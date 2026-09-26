@@ -11,9 +11,10 @@ interface SessionsOverviewProps {
 }
 
 /**
- * The only chrome above the Sessions list. It stays empty in the normal case
- * and speaks only when the current server is unreachable. New session and
- * Services live in the page action menu; the floating button creates a Session.
+ * The only chrome above the Sessions list. It renders nothing in the normal
+ * case and speaks only when the current server is unreachable, so the list
+ * starts directly under the app bar. New session and Services live in the page
+ * action menu; the floating button creates a Session.
  */
 function SessionsOverviewComponent({
   serverName,
@@ -23,7 +24,7 @@ function SessionsOverviewComponent({
 }: SessionsOverviewProps) {
   const showOfflineNotice = Boolean(serverName) && connection === "offline";
   if (!showOfflineNotice) {
-    return <View style={styles.spacer} />;
+    return null;
   }
   return (
     <View style={styles.root}>
@@ -45,8 +46,5 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
     gap: 10,
-  },
-  spacer: {
-    height: 8,
   },
 });

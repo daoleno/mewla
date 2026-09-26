@@ -1074,7 +1074,6 @@ function createStyles(theme: ResolvedZenTheme) {
       width: "100%",
       maxWidth: 760,
       alignSelf: "center",
-      paddingTop: 4,
     },
     sectionHeader: {
       paddingTop: 20,
