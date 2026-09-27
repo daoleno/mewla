@@ -6,55 +6,6 @@ import (
 	"testing"
 )
 
-func TestHardenCodexDelegatedCommandAppendsFullAuthorization(t *testing.T) {
-	cases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{
-			name: "plain codex",
-			in:   "codex",
-			want: "codex --dangerously-bypass-approvals-and-sandbox",
-		},
-		{
-			name: "codex with no-alt-screen",
-			in:   "codex --no-alt-screen",
-			want: "codex --no-alt-screen --dangerously-bypass-approvals-and-sandbox",
-		},
-		{
-			name: "already authorized unchanged",
-			in:   "codex --dangerously-bypass-approvals-and-sandbox --no-alt-screen",
-			want: "codex --dangerously-bypass-approvals-and-sandbox --no-alt-screen",
-		},
-		{
-			name: "absolute path",
-			in:   "/opt/codex --no-alt-screen",
-			want: "/opt/codex --no-alt-screen --dangerously-bypass-approvals-and-sandbox",
-		},
-		{"env value containing flag unchanged", "env NOTE=--dangerously-bypass-approvals-and-sandbox codex", "env NOTE=--dangerously-bypass-approvals-and-sandbox codex"},
-		{"option value containing flag unchanged", "codex --note=--dangerously-bypass-approvals-and-sandbox", "codex --note=--dangerously-bypass-approvals-and-sandbox"},
-		{"equivalent aliases still gain literal flag", "codex -a never -s danger-full-access", "codex -a never -s danger-full-access --dangerously-bypass-approvals-and-sandbox"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := HardenCodexDelegatedCommand(tc.in); got != tc.want {
-				t.Fatalf("HardenCodexDelegatedCommand(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestHardenCodexDelegatedCommandDefaultsToCodex(t *testing.T) {
-	got := HardenCodexDelegatedCommand("")
-	if !strings.HasPrefix(got, "codex ") {
-		t.Fatalf("empty input should default to codex, got %q", got)
-	}
-	if !strings.Contains(got, CodexFullAuthorizationFlag) {
-		t.Fatalf("default codex command should be hardened: %q", got)
-	}
-}
-
 func TestHardenClaudeCommandAppendsFullAuthorization(t *testing.T) {
 	cases := []struct {
 		name string

@@ -676,6 +676,8 @@ func runWorkerCommand(args []string, stderr io.Writer) error {
 		return flag.ErrHelp
 	}
 	switch args[0] {
+	case "defaults":
+		return runWorkerDefaults(args[1:], stderr)
 	case "__supervise":
 		return runWorkerSupervisor(args[1:], stderr)
 	case "list":
@@ -907,9 +909,10 @@ func isHelpArg(value string) bool {
 }
 
 func printWorkerUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen worker <list|spawn|send|capture|status|receipt|progress|close> [flags]")
+	fmt.Fprintln(w, "Usage: zen worker <defaults|list|spawn|send|capture|status|receipt|progress|close> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  defaults   Set or query effective defaults for delegated Workers")
 	fmt.Fprintln(w, "  list       List visible Zen Workers")
 	fmt.Fprintln(w, "  spawn      Create a visible delegated Zen Worker")
 	fmt.Fprintln(w, "  send       Send text to a Zen Worker")
@@ -1036,7 +1039,9 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.Name, "name", "", "visible Worker name")
 	fs.StringVar(&req.Executor, "executor", "", "configured executor name")
-	fs.StringVar(&req.Command, "command", "", "explicit command override")
+	fs.StringVar(&req.Command, "command", "", "explicit command override (delegated client policy still applies)")
+	fs.StringVar(&req.ModelID, "model", "", "single-launch model override")
+	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "single-launch reasoning override")
 	fs.StringVar(&req.Cwd, "cwd", "", "Worker working directory")
 	fs.StringVar(&req.Prompt, "prompt", "", "initial prompt text")
 	fs.StringVar(&req.PromptFile, "prompt-file", "", "file containing the initial prompt")
@@ -1747,6 +1752,11 @@ func writeControlResponse(w io.Writer, resp control.Response, asJSON bool) error
 			fmt.Fprintf(w, "%s: %s\n", resp.Error.Code, resp.Error.Message)
 		}
 		return controlResponseError(resp)
+	}
+	if resp.WorkerDefaults != nil {
+		d := resp.WorkerDefaults
+		fmt.Fprintf(w, "executor=%s model=%s reasoning=%s\n%s\n", d.Executor, d.Model, d.Reasoning, d.Command)
+		return nil
 	}
 	if resp.Workspace != "" {
 		fmt.Fprintln(w, resp.Workspace)

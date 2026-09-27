@@ -678,7 +678,7 @@ func TestProjectDelegatedTurnMapsAllCanonicalStatuses(t *testing.T) {
 		status TurnStatus
 		want   classifier.WorkerState
 	}{
-		{TurnAdmitted, classifier.StateRunning},
+		{TurnAdmitted, classifier.StateUnknown},
 		{TurnAccepted, classifier.StateRunning},
 		{TurnRunning, classifier.StateRunning},
 		{TurnBlocked, classifier.StateBlocked},

@@ -36,6 +36,53 @@ zen brain set-delegated grok
 
 That validates the id against the loaded catalog, persists `delegated_executor` atomically, and updates every future launch/read boundary in the same process. Existing Worker sessions keep their original executor. Editing executor definitions or commands still requires a restart so the static catalog reloads.
 
+## Default delegated Worker configuration
+
+Use one atomic operation against the running daemon:
+
+```sh
+zen worker defaults -executor codex -model gpt-6-astra -reasoning medium
+zen worker defaults --json
+```
+
+The response includes `executor`, `model`, `reasoning`, and the actual resolved
+`command`. The existing `ExecutorConfig` owns all three values in
+`~/.zen/executors.toml` (`delegated_executor`, `delegated_model`,
+`delegated_reasoning`). No Provider model or native Codex configuration is
+rewritten. Persistence succeeds before live state changes; a failed save leaves
+all three prior values effective. The next delegated spawn uses the new snapshot
+without a service restart. Already running Sessions are unchanged.
+
+The model/effort fields are Worker-only. The executor catalog command remains
+the host/manual command, so changing Worker defaults cannot rewrite Brain's
+model. Native Codex config (including `$CODEX_HOME/config.toml`), selected
+profiles and resumed thread settings are lower priority than explicit Worker
+launch options. No duplicate model/effort options are appended. Precedence is:
+
+1. Single-launch `-model` / `-reasoning` values.
+2. Model/effort explicitly present in `-command` (including `codex resume ID`).
+3. Saved Worker model/effort, when launching the selected default client.
+4. Catalog command, then the native client's configuration when omitted.
+
+Setting requires all three flags; pass an empty model or reasoning to clear that
+override. `zen brain set-delegated CLIENT` remains the executor-only operation:
+changing clients clears Worker model/effort overrides rather than carrying a
+Codex model to another client. The startup `ZEN_DELEGATED_EXECUTOR` lock is
+respected. The adapter currently accepts model/reasoning selection for Codex;
+other clients can be selected with empty values and keep native selection.
+
+All delegated Codex launches, including explicit commands and resume, use the
+same client adapter and run autonomously by default. Explicit interactive
+approval/sandbox flags fail with an explanation instead of silently bypassing
+policy or adding conflicting flags. Shell composition is not a supported Codex
+launch command. Ordinary manual/hidden Sessions retain their own policies.
+
+Control requests: `worker_defaults_get`, `worker_defaults_set` with `executor`,
+`model_id`, `reasoning_effort`. Authenticated WebSocket equivalents are
+`get_worker_defaults` / `set_worker_defaults` using `executor_id`, `model_id`,
+`reasoning_effort`. Both call the same owner; no UI-specific default store exists.
+Brain should perform routine configuration directly, then read back the result.
+
 ## Permission bypass risks
 
 Flags such as:

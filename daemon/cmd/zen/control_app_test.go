@@ -958,11 +958,12 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 		t.Fatalf("delegated codex command = %q, want hardened", got)
 	}
 
-	// An explicit full-command override is user-authored and must be returned
-	// verbatim, even if it deliberately chooses a less permissive sandbox.
+	// Manual hidden Sessions preserve an explicit restricted command.
+	// Delegated conflicts are rejected by the adapter (covered separately).
 	overrideResp := app.HandleControlRequest(control.Request{
 		Type:    "worker_spawn",
 		Command: "codex -s read-only -a on-request",
+		Hidden:  true,
 		Name:    "Pinned Codex",
 		Cwd:     "/repo/zen",
 		Prompt:  "stay restricted",

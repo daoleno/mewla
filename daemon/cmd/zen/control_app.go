@@ -81,6 +81,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 	switch strings.TrimSpace(req.Type) {
 	case "worker_list":
 		return a.handleWorkerList()
+	case "worker_defaults_get", "worker_defaults_set":
+		return a.handleWorkerDefaults(req)
 	case "worker_spawn":
 		return a.handleWorkerSpawn(req)
 	case "claude_launch":
@@ -554,7 +556,11 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		connectionID = strings.TrimSpace(req.ProfileID)
 	}
 	if a.profiles != nil {
-		plan, planErr := a.profiles.PrepareLaunchModel(a.spawnProfileClientHint(req, command), connectionID, strings.TrimSpace(req.ModelID), command)
+		profileModel := ""
+		if req.Hidden {
+			profileModel = strings.TrimSpace(req.ModelID)
+		}
+		plan, planErr := a.profiles.PrepareLaunchModel(a.spawnProfileClientHint(req, command), connectionID, profileModel, command)
 		if planErr != nil && !plan.Persist.Applied && !plan.Bypass {
 			a.recordSpawnWorkFailure(ownedWork, planErr, autoCreatedWork)
 			return control.ErrorResponse(modelprofiles.ControlErrorCode(planErr), planErr.Error())
@@ -1512,44 +1518,23 @@ func (a *controlApp) spawnProfileClientHint(req control.Request, command string)
 }
 
 func (a *controlApp) resolveSpawnCommand(req control.Request) (string, error) {
-	if command := strings.TrimSpace(req.Command); command != "" {
-		// Explicit full-command overrides are user-authored; do not mutate
-		// their authorization/sandbox configuration.
-		return command, nil
-	}
-	executorName := strings.TrimSpace(req.Executor)
-	if executorName == "" {
-		if delegatedExecutor, ok := a.brainCallerDelegatedExecutor(req.WorkerID); ok {
-			executorName = delegatedExecutor
+	if a == nil || a.execs == nil {
+		if req.Command != "" {
+			if req.Hidden {
+				return req.Command, nil
+			}
+			return work.PrepareDelegatedCommand(work.InferWorkerProvider(req.Command), req.Command)
 		}
-	}
-	if executorName == "" && a != nil && a.execs != nil {
-		if delegatedExecutor, ok := a.execs.DelegatedWorkerExecutor(); ok {
-			executorName = delegatedExecutor.ID
+		name := strings.TrimSpace(req.Executor)
+		if name == "" {
+			name = "codex"
 		}
-	}
-	if executorName == "" {
-		executorName = "codex"
-	}
-	if a != nil && a.execs != nil {
-		executor, ok := a.execs.ByName[executorName]
-		if !ok {
-			return "", fmt.Errorf("executor %q is not configured", executorName)
+		if req.Hidden {
+			return name, nil
 		}
-		command := strings.TrimSpace(executor.Command)
-		if command == "" {
-			command = executorName
-		}
-		provider := work.InferWorkerProvider(executor.Kind, command, executorName, executor.Name)
-		prepared, prepareErr := work.PrepareDelegatedCommand(provider, command)
-		if prepareErr != nil {
-			return "", prepareErr
-		}
-		command = prepared
-		return command, nil
+		return work.PrepareDelegatedCommand(work.InferWorkerProvider(name), name)
 	}
-	provider := work.InferWorkerProvider(executorName)
-	return work.PrepareDelegatedCommand(provider, executorName)
+	return a.execs.ResolveWorkerCommand(req.Executor, req.Command, req.ModelID, req.ReasoningEffort, !req.Hidden)
 }
 
 func (a *controlApp) brainCallerDelegatedExecutor(workerID string) (string, bool) {
