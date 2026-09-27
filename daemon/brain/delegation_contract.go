@@ -8,7 +8,7 @@ import (
 
 const (
 	brainWorkerRoleContractPlaceholder = "{{ZEN_BRAIN_WORKER_ROLE_CONTRACT}}"
-	brainWorkerRoleContract            = "Brain owns conversation, planning, lifecycle, review and acceptance. Delegate substantive execution to a visible Zen Worker unless the user explicitly asks Brain to execute it directly. Inspect context as needed to form or review a brief. Questions and discussion need no Worker. A delegation failure does not authorize direct execution."
+	brainWorkerRoleContract            = "Brain owns conversation, planning, lifecycle, review and acceptance. Delegate substantive execution to a visible Zen Worker unless the user explicitly asks Brain to execute it directly. Inspect context as needed to form or review a brief. Questions, discussion, and routine runtime configuration (including default Worker settings) need no Worker; Brain applies these directly and queries the effective result. A delegation failure does not authorize direct execution."
 )
 
 func brainHostContractDigest() string {

@@ -677,7 +677,7 @@ func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 
 	// This pre-contract fixture has no prompt-carried identity. Its unscoped
 	// failed progress cannot change canonical status, so the Admitted turn keeps
-	// the Session projection running.
+	// the Session projection unknown.
 	ledger := newFakeTurnLedger()
 	acceptedAt := time.Now().UTC()
 	if err := ledger.AdmitTurn(AdmittedTurn{
@@ -702,8 +702,8 @@ func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 	}
 	<-w.Events()
 	// The unscoped pre-contract report leaves the canonical Admitted Turn and
-	// Session projection running, with no sticky failure metadata.
-	if failed.State != classifier.StateRunning || failed.Attention != "none" ||
+	// Session projection unknown, with no sticky failure metadata.
+	if failed.State != classifier.StateUnknown || failed.Attention != "none" ||
 		failed.NeedsAttention || failed.LastProgressAt != nil ||
 		failed.TaskClass != "" || failed.EventKind != "" {
 		t.Fatalf("failed hint polluted the canonical projection: %#v", failed)
@@ -713,7 +713,7 @@ func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RebindDelegatedTurnProjection returned error: %v", err)
 	}
-	if accepted.State != classifier.StateRunning || accepted.Attention != "none" || accepted.NeedsAttention {
+	if accepted.State != classifier.StateUnknown || accepted.Attention != "none" || accepted.NeedsAttention {
 		t.Fatalf("rebound projection = %#v", accepted)
 	}
 	if accepted.LastProgressAt != nil || accepted.ExpectedNextCheckAt != nil || accepted.LeaseSeconds != 0 {

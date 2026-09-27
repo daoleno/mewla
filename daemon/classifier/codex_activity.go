@@ -10,7 +10,7 @@ var (
 	codexWorkingRe   = regexp.MustCompile(`(?im)\bworking\b`)
 	codexInterruptRe = regexp.MustCompile(`(?i)esc\s+to\s+interrupt`)
 	// Interactive approval phrasing only — exclude static mode chrome like "always-approve".
-	codexApprovalPromptRe = regexp.MustCompile(`(?i)(press enter to (continue|confirm)|do you want to|please\s+approve|approve\s+or\s+reject|allow .+ to)`)
+	codexApprovalPromptRe = regexp.MustCompile(`(?i)(press enter to (continue|confirm)|would you like to run|waiting for approval|do you want to|please\s+approve|approve\s+or\s+reject|allow .+ to)`)
 )
 
 // CodexActivityAdapter detects only visible approval and Working/interrupt pane

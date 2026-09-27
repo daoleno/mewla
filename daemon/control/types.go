@@ -12,6 +12,7 @@ import (
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	telegramchannel "github.com/daoleno/zen/daemon/telegram"
 	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/zen/daemon/work"
 )
 
 const SocketName = "zen.sock"
@@ -88,6 +89,7 @@ type PairingInfo struct {
 }
 
 type Response struct {
+	WorkerDefaults     *work.WorkerDefaults                     `json:"worker_defaults,omitempty"`
 	OK                 bool                                     `json:"ok"`
 	Error              *Error                                   `json:"error,omitempty"`
 	Worker             *Worker                                  `json:"worker,omitempty"`

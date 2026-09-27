@@ -1492,7 +1492,7 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 		} else if r.hasTurn {
 			w.ledgerTurns[r.id] = r.turn
 			clearStaleAttemptMetadata(worker)
-			newState, summary = projectDelegatedTurn(worker, r.turn)
+			newState, summary = projectDelegatedActivity(worker, r.turn, activity)
 		}
 		worker.State = newState
 		worker.Summary = summary
@@ -1719,6 +1719,23 @@ func (w *Watcher) restoreTurnTranscriptBindingLocked(worker *classifier.Worker, 
 // projectDelegatedTurn projects the canonical ledger turn onto the Session
 // (list/capture/close/Work all read this same canonical owner). Hints are
 // attached notes only: they never change the status text.
+// Approval is a current interaction gate, not provider completion. Do not let
+// a historical accepted/running ledger fact conceal a visible approval prompt.
+// The ledger remains authoritative for settlement; this gate clears on the
+// next poll when the live adapter no longer observes it.
+func projectDelegatedActivity(worker *classifier.Worker, turn TurnSnapshot, activity classifier.ActivitySignal) (classifier.WorkerState, string) {
+	state, summary := projectDelegatedTurn(worker, turn)
+	if !TurnTerminal(turn.Status) && activity.State == classifier.StateBlocked {
+		worker.Attention = "user_input"
+		worker.NeedsAttention = true
+		worker.LastProgressAt = nil
+		worker.ExpectedNextCheckAt = nil
+		worker.LeaseSeconds = 0
+		return classifier.StateBlocked, activity.Summary
+	}
+	return state, summary
+}
+
 func projectDelegatedTurn(worker *classifier.Worker, turn TurnSnapshot) (classifier.WorkerState, string) {
 	var state classifier.WorkerState
 	summary := strings.TrimSpace(turn.Summary)
@@ -1731,7 +1748,7 @@ func projectDelegatedTurn(worker *classifier.Worker, turn TurnSnapshot) (classif
 	}
 	switch turn.Status {
 	case TurnAdmitted:
-		state = classifier.StateRunning
+		state = classifier.StateUnknown
 		summary = "Delegated input outcome pending; observing provider activity"
 	case TurnAccepted:
 		state = classifier.StateRunning

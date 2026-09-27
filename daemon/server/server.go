@@ -930,6 +930,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainWorkRead(conn, raw)
 	case "brain_set_executor":
 		s.handleBrainSetExecutor(conn, raw)
+	case "get_worker_defaults", "set_worker_defaults":
+		s.handleWorkerDefaults(conn, raw)
 	case "set_delegated_executor":
 		s.handleSetDelegatedExecutor(conn, raw)
 	case "brain_chat_new":
@@ -3762,4 +3764,25 @@ func (s *Server) writeMessage(conn *websocket.Conn, messageType int, data []byte
 	writeMu.Lock()
 	defer writeMu.Unlock()
 	return conn.WriteMessage(messageType, data)
+}
+
+// Worker defaults use the same owner as the CLI/control socket. This is a
+// delegated-only setting; the manual create_session flow is unchanged.
+func (s *Server) handleWorkerDefaults(conn *websocket.Conn, raw clientMessage) {
+	if s.execs == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "executors_unavailable", "Executor config unavailable")
+		return
+	}
+	var d work.WorkerDefaults
+	var err error
+	if raw.Type == "set_worker_defaults" {
+		d, err = s.execs.SetWorkerDefaults(work.WorkerDefaults{Executor: raw.ExecutorID, Model: raw.ModelID, Reasoning: raw.ReasoningEffort})
+	} else {
+		d, err = s.execs.WorkerDefaults()
+	}
+	if err != nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "worker_defaults_failed", err.Error())
+		return
+	}
+	s.sendJSON(conn, map[string]any{"type": "worker_defaults", "request_id": raw.RequestID, "worker_defaults": d})
 }

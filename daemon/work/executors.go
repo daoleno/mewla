@@ -32,10 +32,12 @@ var ErrDelegatedExecutorLocked = errors.New("delegated executor locked by enviro
 type ExecutorConfig struct {
 	mu sync.RWMutex
 
-	path              string // durable file; empty means memory-only
-	delegatedExecutor string // durable selection (file / live Set)
-	envLock           string // startup ZEN_DELEGATED_EXECUTOR, captured once
-	ByName            map[string]Executor
+	path               string // durable file; empty means memory-only
+	delegatedModel     string
+	delegatedReasoning string
+	delegatedExecutor  string // durable selection (file / live Set)
+	envLock            string // startup ZEN_DELEGATED_EXECUTOR, captured once
+	ByName             map[string]Executor
 }
 
 // NewExecutorConfig builds an in-memory ExecutorConfig (no durable path).
@@ -90,10 +92,12 @@ func (c *ExecutorConfig) SetDelegatedExecutor(id string) error {
 	if lock, active := c.activeEnvLockLocked(); active {
 		return fmt.Errorf("%w: %s (ZEN_DELEGATED_EXECUTOR)", ErrDelegatedExecutorLocked, lock)
 	}
-	if err := c.persistDelegatedExecutorLocked(id); err != nil {
+	if err := c.persistWorkerDefaultsLocked(WorkerDefaults{Executor: id}); err != nil {
 		return err
 	}
 	c.delegatedExecutor = id
+	c.delegatedModel = ""
+	c.delegatedReasoning = ""
 	return nil
 }
 
@@ -129,8 +133,10 @@ func (c *ExecutorConfig) activeEnvLockLocked() (string, bool) {
 }
 
 type executorFile struct {
-	DelegatedExecutor string     `toml:"delegated_executor"`
-	Executors         []Executor `toml:"executors"`
+	DelegatedExecutor  string     `toml:"delegated_executor"`
+	DelegatedModel     string     `toml:"delegated_model"`
+	DelegatedReasoning string     `toml:"delegated_reasoning"`
+	Executors          []Executor `toml:"executors"`
 }
 
 // LoadExecutors reads path, or returns built-in defaults when missing.
@@ -167,6 +173,8 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 	if trimmed := strings.TrimSpace(file.DelegatedExecutor); trimmed != "" {
 		cfg.delegatedExecutor = trimmed
 	}
+	cfg.delegatedModel = file.DelegatedModel
+	cfg.delegatedReasoning = file.DelegatedReasoning
 	for _, executor := range file.Executors {
 		name := strings.TrimSpace(executor.Name)
 		if name == "" {

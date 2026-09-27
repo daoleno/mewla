@@ -385,7 +385,7 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	workerHelp := workerOutput.String()
 	for _, want := range []string{
-		"Usage: zen worker <list|spawn|send|capture|status|receipt|progress|close> [flags]",
+		"Usage: zen worker <defaults|list|spawn|send|capture|status|receipt|progress|close> [flags]",
 		"zen worker spawn -name",
 		"zen worker capture -id",
 		"zen worker status -id",

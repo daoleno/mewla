@@ -48,23 +48,6 @@ const (
 // authorization mode.
 var ErrScheduledActionUnattended = errors.New("scheduled_action executor cannot launch unattended")
 
-// HardenCodexDelegatedCommand returns a Codex launch command configured for
-// non-interactive delegated execution. When command does not already declare
-// the full-authorization flag, it is appended so Brain-delegated Codex
-// sessions do not stop on approval prompts for internal shell/progress
-// commands. Commands that already include the flag are returned unchanged so
-// explicit user-provided authorization configuration is preserved.
-func HardenCodexDelegatedCommand(command string) string {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		command = WorkerProviderCodex
-	}
-	if strings.Contains(command, CodexFullAuthorizationFlag) {
-		return command
-	}
-	return command + " " + CodexFullAuthorizationFlag
-}
-
 // HardenClaudeCommand returns a Claude launch command configured for
 // non-interactive autonomous execution. When command does not already declare
 // an explicit authorization mode, ClaudeFullAuthorizationFlag is appended so
@@ -91,7 +74,7 @@ func PrepareDelegatedCommand(provider, command string) (string, error) {
 	provider = strings.TrimSpace(provider)
 	switch provider {
 	case WorkerProviderCodex:
-		return HardenCodexDelegatedCommand(command), nil
+		return codexWorkerCommand(command, "", "", true)
 	case WorkerProviderClaude:
 		return HardenClaudeCommand(command), nil
 	case WorkerProviderOpenCode:
