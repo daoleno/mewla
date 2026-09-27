@@ -75,8 +75,8 @@ func PrepareDelegatedCommand(provider, command string) (string, error) {
 	switch provider {
 	case WorkerProviderCodex:
 		return codexWorkerCommand(command, "", "", true)
-	case WorkerProviderClaude:
-		return HardenClaudeCommand(command), nil
+	case WorkerProviderClaude, WorkerProviderCursor, WorkerProviderGrok:
+		return ScheduledActionCommand(provider, Executor{Name: provider, Kind: provider, Command: command})
 	case WorkerProviderOpenCode:
 		return HardenOpenCodeDelegatedCommand(command)
 	case WorkerProviderDSH:

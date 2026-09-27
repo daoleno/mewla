@@ -71,6 +71,13 @@ Codex model to another client. The startup `ZEN_DELEGATED_EXECUTOR` lock is
 respected. The adapter currently accepts model/reasoning selection for Codex;
 other clients can be selected with empty values and keep native selection.
 
+Claude, Cursor and Grok delegated launches reuse the existing unattended client
+adapters. Claude `--permission-mode auto`, `dontAsk`, and `acceptEdits` are not
+bypass guarantees and are rejected for delegated work; the manual/Brain host
+paths keep their prior permission policy. Pi/DSH retain their native client
+behavior; extensions, authentication and first-use workspace trust may still
+require setup. Automatic tool execution does not auto-approve workspace trust.
+
 All delegated Codex launches, including explicit commands and resume, use the
 same client adapter and run autonomously by default. Explicit interactive
 approval/sandbox flags fail with an explanation instead of silently bypassing
