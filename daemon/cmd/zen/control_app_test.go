@@ -813,7 +813,7 @@ func TestControlAppWorkerSpawnFromBrainDefaultsToDelegatedExecutor(t *testing.T)
 	if len(fw.created) != 1 {
 		t.Fatalf("created = %#v", fw.created)
 	}
-	if got := fw.created[0].Command; got != "grok --no-alt-screen --permission-mode bypassPermissions" {
+	if got := fw.created[0].Command; got != "grok --no-alt-screen --permission-mode bypassPermissions --sandbox off" {
 		t.Fatalf("command = %q", got)
 	}
 
@@ -841,7 +841,7 @@ func TestControlAppWorkerSpawnFromBrainDefaultsToDelegatedExecutor(t *testing.T)
 	if !regular.OK || regular.Worker == nil {
 		t.Fatalf("regular response = %#v", regular)
 	}
-	if got := fw.created[2].Command; got != "grok --no-alt-screen --permission-mode bypassPermissions" {
+	if got := fw.created[2].Command; got != "grok --no-alt-screen --permission-mode bypassPermissions --sandbox off" {
 		t.Fatalf("regular command = %q", got)
 	}
 }
@@ -874,7 +874,7 @@ func TestControlAppWorkerSpawnFromBrainUsesDelegatedExecutorNotHost(t *testing.T
 	if !brainSpawn.OK || brainSpawn.Worker == nil {
 		t.Fatalf("brain spawn response = %#v", brainSpawn)
 	}
-	if got := fw.created[0].Command; got != "cursor-agent --force --sandbox disabled" {
+	if got := fw.created[0].Command; got != "cursor-agent --force --sandbox disabled --trust --approve-mcps" {
 		t.Fatalf("brain delegated command = %q", got)
 	}
 
@@ -887,7 +887,7 @@ func TestControlAppWorkerSpawnFromBrainUsesDelegatedExecutorNotHost(t *testing.T
 	if !regular.OK || regular.Worker == nil {
 		t.Fatalf("regular response = %#v", regular)
 	}
-	if got := fw.created[1].Command; got != "cursor-agent --force --sandbox disabled" {
+	if got := fw.created[1].Command; got != "cursor-agent --force --sandbox disabled --trust --approve-mcps" {
 		t.Fatalf("regular command = %q", got)
 	}
 }
@@ -991,10 +991,11 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 		t.Fatalf("delegated claude command = %q, want hardened", got)
 	}
 
-	// Explicit Claude command override is preserved.
+	// Manual hidden Claude command override is preserved.
 	claudeOverrideResp := app.HandleControlRequest(control.Request{
 		Type:    "worker_spawn",
 		Command: "claude --permission-mode dontAsk",
+		Hidden:  true,
 		Name:    "Pinned Claude",
 		Cwd:     "/repo/zen",
 		Prompt:  "manual mode",
@@ -2278,17 +2279,18 @@ func TestControlAppBrainSetExecutorStartsSelectedHostWhenWatcherAvailable(t *tes
 
 func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 	tests := []struct {
-		name  string
-		req   control.Request
-		execs *work.ExecutorConfig
-		want  string
+		name      string
+		req       control.Request
+		execs     *work.ExecutorConfig
+		want      string
+		wantError bool
 	}{
 		{
 			name: "explicit command unchanged",
 			req: control.Request{
 				Command: "claude --permission-mode dontAsk --profile custom",
 			},
-			want: "claude --permission-mode dontAsk --profile custom",
+			wantError: true,
 		},
 		{
 			name: "bare default Claude gets hardened",
@@ -2312,7 +2314,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude --permission-mode dontAsk"},
 			}),
-			want: "claude --permission-mode dontAsk",
+			wantError: true,
 		},
 		{
 			name: "explicit Claude dangerously-skip-permissions preserved",
@@ -2349,7 +2351,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
 				"grok": {Name: "grok", Command: "grok --no-alt-screen"},
 			}),
-			want: "grok --no-alt-screen",
+			want: "grok --no-alt-screen --permission-mode bypassPermissions --sandbox off",
 		},
 	}
 
@@ -2357,6 +2359,12 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			app := &controlApp{execs: tc.execs}
 			got, err := app.resolveSpawnCommand(tc.req)
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("expected conflicting policy error")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("resolveSpawnCommand() err = %v", err)
 			}

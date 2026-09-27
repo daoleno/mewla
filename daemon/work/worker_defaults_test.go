@@ -98,3 +98,23 @@ func TestWorkerDefaultCommandResumePrecedence(t *testing.T) {
 		}
 	}
 }
+
+func TestDelegatedClaudeAutoIsNotUnattended(t *testing.T) {
+	for _, command := range []string{"claude --permission-mode auto", "claude --permission-mode dontAsk", "claude --permission-mode acceptEdits", "claude --permission-mode default"} {
+		if _, err := PrepareDelegatedCommand(WorkerProviderClaude, command); err == nil {
+			t.Fatalf("accepted interactive policy %q", command)
+		}
+	}
+	for _, command := range []string{"claude", "claude --permission-mode bypassPermissions", "claude --dangerously-skip-permissions"} {
+		got, err := PrepareDelegatedCommand(WorkerProviderClaude, command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "bypassPermissions") && !strings.Contains(got, "--dangerously-skip-permissions") {
+			t.Fatal(got)
+		}
+	}
+	if got := HardenClaudeCommand("claude --permission-mode auto"); got != "claude --permission-mode auto" {
+		t.Fatal("host policy changed")
+	}
+}
