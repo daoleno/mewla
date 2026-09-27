@@ -1695,6 +1695,7 @@ func canonicalCloseAdmission(turn watcher.TurnSnapshot, hasTurn bool) bool {
 func lifecycleProtocol(profile string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Zen lifecycle protocol:
 Profile: %s.
+You are the delegated Worker: execute the assigned work directly; Brain workspace role/delegation instructions apply to Brain, not this Worker Session.
 Complete the scoped objective and acceptance criteria. Ask Brain only for a material decision or missing authority; continue independent authorized work.
 Edit the supplied repository and cwd directly by default; preserve unrelated changes. Use a worktree under $ZEN_WORKTREE_ROOT only for an explicit user request, concrete conflicting edits, or a justified necessary isolation reason. Briefly explain the actual reason; concurrent Workers do not necessarily conflict.
 When using a worktree, integration into the owning target repository and requested delivery remain part of completion. A candidate branch or passing tests alone are not a delivered outcome.

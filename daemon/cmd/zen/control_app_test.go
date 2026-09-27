@@ -676,6 +676,8 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 	for _, want := range []string{
 		"delegated by Brain\n\nimplement this",
 		"Zen lifecycle protocol:",
+		"You are the delegated Worker: execute the assigned work directly",
+		"Brain workspace role/delegation instructions apply to Brain, not this Worker Session.",
 		"\"$ZEN_WORKER_PROGRESS_CMD\" worker progress",
 		"objective and acceptance criteria",
 		"report resource limits rather than bypassing them",
