@@ -8,82 +8,96 @@ import type {
 
 const TRANSPARENT = 'transparent';
 
+// Sage ramp tuned in OKLCH (hue ~156): chroma peaks through 400–600 so the
+// accent reads alive, and the dark end stays green instead of turning grey mud.
 export const ZEN_SAGE = {
-  50: '#F4F8F4',
-  100: '#E4EDE5',
-  200: '#CADCCD',
-  300: '#A9C6AF',
-  400: '#82A68A',
-  500: '#628A6B',
-  600: '#4A7154',
-  700: '#3A5A43',
-  800: '#2D4535',
-  900: '#23362A',
-  950: '#121C16',
+  50: '#F1F9F3',
+  100: '#DCF2E3',
+  200: '#BEE6CC',
+  300: '#9ED7B2',
+  400: '#7DC398',
+  500: '#559E72',
+  600: '#397C55',
+  700: '#2A5F41',
+  800: '#214630',
+  900: '#1A3123',
+  950: '#0D1911',
 } as const;
 
 export const ZEN_BRAND_COLORS = {
-  environment: '#0F0F14',
+  // Warm ink rather than blue-black, so sage sits on it without vibrating.
+  environment: '#12120E',
   sage: ZEN_SAGE[400],
   ivory: '#F2EEE5',
 } as const;
 
-// Grouped canvas with white content cards, the Apple layering model.
+// Warm stone canvas with near-white paper cards, the Apple layering model.
 export const ZEN_LIGHT_NEUTRALS = {
-  canvas: '#F2F3F0',
-  surface: '#FFFFFF',
-  elevated: '#EBEDE9',
-  pressed: '#E1E4DF',
-  textPrimary: '#121513',
-  textSecondary: '#4B524D',
-  textTertiary: '#646C66',
-  borderSubtle: '#E3E6E1',
-  border: '#D2D7D1',
-  borderStrong: '#8A938C',
+  canvas: '#F5F3EE',
+  surface: '#FEFDFB',
+  elevated: '#EBEAE4',
+  pressed: '#E0E0D9',
+  textPrimary: '#141712',
+  textSecondary: '#4E514A',
+  textTertiary: '#62645D',
+  borderSubtle: '#E3E3DD',
+  border: '#D4D5CD',
+  borderStrong: '#797B74',
 } as const;
 
+// Elevation ladder with ~0.03–0.04 OKLCH lightness steps between levels, so
+// canvas, cards and sheets separate without hairlines doing all the work.
 export const ZEN_DARK_NEUTRALS = {
-  surface: '#18191E',
-  elevated: '#212329',
-  subtle: '#15161B',
-  active: '#1C2A22',
-  pressed: '#2A2C32',
-  textPrimary: '#F3F4F1',
-  textSecondary: '#BCC2BD',
-  textTertiary: '#8F9791',
-  borderSubtle: '#25272C',
-  border: '#33363C',
-  borderStrong: '#666E68',
-  modalSurfaceAlt: '#23252B',
+  surface: '#1C1D18',
+  elevated: '#252721',
+  subtle: '#181814',
+  active: '#1C3125',
+  pressed: '#2E302A',
+  textPrimary: '#F3F0E9',
+  textSecondary: '#C5C5BC',
+  textTertiary: '#A2A49B',
+  borderSubtle: '#2C2D28',
+  border: '#393A34',
+  borderStrong: '#7F8179',
+  modalSurfaceAlt: '#292B25',
 } as const;
 
+// Success is teal, not a second sage: it stays apart from the accent and from
+// danger/warning under deuteranopia and protanopia simulation.
 export const ZEN_LIGHT_STATUS = {
-  danger: '#B42318',
-  dangerSoft: '#FCE8E6',
-  warning: '#8A4B00',
-  warningSoft: '#F8ECD6',
-  success: '#246B3D',
-  successSoft: '#E3F2E7',
+  danger: '#AA1F1F',
+  dangerSoft: '#FFE6E3',
+  warning: '#9A5B00',
+  warningSoft: '#FCEAD0',
+  success: '#005E53',
+  successSoft: '#DAF4EF',
 } as const;
 
 export const ZEN_DARK_STATUS = {
-  danger: '#FF8A80',
-  dangerSoft: '#321B1B',
-  warning: '#F5C26B',
-  warningSoft: '#2C2618',
-  success: '#75D39A',
-  successSoft: '#162A1E',
+  danger: '#F07F77',
+  dangerSoft: '#3A1D1B',
+  warning: '#F6C16B',
+  warningSoft: '#302412',
+  success: '#80E7D6',
+  successSoft: '#102B26',
 } as const;
 
 export const ZEN_LIGHT_OVERLAYS = {
-  selection: 'rgba(74,113,84,0.18)',
-  modalBackdrop: 'rgba(15,15,20,0.32)',
+  selection: 'rgba(57,124,85,0.22)',
+  modalBackdrop: 'rgba(20,23,18,0.32)',
 } as const;
 
 export const ZEN_DARK_OVERLAYS = {
-  selection: 'rgba(130,166,138,0.28)',
+  selection: 'rgba(138,208,164,0.30)',
   modalBackdrop: 'rgba(0,0,0,0.6)',
 } as const;
+
+// Scheme accents sit between ramp stops: light needs 4.5:1 for white label
+// text on it, dark needs chroma without glowing on the ink canvas.
+const ZEN_LIGHT_ACCENT = '#2E6F4A';
+const ZEN_LIGHT_ACCENT_STRONG = '#235A3B';
+const ZEN_DARK_ACCENT = '#8AD0A4';
+const ZEN_DARK_ACCENT_STRONG = '#B3E6C4';
 
 export const ZEN_LIGHT_APP_COLORS: AppColors = {
   bgPrimary: ZEN_LIGHT_NEUTRALS.canvas,
@@ -92,19 +106,19 @@ export const ZEN_LIGHT_APP_COLORS: AppColors = {
   textPrimary: ZEN_LIGHT_NEUTRALS.textPrimary,
   textSecondary: ZEN_LIGHT_NEUTRALS.textSecondary,
   textTertiary: ZEN_LIGHT_NEUTRALS.textTertiary,
-  accent: ZEN_SAGE[600],
+  accent: ZEN_LIGHT_ACCENT,
   accentSoft: ZEN_SAGE[100],
-  accentStrong: ZEN_SAGE[700],
+  accentStrong: ZEN_LIGHT_ACCENT_STRONG,
   logoDetail: ZEN_SAGE[900],
   statusFailed: ZEN_LIGHT_STATUS.danger,
   statusBlocked: ZEN_LIGHT_STATUS.warning,
   statusUnknown: ZEN_LIGHT_NEUTRALS.textTertiary,
-  statusRunning: ZEN_SAGE[600],
+  statusRunning: ZEN_LIGHT_ACCENT,
   statusDone: ZEN_LIGHT_STATUS.success,
   zenGreen: ZEN_LIGHT_STATUS.success,
   priorityUrgent: ZEN_LIGHT_STATUS.danger,
   priorityHigh: ZEN_LIGHT_STATUS.warning,
-  priorityMedium: ZEN_SAGE[600],
+  priorityMedium: ZEN_LIGHT_ACCENT,
   priorityLow: ZEN_LIGHT_NEUTRALS.textSecondary,
   border: ZEN_LIGHT_NEUTRALS.border,
   borderSubtle: ZEN_LIGHT_NEUTRALS.borderSubtle,
@@ -118,7 +132,7 @@ export const ZEN_LIGHT_APP_COLORS: AppColors = {
   modalSurface: ZEN_LIGHT_NEUTRALS.surface,
   modalSurfaceAlt: ZEN_LIGHT_NEUTRALS.elevated,
   textOnAccent: ZEN_LIGHT_NEUTRALS.surface,
-  focusRing: ZEN_SAGE[700],
+  focusRing: ZEN_LIGHT_ACCENT_STRONG,
   selectionBackground: ZEN_LIGHT_OVERLAYS.selection,
   promptGreen: ZEN_LIGHT_STATUS.success,
   promptYellow: ZEN_LIGHT_STATUS.warning,
@@ -139,19 +153,19 @@ export const ZEN_DARK_APP_COLORS: AppColors = {
   textPrimary: ZEN_DARK_NEUTRALS.textPrimary,
   textSecondary: ZEN_DARK_NEUTRALS.textSecondary,
   textTertiary: ZEN_DARK_NEUTRALS.textTertiary,
-  accent: ZEN_SAGE[400],
+  accent: ZEN_DARK_ACCENT,
   accentSoft: ZEN_DARK_NEUTRALS.active,
-  accentStrong: ZEN_SAGE[300],
+  accentStrong: ZEN_DARK_ACCENT_STRONG,
   logoDetail: ZEN_BRAND_COLORS.ivory,
   statusFailed: ZEN_DARK_STATUS.danger,
   statusBlocked: ZEN_DARK_STATUS.warning,
   statusUnknown: ZEN_DARK_NEUTRALS.textTertiary,
-  statusRunning: ZEN_SAGE[400],
+  statusRunning: ZEN_DARK_ACCENT,
   statusDone: ZEN_DARK_STATUS.success,
   zenGreen: ZEN_DARK_STATUS.success,
   priorityUrgent: ZEN_DARK_STATUS.danger,
   priorityHigh: ZEN_DARK_STATUS.warning,
-  priorityMedium: ZEN_SAGE[400],
+  priorityMedium: ZEN_DARK_ACCENT,
   priorityLow: ZEN_DARK_NEUTRALS.textSecondary,
   border: ZEN_DARK_NEUTRALS.border,
   borderSubtle: ZEN_DARK_NEUTRALS.borderSubtle,
@@ -162,10 +176,10 @@ export const ZEN_DARK_APP_COLORS: AppColors = {
   inputBackground: ZEN_DARK_NEUTRALS.subtle,
   disabledSurface: ZEN_DARK_NEUTRALS.elevated,
   modalBackdrop: ZEN_DARK_OVERLAYS.modalBackdrop,
-  modalSurface: ZEN_DARK_NEUTRALS.subtle,
+  modalSurface: ZEN_DARK_NEUTRALS.surface,
   modalSurfaceAlt: ZEN_DARK_NEUTRALS.modalSurfaceAlt,
   textOnAccent: ZEN_BRAND_COLORS.environment,
-  focusRing: ZEN_SAGE[300],
+  focusRing: ZEN_DARK_ACCENT_STRONG,
   selectionBackground: ZEN_DARK_OVERLAYS.selection,
   promptGreen: ZEN_DARK_STATUS.success,
   promptYellow: ZEN_DARK_STATUS.warning,
@@ -196,7 +210,7 @@ export const ZEN_LIGHT_CHAT_PALETTE: ChatPalette = {
   composerBackground: ZEN_LIGHT_NEUTRALS.surface,
   composerBorder: ZEN_LIGHT_NEUTRALS.border,
   composerDock: TRANSPARENT,
-  link: ZEN_SAGE[700],
+  link: ZEN_LIGHT_ACCENT_STRONG,
   patternIcon: TRANSPARENT,
 };
 
@@ -206,18 +220,19 @@ export const ZEN_DARK_CHAT_PALETTE: ChatPalette = {
   showTimestamps: false,
   showDateDividers: true,
   background: ZEN_BRAND_COLORS.environment,
+  // Deep saturated sage on warm ink reads as a lit panel, not a murky mass.
   sentBubble: ZEN_SAGE[700],
-  receivedBubble: ZEN_DARK_NEUTRALS.subtle,
+  receivedBubble: ZEN_DARK_NEUTRALS.surface,
   sentText: ZEN_DARK_NEUTRALS.textPrimary,
   receivedText: ZEN_DARK_NEUTRALS.textPrimary,
   sentTimestamp: ZEN_SAGE[200],
   receivedTimestamp: ZEN_DARK_NEUTRALS.textTertiary,
-  // Outside the bubble on near-black canvas — bright sage for status readability.
+  // Outside the bubble on the ink canvas — bright sage for status readability.
   outboundSentClock: ZEN_SAGE[200],
-  composerBackground: ZEN_DARK_NEUTRALS.subtle,
+  composerBackground: ZEN_DARK_NEUTRALS.surface,
   composerBorder: ZEN_DARK_NEUTRALS.border,
   composerDock: TRANSPARENT,
-  link: ZEN_SAGE[300],
+  link: ZEN_DARK_ACCENT_STRONG,
   patternIcon: TRANSPARENT,
 };
 
@@ -238,35 +253,36 @@ export const ZEN_DARK_SURFACE_PALETTE: SurfacePalette = {
 };
 
 export const ZEN_LIGHT_MATERIALS: MaterialPalette = {
-  chrome: 'rgba(242,243,240,0.88)',
-  regular: 'rgba(255,255,255,0.92)',
-  thick: 'rgba(255,255,255,0.97)',
-  thin: 'rgba(255,255,255,0.68)',
+  chrome: 'rgba(245,243,238,0.88)',
+  regular: 'rgba(254,253,251,0.92)',
+  thick: 'rgba(254,253,251,0.97)',
+  thin: 'rgba(254,253,251,0.68)',
   highlight: 'rgba(255,255,255,0.95)',
-  stroke: 'rgba(18,24,20,0.08)',
-  separator: 'rgba(18,24,20,0.10)',
-  tint: 'rgba(74,113,84,0.12)',
+  stroke: 'rgba(20,23,18,0.08)',
+  separator: 'rgba(20,23,18,0.11)',
+  tint: 'rgba(57,124,85,0.12)',
 };
 
 export const ZEN_DARK_MATERIALS: MaterialPalette = {
-  chrome: 'rgba(15,15,20,0.86)',
-  regular: 'rgba(30,31,37,0.92)',
-  thick: 'rgba(36,38,44,0.97)',
-  thin: 'rgba(44,46,53,0.64)',
-  highlight: 'rgba(255,255,255,0.10)',
-  stroke: 'rgba(255,255,255,0.08)',
-  separator: 'rgba(255,255,255,0.09)',
-  tint: 'rgba(130,166,138,0.18)',
+  chrome: 'rgba(18,18,14,0.86)',
+  regular: 'rgba(34,35,30,0.92)',
+  thick: 'rgba(41,43,37,0.97)',
+  thin: 'rgba(50,52,45,0.64)',
+  // Warm-white light so the lit edge matches the ivory text, not a blue glint.
+  highlight: 'rgba(255,250,235,0.10)',
+  stroke: 'rgba(255,250,235,0.08)',
+  separator: 'rgba(255,250,235,0.10)',
+  tint: 'rgba(138,208,164,0.18)',
 };
 
 export const ZEN_LIGHT_DATA_VISUALIZATION: DataVisualizationPalette = {
-  activityRamp: [ZEN_SAGE[100], ZEN_SAGE[200], ZEN_SAGE[400], ZEN_SAGE[700]],
+  activityRamp: [ZEN_SAGE[100], ZEN_SAGE[300], ZEN_SAGE[500], ZEN_SAGE[700]],
 };
 
 export const ZEN_DARK_DATA_VISUALIZATION: DataVisualizationPalette = {
   activityRamp: [
-    ZEN_DARK_NEUTRALS.active,
-    ZEN_SAGE[800],
+    ZEN_SAGE[900],
+    ZEN_SAGE[700],
     ZEN_SAGE[500],
     ZEN_SAGE[300],
   ],

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
+import { Radii, useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import type { TelegramConnectionStatus } from "../../services/websocket";
 
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   subtitle: { ...UiTextMetrics, ...TypeScale.compact, flexShrink: 1 },
   caption: { ...UiTextMetrics, ...TypeScale.caption },
   stack: { gap: 18 },
-  group: { borderRadius: 22, overflow: "hidden" },
+  group: { borderRadius: Radii.card, overflow: "hidden" },
   // Inset hairline drawn over the row, so every row keeps the same 16pt
   // content inset instead of shifting right under an indented border.
   divider: { position: "absolute", top: 0, left: 16, right: 0, height: StyleSheet.hairlineWidth },
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   detailValue: { ...UiTextMetrics, ...TypeScale.compact, flex: 1, minWidth: 0, textAlign: "right", fontVariant: ["tabular-nums"] },
   detailValueGroup: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   sectionTitle: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, paddingBottom: 6 },
-  inputRow: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 22, paddingLeft: 16, paddingRight: 4 },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: Radii.card, paddingLeft: 16, paddingRight: 4 },
   input: { ...UiTextMetrics, ...TypeScale.body, minHeight: 52, flex: 1, minWidth: 0 },
   paste: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   notice: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, marginTop: 8, marginBottom: 18 },

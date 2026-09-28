@@ -46,6 +46,8 @@ export const Spacing = {
   actionBarHeight: 56,
 } as const;
 
+// One 4pt-aligned ladder. Named roles alias a step instead of sitting between
+// steps (the old 22/24/28/32 cluster read as noise, not hierarchy).
 export const Radii = {
   xs: 8,
   sm: 12,
@@ -54,9 +56,9 @@ export const Radii = {
   xl: 24,
   xxl: 28,
   /** Grouped list sections and content cards. */
-  card: 22,
+  card: 20,
   /** Bottom sheets and full-width floating panels. */
-  sheet: 32,
+  sheet: 28,
   pill: 999,
 } as const;
 
@@ -117,16 +119,16 @@ type TypeScaleStyle = Pick<
 export const TypeScale = {
   largeTitle: {
     fontFamily: Typography.uiFontMedium,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '500',
-    lineHeight: 36,
+    lineHeight: 38,
     letterSpacing: 0,
   },
   display: {
     fontFamily: Typography.uiFontMedium,
-    fontSize: 30,
+    fontSize: 34,
     fontWeight: '500',
-    lineHeight: 38,
+    lineHeight: 42,
     letterSpacing: 0,
   },
   title: {
@@ -147,14 +149,14 @@ export const TypeScale = {
     fontFamily: Typography.uiFont,
     fontSize: 15,
     fontWeight: '400',
-    lineHeight: 23,
+    lineHeight: 24,
     letterSpacing: 0,
   },
   compact: {
     fontFamily: Typography.uiFont,
     fontSize: 14,
     fontWeight: '400',
-    lineHeight: 21,
+    lineHeight: 22,
     letterSpacing: 0,
   },
   label: {
@@ -176,7 +178,8 @@ export const TypeScale = {
     fontSize: 11,
     fontWeight: '500',
     lineHeight: 15,
-    letterSpacing: 0,
+    // Small medium-weight labels close up; a hair of tracking keeps them open.
+    letterSpacing: 0.2,
   },
   mono: {
     fontFamily: Typography.terminalFont,

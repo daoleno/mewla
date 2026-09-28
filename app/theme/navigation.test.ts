@@ -29,7 +29,7 @@ describe("Session exit navigation theme continuity", () => {
       },
       fonts,
     });
-    expect(navigationTheme.colors.background).toBe("#0F0F14");
+    expect(navigationTheme.colors.background).toBe("#12120E");
     expect(Object.values(navigationTheme.colors)).not.toContain("transparent");
   });
 
@@ -75,6 +75,6 @@ describe("Session exit navigation theme continuity", () => {
 
     expect(explicitlyDarkZenTheme.colorScheme).toBe("dark");
     expect(navigationTheme.dark).toBe(true);
-    expect(navigationTheme.colors.background).toBe("#0F0F14");
+    expect(navigationTheme.colors.background).toBe("#12120E");
   });
 });
