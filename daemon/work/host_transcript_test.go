@@ -106,6 +106,13 @@ func TestLoadHostConversationByIdentityDoesNotFallThroughUnknownProviderToCodex(
 	}
 }
 
+func TestHostDataRootForClaudeTranscript(t *testing.T) {
+	path := "/home/daoleno/.claude/projects/-home-daoleno--zen-brain-workspace/session.jsonl"
+	if got, want := hostDataRootForPath(path, WorkerProviderClaude), "/home/daoleno/.claude"; got != want {
+		t.Fatalf("hostDataRootForPath(%q, claude) = %q, want %q", path, got, want)
+	}
+}
+
 func TestSuppressPrivateHostTurnsHidesHandoffAndKeepsLaterReplies(t *testing.T) {
 	events := []CodexConversationEvent{
 		{ID: "boot-user", Kind: "user_message", Role: "user", Body: "You are Brain inside zen\nTreat this bootstrap as a map"},

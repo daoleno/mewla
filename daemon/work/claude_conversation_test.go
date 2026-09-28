@@ -481,6 +481,55 @@ func TestProviderConversationReaderClaudeFindsResumeSession(t *testing.T) {
 	}
 }
 
+func TestEncodeClaudeProjectDirMatchesClaudeLayout(t *testing.T) {
+	tests := []struct {
+		name string
+		cwd  string
+		want string
+	}{
+		{
+			name: "zen brain workspace",
+			cwd:  "/home/daoleno/.zen/brain/workspace",
+			want: "-home-daoleno--zen-brain-workspace",
+		},
+		{
+			name: "dot free path",
+			cwd:  "/home/daoleno/workspace/onlora",
+			want: "-home-daoleno-workspace-onlora",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := encodeClaudeProjectDir(tt.cwd); got != tt.want {
+				t.Fatalf("encodeClaudeProjectDir(%q) = %q, want %q", tt.cwd, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProviderConversationReaderClaudeFindsDotEncodedProjectLayout(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cwd := "/home/daoleno/.zen/brain/workspace"
+	// This is Claude Code's observed directory name. Keep it explicit so the
+	// test proves lookup does not construct the old separator-only spelling.
+	projectDir := filepath.Join(home, ".claude", "projects", "-home-daoleno--zen-brain-workspace")
+	path := filepath.Join(projectDir, "brain-session.jsonl")
+	writeClaudeReaderTranscript(t, path, cwd, "brain-session", "host reply")
+	now := time.Now().UTC()
+	forceReaderFixtureModTime(t, path, now)
+
+	got, err := NewProviderConversationReader().Load(classifier.Worker{
+		Name: "claude", Command: "claude", Cwd: cwd,
+	}, WorkerProviderClaude, now)
+	if err != nil {
+		t.Fatalf("ProviderConversationReader.Load: %v", err)
+	}
+	if !got.Available || got.Path != path || got.SessionID != "brain-session" {
+		t.Fatalf("conversation = %#v", got)
+	}
+}
+
 func TestProviderConversationReaderClaudeExplicitResumeOldOrMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
