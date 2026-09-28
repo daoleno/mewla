@@ -2,7 +2,7 @@ import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native-gesture-handler";
-import { ContinuousCorners, Typography } from "../../constants/tokens";
+import { ContinuousCorners, Radii, Typography } from "../../constants/tokens";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { CodexSlashCommand } from "../../services/websocket";
 import { CodexQuickCommandRow } from "./CodexQuickCommandRow";
@@ -207,7 +207,7 @@ function groupCommands(commands: CodexSlashCommand[]): CommandGroup[] {
 
 const styles = StyleSheet.create({
   menu: {
-    borderRadius: 22,
+    borderRadius: Radii.card,
     ...ContinuousCorners,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",

@@ -74,3 +74,18 @@ A segmented **Codex / Claude** switch picks the agent. Below it, one grouped lis
 - **Destructive actions** go through `confirmDestructive` or a native alert where the destructive button is never the default. This covers terminating Sessions, removing a server, deleting a Work item, deleting a Provider, and removing or unlinking Telegram.
 - **Status** uses `StatusPill`, whose live pulse stops under Reduce Motion. Recoverable problems and in-flow status use `InlineNotice`, and empty, loading, and blocking error states use `EmptyState`.
 - **Lists** use grouped `ListSection` / `ListRow` rows. Small exclusive choices use `SegmentedControl`.
+
+## Visual tokens
+
+Color lives in `app/theme/primitives.ts` and reaches components through `useZenTheme()` / `useAppColors()`. Type, spacing, radii and shadows live in `app/constants/tokens.ts`. The terminal emulator palette in `app/constants/terminalThemes.ts` is separate.
+
+- **Canvas.** Dark mode uses a warm ink canvas (`#12120E`), not a blue-black one, so sage sits on it without vibrating. Light mode uses a warm stone canvas (`#F5F3EE`) with near-white paper cards.
+- **Elevation.** Canvas, surface, elevated and pressed are distinct tonal steps. Hairlines are not the only thing that separates them.
+- **Sage.** The ramp is tuned in OKLCH around hue 156. Chroma peaks at 400–600 and the dark end stays green rather than grey. Ivory `#F2EEE5` remains the brand detail colour on the dark mark.
+- **Status.** Success is teal, not a second sage, so it stays distinct from the accent, danger and warning under common colour-vision deficiencies. Status is never conveyed by hue alone: worker rows also carry a status icon.
+- **Contrast.** Contrast is an acceptance gate. `app/theme/contrast.test.ts` checks every shipped text/background pairing in both schemes against WCAG AA:
+  - 4.5:1 for text.
+  - 3:1 for focus rings, strong borders, status glyphs and the densest heatmap cell.
+  - Translucent materials and the selection colour are blended onto their real background before measuring.
+  - Decorative hairlines (`border`, `borderSubtle`, material separators) are intentionally exempt.
+- **Radii.** One 4pt ladder (8/12/16/20/24/28). `Radii.card` is 20 for grouped sections, cards and menus. `Radii.sheet` is 28 for bottom sheets. Circular controls use half their size.

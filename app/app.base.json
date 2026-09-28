@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F0F14"
+      "backgroundColor": "#12120E"
     },
     "ios": {
       "bundleIdentifier": "com.daoleno.zen",
