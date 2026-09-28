@@ -315,6 +315,11 @@ func hostDataRootForPath(path, provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case WorkerProviderCodex:
 		return dataRootForPath(path, nil)
+	case WorkerProviderClaude:
+		const marker = string(os.PathSeparator) + ".claude" + string(os.PathSeparator)
+		if index := strings.Index(path, marker); index >= 0 {
+			return path[:index] + string(os.PathSeparator) + ".claude"
+		}
 	case WorkerProviderGrok:
 		const marker = string(os.PathSeparator) + ".grok" + string(os.PathSeparator)
 		if index := strings.Index(path, marker); index > 0 {

@@ -881,7 +881,13 @@ func isCodexInstructionContextFragment(value string) bool {
 
 func encodeClaudeProjectDir(cwd string) string {
 	clean := filepath.Clean(cwd)
-	return strings.ReplaceAll(clean, string(filepath.Separator), "-")
+	// Claude Code replaces both path separators and dots with hyphens. Keep
+	// this in sync with the on-disk ~/.claude/projects layout (for example,
+	// /.zen becomes --zen after the separator and dot are encoded).
+	return strings.NewReplacer(
+		string(filepath.Separator), "-",
+		".", "-",
+	).Replace(clean)
 }
 
 func transcriptCWDCandidates(cwd string) []string {
