@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseHex, relativeLuminance, rgbToHex } from "./colorUtils";
+import { ZEN_ACCENTS } from "./primitives";
 import { resolveTheme } from "./resolve";
 import type { ResolvedZenTheme, ThemeColorScheme } from "./types";
 
@@ -23,6 +24,30 @@ function composite(layer: string, backdrop: string): string {
   const a = Number(alpha);
   const mix = (top: number, bottom: number) => Math.round(top * a + bottom * (1 - a));
   return rgbToHex(mix(Number(r), base.red), mix(Number(g), base.green), mix(Number(b), base.blue));
+}
+
+function toOklab(hex: string): [number, number, number] {
+  const { red, green, blue } = parseHex(hex);
+  const lin = (value: number) => {
+    const c = value / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const [r, g, b] = [lin(red), lin(green), lin(blue)];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+/** Perceptual distance (OKLab ΔE); ~0.02 is a just-noticeable difference. */
+function oklabDistance(a: string, b: string): number {
+  const [l1, a1, b1] = toOklab(a);
+  const [l2, a2, b2] = toOklab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
 }
 
 type Pairing = [label: string, foreground: string, background: string, minimum: number];
@@ -90,23 +115,39 @@ const SCHEMES: ThemeColorScheme[] = ["light", "dark"];
 
 describe("Zen palette WCAG AA contrast", () => {
   for (const colorScheme of SCHEMES) {
-    test(`${colorScheme}: every shipped text and affordance pairing meets AA`, () => {
-      const failures = pairings(resolveTheme({ colorScheme }))
-        .map(([label, fg, bg, minimum]) => ({ label, ratio: contrastRatio(fg, bg), minimum }))
-        .filter(({ ratio, minimum }) => ratio < minimum)
-        .map(({ label, ratio, minimum }) => `${label}: ${ratio.toFixed(2)} < ${minimum}`);
-      expect(failures).toEqual([]);
-    });
+    for (const { id: accentId } of ZEN_ACCENTS) {
+      test(`${colorScheme}/${accentId}: every shipped text and affordance pairing meets AA`, () => {
+        const failures = pairings(resolveTheme({ colorScheme, accentId }))
+          .map(([label, fg, bg, minimum]) => ({ label, ratio: contrastRatio(fg, bg), minimum }))
+          .filter(({ ratio, minimum }) => ratio < minimum)
+          .map(({ label, ratio, minimum }) => `${label}: ${ratio.toFixed(2)} < ${minimum}`);
+        expect(failures).toEqual([]);
+      });
 
-    test(`${colorScheme}: the densest activity cell stays visible on the card`, () => {
-      const { dataVisualization, surfaces } = resolveTheme({ colorScheme });
-      const ramp = dataVisualization.activityRamp;
-      expect(contrastRatio(ramp[3], surfaces.card)).toBeGreaterThanOrEqual(UI);
-      // Monotonic: each step moves away from the card, so intensity reads in order.
-      const distance = ramp.map((cell) => contrastRatio(cell, surfaces.card));
-      for (let index = 1; index < distance.length; index += 1) {
-        expect(distance[index]).toBeGreaterThan(distance[index - 1]);
-      }
+      test(`${colorScheme}/${accentId}: the densest activity cell stays visible and ordered`, () => {
+        const { dataVisualization, surfaces } = resolveTheme({ colorScheme, accentId });
+        const ramp = dataVisualization.activityRamp;
+        expect(contrastRatio(ramp[3], surfaces.card)).toBeGreaterThanOrEqual(UI);
+        const distance = ramp.map((cell) => contrastRatio(cell, surfaces.card));
+        for (let index = 1; index < distance.length; index += 1) {
+          expect(distance[index]).toBeGreaterThan(distance[index - 1]);
+        }
+      });
+
+      test(`${colorScheme}/${accentId}: running status stays apart from unknown, done and danger`, () => {
+        const { colors } = resolveTheme({ colorScheme, accentId });
+        const others = [colors.statusUnknown, colors.statusDone, colors.statusFailed, colors.statusBlocked];
+        for (const other of others) {
+          expect(oklabDistance(colors.statusRunning, other)).toBeGreaterThan(0.06);
+        }
+        expect(oklabDistance(colors.accent, colors.statusFailed)).toBeGreaterThan(0.06);
+        expect(oklabDistance(colors.accent, colors.success)).toBeGreaterThan(0.06);
+      });
+    }
+
+    test(`${colorScheme}: default accent resolves to sage`, () => {
+      expect(resolveTheme({ colorScheme }).accentId).toBe("sage");
+      expect(resolveTheme({ colorScheme, accentId: "unknown" }).accentId).toBe("sage");
     });
 
     test(`${colorScheme}: elevation levels are tonally distinct`, () => {

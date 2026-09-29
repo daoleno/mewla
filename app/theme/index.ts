@@ -31,7 +31,11 @@ export {
   ZEN_LIGHT_STATUS,
   ZEN_LIGHT_SURFACE_PALETTE,
   ZEN_SAGE,
+  ZEN_ACCENTS,
+  DEFAULT_ACCENT_ID,
+  getAccentById,
 } from './primitives';
+export type { ZenAccent, ZenAccentId } from './primitives';
 
 export { ThemeProvider, useZenTheme } from './provider';
 export { buildChatChrome } from './buildChatChrome';
