@@ -1,4 +1,5 @@
 import type { AppColors } from './palette';
+import type { ZenAccentId } from './primitives';
 
 export type ThemeColorScheme = 'light' | 'dark';
 
@@ -44,7 +45,7 @@ export interface SurfacePalette {
 /**
  * Layered materials for chrome that floats over content: bars, sheets,
  * menus, floating controls. Fills are translucent so the canvas reads through;
- * `highlight` is the lit top edge and `stroke` the outer hairline.
+ * `stroke` is the one continuous outer outline.
  */
 export interface MaterialPalette {
   /** Navigation bars and pinned chrome over scrolling content. */
@@ -55,7 +56,6 @@ export interface MaterialPalette {
   thick: string;
   /** Chips and capsules resting directly on the canvas. */
   thin: string;
-  highlight: string;
   stroke: string;
   separator: string;
   /** Accent-tinted fill for selected or tinted controls. */
@@ -80,6 +80,7 @@ export interface ZenThemeDefinition {
 
 export interface ResolvedZenTheme extends ZenThemeDefinition {
   isLight: boolean;
+  accentId: ZenAccentId;
 }
 
 export type ThemePreference = 'system' | string;

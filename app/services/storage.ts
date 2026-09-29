@@ -24,6 +24,7 @@ const KEYS = {
   workerAliases: "zen:agent_aliases",
   interfaceRenderModes: "zen:codex_render_modes",
   themePreference: "zen:theme_preference",
+  accentPreference: "zen:accent_preference",
 } as const;
 
 let serverWriteTail: Promise<unknown> = Promise.resolve();
@@ -300,4 +301,14 @@ export async function setThemePreference(
   preference: StoredThemePreference,
 ): Promise<void> {
   await AsyncStorage.setItem(KEYS.themePreference, preference);
+}
+
+export async function getAccentPreference(): Promise<string | null> {
+  const value = await AsyncStorage.getItem(KEYS.accentPreference);
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export async function setAccentPreference(accentId: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.accentPreference, accentId);
 }
