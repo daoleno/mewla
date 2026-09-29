@@ -24,6 +24,7 @@ import {
 } from "../../services/websocket";
 import { BottomSheetFrame } from "../ui";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
+import { outlinedSurface } from "../ui/outlinedSurface";
 
 interface CodexSkillsSheetProps {
   visible: boolean;
@@ -308,8 +309,7 @@ const styles = StyleSheet.create({
   },
   search: {
     minHeight: 44,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    ...outlinedSurface(8),
     flexDirection: "row",
     alignItems: "center",
     gap: 8,

@@ -14,6 +14,7 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { TerminalThemePalette } from "../../constants/terminalThemes";
 import { TypeScale, Typography } from "../../constants/tokens";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
+import { outlinedSurface } from "../ui/outlinedSurface";
 
 interface TerminalActionPromptCardProps {
   prompt: TerminalActionPrompt;
@@ -292,8 +293,7 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 12,
     marginBottom: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    ...outlinedSurface(8),
     padding: 10,
     gap: 10,
   },
@@ -327,8 +327,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   requestBlock: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    ...outlinedSurface(8),
     paddingHorizontal: 9,
     paddingVertical: 8,
     gap: 3,
@@ -348,8 +347,7 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     minHeight: 48,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    ...outlinedSurface(8),
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
@@ -380,8 +378,7 @@ const styles = StyleSheet.create({
   defaultPill: {
     minHeight: 20,
     paddingHorizontal: 6,
-    borderRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
+    ...outlinedSurface(4),
     alignItems: "center",
     justifyContent: "center",
   },
