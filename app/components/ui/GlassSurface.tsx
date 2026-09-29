@@ -11,6 +11,7 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { ContinuousCorners, shadow, useAppTheme } from "../../constants/tokens";
 import type { MaterialPalette } from "../../theme";
 import { relativeLuminance } from "../../theme/colorUtils";
+import { outlinedSurface } from "./outlinedSurface";
 import { useReduceTransparency } from "./useReduceTransparency";
 
 export type GlassMaterial = keyof Pick<
@@ -39,8 +40,11 @@ const LIQUID_GLASS = Platform.OS === "ios" && isLiquidGlassAvailable();
 
 /**
  * The single material owner. iOS 26 renders system Liquid Glass; elsewhere a
- * translucent fill, an outer hairline and a lit top edge stand in for it.
- * Reduce Transparency switches to an opaque fill.
+ * translucent fill and one continuous outline stand in for it. The outline is
+ * the only edge: a partial lit band would brighten the straight run and fall
+ * back at the corners. Reduce Transparency switches to an opaque fill, and so
+ * does a floating Android surface, whose elevation shadow smears through a
+ * translucent one.
  */
 export function GlassSurface({
   material = "regular",
@@ -76,7 +80,8 @@ export function GlassSurface({
     );
   }
 
-  const fill = reduceTransparency
+  const opaque = reduceTransparency || (Platform.OS === "android" && lift?.elevation != null);
+  const fill = opaque
     ? material === "thin"
       ? colors.bgElevated
       : colors.modalSurface
@@ -86,9 +91,8 @@ export function GlassSurface({
     <View
       {...viewProps}
       style={[
-        shape,
-        styles.frame,
-        { backgroundColor: fill, borderColor: strokeOverride ?? materials.stroke },
+        outlinedSurface(radius, strokeOverride ?? materials.stroke),
+        { backgroundColor: fill },
         lift,
         style,
       ]}
@@ -99,17 +103,6 @@ export function GlassSurface({
           style={[StyleSheet.absoluteFill, shape, { backgroundColor: materials.tint }]}
         />
       ) : null}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.highlight,
-          {
-            left: Math.max(radius * 0.6, 8),
-            right: Math.max(radius * 0.6, 8),
-            backgroundColor: materials.highlight,
-          },
-        ]}
-      />
       {children}
     </View>
   );
@@ -123,14 +116,3 @@ function schemeForFill(fill: string, fallback: "light" | "dark"): "light" | "dar
   if (!/^#[0-9a-f]{6}$/i.test(fill)) return fallback;
   return relativeLuminance(fill) > 0.4 ? "light" : "dark";
 }
-
-const styles = StyleSheet.create({
-  frame: {
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  highlight: {
-    position: "absolute",
-    top: 0,
-    height: StyleSheet.hairlineWidth,
-  },
-});

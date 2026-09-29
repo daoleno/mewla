@@ -37,10 +37,5 @@ export function composerNeutralFill(
   return chromeTint(chrome.text, alpha, chrome.disabledSurface);
 }
 
-/** Lit top edge of a floating glass material. */
-export function composerLitEdge(chrome: TerminalThemeChrome): string {
-  return withAlpha("#FFFFFF", chromeIsLight(chrome) ? 0.85 : 0.09);
-}
-
 /** Visual diameter of the circular Composer controls inside a 44 pt target. */
 export const COMPOSER_CONTROL_DISC_SIZE = 34;

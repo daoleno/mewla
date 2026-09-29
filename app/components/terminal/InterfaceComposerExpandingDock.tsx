@@ -10,8 +10,8 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { ContinuousCorners, shadow } from "../../constants/tokens";
-import { composerLitEdge } from "./composerMaterial";
+import { ContinuousCorners } from "../../constants/tokens";
+import { OutlineWidth } from "../ui/outlinedSurface";
 import type { ComposerModelControlPresentation } from "../../services/providers/sessionModelHelpers";
 import { ComposerIconButton } from "./ComposerIconButton";
 import { ComposerModelChip } from "./ComposerModelChip";
@@ -22,7 +22,6 @@ import {
   COMPOSER_MODEL_CONTROL_HEIGHT,
   COMPOSER_MODEL_CONTROL_LEFT_INSET,
   COMPOSER_MODEL_CONTROL_RIGHT_INSET,
-  COMPOSER_RADIUS_COMPACT,
   COMPOSER_SPRING_CONFIG,
   composerActionBandHeight,
   composerExpansionRadius,
@@ -157,19 +156,13 @@ export function InterfaceComposerExpandingDock({
         styles.capsule,
         capsuleStyle,
         {
-          // Opaque fill: Android elevation smears under a translucent one.
-          // The glass read comes from the hairline, the lit edge and a soft,
-          // diffuse shadow instead.
+          // Flat capsule: the one continuous outline is its only edge. A lit
+          // top band or an elevation shadow would break it at the corners.
           backgroundColor: chrome.composerInput,
           borderColor: chrome.border,
-          ...shadow("card", chrome.shadowColor),
         },
       ]}
     >
-      <View
-        pointerEvents="none"
-        style={[styles.litEdge, { backgroundColor: composerLitEdge(chrome) }]}
-      />
       <Reanimated.View style={[styles.inputRegion, inputRegionStyle]}>
         <InterfaceComposerInput
           inputRef={inputRef}
@@ -236,17 +229,8 @@ export function InterfaceComposerExpandingDock({
 const styles = StyleSheet.create({
   capsule: {
     flexDirection: "column",
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: OutlineWidth,
     ...ContinuousCorners,
-  },
-  // Glass-style lit top edge so the dock reads as a floating material. Inset
-  // by the compact radius so it never runs into the rounded corners.
-  litEdge: {
-    position: "absolute",
-    top: 0,
-    left: COMPOSER_RADIUS_COMPACT,
-    right: COMPOSER_RADIUS_COMPACT,
-    height: StyleSheet.hairlineWidth,
   },
   inputRegion: {
     paddingTop: COMPOSER_ACTION_BAND_VERTICAL_PADDING,
