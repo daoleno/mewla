@@ -33,5 +33,5 @@ None.
 
 ## Non-blockers recorded for honesty
 
-- Fonts (Source Han Sans SC, Maple Mono CN, Sarasa Gothic/Term SC): upstream OFL evidence recorded in `third-party-assets.md`.
+- Fonts (Source Han Sans SC, Maple Mono CN): upstream OFL evidence recorded in `third-party-assets.md`.
 - Ghostty: MIT; redistribution of built `.so`/APK and iOS app/IPA needs notice packaging (Android + iOS verifiers).
