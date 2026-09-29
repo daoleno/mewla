@@ -16,8 +16,9 @@ import {
 } from "../../constants/tokens";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { AppText } from "./AppText";
+import { outlinedSurface } from "./outlinedSurface";
 
-export type ButtonVariant = "filled" | "tinted" | "plain" | "destructive";
+export type ButtonVariant = "filled" | "tinted" | "outlined" | "plain" | "destructive";
 export type ButtonSize = "sm" | "md" | "lg";
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -61,7 +62,9 @@ export function Button({
         ? { fill: colors.dangerSoft, text: colors.dangerText }
         : variant === "tinted"
           ? { fill: theme.materials.tint, text: colors.accentStrong }
-          : { fill: "transparent", text: colors.accentStrong };
+          : variant === "outlined"
+            ? { fill: "transparent", text: colors.textPrimary }
+            : { fill: "transparent", text: colors.accentStrong };
 
   return (
     <AnimatedPressable
@@ -82,6 +85,9 @@ export function Button({
           paddingHorizontal: size === "sm" ? 14 : 20,
           backgroundColor: palette.fill,
         },
+        variant === "outlined"
+          ? outlinedSurface(999, inactive ? colors.borderSubtle : colors.border)
+          : null,
         block && styles.block,
         variant === "filled" && !inactive ? shadow("raised", colors.accent) : null,
         style,

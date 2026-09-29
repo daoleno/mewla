@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useAppColors } from "../../constants/tokens";
 import { GlassSurface } from "../ui/GlassSurface";
+import { OutlineWidth } from "../ui/outlinedSurface";
 
 export const PRIMARY_CHROME_BUTTON_SIZE = 40;
 
@@ -72,6 +73,8 @@ const styles = StyleSheet.create({
   disc: {
     width: PRIMARY_CHROME_BUTTON_SIZE,
     height: PRIMARY_CHROME_BUTTON_SIZE,
+    // Fallback glass draws a hairline; a full-point ring stays unbroken on the disc.
+    borderWidth: OutlineWidth,
     alignItems: "center",
     justifyContent: "center",
   },

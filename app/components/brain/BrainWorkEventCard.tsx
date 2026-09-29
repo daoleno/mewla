@@ -6,6 +6,7 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import { brainWorkEventCardModel } from "./brainWorkEventCardModel";
+import { outlinedSurface } from "../ui/outlinedSurface";
 import {
   BRAIN_WORK_CARD_FACT_LINES,
   BRAIN_WORK_CARD_GAP,
@@ -191,8 +192,7 @@ function createStyles(chrome: TerminalThemeChrome) {
       marginBottom: 8,
       paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING,
       paddingVertical: 12,
-      borderRadius: 8,
-      borderWidth: StyleSheet.hairlineWidth,
+      ...outlinedSurface(8),
       borderColor: chrome.border,
       backgroundColor: chrome.surfaceMuted,
     },

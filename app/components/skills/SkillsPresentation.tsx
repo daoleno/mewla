@@ -53,6 +53,7 @@ import { AgentLogoSet } from "../agents/AgentLogoSet";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
 import { PluginsPresentation } from "../plugins/PluginsPresentation";
 import { SkillFileBrowser } from "./SkillFileBrowser";
+import { outlinedSurface } from "../ui/outlinedSurface";
 
 export interface SurfaceMutationNotice {
   kind: "success" | "error";
@@ -1178,8 +1179,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 560,
     minHeight: 48,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    ...outlinedSurface(8),
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",

@@ -17,6 +17,7 @@ import {
 } from "../../services/agentCommands";
 import { AgentKindIcon } from "./AgentKindIcon";
 import { AppText } from "../ui";
+import { outlinedSurface } from "../ui/outlinedSurface";
 
 export type NewTerminalLaunchPreset = {
   key: string;
@@ -118,10 +119,8 @@ function createStyles(colors: AppColors) {
       gap: 12,
       paddingHorizontal: 14,
       paddingVertical: 10,
-      borderRadius: 12,
+      ...outlinedSurface(12, colors.borderSubtle),
       backgroundColor: colors.surfaceSubtle,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderSubtle,
     },
     presetCardActive: {
       backgroundColor: colors.surfaceActive,

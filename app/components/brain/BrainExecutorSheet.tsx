@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { outlinedSurface } from "../ui/outlinedSurface";
 import {
   Radii,
   TypeScale,
@@ -298,8 +299,7 @@ function createStyles(theme: ResolvedZenTheme) {
     targetChip: {
       flex: 1,
       minHeight: 44,
-      borderRadius: Radii.md,
-      borderWidth: StyleSheet.hairlineWidth,
+      ...outlinedSurface(Radii.md),
       paddingHorizontal: 12,
       paddingVertical: 8,
       flexDirection: "row",
@@ -318,8 +318,7 @@ function createStyles(theme: ResolvedZenTheme) {
     },
     row: {
       minHeight: 64,
-      borderRadius: Radii.md,
-      borderWidth: StyleSheet.hairlineWidth,
+      ...outlinedSurface(Radii.md),
       paddingHorizontal: 14,
       paddingVertical: 12,
       flexDirection: "row",

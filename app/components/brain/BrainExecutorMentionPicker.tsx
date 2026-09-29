@@ -9,6 +9,7 @@ import {
 } from "../../constants/tokens";
 import type { BrainExecutorRef } from "../../store/brain";
 import { BrainExecutorIcon } from "./BrainExecutorIcon";
+import { outlinedSurface } from "../ui/outlinedSurface";
 import { brainAdapterLabel, brainProviderLabel } from "./brainPresentation";
 
 interface BrainExecutorMentionPickerProps {
@@ -98,9 +99,7 @@ function createStyles(chrome: TerminalThemeChrome) {
     wrap: {
       marginHorizontal: 10,
       marginBottom: 6,
-      borderRadius: 16,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: chrome.border,
+      ...outlinedSurface(16, chrome.border),
       backgroundColor: chrome.composerInput,
       overflow: "hidden",
     },
@@ -117,9 +116,7 @@ function createStyles(chrome: TerminalThemeChrome) {
       flexDirection: "row",
       alignItems: "center",
       gap: 7,
-      borderRadius: Radii.pill,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: chrome.border,
+      ...outlinedSurface(Radii.pill, chrome.border),
       backgroundColor: chrome.surface,
       paddingHorizontal: 11,
     },

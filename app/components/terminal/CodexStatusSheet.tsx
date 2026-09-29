@@ -11,10 +11,11 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { Typography } from "../../constants/tokens";
+import { ContinuousCorners, Typography } from "../../constants/tokens";
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import { BottomSheetFrame } from "../ui";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
+import { OutlineWidth, outlinedSurface } from "../ui/outlinedSurface";
 
 interface CodexStatusSheetProps {
   visible: boolean;
@@ -285,8 +286,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   rows: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    ...outlinedSurface(8),
     overflow: "hidden",
   },
   row: {
@@ -318,8 +318,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   rawOutput: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    ...outlinedSurface(8),
     paddingHorizontal: 10,
     paddingVertical: 9,
     fontSize: 12,
@@ -355,6 +354,7 @@ const styles = StyleSheet.create({
   actionButton: {
     minHeight: 44,
     borderRadius: 8,
+    ...ContinuousCorners,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   secondaryActionButton: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: OutlineWidth,
   },
   primaryActionText: {
     fontSize: 13,

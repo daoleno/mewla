@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Typography, useAppColors, type AppColors } from "../../constants/tokens";
 import { compactPathLabel } from "../../services/pathDisplay";
 import { AppText } from "../ui";
+import { outlinedSurface } from "../ui/outlinedSurface";
 
 interface NewTerminalCwdRowProps {
   cwd: string;
@@ -72,10 +73,8 @@ function createStyles(colors: AppColors) {
       gap: 10,
       paddingHorizontal: 12,
       paddingVertical: 8,
-      borderRadius: 12,
+      ...outlinedSurface(12, colors.borderSubtle),
       backgroundColor: colors.surfaceSubtle,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderSubtle,
       marginBottom: 14,
     },
     rowPressed: {

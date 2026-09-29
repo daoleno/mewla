@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { ZenLogoMark } from "../ui/ZenLogoMark";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 
 const GUIDE = "https://github.com/daoleno/zen/blob/main/docs/";
@@ -50,16 +51,10 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
               <Text accessibilityRole="header" style={[styles.title, { color: colors.textPrimary }]}>Connect your computer</Text>
             </View>
             <View style={styles.actions}>
-              <AnimatedPressable accessibilityRole="button" accessibilityLabel="Scan pairing code"
-                onPress={() => onPair("scanner")} style={[styles.primary, { backgroundColor: colors.accent }]}>
-                <Ionicons name="qr-code-outline" size={22} color={colors.textOnAccent} />
-                <Text style={[styles.buttonText, { color: colors.textOnAccent }]}>Scan pairing code</Text>
-              </AnimatedPressable>
-              <AnimatedPressable accessibilityRole="button" accessibilityLabel="Import pairing link"
-                onPress={() => onPair("editor")} style={[styles.secondary, { borderColor: colors.borderSubtle }]}>
-                <Ionicons name="link-outline" size={21} color={colors.textPrimary} />
-                <Text style={[styles.buttonText, { color: colors.textPrimary }]}>Import pairing link</Text>
-              </AnimatedPressable>
+              <Button variant="filled" size="lg" block icon="qr-code-outline" label="Scan pairing code"
+                onPress={() => onPair("scanner")} />
+              <Button variant="outlined" size="lg" block icon="link-outline" label="Import pairing link"
+                onPress={() => onPair("editor")} />
             </View>
             <View style={[styles.setup, { borderColor: colors.borderSubtle }]}>
               <AnimatedPressable accessibilityRole="button" accessibilityLabel="Computer setup"
@@ -105,9 +100,6 @@ const styles = StyleSheet.create({
   heading: { gap: 10, paddingTop: 24, paddingBottom: 28 },
   title: { ...TypeScale.heading, fontSize: 26, lineHeight: 33, letterSpacing: 0 },
   actions: { gap: 12 },
-  primary: { borderRadius: 8, minHeight: 54, padding: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
-  secondary: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, minHeight: 54, padding: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
-  buttonText: { ...TypeScale.label, fontSize: 16, flexShrink: 1, textAlign: "center" },
   setup: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 32 },
   setupHeader: { minHeight: 60, paddingVertical: 14, gap: 10, flexDirection: "row", alignItems: "center" },
   setupTitle: { ...TypeScale.label, flex: 1 },
