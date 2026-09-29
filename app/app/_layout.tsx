@@ -758,10 +758,6 @@ export default function RootLayout() {
     "SourceHanSansSC-Medium": require("../assets/fonts/SourceHanSansSC-Medium.otf"),
     "MapleMono-CN-Regular": require("../assets/fonts/MapleMono-CN-Regular.ttf"),
     "MapleMono-CN-SemiBold": require("../assets/fonts/MapleMono-CN-SemiBold.ttf"),
-    "SarasaGothicSC-Regular": require("../assets/fonts/SarasaGothicSC-Regular.ttf"),
-    "SarasaGothicSC-Bold": require("../assets/fonts/SarasaGothicSC-Bold.ttf"),
-    "SarasaTermSC-Regular": require("../assets/fonts/SarasaTermSC-Regular.ttf"),
-    "SarasaTermSC-Bold": require("../assets/fonts/SarasaTermSC-Bold.ttf"),
   });
 
   useEffect(() => {
