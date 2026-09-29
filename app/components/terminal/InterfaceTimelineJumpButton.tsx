@@ -3,7 +3,7 @@ import { StyleSheet, TouchableOpacity, View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners, TypeScale, shadow } from "../../constants/tokens";
-import { composerLitEdge } from "./composerMaterial";
+import { OutlineWidth } from "../ui/outlinedSurface";
 
 interface InterfaceTimelineJumpButtonProps {
   bottom: number;
@@ -42,14 +42,6 @@ export function InterfaceTimelineJumpButton({
       onPress={onPress}
       activeOpacity={0.72}
     >
-      {label ? (
-        // Only the capsule has a straight top run for the lit edge; on the
-        // bare circle any hairline would overhang the curve.
-        <View
-          pointerEvents="none"
-          style={[styles.litEdge, { backgroundColor: composerLitEdge(chrome) }]}
-        />
-      ) : null}
       <View style={styles.content}>
         <Ionicons name="arrow-down" size={18} color={chrome.text} />
         {label ? (
@@ -75,7 +67,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     ...ContinuousCorners,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: OutlineWidth,
     right: 16,
     zIndex: 4,
   },
@@ -83,13 +75,6 @@ const styles = StyleSheet.create({
     width: "auto",
     paddingLeft: 12,
     paddingRight: 14,
-  },
-  litEdge: {
-    position: "absolute",
-    top: 0,
-    left: 22,
-    right: 22,
-    height: StyleSheet.hairlineWidth,
   },
   content: {
     alignItems: "center",

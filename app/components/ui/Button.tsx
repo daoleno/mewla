@@ -11,7 +11,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import {
   ContinuousCorners,
-  shadow,
   useAppTheme,
 } from "../../constants/tokens";
 import { AnimatedPressable } from "./AnimatedPressable";
@@ -89,7 +88,6 @@ export function Button({
           ? outlinedSurface(999, inactive ? colors.borderSubtle : colors.border)
           : null,
         block && styles.block,
-        variant === "filled" && !inactive ? shadow("raised", colors.accent) : null,
         style,
       ]}
     >

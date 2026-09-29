@@ -242,9 +242,17 @@ function makeShadow(
   }) as ShadowStyle;
 }
 
+const NO_SHADOW: ShadowStyle = {};
+
 /**
  * Diffuse ambient elevation. `card` lifts content off the grouped canvas,
  * `raised` separates controls, `float` belongs to sheets, menus and FABs.
+ *
+ * Android elevation paints a flat grey outline shadow, not a diffuse one, and
+ * turns rectangular or smudged when the view's fill is translucent or its
+ * rounded shape lives on a child. So Android stays flat for in-flow `card` and
+ * `raised`; only `float` casts, and its view must own the radius and an
+ * opaque fill.
  */
 export function shadow(
   level: 'card' | 'raised' | 'float',
@@ -252,9 +260,9 @@ export function shadow(
 ): ShadowStyle {
   switch (level) {
     case 'card':
-      return makeShadow(color, 0.05, 12, 3, 1);
+      return Platform.OS === 'android' ? NO_SHADOW : makeShadow(color, 0.05, 12, 3, 1);
     case 'raised':
-      return makeShadow(color, 0.09, 20, 8, 3);
+      return Platform.OS === 'android' ? NO_SHADOW : makeShadow(color, 0.09, 20, 8, 3);
     case 'float':
       return makeShadow(color, 0.16, 32, 16, 10);
   }
