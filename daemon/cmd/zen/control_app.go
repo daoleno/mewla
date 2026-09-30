@@ -539,14 +539,15 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 	autoCreatedWork := ownedWork.ID != "" && strings.TrimSpace(req.WorkID) == ""
 
 	createOpts := watcher.CreateSessionOptions{
-		Cwd:         cwd,
-		Command:     command,
-		Name:        name,
-		Detached:    true,
-		Hidden:      req.Hidden,
-		ProgressEnv: true,
-		Delegated:   !req.Hidden,
-		Env:         progressEnvForStateDir(a.stateDir),
+		Cwd:              cwd,
+		Command:          command,
+		Name:             name,
+		Detached:         true,
+		Hidden:           req.Hidden,
+		ProgressEnv:      true,
+		PrepareWorkspace: work.PrepareDelegatedWorkspace,
+		Delegated:        !req.Hidden,
+		Env:              progressEnvForStateDir(a.stateDir),
 	}
 	var routeSnap *modelprofiles.WireSessionSnapshot
 	var routePersist modelprofiles.PersistResult
@@ -658,6 +659,13 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		}
 	}
 
+	// A successful paste is not proof that the provider survived startup.
+	presence, probeErr := a.watcher.ProbeSession(workerID)
+	if probeErr != nil || presence != watcher.SessionPresencePresent {
+		launchErr := errors.Join(fmt.Errorf("provider Session disappeared before spawn completed"), probeErr)
+		a.recordSpawnWorkFailure(ownedWork, launchErr, false)
+		return control.ErrorResponse("spawn_failed", launchErr.Error())
+	}
 	worker := a.watcher.GetWorker(workerID)
 	if worker == nil {
 		response := control.Response{
@@ -735,6 +743,11 @@ func (a *controlApp) prepareSpawnWork(req control.Request, name, prompt string) 
 		return brain.Work{}, fmt.Errorf("Brain Work store is not configured")
 	}
 	if workID := strings.TrimSpace(req.WorkID); workID != "" {
+		if a.watcher != nil {
+			if _, err := a.brainStore.ReconcileAbsentPreparedAdmissions(workID, a.watcher.ResolveDelegatedAbsence); err != nil {
+				return brain.Work{}, err
+			}
+		}
 		item, err := a.brainStore.Work(workID)
 		if err != nil {
 			return brain.Work{}, err
@@ -1295,6 +1308,9 @@ func (a *controlApp) handleWorkerClose(req control.Request) control.Response {
 		return resp
 	}
 	if a.brainStore != nil {
+		if _, err := a.brainStore.ReconcileAbsentPreparedAdmissions("", func(id string) (bool, error) { return id == workerID, nil }); err != nil {
+			return control.ErrorResponse("close_failed", fmt.Sprintf("Session closed but prepared admission release failed: %v", err))
+		}
 		if _, err := a.brainStore.ReleaseSessionAttempt(workerID, "session_closed"); err != nil {
 			return control.ErrorResponse("close_failed", fmt.Sprintf("Session closed but Work owner release failed: %v", err))
 		}

@@ -75,14 +75,42 @@ Claude, Cursor and Grok delegated launches reuse the existing unattended client
 adapters. Claude `--permission-mode auto`, `dontAsk`, and `acceptEdits` are not
 bypass guarantees and are rejected for delegated work; the manual/Brain host
 paths keep their prior permission policy. Pi/DSH retain their native client
-behavior; extensions, authentication and first-use workspace trust may still
-require setup. Automatic tool execution does not auto-approve workspace trust.
+behavior; extensions and authentication may still require setup.
 
 All delegated Codex launches, including explicit commands and resume, use the
 same client adapter and run autonomously by default. Explicit interactive
 approval/sandbox flags fail with an explanation instead of silently bypassing
 policy or adding conflicting flags. Shell composition is not a supported Codex
 launch command. Ordinary manual/hidden Sessions retain their own policies.
+
+Delegated launches prepare folder trust before starting the provider. Codex's
+native `projects."<cwd>".trust_level = "trusted"` is persisted in its effective
+`CODEX_HOME/config.toml`; an invocation `-c` override alone does not clear the
+0.159.2 folder gate. Zen also passes `--dangerously-bypass-hook-trust` and
+`-c check_for_update_on_startup=false`. The latter prevents a startup update
+picker from consuming the brief's Enter and exiting into npm. Claude's effective
+`.claude.json` gets `projects[<cwd>].hasTrustDialogAccepted = true`, independently
+of `bypassPermissions`. Existing unrelated settings are retained. Trust applies
+to the actual cwd and its resolved symlink spelling, not every parent directory.
+Cursor already supplies `--trust --approve-mcps` with its unattended execution
+flags, and delegated launch disables its background self-updater with the
+native `--disable-auto-update` option; OpenCode uses `--auto`. Initial input still waits for the provider's
+composer, and update menus are explicitly excluded from readiness.
+
+Claude 2.1.285 wraps bracketed terminal paste in `<pasted_content>`. For delegated
+input, Zen types the short instruction `Execute: ` outside that wrapper before
+pasting the unchanged brief. This makes the assignment explicit in the same
+user turn, without a second prompt or a permission-policy override. Manual
+Session input retains native paste semantics.
+
+`worker spawn -work ID` automatically retires an old ordinary delegated
+preparation when an authoritative inventory proves its Session absent. Unknown
+server reachability retains the fence. A retired preparation records unknown
+delivery and rejects late signals; it does not claim successful execution or
+definite non-submission. The normal inventory pass and explicit Session close
+use the same retirement boundary. Accepted/ambiguous and Host/review admissions
+keep their existing handling rules. A final presence check prevents spawn from
+reporting a fabricated running Worker when its pane disappeared during handoff.
 
 Control requests: `worker_defaults_get`, `worker_defaults_set` with `executor`,
 `model_id`, `reasoning_effort`. Authenticated WebSocket equivalents are

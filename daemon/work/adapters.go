@@ -71,13 +71,14 @@ func (r TmuxRunner) Spawn(role, cwd, command string) (string, error) {
 		return "", fmt.Errorf("delegated watcher is required")
 	}
 	opts := watcher.CreateSessionOptions{
-		Cwd:         cwd,
-		Command:     command,
-		Name:        role,
-		Detached:    true,
-		ProgressEnv: true,
-		Delegated:   true,
-		Env:         cloneStringMap(r.Env),
+		Cwd:              cwd,
+		Command:          command,
+		Name:             role,
+		Detached:         true,
+		ProgressEnv:      true,
+		PrepareWorkspace: PrepareDelegatedWorkspace,
+		Delegated:        true,
+		Env:              cloneStringMap(r.Env),
 	}
 	provisionalID := ""
 	if r.Profiles != nil {

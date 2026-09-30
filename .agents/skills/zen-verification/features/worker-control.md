@@ -27,6 +27,11 @@ Preconditions:
 ## Gotchas
 
 - A Worker status is not a completion decision. Brain Work and Event state remain authoritative.
+- A startup proof must include the exact Session's pane capture after at least
+  two minutes; transport acceptance alone does not establish provider execution.
+  `daemon/cmd/zen/spawn_recovery_test.go` covers vanished startup panes and
+  same-Work recovery, and `daemon/brain/absent_preparation_test.go` covers the
+  retirement fence. `daemon/work/delegated_trust_test.go` checks native cwd trust.
 - Do not use `pkill`, `killall`, or process-name matching to clean up a verification run.
 - An empty list can be valid. The control path must pass even when no Worker is active.
 

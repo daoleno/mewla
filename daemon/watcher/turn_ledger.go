@@ -379,3 +379,8 @@ func (b TranscriptBinding) Empty() bool {
 type UnmarkedInputAdmissionLedger interface {
 	AbortUnmarkedInputAdmission(candidate InputAdmission) error
 }
+
+// InputAdmissionTransportLedger records the write-ahead transport boundary.
+type InputAdmissionTransportLedger interface {
+	MarkInputAdmissionTransportStarted(sessionID, turnID string) error
+}

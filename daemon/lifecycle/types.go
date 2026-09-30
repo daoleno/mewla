@@ -46,30 +46,32 @@ const (
 type Kind string
 
 const (
-	KWorkDefined            Kind = "work.defined"
-	KWorkAmended            Kind = "work.amended"
-	KWorkCancelled          Kind = "work.cancelled"
-	KWorkCompleted          Kind = "work.completed"
-	KAdmissionPrepared      Kind = "admission.prepared"
-	KAdmissionRearmed       Kind = "admission.rearmed"
-	KAdmissionAmbiguous     Kind = "admission.ambiguous"
-	KAdmissionAccepted      Kind = "admission.accepted"
-	KAdmissionAborted       Kind = "admission.aborted"
-	KTurnAdmitted           Kind = "turn.admitted"
-	KTurnHeartbeat          Kind = "turn.heartbeat"
-	KTurnProgress           Kind = "turn.progress"
-	KTurnDone               Kind = "turn.done"
-	KTurnRelinquished       Kind = "turn.relinquished"
-	KTurnLost               Kind = "turn.lost"
-	KLeaseExpired           Kind = "turn.lease_expired"
-	KWakeSet                Kind = "wake.set"
-	KWakeCleared            Kind = "wake.cleared"
-	KReviewOpened           Kind = "review.opened"
-	KReviewClaimed          Kind = "review.claimed"
-	KReviewDelivered        Kind = "review.delivered"
-	KReviewReleased         Kind = "review.released"
-	KReviewDeliveryResolved Kind = "review.delivery_resolved"
-	KReviewResolved         Kind = "review.resolved"
+	KWorkDefined               Kind = "work.defined"
+	KWorkAmended               Kind = "work.amended"
+	KWorkCancelled             Kind = "work.cancelled"
+	KWorkCompleted             Kind = "work.completed"
+	KAdmissionPrepared         Kind = "admission.prepared"
+	KAdmissionRearmed          Kind = "admission.rearmed"
+	KAdmissionAmbiguous        Kind = "admission.ambiguous"
+	KAdmissionAccepted         Kind = "admission.accepted"
+	KAdmissionAborted          Kind = "admission.aborted"
+	KAdmissionRetired          Kind = "admission.retired"
+	KAdmissionTransportStarted Kind = "admission.transport_started"
+	KTurnAdmitted              Kind = "turn.admitted"
+	KTurnHeartbeat             Kind = "turn.heartbeat"
+	KTurnProgress              Kind = "turn.progress"
+	KTurnDone                  Kind = "turn.done"
+	KTurnRelinquished          Kind = "turn.relinquished"
+	KTurnLost                  Kind = "turn.lost"
+	KLeaseExpired              Kind = "turn.lease_expired"
+	KWakeSet                   Kind = "wake.set"
+	KWakeCleared               Kind = "wake.cleared"
+	KReviewOpened              Kind = "review.opened"
+	KReviewClaimed             Kind = "review.claimed"
+	KReviewDelivered           Kind = "review.delivered"
+	KReviewReleased            Kind = "review.released"
+	KReviewDeliveryResolved    Kind = "review.delivery_resolved"
+	KReviewResolved            Kind = "review.resolved"
 )
 
 // Wake kinds identify the external producer of a true wait.
@@ -177,7 +179,7 @@ func decodePayload(kind Kind, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return p, nil
-	case KAdmissionAborted:
+	case KAdmissionAborted, KAdmissionRetired, KAdmissionTransportStarted:
 		var p AdmissionAbortedPayload
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
@@ -321,6 +323,7 @@ const (
 	AdmissionAmbiguous AdmissionStatus = "ambiguous"
 	AdmissionAccepted  AdmissionStatus = "accepted"
 	AdmissionAborted   AdmissionStatus = "aborted"
+	AdmissionRetired   AdmissionStatus = "retired"
 )
 
 type AdmissionPreparedPayload struct {
@@ -529,6 +532,7 @@ type AdmissionState struct {
 	Purpose            AdmissionPurpose `json:"purpose,omitempty"`
 	PurposeID          string           `json:"purpose_id,omitempty"`
 	Status             AdmissionStatus  `json:"status"`
+	TransportStartedAt *time.Time       `json:"transport_started_at,omitempty"`
 	AcceptedSeq        uint64           `json:"accepted_seq,omitempty"`
 	PreparedAt         time.Time        `json:"prepared_at"`
 	PreparedSeq        uint64           `json:"prepared_seq"`
@@ -605,6 +609,10 @@ func (s *State) clone(includeSeenSources bool) *State {
 		out.Admissions = make(map[TurnToken]*AdmissionState, len(s.Admissions))
 		for token, source := range s.Admissions {
 			admission := *source
+			if source.TransportStartedAt != nil {
+				started := *source.TransportStartedAt
+				admission.TransportStartedAt = &started
+			}
 			if source.SettledAt != nil {
 				settled := *source.SettledAt
 				admission.SettledAt = &settled

@@ -27,14 +27,22 @@
         "daemon/work/worker_executors.go",
         "daemon/work/dsh_runtime.go",
         "daemon/work/dsh_conversation.go",
-        "daemon/watcher/service_tunnels.go"
+        "daemon/watcher/service_tunnels.go",
+        "daemon/work/delegated_trust.go",
+        "daemon/brain/turn_ledger.go",
+        "daemon/lifecycle/engine.go"
       ],
       "test_paths": [
         "daemon/cmd/zen/control_app_test.go",
         "daemon/brain/session_projection_test.go",
         "daemon/brain/worker_authority_test.go",
         "daemon/work/dsh_conversation_test.go",
-        "daemon/watcher/service_tunnels_test.go"
+        "daemon/watcher/service_tunnels_test.go",
+        "daemon/cmd/zen/spawn_recovery_test.go",
+        "daemon/brain/absent_preparation_test.go",
+        "daemon/work/delegated_trust_test.go",
+        "daemon/watcher/startup_update_test.go",
+        "daemon/watcher/claude_delegated_input_test.go"
       ]
     },
     {

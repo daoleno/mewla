@@ -1771,6 +1771,11 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 			byID[worker.ID] = worker
 		}
 	}
+	if s.watcher != nil {
+		if _, err := s.store.ReconcileAbsentPreparedAdmissions("", s.watcher.ResolveDelegatedAbsence); err != nil {
+			log.Printf("brain prepared admission reconciliation: %v", err)
+		}
+	}
 	items, err := s.store.ListWork()
 	if err != nil {
 		log.Printf("brain Work reconciliation list failed: %v", err)
@@ -3658,4 +3663,11 @@ func (s *Service) brainWorkspace() string {
 		return s.store.WorkspacePath()
 	}
 	return ""
+}
+
+func (s *Service) MarkInputAdmissionTransportStarted(sessionID, turnID string) error {
+	if s == nil || s.store == nil {
+		return fmt.Errorf("brain store is not configured")
+	}
+	return s.store.MarkInputAdmissionTransportStarted(sessionID, turnID)
 }

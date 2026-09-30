@@ -382,6 +382,8 @@ func admissionSnapshot(st *lifecycle.State, admission *lifecycle.AdmissionState)
 	switch admission.Status {
 	case lifecycle.AdmissionAccepted:
 		state = watcher.InputAdmissionResolved
+	case lifecycle.AdmissionRetired:
+		state = watcher.InputAdmissionRetired
 	case lifecycle.AdmissionAborted:
 		state = watcher.InputAdmissionAborted
 	case lifecycle.AdmissionAmbiguous:
@@ -1935,3 +1937,47 @@ func (s *Store) ResolveReviewLease(workID string, resolution ReviewLeaseResoluti
 
 // ErrNoActiveTurn is returned when a session has no canonical turn.
 var ErrNoActiveTurn = errors.New("no canonical turn for session")
+
+// ReconcileAbsentPreparedAdmissions is used by explicit spawn/close and inventory
+// reconciliation. Discovery alone is never proof: the supplied probe must read
+// the authoritative selected tmux server and fail closed on unavailable servers.
+func (s *Store) ReconcileAbsentPreparedAdmissions(workID string, absent func(string) (bool, error)) (int, error) {
+	count := 0
+	for _, st := range s.fsm.ListViews() {
+		if workID != "" && string(st.ID) != workID {
+			continue
+		}
+		for _, a := range st.Admissions {
+			if a.Status != lifecycle.AdmissionPrepared || a.ClaimToken != "" || a.Purpose != "" || !a.SignalProtocol {
+				continue
+			}
+			gone, err := absent(a.SessionID)
+			if err != nil {
+				return count, err
+			}
+			if !gone {
+				continue
+			}
+			if _, err = s.fsm.RetireAbsentPreparedAdmission(st.ID, *a); err != nil {
+				if errors.Is(err, lifecycle.ErrStaleInput) {
+					continue
+				}
+				return count, err
+			}
+			if err = s.SyncWorkProjection(string(st.ID)); err != nil {
+				return count, err
+			}
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (s *Store) MarkInputAdmissionTransportStarted(sessionID, turnID string) error {
+	st, _, err := s.fsmAdmission(sessionID, turnID)
+	if err != nil {
+		return err
+	}
+	_, err = s.fsm.MarkAdmissionTransportStarted(st.ID, lifecycle.TurnToken(turnID))
+	return err
+}
