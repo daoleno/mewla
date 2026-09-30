@@ -79,6 +79,7 @@ type Service struct {
 
 	reconcileMu      sync.Mutex
 	hostActivationMu sync.Mutex
+	hostMu           sync.Mutex
 
 	routeMu sync.Mutex
 	routes  SessionRouteLifecycle
@@ -2627,6 +2628,8 @@ func (s *Service) ensureHostWorker(executor work.WorkerExecutor) (WorkerRef, err
 	if s == nil || s.store == nil || s.watcher == nil {
 		return WorkerRef{}, nil
 	}
+	s.hostMu.Lock()
+	defer s.hostMu.Unlock()
 	discovery, err := s.discoverHostWorker(executor)
 	if err != nil {
 		return WorkerRef{}, err
@@ -2649,6 +2652,25 @@ func (s *Service) ensureHostWorker(executor work.WorkerExecutor) (WorkerRef, err
 	}
 	command, replaceDetail = discovery.command, discovery.replaceDetail
 	resumeToken := discovery.resumeToken
+	// A live Claude process may be on another socket or not yet observed.
+	// Never resume its provider session solely because watcher inventory is empty.
+	if executor.Provider == work.WorkerProviderClaude || work.InferWorkerProvider(executor.Command, executor.ID) == work.WorkerProviderClaude {
+		claimedSession := resumeToken
+		if claimedSession == "" {
+			token, _, err := work.ProviderResumeToken(work.WorkerProviderClaude, command)
+			if err != nil {
+				return WorkerRef{}, err
+			}
+			claimedSession = token
+		}
+		owner, err := work.LiveClaudeSessionOwner(claimedSession, hostSession.ProviderDataRoot)
+		if err != nil {
+			return WorkerRef{}, err
+		}
+		if owner > 0 {
+			return WorkerRef{}, fmt.Errorf("brain host refusing concurrent provider session %q: live Claude pid %d", claimedSession, owner)
+		}
+	}
 	routes := s.sessionRoutes()
 	prepared, err := s.prepareHostLaunch(executor, id, command, resumeToken)
 	if err != nil {
@@ -2958,13 +2980,29 @@ func (s *Service) recoverMatchingHost(executor work.WorkerExecutor, hostSession 
 		cp := *worker
 		if hasWant {
 			token, present, err := work.ProviderResumeToken(provider, worker.Command)
-			if err != nil || !present {
-				continue
+			if err != nil {
+				return nil, fmt.Errorf("brain host candidate identity unknown: %w", err)
+			}
+			if !present {
+				identity, found, identityErr := work.ResolveLiveHostTranscriptIdentity(*worker, provider)
+				if identityErr != nil {
+					return nil, identityErr
+				}
+				if !found {
+					return nil, fmt.Errorf("brain host candidate %q is live but provider identity is unproven; refusing duplicate launch", worker.ID)
+				}
+				token = identity.SessionID
+				if wantPath != "" && identity.Path == wantPath {
+					token = wantPath
+				}
 			}
 			if (wantSession != "" && token == wantSession) ||
 				(wantPath != "" && token == wantPath) ||
 				(wantDerived != "" && token == wantDerived) {
-				return &cp, nil
+				if fallback != nil {
+					return nil, fmt.Errorf("multiple live Brain hosts claim provider session %q", token)
+				}
+				fallback = &cp
 			}
 			continue
 		}

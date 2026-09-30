@@ -33,6 +33,28 @@ missing or ambiguous, the saved binding remains authoritative; cwd and latest
 file timestamps never select a replacement. Rebinding preserves already
 materialized history and does not replay user inputs.
 
+Host continuity uses the daemon's fixed tmux socket. A negative cleanup probe
+alone cannot replace a Host: a second successful inventory must confirm absence.
+Unavailable transport and unknown provider identity preserve the binding and
+block a new launch. Host discovery and launch are serialized within the daemon.
+The shared Brain root also has a lifetime ownership lock, independent of the
+authentication `--state-dir`; a second daemon using the same HOME must fail before
+opening Brain state. Test daemons need a private HOME as well as private sockets
+and state, so their fixtures cannot rewrite the user's Brain binding.
+
+Fresh Claude Hosts receive an explicit `--session-id`; resumes keep the recorded
+native identity. Recovery can adopt an older Host with no resume argument using
+Claude's `sessions/<pid>.json` record, its matching workspace, and the OS process
+start identity (Linux). A stale PID record cannot prove ownership. Codex recovery
+can use the live process's rollout or native thread identity. Workspace, hidden
+status, and a Brain name restrict candidates but do not prove provider continuity
+by themselves. A live candidate with unproven identity blocks duplicate launch.
+Claude resume also checks the provider process registry when watcher inventory is
+empty or points at a different socket. On platforms without a process-start
+verifier, registry evidence fails closed; explicit command identity still supports
+recovery. Activation receipts restore an already activated Host without replaying
+its activation input.
+
 Continue with `zen worker send -id <session> --work-id <work> -text <follow-up>`.
 Runtime mints the Turn token and atomically binds accepted input as execution.
 There is no separate accepted-but-non-owning state or typed continue step.

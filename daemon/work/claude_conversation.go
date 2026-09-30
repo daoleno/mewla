@@ -231,7 +231,7 @@ func claudeResumeSessionID(command string) string {
 		trimmed := strings.Trim(field, `"'`)
 		lower := strings.ToLower(trimmed)
 		switch {
-		case lower == "resume" || lower == "--resume" || lower == "-r":
+		case lower == "resume" || lower == "--resume" || lower == "-r" || lower == "--session-id":
 			nextIndex := index + 2
 			if nextIndex < len(fields) {
 				sessionID := strings.Trim(fields[nextIndex], `"'`)
@@ -239,7 +239,7 @@ func claudeResumeSessionID(command string) string {
 					return sessionID
 				}
 			}
-		case strings.HasPrefix(lower, "--resume="):
+		case strings.HasPrefix(lower, "--resume="), strings.HasPrefix(lower, "--session-id="):
 			if idx := strings.Index(trimmed, "="); idx >= 0 {
 				return strings.Trim(trimmed[idx+1:], `"'`)
 			}

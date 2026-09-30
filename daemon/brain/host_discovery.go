@@ -9,6 +9,7 @@ import (
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	"github.com/daoleno/zen/daemon/watcher"
 	"github.com/daoleno/zen/daemon/work"
+	"github.com/google/uuid"
 )
 
 // hostDiscovery is the read-only decision produced before any route or tmux
@@ -85,6 +86,19 @@ func (s *Service) resolveHostResume(executor work.WorkerExecutor, discovery host
 
 func (s *Service) prepareHostLaunch(executor work.WorkerExecutor, id, command, resumeToken string) (hostLaunchPreparation, error) {
 	p := hostLaunchPreparation{command: command, env: brainSessionEnvironment()}
+	// Allocate identity only for an actual fresh launch, not each discovery poll.
+	if resumeToken == "" && work.InferWorkerProvider(command, executor.Provider) == work.WorkerProviderClaude {
+		_, present, err := work.ProviderResumeToken(work.WorkerProviderClaude, command)
+		if err != nil {
+			return p, err
+		}
+		if !present {
+			p.command, err = work.WithClaudeSessionID(command, uuid.NewString())
+			if err != nil {
+				return p, err
+			}
+		}
+	}
 	routes := s.sessionRoutes()
 	if routes != nil && strings.TrimSpace(id) != "" && resumeToken != "" {
 		routeCommand, routeEnv, found, err := routes.ResumeLaunch(id, command)
@@ -137,10 +151,36 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 	}
 	d := hostDiscovery{hostSession: hostSession, command: command, id: strings.TrimSpace(hostSession.ID)}
 	if d.id == "" {
+		recovered, err := s.recoverMatchingHost(executor, hostSession)
+		if err != nil {
+			return hostDiscovery{}, err
+		}
+		if recovered != nil {
+			if err := s.rebindRecoveredHost("", recovered, executor, hostSession); err != nil {
+				return hostDiscovery{}, err
+			}
+			if err := s.ensureHostActivation(recovered.ID, recovered.Command, executor, false, false); err != nil {
+				return hostDiscovery{}, err
+			}
+			_, _ = s.BindHostProviderTranscript()
+			d.id, d.command, d.reuse = recovered.ID, recovered.Command, recovered
+			return d, nil
+		}
 		d.replaceReason = hostReplaceReasonNoRecordedHost
 		return d, nil
 	}
 	presence, probeErr := s.watcher.ProbeSession(d.id)
+	if probeErr == nil && presence == watcher.SessionPresenceAbsent {
+		// A cleanup probe may map a lost socket to absence. Replacement requires
+		// a second, successful inventory on the watcher's explicitly selected server.
+		absent, err := s.watcher.ResolveDelegatedAbsence(d.id)
+		if err != nil {
+			return hostDiscovery{}, fmt.Errorf("brain host recorded session liveness unknown: %w", err)
+		}
+		if !absent {
+			presence = watcher.SessionPresencePresent
+		}
+	}
 	switch {
 	case probeErr != nil || presence == watcher.SessionPresenceUnknown:
 		if probeErr == nil {
