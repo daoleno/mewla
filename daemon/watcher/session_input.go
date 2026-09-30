@@ -191,9 +191,10 @@ func InputOutcomeFromError(err error) InputOutcome {
 }
 
 type sessionInputProvider struct {
-	submitKey string
-	prepare   time.Duration
-	settle    time.Duration
+	submitKey       string
+	prepare         time.Duration
+	settle          time.Duration
+	delegatedIntent bool
 }
 
 func sessionInputProviderForCommand(command string) sessionInputProvider {
@@ -853,6 +854,10 @@ func (owner *sessionInputOwner) submitWithTurn(
 		defer owner.io.deleteBuffer(socket, buffer)
 
 		adapter := sessionInputProviderForCommand(command)
+		// Claude 2.1.285 labels bracketed input as pasted_content. A delegated
+		// task needs explicit typed intent outside that data wrapper; manual
+		// input keeps its native semantics. The brief remains one exact buffer.
+		adapter.delegatedIntent = delegatedTransportSubmit && isClaudeCommand(command)
 		mutationBoundary := time.Time{}
 		started, queueErr := owner.io.runQueue(socket, sessionInputSubmitQueue(
 			current.paneID,
@@ -872,6 +877,13 @@ func (owner *sessionInputOwner) submitWithTurn(
 			}
 			if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 				return err
+			}
+			if turn != nil {
+				if transport, ok := owner.ledger.(InputAdmissionTransportLedger); ok {
+					if err := transport.MarkInputAdmissionTransportStarted(sessionID, turn.ID); err != nil {
+						return err
+					}
+				}
 			}
 			mutationBoundary = owner.nowUTC()
 			return nil
@@ -1513,6 +1525,10 @@ func sessionInputSubmitQueue(
 		args = append(args,
 			";", "run-shell", "sleep "+strconv.FormatFloat(adapter.prepare.Seconds(), 'f', 3, 64),
 		)
+	}
+	if adapter.delegatedIntent {
+		args = append(args, ";", "send-keys", "-l", "-t", paneID, "Execute: ",
+			";", "run-shell", "sleep 0.050")
 	}
 	args = append(args,
 		// -r is part of the payload contract: without it tmux rewrites every

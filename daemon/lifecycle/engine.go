@@ -382,8 +382,8 @@ func (e *Engine) AcceptAdmission(id WorkID, token TurnToken, in AcceptAdmissionI
 					ResultTurnToken: a.ResultTurnToken},
 			}}, nil
 		}
-		if a.Status == AdmissionAborted {
-			return nil, fmt.Errorf("%w: aborted admission cannot be accepted", ErrInvalidCommand)
+		if a.Status == AdmissionAborted || a.Status == AdmissionRetired {
+			return nil, fmt.Errorf("%w: %s admission cannot be accepted", ErrInvalidCommand, a.Status)
 		}
 		if a.SessionID != in.SessionID || a.Receipt != in.Receipt || a.PayloadSHA256 != in.PayloadSHA256 ||
 			in.AdmissionID == "" || in.AdmissionSHA256 != a.PayloadSHA256 ||
@@ -464,8 +464,8 @@ func (e *Engine) AcceptAdmissionBySignal(id WorkID, token TurnToken, sessionID s
 		if a.Status == AdmissionAccepted {
 			return nil, nil
 		}
-		if a.Status == AdmissionAborted {
-			return nil, fmt.Errorf("%w: aborted admission cannot be accepted", ErrInvalidCommand)
+		if a.Status == AdmissionAborted || a.Status == AdmissionRetired {
+			return nil, fmt.Errorf("%w: %s admission cannot be accepted", ErrInvalidCommand, a.Status)
 		}
 		if a.Mode == AdmissionConditionalSteer {
 			if st.Attempt == nil || st.Attempt.SessionID != sessionID || st.Attempt.TurnToken != a.ExistingTurnToken {
@@ -582,11 +582,11 @@ func (e *Engine) abortAdmission(id WorkID, token TurnToken, receipt, payloadSHA2
 		if a.Status == AdmissionAborted {
 			return nil, nil
 		}
-		if preparedOnly && a.Status != AdmissionPrepared {
+		if preparedOnly && (a.Status != AdmissionPrepared || a.TransportStartedAt != nil) {
 			return nil, fmt.Errorf("%w: unmarked recovery requires prepared admission", ErrInvalidCommand)
 		}
-		if a.Status == AdmissionAccepted {
-			return nil, fmt.Errorf("%w: accepted admission cannot be aborted", ErrInvalidCommand)
+		if a.Status == AdmissionAccepted || a.Status == AdmissionRetired {
+			return nil, fmt.Errorf("%w: %s admission cannot be aborted", ErrInvalidCommand, a.Status)
 		}
 		return []Event{{WorkID: id, Kind: KAdmissionAborted, TurnToken: token,
 			SourceID: "admission-abort:" + string(token), At: now,
@@ -1346,4 +1346,45 @@ func (e *Engine) ReviewResolutions(id WorkID) []Event {
 		}
 	}
 	return out
+}
+
+// RetireAbsentPreparedAdmission consumes authoritative end-of-Session proof.
+// Prepared historically also meant transport-submitted. Retirement preserves
+// that uncertainty instead of asserting non-delivery, and fences late signals.
+// Accepted, ambiguous, Host and review admissions retain their existing rules.
+func (e *Engine) RetireAbsentPreparedAdmission(id WorkID, prior AdmissionState) (*State, error) {
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		a := st.AdmissionByToken(prior.TurnToken)
+		if a == nil || a.SessionID != prior.SessionID || a.ProcessIdentity != prior.ProcessIdentity || a.PaneGeneration != prior.PaneGeneration || a.Receipt != prior.Receipt || a.PayloadSHA256 != prior.PayloadSHA256 || a.PreparedSeq != prior.PreparedSeq {
+			return nil, ErrStaleInput
+		}
+		if a.Status == AdmissionRetired {
+			return nil, nil
+		}
+		if a.Status != AdmissionPrepared || a.ClaimToken != "" || a.Purpose != "" || !a.SignalProtocol {
+			return nil, ErrStaleInput
+		}
+		return []Event{{WorkID: id, Kind: KAdmissionRetired, TurnToken: a.TurnToken, SourceID: "admission-retire:" + string(a.TurnToken), At: now, Payload: AdmissionAbortedPayload{Reason: "prepared_session_absent_outcome_unknown"}}}, nil
+	})
+}
+
+// MarkAdmissionTransportStarted is persisted before starting the tmux mutation.
+// It deliberately retains the active preparation fence until admission or loss.
+func (e *Engine) MarkAdmissionTransportStarted(id WorkID, token TurnToken) (*State, error) {
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		a := st.AdmissionByToken(token)
+		if a == nil || a.Status != AdmissionPrepared {
+			return nil, ErrStaleInput
+		}
+		if a.TransportStartedAt != nil {
+			return nil, nil
+		}
+		return []Event{{WorkID: id, Kind: KAdmissionTransportStarted, TurnToken: token, SourceID: fmt.Sprintf("admission-transport:%s:%d", token, a.PreparedSeq), At: now, Payload: AdmissionAbortedPayload{}}}, nil
+	})
 }

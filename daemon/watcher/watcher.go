@@ -3718,6 +3718,9 @@ func isCodexStartupReady(content string) bool {
 	}
 	lower = strings.ToLower(normalized)
 	for _, blocked := range []string{
+		"update available",
+		"update now",
+		"skip until next version",
 		"select a model",
 		"choose a model",
 		"loading model",
@@ -4274,8 +4277,10 @@ type CreateSessionOptions struct {
 	Hidden      bool
 	Env         map[string]string
 	ProgressEnv bool
-	Delegated   bool
-	resource    *delegatedResourceSpec
+	// PrepareWorkspace applies the provider adapter before starting a delegated process.
+	PrepareWorkspace func(command, cwd string, env map[string]string) (string, error)
+	Delegated        bool
+	resource         *delegatedResourceSpec
 }
 
 // CreateSession creates a new tmux window and returns its target id.
@@ -4336,6 +4341,13 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	if opts.Delegated && !opts.Hidden {
 		if err := validateDelegatedWorkspace(cwd); err != nil {
 			return "", err
+		}
+		if opts.PrepareWorkspace != nil {
+			command, err := opts.PrepareWorkspace(opts.Command, cwd, opts.Env)
+			if err != nil {
+				return "", fmt.Errorf("prepare delegated workspace: %w", err)
+			}
+			opts.Command = command
 		}
 		opts.Env = cloneEnvironment(opts.Env)
 		opts.Env[delegatedMarkerEnv] = "1"

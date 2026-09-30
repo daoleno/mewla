@@ -121,6 +121,22 @@ func Reduce(prev *State, ev Event) *State {
 			Status: AdmissionPrepared, PreparedAt: ev.At, PreparedSeq: ev.Seq,
 		}
 
+	case KAdmissionTransportStarted:
+		a := s.AdmissionByToken(ev.TurnToken)
+		if a == nil || a.Status != AdmissionPrepared || a.TransportStartedAt != nil {
+			return noop(s, ev)
+		}
+		at := ev.At
+		a.TransportStartedAt = &at
+
+	case KAdmissionRetired:
+		a := s.AdmissionByToken(ev.TurnToken)
+		if a == nil || a.Status != AdmissionPrepared || a.ClaimToken != "" || a.Purpose != "" || !a.SignalProtocol {
+			return noop(s, ev)
+		}
+		at := ev.At
+		a.Status, a.SettledAt, a.Reason = AdmissionRetired, &at, payload[AdmissionAbortedPayload](ev).Reason
+
 	case KAdmissionAmbiguous:
 		a := s.AdmissionByToken(ev.TurnToken)
 		if a == nil || a.Status != AdmissionPrepared {
@@ -141,6 +157,7 @@ func Reduce(prev *State, ev Event) *State {
 		a.PreparedAt = ev.At
 		a.PreparedSeq = ev.Seq
 		a.AttemptedAt = p.AttemptedAt
+		a.TransportStartedAt = nil
 
 	case KAdmissionAccepted:
 		a := s.AdmissionByToken(ev.TurnToken)

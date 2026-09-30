@@ -219,6 +219,21 @@ Unknown submission outcomes remain durable evidence across model-directed
 retries and restart. Only one prepared transport transaction may exist per
 Work; older ambiguous outcomes do not prevent reopening the store.
 
+`prepared` is an active fence, including the interval after a delegated paste
+and before its exact admission signal. The transport records
+`admission.transport_started` before starting the tmux mutation; this is not
+provider acceptance. A historical preparation without that marker cannot by
+itself prove non-delivery. When an authoritative inventory of the selected tmux
+server proves the exact Session gone, an ordinary delegated preparation can
+transition to `retired`. Retirement preserves outcome uncertainty, releases the
+preparation fence, and permanently rejects late provider/control admission.
+It checks the exact receipt, digest, process, pane generation, and preparation
+sequence atomically. Concurrent acceptance wins over retirement. No clock,
+missing discovery projection, or unreachable server authorizes this release.
+The next explicit spawn against the same Work, the regular inventory pass, and
+successful explicit close perform this repair. Host/review transactions and
+accepted/ambiguous admissions are excluded.
+
 Exact terminal evidence supersedes a producer's earlier decision, including an
 input request or provisional lost outcome. It gets a new decision identity and
 invalidates the earlier handling; the prior card becomes history, never another
