@@ -89,3 +89,5 @@ Color lives in `app/theme/primitives.ts` and reaches components through `useZenT
   - Translucent materials and the selection colour are blended onto their real background before measuring.
   - Decorative hairlines (`border`, `borderSubtle`, material separators) are intentionally exempt.
 - **Radii.** One 4pt ladder (8/12/16/20/24/28). `Radii.card` is 20 for grouped sections, cards and menus. `Radii.sheet` is 28 for bottom sheets. Circular controls use half their size.
+
+Terminal mode retains the Ghostty live grid and uses native viewport scrolling over styled pane history. See [Terminal scrolling](terminal-scrolling.md) for history limits, full-screen app behavior, and resize semantics.

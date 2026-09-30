@@ -12,6 +12,8 @@ import { useTerminalSession } from './useTerminalSession';
 import type { TerminalInputHandleRef } from './TerminalInputHandler';
 import { TerminalLiveGridOwner } from './terminalLiveGrid';
 import type { TerminalScrollCancelReason } from './terminalScrollGesture';
+import { useTerminalHistory } from './useTerminalHistory';
+import type { TerminalHistoryRender } from './terminalHistory';
 import { isCurrentTerminalRendererGeneration } from './terminalSurfaceBootstrap';
 import {
   notifyTmuxClientFocus,
@@ -32,13 +34,10 @@ type BridgeMessage = { rendererGeneration: number } & (
     }
   | { type: 'focusInput'; sessionId: string | null }
   | { type: 'selectionActive'; active: boolean }
+  | { type: 'historyInteraction'; sessionId: string | null; active: boolean }
+  | { type: 'historyRetry'; sessionId: string | null }
+  | { type: 'viewportScroll'; sessionId: string | null; atBottom: boolean }
   | { type: 'copyText'; text: string }
-  | {
-      type: 'scroll';
-      sessionId: string | null;
-      scrollToken: string | null;
-      lines: number;
-    }
   | {
       type: 'mouse';
       action: MouseAction;
@@ -62,7 +61,8 @@ type RendererCommand =
 
 type RendererStateMessage =
   | { type: 'renderSnapshot'; snapshot: RenderSnapshot }
-  | { type: 'theme'; theme: TerminalThemePalette };
+  | { type: 'theme'; theme: TerminalThemePalette }
+  | { type: 'history'; history: TerminalHistoryRender };
 
 interface UseGhosttyTerminalControllerArgs {
   serverId: string;
@@ -76,7 +76,8 @@ interface UseGhosttyTerminalControllerArgs {
 
 /**
  * One native terminal path: PTY bytes update Ghostty, and Ghostty updates one
- * live WebView DOM. tmux copy-mode is the only scrollback model.
+ * live grid. Styled pane history uses the same Ghostty formatter; the WebView
+ * owns scrolling locally, without PTY redraws or per-frame bridge messages.
  */
 export function useGhosttyTerminalController({
   serverId,
@@ -106,6 +107,8 @@ export function useGhosttyTerminalController({
   const injectRendererState = useCallback((payload: RendererStateMessage) => {
     const script = payload.type === 'renderSnapshot'
       ? `window.__zenRenderSnapshot && window.__zenRenderSnapshot(${JSON.stringify(payload.snapshot)}); true;`
+      : payload.type === 'history'
+        ? `window.__zenHistory && window.__zenHistory(${JSON.stringify(payload.history)}); true;`
       : `window.__zenTheme && window.__zenTheme(${JSON.stringify(payload.theme)}); true;`;
     webviewRef.current?.injectJavaScript(script);
   }, []);
@@ -120,6 +123,11 @@ export function useGhosttyTerminalController({
     }
     injectRendererState(payload);
   }, [injectRendererState]);
+
+  const publishHistory = useCallback((history: TerminalHistoryRender) => {
+    postToRenderer({ type: 'history', history });
+  }, [postToRenderer]);
+  const history = useTerminalHistory(serverId, theme, publishHistory);
 
   const injectRendererCommand = useCallback((command: RendererCommand) => {
     const scripts: Record<RendererCommand, string> = {
@@ -187,6 +195,7 @@ export function useGhosttyTerminalController({
   const session = useTerminalSession(serverId, targetId, backend, {
     onOpened: ({ sessionId }) => {
       replaceScrollContext(sessionId, 'session-change');
+      history.attach(sessionId);
       setScrolledUp(false);
       const attached = gridOwnerRef.current?.attach(sessionId) ?? false;
       if (attached) {
@@ -195,14 +204,13 @@ export function useGhosttyTerminalController({
       return attached;
     },
     onOutput: ({ session_id, data }) => {
+      history.output();
       if (ghostty.writeOutput(session_id, data)) {
         scheduleRenderState();
       }
     },
-    onScrollState: ({ at_bottom }) => {
-      setScrolledUp(!at_bottom);
-    },
     onSessionInvalidated: (sessionId, reason) => {
+      history.attach(null);
       replaceScrollContext(
         null,
         reason === 'disconnect' ? 'disconnect' : 'session-change',
@@ -253,8 +261,9 @@ export function useGhosttyTerminalController({
 
   const deliverInput = useCallback((data: string) => {
     cancelLocalScroll('input');
+    runRendererCommand('scrollToBottom');
     return session.sendInput(data);
-  }, [cancelLocalScroll, session]);
+  }, [cancelLocalScroll, runRendererCommand, session]);
 
   const focusPaneAtPoint = useCallback((x: number, y: number) => {
     if (backend !== 'tmux') {
@@ -267,15 +276,17 @@ export function useGhosttyTerminalController({
     const col = Math.max(0, Math.min(grid.cols - 1, Math.floor(x / grid.cellWidth)));
     const row = Math.max(0, Math.min(grid.rows - 1, Math.floor(y / grid.cellHeight)));
     session.focusPane(col, row);
-  }, [backend, ghostty, session]);
+    history.output();
+  }, [backend, ghostty, history, session]);
 
   const focus = useCallback(() => {
     if (canDeliverInput()) {
       cancelLocalScroll('input');
+      runRendererCommand('scrollToBottom');
       notifyClientFocus();
       inputRef.current?.focus();
     }
-  }, [canDeliverInput, cancelLocalScroll, notifyClientFocus]);
+  }, [canDeliverInput, cancelLocalScroll, notifyClientFocus, runRendererCommand]);
 
   const blur = useCallback(() => {
     cancelLocalScroll('route-blur');
@@ -363,6 +374,7 @@ export function useGhosttyTerminalController({
           `window.__zenSetScrollContext && window.__zenSetScrollContext(${JSON.stringify(scrollContext.sessionId)}, ${JSON.stringify(scrollContext.token)}, "session-change"); true;`,
         );
         scheduleRenderState();
+        history.replay();
         injectRendererCommand('wakeRenderer');
         return;
       }
@@ -387,6 +399,7 @@ export function useGhosttyTerminalController({
       }
 
       if (payload.type === 'resize') {
+        history.output();
         gridOwner.update({
           cols: payload.cols,
           rows: payload.rows,
@@ -425,20 +438,16 @@ export function useGhosttyTerminalController({
         return;
       }
 
-      if (payload.type === 'scroll') {
-        if (
-          !scrollCorrelationRef.current.accept(
-            payload.sessionId,
-            payload.scrollToken,
-          ) ||
-          !session.acceptInteractionSession(payload.sessionId)
-        ) {
-          return;
-        }
-        if (session.scroll(payload.lines) && payload.lines < 0) {
-          setScrolledUp(true);
-          inputRef.current?.blur();
-        }
+      if (payload.type === 'historyInteraction') {
+        if (session.acceptInteractionSession(payload.sessionId)) history.interaction(payload.active);
+        return;
+      }
+      if (payload.type === 'historyRetry') {
+        if (session.acceptInteractionSession(payload.sessionId)) history.output();
+        return;
+      }
+      if (payload.type === 'viewportScroll') {
+        if (session.acceptInteractionSession(payload.sessionId)) setScrolledUp(!payload.atBottom);
         return;
       }
 
@@ -487,6 +496,7 @@ export function useGhosttyTerminalController({
     deliverInput,
     focusPaneAtPoint,
     ghostty,
+    history,
     gridOwner,
     injectRendererCommand,
     injectRendererState,

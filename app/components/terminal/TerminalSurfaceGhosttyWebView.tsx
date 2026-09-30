@@ -193,12 +193,12 @@ export const TerminalSurfaceGhosttyWebView = forwardRef<
         domStorageEnabled
         allowFileAccess
         textInteractionEnabled
-        scrollEnabled={false}
-        bounces={false}
+        scrollEnabled
+        bounces
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         allowsLinkPreview={false}
-        overScrollMode="never"
+        overScrollMode="always"
         {...terminalWebViewDensityProps(Platform.OS)}
         // Keep a dedicated compositor layer so focus transitions do not leave
         // a stale blank buffer until the next touch.

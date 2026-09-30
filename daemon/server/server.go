@@ -988,7 +988,7 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSessionFileMetadata(conn, raw)
 	case "session_file_text":
 		s.handleSessionFileText(conn, raw)
-	case "terminal_open", "terminal_input", "terminal_resize", "terminal_scroll", "terminal_scroll_cancel", "terminal_focus_pane", "terminal_close":
+	case "terminal_history", "terminal_open", "terminal_input", "terminal_resize", "terminal_scroll", "terminal_scroll_cancel", "terminal_focus_pane", "terminal_close":
 		s.handleTerminalMessage(conn, raw)
 	case "get_stats":
 		if resp := s.stats.Stats(); resp != nil {
@@ -1488,6 +1488,14 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 // shaping together.
 func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) {
 	switch raw.Type {
+	case "terminal_history":
+		history, err := s.terminal.History(clientID(conn), raw.SessionID)
+		if err != nil {
+			s.sendErrorWithRequestID(conn, raw.RequestID, "terminal_history_failed", err.Error())
+			return
+		}
+		s.sendJSON(conn, map[string]any{"type": "terminal_history", "request_id": raw.RequestID, "session_id": raw.SessionID, "history": history})
+
 	case "terminal_snapshot":
 		text, err := s.watcher.CapturePaneContent(raw.TargetID)
 		if err != nil {
