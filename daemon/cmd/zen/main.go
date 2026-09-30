@@ -173,6 +173,21 @@ func runDaemon(args []string, stderr io.Writer) error {
 	)
 	defer stopSignals()
 
+	brainRoot, err := brain.DefaultRoot()
+	if err != nil {
+		return fmt.Errorf("resolve brain root: %w", err)
+	}
+	// The Brain root is shared across --state-dir values. Lock that root too:
+	// a test/secondary daemon on another tmux socket must not replace its host.
+	brainOwner, acquired, err := control.TryAcquireLifecycleLock(brainRoot)
+	if err != nil {
+		return fmt.Errorf("lock Brain root: %w", err)
+	}
+	if !acquired {
+		return fmt.Errorf("Brain root %q is already owned by another daemon", brainRoot)
+	}
+	defer brainOwner.Close()
+
 	stateDir := authManager.StorageDir()
 	startUpdateNotice(stderr, stateDir)
 	for _, name := range []string{"tasks.json", "runs.json", "meta.json"} {
@@ -232,10 +247,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("load executors: %w", err)
 	}
 
-	brainRoot, err := brain.DefaultRoot()
-	if err != nil {
-		return fmt.Errorf("resolve brain root: %w", err)
-	}
 	brainStore, err := brain.NewStore(brainRoot)
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)

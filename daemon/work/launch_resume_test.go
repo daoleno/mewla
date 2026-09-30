@@ -115,3 +115,19 @@ func TestCodexSessionIDFromRolloutPath(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestClaudeFreshIdentityBecomesNativeResume(t *testing.T) {
+	for _, command := range []string{"claude --session-id session-one", "claude --session-id=session-one", "env PATH=/usr/bin -- claude --session-id=session-one"} {
+		got, err := WithProviderResumeToken(WorkerProviderClaude, command, "session-one")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(got, "--session-id") || !strings.Contains(got, "--resume") {
+			t.Fatalf("resume command=%q", got)
+		}
+		token, ok, err := ProviderResumeToken(WorkerProviderClaude, got)
+		if err != nil || !ok || token != "session-one" {
+			t.Fatalf("token=%q ok=%v err=%v", token, ok, err)
+		}
+	}
+}

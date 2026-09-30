@@ -29,3 +29,13 @@ Preconditions:
 - A healthy daemon with stale source is not a pass. The source and test checks must also pass.
 - The report does not prove provider quality or a mobile or desktop client flow.
 - A missing daemon is a prerequisite failure. Do not start a second server as part of this bounded preflight.
+
+## Host continuity
+
+The source map includes confirmed tmux absence, serialized Host launch, native
+Claude process identity, and exclusive Brain-root ownership. The CLI preflight
+is read-only evidence of the current binding. After a continuity repair, also
+compare `host_worker.id` and `observed` with the unchanged live tmux pane/process,
+check Worker identities before and after restart, and inspect the replacement
+audit for recovery with no new launch. An App-to-Host message requires separate
+explicitly authorized device verification; the preflight does not send input.

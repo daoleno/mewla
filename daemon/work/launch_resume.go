@@ -32,7 +32,7 @@ func ProviderResumeToken(provider, command string) (token string, present bool, 
 	case WorkerProviderCodex:
 		return codexResumeTokenFromArgv(options.argv)
 	case WorkerProviderClaude:
-		return exclusiveResumeFlagToken(options.argv, "--resume", "-r")
+		return exclusiveResumeFlagToken(options.argv, "--resume", "-r", "--session-id")
 	case WorkerProviderGrok, WorkerProviderCursor:
 		return exclusiveResumeFlagToken(options.argv, "--resume")
 	case WorkerProviderOpenCode:
@@ -68,6 +68,42 @@ func WithProviderResumeToken(provider, command, token string) (string, error) {
 	}
 	if present {
 		if existing == token {
+			if provider == WorkerProviderClaude {
+				// A fresh --session-id declaration identifies the conversation but cannot
+				// reopen it. Convert it to Claude's native resume flag on replacement.
+				fields, _ := splitSupportedLaunchFields(command)
+				changed := false
+				executable := 0
+				if fields[0] == "env" {
+					executable++
+					for executable < len(fields) && isLaunchEnvAssignment(fields[executable]) {
+						executable++
+					}
+					if executable < len(fields) && fields[executable] == "--" {
+						executable++
+					}
+				}
+				for i := executable + 1; i < len(fields); i++ {
+					field := fields[i]
+					if field == "--" {
+						break
+					}
+					if field == "--session-id" {
+						fields[i] = "--resume"
+						changed = true
+					}
+					if strings.HasPrefix(field, "--session-id=") {
+						fields[i] = "--resume=" + strings.TrimPrefix(field, "--session-id=")
+						changed = true
+					}
+				}
+				if changed {
+					for i := range fields {
+						fields[i] = shellQuoteForLaunch(fields[i])
+					}
+					return strings.Join(fields, " "), nil
+				}
+			}
 			return command, nil
 		}
 		return "", fmt.Errorf("command already resumes %q", existing)
@@ -321,4 +357,23 @@ func codexFlagBoolean(flag string) bool {
 	default:
 		return false
 	}
+}
+
+// WithClaudeSessionID gives a fresh Claude launch a durable, parseable identity.
+func WithClaudeSessionID(command, id string) (string, error) {
+	options, ok := inspectLaunchCommandOptions(command)
+	if !ok {
+		return "", ErrLaunchUnparseable
+	}
+	if options.terminated {
+		return "", ErrResumeTerminated
+	}
+	_, present, err := ProviderResumeToken(WorkerProviderClaude, command)
+	if err != nil {
+		return "", err
+	}
+	if present {
+		return "", ErrResumeAmbiguous
+	}
+	return appendCommandOptions(command, "--session-id", shellQuoteForLaunch(id)), nil
 }
