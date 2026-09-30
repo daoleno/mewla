@@ -3123,6 +3123,66 @@ export class MultiServerWebSocketClient {
     );
   }
 
+  getTerminalHistory(serverId: string, sessionId: string) {
+    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise<import("./terminalHistory").TerminalHistorySnapshot>(
+      (resolve, reject) => {
+        const cleanup = () => {
+          if (timer) clearTimeout(timer);
+          this.off("terminal_history", handleSnapshot);
+          this.off("error", handleError);
+        };
+
+        const handleSnapshot = (payload: any) => {
+          if (
+            payload.serverId !== serverId ||
+            payload.request_id !== requestId
+          ) {
+            return;
+          }
+          cleanup();
+          if (payload.session_id !== sessionId || !payload.history) {
+            reject(new Error("Invalid terminal history response."));
+            return;
+          }
+          resolve(payload.history);
+        };
+
+        const handleError = (payload: any) => {
+          if (
+            payload.serverId !== serverId ||
+            payload.request_id !== requestId
+          ) {
+            return;
+          }
+          cleanup();
+          reject(
+            new Error(payload.message || "Failed to load terminal snapshot."),
+          );
+        };
+
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("Timed out while loading terminal snapshot."));
+        }, 10000);
+
+        this.on("terminal_history", handleSnapshot);
+        this.on("error", handleError);
+        this.sendRequestNow(
+          serverId,
+          {
+            type: "terminal_history",
+            request_id: requestId,
+            session_id: sessionId,
+          },
+          cleanup,
+          reject,
+        );
+      },
+    );
+  }
+
   sendKey(serverId: string, workerId: string, key: string) {
     const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 

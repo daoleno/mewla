@@ -7,7 +7,6 @@ import {
   TERMINAL_TEXT_SIZE_ADJUST_CSS,
   terminalGridLineHeightCssPx,
 } from './terminalFontDensity';
-import { TERMINAL_SCROLL_GESTURE_CONTROLLER_SOURCE } from './terminalScrollGesture';
 
 export function buildGhosttyTerminalHtml(
   theme: TerminalThemePalette,
@@ -52,7 +51,7 @@ export function buildGhosttyTerminalHtml(
         height: 100%;
         overflow: hidden;
         background: ${theme.background};
-        overscroll-behavior: none;
+        overscroll-behavior: contain;
         ${TERMINAL_TEXT_SIZE_ADJUST_CSS}
       }
       body {
@@ -63,12 +62,26 @@ export function buildGhosttyTerminalHtml(
         position: relative;
         width: 100%;
         height: 100%;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overflow-anchor: none;
+        overscroll-behavior-y: contain;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
         background: ${theme.background};
       }
-      #terminal-html {
-        position: absolute;
-        inset: 0;
+      #terminal-live { position: relative; overflow: hidden; }
+      #terminal-history { position: relative; overflow: hidden; }
+      #history-rows { position: absolute; left: 0; right: 0; }
+      #history-notice {
+        position: fixed; top: 6px; right: 8px; z-index: 20;
+        max-width: 85%; padding: 5px 8px; border-radius: 6px;
+        font: 11px system-ui; color: ${theme.foreground};
+        background: ${theme.background}; opacity: .9;
+      }
+      #history-notice:empty { display: none; }
+      #terminal-html, #history-rows {
+        position: relative;
         overflow: hidden;
         display: block;
         box-sizing: border-box;
@@ -83,22 +96,24 @@ export function buildGhosttyTerminalHtml(
         user-select: text;
         -webkit-user-select: text;
         -webkit-touch-callout: default;
-        touch-action: none;
+        touch-action: pan-y;
         -webkit-tap-highlight-color: transparent;
-        transform: translate3d(0, 0, 0);
+
       }
-      #terminal-html * {
+      #terminal-html { transform: translate3d(0, 0, 0); }
+      #history-rows { position: absolute; overflow: visible; }
+      #terminal-html *, #history-rows * {
         font-family: inherit;
         user-select: text;
         -webkit-user-select: text;
       }
-      #terminal-html .terminal-row {
+      .terminal-row {
         display: block;
         height: ${lineHeight}px;
         line-height: ${lineHeight}px;
         white-space: pre;
       }
-      #terminal-html .terminal-row * {
+      .terminal-row * {
         white-space: pre;
       }
       #terminal-html pre {
@@ -106,7 +121,7 @@ export function buildGhosttyTerminalHtml(
         white-space: pre;
       }
       #terminal-html::selection,
-      #terminal-html *::selection {
+      #terminal-html *::selection, #history-rows *::selection {
         background: ${theme.selectionBackground};
       }
       #terminal-cursor {
@@ -122,6 +137,8 @@ export function buildGhosttyTerminalHtml(
       }
       #cell-measure {
         position: absolute;
+        top: 0;
+        left: 0;
         visibility: hidden;
         white-space: pre;
         font-family: ${terminalFontFamily};
@@ -132,10 +149,14 @@ export function buildGhosttyTerminalHtml(
   </head>
   <body>
     <div id="root">
-      <div id="terminal-html"></div>
-      <div id="terminal-cursor"></div>
+      <div id="terminal-history"><div id="history-rows"></div></div>
+      <div id="terminal-live">
+        <div id="terminal-html"></div>
+        <div id="terminal-cursor"></div>
+      </div>
       <span id="cell-measure">M</span>
     </div>
+    <div id="history-notice"></div>
     <script>
       const FONT_SIZE = ${terminalFontSize};
       const LINE_HEIGHT_RATIO = ${TERMINAL_GRID_LINE_HEIGHT_RATIO};
@@ -237,6 +258,10 @@ export function buildGhosttyTerminalHtml(
         const terminalHtml = document.getElementById('terminal-html');
         const cursor = document.getElementById('terminal-cursor');
         const measure = document.getElementById('cell-measure');
+        const live = document.getElementById('terminal-live');
+        const history = document.getElementById('terminal-history');
+        const historyRows = document.getElementById('history-rows');
+        const historyNotice = document.getElementById('history-notice');
         if (!root || !terminalHtml || !cursor || !measure) {
           throw new Error('Terminal WebView bootstrap elements are missing.');
         }
@@ -263,7 +288,20 @@ export function buildGhosttyTerminalHtml(
         let pendingViewportSyncAfterSelection = false;
         let cursorBlinkVisible = true;
         let drawRAF = null;
-        let scrollRAF = null;
+        let historyLines = [];
+        let historyStart = -1;
+        let historyEnd = -1;
+        let followLive = true;
+        let touching = false;
+        let touchRow = null;
+        const mountedHistoryRows = new Map();
+        let moved = false;
+        let tapInTerminal = false;
+        let touchX = 0;
+        let touchY = 0;
+        let interactionActive = false;
+        let idleTimer = null;
+        let pendingHistory = null;
         let scrollSessionId = null;
         let scrollToken = null;
 
@@ -292,9 +330,11 @@ export function buildGhosttyTerminalHtml(
         };
 
         const emitTap = (x, y) => {
-          if (nativeSelectionActive || hasTerminalSelection()) {
+          if (!followLive || nativeSelectionActive || hasTerminalSelection()) {
             return;
           }
+          y -= live.getBoundingClientRect().top;
+          x -= live.getBoundingClientRect().left;
           sendMouse('press', 'left', x, y, true);
           sendMouse('release', 'left', x, y, false);
           focusInput();
@@ -323,6 +363,10 @@ export function buildGhosttyTerminalHtml(
           root.style.background = activeTheme.background;
           terminalHtml.style.background = activeTheme.background;
           terminalHtml.style.color = activeTheme.foreground;
+          historyRows.style.color = activeTheme.foreground;
+          historyRows.style.background = activeTheme.background;
+          historyNotice.style.color = activeTheme.foreground;
+          historyNotice.style.background = activeTheme.background;
           cursor.style.background = activeTheme.cursor;
         };
 
@@ -348,10 +392,44 @@ export function buildGhosttyTerminalHtml(
           cursor.style.transform = 'translate(' + x + 'px,' + y + 'px)';
         };
 
+        const drawHistory = () => {
+          if (nativeSelectionActive) return;
+          const visibleRows = Math.ceil(viewportHeight / cellHeight);
+          const start = Math.max(0, Math.floor(root.scrollTop / cellHeight) - visibleRows * 2);
+          const end = Math.min(historyLines.length, start + visibleRows * 5);
+          if (start === historyStart && end === historyEnd) return;
+          historyStart = start;
+          historyEnd = end;
+          for (const [index, node] of mountedHistoryRows) {
+            if ((index < start || index >= end) && node !== touchRow) {
+              node.remove();
+              mountedHistoryRows.delete(index);
+            }
+          }
+          // Keep surviving DOM nodes, including the node under the finger.
+          // Replacing innerHTML here loses Android touchmove/touchend events.
+          for (let index = start; index < end; index++) {
+            if (mountedHistoryRows.has(index)) continue;
+            const template = document.createElement('template');
+            template.innerHTML = historyLines[index];
+            const node = template.content.firstElementChild;
+            if (!node) continue;
+            node.style.position = 'absolute';
+            node.style.top = index * cellHeight + 'px';
+            node.style.left = '0';
+            node.style.right = '0';
+            mountedHistoryRows.set(index, node);
+            const following = Array.from(historyRows.children).find((child) => Number(child.dataset.historyIndex) > index);
+            node.dataset.historyIndex = String(index);
+            historyRows.insertBefore(node, following || null);
+          }
+        };
+
         const draw = () => {
           drawRAF = null;
+          drawHistory();
           const nextHtml = renderSnapshot.html || '';
-          if (!nativeSelectionActive && nextHtml !== lastRenderedHtml) {
+          if (!nativeSelectionActive && !interactionActive && nextHtml !== lastRenderedHtml) {
             terminalHtml.innerHTML = nextHtml;
             lastRenderedHtml = nextHtml;
           }
@@ -379,6 +457,8 @@ export function buildGhosttyTerminalHtml(
           viewportHeight = viewport.height;
           cellWidth = nextCellWidth;
           cellHeight = nextCellHeight;
+          live.style.height = viewportHeight + 'px';
+          if (followLive) root.scrollTop = root.scrollHeight;
 
           const shouldReport = force ||
             nextCols !== lastReportedCols ||
@@ -406,7 +486,8 @@ export function buildGhosttyTerminalHtml(
             return false;
           }
           const element = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
-          return element === terminalHtml || terminalHtml.contains(element);
+          return element === terminalHtml || terminalHtml.contains(element) ||
+            element === historyRows || historyRows.contains(element);
         };
 
         const hasTerminalSelection = () => {
@@ -444,7 +525,7 @@ export function buildGhosttyTerminalHtml(
           }
 
           const range = selection.getRangeAt(0);
-          const rows = Array.from(terminalHtml.querySelectorAll('.terminal-row'));
+          const rows = Array.from(root.querySelectorAll('.terminal-row'));
           if (rows.length === 0) {
             return selection.toString();
           }
@@ -482,117 +563,124 @@ export function buildGhosttyTerminalHtml(
           syncNativeSelectionState();
         };
 
-        const scrollGesture = ${TERMINAL_SCROLL_GESTURE_CONTROLLER_SOURCE};
-
-        const stopScrollFrame = () => {
-          if (scrollRAF != null) {
-            cancelAnimationFrame(scrollRAF);
-            scrollRAF = null;
+        const reportPosition = () => {
+          const nextFollow = root.scrollHeight - root.clientHeight - root.scrollTop < 2;
+          if (nextFollow !== followLive) {
+            followLive = nextFollow;
+            send({ type: 'viewportScroll', sessionId: scrollSessionId, atBottom: followLive });
           }
         };
 
-        const cancelScrollAnimation = (reason) => {
-          scrollGesture.cancel(reason);
-          stopScrollFrame();
+        const setInteraction = (active) => {
+          if (active === interactionActive) return;
+          interactionActive = active;
+          send({ type: 'historyInteraction', sessionId: scrollSessionId, active });
         };
 
-        const scheduleScrollFrame = () => {
-          if (scrollRAF == null) {
-            scrollRAF = requestAnimationFrame(flushScrollFrame);
+        const settleScroll = () => {
+          if (idleTimer != null) clearTimeout(idleTimer);
+          idleTimer = null;
+          if (touching || nativeSelectionActive) return;
+          reportPosition();
+          setInteraction(false);
+          scheduleDraw();
+          if (pendingHistory) {
+            const next = pendingHistory;
+            pendingHistory = null;
+            applyHistory(next);
           }
         };
 
-        const flushScrollFrame = (timestamp) => {
-          scrollRAF = null;
-          const frame = scrollGesture.frame(timestamp);
-          if (frame.lines !== 0) {
-            send({
-              type: 'scroll',
-              sessionId: scrollSessionId,
-              scrollToken,
-              lines: frame.lines,
-            });
+        const scheduleIdle = () => {
+          if (idleTimer != null) clearTimeout(idleTimer);
+          idleTimer = setTimeout(settleScroll, 180);
+        };
+
+        const jumpLive = () => {
+          followLive = true;
+          root.scrollTo({ top: root.scrollHeight, behavior: 'instant' });
+          send({ type: 'viewportScroll', sessionId: scrollSessionId, atBottom: true });
+          scheduleDraw();
+        };
+
+        const applyHistory = (next) => {
+          if (interactionActive || nativeSelectionActive) {
+            pendingHistory = next;
+            return;
           }
-          if (frame.keepAnimating) {
-            scrollRAF = requestAnimationFrame(flushScrollFrame);
-          }
+          const oldTop = root.scrollTop;
+          historyLines = next.rows || [];
+          mountedHistoryRows.clear();
+          historyRows.innerHTML = '';
+          historyStart = -1;
+          historyEnd = -1;
+          history.style.height = historyLines.length * cellHeight + 'px';
+          historyNotice.textContent = next.notice || '';
+          if (followLive) root.scrollTop = root.scrollHeight;
+          else if (next.reset) {
+            // Pane/width changes replace coordinates. Keep the reader in history
+            // at the closest physical row; never jump to the live screen.
+            root.scrollTop = Math.min(oldTop, Math.max(0, historyLines.length * cellHeight - cellHeight));
+          } else root.scrollTop = Math.max(0, oldTop - next.removed * cellHeight);
+          drawHistory();
         };
 
         const syncNativeSelectionState = () => {
           const nextActive = hasTerminalSelection();
-          if (nativeSelectionActive === nextActive) {
-            return nextActive;
-          }
+          if (nativeSelectionActive === nextActive) return nextActive;
           nativeSelectionActive = nextActive;
-          if (nextActive) {
-            scrollGesture.cancel('selection');
-            stopScrollFrame();
-          }
+          setInteraction(nextActive || touching);
           send({ type: 'selectionActive', active: nextActive });
-          if (!nextActive && pendingViewportSyncAfterSelection) {
-            pendingViewportSyncAfterSelection = false;
-            syncViewport(true);
+          if (!nextActive) {
+            if (pendingViewportSyncAfterSelection) {
+              pendingViewportSyncAfterSelection = false;
+              syncViewport(true);
+            }
+            settleScroll();
           }
           scheduleDraw();
           return nextActive;
         };
 
+        root.addEventListener('scroll', () => {
+          reportPosition();
+          setInteraction(true);
+          scheduleDraw();
+          scheduleIdle();
+        }, { passive: true });
+        root.addEventListener('scrollend', settleScroll, { passive: true });
+
         document.addEventListener('touchstart', (event) => {
           const touch = event.touches[0];
-          cancelScrollAnimation('new-touch');
-          scrollGesture.start(
-            touch.clientX,
-            touch.clientY,
-            event.timeStamp,
-            nativeSelectionActive,
-          );
-          scheduleDraw();
+          if (!touch) return;
+          touching = true;
+          moved = false;
+          tapInTerminal = root.contains(event.target);
+          touchRow = event.target.closest ? event.target.closest('.terminal-row') : null;
+          touchX = touch.clientX;
+          touchY = touch.clientY;
+          setInteraction(true);
         }, { capture: true, passive: true });
-
         document.addEventListener('touchmove', (event) => {
-          if (nativeSelectionActive) {
-            return;
-          }
           const touch = event.touches[0];
-          if (!scrollGesture.move(
-            touch.clientX,
-            touch.clientY,
-            event.timeStamp,
-            cellHeight,
-          )) {
-            return;
-          }
-          if (event.cancelable) {
-            event.preventDefault();
-          }
-          if (typeof event.stopPropagation === 'function') {
-            event.stopPropagation();
-          }
-          scheduleScrollFrame();
-        }, { capture: true, passive: false });
-
-        document.addEventListener('touchend', (event) => {
-          if (nativeSelectionActive) {
-            cancelScrollAnimation('selection');
-            return;
-          }
-          const touch = event.changedTouches && event.changedTouches[0];
-          const endX = touch ? touch.clientX : 0;
-          const endY = touch ? touch.clientY : 0;
-          const claimed = scrollGesture.end(event.timeStamp);
-          if (!claimed) {
-            stopScrollFrame();
-            if (!syncNativeSelectionState()) {
-              emitTap(endX, endY);
-            }
-            return;
-          }
-          scheduleScrollFrame();
-        }, { capture: true, passive: false });
-
-        document.addEventListener('touchcancel', () => {
-          cancelScrollAnimation('touch-cancel');
+          if (touch && (Math.abs(touch.clientX - touchX) > 4 || Math.abs(touch.clientY - touchY) > 4)) moved = true;
         }, { capture: true, passive: true });
+        document.addEventListener('touchend', (event) => {
+          touching = false;
+          touchRow = null;
+          const touch = event.changedTouches && event.changedTouches[0];
+          if (tapInTerminal && !moved && touch && !syncNativeSelectionState()) emitTap(touch.clientX, touch.clientY);
+          scheduleIdle();
+        }, { capture: true, passive: true });
+        document.addEventListener('touchcancel', () => {
+          touching = false;
+          touchRow = null;
+          moved = true;
+          scheduleIdle();
+        }, { capture: true, passive: true });
+        historyNotice.addEventListener('click', () => {
+          send({ type: 'historyRetry', sessionId: scrollSessionId });
+        });
 
         document.addEventListener('selectionchange', syncNativeSelectionState);
 
@@ -626,22 +714,31 @@ export function buildGhosttyTerminalHtml(
           }
         };
 
-        window.__zenCancelScroll = (reason) => {
-          scrollGesture.cancel(reason);
-          stopScrollFrame();
-        };
+        window.__zenHistory = applyHistory;
 
         window.__zenSetScrollContext = (sessionId, token, reason) => {
-          cancelScrollAnimation(reason || 'session-change');
-          scrollSessionId = typeof sessionId === 'string' && sessionId
-            ? sessionId
-            : null;
+          const changed = sessionId !== scrollSessionId;
+          scrollSessionId = typeof sessionId === 'string' && sessionId ? sessionId : null;
           scrollToken = typeof token === 'string' && token ? token : null;
+          if (changed) {
+            touching = false;
+            interactionActive = false;
+            pendingHistory = null;
+            historyLines = [];
+            history.style.height = '0px';
+            historyRows.innerHTML = '';
+            mountedHistoryRows.clear();
+            historyStart = -1;
+            historyEnd = -1;
+            followLive = true;
+            settleScroll();
+          }
         };
 
         window.__zenBlur = () => {
-          cancelScrollAnimation('route-blur');
+          touching = false;
           clearSelection();
+          settleScroll();
         };
 
         window.__zenWakeRenderer = () => {
@@ -655,13 +752,13 @@ export function buildGhosttyTerminalHtml(
         };
 
         window.__zenResumeInput = () => {
-          cancelScrollAnimation('jump-live');
+          jumpLive();
           clearSelection();
           window.__zenWakeRenderer();
         };
 
         window.__zenScrollToBottom = () => {
-          cancelScrollAnimation('jump-live');
+          jumpLive();
           clearSelection();
           window.__zenWakeRenderer();
         };
