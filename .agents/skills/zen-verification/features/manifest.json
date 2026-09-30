@@ -10,7 +10,8 @@
         "daemon/brain/playbooks.go",
         "daemon/cmd/zen/main.go",
         "daemon/brain/host_discovery.go",
-        "daemon/work/live_host_identity.go"
+        "daemon/work/live_host_identity.go",
+        "daemon/modelprofiles/live_route_endpoints.go"
       ],
       "test_paths": [
         "daemon/brain/service_test.go",
@@ -19,7 +20,8 @@
         "daemon/brain/host_continuity_test.go",
         "daemon/brain/host_continuity_linux_test.go",
         "daemon/work/live_host_identity_linux_test.go",
-        "daemon/cmd/zen/brain_owner_test.go"
+        "daemon/cmd/zen/brain_owner_test.go",
+        "daemon/modelprofiles/live_route_endpoints_test.go"
       ]
     },
     {

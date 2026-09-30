@@ -53,8 +53,11 @@ type OwnerConfig struct {
 	Credentials    CredentialStore // Zen private store (or test fake); optional
 	Verifier       ProfileContractVerifier
 	// SessionProbe checks restored sessions before new launches begin.
-	SessionProbe  func(string) (SessionLiveness, error)
-	ListenNetwork string // default "tcp"
+	SessionProbe func(string) (SessionLiveness, error)
+	// LiveRouteEndpoints reports addresses embedded in surviving provider clients.
+	// Only endpoints whose opaque route is retained by this Owner are restored.
+	LiveRouteEndpoints func() ([]LiveRouteEndpoint, error)
+	ListenNetwork      string // default "tcp"
 	// PreferAddr overrides ListenerFile for tests when the listener is started
 	// (live-route restore or first managed launch).
 	PreferAddr string
@@ -337,6 +340,13 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 	if sweepErr == nil {
 		if hasRoutes {
 			_, listenErr = o.ensureListenerLocked(true)
+			if listenErr == nil && cfg.LiveRouteEndpoints != nil {
+				var endpoints []LiveRouteEndpoint
+				endpoints, listenErr = cfg.LiveRouteEndpoints()
+				if listenErr == nil {
+					listenErr = o.restoreLiveRouteListenersLocked(endpoints)
+				}
+			}
 		} else {
 			// Zero live routes after load/sweep: always converge Zen-owned
 			// listener metadata to inert, including retries after a prior

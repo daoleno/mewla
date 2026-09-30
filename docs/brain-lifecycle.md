@@ -42,6 +42,16 @@ authentication `--state-dir`; a second daemon using the same HOME must fail befo
 opening Brain state. Test daemons need a private HOME as well as private sockets
 and state, so their fixtures cannot rewrite the user's Brain binding.
 
+A recovered Host also needs its original model-proxy endpoint. On Linux,
+daemon startup reads surviving Claude processes' structured `--settings` argv
+and restores their literal loopback listeners only when the embedded opaque
+route still belongs to the current route table. The existing Router serves both
+the persisted address and any addresses retained by live clients; shutdown
+closes them together. No provider input or process restart is needed. This
+repairs listener metadata contaminated by an older secondary daemon while
+preserving newer clients already using the recorded address. Verification must
+check the Host's actual embedded route URL as well as its tmux/process binding.
+
 Fresh Claude Hosts receive an explicit `--session-id`; resumes keep the recorded
 native identity. Recovery can adopt an older Host with no resume argument using
 Claude's `sessions/<pid>.json` record, its matching workspace, and the OS process
