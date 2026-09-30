@@ -39,3 +39,9 @@ compare `host_worker.id` and `observed` with the unchanged live tmux pane/proces
 check Worker identities before and after restart, and inspect the replacement
 audit for recovery with no new launch. An App-to-Host message requires separate
 explicitly authorized device verification; the preflight does not send input.
+
+Host continuity also requires the immutable model-proxy URL held by the live
+provider. Check that exact endpoint after daemon restart, not only the current
+listener metadata. Linux startup restores known routes' live Claude endpoints
+on the same Router; the regression changes listener metadata and verifies both
+old and new ports serve the route across restarts and close without leaking.

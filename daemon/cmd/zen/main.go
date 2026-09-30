@@ -300,12 +300,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("initialize provider credentials: %w", err)
 	}
 	profileOwner, err := modelprofiles.StartOwner(modelprofiles.OwnerConfig{
-		ProfilesPath:   profilesPath,
-		RoutesPath:     routesPath,
-		ListenerPath:   listenerPath,
-		DiscoveryPath:  discoveryPath,
-		ModelsObserved: sc.ObserveModels,
-		Credentials:    credentialStore,
+		ProfilesPath:       profilesPath,
+		RoutesPath:         routesPath,
+		ListenerPath:       listenerPath,
+		DiscoveryPath:      discoveryPath,
+		ModelsObserved:     sc.ObserveModels,
+		Credentials:        credentialStore,
+		LiveRouteEndpoints: modelprofiles.LiveClaudeRouteEndpoints,
 		SessionProbe: func(id string) (modelprofiles.SessionLiveness, error) {
 			if pid, ok := directClaudePID(id); ok {
 				process, findErr := os.FindProcess(pid)
