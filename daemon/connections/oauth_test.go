@@ -25,10 +25,11 @@ func TestTrustedLocalMCPAuthorizationRefreshRestartRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var refreshes, revokes, registrations atomic.Int32
+	var refreshes, revokes, registrations, calls, rejectedResources atomic.Int32
 	var challenge string
 	server := mcp.NewServer(&mcp.Implementation{Name: "Owned local adapter", Version: "1"}, nil)
 	server.AddTool(&mcp.Tool{Name: "read_local", Description: "Read the owned local fixture", InputSchema: object(map[string]any{})}, func(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "local adapter reached"}}}, nil
 	})
 	protocol := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
@@ -57,6 +58,13 @@ func TestTrustedLocalMCPAuthorizationRefreshRestartRevoke(t *testing.T) {
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		w.Header().Set("Content-Type", "application/json")
+		if resources := r.PostForm["resource"]; len(resources) != 1 || resources[0] != base+"/mcp" {
+			rejectedResources.Add(1)
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":"invalid_target"}`)
+			return
+		}
+		access := "local-access-secret"
 		if r.Form.Get("grant_type") == "authorization_code" {
 			if oauth2.S256ChallengeFromVerifier(r.Form.Get("code_verifier")) != challenge || r.Form.Get("resource") != base+"/mcp" {
 				t.Error("exchange lost PKCE or resource")
@@ -66,10 +74,11 @@ func TestTrustedLocalMCPAuthorizationRefreshRestartRevoke(t *testing.T) {
 				t.Error("wrong account refresh")
 			}
 			refreshes.Add(1)
+			access = "local-refreshed-access-secret"
 		} else {
 			t.Error("unexpected grant")
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "local-access-secret", "refresh_token": "local-refresh-secret", "token_type": "Bearer", "expires_in": 3600, "scope": "read"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": access, "refresh_token": "local-refresh-secret", "token_type": "Bearer", "expires_in": 3600, "scope": "read"})
 	})
 	mux.HandleFunc("/revoke", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
@@ -79,7 +88,11 @@ func TestTrustedLocalMCPAuthorizationRefreshRestartRevoke(t *testing.T) {
 		revokes.Add(1)
 	})
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer local-access-secret" {
+		access := "local-access-secret"
+		if refreshes.Load() > 0 {
+			access = "local-refreshed-access-secret"
+		}
+		if r.Header.Get("Authorization") != "Bearer "+access {
 			w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+base+`/resource"`)
 			w.WriteHeader(401)
 			return
@@ -90,6 +103,20 @@ func TestTrustedLocalMCPAuthorizationRefreshRestartRevoke(t *testing.T) {
 	fixture := httptest.NewServer(mux)
 	defer fixture.Close()
 	base = fixture.URL
+	for _, resource := range []string{"", base + "/another-account"} {
+		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"local-refresh-secret"}}
+		if resource != "" {
+			form.Set("resource", resource)
+		}
+		response, err := http.PostForm(base+"/token", form)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatal("strict provider accepted missing or wrong resource")
+		}
+	}
 	in := &Input{Integration: "mcp", Name: "Local OAuth", Endpoint: base + "/mcp"}
 	mustHandle(t, m, Request{Action: "oauth_configure", Input: &Input{Integration: "mcp", OAuthClient: &OAuthClientConfig{RedirectURL: base + "/plugins/oauth/callback"}}})
 	if _, err := m.Handle(context.Background(), Request{Action: "oauth_start", Input: in}); err == nil {
@@ -145,9 +172,11 @@ func TestTrustedLocalMCPAuthorizationRefreshRestartRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustHandle(t, m, q)
-	if refreshes.Load() != 1 || registrations.Load() != 1 {
-		t.Fatal("restart did not reuse registered client and refresh token")
+	if !strings.Contains(string(mustHandle(t, m, q).Result), "local adapter reached") || calls.Load() != 2 {
+		t.Fatal("post-restart invocation did not reach the adapter with the refreshed token")
+	}
+	if refreshes.Load() != 1 || registrations.Load() != 1 || rejectedResources.Load() != 2 {
+		t.Fatal("restart did not preserve the registered client, refresh token and exact resource")
 	}
 	mustHandle(t, m, Request{Action: "disable", ID: id})
 	if _, err := m.Handle(context.Background(), q); err == nil {

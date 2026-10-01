@@ -84,6 +84,10 @@ func newPluginsBrowserFixture(t *testing.T, manager *connections.Manager, root s
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		w.Header().Set("Content-Type", "application/json")
+		if resources := r.PostForm["resource"]; len(resources) != 1 || resources[0] != base+"/mcp" {
+			http.Error(w, `{"error":"invalid_target"}`, 400)
+			return
+		}
 		switch r.Form.Get("grant_type") {
 		case "authorization_code":
 			mu.Lock()
