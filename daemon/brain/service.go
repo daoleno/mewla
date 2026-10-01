@@ -2341,38 +2341,49 @@ func (s *Service) BindHostProviderTranscript() (work.HostTranscriptIdentity, err
 	if s == nil || s.store == nil {
 		return work.HostTranscriptIdentity{}, nil
 	}
-	host, err := s.store.HostSession()
-	if err != nil {
-		return work.HostTranscriptIdentity{}, err
+	for attempt := 0; attempt < hostTranscriptCaptureAttempts; attempt++ {
+		host, err := s.store.HostSession()
+		if err != nil {
+			return work.HostTranscriptIdentity{}, err
+		}
+		provider := s.hostTranscriptProvider(host, nil)
+		existing := work.HostTranscriptIdentity{
+			Provider: provider, SessionID: host.ProviderSessionID,
+			Path: host.TranscriptPath, DataRoot: host.ProviderDataRoot,
+		}
+		if work.HostTranscriptIdentityConflictsWithProvider(existing, provider) {
+			// Repair only a proven cross-provider binding. A missing file or
+			// incomplete write must retain the saved resume identity.
+			existing = work.HostTranscriptIdentity{Provider: provider}
+		}
+		resolved := existing
+		if host.ID != "" && s.watcher != nil {
+			if worker := s.watcher.GetWorker(host.ID); worker != nil {
+				// SetHostExecutor persists the desired executor before replacing
+				// its process. The departing process cannot bind that new owner.
+				if observed := work.InferWorkerProvider(worker.Command, worker.Name); observed != "" && observed != work.WorkerProviderCustom && observed != provider {
+					return work.HostTranscriptIdentity{Provider: provider}, nil
+				}
+				resolved = work.ResolveHostTranscriptIdentityForWorker(*worker, existing, provider)
+				if !resolved.Bound() && existing.Bound() {
+					resolved = existing
+				}
+			}
+		}
+		if host.ID == "" {
+			return resolved, nil
+		}
+		applied, err := s.store.compareAndSetHostProviderTranscript(host, resolved.SessionID, resolved.Path, resolved.DataRoot)
+		if err != nil {
+			return work.HostTranscriptIdentity{}, err
+		}
+		if applied {
+			return resolved, nil
+		}
+		// Replacement or another resolver won. Discard this result and read
+		// the current Host before publishing any native identity to a stream.
 	}
-	var worker *classifier.Worker
-	if strings.TrimSpace(host.ID) != "" && s.watcher != nil {
-		worker = s.watcher.GetWorker(host.ID)
-	}
-	provider := s.hostTranscriptProvider(host, worker)
-	existing := work.HostTranscriptIdentity{
-		Provider:  provider,
-		SessionID: host.ProviderSessionID,
-		Path:      host.TranscriptPath,
-		DataRoot:  host.ProviderDataRoot,
-	}
-	if strings.TrimSpace(host.ID) == "" || s.watcher == nil || worker == nil {
-		return existing, nil
-	}
-	resolved := work.ResolveHostTranscriptIdentityForWorker(*worker, existing, provider)
-	if strings.TrimSpace(resolved.SessionID) == strings.TrimSpace(existing.SessionID) &&
-		strings.TrimSpace(resolved.Path) == strings.TrimSpace(existing.Path) &&
-		strings.TrimSpace(resolved.DataRoot) == strings.TrimSpace(existing.DataRoot) &&
-		strings.TrimSpace(resolved.Provider) == strings.TrimSpace(existing.Provider) {
-		return resolved, nil
-	}
-	if !resolved.Bound() {
-		return work.HostTranscriptIdentity{Provider: provider}, nil
-	}
-	if err := s.store.SetHostProviderTranscript(resolved.SessionID, resolved.Path, resolved.DataRoot); err != nil {
-		return resolved, err
-	}
-	return resolved, nil
+	return work.HostTranscriptIdentity{}, nil
 }
 
 func (s *Service) hostTranscriptProvider(host HostSession, worker *classifier.Worker) string {
@@ -2436,30 +2447,7 @@ func (s *Service) hostBoundProviderConversation(reader *work.ProviderConversatio
 // half shared by the App overlay and the daemon capture loop; the capture loop
 // pins the result as a binding and the store re-proves it under its lock.
 func (s *Service) hostBoundProviderTranscriptIdentity() (work.HostTranscriptIdentity, error) {
-	if s == nil || s.store == nil {
-		return work.HostTranscriptIdentity{}, nil
-	}
-	identity, err := s.BindHostProviderTranscript()
-	if err != nil {
-		return work.HostTranscriptIdentity{}, err
-	}
-	if identity.Bound() {
-		return identity, nil
-	}
-	host, hostErr := s.store.HostSession()
-	if hostErr != nil {
-		return work.HostTranscriptIdentity{}, hostErr
-	}
-	var worker *classifier.Worker
-	if strings.TrimSpace(host.ID) != "" && s.watcher != nil {
-		worker = s.watcher.GetWorker(host.ID)
-	}
-	return work.HostTranscriptIdentity{
-		Provider:  s.hostTranscriptProvider(host, worker),
-		SessionID: host.ProviderSessionID,
-		Path:      host.TranscriptPath,
-		DataRoot:  host.ProviderDataRoot,
-	}, nil
+	return s.BindHostProviderTranscript()
 }
 
 func (s *Service) ThreadTimeline(threadID string, limit int) ([]TimelineItem, error) {

@@ -33,6 +33,20 @@ missing or ambiguous, the saved binding remains authoritative; cwd and latest
 file timestamps never select a replacement. Rebinding preserves already
 materialized history and does not replay user inputs.
 
+Switching the Host executor keeps the current Brain thread and its durable
+history. The App consumes the authoritative `brain_snapshot`, replaces the
+Host subscription using its new Session ID and process metadata, and accepts
+the new stream's snapshot before consuming its deltas. Draft ownership stays
+with the logical Brain thread; late frames from the old subscription are ignored.
+
+Transcript discovery can race a Host switch. Before publishing or persisting a
+resolved transcript, the store must compare the complete Host binding with the
+one that started the read. A departing provider cannot bind the newly selected
+executor. For an already corrupted Claude/Codex binding, positive native header
+evidence of a different provider invalidates the binding; missing or partial
+files do not. A mismatched saved transcript must never replace the live Host's
+conversation or hide its subsequent replies behind the prior Host's history.
+
 Host continuity uses the daemon's fixed tmux socket. A negative cleanup probe
 alone cannot replace a Host: a second successful inventory must confirm absence.
 Unavailable transport and unknown provider identity preserve the binding and

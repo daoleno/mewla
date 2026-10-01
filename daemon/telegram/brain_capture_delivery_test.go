@@ -133,6 +133,11 @@ func TestTelegramBrainReplyArrivesWithoutAppSubscription(t *testing.T) {
 	provider.workers["host:@1"].Command = "pi --session " + transcript
 	provider.workers["host:@1"].Cwd = root
 	provider.mu.Unlock()
+	// The fixture replaces the provider; mirror the canonical Host executor
+	// binding too, just as SetHostExecutor does before transcript discovery.
+	if err := store.SetHostSession("host:@1", "pi"); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.SetHostProviderTranscript("fixture-host-session", transcript, ""); err != nil {
 		t.Fatal(err)
 	}

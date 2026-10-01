@@ -315,6 +315,32 @@ func (s *Store) SetHostProviderTranscript(providerSessionID, transcriptPath, pro
 	if strings.TrimSpace(host.ID) == "" {
 		return fmt.Errorf("host session required before binding provider transcript")
 	}
+	return s.writeHostProviderTranscriptLocked(host, providerSessionID, transcriptPath, providerDataRoot)
+}
+
+// Resolution performs provider IO outside the store lock. Re-prove the entire
+// binding before committing: both a Host replacement and another native-thread
+// resolver can invalidate that observation while it is in flight.
+func (s *Store) compareAndSetHostProviderTranscript(expected HostSession, providerSessionID, transcriptPath, providerDataRoot string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	host, err := s.readHostSessionLocked()
+	if err != nil {
+		return false, err
+	}
+	if host != expected || host.ID == "" {
+		return false, nil
+	}
+	if host.ProviderSessionID == providerSessionID && host.TranscriptPath == transcriptPath && host.ProviderDataRoot == providerDataRoot {
+		return true, nil
+	}
+	if err := s.writeHostProviderTranscriptLocked(host, providerSessionID, transcriptPath, providerDataRoot); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Store) writeHostProviderTranscriptLocked(host HostSession, providerSessionID, transcriptPath, providerDataRoot string) error {
 	return writeJSONFile(s.HostSessionPath(), hostSessionFile{
 		ID:                host.ID,
 		ExecutorID:        host.ExecutorID,
