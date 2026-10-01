@@ -285,11 +285,20 @@ static TerminalHandle *TerminalFromHandle(unsigned long long handle) {
         snapshot[@"cursorVisible"] = @NO;
     }
 
-    std::string visibleHTML;
-    if (!buildVisibleHtml(terminal->render_state, renderRows, &visibleHTML)) {
-        visibleHTML = formatTerminalScreen(terminal);
+    RenderRowUpdates updates;
+    if (!buildRenderRowUpdates(terminal, renderRows, renderCols, dirty, &updates)) {
+        terminal->force_full_snapshot = true;
+        return @{ @"dirty": @"none" };
     }
-    snapshot[@"html"] = NSStringFromStdString(visibleHTML);
+    NSMutableArray<NSString *> *lines = [NSMutableArray arrayWithCapacity:updates.html.size()];
+    NSMutableArray<NSNumber *> *indices = [NSMutableArray arrayWithCapacity:updates.indices.size()];
+    for (size_t index = 0; index < updates.html.size(); index++) {
+        [lines addObject:NSStringFromStdString(updates.html[index])];
+        [indices addObject:@(updates.indices[index])];
+    }
+    snapshot[@"dirty"] = updates.full ? @"full" : @"partial";
+    snapshot[@"lineHtml"] = lines;
+    snapshot[@"dirtyLines"] = indices;
 
     terminal->force_full_snapshot = false;
     clearRenderStateDirty(terminal->render_state);

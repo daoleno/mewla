@@ -1,7 +1,6 @@
 import { requireNativeModule } from 'expo-modules-core';
 
-type NativeRenderSnapshot = Omit<RenderSnapshot, 'html' | 'lineHtml' | 'dirtyLines'> & {
-  html?: string;
+type NativeRenderSnapshot = Omit<RenderSnapshot, 'lineHtml' | 'dirtyLines'> & {
   lineHtml?: string[];
   dirtyLines?: number[];
 };
@@ -91,9 +90,10 @@ export interface RenderSnapshot {
   dirty: 'none' | 'partial' | 'full';
   rows: number;
   cols: number;
-  html: string;
-  lineHtml?: string[];
-  dirtyLines?: number[];
+  /** Matching arrays: lineHtml[i] replaces the row at dirtyLines[i].
+   * Full updates establish a base; partial updates may contain no rows. */
+  lineHtml: string[];
+  dirtyLines: number[];
   cursorCol: number;
   cursorRow: number;
   cursorVisible: boolean;
@@ -214,9 +214,8 @@ export function getRenderSnapshot(handle: number): RenderSnapshot {
       dirty: 'none',
       rows: snapshot?.rows ?? 0,
       cols: snapshot?.cols ?? 0,
-      html: '',
-      lineHtml: undefined,
-      dirtyLines: undefined,
+      lineHtml: [],
+      dirtyLines: [],
       cursorCol: snapshot?.cursorCol ?? 0,
       cursorRow: snapshot?.cursorRow ?? 0,
       cursorVisible: snapshot?.cursorVisible ?? false,
@@ -225,12 +224,8 @@ export function getRenderSnapshot(handle: number): RenderSnapshot {
 
   return {
     ...snapshot,
-    // Prefer the native snapshot HTML when provided. The Android bridge now
-    // resolves per-cell styles itself so tmux status lines and ANSI/RGB spans
-    // render consistently in the WebView.
-    html: typeof snapshot.html === 'string'
-      ? snapshot.html
-      : ZenTerminalVt.getVisibleHtml(handle),
+    lineHtml: snapshot.lineHtml ?? [],
+    dirtyLines: snapshot.dirtyLines ?? [],
   };
 }
 

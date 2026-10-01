@@ -170,6 +170,9 @@ Remote Expo push is optional. To test it with your own EAS project, set `ZEN_EXP
 
 ## Native terminal library
 
+Android and iOS share the [terminal row-update pipeline](terminal-rendering.md),
+including the native formatter, renderer lifecycle, and DOM reuse rules.
+
 `app/modules/zen-terminal-vt/libs/android/*/libghostty_vt.so` is **gitignored**. Without those binaries, the terminal surface is unavailable even if Chat works.
 
 ### Build (reproducible path)

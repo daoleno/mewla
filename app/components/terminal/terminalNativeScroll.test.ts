@@ -14,7 +14,12 @@ async function renderer() {
   const element = () => ({
     style: {} as Record<string, string>, innerHTML: '', textContent: '',
     clientWidth: 320, clientHeight: 480, scrollHeight: 480, scrollTop: 0,
-    children: [], replaceChildren() { this.innerHTML = ''; },
+    children: [] as any[], replaceChildren() { this.innerHTML = ''; this.children = []; },
+    appendChild(node: any) {
+      node.parent = this;
+      this.children.push(node);
+      this.innerHTML = this.children.map((child) => child.outerHTML).join('');
+    },
     getBoundingClientRect: () => ({ width: 320, height: 480, top: 0, left: 0 }),
     addEventListener: (name: string, fn: Function) => {
       handlers.set(name, [...(handlers.get(name) || []), fn]);
@@ -26,6 +31,20 @@ async function renderer() {
     'terminal-live', 'terminal-scroll-blend', 'terminal-history', 'history-rows', 'history-notice'].map((id) => [id, element()]));
   elements['cell-measure'].getBoundingClientRect = () => ({ width: 8, height: 16, top: 0, left: 0 });
   const document = { ...element(), body: element(), documentElement: element(),
+    createElement: () => {
+      const template = { innerHTML: '', content: {} as any };
+      Object.defineProperty(template.content, 'firstElementChild', { get: () => ({
+        outerHTML: template.innerHTML,
+        parent: null as any,
+        replaceWith(node: any) {
+          const parent = this.parent;
+          node.parent = parent;
+          parent.children[parent.children.indexOf(this)] = node;
+          parent.innerHTML = parent.children.map((child: any) => child.outerHTML).join('');
+        },
+      }) });
+      return template;
+    },
     getElementById: (id: string) => elements[id] };
   const window = { ...element(), getSelection: () => null,
     matchMedia: () => ({ matches: false }),
@@ -54,10 +73,12 @@ async function renderer() {
 
 test('PTY redraw cannot detach the Android touch target during a drag or fling', async () => {
   const r = await renderer();
-  r.window.__zenRenderSnapshot({ html: 'before', cursorVisible: false }); r.flush();
+  const frame = (text: string, dirty = 'partial') => ({ dirty, rows: 1, cols: 80,
+    dirtyLines: [0], lineHtml: [text], cursorVisible: false });
+  r.window.__zenRenderSnapshot(frame('before', 'full')); r.flush();
   r.dispatch('touchstart', 100);
   r.dispatch('touchmove', 200);
-  r.window.__zenRenderSnapshot({ html: 'after', cursorVisible: false }); r.flush();
+  r.window.__zenRenderSnapshot(frame('after')); r.flush();
   expect(r.elements['terminal-html'].innerHTML).toBe('before');
   r.dispatch('touchend', 200); r.flush();
   expect(r.elements['terminal-html'].innerHTML).toBe('before');

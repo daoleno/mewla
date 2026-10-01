@@ -1,5 +1,5 @@
 import { buildTerminalPalette, type TerminalThemePalette } from '../../constants/terminalThemes';
-import { createTerminal, destroyTerminal, writeData, getRenderSnapshot, setTheme } from '../../modules/zen-terminal-vt/src';
+import { createTerminal, destroyTerminal, writeData, getVisibleHtml, setTheme } from '../../modules/zen-terminal-vt/src';
 import { TERMINAL_HISTORY_MAX_HTML } from './terminalHistory';
 
 /** Same Ghostty parser and cell HTML formatter as the live grid. The second
@@ -26,7 +26,7 @@ export async function renderTerminalHistory(
       const page = rows.slice(offset, offset + pageSize);
       // Clear/home without resetting SGR inherited from the preceding page.
       writeData(handle, '\x1b[2J\x1b[H' + page.join('\r\n'));
-      const html = getRenderSnapshot(handle).html;
+      const html = getVisibleHtml(handle);
       const rendered = html.match(/<div class="terminal-row"[^>]*>[\s\S]*?<\/div>/g);
       if (!rendered || rendered.length < page.length) throw new Error('Incomplete Ghostty history render.');
       for (const row of rendered.slice(0, page.length)) {
