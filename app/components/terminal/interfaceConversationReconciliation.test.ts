@@ -253,3 +253,15 @@ describe("conversation stream reconciliation", () => {
     ]);
   });
 });
+
+test("snapshot and delta both upsert repeated event ids without merging equal bodies", () => {
+  const first = { ...event("receipt-a", 1, "same"), kind: "user_message" as const };
+  const updated = { ...first, seq: 2 };
+  const second = { ...event("receipt-b", 3, "same"), kind: "user_message" as const };
+  const snapshot = reconcileConversationSnapshot(null, conversation("thread", [first, updated, second]), true);
+  expect(snapshot.events.map(({ id, seq }) => ({ id, seq }))).toEqual([
+    { id: "receipt-a", seq: 2 }, { id: "receipt-b", seq: 3 },
+  ]);
+  const replay = reconcileConversationDeltaEvents(snapshot.events, [updated, updated, second]);
+  expect(replay).toEqual(snapshot.events);
+});

@@ -72,7 +72,7 @@ func ProviderUserEchoSuppressions(items []TimelineItem, providerSessionID string
 	providerSessionID = strings.TrimSpace(providerSessionID)
 	suppress := map[string]bool{}
 	for _, item := range items {
-		if !IsBrainInputAdmission(item) || strings.TrimSpace(item.SessionID) != providerSessionID {
+		if !IsBrainInputAdmission(item) || admissionEchoSessionID(item) != providerSessionID {
 			continue
 		}
 		if echoID := strings.TrimSpace(item.AdmissionEchoEventID); echoID != "" {
@@ -82,18 +82,29 @@ func ProviderUserEchoSuppressions(items []TimelineItem, providerSessionID string
 	return suppress
 }
 
+// The admission retains its immutable pre-send Session identity. A Host whose
+// native transcript was initially unbound records the proven echo Session
+// separately, so replay never retargets a consumed credit after Host replacement.
+func admissionEchoSessionID(item TimelineItem) string {
+	if id := strings.TrimSpace(item.AdmissionEchoSessionID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(item.SessionID)
+}
+
 // claimProviderUserEchoes matches provider user events against accepted
 // lifecycle admissions in causal order. Unconsumed admissions receive
 // AdmissionEchoEventID for durable idempotence.
 //
-// Already-durable provider-native user event IDs are excluded from candidates
-// so an older Terminal/direct row cannot consume a later admission's echo credit.
+// Already-durable provider-native rows are excluded unless the exact Host
+// binding proves a unique stranded echo for a formerly unbound admission.
 func claimProviderUserEchoes(
 	items []TimelineItem,
 	providerEvents []work.CodexConversationEvent,
 	admissions []BrainInputAdmission,
 	threadID string,
 	providerSessionID string,
+	host HostSession,
 ) (map[string]bool, []TimelineItem, bool) {
 	suppress := map[string]bool{}
 	if len(items) == 0 || len(providerEvents) == 0 {
@@ -114,8 +125,9 @@ func claimProviderUserEchoes(
 	}
 
 	type credit struct {
-		index     int
-		admission BrainInputAdmission
+		index       int
+		admission   BrainInputAdmission
+		knownEchoID string
 	}
 	credits := make([]credit, 0, len(items))
 	out := append([]TimelineItem(nil), items...)
@@ -125,7 +137,9 @@ func claimProviderUserEchoes(
 		}
 		echoID := strings.TrimSpace(item.AdmissionEchoEventID)
 		if echoID != "" {
-			suppress[echoID] = true
+			if admissionEchoSessionID(item) == providerSessionID {
+				suppress[echoID] = true
+			}
 			continue
 		}
 		for _, admission := range admissions {
@@ -133,7 +147,28 @@ func claimProviderUserEchoes(
 				!timelineItemMatchesBrainInputAdmission(item, admission) {
 				continue
 			}
-			credits = append(credits, credit{index: index, admission: admission})
+			// A send can precede discovery of the native transcript. Only the
+			// exact recorded Host can prove that formerly unbound Session;
+			// an explicitly bound admission must never follow a replacement.
+			knownEchoID := ""
+			if admission.SessionID == admission.HostSessionID &&
+				admission.HostSessionID == strings.TrimSpace(host.ID) &&
+				providerSessionID != "" && providerSessionID == strings.TrimSpace(host.ProviderSessionID) {
+				admission.SessionID = providerSessionID
+				// Repair a previously materialized echo only when this binding
+				// proves exactly one candidate in the admission's causal window.
+				matches := 0
+				for _, prior := range items {
+					if providerRowMatchesAdmissionWindow(prior, admission) {
+						matches++
+						knownEchoID = prior.ID
+					}
+				}
+				if matches != 1 {
+					knownEchoID = ""
+				}
+			}
+			credits = append(credits, credit{index: index, admission: admission, knownEchoID: knownEchoID})
 			break
 		}
 	}
@@ -150,16 +185,16 @@ func claimProviderUserEchoes(
 		if suppress[eventID] {
 			continue
 		}
-		// Causal boundary: durable provider-native rows are not echoes.
-		if knownProviderUserIDs[eventID] {
-			continue
-		}
 		createdAt, hasExactTimestamp := exactProviderEventTimestamp(event)
 		if !hasExactTimestamp {
 			continue
 		}
 		matched := -1
 		for cursor := 0; cursor < len(credits); cursor++ {
+			// Durable rows need the unique late-binding proof above.
+			if knownProviderUserIDs[eventID] && credits[cursor].knownEchoID != eventID {
+				continue
+			}
 			if !providerEchoMatchesAdmission(
 				credits[cursor].admission,
 				threadID,
@@ -177,6 +212,7 @@ func claimProviderUserEchoes(
 		}
 		suppress[eventID] = true
 		out[credits[matched].index].AdmissionEchoEventID = eventID
+		out[credits[matched].index].AdmissionEchoSessionID = providerSessionID
 		dirty = true
 		credits = append(credits[:matched], credits[matched+1:]...)
 	}
