@@ -200,7 +200,7 @@ func TestCompletedCleanupMissingScratchAfterAbsenceSucceeds(t *testing.T) {
 exit 1
 `)
 	t.Setenv("PATH", dir)
-	manager := newTestPortableResourceManager(t, "abc123", delegatedResourceLimits{TasksMax: 1024})
+	manager := newTestPortableResourceManager(t, "abc123")
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	tempDir, err := manager.createOwnedTempDir(unit)
 	if err != nil {

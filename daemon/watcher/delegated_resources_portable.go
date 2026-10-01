@@ -4,7 +4,6 @@ package watcher
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,20 +17,15 @@ import (
 const delegatedResourceReservationTTL = 2 * time.Minute
 
 type portableDelegatedResourceManager struct {
-	owner      string
-	supervisor string
-	leaseDir   string
-	tempRoot   string
-	limits     delegatedResourceLimits
+	owner    string
+	leaseDir string
+	tempRoot string
 
-	mu                sync.Mutex
-	byTarget          map[string]string
-	reserved          map[string]time.Time
-	lastFullScan      time.Time
-	now               func() time.Time
-	availableMemory   func() uint64
-	listLeases        func(dir string) ([]workerproc.Lease, error)
-	sampleOwnedLeases func(dir string) (workerproc.PoolSample, error)
+	mu           sync.Mutex
+	byTarget     map[string]string
+	reserved     map[string]time.Time
+	lastFullScan time.Time
+	now          func() time.Time
 }
 
 func newPortableDelegatedResourceManager(owner string) (*portableDelegatedResourceManager, error) {
@@ -53,64 +47,18 @@ func newPortableDelegatedResourceManager(owner string) (*portableDelegatedResour
 		return nil, fmt.Errorf("create delegated temporary root: %w", err)
 	}
 	return &portableDelegatedResourceManager{
-		owner:           owner,
-		supervisor:      ZenExecutablePath(),
-		leaseDir:        leaseDir,
-		tempRoot:        tempRoot,
-		limits:          delegatedResourceLimitsForMemory(workerproc.PhysicalMemory()),
-		byTarget:        make(map[string]string),
-		reserved:        make(map[string]time.Time),
-		now:             time.Now,
-		availableMemory: workerproc.AvailableMemory,
+		owner:    owner,
+		leaseDir: leaseDir,
+		tempRoot: tempRoot,
+		byTarget: make(map[string]string),
+		reserved: make(map[string]time.Time),
+		now:      time.Now,
 	}, nil
 }
 
-func (m *portableDelegatedResourceManager) Prepare(activeSessions int) (*delegatedResourceSpec, error) {
-	var ownedLeases map[string]bool
-	if m.limits.MaxActiveSessions > 0 {
-		leases, err := m.listOwnedLeases()
-		if err != nil {
-			return nil, fmt.Errorf("inspect delegated resource leases: %w", err)
-		}
-		ownedLeases = make(map[string]bool, len(leases))
-		for _, lease := range leases {
-			if validDelegatedResourceUnit(m.owner, lease.ResourceID) {
-				ownedLeases[lease.ResourceID] = true
-			}
-		}
-	}
-	m.mu.Lock()
-	m.expireReservationsLocked(m.now())
-	if m.limits.MaxActiveSessions > 0 {
-		reserved := 0
-		for unit := range m.reserved {
-			if !ownedLeases[unit] {
-				reserved++
-			}
-		}
-		activeSessions = max(activeSessions, len(ownedLeases)+reserved)
-		if activeSessions >= m.limits.MaxActiveSessions {
-			m.mu.Unlock()
-			return nil, fmt.Errorf("active delegated session capacity reached (%d for this machine); reuse or close an existing delegated session, or explicitly configure ZEN_DELEGATED_MAX_SESSIONS", m.limits.MaxActiveSessions)
-		}
-	}
-	if m.limits.HostReserve > 0 {
-		available := uint64(0)
-		if m.availableMemory != nil {
-			available = m.availableMemory()
-		} else {
-			available = workerproc.AvailableMemory()
-		}
-		if available > 0 && available < m.limits.HostReserve {
-			m.mu.Unlock()
-			return nil, fmt.Errorf("delegated Zen Worker launch deferred under host memory pressure (available %d bytes is below host reserve %d); retry when memory is available", available, m.limits.HostReserve)
-		}
-	}
+func (m *portableDelegatedResourceManager) Prepare(_ int) (*delegatedResourceSpec, error) {
 	unit := delegatedResourceUnit(m.owner, uuid.NewString())
-	if unit == "" {
-		m.mu.Unlock()
-		return nil, fmt.Errorf("create delegated resource id")
-	}
+	m.mu.Lock()
 	m.reserved[unit] = m.now().Add(delegatedResourceReservationTTL)
 	m.mu.Unlock()
 	tempDir, err := m.createOwnedTempDir(unit)
@@ -118,21 +66,16 @@ func (m *portableDelegatedResourceManager) Prepare(activeSessions int) (*delegat
 		m.forgetUnit(unit)
 		return nil, err
 	}
-	return &delegatedResourceSpec{
-		Owner:      m.owner,
-		Unit:       unit,
-		Supervisor: m.supervisor,
-		LeaseDir:   m.leaseDir,
-		TempDir:    tempDir,
-		Limits:     m.limits,
-	}, nil
-}
-
-func (m *portableDelegatedResourceManager) listOwnedLeases() ([]workerproc.Lease, error) {
-	if m.listLeases != nil {
-		return m.listLeases(m.leaseDir)
+	path, err := workerproc.LeasePath(m.leaseDir, unit)
+	if err == nil {
+		err = workerproc.WriteOwnershipLease(path, unit)
 	}
-	return workerproc.ListLeases(m.leaseDir)
+	if err != nil {
+		_ = m.removeOwnedTempDir(unit)
+		m.forgetUnit(unit)
+		return nil, err
+	}
+	return &delegatedResourceSpec{Owner: m.owner, Unit: unit, TempDir: tempDir}, nil
 }
 
 func (m *portableDelegatedResourceManager) Bind(target, unit string) {
@@ -165,71 +108,23 @@ func (m *portableDelegatedResourceManager) reservedUnits() map[string]bool {
 	return units
 }
 
+// Re-observation never kills: live legacy scopes and their processes survive
+// daemon replacement. Only explicit Worker/Work cleanup calls Release.
 func (m *portableDelegatedResourceManager) Reconcile(windows []tmuxWindow) {
-	now := m.now()
-	liveTargets := make(map[string]bool)
-	liveUnits := make(map[string]bool)
-	for _, window := range windows {
-		if !window.delegated || !validDelegatedResourceUnit(m.owner, window.resourceUnit) {
-			continue
-		}
-		liveTargets[window.target] = true
-		liveUnits[window.resourceUnit] = true
-		m.Bind(window.target, window.resourceUnit)
-	}
-
-	toStop := make(map[string]bool)
 	m.mu.Lock()
-	m.expireReservationsLocked(now)
-	for target, unit := range m.byTarget {
-		if !liveTargets[target] {
-			toStop[unit] = true
-		}
-	}
-	fullScan := m.lastFullScan.IsZero() || now.Sub(m.lastFullScan) >= 10*time.Second
-	if fullScan {
-		m.lastFullScan = now
-	}
-	for unit := range m.reserved {
-		liveUnits[unit] = true
+	observe := m.lastFullScan.IsZero() || m.now().Sub(m.lastFullScan) >= 5*time.Second
+	if observe {
+		m.lastFullScan = m.now()
 	}
 	m.mu.Unlock()
-
-	if fullScan {
-		leases, err := workerproc.ListLeases(m.leaseDir)
-		if err != nil {
-			log.Printf("delegated lease reconciliation: %v", err)
-		} else {
-			for _, lease := range leases {
-				if validDelegatedResourceUnit(m.owner, lease.ResourceID) && !liveUnits[lease.ResourceID] {
-					toStop[lease.ResourceID] = true
-				}
-			}
-		}
-		entries, err := os.ReadDir(m.tempRoot)
-		if err != nil && !os.IsNotExist(err) {
-			log.Printf("delegated temporary directory reconciliation: %v", err)
-		} else {
-			for _, entry := range entries {
-				if !entry.IsDir() {
-					continue
-				}
-				tempDir := filepath.Join(m.tempRoot, entry.Name())
-				unit, ok := readDelegatedTempMarker(tempDir)
-				if !ok || !validDelegatedResourceUnit(m.owner, unit) || liveUnits[unit] {
-					continue
-				}
-				toStop[unit] = true
-			}
-		}
+	if observe {
+		_ = workerproc.ObserveLeases(m.leaseDir)
 	}
 
-	for unit := range toStop {
-		if err := m.stopLease(unit); err != nil {
-			log.Printf("release orphaned delegated lease %s: %v", unit, err)
-			continue
+	for _, window := range windows {
+		if window.delegated && validDelegatedResourceUnit(m.owner, window.resourceUnit) {
+			m.Bind(window.target, window.resourceUnit)
 		}
-		m.forgetUnit(unit)
 	}
 }
 
@@ -408,4 +303,67 @@ func (m *portableDelegatedResourceManager) expireReservationsLocked(now time.Tim
 			delete(m.reserved, unit)
 		}
 	}
+}
+
+func (m *portableDelegatedResourceManager) CaptureOwnership(unit string) error {
+	if !validDelegatedResourceUnit(m.owner, unit) {
+		return fmt.Errorf("refuse unowned resource token")
+	}
+	if _, err := workerproc.Processes(true); err != nil {
+		return err
+	}
+	return workerproc.ObserveLeases(m.leaseDir)
+}
+
+// ReleaseProcess stops an explicitly selected owned tool tree while retaining
+// the provider and pane. The caller supplies the PID start identity from telemetry.
+func (w *Watcher) ReleaseProcess(sessionID string, pid int, start string) error {
+	worker := w.GetWorker(sessionID)
+	if worker == nil || !worker.Delegated || worker.Hidden {
+		return fmt.Errorf("a live delegated Worker is required")
+	}
+	identity, known := w.targetForSession(sessionID)
+	if !known || identity.ProcessID <= 1 {
+		return fmt.Errorf("Worker process identity unavailable")
+	}
+	manager, ok := w.resourceManager().(*portableDelegatedResourceManager)
+	if !ok {
+		return fmt.Errorf("process ownership unavailable")
+	}
+	unit := manager.UnitForTarget(sessionID)
+	if !validDelegatedResourceUnit(manager.owner, unit) {
+		return fmt.Errorf("Worker ownership unavailable")
+	}
+	path, err := workerproc.LeasePath(manager.leaseDir, unit)
+	if err != nil {
+		return err
+	}
+	lease, err := workerproc.ReadLease(path)
+	if err != nil {
+		return err
+	}
+	records, err := workerproc.Processes(true)
+	if err != nil {
+		return err
+	}
+	target, ok := workerproc.Owned(records, lease)[pid]
+	if !ok || start == "" || target.Start != start {
+		return fmt.Errorf("selected process is absent, reused, or not owned by this Worker")
+	}
+	for parent := identity.ProcessID; parent > 1; {
+		if parent == pid {
+			return fmt.Errorf("cannot release the Worker provider or its ancestors")
+		}
+		p, ok := records[parent]
+		if !ok || p.PPID == parent {
+			break
+		}
+		parent = p.PPID
+	}
+	if err := guardTargetIdentity(w.targetForSession, sessionID, identity); err != nil {
+		return err
+	}
+	// A new selection lease has no inherited token: only the selected exact
+	// process and its descendants are eligible, never sibling workloads.
+	return workerproc.StopOwned(workerproc.Lease{Observed: []workerproc.ProcessIdentity{{PID: pid, Start: start}}}, nil)
 }

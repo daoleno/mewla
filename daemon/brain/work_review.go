@@ -58,6 +58,7 @@ type WorkReviewLease struct {
 // action content (from the fact) plus the exact lease capability. It is the
 // value the Host lane claims, consumes, and resolves.
 type WorkReviewAction struct {
+	DetailsJSON    string `json:"details_json,omitempty"`
 	WorkID         string `json:"work_id"`
 	EventID        string `json:"event_id"`
 	Kind           string `json:"kind"`
@@ -126,6 +127,7 @@ func reviewActionFromReview(database presentationDatabase, review *WorkReview) (
 		return WorkReviewAction{}, false
 	}
 	action := WorkReviewAction{
+		DetailsJSON:    fact.DetailsJSON,
 		WorkID:         fact.WorkID,
 		EventID:        fact.ID,
 		Kind:           fact.Kind,

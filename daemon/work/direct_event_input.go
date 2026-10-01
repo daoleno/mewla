@@ -3,6 +3,7 @@ package work
 import (
 	"encoding/json"
 	"io"
+	"reflect"
 	"strings"
 )
 
@@ -14,19 +15,20 @@ const (
 // DirectWorkEventInput is the complete provider-neutral internal input shape.
 // It is transport data only; Work and Event remain the durable product owners.
 type DirectWorkEventInput struct {
-	EventID            string `json:"event_id"`
-	WorkID             string `json:"work_id"`
-	WorkRevision       uint64 `json:"work_revision"`
-	HandlingID         string `json:"handling_id"`
-	ProviderTurnID     string `json:"provider_turn_id"`
-	EventSequenceFence uint64 `json:"event_sequence_fence,omitempty"`
-	WorkTitle          string `json:"work_title"`
-	Kind               string `json:"kind"`
-	Source             string `json:"source"`
-	Summary            string `json:"summary"`
-	NextAction         string `json:"next_action"`
-	ContextRef         string `json:"context_ref"`
-	PayloadRef         string `json:"payload_ref"`
+	ResourcePressure   json.RawMessage `json:"resource_pressure,omitempty"`
+	EventID            string          `json:"event_id"`
+	WorkID             string          `json:"work_id"`
+	WorkRevision       uint64          `json:"work_revision"`
+	HandlingID         string          `json:"handling_id"`
+	ProviderTurnID     string          `json:"provider_turn_id"`
+	EventSequenceFence uint64          `json:"event_sequence_fence,omitempty"`
+	WorkTitle          string          `json:"work_title"`
+	Kind               string          `json:"kind"`
+	Source             string          `json:"source"`
+	Summary            string          `json:"summary"`
+	NextAction         string          `json:"next_action"`
+	ContextRef         string          `json:"context_ref"`
+	PayloadRef         string          `json:"payload_ref"`
 }
 
 func FormatDirectWorkEventInput(input DirectWorkEventInput) string {
@@ -94,8 +96,10 @@ func IsDirectWorkEventPresentationInput(value string) bool {
 		if fieldDecoder.Decode(&actual) != nil {
 			return false
 		}
-		encodedActual, _ := json.Marshal(actual)
-		if string(encodedActual) != string(expectedValue) {
+		var expectedField any
+		expectedDecoder := json.NewDecoder(strings.NewReader(string(expectedValue)))
+		expectedDecoder.UseNumber()
+		if expectedDecoder.Decode(&expectedField) != nil || !reflect.DeepEqual(actual, expectedField) {
 			return false
 		}
 	}

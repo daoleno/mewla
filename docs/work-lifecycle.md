@@ -184,7 +184,7 @@ Session links. This development release does not provide old-format migration.
 Use fresh state for the new release; do not point it at an active old deployment.
 Existing data can be archived separately without importing it into the new state.
 
-Live process environments, tmux ownership markers, resource supervisors, provider
+Live process environments, tmux ownership markers, process ownership leases, provider
 transcripts and active Brain instruction overlays are not upgraded by source edits.
 Plan an authorized maintenance handoff: finish and review active Work normally,
 preserve native resume identities/transcripts and configuration, then stop the

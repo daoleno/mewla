@@ -19,6 +19,7 @@ const (
 
 func marshalDirectWorkEventInput(action WorkReviewAction, item Work) (string, error) {
 	input := work.DirectWorkEventInput{
+		ResourcePressure:   resourcePressureDetails(action.Kind, action.DetailsJSON),
 		EventID:            strings.TrimSpace(action.EventID),
 		WorkID:             strings.TrimSpace(action.WorkID),
 		WorkRevision:       action.DeliveryWorkRevision,
@@ -34,8 +35,12 @@ func marshalDirectWorkEventInput(action WorkReviewAction, item Work) (string, er
 		PayloadRef:         compactDirectWorkEventField(action.PayloadRef, directWorkEventReferenceRuneLimit),
 	}
 	payload := work.FormatDirectWorkEventInput(input)
-	if len(payload) > directWorkEventInputMaxBytes {
-		return "", fmt.Errorf("direct Work Event input exceeds %d bytes", directWorkEventInputMaxBytes)
+	limit := directWorkEventInputMaxBytes
+	if len(input.ResourcePressure) > 0 {
+		limit = 12 * 1024
+	}
+	if len(payload) > limit {
+		return "", fmt.Errorf("direct Work Event input exceeds %d bytes", limit)
 	}
 	return payload, nil
 }

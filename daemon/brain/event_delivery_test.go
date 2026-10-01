@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -64,7 +65,7 @@ func TestDirectWorkEventInputIsDeterministicBoundedAndComplete(t *testing.T) {
 		ContextRef:         item.ContextRef,
 		PayloadRef:         event.PayloadRef,
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("direct input = %#v, want %#v", got, want)
 	}
 }

@@ -26,69 +26,6 @@ func parseProcessIntegers(fields []string) ([]int64, bool) {
 	return values, true
 }
 
-func parseMarkedProcessIDs(out []byte, marker string) (map[int]bool, error) {
-	marked := make(map[int]bool)
-	scanner := largeLineScanner(out)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.Contains(line, marker) {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		pid, err := strconv.Atoi(fields[0])
-		if err == nil && pid > 1 {
-			marked[pid] = true
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return marked, nil
-}
-
-// parseAllMarkedProcessIDs groups PIDs by ZEN_WORKER_RESOURCE_UNIT from one
-// environment-bearing process listing. Callers must not issue one ps per lease.
-func parseAllMarkedProcessIDs(out []byte) (map[string]map[int]bool, error) {
-	const prefix = "ZEN_WORKER_RESOURCE_UNIT="
-	marked := make(map[string]map[int]bool)
-	scanner := largeLineScanner(out)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		index := strings.Index(line, prefix)
-		if index < 0 {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		pid, err := strconv.Atoi(fields[0])
-		if err != nil || pid <= 1 {
-			continue
-		}
-		rest := line[index+len(prefix):]
-		resourceID := rest
-		if end := strings.IndexAny(rest, " \t"); end >= 0 {
-			resourceID = rest[:end]
-		}
-		resourceID = strings.TrimSpace(resourceID)
-		if resourceID == "" {
-			continue
-		}
-		if marked[resourceID] == nil {
-			marked[resourceID] = make(map[int]bool)
-		}
-		marked[resourceID][pid] = true
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return marked, nil
-}
-
 func parseDarwinProcessSnapshot(out []byte, sessionID func(int) (int, error)) (map[int]processRecord, error) {
 	processes := make(map[int]processRecord)
 	scanner := largeLineScanner(out)

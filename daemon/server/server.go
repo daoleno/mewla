@@ -95,6 +95,7 @@ type Server struct {
 	work                         *work.Store
 	execs                        *work.ExecutorConfig
 	brain                        *brain.Service
+	resourceSampler              *watcher.ResourceSampler
 	profiles                     *modelprofiles.Owner
 	calendar                     *calendar.Store
 	calendarScheduler            *calendar.Scheduler
@@ -283,6 +284,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		work:               workStore,
 		execs:              execs,
 		brain:              brainService,
+		resourceSampler:    watcher.NewResourceSampler(),
 		uploadDir:          uploadDir,
 		uploadStore:        &attachment.Store{Dir: uploadDir},
 		clients:            make(map[*websocket.Conn]*authenticatedClient),
@@ -400,6 +402,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
+	mux.HandleFunc("/resources", s.handleResourceTelemetryHTTP)
 	mux.HandleFunc("/desktop", s.handleDesktop)
 	mux.HandleFunc("/desktop/capability", s.handleDesktopCapability)
 	mux.HandleFunc("/desktop/moonlight/enroll/begin", s.handleMoonlightEnrollBegin)
@@ -440,7 +443,8 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	srv := &http.Server{Handler: s.Handler()}
 
 	var runtime sync.WaitGroup
-	runtime.Add(2)
+	runtime.Add(3)
+	go func() { defer runtime.Done(); s.runResourceTelemetry(runtimeCtx) }()
 	go func() {
 		defer runtime.Done()
 		s.broadcastEvents(runtimeCtx)
@@ -1018,8 +1022,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleDSHInteraction(conn, raw)
 	case "session_image":
 		s.handleDSHImage(conn, raw)
-	case "get_session_resource_snapshot":
-		s.handleGetSessionResourceSnapshot(conn, raw)
+	case "get_resource_telemetry":
+		s.handleGetResourceTelemetry(conn, raw)
 	default:
 		log.Printf("unknown message type: %s", raw.Type)
 		if raw.RequestID != "" {

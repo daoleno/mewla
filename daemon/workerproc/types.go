@@ -12,44 +12,12 @@ import (
 
 var resourceIDRE = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
-type SupervisorConfig struct {
-	ResourceID string
-	LeaseDir   string
-	MemoryHigh string
-	MemoryMax  string
-	TasksMax   int
-	PoolGuard  bool
-	Command    []string
-	Stdin      *os.File
-	Stdout     *os.File
-	Stderr     *os.File
-}
-
 type Lease struct {
-	Version       int       `json:"version"`
-	ResourceID    string    `json:"resource_id"`
-	BootID        string    `json:"boot_id"`
-	SupervisorPID int       `json:"supervisor_pid"`
-	RootPID       int       `json:"root_pid"`
-	SessionID     int       `json:"session_id"`
-	ProcessGroup  int       `json:"process_group"`
-	StartedAt     time.Time `json:"started_at"`
-	MemoryHigh    uint64    `json:"memory_high,omitempty"`
-	MemoryMax     uint64    `json:"memory_max,omitempty"`
-	TasksMax      int       `json:"tasks_max,omitempty"`
-}
-
-// PhysicalMemory returns installed physical memory in bytes when the current
-// platform exposes it. Resource policy callers fall back conservatively when
-// it returns zero.
-func PhysicalMemory() uint64 {
-	return physicalMemory()
-}
-
-// AvailableMemory returns currently available memory in bytes when the current
-// platform exposes it. Callers treat zero as "observation unavailable".
-func AvailableMemory() uint64 {
-	return availableMemory()
+	Observed   []ProcessIdentity `json:"observed,omitempty"`
+	Version    int               `json:"version"`
+	ResourceID string            `json:"resource_id"`
+	BootID     string            `json:"boot_id"`
+	StartedAt  time.Time         `json:"started_at"`
 }
 
 func LeasePath(dir, resourceID string) (string, error) {
@@ -130,46 +98,8 @@ func writeLease(path string, lease Lease) error {
 	return os.Rename(tmpPath, path)
 }
 
-// ParseMemoryLimit converts a systemd-style memory limit string into bytes.
-// Percentage forms require a positive total; absolute sizes do not.
-func ParseMemoryLimit(value string, total uint64) (uint64, error) {
-	value = strings.ToUpper(strings.TrimSpace(value))
-	if value == "" || value == "0" {
-		return 0, nil
-	}
-	if strings.HasSuffix(value, "%") {
-		var percent uint64
-		if _, err := fmt.Sscanf(value, "%d%%", &percent); err != nil || percent == 0 || percent > 100 {
-			return 0, fmt.Errorf("invalid memory percentage %q", value)
-		}
-		return total * percent / 100, nil
-	}
-	multiplier := uint64(1)
-	if last := value[len(value)-1]; last < '0' || last > '9' {
-		switch last {
-		case 'K':
-			multiplier = 1 << 10
-		case 'M':
-			multiplier = 1 << 20
-		case 'G':
-			multiplier = 1 << 30
-		case 'T':
-			multiplier = 1 << 40
-		case 'P':
-			multiplier = 1 << 50
-		case 'E':
-			multiplier = 1 << 60
-		default:
-			return 0, fmt.Errorf("invalid memory size %q", value)
-		}
-		value = strings.TrimSpace(value[:len(value)-1])
-	}
-	var amount uint64
-	if _, err := fmt.Sscanf(value, "%d", &amount); err != nil || amount == 0 {
-		return 0, fmt.Errorf("invalid memory size %q", value)
-	}
-	if amount > ^uint64(0)/multiplier {
-		return 0, fmt.Errorf("memory size overflows")
-	}
-	return amount * multiplier, nil
+// WriteOwnershipLease persists only identity, never limits. Old version-1
+// supervisor leases remain readable; obsolete budget fields are ignored.
+func WriteOwnershipLease(path, resourceID string) error {
+	return writeLease(path, Lease{Version: 1, ResourceID: resourceID, BootID: bootID(), StartedAt: time.Now().UTC()})
 }

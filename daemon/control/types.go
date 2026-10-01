@@ -18,6 +18,8 @@ import (
 const SocketName = "zen.sock"
 
 type Request struct {
+	ProcessID            int                                    `json:"process_id,omitempty"`
+	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`
 	Name                 string                                 `json:"name,omitempty"`
 	Executor             string                                 `json:"executor,omitempty"`
@@ -89,6 +91,7 @@ type PairingInfo struct {
 }
 
 type Response struct {
+	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	WorkerDefaults     *work.WorkerDefaults                     `json:"worker_defaults,omitempty"`
 	OK                 bool                                     `json:"ok"`
 	Error              *Error                                   `json:"error,omitempty"`

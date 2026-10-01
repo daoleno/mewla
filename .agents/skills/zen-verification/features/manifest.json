@@ -38,7 +38,11 @@
         "daemon/watcher/service_tunnels.go",
         "daemon/work/delegated_trust.go",
         "daemon/brain/turn_ledger.go",
-        "daemon/lifecycle/engine.go"
+        "daemon/lifecycle/engine.go",
+        "daemon/watcher/resource_telemetry.go",
+        "daemon/workerproc/ownership_unix.go",
+        "daemon/brain/resource_pressure.go",
+        "daemon/cmd/zen/worker_release.go"
       ],
       "test_paths": [
         "daemon/cmd/zen/control_app_test.go",
@@ -50,7 +54,12 @@
         "daemon/brain/absent_preparation_test.go",
         "daemon/work/delegated_trust_test.go",
         "daemon/watcher/startup_update_test.go",
-        "daemon/watcher/claude_delegated_input_test.go"
+        "daemon/watcher/claude_delegated_input_test.go",
+        "daemon/watcher/resource_cleanup_real_test.go",
+        "daemon/watcher/resource_pressure_test.go",
+        "daemon/watcher/resource_cost_linux_test.go",
+        "daemon/server/resource_telemetry_test.go",
+        "daemon/brain/resource_pressure_test.go"
       ]
     },
     {

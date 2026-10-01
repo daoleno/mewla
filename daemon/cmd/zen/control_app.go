@@ -54,6 +54,7 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
+	resourceSampler   *watcher.ResourceSampler
 	auth              *auth.Manager
 	watcher           controlWatcher
 	execs             *work.ExecutorConfig
@@ -79,6 +80,17 @@ const delegatedInitialReadinessBudget = 45 * time.Second
 
 func (a *controlApp) HandleControlRequest(req control.Request) control.Response {
 	switch strings.TrimSpace(req.Type) {
+	case "resource_telemetry":
+		if a.resourceSampler == nil {
+			return control.ErrorResponse("resource_telemetry_unavailable", "Resource sampler not ready")
+		}
+		snap := a.resourceSampler.Snapshot()
+		if a.brainService != nil {
+			if consumers, _, _, err := a.brainService.ResourceWorkContext(snap.Consumers); err == nil {
+				snap.Consumers = consumers
+			}
+		}
+		return control.Response{OK: true, ResourceTelemetry: &snap}
 	case "worker_list":
 		return a.handleWorkerList()
 	case "worker_defaults_get", "worker_defaults_set":
@@ -97,6 +109,17 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleWorkerReceipt(req)
 	case "worker_progress":
 		return a.handleWorkerProgress(req)
+	case "worker_release":
+		releaser, ok := a.watcher.(interface {
+			ReleaseProcess(string, int, string) error
+		})
+		if !ok {
+			return control.ErrorResponse("resource_release_unavailable", "Worker process ownership is unavailable")
+		}
+		if err := releaser.ReleaseProcess(req.WorkerID, req.ProcessID, req.ProcessStart); err != nil {
+			return control.ErrorResponse("resource_release_failed", err.Error())
+		}
+		return control.Response{OK: true}
 	case "worker_close":
 		return a.handleWorkerClose(req)
 	case "service_tunnel":
