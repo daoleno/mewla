@@ -1,133 +1,135 @@
 import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { TypeScale, UiTextMetrics, useAppTheme } from "../../constants/tokens";
+import { Text, View } from "react-native";
+import { useAppTheme } from "../../constants/tokens";
 import {
-  consumerMeta,
-  consumerTitle,
-  formatBytes,
-  formatCores,
-  groupConsumers,
-  kindChips,
-  type ConsumerGroup,
-  type ResourceConsumer,
-  type ResourceTelemetry,
+  CONSUMER_OWNER_LABEL, consumerKey, consumerMeta, consumerTitle, formatBytes, formatPercent,
+  groupConsumers, kindChips, sortConsumers, type ConsumerSort, type ResourceConsumer,
+  type ResourceConsumerOwner, type ResourceTelemetry,
 } from "../../services/resourceTelemetry";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
-import { StackBar } from "./ResourceCharts";
 import type { ResourceStyles } from "./resourceStyles";
 
-const VISIBLE_PER_GROUP = 4;
-
-export function ConsumersSection({ telemetry, styles }: { telemetry: ResourceTelemetry; styles: ResourceStyles }) {
+export function ConsumersSection({ telemetry, styles, wide = false }: { telemetry: ResourceTelemetry; styles: ResourceStyles; wide?: boolean }) {
+  const { colors } = useAppTheme();
+  const [sort, setSort] = useState<ConsumerSort>("rss");
+  const [owner, setOwner] = useState<ResourceConsumerOwner | null>(null);
+  const [limit, setLimit] = useState(30);
   const groups = useMemo(() => groupConsumers(telemetry.consumers), [telemetry.consumers]);
-  if (groups.length === 0) return null;
-  const total = telemetry.memory.totalBytes ?? Math.max(...telemetry.consumers.map((consumer) => consumer.rssBytes), 1);
+  const consumers = sortConsumers(telemetry.consumers.filter((c) => owner === null || c.owner === owner), sort);
+  const totalRss = consumers.reduce((sum, c) => sum + c.rssBytes, 0);
+  const totalCpu = consumers.every((c) => c.cpuPercent !== undefined)
+    ? consumers.reduce((sum, c) => sum + c.cpuPercent!, 0) : undefined;
+  // Malformed/legacy snapshots can contain duplicate identities. Keep every row.
+  const keys = new Map<string, number>();
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle} accessibilityRole="header">Who&apos;s using it</Text>
-      <View style={{ gap: 20 }}>
-        {groups.map((group) => (
-          <GroupBlock key={group.key} group={group} total={total} styles={styles} />
-        ))}
+      <View style={styles.sectionHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Consumers <Text style={styles.caption}>{telemetry.consumers.length}</Text></Text>
+          <Text style={styles.micro}>CPU 100% = 1 core · RSS may share pages</Text>
+        </View>
+        <View style={styles.legendItem}>
+          {(["rss", "cpu"] as const).map((value) => <AnimatedPressable key={value} accessibilityRole="button"
+            accessibilityLabel={`Sort by ${value.toUpperCase()}`} accessibilityState={{ selected: sort === value }}
+            onPress={() => setSort(value)} style={[styles.control, sort === value && { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={[styles.label, sort === value && { color: colors.accent }]}>{value.toUpperCase()}{sort === value ? " ↓" : ""}</Text>
+          </AnimatedPressable>)}
+        </View>
       </View>
+      <View style={styles.filterRow}>
+        {[{ key: "all", title: "All", rssBytes: undefined, cpuPercent: undefined, consumers: telemetry.consumers }, ...groups].map((group) => {
+          const value = group.key === "all" ? null : group.consumers[0].owner;
+          return <AnimatedPressable key={group.key} accessibilityRole="button"
+            accessibilityLabel={`Filter ${group.title}`} accessibilityState={{ selected: owner === value }}
+            onPress={() => { setOwner(value); setLimit(30); }}
+            style={[styles.filter, { backgroundColor: owner === value ? colors.surfaceSubtle : colors.bgPrimary,
+              borderColor: owner === value ? colors.accent : colors.borderSubtle }]}>
+            <Text style={[styles.caption, { color: value === "orphaned_worker" ? colors.warning : colors.textSecondary }]}>{group.title} · {group.consumers.length}</Text>
+            {wide && group.rssBytes !== undefined ? <Text style={styles.micro}>{formatBytes(group.rssBytes)} · CPU {formatPercent(group.cpuPercent)}</Text> : null}
+          </AnimatedPressable>;
+        })}
+      </View>
+      {!wide ? <Text style={styles.micro}>{formatBytes(totalRss)} RSS · CPU {formatPercent(totalCpu)} · {consumers.reduce((sum, c) => sum + c.processCount, 0)} procs</Text> : null}
+      {wide ? <View style={styles.tableHeader}>
+        <Text style={[styles.micro, { flex: 1 }]}>NAME / EXECUTOR / CWD</Text>
+        <Text style={[styles.micro, { width: 142 }]}>OWNER / STATUS</Text>
+        <Text style={[styles.micro, styles.cpuCell]}>CPU</Text>
+        <Text style={[styles.micro, styles.rssCell]}>RSS</Text>
+        <Text style={[styles.micro, styles.countCell]}>PROCS</Text>
+        <View style={{ width: 14 }} />
+      </View> : null}
+      <View>
+        {consumers.slice(0, limit).map((consumer) => {
+          const key = consumerKey(consumer);
+          const occurrence = keys.get(key) ?? 0;
+          keys.set(key, occurrence + 1);
+          return <ConsumerRow key={`${key}:${occurrence}`} consumer={consumer} styles={styles} wide={wide} />;
+        })}
+      </View>
+      {consumers.length === 0 ? <Text style={styles.caption}>No consumers reported{owner ? " for this owner" : ""}.</Text> : null}
+      {consumers.length > limit ? <AnimatedPressable style={styles.control} accessibilityRole="button" onPress={() => setLimit((v) => v + 30)}>
+        <Text style={styles.label}>Show more · {consumers.length - limit} remaining</Text>
+      </AnimatedPressable> : null}
     </View>
   );
 }
 
-function GroupBlock({ group, total, styles }: { group: ConsumerGroup; total: number; styles: ResourceStyles }) {
+function ConsumerRow({ consumer, styles, wide }: { consumer: ResourceConsumer; styles: ResourceStyles; wide: boolean }) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? group.consumers : group.consumers.slice(0, VISIBLE_PER_GROUP);
-  const hidden = group.consumers.length - visible.length;
-  const orphaned = group.key === "orphaned";
+  const title = consumerTitle(consumer);
+  const orphaned = consumer.owner === "orphaned_worker";
+  const commands = [...new Set([...consumer.commands, ...consumer.processes.flatMap((p) => p.command ? [p.command] : [])])];
+  const kinds = kindChips(consumer.kinds).map((chip) => chip.label).join(" · ");
+  const ownerStatus = <View style={wide ? { width: 142, gap: 2 } : styles.legendRow}>
+    <Text style={[styles.caption, orphaned && { color: colors.warning }]}>{CONSUMER_OWNER_LABEL[consumer.owner]}</Text>
+    <Text style={[styles.micro, orphaned && { color: colors.warning }]}>{orphaned ? `Residual · ${consumer.status ?? "unknown"}` : consumer.status ?? "unknown"}</Text>
+  </View>;
+  const metrics = <>
+    <Text style={[styles.mono, wide && styles.cpuCell]}>{wide ? "" : "CPU "}{formatPercent(consumer.cpuPercent)}</Text>
+    <Text style={[styles.monoStrong, wide && styles.rssCell]}>{wide ? "" : "RSS "}{formatBytes(consumer.rssBytes)}</Text>
+    <Text style={[styles.mono, wide && styles.countCell]}>{consumer.processCount}{wide ? "" : " procs"}</Text>
+  </>;
   return (
-    <View style={{ gap: 2 }}>
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.label, orphaned && { color: colors.warning }]}>{group.title}</Text>
-        <Text style={styles.mono}>
-          {formatBytes(group.rssBytes)} · {formatCores(group.cpuPercent)}
-        </Text>
-      </View>
-      {group.hint ? <Text style={styles.caption}>{group.hint}</Text> : null}
-      {visible.map((consumer, index) => (
-        <ConsumerRow
-          key={`${consumer.owner}:${consumer.workerId ?? consumer.workId ?? consumer.title ?? index}`}
-          consumer={consumer}
-          total={total}
-          styles={styles}
-        />
-      ))}
-      {hidden > 0 || expanded ? (
-        <AnimatedPressable
-          style={{ minHeight: 44, justifyContent: "center" }}
-          scale={0.97}
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          accessibilityLabel={expanded ? `Show fewer ${group.title}` : `Show ${hidden} more ${group.title}`}
-          onPress={() => setExpanded((value) => !value)}
-        >
-          <Text style={[TypeScale.label, UiTextMetrics, { color: colors.accent }]}>
-            {expanded ? "Show less" : `${hidden} more`}
-          </Text>
-        </AnimatedPressable>
-      ) : null}
-    </View>
-  );
-}
-
-function ConsumerRow({ consumer, total, styles }: { consumer: ResourceConsumer; total: number; styles: ResourceStyles }) {
-  const { colors } = useAppTheme();
-  const chips = kindChips(consumer.kinds);
-  const meta = consumerMeta(consumer);
-  const share = total > 0 ? consumer.rssBytes / total : 0;
-  const heavy = chips.some((chip) => chip.heavy);
-  return (
-    <View
-      style={{
-        paddingVertical: 10,
-        gap: 6,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: colors.borderSubtle,
-      }}
-      accessible
-      accessibilityLabel={[
-        consumerTitle(consumer),
-        meta,
-        chips.map((chip) => chip.label).join(", "),
-        `${formatBytes(consumer.rssBytes)} memory`,
-        formatCores(consumer.cpuPercent),
-      ].filter(Boolean).join(", ")}
-    >
-      <View style={[styles.sectionHeader, { alignItems: "flex-start" }]}>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={[TypeScale.body, UiTextMetrics, { color: colors.textPrimary }]} numberOfLines={1}>
-            {consumerTitle(consumer)}
-          </Text>
-          {meta ? <Text style={styles.caption} numberOfLines={1}>{meta}</Text> : null}
+    <View style={styles.consumer}>
+      <AnimatedPressable scale={1} accessibilityRole="button" accessibilityState={{ expanded }}
+        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}, ${CONSUMER_OWNER_LABEL[consumer.owner]}, ${consumer.status ?? "unknown"}, CPU ${formatPercent(consumer.cpuPercent)}, RSS ${formatBytes(consumer.rssBytes)}, ${consumer.processCount} processes`}
+        onPress={() => setExpanded((v) => !v)} style={styles.consumerButton}>
+        <View style={styles.consumerLine}>
+          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+            <Text style={styles.label} numberOfLines={1}>{title}</Text>
+            {consumerMeta(consumer) ? <Text style={styles.micro} numberOfLines={1}>{consumerMeta(consumer)}</Text> : null}
+            {commands.length || kinds ? <Text style={styles.micro} numberOfLines={1}>{[commands.join(", "), kinds].filter(Boolean).join(" · ")}</Text> : null}
+          </View>
+          {wide ? <>{ownerStatus}{metrics}</> : null}
+          <Text style={[styles.caption, { width: 14 }]}>{expanded ? "−" : "+"}</Text>
         </View>
-        <View style={{ alignItems: "flex-end", gap: 2 }}>
-          <Text style={styles.monoStrong}>{formatBytes(consumer.rssBytes)}</Text>
-          <Text style={styles.caption}>{formatCores(consumer.cpuPercent)}</Text>
+        {!wide ? <>{ownerStatus}<View style={[styles.legendRow, { justifyContent: "space-between" }]}>{metrics}</View></> : null}
+      </AnimatedPressable>
+      {expanded ? <View style={styles.processPanel}>
+        <Text style={styles.label} selectable>{title}</Text>
+        {consumer.id ? <Text selectable style={styles.micro}>ID {consumer.id}</Text> : null}
+        {consumer.workerId ? <Text selectable style={styles.micro}>Worker {consumer.workerId}</Text> : null}
+        {consumer.workId ? <Text selectable style={styles.micro}>Work {consumer.workId}</Text> : null}
+        {consumerMeta(consumer) ? <Text selectable style={styles.caption}>{consumerMeta(consumer)}</Text> : null}
+        {commands.length ? <Text selectable style={styles.caption}>Commands · {commands.join(", ")}</Text> : null}
+        {kinds ? <Text style={styles.caption}>Kinds · {kinds}</Text> : null}
+        <Text style={styles.micro}>{consumer.processes.length} / {consumer.processCount} processes reported · largest RSS</Text>
+        <View style={styles.consumerLine}>
+          <Text style={[styles.micro, styles.pidCell]}>PID</Text>
+          <Text style={[styles.micro, { flex: 1 }]}>COMMAND / START TOKEN</Text>
+          <Text style={[styles.micro, styles.rssCell]}>RSS</Text>
         </View>
-      </View>
-      <StackBar
-        height={3}
-        segments={[{ key: "rss", ratio: share, color: heavy ? colors.warning : colors.accent, opacity: 0.7 }]}
-      />
-      {chips.length > 0 ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          {chips.map((chip) => (
-            <View
-              key={chip.label}
-              style={[styles.chip, { backgroundColor: chip.heavy ? colors.warningSoft : colors.surfaceSubtle }]}
-            >
-              <Text style={[styles.micro, { color: chip.heavy ? colors.warning : colors.textSecondary }]}>
-                {chip.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+        {[...consumer.processes].sort((a, b) => (b.rssBytes ?? -1) - (a.rssBytes ?? -1)).map((process, index) => <View key={`${process.pid}:${process.start}:${index}`} style={styles.processLine}>
+          <Text selectable style={[styles.mono, styles.pidCell]}>{process.pid ?? "—"}</Text>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text selectable style={styles.monoStrong}>{process.command ?? "Unknown process"}</Text>
+            {process.start ? <Text selectable style={styles.micro}>start {process.start}</Text> : null}
+          </View>
+          <Text style={[styles.mono, styles.rssCell]}>{formatBytes(process.rssBytes)}</Text>
+        </View>)}
+        {consumer.processes.length === 0 ? <Text style={styles.caption}>Process details unavailable in this sample.</Text> : null}
+      </View> : null}
     </View>
   );
 }
