@@ -9,6 +9,17 @@ import (
 
 var safeLaunchToken = regexp.MustCompile(`^[a-zA-Z0-9_./:@+=,-]+$`)
 
+// CodexNativeResumeCommand leaves model and effort selection to the saved
+// native Session. Executor defaults describe fresh launches, and may predate
+// a user's in-session model switch. Connection and permission options remain.
+func CodexNativeResumeCommand(command, sessionID string) (string, error) {
+	args, _, _, err := codexCommandParts(command, false)
+	if err != nil {
+		return "", err
+	}
+	return WithProviderResumeToken(WorkerProviderCodex, joinLaunchTokens(args), sessionID)
+}
+
 func joinLaunchTokens(args []string) string {
 	for i, v := range args {
 		if !safeLaunchToken.MatchString(v) {

@@ -56,6 +56,15 @@ func TestHostTranscriptBindingFollowsLiveCodexThreadSwitch(t *testing.T) {
 			if tc.want == newPath && got.SessionID != "new-thread" {
 				t.Fatalf("stale session ID: %+v", got)
 			}
+			if len(tc.paths) > 1 {
+				unbound := ResolveHostTranscriptIdentityForWorker(classifier.Worker{ProcessID: cmd.Process.Pid, Command: "codex"}, HostTranscriptIdentity{}, WorkerProviderCodex)
+				if unbound.Bound() {
+					t.Fatalf("ambiguous evidence selected a conversation for an unbound Host: %+v", unbound)
+				}
+				if identity, found := ResolveCodexTranscriptIdentity(cmd.Process.Pid); found {
+					t.Fatalf("live recovery guessed an ambiguous identity: %+v", identity)
+				}
+			}
 		})
 	}
 }
