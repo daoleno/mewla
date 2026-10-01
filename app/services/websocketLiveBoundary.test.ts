@@ -1647,3 +1647,24 @@ describe("resource telemetry live boundary", () => {
     client.disconnectAll();
   });
 });
+
+describe("Plugins account boundary", () => {
+  test("ignores another server and cleans pending calls on disconnect", async () => {
+    const client = new MultiServerWebSocketClient();
+    const first = await connectClient(client, server);
+    const second = await connectClient(client, secondServer);
+    first.open(); second.open();
+    const pending = client.requestConnections(server.id, { action: "get", id: "personal" });
+    const outbound = JSON.parse(first.sent.at(-1)!);
+    second.receive({ type: "connections_result", request_id: outbound.request_id, connections: { account: { id: "wrong" } } });
+    expect(registeredHandlerCount(client)).toBeGreaterThan(0);
+    first.receive({ type: "connections_result", request_id: outbound.request_id, connections: { account: { id: "personal" } } });
+    expect((await pending).account?.id).toBe("personal");
+    expect(registeredHandlerCount(client)).toBe(0);
+    const disconnected = client.requestConnections(server.id, { action: "list" });
+    client.disconnectServer(server.id);
+    await expect(disconnected).rejects.toThrow("Server disconnected");
+    expect(registeredHandlerCount(client)).toBe(0);
+    client.disconnectAll();
+  });
+});

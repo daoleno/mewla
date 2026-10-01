@@ -8,6 +8,7 @@ import (
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
 	"github.com/daoleno/zen/daemon/calendar"
+	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/lifecycle"
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	telegramchannel "github.com/daoleno/zen/daemon/telegram"
@@ -18,6 +19,7 @@ import (
 const SocketName = "zen.sock"
 
 type Request struct {
+	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`
@@ -91,6 +93,7 @@ type PairingInfo struct {
 }
 
 type Response struct {
+	Connections        *connections.Response                    `json:"connections,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	WorkerDefaults     *work.WorkerDefaults                     `json:"worker_defaults,omitempty"`
 	OK                 bool                                     `json:"ok"`

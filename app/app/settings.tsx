@@ -654,6 +654,10 @@ export default function SettingsScreen() {
             </ListSection>
           )}
 
+          <ListSection>
+            <ListRow title="Plugins" subtitle="External services and tools for Brain" icon="extension-puzzle-outline" accessory="chevron" onPress={() => router.push("/plugins")} />
+          </ListSection>
+
           <SettingsSectionHeader>Providers</SettingsSectionHeader>
           <ListSection>
             <ListRow

@@ -1,3 +1,4 @@
+import type { ConnectionRequest, ConnectionResponse } from "./connections";
 import type { StoredServer } from "./storage";
 import type { StatsPayload } from "./statsPayload";
 import { Platform } from "react-native";
@@ -3581,6 +3582,42 @@ export class MultiServerWebSocketClient {
         cleanup,
         reject,
       );
+    });
+  }
+
+  requestConnections(serverId: string, request: ConnectionRequest): Promise<ConnectionResponse> {
+    const requestId = `plugins_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off("connections_result", handleResult);
+        this.off("error", handleError);
+        this.off("disconnected", handleDisconnect);
+      };
+      const handleResult = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
+        cleanup();
+        if (!payload.connections || typeof payload.connections !== "object") {
+          reject(new Error("Invalid plugin response."));
+          return;
+        }
+        resolve(payload.connections as ConnectionResponse);
+      };
+      const handleError = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
+        cleanup(); reject(new Error(payload.message || "Plugin request failed."));
+      };
+      const handleDisconnect = (payload: any) => {
+        if (payload.serverId !== serverId) return;
+        cleanup(); reject(new Error("Server disconnected. Reconnect to check the result."));
+      };
+      const timer = setTimeout(() => {
+        cleanup(); reject(new Error("Plugin request timed out. Refresh to check the result."));
+      }, 25000);
+      this.on("connections_result", handleResult);
+      this.on("error", handleError);
+      this.on("disconnected", handleDisconnect);
+      this.sendRequestNow(serverId, { type: "connections", request_id: requestId, connection_request: request }, cleanup, reject);
     });
   }
 

@@ -47,3 +47,5 @@ Match proof to the user workflow and blast radius: regression evidence for bugs,
 - Use zen calendar list/get/create/update/cancel/run only for explicit time intent. event, reminder and deadline are passive; scheduled_action executes work.
 - For scheduled_action, get the current thread_id from zen brain context --json and pass it as -source-thread. Never invent or retarget the result destination.
 - Calendar uses local YYYY-MM-DD, HH:MM and IANA timezone. Ask first/second for a repeated DST time. After create/update/run, confirm resolved local time, timezone, recurrence/effect and result destination. A recurring series continues after a failed occurrence.
+
+- Plugins: `zen connections --help` discovers shared tools. Respect user authority.
