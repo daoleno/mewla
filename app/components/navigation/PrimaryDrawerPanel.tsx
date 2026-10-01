@@ -23,6 +23,7 @@ import { ZenLogoMark } from "../ui/ZenLogoMark";
 import {
   NavChevronIcon,
   NavCloseIcon,
+  NavResourcesIcon,
   NavSkillsIcon,
   NavStatsIcon,
 } from "./PrimaryNavIcons";
@@ -35,7 +36,7 @@ interface PrimaryDrawerPanelProps {
   onNavigateAway(): void;
 }
 
-type DrawerRowIcon = "settings" | "skills" | "stats";
+type DrawerRowIcon = "settings" | "skills" | "stats" | "resources";
 
 interface DrawerRowProps {
   drawerVisible: boolean;
@@ -53,6 +54,9 @@ function DrawerRowIconView({
 }) {
   if (icon === "stats") {
     return <NavStatsIcon color={color} size={20} />;
+  }
+  if (icon === "resources") {
+    return <NavResourcesIcon color={color} size={20} />;
   }
   if (icon === "skills") {
     return <NavSkillsIcon color={color} size={20} />;
@@ -134,7 +138,7 @@ export function PrimaryDrawerPanel({
       : colors.textTertiary;
 
   const openRoute = useCallback(
-    (pathname: "/skills" | "/stats" | "/settings" | "/remote-desktop") => {
+    (pathname: "/skills" | "/stats" | "/resources" | "/settings" | "/remote-desktop") => {
       onNavigateAway();
       router.push(pathname);
     },
@@ -229,6 +233,13 @@ export function PrimaryDrawerPanel({
             icon="stats"
             label="Stats"
             onPress={() => openRoute("/stats")}
+          />
+          <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
+          <DrawerRow
+            drawerVisible={drawerVisible}
+            icon="resources"
+            label="Resources"
+            onPress={() => openRoute("/resources")}
           />
           <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
           <DrawerRow

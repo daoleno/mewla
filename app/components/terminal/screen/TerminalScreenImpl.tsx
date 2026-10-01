@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Linking } from "react-native";
+import { useRouter } from "expo-router";
 import { useWorkers } from "../../../store/workers";
 import { useBrain } from "../../../store/brain";
 import { useWork } from "../../../store/work";
@@ -15,7 +16,6 @@ import { useTerminalScreenModels } from "./useTerminalScreenModels";
 import { useTerminalScreenStorage } from "./useTerminalScreenStorage";
 import { useTerminalSessionActions } from "./useTerminalSessionActions";
 import { useTerminalNavigationActions } from "./useTerminalNavigationActions";
-import { useSessionResourceSheet } from "./useSessionResourceSheet";
 import { useSessionProviderSheet } from "./useSessionProviderSheet";
 import { dshWebServiceURL } from "../../../services/sessionServicesPresentation";
 import { wsClient } from "../../../services/websocket";
@@ -25,6 +25,7 @@ export default function TerminalScreen() {
   const { state: brainState } = useBrain();
   const { state: workState } = useWork();
   const { setCurrentSession } = useCurrentSession();
+  const router = useRouter();
   const [dshWebURL, setDshWebURL] = useState<string | null>(null);
   const {
     workerId,
@@ -188,11 +189,10 @@ export default function TerminalScreen() {
   });
   const { openNewTerminal } = sessionActions;
 
-  const resourceSheet = useSessionResourceSheet({
-    serverId,
-    workerId,
-    connectionConnected: connectionState === "connected",
-  });
+  const openSessionDetails = useCallback(() => {
+    closeMenu();
+    router.push("/resources");
+  }, [closeMenu, router]);
 
   const routeSheet = useSessionProviderSheet({
     serverId,
@@ -246,10 +246,6 @@ export default function TerminalScreen() {
       renameDraft,
       renamePlaceholder: agent?.name || workerId,
       renameVisible,
-      resourceSheetVisible: resourceSheet.visible,
-      resourceSheetLoading: resourceSheet.loading,
-      resourceSheetError: resourceSheet.error,
-      resourceSheetSnapshot: resourceSheet.snapshot,
       routeSheetVisible: routeSheet.visible,
       routeSheetLoading: routeSheet.loading,
       routeSheetActivating: routeSheet.activating,
@@ -274,9 +270,7 @@ export default function TerminalScreen() {
       openGitDiff,
       openNewTerminal,
       openRenameModal,
-      openSessionDetails: resourceSheet.open,
-      closeResourceSheet: resourceSheet.close,
-      retryResourceSheet: resourceSheet.retry,
+      openSessionDetails,
       openModel: modelActionAvailable
         ? openModel
         : undefined,

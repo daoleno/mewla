@@ -135,7 +135,7 @@ export function TelegramChatHeader({
           accessibilityLabel={[
             title,
             status ? workerStatusLabel(status) : null,
-            onPressTitle ? 'Session details and resource usage' : null,
+            onPressTitle ? 'Server resources' : null,
           ]
             .filter(Boolean)
             .join(', ')}

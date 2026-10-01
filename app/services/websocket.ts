@@ -20,6 +20,10 @@ import {
   type SessionResourceSnapshot,
 } from "./sessionResourceSnapshot";
 import {
+  normalizeResourceTelemetry,
+  type ResourceTelemetry,
+} from "./resourceTelemetry";
+import {
   normalizeCodexConversation,
   type CodexConversation,
 } from "./codexConversation";
@@ -3274,6 +3278,77 @@ export class MultiServerWebSocketClient {
       this.sendRequestNow(
         serverId,
         { type: "get_stats", request_id: requestId },
+        cleanup,
+        reject,
+      );
+    });
+  }
+
+  getResourceTelemetry(serverId: string, signal?: AbortSignal): Promise<ResourceTelemetry> {
+    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        this.off("resource_telemetry", handleTelemetry);
+        this.off("error", handleError);
+        this.off("disconnected", handleDisconnect);
+        signal?.removeEventListener("abort", handleAbort);
+      };
+
+      const handleAbort = () => {
+        cleanup();
+        reject(new Error("Resource telemetry cancelled."));
+      };
+      const handleDisconnect = (payload: { serverId: string }) => {
+        if (payload.serverId !== serverId) return;
+        cleanup();
+        reject(new Error("Daemon is not connected."));
+      };
+
+      const handleTelemetry = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) {
+          return;
+        }
+        const telemetry = normalizeResourceTelemetry(payload);
+        cleanup();
+        if (!telemetry) {
+          reject(new Error("Invalid resource telemetry."));
+          return;
+        }
+        resolve(telemetry);
+      };
+
+      const handleError = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) {
+          return;
+        }
+        cleanup();
+        reject(
+          new Error(
+            typeof payload.message === "string" && payload.message
+              ? payload.message
+              : "Resource telemetry failed.",
+          ),
+        );
+      };
+
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Resource telemetry timed out."));
+      }, 10000);
+
+      this.on("resource_telemetry", handleTelemetry);
+      this.on("error", handleError);
+      this.on("disconnected", handleDisconnect);
+      signal?.addEventListener("abort", handleAbort, { once: true });
+      if (signal?.aborted) {
+        handleAbort();
+        return;
+      }
+      this.sendRequestNow(
+        serverId,
+        { type: "get_resource_telemetry", request_id: requestId },
         cleanup,
         reject,
       );

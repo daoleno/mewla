@@ -76,11 +76,13 @@ describe("Session list information hierarchy", () => {
 });
 
 describe("Interface Session title ownership", () => {
-  test("passes the exact resolved header title into the resource sheet", () => {
+  test("preserves the resolved session title in the menu while Resources opens globally", () => {
     expect(layoutPropsSource).toContain("title: headerTitle");
-    expect(layoutPropsSource).toContain("resourceSheetTitle: headerTitle");
-    expect(overlayPropsSource).toContain("resourceSheetTitle,");
-    expect(overlaysSource).toContain("sessionTitle={resourceSheetTitle}");
+    expect(layoutPropsSource).toContain("menuTitle: headerTitle");
+    expect(layoutPropsSource).toContain("onOpenResources: openSessionDetails");
+    expect(overlayPropsSource).toContain("menuTitle,");
+    expect(overlaysSource).toContain("title={menuTitle}");
+    expect(overlaysSource).not.toContain("<SessionResourceSheet");
   });
 
   test("renders the selectable full title before every resource state", () => {

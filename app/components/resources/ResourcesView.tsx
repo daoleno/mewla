@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
 import type { ResourceTelemetry } from "../../services/resourceTelemetry";
@@ -15,13 +15,15 @@ export interface ResourcesViewProps {
   error: string | null;
   connected: boolean;
   hasServer: boolean;
+  serverName?: string;
   onRetry(): void;
+  onOpenSettings?(): void;
   /** Clock for "updated" copy; injected so fixtures render stably. */
   now?: number;
 }
 
 /** Calm machine overview: state, CPU, memory, waiting, disk, then who. */
-export function ResourcesView({ telemetry, loading, error, connected, hasServer, onRetry, now }: ResourcesViewProps) {
+export function ResourcesView({ telemetry, loading, error, connected, hasServer, serverName, onRetry, onOpenSettings, now }: ResourcesViewProps) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createResourceStyles(colors), [colors]);
@@ -29,10 +31,10 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
   if (!telemetry) {
     const state = !hasServer
       ? { title: "No current server", detail: "Pair a server in Settings to see its resources.", busy: false }
-      : !connected
-        ? { title: "Server offline", detail: "Resources appear once the server reconnects.", busy: loading }
-        : loading
-          ? { title: "Reading the machine", detail: null, busy: true }
+      : loading
+        ? { title: connected ? "Reading the machine" : "Connecting to server", detail: null, busy: true }
+        : !connected
+          ? { title: "Server offline", detail: "Resources appear once the server reconnects.", busy: false }
           : { title: "Resources unavailable", detail: error ?? "This server did not report resources.", busy: false };
     return (
       <View style={[layout.fill, { backgroundColor: colors.bgPrimary, justifyContent: "center" }]}>
@@ -41,7 +43,11 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
           detail={state.detail}
           icon="pulse-outline"
           busy={state.busy}
-          action={!state.busy && hasServer && connected ? { label: "Try again", icon: "refresh-outline", onPress: onRetry } : undefined}
+          action={!hasServer && onOpenSettings
+            ? { label: "Open Settings", onPress: onOpenSettings }
+            : !state.busy && connected
+              ? { label: "Try again", icon: "refresh-outline", onPress: onRetry }
+              : undefined}
         />
       </View>
     );
@@ -53,7 +59,21 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
       contentContainerStyle={[layout.content, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
       showsVerticalScrollIndicator={false}
     >
-      <PressureHeadline telemetry={telemetry} styles={styles} now={now ?? Date.now()} />
+      {serverName ? <Text style={styles.caption}>{serverName}</Text> : null}
+      {!connected || error ? (
+        <EmptyState
+          size="inline"
+          title={!connected ? "Server offline" : "Refresh failed"}
+          detail={!connected ? "Showing the last sample. Updates resume when the server reconnects." : error}
+          action={connected ? { label: "Try again", icon: "refresh-outline", onPress: onRetry } : undefined}
+        />
+      ) : null}
+      <PressureHeadline
+        telemetry={telemetry}
+        styles={styles}
+        now={now ?? Date.now()}
+        statusLabel={!connected || error ? "Last sample" : undefined}
+      />
       <CpuSection telemetry={telemetry} styles={styles} />
       <MemorySection telemetry={telemetry} styles={styles} />
       <PressureSection telemetry={telemetry} styles={styles} />
