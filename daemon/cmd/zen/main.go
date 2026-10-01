@@ -24,6 +24,7 @@ import (
 	"github.com/daoleno/zen/daemon/brain"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/control"
 	"github.com/daoleno/zen/daemon/desktop/host"
 	"github.com/daoleno/zen/daemon/doctor"
@@ -107,6 +108,8 @@ func run(args []string, stderr io.Writer) error {
 			return runBrainCommand(args[1:], stderr)
 		case "calendar":
 			return runCalendarCommand(args[1:], stderr)
+		case "connections":
+			return runConnectionsCommand(args[1:], stderr)
 		case "telegram":
 			return runTelegramCommand(args[1:], stderr)
 		case "codex-gateway":
@@ -381,6 +384,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)
 	}
+	connectionManager, err := connections.New(authManager.StorageDir())
+	if err != nil {
+		return fmt.Errorf("initialize Plugins: %w", err)
+	}
+	srv.SetConnections(connectionManager)
+	controlHandler.connections = connectionManager
 	srv.SetTelegram(telegramManager)
 	controlHandler.telegram = telegramManager
 	srv.SetModelProfiles(profileOwner)

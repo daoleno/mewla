@@ -14,6 +14,7 @@ import (
 	"github.com/daoleno/zen/daemon/brain"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/control"
 	"github.com/daoleno/zen/daemon/lifecycle"
 	"github.com/daoleno/zen/daemon/modelprofiles"
@@ -54,6 +55,7 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
+	connections       *connections.Manager
 	resourceSampler   *watcher.ResourceSampler
 	auth              *auth.Manager
 	watcher           controlWatcher
@@ -80,6 +82,15 @@ const delegatedInitialReadinessBudget = 45 * time.Second
 
 func (a *controlApp) HandleControlRequest(req control.Request) control.Response {
 	switch strings.TrimSpace(req.Type) {
+	case "connections":
+		if req.ConnectionRequest == nil {
+			return control.ErrorResponse("invalid_request", "Plugin request is required")
+		}
+		result, err := a.connections.Handle(context.Background(), *req.ConnectionRequest)
+		if err != nil {
+			return control.ErrorResponse("plugin_request_failed", err.Error())
+		}
+		return control.Response{OK: true, Connections: &result}
 	case "resource_telemetry":
 		if a.resourceSampler == nil {
 			return control.ErrorResponse("resource_telemetry_unavailable", "Resource sampler not ready")
@@ -1735,6 +1746,7 @@ func lifecycleProtocol(profile string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Zen lifecycle protocol:
 Profile: %s.
 You are the delegated Worker: execute the assigned work directly; Brain workspace role/delegation instructions apply to Brain, not this Worker Session.
+Plugins: zen connections --help.
 Complete the scoped objective and acceptance criteria. Ask Brain only for a material decision or missing authority; continue independent authorized work.
 Edit the supplied repository and cwd directly by default; preserve unrelated changes. Use a worktree under $ZEN_WORKTREE_ROOT only for an explicit user request, concrete conflicting edits, or a justified necessary isolation reason. Briefly explain the actual reason; concurrent Workers do not necessarily conflict.
 When using a worktree, integration into the owning target repository and requested delivery remain part of completion. A candidate branch or passing tests alone are not a delivered outcome.

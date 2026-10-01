@@ -679,6 +679,7 @@ const AppNavigator = memo(function AppNavigator({
           headerLeft: () => <SecondaryBackButton />,
         }}
       />
+      <Stack.Screen name="plugins" options={{ title: "Plugins", headerLeft: () => <SecondaryBackButton /> }} />
       <Stack.Screen
         name="skills"
         options={{

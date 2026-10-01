@@ -31,6 +31,7 @@ import (
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/codexctl"
+	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/desktop"
 	"github.com/daoleno/zen/daemon/desktop/host"
 	"github.com/daoleno/zen/daemon/modelprofiles"
@@ -83,6 +84,7 @@ type notificationPusher interface {
 
 // Server handles WebSocket connections from the zen mobile app.
 type Server struct {
+	connections                  *connections.Manager
 	desktop                      desktop.Manager
 	desktopTrustedNetwork        bool
 	moonlightChallenges          map[string]*moonlightChallenge
@@ -317,6 +319,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 }
 
 type clientMessage struct {
+	ConnectionRequest    *connections.Request                   `json:"connection_request"`
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
 	ServiceID            string                                 `json:"service_id"`
 	ServiceGeneration    string                                 `json:"service_generation"`
@@ -894,6 +897,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 	}
 
 	switch raw.Type {
+	case "connections":
+		s.handleConnections(conn, raw)
 	case "list_worker_sessions", "set_active_worker", "create_session", "kill_worker":
 		s.handleSessionLifecycleMessage(conn, raw)
 	case "telegram_connection_status", "telegram_connection_configure", "telegram_connection_bind", "telegram_connection_enable", "telegram_connection_disable", "telegram_connection_revoke", "telegram_connection_remove":

@@ -138,7 +138,7 @@ export function PrimaryDrawerPanel({
       : colors.textTertiary;
 
   const openRoute = useCallback(
-    (pathname: "/skills" | "/stats" | "/resources" | "/settings" | "/remote-desktop") => {
+    (pathname: "/skills" | "/plugins" | "/stats" | "/resources" | "/settings" | "/remote-desktop") => {
       onNavigateAway();
       router.push(pathname);
     },
@@ -221,6 +221,13 @@ export function PrimaryDrawerPanel({
             },
           ]}
         >
+          <DrawerRow
+            drawerVisible={drawerVisible}
+            icon="skills"
+            label="Plugins"
+            onPress={() => openRoute("/plugins")}
+          />
+          <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
           <DrawerRow
             drawerVisible={drawerVisible}
             icon="skills"
