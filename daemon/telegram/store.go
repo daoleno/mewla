@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -220,29 +221,22 @@ func (s *store) ensureMapsLocked() {
 func (s *store) snapshot() durableState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	data, _ := json.Marshal(s.state)
-	var copy durableState
-	_ = json.Unmarshal(data, &copy)
-	ensureDurableMaps(&copy)
-	return copy
+	return cloneDurableState(s.state)
 }
 
 func (s *store) mutate(fn func(*durableState) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := json.Marshal(s.state)
-	if err != nil {
-		return err
-	}
-	var next durableState
-	if err := json.Unmarshal(raw, &next); err != nil {
-		return err
-	}
-	ensureDurableMaps(&next)
+	next := cloneDurableState(s.state)
 	if err := fn(&next); err != nil {
 		return err
 	}
 	ensureDurableMaps(&next)
+	// Polling projections often have no new facts. Preserve the existing durable
+	// image without serialization, rename, or fsync when nothing changed.
+	if reflect.DeepEqual(s.state, next) {
+		return nil
+	}
 	data, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err

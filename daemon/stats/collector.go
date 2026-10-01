@@ -25,6 +25,7 @@ import (
 // and Pi data files and builds aggregated stats. All reads are read-only —
 // it never modifies source files.
 type Collector struct {
+	usageCacheDir            string
 	mu                       sync.RWMutex
 	refreshMu                sync.Mutex
 	codexRolloutCacheMu      sync.Mutex
@@ -43,6 +44,7 @@ type Collector struct {
 func NewCollector() *Collector {
 	loadPricingCache(homeDir())
 	return &Collector{
+		usageCacheDir:      filepath.Join(homeDir(), ".cache", "zen", "usage-v1"),
 		codexUsageClient:   &http.Client{Timeout: 8 * time.Second},
 		codexUsageEndpoint: codexUsageEndpoint,
 		codexUsageTimeout:  8 * time.Second,
@@ -61,7 +63,9 @@ func (c *Collector) Start(ctx context.Context) {
 	}()
 	defer func() { <-pricingDone }()
 
-	c.refresh()
+	if !c.loadRecentSummary() {
+		c.refresh()
+	}
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for {
@@ -421,6 +425,7 @@ func (c *Collector) refresh() {
 	}
 	c.mu.Unlock()
 
+	c.saveSummary()
 	log.Printf("[stats] refresh complete: %d days of data", len(dailyMap))
 }
 
@@ -1292,7 +1297,7 @@ func (c *Collector) readCodexUsageByDate(path string, loc *time.Location) (map[s
 	}
 	c.codexRolloutCacheMu.Unlock()
 
-	byDate, readErr := readCodexUsageByDate(path, loc)
+	byDate, readErr := cachedUsageFile(c.usageCacheDir, "codex:"+timezone, path, func() (map[string]codexUsage, error) { return readCodexUsageByDate(path, loc) })
 	c.codexRolloutCacheMu.Lock()
 	if c.codexRolloutCache == nil {
 		c.codexRolloutCache = make(map[string]codexRolloutCacheEntry)

@@ -119,7 +119,7 @@ func (c *Collector) collectPiStats(home string) map[string]*dateAgg {
 				continue
 			}
 			dirPath := filepath.Join(sessionsRoot, projectDir.Name())
-			scanPiSessionDir(dirPath, decodePiProjectDir(projectDir.Name()), byDate)
+			scanPiSessionDirCached(dirPath, decodePiProjectDir(projectDir.Name()), byDate, c.usageCacheDir)
 		}
 	}
 
@@ -127,12 +127,15 @@ func (c *Collector) collectPiStats(home string) map[string]*dateAgg {
 	// stable transcript owner. Those files are deliberately outside Pi's
 	// shared per-CWD history and use the same durable JSONL schema.
 	ownedSessionsRoot := filepath.Join(home, ".zen", "provider-sessions", "pi")
-	scanPiSessionDir(ownedSessionsRoot, "", byDate)
+	scanPiSessionDirCached(ownedSessionsRoot, "", byDate, c.usageCacheDir)
 
 	return byDate
 }
 
 func scanPiSessionDir(dirPath, fallbackProject string, byDate map[string]*dateAgg) {
+	scanPiSessionDirCached(dirPath, fallbackProject, byDate, "")
+}
+func scanPiSessionDirCached(dirPath, fallbackProject string, byDate map[string]*dateAgg, cacheDir string) {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
 		return
@@ -141,7 +144,7 @@ func scanPiSessionDir(dirPath, fallbackProject string, byDate map[string]*dateAg
 		if file.IsDir() || !strings.HasSuffix(file.Name(), ".jsonl") {
 			continue
 		}
-		scanPiSessionFile(filepath.Join(dirPath, file.Name()), fallbackProject, byDate)
+		scanPiSessionFileCached(filepath.Join(dirPath, file.Name()), fallbackProject, byDate, cacheDir)
 	}
 }
 
@@ -151,11 +154,32 @@ func scanPiSessionDir(dirPath, fallbackProject string, byDate map[string]*dateAg
 // to the entry's own local date/hour, the file's project, and the recorded
 // model (or the model in effect for entries that carry usage but no model).
 func scanPiSessionFile(path, fallbackProject string, byDate map[string]*dateAgg) {
-	f, err := os.Open(path)
+	scanPiSessionFileCached(path, fallbackProject, byDate, "")
+}
+func scanPiSessionFileCached(path, fallbackProject string, byDate map[string]*dateAgg, cacheDir string) {
+	lines, err := cachedUsageFile(cacheDir, "pi", path, func() ([]piSessionLine, error) {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+		lines := []piSessionLine{}
+		for scanner.Scan() {
+			var line piSessionLine
+			if json.Unmarshal(scanner.Bytes(), &line) != nil {
+				continue
+			}
+			if line.Type == "session" || line.Type == "model_change" || line.Usage != nil || (line.Message != nil && line.Message.Usage != nil) {
+				lines = append(lines, line)
+			}
+		}
+		return lines, scanner.Err()
+	})
 	if err != nil {
 		return
 	}
-	defer f.Close()
 
 	headerCwd := ""
 	inEffectModel := ""
@@ -163,16 +187,7 @@ func scanPiSessionFile(path, fallbackProject string, byDate map[string]*dateAgg)
 	seenIDs := make(map[string]bool)
 	var records []piLedgerRecord
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 16*1024*1024)
-	for scanner.Scan() {
-		var line piSessionLine
-		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
-			// Malformed or partially written line (live append, interrupted
-			// write): skip it and keep scanning.
-			continue
-		}
-
+	for _, line := range lines {
 		switch line.Type {
 		case "session":
 			headerCwd = line.Cwd
