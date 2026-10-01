@@ -33,7 +33,10 @@ func ResolveCodexTranscriptIdentity(processID int) (CodexTranscriptIdentity, boo
 	openPaths := openCodexRolloutPathsForProcess(processID)
 	envSessionID := strings.TrimSpace(firstProcessTreeEnvironValue(processID, "CODEX_THREAD_ID"))
 
-	if len(openPaths) > 0 {
+	if len(openPaths) > 1 {
+		return CodexTranscriptIdentity{}, false
+	}
+	if len(openPaths) == 1 {
 		path := openPaths[0]
 		sessionID := sessionIDFromCodexRolloutPath(path)
 		if sessionID == "" {
@@ -95,7 +98,11 @@ func ResolveCodexTranscriptIdentityForWorker(
 	existing.SessionID = strings.TrimSpace(existing.SessionID)
 	existing.Path = strings.TrimSpace(existing.Path)
 	existing.DataRoot = strings.TrimSpace(existing.DataRoot)
-	if paths := openCodexRolloutPathsForProcess(worker.ProcessID); len(paths) == 1 {
+	paths := openCodexRolloutPathsForProcess(worker.ProcessID)
+	if len(paths) > 1 {
+		return existing
+	}
+	if len(paths) == 1 {
 		path := paths[0]
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			return CodexTranscriptIdentity{
