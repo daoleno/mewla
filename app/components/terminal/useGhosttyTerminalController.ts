@@ -172,6 +172,8 @@ export function useGhosttyTerminalController({
 
   const flushRenderState = useCallback(() => {
     renderFrameRef.current = 0;
+    // Keep native dirty rows until this renderer can receive their full base.
+    if (!webReadyRef.current || !webviewRef.current) return;
     const frame = ghostty.consumeRenderSnapshot();
     if (frame) {
       postToRenderer({ type: 'renderSnapshot', snapshot: frame.snapshot });

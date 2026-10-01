@@ -78,6 +78,8 @@ struct TerminalHandle {
     uint32_t cell_width_px = 1;
     uint32_t cell_height_px = 1;
     bool force_full_snapshot = true;
+    std::vector<std::string> rendered_rows;
+    uint16_t rendered_cols = 0;
 };
 
 static GhosttyResult createHtmlFormatter(
@@ -812,6 +814,64 @@ static bool buildVisibleHtml(
     return rowIndex == expectedRows;
 }
 
+struct RenderRowUpdates {
+    bool full = false;
+    std::vector<uint16_t> indices;
+    std::vector<std::string> html;
+};
+
+// Shared by Android and iOS. Ghostty's full-dirty flag can also mean a redraw
+// of identical cells; only lifecycle/geometry/theme resets require a new base.
+static bool buildRenderRowUpdates(
+    TerminalHandle* h,
+    uint16_t rows,
+    uint16_t cols,
+    GhosttyRenderStateDirty dirty,
+    RenderRowUpdates* out)
+{
+    out->full = h->force_full_snapshot || h->rendered_rows.size() != rows ||
+        h->rendered_cols != cols;
+    out->indices.clear();
+    out->html.clear();
+    GhosttyRenderStateRowIterator iterator = nullptr;
+    if (ghostty_render_state_row_iterator_new(nullptr, &iterator) != GHOSTTY_SUCCESS || !iterator) {
+        return false;
+    }
+    if (populateRowIterator(h->render_state, iterator) != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_iterator_free(iterator);
+        return false;
+    }
+    GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+    ghostty_render_state_colors_get(h->render_state, &colors);
+    h->rendered_rows.resize(rows);
+    size_t index = 0;
+    while (ghostty_render_state_row_iterator_next(iterator)) {
+        if (index >= rows) break;
+        bool rowDirty = true;
+        ghostty_render_state_row_get(iterator, GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY, &rowDirty);
+        if (out->full || dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL || rowDirty) {
+            bool wrap = false, continuation = false;
+            readRowWrapFlags(iterator, &wrap, &continuation);
+            std::string html;
+            appendVisibleHtmlRow(&html, static_cast<uint16_t>(index), wrap, continuation,
+                buildRowHtml(iterator, colors));
+            if (out->full || html != h->rendered_rows[index]) {
+                out->indices.push_back(static_cast<uint16_t>(index));
+                out->html.push_back(html);
+                h->rendered_rows[index] = std::move(html);
+            }
+        }
+        index++;
+    }
+    ghostty_render_state_row_iterator_free(iterator);
+    if (index != rows) {
+        h->force_full_snapshot = true;
+        return false;
+    }
+    h->rendered_cols = cols;
+    return true;
+}
+
 static void clearRenderStateDirty(GhosttyRenderState renderState) {
     if (!renderState) {
         return;
@@ -1271,9 +1331,6 @@ Java_expo_modules_zenterminalvt_ZenTerminalVtModule_nativeGetRenderSnapshot(
     auto putStr = [&](const char* key, const char* val) {
         env->CallObjectMethod(map, mapPut, env->NewStringUTF(key), env->NewStringUTF(val));
     };
-    auto putJString = [&](const char* key, jstring val) {
-        env->CallObjectMethod(map, mapPut, env->NewStringUTF(key), val);
-    };
     auto putInt = [&](const char* key, jint val) {
         env->CallObjectMethod(map, mapPut, env->NewStringUTF(key),
             env->CallStaticObjectMethod(intClass, intOf, val));
@@ -1340,15 +1397,27 @@ Java_expo_modules_zenterminalvt_ZenTerminalVtModule_nativeGetRenderSnapshot(
         putBool("cursorVisible", false);
     }
 
-    std::string visibleHtml;
-    if (buildVisibleHtml(h->render_state, renderRows, &visibleHtml)) {
-        putJString("html", newStringFromStdString(env, visibleHtml));
-    } else {
-        putJString(
-            "html",
-            newStringFromStdString(env, formatTerminalScreen(h))
-        );
+    RenderRowUpdates updates;
+    if (!buildRenderRowUpdates(h, renderRows, renderCols, dirty, &updates)) {
+        h->force_full_snapshot = true;
+        putStr("dirty", "none");
+        return map;
     }
+    putStr("dirty", updates.full ? "full" : "partial");
+    jclass listClass = env->FindClass("java/util/ArrayList");
+    jmethodID listInit = env->GetMethodID(listClass, "<init>", "(I)V");
+    jmethodID listAdd = env->GetMethodID(listClass, "add", "(Ljava/lang/Object;)Z");
+    jobject lines = env->NewObject(listClass, listInit, static_cast<jint>(updates.html.size()));
+    jobject indices = env->NewObject(listClass, listInit, static_cast<jint>(updates.indices.size()));
+    for (size_t i = 0; i < updates.html.size(); i++) {
+        env->PushLocalFrame(16);
+        env->CallBooleanMethod(lines, listAdd, newStringFromStdString(env, updates.html[i]));
+        env->CallBooleanMethod(indices, listAdd,
+            env->CallStaticObjectMethod(intClass, intOf, static_cast<jint>(updates.indices[i])));
+        env->PopLocalFrame(nullptr);
+    }
+    env->CallObjectMethod(map, mapPut, env->NewStringUTF("lineHtml"), lines);
+    env->CallObjectMethod(map, mapPut, env->NewStringUTF("dirtyLines"), indices);
 
     h->force_full_snapshot = false;
     clearRenderStateDirty(h->render_state);

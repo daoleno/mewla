@@ -1,4 +1,5 @@
 import { TERMINAL_SCROLL_ROUTE_SOURCE } from './terminalWheel';
+import { TERMINAL_ROW_UPDATES_SOURCE } from './terminalRowUpdates';
 import type { TerminalThemePalette } from '../../constants/terminalThemes';
 import {
   TERMINAL_GRID_CELL_WIDTH_FALLBACK_EM,
@@ -276,7 +277,6 @@ export function buildGhosttyTerminalHtml(
         let renderSnapshot = {
           rows: 0,
           cols: 0,
-          html: '',
           cursorCol: 0,
           cursorRow: 0,
           cursorVisible: false,
@@ -285,7 +285,8 @@ export function buildGhosttyTerminalHtml(
         let viewportHeight = 1;
         let cellWidth = Math.max(1, FONT_SIZE * CELL_WIDTH_FALLBACK);
         let cellHeight = LINE_HEIGHT_PX;
-        let lastRenderedHtml = '';
+        const rowUpdates = (${TERMINAL_ROW_UPDATES_SOURCE})();
+        let presentedRevision = -1;
         let lastReportedCols = 0;
         let lastReportedRows = 0;
         let lastReportedCellWidth = 0;
@@ -329,7 +330,7 @@ export function buildGhosttyTerminalHtml(
         let blendRegion = '';
         let blendEnd = 0;
         let blendDelta = 0;
-        let presentedHtml = '';
+        let presentedRows = [];
         let presentedAt = 0;
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -596,25 +597,28 @@ export function buildGhosttyTerminalHtml(
         const draw = () => {
           drawRAF = null;
           drawHistory();
-          const nextHtml = renderSnapshot.html || '';
           // Keep the original touched subtree attached until touchend. A separate
           // non-interactive layer shows app redraws while its transcript scrolls.
           // Replacing that subtree drops Android's subsequent touch events.
           const overlay = wheelViewport && touching && !nativeSelectionActive;
-          if (nextHtml !== presentedHtml && !nativeSelectionActive) {
+          if (rowUpdates.revision !== presentedRevision && !nativeSelectionActive) {
             const now = performance.now();
-            blendRows(presentedHtml, nextHtml, now - presentedAt);
-            presentedHtml = nextHtml;
+            if (wheelGesture) {
+              blendRows(presentedRows.join(''), rowUpdates.lines.join(''), now - presentedAt);
+            } else {
+              stopBlend();
+            }
+            presentedRows = rowUpdates.lines.slice();
+            presentedRevision = rowUpdates.revision;
             presentedAt = now;
           }
           if (wheelHtml) {
             wheelHtml.style.display = overlay ? 'block' : 'none';
             terminalHtml.style.opacity = overlay ? '0' : '1';
-            if (overlay && wheelHtml.innerHTML !== nextHtml) wheelHtml.innerHTML = nextHtml;
+            if (overlay) rowUpdates.paint(wheelHtml);
           }
-          if (!nativeSelectionActive && (!interactionActive || (wheelViewport && !touching)) && nextHtml !== lastRenderedHtml) {
-            terminalHtml.innerHTML = nextHtml;
-            lastRenderedHtml = nextHtml;
+          if (!nativeSelectionActive && (!interactionActive || (wheelViewport && !touching))) {
+            rowUpdates.paint(terminalHtml);
           }
           updateCursor();
         };
@@ -934,7 +938,8 @@ export function buildGhosttyTerminalHtml(
         }, 530);
 
         window.__zenRenderSnapshot = (nextSnapshot) => {
-          renderSnapshot = nextSnapshot || renderSnapshot;
+          if (!nextSnapshot || !rowUpdates.apply(nextSnapshot)) return;
+          renderSnapshot = nextSnapshot;
           // The response has arrived. Release backpressure now: waiting for a
           // separate acknowledgement RAF can miss this vsync's wheel callback
           // and add another full frame to every round trip.
@@ -958,7 +963,8 @@ export function buildGhosttyTerminalHtml(
           scrollSessionId = typeof sessionId === 'string' && sessionId ? sessionId : null;
           scrollToken = typeof token === 'string' && token ? token : null;
           if (changed) {
-            presentedHtml = '';
+            presentedRows = [];
+            presentedRevision = -1;
             presentedAt = 0;
             paneModes = [];
             setWheelViewport(false);

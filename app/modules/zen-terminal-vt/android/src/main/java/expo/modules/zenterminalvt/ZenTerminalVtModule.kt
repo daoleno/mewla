@@ -98,8 +98,9 @@ class ZenTerminalVtModule : Module() {
                 is List<*> -> {
                     val stringValues = ArrayList<String>(value.size)
                     val intValues = ArrayList<Int>(value.size)
-                    var isStringList = value.isNotEmpty()
-                    var isIntList = value.isNotEmpty()
+                    // Cursor-only updates carry empty row arrays, too.
+                    var isStringList = value.isNotEmpty() || key == "lineHtml"
+                    var isIntList = value.isNotEmpty() || key == "dirtyLines"
 
                     for (entry in value) {
                         when (entry) {

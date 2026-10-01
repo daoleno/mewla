@@ -97,6 +97,9 @@ An end-to-end terminal check should cover:
 
 ## Native terminal / XCFramework contract
 
+iOS uses the same [terminal row-update pipeline](terminal-rendering.md) as Android.
+The Objective-C++ bridge shares the native row formatter and update cache.
+
 The machine-readable source of truth is:
 
 [`app/modules/zen-terminal-vt/native.lock.json`](../app/modules/zen-terminal-vt/native.lock.json)
