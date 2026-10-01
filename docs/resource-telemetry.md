@@ -1,4 +1,4 @@
-# Resource telemetry contract
+# Resource telemetry contract (v2)
 
 Zen exposes a read-only machine resource snapshot over the authenticated daemon
 WebSocket. Clients send `{ "type": "get_resource_telemetry", "request_id":
@@ -14,7 +14,7 @@ are omitted rather than reported as zero.
 {
   "type": "resource_telemetry",
   "request_id": "optional-client-id",
-  "version": 1,
+  "version": 2,
   "sampled_at": "2026-10-01T06:00:00Z",
   "state": "normal|elevated|critical",
   "cpu": {
@@ -50,13 +50,34 @@ are omitted rather than reported as zero.
     "cpu_percent": 25.0,
     "kinds": ["qemu", "gradle", "chrome", "node"]
   }],
-  "history": [{"sampled_at": "2026-10-01T05:59:55Z", "state": "normal", "memory_available_bytes": 17179869184, "load15": 0.7}],
+  "history": [{
+    "sampled_at": "2026-10-01T05:59:55Z",
+    "state": "normal",
+    "cpu_percent": 18.4,
+    "load15": 0.7,
+    "memory_available_bytes": 17179869184,
+    "memory_used_bytes": 17179869184,
+    "swap_used_bytes": 0,
+    "psi_cpu_some_avg10": 0.1,
+    "psi_memory_some_avg10": 0.2,
+    "psi_io_some_avg10": 0.3,
+    "disk_read_bytes_per_second": 1048576,
+    "disk_write_bytes_per_second": 524288
+  }],
   "endpoint": "get_resource_telemetry"
 }
 ```
 
 PSI values are kernel pressure averages in percent. `history` is a bounded
-15–30 minute ring buffer at the daemon's sampling interval. Consumers are
+30 minute ring buffer containing up to 360 samples at a five-second interval,
+oldest first. Version 2 adds the compact history fields above so the app can
+draw CPU, memory, swap, pressure and disk-throughput charts from one response.
+All percentage values are 0–100, except consumer CPU (100% means one core).
+`cpu_percent` is total machine utilization. Disk history rates sum each unique
+sampled mount device once. Rates and unavailable metrics are omitted until a
+valid sample interval exists; measured zero is retained. `memory_used_bytes`
+is total minus available, and `swap_used_bytes` is swap total minus swap free.
+The ring is in memory and restarts empty. No synthetic backfill is generated. Consumers are
 best-effort attribution from process ownership markers, the Brain host, Docker
 metadata, and remaining user processes. A consumer with `owner=orphaned_worker`
 is a process tree left after a Worker reached `done` or was closed.
