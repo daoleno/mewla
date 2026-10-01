@@ -39,7 +39,8 @@ export function useTerminalHistory(
         const rows = historyRows(snapshot);
         if (snapshot.ansi === s.ansi && snapshot.pane_id === s.pane &&
             snapshot.cols === s.cols && c.theme === s.theme &&
-            !snapshot.alternate && !s.render.notice) return;
+            JSON.stringify(snapshot.panes) === JSON.stringify(s.render.panes) &&
+            !s.render.notice) return;
         const rendered = await renderTerminalHistory(rows, snapshot.cols, c.theme, current);
         if (!rendered || !current()) return;
         const normalized = rendered.map((row) => row.replace(/ data-row="\d+"/, ''));
@@ -49,7 +50,9 @@ export function useTerminalHistory(
           rows: normalized,
           removed: s.rows.length - overlap,
           reset: !samePane || (s.rows.length > 0 && overlap === 0),
-          notice: snapshot.alternate ? 'History is unavailable while a full-screen app is active.' : '',
+          notice: '',
+          panes: snapshot.panes,
+          paneId: snapshot.pane_id,
         };
         s.rows = normalized;
         s.pane = snapshot.pane_id;

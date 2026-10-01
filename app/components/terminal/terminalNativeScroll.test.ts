@@ -14,7 +14,7 @@ async function renderer() {
   const element = () => ({
     style: {} as Record<string, string>, innerHTML: '', textContent: '',
     clientWidth: 320, clientHeight: 480, scrollHeight: 480, scrollTop: 0,
-    children: [],
+    children: [], replaceChildren() { this.innerHTML = ''; },
     getBoundingClientRect: () => ({ width: 320, height: 480, top: 0, left: 0 }),
     addEventListener: (name: string, fn: Function) => {
       handlers.set(name, [...(handlers.get(name) || []), fn]);
@@ -23,11 +23,12 @@ async function renderer() {
     scrollTo(options: { top: number }) { this.scrollTop = options.top; },
   });
   const elements = Object.fromEntries(['root', 'terminal-html', 'terminal-cursor', 'cell-measure',
-    'terminal-live', 'terminal-history', 'history-rows', 'history-notice'].map((id) => [id, element()]));
+    'terminal-live', 'terminal-scroll-blend', 'terminal-history', 'history-rows', 'history-notice'].map((id) => [id, element()]));
   elements['cell-measure'].getBoundingClientRect = () => ({ width: 8, height: 16, top: 0, left: 0 });
   const document = { ...element(), body: element(), documentElement: element(),
     getElementById: (id: string) => elements[id] };
   const window = { ...element(), getSelection: () => null,
+    matchMedia: () => ({ matches: false }),
     ReactNativeWebView: { postMessage: (data: string) => sent.push(JSON.parse(data)) } } as any;
   const html = buildGhosttyTerminalHtml({ background: '#000', foreground: '#fff',
     cursor: '#fff', selectionBackground: '#333' } as any, null, 13, 0);
