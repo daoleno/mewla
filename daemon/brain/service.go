@@ -2636,6 +2636,29 @@ const (
 )
 
 func (s *Service) ensureHostWorker(executor work.WorkerExecutor) (WorkerRef, error) {
+	return s.ensureHostContinuity(executor, false)
+}
+
+// ReconcileHostContinuity is the daemon lifecycle owner, independent of client
+// subscriptions and Work delivery. Automatic replacement requires a proven
+// native resume identity; losing a terminal must never silently start over.
+func (s *Service) ReconcileHostContinuity() (bool, error) {
+	if s == nil || s.store == nil || s.watcher == nil {
+		return false, nil
+	}
+	before, err := s.store.HostSession()
+	if err != nil {
+		return false, err
+	}
+	_, continuityErr := s.ensureHostContinuity(s.hostExecutor(), true)
+	// Capture identity even if activation failed or its receipt is ambiguous.
+	// The process can already own a resumable conversation at that point.
+	_, bindingErr := s.BindHostProviderTranscript()
+	after, readErr := s.store.HostSession()
+	return before.ID != after.ID, errors.Join(continuityErr, bindingErr, readErr)
+}
+
+func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic bool) (WorkerRef, error) {
 	if s == nil || s.store == nil || s.watcher == nil {
 		return WorkerRef{}, nil
 	}
@@ -2663,6 +2686,9 @@ func (s *Service) ensureHostWorker(executor work.WorkerExecutor) (WorkerRef, err
 	}
 	command, replaceDetail = discovery.command, discovery.replaceDetail
 	resumeToken := discovery.resumeToken
+	if automatic && replaceReason == hostReplaceReasonMissingTmux && resumeToken == "" {
+		return WorkerRef{}, fmt.Errorf("brain host %q has no proven native session identity; refusing automatic blank replacement", id)
+	}
 	// A live Claude process may be on another socket or not yet observed.
 	// Never resume its provider session solely because watcher inventory is empty.
 	if executor.Provider == work.WorkerProviderClaude || work.InferWorkerProvider(executor.Command, executor.ID) == work.WorkerProviderClaude {
@@ -3416,7 +3442,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 		}
 		if resumeSessionID != "" {
 			var err error
-			command, err = work.WithProviderResumeToken(provider, command, resumeSessionID)
+			command, err = work.CodexNativeResumeCommand(command, resumeSessionID)
 			if err != nil {
 				return "", err
 			}

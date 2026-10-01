@@ -138,7 +138,7 @@ type Server struct {
 	calendarSub                 <-chan calendar.Event
 	brainWorkSubID              int
 	brainWorkSub                <-chan brain.WorkChange
-	brainHostStartupComplete    bool
+	brainHostRecovery           chan struct{}
 	signalSystemStartupComplete bool
 
 	clients            map[*websocket.Conn]*authenticatedClient
@@ -286,6 +286,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		work:               workStore,
 		execs:              execs,
 		brain:              brainService,
+		brainHostRecovery:  make(chan struct{}, 1),
 		resourceSampler:    watcher.NewResourceSampler(),
 		uploadDir:          uploadDir,
 		uploadStore:        &attachment.Store{Dir: uploadDir},
@@ -453,8 +454,9 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	srv := &http.Server{Handler: s.Handler()}
 
 	var runtime sync.WaitGroup
-	runtime.Add(3)
+	runtime.Add(4)
 	go func() { defer runtime.Done(); s.runResourceTelemetry(runtimeCtx) }()
+	go func() { defer runtime.Done(); s.runBrainHostContinuity(runtimeCtx) }()
 	go func() {
 		defer runtime.Done()
 		s.broadcastEvents(runtimeCtx)
@@ -3162,7 +3164,7 @@ func (s *Server) broadcastBrainSnapshot() {
 
 // broadcastBrainHostCapabilityRefresh projects brain_snapshot for Hidden-host
 // discovery/removal without ensureHostAgent. Continuity (create/resume/rebind)
-// is owned by startup lifecycle reconciliation and NewChat, not projection.
+// is owned by startup, Host-removal recovery, and NewChat, not projection.
 func (s *Server) broadcastBrainHostCapabilityRefresh() {
 	if s.brain == nil {
 		return
@@ -3239,20 +3241,6 @@ func (s *Server) heartbeat(ctx context.Context) {
 			allWorkerSessions := s.watcher.Workers()
 			workerSessions := visibleWorkerSessions(allWorkerSessions)
 			if s.brain != nil && s.watcher != nil && s.watcher.SnapshotReady() {
-				if !s.brainHostStartupComplete {
-					_, err := s.brain.EnsureHostSnapshot()
-					switch {
-					case err == nil:
-						s.brainHostStartupComplete = true
-					case errors.Is(err, brain.ErrHostActivationAmbiguous):
-						// The receipt is the no-replay authority. Stop automatic
-						// startup retries and leave the activation unmarked.
-						s.brainHostStartupComplete = true
-						log.Printf("brain Host startup activation is ambiguous: %v", err)
-					default:
-						log.Printf("brain Host startup reconciliation failed: %v", err)
-					}
-				}
 				if !s.signalSystemStartupComplete {
 					complete, err := s.brain.ReconcileSignalSystemStartup(allWorkerSessions, 64)
 					if err != nil {
@@ -3278,10 +3266,18 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 			// Hidden hosts stay off worker_session_list. Refresh brain_snapshot
 			// only when the current Host appears or disappears so capabilities
 			// converge after reconnect discovery — never on output/turn noise,
-			// and never via ensureHostAgent (projection must not create/resume/
-			// rebind as a side effect of a discovery event).
+			// without launching a provider from projection. Current-Host removal
+			// separately wakes the continuity lifecycle owner.
 			if s.shouldBroadcastHiddenHostBrainSnapshot(ev) {
 				s.broadcastBrainHostCapabilityRefresh()
+				if ev.Type == "worker_removed" {
+					// Recovery can wait for provider readiness. Wake its lifecycle
+					// owner without blocking consumption of watcher events.
+					select {
+					case s.brainHostRecovery <- struct{}{}:
+					default:
+					}
+				}
 			}
 		}
 		return
