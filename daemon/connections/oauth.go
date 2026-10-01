@@ -313,7 +313,14 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 		return secret.Token.AccessToken, nil
 	}
 	config := oauthConfig(r, secret.ClientSecret)
-	token, err := config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)), secret.Token).Token()
+	client := m.oauthHTTP(r)
+	if r.OAuth.Resource != "" {
+		// oauth2 v0.34 does not expose refresh AuthCodeOptions. Keep its token
+		// lifecycle and client authentication, adding RFC8707's resource only to
+		// this account's exact token endpoint and refresh grant.
+		client.Transport = oauthRefreshResourceTransport{client.Transport, r.OAuth.TokenURL, r.OAuth.Resource}
+	}
+	token, err := config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, client), secret.Token).Token()
 	if err != nil {
 		r.Account.Status = "authorization_required"
 		_ = m.save()
@@ -329,6 +336,37 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	}
 	return token.AccessToken, nil
 }
+
+type oauthRefreshResourceTransport struct {
+	base               http.RoundTripper
+	tokenURL, resource string
+}
+
+func (t oauthRefreshResourceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method != http.MethodPost || r.URL.String() != t.tokenURL || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" || r.Body == nil {
+		return nil, errors.New("invalid OAuth refresh request")
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, (128<<10)+1))
+	r.Body.Close()
+	if err != nil || len(raw) > 128<<10 {
+		return nil, errors.New("invalid OAuth refresh body")
+	}
+	form, err := url.ParseQuery(string(raw))
+	if err != nil || form.Get("grant_type") != "refresh_token" {
+		return nil, errors.New("invalid OAuth refresh grant")
+	}
+	if resources, present := form["resource"]; present && (len(resources) != 1 || resources[0] != t.resource) {
+		return nil, errors.New("OAuth refresh resource mismatch")
+	}
+	form.Set("resource", t.resource)
+	body := form.Encode()
+	request := r.Clone(r.Context())
+	request.Body = io.NopCloser(strings.NewReader(body))
+	request.ContentLength = int64(len(body))
+	request.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(body)), nil }
+	return t.base.RoundTrip(request)
+}
+
 func (m *Manager) revokeOAuth(ctx context.Context, r *record) error {
 	raw, ok, err := m.vault.Get("integration:" + r.Account.ID)
 	if err != nil {
