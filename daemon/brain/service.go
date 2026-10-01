@@ -71,6 +71,10 @@ type Service struct {
 	// keeps the real reader. It carries no routing or input authority.
 	sessionConversationHook func(worker *classifier.Worker, provider string, now time.Time) (work.CodexConversation, error)
 
+	conversationMu             sync.Mutex
+	hostConversationReader     *work.ProviderConversationReader
+	sessionConversationReaders map[string]*work.ProviderConversationReader
+
 	dispatchMu sync.Mutex
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
@@ -2390,7 +2394,12 @@ func (s *Service) hostTranscriptProvider(host HostSession, worker *classifier.Wo
 // HostBoundProviderConversation loads assistant/final transcript rows from the
 // stable Host Executor Session identity rather than cwd matching.
 func (s *Service) HostBoundProviderConversation() (work.CodexConversation, error) {
-	return s.hostBoundProviderConversation(work.NewProviderConversationReader())
+	s.conversationMu.Lock()
+	defer s.conversationMu.Unlock()
+	if s.hostConversationReader == nil {
+		s.hostConversationReader = work.NewProviderConversationReader()
+	}
+	return s.hostBoundProviderConversation(s.hostConversationReader)
 }
 
 // hostBoundProviderConversation is the reader-owning form used by the daemon

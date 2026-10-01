@@ -229,7 +229,25 @@ func (s *Service) loadSessionAssistantConversation(worker *classifier.Worker, pr
 	if worker == nil {
 		return work.CodexConversation{}, nil
 	}
-	return work.NewProviderConversationReader().Load(*worker, provider, now)
+	s.conversationMu.Lock()
+	defer s.conversationMu.Unlock()
+	if s.sessionConversationReaders == nil {
+		s.sessionConversationReaders = map[string]*work.ProviderConversationReader{}
+	}
+	reader := s.sessionConversationReaders[worker.ID]
+	if reader == nil {
+		reader = work.NewProviderConversationReader()
+		s.sessionConversationReaders[worker.ID] = reader
+	}
+	// Retain only live sessions so historical topic mappings cannot grow this cache.
+	if len(s.sessionConversationReaders) > 64 {
+		for id := range s.sessionConversationReaders {
+			if s.watcher.GetWorker(id) == nil {
+				delete(s.sessionConversationReaders, id)
+			}
+		}
+	}
+	return reader.Load(*worker, provider, now)
 }
 
 func sessionDisplayLabel(worker *classifier.Worker) string {
