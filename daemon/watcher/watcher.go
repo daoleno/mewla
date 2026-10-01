@@ -782,12 +782,7 @@ func (w *Watcher) resourceManager() delegatedResourceManager {
 	return manager
 }
 
-// SessionResourceSnapshot returns one on-demand read-only resource projection
-// for agentID from the daemon-owned shared resource manager.
-func (w *Watcher) SessionResourceSnapshot(workerID string) SessionResourceSnapshot {
-	return w.resourceManager().Snapshot(strings.TrimSpace(workerID))
-}
-
+// delegatedSessionCount is an inventory count, not an admission budget.
 func (w *Watcher) delegatedSessionCount() int {
 	if w == nil {
 		return 0
@@ -4665,7 +4660,7 @@ func buildWindowCommand(opts CreateSessionOptions) (string, error) {
 	}
 
 	inner := buildWindowCommandForShellWithOptions(shellPath, strings.TrimSpace(opts.Command), opts.ProgressEnv)
-	return wrapDelegatedResourceCommand(inner, opts.resource), nil
+	return inner, nil
 }
 
 func buildWindowCommandForShell(shellPath, command string) string {
@@ -4959,6 +4954,14 @@ func (w *Watcher) KillSession(sessionID string) error {
 	if present && !delegated {
 		delegated, unit = tmuxDelegatedResource(socket, sessionID)
 	}
+	if delegated && unit != "" {
+		if capture, ok := manager.(interface{ CaptureOwnership(string) error }); ok {
+			if err := capture.CaptureOwnership(unit); err != nil {
+				return fmt.Errorf("capture owned descendants: %w", err)
+			}
+		}
+	}
+
 	if present {
 		out, killErr := tmuxCommand(socket, "kill-window", "-t", sessionID).CombinedOutput()
 		outText := strings.TrimSpace(string(out))

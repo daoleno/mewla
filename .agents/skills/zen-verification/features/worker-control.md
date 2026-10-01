@@ -50,3 +50,18 @@ never infer success from a launch option alone or change saved model choices.
 origin/listener replacement, stop isolation and Linux parent-death cleanup. Its
 public fixture test is explicit opt-in and always stops its own tunnel. A URL or
 native Cloudflare connection confirmation alone is not public reachability proof.
+
+## Machine telemetry and ownership cleanup
+
+`zen resources --json` reads the cached machine snapshot and chart history.
+The authenticated API contract is in `docs/resource-telemetry.md`. Threshold
+transitions use the durable Brain Work Event lane; they do not authorize daemon
+resource intervention. `zen worker release -id SESSION -pid PID -start START`
+releases a selected exact tool tree while retaining its provider.
+
+`resource_cleanup_real_test.go` launches a plain inert tmux Worker, re-observes
+it, and verifies that close removes its detached descendant.
+`resource_cost_linux_test.go` provides the opt-in sampler CPU/IO budget check.
+`resource_pressure_test.go` covers sustained transitions, hysteresis and cooldown;
+Brain and server tests cover the event envelope and authenticated API. The lever's
+Worker inventory read alone does not prove these mutation or pressure flows.

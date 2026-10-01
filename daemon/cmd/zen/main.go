@@ -37,7 +37,6 @@ import (
 	telegramchannel "github.com/daoleno/zen/daemon/telegram"
 	"github.com/daoleno/zen/daemon/watcher"
 	"github.com/daoleno/zen/daemon/work"
-	"github.com/daoleno/zen/daemon/workerproc"
 	"golang.org/x/term"
 )
 
@@ -98,6 +97,8 @@ func run(args []string, stderr io.Writer) error {
 			return runSetupCommand(args[1:], stderr)
 		case "update":
 			return runUpdateCommand(args[1:], stderr)
+		case "resources":
+			return runResources(args[1:], stderr)
 		case "worker":
 			return runWorkerCommand(args[1:], stderr)
 		case "service":
@@ -265,14 +266,17 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("resolve control socket path: %w", err)
 	}
+	resourceSampler := watcher.NewResourceSampler()
+	resourceSampler.ConfigureResourceFiles(authManager.StorageDir())
 	controlHandler := &controlApp{
-		auth:          authManager,
-		watcher:       w,
-		execs:         execs,
-		brainStore:    brainStore,
-		brainService:  brainService,
-		calendarStore: calendarStore,
-		stateDir:      authManager.StorageDir(),
+		resourceSampler: resourceSampler,
+		auth:            authManager,
+		watcher:         w,
+		execs:           execs,
+		brainStore:      brainStore,
+		brainService:    brainService,
+		calendarStore:   calendarStore,
+		stateDir:        authManager.StorageDir(),
 	}
 
 	profilesPath, err := work.DefaultModelProfilesPath()
@@ -365,6 +369,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		InputReadyBudget: work.DefaultScheduledInputReadyBudget,
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
+	srv.SetResourceSampler(resourceSampler)
 	// The scoped idle/suspend inhibitor is tied to the persisted unattended
 	// authorization; the production entry point owns it so tests never touch a
 	// developer session bus.
@@ -690,8 +695,6 @@ func runWorkerCommand(args []string, stderr io.Writer) error {
 	switch args[0] {
 	case "defaults":
 		return runWorkerDefaults(args[1:], stderr)
-	case "__supervise":
-		return runWorkerSupervisor(args[1:], stderr)
 	case "list":
 		return runWorkerList(args[1:], stderr)
 	case "spawn":
@@ -706,56 +709,13 @@ func runWorkerCommand(args []string, stderr io.Writer) error {
 		return runWorkerReceipt(args[1:], stderr)
 	case "progress":
 		return runWorkerProgress(args[1:], stderr)
+	case "release":
+		return runWorkerRelease(args[1:], stderr)
 	case "close":
 		return runWorkerClose(args[1:], stderr)
 	default:
 		return fmt.Errorf("unknown worker command: %s", args[0])
 	}
-}
-
-func runWorkerSupervisor(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker __supervise", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var resourceID string
-	var leaseDir string
-	var memoryHigh string
-	var memoryMax string
-	var tasksMax int
-	var poolGuard bool
-	fs.StringVar(&resourceID, "resource-id", "", "owned delegated resource id")
-	fs.StringVar(&leaseDir, "lease-dir", "", "durable resource lease directory")
-	fs.StringVar(&memoryHigh, "memory-high", "", "shared soft memory threshold")
-	fs.StringVar(&memoryMax, "memory-max", "", "shared hard memory threshold")
-	fs.IntVar(&tasksMax, "tasks-max", 0, "maximum owned process count")
-	fs.BoolVar(&poolGuard, "pool-guard", false, "elect portable shared-pool memory guard")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	command := fs.Args()
-	if strings.TrimSpace(resourceID) == "" {
-		return fmt.Errorf("resource id is required")
-	}
-	if strings.TrimSpace(leaseDir) == "" {
-		return fmt.Errorf("lease directory is required")
-	}
-	if len(command) == 0 {
-		return fmt.Errorf("supervised command is required after --")
-	}
-	if os.Getenv("ZEN_WORKER_DELEGATED") != "1" || strings.TrimSpace(os.Getenv("ZEN_WORKER_RESOURCE_UNIT")) != strings.TrimSpace(resourceID) {
-		return fmt.Errorf("delegated resource environment does not match resource id")
-	}
-	return workerproc.RunSupervisor(workerproc.SupervisorConfig{
-		ResourceID: resourceID,
-		LeaseDir:   leaseDir,
-		MemoryHigh: memoryHigh,
-		MemoryMax:  memoryMax,
-		TasksMax:   tasksMax,
-		PoolGuard:  poolGuard,
-		Command:    command,
-		Stdin:      os.Stdin,
-		Stdout:     os.Stdout,
-		Stderr:     os.Stderr,
-	})
 }
 
 func runBrainCommand(args []string, stderr io.Writer) error {
@@ -921,7 +881,7 @@ func isHelpArg(value string) bool {
 }
 
 func printWorkerUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen worker <defaults|list|spawn|send|capture|status|receipt|progress|close> [flags]")
+	fmt.Fprintln(w, "Usage: zen worker <defaults|list|spawn|send|capture|status|receipt|progress|release|close> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  defaults   Set or query effective defaults for delegated Workers")
@@ -932,6 +892,7 @@ func printWorkerUsage(w io.Writer) {
 	fmt.Fprintln(w, "  status     Print compact status for one Zen Worker")
 	fmt.Fprintln(w, "  receipt    Read exact durable input acceptance without resubmitting")
 	fmt.Fprintln(w, "  progress   Report lifecycle progress for the current or selected Zen Worker")
+	fmt.Fprintln(w, "  release    Stop one owned tool process tree; preserve the Worker")
 	fmt.Fprintln(w, "  close      Close a Zen Worker")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")

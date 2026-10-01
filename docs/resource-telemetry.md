@@ -3,9 +3,8 @@
 Zen exposes a read-only machine resource snapshot over the authenticated daemon
 WebSocket. Clients send `{ "type": "get_resource_telemetry", "request_id":
 "…" }`; the daemon replies with `resource_telemetry` and the same
-`request_id`. The daemon may also broadcast `resource_telemetry` messages when a
-new sample is available. The stream is intentionally poll-friendly: clients
-that do not want broadcasts can request a snapshot every few seconds.
+`request_id`. The endpoint is poll-friendly: clients request the latest cached snapshot every
+five seconds; reads never trigger another sample.
 
 The response is versioned and Linux-first. Unsupported platform measurements
 are omitted rather than reported as zero.
@@ -94,7 +93,130 @@ to `normal`; sustained pressure and cooldowns prevent spam. The daemon never
 kills or throttles a process in response to this event. Brain decides whether
 to dispatch, ask a Worker to release resources, or close a Worker.
 
-Default thresholds are configurable with `ZEN_RESOURCE_*` environment
-variables and are documented in the daemon configuration. Defaults require at
-least 20 seconds of sustained pressure and use a 60 second notification
-cooldown.
+Defaults require 20 seconds of sustained pressure and use a 60 second
+notification cooldown. See the threshold configuration below.
+
+## Transport and data details
+
+The implemented transport is cached polling: request `get_resource_telemetry`
+on the current server's existing authenticated WebSocket every five seconds.
+There is no unconditional telemetry broadcast. `GET /resources` returns the
+same flat response with the existing signed device authentication and purpose
+`zen-resource-telemetry`; responses use `Cache-Control: no-store`. The local
+control socket exposes the same snapshot through `zen resources --json` under
+`resource_telemetry`. Before the first sample, the WebSocket returns
+`resource_telemetry_unavailable` and HTTP returns 503. Changing the app's current
+server must clear its previous history and polling state.
+
+Consumers additionally include `id` (stable group key), `process_count`,
+`commands` (bounded executable labels), and up to five largest `processes`:
+`{ "pid": 123, "start": "1234567", "command": "qemu-system-x86", "rss_bytes": 123 }`.
+`start` is an opaque kernel process-generation token. Use it with
+`zen worker release -id SESSION -pid PID -start START` to release a selected
+owned tool tree. This command refuses stale/unowned processes and the provider's
+ancestor chain. Worker close/Work acceptance remain the full cleanup commands.
+No command-line arguments or environment variables are exposed by telemetry.
+Java is labelled `gradle` as a notable workload family, without claiming all Java
+processes are Gradle. Container identifiers come from cgroup paths; no Docker
+socket or Docker CLI polling is performed. RSS sums may double-count shared
+pages. CPU rates are interval deltas, with a consumer's 100% representing one
+CPU core. The first interval has no CPU or IO rates.
+
+Linux reads `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, PSI, process metadata,
+`/proc/diskstats`, and local mount metadata. Relevant mounts are `/` plus local
+ext4/xfs/btrfs/zfs filesystems, deduplicated by device; pseudo and network mounts
+are excluded. IO rates are per mount's block device when a matching counter
+exists, and omitted on overlay filesystems without an exposed block counter.
+The sampler never shells out on Linux. Processes are sampled once per interval,
+with environment ownership fields cached by PID/start identity. Network,
+temperature and GPU metrics are outside this version. macOS currently returns
+`unavailable` measurement names with empty disks/consumers and continues to
+compile; the app must render these as unavailable, never zero.
+
+`signals` contains active threshold conditions as
+`{ "name": "psi.memory.some.avg10", "value": 3, "threshold": 2, "state": "elevated" }`.
+A transient crossed signal can appear while the sustained `state` remains normal.
+
+## Threshold configuration
+
+The defaults use the following elevated/critical thresholds. High-water signals
+trigger at or above the value; low-water signals trigger at or below it.
+
+| Signal | Elevated | Critical |
+| --- | ---: | ---: |
+| Available memory (% total, low) | 15 | 7 |
+| Total CPU utilization (%) | 90 | 98 |
+| CPU PSI some avg10 (%) | 20 | 60 |
+| Memory PSI some avg10 (%) | 2 | 10 |
+| Memory PSI full avg10 (%) | 1 | 5 |
+| IO PSI full avg10 (%) | 5 | 20 |
+| Free disk (% capacity, low) | 10 | 3 |
+
+A higher state requires 20 seconds of continuous pressure. Recovery/downgrade
+requires 30 seconds and 20% headroom beyond the active threshold. Re-entry into
+the same elevated/critical state has a 60-second cooldown; recovery always gets
+one event. Continued pressure in the same state produces no repeat events.
+Threshold state, cooldown timestamps and pending events persist under the daemon
+state directory, so hot reload cannot repeatedly notify the same sustained state.
+
+Override defaults with the `ZEN_RESOURCE_THRESHOLDS` JSON environment variable,
+or an optional `resource-telemetry.json` file in the daemon state directory
+(normally `~/.zen`). The file is checked every sample and overrides the environment
+without restarting the daemon. Removing it restores environment/default values.
+Malformed or invalid files retain the last valid configuration. Unknown JSON
+fields must be avoided. Example (partial overrides are supported):
+
+```json
+{
+  "available_memory_percent": { "elevated": 15, "critical": 7 },
+  "cpu_busy_percent": { "elevated": 90, "critical": 98 },
+  "cpu_some": { "elevated": 20, "critical": 60 },
+  "memory_some": { "elevated": 2, "critical": 10 },
+  "memory_full": { "elevated": 1, "critical": 5 },
+  "io_full": { "elevated": 5, "critical": 20 },
+  "disk_free_percent": { "elevated": 10, "critical": 3 },
+  "sustain_seconds": 20,
+  "recovery_seconds": 30,
+  "cooldown_seconds": 60
+}
+```
+
+Sustain/recovery durations accept 15–600 seconds; cooldown accepts 30–3600 seconds.
+Thresholds must be positive and at most 100, with ordered elevated/critical
+values. Notifications are `zen_work_event` envelopes with `kind=resource_pressure`
+and an embedded `resource_pressure` object. They use the durable Work review
+channel and exact delivery receipts, not user-input admission. Each transition
+has a deterministic event identity and a separate bounded notification Work;
+Brain can record its disposition with the existing Work commands. The compact
+payload is bounded to top consumers and a few trend points; `zen resources`
+and `get_resource_telemetry` expose the full cached view.
+
+## Sampling cost acceptance
+
+Sampling runs once every five seconds. API polls read the latest in-memory
+snapshot; they never trigger a process scan. History is an in-memory ring and
+is not rewritten to disk on each tick. Only pressure transitions and their
+acknowledgements update the small durable notification state. Ownership leases
+are updated only when the exact owned process identities change.
+
+The opt-in Linux acceptance test `TestResourceSamplerLiveCost` measures six
+samples at the production cadence, including `/proc` process attribution. It
+requires mean CPU below 50 ms/tick (1% of one core at five seconds) and no
+logical or physical writes during sampling. Run its compiled test binary
+without Go's test-log instrumentation when measuring IO:
+
+```sh
+cd daemon
+GOMAXPROCS=2 go test -c -o "$ZEN_BUILD_TMPDIR/resource-watcher.test" ./watcher
+ZEN_VERIFY_RESOURCE_COST=1 GOMAXPROCS=2 "$ZEN_BUILD_TMPDIR/resource-watcher.test" \
+  -test.run '^TestResourceSamplerLiveCost$' -test.v
+```
+
+Whole-daemon profiling must distinguish this sampler from provider usage
+statistics and channel projections. Usage statistics retain validated sparse
+metadata under `~/.cache/zen/usage-v1` across restarts; source identity, size,
+modification time and timezone invalidate entries. This disposable cache never
+contains transcript bodies. A summary younger than five minutes can serve a
+quick restart; normal periodic collection resumes afterwards. Telegram polling
+preserves its durable state file when no facts change, and Brain presentation
+reuses provider readers for unchanged transcript sources.
