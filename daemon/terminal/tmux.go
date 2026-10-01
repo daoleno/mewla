@@ -165,14 +165,18 @@ func (s *tmuxSession) Start(ctx context.Context) error {
 }
 
 func (s *tmuxSession) streamLoop(ctx context.Context, ptmx *os.File) {
-	const flushInterval = 16 * time.Millisecond
-	const maxFrameBytes = 8192
-
 	results := make(chan tmuxReadResult, 128)
 	go func() {
 		defer close(results)
 		s.readLoop(ctx, ptmx, results)
 	}()
+	s.forwardOutput(ctx, results)
+}
+
+func (s *tmuxSession) forwardOutput(ctx context.Context, results <-chan tmuxReadResult) {
+	const flushInterval = 16 * time.Millisecond
+	const maxFrameBytes = 8192
+	var lastFlush time.Time
 
 	timer := time.NewTimer(time.Hour)
 	if !timer.Stop() {
@@ -200,6 +204,7 @@ func (s *tmuxSession) streamLoop(ctx context.Context, ptmx *os.File) {
 		}
 		data := pending.String()
 		pending.Reset()
+		lastFlush = time.Now()
 		for len(data) > 0 {
 			chunk, rest := splitUTF8Prefix(data, maxFrameBytes)
 			s.sendEvent(Event{
@@ -232,8 +237,15 @@ func (s *tmuxSession) streamLoop(ctx context.Context, ptmx *os.File) {
 						timerActive = true
 					}
 				} else if !timerActive {
-					timer.Reset(flushInterval)
-					timerActive = true
+					// Echo after idle should not pay a fixed batching delay.
+					// Keep the same byte bound and trailing coalescing for floods.
+					remaining := flushInterval - time.Since(lastFlush)
+					if remaining <= 0 {
+						flush()
+					} else {
+						timer.Reset(remaining)
+						timerActive = true
+					}
 				}
 			}
 			if result.err != nil {
@@ -277,11 +289,24 @@ func splitUTF8Prefix(s string, maxBytes int) (string, string) {
 
 func (s *tmuxSession) readLoop(ctx context.Context, ptmx *os.File, results chan<- tmuxReadResult) {
 	buf := make([]byte, 8192)
+	var tail string
 	for {
 		n, err := ptmx.Read(buf)
-		if n > 0 {
+		data := tail + string(buf[:n])
+		tail = ""
+		if err == nil && len(data) > 0 {
+			start := len(data) - 1
+			for start > 0 && !utf8.RuneStart(data[start]) {
+				start--
+			}
+			if !utf8.FullRuneInString(data[start:]) {
+				tail = data[start:]
+				data = data[:start]
+			}
+		}
+		if len(data) > 0 {
 			select {
-			case results <- tmuxReadResult{data: string(buf[:n])}:
+			case results <- tmuxReadResult{data: data}:
 			case <-ctx.Done():
 				return
 			}
