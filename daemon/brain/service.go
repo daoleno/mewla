@@ -2030,6 +2030,12 @@ func (s *Service) hostUserInputAdmission(workerID, receipt, displayBody, convers
 	if s == nil || s.store == nil {
 		return BrainInputAdmission{}, false, nil
 	}
+	// Resolve native identity before freezing the no-replay intent. Transcript
+	// discovery may lag Host launch; do not unnecessarily freeze a Worker ID
+	// when the provider Session is already discoverable.
+	if _, err := s.BindHostProviderTranscript(); err != nil {
+		return BrainInputAdmission{}, false, err
+	}
 	host, err := s.store.HostSession()
 	if err != nil {
 		return BrainInputAdmission{}, false, err
@@ -2098,6 +2104,7 @@ func (s *Service) PrepareHostUserInput(workerID, receipt, displayBody, conversat
 			return BrainInputAdmission{}, false, err
 		}
 	}
+	retrySessionID := ""
 	if existing, found, lookupErr := s.store.BrainInputAdmission(receipt, threadID); lookupErr != nil {
 		return BrainInputAdmission{}, false, lookupErr
 	} else if found {
@@ -2112,10 +2119,17 @@ func (s *Service) PrepareHostUserInput(workerID, receipt, displayBody, conversat
 		// NotSubmitted is the same logical input retried after a proven
 		// non-mutation: fall through so the store re-arms the exact row with
 		// the caller's current host generation.
+		retrySessionID = existing.SessionID
 	}
 	admission, hostInput, err := s.hostUserInputAdmission(workerID, receipt, displayBody, conversationScopeKey)
 	if err != nil || !hostInput {
 		return admission, false, err
+	}
+	if retrySessionID != "" {
+		// Native discovery can complete between a proven non-submission and
+		// retry. Keep the original receipt payload identity; late echo binding
+		// handles the now-known native Session without changing the intent.
+		admission.SessionID = retrySessionID
 	}
 	// Enter the lane mutex before this message may mutate the provider:
 	// reconciliation runs first (an internal Event admitted at an idle

@@ -255,6 +255,9 @@ type TimelineItem struct {
 	// AdmissionEchoEventID records the provider event id that consumed this
 	// admission's single echo credit. Empty means unmatched.
 	AdmissionEchoEventID string `json:"admission_echo_event_id,omitempty"`
+	// Native Session proven when consuming an echo after late Host binding.
+	// It does not rewrite the immutable admission or its original SessionID.
+	AdmissionEchoSessionID string `json:"admission_echo_session_id,omitempty"`
 
 	// Legacy calendar rows retained for orphan-message migration compatibility.
 	CalendarItemID string     `json:"calendar_item_id,omitempty"`
@@ -520,6 +523,10 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 	if sessionID == "" {
 		sessionID = "provider"
 	}
+	host, err := s.readHostSessionLocked()
+	if err != nil {
+		return err
+	}
 	// Assign echo credits before appending so restart/replay stays idempotent.
 	suppress, updatedItems, dirty := claimProviderUserEchoes(
 		items,
@@ -527,18 +534,25 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 		database.BrainInputAdmissions,
 		threadID,
 		sessionID,
+		host,
 	)
 	if dirty {
 		byID := make(map[string]TimelineItem, len(updatedItems))
 		for _, item := range updatedItems {
 			byID[item.ID] = item
 		}
-		for index := range allItems {
-			if next, ok := byID[allItems[index].ID]; ok {
-				allItems[index] = next
+		reconciled := make([]TimelineItem, 0, len(allItems))
+		for _, item := range allItems {
+			if item.ThreadID == threadID && !IsBrainInputAdmission(item) &&
+				item.Kind == timelineKindUserMessage && item.SessionID == sessionID && suppress[item.ID] {
+				continue
 			}
+			if next, ok := byID[item.ID]; ok {
+				item = next
+			}
+			reconciled = append(reconciled, item)
 		}
-		if err := s.rewriteTimelineLocked(allItems); err != nil {
+		if err := s.rewriteTimelineLocked(reconciled); err != nil {
 			return err
 		}
 		items = updatedItems

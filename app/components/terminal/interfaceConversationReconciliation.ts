@@ -147,7 +147,11 @@ export function reconcileConversationSnapshot(
   _sameConversation: boolean,
 ): CodexConversation {
   const replacement = normalizeCodexConversation(incoming);
-  const events = replacement.events;
+  // Snapshot replay uses the same event identity as delta upserts. Repeated
+  // IDs replace their earlier value; equal bodies with distinct IDs survive.
+  const events = Array.from(
+    new Map(replacement.events.map((event) => [event.id, event])).values(),
+  );
   return {
     ...replacement,
     activity: replacement.activity,

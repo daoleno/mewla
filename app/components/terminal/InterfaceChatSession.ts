@@ -247,14 +247,14 @@ export function interfaceChatThreadReducer(
           conversationEventIdSet(state.conversation),
         ),
       };
-      return {
+      return reconcileLocalPendingMessages({
         ...state,
         pendingUserMessages: [...state.pendingUserMessages, message],
         turnFocusAnchorAliases:
           state.turnFocusAnchorAliases.size === 0
             ? state.turnFocusAnchorAliases
             : new Map(),
-      };
+      });
     }
     case "begin_pending_user_message_attempt": {
       const createdAfterMaxSeq = maxConversationEventSeq(state.conversation);
@@ -278,7 +278,9 @@ export function interfaceChatThreadReducer(
           staleReceiptAutoRetried: action.staleReceiptAutoRetried,
         });
       });
-      return changed ? { ...state, pendingUserMessages } : state;
+      return changed
+        ? reconcileLocalPendingMessages({ ...state, pendingUserMessages })
+        : state;
     }
     case "reject_pending_user_message": {
       let changed = false;
@@ -295,6 +297,28 @@ export function interfaceChatThreadReducer(
     default:
       return state;
   }
+}
+
+// sendInput writes before adding/updating the optimistic row. A canonical
+// receipt may therefore already be present when that local action is reduced.
+// Reconcile on both sides of the race, using the same identity rules.
+function reconcileLocalPendingMessages(state: InterfaceChatThreadState) {
+  const reconciled = reconcilePendingUserMessagesAgainstEvents(
+    state.pendingUserMessages,
+    state.conversation?.events ?? [],
+  );
+  return {
+    ...state,
+    pendingUserMessages: reconciled.pendingUserMessages,
+    turnFocusAnchorAliases: extendTurnFocusAnchorAliases(
+      state.turnFocusAnchorAliases,
+      reconciled.providerEventAliases,
+      resolveCurrentTurnFocusAnchorId(
+        state.turnFocusAnchorAliases,
+        state.pendingUserMessages,
+      ),
+    ),
+  };
 }
 
 function nextPendingDispatchAttemptOrder(

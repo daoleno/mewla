@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { ProviderActivity } from "../../services/codexConversation";
 import type { PendingUserMessage } from "./InterfaceChatSession";
+import { mergePendingUserMessagesIntoTimeline } from "./InterfaceTimelineModel";
+import { projectZenTimeline } from "./projectZenTimeline";
 
 mock.module("react-native", () => ({ Platform: { OS: "web" } }));
 mock.module("../../services/auth", () => ({
@@ -1270,5 +1272,113 @@ describe("fresh-generation unavailable snapshots never erase a populated timelin
     });
     expect(cleared.conversation?.events).toEqual([]);
     expect(cleared.conversation?.available).toBe(true);
+  });
+});
+
+describe("one user bubble per send across stream ordering", () => {
+  function visibleUserIds(current: ReturnType<typeof state>) {
+    const projected = projectZenTimeline(current.conversation?.events ?? [], null);
+    return mergePendingUserMessagesIntoTimeline(
+      projected.items,
+      current.pendingUserMessages,
+    )
+      .filter((item) => item.type === "message" && item.role === "user")
+      .map((item) => item.id);
+  }
+
+  function add(current: ReturnType<typeof state>, id: string, requestId: string) {
+    return interfaceChatThreadReducer(current, {
+      type: "add_pending_user_message",
+      message: {
+        ...pending({ id, dispatchRequestId: requestId, body: "same text", sentText: "same text" }),
+      },
+    });
+  }
+
+  function snapshot(
+    current: ReturnType<typeof state>,
+    events: NonNullable<ReturnType<typeof state>["conversation"]>["events"],
+    generation = 1,
+    revision = current.streamCursor.revision + 1,
+  ) {
+    return interfaceChatThreadReducer(current, {
+      type: "snapshot",
+      generation,
+      payload: {
+        request_id: `stream-${generation}`,
+        conversation_id: "thread-a",
+        revision,
+        conversation: { available: true, session_id: "thread-a", events },
+      },
+    });
+  }
+
+  const userEvent = (id: string, seq: number) => ({
+    id, seq, kind: "user_message" as const, body: "same text",
+  });
+
+  test("receipt snapshot before optimistic insertion consumes the local row immediately", () => {
+    const canonical = snapshot(state([]), [userEvent("receipt-a", 1)]);
+    const next = add(canonical, "local-a", "receipt-a");
+    expect(next.pendingUserMessages).toEqual([]);
+    expect(next.conversation?.events.map((event) => event.id)).toEqual(["receipt-a"]);
+    expect([...next.turnFocusAnchorAliases]).toEqual([["receipt-a", "local-a"]]);
+    expect(visibleUserIds(next)).toEqual(["receipt-a"]);
+  });
+
+  test("different provider ids consume sends once through delta, snapshot and reconnect", () => {
+    let current = snapshot(state([]), [userEvent("history", 1)]);
+    current = add(current, "local-a", "receipt-a");
+    current = add(current, "local-b", "receipt-b");
+    const firstEcho = userEvent("provider-a", 2);
+    const delta = {
+      type: "delta" as const, generation: 1,
+      delta: {
+        request_id: "stream-1", conversation_id: "thread-a",
+        base_revision: current.streamCursor.revision,
+        revision: current.streamCursor.revision + 1,
+        upserts: [firstEcho, firstEcho], deletes: [],
+      },
+    };
+    current = interfaceChatThreadReducer(current, delta);
+    expect(current.pendingUserMessages.map((row) => row.id)).toEqual(["local-b"]);
+    // Snapshot replay of A cannot consume the separate same-body send B.
+    current = snapshot(current, [userEvent("history", 1), firstEcho, firstEcho]);
+    expect(current.pendingUserMessages.map((row) => row.id)).toEqual(["local-b"]);
+    expect(current.conversation?.events.map((event) => event.id)).toEqual(["history", "provider-a"]);
+    expect(visibleUserIds(current)).toEqual(["history", "provider-a", "local-b"]);
+    current = interfaceChatThreadReducer(current, { type: "stream_start", generation: 2 });
+    // Old in-flight delta and a pre-snapshot new-generation delta cannot mutate history.
+    current = interfaceChatThreadReducer(current, delta);
+    current = interfaceChatThreadReducer(current, { ...delta, generation: 2 });
+    current = snapshot(current, [userEvent("history", 1), firstEcho, userEvent("provider-b", 3)], 2, 1);
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(current.conversation?.events.map((event) => event.id)).toEqual(["history", "provider-a", "provider-b"]);
+    current = snapshot(current, current.conversation!.events, 2, 2);
+    expect(current.conversation?.events).toHaveLength(3);
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(visibleUserIds(current)).toEqual(["history", "provider-a", "provider-b"]);
+  });
+
+  test("failed retry is replaced by its receipt once and ignores late failure", () => {
+    let current = add(snapshot(state([]), []), "local-a", "receipt-a");
+    current = interfaceChatThreadReducer(current, {
+      type: "reject_pending_user_message", id: "local-a", requestId: "receipt-a",
+      code: "send_input_failed", message: "not submitted",
+    });
+    expect(current.pendingUserMessages[0]?.lifecycle).toBe("failed");
+    current = interfaceChatThreadReducer(current, {
+      type: "begin_pending_user_message_attempt", id: "local-a", requestId: "receipt-a",
+    });
+    expect(current.pendingUserMessages).toHaveLength(1);
+    const echo = userEvent("receipt-a", 1);
+    current = snapshot(current, [echo, echo]);
+    current = interfaceChatThreadReducer(current, {
+      type: "reject_pending_user_message", id: "local-a", requestId: "receipt-a",
+      code: "send_input_failed", message: "late failure",
+    });
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(current.conversation?.events).toHaveLength(1);
+    expect(visibleUserIds(current)).toEqual(["receipt-a"]);
   });
 });
