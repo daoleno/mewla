@@ -136,7 +136,9 @@ type Server struct {
 	calendarSub                 <-chan calendar.Event
 	brainWorkSubID              int
 	brainWorkSub                <-chan brain.WorkChange
-	brainHostStartupComplete    bool
+	brainHostRetryAt            time.Time
+	brainHostRetryDelay         time.Duration
+	brainHostStableSince        time.Time
 	signalSystemStartupComplete bool
 
 	clients            map[*websocket.Conn]*authenticatedClient
@@ -3227,20 +3229,7 @@ func (s *Server) heartbeat(ctx context.Context) {
 			allWorkerSessions := s.watcher.Workers()
 			workerSessions := visibleWorkerSessions(allWorkerSessions)
 			if s.brain != nil && s.watcher != nil && s.watcher.SnapshotReady() {
-				if !s.brainHostStartupComplete {
-					_, err := s.brain.EnsureHostSnapshot()
-					switch {
-					case err == nil:
-						s.brainHostStartupComplete = true
-					case errors.Is(err, brain.ErrHostActivationAmbiguous):
-						// The receipt is the no-replay authority. Stop automatic
-						// startup retries and leave the activation unmarked.
-						s.brainHostStartupComplete = true
-						log.Printf("brain Host startup activation is ambiguous: %v", err)
-					default:
-						log.Printf("brain Host startup reconciliation failed: %v", err)
-					}
-				}
+				s.reconcileBrainHostContinuity(time.Now())
 				if !s.signalSystemStartupComplete {
 					complete, err := s.brain.ReconcileSignalSystemStartup(allWorkerSessions, 64)
 					if err != nil {

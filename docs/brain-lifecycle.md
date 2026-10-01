@@ -56,6 +56,22 @@ authentication `--state-dir`; a second daemon using the same HOME must fail befo
 opening Brain state. Test daemons need a private HOME as well as private sockets
 and state, so their fixtures cannot rewrite the user's Brain binding.
 
+The daemon heartbeat owns Host continuity throughout its lifetime, including
+after startup succeeds. Once watcher inventory is ready, it checks every ten
+seconds and persists the current native conversation binding independently of
+App subscriptions. A confirmed missing terminal resumes that exact provider
+Session and broadcasts the replacement Host to connected clients, preserving
+the logical Brain thread and its history. Automatic recovery refuses a blank
+replacement when native identity is unavailable. It never selects the most
+recent conversation by directory, nor replays accepted user messages.
+
+Failed recovery and rapidly crashing replacements back off from ten seconds to
+one minute. A minute of healthy observations resets the delay. Activation uses
+the existing generation-specific receipt, so ambiguous delivery is not replayed;
+it also does not permanently disable recovery of a later Host loss. Codex native
+resume omits fresh-executor model and effort defaults so the saved Session keeps
+its own choices; any persisted model-profile route retains its existing owner.
+
 A recovered Host also needs its original model-proxy endpoint. On Linux,
 daemon startup reads surviving Claude processes' structured `--settings` argv
 and restores their literal loopback listeners only when the embedded opaque
