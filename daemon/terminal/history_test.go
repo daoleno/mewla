@@ -21,8 +21,18 @@ func TestHistoryBoundsAndOwnership(t *testing.T) {
 	if _, err := b.Write([]byte("x")); err == nil {
 		t.Fatal("unbounded capture")
 	}
-	if _, err := parseHistory("%1\t80\t10\t0\n" + strings.Repeat("line\n", 6001)); err == nil {
+	if _, err := parseHistory("%1\t80\t10\t0\t%1:0:0:80:24:0:0|\n" + strings.Repeat("line\n", 6001)); err == nil {
 		t.Fatal("unbounded rows")
+	}
+}
+
+func TestPaneScrollModeSelectionMetadata(t *testing.T) {
+	h, err := parseHistory("%2\t40\t0\t1\t%1:0:0:40:24:0:0|%2:41:0:40:24:1:1|\n")
+	if err != nil || len(h.Panes) != 2 {
+		t.Fatalf("pane modes: %+v, %v", h, err)
+	}
+	if h.Panes[0].Alternate || !h.Panes[1].Alternate || !h.Panes[1].Mouse || h.Panes[1].Left != 41 {
+		t.Fatalf("pane modes lost: %+v", h.Panes)
 	}
 }
 

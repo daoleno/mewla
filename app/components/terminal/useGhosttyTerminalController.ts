@@ -13,6 +13,7 @@ import type { TerminalInputHandleRef } from './TerminalInputHandler';
 import { TerminalLiveGridOwner } from './terminalLiveGrid';
 import type { TerminalScrollCancelReason } from './terminalScrollGesture';
 import { useTerminalHistory } from './useTerminalHistory';
+import { encodeTerminalWheel, selectTerminalScrollRoute } from './terminalWheel';
 import type { TerminalHistoryRender } from './terminalHistory';
 import { isCurrentTerminalRendererGeneration } from './terminalSurfaceBootstrap';
 import {
@@ -38,6 +39,7 @@ type BridgeMessage = { rendererGeneration: number } & (
   | { type: 'historyRetry'; sessionId: string | null }
   | { type: 'viewportScroll'; sessionId: string | null; atBottom: boolean }
   | { type: 'copyText'; text: string }
+  | { type: 'wheel'; sessionId: string | null; token: string | null; ticks: number; x: number; y: number }
   | {
       type: 'mouse';
       action: MouseAction;
@@ -94,8 +96,11 @@ export function useGhosttyTerminalController({
   const pendingRef = useRef<RendererStateMessage[]>([]);
   const pendingRendererCommandRef = useRef<RendererCommand | null>(null);
   const renderFrameRef = useRef(0);
+  const wheelRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wheelInteractionRef = useRef(false);
   const gridOwnerRef = useRef<TerminalLiveGridOwner | null>(null);
   const scrollCorrelationRef = useRef(new TerminalScrollCorrelation());
+  const paneModesRef = useRef<TerminalHistoryRender['panes']>([]);
   const rendererGenerationRef = useRef(rendererGeneration);
   rendererGenerationRef.current = rendererGeneration;
   const [readyGeneration, setReadyGeneration] = useState<number | null>(null);
@@ -125,6 +130,7 @@ export function useGhosttyTerminalController({
   }, [injectRendererState]);
 
   const publishHistory = useCallback((history: TerminalHistoryRender) => {
+    paneModesRef.current = history.panes || [];
     postToRenderer({ type: 'history', history });
   }, [postToRenderer]);
   const history = useTerminalHistory(serverId, theme, publishHistory);
@@ -151,6 +157,7 @@ export function useGhosttyTerminalController({
     sessionId: string | null,
     reason: TerminalScrollCancelReason,
   ) => {
+    wheelInteractionRef.current = false;
     const context = scrollCorrelationRef.current.replace(sessionId);
     if (webReadyRef.current) {
       webviewRef.current?.injectJavaScript(
@@ -172,6 +179,22 @@ export function useGhosttyTerminalController({
   }, [ghostty, postToRenderer]);
 
   const scheduleRenderState = useCallback(() => {
+    if (wheelInteractionRef.current) {
+      // The WebView already presents on its own animation frame. Waiting for
+      // a second (RN) vsync adds a whole frame to every wheel/redraw round trip.
+      // A task batches adjacent output chunks without that additional wait.
+      if (renderFrameRef.current) {
+        cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = 0;
+      }
+      if (wheelRenderTimerRef.current === null) {
+        wheelRenderTimerRef.current = setTimeout(() => {
+          wheelRenderTimerRef.current = null;
+          flushRenderState();
+        }, 0);
+      }
+      return;
+    }
     if (!renderFrameRef.current) {
       renderFrameRef.current = requestAnimationFrame(flushRenderState);
     }
@@ -179,6 +202,7 @@ export function useGhosttyTerminalController({
 
   useEffect(() => {
     return () => {
+      if (wheelRenderTimerRef.current !== null) clearTimeout(wheelRenderTimerRef.current);
       if (renderFrameRef.current) {
         cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = 0;
@@ -439,7 +463,10 @@ export function useGhosttyTerminalController({
       }
 
       if (payload.type === 'historyInteraction') {
-        if (session.acceptInteractionSession(payload.sessionId)) history.interaction(payload.active);
+        if (session.acceptInteractionSession(payload.sessionId)) {
+          if (!payload.active) wheelInteractionRef.current = false;
+          history.interaction(payload.active);
+        }
         return;
       }
       if (payload.type === 'historyRetry') {
@@ -484,6 +511,24 @@ export function useGhosttyTerminalController({
             clearInputMirror();
           }
           deliverInput(encoded);
+        }
+      }
+
+      if (payload.type === 'wheel') {
+        if (!session.acceptInteractionSession(payload.sessionId) ||
+            !scrollCorrelationRef.current.accept(payload.sessionId, payload.token) ||
+            !canDeliverInput() || !Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return;
+        const grid = ghostty.currentGrid();
+        if (!grid || selectTerminalScrollRoute(paneModesRef.current || [],
+          Math.floor(payload.x / grid.cellWidth), Math.floor(payload.y / grid.cellHeight)) !== 'wheel') return;
+        const encoded = encodeTerminalWheel(payload.ticks, (button) => ghostty.encodePointer({
+          action: 'press', button, x: payload.x, y: payload.y, anyButtonPressed: false,
+        }));
+        // Wheel input must not focus the IME, clear the composer, jump the
+        // native viewport or invalidate the gesture that produced this batch.
+        if (encoded) {
+          wheelInteractionRef.current = true;
+          session.sendInput(encoded);
         }
       }
     } catch {

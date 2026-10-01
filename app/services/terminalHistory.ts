@@ -5,4 +5,15 @@ export interface TerminalHistorySnapshot {
   total: number;
   alternate: boolean;
   ansi: string;
+  panes?: TerminalPaneScrollMode[];
+}
+
+export interface TerminalPaneScrollMode {
+  id: string;
+  left: number;
+  top: number;
+  cols: number;
+  rows: number;
+  alternate: boolean;
+  mouse: boolean;
 }

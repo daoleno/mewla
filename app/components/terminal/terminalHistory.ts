@@ -1,4 +1,4 @@
-import type { TerminalHistorySnapshot } from '../../services/terminalHistory';
+import type { TerminalHistorySnapshot, TerminalPaneScrollMode } from '../../services/terminalHistory';
 
 export const TERMINAL_HISTORY_MAX_ROWS = 6000;
 export const TERMINAL_HISTORY_MAX_BYTES = 4 * 1024 * 1024;
@@ -44,4 +44,6 @@ export interface TerminalHistoryRender {
   removed: number;
   reset: boolean;
   notice: string;
+  panes?: TerminalPaneScrollMode[];
+  paneId?: string;
 }

@@ -1,3 +1,4 @@
+import { TERMINAL_SCROLL_ROUTE_SOURCE } from './terminalWheel';
 import type { TerminalThemePalette } from '../../constants/terminalThemes';
 import {
   TERMINAL_GRID_CELL_WIDTH_FALLBACK_EM,
@@ -80,7 +81,7 @@ export function buildGhosttyTerminalHtml(
         background: ${theme.background}; opacity: .9;
       }
       #history-notice:empty { display: none; }
-      #terminal-html, #history-rows {
+      #terminal-html, #terminal-wheel-frame, #terminal-scroll-blend, #history-rows {
         position: relative;
         overflow: hidden;
         display: block;
@@ -100,6 +101,8 @@ export function buildGhosttyTerminalHtml(
         -webkit-tap-highlight-color: transparent;
 
       }
+      #terminal-wheel-frame { position: absolute; inset: 0; pointer-events: none; display: none; }
+      #terminal-scroll-blend { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: none; display: none; }
       #terminal-html { transform: translate3d(0, 0, 0); }
       #history-rows { position: absolute; overflow: visible; }
       #terminal-html *, #history-rows * {
@@ -152,6 +155,8 @@ export function buildGhosttyTerminalHtml(
       <div id="terminal-history"><div id="history-rows"></div></div>
       <div id="terminal-live">
         <div id="terminal-html"></div>
+        <div id="terminal-wheel-frame"></div>
+        <div id="terminal-scroll-blend"></div>
         <div id="terminal-cursor"></div>
       </div>
       <span id="cell-measure">M</span>
@@ -256,6 +261,7 @@ export function buildGhosttyTerminalHtml(
 
         const root = document.getElementById('root');
         const terminalHtml = document.getElementById('terminal-html');
+        const wheelHtml = document.getElementById('terminal-wheel-frame');
         const cursor = document.getElementById('terminal-cursor');
         const measure = document.getElementById('cell-measure');
         const live = document.getElementById('terminal-live');
@@ -304,6 +310,162 @@ export function buildGhosttyTerminalHtml(
         let pendingHistory = null;
         let scrollSessionId = null;
         let scrollToken = null;
+        const selectScrollRoute = ${TERMINAL_SCROLL_ROUTE_SOURCE};
+        const wheelCenter = 1000000;
+        let paneModes = [];
+        let wheelViewport = false;
+        let wheelGesture = false;
+        let wheelTop = wheelCenter;
+        let wheelPixels = 0;
+        let wheelDirection = 0;
+        let wheelAwaitingFrame = false;
+        let wheelFrameAt = 0;
+        let wheelRAF = null;
+        let wheelX = 0;
+        let wheelY = 0;
+
+        const blend = document.getElementById('terminal-scroll-blend');
+        let blendAnimation = null;
+        let blendRegion = '';
+        let blendEnd = 0;
+        let blendDelta = 0;
+        let presentedHtml = '';
+        let presentedAt = 0;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+        const stopBlend = () => {
+          if (blendAnimation) blendAnimation.cancel();
+          blendAnimation = null;
+          blend.style.display = 'none';
+          blend.replaceChildren();
+        };
+
+        // Interpolate only a proven row translation. Exact styled-row matches
+        // preserve ANSI/CJK cells; unchanged rows outside the region stay pinned.
+        // Unknown layouts, selection and unrelated redraws use the original grid.
+        const blendRows = (previous, next, interval) => {
+          if (!wheelGesture || (touching && !moved) || nativeSelectionActive || reducedMotion.matches || !previous) {
+            stopBlend();
+            return;
+          }
+          const parse = (html) => {
+            const template = document.createElement('template');
+            template.innerHTML = html;
+            return Array.from(template.content.querySelectorAll('.terminal-row'));
+          };
+          const before = parse(previous);
+          const after = parse(next);
+          if (before.length !== after.length) { stopBlend(); return; }
+          const oldRows = before.map((row) => row.innerHTML);
+          const newRows = after.map((row) => row.innerHTML);
+          let start = 0;
+          let end = 0;
+          let delta = 0;
+          let bestLength = 0;
+          for (let shift = -12; shift <= 12; shift++) {
+            if (!shift) continue;
+            let runStart = 0;
+            let nonblank = 0;
+            for (let row = 0; row <= after.length; row++) {
+              const oldRow = row + shift;
+              if (row < after.length && oldRow >= 0 && oldRow < before.length &&
+                  oldRows[oldRow] === newRows[row]) {
+                if (after[row].textContent.trim()) nonblank++;
+                continue;
+              }
+              const length = row - runStart;
+              if (nonblank >= 4 && length > bestLength && length >= 8) {
+                // Fixed headers and transient badges may change beside the
+                // transcript. Animate only the longest proven contiguous band.
+                start = runStart + Math.min(0, shift);
+                end = row + Math.max(0, shift);
+                delta = shift;
+                bestLength = length;
+              }
+              runStart = row + 1;
+              nonblank = 0;
+            }
+          }
+          if (!delta) { stopBlend(); return; }
+          const region = start + ':' + end;
+          let residual = 0;
+          if (blendAnimation && blendRegion === region && Math.sign(delta) === Math.sign(blendDelta)) {
+            const transform = getComputedStyle(blend.firstElementChild).transform;
+            if (transform !== 'none') residual = new DOMMatrixReadOnly(transform).m42 - blendEnd;
+          }
+          stopBlend();
+          const strip = document.createElement('div');
+          const rows = delta > 0
+            ? before.slice(start, end).concat(after.slice(end - delta, end))
+            : after.slice(start, start - delta).concat(before.slice(start, end));
+          for (const row of rows) strip.appendChild(row);
+          blend.appendChild(strip);
+          blend.style.top = start * cellHeight + 'px';
+          blend.style.height = (end - start) * cellHeight + 'px';
+          blend.style.display = 'block';
+          blendRegion = region;
+          blendDelta = delta;
+          blendEnd = delta > 0 ? -delta * cellHeight : 0;
+          const from = (delta > 0 ? 0 : delta * cellHeight) + residual;
+          // One bounded interpolation, never a queue. A late frame cannot add
+          // more than 80 ms of visual lag; new touch/reversal cancels immediately.
+          const animation = strip.animate([
+            { transform: 'translateY(' + from + 'px)' },
+            { transform: 'translateY(' + blendEnd + 'px)' },
+          ], { duration: Math.max(16, Math.min(80, interval)), easing: 'linear', fill: 'forwards' });
+          blendAnimation = animation;
+          animation.onfinish = () => { if (blendAnimation === animation) stopBlend(); };
+        };
+
+        const stopWheel = () => {
+          stopBlend();
+          wheelGesture = false;
+          wheelPixels = 0;
+          wheelDirection = 0;
+          wheelAwaitingFrame = false;
+        };
+
+        const wheelFrame = (timestamp) => {
+          wheelRAF = null;
+          if (!wheelGesture || (touching && !moved) || nativeSelectionActive || !scrollSessionId) return;
+          if (timestamp - wheelFrameAt < 16) {
+            wheelRAF = requestAnimationFrame(wheelFrame);
+            return;
+          }
+          const ticks = Math.trunc(wheelPixels / cellHeight);
+          if (!ticks) return;
+          // Consume even while awaiting a redraw: no delayed backlog on LAN.
+          wheelPixels %= cellHeight;
+          // Some apps consume the first reverse wheel without redrawing. A
+          // frame is not an input acknowledgement. Drop blocked deltas, then
+          // allow a fresh tick after a bounded no-output deadline; never replay.
+          if (wheelAwaitingFrame && timestamp - wheelFrameAt < 100) return;
+          wheelFrameAt = timestamp;
+          wheelAwaitingFrame = true;
+          send({ type: 'wheel', sessionId: scrollSessionId, token: scrollToken,
+            ticks: Math.max(-3, Math.min(3, ticks)), x: wheelX, y: wheelY });
+        };
+
+        const setWheelViewport = (enabled) => {
+          if (enabled === wheelViewport) return;
+          stopWheel();
+          wheelViewport = enabled;
+          // A fixed descendant is excluded from Android WebView's native
+          // scroll hit testing. Sticky content stays on screen while retaining
+          // the scroller as the touch target's scrolling ancestor.
+          if (enabled) root.insertBefore(live, history);
+          else root.insertBefore(history, live);
+          live.style.position = enabled ? 'sticky' : 'relative';
+          live.style.zIndex = enabled ? '1' : '';
+          live.style.top = enabled ? '0' : '';
+          live.style.left = enabled ? '0' : '';
+          live.style.width = enabled ? '100%' : '';
+          history.style.height = enabled ? (wheelCenter * 2 + viewportHeight) + 'px' : historyLines.length * cellHeight + 'px';
+          historyRows.style.display = enabled ? 'none' : '';
+          root.scrollTop = enabled ? wheelCenter : root.scrollHeight;
+          wheelTop = root.scrollTop;
+          followLive = true;
+        };
 
         const scheduleDraw = () => {
           if (drawRAF == null) {
@@ -363,6 +525,12 @@ export function buildGhosttyTerminalHtml(
           root.style.background = activeTheme.background;
           terminalHtml.style.background = activeTheme.background;
           terminalHtml.style.color = activeTheme.foreground;
+          if (wheelHtml) {
+            wheelHtml.style.color = activeTheme.foreground;
+            wheelHtml.style.background = activeTheme.background;
+          }
+          blend.style.color = activeTheme.foreground;
+          blend.style.background = activeTheme.background;
           historyRows.style.color = activeTheme.foreground;
           historyRows.style.background = activeTheme.background;
           historyNotice.style.color = activeTheme.foreground;
@@ -393,7 +561,7 @@ export function buildGhosttyTerminalHtml(
         };
 
         const drawHistory = () => {
-          if (nativeSelectionActive) return;
+          if (nativeSelectionActive || wheelViewport) return;
           const visibleRows = Math.ceil(viewportHeight / cellHeight);
           const start = Math.max(0, Math.floor(root.scrollTop / cellHeight) - visibleRows * 2);
           const end = Math.min(historyLines.length, start + visibleRows * 5);
@@ -429,7 +597,22 @@ export function buildGhosttyTerminalHtml(
           drawRAF = null;
           drawHistory();
           const nextHtml = renderSnapshot.html || '';
-          if (!nativeSelectionActive && !interactionActive && nextHtml !== lastRenderedHtml) {
+          // Keep the original touched subtree attached until touchend. A separate
+          // non-interactive layer shows app redraws while its transcript scrolls.
+          // Replacing that subtree drops Android's subsequent touch events.
+          const overlay = wheelViewport && touching && !nativeSelectionActive;
+          if (nextHtml !== presentedHtml && !nativeSelectionActive) {
+            const now = performance.now();
+            blendRows(presentedHtml, nextHtml, now - presentedAt);
+            presentedHtml = nextHtml;
+            presentedAt = now;
+          }
+          if (wheelHtml) {
+            wheelHtml.style.display = overlay ? 'block' : 'none';
+            terminalHtml.style.opacity = overlay ? '0' : '1';
+            if (overlay && wheelHtml.innerHTML !== nextHtml) wheelHtml.innerHTML = nextHtml;
+          }
+          if (!nativeSelectionActive && (!interactionActive || (wheelViewport && !touching)) && nextHtml !== lastRenderedHtml) {
             terminalHtml.innerHTML = nextHtml;
             lastRenderedHtml = nextHtml;
           }
@@ -458,7 +641,7 @@ export function buildGhosttyTerminalHtml(
           cellWidth = nextCellWidth;
           cellHeight = nextCellHeight;
           live.style.height = viewportHeight + 'px';
-          if (followLive) root.scrollTop = root.scrollHeight;
+          if (followLive && !wheelViewport) root.scrollTop = root.scrollHeight;
 
           const shouldReport = force ||
             nextCols !== lastReportedCols ||
@@ -564,6 +747,7 @@ export function buildGhosttyTerminalHtml(
         };
 
         const reportPosition = () => {
+          if (wheelViewport) return;
           const nextFollow = root.scrollHeight - root.clientHeight - root.scrollTop < 2;
           if (nextFollow !== followLive) {
             followLive = nextFollow;
@@ -581,6 +765,11 @@ export function buildGhosttyTerminalHtml(
           if (idleTimer != null) clearTimeout(idleTimer);
           idleTimer = null;
           if (touching || nativeSelectionActive) return;
+          stopWheel();
+          if (wheelViewport) {
+            root.scrollTop = wheelCenter;
+            wheelTop = wheelCenter;
+          }
           reportPosition();
           setInteraction(false);
           scheduleDraw();
@@ -597,8 +786,10 @@ export function buildGhosttyTerminalHtml(
         };
 
         const jumpLive = () => {
+          stopWheel();
           followLive = true;
-          root.scrollTo({ top: root.scrollHeight, behavior: 'instant' });
+          root.scrollTo({ top: wheelViewport ? wheelCenter : root.scrollHeight, behavior: 'instant' });
+          wheelTop = root.scrollTop;
           send({ type: 'viewportScroll', sessionId: scrollSessionId, atBottom: true });
           scheduleDraw();
         };
@@ -614,14 +805,16 @@ export function buildGhosttyTerminalHtml(
           historyRows.innerHTML = '';
           historyStart = -1;
           historyEnd = -1;
-          history.style.height = historyLines.length * cellHeight + 'px';
+          paneModes = next.panes || [];
+          setWheelViewport(paneModes.some((p) => p.id === next.paneId && p.alternate));
+          history.style.height = wheelViewport ? (wheelCenter * 2 + viewportHeight) + 'px' : historyLines.length * cellHeight + 'px';
           historyNotice.textContent = next.notice || '';
-          if (followLive) root.scrollTop = root.scrollHeight;
-          else if (next.reset) {
+          if (followLive && !wheelViewport) root.scrollTop = root.scrollHeight;
+          else if (!wheelViewport && next.reset) {
             // Pane/width changes replace coordinates. Keep the reader in history
             // at the closest physical row; never jump to the live screen.
             root.scrollTop = Math.min(oldTop, Math.max(0, historyLines.length * cellHeight - cellHeight));
-          } else root.scrollTop = Math.max(0, oldTop - next.removed * cellHeight);
+          } else if (!wheelViewport) root.scrollTop = Math.max(0, oldTop - next.removed * cellHeight);
           drawHistory();
         };
 
@@ -629,6 +822,7 @@ export function buildGhosttyTerminalHtml(
           const nextActive = hasTerminalSelection();
           if (nativeSelectionActive === nextActive) return nextActive;
           nativeSelectionActive = nextActive;
+          if (nextActive) stopWheel();
           setInteraction(nextActive || touching);
           send({ type: 'selectionActive', active: nextActive });
           if (!nextActive) {
@@ -643,6 +837,26 @@ export function buildGhosttyTerminalHtml(
         };
 
         root.addEventListener('scroll', () => {
+          if (wheelViewport) {
+            const delta = root.scrollTop - wheelTop;
+            wheelTop = root.scrollTop;
+            if (wheelGesture && delta) {
+              const direction = Math.sign(delta);
+              if (direction !== wheelDirection) {
+                stopBlend();
+                // Native slop already established a drag. Do not wait another
+                // full cell before the first tick or a direction reversal.
+                wheelPixels = direction * cellHeight;
+                // A reverse tick must work even when the old direction hit an
+                // app boundary and therefore produced no redraw.
+                wheelAwaitingFrame = false;
+              }
+              wheelDirection = direction;
+              wheelPixels += delta;
+              if (wheelRAF == null) wheelRAF = requestAnimationFrame(wheelFrame);
+            }
+            if (!wheelGesture) return;
+          }
           reportPosition();
           setInteraction(true);
           scheduleDraw();
@@ -653,16 +867,32 @@ export function buildGhosttyTerminalHtml(
         document.addEventListener('touchstart', (event) => {
           const touch = event.touches[0];
           if (!touch) return;
+          stopWheel();
           touching = true;
           moved = false;
           tapInTerminal = root.contains(event.target);
           touchRow = event.target.closest ? event.target.closest('.terminal-row') : null;
           touchX = touch.clientX;
           touchY = touch.clientY;
+          wheelX = touchX - live.getBoundingClientRect().left;
+          wheelY = touchY - live.getBoundingClientRect().top;
+          const route = selectScrollRoute(paneModes, Math.floor(wheelX / cellWidth), Math.floor(wheelY / cellHeight));
+          if (tapInTerminal && followLive && !nativeSelectionActive && !hasTerminalSelection()) {
+            setWheelViewport(route === 'wheel' || (route === 'none' && wheelViewport));
+          }
+          wheelTop = root.scrollTop;
+          wheelGesture = wheelViewport && event.touches.length === 1 && tapInTerminal &&
+            !nativeSelectionActive && !hasTerminalSelection() &&
+            route === 'wheel';
           setInteraction(true);
         }, { capture: true, passive: true });
         document.addEventListener('touchmove', (event) => {
           const touch = event.touches[0];
+          if (event.touches.length !== 1) stopWheel();
+          if (wheelGesture && touch) {
+            wheelX = Math.max(0, Math.min(viewportWidth - 1, touch.clientX - live.getBoundingClientRect().left));
+            wheelY = Math.max(0, Math.min(viewportHeight - 1, touch.clientY - live.getBoundingClientRect().top));
+          }
           if (touch && (Math.abs(touch.clientX - touchX) > 4 || Math.abs(touch.clientY - touchY) > 4)) moved = true;
         }, { capture: true, passive: true });
         document.addEventListener('touchend', (event) => {
@@ -670,9 +900,11 @@ export function buildGhosttyTerminalHtml(
           touchRow = null;
           const touch = event.changedTouches && event.changedTouches[0];
           if (tapInTerminal && !moved && touch && !syncNativeSelectionState()) emitTap(touch.clientX, touch.clientY);
+          scheduleDraw();
           scheduleIdle();
         }, { capture: true, passive: true });
         document.addEventListener('touchcancel', () => {
+          stopWheel();
           touching = false;
           touchRow = null;
           moved = true;
@@ -703,6 +935,10 @@ export function buildGhosttyTerminalHtml(
 
         window.__zenRenderSnapshot = (nextSnapshot) => {
           renderSnapshot = nextSnapshot || renderSnapshot;
+          // The response has arrived. Release backpressure now: waiting for a
+          // separate acknowledgement RAF can miss this vsync's wheel callback
+          // and add another full frame to every round trip.
+          wheelAwaitingFrame = false;
           scheduleDraw();
         };
 
@@ -718,9 +954,14 @@ export function buildGhosttyTerminalHtml(
 
         window.__zenSetScrollContext = (sessionId, token, reason) => {
           const changed = sessionId !== scrollSessionId;
+          stopWheel();
           scrollSessionId = typeof sessionId === 'string' && sessionId ? sessionId : null;
           scrollToken = typeof token === 'string' && token ? token : null;
           if (changed) {
+            presentedHtml = '';
+            presentedAt = 0;
+            paneModes = [];
+            setWheelViewport(false);
             touching = false;
             interactionActive = false;
             pendingHistory = null;
@@ -736,6 +977,7 @@ export function buildGhosttyTerminalHtml(
         };
 
         window.__zenBlur = () => {
+          stopWheel();
           touching = false;
           clearSelection();
           settleScroll();
