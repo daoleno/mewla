@@ -1,9 +1,11 @@
 import React from "react";
+import { useRouter } from "expo-router";
 import { useCurrentServer } from "../store/currentServer";
 import { ResourcesView } from "../components/resources/ResourcesView";
 import { useResourceTelemetry } from "../components/resources/useResourceTelemetry";
 
 export default function ResourcesScreen() {
+  const router = useRouter();
   const { currentServer } = useCurrentServer();
   const { telemetry, loading, error, connected, retry } = useResourceTelemetry();
   return (
@@ -13,6 +15,8 @@ export default function ResourcesScreen() {
       error={error}
       connected={connected}
       hasServer={currentServer !== null}
+      serverName={currentServer?.name}
+      onOpenSettings={() => router.push("/settings")}
       onRetry={retry}
     />
   );

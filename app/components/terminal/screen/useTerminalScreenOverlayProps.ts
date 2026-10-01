@@ -1,5 +1,4 @@
 import { useCallback, useMemo } from "react";
-import type { SessionResourceSnapshot } from "../../../services/sessionResourceSnapshot";
 import type {
   ProviderError,
   ThreadRuntimeChoice,
@@ -15,11 +14,8 @@ import type { useTerminalSessionActions } from "./useTerminalSessionActions";
 import type { useTerminalNavigationActions } from "./useTerminalNavigationActions";
 
 interface UseTerminalScreenOverlayPropsInput {
-  resourceSheetVisible: boolean;
-  resourceSheetTitle: string;
-  resourceSheetLoading: boolean;
-  resourceSheetError?: string | null;
-  resourceSheetSnapshot?: SessionResourceSnapshot | null;
+  menuTitle: string;
+  onOpenResources(): void;
   routeSheetVisible: boolean;
   routeSheetLoading: boolean;
   routeSheetActivating: boolean;
@@ -43,8 +39,6 @@ interface UseTerminalScreenOverlayPropsInput {
   renamePlaceholder: string;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
-  onCloseResourceSheet(): void;
-  onRetryResourceSheet(): void;
   onCloseRouteSheet(): void;
   onRetryRouteSheet(): void;
   onActivateSessionModel(choice: ThreadRuntimeChoice): void;
@@ -62,11 +56,8 @@ interface UseTerminalScreenOverlayPropsInput {
 }
 
 export function useTerminalScreenOverlayProps({
-  resourceSheetVisible,
-  resourceSheetTitle,
-  resourceSheetLoading,
-  resourceSheetError,
-  resourceSheetSnapshot,
+  menuTitle,
+  onOpenResources,
   routeSheetVisible,
   routeSheetLoading,
   routeSheetActivating,
@@ -90,8 +81,6 @@ export function useTerminalScreenOverlayProps({
   renamePlaceholder,
   chrome,
   theme,
-  onCloseResourceSheet,
-  onRetryResourceSheet,
   onCloseRouteSheet,
   onRetryRouteSheet,
   onActivateSessionModel,
@@ -128,11 +117,8 @@ export function useTerminalScreenOverlayProps({
 
   return useMemo(
     () => ({
-      resourceSheetVisible,
-      resourceSheetTitle,
-      resourceSheetLoading,
-      resourceSheetError,
-      resourceSheetSnapshot,
+      menuTitle,
+      onOpenResources,
       routeSheetVisible,
       routeSheetLoading,
       routeSheetActivating,
@@ -156,8 +142,6 @@ export function useTerminalScreenOverlayProps({
       renamePlaceholder,
       chrome,
       theme,
-      onCloseResourceSheet,
-      onRetryResourceSheet,
       onCloseRouteSheet,
       onRetryRouteSheet,
       onActivateSessionModel,
@@ -178,6 +162,8 @@ export function useTerminalScreenOverlayProps({
     [
       workerCwd,
       chrome,
+      menuTitle,
+      onOpenResources,
       closeMenu,
       connectionConnected,
       creatingSession,
@@ -191,11 +177,9 @@ export function useTerminalScreenOverlayProps({
       navigationActions.handleTerminateWorker,
       newTerminalVisible,
       onActivateSessionModel,
-      onCloseResourceSheet,
       onCloseRouteSheet,
       onOpenModel,
       onOpenDSHWeb,
-      onRetryResourceSheet,
       onRetryRouteSheet,
       onToggleRenderMode,
       openNewTerminal,
@@ -203,11 +187,6 @@ export function useTerminalScreenOverlayProps({
       renameDraft,
       renamePlaceholder,
       renameVisible,
-      resourceSheetError,
-      resourceSheetLoading,
-      resourceSheetSnapshot,
-      resourceSheetTitle,
-      resourceSheetVisible,
       routeSheetActivating,
       routeSheetError,
       routeSheetRows,

@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkerServerSummary } from "../../store/workers";
 import { wsClient } from "../../services/websocket";
-import {
-  normalizeResourceTelemetry,
-  type ResourceTelemetry,
-} from "../../services/resourceTelemetry";
+import type { ResourceTelemetry } from "../../services/resourceTelemetry";
 
 // The daemon samples every five seconds; history carries the charts.
 const POLL_MS = 5000;
@@ -28,8 +25,8 @@ interface Snapshot {
 
 /**
  * Live machine telemetry for the current server. Polls only while the screen
- * is focused and the app is in the foreground; daemon broadcasts are accepted
- * in the same window. State is bound to one server and dropped on a switch.
+ * is focused and the app is in the foreground. State is bound to one server
+ * and dropped on a switch. Pending reads are cancelled when polling stops.
  */
 export function useResourceTelemetry(): ResourceTelemetryState {
   const { currentServer, isCurrentServer } = useCurrentServer();
@@ -41,8 +38,6 @@ export function useResourceTelemetry(): ResourceTelemetryState {
   const [inFlight, setInFlight] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
   const current = snapshot?.serverId === serverId ? snapshot : null;
-  const currentRef = useRef(current);
-  currentRef.current = current;
 
   useEffect(() => {
     setSnapshot((previous) => (previous && previous.serverId !== serverId ? null : previous));
@@ -67,6 +62,7 @@ export function useResourceTelemetry(): ResourceTelemetryState {
       let cancelled = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
       let foreground = AppState.currentState === "active";
+      let request: AbortController | null = null;
 
       const schedule = () => {
         if (cancelled || !foreground) return;
@@ -75,16 +71,18 @@ export function useResourceTelemetry(): ResourceTelemetryState {
 
       const poll = () => {
         timer = null;
-        if (cancelled || !foreground || !isCurrentServer(targetServerId)) return;
+        if (cancelled || !foreground || request || !isCurrentServer(targetServerId)) return;
+        const controller = new AbortController();
+        request = controller;
         setInFlight(true);
         wsClient
-          .getResourceTelemetry(targetServerId)
+          .getResourceTelemetry(targetServerId, controller.signal)
           .then((telemetry) => {
-            if (cancelled || !isCurrentServer(targetServerId)) return;
+            if (cancelled || controller.signal.aborted || !isCurrentServer(targetServerId)) return;
             accept(targetServerId, telemetry);
           })
           .catch((error: unknown) => {
-            if (cancelled || !isCurrentServer(targetServerId)) return;
+            if (cancelled || controller.signal.aborted || !isCurrentServer(targetServerId)) return;
             const message = error instanceof Error ? error.message : "Resource telemetry failed.";
             setSnapshot((previous) => {
               const base = previous?.serverId === targetServerId ? previous : null;
@@ -96,37 +94,34 @@ export function useResourceTelemetry(): ResourceTelemetryState {
             });
           })
           .finally(() => {
-            if (cancelled) return;
+            if (cancelled || request !== controller) return;
+            request = null;
             setInFlight(false);
             schedule();
           });
       };
 
-      const onBroadcast = (payload: any) => {
-        if (payload?.serverId !== targetServerId || payload.request_id) return;
-        const telemetry = normalizeResourceTelemetry(payload);
-        if (telemetry && isCurrentServer(targetServerId)) accept(targetServerId, telemetry);
+      const stop = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        request?.abort();
+        request = null;
+        setInFlight(false);
       };
 
       const appState = AppState.addEventListener("change", (next) => {
         const active = next === "active";
         if (active === foreground) return;
         foreground = active;
-        if (timer) {
-          clearTimeout(timer);
-          timer = null;
-        }
         if (active) poll();
+        else stop();
       });
 
-      wsClient.on("resource_telemetry", onBroadcast);
       if (foreground) poll();
       return () => {
         cancelled = true;
-        if (timer) clearTimeout(timer);
+        stop();
         appState.remove();
-        wsClient.off("resource_telemetry", onBroadcast);
-        setInFlight(false);
       };
     }, [accept, connected, isCurrentServer, retryToken, serverId]),
   );

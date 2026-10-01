@@ -10,7 +10,6 @@ import type { Worker, ConnectionState } from "../../../store/workers";
 import type { ConnectionIssue } from "../../../services/connectionIssue";
 import type { StoredInterfaceRenderMode } from "../../../services/storage";
 import type { PresentedWorker } from "../../../services/workerPresentation";
-import type { SessionResourceSnapshot } from "../../../services/sessionResourceSnapshot";
 import type {
   ProviderError,
   ThreadRuntimeChoice,
@@ -56,10 +55,6 @@ interface UseTerminalScreenLayoutPropsInput {
   renameDraft: string;
   renamePlaceholder: string;
   renameVisible: boolean;
-  resourceSheetVisible: boolean;
-  resourceSheetLoading: boolean;
-  resourceSheetError?: string | null;
-  resourceSheetSnapshot?: SessionResourceSnapshot | null;
   routeSheetVisible: boolean;
   routeSheetLoading: boolean;
   routeSheetActivating: boolean;
@@ -85,8 +80,6 @@ interface UseTerminalScreenLayoutPropsInput {
   openNewTerminal(): void;
   openRenameModal(): void;
   openSessionDetails(): void;
-  closeResourceSheet(): void;
-  retryResourceSheet(): void;
   openModel?: () => void;
   openDSHWeb?: () => void;
   modelActionAvailable?: boolean;
@@ -129,10 +122,6 @@ export function useTerminalScreenLayoutProps({
   renameDraft,
   renamePlaceholder,
   renameVisible,
-  resourceSheetVisible,
-  resourceSheetLoading,
-  resourceSheetError,
-  resourceSheetSnapshot,
   routeSheetVisible,
   routeSheetLoading,
   routeSheetActivating,
@@ -158,8 +147,6 @@ export function useTerminalScreenLayoutProps({
   openNewTerminal,
   openRenameModal,
   openSessionDetails,
-  closeResourceSheet,
-  retryResourceSheet,
   openModel,
   openDSHWeb,
   modelActionAvailable = false,
@@ -240,11 +227,8 @@ export function useTerminalScreenLayoutProps({
     onComposerModelControlPress,
   });
   const overlayProps = useTerminalScreenOverlayProps({
-    resourceSheetVisible,
-    resourceSheetTitle: headerTitle,
-    resourceSheetLoading,
-    resourceSheetError,
-    resourceSheetSnapshot,
+    menuTitle: headerTitle,
+    onOpenResources: openSessionDetails,
     routeSheetVisible,
     routeSheetLoading,
     routeSheetActivating,
@@ -269,8 +253,6 @@ export function useTerminalScreenLayoutProps({
     renamePlaceholder,
     chrome,
     theme: terminalTheme,
-    onCloseResourceSheet: closeResourceSheet,
-    onRetryResourceSheet: retryResourceSheet,
     onCloseRouteSheet: closeRouteSheet,
     onRetryRouteSheet: retryRouteSheet,
     onActivateSessionModel: activateSessionModel,

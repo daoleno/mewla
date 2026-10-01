@@ -5,7 +5,6 @@ import type {
   TerminalThemePalette,
 } from "../../../constants/terminalThemes";
 import { TypeScale } from "../../../constants/tokens";
-import type { SessionResourceSnapshot } from "../../../services/sessionResourceSnapshot";
 import type {
   ProviderError,
   ThreadRuntimeChoice,
@@ -14,7 +13,6 @@ import type { ProviderPickerModelRow } from "../../../services/providers/session
 import { SessionModelSheet } from "../../providers/SessionModelSheet";
 import { GitDiffSheet } from "../GitDiffSheet";
 import { NewTerminalSheet } from "../NewTerminalSheet";
-import { SessionResourceSheet } from "../SessionResourceSheet";
 import { TerminalActionPopover } from "../TerminalActionPopover";
 import { TerminalRenameModal } from "../TerminalRenameModal";
 
@@ -24,11 +22,8 @@ type NewTerminalSubmitInput = Parameters<
 >[0];
 
 export interface TerminalScreenOverlaysProps {
-  resourceSheetVisible: boolean;
-  resourceSheetTitle: string;
-  resourceSheetLoading: boolean;
-  resourceSheetError?: string | null;
-  resourceSheetSnapshot?: SessionResourceSnapshot | null;
+  menuTitle: string;
+  onOpenResources(): void;
   routeSheetVisible: boolean;
   routeSheetLoading: boolean;
   routeSheetActivating: boolean;
@@ -52,8 +47,6 @@ export interface TerminalScreenOverlaysProps {
   renamePlaceholder: string;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
-  onCloseResourceSheet(): void;
-  onRetryResourceSheet(): void;
   onCloseRouteSheet(): void;
   onRetryRouteSheet(): void;
   onActivateSessionModel(choice: ThreadRuntimeChoice): void;
@@ -73,11 +66,8 @@ export interface TerminalScreenOverlaysProps {
 }
 
 export function TerminalScreenOverlays({
-  resourceSheetVisible,
-  resourceSheetTitle,
-  resourceSheetLoading,
-  resourceSheetError,
-  resourceSheetSnapshot,
+  menuTitle,
+  onOpenResources,
   routeSheetVisible,
   routeSheetLoading,
   routeSheetActivating,
@@ -101,8 +91,6 @@ export function TerminalScreenOverlays({
   renamePlaceholder,
   chrome,
   theme,
-  onCloseResourceSheet,
-  onRetryResourceSheet,
   onCloseRouteSheet,
   onRetryRouteSheet,
   onActivateSessionModel,
@@ -147,17 +135,6 @@ export function TerminalScreenOverlays({
         </View>
       ) : null}
 
-      <SessionResourceSheet
-        visible={resourceSheetVisible}
-        sessionTitle={resourceSheetTitle}
-        loading={resourceSheetLoading}
-        error={resourceSheetError}
-        snapshot={resourceSheetSnapshot}
-        chrome={chrome}
-        onClose={onCloseResourceSheet}
-        onRetry={onRetryResourceSheet}
-      />
-
       <SessionModelSheet
         visible={routeSheetVisible}
         loading={routeSheetLoading}
@@ -174,7 +151,8 @@ export function TerminalScreenOverlays({
         visible={menuVisible}
         left={menuPosition.left}
         top={menuPosition.top}
-        title={resourceSheetTitle}
+        title={menuTitle}
+        onOpenResources={onOpenResources}
         creatingSession={creatingSession}
         newTerminalLabel={creatingSession ? "Starting Terminal…" : "New Terminal"}
         newTerminalDisabled={newTerminalDisabled}

@@ -41,7 +41,7 @@ export interface ResourceConsumer {
   cwd?: string;
   ageSeconds?: number;
   rssBytes: number;
-  cpuPercent: number;
+  cpuPercent?: number;
   processCount: number;
   kinds: string[];
 }
@@ -178,7 +178,7 @@ function normalizeConsumer(value: unknown): ResourceConsumer | null {
     cwd: str(source.cwd),
     ageSeconds: nonNegative(source.age_seconds),
     rssBytes: nonNegative(source.rss_bytes) ?? 0,
-    cpuPercent: nonNegative(source.cpu_percent) ?? 0,
+    cpuPercent: nonNegative(source.cpu_percent),
     processCount: nonNegative(source.process_count) ?? 0,
     kinds,
   };
@@ -456,7 +456,7 @@ export interface ConsumerGroup {
   title: string;
   hint?: string;
   rssBytes: number;
-  cpuPercent: number;
+  cpuPercent?: number;
   consumers: ResourceConsumer[];
 }
 
@@ -489,7 +489,9 @@ export function groupConsumers(consumers: readonly ResourceConsumer[]): Consumer
       hint: group.hint,
       consumers: members,
       rssBytes: members.reduce((sum, consumer) => sum + consumer.rssBytes, 0),
-      cpuPercent: members.reduce((sum, consumer) => sum + consumer.cpuPercent, 0),
+      cpuPercent: members.every((consumer) => consumer.cpuPercent !== undefined)
+        ? members.reduce((sum, consumer) => sum + consumer.cpuPercent!, 0)
+        : undefined,
     };
   }).filter((group) => group.consumers.length > 0);
 }
@@ -627,7 +629,8 @@ export function chartWindow(telemetry: ResourceTelemetry): { start: number; end:
 }
 
 /** Consumer CPU is per-core (100% = one core); people read cores. */
-export function formatCores(cpuPercent: number): string {
+export function formatCores(cpuPercent: number | undefined): string {
+  if (cpuPercent === undefined) return "—";
   const cores = cpuPercent / 100;
   if (cores < 0.05) return "idle";
   return `${cores < 10 ? cores.toFixed(1).replace(/\.0$/, "") : Math.round(cores)} ${cores >= 0.95 && cores < 1.05 ? "core" : "cores"}`;

@@ -220,3 +220,29 @@ contains transcript bodies. A summary younger than five minutes can serve a
 quick restart; normal periodic collection resumes afterwards. Telegram polling
 preserves its durable state file when no facts change, and Brain presentation
 reuses provider readers for unchanged transcript sources.
+
+## App entry and refresh behavior
+
+Open **Resources** from the primary drawer, or from a terminal's action menu
+or title. All entries push the same `/resources` screen; Back returns to the
+originating screen. The view always uses the canonical current server and
+shows its name above the latest machine snapshot. It does not select a server
+from a terminal's route or merge measurements across servers.
+
+The screen requests `get_resource_telemetry` immediately when focused and
+connected, then five seconds after each completed read. Requests use the
+existing authenticated WebSocket and match both server identity and
+`request_id`; there is no separate connection, HTTP fallback or demo data.
+A read times out after ten seconds. Blur, background, server switch and
+unmount stop polling and cancel local pending listeners. Returning to the
+foreground or reconnecting starts a fresh read. A server switch clears the
+previous server's snapshot and history before displaying any new data.
+
+Without a server the view links to Settings; connecting and initial loading
+have explicit progress states. The first-sample-unavailable error and other
+request errors expose Retry and continue bounded polling. After a successful
+sample, disconnect or refresh failure keeps the last snapshot with a visible
+status notice and a **Last sample** label instead of **Live**. Omitted first
+interval consumer CPU is unavailable (`—`), while measured zero is `idle`.
+The terminal menu retains its session title; the old per-session resource
+sheet is no longer mounted by the terminal screen.

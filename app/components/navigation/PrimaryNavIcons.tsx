@@ -97,6 +97,28 @@ export function NavStatsIcon({ color, size }: PrimaryNavIconProps) {
   );
 }
 
+/** Outline gauge with a soft pulse line for machine Resources. */
+export function NavResourcesIcon({ color, size }: PrimaryNavIconProps) {
+  const dim = iconSize(size);
+  return (
+    <Svg width={dim} height={dim} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4.75 6.75a2 2 0 0 1 2-2h10.5a2 2 0 0 1 2 2v10.5a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2z"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 13h1.75l1.5-3.5 2 6 1.5-2.5H16"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Three stacked cards for the Skills catalog and inventory. */
 export function NavSkillsIcon({ color, size }: PrimaryNavIconProps) {
   const dim = iconSize(size);

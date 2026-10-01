@@ -24,7 +24,7 @@ interface SectionProps {
   styles: ResourceStyles;
 }
 
-export function PressureHeadline({ telemetry, styles, now }: SectionProps & { now: number }) {
+export function PressureHeadline({ telemetry, styles, now, statusLabel }: SectionProps & { now: number; statusLabel?: string }) {
   const { colors, theme } = useAppTheme();
   const copy = PRESSURE_COPY[telemetry.state];
   const ink = telemetry.state === "normal" ? colors.accentStrong : pressureInk(telemetry.state, colors);
@@ -48,7 +48,7 @@ export function PressureHeadline({ telemetry, styles, now }: SectionProps & { no
             {telemetry.state === "normal" ? "Normal" : telemetry.state === "elevated" ? "Elevated" : "Critical"}
           </Text>
         </View>
-        <Text style={styles.micro}>{sampledAgoLabel(telemetry.sampledAt, now)}</Text>
+        <Text style={styles.micro}>{statusLabel ?? sampledAgoLabel(telemetry.sampledAt, now)}</Text>
       </View>
       <Text style={[styles.sectionValue, { fontSize: 24, lineHeight: 32 }]} accessibilityRole="header">
         {copy.title}

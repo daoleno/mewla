@@ -1575,3 +1575,75 @@ describe("Telegram current-daemon connection boundary", () => {
     client.disconnectAll();
   });
 });
+
+describe("resource telemetry live boundary", () => {
+  test("correlates the flat daemon contract with the authenticated owning socket", async () => {
+    const client = new MultiServerWebSocketClient();
+    const socket = await connectClient(client);
+    const other = await connectClient(client, secondServer);
+    socket.open(); other.open();
+    const pending = client.getResourceTelemetry(server.id);
+    const request = JSON.parse(socket.sent.at(-1)!);
+    expect(request.type).toBe("get_resource_telemetry");
+    const payload = { type: "resource_telemetry", request_id: request.request_id, version: 2,
+      sampled_at: "2026-10-01T06:00:00Z", state: "elevated",
+      cpu: { utilization_percent: 0 }, memory: { available_bytes: 42 },
+      history: [{ sampled_at: "2026-10-01T06:00:00Z", cpu_percent: 0 }] };
+    other.receive(payload);
+    socket.receive({ ...payload, request_id: "unrelated" });
+    expect(registeredHandlerCount(client)).toBe(3);
+    socket.receive(payload);
+    const result = await pending;
+    expect(result.cpu.utilizationPercent).toBe(0);
+    expect(result.memory.availableBytes).toBe(42);
+    expect(result.memory.totalBytes).toBeUndefined();
+    expect(result.history[0].cpuPercent).toBe(0);
+    expect(registeredHandlerCount(client)).toBe(0);
+    client.disconnectAll();
+  });
+
+  test("first sample errors, invalid replies, disconnect and cancellation release listeners", async () => {
+    const client = new MultiServerWebSocketClient();
+    const socket = await connectClient(client);
+    socket.open();
+    const first = client.getResourceTelemetry(server.id);
+    socket.receive({ type: "error", request_id: JSON.parse(socket.sent.at(-1)!).request_id,
+      code: "resource_telemetry_unavailable", message: "The first resource sample is not available yet" });
+    await expect(first).rejects.toThrow("first resource sample");
+    expect(registeredHandlerCount(client)).toBe(0);
+    const invalid = client.getResourceTelemetry(server.id);
+    socket.receive({ type: "resource_telemetry", request_id: JSON.parse(socket.sent.at(-1)!).request_id });
+    await expect(invalid).rejects.toThrow("Invalid resource telemetry");
+    const controller = new AbortController();
+    const aborted = client.getResourceTelemetry(server.id, controller.signal);
+    controller.abort();
+    await expect(aborted).rejects.toThrow("cancelled");
+    expect(registeredHandlerCount(client)).toBe(0);
+    const sentCount = socket.sent.length;
+    await expect(client.getResourceTelemetry(server.id, controller.signal)).rejects.toThrow("cancelled");
+    expect(socket.sent).toHaveLength(sentCount);
+    const disconnected = client.getResourceTelemetry(server.id);
+    client.disconnectAll();
+    await expect(disconnected).rejects.toThrow("not connected");
+    expect(registeredHandlerCount(client)).toBe(0);
+    await expect(client.getResourceTelemetry(server.id)).rejects.toThrow("not connected");
+    expect(registeredHandlerCount(client)).toBe(0);
+  });
+
+  test("a timed out resource request releases all handlers", async () => {
+    const client = new MultiServerWebSocketClient();
+    const socket = await connectClient(client);
+    socket.open();
+    let timeout!: () => void;
+    const timer = spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void) => {
+      timeout = fn;
+      return 1;
+    }) as typeof setTimeout);
+    const pending = client.getResourceTelemetry(server.id);
+    timer.mockRestore();
+    timeout();
+    await expect(pending).rejects.toThrow("timed out");
+    expect(registeredHandlerCount(client)).toBe(0);
+    client.disconnectAll();
+  });
+});
