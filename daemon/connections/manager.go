@@ -21,15 +21,18 @@ import (
 type record struct {
 	Account Account           `json:"account"`
 	Spec    json.RawMessage   `json:"spec,omitempty"`
+	OAuth   *oauthAccount     `json:"oauth,omitempty"`
 	Grants  map[string]string `json:"grants"` // grant is bound to the full discovered tool definition
 }
 
 type Manager struct {
-	mu      sync.Mutex // mutations and invocation are linearized; revoke waits for an in-flight call
-	path    string
-	vault   modelprofiles.CredentialStore
-	records map[string]*record
-	http    *http.Client
+	mu           sync.Mutex // mutations and invocation are linearized; revoke waits for an in-flight call
+	path         string
+	vault        modelprofiles.CredentialStore
+	records      map[string]*record
+	http         *http.Client
+	networkOwned bool
+	pending      map[string]*oauthFlow
 }
 
 func New(dir string) (*Manager, error) {
@@ -37,10 +40,14 @@ func New(dir string) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newManager(filepath.Join(dir, "integrations.json"), vault, newHTTPClient())
+	m, err := newManager(filepath.Join(dir, "integrations.json"), vault, newHTTPClient())
+	if m != nil {
+		m.networkOwned = true
+	}
+	return m, err
 }
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
-	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}}
+	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}}
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -127,7 +134,11 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 			accounts = append(accounts, a)
 		}
 		sort.Slice(accounts, func(i, j int) bool { return accounts[i].Name < accounts[j].Name })
-		return Response{Catalog: Catalog(), Accounts: accounts}, nil
+		return Response{Catalog: Catalog(), Accounts: accounts, OAuthConfigured: m.oauthConfigured()}, nil
+	case "oauth_configure":
+		return m.configureOAuth(q.Input)
+	case "oauth_start":
+		return m.startOAuth(ctx, q.Input)
 	case "add":
 		return m.add(ctx, q.Input)
 	case "search":
@@ -190,6 +201,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		// failure can never restore execution on the next startup.
 		r.Account.Enabled = false
 		r.Account.Status = "disconnected"
+		r.Account.CredentialRemovalPending = true
 		r.Grants = map[string]string{}
 	case "policy":
 		found := false
@@ -213,9 +225,9 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if r.Account.Status == "disconnected" {
 			return Response{}, errors.New("connect this account again")
 		}
-		secret, _, err := m.vault.Get("integration:" + q.ID)
+		secret, err := m.accountToken(ctx, r)
 		if err != nil {
-			return Response{}, errors.New("credential store unavailable")
+			return Response{}, err
 		}
 		err = m.discover(ctx, r, secret)
 		if err != nil {
@@ -232,8 +244,17 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return Response{}, err
 	}
 	if q.Action == "disconnect" {
+		if r.OAuth != nil {
+			if err := m.revokeOAuth(ctx, r); err != nil {
+				return Response{}, err
+			}
+		}
 		if err := m.vault.Delete("integration:" + q.ID); err != nil {
 			return Response{}, errors.New("account disconnected; stored credential removal failed, retry disconnect")
+		}
+		r.Account.CredentialRemovalPending = false
+		if err := m.save(); err != nil {
+			return Response{}, err
 		}
 	}
 	a := m.projection(r)
@@ -269,6 +290,8 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 	}
 	endpoint := in.Endpoint
 	switch in.Integration {
+	case "google":
+		return Response{}, errors.New("Google uses browser authorization; start OAuth for this account")
 	case "github":
 		endpoint = "https://api.github.com"
 	case "notion":
@@ -279,15 +302,18 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 		endpoint = "https://mcp.linear.app/mcp"
 	case "mcp", "openapi":
 	default:
-		return Response{}, errors.New("this plugin needs OAuth setup and is not available yet")
+		return Response{}, errors.New("unknown plugin")
 	}
-	if _, err := endpointURL(endpoint); err != nil {
+	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" && in.Integration != "openapi" {
+		return Response{}, errors.New("internal network trust is only supported for custom plugins")
+	}
+	if _, err := trustedEndpointURL(endpoint, in.TrustedNetworks); err != nil {
 		return Response{}, err
 	}
 	if (in.Integration == "github" || in.Integration == "notion" || in.Integration == "slack" || in.Integration == "linear") && strings.TrimSpace(in.Credential) == "" {
 		return Response{}, errors.New("connect an authorized account first")
 	}
-	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: name, Endpoint: endpoint, Enabled: true, History: []Event{}}, Spec: in.Spec, Grants: map[string]string{}}
+	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: name, Endpoint: endpoint, TrustedNetworks: append([]string(nil), in.TrustedNetworks...), Enabled: true, History: []Event{}}, Spec: in.Spec, Grants: map[string]string{}}
 	if err := m.discover(ctx, r, in.Credential); err != nil {
 		return Response{}, err
 	}
@@ -366,18 +392,23 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 	if err = resolved.Validate(args); err != nil {
 		return Response{}, errors.New("arguments do not match the tool schema; describe the tool first")
 	}
-	secret, ok, err := m.vault.Get("integration:" + r.Account.ID)
+	secret, err := m.accountToken(ctx, r)
+	ok := secret != ""
 	if err != nil {
-		return Response{}, errors.New("credential store unavailable")
+		return Response{}, err
 	}
 	if !ok && (r.Account.Integration == "github" || r.Account.Integration == "notion" || r.Account.Integration == "slack" || r.Account.Integration == "linear") {
 		return Response{}, errAuth
 	}
 	var result []byte
-	if r.Account.Integration == "mcp" || r.Account.Integration == "linear" {
+	if r.Account.Integration == "mcp" || r.Account.Integration == "linear" || r.Account.AuthMethod == "mcp_oauth" {
 		result, err = m.invokeMCP(ctx, r, secret, *t, args)
 	} else {
-		result, err = m.invokeHTTP(ctx, r, secret, *t, args)
+		if r.Account.Integration == "google" {
+			result, err = m.invokeGoogle(ctx, r, secret, *t, args)
+		} else {
+			result, err = m.invokeHTTP(ctx, r, secret, *t, args)
+		}
 	}
 	if ctx.Err() != nil {
 		err = safeError(ctx.Err())
@@ -388,11 +419,16 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 	if err == nil && len(result) > MaxResultBytes {
 		err = errors.New("integration result exceeds 1 MiB")
 	}
-	if err == nil && secret != "" {
-		result = bytes.ReplaceAll(result, []byte(secret), []byte("[REDACTED]"))
-		escaped, _ := json.Marshal(secret)
-		if len(escaped) > 2 {
-			result = bytes.ReplaceAll(result, escaped[1:len(escaped)-1], []byte("[REDACTED]"))
+	if err == nil {
+		for _, value := range m.sensitiveValues(r, secret) {
+			if value == "" {
+				continue
+			}
+			result = bytes.ReplaceAll(result, []byte(value), []byte("[REDACTED]"))
+			escaped, _ := json.Marshal(value)
+			if len(escaped) > 2 {
+				result = bytes.ReplaceAll(result, escaped[1:len(escaped)-1], []byte("[REDACTED]"))
+			}
 		}
 	}
 	if errors.Is(err, errAuth) {

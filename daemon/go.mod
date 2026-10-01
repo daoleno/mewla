@@ -19,6 +19,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/image v0.31.0
+	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sys v0.40.0
 	golang.org/x/term v0.13.0
 	gopkg.in/ini.v1 v1.67.0
@@ -38,6 +39,5 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )

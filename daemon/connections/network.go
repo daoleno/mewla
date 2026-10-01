@@ -16,6 +16,63 @@ import (
 
 var errAuth = errors.New("authorization expired or revoked; reconnect this account")
 
+func trustedIP(ip net.IP, networks []string) bool {
+	a, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return false
+	}
+	for _, raw := range networks {
+		p, err := netip.ParsePrefix(raw)
+		if err == nil && p.Contains(a.Unmap()) {
+			return true
+		}
+	}
+	return false
+}
+
+func trustedEndpointURL(raw string, networks []string) (*url.URL, error) {
+	if len(networks) > 8 {
+		return nil, errors.New("choose at most eight internal network ranges")
+	}
+	for _, raw := range networks {
+		p, err := netip.ParsePrefix(raw)
+		valid := false
+		if err == nil {
+			for _, block := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "100.64.0.0/10", "fc00::/7", "::1/128"} {
+				b := netip.MustParsePrefix(block)
+				if p.Bits() >= b.Bits() && b.Contains(p.Addr()) {
+					valid = true
+				}
+			}
+		}
+		if !valid {
+			return nil, errors.New("trusted ranges must be explicit private, loopback or Tailscale CIDRs")
+		}
+	}
+	u, err := url.Parse(raw)
+	if err == nil && u.Scheme == "http" && trustedIP(net.ParseIP(u.Hostname()), networks) && u.User == nil && u.RawQuery == "" && u.Fragment == "" {
+		// Plain HTTP is allowed only for an explicitly trusted literal internal IP.
+		// Hostnames still require HTTPS and normal certificate validation.
+		return u, nil
+	}
+	return endpointURL(raw)
+}
+
+func (m *Manager) clientFor(r *record) *http.Client {
+	if !m.networkOwned {
+		return m.http
+	} // explicit test transport; production always uses checked dialing
+	u, _ := url.Parse(r.Account.Endpoint)
+	port := u.Port()
+	if port == "" {
+		port = "443"
+		if u.Scheme == "http" {
+			port = "80"
+		}
+	}
+	return newHTTPClientFor(net.JoinHostPort(u.Hostname(), port), r.Account.TrustedNetworks)
+}
+
 func endpointURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -43,8 +100,10 @@ func publicIP(ip net.IP) bool {
 
 // Resolve and dial the checked IP together, preventing DNS rebinding. Custom
 // sources never get access to host-local services or ambient proxy credentials.
-func newHTTPClient() *http.Client {
-	transport := &http.Transport{TLSHandshakeTimeout: 8 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
+func newHTTPClient() *http.Client { return newHTTPClientFor("", nil) }
+
+func newHTTPClientFor(origin string, networks []string) *http.Client {
+	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 8 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {
@@ -55,7 +114,7 @@ func newHTTPClient() *http.Client {
 			return nil, errors.New("endpoint DNS failed")
 		}
 		for _, ip := range ips {
-			if !publicIP(ip.IP) {
+			if !publicIP(ip.IP) && !(address == origin && trustedIP(ip.IP, networks)) {
 				return nil, errors.New("private network endpoints are not supported")
 			}
 		}
@@ -123,8 +182,8 @@ func safeError(err error) error {
 	return err
 }
 
-func (m *Manager) request(ctx context.Context, endpoint, secret, method, path string, body io.Reader, capture ...*http.Header) ([]byte, error) {
-	u, err := endpointURL(endpoint)
+func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, method, path string, body io.Reader, capture ...*http.Header) ([]byte, error) {
+	u, err := trustedEndpointURL(endpoint, r.Account.TrustedNetworks)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +207,7 @@ func (m *Manager) request(ctx context.Context, endpoint, secret, method, path st
 	if u.Hostname() == "api.github.com" {
 		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	}
-	resp, err := m.http.Do(req)
+	resp, err := m.clientFor(r).Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, safeError(ctx.Err())

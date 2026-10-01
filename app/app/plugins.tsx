@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
+import { Alert, AppState, Linking, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
 import { Stack } from "expo-router";
 import { useCurrentServer } from "../store/currentServer";
 import { useAppColors } from "../constants/tokens";
@@ -25,8 +25,21 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
   const [credential, setCredential] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [spec, setSpec] = useState("");
+  const [oauthConfigured, setOauthConfigured] = useState<string[]>([]);
+  const [tokenMode, setTokenMode] = useState(false);
+  const [allowWrites, setAllowWrites] = useState(false);
+  const [trustInternal, setTrustInternal] = useState(false);
+  const [networks, setNetworks] = useState("");
+  const [configuring, setConfiguring] = useState(false);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [callbackUrl, setCallbackUrl] = useState("");
+  const oauthSupported = !!selected && ["google", "notion", "linear", "mcp"].includes(selected.id);
+  const browserAuth = oauthSupported && !tokenMode;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const accountIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => { accountIdRef.current = account?.id; }, [account?.id]);
   const alive = useRef(true);
   const pending = useRef(false);
   const valid = useCallback(() => alive.current && !!serverId && isCurrentServer(serverId), [serverId, isCurrentServer]);
@@ -38,6 +51,7 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
     try {
       const response = await wsClient.requestConnections(serverId, input);
       if (!valid()) return;
+      if (response.oauth_configured) setOauthConfigured(response.oauth_configured);
       if (response.catalog) setCatalog(response.catalog);
       if (input.action === "list") setAccounts(response.accounts ?? []);
       if (response.account) {
@@ -53,14 +67,35 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
     }
   }, [serverId, valid]);
 
+  const reload = useCallback(async () => {
+    const response = await request({ action: "list" });
+    const id = accountIdRef.current;
+    if (response && id && valid()) await request({ action: "get", id });
+  }, [request, valid]);
   useEffect(() => {
-    void request({ action: "list" });
-    const onConnected = (event: { serverId: string }) => { if (event.serverId === serverId) void request({ action: "list" }); };
+    void reload();
+    const onConnected = (event: { serverId: string }) => { if (event.serverId === serverId) void reload(); };
     wsClient.on("connected", onConnected);
     return () => wsClient.off("connected", onConnected);
-  }, [request, serverId]);
+  }, [reload, serverId]);
 
-  const clearForm = () => { setAdding(false); setCredential(""); setName(""); setEndpoint(""); setSpec(""); };
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && valid()) void reload();
+    });
+    return () => subscription.remove();
+  }, [reload, valid]);
+  const clearForm = () => {
+    setAdding(false); setCredential(""); setName(""); setEndpoint(""); setSpec("");
+    setTokenMode(false); setAllowWrites(false); setTrustInternal(false); setNetworks("");
+    setConfiguring(false); setClientId(""); setClientSecret(""); setCallbackUrl("");
+  };
+  const saveOAuthConfig = async () => {
+    if (!selected) return;
+    const secret = clientSecret; setClientSecret("");
+    const response = await request({ action: "oauth_configure", input: { integration: selected.id, name: "", oauth_client: { client_id: clientId.trim(), client_secret: secret, redirect_url: callbackUrl.trim(), resource_url: selected.id === "mcp" ? endpoint.trim() : undefined }, trusted_networks: trustInternal ? networks.split(",").map((value) => value.trim()).filter(Boolean) : undefined } });
+    if (response && valid()) setConfiguring(false);
+  };
   const connect = async () => {
     if (!selected) return;
     let document: unknown;
@@ -68,8 +103,14 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
       try { document = JSON.parse(spec); } catch { setError("Enter a valid OpenAPI JSON document."); return; }
     }
     const secret = credential; setCredential("");
-    const response = await request({ action: "add", input: { integration: selected.id, name: name.trim(), credential: secret, endpoint: endpoint.trim(), spec: document } });
-    if (response && valid()) clearForm();
+    const response = await request({ action: browserAuth ? "oauth_start" : "add", input: { integration: selected.id, name: name.trim(), credential: secret, endpoint: endpoint.trim(), spec: document, allow_writes: allowWrites, trusted_networks: trustInternal ? networks.split(",").map((value) => value.trim()).filter(Boolean) : undefined } });
+    if (response && valid()) {
+      clearForm();
+      if (response.authorization_url) {
+        try { await Linking.openURL(response.authorization_url); }
+        catch { if (valid()) setError("Could not open the system browser. Connect again to retry."); }
+      }
+    }
   };
   const changePolicy = (tool: string, allowed: boolean) => {
     if (!account) return;
@@ -99,7 +140,7 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
           {!accounts.some((item) => item.status !== "disconnected") ? <ListRow title={busy ? "Loading plugins…" : "No accounts connected"} subtitle="Add a plugin to give Brain access to an external service." /> : null}
         </ListSection>
         <ListSection title="Add plugin" footer="Connect an account once. Use its tools from Brain and delegated Workers.">
-          {catalog.map((plugin) => <ListRow key={plugin.id} title={plugin.name} subtitle={plugin.description} value={plugin.available ? undefined : "Setup required"} accessory="chevron" onPress={() => { setSelected(plugin); setAccount(null); }} />)}
+          {catalog.map((plugin) => <ListRow key={plugin.id} title={plugin.name} subtitle={plugin.description} value={plugin.id === "google" && !oauthConfigured.includes("google") ? "Set up authorization" : plugin.available ? undefined : "Setup required"} accessory="chevron" onPress={() => { setSelected(plugin); setAccount(null); }} />)}
         </ListSection>
         <Button label="Refresh" variant="plain" loading={busy} onPress={() => void request({ action: "list" })} />
       </> : null}
@@ -112,16 +153,31 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
         </ListSection> : !adding ? <Button label="Connect account" icon="add" disabled={busy} onPress={() => { setAdding(true); setAccount(null); setName(selected.name); }} /> : <View style={styles.form}>
           <TextInput accessibilityLabel="Account name" placeholder="Account name" placeholderTextColor={colors.textTertiary} value={name} onChangeText={setName} maxLength={80} style={inputStyle} />
           {selected.id === "mcp" || selected.id === "openapi" ? <TextInput accessibilityLabel="Endpoint" placeholder="https://service.example.com/api" placeholderTextColor={colors.textTertiary} autoCapitalize="none" autoCorrect={false} value={endpoint} onChangeText={setEndpoint} style={inputStyle} /> : null}
-          <TextInput accessibilityLabel="Account token" placeholder={selected.id === "github" || selected.id === "notion" || selected.id === "slack" || selected.id === "linear" ? "Account token" : "Account token (optional)"} placeholderTextColor={colors.textTertiary} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" value={credential} onChangeText={setCredential} style={inputStyle} />
+          {!browserAuth ? <TextInput accessibilityLabel="Account token" placeholder={selected.id === "github" || selected.id === "notion" || selected.id === "slack" || selected.id === "linear" ? "Account token" : "Account token (optional)"} placeholderTextColor={colors.textTertiary} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" value={credential} onChangeText={setCredential} style={inputStyle} /> : null}
           {selected.id === "openapi" ? <TextInput accessibilityLabel="OpenAPI document" placeholder="OpenAPI 3.0 JSON document" placeholderTextColor={colors.textTertiary} multiline value={spec} onChangeText={setSpec} style={[inputStyle, { minHeight: 140, textAlignVertical: "top" }]} /> : null}
+          {oauthSupported ? <>
+            {browserAuth ? <ListRow title="Allow updates" subtitle="Request write access. Each write tool still starts disabled." trailing={<Switch accessibilityLabel="Request write access" value={allowWrites} onValueChange={setAllowWrites} />} /> : null}
+            {selected.id !== "google" ? <Button label={tokenMode ? "Use browser authorization" : "Use token or public endpoint"} variant="plain" onPress={() => { setTokenMode((value) => !value); setCredential(""); }} /> : null}
+            {browserAuth && (!oauthConfigured.includes(selected.id) || configuring) ? <ListSection title="Server authorization setup" footer={selected.id === "google" ? "Use your Google web application OAuth client. Register this server’s HTTPS callback in Google Cloud." : "Set this server’s HTTPS callback once. Providers supporting dynamic registration do not need a client ID."}>
+              <TextInput accessibilityLabel="OAuth callback URL" placeholder="https://your-server/plugins/oauth/callback" placeholderTextColor={colors.textTertiary} autoCapitalize="none" autoCorrect={false} value={callbackUrl} onChangeText={setCallbackUrl} style={inputStyle} />
+              <TextInput accessibilityLabel="OAuth client ID" placeholder={selected.id === "google" ? "Client ID" : "Client ID (if registered)"} placeholderTextColor={colors.textTertiary} autoCapitalize="none" autoCorrect={false} value={clientId} onChangeText={setClientId} style={inputStyle} />
+              <TextInput accessibilityLabel="OAuth client secret" placeholder="Client secret (if required)" placeholderTextColor={colors.textTertiary} secureTextEntry autoCapitalize="none" autoCorrect={false} value={clientSecret} onChangeText={setClientSecret} style={inputStyle} />
+              <Button label="Save authorization setup" loading={busy} disabled={!callbackUrl.trim()} onPress={() => void saveOAuthConfig()} />
+            </ListSection> : browserAuth ? <Button label="Edit authorization setup" variant="plain" onPress={() => setConfiguring(true)} /> : null}
+          </> : null}
+          {selected.id === "mcp" || selected.id === "openapi" ? <>
+            <ListRow title="Trust an internal endpoint" subtitle="Allow this account to reach specified LAN, loopback or Tailscale addresses." trailing={<Switch accessibilityLabel="Trust internal endpoint" value={trustInternal} onValueChange={setTrustInternal} />} />
+            {trustInternal ? <TextInput accessibilityLabel="Trusted internal ranges" placeholder="192.168.1.10/32, 100.64.1.2/32" placeholderTextColor={colors.textTertiary} autoCapitalize="none" autoCorrect={false} value={networks} onChangeText={setNetworks} style={inputStyle} /> : null}
+          </> : null}
           <AppText variant="caption" tone="secondary">Credentials stay on this server. {selected.id === "notion" ? "Share the pages you want this account to access in Notion." : "Only enabled tools are available to agents."}</AppText>
-          <Button label="Connect account" loading={busy} disabled={!name.trim()} onPress={() => void connect()} />
+          <Button label={browserAuth ? "Continue in browser" : "Connect account"} loading={busy} disabled={!name.trim() || (browserAuth && !oauthConfigured.includes(selected.id)) || (trustInternal && !networks.trim())} onPress={() => void connect()} />
           <Button label="Account setup" variant="plain" onPress={() => void Linking.openURL(selected.setup_url)} />
           <Button label="Cancel" variant="plain" disabled={busy} onPress={clearForm} />
         </View>}
         {account ? <>
           <ListSection title={account.name} footer={account.verified_at ? `Last verified ${new Date(account.verified_at).toLocaleString()}` : "Authorization has not been verified."}>
             <ListRow title={account.identity} value={accountStatus(account)} numberOfLines={2} />
+            {account.trusted_networks?.length ? <ListRow title="Trusted internal ranges" subtitle={account.trusted_networks.join(", ")} /> : null}
             <ListRow title="Enabled" trailing={<Switch accessibilityLabel="Enable account" value={account.enabled} disabled={busy || account.status === "disconnected"} onValueChange={(enabled) => void request({ action: enabled ? "enable" : "disable", id: account.id })} />} />
             <ListRow title="Refresh tools and status" icon="refresh-outline" disabled={busy || account.status === "disconnected"} onPress={() => void request({ action: "refresh", id: account.id })} />
           </ListSection>
@@ -134,7 +190,7 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
           <ListSection title="Recent calls">
             {(account.history ?? []).length ? account.history.map((event, index) => <ListRow key={`${event.at}_${index}`} title={event.tool} subtitle={event.message || new Date(event.at).toLocaleString()} value={event.status === "success" ? "Success" : "Error"} numberOfLines={3} />) : <ListRow title="No calls yet" subtitle="Results appear here after a tool is used." />}
           </ListSection>
-          <Button label="Disconnect account" variant="destructive" disabled={busy || account.status === "disconnected"} onPress={() => Alert.alert("Disconnect account?", "This removes its stored credential and stops future calls from Brain and Workers.", [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => { if (valid()) void request({ action: "disconnect", id: account.id }); } }])} />
+          {account.status !== "disconnected" || account.credential_removal_pending ? <Button label={account.credential_removal_pending ? "Retry credential removal" : "Disconnect account"} variant="destructive" disabled={busy} onPress={() => Alert.alert("Disconnect account?", "This stops future calls, revokes OAuth access where supported, and removes the stored credential.", [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => { if (valid()) void request({ action: "disconnect", id: account.id }); } }])} /> : null}
         </> : null}
       </> : null}
     </ScrollView>

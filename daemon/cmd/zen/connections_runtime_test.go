@@ -48,6 +48,34 @@ func TestPluginsOwnedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Real loopback API for exercising an explicitly trusted custom account
+	// through the production dialer, control socket and native client.
+	localAPI := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/items/42" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 42, "source": "owned local adapter", "read_only": true})
+	}))
+	localAPI.Listener.Close()
+	address := "127.0.0.1:0"
+	if previous, err := os.ReadFile(filepath.Join(root, "local-api-endpoint")); err == nil {
+		if u, err := url.Parse(string(previous)); err == nil && u.Hostname() == "127.0.0.1" {
+			address = u.Host
+		}
+	}
+	localAPI.Listener, err = net.Listen("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localAPI.Start()
+	defer localAPI.Close()
+	browser := newPluginsBrowserFixture(t, m, root)
+	defer browser.Close()
+	if err := os.WriteFile(filepath.Join(root, "local-api-endpoint"), []byte(localAPI.URL), 0600); err != nil {
+		t.Fatal(err)
+	}
 	a, err := auth.NewManager(root)
 	if err != nil {
 		t.Fatal(err)
