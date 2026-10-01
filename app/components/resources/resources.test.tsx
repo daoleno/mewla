@@ -50,6 +50,7 @@ if (!process.env.ZEN_RESOURCE_TEST_CHILD) {
   mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
   mock.module("../../constants/tokens", () => ({ useAppTheme: () => ({ colors: {} }) }));
   mock.module("./resourceStyles", () => ({ createResourceStyles: () => ({}), RESOURCES_CONTENT_MAX_WIDTH: 800 }));
+  mock.module("../ui/AnimatedPressable", () => ({ AnimatedPressable: "Pressable" }));
   mock.module("../ui/EmptyState", () => ({ EmptyState: "EmptyState" }));
   mock.module("../ui/ActionMenu", () => ({ ActionMenu: "ActionMenu" }));
   mock.module("./ResourceOverviewSections", () => ({ PressureHeadline: "PressureHeadline", CpuSection: "CPU", MemorySection: "Memory" }));

@@ -31,7 +31,18 @@ export type ResourceConsumerOwner =
   | "docker"
   | "user";
 
+export interface ResourceProcess {
+  pid?: number;
+  /** Opaque kernel generation token, not a timestamp. */
+  start?: string;
+  command?: string;
+  rssBytes?: number;
+}
+
 export interface ResourceConsumer {
+  id?: string;
+  commands: string[];
+  processes: ResourceProcess[];
   owner: ResourceConsumerOwner;
   workerId?: string;
   workId?: string;
@@ -159,28 +170,45 @@ const CONSUMER_OWNERS: readonly ResourceConsumerOwner[] = [
   "user",
 ];
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? [...new Set(value.map(str).filter((v): v is string => v !== undefined))] : [];
+}
+
+function normalizeProcess(value: unknown): ResourceProcess | null {
+  const source = record(value);
+  if (!source) return null;
+  const pid = num(source.pid);
+  return {
+    pid: pid !== undefined && Number.isSafeInteger(pid) && pid > 0 ? pid : undefined,
+    start: str(source.start),
+    command: str(source.command),
+    rssBytes: nonNegative(source.rss_bytes),
+  };
+}
+
 function normalizeConsumer(value: unknown): ResourceConsumer | null {
   const source = record(value);
   if (!source) return null;
   const owner = CONSUMER_OWNERS.includes(source.owner as ResourceConsumerOwner)
     ? (source.owner as ResourceConsumerOwner)
     : "user";
-  const kinds = Array.isArray(source.kinds)
-    ? source.kinds.filter((kind): kind is string => typeof kind === "string" && kind.trim() !== "")
-    : [];
+  const processes = compact((Array.isArray(source.processes) ? source.processes : []).map(normalizeProcess));
   return {
+    id: str(source.id),
+    commands: stringList(source.commands),
+    processes,
     owner,
     workerId: str(source.worker_id),
     workId: str(source.work_id),
-    title: str(source.title),
+    title: str(source.title) ?? str(source.work_title) ?? str(source.worker_title),
     status: str(source.status),
     executor: str(source.executor),
     cwd: str(source.cwd),
     ageSeconds: nonNegative(source.age_seconds),
     rssBytes: nonNegative(source.rss_bytes) ?? 0,
     cpuPercent: nonNegative(source.cpu_percent),
-    processCount: nonNegative(source.process_count) ?? 0,
-    kinds,
+    processCount: Math.max(processes.length, Math.floor(nonNegative(source.process_count) ?? 0)),
+    kinds: stringList(source.kinds),
   };
 }
 
@@ -309,6 +337,11 @@ export function formatPercent(value: number | undefined): string {
   return `${Math.round(value)}%`;
 }
 
+/** Keep small PSI percentages readable against sub-percent stall thresholds. */
+export function formatPressurePercent(value: number | undefined): string {
+  return value === undefined ? "—" : `${Number(value.toFixed(2))}%`;
+}
+
 export function formatAge(seconds: number | undefined): string | undefined {
   if (seconds === undefined) return undefined;
   if (seconds < 60) return "just now";
@@ -330,21 +363,6 @@ export function memoryUsedRatio(telemetry: ResourceTelemetry): number | undefine
 export function clampRatio(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
-
-export const PRESSURE_COPY: Record<ResourcePressureState, { title: string; detail: string }> = {
-  normal: {
-    title: "Running comfortably",
-    detail: "Plenty of headroom for new work.",
-  },
-  elevated: {
-    title: "Under pressure",
-    detail: "The machine is working hard. New heavy work may slow things down.",
-  },
-  critical: {
-    title: "Critically loaded",
-    detail: "The machine is close to stalling. Consider closing heavy work.",
-  },
-};
 
 export type PsiTone = "calm" | "some" | "heavy";
 
@@ -470,12 +488,11 @@ const GROUPS: readonly {
   {
     key: "orphaned",
     owner: "orphaned_worker",
-    title: "Left behind",
-    hint: "Still running after their Worker finished or closed.",
+    title: "Orphaned Workers",
   },
   { key: "brain", owner: "brain", title: "Brain" },
-  { key: "docker", owner: "docker", title: "Containers" },
-  { key: "user", owner: "user", title: "Everything else" },
+  { key: "docker", owner: "docker", title: "Docker" },
+  { key: "user", owner: "user", title: "User processes" },
 ];
 
 export function groupConsumers(consumers: readonly ResourceConsumer[]): ConsumerGroup[] {
@@ -496,25 +513,46 @@ export function groupConsumers(consumers: readonly ResourceConsumer[]): Consumer
   }).filter((group) => group.consumers.length > 0);
 }
 
-const OWNER_FALLBACK_TITLE: Record<ResourceConsumerOwner, string> = {
+export const CONSUMER_OWNER_LABEL: Record<ResourceConsumerOwner, string> = {
   worker: "Worker",
-  orphaned_worker: "Finished Worker",
+  orphaned_worker: "Orphaned Worker",
   brain: "Brain",
-  docker: "Container",
-  user: "Other processes",
+  docker: "Docker",
+  user: "User process",
 };
 
 export function consumerTitle(consumer: ResourceConsumer): string {
-  return consumer.title ?? (consumer.executor ? `${capitalize(consumer.executor)} Worker` : OWNER_FALLBACK_TITLE[consumer.owner]);
+  if (consumer.title) return consumer.title;
+  const command = consumer.commands[0] ?? consumer.processes.find((p) => p.command)?.command;
+  const id = consumer.id?.replace(/^(docker|user|session):/, "");
+  if (consumer.owner === "docker" && id) {
+    return `${id.length > 12 ? id.slice(0, 12) : id}${command ? ` · ${command}` : ""}`;
+  }
+  if (command) return command;
+  if (id) return id;
+  if (consumer.workId) return `Work ${consumer.workId}`;
+  if (consumer.workerId) return `Worker ${consumer.workerId}`;
+  if (consumer.executor) return `${capitalize(consumer.executor)} · ${CONSUMER_OWNER_LABEL[consumer.owner]}`;
+  const pid = consumer.processes.find((p) => p.pid !== undefined)?.pid;
+  return `Unknown process${pid !== undefined ? ` · PID ${pid}` : ""}`;
+}
+
+/** Stable identity keeps expansion attached to its owner across sorting and polling. */
+export function consumerKey(consumer: ResourceConsumer): string {
+  return `${consumer.owner}:${consumer.id ?? consumer.workerId ?? consumer.workId ??
+    (consumer.processes.length ? consumer.processes.map((p) => `${p.pid ?? "?"}:${p.start ?? "?"}`).join(",") :
+      consumer.title ?? consumer.commands.join(","))}`;
+}
+
+export type ConsumerSort = "rss" | "cpu";
+export function sortConsumers(consumers: readonly ResourceConsumer[], sort: ConsumerSort): ResourceConsumer[] {
+  return [...consumers].sort((a, b) =>
+    (sort === "cpu" ? (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1) : b.rssBytes - a.rssBytes) ||
+    b.rssBytes - a.rssBytes || consumerKey(a).localeCompare(consumerKey(b)));
 }
 
 export function consumerMeta(consumer: ResourceConsumer): string {
-  const parts: string[] = [];
-  if (consumer.title && consumer.executor) parts.push(capitalize(consumer.executor));
-  if (consumer.status && consumer.status !== "unknown") parts.push(capitalize(consumer.status));
-  const age = formatAge(consumer.ageSeconds);
-  if (age) parts.push(age === "just now" ? "started just now" : `${age} old`);
-  return parts.join(" · ");
+  return [consumer.executor, consumer.cwd, formatAge(consumer.ageSeconds)].filter(Boolean).join(" · ");
 }
 
 function capitalize(value: string): string {
@@ -576,21 +614,22 @@ export function diskThroughputSeries(telemetry: ResourceTelemetry): ThroughputSe
   const samples = telemetry.history.filter(
     (sample) => sample.diskReadBytesPerSecond !== undefined || sample.diskWriteBytesPerSecond !== undefined,
   );
+  const latest = latestDiskThroughput(telemetry);
   const peak = Math.max(
-    1024 * 1024,
+    1024 * 1024, latest.read ?? 0, latest.write ?? 0,
     ...samples.map((sample) => Math.max(sample.diskReadBytesPerSecond ?? 0, sample.diskWriteBytesPerSecond ?? 0)),
   );
   return {
     peak,
-    read: historySeries(telemetry, (sample) => sample.diskReadBytesPerSecond, peak),
-    write: historySeries(telemetry, (sample) => sample.diskWriteBytesPerSecond, peak),
+    read: withCurrent(historySeries(telemetry, (sample) => sample.diskReadBytesPerSecond, peak), telemetry, latest.read === undefined ? undefined : latest.read / peak),
+    write: withCurrent(historySeries(telemetry, (sample) => sample.diskWriteBytesPerSecond, peak), telemetry, latest.write === undefined ? undefined : latest.write / peak),
   };
 }
 
 export function latestDiskThroughput(telemetry: ResourceTelemetry): { read?: number; write?: number } {
   for (let index = telemetry.history.length - 1; index >= 0; index -= 1) {
     const sample = telemetry.history[index];
-    if (sample.diskReadBytesPerSecond !== undefined || sample.diskWriteBytesPerSecond !== undefined) {
+    if (sample.sampledAt === telemetry.sampledAt && (sample.diskReadBytesPerSecond !== undefined || sample.diskWriteBytesPerSecond !== undefined)) {
       return { read: sample.diskReadBytesPerSecond, write: sample.diskWriteBytesPerSecond };
     }
   }
@@ -644,7 +683,7 @@ export interface StateSpan {
 
 /** Collapse history into contiguous pressure-state spans for the timeline. */
 export function pressureSpans(telemetry: ResourceTelemetry): StateSpan[] {
-  const samples = [...telemetry.history.map((sample) => ({ at: sample.sampledAt, state: sample.state }))];
+  const samples = telemetry.history.map((sample) => ({ at: sample.sampledAt, state: sample.state }));
   if (samples.length === 0 || samples[samples.length - 1].at < telemetry.sampledAt) {
     samples.push({ at: telemetry.sampledAt, state: telemetry.state });
   }

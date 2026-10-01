@@ -66,7 +66,7 @@ export function AreaChart({ points, start, end, color, height = 88, grid = true,
 
   return (
     <View
-      style={{ height }}
+      style={{ height, overflow: "hidden" }}
       onLayout={onLayout}
       accessible
       accessibilityRole="image"

@@ -1,172 +1,70 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Text, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import {
-  chartWindow,
-  clampRatio,
-  diskThroughputSeries,
-  formatBytes,
-  formatPercent,
-  formatRate,
-  latestDiskThroughput,
-  psiHistorySeries,
-  psiLines,
-  psiTrend,
-  type PsiLine,
-  type PsiTone,
-  type ResourceTelemetry,
+  chartWindow, diskThroughputSeries, formatBytes, formatPressurePercent, formatRate,
+  latestDiskThroughput, psiHistorySeries,
 } from "../../services/resourceTelemetry";
 import { AreaChart, StackBar } from "./ResourceCharts";
-import { Legend } from "./ResourceOverviewSections";
-import type { ResourceStyles } from "./resourceStyles";
+import { Legend, type SectionProps } from "./ResourceOverviewSections";
 
-interface SectionProps {
-  telemetry: ResourceTelemetry;
-  styles: ResourceStyles;
-}
-
-const TONE_LABEL: Record<PsiTone, string> = {
-  calm: "Calm",
-  some: "Some waiting",
-  heavy: "Heavy waiting",
-};
-
-const TREND_LABEL = {
-  rising: "rising",
-  falling: "easing",
-  steady: "steady",
-} as const;
-
-export function PressureSection({ telemetry, styles }: SectionProps) {
-  const lines = useMemo(() => psiLines(telemetry), [telemetry]);
-  if (lines.length === 0) return null;
+export function PressureSection({ telemetry, styles, details }: SectionProps) {
+  const { colors } = useAppTheme();
+  const values = (["cpu", "memory", "io"] as const).map((key) => ({ key, value: telemetry.psi[key]?.some?.avg10 }));
+  const peak = values.reduce<typeof values[number] | undefined>((best, next) =>
+    next.value !== undefined && (best?.value === undefined || next.value > best.value) ? next : best, undefined);
+  const labels = { cpu: "CPU", memory: "Mem", io: "I/O" };
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle} accessibilityRole="header">Waiting</Text>
-      <Text style={styles.sectionNote}>
-        How often work had to wait for the CPU, memory or disk. Low is good. Waiting is what makes the
-        machine feel slow, even when usage looks fine.
-      </Text>
-      <View style={{ gap: 16 }}>
-        {lines.map((line) => (
-          <PressureRow key={line.key} line={line} telemetry={telemetry} styles={styles} />
-        ))}
-      </View>
+    <View style={styles.surface}>
+      <Text style={styles.label}>Pressure · PSI</Text>
+      <Text style={styles.sectionValue}>{formatPressurePercent(peak?.value)}</Text>
+      <AreaChart points={peak ? psiHistorySeries(telemetry, peak.key) : []} {...chartWindow(telemetry)} height={40}
+        color={colors.warning} accessibilityLabel={`PSI ${peak ? labels[peak.key] : "unavailable"} some history, scale 0–100%`} />
+      <Text style={styles.caption}>{peak ? `${labels[peak.key]} · max some 10s` : "PSI unavailable"}</Text>
+      <Text style={styles.micro}>{values.map(({ key, value }) => `${labels[key]} ${formatPressurePercent(value)}`).join(" · ")}</Text>
+      {details ? <>
+        <Text style={styles.caption}>some / full · 10s / 1m / 5m</Text>
+        {values.map(({ key }) => <View key={key} style={{ gap: 2 }}>
+          <Text style={styles.label}>{labels[key]}</Text>
+          {(["some", "full"] as const).map((kind) => {
+            const averages = telemetry.psi[key]?.[kind];
+            return <Text key={kind} style={styles.micro}>{kind} {(["avg10", "avg60", "avg300"] as const).map((v) => formatPressurePercent(averages?.[v])).join(" / ")}</Text>;
+          })}
+          <AreaChart points={psiHistorySeries(telemetry, key)} {...chartWindow(telemetry)} height={24}
+            color={colors.warning} accessibilityLabel={`${labels[key]} PSI some history, scale 0–100%`} />
+        </View>)}
+      </> : null}
     </View>
   );
 }
 
-function PressureRow({ line, telemetry, styles }: { line: PsiLine; telemetry: ResourceTelemetry; styles: ResourceStyles }) {
+export function DiskSection({ telemetry, styles, details }: SectionProps) {
   const { colors } = useAppTheme();
-  const series = useMemo(() => psiHistorySeries(telemetry, line.key), [line.key, telemetry]);
-  const { start, end } = chartWindow(telemetry);
-  const tone = {
-    calm: { fill: colors.surfaceSubtle, ink: colors.textSecondary },
-    some: { fill: colors.warningSoft, ink: colors.warning },
-    heavy: { fill: colors.dangerSoft, ink: colors.dangerText },
-  }[line.tone];
-  // Stall share rarely exceeds a few percent; scale charts to 25% so calm
-  // stays a flat line and real waiting is visible.
-  const scaled = useMemo(
-    () => series.map((point) => ({ at: point.at, value: clampRatio(point.value * 4) })),
-    [series],
-  );
-  return (
-    <View
-      style={{ gap: 6 }}
-      accessible
-      accessibilityLabel={`${line.label}, ${TONE_LABEL[line.tone]}. ${line.sentence}`}
-    >
-      <View style={styles.sectionHeader}>
-        <Text style={styles.label}>{line.label}</Text>
-        <View style={[styles.chip, { backgroundColor: tone.fill }]}>
-          <Text style={[styles.micro, { color: tone.ink }]}>{TONE_LABEL[line.tone]}</Text>
-        </View>
-      </View>
-      <Text style={styles.sectionNote}>{line.sentence}</Text>
-      {scaled.length > 1 ? (
-        <AreaChart
-          points={scaled}
-          start={start}
-          end={end}
-          height={32}
-          color={line.tone === "calm" ? colors.accent : tone.ink}
-          accessibilityLabel={`${line.label} waiting over time`}
-        />
-      ) : null}
-      <Text style={styles.caption}>
-        1 min {formatPercent(line.avg60)} · 5 min {formatPercent(line.avg300)} · {TREND_LABEL[psiTrend(line)]}
-      </Text>
-    </View>
-  );
-}
-
-export function DiskSection({ telemetry, styles }: SectionProps) {
-  const { colors } = useAppTheme();
-  const throughput = useMemo(() => diskThroughputSeries(telemetry), [telemetry]);
+  const throughput = diskThroughputSeries(telemetry);
   const latest = latestDiskThroughput(telemetry);
-  const { start, end } = chartWindow(telemetry);
-  if (telemetry.disks.length === 0 && throughput.read.length === 0) return null;
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle} accessibilityRole="header">Disk</Text>
-      {telemetry.disks.map((disk) => {
-        const ratio = disk.totalBytes > 0 ? disk.usedBytes / disk.totalBytes : 0;
-        const low = disk.totalBytes > 0 && disk.freeBytes / disk.totalBytes < 0.1;
-        return (
-          <View
-            key={disk.mount}
-            style={{ gap: 6 }}
-            accessible
-            accessibilityLabel={`${disk.mount}, ${formatBytes(disk.freeBytes)} free of ${formatBytes(disk.totalBytes)}`}
-          >
-            <View style={styles.sectionHeader}>
-              <Text style={styles.monoStrong} numberOfLines={1}>{disk.mount}</Text>
-              <Text style={[styles.mono, low && { color: colors.warning }]}>
-                {formatBytes(disk.freeBytes)} free of {formatBytes(disk.totalBytes)}
-              </Text>
-            </View>
-            <StackBar height={6} segments={[{ key: "used", ratio, color: low ? colors.warning : colors.accent, opacity: 0.75 }]} />
-          </View>
-        );
-      })}
-      {throughput.read.length > 1 || throughput.write.length > 1 ? (
-        <View style={{ gap: 6 }}>
-          <View>
-            <AreaChart
-              points={throughput.read}
-              start={start}
-              end={end}
-              height={48}
-              color={colors.accent}
-              accessibilityLabel={`Disk reads over time, now ${formatRate(latest.read)}`}
-            />
-            <View style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
-              <AreaChart
-                points={throughput.write}
-                start={start}
-                end={end}
-                height={48}
-                color={colors.statusUnknown}
-                grid={false}
-                accessibilityLabel={`Disk writes over time, now ${formatRate(latest.write)}`}
-              />
-            </View>
-          </View>
-          <View style={styles.sectionHeader}>
-            <View style={styles.legendRow}>
-              <Legend color={colors.accent} label={`Read ${formatRate(latest.read)}`} styles={styles} />
-              <Legend color={colors.statusUnknown} label={`Write ${formatRate(latest.write)}`} styles={styles} />
-            </View>
-            <Text style={styles.micro}>peak {formatRate(throughput.peak)}</Text>
-          </View>
+    <View style={styles.surface}>
+      <Text style={styles.label}>Disk I/O</Text>
+      <Text style={styles.sectionValue}>{formatRate(latest.read === undefined && latest.write === undefined ? undefined : (latest.read ?? 0) + (latest.write ?? 0))}</Text>
+      <View>
+        <AreaChart points={throughput.read} {...chartWindow(telemetry)} height={40} color={colors.accent} accessibilityLabel="Disk read throughput history" />
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
+          <AreaChart points={throughput.write} {...chartWindow(telemetry)} height={40} color={colors.statusUnknown} grid={false} accessibilityLabel="Disk write throughput history" />
         </View>
-      ) : latest.read !== undefined || latest.write !== undefined ? (
-        <View style={styles.legendRow}>
-          <Legend color={colors.accent} label={`Read ${formatRate(latest.read)}`} styles={styles} />
-          <Legend color={colors.statusUnknown} label={`Write ${formatRate(latest.write)}`} styles={styles} />
-        </View>
-      ) : null}
+      </View>
+      <Legend color={colors.accent} label={`R ${formatRate(latest.read)}`} styles={styles} />
+      <Legend color={colors.statusUnknown} label={`W ${formatRate(latest.write)}`} styles={styles} />
+      {details ? <>
+        <Text style={styles.caption}>Chart scale {formatRate(throughput.peak)}</Text>
+        {telemetry.disks.length === 0 ? <Text style={styles.caption}>Mount data unavailable</Text> : null}
+        {telemetry.disks.map((disk) => <View key={disk.mount} style={{ gap: 4 }}>
+          <Text style={styles.monoStrong}>{disk.mount}</Text>
+          <Text style={styles.caption}>{formatBytes(disk.freeBytes)} free / {formatBytes(disk.totalBytes)}</Text>
+          <StackBar height={4} segments={[{ key: "used", ratio: disk.totalBytes ? disk.usedBytes / disk.totalBytes : 0,
+            color: disk.totalBytes && disk.freeBytes / disk.totalBytes < 0.1 ? colors.warning : colors.accent }]} />
+          <Text style={styles.micro}>R {formatRate(disk.readBytesPerSecond)} · W {formatRate(disk.writeBytesPerSecond)}</Text>
+        </View>)}
+      </> : null}
     </View>
   );
 }

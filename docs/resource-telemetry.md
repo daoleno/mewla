@@ -243,6 +243,69 @@ have explicit progress states. The first-sample-unavailable error and other
 request errors expose Retry and continue bounded polling. After a successful
 sample, disconnect or refresh failure keeps the last snapshot with a visible
 status notice and a **Last sample** label instead of **Live**. Omitted first
-interval consumer CPU is unavailable (`—`), while measured zero is `idle`.
+interval consumer CPU is unavailable (`—`), while measured zero is `0%`.
 The terminal menu retains its session title; the old per-session resource
 sheet is no longer mounted by the terminal screen.
+
+## Resources dashboard presentation
+
+The shared React Native view uses its measured content width: four trend cards
+at 1040 pt and above, two below that, and one below 340 pt. Consumers use aligned
+columns at 760 pt and a stacked row on phones. Both use the same normalized data,
+owner filters, sorting and inline process disclosure; there is no web-only view.
+
+The header shows the current server, pressure state, sample time, refresh action
+and active threshold signals. CPU, memory, disk throughput and PSI remain visible.
+**Details** reveals core activity, load averages, available/cache/shared memory,
+swap, mount capacity and rates, and PSI some/full 10s/1m/5m averages with each
+resource's history. PSI keeps sub-percent precision. Disk throughput never uses
+an older history interval as the current rate. Missing rates display `—`.
+
+Consumers sort globally by RSS by default; **CPU** switches the sort, with unknown
+CPU last. Owner filters distinguish Workers, Orphaned Workers, Brain, Docker and
+User processes. Group RSS/CPU summaries appear on wide screens; phones show totals
+for the selected filter. Consumer CPU uses percent of one core. **Residual** on an
+orphaned Worker describes process ownership; its original Worker status remains
+visible (for example, `Residual · done`). Unknown status is never inferred as running.
+The list initially shows up to 30 consumers, with **Show more** for the rest.
+
+The normalizer retains `id`, `commands` and `processes`, including validated PID,
+opaque string `start`, command and RSS. Older snapshots get empty command/process
+arrays and remain expandable with an explicit details-unavailable message. Names
+prefer `title` (including Work title), then optional `work_title`/`worker_title`;
+commands and process commands precede IDs for non-Docker consumers. Docker uses
+a short ID plus command, with the full ID available on expansion. Work/Worker IDs
+and executor/owner labels are additional fallbacks. A wholly unnamed entry is
+`Unknown process`, with PID when available. Owner always has its own field.
+
+Tapping a consumer expands its full identity, executor/cwd, commands/kinds and a
+PID/command/RSS table in the same outer scroll view. Start values are **kernel
+generation tokens**, not wall-clock start times. The `reported / total` label
+makes the daemon's bounded process list explicit; the UI does not claim these
+are every process. Disclosure stays attached to consumer identity across polling
+and sorting. Switching the canonical server still clears the previous snapshot.
+
+### Reproducible fixture inspection
+
+`app/__fixtures__/telemetry/dashboard-v2.json` is synthetic, with all five owners,
+unknown names, missing CPU, orphaned status, process identities and five minutes
+of history. It is separate from existing local telemetry captures. The standalone
+Metro entry renders the actual ResourcesView, ThemeProvider, app fonts, native
+pressables and SVG charts without requiring pairing or modifying runtime routes.
+
+With the repository's Expo Metro server on port 8081, run from the repository root:
+
+```sh
+bun app/__fixtures__/telemetry/serve-dashboard-preview.ts
+```
+
+Open `http://127.0.0.1:8097/` and emulate dark/light media and phone/wide viewport
+sizes. This loopback-only fixture server is a development tool; it is not a
+production route or a fallback for live Resources data. The Refresh callback is
+a no-op in this static fixture; real refresh/polling is covered by lifecycle tests.
+
+```sh
+cd app
+bun test services/resourceTelemetry.test.ts components/resources/resources.test.tsx components/resources/resourceConsumers.test.tsx
+bunx tsc --noEmit
+```
