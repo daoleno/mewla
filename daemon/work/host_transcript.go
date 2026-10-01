@@ -1,6 +1,9 @@
 package work
 
 import (
+	"bufio"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,6 +113,10 @@ func (r *ProviderConversationReader) LoadByIdentity(identity HostTranscriptIdent
 		r = NewProviderConversationReader()
 	}
 	identity = normalizeHostTranscriptIdentity(identity)
+	if HostTranscriptIdentityConflictsWithProvider(identity, identity.Provider) {
+		r.resetSource()
+		return CodexConversation{Available: false, Reason: "host_transcript_provider_mismatch", Events: []CodexConversationEvent{}}, nil
+	}
 	if !identity.Bound() {
 		r.resetSource()
 		return CodexConversation{
@@ -142,6 +149,48 @@ func (r *ProviderConversationReader) LoadByIdentity(identity HostTranscriptIdent
 			Events:    []CodexConversationEvent{},
 		}, nil
 	}
+}
+
+// HostTranscriptIdentityConflictsWithProvider rejects positive evidence of a
+// different provider, including bindings persisted by an older Host-switch
+// race. Missing, partial and legacy headers are not proof of a mismatch and
+// must not destroy a resumable native identity. Inspect structured metadata,
+// never directory names: provider data roots can be customized.
+func HostTranscriptIdentityConflictsWithProvider(identity HostTranscriptIdentity, provider string) bool {
+	identity = normalizeHostTranscriptIdentity(identity)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if identity.Provider != "" && provider != "" && identity.Provider != provider {
+		return true
+	}
+	if identity.Path == "" || (provider != WorkerProviderCodex && provider != WorkerProviderClaude) {
+		return false
+	}
+	file, err := os.Open(identity.Path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(io.LimitReader(file, maxCodexMetaReadBytes))
+	scanner.Buffer(make([]byte, 4096), maxCodexMetaRecordBytes)
+	for records := 0; records < maxCodexMetaRecords && scanner.Scan(); records++ {
+		var header struct {
+			Type      string `json:"type"`
+			SessionID string `json:"sessionId"`
+			Payload   struct {
+				ID string `json:"id"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &header) != nil {
+			continue
+		}
+		if header.Type == "session_meta" && header.Payload.ID != "" {
+			return provider != WorkerProviderCodex
+		}
+		if header.SessionID != "" && (header.Type == "user" || header.Type == "assistant" || header.Type == "system") {
+			return provider != WorkerProviderClaude
+		}
+	}
+	return false
 }
 
 func (r *ProviderConversationReader) loadBoundGrokConversation(identity HostTranscriptIdentity) (CodexConversation, error) {

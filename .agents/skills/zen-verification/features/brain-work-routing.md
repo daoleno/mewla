@@ -45,3 +45,12 @@ provider. Check that exact endpoint after daemon restart, not only the current
 listener metadata. Linux startup restores known routes' live Claude endpoints
 on the same Router; the regression changes listener metadata and verifies both
 old and new ports serve the route across restarts and close without leaking.
+
+Executor switches preserve the Brain thread while changing its Host Session.
+Transcript resolution must compare the complete saved binding before writeback
+and reject a departing provider's observation. The regression fixtures cover
+both Claude/Codex directions, stale in-flight resolutions, and socket snapshots
+plus subsequent deltas after repairing a cross-provider transcript binding.
+The App hook test also checks input targets, subscription cleanup, Activity,
+assistant replies, errors, and late old-subscription frames. These are local
+behavioral tests, not evidence of a real provider call or native device UI.
