@@ -3,6 +3,10 @@ package expo.modules.zenterminalvt
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.concurrent.ConcurrentHashMap
@@ -11,6 +15,16 @@ import java.util.concurrent.atomic.AtomicInteger
 class ZenTerminalVtModule : Module() {
     private val terminalHandles = ConcurrentHashMap<Int, Long>()
     private val nextHandleId = AtomicInteger(1)
+
+    private fun rendererIn(view: View?): WebView? {
+        if (view is WebView) return view
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                rendererIn(view.getChildAt(index))?.let { return it }
+            }
+        }
+        return null
+    }
 
     private fun getPrefs() =
         appContext.reactContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -141,6 +155,14 @@ class ZenTerminalVtModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("ZenTerminalVt")
+
+        // Fabric view commands wait for mounting/vsync. Terminal output already
+        // has its own bounded scheduler and WebView presentation clock.
+        AsyncFunction("dispatchRenderer") { viewTag: Int, script: String ->
+            val renderer = rendererIn(appContext.findView<View>(viewTag))
+                ?: throw IllegalStateException("Terminal renderer is no longer mounted")
+            renderer.evaluateJavascript(script, null)
+        }.runOnQueue(Queues.MAIN)
 
         Function("getCapabilities") {
             mapOf(

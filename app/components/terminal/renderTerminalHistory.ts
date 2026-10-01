@@ -1,10 +1,11 @@
 import { buildTerminalPalette, type TerminalThemePalette } from '../../constants/terminalThemes';
 import { createTerminal, destroyTerminal, writeData, getVisibleHtml, setTheme } from '../../modules/zen-terminal-vt/src';
 import { TERMINAL_HISTORY_MAX_HTML } from './terminalHistory';
+import { createTerminalHistoryDecodeBudget } from './terminalHistoryDecodeBudget';
 
 /** Same Ghostty parser and cell HTML formatter as the live grid. The second
  * instance is bounded to 64 rows and never receives PTY input or mouse events.
- * Preserve SGR across page boundaries and yield between pages for native input.
+ * Preserve SGR across page boundaries; yield after 4 ms of page work for input.
  */
 export async function renderTerminalHistory(
   rows: readonly string[],
@@ -18,6 +19,7 @@ export async function renderTerminalHistory(
   if (!handle) throw new Error('History renderer could not start.');
   const result: string[] = [];
   let bytes = 0;
+  const yieldIfNeeded = createTerminalHistoryDecodeBudget();
   try {
     setTheme(handle, { foreground: theme.foreground, background: theme.background,
       cursor: theme.cursor, palette: buildTerminalPalette(theme) });
@@ -34,7 +36,10 @@ export async function renderTerminalHistory(
         if (bytes > TERMINAL_HISTORY_MAX_HTML) throw new Error('Styled history exceeds the device memory limit.');
         result.push(row);
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      if (offset + pageSize < rows.length) {
+        const pause = yieldIfNeeded();
+        if (pause) await pause;
+      }
     }
     return result;
   } finally {
