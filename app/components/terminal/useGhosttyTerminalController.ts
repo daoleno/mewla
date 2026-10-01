@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import { dispatchRenderer } from '../../modules/zen-terminal-vt/src';
+import { createTerminalRendererTransport } from './terminalRendererTransport';
 import type {
   MouseAction,
   MouseButton,
   RenderSnapshot,
 } from '../../modules/zen-terminal-vt/src';
 import type { TerminalThemePalette } from '../../constants/terminalThemes';
+import { createTerminalRenderScheduler } from './terminalRenderScheduler';
 import { useGhosttyCoreTerminal } from './useGhosttyCoreTerminal';
 import { useTerminalSession } from './useTerminalSession';
 import type { TerminalInputHandleRef } from './TerminalInputHandler';
@@ -95,9 +98,6 @@ export function useGhosttyTerminalController({
   const webReadyRef = useRef(false);
   const pendingRef = useRef<RendererStateMessage[]>([]);
   const pendingRendererCommandRef = useRef<RendererCommand | null>(null);
-  const renderFrameRef = useRef(0);
-  const wheelRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wheelInteractionRef = useRef(false);
   const gridOwnerRef = useRef<TerminalLiveGridOwner | null>(null);
   const scrollCorrelationRef = useRef(new TerminalScrollCorrelation());
   const paneModesRef = useRef<TerminalHistoryRender['panes']>([]);
@@ -109,14 +109,24 @@ export function useGhosttyTerminalController({
 
   const ghostty = useGhosttyCoreTerminal();
 
+  const rendererTransport = useMemo(() => createTerminalRendererTransport(
+    dispatchRenderer,
+    (message, generation) => {
+      webReadyRef.current = false;
+      setReadyGeneration(null);
+      onRendererBootstrapFailure?.(message, generation);
+    },
+  ), [onRendererBootstrapFailure]);
+  useEffect(() => () => rendererTransport.clear(), [rendererTransport]);
+
   const injectRendererState = useCallback((payload: RendererStateMessage) => {
     const script = payload.type === 'renderSnapshot'
       ? `window.__zenRenderSnapshot && window.__zenRenderSnapshot(${JSON.stringify(payload.snapshot)}); true;`
       : payload.type === 'history'
         ? `window.__zenHistory && window.__zenHistory(${JSON.stringify(payload.history)}); true;`
       : `window.__zenTheme && window.__zenTheme(${JSON.stringify(payload.theme)}); true;`;
-    webviewRef.current?.injectJavaScript(script);
-  }, []);
+    rendererTransport.send(script);
+  }, [rendererTransport]);
 
   const postToRenderer = useCallback((payload: RendererStateMessage) => {
     if (!webReadyRef.current) {
@@ -142,8 +152,8 @@ export function useGhosttyTerminalController({
       resumeInput: 'window.__zenResumeInput && window.__zenResumeInput(); true;',
       scrollToBottom: 'window.__zenScrollToBottom && window.__zenScrollToBottom(); true;',
     };
-    webviewRef.current?.injectJavaScript(scripts[command]);
-  }, []);
+    rendererTransport.send(scripts[command]);
+  }, [rendererTransport]);
 
   const runRendererCommand = useCallback((command: RendererCommand) => {
     if (!webReadyRef.current) {
@@ -157,21 +167,19 @@ export function useGhosttyTerminalController({
     sessionId: string | null,
     reason: TerminalScrollCancelReason,
   ) => {
-    wheelInteractionRef.current = false;
     const context = scrollCorrelationRef.current.replace(sessionId);
     if (webReadyRef.current) {
-      webviewRef.current?.injectJavaScript(
+      rendererTransport.send(
         `window.__zenSetScrollContext && window.__zenSetScrollContext(${JSON.stringify(context.sessionId)}, ${JSON.stringify(context.token)}, ${JSON.stringify(reason)}); true;`,
       );
     }
-  }, []);
+  }, [rendererTransport]);
 
   const cancelLocalScroll = useCallback((reason: TerminalScrollCancelReason) => {
     replaceScrollContext(scrollCorrelationRef.current.context.sessionId, reason);
   }, [replaceScrollContext]);
 
   const flushRenderState = useCallback(() => {
-    renderFrameRef.current = 0;
     // Keep native dirty rows until this renderer can receive their full base.
     if (!webReadyRef.current || !webviewRef.current) return;
     const frame = ghostty.consumeRenderSnapshot();
@@ -180,37 +188,13 @@ export function useGhosttyTerminalController({
     }
   }, [ghostty, postToRenderer]);
 
-  const scheduleRenderState = useCallback(() => {
-    if (wheelInteractionRef.current) {
-      // The WebView already presents on its own animation frame. Waiting for
-      // a second (RN) vsync adds a whole frame to every wheel/redraw round trip.
-      // A task batches adjacent output chunks without that additional wait.
-      if (renderFrameRef.current) {
-        cancelAnimationFrame(renderFrameRef.current);
-        renderFrameRef.current = 0;
-      }
-      if (wheelRenderTimerRef.current === null) {
-        wheelRenderTimerRef.current = setTimeout(() => {
-          wheelRenderTimerRef.current = null;
-          flushRenderState();
-        }, 0);
-      }
-      return;
-    }
-    if (!renderFrameRef.current) {
-      renderFrameRef.current = requestAnimationFrame(flushRenderState);
-    }
-  }, [flushRenderState]);
+  const renderScheduler = useMemo(
+    () => createTerminalRenderScheduler(flushRenderState),
+    [flushRenderState],
+  );
+  const scheduleRenderState = renderScheduler.schedule;
 
-  useEffect(() => {
-    return () => {
-      if (wheelRenderTimerRef.current !== null) clearTimeout(wheelRenderTimerRef.current);
-      if (renderFrameRef.current) {
-        cancelAnimationFrame(renderFrameRef.current);
-        renderFrameRef.current = 0;
-      }
-    };
-  }, []);
+  useEffect(() => () => renderScheduler.cancel(), [renderScheduler]);
 
   useEffect(() => {
     ghostty.setTheme(theme);
@@ -363,13 +347,15 @@ export function useGhosttyTerminalController({
       return;
     }
     webReadyRef.current = false;
+    rendererTransport.clear();
+    renderScheduler.cancel();
     pendingRef.current = [];
     setReadyGeneration(null);
     // A WebView retry/remount loses its DOM but not the sole Ghostty model.
     // Reapplying the same theme marks the native render state fully dirty so
     // the replacement renderer receives a complete current snapshot on ready.
     ghostty.setTheme(theme);
-  }, [ghostty, theme]);
+  }, [ghostty, renderScheduler, rendererTransport, theme]);
 
   const onRendererMessage = useCallback((event: WebViewMessageEvent) => {
     try {
@@ -384,6 +370,8 @@ export function useGhosttyTerminalController({
       }
 
       if (payload.type === 'ready') {
+        const nativeEvent = event.nativeEvent as typeof event.nativeEvent & { target: number };
+        rendererTransport.bind(nativeEvent.target, payload.rendererGeneration);
         webReadyRef.current = true;
         setReadyGeneration(payload.rendererGeneration);
         postToRenderer({ type: 'theme', theme });
@@ -396,7 +384,7 @@ export function useGhosttyTerminalController({
           injectRendererCommand(pendingCommand);
         }
         const scrollContext = scrollCorrelationRef.current.context;
-        webviewRef.current?.injectJavaScript(
+        rendererTransport.send(
           `window.__zenSetScrollContext && window.__zenSetScrollContext(${JSON.stringify(scrollContext.sessionId)}, ${JSON.stringify(scrollContext.token)}, "session-change"); true;`,
         );
         scheduleRenderState();
@@ -466,7 +454,6 @@ export function useGhosttyTerminalController({
 
       if (payload.type === 'historyInteraction') {
         if (session.acceptInteractionSession(payload.sessionId)) {
-          if (!payload.active) wheelInteractionRef.current = false;
           history.interaction(payload.active);
         }
         return;
@@ -529,7 +516,6 @@ export function useGhosttyTerminalController({
         // Wheel input must not focus the IME, clear the composer, jump the
         // native viewport or invalidate the gesture that produced this batch.
         if (encoded) {
-          wheelInteractionRef.current = true;
           session.sendInput(encoded);
         }
       }
@@ -552,6 +538,7 @@ export function useGhosttyTerminalController({
     onRendererBootstrapFailure,
     postToRenderer,
     replaceScrollContext,
+    rendererTransport,
     scheduleRenderState,
     session,
     theme,

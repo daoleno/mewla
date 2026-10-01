@@ -1,6 +1,11 @@
 import ExpoModulesCore
 import Foundation
 import UIKit
+import WebKit
+
+private final class TerminalRendererUnavailableException: Exception, @unchecked Sendable {
+  override var reason: String { "Terminal renderer is no longer mounted" }
+}
 
 private final class UnknownTerminalHandleException: GenericException<Int>, @unchecked Sendable {
   override var reason: String {
@@ -21,6 +26,14 @@ public final class ZenTerminalVtModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("ZenTerminalVt")
+
+    AsyncFunction("dispatchRenderer") { (viewTag: Int, script: String) throws in
+      guard let view = self.appContext?.findView(withTag: viewTag, ofType: UIView.self),
+        let renderer = Self.renderer(in: view) else {
+        throw TerminalRendererUnavailableException()
+      }
+      renderer.evaluateJavaScript(script, completionHandler: nil)
+    }.runOnQueue(.main)
 
     Function("createTerminal") { (cols: Int, rows: Int) throws -> Int in
       try self.withPersistentBreadcrumb(
@@ -141,6 +154,16 @@ public final class ZenTerminalVtModule: Module {
     terminalHandles[handleID] = nativeHandle
     nextHandleID = nextHandleID == Int.max ? 1 : nextHandleID + 1
     return handleID
+  }
+
+  // RNCWebView's React tag belongs to its wrapper on both mobile platforms.
+  // Resolve only that mounted subtree, never a different screen's WebView.
+  private static func renderer(in view: UIView) -> WKWebView? {
+    if let renderer = view as? WKWebView { return renderer }
+    for child in view.subviews {
+      if let renderer = renderer(in: child) { return renderer }
+    }
+    return nil
   }
 
   private func remove(handleID: Int) -> UInt64? {

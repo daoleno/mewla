@@ -171,6 +171,7 @@ export function buildGhosttyTerminalHtml(
       const HAS_BUNDLED_FONT = ${escapedFontUri !== null};
       const FONT_READY_TIMEOUT_MS = 1200;
       const RENDERER_GENERATION = ${safeRendererGeneration};
+      window.__zenRendererGeneration = RENDERER_GENERATION;
 
       ${TERMINAL_GRID_SIZE_SOURCE}
 
@@ -327,11 +328,7 @@ export function buildGhosttyTerminalHtml(
 
         const blend = document.getElementById('terminal-scroll-blend');
         let blendAnimation = null;
-        let blendRegion = '';
-        let blendEnd = 0;
-        let blendDelta = 0;
         let presentedRows = [];
-        let presentedAt = 0;
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
         const stopBlend = () => {
@@ -344,7 +341,7 @@ export function buildGhosttyTerminalHtml(
         // Interpolate only a proven row translation. Exact styled-row matches
         // preserve ANSI/CJK cells; unchanged rows outside the region stay pinned.
         // Unknown layouts, selection and unrelated redraws use the original grid.
-        const blendRows = (previous, next, interval) => {
+        const blendRows = (previous, next) => {
           if (!wheelGesture || (touching && !moved) || nativeSelectionActive || reducedMotion.matches || !previous) {
             stopBlend();
             return;
@@ -388,12 +385,6 @@ export function buildGhosttyTerminalHtml(
             }
           }
           if (!delta) { stopBlend(); return; }
-          const region = start + ':' + end;
-          let residual = 0;
-          if (blendAnimation && blendRegion === region && Math.sign(delta) === Math.sign(blendDelta)) {
-            const transform = getComputedStyle(blend.firstElementChild).transform;
-            if (transform !== 'none') residual = new DOMMatrixReadOnly(transform).m42 - blendEnd;
-          }
           stopBlend();
           const strip = document.createElement('div');
           const rows = delta > 0
@@ -404,16 +395,16 @@ export function buildGhosttyTerminalHtml(
           blend.style.top = start * cellHeight + 'px';
           blend.style.height = (end - start) * cellHeight + 'px';
           blend.style.display = 'block';
-          blendRegion = region;
-          blendDelta = delta;
-          blendEnd = delta > 0 ? -delta * cellHeight : 0;
-          const from = (delta > 0 ? 0 : delta * cellHeight) + residual;
-          // One bounded interpolation, never a queue. A late frame cannot add
-          // more than 80 ms of visual lag; new touch/reversal cancels immediately.
+          const blendEnd = delta > 0 ? -delta * cellHeight : 0;
+          const from = delta > 0 ? 0 : delta * cellHeight;
+          // The PTY round trip has already delayed this frame. Present its
+          // exact row translation within one display interval, never another
+          // round-trip interval. Carrying residual displacement between frames
+          // made the old ANSI layer trail the latest grid on continuous output.
           const animation = strip.animate([
             { transform: 'translateY(' + from + 'px)' },
             { transform: 'translateY(' + blendEnd + 'px)' },
-          ], { duration: Math.max(16, Math.min(80, interval)), easing: 'linear', fill: 'forwards' });
+          ], { duration: 16, easing: 'linear', fill: 'forwards' });
           blendAnimation = animation;
           animation.onfinish = () => { if (blendAnimation === animation) stopBlend(); };
         };
@@ -440,7 +431,7 @@ export function buildGhosttyTerminalHtml(
           // Some apps consume the first reverse wheel without redrawing. A
           // frame is not an input acknowledgement. Drop blocked deltas, then
           // allow a fresh tick after a bounded no-output deadline; never replay.
-          if (wheelAwaitingFrame && timestamp - wheelFrameAt < 100) return;
+          if (wheelAwaitingFrame && timestamp - wheelFrameAt < 32) return;
           wheelFrameAt = timestamp;
           wheelAwaitingFrame = true;
           send({ type: 'wheel', sessionId: scrollSessionId, token: scrollToken,
@@ -602,15 +593,13 @@ export function buildGhosttyTerminalHtml(
           // Replacing that subtree drops Android's subsequent touch events.
           const overlay = wheelViewport && touching && !nativeSelectionActive;
           if (rowUpdates.revision !== presentedRevision && !nativeSelectionActive) {
-            const now = performance.now();
             if (wheelGesture) {
-              blendRows(presentedRows.join(''), rowUpdates.lines.join(''), now - presentedAt);
+              blendRows(presentedRows.join(''), rowUpdates.lines.join(''));
             } else {
               stopBlend();
             }
             presentedRows = rowUpdates.lines.slice();
             presentedRevision = rowUpdates.revision;
-            presentedAt = now;
           }
           if (wheelHtml) {
             wheelHtml.style.display = overlay ? 'block' : 'none';
@@ -897,7 +886,18 @@ export function buildGhosttyTerminalHtml(
             wheelX = Math.max(0, Math.min(viewportWidth - 1, touch.clientX - live.getBoundingClientRect().left));
             wheelY = Math.max(0, Math.min(viewportHeight - 1, touch.clientY - live.getBoundingClientRect().top));
           }
-          if (touch && (Math.abs(touch.clientX - touchX) > 4 || Math.abs(touch.clientY - touchY) > 4)) moved = true;
+          if (touch && (Math.abs(touch.clientX - touchX) > 4 || Math.abs(touch.clientY - touchY) > 4)) {
+            const firstMove = !moved;
+            moved = true;
+            if (firstMove && wheelGesture && Math.abs(touch.clientY - touchY) > 4) {
+              // Start the TUI round trip at touch slop, before the WebView's
+              // native scroll callback. Native scrolling still owns distance,
+              // velocity and fling; prime only its existing first-direction tick.
+              wheelDirection = Math.sign(touchY - touch.clientY);
+              wheelPixels = wheelDirection * cellHeight;
+              wheelFrame(performance.now());
+            }
+          }
         }, { capture: true, passive: true });
         document.addEventListener('touchend', (event) => {
           touching = false;
@@ -912,6 +912,9 @@ export function buildGhosttyTerminalHtml(
           touching = false;
           touchRow = null;
           moved = true;
+          // Retire the gesture layer on the next frame even if the app stops
+          // producing output. Waiting for idle/cursor blink leaves stale pixels.
+          scheduleDraw();
           scheduleIdle();
         }, { capture: true, passive: true });
         historyNotice.addEventListener('click', () => {
@@ -965,7 +968,6 @@ export function buildGhosttyTerminalHtml(
           if (changed) {
             presentedRows = [];
             presentedRevision = -1;
-            presentedAt = 0;
             paneModes = [];
             setWheelViewport(false);
             touching = false;

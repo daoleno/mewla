@@ -49,22 +49,28 @@ The same WebView implementation runs on Android and iOS. Native scrolling owns
 fling, reversal and stop-on-touch. Batches are limited to three wheel ticks at
 most once per animation frame (at least 16 ms apart). A batch waits for an
 arriving app render before another is sent; intervening ticks are discarded, never queued. Because applications can
-consume a reverse tick without redrawing, a 100 ms no-output deadline permits
+consume a reverse tick without redrawing, a 32 ms no-output deadline permits
 a fresh tick; it never replays blocked deltas. Reversal and a new touch
 release that wait so reaching a transcript boundary cannot trap the gesture.
-Smoothness depends on app redraw and network latency. Wheel-response output is
-coalesced in one JS task, with presentation on the WebView animation frame,
-avoiding an additional React Native animation-frame wait. The first recognized
-native scroll delta and each reversal emit a tick without waiting a full cell.
+Smoothness depends on app redraw and network latency. Output after an idle
+interval publishes immediately, with sustained updates bounded to 16 ms and
+presentation on the WebView animation frame. Native UI-queue dispatch avoids
+an additional Fabric mounting-frame wait. The first vertical touch-slop crossing
+primes one tick before the native scroll callback; native scrolling continues to
+own distance and momentum. Each reversal emits a tick without waiting a full cell.
 
 To soften line stepping, consecutive styled frames are compared for an exact
 contiguous row translation with at least eight matching rows and four nonblank
 rows. Only the longest proven region is interpolated; fixed headers, prompts
 and badges retain their incoming rendering. ANSI spans and CJK cells are copied
-unchanged. Interpolation uses the previous redraw interval, capped at 80 ms,
-with no animation queue. Touch, reversal, selection and context changes cancel
+unchanged. Interpolation finishes within one 16 ms display interval, without
+carrying residual displacement into another frame. Using the previous PTY
+redraw interval added up to 80 ms of old-content lag after output had already
+arrived. Touch, reversal, selection and context changes cancel
 it. Unmatched layouts and the system reduced-motion setting use direct redraws.
 Touch targets remain in the DOM while a separate, non-interactive layer displays the updated transcript.
+Touch cancellation retires that layer on the next frame, even without further
+PTY output; it does not wait for the idle timer or cursor blink.
 Selection suspends forwarding. Wheel input does not focus the IME, clear the
 composer, resize the PTY, or synthesize a click.
 

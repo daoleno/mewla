@@ -28,6 +28,7 @@ export interface NativeTerminalTheme {
 }
 
 interface NativeTerminalVtModule {
+  dispatchRenderer(viewTag: number, script: string): Promise<void>;
   getCapabilities?(): NativeTerminalCapabilities;
   createTerminal(cols: number, rows: number): number;
   destroyTerminal(handle: number): void;
@@ -57,6 +58,11 @@ export interface NativeTerminalCapabilities {
 }
 
 const ZenTerminalVt = requireNativeModule<NativeTerminalVtModule>('ZenTerminalVt');
+
+/** Enqueue on the native UI queue without Fabric's extra mounting-frame wait. */
+export function dispatchRenderer(viewTag: number, script: string): Promise<void> {
+  return ZenTerminalVt.dispatchRenderer(viewTag, script);
+}
 
 export function getCapabilities(): NativeTerminalCapabilities {
   return ZenTerminalVt.getCapabilities?.() ?? {
