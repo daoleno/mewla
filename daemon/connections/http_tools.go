@@ -93,96 +93,114 @@ func (m *Manager) discover(ctx context.Context, r *record, secret string) error 
 		return err
 	}
 	raw, _ := json.Marshal(candidate.Account)
-	escaped, _ := json.Marshal(secret)
-	if secret != "" && (bytes.Contains(raw, []byte(secret)) || bytes.Contains(raw, escaped[1:len(escaped)-1])) {
-		return errors.New("service echoed credential in account metadata")
+	for _, value := range m.sensitiveValues(r, secret) {
+		escaped, _ := json.Marshal(value)
+		if value != "" && (bytes.Contains(raw, []byte(value)) || bytes.Contains(raw, escaped[1:len(escaped)-1])) {
+			return errors.New("service echoed credential in account metadata")
+		}
 	}
 	r.Account = candidate.Account
 	return nil
 }
 func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret string) error {
 	var tools []Tool
-	switch r.Account.Integration {
-	case "github", "notion":
-		raw, err := m.request(ctx, r.Account.Endpoint, secret, "GET", map[string]string{"github": "/user", "notion": "/users/me"}[r.Account.Integration], nil)
-		if err != nil {
-			return err
-		}
-		var user struct {
-			Login string `json:"login"`
-			Name  string `json:"name"`
-			ID    any    `json:"id"`
-			Bot   struct {
-				WorkspaceName string `json:"workspace_name"`
-			} `json:"bot"`
-		}
-		if json.Unmarshal(raw, &user) != nil || user.ID == nil {
-			return errors.New("service did not return an account identity")
-		}
-		r.Account.Identity = user.Login
-		if r.Account.Identity == "" {
-			r.Account.Identity = user.Bot.WorkspaceName
-		}
-		if r.Account.Identity == "" {
-			r.Account.Identity = user.Name
-		}
-		if r.Account.Identity == "" {
-			r.Account.Identity = fmt.Sprint(user.ID)
-		}
-		tools = builtinTools(r.Account.Integration)
-	case "slack":
-		var headers http.Header
-		raw, err := m.request(ctx, r.Account.Endpoint, secret, "GET", "/auth.test", nil, &headers)
-		if err != nil {
-			return err
-		}
-		var identity struct {
-			Team   string `json:"team"`
-			User   string `json:"user"`
-			UserID string `json:"user_id"`
-			BotID  string `json:"bot_id"`
-		}
-		if json.Unmarshal(raw, &identity) != nil || identity.UserID == "" {
-			return errors.New("Slack did not return an account identity")
-		}
-		r.Account.Identity = identity.Team + " · " + identity.User
-		granted := map[string]bool{}
-		for _, scope := range strings.Split(headers.Get("X-OAuth-Scopes"), ",") {
-			granted[strings.TrimSpace(scope)] = true
-		}
-		for _, tool := range slackTools() {
-			allowed := tool.Name == "get_me"
-			for _, scope := range slackToolScopes[tool.Name] {
-				if granted[scope] {
-					allowed = true
-				}
-			}
-			if tool.Name == "search_messages" && identity.BotID != "" {
-				allowed = false
-			}
-			if allowed {
-				tools = append(tools, tool)
-			}
-		}
-	case "openapi":
-		var err error
-		tools, err = openAPITools(r.Spec)
-		if err != nil {
-			return err
-		}
-		// A schema is not proof of account authorization. The first permitted call
-		// verifies the remote endpoint; never label an uploaded spec connected.
-		r.Account.Tools = tools
-		r.Account.Identity = "Authorization not verified"
-		r.Account.Status = "configured"
-		return nil
-	case "mcp", "linear":
+	if r.Account.AuthMethod == "mcp_oauth" {
 		var err error
 		tools, err = m.discoverMCP(ctx, r, secret)
 		if err != nil {
 			return err
 		}
 		r.Account.Identity = "MCP account · identity not provided by server"
+	} else {
+		switch r.Account.Integration {
+		case "google":
+			if err := m.discoverGoogle(ctx, r, secret); err != nil {
+				return err
+			}
+			tools = r.Account.Tools
+		case "github", "notion":
+			raw, err := m.request(ctx, r, r.Account.Endpoint, secret, "GET", map[string]string{"github": "/user", "notion": "/users/me"}[r.Account.Integration], nil)
+			if err != nil {
+				return err
+			}
+			var user struct {
+				Login string `json:"login"`
+				Name  string `json:"name"`
+				ID    any    `json:"id"`
+				Bot   struct {
+					WorkspaceName string `json:"workspace_name"`
+				} `json:"bot"`
+			}
+			if json.Unmarshal(raw, &user) != nil || user.ID == nil {
+				return errors.New("service did not return an account identity")
+			}
+			r.Account.Identity = user.Login
+			if r.Account.Identity == "" {
+				r.Account.Identity = user.Bot.WorkspaceName
+			}
+			if r.Account.Identity == "" {
+				r.Account.Identity = user.Name
+			}
+			if r.Account.Identity == "" {
+				r.Account.Identity = fmt.Sprint(user.ID)
+			}
+			tools = builtinTools(r.Account.Integration)
+		case "slack":
+			var headers http.Header
+			raw, err := m.request(ctx, r, r.Account.Endpoint, secret, "GET", "/auth.test", nil, &headers)
+			if err != nil {
+				return err
+			}
+			var identity struct {
+				Team   string `json:"team"`
+				User   string `json:"user"`
+				UserID string `json:"user_id"`
+				BotID  string `json:"bot_id"`
+			}
+			if json.Unmarshal(raw, &identity) != nil || identity.UserID == "" {
+				return errors.New("Slack did not return an account identity")
+			}
+			r.Account.Identity = identity.Team + " · " + identity.User
+			granted := map[string]bool{}
+			for _, scope := range strings.Split(headers.Get("X-OAuth-Scopes"), ",") {
+				granted[strings.TrimSpace(scope)] = true
+			}
+			for _, tool := range slackTools() {
+				allowed := tool.Name == "get_me"
+				for _, scope := range slackToolScopes[tool.Name] {
+					if granted[scope] {
+						allowed = true
+					}
+				}
+				if tool.Name == "search_messages" && identity.BotID != "" {
+					allowed = false
+				}
+				if allowed {
+					tools = append(tools, tool)
+				}
+			}
+		case "openapi":
+			var err error
+			tools, err = openAPITools(r.Spec)
+			if err != nil {
+				return err
+			}
+			// A schema is not proof of account authorization. The first permitted call
+			// verifies the remote endpoint; never label an uploaded spec connected.
+			r.Account.Tools = tools
+			r.Account.Identity = "Account identity unavailable"
+			if r.Account.VerifiedAt == nil {
+				r.Account.Status = "configured"
+			}
+			return nil
+		case "mcp", "linear":
+			var err error
+			tools, err = m.discoverMCP(ctx, r, secret)
+			if err != nil {
+				return err
+			}
+			r.Account.Identity = "MCP account · identity not provided by server"
+		}
 	}
 	if len(tools) > MaxTools {
 		return errors.New("plugin exposes more than 200 tools; use a narrower endpoint")
@@ -371,6 +389,10 @@ func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool
 	if t == nil || fingerprint(*t) != fingerprint(tool) {
 		return nil, errors.New("tool definition changed; refresh and review authorization")
 	}
+	return m.dispatchHTTP(ctx, r, r.Account.Endpoint, secret, *t, args)
+}
+
+func (m *Manager) dispatchHTTP(ctx context.Context, r *record, endpoint, secret string, t Tool, args map[string]any) ([]byte, error) {
 	path := t.Path
 	if params, ok := args["path"].(map[string]any); ok {
 		for k, v := range params {
@@ -403,5 +425,5 @@ func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool
 	if b, ok := args["body"]; ok {
 		body, _ = json.Marshal(b)
 	}
-	return m.request(ctx, r.Account.Endpoint, secret, t.Method, path, bytes.NewReader(body))
+	return m.request(ctx, r, endpoint, secret, t.Method, path, bytes.NewReader(body))
 }

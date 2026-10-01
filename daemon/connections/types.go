@@ -22,7 +22,7 @@ func Catalog() []Integration {
 	return []Integration{
 		{"github", "GitHub", true, "https://github.com/settings/personal-access-tokens", "Repositories, issues and pull requests"},
 		{"notion", "Notion", true, "https://www.notion.so/profile/integrations", "Pages, search and workspace content"},
-		{"google", "Google Workspace", false, "https://developers.google.com/workspace/guides/configure-oauth-consent", "Drive, Gmail and Calendar · OAuth setup required"},
+		{"google", "Google Workspace", true, "https://developers.google.com/workspace/guides/configure-oauth-consent", "Drive, Gmail and Calendar · browser authorization"},
 		{"slack", "Slack", true, "https://api.slack.com/apps", "Channels and messages · tools match account scopes"},
 		{"linear", "Linear", true, "https://linear.app/settings/account/security", "Issues and projects through official remote MCP"},
 		{"mcp", "Remote MCP", true, "https://modelcontextprotocol.io", "Discover tools from a remote MCP server"},
@@ -49,24 +49,31 @@ type Event struct {
 }
 
 type Account struct {
-	ID          string     `json:"id"`
-	Integration string     `json:"integration"`
-	Name        string     `json:"name"`
-	Identity    string     `json:"identity"`
-	Endpoint    string     `json:"endpoint,omitempty"`
-	Enabled     bool       `json:"enabled"`
-	Status      string     `json:"status"`
-	VerifiedAt  *time.Time `json:"verified_at,omitempty"`
-	Tools       []Tool     `json:"tools"`
-	History     []Event    `json:"history"`
+	ID                       string     `json:"id"`
+	Integration              string     `json:"integration"`
+	Name                     string     `json:"name"`
+	Identity                 string     `json:"identity"`
+	Endpoint                 string     `json:"endpoint,omitempty"`
+	TrustedNetworks          []string   `json:"trusted_networks,omitempty"`
+	AuthMethod               string     `json:"auth_method,omitempty"`
+	Scopes                   []string   `json:"scopes,omitempty"`
+	Enabled                  bool       `json:"enabled"`
+	CredentialRemovalPending bool       `json:"credential_removal_pending,omitempty"`
+	Status                   string     `json:"status"`
+	VerifiedAt               *time.Time `json:"verified_at,omitempty"`
+	Tools                    []Tool     `json:"tools"`
+	History                  []Event    `json:"history"`
 }
 
 type Input struct {
-	Integration string          `json:"integration"`
-	Name        string          `json:"name"`
-	Endpoint    string          `json:"endpoint,omitempty"`
-	Credential  string          `json:"credential,omitempty"`
-	Spec        json.RawMessage `json:"spec,omitempty"`
+	Integration     string             `json:"integration"`
+	Name            string             `json:"name"`
+	Endpoint        string             `json:"endpoint,omitempty"`
+	TrustedNetworks []string           `json:"trusted_networks,omitempty"`
+	Credential      string             `json:"credential,omitempty"`
+	Spec            json.RawMessage    `json:"spec,omitempty"`
+	OAuthClient     *OAuthClientConfig `json:"oauth_client,omitempty"`
+	AllowWrites     bool               `json:"allow_writes,omitempty"`
 }
 
 type Request struct {
@@ -88,10 +95,12 @@ type Match struct {
 }
 
 type Response struct {
-	Catalog  []Integration   `json:"catalog,omitempty"`
-	Accounts []Account       `json:"accounts,omitempty"`
-	Account  *Account        `json:"account,omitempty"`
-	Matches  []Match         `json:"matches,omitempty"`
-	Tool     *Tool           `json:"tool,omitempty"`
-	Result   json.RawMessage `json:"result,omitempty"`
+	Catalog          []Integration   `json:"catalog,omitempty"`
+	Accounts         []Account       `json:"accounts,omitempty"`
+	Account          *Account        `json:"account,omitempty"`
+	Matches          []Match         `json:"matches,omitempty"`
+	Tool             *Tool           `json:"tool,omitempty"`
+	Result           json.RawMessage `json:"result,omitempty"`
+	AuthorizationURL string          `json:"authorization_url,omitempty"`
+	OAuthConfigured  []string        `json:"oauth_configured"`
 }

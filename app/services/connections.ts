@@ -17,20 +17,26 @@ export type PluginAccount = {
   name: string;
   identity: string;
   endpoint?: string;
+  trusted_networks?: string[];
+  auth_method?: string;
+  scopes?: string[];
   enabled: boolean;
+  credential_removal_pending?: boolean;
   status: "connected" | "configured" | "error" | "authorization_required" | "disconnected";
   verified_at?: string;
   tools?: ConnectionTool[];
   history: { at: string; tool: string; status: string; message?: string }[];
 };
 export type ConnectionRequest = {
-  action: "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
+  action: "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
   id?: string;
   tool?: string;
   allowed?: boolean;
-  input?: { integration: string; name: string; endpoint?: string; credential?: string; spec?: unknown };
+  input?: { integration: string; name: string; endpoint?: string; credential?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectionResponse = {
+  authorization_url?: string;
+  oauth_configured?: string[];
   catalog?: PluginIntegration[];
   accounts?: PluginAccount[];
   account?: PluginAccount;

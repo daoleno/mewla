@@ -405,6 +405,13 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
+	mux.HandleFunc("/plugins/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
+		if s.connections == nil {
+			http.Error(w, "Plugins unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		s.connections.OAuthCallback(w, r)
+	})
 	mux.HandleFunc("/resources", s.handleResourceTelemetryHTTP)
 	mux.HandleFunc("/desktop", s.handleDesktop)
 	mux.HandleFunc("/desktop/capability", s.handleDesktopCapability)

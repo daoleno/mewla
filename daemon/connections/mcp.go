@@ -13,7 +13,7 @@ import (
 
 func (m *Manager) mcpSession(ctx context.Context, r *record, secret string) (*mcp.ClientSession, error) {
 	u, _ := url.Parse(r.Account.Endpoint)
-	client := *m.http
+	client := *m.clientFor(r)
 	base := client.Transport
 	if base == nil {
 		base = http.DefaultTransport
@@ -22,6 +22,9 @@ func (m *Manager) mcpSession(ctx context.Context, r *record, secret string) (*mc
 	c := mcp.NewClient(&mcp.Implementation{Name: "Zen", Version: "1"}, nil)
 	session, err := c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: r.Account.Endpoint, HTTPClient: &client, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
+		if errors.Is(err, errAuth) {
+			return nil, errAuth
+		}
 		if ctx.Err() != nil {
 			return nil, safeError(ctx.Err())
 		}

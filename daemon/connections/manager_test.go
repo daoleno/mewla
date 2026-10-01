@@ -195,6 +195,10 @@ func TestOpenAPIDiscoveryGrantAndDispatch(t *testing.T) {
 	if calls != 1 {
 		t.Fatal(calls)
 	}
+	refreshed := mustHandle(t, m, Request{Action: "refresh", ID: a.ID}).Account
+	if refreshed.Status != "connected" || refreshed.Identity != "Account identity unavailable" || calls != 1 {
+		t.Fatal("local schema refresh changed last observed connection status")
+	}
 	q.Arguments = json.RawMessage(`{"path":{"id":"../secret"}}`)
 	if _, err := m.Handle(context.Background(), q); err == nil {
 		t.Fatal("path escape")
