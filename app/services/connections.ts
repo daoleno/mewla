@@ -10,6 +10,7 @@ export type ConnectionTool = {
   description: string;
   input_schema?: Record<string, unknown>;
   allowed: boolean;
+  group?: "read" | "write";
 };
 export type PluginAccount = {
   id: string;
@@ -28,13 +29,28 @@ export type PluginAccount = {
   history: { at: string; tool: string; status: string; message?: string }[];
 };
 export type ConnectionRequest = {
-  action: "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
+  flow_id?: string;
+  callback?: string;
+  group?: "read" | "write";
+  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
   id?: string;
   tool?: string;
   allowed?: boolean;
-  input?: { integration: string; name: string; endpoint?: string; credential?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; name?: string; endpoint?: string; credential?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+};
+export type ConnectFlow = {
+  id: string;
+  integration: string;
+  status: "waiting" | "confirm" | "connected" | "cancelled" | "failed";
+  authorization_url?: string;
+  user_code?: string;
+  identity?: string;
+  message?: string;
+  expires: string;
+  account_id?: string;
 };
 export type ConnectionResponse = {
+  flow?: ConnectFlow;
   authorization_url?: string;
   oauth_configured?: string[];
   catalog?: PluginIntegration[];

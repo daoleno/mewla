@@ -110,7 +110,10 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 		if err != nil {
 			return err
 		}
-		r.Account.Identity = "MCP account · identity not provided by server"
+		r.Account.Identity = "Account identity not provided by this service"
+		if identity := m.officialMCPIdentity(ctx, r, secret, tools); identity != "" {
+			r.Account.Identity = identity
+		}
 	} else {
 		switch r.Account.Integration {
 		case "google":
