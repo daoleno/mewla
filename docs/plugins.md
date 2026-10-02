@@ -9,7 +9,7 @@ The connected service shows useful capabilities first. **Permissions** controls 
 | Service | Built-in authorization | Current implementation boundary |
 | --- | --- | --- |
 | Linear | DCR + PKCE + fixed native return | Live DCR accepted `zen://plugins`; account consent still needed. |
-| Notion | Official remote MCP, DCR + PKCE + native return | This environment returns HTTP403 from vendor metadata; live compatibility is unverified. |
+| Notion | Official remote MCP, DCR + PKCE; native return implemented but not vendor-verified | Metadata now returns200 and unauthenticated Streamable HTTP returns the expected401 challenge. Native redirect acceptance and account consent remain unverified; the earlier403 did not establish redirect incompatibility. |
 | GitHub | Official device authorization, or preview and explicitly import a server-signed-in identity through `gh` | First-time device flow needs a real Zen-owned public client ID in the release. Existing identity import is not first-time signup proof. |
 | Slack | Official public-client PKCE with user scopes and rotating tokens | Requires Zen publisher registration with PKCE enabled and a public client ID in the release. No shared client secret or public daemon callback. |
 | Google Workspace | Existing operator-owned Web OAuth works on an already configured daemon | The prepared Google-only exchange and daemon adapter support distributed no-configuration background access once publisher hosting/registration is provisioned. No end-user configuration workaround is offered. |
@@ -44,6 +44,8 @@ Credentials live in the daemon's private 0600 vault. Account metadata/history co
 The existing private control CLI retains operator-owned OAuth configuration and token/custom-service functionality for advanced use. Those commands are not the end-user built-in installation journey and must never distribute Zen's shared publisher secret.
 
 ## Custom service boundaries
+
+Custom forms use the shared `react-native-keyboard-controller` keyboard-aware scroll view on Android and iOS. It follows focused inputs and keyboard geometry automatically, including lower private-network fields, with the existing `Spacing.lg` token as the supported caret clearance, without a second keyboard-padding wrapper, manual scroll coordinates or timers. The same scroll container stays mounted while fields update; built-in connection screens still contain no text inputs.
 
 Custom endpoints use HTTPS/public addresses by default. A per-account grant permits explicitly selected internal CIDRs; cloud metadata/link-local addresses and overbroad ranges remain rejected. DNS validation is bound to dialing. Credentials never follow redirects. OAuth resource/client identity remains bound to the exact endpoint, including refresh. OpenAPI references stay local to the submitted document; file/remote references, recursive schemas and unsupported body encodings are rejected. Calls cannot override endpoint, credential, policy or schema.
 
