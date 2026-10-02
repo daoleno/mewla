@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, BackHandler, Linking, StyleSheet, Switch, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
+import { openPluginAuthorization } from "../services/pluginBrowser";
 import * as SecureStore from "expo-secure-store";
 import * as Clipboard from "expo-clipboard";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -162,8 +162,8 @@ function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: stri
     setPhase("opening");
     try {
       setPhase("waiting");
-      if (active.flow.user_code) { await WebBrowser.openBrowserAsync(active.flow.authorization_url); await check(); return; }
-      const result = await WebBrowser.openAuthSessionAsync(active.flow.authorization_url, PLUGIN_CALLBACK);
+      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code);
+      if (result.type === "external") { await check(); return; }
       if (!valid()) {
         if (result.type === "success") await deferReturn(result.url);
         return;
