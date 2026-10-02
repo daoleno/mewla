@@ -363,11 +363,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
 	srv.SetResourceSampler(resourceSampler)
-	// The scoped idle/suspend inhibitor is tied to the persisted unattended
-	// authorization; the production entry point owns it so tests never touch a
-	// developer session bus.
-	// Trusted-deployment opt-in: --lan or an explicit private/tailnet-bound
-	// origin. Forwarded headers and client JSON never enable this.
 	telegramManager, err := telegramchannel.NewManagerWithOptions(authManager.StorageDir(), brainService, telegramchannel.Options{Attachments: srv.AttachmentStore()})
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)

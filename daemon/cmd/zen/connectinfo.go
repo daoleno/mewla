@@ -103,7 +103,7 @@ func printPairingInfo(w io.Writer, offers []connectionOffer) {
 		return
 	}
 	fmt.Fprintln(w, "Pairing grants this phone access to sessions, terminal, Brain, Workers, and files on this Zen server.")
-	fmt.Fprintln(w, "Re-pair an existing device once to confirm this expanded access. Revoke with zen devices revoke -id DEVICE_ID.")
+	fmt.Fprintln(w, "Revoke this phone's access with zen devices revoke -id DEVICE_ID.")
 
 	for _, offer := range offers {
 		fmt.Fprintf(w, "  - %s\n", offer.Label)
