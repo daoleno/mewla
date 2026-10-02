@@ -128,7 +128,7 @@ Do not create a GitHub Release by hand. Recovery repeats every identity, SHA, ma
 
 Android SDK setup explicitly requests `platform-tools` because the action's default also requests the removed SDK package `tools`. The following install step retains the pinned Android platform, build-tools, NDK, and CMake packages.
 
-The Linux release job installs GTK3, GLib/GIO, GStreamer app/video, X11, and XTest development packages and checks their pkg-config modules before the production daemon recipe. The Android APK helper fetches the hash-pinned Moonlight core, enet, and nanors, then builds OpenSSL for arm64/API 24 with NDK 27.1.12297006 before clean prebuild and Gradle. This also covers local staging through the same helper. Ordinary native CI prepares the same inputs and builds the production daemon targets and Android debug/release variants from a clean checkout; its APK uses development signing, while official certificate verification remains in the release workflow.
+The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Ordinary native CI builds Android debug/release variants with development signing; official certificate verification remains in the release workflow.
 
 Recent pre-change GitHub runs on July 14, 2026 put the combined release-assets job at about 20–27 minutes warm/cold. Android dominated: clean prebuild plus Gradle took roughly 14–22 minutes, native Ghostty took 2–3 minutes, and all three daemon binaries took about 40 seconds at the end. The old redundant tag-triggered `native-libs` workflow also consumed about 25–35 minutes, including duplicate iOS/Android native builds.
 

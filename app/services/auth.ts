@@ -35,9 +35,6 @@ export interface LocalDeviceIdentity {
 }
 
 export type AuthPurpose =
-  | "zen-desktop"
-  | "zen-desktop-capability"
-  | "zen-device-admin:desktop-grant:POST:/desktop/scope"
   | "zen-connect"
   | "zen-upload"
   | "zen-probe"

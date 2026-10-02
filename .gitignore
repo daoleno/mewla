@@ -42,9 +42,6 @@ app/ios/
 app/modules/zen-file-upload/android/build/
 app/modules/zen-keyboard-lifecycle/android/build/
 app/modules/zen-link-transport/android/build/
-app/modules/zen-remote-desktop/android/build/
-app/modules/zen-remote-desktop/android/.cxx/
-app/modules/zen-remote-desktop/third_party/
 
 # Host CMake/JVM bridge test build (never shipped)
 /build/

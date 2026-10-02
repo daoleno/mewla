@@ -226,9 +226,4 @@ func TestDaemonArchiveRoleIsSingleZenExecutable(t *testing.T) {
 	if !ok || got.Role != "daemon_archive" || got.Path != name {
 		t.Fatalf("manifest artifact %+v ok=%v", got, ok)
 	}
-	for _, artifact := range manifest.Artifacts {
-		if artifact.Role == "desktop_helper" || strings.Contains(artifact.Path, "desktop-helper") {
-			t.Fatal("update manifest must not ship a separate helper ELF")
-		}
-	}
 }

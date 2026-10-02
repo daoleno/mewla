@@ -21,7 +21,7 @@ import (
 // authenticated chat WebSocket with an empty worker session list instead of
 // panicking the handler process. Regression for the fixture-route
 // system-process panic that broke native chat reconnects and, through the
-// shared pinned-tunnel key, desktop preflight retries.
+// shared pinned-tunnel key.
 func TestChatWebSocketNilWatcherStaysConnected(t *testing.T) {
 	manager, err := auth.NewManager(t.TempDir())
 	if err != nil {

@@ -50,12 +50,12 @@ func TestTransportIdentityPersistsRouteAndPinAcrossCertificateReissue(t *testing
 	}
 	foundIdentityName := false
 	for _, name := range first.Certificate.Leaf.DNSNames {
-		if name == DesktopIdentityServerName {
+		if name == LinkIdentityServerName {
 			foundIdentityName = true
 		}
 	}
 	if !foundIdentityName {
-		t.Fatal("identity desktop server name missing from transport certificate")
+		t.Fatal("pinned Link server name missing from transport certificate")
 	}
 }
 
