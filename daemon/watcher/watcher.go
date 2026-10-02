@@ -5600,7 +5600,10 @@ func workerCommandFromProcess(proc processInfo) string {
 	if lowerComm == "claude" || lowerComm == "claude-code" || lowerComm == "cc" {
 		return lowerComm
 	}
-	if strings.Contains(lowerArgs, " claude") || strings.HasPrefix(lowerArgs, "claude ") {
+	// Provider identity comes from the executable, not option values. Cursor
+	// can run --model claude-opus-5-5-high without becoming a Claude process.
+	argsExecutable := processArgsExecutableBase(lowerArgs)
+	if argsExecutable == "claude" || argsExecutable == "claude-code" || argsExecutable == "cc" {
 		return "claude"
 	}
 	if lowerComm == "codex" || lowerArgs == "codex" || strings.Contains(lowerArgs, "/bin/codex") || strings.Contains(lowerArgs, " codex ") || strings.HasPrefix(lowerArgs, "codex ") {

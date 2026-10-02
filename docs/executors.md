@@ -2,6 +2,14 @@
 
 Zen launches and observes AI CLIs through tmux. Configuration is optional: if `~/.zen/executors.toml` is missing, built-in defaults apply.
 
+Session identity follows the live provider executable. A Cursor Worker launched
+with `cursor-agent --model claude-opus-5-5-high` is a Cursor Session; a model
+argument containing `claude` does not select the Claude transcript reader.
+Visible delegated Workers are included in the mobile Session index even when
+their lifecycle status is `unknown`. That status means Zen lacks authoritative
+turn evidence, and does not mean the provider process stopped. Sessions use the
+current server's index on both Android and iOS.
+
 **One authenticated executor on `PATH` is enough** for a usable Zen installation. You do not need Codex, Claude, Cursor, Grok, Pi, and OpenCode all installed.
 
 ## Built-in defaults (current code)
