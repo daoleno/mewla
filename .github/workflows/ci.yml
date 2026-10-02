@@ -55,6 +55,9 @@ jobs:
           retention-days: 7
       - name: Vet
         run: go vet ./...
+      - name: Verify public publisher build configuration
+        working-directory: .
+        run: python3 scripts/test-plugin-publisher-flags.py
       - name: Build release targets
         working-directory: .
         run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
