@@ -27,24 +27,28 @@ type OAuthClientConfig struct {
 	ResourceURL  string `json:"resource_url,omitempty"`
 }
 type oauthAccount struct {
-	ClientID    string           `json:"client_id"`
-	RedirectURL string           `json:"redirect_url"`
-	Issuer      string           `json:"issuer"`
-	AuthURL     string           `json:"auth_url"`
-	TokenURL    string           `json:"token_url"`
-	RevokeURL   string           `json:"revoke_url,omitempty"`
-	Resource    string           `json:"resource,omitempty"`
-	AuthStyle   oauth2.AuthStyle `json:"auth_style"`
+	ClientID       string           `json:"client_id"`
+	RedirectURL    string           `json:"redirect_url"`
+	Issuer         string           `json:"issuer"`
+	AuthURL        string           `json:"auth_url"`
+	TokenURL       string           `json:"token_url"`
+	RevokeURL      string           `json:"revoke_url,omitempty"`
+	Resource       string           `json:"resource,omitempty"`
+	GoogleExchange string           `json:"google_exchange,omitempty"`
+	AuthStyle      oauth2.AuthStyle `json:"auth_style"`
 }
 type oauthSecret struct {
-	Token        *oauth2.Token `json:"token"`
-	ClientSecret string        `json:"client_secret,omitempty"`
+	Exchange     *googleExchangeSecret `json:"exchange,omitempty"`
+	Token        *oauth2.Token         `json:"token"`
+	ClientSecret string                `json:"client_secret,omitempty"`
 }
 type oauthFlow struct {
 	ID           string
 	Verifier     string
 	ClientSecret string
 	Expires      time.Time
+	Mobile       bool
+	AllowWrites  bool
 }
 type oauthMetadata struct {
 	Issuer                string   `json:"issuer"`
@@ -62,16 +66,16 @@ func validCallback(raw string) bool {
 	return len(raw) <= 4096 && err == nil && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/plugins/oauth/callback" && (u.Scheme == "https" && u.Hostname() != "" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))
 }
 func (m *Manager) configureOAuth(in *Input) (Response, error) {
-	if in == nil || in.OAuthClient == nil || !validCallback(in.OAuthClient.RedirectURL) || len(in.OAuthClient.ClientID) > 2048 || len(in.OAuthClient.ClientSecret) > 16384 {
+	if in == nil || in.OAuthClient == nil || !(validCallback(in.OAuthClient.RedirectURL) || in.Integration == "github" && in.OAuthClient.RedirectURL == "" || in.Integration == "slack" && in.OAuthClient.RedirectURL == NativeCallback && in.OAuthClient.ClientSecret == "") || len(in.OAuthClient.ClientID) > 2048 || len(in.OAuthClient.ClientSecret) > 16384 {
 		return Response{}, errors.New("provide an OAuth client and registered daemon /plugins/oauth/callback URL")
 	}
 	switch in.Integration {
-	case "google", "notion", "linear", "mcp":
+	case "github", "slack", "google", "notion", "linear", "mcp":
 	default:
 		return Response{}, errors.New("OAuth is not supported for this plugin")
 	}
-	if in.Integration == "google" && in.OAuthClient.ClientID == "" {
-		return Response{}, errors.New("Google requires your registered web application OAuth client ID")
+	if (in.Integration == "google" || in.Integration == "slack" || in.Integration == "github") && in.OAuthClient.ClientID == "" {
+		return Response{}, errors.New("this service requires a publisher-owned client ID")
 	}
 	if in.Integration == "mcp" && in.OAuthClient.ClientID != "" {
 		if _, err := trustedEndpointURL(in.OAuthClient.ResourceURL, in.TrustedNetworks); err != nil {
@@ -86,7 +90,7 @@ func (m *Manager) configureOAuth(in *Input) (Response, error) {
 }
 func (m *Manager) oauthConfigured() []string {
 	configured := []string{}
-	for _, kind := range []string{"google", "notion", "linear", "mcp"} {
+	for _, kind := range []string{"github", "slack", "google", "notion", "linear", "mcp"} {
 		if _, ok, err := m.vault.Get("oauth-client:" + kind); err == nil && ok {
 			configured = append(configured, kind)
 		}
@@ -94,29 +98,40 @@ func (m *Manager) oauthConfigured() []string {
 	return configured
 }
 func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
-	if in == nil || strings.TrimSpace(in.Name) == "" || len(in.Name) > 80 || len(m.records) >= 50 {
-		return Response{}, errors.New("provide a unique account name (up to 80 characters)")
+	if in == nil || len(in.Name) > 80 || len(m.records) >= 50 {
+		return Response{}, errors.New("maximum accounts reached or invalid account name")
 	}
-	for _, r := range m.records {
-		if r.Account.Integration == in.Integration && r.Account.Name == strings.TrimSpace(in.Name) && r.Account.Status != "disconnected" {
-			return Response{}, errors.New("choose a unique account name for this plugin")
-		}
+	if strings.TrimSpace(in.Name) == "" {
+		copy := *in
+		in = &copy
+		in.Name = serviceName(in.Integration)
 	}
 	for state, flow := range m.pending {
 		if time.Now().After(flow.Expires) {
+			delete(m.records, flow.ID)
 			delete(m.pending, state)
 		}
 	}
 	if len(m.pending) >= 20 {
 		return Response{}, errors.New("too many pending authorizations; try again later")
 	}
-	raw, ok, err := m.vault.Get("oauth-client:" + in.Integration)
-	var client OAuthClientConfig
-	if err != nil || !ok || json.Unmarshal([]byte(raw), &client) != nil {
-		return Response{}, errors.New("configure this server's OAuth callback/client first in Plugins")
+	client, ok, err := m.clientConfig(in.Integration)
+	if err != nil {
+		return Response{}, errors.New("authorization configuration unavailable")
 	}
+	if !ok && in.Mobile && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "mcp") {
+		client.RedirectURL = NativeCallback
+	} else if !ok {
+		return Response{}, errors.New("Zen has not finished setting up authorization for this service. No account was connected.")
+	}
+	if in.Mobile && (in.Integration == "notion" || in.Integration == "linear") {
+		client = OAuthClientConfig{RedirectURL: NativeCallback}
+	}
+
 	endpoint := in.Endpoint
 	switch in.Integration {
+	case "slack":
+		endpoint = "https://slack.com/api"
 	case "google":
 		endpoint = "https://www.googleapis.com"
 	case "notion":
@@ -138,7 +153,14 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: strings.TrimSpace(in.Name), Endpoint: endpoint, TrustedNetworks: append([]string(nil), in.TrustedNetworks...), Enabled: true, Status: "authorization_required", AuthMethod: "mcp_oauth", History: []Event{}}, Grants: map[string]string{}}
 	var meta oauthMetadata
-	if in.Integration == "google" {
+	if in.Integration == "slack" {
+		r.Account.AuthMethod = "oauth"
+		meta = oauthMetadata{Issuer: "https://slack.com", AuthorizationEndpoint: "https://slack.com/oauth/v2/authorize", TokenEndpoint: "https://slack.com/api/oauth.v2.access", AuthMethods: []string{"client_secret_post"}}
+		r.Account.Scopes = []string{"channels:read", "channels:history", "search:read"}
+		if in.AllowWrites {
+			r.Account.Scopes = append(r.Account.Scopes, "chat:write")
+		}
+	} else if in.Integration == "google" {
 		r.Account.AuthMethod = "oauth"
 		meta = oauthMetadata{Issuer: "https://accounts.google.com", AuthorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth", TokenEndpoint: "https://oauth2.googleapis.com/token", RevocationEndpoint: "https://oauth2.googleapis.com/revoke", AuthMethods: []string{"client_secret_post"}}
 		r.Account.Scopes = googleScopes(in.AllowWrites)
@@ -183,7 +205,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		}
 	}
 	r.OAuth = &oauthAccount{ClientID: client.ClientID, RedirectURL: client.RedirectURL, Issuer: meta.Issuer, AuthURL: meta.AuthorizationEndpoint, TokenURL: meta.TokenEndpoint, RevokeURL: meta.RevocationEndpoint, AuthStyle: style}
-	if in.Integration != "google" {
+	if r.Account.AuthMethod == "mcp_oauth" {
 		r.OAuth.Resource = endpoint
 	}
 	state, verifier := oauth2.GenerateVerifier(), oauth2.GenerateVerifier()
@@ -195,13 +217,13 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		options = append(options, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 	}
 	config := oauthConfig(r, client.ClientSecret)
+	if in.Integration == "slack" {
+		config.Scopes = nil
+		options = append(options, oauth2.SetAuthURLParam("user_scope", strings.Join(r.Account.Scopes, ",")))
+	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
-	if err := m.save(); err != nil {
-		delete(m.records, r.Account.ID)
-		return Response{}, err
-	}
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute)}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: in.Mobile && client.RedirectURL == NativeCallback, AllowWrites: in.Mobile && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -232,9 +254,13 @@ func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.finishOAuth(w, req, ctx, false)
+}
+
+func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile bool) {
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
-	if !ok || time.Now().After(flow.Expires) {
+	if !ok || flow.Mobile != mobile || time.Now().After(flow.Expires) {
 		http.Error(w, "Authorization expired. Return to Plugins and connect again.", 400)
 		return
 	}
@@ -244,9 +270,13 @@ func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Account authorization cancelled", 400)
 		return
 	}
+	pendingID := r.Account.ID
 	fail := func() {
-		r.Account.Status = "authorization_required"
-		m.event(r, "authorize", errors.New("authorization failed; connect again"))
+		// Never remove an established account if a verified reconnect reused its ID.
+		if r.Account.ID == pendingID {
+			delete(m.records, pendingID)
+			_ = m.vault.Delete("integration:" + pendingID)
+		}
 		_ = m.save()
 		http.Error(w, "Authorization failed. Return to Plugins and connect again.", 400)
 	}
@@ -263,8 +293,14 @@ func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
 	if r.OAuth.Resource != "" {
 		options = append(options, oauth2.SetAuthURLParam("resource", r.OAuth.Resource))
 	}
-	token, err := config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)), req.URL.Query().Get("code"), options...)
-	if err != nil || token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
+	var token *oauth2.Token
+	var err error
+	if r.Account.Integration == "slack" {
+		token, err = m.exchangeSlack(ctx, r, flow.ClientSecret, req.URL.Query().Get("code"), flow.Verifier)
+	} else {
+		token, err = config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)), req.URL.Query().Get("code"), options...)
+	}
+	if err != nil || token == nil || token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
 		fail()
 		return
 	}
@@ -281,11 +317,11 @@ func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
 		fail()
 		return
 	}
-	for _, tool := range r.Account.Tools {
-		if tool.Read {
-			r.Grants[tool.Name] = fingerprint(tool)
-		}
+	m.setGroup(r, "read", true)
+	if flow.AllowWrites {
+		m.setGroup(r, "write", true)
 	}
+	m.nameAndDeduplicate(r)
 	m.event(r, "authorize", nil)
 	if err = m.save(); err != nil {
 		fail()
@@ -312,6 +348,9 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	if secret.Token.Valid() {
 		return secret.Token.AccessToken, nil
 	}
+	if secret.Exchange != nil {
+		return m.refreshGoogleExchange(ctx, r, &secret)
+	}
 	config := oauthConfig(r, secret.ClientSecret)
 	client := m.oauthHTTP(r)
 	if r.OAuth.Resource != "" {
@@ -320,7 +359,12 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 		// this account's exact token endpoint and refresh grant.
 		client.Transport = oauthRefreshResourceTransport{client.Transport, r.OAuth.TokenURL, r.OAuth.Resource}
 	}
-	token, err := config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, client), secret.Token).Token()
+	var token *oauth2.Token
+	if r.Account.Integration == "slack" {
+		token, err = m.slackToken(ctx, r, url.Values{"client_id": {r.OAuth.ClientID}, "grant_type": {"refresh_token"}, "refresh_token": {secret.Token.RefreshToken}})
+	} else {
+		token, err = config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, client), secret.Token).Token()
+	}
 	if err != nil {
 		r.Account.Status = "authorization_required"
 		_ = m.save()
@@ -378,6 +422,12 @@ func (m *Manager) revokeOAuth(ctx context.Context, r *record) error {
 	var secret oauthSecret
 	if json.Unmarshal([]byte(raw), &secret) != nil || secret.Token == nil {
 		return errors.New("account disabled; stored OAuth credential is invalid")
+	}
+	if r.Account.Integration == "slack" {
+		if _, err := m.request(ctx, r, "https://slack.com/api", secret.Token.AccessToken, "POST", "/auth.revoke", nil); err != nil {
+			return errors.New("account disabled; Slack revocation failed, retry disconnect")
+		}
+		return nil
 	}
 	if r.OAuth.RevokeURL == "" {
 		return nil

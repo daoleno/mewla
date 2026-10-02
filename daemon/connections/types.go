@@ -20,11 +20,11 @@ type Integration struct {
 
 func Catalog() []Integration {
 	return []Integration{
-		{"github", "GitHub", true, "https://github.com/settings/personal-access-tokens", "Repositories, issues and pull requests"},
+		{"github", "GitHub", true, "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", "Repositories, issues and pull requests"},
 		{"notion", "Notion", true, "https://www.notion.so/profile/integrations", "Pages, search and workspace content"},
-		{"google", "Google Workspace", true, "https://developers.google.com/workspace/guides/configure-oauth-consent", "Drive, Gmail and Calendar · browser authorization"},
-		{"slack", "Slack", true, "https://api.slack.com/apps", "Channels and messages · tools match account scopes"},
-		{"linear", "Linear", true, "https://linear.app/settings/account/security", "Issues and projects through official remote MCP"},
+		{"google", "Google Workspace", true, "https://developers.google.com/workspace/guides/configure-oauth-consent", "Files, email and calendar events"},
+		{"slack", "Slack", true, "https://api.slack.com/apps", "Channels, conversations and messages"},
+		{"linear", "Linear", true, "https://linear.app/settings/account/security", "Issues, projects and team activity"},
 		{"mcp", "Remote MCP", true, "https://modelcontextprotocol.io", "Discover tools from a remote MCP server"},
 		{"openapi", "OpenAPI", true, "https://spec.openapis.org/oas/v3.0.3", "Discover operations from an OpenAPI 3 document"},
 	}
@@ -35,6 +35,7 @@ type Tool struct {
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"input_schema,omitempty"`
 	Allowed     bool            `json:"allowed"`
+	Group       string          `json:"group,omitempty"`
 	// HTTP routing is private; never accepted from an execution request.
 	Method string `json:"-"`
 	Path   string `json:"-"`
@@ -73,10 +74,14 @@ type Input struct {
 	Credential      string             `json:"credential,omitempty"`
 	Spec            json.RawMessage    `json:"spec,omitempty"`
 	OAuthClient     *OAuthClientConfig `json:"oauth_client,omitempty"`
+	Mobile          bool               `json:"mobile,omitempty"`
 	AllowWrites     bool               `json:"allow_writes,omitempty"`
 }
 
 type Request struct {
+	FlowID    string          `json:"flow_id,omitempty"`
+	Callback  string          `json:"callback,omitempty"`
+	Group     string          `json:"group,omitempty"`
 	Action    string          `json:"action"`
 	ID        string          `json:"id,omitempty"`
 	Input     *Input          `json:"input,omitempty"`
@@ -95,6 +100,7 @@ type Match struct {
 }
 
 type Response struct {
+	Flow             *ConnectFlow    `json:"flow,omitempty"`
 	Catalog          []Integration   `json:"catalog,omitempty"`
 	Accounts         []Account       `json:"accounts,omitempty"`
 	Account          *Account        `json:"account,omitempty"`
