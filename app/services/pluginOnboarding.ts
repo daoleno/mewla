@@ -3,12 +3,33 @@ import type { ConnectionRequest, ConnectionResponse, ConnectFlow } from "./conne
 export const PLUGIN_CALLBACK = "zen://plugins";
 export type PendingConnection = { serverId: string; flow: ConnectFlow; callback?: string };
 export type ConnectPhase = "idle" | "opening" | "waiting" | "verifying" | "connected" | "cancelled" | "failed";
+export function pendingConnectionKey(serverId: string | null) {
+  return `zen.plugin.authorization.${serverId?.replace(/[^a-zA-Z0-9.-]/g, "_") ?? "none"}`;
+}
+// Preserve a return for its original paired server while another server is
+// current. This only stores the code; it never contacts or switches servers.
+export async function retainPluginReturn(serverIds: string[], callback: string, storage: {
+  getItemAsync(key: string): Promise<string | null>;
+  setItemAsync(key: string, value: string): Promise<void>;
+}): Promise<string | null> {
+  for (const serverId of serverIds) {
+    const key = pendingConnectionKey(serverId);
+    const raw = await storage.getItemAsync(key);
+    if (!raw) continue;
+    let pending: PendingConnection;
+    try { pending = JSON.parse(raw); } catch { continue; }
+    if (pending.serverId !== serverId || !pending.flow || !(Date.parse(pending.flow.expires) > Date.now()) || !matchesPluginReturn(callback, pending.flow)) continue;
+    await storage.setItemAsync(key, JSON.stringify({ ...pending, callback }));
+    return serverId;
+  }
+  return null;
+}
 export function matchesPluginReturn(url: string, flow: ConnectFlow): boolean {
   try {
     const parsed = new URL(url);
     const original = new URL(flow.authorization_url ?? "");
-    return parsed.protocol === "zen:" && parsed.hostname === "plugins" && !parsed.pathname && !parsed.hash
-      && parsed.searchParams.getAll("state").length === 1 && parsed.searchParams.getAll("code").length <= 1 && parsed.searchParams.getAll("error").length <= 1
+    return parsed.protocol === "zen:" && parsed.host === "plugins" && !parsed.username && !parsed.password && !parsed.pathname && !parsed.hash
+      && parsed.searchParams.getAll("state").length === 1 && parsed.searchParams.getAll("code").length <= 1 && parsed.searchParams.getAll("error").length <= 1 && parsed.searchParams.getAll("iss").length <= 1
       && !!parsed.searchParams.get("state") && parsed.searchParams.get("state") === original.searchParams.get("state");
   } catch { return false; }
 }

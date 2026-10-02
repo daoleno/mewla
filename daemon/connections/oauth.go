@@ -183,7 +183,10 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	if client.ClientID == "" {
 		if meta.RegistrationEndpoint == "" {
-			return Response{}, errors.New("provider requires an OAuth client registration; configure its client ID on this server")
+			if in.Integration == "mcp" {
+				return Response{}, errors.New("this custom service requires a client registered by its operator")
+			}
+			return Response{}, errors.New("Zen's authorization for this service is not ready. No account was connected.")
 		}
 		registration := map[string]any{"client_name": "Zen Plugins", "redirect_uris": []string{client.RedirectURL}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}
 		body, _ := json.Marshal(registration)
