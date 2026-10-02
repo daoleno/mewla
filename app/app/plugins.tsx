@@ -254,6 +254,7 @@ function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: stri
       <AppText variant="title">{title}</AppText>
       {!serverId ? <AppText tone="secondary">Choose a current server in Settings to connect services.</AppText> : null}
       {error ? <View accessibilityRole="alert"><AppText style={{ color: colors.dangerText }}>{error}</AppText></View> : null}
+      {!error && phase === "cancelled" ? <AppText accessibilityRole="alert" tone="secondary">Connection cancelled. You can try again.</AppText> : null}
       {deferredName ? <ListSection title="Return to the original server">
         <ListRow title={`Authorization is saved for ${deferredName}`} subtitle="Choose that server in Settings to finish connecting. This server has not received its authorization." numberOfLines={3} />
         <Button label="Open server settings" onPress={() => router.push("/settings")} />
@@ -287,7 +288,7 @@ function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: stri
           <Button label="Cancel connection" variant="plain" onPress={() => void cancel()} />
         </ListSection> : linked ? <>
           <ListSection title={accountStatus(account)}>
-            <ListRow title={account.name} subtitle={account.identity || "This service does not provide an account name."} numberOfLines={3} />
+            <ListRow title={account.name} subtitle={account.identity === account.name ? undefined : account.identity || "This service does not provide an account name."} numberOfLines={3} />
           </ListSection>
           <ListSection title="What you can do">
             {account.tools?.some((tool) => tool.allowed) ? <ListRow title={job?.read ?? "Use the tools you authorize"} subtitle={job?.example ?? "Review individual permissions in Tools & activity."} numberOfLines={3} /> : <ListRow title="Choose permissions to get started" subtitle="Decide what Brain may use with this account." accessory="chevron" onPress={() => setPage(custom ? "advanced" : "permissions")} />}
@@ -318,7 +319,7 @@ function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: stri
         </>}
       </> : null}
       {page === "accounts" && selected ? <>
-        <ListSection>{pluginAccounts.map((item) => <ListRow key={item.id} title={item.name} subtitle={item.identity} value={accountStatus(item)} accessory="chevron" onPress={() => { void send({ action: "get", id: item.id }).then(() => setPage("service")); }} />)}</ListSection>
+        <ListSection>{pluginAccounts.map((item) => <ListRow key={item.id} title={item.name} subtitle={item.identity === item.name ? undefined : item.identity} value={accountStatus(item)} accessory="chevron" onPress={() => { void send({ action: "get", id: item.id }).then(() => setPage("service")); }} />)}</ListSection>
         <Button label="Connect another account" icon="add" onPress={() => { setAnother(true); setPage("service"); setPhase("idle"); setError(""); }} />
         {account ? <Button label={account.credential_removal_pending ? "Retry credential removal" : `Disconnect ${account.name}`} variant="destructive" disabled={busy} onPress={() => Alert.alert("Disconnect this account?", "Future calls stop immediately. Zen removes its saved credential and revokes access where supported.", [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => { if (valid()) void send({ action: "disconnect", id: account.id }).then((response) => { if (response && valid()) { setAccount(null); setPage("service"); } }); } }])} /> : null}
       </> : null}
