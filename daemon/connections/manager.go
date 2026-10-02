@@ -33,6 +33,8 @@ type Manager struct {
 	http         *http.Client
 	networkOwned bool
 	pending      map[string]*oauthFlow
+	connectFlows map[string]*connectFlow
+	githubToken  func(context.Context) (string, error)
 }
 
 func New(dir string) (*Manager, error) {
@@ -47,7 +49,7 @@ func New(dir string) (*Manager, error) {
 	return m, err
 }
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
-	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}}
+	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken}
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -62,7 +64,13 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 	return m, nil
 }
 func (m *Manager) save() error {
-	raw, err := json.Marshal(m.records)
+	records := map[string]*record{}
+	for id, r := range m.records {
+		if !m.isPending(id) {
+			records[id] = r
+		}
+	}
+	raw, err := json.Marshal(records)
 	if err != nil {
 		return err
 	}
@@ -102,6 +110,7 @@ func cloneAccount(a Account) Account {
 func (m *Manager) projection(r *record) Account {
 	a := cloneAccount(r.Account)
 	for i := range a.Tools {
+		a.Tools[i].Group = toolGroup(r, a.Tools[i])
 		a.Tools[i].Allowed = r.Grants[a.Tools[i].Name] == fingerprint(a.Tools[i])
 	}
 	return a
@@ -125,10 +134,16 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	if ctx.Err() != nil {
 		return Response{}, safeError(ctx.Err())
 	}
+	m.expireFlows()
 	switch q.Action {
+	case "connect_start", "connect_status", "connect_finish", "connect_cancel", "github_preview", "github_import":
+		return m.connect(ctx, q)
 	case "list":
 		accounts := make([]Account, 0, len(m.records))
 		for _, r := range m.records {
+			if m.isPending(r.Account.ID) {
+				continue
+			}
 			a := m.projection(r)
 			a.Tools = nil
 			accounts = append(accounts, a)
@@ -203,6 +218,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		r.Account.Status = "disconnected"
 		r.Account.CredentialRemovalPending = true
 		r.Grants = map[string]string{}
+	case "permissions":
+		if !m.setGroup(r, q.Group, q.Allowed) {
+			return Response{}, errors.New("this permission group is not available")
+		}
 	case "policy":
 		found := false
 		for _, t := range r.Account.Tools {

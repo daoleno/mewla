@@ -24,7 +24,7 @@ Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name.
 Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination.
 Add: --integration github|notion|google|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
-OAuth: oauth-configure --integration google|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
+Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|google|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
 Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account).
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
 import-gh explicitly copies the current github.com gh login into this daemon's private vault.
