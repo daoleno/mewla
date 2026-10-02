@@ -87,7 +87,7 @@ existing debug keystore. Start or reuse Metro separately, then enter
 `192.168.110.223:8081` in **Zen Development** on the phone.
 
 Use a **Metro-connected debug APK** for development, not a standalone APK or
-Expo Go. Zen's custom terminal, pinned Link transport and remote desktop need
+Expo Go. Zen's custom terminal and pinned Link transport need
 their compiled native modules. The development APK uses the existing React
 Native dev-support runtime; it does not require an additional Expo Dev Client
 dependency. Android and iOS continue to share product JS; the native connection

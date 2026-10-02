@@ -17,8 +17,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/daoleno/zen/daemon/desktop"
 )
 
 // The user-facing runtime contract: `zen` executes the daemon; `zen-dev` builds
@@ -91,24 +89,6 @@ func paritySnapshot(t *testing.T, moduleDir string) string {
 		t.Fatal("snapshot unexpectedly contains a tmp build directory")
 	}
 	return destination
-}
-
-// parityDesktopBuild mirrors the DEV runner's own detection so the direct
-// binary is compiled with the same tags, CGO setting and native marker.
-func parityDesktopBuild(t *testing.T, moduleDir string) ([]string, []string) {
-	t.Helper()
-	probe := exec.Command("pkg-config", "--exists", "gtk+-3.0", "gstreamer-app-1.0", "gstreamer-video-1.0", "x11", "xtst", "gio-unix-2.0")
-	if probe.Run() != nil {
-		return nil, []string{"CGO_ENABLED=0"}
-	}
-	token, err := desktop.NativeBuildInputToken(filepath.Join(moduleDir, "desktop", "native"))
-	if err != nil {
-		t.Fatalf("native build input token: %v", err)
-	}
-	return []string{"-tags", "zen_desktop"}, []string{
-		"CGO_ENABLED=1",
-		"CGO_CFLAGS=-DZEN_NATIVE_BUILD_INPUT=h" + token,
-	}
 }
 
 func parityBuild(t *testing.T, moduleDir, pkg, out string, extraArgs, extraEnv []string) {
@@ -344,7 +324,7 @@ func parityRequireSameBuildOptions(t *testing.T, direct, dev string) {
 	devOptions := parityBuildOptions(t, dev)
 	for _, key := range []string{"-tags", "CGO_ENABLED", "CGO_CFLAGS"} {
 		if directOptions[key] != devOptions[key] {
-			t.Fatalf("desktop build options differ between zen (%q) and zen-dev child (%q) for %s", directOptions[key], devOptions[key], key)
+			t.Fatalf("build options differ between zen (%q) and zen-dev child (%q) for %s", directOptions[key], devOptions[key], key)
 		}
 	}
 }
@@ -360,8 +340,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	work := t.TempDir()
 	zen := filepath.Join(work, "zen")
 	dev := filepath.Join(work, "zen-dev")
-	desktopArgs, desktopEnv := parityDesktopBuild(t, snapshot)
-	parityBuild(t, snapshot, "./cmd/zen", zen, desktopArgs, desktopEnv)
+	parityBuild(t, snapshot, "./cmd/zen", zen, nil, []string{"CGO_ENABLED=0"})
 	parityBuild(t, snapshot, "./cmd/zen-dev", dev, nil, nil)
 
 	stateDir := filepath.Join(work, "state")
@@ -451,7 +430,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		t.Fatalf("runtime identity differs between zen (%s) and zen-dev (%s)", identities["zen"], identities["zen-dev"])
 	}
 	// The DEV runner built its own child in the snapshot; its build options must
-	// match the direct binary so parity covers the same desktop build scope.
+	// match the direct binary so parity covers the same build scope.
 	devChild := filepath.Join(snapshot, "tmp", "zen-dev")
 	if _, err := os.Stat(devChild); err != nil {
 		t.Fatalf("DEV runner child was not built in the owned snapshot: %v", err)
@@ -467,8 +446,7 @@ func TestRuntimeParityEarlyExitCleanup(t *testing.T) {
 	snapshot := paritySnapshot(t, realModule)
 	work := t.TempDir()
 	zen := filepath.Join(work, "zen")
-	desktopArgs, desktopEnv := parityDesktopBuild(t, snapshot)
-	parityBuild(t, snapshot, "./cmd/zen", zen, desktopArgs, desktopEnv)
+	parityBuild(t, snapshot, "./cmd/zen", zen, nil, []string{"CGO_ENABLED=0"})
 	home := filepath.Join(work, "home")
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)

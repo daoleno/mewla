@@ -138,7 +138,7 @@ export function PrimaryDrawerPanel({
       : colors.textTertiary;
 
   const openRoute = useCallback(
-    (pathname: "/skills" | "/plugins" | "/stats" | "/resources" | "/settings" | "/remote-desktop") => {
+    (pathname: "/skills" | "/plugins" | "/stats" | "/resources" | "/settings") => {
       onNavigateAway();
       router.push(pathname);
     },

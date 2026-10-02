@@ -36,21 +36,8 @@ jobs:
         with:
           go-version-file: daemon/go.mod
           cache-dependency-path: daemon/go.sum
-      - name: Install Linux desktop native prerequisites
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config gcc make binutils git rsync tmux \
-            xvfb \
-            libgtk-3-dev libglib2.0-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-            gstreamer1.0-tools \
-            libx11-dev libxtst-dev
-          gst-inspect-1.0 openh264enc > /dev/null
-          gst-inspect-1.0 h264parse > /dev/null
-          gst-inspect-1.0 ximagesrc > /dev/null
+      - name: Install runtime test prerequisites
+        run: sudo apt-get update && sudo apt-get install -y tmux rsync
       - name: Test
         run: go test ./...
       - name: Executable behavior contracts (scripted, not real AI)
@@ -68,67 +55,9 @@ jobs:
           retention-days: 7
       - name: Vet
         run: go vet ./...
-      - name: Build
-        run: go build -o bin/zen ./cmd/zen/
-
-  linux-desktop-native:
-    name: Linux desktop native
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: daemon
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: daemon/go.mod
-          cache-dependency-path: daemon/go.sum
-      - name: Install desktop native build and Xvfb packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libxtst-dev \
-            libx11-dev \
-            pkg-config \
-            xvfb \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-libav \
-            libopenh264-7 || sudo apt-get install -y libopenh264-6 || true
-          sudo apt-get install -y gstreamer1.0-plugins-ugly || true
-      - name: Build desktop-capable Linux ELF
+      - name: Build release targets
         working-directory: .
-        run: ./scripts/build-zen-local.sh bin/zen
-      - name: zen ELF must DT_NEED GTK and must not ship a sidecar
-        working-directory: .
-        run: |
-          set -euo pipefail
-          readelf -d bin/zen | grep -E 'NEEDED.*libgtk-3'
-          test ! -e bin/libzen-desktop.so
-      - name: Build and verify production daemon targets
-        working-directory: .
-        env:
-          ZEN_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
-        run: |
-          set -euo pipefail
-          pkg-config --exists gtk+-3.0 gstreamer-app-1.0 gstreamer-video-1.0 x11 xtst gio-unix-2.0
-          ./scripts/build-daemon-linux.sh --out-dir "$ZEN_BUILD_TMPDIR/release-bin"
-          file "$ZEN_BUILD_TMPDIR/release-bin/zen-linux-amd64" | grep -Eq 'ELF 64-bit.*(x86-64|x86_64)'
-          file "$ZEN_BUILD_TMPDIR/release-bin/zen-linux-arm64" | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64)'
-          file "$ZEN_BUILD_TMPDIR/release-bin/zen-darwin-arm64" | grep -Eq 'Mach-O 64-bit.*arm64'
-      - name: Desktop native tests
-        env:
-          CGO_ENABLED: "1"
-          ZEN_DESKTOP_NATIVE_TEST: "1"
-          ZEN_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
-        run: |
-          mkdir -p "$ZEN_BUILD_TMPDIR"
-          go test -count=1 -timeout 8m ./desktop ./desktop/nativebind ./desktop/host ./doctor ./cmd/zen-dev ./selfupdate
-          make -C desktop/native encoder-check portal-check
+        run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
 
   app:
     name: App (Bun / Expo)
@@ -336,14 +265,6 @@ jobs:
       - name: Verify cached or built Android Ghostty output
         if: steps.ghostty-output-cache.outputs.cache-hit == 'true'
         run: ./scripts/verify-libghostty.sh --release
-      - name: Prepare pinned Android Moonlight sources and OpenSSL
-        env:
-          ZEN_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
-        run: |
-          set -euo pipefail
-          ./scripts/fetch-moonlight-common-c.sh
-          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.1.12297006" \
-            ./scripts/build-openssl-android.sh --abi arm64-v8a --api 24
       - name: Generate Android project
         run: |
           set -euo pipefail
