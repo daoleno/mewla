@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, BackHandler, Linking, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { Alert, AppState, BackHandler, Linking, StyleSheet, Switch, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as SecureStore from "expo-secure-store";
 import * as Clipboard from "expo-clipboard";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useCurrentServer } from "../store/currentServer";
-import { useAppColors } from "../constants/tokens";
+import { Spacing, useAppColors } from "../constants/tokens";
 import { AppText, Button, ListRow, ListSection } from "../components/ui";
 import { CustomServiceForm } from "../components/plugins/CustomServiceForm";
 import { wsClient } from "../services/websocket";
@@ -248,9 +248,9 @@ function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: stri
   const linked = account && !another && account.status !== "disconnected";
   const custom = selected?.id === "mcp" || selected?.id === "openapi";
   const title = page === "catalog" ? "Plugins" : page === "custom" ? "Custom services" : page === "permissions" ? "Permissions" : page === "advanced" ? "Tools & activity" : page === "accounts" ? "Connected accounts" : selected?.name ?? "Plugins";
-  return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bgPrimary }} behavior="padding">
+  return <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
     <Stack.Screen options={{ title, headerLeft: () => <Button label="Back" accessibilityLabel="Back" icon="chevron-back" variant="plain" onPress={back} />, gestureEnabled: page === "catalog" }} />
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
       <AppText variant="title">{title}</AppText>
       {!serverId ? <AppText tone="secondary">Choose a current server in Settings to connect services.</AppText> : null}
       {error ? <View accessibilityRole="alert"><AppText style={{ color: colors.dangerText }}>{error}</AppText></View> : null}
@@ -345,8 +345,8 @@ function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: stri
         </ListSection>
         <ListSection title="Recent calls">{account.history.length ? account.history.map((event, i) => <ListRow key={`${event.at}-${i}`} title={event.tool} subtitle={event.message || new Date(event.at).toLocaleString()} value={event.status} numberOfLines={3} />) : <ListRow title="No calls yet" />}</ListSection>
       </> : null}
-    </ScrollView>
-  </KeyboardAvoidingView>;
+    </KeyboardAwareScrollView>
+  </View>;
 }
 function ToolSchema({ schema }: { schema?: Record<string, unknown> }) {
   const [expanded, setExpanded] = useState(false);
