@@ -88,10 +88,6 @@ if (!integrationEnabled) {
       expect(request.enrollment_token).toBe(enrollmentToken);
       expect(request.expected_daemon_id).toBe(daemonId);
       expect(request.expected_daemon_public_key).toBe(daemonPublicKey);
-      expect(request.desktop_scope_version).toBe(1);
-      const scopePayload = new TextEncoder().encode(["zen-pair-desktop-scope-v1", daemonPublicKey, enrollmentToken, request.device_id, request.device_public_key].join("\n"));
-      expect(nacl.sign.detached.verify(scopePayload, Buffer.from(String(request.desktop_scope_signature), "hex"), Buffer.from(String(request.device_public_key), "hex"))).toBe(true);
-
       const timestamp = Date.now().toString();
       const nonce = "5".repeat(32);
       const assertion = new TextEncoder().encode(
@@ -100,7 +96,6 @@ if (!integrationEnabled) {
       return new Response(
         JSON.stringify({
           device_id: request.device_id,
-          desktop_scope_version: 1,
           daemon_id: daemonId,
           daemon_public_key: daemonPublicKey,
           assertion_timestamp: timestamp,

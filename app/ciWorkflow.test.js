@@ -30,7 +30,7 @@ describe("ordinary CI contract", () => {
       workflow.indexOf("  app:"),
     );
     expect(daemonJob).toMatch(
-      /run: go test \.\/\.\.\.[\s\S]*run: go vet \.\/\.\.\.[\s\S]*run: go build -o bin\/zen \.\/cmd\/zen\//,
+      /run: go test \.\/\.\.\.[\s\S]*run: go vet \.\/\.\.\.[\s\S]*run: \.\/scripts\/build-daemon-linux\.sh --out-dir/,
     );
   });
 

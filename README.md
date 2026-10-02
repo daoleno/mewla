@@ -146,7 +146,6 @@ separate from the Brain executor choice.
 | Brain, Workers, durable Work lifecycle | Beta |
 | Calendar scheduled actions, Telegram channel | Beta ([Calendar](docs/calendar.md), [Telegram](docs/telegram-brain-connection.md)) |
 | Zen Link relay | Optional source only. No hosted relay is operated. See [Zen Link Relay](docs/zen-link-relay.md) |
-| Remote Desktop | Implemented but hidden in the app. See [Remote Desktop](docs/remote-desktop.md) |
 | Web client | Out of scope |
 
 Known release issues: [docs/release-blockers.md](docs/release-blockers.md).

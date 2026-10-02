@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -26,7 +25,6 @@ import (
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/control"
-	"github.com/daoleno/zen/daemon/desktop/host"
 	"github.com/daoleno/zen/daemon/doctor"
 	"github.com/daoleno/zen/daemon/link"
 	"github.com/daoleno/zen/daemon/modelprofiles"
@@ -118,16 +116,8 @@ func run(args []string, stderr io.Writer) error {
 			return runClaudeCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
-		case "desktop-helper":
-			return runDesktopHelperCommand(args[1:])
 		case "boot":
 			return runBootCommand(args[1:], stderr)
-		case "desktop-host":
-			return runDesktopHostCommand(args[1:], stderr)
-		case "desktop-agent":
-			return runDesktopAgentCommand(args[1:])
-		case "desktop-identity":
-			return runDesktopIdentityCommand(stderr)
 		}
 	}
 	return runDaemon(args, stderr)
@@ -376,10 +366,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	// The scoped idle/suspend inhibitor is tied to the persisted unattended
 	// authorization; the production entry point owns it so tests never touch a
 	// developer session bus.
-	srv.EnableDesktopAuthorization(host.NewAuthorizationController(uint32(os.Getuid())))
 	// Trusted-deployment opt-in: --lan or an explicit private/tailnet-bound
 	// origin. Forwarded headers and client JSON never enable this.
-	srv.SetDesktopTrustedNetwork(cfg.lan || desktopTrustedBind(cfg.addr))
 	telegramManager, err := telegramchannel.NewManagerWithOptions(authManager.StorageDir(), brainService, telegramchannel.Options{Attachments: srv.AttachmentStore()})
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)
@@ -468,12 +456,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		relayDomains,
 	)
 	if identityErr != nil {
-		return fmt.Errorf("initialize desktop transport identity: %w", identityErr)
+		return fmt.Errorf("initialize transport identity: %w", identityErr)
 	}
-	srv.SetDesktopTransport(server.DesktopTransport{
-		TLSConfig: transportIdentity.ServerTLSConfig(),
-		Pin:       transportIdentity.SPKISHA256,
-	})
+	srv.SetTLSConfig(transportIdentity.ServerTLSConfig())
 	if linkEnabled {
 		linkConfig.StateObserver = func(state link.ConnectorState) {
 			switch {
@@ -1963,8 +1948,6 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "  worker     List, spawn, inspect, message, progress, and close Zen Workers")
 		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
 		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
-		fmt.Fprintln(stderr, "  desktop-host  Linux remote desktop host (authorize/revoke/status and install)")
-		fmt.Fprintln(stderr, "  desktop-identity  Print this zen ELF hash and native role provenance")
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -2363,37 +2346,4 @@ func withAuthRuntimeOwnerWait(
 				)
 		}
 	}
-}
-
-// desktopTrustedBind reports whether the operator bound an explicit private or
-// tailnet address (documented trusted deployments). Wildcard/public binds stay
-// untrusted unless --lan was chosen.
-func desktopTrustedBind(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		host = addr
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	// cloudflared reaches the documented default `zen` origin on loopback; this
-	// is the operator's deliberate local connector path, not a wildcard bind.
-	if ip.IsLoopback() {
-		return true
-	}
-	if v4 := ip.To4(); v4 != nil {
-		switch {
-		case v4[0] == 10:
-			return true
-		case v4[0] == 172 && v4[1] >= 16 && v4[1] <= 31:
-			return true
-		case v4[0] == 192 && v4[1] == 168:
-			return true
-		case v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127:
-			return true
-		}
-		return false
-	}
-	return ip[0]&0xfe == 0xfc
 }

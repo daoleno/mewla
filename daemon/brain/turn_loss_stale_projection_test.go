@@ -26,7 +26,7 @@ func TestResolveContinue_ConvergesLostCoordinationWithLiveProvider(t *testing.T)
 		t.Fatal(err)
 	}
 	item, err := store.CreateWork(Work{
-		Title: "remote desktop review", Objective: "reconcile lost coordination with live execution",
+		Title: "runtime lifecycle review", Objective: "reconcile lost coordination with live execution",
 		CompletionPolicy: CompletionUntilDone, DoneCriteriaRef: "all runtime acceptance verified",
 	})
 	if err != nil {

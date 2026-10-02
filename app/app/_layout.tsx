@@ -37,7 +37,6 @@ import { IconButton } from "../components/ui/IconButton";
 import { ToastProvider } from "../components/ui/Toast";
 import { ThemeProvider } from "../theme";
 import { MermaidEngineHost } from "../components/markdown/MermaidEngineHost";
-import { OrientationPolicy } from "../components/OrientationPolicy";
 import { wsClient } from "../services/websocket";
 import {
   createConnectedReadRefreshHandler,
@@ -792,7 +791,6 @@ export default function RootLayout() {
                         <ToastProvider>
                           <ThemedStatusBar />
                           <MermaidEngineHost />
-                          <OrientationPolicy />
                           <AppRuntime />
                         </ToastProvider>
                       </SafeAreaProvider>

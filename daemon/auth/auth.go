@@ -21,11 +21,6 @@ const (
 	AuthorizationHeaderPrefix = "ZenDevice "
 	DefaultPairingTTL         = 15 * time.Minute
 	DeviceListPurpose         = "zen-device-admin:list:GET:/devices"
-	// DesktopGrantPurpose is mirrored verbatim by the app contract
-	// (app/services/desktopScopeGrantCore.ts DESKTOP_GRANT_PURPOSE). Both the
-	// device request and the daemon confirmation assertion use this literal.
-	DesktopGrantPurpose = "zen-device-admin:desktop-grant:POST:/desktop/scope"
-	DesktopScopeVersion = 1
 )
 
 var (
@@ -38,20 +33,18 @@ var (
 )
 
 type TrustedDevice struct {
-	ID                  string    `json:"id"`
-	Name                string    `json:"name"`
-	PublicKeyHex        string    `json:"public_key_hex"`
-	AddedAt             time.Time `json:"added_at"`
-	LastSeenAt          time.Time `json:"last_seen_at"`
-	DesktopScopeVersion int       `json:"desktop_scope_version,omitempty"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	PublicKeyHex string    `json:"public_key_hex"`
+	AddedAt      time.Time `json:"added_at"`
+	LastSeenAt   time.Time `json:"last_seen_at"`
 }
 
 type DeviceInfo struct {
-	ID                  string    `json:"id"`
-	Name                string    `json:"name"`
-	AddedAt             time.Time `json:"added_at"`
-	LastSeenAt          time.Time `json:"last_seen_at"`
-	DesktopScopeVersion int       `json:"desktop_scope_version,omitempty"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	AddedAt    time.Time `json:"added_at"`
+	LastSeenAt time.Time `json:"last_seen_at"`
 }
 
 type PairingToken struct {
@@ -179,11 +172,10 @@ func (m *Manager) ListDevices() []DeviceInfo {
 	for _, device := range m.devices {
 		if device != nil {
 			devices = append(devices, DeviceInfo{
-				ID:                  device.ID,
-				Name:                device.Name,
-				AddedAt:             device.AddedAt,
-				LastSeenAt:          device.LastSeenAt,
-				DesktopScopeVersion: device.DesktopScopeVersion,
+				ID:         device.ID,
+				Name:       device.Name,
+				AddedAt:    device.AddedAt,
+				LastSeenAt: device.LastSeenAt,
 			})
 		}
 	}
@@ -303,147 +295,6 @@ func (m *Manager) IssuePairingToken(ttl time.Duration) (PairingToken, error) {
 }
 
 func (m *Manager) EnrollDevice(token, expectedDaemonID, expectedPublicKeyHex, deviceID, deviceName, devicePublicKeyHex string) (*TrustedDevice, error) {
-	return m.enrollDevice(token, expectedDaemonID, expectedPublicKeyHex, deviceID, deviceName, devicePublicKeyHex, 0)
-}
-
-// EnrollDeviceWithDesktopScope uses the existing owner-issued pairing token.
-// Re-pairing a legacy record is the explicit migration, not a trust backfill.
-func (m *Manager) EnrollDeviceWithDesktopScope(token, expectedDaemonID, expectedPublicKeyHex, deviceID, deviceName, devicePublicKeyHex string, scopeVersion int, signatureHex string) (*TrustedDevice, error) {
-	if scopeVersion != DesktopScopeVersion || strings.ContainsAny(deviceID, "\r\n") || normalizeHex(expectedPublicKeyHex) != m.PublicKeyHex() {
-		return nil, ErrUnauthorized
-	}
-	key, keyErr := decodeFixedHex(devicePublicKeyHex, ed25519.PublicKeySize)
-	signature, sigErr := decodeFixedHex(signatureHex, ed25519.SignatureSize)
-	if keyErr != nil || sigErr != nil || !ed25519.Verify(ed25519.PublicKey(key), BuildPairingScopePayload(m.PublicKeyHex(), token, deviceID, devicePublicKeyHex), signature) {
-		return nil, ErrUnauthorized
-	}
-	return m.enrollDevice(token, expectedDaemonID, expectedPublicKeyHex, deviceID, deviceName, devicePublicKeyHex, scopeVersion)
-}
-
-func BuildPairingScopePayload(daemonPublicKeyHex, token, deviceID, devicePublicKeyHex string) []byte {
-	return []byte(strings.Join([]string{"zen-pair-desktop-scope-v1", normalizeHex(daemonPublicKeyHex), strings.TrimSpace(token), strings.TrimSpace(deviceID), normalizeHex(devicePublicKeyHex)}, "\n"))
-}
-
-// HasDesktopScope is evaluated against the canonical owner's current record.
-// Device-key rotation cannot inherit a grant by reusing an ID or display name.
-func (m *Manager) HasDesktopScope(deviceID, devicePublicKeyHex string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	device := m.devices[deviceID]
-	return device != nil && device.PublicKeyHex == normalizeHex(devicePublicKeyHex) && device.DesktopScopeVersion == DesktopScopeVersion
-}
-
-// GrantDesktopScope applies explicit in-place desktop consent for one already
-// authenticated trusted device. The device ID and key must come from the
-// authenticated request, never from a request body, so a device cannot grant
-// scope to another device. The device set is reloaded under the mutation lock
-// so a concurrent revocation cannot be resurrected, and the scope is committed
-// only when the replacement file applied. Re-consent is idempotent.
-func (m *Manager) GrantDesktopScope(deviceID, devicePublicKeyHex string, scopeVersion int) (*TrustedDevice, error) {
-	deviceID = strings.TrimSpace(deviceID)
-	if scopeVersion != DesktopScopeVersion || deviceID == "" || strings.ContainsAny(deviceID, "\r\n") {
-		return nil, ErrUnauthorized
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.loadDevicesLocked(); err != nil {
-		return nil, err
-	}
-	existing, ok := m.devices[deviceID]
-	if !ok || existing == nil || existing.PublicKeyHex != normalizeHex(devicePublicKeyHex) {
-		return nil, ErrUnknownDevice
-	}
-	if existing.DesktopScopeVersion == DesktopScopeVersion {
-		copyDevice := *existing
-		return &copyDevice, nil
-	}
-	if existing.DesktopScopeVersion != 0 {
-		return nil, ErrUnauthorized
-	}
-	nextDevices := make(map[string]*TrustedDevice, len(m.devices))
-	for id, device := range m.devices {
-		if device == nil {
-			continue
-		}
-		copyDevice := *device
-		nextDevices[id] = &copyDevice
-	}
-	nextDevices[deviceID].DesktopScopeVersion = DesktopScopeVersion
-	persistence, err := m.saveDevicesSnapshotLocked(nextDevices)
-	if persistence.Applied {
-		m.devices = nextDevices
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !persistence.Applied {
-		return nil, errors.New("trusted-device persistence did not apply")
-	}
-	copyDevice := *nextDevices[deviceID]
-	return &copyDevice, nil
-}
-
-// RevokeDesktopScopes clears only the desktop scope from every existing
-// trusted-device record. Pairing, terminal access and device identity remain
-// intact. Repeating the operation is safe and reports the number of records
-// whose scope changed.
-func (m *Manager) RevokeDesktopScopes() (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.loadDevicesLocked(); err != nil {
-		return 0, err
-	}
-	changed := 0
-	changedIDs := make([]string, 0)
-	nextDevices := make(map[string]*TrustedDevice, len(m.devices))
-	for id, device := range m.devices {
-		if device == nil {
-			continue
-		}
-		copyDevice := *device
-		if copyDevice.DesktopScopeVersion == DesktopScopeVersion {
-			copyDevice.DesktopScopeVersion = 0
-			changed++
-			changedIDs = append(changedIDs, id)
-		}
-		nextDevices[id] = &copyDevice
-	}
-	if changed == 0 {
-		return 0, nil
-	}
-	persistence, err := m.saveDevicesSnapshotLocked(nextDevices)
-	if err != nil {
-		return 0, err
-	}
-	if !persistence.Applied {
-		return 0, errors.New("trusted-device persistence did not apply")
-	}
-	m.devices = nextDevices
-	// Scope revocation must synchronously retire any active desktop leases,
-	// just like full device revocation. Publish after releasing the store lock.
-	m.mu.Unlock()
-	for _, id := range changedIDs {
-		m.publishRevocation(id)
-	}
-	m.mu.Lock()
-	return changed, nil
-}
-
-func (m *Manager) DesktopTrust(deviceID string, fingerprint [32]byte) (trusted, scoped bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	device := m.devices[deviceID]
-	if device == nil {
-		return false, false
-	}
-	key, err := decodeFixedHex(device.PublicKeyHex, ed25519.PublicKeySize)
-	if err != nil || sha256.Sum256(key) != fingerprint {
-		return false, false
-	}
-	return true, device.DesktopScopeVersion == DesktopScopeVersion
-}
-
-func (m *Manager) enrollDevice(token, expectedDaemonID, expectedPublicKeyHex, deviceID, deviceName, devicePublicKeyHex string, scopeVersion int) (*TrustedDevice, error) {
 	token = strings.TrimSpace(token)
 	deviceID = strings.TrimSpace(deviceID)
 	deviceName = strings.TrimSpace(deviceName)
@@ -492,18 +343,14 @@ func (m *Manager) enrollDevice(token, expectedDaemonID, expectedPublicKeyHex, de
 	}
 
 	device := &TrustedDevice{
-		ID:                  deviceID,
-		Name:                deviceName,
-		PublicKeyHex:        devicePublicKeyHex,
-		AddedAt:             now,
-		LastSeenAt:          now,
-		DesktopScopeVersion: scopeVersion,
+		ID:           deviceID,
+		Name:         deviceName,
+		PublicKeyHex: devicePublicKeyHex,
+		AddedAt:      now,
+		LastSeenAt:   now,
 	}
 	if existing != nil {
 		device.AddedAt = existing.AddedAt
-		if scopeVersion == 0 {
-			device.DesktopScopeVersion = existing.DesktopScopeVersion
-		}
 	}
 	nextDevices := make(map[string]*TrustedDevice, len(m.devices)+1)
 	for id, existingDevice := range m.devices {

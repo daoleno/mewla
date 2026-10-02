@@ -215,7 +215,7 @@ SUMS="$STAGE_DIR/SHA256SUMS"
 ) > "$SUMS"
 
 python3 - "$STAGE_DIR" "$VERSION" "$PACKAGE" "$VERSION_CODE" "${STAGED_APK:-}" "$BUILD_TMP" <<'PY'
-import hashlib, json, subprocess, sys
+import hashlib, json, sys
 from pathlib import Path
 
 stage, version, package, version_code, staged_apk, build_tmp = sys.argv[1:7]
@@ -242,22 +242,10 @@ def artifact(rel: str, role: str, **extra):
     entry.update(extra)
     return entry
 
-def elf_needs_gtk(name: str) -> bool:
-    path = build_p / name
-    if not path.is_file():
-        return False
-    try:
-        out = subprocess.check_output(["readelf", "-d", str(path)], text=True)
-    except (OSError, subprocess.CalledProcessError):
-        return False
-    return "libgtk-3" in out
-
-linux_amd64_desktop = elf_needs_gtk("zen-linux-amd64")
-
 artifacts = [
-    artifact("zen-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64", desktop_native=linux_amd64_desktop),
-    artifact("zen-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64", desktop_native=False),
-    artifact("zen-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64", desktop_native=False),
+    artifact("zen-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64"),
+    artifact("zen-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64"),
+    artifact("zen-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64"),
 ]
 
 if staged_apk:
@@ -290,12 +278,7 @@ identity = {
         "module": "github.com/daoleno/zen/daemon",
         "targets": ["linux/amd64", "linux/arm64", "darwin/arm64"],
         "cgo": {
-            "linux/amd64": linux_amd64_desktop,
-            "linux/arm64": False,
-            "darwin/arm64": False,
-        },
-        "desktop_native": {
-            "linux/amd64": linux_amd64_desktop,
+            "linux/amd64": False,
             "linux/arm64": False,
             "darwin/arm64": False,
         },

@@ -39,9 +39,9 @@ describe("primary drawer navigation", () => {
   test("lists each destination exactly once in one group, with only the version in the footer", () => {
     expect(scroll).toBeDefined();
     expect(footer).toBeDefined();
-    expect(rows(group).map(label)).toEqual(["Skills", "Stats", "Resources", "Settings"]);
+    expect(rows(group).map(label)).toEqual(["Plugins", "Skills", "Stats", "Resources", "Settings"]);
     expect(rows(footer)).toHaveLength(0);
-    expect(rows(file).map(label)).toEqual(["Skills", "Stats", "Resources", "Settings"]);
+    expect(rows(file).map(label)).toEqual(["Plugins", "Skills", "Stats", "Resources", "Settings"]);
     expect(scroll.end).toBeLessThan(footer.pos);
     expect(footer.getText(file)).toContain("Zen v{appVersion}");
   });
@@ -53,7 +53,7 @@ describe("primary drawer navigation", () => {
   });
 
   test("preserves Settings navigation and closed-drawer keyboard semantics", () => {
-    const settings = rows(group)[3].getText(file);
+    const settings = rows(group).find((row) => label(row) === "Settings")!.getText(file);
     expect(settings).toContain('onPress={() => openRoute("/settings")}');
     expect(settings).toContain("drawerVisible={drawerVisible}");
     expect(source).toContain("onNavigateAway();\n      router.push(pathname);");

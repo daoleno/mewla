@@ -8,30 +8,6 @@ export function verifyLinkPairingSignature(input: {
   return verifyDomainSignature("zen-link-pairing-v2\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
 }
 
-export function verifyDesktopDeploymentProof(input: {
-  daemonPublicKey: string;
-  bindingPayload: Uint8Array;
-  signatureHex: string;
-}): boolean {
-  return verifyDomainSignature("zen-desktop-capability-deployment-v1\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
-}
-
-export function verifyDesktopCapabilitySignatureV2(input: {
-  daemonPublicKey: string;
-  bindingPayload: Uint8Array;
-  signatureHex: string;
-}): boolean {
-  return verifyDomainSignature("zen-desktop-capability-v2\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
-}
-
-export function verifyDesktopCapabilitySignature(input: {
-  daemonPublicKey: string;
-  bindingPayload: Uint8Array;
-  signatureHex: string;
-}): boolean {
-  return verifyDomainSignature("zen-desktop-capability-v1\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
-}
-
 function verifyDomainSignature(
   domainText: string,
   daemonPublicKey: string,

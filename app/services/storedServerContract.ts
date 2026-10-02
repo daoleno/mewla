@@ -1,5 +1,3 @@
-import { normalizeDesktopLanConsent, type DesktopLanConsent } from "./desktopTransportPolicy";
-
 export type ServerTransportKind = "manual" | "link";
 
 export interface StoredTransportCandidate {
@@ -9,7 +7,6 @@ export interface StoredTransportCandidate {
 }
 
 export interface StoredServer {
-  desktopLanConsent?: DesktopLanConsent;
   id: string;
   name: string;
   url: string;
@@ -66,7 +63,6 @@ export function normalizeStoredServers(value: unknown): StoredServer[] {
     }
 
     normalized.push({
-      desktopLanConsent: normalizeDesktopLanConsent(candidate.desktopLanConsent, { url: rawURL, transportKind, daemonId, daemonPublicKey }),
       id,
       name: rawName || deriveServerName(rawURL),
       url: rawURL,
@@ -137,12 +133,6 @@ export function mergeStoredServer(
       normalizedURL,
     ),
   };
-  const previous = servers.find((candidate) => candidate.id === server.id);
-  server.desktopLanConsent = normalizeDesktopLanConsent(
-    previous?.desktopLanConsent,
-    server,
-  );
-
   return {
     server,
     servers: dedupeServers([

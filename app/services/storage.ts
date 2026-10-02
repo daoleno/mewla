@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { desktopLanOrigin } from "./desktopTransportPolicy";
 import {
   mergeStoredServer,
   normalizeStoredServers,
@@ -71,23 +70,6 @@ export async function removeServer(serverID: string): Promise<void> {
   const nextServers = servers.filter((server) => server.id !== serverID);
   await AsyncStorage.setItem(KEYS.servers, JSON.stringify(nextServers));
   await setServerAutoConnect(serverID, true);
-  });
-}
-
-export async function setDesktopLanConsent(expected: StoredServer, allowed: boolean, isCurrent: () => boolean): Promise<StoredServer> {
-  return writeServers(async () => {
-  const servers = await getServers();
-  const current = servers.find((server) => server.id === expected.id);
-  const origin = current && desktopLanOrigin(current);
-  if (!isCurrent() || !current || !origin || origin !== desktopLanOrigin(expected) || current.daemonId !== expected.daemonId ||
-      current.daemonPublicKey !== expected.daemonPublicKey) {
-    throw new Error("The paired server changed. Review its current connection first.");
-  }
-  const updated = { ...current, desktopLanConsent: allowed ? {
-    origin, daemonId: current.daemonId, daemonPublicKey: current.daemonPublicKey, acknowledgedAt: Date.now(),
-  } : undefined };
-  await AsyncStorage.setItem(KEYS.servers, JSON.stringify(servers.map((server) => server.id === current.id ? updated : server)));
-  return updated;
   });
 }
 

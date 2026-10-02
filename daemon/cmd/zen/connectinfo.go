@@ -84,7 +84,6 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir string, addresses []priv
 	if len(usable) > 0 {
 		endpoint := "http://" + net.JoinHostPort(usable[0].ip.String(), port)
 		fmt.Fprintf(w, "\n  Pair    %s\n", pairCommand(stateDir, endpoint))
-		fmt.Fprintln(w, "  HTTP pairing stays on this port. Unattended desktop uses identity-bound TLS on the same address; no extra certificate is required.")
 	} else if isWildcardHost(host) {
 		fmt.Fprintln(w, "\n  WARN    No LAN or Tailscale address detected.")
 	} else {
@@ -103,7 +102,7 @@ func printPairingInfo(w io.Writer, offers []connectionOffer) {
 	if len(offers) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "Pairing grants terminal and unattended desktop view/control of the current logged-in session, including supported lock and OS login screens after one host install. Encrypted desktop uses this computer's identity; no extra certificate is required.")
+	fmt.Fprintln(w, "Pairing grants this phone access to sessions, terminal, Brain, Workers, and files on this Zen server.")
 	fmt.Fprintln(w, "Re-pair an existing device once to confirm this expanded access. Revoke with zen devices revoke -id DEVICE_ID.")
 
 	for _, offer := range offers {
