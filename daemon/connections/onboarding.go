@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -329,8 +330,11 @@ func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
 	f.nextPoll = time.Now().Add(f.interval)
 	r := &record{Account: Account{Endpoint: "https://api.github.com"}}
 	var data struct {
-		AccessToken string `json:"access_token"`
-		Error       string `json:"error"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		Scope        string `json:"scope"`
+		Error        string `json:"error"`
 	}
 	if err := m.oauthForm(ctx, r, "https://github.com/login/oauth/access_token", url.Values{"client_id": {f.clientID}, "device_code": {f.deviceCode}, "grant_type": {"urn:ietf:params:oauth:grant-type:device_code"}}, &data); err != nil {
 		return errors.New("Could not check GitHub authorization. Try again.")
@@ -349,24 +353,64 @@ func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
 		f.deviceCode = ""
 		return nil
 	}
-	if data.AccessToken == "" || len(data.AccessToken) > 16384 {
+	if data.AccessToken == "" || len(data.AccessToken) > 16384 || len(data.RefreshToken) > 16384 || strings.ContainsAny(data.AccessToken+data.RefreshToken, "\r\n") || data.ExpiresIn < 0 || data.ExpiresIn > 365*24*60*60 || data.ExpiresIn > 0 && data.RefreshToken == "" {
 		return errors.New("GitHub returned an invalid credential")
 	}
+	if len(m.records) >= 50 {
+		return errors.New("maximum of 50 accounts reached")
+	}
+	// Device-issued tokens can expire. Keep the complete lifecycle in the
+	// vault, with public-client authentication for secret-free refresh.
+	token := &oauth2.Token{AccessToken: data.AccessToken, RefreshToken: data.RefreshToken, TokenType: "Bearer"}
+	if data.ExpiresIn > 0 {
+		token.Expiry = time.Now().Add(time.Duration(data.ExpiresIn) * time.Second)
+	}
+	account := &record{Account: Account{ID: uuid.NewString(), Integration: "github", Name: "GitHub", Endpoint: "https://api.github.com", AuthMethod: "oauth", Enabled: true, Scopes: strings.Fields(strings.ReplaceAll(data.Scope, ",", " ")), History: []Event{}}, OAuth: &oauthAccount{ClientID: f.clientID, Issuer: "https://github.com", TokenURL: "https://github.com/login/oauth/access_token", AuthStyle: oauth2.AuthStyleInParams}, Grants: map[string]string{}}
 	// Verify identity before creating an account or persisting any credential.
-	if err := m.discover(ctx, &record{Account: Account{Integration: "github", Endpoint: "https://api.github.com"}}, data.AccessToken); err != nil {
+	if err := m.discover(ctx, account, token.AccessToken); err != nil {
 		return err
 	}
-	result, err := m.add(ctx, &Input{Integration: "github", Name: "GitHub " + f.ID[:8], Credential: data.AccessToken})
-	if err != nil {
-		return err
+	public, _ := json.Marshal(account.Account)
+	for _, credential := range []string{token.AccessToken, token.RefreshToken} {
+		if credential != "" && bytes.Contains(public, []byte(credential)) {
+			return errors.New("service echoed credential in account metadata")
+		}
 	}
-	account := m.records[result.Account.ID]
-	f.AccountID = account.Account.ID
-	m.nameAndDeduplicate(account)
+	m.setGroup(account, "read", true)
 	if f.allowWrites {
 		m.setGroup(account, "write", true)
 	}
-	if err = m.save(); err != nil {
+	var previous *record
+	if account.Account.Identity != "" && !strings.Contains(account.Account.Identity, "identity not provided") {
+		account.Account.Name = account.Account.Identity
+		for _, existing := range m.records {
+			if existing.Account.Integration == "github" && existing.Account.Status != "disconnected" && existing.Account.Identity == account.Account.Identity {
+				account.Account.ID = existing.Account.ID
+				previous = existing
+				break
+			}
+		}
+	}
+	ref := "integration:" + account.Account.ID
+	oldRaw, oldOK, err := m.vault.Get(ref)
+	if err != nil {
+		return errors.New("credential store unavailable")
+	}
+	raw, _ := json.Marshal(oauthSecret{Token: token})
+	if err := m.vault.Set(ref, string(raw)); err != nil {
+		return errors.New("credential could not be stored")
+	}
+	m.records[account.Account.ID] = account
+	if err := m.save(); err != nil {
+		delete(m.records, account.Account.ID)
+		if previous != nil {
+			m.records[account.Account.ID] = previous
+		}
+		if oldOK {
+			_ = m.vault.Set(ref, oldRaw)
+		} else {
+			_ = m.vault.Delete(ref)
+		}
 		return err
 	}
 	f.AccountID = account.Account.ID

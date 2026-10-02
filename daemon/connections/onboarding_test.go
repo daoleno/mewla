@@ -246,3 +246,112 @@ func TestPermissionGroupsSurviveRestart(t *testing.T) {
 		}
 	}
 }
+
+func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
+	stateDir := t.TempDir()
+	m, _ := New(stateDir)
+	m.networkOwned = false
+	refreshCalls, reads := 0, 0
+	rejectRefresh := false
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"login":"device-user","id":42}`
+		switch req.URL.String() {
+		case "https://github.com/login/oauth/access_token":
+			_ = req.ParseForm()
+			if req.PostForm.Get("client_id") != "zen-public" || req.PostForm.Has("client_secret") || req.Header.Get("Authorization") != "" {
+				t.Fatal("device flow must use only the registered public client")
+			}
+			if req.PostForm.Get("grant_type") == "refresh_token" {
+				refreshCalls++
+				if req.PostForm.Get("refresh_token") != "device-refresh" && req.PostForm.Get("refresh_token") != "rotated-refresh" {
+					t.Fatal("refresh token was not retained")
+				}
+				body = `{"access_token":"refreshed-access","refresh_token":"rotated-refresh","expires_in":28800,"token_type":"bearer"}`
+				if rejectRefresh {
+					body = `{"error":"invalid_grant"}`
+				}
+			} else {
+				if req.PostForm.Get("device_code") != "device-code" {
+					t.Fatal("lost device binding")
+				}
+				body = `{"access_token":"device-access","refresh_token":"device-refresh","expires_in":28800,"scope":"repo,read:user"}`
+			}
+		case "https://api.github.com/user":
+			reads++
+			if req.Header.Get("Authorization") != "Bearer device-access" && req.Header.Get("Authorization") != "Bearer refreshed-access" {
+				t.Fatal("wrong resource credential")
+			}
+		default:
+			t.Fatalf("unexpected request %s", req.URL)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	f := &connectFlow{ConnectFlow: ConnectFlow{ID: "device-flow", Integration: "github", Status: "waiting", Expires: time.Now().Add(time.Minute)}, deviceCode: "device-code", clientID: "zen-public", interval: 5 * time.Second}
+	m.connectFlows[f.ID] = f
+	if err := m.pollGitHubDevice(context.Background(), f); err != nil {
+		t.Fatal(err)
+	}
+	r := m.records[f.AccountID]
+	if f.Status != "connected" || r.Account.Name != "device-user" || r.OAuth == nil || r.Account.AuthMethod != "oauth" || reads != 1 {
+		t.Fatal("device account not verified and connected exactly once")
+	}
+	readSecret := func() oauthSecret {
+		t.Helper()
+		raw, ok, err := m.vault.Get("integration:" + r.Account.ID)
+		var secret oauthSecret
+		if err != nil || !ok || json.Unmarshal([]byte(raw), &secret) != nil || secret.Token == nil {
+			t.Fatal("missing token lifecycle")
+		}
+		return secret
+	}
+	secret := readSecret()
+	if secret.Token.RefreshToken != "device-refresh" || secret.Token.Expiry.Before(time.Now().Add(7*time.Hour)) || secret.ClientSecret != "" {
+		t.Fatal("expiry/refresh persistence failed")
+	}
+	expire := func() {
+		t.Helper()
+		secret := readSecret()
+		secret.Token.Expiry = time.Now().Add(-time.Minute)
+		raw, _ := json.Marshal(secret)
+		if err := m.vault.Set("integration:"+r.Account.ID, string(raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Restart keeps the public client binding and token lifecycle.
+	reopened, err := New(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened.networkOwned, reopened.http = false, m.http
+	m = reopened
+	r = m.records[r.Account.ID]
+	if r.OAuth == nil || r.OAuth.ClientID != "zen-public" {
+		t.Fatal("restart lost client binding")
+	}
+	expire()
+	mustHandle(t, m, Request{Action: "invoke", ID: r.Account.ID, Tool: "get_me", Arguments: json.RawMessage(`{}`)})
+	if refreshCalls != 1 || readSecret().Token.RefreshToken != "rotated-refresh" {
+		t.Fatal("token rotation was not persisted")
+	}
+	expire()
+	rejectRefresh = true
+	if _, err := m.accountToken(context.Background(), r); err == nil || r.Account.Status != "authorization_required" {
+		t.Fatal("expired grant must require reconnect")
+	}
+	// Re-consent replaces only this verified identity and retains the account ID.
+	oldID := r.Account.ID
+	rejectRefresh = false
+	f.deviceCode, f.nextPoll, f.Status = "device-code", time.Time{}, "waiting"
+	if err := m.pollGitHubDevice(context.Background(), f); err != nil {
+		t.Fatal(err)
+	}
+	r = m.records[f.AccountID]
+	if r.Account.ID != oldID || len(m.records) != 1 || r.Account.Status != "connected" {
+		t.Fatal("reconnect duplicated or lost the verified identity")
+	}
+	mustHandle(t, m, Request{Action: "disconnect", ID: r.Account.ID})
+	before := reads
+	if _, err := m.Handle(context.Background(), Request{Action: "invoke", ID: r.Account.ID, Tool: "get_me"}); err == nil || reads != before {
+		t.Fatal("disconnected device account reached the provider")
+	}
+}
