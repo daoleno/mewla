@@ -116,8 +116,7 @@ If `~/.local/bin` is not on your `PATH`, install into another user-owned directo
 
 Startup prints the listening address, available private-network addresses, and one pairing command. Saved model routes are reclaimed when the selected tmux server confirms their sessions are absent. Live or unobservable sessions retain their routes; a model-settings warning for a retained route does not mean the HTTP server failed to start.
 
-Source builds require the Go toolchain declared in `daemon/go.mod`. On Linux,
-the local recipe links desktop capture when development libraries are present:
+Source builds require the Go toolchain declared in `daemon/go.mod`:
 
 ```bash
 git clone https://github.com/daoleno/zen.git
@@ -127,45 +126,23 @@ bun run daemon:build
 ./bin/zen doctor
 ```
 
-`bun run daemon:build` (and `cd daemon && go run ./cmd/zen-dev`) enable CGO and
-`-tags zen_desktop` when `pkg-config` finds GTK3, GStreamer app/video, GIO Unix,
-X11 and XTest. Desktop-capable builds pass a content-hash
-`-DZEN_NATIVE_BUILD_INPUT=…` compiler define so cgo rebuilds when external
-`desktop/native` C/headers change, without deleting GOCACHE. That produces one
-`zen` ELF whose `desktop-helper`, `desktop-host` and `desktop-agent` roles are
-the same file. It does not extract a second helper, emit `libzen-desktop.so`,
-or compile C at end-user startup. System GTK/GStreamer/X11
-remain dynamically linked (`DT_NEEDED`). If those OS libraries are absent, the
-dynamic loader refuses to start the ELF before `zen doctor` can run; install them
-first. `zen doctor` on a running desktop-capable ELF reports `native_linked`
-and lists `DT_NEEDED` names. Linking is not stream readiness.
-
-A plain `cd zen/daemon && go build -o bin/zen ./cmd/zen/` without the tag is a
-daemon-only artifact. Desktop capture is then unavailable until you rebuild with
-the local or Linux amd64 production recipe.
-
-```bash
-cd zen/daemon
-go build -o bin/zen ./cmd/zen/
-./bin/zen --help
-```
+`bun run daemon:build` and `cd daemon && go run ./cmd/zen-dev` build with
+`CGO_ENABLED=0`. The development watcher rebuilds Go source changes and restarts
+the daemon with its existing arguments. No display libraries are required.
 
 Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/zen/version.go` and can be overridden at link time (`-X main.Version=…`).
 
 ## Release binaries (Linux and Apple Silicon macOS)
 
-On a Linux amd64 host, `scripts/build-daemon-linux.sh` builds **desktop-capable**
-`zen-linux-amd64` (`CGO_ENABLED=1 -tags zen_desktop`). linux/arm64 and Darwin
-archives stay `CGO_ENABLED=0` daemon-only (no matching GTK sysroot). Staging
-from macOS likewise produces a daemon-only linux/amd64 archive; that is not a
-universal desktop binary. Deterministic flags: `-trimpath`, `-buildvcs=false`,
-stripped ldflags.
+`scripts/build-daemon-linux.sh` builds Linux amd64, Linux arm64 and Darwin
+arm64 binaries with `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false` and stripped
+ldflags. All targets use the same daemon feature set.
 
 ```bash
 ./scripts/build-daemon-linux.sh
-# → dist-download/staging/bin/zen-linux-amd64   (desktop-capable on Linux amd64 hosts)
-# → dist-download/staging/bin/zen-linux-arm64   (daemon-only)
-# → dist-download/staging/bin/zen-darwin-arm64  (daemon-only)
+# → dist-download/staging/bin/zen-linux-amd64
+# → dist-download/staging/bin/zen-linux-arm64
+# → dist-download/staging/bin/zen-darwin-arm64
 ```
 
 Full local stage (clean directory each run; **no** GitHub Release):
@@ -337,14 +314,6 @@ stop, disable or ownership failure — including a still-held lifecycle lock
 whose holder cannot be attributed — it retains the unit and configuration for
 a retry and never deletes a running owner. Daemon state and pairing are never
 touched.
-
-Remote desktop lock/login before an interactive login additionally needs the
-administrator-installed desktop broker and SDDM hooks described in
-[Remote Desktop](remote-desktop.md). That installation is independent of how
-you run the daemon: the broker admits the configured owner account whether the
-daemon runs in the foreground, in tmux, or under a service, and an optional
-`ownerUnit` setting adds a stricter root-enrolled process boundary. No separate
-tmux service is installed or required.
 
 ## Docker (advanced)
 

@@ -9,13 +9,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/daoleno/zen/daemon/desktop"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -70,7 +68,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		stderr:     stderr,
 	}
 
-	if err := runner.rebuild(false); err != nil {
+	if err := runner.rebuild(); err != nil {
 		return err
 	}
 	if err := runner.start(); err != nil {
@@ -140,7 +138,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			pending = map[string]struct{}{}
 
 			fmt.Fprintf(stderr, "\nzen-dev detected changes: %s\n", strings.Join(changedFiles, ", "))
-			if err := runner.rebuild(nativeSourcesChanged(changedFiles)); err != nil {
+			if err := runner.rebuild(); err != nil {
 				fmt.Fprintf(stderr, "zen-dev build failed:\n%v\n", err)
 				continue
 			}
@@ -262,44 +260,27 @@ func (t *watchTree) relevantPath(path string) (string, bool) {
 	}
 
 	base := filepath.Base(rel)
-	if base == "go.mod" || base == "go.sum" || base == "Makefile" || strings.HasSuffix(base, ".mk") {
+	if base == "go.mod" || base == "go.sum" {
 		return filepath.ToSlash(rel), true
 	}
 	if strings.HasSuffix(base, "_test.go") {
 		return "", false
 	}
 	switch filepath.Ext(base) {
-	case ".go", ".c", ".h":
+	case ".go":
 		return filepath.ToSlash(rel), true
 	default:
 		return "", false
 	}
 }
 
-func (r *devRunner) rebuild(forceNative bool) error {
+func (r *devRunner) rebuild() error {
 	built := r.binary + ".building"
 	args := []string{"build", "-o", built}
-	env := stripEnvKey(os.Environ(), "CGO_ENABLED")
-	if tags, extraEnv, ok := desktopNativeBuild(); ok {
-		args = append(args, tags...)
-		env = append(env, extraEnv...)
-		token, err := desktop.NativeBuildInputToken(filepath.Join(r.root, "desktop", "native"))
-		if err != nil {
-			return fmt.Errorf("native build input: %w", err)
-		}
-		env = desktop.WithNativeBuildInput(env, token)
-		if forceNative {
-			fmt.Fprintln(r.stderr, "zen-dev: rebuilding desktop-capable zen after native C/H change")
-		} else {
-			fmt.Fprintln(r.stderr, "zen-dev: building desktop-capable zen (CGO, zen_desktop)")
-		}
-	} else {
-		fmt.Fprintln(r.stderr, "zen-dev: building zen without desktop native (pkg-config libraries missing or not Linux)")
-	}
 	args = append(args, "./cmd/zen")
 	cmd := exec.Command("go", args...)
 	cmd.Dir = r.root
-	cmd.Env = env
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	output, err := cmd.CombinedOutput()
 	if len(output) > 0 {
 		_, _ = r.stderr.Write(output)
@@ -320,40 +301,6 @@ func commitBuiltBinary(built, dest string) error {
 		return fmt.Errorf("install built zen: %w", err)
 	}
 	return nil
-}
-
-func nativeSourcesChanged(files []string) bool {
-	for _, name := range files {
-		switch {
-		case strings.HasSuffix(name, ".c"), strings.HasSuffix(name, ".h"), strings.HasSuffix(name, ".mk"):
-			return true
-		case filepath.Base(name) == "Makefile":
-			return true
-		}
-	}
-	return false
-}
-
-func stripEnvKey(env []string, key string) []string {
-	prefix := key + "="
-	out := make([]string, 0, len(env))
-	for _, item := range env {
-		if !strings.HasPrefix(item, prefix) {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func desktopNativeBuild() (tags []string, env []string, ok bool) {
-	if runtime.GOOS != "linux" {
-		return nil, nil, false
-	}
-	cmd := exec.Command("pkg-config", "--exists", "gtk+-3.0", "gstreamer-app-1.0", "gstreamer-video-1.0", "x11", "xtst", "gio-unix-2.0")
-	if cmd.Run() != nil {
-		return nil, nil, false
-	}
-	return []string{"-tags", "zen_desktop"}, []string{"CGO_ENABLED=1"}, true
 }
 
 func (r *devRunner) restart() error {

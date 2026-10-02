@@ -34,7 +34,7 @@ func TestSingleConnectionPreservesOnlyActualTLS(t *testing.T) {
 				}), time.Second)
 			}()
 			_ = client.SetDeadline(time.Now().Add(2 * time.Second))
-			_, err := io.WriteString(client, "GET /desktop HTTP/1.1\r\nHost: host.test\r\nX-Forwarded-Proto: https\r\nForwarded: proto=https\r\nConnection: close\r\n\r\n")
+			_, err := io.WriteString(client, "GET /health HTTP/1.1\r\nHost: host.test\r\nX-Forwarded-Proto: https\r\nForwarded: proto=https\r\nConnection: close\r\n\r\n")
 			if err != nil {
 				t.Fatal(err)
 			}

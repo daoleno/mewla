@@ -32,8 +32,6 @@ import (
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/codexctl"
 	"github.com/daoleno/zen/daemon/connections"
-	"github.com/daoleno/zen/daemon/desktop"
-	"github.com/daoleno/zen/daemon/desktop/host"
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	"github.com/daoleno/zen/daemon/push"
 	skillmgmt "github.com/daoleno/zen/daemon/skills"
@@ -85,10 +83,6 @@ type notificationPusher interface {
 // Server handles WebSocket connections from the zen mobile app.
 type Server struct {
 	connections                  *connections.Manager
-	desktop                      desktop.Manager
-	desktopTrustedNetwork        bool
-	moonlightChallenges          map[string]*moonlightChallenge
-	moonlightChallengesMu        sync.Mutex
 	auth                         *auth.Manager
 	watcher                      *watcher.Watcher
 	terminal                     *terminal.Manager
@@ -128,9 +122,7 @@ type Server struct {
 	authRevocationUnsubscribe  func()
 	runtimeClosing             bool
 	terminalCleanup            terminalCleanupOwner
-	desktopTransport           DesktopTransport
-	desktopAuthorization       desktopAuthorizationController
-	desktopAuthorizationWake   chan struct{}
+	tlsConfig                  *tls.Config
 
 	workSubID                   int
 	workSub                     <-chan work.Event
@@ -154,16 +146,9 @@ type Server struct {
 	mu                 sync.Mutex
 }
 
-// DesktopTransport is identity-bound TLS for unattended desktop. Pin is the
-// Link/desktop SPKI; TLSConfig is the matching server certificate. HTTP clients
-// keep working on the same port; unattended /desktop requires actual TLS.
-type DesktopTransport struct {
-	TLSConfig *tls.Config
-	Pin       string
-}
-
-func (s *Server) SetDesktopTransport(transport DesktopTransport) {
-	s.desktopTransport = transport
+// SetTLSConfig enables identity-bound TLS alongside local HTTP.
+func (s *Server) SetTLSConfig(config *tls.Config) {
+	s.tlsConfig = config
 }
 
 func (s *Server) SetCalendar(store *calendar.Store, scheduler *calendar.Scheduler) {
@@ -414,11 +399,6 @@ func (s *Server) Handler() http.Handler {
 		s.connections.OAuthCallback(w, r)
 	})
 	mux.HandleFunc("/resources", s.handleResourceTelemetryHTTP)
-	mux.HandleFunc("/desktop", s.handleDesktop)
-	mux.HandleFunc("/desktop/capability", s.handleDesktopCapability)
-	mux.HandleFunc("/desktop/moonlight/enroll/begin", s.handleMoonlightEnrollBegin)
-	mux.HandleFunc("/desktop/moonlight/enroll/complete", s.handleMoonlightEnrollComplete)
-	mux.HandleFunc("/desktop/scope", s.handleDesktopScope)
 	mux.HandleFunc("/pair", s.handlePair)
 	mux.HandleFunc("/auth-check", s.handleAuthCheck)
 	mux.HandleFunc("/devices", s.handleDevices)
@@ -446,8 +426,8 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 		return err
 	}
 	var listener net.Listener = tcp
-	if s.desktopTransport.TLSConfig != nil {
-		listener = &tlsHTTPListener{Listener: tcp, config: s.desktopTransport.TLSConfig.Clone()}
+	if s.tlsConfig != nil {
+		listener = &tlsHTTPListener{Listener: tcp, config: s.tlsConfig.Clone()}
 	}
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -472,20 +452,7 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 		<-runtimeCtx.Done()
 		s.shutdownAuthenticatedClients()
 		_ = srv.Shutdown(context.Background())
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := moonlightStopRuntime(stopCtx); err != nil {
-			log.Printf("moonlight stop on shutdown: %v", err)
-		}
-		stopCancel()
 	}()
-
-	if s.auth != nil && s.desktopAuthorization != nil {
-		runtime.Add(1)
-		go func() {
-			defer runtime.Done()
-			s.runDesktopAuthorization(runtimeCtx)
-		}()
-	}
 
 	if onReady != nil {
 		onReady()
@@ -596,40 +563,11 @@ func (s *Server) detachAuthenticatedClient(
 	s.completeClientDetach(work)
 }
 
-// Moonlight engine hooks are injectable for tests. Revoking a device also
-var moonlightEnrollment = host.SunshineEnrollment
-var moonlightRevokeTarget = host.RevokeSunshineTarget
-var moonlightStopRuntime = host.StopSunshineRuntime
-
-// revokeSunshineForDeviceRevocation affects only the device with a verified
-// upstream enrollment. An unrelated or non-enrolled target leaves other
-// devices' pairings untouched; a corrupt ownership store fails closed instead
-// of looking unenrolled, and failures keep the enrollment for retry.
-func revokeSunshineForDeviceRevocation(ctx context.Context, targetDeviceID string) error {
-	_, ok, err := moonlightEnrollment(targetDeviceID)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-	return moonlightRevokeTarget(ctx, targetDeviceID)
-}
-
 func (s *Server) revokeAuthenticatedDevice(deviceID string) {
 	normalizedID := strings.TrimSpace(deviceID)
 	if normalizedID == "" {
 		return
 	}
-	s.desktop.Revoke(deviceID)
-	revokeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := revokeSunshineForDeviceRevocation(revokeCtx, normalizedID); err != nil {
-		log.Printf("moonlight revoke after device revocation: %v", err)
-	}
-	cancel()
-	// A revocation that leaves no authorized device releases the scoped
-	// idle/suspend inhibitor; the background reconciler applies it.
-	s.nudgeDesktopAuthorization()
 	var revoked []clientDetachWork
 	s.mu.Lock()
 	for conn, owner := range s.clients {
@@ -646,7 +584,6 @@ func (s *Server) revokeAuthenticatedDevice(deviceID string) {
 }
 
 func (s *Server) shutdownAuthenticatedClients() {
-	s.desktop.Close()
 	var closing []clientDetachWork
 	s.mu.Lock()
 	if s.runtimeClosing {
@@ -735,14 +672,12 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var raw struct {
-		EnrollmentToken       string `json:"enrollment_token"`
-		ExpectedDaemonID      string `json:"expected_daemon_id"`
-		ExpectedPublicKey     string `json:"expected_daemon_public_key"`
-		DeviceID              string `json:"device_id"`
-		DeviceName            string `json:"device_name"`
-		DevicePublicKey       string `json:"device_public_key"`
-		DesktopScopeVersion   int    `json:"desktop_scope_version"`
-		DesktopScopeSignature string `json:"desktop_scope_signature"`
+		EnrollmentToken   string `json:"enrollment_token"`
+		ExpectedDaemonID  string `json:"expected_daemon_id"`
+		ExpectedPublicKey string `json:"expected_daemon_public_key"`
+		DeviceID          string `json:"device_id"`
+		DeviceName        string `json:"device_name"`
+		DevicePublicKey   string `json:"device_public_key"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 	decoder := json.NewDecoder(r.Body)
@@ -751,20 +686,14 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var device *auth.TrustedDevice
-	var err error
-	if raw.DesktopScopeVersion != 0 || raw.DesktopScopeSignature != "" {
-		device, err = s.auth.EnrollDeviceWithDesktopScope(raw.EnrollmentToken, raw.ExpectedDaemonID, raw.ExpectedPublicKey, raw.DeviceID, raw.DeviceName, raw.DevicePublicKey, raw.DesktopScopeVersion, raw.DesktopScopeSignature)
-	} else {
-		device, err = s.auth.EnrollDevice(
-			raw.EnrollmentToken,
-			raw.ExpectedDaemonID,
-			raw.ExpectedPublicKey,
-			raw.DeviceID,
-			raw.DeviceName,
-			raw.DevicePublicKey,
-		)
-	}
+	device, err := s.auth.EnrollDevice(
+		raw.EnrollmentToken,
+		raw.ExpectedDaemonID,
+		raw.ExpectedPublicKey,
+		raw.DeviceID,
+		raw.DeviceName,
+		raw.DevicePublicKey,
+	)
 	if err != nil {
 		status := http.StatusUnauthorized
 		switch err {
@@ -782,12 +711,11 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSONWithAssertion(w, http.StatusOK, "zen-pair", map[string]any{
-		"ok":                    true,
-		"daemon_id":             s.auth.DaemonID(),
-		"daemon_public_key":     s.auth.PublicKeyHex(),
-		"device_id":             device.ID,
-		"device_name":           device.Name,
-		"desktop_scope_version": device.DesktopScopeVersion,
+		"ok":                true,
+		"daemon_id":         s.auth.DaemonID(),
+		"daemon_public_key": s.auth.PublicKeyHex(),
+		"device_id":         device.ID,
+		"device_name":       device.Name,
 	})
 }
 
@@ -797,11 +725,10 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSONWithAssertion(w, http.StatusOK, "zen-probe", map[string]any{
-		"ok":                    true,
-		"device_id":             device.ID,
-		"daemon_id":             s.auth.DaemonID(),
-		"daemon_public_key":     s.auth.PublicKeyHex(),
-		"desktop_scope_version": device.DesktopScopeVersion,
+		"ok":                true,
+		"device_id":         device.ID,
+		"daemon_id":         s.auth.DaemonID(),
+		"daemon_public_key": s.auth.PublicKeyHex(),
 	})
 }
 

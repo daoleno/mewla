@@ -143,7 +143,6 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The unit starts the same unprivileged runtime before an interactive")
 	fmt.Fprintln(w, "login only when the user manager lingers (loginctl enable-linger).")
-	fmt.Fprintln(w, "Remote desktop lock/login still needs the administrator broker install.")
 	fmt.Fprintln(w, "`zen boot status` always reads the installed unit configuration.")
 }
 
