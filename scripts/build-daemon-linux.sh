@@ -49,7 +49,8 @@ if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
   export GOSUMDB="${GOSUMDB:-sum.golang.org}"
 fi
 
-LDFLAGS="-s -w -buildid= -X main.Version=${VERSION}"
+PUBLISHER_FLAGS="$(python3 "$ROOT/scripts/plugin-publisher-flags.py")"
+LDFLAGS="-s -w -buildid= -X main.Version=${VERSION} ${PUBLISHER_FLAGS}"
 
 build_one() {
   local goos="$1"

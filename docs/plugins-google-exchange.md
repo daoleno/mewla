@@ -1,6 +1,6 @@
 # Google publisher exchange deployment artifact
 
-This component is prepared for review and fixture verification. It is **not deployed**, and no publisher client or HTTPS origin has been registered. It is not part of a user's private daemon. Its only provider is Google; Slack uses its official public PKCE flow instead.
+This component is an unselected candidate prepared for review and fixture verification. Review the [maintained-component comparison](plugins-google-options.md) before choosing it. It is **not deployed**, and no publisher client or HTTPS origin has been registered. It is not part of a user's private daemon. Its only provider is Google; Slack uses its official public PKCE flow instead.
 
 Build `daemon/cmd/zen-google-auth` as a normal Go binary. Host it behind an existing product-owned TLS ingress. Required private environment configuration on that host:
 

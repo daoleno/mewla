@@ -2,17 +2,17 @@
 
 **Revised 2026-10-02 after checking current public-client support.** Ordinary users install Zen and connect accounts. They never run `oauth-configure`, register an app, choose callbacks or receive Zen's shared client secret. Existing local operator configuration remains supported for that operator's own registrations; it is not the distributed product solution.
 
-No Zen-owned GitHub/Slack/Google client or dedicated HTTPS publisher origin has been confirmed in the inspected runtime. GitHub repository ownership is not proof of ownership of other vendor accounts. No application registration or deployment is claimed.
+No Zen-owned GitHub/Slack/Google client or dedicated HTTPS publisher origin has been confirmed in the inspected runtime. GitHub repository ownership is not proof of ownership of other vendor accounts. No publisher-owned application registration or deployment is claimed; automatic protocol DCR is distinguished below.
 
 ## Smallest recommended product arrangement
 
 | Service | End-user journey / public client capability | Publisher prerequisite | Return and credential ownership | Evidence and remaining dependency |
 | --- | --- | --- | --- | --- |
 | Linear | Connect → official account/workspace consent; automatic DCR, PKCE S256 | No manual app registration; daemon registers Zen as public client | Fixed `zen://plugins`; matching state/code goes through authenticated original-server channel; verifier/token remain daemon-side | Live metadata and a DCR probe accepted this URI. Real account consent remains unverified. |
-| Notion | Connect → official MCP OAuth consent; advertised public DCR/PKCE | Automatic registration supported by current metadata; no manual publisher registration established as necessary | Native return only if vendor accepts it; exact MCP resource binding | Official metadata now returns200; unauthenticated Streamable HTTP returns401 with the correct resource metadata challenge. Prior403 is not evidence of redirect incompatibility. No Zen native registration or grant has been tested. |
+| Notion | Connect → official MCP OAuth consent; advertised public DCR/PKCE | Automatic registration supported by current metadata; no manual publisher registration established as necessary | Fixed native URI accepted by real DCR; exact MCP resource binding | Official metadata now returns200; unauthenticated Streamable HTTP returns401 with the correct resource metadata challenge. Prior403 is not evidence of redirect incompatibility. Actual Zen DCR accepted `zen://plugins`, S256 and the exact MCP resource; official browser login loaded. Account grant/read/native return remain unverified. |
 | GitHub | Connect → official device page; code entered on GitHub, no Zen text input. Existing signed-in identity is a secondary explicitly consented import | Zen-owned OAuth app, device flow enabled; **public client ID only** shipped in official release | No redirect/hosting. Daemon polls respecting interval/slow_down; token remains in daemon vault | Device flow docs verified. No owned client ID supplied. Existing gh API can verify/import identity but is not first-time signup proof. |
 | Slack | Connect → official workspace authorization with user scopes | Zen-owned app with **PKCE enabled**, `zen://plugins` registered, appropriate distribution/workspace approval; **public client ID only** shipped | Native URI + S256. `oauth.v2.access` sends verifier, no client secret. Daemon stores and rotates tokens. Public-client refresh tokens expire after 30 days | Current official PKCE guide and 2026-03-30 GA announcement confirm standard and directory apps can enable it. No Zen app registered. No live consent claimed. |
-| Google Workspace | Connect → official consent. Android AuthorizationClient gives online access directly, but continued backend access requires offline authorization against a **Web client** | Zen-owned Cloud project, APIs, consent audience/verification and Web client; secret remains in a **product-owned exchange service**, never distributed | Google code callback and initial exchange hosted by product; per-flow daemon key binds encrypted delivery. Daemon vault is final token storage; refresh exchange also needs the product-held client secret | Official Android offline-access docs require backend exchange. No confirmed owned client, HTTPS origin or exchange host exists. This is the only preset needing confidential exchange in the recommended cross-platform background-access design. |
+| Google Workspace | Connect → official consent. Android AuthorizationClient gives online access directly, but continued backend access requires offline authorization against a **Web client** | Zen-owned Cloud project, APIs, consent audience/verification and Web client; secret remains in a **product-owned exchange service**, never distributed | Google code callback and initial exchange hosted by product; per-flow daemon key binds encrypted delivery. Daemon vault is final token storage; refresh exchange also needs the product-held client secret | Official Android offline-access docs require backend exchange. No confirmed owned client, HTTPS origin or exchange host exists. A confidential product-side exchange is needed for this offline cross-platform design; component selection follows the maintained-option comparison below. |
 | Custom MCP / OpenAPI | Separate advanced path with service endpoint and real service-specific prerequisites | Service owner | Explicit network trust and individual grants; automatic MCP registration when supported | Existing custom functionality retained. It is not a fallback for failed built-in onboarding. |
 
 ### Notion discovery diagnosis
@@ -21,9 +21,28 @@ Rechecked2026-10-02 against the official recommended `https://mcp.notion.com/mcp
 
 The earlier403 is therefore a prior discovery/transport denial that is not reproducible in this recheck. Its original cause is unproven; discovery occurs before a client or redirect is submitted, so it cannot demonstrate rejection of `zen://plugins`. The official [custom-client guide](https://developers.notion.com/guides/mcp/build-mcp-client) documents public dynamic registration and PKCE, but recommends HTTPS redirects in production and does not explicitly promise custom native schemes. Registration acceptance, official browser return and a granted read still need a later authorized check. No registration POST, consent request, credential reuse or vendor record was created during diagnosis. Do not assume another application's registered client is reusable or turn this uncertainty into an end-user callback form.
 
-### GitHub release artifact
+### GitHub: approved owner and concrete registration handoff
 
-Register a new Zen OAuth app under the confirmed publisher account and enable device flow. Release build injects only `github.com/daoleno/zen/daemon/connections.GitHubPublicClientID` using Go `-ldflags -X`. The value is public and common to official daemon installations. It is deliberately empty until actually registered. Never reuse GitHub CLI's registered identity. GitHub `repo` scope is broad; the provider displays it and daemon permissions still separately limit reads/writes.
+Approved owner is **daoleno**, not the currently accessible CLI identity `paul-freeride`. Never switch that production identity or register under it as a shortcut. If an accessible signed-in publisher browser is unavailable, the owner can complete the following in their own browser; no password/session/secret transfer is needed:
+
+1. Check [existing OAuth apps](https://github.com/settings/developers) while signed in as daoleno. Reuse an appropriate Zen registration if one exists.
+2. Otherwise open [Register a new OAuth application](https://github.com/settings/applications/new):
+
+| Field | Truthful value |
+| --- | --- |
+| Application name | Zen |
+| Homepage URL | `https://github.com/daoleno/zen` |
+| Description | Mobile-native control plane for coding agents. Connect GitHub accounts with user authorization. |
+| Authorization callback URL | `http://127.0.0.1/` |
+| Enable Device Flow | Enabled |
+| Expire user access tokens | Keep enabled |
+| Owner | daoleno |
+
+The form's loopback callback is unused by device flow. GitHub supports literal loopback callbacks; this does not require a daemon listener or hosted callback. Do not invent a Zen domain/privacy policy to fill a new requirement. Return **only the public Client ID**, never a client secret or token.
+
+Product release engineering stores it in `release/plugin-publishers.json`. `scripts/plugin-publisher-flags.py` validates public-only fields and the approved owner, and emits Go linker flags consumed by both `build-zen-local.sh` and all three `build-daemon-linux.sh` targets. Ordinary dev builds may leave pending IDs null. The release workflow requires a real configured GitHub ID before building/publishing release artifacts; no public release/tag is created by this preparation. Unknown/secret fields and unsafe linker characters are rejected. End users do not run `oauth-configure`.
+
+GitHub now defaults new OAuth apps to expiring tokens. Device-issued refresh uses the public Client ID without a secret, as documented by GitHub. The daemon must retain expiry and rotating refresh tokens in its vault and show reconnect when the grant expires. GitHub `repo` is a broad vendor scope; daemon read/write capability enforcement remains separate. Existing signed-in import is a secondary flow and does not prove first-time device authorization.
 
 ### Slack release artifact
 
@@ -31,31 +50,11 @@ Import/review `docs/plugins-slack-manifest.json` in the confirmed Slack publishe
 
 This removes the earlier proposed Slack HTTPS/static handoff. The earlier advice to disable Slack token rotation was incorrect and is superseded by this document.
 
-### Google: minimal necessary ownership decision
+### Google: evaluate maintained components before selecting
 
-Recommendation: one Google-only confidential exchange component on an **existing Zen-owned HTTPS host**, if such a host can be confirmed. Do not buy a service or register a domain merely to continue implementation. A static page alone is insufficient for a distributed Web client.
+The approved sequence is GitHub, Linear/Notion, Slack, then Google. [Maintained-component comparison](plugins-google-options.md) checks current licenses, free/paid features, credentials, deployment and the mobile-to-offline-daemon boundary. The prepared [Google-only exchange](plugins-google-exchange.md) is a candidate, not a selected/deployed service.
 
-The independent implementation is now available as `daemon/googleauth`, `cmd/zen-google-auth`, and the daemon adapter `connections/google_exchange.go`. [Exact deployment configuration and binding protocol](plugins-google-exchange.md) are ready for review. It is unconfigured and undeployed.
-
-Component responsibilities, deliberately narrower than a general OAuth platform:
-
-1. Create a short-lived flow for a daemon-generated ephemeral encryption public key and unguessable retrieval capability. Accept a fixed Google provider/scopes/registered callback only. Return an authorization-start URL to the native app through its current-server channel. No caller-supplied daemon URL or callback.
-2. Bind the browser start and callback using an HttpOnly/Secure SameSite cookie plus unpredictable single-use state. Generate PKCE at the product exchange. Callback exchanges the code with Google's client secret entirely on the product host.
-3. Encrypt the token result to that flow's original daemon public key using maintained authenticated public-key encryption. Browser returns only a flow completion signal to fixed `zen://plugins`; it never receives a Google token, refresh token or retrieval capability. Daemon polls using its capability and decrypts only its own result. Ten-minute expiry, one-use completion, cancel/replay rejection and bounded capacity/rate limiting are required.
-4. Daemon verifies Google identity/scopes, saves tokens in its existing vault, and exposes only an account projection to the phone. Server switch cannot reroute the flow. The exchange must support refresh with its product-held client secret; refresh requests must prove the daemon binding established at initial exchange. No long-term token database is required on the product host. Disconnection locally disables first, revokes at Google and removes local credentials/binding.
-5. Publisher handles the Cloud project, APIs, consent branding/audience/test users, privacy disclosures and restricted Gmail-scope verification/security assessment. Register exactly one HTTPS callback. Backend logging must exclude request bodies, code/state queries, secrets and tokens.
-
-Alternatives considered:
-
-| Option | What it solves | Why selected / not selected |
-| --- | --- | --- |
-| Official native Google SDKs on both platforms | Online authorization on phone; Android SDK can request backend auth code | Prefer for phone-only access, but online token handoff alone does not support a daemon working after the phone leaves. Android offline access still uses a Web-client backend exchange. iOS custom scheme does not establish Android parity. |
-| Existing maintained managed connection service (e.g. Nango) | OAuth orchestration/refresh and token custody | Can reduce implementation burden if Zen already owns such a service; none confirmed. Adds third-party credential custody, service/account terms and possible cost. Do not provision without a concrete owner choice. |
-| Minimal Google-only exchange on an existing owned host | Keeps the one confidential secret product-side and returns credentials only to original daemon | Recommended if a suitable owned host exists; reusable protocol/design preparation is independent of registration. Production deployment needs confirmation of host/account and security review. |
-| Static code handoff + client secret on every daemon | Mobile return only | Rejected: exposes shared product secret, fails no-configuration distribution, and does not solve refresh ownership. |
-| Google TV/device flow or desktop client identity used for phones | Would avoid a browser callback | Rejected: cannot assume eligibility or reuse a different app type for Workspace/mobile access. |
-
-**Single request for Brain's decision after independent preparation:** confirm the Zen publisher accounts for GitHub/Slack/Google and whether an existing owned HTTPS host is available for the Google-only exchange. If no host exists, choose between explicitly provisioning a minimal owned host or adopting an already-approved managed provider. No end-user secret entry, disabled tile or mock connection counts as completion while these publisher prerequisites are absent.
+The minimum remaining Google owner decision is an actually owned Cloud project and an existing owned HTTPS host **after reviewing that comparison**. No paid plan, domain purchase, new host or vendor/legal acceptance is implied. All approaches still require real Google branding/audience/scopes/verification. Shared client secrets may never be shipped to daemons. A static handoff alone cannot solve that boundary.
 
 ## Decisive flow changes
 

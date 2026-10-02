@@ -59,6 +59,9 @@ jobs:
           ref: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
           fetch-depth: 0
 
+      - name: Require registered public GitHub publisher
+        run: python3 scripts/plugin-publisher-flags.py --require github
+
       - name: Fetch and validate reviewed release identity
         id: meta
         env:

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "github": {
+    "owner": "daoleno",
+    "client_id": null
+  },
+  "slack": {
+    "workspace_id": null,
+    "client_id": null
+  }
+}
