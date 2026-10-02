@@ -11,17 +11,30 @@ import { AppText, Button, ListRow, ListSection } from "../components/ui";
 import { CustomServiceForm } from "../components/plugins/CustomServiceForm";
 import { wsClient } from "../services/websocket";
 import { accountStatus, type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../services/connections";
-import { finishPluginReturn, matchesPluginReturn, PLUGIN_CALLBACK, pluginJobs, type ConnectPhase, type PendingConnection } from "../services/pluginOnboarding";
+import { finishPluginReturn, matchesPluginReturn, pendingConnectionKey, retainPluginReturn, PLUGIN_CALLBACK, pluginJobs, type ConnectPhase, type PendingConnection } from "../services/pluginOnboarding";
 
 
 type Page = "catalog" | "service" | "accounts" | "permissions" | "advanced" | "custom";
 
 export default function PluginsScreen() {
-  const { currentServerId } = useCurrentServer();
-  return <PluginCatalog key={currentServerId ?? "none"} serverId={currentServerId} />;
+  const { currentServerId, servers, isCurrentServer } = useCurrentServer();
+  const [deferredServerId, setDeferredServerId] = useState<string | null>(null);
+  useEffect(() => { if (deferredServerId === currentServerId) setDeferredServerId(null); }, [currentServerId, deferredServerId]);
+  const deferReturn = useCallback(async (url: string) => {
+    const owner = await retainPluginReturn(servers.filter((s) => !isCurrentServer(s.id)).map((s) => s.id), url, SecureStore);
+    if (owner) setDeferredServerId(owner);
+  }, [servers, isCurrentServer]);
+  useEffect(() => {
+    const receive = (url: string) => { void deferReturn(url).catch(() => undefined); };
+    void Linking.getInitialURL().then((url) => { if (url) receive(url); });
+    const listener = Linking.addEventListener("url", ({ url }) => receive(url));
+    return () => listener.remove();
+  }, [deferReturn]);
+  const deferredName = deferredServerId && deferredServerId !== currentServerId ? servers.find((s) => s.id === deferredServerId)?.name : undefined;
+  return <PluginCatalog key={currentServerId ?? "none"} serverId={currentServerId} deferredName={deferredName} deferReturn={deferReturn} />;
 }
-function PluginCatalog({ serverId }: { serverId: string | null }) {
-  const PENDING_KEY = `zen.plugin.authorization.${serverId?.replace(/[^a-zA-Z0-9.-]/g, "_") ?? "none"}`;
+function PluginCatalog({ serverId, deferredName, deferReturn }: { serverId: string | null; deferredName?: string; deferReturn: (url: string) => Promise<void> }) {
+  const PENDING_KEY = pendingConnectionKey(serverId);
   const colors = useAppColors();
   const router = useRouter();
   const { isCurrentServer } = useCurrentServer();
@@ -151,7 +164,11 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
       setPhase("waiting");
       if (active.flow.user_code) { await WebBrowser.openBrowserAsync(active.flow.authorization_url); await check(); return; }
       const result = await WebBrowser.openAuthSessionAsync(active.flow.authorization_url, PLUGIN_CALLBACK);
-      if (!valid() || pending.current?.flow.id !== active.flow.id) return;
+      if (!valid()) {
+        if (result.type === "success") await deferReturn(result.url);
+        return;
+      }
+      if (pending.current?.flow.id !== active.flow.id) return;
       if (result.type === "success") {
         if (matchesPluginReturn(result.url, active.flow)) await finish(result.url);
         else if (result.url === PLUGIN_CALLBACK) await check();
@@ -174,7 +191,13 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
         return;
       }
       const active = { serverId: serverId!, flow: result.flow };
-      await remember(active); await openBrowser(active);
+      await remember(active);
+      // Device authorization asks for a code on GitHub. Let people see and
+      // copy it before leaving Zen, instead of opening a page with no code.
+      if (active.flow.user_code) setPhase("waiting");
+      else await openBrowser(active);
+    } catch (failure) {
+      if (valid()) { setPhase("failed"); setError(failure instanceof Error ? failure.message : "Could not start this connection. Try again."); }
     } finally { starting.current = false; }
   };
   const previewGitHub = async () => {
@@ -189,6 +212,7 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
     if (result) await settle(result); else setPhase("failed");
   };
   const choose = async (plugin: PluginIntegration) => {
+    if (mutation.current || starting.current) return;
     setSelected(plugin); setPage("service"); setAccount(null); setAnother(false); setError(""); setPhase("idle"); setWrites(false);
     const existing = accounts.find((item) => item.integration === plugin.id && item.status !== "disconnected");
     if (existing) await send({ action: "get", id: existing.id });
@@ -196,6 +220,13 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
   const back = () => {
     if (["opening", "waiting", "verifying"].includes(phase)) {
       Alert.alert("Leave this connection?", "You can connect again later.", [{ text: "Keep connecting", style: "cancel" }, { text: "Cancel connection", onPress: () => { void cancel().then(() => { if (valid()) setPage("catalog"); }); } }]); return;
+    }
+    if (pending.current) {
+      void cancel().then(() => {
+        if (!valid()) return;
+        setError(""); setPhase("idle"); setPage("catalog"); setSelected(null); setAccount(null);
+      });
+      return;
     }
     setError("");
     if (page === "catalog") { router.back(); return; }
@@ -223,6 +254,10 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
       <AppText variant="title">{title}</AppText>
       {!serverId ? <AppText tone="secondary">Choose a current server in Settings to connect services.</AppText> : null}
       {error ? <View accessibilityRole="alert"><AppText style={{ color: colors.dangerText }}>{error}</AppText></View> : null}
+      {deferredName ? <ListSection title="Return to the original server">
+        <ListRow title={`Authorization is saved for ${deferredName}`} subtitle="Choose that server in Settings to finish connecting. This server has not received its authorization." numberOfLines={3} />
+        <Button label="Open server settings" onPress={() => router.push("/settings")} />
+      </ListSection> : null}
       {page === "catalog" && serverId ? <>
         <AppText tone="secondary">Bring your work into Brain. Choose a service and connect your account.</AppText>
         <ListSection title="Services">
@@ -244,9 +279,11 @@ function PluginCatalog({ serverId }: { serverId: string | null }) {
           <ListRow title={phase === "verifying" ? "Checking access on your server" : "Finish in your browser"} subtitle="Your account appears here automatically after authorization." />
           {flow?.flow.user_code ? <>
             <ListRow title={flow.flow.user_code} subtitle="Enter this code on GitHub. No code is entered in Zen." />
-            <Button label="Copy code" variant="plain" onPress={() => void Clipboard.setStringAsync(flow.flow.user_code!)} />
           </> : null}
-          {phase === "waiting" && flow ? <Button label="Open authorization" onPress={() => void openBrowser(flow)} /> : null}
+          {phase === "waiting" && flow ? <Button label={flow.flow.user_code ? "Copy code and open GitHub" : "Open authorization"} onPress={() => void (async () => {
+            if (flow.flow.user_code) await Clipboard.setStringAsync(flow.flow.user_code);
+            await openBrowser(flow);
+          })()} /> : null}
           <Button label="Cancel connection" variant="plain" onPress={() => void cancel()} />
         </ListSection> : linked ? <>
           <ListSection title={accountStatus(account)}>

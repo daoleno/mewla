@@ -31,7 +31,8 @@ func newPluginsBrowserFixture(t *testing.T, manager *connections.Manager, root s
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return protocol }, nil)
 	var base string
 	var mu sync.Mutex
-	codes := map[string]string{}
+	type grant struct{ challenge, redirect string }
+	codes := map[string]grant{}
 	counts := map[string]int{}
 	event := func(kind string) {
 		mu.Lock()
@@ -55,7 +56,8 @@ func newPluginsBrowserFixture(t *testing.T, manager *connections.Manager, root s
 		_ = r.ParseForm()
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		if r.Form.Get("redirect_uri") != base+"/plugins/oauth/callback" || r.Form.Get("state") == "" || r.Form.Get("code_challenge_method") != "S256" {
+		redirect := r.Form.Get("redirect_uri")
+		if (redirect != base+"/plugins/oauth/callback" && redirect != connections.NativeCallback) || r.Form.Get("state") == "" || r.Form.Get("code_challenge_method") != "S256" {
 			http.Error(w, "Invalid fixture authorization", 400)
 			return
 		}
@@ -65,21 +67,26 @@ func newPluginsBrowserFixture(t *testing.T, manager *connections.Manager, root s
 			for _, key := range []string{"redirect_uri", "state", "code_challenge", "code_challenge_method"} {
 				page += `<input type="hidden" name="` + key + `" value="` + html.EscapeString(r.Form.Get(key)) + `">`
 			}
-			_, _ = w.Write([]byte(page + `<button style="font-size:20px;padding:16px">Authorize fixture</button></form>`))
+			_, _ = w.Write([]byte(page + `<button name="decision" value="allow" style="font-size:20px;padding:16px">Authorize fixture</button><button name="decision" value="deny" style="font-size:20px;padding:16px">Deny fixture</button></form>`))
 			return
 		}
 		if r.Method != "POST" {
 			http.Error(w, "Method not allowed", 405)
 			return
 		}
+		if r.Form.Get("decision") == "deny" {
+			event("browser_denial")
+			http.Redirect(w, r, redirect+"?"+url.Values{"error": {"access_denied"}, "state": {r.Form.Get("state")}, "iss": {base}}.Encode(), http.StatusSeeOther)
+			return
+		}
 		var b [24]byte
 		_, _ = rand.Read(b[:])
 		code := base64.RawURLEncoding.EncodeToString(b[:])
 		mu.Lock()
-		codes[code] = r.Form.Get("code_challenge")
+		codes[code] = grant{r.Form.Get("code_challenge"), redirect}
 		mu.Unlock()
 		event("browser_consent")
-		http.Redirect(w, r, base+"/plugins/oauth/callback?"+url.Values{"code": {code}, "state": {r.Form.Get("state")}, "iss": {base}}.Encode(), http.StatusSeeOther)
+		http.Redirect(w, r, redirect+"?"+url.Values{"code": {code}, "state": {r.Form.Get("state")}, "iss": {base}}.Encode(), http.StatusSeeOther)
 	})
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
@@ -91,10 +98,10 @@ func newPluginsBrowserFixture(t *testing.T, manager *connections.Manager, root s
 		switch r.Form.Get("grant_type") {
 		case "authorization_code":
 			mu.Lock()
-			challenge, ok := codes[r.Form.Get("code")]
+			grant, ok := codes[r.Form.Get("code")]
 			delete(codes, r.Form.Get("code"))
 			mu.Unlock()
-			if !ok || oauth2.S256ChallengeFromVerifier(r.Form.Get("code_verifier")) != challenge {
+			if !ok || oauth2.S256ChallengeFromVerifier(r.Form.Get("code_verifier")) != grant.challenge || r.Form.Get("redirect_uri") != grant.redirect {
 				http.Error(w, `{"error":"invalid_grant"}`, 400)
 				return
 			}
