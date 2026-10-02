@@ -105,3 +105,62 @@ func (m *Manager) invokeMCP(ctx context.Context, r *record, secret string, t Too
 	}
 	return json.Marshal(result)
 }
+
+// Identity is optional in MCP. Only call a reviewed identity operation on a
+// fixed official resource, using its discovered structured input contract.
+func (m *Manager) officialMCPIdentity(ctx context.Context, r *record, secret string, tools []Tool) string {
+	for _, tool := range tools {
+		args := map[string]any{}
+		if r.Account.Integration == "notion" && tool.Name == "notion-get-self" && toolGroup(r, tool) == "read" {
+		} else if r.Account.Integration == "linear" && tool.Name == "get_user" && toolGroup(r, tool) == "read" {
+			var schema struct {
+				Properties map[string]json.RawMessage `json:"properties"`
+			}
+			if json.Unmarshal(tool.InputSchema, &schema) != nil || schema.Properties["query"] == nil {
+				continue
+			}
+			args["query"] = "me"
+		} else {
+			continue
+		}
+		raw, err := m.invokeMCP(ctx, r, secret, tool, args)
+		if err != nil {
+			return ""
+		}
+		var result struct {
+			Structured map[string]any `json:"structuredContent"`
+			Content    []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		}
+		if json.Unmarshal(raw, &result) != nil {
+			return ""
+		}
+		identity := func(value map[string]any) string {
+			if nested, ok := value["user"].(map[string]any); ok {
+				value = nested
+			}
+			for _, key := range []string{"email", "name", "id"} {
+				if name, ok := value[key].(string); ok && len(name) > 0 && len(name) <= 200 {
+					return name
+				}
+			}
+			return ""
+		}
+		if value := identity(result.Structured); value != "" {
+			return value
+		}
+		for _, content := range result.Content {
+			if content.Type == "text" {
+				var value map[string]any
+				if json.Unmarshal([]byte(content.Text), &value) == nil {
+					if name := identity(value); name != "" {
+						return name
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
