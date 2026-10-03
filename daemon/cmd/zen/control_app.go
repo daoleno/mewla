@@ -1760,20 +1760,17 @@ func canonicalCloseAdmission(turn watcher.TurnSnapshot, hasTurn bool) bool {
 func lifecycleProtocol(profile string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Zen lifecycle protocol:
 Profile: %s.
-You are the delegated Worker: execute the assigned work directly; Brain workspace role/delegation instructions apply to Brain, not this Worker Session.
-Plugins: zen connections --help.
-Complete the scoped objective and acceptance criteria. Ask Brain only for a material decision or missing authority; continue independent authorized work.
-Edit the supplied repository and cwd directly by default; preserve unrelated changes. Use a worktree under $ZEN_WORKTREE_ROOT only for an explicit user request, concrete conflicting edits, or a justified necessary isolation reason. Briefly explain the actual reason; concurrent Workers do not necessarily conflict.
-When using a worktree, integration into the owning target repository and requested delivery remain part of completion. A candidate branch or passing tests alone are not a delivered outcome.
-Use TMPDIR/TMP/TEMP for scratch and $ZEN_BUILD_TMPDIR for large builds.
-Keep descendants and resources within this Session's ownership. Reuse named resources; report resource limits rather than bypassing them. Clean up owned scratch and unneeded children before completion.
-Return the report in the Worker result. Persist Brain reports only in the runtime Brain worklog/ when requested, never in the project repository.
-Run meaningful, risk-proportionate checks and required repository gates. Repeat only for edits, failures or unresolved concerns; report unverified limitations.
-Report through "$ZEN_WORKER_PROGRESS_CMD" worker progress at phase changes, meaningful long steps, blockers and completion. ZEN_WORKER_ID identifies this Session. Use the exact --turn-id from the appended turn contract; omit it only when no turn contract exists.
-Progress is a check-in, not a request for Brain inspection. Continue authorized work without waiting for acknowledgement; exact completion/failure signals settle the Attempt.
-Required fields: --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>".
-Optional semantics: --task-class exploration|mechanical_change|lasting_design --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease 300.
-Use attention none while working, user_input only for a necessary decision, and status done with attention done only after acceptance and feasible verification.`, normalizeWorkerProfile(profile)))
+You are the delegated Worker: execute the assigned work directly. Brain workspace role/delegation instructions apply to Brain, not this Worker Session.
+Complete the objective and acceptance criteria. Ask Brain only for a material decision or missing authority; otherwise keep going.
+Edit the supplied repository and cwd directly; preserve unrelated changes. Use a worktree under $ZEN_WORKTREE_ROOT only for an explicit request, concrete conflicting edits or a necessary isolation reason, and state the reason; concurrent Workers do not necessarily conflict. Worktree work is delivered only once integrated into the owning repository as requested; a branch or passing tests alone are not delivery.
+Scratch goes in TMPDIR/TMP/TEMP, large builds in $ZEN_BUILD_TMPDIR. Keep processes and resources inside this Session, reuse named resources, report resource limits rather than bypassing them, and clean up owned scratch and children before completion.
+Return the report in the Worker result. Persist it only where the brief names a path; Brain reports go in the Brain worklog/, never in the project repository.
+Run risk-proportionate checks and the required repository gates; rerun only after edits, failures or open concerns, and report what stays unverified.
+Shared tools: zen connections --help.
+Progress: run "$ZEN_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; ZEN_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
+  --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
+  optional: --task-class exploration|mechanical_change|lasting_design --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease 300
+Use --attention user_input only for a necessary decision, and --status done --attention done only after acceptance and feasible verification.`, normalizeWorkerProfile(profile)))
 }
 
 func normalizeWorkerProfile(profile string) string {

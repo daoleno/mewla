@@ -2,6 +2,7 @@ package brain
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func TestResourcePressureUsesDurableEventLaneAndKeepsPayload(t *testing.T) {
 	}
 	service := NewService(store, &fakeWatcher{}, nil)
 	now := time.Now().UTC()
-	event := watcher.ResourcePressureEvent{State: "elevated", PreviousState: "normal", SampledAt: now, SnapshotEndpoint: "get_resource_telemetry", Memory: &watcher.MemoryResource{TotalBytes: 1000, AvailableBytes: 100}, Consumers: []watcher.ProcessConsumer{{WorkerID: "worker1", Owner: "worker", Commands: []string{"qemu-system-x86"}, RSSBytes: 700}}}
+	event := watcher.ResourcePressureEvent{State: "elevated", PreviousState: "normal", SampledAt: now, SnapshotEndpoint: "get_resource_telemetry", Memory: &watcher.MemoryResource{TotalBytes: 32 << 30, AvailableBytes: 4 << 30}, Consumers: []watcher.ProcessConsumer{{WorkerID: "worker1", Owner: "worker", Commands: []string{"qemu-system-x86"}, RSSBytes: 700}}}
 	// A missing host leaves the event pending; no user-input path is involved.
 	_ = service.RouteResourcePressure(event)
 	items, err := store.ListWork()
@@ -53,20 +54,26 @@ func TestResourcePressureUsesDurableEventLaneAndKeepsPayload(t *testing.T) {
 	if !ok || !work.IsDirectWorkEventPresentationInput(text) {
 		t.Fatal("not a reserved event envelope")
 	}
-	var payload watcher.ResourcePressureEvent
+	var payload resourcePressureBrief
 	if err = json.Unmarshal(input.ResourcePressure, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.State != "elevated" || payload.Memory.AvailableBytes != 100 || len(payload.Consumers) != 1 || payload.Consumers[0].WorkerID != "worker1" {
+	if payload.State != "elevated" || payload.MemoryGiB == 0 || len(payload.Consumers) != 1 || payload.Consumers[0].WorkerID != "worker1" || payload.Snapshot != "zen resources --json" {
 		t.Fatal(payload)
+	}
+	// Process rows, trend and PSI stay in zen resources --json.
+	for _, detail := range []string{"commands", "trend", "psi", "qemu"} {
+		if strings.Contains(string(input.ResourcePressure), detail) {
+			t.Fatalf("envelope kept snapshot detail %q: %s", detail, input.ResourcePressure)
+		}
 	}
 	event.State = "normal"
 	event.PreviousState = "elevated"
 	event.SampledAt = now.Add(time.Minute)
 	_ = service.RouteResourcePressure(event)
 	items, _ = store.ListWork()
-	if len(items) != 2 {
-		t.Fatal("recovery not independently queued", items)
+	if len(items) != 1 || items[0].Status != WorkCancelled {
+		t.Fatal("recovery must close the unreviewed pressure Work without queuing a turn", items)
 	}
 }
 
@@ -106,8 +113,23 @@ func TestResourcePressureSupersedesOnlyUnengagedEarlierWork(t *testing.T) {
 	if _, claimed, err := store.ClaimNextReviewAction("host:@1"); err != nil || !claimed {
 		t.Fatalf("claim=%v err=%v", claimed, err)
 	}
-	third := route("normal", now.Add(2*time.Minute))
+	third := route("elevated", now.Add(2*time.Minute))
 	if status(second) == WorkCancelled || status(third) == WorkCancelled {
 		t.Fatalf("engaged=%s latest=%s", status(second), status(third))
+	}
+
+	// The undelivered test claim was released by lane reconciliation; hold it
+	// again so recovery meets an engaged Work.
+	if _, claimed, err := store.ClaimNextReviewAction("host:@1"); err != nil || !claimed {
+		t.Fatalf("reclaim=%v err=%v", claimed, err)
+	}
+	// Recovery closes unreviewed pressure Work and queues nothing new.
+	route("normal", now.Add(3*time.Minute))
+	items, err := store.ListWork()
+	if err != nil || len(items) != 3 {
+		t.Fatalf("recovery created Work: %d %v", len(items), err)
+	}
+	if status(third) != WorkCancelled || status(second) == WorkCancelled {
+		t.Fatalf("after recovery engaged=%s unreviewed=%s", status(second), status(third))
 	}
 }

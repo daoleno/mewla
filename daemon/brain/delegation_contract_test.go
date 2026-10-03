@@ -31,13 +31,18 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 		}
 		return string(raw)
 	}
+	agents := read(store.workspaceInstructionsPath())
+	if strings.Count(agents, brainWorkerRoleContract) != 1 || strings.Contains(agents, brainWorkerRoleContractPlaceholder) {
+		t.Fatal("AGENTS has missing/duplicate role or unresolved placeholder")
+	}
+	// The role has one owner; prompts point the Host at it.
 	for name, surface := range map[string]string{
-		"AGENTS":     read(store.workspaceInstructionsPath()),
+		"AGENTS":     agents,
 		"activation": brainHostActivationPrompt(),
 		"bootstrap":  service.hostBootstrapPrompt(service.hostExecutor()),
 	} {
-		if strings.Count(surface, brainWorkerRoleContract) != 1 || strings.Contains(surface, brainWorkerRoleContractPlaceholder) {
-			t.Fatalf("%s has missing/duplicate role or unresolved placeholder", name)
+		if name != "AGENTS" && (strings.Contains(surface, brainWorkerRoleContract) || !strings.Contains(surface, "Read AGENTS.md before continuing")) {
+			t.Fatalf("%s must reference the role owner without repeating it", name)
 		}
 		if strings.Contains(surface, "zen-brain-worker-role/") || strings.Contains(surface, brainHostContractDigest()) {
 			t.Fatalf("%s exposes internal activation identity", name)
@@ -56,12 +61,12 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 		t.Fatal("role lost explicit user override or failure boundary")
 	}
 	bootstrap := service.hostBootstrapPrompt(service.hostExecutor())
-	for _, marker := range []string{"Brain Worklog (private): " + store.WorklogPath(), "current.md", "zen brain context --json"} {
+	for _, marker := range []string{store.WorkspacePath() + " (private reports in worklog/)", "current.md", "zen brain context --json"} {
 		if !strings.Contains(bootstrap, marker) {
 			t.Fatalf("bootstrap missing %q", marker)
 		}
 	}
-	if len(bootstrap) > 1400 {
+	if len(bootstrap) > 900 {
 		t.Fatalf("bootstrap expanded to %d bytes", len(bootstrap))
 	}
 	t.Logf("rendered bootstrap: %d bytes", len(bootstrap))
@@ -129,7 +134,7 @@ func TestHostActivationContractDeliveredOncePerProcessGeneration(t *testing.T) {
 		t.Fatalf("fresh Host activation readiness calls = %d, want one", fw.readyInputCalls)
 	}
 	if !strings.Contains(fw.sentCalls[0].text, "You are Brain inside zen") ||
-		!strings.Contains(fw.sentCalls[0].text, brainWorkerRoleContract) {
+		!strings.Contains(fw.sentCalls[0].text, "Brain Host activation contract:") {
 		t.Fatalf("fresh bootstrap did not serve as activation:\n%s", fw.sentCalls[0].text)
 	}
 	firstActivation, err := store.HostActivation()
@@ -167,7 +172,7 @@ func TestHostActivationContractDeliveredOncePerProcessGeneration(t *testing.T) {
 	}
 	secondPrompt := fw.sentCalls[1].text
 	if !strings.Contains(secondPrompt, "Brain Host activation contract:") ||
-		!strings.Contains(secondPrompt, brainWorkerRoleContract) ||
+		strings.Contains(secondPrompt, brainWorkerRoleContract) || len(secondPrompt) > 300 ||
 		strings.Contains(secondPrompt, "You are Brain inside zen") {
 		t.Fatalf("generation refresh must use compact private activation:\n%s", secondPrompt)
 	}
@@ -324,7 +329,7 @@ func TestLiveHostActivationQueuesWithUserInputsOutsideSnapshot(t *testing.T) {
 		t.Fatalf("live activation called startup readiness API %d times", fw.readyInputCalls)
 	}
 	if len(fw.sentCalls) != 3 || fw.sentCalls[0].text != "queued user input one" ||
-		!strings.Contains(fw.sentCalls[1].text, brainWorkerRoleContract) ||
+		!strings.Contains(fw.sentCalls[1].text, "Brain Host activation contract:") ||
 		fw.sentCalls[2].text != "queued user input two" {
 		t.Fatalf("per-Session queue order = %+v", fw.sentCalls)
 	}

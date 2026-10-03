@@ -3,7 +3,9 @@ package brain
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/daoleno/zen/daemon/lifecycle"
 	"github.com/daoleno/zen/daemon/watcher"
@@ -89,39 +91,24 @@ func (s *Service) RouteResourcePressure(event watcher.ResourcePressureEvent) err
 	if err != nil {
 		return err
 	}
-	// Per-core values live in the full snapshot; the Brain envelope stays small.
-	if event.CPU != nil {
-		cpu := *event.CPU
-		cpu.PerCorePercent = nil
-		event.CPU = &cpu
-	}
-	for i := range event.Consumers {
-		event.Consumers[i].Title = compactDirectWorkEventField(event.Consumers[i].Title, 100)
-		event.Consumers[i].Cwd = compactDirectWorkEventField(event.Consumers[i].Cwd, 160)
-	}
-	if len(event.Consumers) > 5 {
-		event.Consumers = event.Consumers[:5]
-	}
-	if len(event.Orphaned) > 2 {
-		event.Orphaned = event.Orphaned[:2]
-	}
-	payload, err := json.Marshal(event)
+	payload, err := json.Marshal(compactResourcePressureEvent(event))
 	if err != nil {
 		return err
-	}
-	for len(payload) > 7000 && len(event.Consumers) > 1 {
-		event.Consumers = event.Consumers[:len(event.Consumers)-1]
-		payload, _ = json.Marshal(event)
 	}
 	id := resourcePressureWorkPrefix + event.SampledAt.UTC().Format("20060102T150405.000000000Z")
 	if err = s.supersedeResourcePressureWork(id); err != nil {
 		return err
 	}
-	_, _, err = s.store.EnsureWork(Work{ID: id, Title: "Machine resource pressure: " + event.State, Objective: "Assess the machine resource event and decide whether any Worker action is needed.", CompletionPolicy: CompletionBounded, ContextRef: "get_resource_telemetry", NextAction: "Decide whether to defer dispatch, ask a Worker to release resources, or close it. No daemon resource intervention occurred."})
+	// Recovery is informational: it closes unreviewed pressure Work above and
+	// needs no Brain turn. Engaged Work stays with Brain.
+	if event.State == "normal" {
+		return nil
+	}
+	_, _, err = s.store.EnsureWork(Work{ID: id, Title: "Machine resource pressure: " + event.State, Objective: "Assess the machine resource event and decide whether any Worker action is needed.", CompletionPolicy: CompletionBounded, NextAction: "Decide whether to defer dispatch, ask a Worker to release resources, or close it."})
 	if err != nil {
 		return err
 	}
-	recorded, _, err := s.store.AppendWorkEvent(WorkEvent{WorkID: id, Kind: "resource_pressure", DedupeKey: id, SourceName: "machine resource telemetry", Summary: fmt.Sprintf("Machine pressure changed from %s to %s. Brain decides any resource action.", event.PreviousState, event.State), DetailsJSON: string(payload), PayloadRef: "get_resource_telemetry", Actionable: true})
+	recorded, _, err := s.store.AppendWorkEvent(WorkEvent{WorkID: id, Kind: "resource_pressure", DedupeKey: id, SourceName: "machine resource telemetry", Summary: fmt.Sprintf("Machine pressure changed from %s to %s.", event.PreviousState, event.State), DetailsJSON: string(payload), PayloadRef: resourceSnapshotCommand, Actionable: true})
 	if err != nil {
 		return err
 	}
@@ -138,7 +125,95 @@ func (s *Service) RouteResourcePressure(event watcher.ResourcePressureEvent) err
 	return err
 }
 
-const resourcePressureWorkPrefix = "resource-pressure:"
+const (
+	resourcePressureWorkPrefix    = "resource-pressure:"
+	resourcePressureConsumerLimit = 3
+	resourcePressureOrphanLimit   = 2
+	resourceSnapshotCommand       = "zen resources --json"
+)
+
+// resourcePressureBrief is the Brain-facing event payload: the transition,
+// crossed signals, machine headroom and the largest attributed consumers.
+// Process rows, trend samples and PSI detail stay in zen resources --json,
+// which Brain reads only when it acts.
+type resourcePressureBrief struct {
+	State         string                   `json:"state"`
+	PreviousState string                   `json:"previous_state"`
+	SampledAt     time.Time                `json:"sampled_at"`
+	Crossed       []watcher.PressureSignal `json:"crossed,omitempty"`
+	MemoryFreeGiB float64                  `json:"memory_available_gib,omitempty"`
+	MemoryGiB     float64                  `json:"memory_total_gib,omitempty"`
+	SwapUsedGiB   float64                  `json:"swap_used_gib,omitempty"`
+	CPUPercent    float64                  `json:"cpu_percent,omitempty"`
+	Load15        float64                  `json:"load15,omitempty"`
+	Consumers     []resourceConsumerBrief  `json:"consumers,omitempty"`
+	Orphaned      []resourceConsumerBrief  `json:"orphaned,omitempty"`
+	Queued        int                      `json:"queued"`
+	InFlight      int                      `json:"in_flight"`
+	Snapshot      string                   `json:"snapshot"`
+}
+
+type resourceConsumerBrief struct {
+	ID         string  `json:"id,omitempty"`
+	WorkerID   string  `json:"worker_id,omitempty"`
+	WorkID     string  `json:"work_id,omitempty"`
+	Title      string  `json:"title,omitempty"`
+	Owner      string  `json:"owner"`
+	Status     string  `json:"status,omitempty"`
+	RSSMiB     float64 `json:"rss_mib"`
+	CPUPercent float64 `json:"cpu_percent,omitempty"`
+	Processes  int     `json:"processes,omitempty"`
+}
+
+func compactResourcePressureEvent(event watcher.ResourcePressureEvent) resourcePressureBrief {
+	brief := resourcePressureBrief{State: event.State, PreviousState: event.PreviousState, SampledAt: event.SampledAt, Queued: event.Queued, InFlight: event.InFlight, Snapshot: resourceSnapshotCommand}
+	for _, signal := range event.Crossed {
+		signal.Value = roundTo(signal.Value, 2)
+		brief.Crossed = append(brief.Crossed, signal)
+	}
+	if memory := event.Memory; memory != nil {
+		brief.MemoryFreeGiB = roundTo(float64(memory.AvailableBytes)/(1<<30), 1)
+		brief.MemoryGiB = roundTo(float64(memory.TotalBytes)/(1<<30), 1)
+		brief.SwapUsedGiB = roundTo(float64(memory.SwapUsedBytes)/(1<<30), 1)
+	}
+	if cpu := event.CPU; cpu != nil {
+		if cpu.UtilizationPercent != nil {
+			brief.CPUPercent = roundTo(*cpu.UtilizationPercent, 0)
+		}
+		brief.Load15 = roundTo(cpu.Load15, 1)
+	}
+	brief.Consumers = compactResourceConsumers(event.Consumers, resourcePressureConsumerLimit)
+	brief.Orphaned = compactResourceConsumers(event.Orphaned, resourcePressureOrphanLimit)
+	return brief
+}
+
+func compactResourceConsumers(consumers []watcher.ProcessConsumer, limit int) []resourceConsumerBrief {
+	if len(consumers) > limit {
+		consumers = consumers[:limit]
+	}
+	out := make([]resourceConsumerBrief, 0, len(consumers))
+	for _, consumer := range consumers {
+		item := resourceConsumerBrief{WorkerID: consumer.WorkerID, WorkID: consumer.WorkID, Owner: consumer.Owner, RSSMiB: roundTo(float64(consumer.RSSBytes)/(1<<20), 0), Processes: consumer.ProcessCount}
+		if item.WorkerID == "" {
+			item.ID = consumer.ID
+		}
+		if consumer.Status != "unknown" {
+			item.Status = consumer.Status
+		}
+		// Worker titles repeat the Session id; the worker_id field carries it.
+		item.Title = compactDirectWorkEventField(strings.TrimSpace(strings.TrimSuffix(consumer.Title, " ("+consumer.WorkerID+")")), 100)
+		if consumer.CPUPercent != nil {
+			item.CPUPercent = roundTo(*consumer.CPUPercent, 0)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func roundTo(value float64, places int) float64 {
+	scale := math.Pow(10, float64(places))
+	return math.Round(value*scale) / scale
+}
 
 // supersedeResourcePressureWork cancels earlier pressure Work that Brain has
 // not engaged: each event carries the full current state, so an unreviewed

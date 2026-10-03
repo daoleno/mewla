@@ -3604,22 +3604,13 @@ func (s *Service) hostBootstrapPrompt(executor work.WorkerExecutor) string {
 	worktreeRoot, _ := work.DefaultWorktreeRoot()
 	return brainHostActivationPrompt() + "\n\n" + strings.TrimSpace(fmt.Sprintf(`
 You are Brain inside zen.
-Brain workspace: %s
-Brain Worklog (private): %s
+Brain workspace: %s (private reports in worklog/)
 Managed worktree root: %s
-Host executor: %s (%s via %s)
-Delegated executor: %s (%s via %s)
-Host executor capabilities: %s
+Host executor: %s. Delegated executor: %s.
 Zen CLI: %s
-
 Recover active work from current.md and zen brain context --json.
-
-Current personality:
-%s
-`, snapshot.Workspace, snapshot.WorklogPath, worktreeRoot,
-		executor.ID, executor.Provider, executor.Runtime,
-		delegated.ID, delegated.Provider, delegated.Runtime,
-		executorCapabilitiesSummary(executor.Capabilities), zenCLICommand(),
+Personality: %s
+`, snapshot.Workspace, worktreeRoot, executor.ID, delegated.ID, zenCLICommand(),
 		strings.TrimSpace(snapshot.Personality)))
 }
 
@@ -3653,20 +3644,20 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID, deleg
 	}
 	lines := []string{
 		"Brain host executor handoff:",
-		"Continue the same visible Brain chat in the user's language. Keep this handoff private.",
-		"Current thread id: " + threadID,
-		"Previous host executor: " + strings.TrimSpace(previousExecutorID),
-		"Current host executor: " + strings.TrimSpace(nextExecutorID),
-		"Delegated executor: " + strings.TrimSpace(delegatedExecutorID),
-		"Read AGENTS.md, policies/handoff.md and current.md; use zen brain context --json for authoritative Work state.",
-		"Preserve pending Event identities and next actions. A Host change does not authorize restarting or polling Workers.",
+		fmt.Sprintf("Host executor changed from %s to %s (delegated executor: %s) in thread %s. Continue the same visible Brain chat in the user's language; keep this handoff private.",
+			strings.TrimSpace(previousExecutorID), strings.TrimSpace(nextExecutorID), strings.TrimSpace(delegatedExecutorID), threadID),
+		"Read AGENTS.md, policies/handoff.md and current.md; zen brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
 	}
+	active := []string{}
 	for _, worker := range workers {
-		if worker.Delegated {
-			lines = append(lines, fmt.Sprintf("Worker %s [%s]", worker.ID, worker.Status))
+		if worker.Delegated && worker.Status != string(classifier.StateDone) && worker.Status != string(classifier.StateFailed) && worker.Status != string(classifier.StateRemoved) {
+			active = append(active, fmt.Sprintf("%s [%s]", worker.ID, worker.Status))
 		}
 	}
-	lines = append(lines, "Wait for the next user message or direct Work Event input.")
+	if len(active) > 0 {
+		lines = append(lines, "Active Workers: "+strings.Join(active, ", "))
+	}
+	lines = append(lines, "Wait for the next user message or Work Event.")
 	return strings.Join(lines, "\n")
 }
 
@@ -3679,20 +3670,6 @@ func zenCLICommand() string {
 		return shellQuote(exe)
 	}
 	return exe
-}
-
-func executorCapabilitiesSummary(caps work.WorkerCapabilities) string {
-	parts := []string{}
-	if caps.InteractiveTTY {
-		parts = append(parts, "interactive_tty")
-	}
-	if caps.StructuredEvents {
-		parts = append(parts, "structured_events")
-	}
-	if len(parts) == 0 {
-		return "none declared"
-	}
-	return strings.Join(parts, ", ")
 }
 
 func (s *Service) workerRefs(hostID string) []WorkerRef {

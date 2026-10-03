@@ -135,7 +135,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 					}
 				}
 			}
-			if len(activation) > 700 || len(bootstrap) > 1400 || len(handoff) > 600 {
+			if len(activation) > 300 || len(bootstrap) > 800 || len(handoff) > 600 {
 				t.Fatalf("prompt growth: activation=%d bootstrap=%d handoff=%d", len(activation), len(bootstrap), len(handoff))
 			}
 			t.Logf("%s: AGENTS=%d bootstrap=%d activation=%d handoff=%d bytes", provider, len(agents), len(bootstrap), len(activation), len(handoff))

@@ -25,11 +25,12 @@ func projectBrainWorkerRoleContract(template string) string {
 	return strings.ReplaceAll(template, brainWorkerRoleContractPlaceholder, brainWorkerRoleContract)
 }
 
+// brainHostActivationPrompt is re-sent when a Host process generation or the
+// product guidance changes. The role lives once, in AGENTS.md; the activation
+// only makes the Host reload it.
 func brainHostActivationPrompt() string {
 	return strings.Join([]string{
 		"Brain Host activation contract:",
-		"This is private Zen product policy for the current Host process generation.",
-		brainWorkerRoleContract,
-		"Read AGENTS.md before continuing, even in a resumed Session; load a policy or playbook only when its workflow applies. Preserve active Work/Event state.",
+		"Read AGENTS.md before continuing, even in a resumed Session; it holds the current Brain role and guidance. Load a policy or playbook only when its workflow applies. Preserve active Work/Event state.",
 	}, "\n")
 }
