@@ -265,10 +265,9 @@ func TestGrantRevocationAndTargetFencing(t *testing.T) {
 func TestAttachmentSelectionRequiresOpenGrantedResourceWithoutSideEffects(t *testing.T) {
 	m, backend, id := setup(t)
 	ctx := context.Background()
-	if err := m.ValidateAttachment(ctx, id); err == nil {
-		t.Fatal("ungranted stopped profile selected")
+	if listed := must(t, m, agent, Request{Action: "list"}).Resources; len(listed) != 1 || !listed[0].AllowAgents {
+		t.Fatal("new browser is not available to same-server Agents by default")
 	}
-	must(t, m, human, Request{Action: "grant", ID: id, AllowAgents: true})
 	if err := m.ValidateAttachment(ctx, id); err == nil {
 		t.Fatal("stopped profile selected")
 	}

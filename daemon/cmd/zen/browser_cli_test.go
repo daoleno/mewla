@@ -48,8 +48,10 @@ func TestBrowserBrokerRequiresExplicitResourceGrantAndActiveTask(t *testing.T) {
 	w.workers["task"] = &classifier.Worker{ID: "task", BrowserID: id, State: classifier.StateRunning, Delegated: true}
 	app := &controlApp{browsers: m, watcher: w}
 	q := control.Request{Type: "browser", WorkerID: "task", Client: uuid.NewString(), BrowserRequest: &browser.Request{Action: "control", ID: id}}
+	// New browsers are shared with same-server Agents; an explicit revocation still blocks.
+	m.Handle(ctx, human, browser.Request{Action: "grant", ID: id, AllowAgents: false})
 	if app.HandleControlRequest(q).OK {
-		t.Fatal("ungranted profile attached")
+		t.Fatal("revoked profile attached")
 	}
 	m.Handle(ctx, human, browser.Request{Action: "grant", ID: id, AllowAgents: true})
 	w.workers["task"].BrowserID = uuid.NewString()
