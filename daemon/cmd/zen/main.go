@@ -927,7 +927,7 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  zen brain context --json")
 	fmt.Fprintln(w, "  zen brain playbooks --json")
 	fmt.Fprintln(w, "  zen brain gc --json")
-	fmt.Fprintln(w, "  zen brain work list --json")
+	fmt.Fprintln(w, "  zen brain work list --json [-all] [-full] [-id <work>]")
 	fmt.Fprintln(w, "  zen brain executors --json")
 	fmt.Fprintln(w, "  zen brain use codex")
 	fmt.Fprintln(w, "  zen brain set-delegated grok")
@@ -1430,7 +1430,10 @@ func runBrainWorkList(args []string, stderr io.Writer) error {
 	var workID string
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
-	fs.StringVar(&workID, "id", "", "optional Work id (includes its event history)")
+	var all, full bool
+	fs.StringVar(&workID, "id", "", "optional Work id (includes its event history and objective)")
+	fs.BoolVar(&all, "all", false, "include done and cancelled Work")
+	fs.BoolVar(&full, "full", false, "include each Work objective")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1441,7 +1444,27 @@ func runBrainWorkList(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if workID == "" {
+		resp.BrainWorks = compactBrainWorkList(resp.BrainWorks, all, full)
+	}
 	return writeControlResponse(os.Stdout, resp, cfg.json)
+}
+
+// compactBrainWorkList keeps the default listing small enough to read in a
+// Brain turn: terminal Work and objective bodies dominate a long history, and
+// -id returns the full record when one is needed.
+func compactBrainWorkList(items []brain.Work, all, full bool) []brain.Work {
+	out := make([]brain.Work, 0, len(items))
+	for _, item := range items {
+		if !all && (item.Status == brain.WorkDone || item.Status == brain.WorkCancelled) {
+			continue
+		}
+		if !full {
+			item.Objective = ""
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func runBrainWorkCreate(args []string, stderr io.Writer) error {

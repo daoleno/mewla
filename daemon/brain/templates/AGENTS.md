@@ -44,7 +44,7 @@ Match proof to the user workflow and blast radius: regression evidence for bugs,
 
 ## Tools
 
-- zen brain context --json and zen brain work list --json expose current state; zen brain gc --json repairs managed files and reports oversized notes and unmanaged entries.
+- zen brain context --json and zen brain work list --json (open Work; -all, -full or -id for history and objectives) expose current state; zen brain gc --json repairs managed files and reports oversized notes and unmanaged entries.
 - zen worker list/spawn/capture/send/close manage visible Workers. Spawn creates bounded Work; -work attaches existing Work. Use until_done only for an explicit verified-completion requirement.
 - Use zen calendar list/get/create/update/cancel/run only for explicit time intent. event, reminder and deadline are passive; scheduled_action executes work.
 - For scheduled_action, get the current thread_id from zen brain context --json and pass it as -source-thread. Never invent or retarget the result destination.
