@@ -48,6 +48,13 @@ export interface BrowserFrame {
   data: string;
   metadata: { deviceWidth: number; deviceHeight: number };
 }
+/** HTTP failure with the status kept apart from any body text, so callers can explain it. */
+export class BrowserRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly detail: string) {
+    super(message);
+    this.name = "BrowserRequestError";
+  }
+}
 async function endpoint(server: StoredServer, path: string) {
   const url = new URL(await resolveStoredServerURL(server));
   url.pathname = path;
@@ -68,8 +75,13 @@ export async function browserRequest(
     headers: { Authorization: authorization, "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Browser request failed");
+  // Servers without Browser, proxies and auth failures answer in plain text.
+  const body = await response.text();
+  let result: (BrowserResponse & { error?: string }) | undefined;
+  try { result = body ? JSON.parse(body) : undefined; } catch { result = undefined; }
+  if (!response.ok || !result) {
+    throw new BrowserRequestError(result?.error || "Browser request failed", response.status, result?.error || body.trim().slice(0, 300));
+  }
   return result;
 }
 
@@ -96,6 +108,8 @@ export class BrowserViewer {
       frame(frame: BrowserFrame): void;
       status(value: string): void;
       resource(value: BrowserResource): void;
+      /** Socket liveness; status strings stay informational. */
+      connection?(state: "live" | "lost"): void;
     },
   ) {}
   async connect() {
@@ -110,6 +124,7 @@ export class BrowserViewer {
     socket.onopen = () => {
       if (this.closed) return;
       this.handlers.status("Viewing");
+      this.handlers.connection?.("live");
       this.timer = setInterval(() => {
         if (this.closed || socket.readyState !== WebSocket.OPEN) return;
         socket.send(JSON.stringify({ type: "ping" }));
@@ -141,9 +156,16 @@ export class BrowserViewer {
       } else if (message.type === "pong" && message.resource) this.handlers.resource(message.resource);
       else if (message.type === "error") this.handlers.status(message.error);
     };
-    socket.onerror = () => { if (!this.closed) this.handlers.status("Connection failed. Reconnect to view this browser."); };
+    socket.onerror = () => {
+      if (this.closed) return;
+      this.handlers.status("Connection failed. Reconnect to view this browser.");
+      this.handlers.connection?.("lost");
+    };
     socket.onclose = () => {
-      if (!this.closed) this.handlers.status("Disconnected. Your browser is still on the server.");
+      if (!this.closed) {
+        this.handlers.status("Disconnected. Your browser is still on the server.");
+        this.handlers.connection?.("lost");
+      }
       this.close();
     };
   }
@@ -157,6 +179,7 @@ export class BrowserViewer {
       const timer = setTimeout(() => {
         this.pending.delete(request_id);
         reject(new Error("Browser response timed out. Reconnect before continuing."));
+        if (!this.closed) this.handlers.connection?.("lost");
         this.close();
       }, 15000);
       this.pending.set(request_id, { resolve, reject, timer, revision: this.revision });

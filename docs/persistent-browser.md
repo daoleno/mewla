@@ -18,6 +18,16 @@ This is a page viewport, not an entire desktop: native browser chrome, file pick
 extension windows and device-bound passkeys are outside the current viewer.
 Google/MFA acceptance has not been established by the local synthetic login test.
 
+The Browser page leads with the current server and each browser's state: Closed,
+Open, Agent is using it, In use on another device, You're in control, or Needs
+restart. Each card has one primary **Open browser** action, an explicit Agent
+access switch, Close, and a confirmed Delete. In the viewer the primary action is
+Take control, Release control, or Reconnect after the view drops; address, tab and
+key tools appear only while this phone holds control. Failures (server without
+Browser, pairing rejected, unreachable server, control taken, restart required,
+non-JSON responses) are shown as readable cards with one recovery action; the raw
+message and HTTP status stay behind a collapsed Details row.
+
 ## Runtime and host
 
 The first Linux adapter reuses installed Chrome/Chromium, agent-browser **0.38.1**

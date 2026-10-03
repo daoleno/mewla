@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, test } from "bun:test";
 mock.module("./auth", () => ({ buildAuthorizationHeader: async () => "signed-fixture" }));
 mock.module("./pinnedTransport", () => ({ resolveStoredServerURL: async (server: { url: string }) => server.url }));
-const { BrowserViewer } = await import("./browser");
+const { BrowserRequestError, BrowserViewer, browserRequest } = await import("./browser");
 class Socket {
   static OPEN = 1;
   static all: Socket[] = [];
@@ -87,4 +87,30 @@ test("input queue remains bounded", async () => {
   await expect(viewer.command({ kind: "snapshot" })).rejects.toThrow("Input is busy");
   viewer.close();
   await Promise.all(waiting);
+});
+test("plain-text server failures become typed errors instead of JSON parse errors", async () => {
+  const fetchOriginal = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("404 page not found", { status: 404 })) as any;
+  try {
+    const error = await browserRequest(server as any, { action: "list" }).catch((e) => e);
+    expect(error).toBeInstanceOf(BrowserRequestError);
+    expect(error.status).toBe(404);
+    expect(error.detail).toBe("404 page not found");
+    globalThis.fetch = (async () => new Response(JSON.stringify({ error: "Browser not found" }), { status: 409 })) as any;
+    await expect(browserRequest(server as any, { action: "start", id: "x" })).rejects.toThrow("Browser not found");
+  } finally { globalThis.fetch = fetchOriginal; }
+});
+test("viewer reports lost liveness on close without reporting after detach", async () => {
+  globalThis.WebSocket = Socket as any;
+  const states: string[] = [];
+  const viewer = new BrowserViewer(server as any, "resource", { frame() {}, status() {}, resource() {}, connection: (s) => states.push(s) });
+  viewers.push(viewer);
+  await viewer.connect();
+  const socket = Socket.all.at(-1)!;
+  socket.onopen?.();
+  socket.onclose?.();
+  expect(states).toEqual(["live", "lost"]);
+  viewer.close();
+  socket.onclose?.();
+  expect(states).toEqual(["live", "lost"]);
 });
