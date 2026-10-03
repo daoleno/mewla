@@ -29,8 +29,8 @@ describe("Settings connection information architecture", () => {
     expect(panelSource).toContain('action("Retry"');
     expect(telegram).toContain("if (!ownerActive.current) return;");
   });
-  test("Servers, Channels and Providers have separate entry points", () => {
-    for (const section of ["Servers", "Channels", "Providers"]) {
+  test("Servers, Channels and Agents have separate entry points", () => {
+    for (const section of ["Servers", "Channels", "Agents"]) {
       expect(settingsSource).toMatch(new RegExp(`>\\s*${section}\\s*<`));
     }
     expect(settingsSource).toContain('accessibilityLabel="Pair a server"');

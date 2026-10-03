@@ -161,8 +161,8 @@ remain in Zen's private store and are injected by the daemon router at request
 time.
 
 For **Official login / Direct**, authenticate each CLI on the daemon host using
-its own login flow. For a custom Codex or Claude endpoint, **Settings > Providers >
-Models and accounts** stores the supplied API key on the current daemon through
+its own login flow. For a custom Codex or Claude endpoint, **Settings > Agents >
+Model Providers** stores the supplied API key on the current daemon through
 Zen's credential store. The mobile form does not display stored secrets; leaving
 an existing key empty preserves it. Switching the current server rebinds the
 configuration. Selecting a Provider connection does not change the Brain
@@ -266,7 +266,7 @@ Model and reasoning effort are separate model-profile settings; do not create
 capability-suffixed executor IDs such as `codex-medium` or `codex-high`.
 
 Keep the delegated executor set to `codex`, then choose the Codex model profile
-and its reasoning effort in **Settings > Providers > Models and accounts**. A
+and its reasoning effort in **Settings > Agents > Model Providers**. A
 profile selecting `gpt-6-sol` with `medium` effort applies to future delegated
 Workers while preserving the existing `codex` executor identity. Existing
 Sessions retain their current route and model until explicitly changed.

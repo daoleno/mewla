@@ -23,10 +23,17 @@ import { ZenLogoMark } from "../ui/ZenLogoMark";
 import {
   NavChevronIcon,
   NavCloseIcon,
+  NavPluginsIcon,
   NavResourcesIcon,
+  NavSettingsIcon,
   NavSkillsIcon,
   NavStatsIcon,
 } from "./PrimaryNavIcons";
+import {
+  PRIMARY_DRAWER_GROUPS,
+  type PrimaryDrawerIcon,
+  type PrimaryDrawerPathname,
+} from "./primaryDrawerDestinations";
 
 interface PrimaryDrawerPanelProps {
   closeButtonRef: RefObject<ViewInstance | null>;
@@ -36,40 +43,29 @@ interface PrimaryDrawerPanelProps {
   onNavigateAway(): void;
 }
 
-type DrawerRowIcon = "settings" | "skills" | "stats" | "resources";
-
 interface DrawerRowProps {
   drawerVisible: boolean;
-  icon: DrawerRowIcon;
+  icon: PrimaryDrawerIcon;
   label: string;
   onPress(): void;
 }
 
-function DrawerRowIconView({
-  color,
-  icon,
-}: {
-  color: string;
-  icon: DrawerRowIcon;
-}) {
-  if (icon === "stats") {
-    return <NavStatsIcon color={color} size={20} />;
-  }
-  if (icon === "resources") {
-    return <NavResourcesIcon color={color} size={20} />;
-  }
-  if (icon === "skills") {
-    return <NavSkillsIcon color={color} size={20} />;
-  }
-  return <Ionicons name="settings-outline" color={color} size={20} />;
-}
+const DRAWER_ROW_ICONS = {
+  plugins: NavPluginsIcon,
+  skills: NavSkillsIcon,
+  stats: NavStatsIcon,
+  resources: NavResourcesIcon,
+  settings: NavSettingsIcon,
+} satisfies Record<PrimaryDrawerIcon, unknown>;
 
 /**
  * One navigation destination. Every row pushes a screen, so there is no
- * selected state: the glyph is quiet ink and the label carries the meaning.
+ * selected state; the tile matches Settings rows and the label carries the
+ * meaning.
  */
 function DrawerRow({ drawerVisible, icon, label, onPress }: DrawerRowProps) {
-  const { colors } = useAppTheme();
+  const { colors, theme } = useAppTheme();
+  const Icon = DRAWER_ROW_ICONS[icon];
   return (
     <Pressable
       onPress={onPress}
@@ -84,8 +80,10 @@ function DrawerRow({ drawerVisible, icon, label, onPress }: DrawerRowProps) {
         },
       ]}
     >
-      <View style={styles.drawerRowIcon}>
-        <DrawerRowIconView color={colors.textSecondary} icon={icon} />
+      <View
+        style={[styles.drawerRowIcon, { backgroundColor: theme.materials.tint }]}
+      >
+        <Icon color={colors.accentStrong} size={18} />
       </View>
       <Text
         numberOfLines={1}
@@ -138,7 +136,7 @@ export function PrimaryDrawerPanel({
       : colors.textTertiary;
 
   const openRoute = useCallback(
-    (pathname: "/skills" | "/plugins" | "/stats" | "/resources" | "/settings") => {
+    (pathname: PrimaryDrawerPathname) => {
       onNavigateAway();
       router.push(pathname);
     },
@@ -212,50 +210,39 @@ export function PrimaryDrawerPanel({
           </View>
         </View>
 
-        <View
-          style={[
-            styles.drawerGroup,
-            {
-              backgroundColor: colors.bgElevated,
-              borderColor: theme.isLight ? "transparent" : theme.materials.stroke,
-            },
-          ]}
-        >
-          <DrawerRow
-            drawerVisible={drawerVisible}
-            icon="skills"
-            label="Plugins"
-            onPress={() => openRoute("/plugins")}
-          />
-          <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
-          <DrawerRow
-            drawerVisible={drawerVisible}
-            icon="skills"
-            label="Skills"
-            onPress={() => openRoute("/skills")}
-          />
-          <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
-          <DrawerRow
-            drawerVisible={drawerVisible}
-            icon="stats"
-            label="Stats"
-            onPress={() => openRoute("/stats")}
-          />
-          <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
-          <DrawerRow
-            drawerVisible={drawerVisible}
-            icon="resources"
-            label="Resources"
-            onPress={() => openRoute("/resources")}
-          />
-          <View style={[styles.groupSeparator, { backgroundColor: theme.materials.separator }]} />
-          <DrawerRow
-            drawerVisible={drawerVisible}
-            icon="settings"
-            label="Settings"
-            onPress={() => openRoute("/settings")}
-          />
-        </View>
+        {PRIMARY_DRAWER_GROUPS.map((group, groupIndex) => (
+          <View
+            key={group[0]?.key ?? groupIndex}
+            style={[
+              styles.drawerGroup,
+              {
+                backgroundColor: colors.bgElevated,
+                borderColor: theme.isLight
+                  ? "transparent"
+                  : theme.materials.stroke,
+              },
+            ]}
+          >
+            {group.map((destination, index) => (
+              <React.Fragment key={destination.key}>
+                {index > 0 ? (
+                  <View
+                    style={[
+                      styles.groupSeparator,
+                      { backgroundColor: theme.materials.separator },
+                    ]}
+                  />
+                ) : null}
+                <DrawerRow
+                  drawerVisible={drawerVisible}
+                  icon={destination.icon}
+                  label={destination.label}
+                  onPress={() => openRoute(destination.pathname)}
+                />
+              </React.Fragment>
+            ))}
+          </View>
+        ))}
       </ScrollView>
 
       <View style={styles.drawerFooter}>
@@ -275,7 +262,7 @@ export function PrimaryDrawerPanel({
   );
 }
 
-const DRAWER_ICON_SLOT = 28;
+const DRAWER_ICON_SLOT = 30;
 
 const styles = StyleSheet.create({
   drawerContent: {
@@ -342,7 +329,7 @@ const styles = StyleSheet.create({
     fontFamily: Typography.uiFont,
   },
   drawerGroup: {
-    marginTop: 16,
+    marginTop: 14,
     borderRadius: Radii.card,
     ...ContinuousCorners,
     borderWidth: StyleSheet.hairlineWidth,
@@ -361,6 +348,9 @@ const styles = StyleSheet.create({
   },
   drawerRowIcon: {
     width: DRAWER_ICON_SLOT,
+    height: DRAWER_ICON_SLOT,
+    borderRadius: 9,
+    ...ContinuousCorners,
     alignItems: "center",
     justifyContent: "center",
   },

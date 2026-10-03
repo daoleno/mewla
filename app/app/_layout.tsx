@@ -710,7 +710,7 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen
         name="model-profiles"
         options={{
-          title: "Providers",
+          title: "Model Providers",
           headerLeft: () => <SecondaryBackButton />,
         }}
       />

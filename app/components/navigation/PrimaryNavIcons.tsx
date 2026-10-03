@@ -119,17 +119,64 @@ export function NavResourcesIcon({ color, size }: PrimaryNavIconProps) {
   );
 }
 
-/** Three stacked cards for the Skills catalog and inventory. */
+/** Stacked layers for Skills: reusable capabilities an agent can load. */
 export function NavSkillsIcon({ color, size }: PrimaryNavIconProps) {
   const dim = iconSize(size);
   return (
     <Svg width={dim} height={dim} viewBox="0 0 24 24" fill="none">
-      <Path d="M7 7.5h10" stroke={color} strokeWidth={STROKE} strokeLinecap="round" />
-      <Path d="M7 12h10" stroke={color} strokeWidth={STROKE} strokeLinecap="round" />
-      <Path d="M7 16.5h10" stroke={color} strokeWidth={STROKE} strokeLinecap="round" />
-      <Circle cx={4.5} cy={7.5} r={0.9} fill={color} />
-      <Circle cx={4.5} cy={12} r={0.9} fill={color} />
-      <Circle cx={4.5} cy={16.5} r={0.9} fill={color} />
+      <Path
+        d="M12 4.75l7.25 3.75L12 12.25 4.75 8.5z"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4.75 12.25L12 16l7.25-3.75"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4.75 15.75L12 19.5l7.25-3.75"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Outline plug for Plugins: external services connected to Brain. */
+export function NavPluginsIcon({ color, size }: PrimaryNavIconProps) {
+  const dim = iconSize(size);
+  return (
+    <Svg width={dim} height={dim} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9.25 4.5v3.5"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M14.75 4.5v3.5"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M7 8h10v2.75a5 5 0 0 1-10 0z"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 15.75v3.75"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+      />
     </Svg>
   );
 }

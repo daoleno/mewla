@@ -10,7 +10,8 @@ The guiding rule: a primary page shows only what you need right now. Low-frequen
 - The menu button stays clean while the current server is healthy. A dot appears only when there is something to act on: red for a connection issue, amber while the server is offline. The button's accessibility label names the state. Connecting is transient and shows no dot.
 - The drawer is pure navigation:
   - A read-only header shows the current server and its connection state. The state text is colored only when the server is offline or has an issue.
-  - One grouped card holds **Skills**, **Stats**, and **Settings**. Each destination appears once.
+  - The first card holds the current server's destinations: **Plugins**, **Skills**, **Stats**, and **Resources**. A second card holds **Settings**. Each destination appears once, with a tinted icon tile like Settings rows.
+  - Open it with the menu button, or swipe right from the leading edge on Brain (Sessions keeps horizontal swipes for the pager). Close it with the close button, a tap or swipe on the backdrop, a left swipe anywhere, or system Back. The open state lives on the UI thread, so a close is never lost while JavaScript is busy.
   - The footer shows the app version.
 
 ## Brain (launch screen)
@@ -62,10 +63,10 @@ Settings is one grouped list:
 
 - **Servers**: each server shows a dot only when it is not connected. The current server carries an **In use** tag. Tapping a server opens its actions: Use, Connect, Disconnect or Retry, then Edit, then Remove.
 - **Channels**: one **Telegram** row with the bot name and a status pill. It opens the Telegram page, which shows the identity, one primary next step (Verify token, Connect Telegram, Open Telegram, or Reconnect), grouped secondary actions, and diagnostics as one-line label/value rows (long IDs truncate in the middle and copy on tap). Destructive actions (Unlink account, Remove bot) sit behind **Advanced**.
-- **Providers**: opens Providers.
+- **Agents**: one **Model Providers** row, which opens Model Providers: how Codex and Claude reach models (official login or your own API keys).
 - **Appearance**: one segmented control (Auto / Light / Dark). Theme lives only here.
 
-## Providers
+## Model Providers
 
 A segmented **Codex / Claude** switch picks the agent. Below it, one grouped list shows which connection that agent uses: **Official login** first, then saved Providers. Each has a radio mark, its host, model count and catalog age, and any test result. A **Key required** pill marks Providers without a credential. Each Provider's **…** opens an action menu: Models, Test connection, Edit, and Delete (confirmed). **Add** sits in the section header. Search appears only once the list is long. The Zen Provider Gateway is its own row with a status pill, and tapping it copies the endpoint.
 
