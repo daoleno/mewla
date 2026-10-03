@@ -130,7 +130,7 @@ func (c *modelsDevCatalog) refresh(ctx context.Context) error {
 	}
 	now := time.Now().UTC()
 	disk := modelsDevCatalog{UpdatedAt: now, Models: parsed}
-	data, err := json.Marshal(disk)
+	data, err := json.Marshal(&disk)
 	if err != nil {
 		return err
 	}

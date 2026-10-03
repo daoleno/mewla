@@ -72,6 +72,7 @@ Prerequisites:
 2. All existing release notes are indexed in root `CHANGELOG.md`; future preparation prepends one link without copying full notes.
 3. The four `ZEN_ANDROID_*` secrets above are configured on the repository.
 4. `ZEN_UPDATE_SIGNING_KEY_BASE64` is configured with the updater manifest key.
+5. `release/plugin-publishers.json` contains the public Client ID of the approved `daoleno`-owned Zen GitHub OAuth app with Device Flow enabled. Run `python3 scripts/plugin-publisher-flags.py --require github` before preparation; the artifact workflow enforces the same requirement before building. Registration handoff is documented in [Publisher setup](plugins-publisher-setup.md). A null ID is a missing publisher configuration, not a request for publication approval. Never supply a client secret or another application's identity to satisfy this gate.
 
 The normal maintainer action is to dispatch **Release reviewed version** from the Actions UI or CLI:
 
