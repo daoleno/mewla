@@ -44,7 +44,7 @@ test("viewer binds canonical server/resource, ACKs only after renderer and drops
   const frame = { type: "frame", seq: 1, data: "aGVsbG8=", metadata: { deviceWidth: 1, deviceHeight: 1 } };
   socket.response(frame);
   expect(frames).toHaveLength(1);
-  expect(socket.sent).toHaveLength(0);
+  expect(socket.sent).toEqual([{ type: "ping" }]);
   viewer.ack(1);
   expect(socket.sent.at(-1)).toEqual({ type: "ack", seq: 1 });
   viewer.close();
@@ -77,7 +77,8 @@ test("disconnect rejects pending input and reconnect never silently takes contro
   socket.onclose?.();
   expect(await pending).toBeInstanceOf(Error);
   const next = await setup();
-  expect(next.socket.sent).toHaveLength(0);
+  // Opening only asks for fresh state; it never requests control by itself.
+  expect(next.socket.sent).toEqual([{ type: "ping" }]);
   await expect(next.viewer.command({ kind: "snapshot" })).rejects.toThrow("Take control");
 });
 test("input queue remains bounded", async () => {
@@ -113,4 +114,20 @@ test("viewer reports lost liveness on close without reporting after detach", asy
   viewer.close();
   socket.onclose?.();
   expect(states).toEqual(["live", "lost"]);
+});
+test("viewer reports lease grant and loss from server responses only", async () => {
+  globalThis.WebSocket = Socket as any;
+  const leases: boolean[] = [];
+  const viewer = new BrowserViewer(server as any, "resource", { frame() {}, status() {}, resource() {}, lease: (held) => leases.push(held) });
+  viewers.push(viewer);
+  await viewer.connect();
+  const socket = Socket.all.at(-1)!;
+  socket.onopen?.();
+  await control(viewer, socket);
+  expect(leases).toEqual([true]);
+  const pending = viewer.command({ kind: "snapshot" }).catch((e) => e);
+  await Promise.resolve();
+  socket.response({ type: "response", request_id: socket.sent.at(-1).request_id, error: "Browser control changed; request control again" });
+  expect(await pending).toBeInstanceOf(Error);
+  expect(leases).toEqual([true, false]);
 });

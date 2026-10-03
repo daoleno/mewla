@@ -13,7 +13,7 @@ import {
 
 interface NewTerminalSheetContentProps {
   browserId?: string;
-  onBrowserChange(value?: string): void;
+  onBrowserChange(value?: string, automatic?: boolean): void;
   title: string;
   command: string;
   submitting: boolean;

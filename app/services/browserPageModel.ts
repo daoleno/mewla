@@ -1,5 +1,4 @@
 import { BrowserRequestError, type BrowserResource } from "./browser";
-import type { StatusTone } from "../components/ui/StatusPill";
 
 export type BrowserRecovery = "retry" | "reconnect" | "take_control" | "settings" | "restart" | "none";
 
@@ -12,12 +11,6 @@ export interface BrowserIssue {
   diagnostic: string;
 }
 
-export interface BrowserPresence {
-  label: string;
-  tone: StatusTone;
-  detail: string;
-}
-
 export function browserIssue(error: unknown, server: string): BrowserIssue | null {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   if ((error instanceof Error && error.name === "AbortError") || /cancelled/i.test(message)) return null;
@@ -27,19 +20,19 @@ export function browserIssue(error: unknown, server: string): BrowserIssue | nul
   const issue = (title: string, detail: string, recovery: BrowserRecovery, tone: BrowserIssue["tone"] = "danger"): BrowserIssue =>
     ({ title, detail, recovery, tone, diagnostic });
   if (status === 404 || status === 405) {
-    return issue("Browser isn’t on this server yet", `Update Zen on ${server} to keep a browser you can reuse.`, "retry", "warning");
+    return issue("Browser isn't on this server yet", `Update Zen on ${server} to keep a browser you can reuse.`, "retry", "warning");
   }
   if (status === 401 || status === 403) {
-    return issue("This phone needs to pair again", `${server} didn’t accept this phone. Pair it again in Settings.`, "settings");
+    return issue("This phone needs to pair again", `${server} didn't accept this phone. Pair it again in Settings.`, "settings");
   }
   if (status === 503) {
-    return issue("Browser is off on this server", `Browser isn’t running on ${server} right now. Try again in a moment.`, "retry", "warning");
+    return issue("Browser is off on this server", `Browser isn't running on ${server} right now. Try again in a moment.`, "retry", "warning");
   }
   if (/controlled by someone else/i.test(message)) {
     return issue("Someone else is in control", "Another device or an Agent task is using this browser. Try again after they release it.", "take_control", "warning");
   }
   if (/control changed|take control before/i.test(message)) {
-    return issue("You’re no longer in control", "Take control again to keep browsing.", "take_control", "warning");
+    return issue("You're no longer in control", "Take control again to keep browsing.", "take_control", "warning");
   }
   if (/could not be drained|needs restart/i.test(message)) {
     return issue("This browser needs a restart", "Close it, then open it again. Your sign-ins are kept.", "restart");
@@ -54,41 +47,54 @@ export function browserIssue(error: unknown, server: string): BrowserIssue | nul
     return issue("Lost connection to the browser", `The browser is still open on ${server}. Reconnect to keep viewing it.`, "reconnect", "warning");
   }
   if (error instanceof TypeError || /network request failed|failed to fetch/i.test(message)) {
-    return issue(`Can’t reach ${server}`, "Check that the server is online and this phone has a connection.", "retry");
+    return issue(`Can't reach ${server}`, "Check that the server is online and this phone has a connection.", "retry");
   }
-  return issue("That didn’t finish", "Try again. If it keeps happening, the details below can help.", "retry");
+  return issue("That didn't finish", "Try again. If it keeps happening, the details below can help.", "retry");
 }
 
-/** Where a browser stands. `controlling` is true only for this viewer's own control. */
-export function browserPresence(resource: BrowserResource, controlling = false): BrowserPresence {
-  if (resource.state === "needs_restart") {
-    return { label: "Needs restart", tone: "warning", detail: "Close it and open it again. Sign-ins are kept." };
-  }
-  if (resource.state !== "running") {
-    return { label: "Closed", tone: "neutral", detail: "Sign-ins are saved. Open it to continue where you left off." };
-  }
-  if (resource.control === "quiescing") {
-    return { label: "Switching control", tone: "accent", detail: "Finishing the last action before control changes." };
-  }
-  if (resource.control === "human") {
-    return controlling
-      ? { label: "You’re in control", tone: "accent", detail: "Agent tasks wait until you release control." }
-      : { label: "In use on another device", tone: "warning", detail: "Agent tasks wait until it’s released." };
-  }
-  if (resource.control === "agent") {
-    return { label: "Agent is using it", tone: "accent", detail: "You can watch. Take control to pause the Agent." };
-  }
-  return { label: "Open", tone: "success", detail: "Ready for you or an Agent task." };
+export const DEFAULT_BROWSER_NAME = "Browser";
+
+/** Bounded automatic reconnects after a dropped view; then one explicit action. */
+export const RECONNECT_DELAYS_MS = [1000, 2000, 4000] as const;
+
+/** Remembered browser first, then one that is already running, then the oldest. */
+export function pickDefaultBrowser(resources: readonly BrowserResource[], rememberedId: string | null): BrowserResource | null {
+  return resources.find((r) => r.id === rememberedId)
+    ?? resources.find((r) => r.state === "running")
+    ?? resources[0]
+    ?? null;
 }
 
-export function agentAvailability(resource: BrowserResource): { label: string; detail: string } {
-  if (!resource.allow_agents) {
-    return { label: "Agent tasks can’t use it", detail: "Turn on to let Codex or Claude sessions continue with these sign-ins." };
-  }
-  if (resource.state !== "running") {
-    return { label: "Agent tasks can use it once it’s open", detail: "Open the browser before you start a session that needs it." };
-  }
-  return { label: "Agent tasks can use it", detail: "Choose it when you start a Codex or Claude session." };
+/**
+ * What opening the viewer may do about input. Only an idle browser is claimed
+ * automatically; a current controller (an Agent or another device) is never
+ * overridden without an explicit takeover.
+ */
+export function controlOffer(resource: BrowserResource): "acquire" | "takeover" | "wait" {
+  if (resource.state !== "running" || resource.control === "quiescing") return "wait";
+  if (resource.control === "idle") return "acquire";
+  return "takeover";
+}
+
+/** Session launches can attach Browser only to Codex and Claude commands. */
+export function supportsBrowserAttachment(command: string): boolean {
+  const argv = command.trim().split(/\s+/).filter((part) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(part));
+  const executable = (argv[0] ?? "").split("/").pop() ?? "";
+  return executable === "codex" || executable === "claude";
+}
+
+/** A session-sheet Browser selection; `chosen` means the user picked (even None). */
+export interface BrowserChoice { id?: string; automatic: boolean; chosen: boolean }
+
+/** A preselected default only rides along with commands that can attach it. */
+export function launchBrowserId(choice: BrowserChoice, command: string): string | undefined {
+  return choice.automatic && !supportsBrowserAttachment(command) ? undefined : choice.id;
+}
+
+/** Automatic preselection never overrides the user's own choice. */
+export function chooseBrowser(current: BrowserChoice, id: string | undefined, automatic: boolean): BrowserChoice {
+  if (automatic && current.chosen) return current;
+  return { id, automatic, chosen: current.chosen || !automatic };
 }
 
 export function recoveryLabel(recovery: BrowserRecovery): string | null {

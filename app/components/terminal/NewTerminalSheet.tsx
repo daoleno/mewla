@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, StyleSheet } from "react-native";
 import { wsClient } from "../../services/websocket";
 import { useCurrentServer } from "../../store/currentServer";
+import { chooseBrowser, launchBrowserId, type BrowserChoice } from "../../services/browserPageModel";
 import { DirectoryPickerContent } from "./DirectoryPickerContent";
 import {
   beginDirectoryLoad,
@@ -57,7 +58,8 @@ export function NewTerminalSheet({
   onSubmit,
 }: NewTerminalSheetProps) {
   const { isCurrentServer } = useCurrentServer();
-  const [browserId, setBrowserId] = useState<string>();
+  // An explicit choice is always sent so an unsupported launch reports why.
+  const [browser, setBrowser] = useState<BrowserChoice>({ automatic: false, chosen: false });
   const [form, setForm] = useState<NewTerminalSheetFormState>(() =>
     createNewTerminalSheetFormState({
       cwd: initialCwd,
@@ -85,7 +87,7 @@ export function NewTerminalSheet({
       invalidateDirectoryRequests();
       return;
     }
-    setBrowserId(undefined);
+    setBrowser({ automatic: false, chosen: false });
     setForm(
       createNewTerminalSheetFormState({
         cwd: initialCwd,
@@ -137,7 +139,7 @@ export function NewTerminalSheet({
     if (!serverId || !isCurrentServer(serverId)) return;
     onSubmit({
       ...input,
-      browserId,
+      browserId: launchBrowserId(browser, input.command),
       serverId,
     });
   };
@@ -234,8 +236,8 @@ export function NewTerminalSheet({
         />
       ) : (
         <NewTerminalSheetContent
-          browserId={browserId}
-          onBrowserChange={setBrowserId}
+          browserId={browser.id}
+          onBrowserChange={(id, automatic = false) => setBrowser((current) => chooseBrowser(current, id, automatic))}
           title={title}
           command={form.command}
           submitting={submitting}
