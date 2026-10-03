@@ -73,9 +73,10 @@ recovery still belongs to Chrome.
 ## Managed Agent attachment
 
 Open browsers on the current server are listed in the normal new-session sheet.
-The remembered default browser is preselected when it is running and the command
-can attach it (Codex or Claude). Other commands launch without a browser unless one
-was chosen explicitly. Opening a browser from the app also grants it to Agents on
+The remembered default browser is preselected when it is running and shared with
+Agents. A preselected browser is sent only with commands that can attach it (Codex
+or Claude); other commands launch without it. A browser chosen explicitly is always
+sent, so an unsupported command reports why. Opening a browser from the app also grants it to Agents on
 this server once, so browsers created before this default keep working with the
 existing grant check. No global provider/MCP
 configuration is changed. Zen injects the selected resource into that invocation's
