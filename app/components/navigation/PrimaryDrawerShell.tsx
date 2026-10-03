@@ -16,8 +16,6 @@ import {
   type View as ViewInstance,
 } from "react-native";
 import { useIsFocused } from "expo-router";
-import { Drawer } from "react-native-drawer-layout";
-import type { PanGesture } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppColors } from "../../constants/tokens";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
@@ -29,6 +27,7 @@ import {
   PrimaryAppBarPageAction,
   PrimaryPageActionProvider,
 } from "./PrimaryPageAction";
+import { PrimaryDrawer, usePrimaryDrawerController } from "./PrimaryDrawer";
 import { PrimaryDrawerPanel } from "./PrimaryDrawerPanel";
 import {
   PrimarySurfaceInteractionProvider,
@@ -165,51 +164,47 @@ export function PrimaryDrawerShell({
   const insets = useSafeAreaInsets();
   const routeFocused = useIsFocused();
   const drawerWidth = Math.min(320, Math.max(240, windowWidth - 52));
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [restoreMenuFocus, setRestoreMenuFocus] = useState(false);
-  const drawerWasOpenRef = useRef(false);
+  const navigatingAwayRef = useRef(false);
   const primaryRef = useRef<ViewInstance>(null);
   const drawerRef = useRef<ViewInstance>(null);
   const menuButtonRef = useRef<ViewInstance>(null);
   const closeButtonRef = useRef<ViewInstance>(null);
 
+  // React mirrors the UI-thread drawer target. Focus returns to the menu
+  // button after any close except one that navigates away.
+  const handleDrawerChange = useCallback((open: boolean) => {
+    if (open) {
+      navigatingAwayRef.current = false;
+      setRestoreMenuFocus(false);
+      return;
+    }
+    setRestoreMenuFocus(!navigatingAwayRef.current);
+    navigatingAwayRef.current = false;
+  }, []);
+  const drawer = usePrimaryDrawerController(handleDrawerChange);
+  const drawerOpen = drawer.open;
+  const requestDrawer = drawer.request;
+
   const beginOpenInteraction = useCallback(() => {
     setRestoreMenuFocus(false);
   }, []);
   const openDrawer = useCallback(() => {
-    drawerWasOpenRef.current = true;
     setRestoreMenuFocus(false);
     Keyboard.dismiss();
-    setDrawerOpen(true);
-  }, []);
+    requestDrawer(true);
+  }, [requestDrawer]);
   const closeDrawer = useCallback(() => {
-    if (drawerWasOpenRef.current) {
-      setRestoreMenuFocus(true);
-    }
-    drawerWasOpenRef.current = false;
-    setDrawerOpen(false);
-  }, []);
+    requestDrawer(false);
+  }, [requestDrawer]);
   const dismissDrawerForNavigation = useCallback(() => {
-    drawerWasOpenRef.current = false;
+    navigatingAwayRef.current = true;
     setRestoreMenuFocus(false);
-    setDrawerOpen(false);
-  }, []);
+    requestDrawer(false);
+  }, [requestDrawer]);
   const consumeMenuFocusReturn = useCallback(() => {
     setRestoreMenuFocus(false);
   }, []);
-  const configureDrawerGesture = useCallback(
-    (gesture: PanGesture) => {
-      if (drawerOpen) {
-        return gesture
-          .activeOffsetX([-12, windowWidth])
-          .failOffsetX(12);
-      }
-      return gesture
-        .activeOffsetX([-windowWidth, 12])
-        .failOffsetX(-12);
-    },
-    [drawerOpen, windowWidth],
-  );
 
   useEffect(() => {
     if (!routeFocused && drawerOpen) {
@@ -264,35 +259,27 @@ export function PrimaryDrawerShell({
     [drawerOpen],
   );
 
-  const renderDrawerContent = useCallback(
-    () => (
-      <View
-        {...drawerWebProps}
-        ref={drawerRef}
-        accessibilityElementsHidden={!drawerOpen}
-        aria-hidden={!drawerOpen}
-        importantForAccessibility={
-          drawerOpen ? "yes" : "no-hide-descendants"
-        }
-        accessibilityViewIsModal={drawerOpen}
-        accessibilityLabel="Navigation drawer"
-        style={styles.drawerContent}
-      >
-        <PrimaryDrawerPanel
-          closeButtonRef={closeButtonRef}
-          drawerVisible={drawerOpen}
-          onClose={closeDrawer}
-          onClosePressIn={() => undefined}
-          onNavigateAway={dismissDrawerForNavigation}
-        />
-      </View>
-    ),
-    [
-      closeDrawer,
-      dismissDrawerForNavigation,
-      drawerOpen,
-      drawerWebProps,
-    ],
+  const drawerContent = (
+    <View
+      {...drawerWebProps}
+      ref={drawerRef}
+      accessibilityElementsHidden={!drawerOpen}
+      aria-hidden={!drawerOpen}
+      importantForAccessibility={
+        drawerOpen ? "yes" : "no-hide-descendants"
+      }
+      accessibilityViewIsModal={drawerOpen}
+      accessibilityLabel="Navigation drawer"
+      style={styles.drawerContent}
+    >
+      <PrimaryDrawerPanel
+        closeButtonRef={closeButtonRef}
+        drawerVisible={drawerOpen}
+        onClose={closeDrawer}
+        onClosePressIn={() => undefined}
+        onNavigateAway={dismissDrawerForNavigation}
+      />
+    </View>
   );
 
   return (
@@ -302,31 +289,33 @@ export function PrimaryDrawerShell({
         drawerPhase={drawerOpen ? "open" : "closed"}
         routeFocused={routeFocused}
       >
-        <Drawer
-          configureGestureHandler={configureDrawerGesture}
-          drawerPosition="left"
+        <PrimaryDrawer
+          controller={drawer}
+          drawer={drawerContent}
           drawerStyle={{
-            width: drawerWidth,
             backgroundColor: colors.bgSurface,
             borderRightColor: colors.borderSubtle,
             borderRightWidth: StyleSheet.hairlineWidth,
           }}
-          drawerType="front"
-          keyboardDismissMode="on-drag"
-          onClose={closeDrawer}
-          onGestureStart={beginOpenInteraction}
-          onOpen={openDrawer}
-          open={drawerOpen}
+          drawerWidth={drawerWidth}
+          edgeWidth={PRIMARY_DRAWER_SWIPE_EDGE_WIDTH}
+          onDragStart={beginOpenInteraction}
           overlayAccessibilityLabel="Close navigation drawer"
-          overlayStyle={{ backgroundColor: colors.modalBackdrop }}
-          renderDrawerContent={renderDrawerContent}
+          overlayColor={colors.modalBackdrop}
           style={[styles.root, { backgroundColor: colors.bgPrimary }]}
-          swipeEdgeWidth={PRIMARY_DRAWER_SWIPE_EDGE_WIDTH}
-          swipeEnabled={routeFocused && activePrimaryRoute === "brain"}
+          // Brain is the pager's leading page, so a leading-edge swipe there
+          // can only mean the drawer; on Sessions it pages back to Brain.
+          // Closing swipes work on every page while the drawer is open.
+          swipeToOpenEnabled={routeFocused && activePrimaryRoute === "brain"}
+          windowWidth={windowWidth}
         >
+          {/* Never flattened: toggling pointerEvents would otherwise create
+              and remove this native view on every open/close, re-parenting
+              the whole primary surface under in-flight touches. */}
           <View
             {...primaryWebProps}
             ref={primaryRef}
+            collapsable={false}
             style={styles.primary}
             pointerEvents={drawerOpen ? "none" : "auto"}
             accessibilityElementsHidden={drawerOpen}
@@ -346,7 +335,7 @@ export function PrimaryDrawerShell({
             />
             <View style={styles.content}>{children}</View>
           </View>
-        </Drawer>
+        </PrimaryDrawer>
       </PrimarySurfaceInteractionProvider>
       </PrimarySelectionBarProvider>
     </PrimaryPageActionProvider>
