@@ -340,7 +340,7 @@ export function BrowserScreen() {
     : phase === "reconnecting" ? <InlineNotice busy title="Reconnecting…" />
     : phase === "connecting" ? <InlineNotice busy title="Connecting…" />
     : viewOnly && offer === "takeover" ? (
-      <InlineNotice tone="accent" icon={selected.control === "agent" ? "sparkles-outline" : "phone-portrait-outline"}
+      <InlineNotice tone="accent" icon={selected.control === "agent" ? "git-network-outline" : "phone-portrait-outline"}
         title={selected.control === "agent" ? "An Agent is using this browser" : "In use on another device"}
         detail={selected.control === "agent" ? "The Agent pauses while you're in control." : undefined}
         action={{ label: "Take over", onPress: () => void run("control", acquire), disabled: busy !== null }} />
