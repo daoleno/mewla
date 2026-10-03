@@ -51,6 +51,15 @@ import {
 import { PLUGINS_SKILLS_SCREEN_PADDING } from "../../services/pluginsSkillsSurfaceModel";
 import { AgentLogoSet } from "../agents/AgentLogoSet";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
+import {
+  ServerContextRow,
+  type ServerConnection,
+} from "../extensions/ServerContextRow";
+import { Button } from "../ui/Button";
+import { EmptyState } from "../ui/EmptyState";
+import { InlineNotice } from "../ui/InlineNotice";
+import { SegmentedControl } from "../ui/SegmentedControl";
+import { StatusPill } from "../ui/StatusPill";
 import { PluginsPresentation } from "../plugins/PluginsPresentation";
 import { SkillFileBrowser } from "./SkillFileBrowser";
 import { outlinedSurface } from "../ui/outlinedSurface";
@@ -72,6 +81,10 @@ export interface SkillsPresentationProps {
   preparingMutation: string;
   mutationNotice: SurfaceMutationNotice | null;
   currentServerAvailable: boolean;
+  serverName: string;
+  connection: ServerConnection;
+  /** Project the inventory was read for; empty when only global roots were read. */
+  projectCwd: string;
   /** Copies hidden from the Skills list because their Plugin owns them. */
   pluginOwnedSkillCount: number;
   inspectedName: string | null;
@@ -134,35 +147,24 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
       style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
       edges={[]}
     >
-      <View
-        style={[styles.modeBar, { borderBottomColor: colors.borderSubtle }]}
-      >
-        {(["skills", "plugins"] as const).map((section) => (
-          <Pressable
-            key={section}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: props.section === section }}
-            onPress={() => props.onSelectSection(section)}
-            style={[
-              styles.modeItem,
-              props.section === section && { borderBottomColor: colors.accent },
-            ]}
-          >
-            <Text
-              style={[
-                styles.modeText,
-                {
-                  color:
-                    props.section === section
-                      ? colors.textPrimary
-                      : colors.textTertiary,
-                },
-              ]}
-            >
-              {section === "skills" ? "Skills" : "Plugins"}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.header}>
+        {props.currentServerAvailable ? (
+          <ServerContextRow
+            name={props.serverName}
+            connection={props.connection}
+            project={props.projectCwd}
+          />
+        ) : null}
+        <SegmentedControl
+          accessibilityLabel="Skills sections"
+          value={props.section}
+          onChange={props.onSelectSection}
+          options={(["skills", "plugins"] as const).map((section) => ({
+            value: section,
+            label: section === "skills" ? "Skills" : "Agent Plugins",
+            icon: section === "skills" ? "book-outline" : "extension-puzzle-outline",
+          }))}
+        />
       </View>
       {props.section === "skills" ? (
         <View style={styles.flex}>
@@ -599,11 +601,13 @@ function LocalSkillsList(
 ) {
   const colors = useAppColors();
   const state = props.inventoryState;
+  const offline = props.connection !== "connected";
   if (!props.currentServerAvailable)
     return (
       <State
         icon="server-outline"
         title="No current server"
+        detail="Skills are read from the current server. Choose one in Settings."
         action="Open Settings"
         onAction={props.onOpenSettings}
       />
@@ -611,13 +615,14 @@ function LocalSkillsList(
   if (state.status === "error" && !props.inventory)
     return (
       <State
-        icon="warning-outline"
-        title={
-          state.error.includes("offline")
-            ? "Server disconnected"
-            : "Skills unavailable"
-        }
+        icon={offline ? "cloud-offline-outline" : "warning-outline"}
+        tone={offline ? "default" : "danger"}
+        title={offline ? "Server disconnected" : "Skills unavailable"}
         detail={state.error}
+        action="Try again"
+        onAction={props.onRefreshSkills}
+        secondary={offline ? "Open Settings" : undefined}
+        onSecondary={props.onOpenSettings}
       />
     );
   if (
@@ -635,6 +640,8 @@ function LocalSkillsList(
       <State
         icon="folder-open-outline"
         title="No local Skills"
+        action="Refresh"
+        onAction={props.onRefreshSkills}
       />
     );
   if (
@@ -645,7 +652,9 @@ function LocalSkillsList(
     return (
       <State
         icon="extension-puzzle-outline"
-        title="All Skills belong to Plugins"
+        title="All Skills come from Agent Plugins"
+        action="Show Agent Plugins"
+        onAction={() => props.onSelectSection("plugins")}
       />
     );
   return (
@@ -660,6 +669,7 @@ function LocalSkillsList(
         />
       }
       contentContainerStyle={props.rows.length ? styles.list : styles.emptyList}
+      ListHeaderComponent={<OwnershipNotice {...props} />}
       ListEmptyComponent={
         <State
           icon="search-outline"
@@ -680,6 +690,36 @@ function LocalSkillsList(
           }}
         />
       )}
+    />
+  );
+}
+
+/**
+ * States where Plugin-provided Skills are: inside their Plugin, or, while
+ * Plugin ownership is unknown, possibly in this list and still protected.
+ */
+function OwnershipNotice(props: SkillsPresentationProps) {
+  const failed = props.pluginsState.status === "error";
+  if (failed)
+    return (
+      <InlineNotice
+        tone="warning"
+        icon="extension-puzzle-outline"
+        title="Plugin ownership unavailable"
+        detail="Skills from Agent Plugins may appear here. They stay protected."
+        action={{ label: "Retry", onPress: props.onRetryPlugins }}
+        style={styles.listNotice}
+      />
+    );
+  if (!props.pluginOwnedSkillCount) return null;
+  const count = props.pluginOwnedSkillCount;
+  return (
+    <InlineNotice
+      tone="accent"
+      icon="extension-puzzle-outline"
+      title={`${count} more ${count === 1 ? "Skill comes" : "Skills come"} from Agent Plugins`}
+      action={{ label: "View", onPress: () => props.onSelectSection("plugins") }}
+      style={styles.listNotice}
     />
   );
 }
@@ -855,21 +895,27 @@ function Inspector(
     return (
       <State
         icon="warning-outline"
+        tone="danger"
         title="Skill unavailable"
         detail={props.inspectState.error}
+        action={copy ? "Try again" : "Close"}
+        onAction={
+          copy ? () => props.onInspectSkill(copy) : props.onDismissInspector
+        }
       />
     );
   if (!detail || !copy || !props.logical) return null;
   const location = skillCopyLocation(copy);
-  const canDelete =
-    props.mutationOperations.includes("delete") &&
-    copy.capability.canDelete &&
-    detail.capability.canDelete;
   const deleting = props.preparingMutation === `delete:${copy.id}`;
   const pluginOwner = resolveSkillCopyPluginOwner(
     { ...copy, plugin: detail.plugin ?? copy.plugin },
     props.logicalPlugins,
   );
+  const canDelete =
+    skillRowSupportsDelete(copy, props.mutationOperations) &&
+    detail.capability.canDelete &&
+    !detail.plugin &&
+    !pluginOwner;
   return (
     <View style={styles.inspector}>
       <View
@@ -888,8 +934,25 @@ function Inspector(
           >
             {location.label}
           </Text>
+          <View style={styles.badges}>
+            <StatusPill
+              label={
+                pluginOwner
+                  ? `From ${pluginOwner.displayName}`
+                  : copy.scope === "builtin"
+                    ? "Built-in"
+                    : "Standalone"
+              }
+              tone={pluginOwner ? "accent" : "neutral"}
+            />
+            <StatusPill
+              label={canDelete ? "Can delete" : "Protected"}
+              tone={canDelete ? "neutral" : "warning"}
+            />
+          </View>
         </View>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Close Skill details"
           onPress={props.onDismissInspector}
           style={styles.close}
@@ -949,9 +1012,13 @@ function Inspector(
             <Text style={[styles.metadata, { color: colors.textTertiary }]}>
               Permanently delete this copy from {location.label}.
             </Text>
-            <Action
+            <Button
               label={deleting ? "Deleting..." : "Delete Skill"}
-              destructive
+              accessibilityLabel={`Delete ${copy.name} from ${location.label}`}
+              variant="destructive"
+              icon="trash-outline"
+              block
+              loading={deleting}
               disabled={Boolean(props.preparingMutation)}
               onPress={() => props.onDeleteSkill(copy)}
             />
@@ -975,9 +1042,11 @@ function Inspector(
               )}
             </Text>
             {pluginOwner ? (
-              <Action
+              <Button
                 label={`Open ${pluginOwner.displayName}`}
                 accessibilityLabel={`Open the ${pluginOwner.displayName} Plugin that provides this Skill`}
+                icon="extension-puzzle-outline"
+                block
                 onPress={() => props.onViewSkillPlugin(pluginOwner.key)}
               />
             ) : null}
@@ -1075,72 +1144,42 @@ function CopyRow({
   );
 }
 
-function Action({
-  label,
-  destructive,
-  disabled,
-  accessibilityLabel,
-  onPress,
-}: {
-  label: string;
-  destructive?: boolean;
-  disabled?: boolean;
-  accessibilityLabel?: string;
-  onPress(): void;
-}) {
-  const colors = useAppColors();
-  return (
-    <Pressable
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      style={[
-        styles.action,
-        { borderColor: destructive ? colors.dangerText : colors.borderSubtle },
-        disabled && styles.dimmed,
-      ]}
-    >
-      <Text style={{ color: destructive ? colors.dangerText : colors.accent }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 function State({
   loading,
   icon,
+  tone,
   title,
   detail,
   action,
   onAction,
+  secondary,
+  onSecondary,
 }: {
   loading?: boolean;
   icon?: React.ComponentProps<typeof Ionicons>["name"];
+  tone?: "default" | "danger";
   title: string;
   detail?: string;
   action?: string;
   onAction?(): void;
+  secondary?: string;
+  onSecondary?(): void;
 }) {
-  const colors = useAppColors();
   return (
     <View style={styles.state}>
-      {loading ? (
-        <ActivityIndicator color={colors.accent} />
-      ) : (
-        <Ionicons
-          name={icon ?? "information-circle-outline"}
-          size={28}
-          color={colors.textTertiary}
-        />
-      )}
-      <Text style={[styles.stateTitle, { color: colors.textPrimary }]}>
-        {title}
-      </Text>
-      {detail ? <Text style={[styles.stateDetail, { color: colors.textTertiary }]}>
-        {detail}
-      </Text> : null}
-      {action && onAction ? <Action label={action} onPress={onAction} /> : null}
+      <EmptyState
+        busy={loading}
+        icon={icon ?? "information-circle-outline"}
+        tone={tone}
+        title={title}
+        detail={detail}
+        action={action && onAction ? { label: action, onPress: onAction } : undefined}
+        secondary={
+          secondary && onSecondary
+            ? { label: secondary, onPress: onSecondary }
+            : undefined
+        }
+      />
     </View>
   );
 }
@@ -1152,21 +1191,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: "row" },
   safe: { flex: 1 },
   flex: { flex: 1 },
-  modeBar: {
-    height: 44,
-    flexDirection: "row",
+  header: {
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 8,
   },
-  modeItem: {
-    minWidth: 76,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  modeText: { ...TypeScale.compact, fontFamily: Typography.uiFontMedium },
   toastWrap: {
     position: "absolute",
     left: PLUGINS_SKILLS_SCREEN_PADDING,
@@ -1306,6 +1336,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   statusLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   copyRow: {
     minHeight: 58,
     borderWidth: 1,
@@ -1341,15 +1372,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
     paddingVertical: 16,
     gap: 10,
-  },
-  action: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "flex-start",
   },
   filterSheet: { maxHeight: 600 },
   sheetHeader: {
@@ -1388,13 +1410,6 @@ const styles = StyleSheet.create({
     minHeight: 180,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
-    gap: 7,
   },
-  stateTitle: {
-    ...TypeScale.body,
-    fontFamily: Typography.uiFontMedium,
-    textAlign: "center",
-  },
-  stateDetail: { ...TypeScale.compact, textAlign: "center", maxWidth: 360 },
+  listNotice: { marginTop: 4, marginBottom: 4 },
 });

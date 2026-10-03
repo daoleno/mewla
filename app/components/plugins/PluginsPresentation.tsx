@@ -38,6 +38,8 @@ import { MANAGED_SKILL_AGENTS } from "../../services/skillsScreenModel";
 import { AgentLogoSet } from "../agents/AgentLogoSet";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
+import { Button } from "../ui/Button";
+import { EmptyState } from "../ui/EmptyState";
 import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { PluginSkillsDirectory } from "./PluginSkillsDirectory";
 
@@ -204,6 +206,10 @@ export function PluginsPresentation(props: PluginsPresentationProps) {
         {...props}
         inventory={inventory}
         rows={visible}
+        onClearFilters={() => {
+          setQuery("");
+          setFilters(DEFAULT_FILTERS);
+        }}
         onOpen={openPlugin}
         onChooseUninstall={chooseUninstall}
       />
@@ -279,6 +285,7 @@ function PluginsList(
   props: PluginsPresentationProps & {
     inventory?: PluginInventory;
     rows: LogicalPlugin[];
+    onClearFilters(): void;
     onOpen(plugin: LogicalPlugin): void;
     onChooseUninstall(plugin: LogicalPlugin): void;
   },
@@ -298,8 +305,11 @@ function PluginsList(
     return (
       <PluginState
         icon="warning-outline"
+        tone="danger"
         title="Plugins unavailable"
         detail={props.state.error}
+        action="Try again"
+        onAction={props.onRefresh}
       />
     );
   }
@@ -318,7 +328,9 @@ function PluginsList(
     return (
       <PluginState
         icon="extension-puzzle-outline"
-        title="No installed Plugins"
+        title="No installed Agent Plugins"
+        action="Refresh"
+        onAction={props.onRefresh}
       />
     );
   }
@@ -338,6 +350,8 @@ function PluginsList(
         <PluginState
           icon="search-outline"
           title="No matches"
+          action="Clear search"
+          onAction={props.onClearFilters}
         />
       }
       renderItem={({ item }) => (
@@ -530,25 +544,16 @@ function PluginInspector({
               <Text style={[styles.metadata, { color: colors.textTertiary }]}>
                 Permanently removes only this exact copy from {copy.location}.
               </Text>
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                label="Uninstall Plugin"
                 accessibilityLabel={`Uninstall ${plugin.displayName} from ${copy.location}`}
+                variant="destructive"
+                icon="trash-outline"
+                block
+                loading={uninstalling}
                 disabled={Boolean(preparingMutation)}
                 onPress={() => onUninstall(copy)}
-                style={[
-                  styles.uninstallButton,
-                  { borderColor: colors.dangerText },
-                  Boolean(preparingMutation) && styles.dimmed,
-                ]}
-              >
-                {uninstalling ? (
-                  <ActivityIndicator size="small" color={colors.dangerText} />
-                ) : (
-                  <Text style={{ color: colors.dangerText }}>
-                    Uninstall Plugin
-                  </Text>
-                )}
-              </Pressable>
+              />
             </>
           ) : (
             <>
@@ -913,6 +918,7 @@ function PluginDetailSection({
 function PluginState({
   loading,
   icon,
+  tone,
   title,
   detail,
   action,
@@ -920,30 +926,22 @@ function PluginState({
 }: {
   loading?: boolean;
   icon?: React.ComponentProps<typeof Ionicons>["name"];
+  tone?: "default" | "danger";
   title: string;
   detail?: string;
   action?: string;
   onAction?(): void;
 }) {
-  const colors = useAppColors();
   return (
     <View style={styles.state}>
-      {loading ? (
-        <ActivityIndicator color={colors.accent} />
-      ) : icon ? (
-        <Ionicons name={icon} size={28} color={colors.textTertiary} />
-      ) : null}
-      <Text style={[styles.stateTitle, { color: colors.textPrimary }]}>
-        {title}
-      </Text>
-      {detail ? <Text style={[styles.stateDetail, { color: colors.textTertiary }]}>
-        {detail}
-      </Text> : null}
-      {action && onAction ? (
-        <Pressable onPress={onAction} style={styles.stateAction}>
-          <Text style={{ color: colors.accent }}>{action}</Text>
-        </Pressable>
-      ) : null}
+      <EmptyState
+        busy={loading}
+        icon={icon}
+        tone={tone}
+        title={title}
+        detail={detail}
+        action={action && onAction ? { label: action, onPress: onAction } : undefined}
+      />
     </View>
   );
 }
@@ -1082,15 +1080,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   protectedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  uninstallButton: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "flex-start",
-  },
   copyCard: {
     minHeight: 78,
     borderWidth: 1,
@@ -1137,20 +1126,6 @@ const styles = StyleSheet.create({
   state: {
     flex: 1,
     minHeight: 180,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    gap: 7,
-  },
-  stateTitle: {
-    ...TypeScale.body,
-    fontFamily: Typography.uiFontMedium,
-    textAlign: "center",
-  },
-  stateDetail: { ...TypeScale.compact, textAlign: "center", maxWidth: 360 },
-  stateAction: {
-    minHeight: 44,
-    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
