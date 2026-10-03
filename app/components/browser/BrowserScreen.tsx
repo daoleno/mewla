@@ -266,14 +266,16 @@ export function BrowserScreen() {
     ...resources.filter((r) => r.id !== selected?.id).map((resource): ActionMenuItem => ({
       key: `switch:${resource.id}`, label: `Switch to ${resource.name}`, icon: "swap-horizontal-outline",
       detail: resource.state === "running" ? "Open" : "Closed",
+      // Closed browsers can't start until the server finishes setup.
+      disabled: Boolean(reason) && resource.state !== "running",
       onPress: () => void run("open", () => open(resource)),
     })),
     ...(resources.length > 0 && resources.length < 8 ? [{
-      key: "new", label: "New browser", icon: "add-circle-outline", detail: "Separate sign-ins, like Work",
+      key: "new", label: "New browser", icon: "add-circle-outline", detail: "Separate sign-ins", disabled: Boolean(reason),
       onPress: () => void run("open", () => open(null, `${DEFAULT_BROWSER_NAME} ${resources.length + 1}`)),
     } satisfies ActionMenuItem] : []),
     ...(selected && mine ? [{
-      key: "release", label: "Stop controlling", icon: "hand-left-outline", detail: "Agents can continue",
+      key: "release", label: "Stop controlling", icon: "hand-left-outline",
       onPress: () => void run("control", async () => { await viewer.current?.release(); setMine(false); }),
     } satisfies ActionMenuItem] : []),
     ...(selected && mine ? [{ key: "dialog", label: "Page dialog", icon: "chatbox-outline", onPress: () => void run("dialog", () => command("dialog_status")) } satisfies ActionMenuItem] : []),
@@ -299,7 +301,7 @@ export function BrowserScreen() {
   if (!currentServer) {
     return (
       <View style={[styles.root, styles.center, { backgroundColor: colors.bgPrimary }]}>
-        <EmptyState icon="server-outline" title="Choose a server" detail="Your browser lives on a server. Choose one in Settings." action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
+        <EmptyState icon="server-outline" title="No current server" detail="Choose one in Settings." action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
       </View>
     );
   }
@@ -319,8 +321,8 @@ export function BrowserScreen() {
             <EmptyState icon="construct-outline" title="Browser needs setup on this server" detail={reason}
               action={{ label: "Check again", icon: "refresh", onPress: () => void run("enter", enter), loading: busy === "enter" }} />
           ) : (
-            <EmptyState icon="globe-outline" title="Sign in once, keep using it"
-              detail={`A browser on ${serverName} that keeps your sign-ins. Agents on this server can continue with them.`}
+            <EmptyState icon="globe-outline" title="No browser yet"
+              detail={`Sign-ins are kept on ${serverName}.`}
               action={{ label: "Open browser", icon: "open-outline", onPress: () => void run("open", () => open(target)) }} />
           )}
         </View>
@@ -332,18 +334,18 @@ export function BrowserScreen() {
   const viewOnly = phase === "live" && !mine;
   const notice =
     phase === "lost" ? (
-      <InlineNotice tone="warning" title="Lost connection to the browser" detail="It's still open on the server with your sign-ins."
+      <InlineNotice tone="warning" title="Lost connection to the browser" detail={`Still open on ${serverName}.`}
         action={{ label: "Reconnect", onPress: () => void run("open", () => open(selected)), disabled: busy !== null }} />
     ) : issueNotice ? issueNotice
-    : phase === "reconnecting" ? <InlineNotice busy title="Reconnecting…" detail="Your browser is still open on the server." />
+    : phase === "reconnecting" ? <InlineNotice busy title="Reconnecting…" />
     : phase === "connecting" ? <InlineNotice busy title="Connecting…" />
     : viewOnly && offer === "takeover" ? (
       <InlineNotice tone="accent" icon={selected.control === "agent" ? "sparkles-outline" : "phone-portrait-outline"}
         title={selected.control === "agent" ? "An Agent is using this browser" : "In use on another device"}
-        detail={selected.control === "agent" ? "Take over to use it yourself. The Agent pauses until you stop." : "Take over to use it here."}
+        detail={selected.control === "agent" ? "The Agent pauses while you're in control." : undefined}
         action={{ label: "Take over", onPress: () => void run("control", acquire), disabled: busy !== null }} />
     ) : viewOnly && offer === "acquire" ? (
-      <InlineNotice title="Viewing only" detail="Agents can use this browser now."
+      <InlineNotice title="Viewing only"
         action={{ label: "Use browser", onPress: () => void run("control", acquire), disabled: busy !== null }} />
     ) : null;
   const inputStyle = [styles.input, { color: colors.textPrimary, backgroundColor: colors.inputBackground, borderColor: colors.border }];

@@ -48,7 +48,7 @@ export function NoServerState({ onOpenSettings }: { onOpenSettings(): void }) {
     <EmptyState
       icon="server-outline"
       title="No current server"
-      detail="Plugins connect to the current server. Choose one in Settings."
+      detail="Choose one in Settings."
       action={{ label: "Open Settings", onPress: onOpenSettings }}
     />
   );
@@ -58,7 +58,6 @@ export function CatalogView({
   sections,
   loading,
   error,
-  serverName,
   onRetry,
   onOpenAccount,
   onOpenService,
@@ -67,7 +66,6 @@ export function CatalogView({
   sections: PluginCatalogSections;
   loading: boolean;
   error: string;
-  serverName: string;
   onRetry(): void;
   onOpenAccount(plugin: PluginIntegration, account: PluginAccount): void;
   onOpenService(plugin: PluginIntegration): void;
@@ -79,7 +77,7 @@ export function CatalogView({
     ) : loading ? (
       <EmptyState busy title="Loading services" />
     ) : (
-      <EmptyState icon="extension-puzzle-outline" title="No services" detail="This server did not report any Plugins." action={{ label: "Try again", icon: "refresh-outline", onPress: onRetry }} />
+      <EmptyState icon="extension-puzzle-outline" title="No services" detail="This server has none to connect." action={{ label: "Try again", icon: "refresh-outline", onPress: onRetry }} />
     );
   }
   return (
@@ -101,7 +99,7 @@ export function CatalogView({
           ))}
         </ListSection>
       ) : null}
-      <ListSection title={sections.connected.length ? "Add a service" : "Services"} footer={`Accounts and credentials stay on ${serverName}.`}>
+      <ListSection title={sections.connected.length ? "Add a service" : "Services"}>
         {sections.services.map(({ plugin, accountCount }) => (
           <ListRow
             key={plugin.id}
@@ -133,7 +131,7 @@ export function CatalogView({
 
 export function CustomCatalogView({ sections, onOpenService }: { sections: PluginCatalogSections; onOpenService(plugin: PluginIntegration): void }) {
   return (
-    <ListSection footer="For services you or your organization operate. Each tool needs its own permission after connecting.">
+    <ListSection>
       {sections.custom.map(({ plugin, accountCount }) => (
         <ListRow
           key={plugin.id}
@@ -190,7 +188,7 @@ export function ConnectProgressCard({
   return (
     <ListSection
       title={phase === "verifying" ? "Verifying your account" : `Connecting ${serviceName}`}
-      footer="Your account appears here after authorization. You can leave and come back."
+      footer="You can leave and come back."
     >
       {steps.map((step) => (
         <ListRow
@@ -287,14 +285,11 @@ export function LinkedAccountView({
         <ListRow
           icon="person-circle-outline"
           title={account.name}
-          subtitle={account.identity === account.name ? undefined : account.identity || "This service does not provide an account name."}
+          subtitle={account.identity === account.name ? undefined : account.identity || undefined}
           numberOfLines={2}
         />
       </ListSection>
-      <ListSection
-        title="What Brain can do"
-        footer="Permission to use a tool never replaces your instruction to send, create or change anything."
-      >
+      <ListSection title="What Brain can do">
         {custom ? (
           <ListRow
             icon="key-outline"
@@ -328,11 +323,6 @@ export function LinkedAccountView({
           </>
         )}
       </ListSection>
-      {job && read === "allowed" ? (
-        <ListSection title="Try it">
-          <ListRow icon="chatbubble-ellipses-outline" title={job.example} numberOfLines={3} />
-        </ListSection>
-      ) : null}
       <ListSection>
         <ListRow icon="people-outline" title="Connected accounts" value={String(accountCount)} accessory="chevron" onPress={onOpenAccounts} />
         <ListRow icon="list-outline" title="Tools & activity" value={tools.total ? `${tools.allowed}/${tools.total}` : undefined} accessory="chevron" onPress={onOpenTools} />
@@ -374,7 +364,7 @@ export function ConnectOfferView({
 }) {
   return (
     <>
-      <ListSection title="Access you're granting" footer={`You choose the account in ${plugin.name}'s official sign-in. Credentials stay on ${serverName}.`}>
+      <ListSection title="Access you're granting" footer={`Credentials stay on ${serverName}.`}>
         <ListRow icon="eye-outline" title="Read and search" subtitle={job?.read} numberOfLines={3} value="Included" />
         <ListRow
           icon="create-outline"
@@ -385,7 +375,7 @@ export function ConnectOfferView({
         />
       </ListSection>
       {confirmIdentity !== null ? (
-        <ListSection title="Use the account signed in on this server?" footer="Connect copies this account's credential into Zen's private store. Future sign-ins on the server won't change this connection.">
+        <ListSection title="Use the account signed in on this server?" footer="Zen keeps its own copy. Later sign-ins on the server don't change it.">
           <ListRow icon="person-circle-outline" title={confirmIdentity || `${plugin.name} account`} subtitle={`${plugin.name} · identity verified`} />
           <View style={styles.cardActions}>
             <Button label={`Connect ${confirmIdentity || "this account"}`} variant="filled" block loading={busy} onPress={onImport} />
@@ -444,7 +434,7 @@ export function AccountsView({
         <ListRow icon="add" title="Connect another account" accessory="chevron" onPress={onConnectAnother} />
       </ListSection>
       {selected ? (
-        <ListSection footer="Future calls stop immediately. Zen removes its saved credential and revokes access where supported.">
+        <ListSection>
           <ListRow
             icon={selected.credential_removal_pending ? "refresh-outline" : "remove-circle-outline"}
             title={selected.credential_removal_pending ? "Retry credential removal" : `Disconnect ${selected.name}`}
@@ -473,7 +463,7 @@ export function PermissionsView({
 }) {
   return (
     <>
-      <ListSection title={account.name} footer="Permission to use a tool never replaces your instruction to send a message or make a change.">
+      <ListSection title={account.name}>
         {(["read", "write"] as const).map((group) => {
           const state = capabilityState(account, group);
           const label = group === "read" ? "Read and search" : "Make changes when asked";
@@ -482,7 +472,7 @@ export function PermissionsView({
               key={group}
               icon={group === "read" ? "eye-outline" : "create-outline"}
               title={label}
-              subtitle={state === "unavailable" ? "Not included in this account's authorization. Reconnect to request access." : group === "read" ? job?.read : job?.write}
+              subtitle={state === "unavailable" ? "Not granted. Reconnect to request it." : group === "read" ? job?.read : job?.write}
               numberOfLines={3}
               trailing={<Switch accessibilityLabel={label} disabled={busy || state === "unavailable"} value={state === "allowed"} onValueChange={(allowed) => onChange(group, allowed)} />}
             />
@@ -520,11 +510,11 @@ export function ToolsView({
           onPress={onRefresh}
         />
       </ListSection>
-      <ListSection title={`Tools (${tools.length})`} footer="Changed tool definitions require a new permission. Custom tools are never enabled by remote annotations.">
+      <ListSection title={`Tools (${tools.length})`} footer="A tool that changes needs permission again.">
         {tools.length ? (
           tools.map((tool) => <ToolRow key={tool.name} tool={tool} busy={busy} onToggle={(allowed) => onToggleTool(tool, allowed)} />)
         ) : (
-          <ListRow title="No tools reported" subtitle="Check the service to discover its tools." />
+          <ListRow title="No tools reported" />
         )}
       </ListSection>
       <ListSection title="Recent calls">

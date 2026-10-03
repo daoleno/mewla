@@ -92,7 +92,7 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
     return { title: "Credential removal pending", detail: "Calls are stopped. Zen still needs to remove the saved credential.", action: "disconnect", actionLabel: "Retry", tone: "danger" };
   }
   if (!account.enabled) {
-    return { title: "Paused", detail: "Brain and Workers cannot use this account.", action: "enable", actionLabel: "Resume", tone: "neutral" };
+    return { title: "Paused", detail: "Brain and Agents can't use this account.", action: "enable", actionLabel: "Resume", tone: "neutral" };
   }
   if (account.status === "authorization_required") {
     return { title: "Reconnect required", detail: `${serviceName} no longer accepts the saved authorization.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };

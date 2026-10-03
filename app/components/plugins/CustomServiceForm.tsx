@@ -34,7 +34,7 @@ export function CustomServiceForm({ plugin, busy, serverName, send, authorize }:
       <Field label="Endpoint" accessibilityLabel="Service endpoint" placeholder="https://service.example.com/mcp" value={endpoint} onChangeText={setEndpoint} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
     </ListSection>
     <ListSection title="Authorization">
-      {plugin.id === "mcp" ? <ListRow icon="open-outline" title="Sign in with browser" subtitle="Registers automatically when supported." numberOfLines={2} trailing={<Switch accessibilityLabel="Sign in with browser" value={browser} onValueChange={setBrowser} />} /> : null}
+      {plugin.id === "mcp" ? <ListRow icon="open-outline" title="Sign in with browser" trailing={<Switch accessibilityLabel="Sign in with browser" value={browser} onValueChange={setBrowser} />} /> : null}
       {!browser ? <Field label="Token" accessibilityLabel="Service token" placeholder="Optional for public services" secureTextEntry autoCapitalize="none" autoCorrect={false} value={token} onChangeText={setToken} /> : null}
     </ListSection>
     {plugin.id === "openapi" ? <ListSection title="OpenAPI document">
@@ -46,7 +46,7 @@ export function CustomServiceForm({ plugin, busy, serverName, send, authorize }:
     </ListSection>
     {error ? <InlineNotice tone="danger" title="Check the form" detail={error} style={styles.error} /> : null}
     <Button label={browser ? "Continue in browser" : "Connect service"} variant="filled" size="lg" block loading={busy} disabled={!endpoint.trim() || trust && !networks.trim()} onPress={() => void connect()} />
-    <AppText variant="caption" tone="tertiary" style={styles.note}>Custom tools need individual permission after connection. Credentials stay on {serverName}.</AppText>
+    <AppText variant="caption" tone="tertiary" style={styles.note}>Credentials stay on {serverName}. Each tool needs your permission.</AppText>
   </View>;
 }
 

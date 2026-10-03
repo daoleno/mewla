@@ -607,7 +607,7 @@ function LocalSkillsList(
       <State
         icon="server-outline"
         title="No current server"
-        detail="Skills are read from the current server. Choose one in Settings."
+        detail="Choose one in Settings."
         action="Open Settings"
         onAction={props.onOpenSettings}
       />
