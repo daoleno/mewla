@@ -42,6 +42,7 @@ import {
 import { skillsOutsidePlugins } from "../services/skillsPluginOwnership";
 import {
   createSkillsSurfaceState,
+  isPluginProvidedSkill,
   reduceSkillsSurface,
   type SkillsSurfaceSection,
 } from "../services/skillsSurfaceModel";
@@ -369,7 +370,7 @@ export default function SkillsScreen() {
   const runSkillDelete = useCallback(
     async (skill: InstalledSkill) => {
       if (!serverId || !connected || preparingMutation) return;
-      if (!skill.capability.canDelete) return;
+      if (!skill.capability.canDelete || isPluginProvidedSkill(skill)) return;
       const requestContext = skillsContextKey;
       if (currentSkillsContext.current !== requestContext) return;
       const owner = ++mutationOwner.current;
@@ -553,6 +554,11 @@ export default function SkillsScreen() {
       preparingMutation={preparingMutation}
       mutationNotice={notice}
       currentServerAvailable={Boolean(currentServer)}
+      serverName={currentServer?.name ?? ""}
+      connection={
+        serverId ? state.serverConnections[serverId] ?? "offline" : "offline"
+      }
+      projectCwd={projectCwd}
       inspectedName={inspectedName}
       inspectedCopyId={inspectedCopyId}
       inspectState={inspectState}

@@ -66,6 +66,20 @@ Settings is one grouped list:
 - **Agents**: one **Model Providers** row, which opens Model Providers: how Codex and Claude reach models (official login or your own API keys).
 - **Appearance**: one segmented control (Auto / Light / Dark). Theme lives only here.
 
+## Plugins
+
+Plugins connects outside services to the current server. A context row names that server and its connection state. **Connected** lists each active account with a status pill (Connected, Not verified, Last call failed, Reconnect required, Disabled). **Add a service** lists the reviewed services, and **Custom services** holds MCP and OpenAPI. A service page shows the service, then either the connection steps, the connected account, or the access to grant before connecting. See [Plugins](plugins.md).
+
+## Skills
+
+Skills manages the Skills that local Agents load on the current server. A context row names the server, the project the inventory was read for (or **Global only**), and the connection state. A segmented control switches between **Skills** and **Agent Plugins**:
+
+- **Skills** lists standalone Skills with search, filters and pull to refresh. Skills that an installed Agent Plugin provides are listed inside that Plugin instead, and a notice links to them. If Plugin ownership can't be read, a notice says so and offers **Retry**. Those Skills stay protected.
+- A Skill opens a detail sheet (a side panel on wide screens). Its header shows where the Skill comes from (**Standalone**, **Built-in** or **From** the Plugin) and whether it can be deleted. Deleting works on one exact copy and needs the server-built confirmation. Plugin-provided copies can't be deleted here and link to their Plugin.
+- **Agent Plugins** lists installed Agent Plugins. Each one shows its Skills, components, Agents and copies. Uninstalling removes one exact copy after confirmation and is checked against a fresh inventory.
+
+Loading, offline, empty and error states use the shared empty state with **Try again**, **Refresh** or **Open Settings**.
+
 ## Model Providers
 
 A segmented **Codex / Claude** switch picks the agent. Below it, one grouped list shows which connection that agent uses: **Official login** first, then saved Providers. Each has a radio mark, its host, model count and catalog age, and any test result. A **Key required** pill marks Providers without a credential. Each Provider's **…** opens an action menu: Models, Test connection, Edit, and Delete (confirmed). **Add** sits in the section header. Search appears only once the list is long. The Zen Provider Gateway is its own row with a status pill, and tapping it copies the endpoint.

@@ -19,9 +19,15 @@ describe("mobile chrome copy", () => {
   });
 
   test("optional descriptions do not leave empty text rows, errors remain visible", () => {
-    for (const path of ["components/skills/SkillsPresentation.tsx", "components/plugins/PluginsPresentation.tsx", "components/terminal/GitDiffStateCard.tsx", "components/terminal/SessionFilePreviewSheet.tsx"]) {
+    for (const path of ["components/terminal/GitDiffStateCard.tsx", "components/terminal/SessionFilePreviewSheet.tsx"]) {
       expect(source(path)).toContain("{detail ? <Text");
     }
+    // Skills and Agent Plugins states render through the shared EmptyState,
+    // which omits the detail row when there is no detail.
+    for (const path of ["components/skills/SkillsPresentation.tsx", "components/plugins/PluginsPresentation.tsx"]) {
+      expect(source(path)).toContain("<EmptyState");
+    }
+    expect(source("components/ui/EmptyState.tsx")).toContain("{detail ? (");
     expect(source("components/skills/SkillsPresentation.tsx")).toContain("detail={state.error}");
     expect(source("components/plugins/PluginsPresentation.tsx")).toContain("detail={props.state.error}");
     expect(source("components/terminal/GitDiffSheet.tsx")).toContain("detail={error}");

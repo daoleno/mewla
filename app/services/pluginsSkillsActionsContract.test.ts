@@ -225,4 +225,40 @@ describe("local-only Skills surface contract", () => {
     expect(screen).toContain("if (!reconciliation.removed)");
     expect(screen).toContain("mutationError ||");
   });
+  test("Skills names its server/project context and where Plugin-owned Skills live", () => {
+    expect(presentation).toContain("<ServerContextRow");
+    expect(presentation).toContain("project={props.projectCwd}");
+    expect(presentation).toContain("function OwnershipNotice");
+    expect(presentation).toContain("Plugin ownership unavailable");
+    expect(presentation).toContain('action="Try again"');
+  });
+  test("Plugin-provided copies cannot be deleted through the standalone path", () => {
+    expect(screen).toContain("isPluginProvidedSkill(skill)) return;");
+    expect(presentation).toContain("!pluginOwner;");
+  });
+});
+
+describe("Plugins connection route contract", () => {
+  const route = readFileSync(join(import.meta.dir, "../app/plugins.tsx"), "utf8");
+  const views = readFileSync(
+    join(import.meta.dir, "../components/plugins/PluginConnectionViews.tsx"),
+    "utf8",
+  );
+  test("server switches remount the page and every page shares one keyboard-aware scroll view", () => {
+    expect(route).toContain('key={currentServerId ?? "none"}');
+    expect(route.match(/<KeyboardAwareScrollView/g)?.length).toBe(1);
+    expect(route).toContain('gestureEnabled: page === "catalog"');
+  });
+  test("consent and destructive changes keep their confirmations", () => {
+    for (const title of [
+      "Disconnect this account?",
+      "Allow changes when asked?",
+      "Allow this tool?",
+      "Leave this connection?",
+    ])
+      expect(route).toContain(title);
+  });
+  test("built-in connection views contain no text input", () => {
+    expect(views).not.toContain("TextInput");
+  });
 });
