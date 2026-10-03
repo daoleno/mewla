@@ -16,7 +16,7 @@ func (m *Manager) ValidateAttachment(ctx context.Context, id string) error {
 		return err
 	}
 	if r.Resource == nil || !r.Resource.AllowAgents {
-		return errors.New("Enable managed Agent access for this Browser first")
+		return errors.New("Agents can't use this Browser right now; open it in Zen Browser first")
 	}
 	if r.Resource.State != "running" {
 		return errors.New("Open this Browser before attaching a task")

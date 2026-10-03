@@ -221,7 +221,9 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		if len(m.entries) >= 8 {
 			return Response{}, errors.New("This server supports up to eight browser profiles")
 		}
-		e := newEntry(Resource{ID: uuid.NewString(), Name: name, CreatedAt: time.Now().UTC(), State: "stopped", Control: "idle"})
+		// Agents of the same server owner may use a new browser by default; the
+		// lease still decides who types, and grant(false) remains a revocation.
+		e := newEntry(Resource{ID: uuid.NewString(), Name: name, CreatedAt: time.Now().UTC(), State: "stopped", Control: "idle", AllowAgents: true})
 		if err := m.save(e); err != nil {
 			return Response{}, err
 		}
