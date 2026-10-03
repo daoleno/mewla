@@ -2518,14 +2518,13 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 	prompt := fw.sentCalls[0].text
 	for _, want := range []string{
 		"Delegated executor: codex", brainWorkerRoleContract,
-		"Read AGENTS.md and soul.md", "Managed worktree root:", "Zen CLI:",
-		"Brain owns orchestration", "a running Worker does not need progress polling",
+		"Read AGENTS.md before continuing", "Managed worktree root:", "Zen CLI:",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("bootstrap missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{"agent spawn", "agent capture", "Zen CLI quick reference", "Current memory:", "Current profile notes:"} {
+	for _, unwanted := range []string{"agent spawn", "agent capture", "Zen CLI quick reference", "Current memory:", "Current profile notes:", "soul.md", "Brain owns orchestration"} {
 		if strings.Contains(prompt, unwanted) {
 			t.Fatalf("bootstrap retains %q", unwanted)
 		}
@@ -2544,14 +2543,10 @@ func TestServiceBootstrapPromptReferencesPrivateWorkspaceWithoutEmbeddingIt(t *t
 	}
 	memorySecret := "MEMORY_SECRET_SHOULD_NOT_BE_IN_BOOTSTRAP"
 	profileSecret := "PROFILE_SECRET_SHOULD_NOT_BE_IN_BOOTSTRAP"
-	soulSecret := "SOUL_SECRET_SHOULD_NOT_BE_IN_BOOTSTRAP"
 	if err := os.WriteFile(store.memoryPath(), []byte("# Brain Memory\n\n"+memorySecret+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(store.profileNotesPath(), []byte("# Brain Profile\n\n"+profileSecret+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(store.soulPath(), []byte("# Brain Soul\n\n"+soulSecret+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
@@ -2559,29 +2554,26 @@ func TestServiceBootstrapPromptReferencesPrivateWorkspaceWithoutEmbeddingIt(t *t
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
-	snapshot, err := service.EnsureHostSnapshot()
-	if err != nil {
+	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)
-	}
-	if !strings.Contains(snapshot.Memory, memorySecret) || !strings.Contains(snapshot.Profile, profileSecret) {
-		t.Fatalf("snapshot should still expose stored memory/profile: %#v", snapshot)
 	}
 	if len(fw.sentCalls) != 1 {
 		t.Fatalf("bootstrap sends = %#v", fw.sentCalls)
 	}
 	prompt := fw.sentCalls[0].text
-	for _, want := range []string{
-		"Read AGENTS.md and soul.md", "zen brain context --json", "zen brain playbooks --json",
-		"current.md", "memory.md", "profile.md", "policies/delegation.md", "policies/engine.md", "policies/handoff.md",
-	} {
+	for _, want := range []string{"Read AGENTS.md", "zen brain context --json", "current.md"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("bootstrap prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	for _, want := range []string{"zen brain playbooks --json", "memory.md", "profile.md", "policies/delegation.md", "policies/engine.md", "policies/handoff.md"} {
+		if !strings.Contains(productWorkspaceInstructions, want) {
+			t.Fatalf("AGENTS.md missing on-demand reference %q", want)
 		}
 	}
 	for _, unexpected := range []string{
 		memorySecret,
 		profileSecret,
-		soulSecret,
 		"Current memory:",
 		"Current profile notes:",
 	} {
@@ -2885,10 +2877,8 @@ func TestServiceNewChatReplacesHostAndStartsFreshThread(t *testing.T) {
 	bootstrap := fw.sentCalls[0].text
 	for _, want := range []string{
 		brainWorkerRoleContract,
-		"Read AGENTS.md and soul.md",
-		"policies/delegation.md",
+		"Read AGENTS.md before continuing",
 		"Managed worktree root:",
-		"Brain owns orchestration",
 	} {
 		if !strings.Contains(bootstrap, want) {
 			t.Fatalf("new chat bootstrap missing %q:\n%s", want, bootstrap)
@@ -3111,13 +3101,13 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCalendarPromptContract(t, string(instructions))
-	if !strings.Contains(string(instructions), "Keep a human-readable handoff projection in current.md; database Work/Event state is authoritative") {
+	if !strings.Contains(string(instructions), "current.md is the short handoff for active work; database Work/Event state is authoritative") {
 		t.Fatalf("workspace instructions do not describe current.md:\n%s", instructions)
 	}
 	if !strings.Contains(string(instructions), "Read policies/delegation.md before delegating") {
 		t.Fatalf("workspace instructions do not describe policies:\n%s", instructions)
 	}
-	if !strings.Contains(string(instructions), "Discover optional playbooks") {
+	if !strings.Contains(string(instructions), "zen brain playbooks --json") {
 		t.Fatalf("workspace instructions do not describe playbooks:\n%s", instructions)
 	}
 	for _, want := range []string{

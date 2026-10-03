@@ -2,6 +2,7 @@ package brain
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,10 +31,11 @@ func TestNewStoreCreatesExactlyOneCanonicalManagedBlock(t *testing.T) {
 	if got := mustReadFile(t, store.profileNotesPath()); string(got) != defaultProfileNotes {
 		t.Fatalf("profile.md = %q, want %q", got, defaultProfileNotes)
 	}
-	if got := mustReadFile(t, store.soulPath()); string(got) != defaultSoulPrinciples {
-		t.Fatalf("soul.md differs from shipped default:\n%s", got)
+	for _, retired := range []string{"soul.md", "playbooks/README.md", "playbooks/brain-flows.md"} {
+		if _, err := os.Stat(filepath.Join(store.WorkspacePath(), retired)); !os.IsNotExist(err) {
+			t.Fatalf("fresh workspace created retired %s: %v", retired, err)
+		}
 	}
-	assertFileMode(t, store.soulPath(), 0o600)
 }
 
 func TestCleanHomeShipsAutonomousPolicyAndRepairPreservesPrivateOverlays(t *testing.T) {
@@ -92,7 +94,7 @@ func TestCleanHomeShipsAutonomousPolicyAndRepairPreservesPrivateOverlays(t *test
 	} {
 		for name, template := range map[string]string{
 			"AGENTS.md": productWorkspaceInstructions, "delegation.md": productDelegationPolicy,
-			"engine.md": productEnginePolicy, "handoff.md": productHandoffPolicy, "soul.md default": defaultSoulPrinciples,
+			"engine.md": productEnginePolicy, "handoff.md": productHandoffPolicy,
 		} {
 			if strings.Contains(template, privateFact) {
 				t.Fatalf("shipped %s contains private fact %q", name, privateFact)
@@ -349,34 +351,6 @@ func TestNewStorePreservesEveryExistingNonEmptySoul(t *testing.T) {
 	}
 }
 
-func TestNewStoreInitializesExactlyEmptySoulAndThenPreservesIt(t *testing.T) {
-	root := t.TempDir()
-	workspace := filepath.Join(root, "workspace")
-	if err := os.MkdirAll(workspace, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(workspace, "soul.md")
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := NewStore(root); err != nil {
-		t.Fatal(err)
-	}
-	if got := mustReadFile(t, path); string(got) != defaultSoulPrinciples {
-		t.Fatalf("empty soul differs from shipped default:\n%s", got)
-	}
-	assertFileMode(t, path, 0o600)
-
-	fixed := time.Date(2005, 6, 7, 8, 9, 10, 0, time.UTC)
-	if err := os.Chtimes(path, fixed, fixed); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := NewStore(root); err != nil {
-		t.Fatal(err)
-	}
-	assertBytesAndMtime(t, path, []byte(defaultSoulPrinciples), fixed)
-}
-
 func TestHousekeepingReportsOnlySortedChangedPaths(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -407,47 +381,107 @@ func TestHousekeepingReportsOnlySortedChangedPaths(t *testing.T) {
 	}
 }
 
-func TestHousekeepingCreatesMissingSoulOnceAndPreservesPrivateSoul(t *testing.T) {
+func TestRetiredShippedDefaultsAreDeletedAndEditedCopiesReported(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(store.soulPath()); err != nil {
-		t.Fatal(err)
+	workspace := store.WorkspacePath()
+	fixtures := map[string]string{
+		"soul.md":                  "testdata/retired/soul.md",
+		"playbooks/README.md":      "testdata/retired/playbooks-README.md",
+		"playbooks/brain-flows.md": "testdata/retired/brain-flows.md",
+		"current.md":               "testdata/retired/current.md",
+		"worklog/README.md":        "testdata/retired/worklog-README.md",
+	}
+	for target, fixture := range fixtures {
+		if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(target)), mustReadFile(t, fixture), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	service := NewService(store, nil, nil)
-
-	first, err := service.Housekeeping()
+	report, err := service.Housekeeping()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.SoulPath != "soul.md" || !equalStrings(first.ChangedPaths, []string{"soul.md"}) {
-		t.Fatalf("first report = %+v", first)
+	for _, retired := range []string{"soul.md", "playbooks/README.md", "playbooks/brain-flows.md"} {
+		if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(retired))); !os.IsNotExist(err) {
+			t.Fatalf("shipped default %s was not deleted: %v", retired, err)
+		}
+	}
+	if got := string(mustReadFile(t, store.currentPath())); got != defaultCurrentContext {
+		t.Fatalf("legacy current.md seed not upgraded:\n%s", got)
+	}
+	if got := string(mustReadFile(t, store.worklogReadmePath())); got != defaultWorklogReadme {
+		t.Fatalf("legacy worklog README not upgraded:\n%s", got)
+	}
+	want := []string{"current.md", "playbooks/README.md", "playbooks/brain-flows.md", "soul.md", "worklog/README.md"}
+	if !equalStrings(report.ChangedPaths, want) {
+		t.Fatalf("changed paths = %v, want %v", report.ChangedPaths, want)
+	}
+
+	private := []byte("# Brain Soul\n\nPRIVATE_SOUL_SENTINEL\n")
+	soulPath := filepath.Join(workspace, "soul.md")
+	if err := os.WriteFile(soulPath, private, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixed := time.Date(2006, 7, 8, 9, 10, 11, 0, time.UTC)
+	if err := os.Chtimes(soulPath, fixed, fixed); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(workspace, "downloads"), 0o700); err != nil {
+		t.Fatal(err)
 	}
 	second, err := service.Housekeeping()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(second.ChangedPaths) != 0 {
-		t.Fatalf("second changed paths = %v, want none", second.ChangedPaths)
+	assertBytesAndMtime(t, soulPath, private, fixed)
+	if len(second.ChangedPaths) != 0 || !equalStrings(second.UnmanagedPaths, []string{"downloads/", "soul.md"}) {
+		t.Fatalf("second report changed=%v unmanaged=%v", second.ChangedPaths, second.UnmanagedPaths)
 	}
+}
 
-	private := []byte("# Private Soul\n\nPRIVATE_SOUL_SENTINEL\n")
-	if err := os.WriteFile(store.soulPath(), private, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	fixed := time.Date(2006, 7, 8, 9, 10, 11, 0, time.UTC)
-	if err := os.Chtimes(store.soulPath(), fixed, fixed); err != nil {
-		t.Fatal(err)
-	}
-	third, err := service.Housekeeping()
+func TestContextReportsNoteBudgetsWithoutInliningPrivateNotes(t *testing.T) {
+	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(third.ChangedPaths) != 0 {
-		t.Fatalf("third changed paths = %v, want none", third.ChangedPaths)
+	large := "# Current\n\nPRIVATE_CURRENT_SENTINEL\n" + strings.Repeat("finished item\n", 2000)
+	if err := os.WriteFile(store.currentPath(), []byte(large), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	assertBytesAndMtime(t, store.soulPath(), private, fixed)
+	service := NewService(store, nil, nil)
+	context, err := service.Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "PRIVATE_CURRENT_SENTINEL") || strings.Contains(string(raw), "Brain Memory") {
+		t.Fatalf("context inlined private notes:\n%s", raw)
+	}
+	if len(raw) > 4096 {
+		t.Fatalf("idle context is %d bytes", len(raw))
+	}
+	var current WorkspaceNote
+	for _, note := range context.Notes {
+		if note.Path == "current.md" {
+			current = note
+		}
+	}
+	if current.Bytes != int64(len(large)) || !current.OverBudget {
+		t.Fatalf("current note = %+v", current)
+	}
+	report, err := service.Housekeeping()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(report.RecommendedNextSteps, "\n"), "Compact current.md") {
+		t.Fatalf("over-budget current.md not flagged: %v", report.RecommendedNextSteps)
+	}
 }
 
 func lateFailureFixture(t *testing.T) (root, agentsPath, handoffPath string, workers []byte, fixed time.Time) {

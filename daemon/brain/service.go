@@ -598,13 +598,15 @@ func (s *Service) Context() (BrainContext, error) {
 	if err != nil {
 		return BrainContext{}, err
 	}
+	notes, err := s.store.WorkspaceNotes()
+	if err != nil {
+		return BrainContext{}, err
+	}
 	return BrainContext{
 		ThreadID:          snapshot.ChatThreadID,
 		Workspace:         snapshot.Workspace,
 		WorklogPath:       snapshot.WorklogPath,
-		Current:           snapshot.Current,
-		Memory:            snapshot.Memory,
-		Profile:           snapshot.Profile,
+		Notes:             notes,
 		Personality:       snapshot.Personality,
 		CurrentWork:       snapshot.CurrentWork,
 		WorkBacklog:       snapshot.WorkBacklog,
@@ -644,9 +646,21 @@ func (s *Service) Housekeeping() (HousekeepingReport, error) {
 			delegated = append(delegated, worker)
 		}
 	}
+	unmanaged, err := s.store.unmanagedWorkspaceEntries()
+	if err != nil {
+		return HousekeepingReport{}, err
+	}
 	steps := []string{}
-	if strings.TrimSpace(context.Current) == "" || strings.Contains(context.Current, "None recorded yet.") {
-		steps = append(steps, "Update current.md with the active objective, decisions, open threads, and next step.")
+	if current, err := os.ReadFile(s.store.currentPath()); err == nil && string(current) == defaultCurrentContext {
+		steps = append(steps, "Record the active objective, decisions and next step in current.md.")
+	}
+	for _, note := range context.Notes {
+		if note.OverBudget {
+			steps = append(steps, fmt.Sprintf("Compact %s to under %d KiB (now %d KiB): delete finished, stale or superseded entries; Work/Event state and worklog keep history.", note.Path, note.BudgetBytes>>10, note.Bytes>>10))
+		}
+	}
+	if len(unmanaged) > 0 {
+		steps = append(steps, "Delete or relocate unmanaged workspace entries; put scratch in TMPDIR and reports in worklog/.")
 	}
 	if len(delegated) > 0 {
 		steps = append(steps, "Inspect open delegated Zen Workers and close only those whose larger task is complete and reported.")
@@ -654,7 +668,8 @@ func (s *Service) Housekeeping() (HousekeepingReport, error) {
 	return HousekeepingReport{
 		Workspace:            s.store.WorkspacePath(),
 		CurrentPath:          "current.md",
-		SoulPath:             "soul.md",
+		Notes:                context.Notes,
+		UnmanagedPaths:       unmanaged,
 		PolicyPaths:          []string{"policies/delegation.md", "policies/engine.md", "policies/handoff.md"},
 		PlaybookPaths:        seedPlaybookPaths(),
 		WorklogPath:          s.store.WorklogPath(),
@@ -672,7 +687,12 @@ type workspaceFileIdentity struct {
 
 func workspaceContentIdentity(store *Store) (map[string]workspaceFileIdentity, error) {
 	identities := make(map[string]workspaceFileIdentity)
-	for _, relativePath := range standardWorkspaceRelativePaths() {
+	paths := standardWorkspaceRelativePaths()
+	for relativePath := range retiredWorkspaceDefaults {
+		paths = append(paths, relativePath)
+	}
+	paths = append(paths, retiredBrainFlowsPath)
+	for _, relativePath := range paths {
 		path := filepath.Join(store.WorkspacePath(), filepath.FromSlash(relativePath))
 		raw, exists, err := readOptionalFile(path)
 		if err != nil {
@@ -3592,10 +3612,7 @@ Delegated executor: %s (%s via %s)
 Host executor capabilities: %s
 Zen CLI: %s
 
-Read AGENTS.md and soul.md before the first response or work. Load policies/delegation.md, policies/engine.md and policies/handoff.md when their workflow applies.
-Use current.md and zen brain context --json to recover active work. Read memory.md and profile.md only when relevant. Discover optional playbooks with zen brain playbooks --json.
-Brain owns orchestration. Work/Event state persists facts and decisions; a running Worker does not need progress polling.
-Keep private reports in the Brain Worklog; return delegated reports in the Worker result unless persistence is requested.
+Recover active work from current.md and zen brain context --json.
 
 Current personality:
 %s
@@ -3641,7 +3658,7 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID, deleg
 		"Previous host executor: " + strings.TrimSpace(previousExecutorID),
 		"Current host executor: " + strings.TrimSpace(nextExecutorID),
 		"Delegated executor: " + strings.TrimSpace(delegatedExecutorID),
-		"Read AGENTS.md, soul.md, policies/handoff.md and current.md; use zen brain context --json for authoritative Work state.",
+		"Read AGENTS.md, policies/handoff.md and current.md; use zen brain context --json for authoritative Work state.",
 		"Preserve pending Event identities and next actions. A Host change does not authorize restarting or polling Workers.",
 	}
 	for _, worker := range workers {

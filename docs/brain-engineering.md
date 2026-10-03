@@ -41,8 +41,8 @@ existing catalog in `daemon/brain/playbooks.go`:
 | `slice-work` | A high-risk first experiment, coherent decomposition, or a repeatedly failing approach. |
 | `delegate-brief` | A context-bearing brief, workflow-specific proof, and evidence-based acceptance. |
 
-`brain-flows` remains the workflow entry. Brain discovers paths with the normal
-`zen brain playbooks --json` catalog and reads only relevant files. This is a
+The managed `AGENTS.md` names when each method helps. Brain discovers paths
+with the normal `zen brain playbooks --json` catalog and reads only relevant files. This is a
 Brain skill expressed through native playbooks, not four new user commands.
 
 `templates/policies/delegation.md` directs Brain to carry the selected method
@@ -56,10 +56,13 @@ choose a method; Brain must still exercise judgment and compose the brief.
 
 `NewStore` and `Service.Housekeeping` use the production reconciliation path.
 Managed `AGENTS.md` and policy blocks are updated; text outside them is retained.
-Nonempty soul, profile, memory, current context and worklogs remain user-owned.
+Nonempty profile, memory, current context and worklogs remain user-owned.
 
-Playbooks are seed files, not managed policy blocks, except for the existing
-`brain-flows` routing block. The four exact shipped seeds from revision
+Playbooks are seed files, not managed policy blocks. The retired `brain-flows`
+playbook, `playbooks/README.md` and `soul.md` are deleted only when they are
+byte-identical shipped defaults; an edited `brain-flows` loses only its retired
+product block, and other edited copies are reported by `zen brain gc` as
+unmanaged entries. The four exact shipped seeds from revision
 `4c72f7b` are recognized by SHA-256 and upgraded. Any byte change, including
 whitespace or an appended note, preserves the entire unmarked file. Unknown
 older versions are also preserved. Symlink overrides are not replaced or

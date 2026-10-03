@@ -2028,10 +2028,10 @@ func TestControlAppBrainContextReturnsStructuredContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("context type = %T", resp.Context)
 	}
-	if context.ThreadID != "thread-main" || !strings.Contains(context.Current, "Ship context.") {
+	if context.ThreadID != "thread-main" || len(context.Notes) != 3 || context.Notes[0].Path != "current.md" || context.Notes[0].Bytes == 0 {
 		t.Fatalf("context = %#v", context)
 	}
-	if len(context.Playbooks) != 5 {
+	if len(context.Playbooks) != 4 {
 		t.Fatalf("playbooks = %#v", context.Playbooks)
 	}
 }
@@ -2052,7 +2052,7 @@ func TestControlAppBrainPlaybooksReturnsCatalog(t *testing.T) {
 	if !ok {
 		t.Fatalf("playbooks type = %T", resp.Playbooks)
 	}
-	if len(catalog.Playbooks) != 5 {
+	if len(catalog.Playbooks) != 4 {
 		t.Fatalf("catalog = %#v", catalog)
 	}
 	foundAlign := false

@@ -30,6 +30,6 @@ func brainHostActivationPrompt() string {
 		"Brain Host activation contract:",
 		"This is private Zen product policy for the current Host process generation.",
 		brainWorkerRoleContract,
-		"Read AGENTS.md for current product guidance before continuing, even in a resumed Session. Reload the relevant policy or playbook when needed; do not load the whole catalog. Preserve private overlays and active Work/Event state.",
+		"Read AGENTS.md before continuing, even in a resumed Session; load a policy or playbook only when its workflow applies. Preserve active Work/Event state.",
 	}, "\n")
 }

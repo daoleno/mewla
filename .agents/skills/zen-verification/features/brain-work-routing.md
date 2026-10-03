@@ -21,7 +21,7 @@ Preconditions:
 - The checkout contains the source and test anchors in `features/manifest.json`.
 
 - **Context.** Run the lever. The report contains a passing `brain_context` runtime check, a separate runtime daemon identity, a host executor ID, a delegated executor ID, and a Worker count.
-- **Playbooks.** Read the same report. The report contains a passing `brain_playbooks` preflight and the `brain-flows` catalog entry. This does not prove Skill loading.
+- **Playbooks.** Read the same report. The report contains a passing `brain_playbooks` preflight and the `delegate-brief` catalog entry. This does not prove Skill loading.
 - **Privacy.** Inspect the report. It contains no raw `current`, transcript, or Work objective field.
 
 ## Gotchas

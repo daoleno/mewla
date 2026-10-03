@@ -352,19 +352,7 @@ func (s *Store) writeHostProviderTranscriptLocked(host HostSession, providerSess
 }
 
 func (s *Store) snapshotLocked(workers []WorkerRef) (Snapshot, error) {
-	memory, err := readTextFile(s.memoryPath())
-	if err != nil {
-		return Snapshot{}, err
-	}
 	profile, err := s.readProfileLocked()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	profileNotes, err := readTextFile(s.profileNotesPath())
-	if err != nil {
-		return Snapshot{}, err
-	}
-	current, err := readTextFile(s.currentPath())
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -372,9 +360,6 @@ func (s *Store) snapshotLocked(workers []WorkerRef) (Snapshot, error) {
 		workers = []WorkerRef{}
 	}
 	return Snapshot{
-		Memory:      memory,
-		Profile:     profileNotes,
-		Current:     current,
 		Personality: firstNonEmpty(profile.Personality, defaultPersonality),
 		Workers:     workers,
 		Workspace:   s.WorkspacePath(),
@@ -394,6 +379,9 @@ func (s *Store) ensureFiles() error {
 		return err
 	}
 	if err := s.reconcileManagedWorkspace(); err != nil {
+		return err
+	}
+	if err := s.retireLegacyWorkspaceDefaults(); err != nil {
 		return err
 	}
 	if err := ensureFile(s.memoryPath(), []byte("# Brain Memory\n\n")); err != nil {
@@ -532,10 +520,6 @@ func (s *Store) statePath() string {
 
 func (s *Store) memoryPath() string {
 	return filepath.Join(s.WorkspacePath(), "memory.md")
-}
-
-func (s *Store) soulPath() string {
-	return filepath.Join(s.WorkspacePath(), "soul.md")
 }
 
 func (s *Store) remindersPath() string {
@@ -781,57 +765,12 @@ Record user-authored preferences, background, and working style here.
 
 const defaultCurrentContext = `# Current Brain Context
 
-## Active Objective
-
-None recorded yet.
-
-## Decisions
-
-- Brain's current host executor is the orchestrator for planning, delegation, review, and final synthesis.
-- Delegated Zen Workers use the configured Delegated Executor unless the user explicitly asks for a different executor for that session.
-- delegated_executor controls delegated execution and ordinary non-Brain session creation.
-- Use a different executor for a session only when the user explicitly mentions or asks for it.
-- Switching Brain host executors preserves the visible chat and uses private handoff context.
-
-## Open Threads
-
-- Summarize only context useful for executor handoff. Durable status, ownership, next action, and wait state live in Brain Work.
-
-## Next
-
-- Refresh this projection when handoff context materially changes; do not duplicate Work/Event state manually.
+Active objectives, decisions and next actions needed to resume after a Host change. Work/Event state is authoritative; keep this short and delete finished items.
 `
 
 const defaultWorklogReadme = `# Brain Worklog
 
-This directory stores one Markdown record for each problem, feature, fix, or workflow Brain tracks for the user. Use it as a durable archive and as lightweight task progress state.
-
-Suggested filename: ` + "`YYYY-MM-DD-short-title.md`" + `
-
-## Task Record Template
-
-` + "```markdown" + `
-# <Task Title>
-
-- Status: planned | in_progress | blocked | done
-- Date: YYYY-MM-DD
-
-## Context
-
-## Objective
-
-## Todo
-
-- [ ]
-
-## Progress
-
-## Verification
-
-## Result
-
-## Follow-up
-` + "```" + `
+Private Brain reports, one file per topic (` + "`YYYY-MM-DD-topic.md`" + `). Write one only when the record will be read again; delete records that no longer matter.
 `
 
 func writeJSONFile(path string, value any) error {

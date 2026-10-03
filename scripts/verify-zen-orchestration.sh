@@ -230,7 +230,7 @@ if [[ "$doctor_pass" == true ]]; then
   run_json brain_playbooks "$zen_bin" brain playbooks --json --state-dir "$state_dir" || true
   run_json brain_context "$zen_bin" brain context --json --state-dir "$state_dir" || true
   run_json worker_list "$zen_bin" worker list --json --state-dir "$state_dir" || true
-  if [[ -s "${output_files[brain_playbooks]:-}" ]] && jq -e '.playbooks.playbooks | map(.name) | index("brain-flows") != null' "${output_files[brain_playbooks]}" >/dev/null 2>&1; then brain_playbooks_pass=true; else failures+=("brain_playbooks: brain-flows is not available"); fi
+  if [[ -s "${output_files[brain_playbooks]:-}" ]] && jq -e '.playbooks.playbooks | map(.name) | index("delegate-brief") != null' "${output_files[brain_playbooks]}" >/dev/null 2>&1; then brain_playbooks_pass=true; else failures+=("brain_playbooks: delegate-brief is not available"); fi
   if [[ -s "${output_files[brain_context]:-}" ]] && jq -e '.context.host_executor.id != null and .context.delegated_executor.id != null' "${output_files[brain_context]}" >/dev/null 2>&1; then brain_context_pass=true; else failures+=("brain_context: executor contract is incomplete"); fi
   if [[ -s "${output_files[worker_list]:-}" ]] && jq -e '.workers | type == "array"' "${output_files[worker_list]}" >/dev/null 2>&1; then
     worker_list_pass=true

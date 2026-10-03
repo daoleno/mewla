@@ -30,9 +30,6 @@ func TestWorkspaceTreeListsDefaultMarkdownFiles(t *testing.T) {
 	if !workspaceTreeHasFile(tree.Entries, "profile.md") {
 		t.Fatal("WorkspaceTree() missing profile.md")
 	}
-	if !workspaceTreeHasFile(tree.Entries, "soul.md") {
-		t.Fatal("WorkspaceTree() missing soul.md")
-	}
 	if !workspaceTreeHasFile(tree.Entries, "current.md") {
 		t.Fatal("WorkspaceTree() missing current.md")
 	}
@@ -72,8 +69,8 @@ func TestWorkspaceTreeListsDefaultMarkdownFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WorkspaceTree(playbooks) error = %v", err)
 	}
-	if !workspaceTreeHasFile(playbooks.Entries, "playbooks/brain-flows.md") {
-		t.Fatal("WorkspaceTree() missing playbooks/brain-flows.md")
+	if !workspaceTreeHasFile(playbooks.Entries, "playbooks/delegate-brief.md") {
+		t.Fatal("WorkspaceTree() missing playbooks/delegate-brief.md")
 	}
 }
 
@@ -138,28 +135,10 @@ func TestNewStoreCreatesMinimalUserOwnedProfile(t *testing.T) {
 	}
 }
 
-func TestNewStoreCreatesDefaultSoulWithPrivateMode(t *testing.T) {
-	store, err := NewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewStore() error = %v", err)
-	}
-
-	raw, err := os.ReadFile(store.soulPath())
-	if err != nil {
-		t.Fatalf("read soul.md: %v", err)
-	}
-	if string(raw) != defaultSoulPrinciples {
-		t.Fatalf("soul.md differs from shipped default:\n%s", raw)
-	}
-	assertFileMode(t, store.soulPath(), 0o600)
-	for _, marker := range []string{
-		"user's language",
-		"concise paragraphs",
-		"Separate facts from assumptions",
-		"meaningful verification",
-	} {
-		if !strings.Contains(string(raw), marker) {
-			t.Fatalf("soul.md missing %q:\n%s", marker, raw)
+func TestWorkspaceCommunicationGuidanceLivesInAgents(t *testing.T) {
+	for _, marker := range []string{"## Communication", "user's language", "Lead with the answer", "Separate facts, assumptions and recommendations"} {
+		if !strings.Contains(productWorkspaceInstructions, marker) {
+			t.Fatalf("AGENTS.md missing %q", marker)
 		}
 	}
 }
@@ -296,9 +275,6 @@ func TestNewStoreKeepsStatePersonalityWithoutImportingStateNotes(t *testing.T) {
 	if snapshot.Personality != "focused and concise" {
 		t.Fatalf("snapshot personality = %q, want state personality", snapshot.Personality)
 	}
-	if snapshot.Profile != defaultProfileNotes {
-		t.Fatalf("snapshot profile = %q, want workspace profile %q", snapshot.Profile, defaultProfileNotes)
-	}
 	stateProfileAfter, err := os.ReadFile(stateProfilePath)
 	if err != nil {
 		t.Fatalf("read state profile after NewStore: %v", err)
@@ -317,7 +293,7 @@ func TestGeneratedWorkspaceDirectRepositoryAndDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"AGENTS.md", "policies/delegation.md"} {
+	for _, path := range []string{"AGENTS.md"} {
 		raw, err := os.ReadFile(filepath.Join(store.WorkspacePath(), path))
 		if err != nil {
 			t.Fatal(err)
@@ -355,9 +331,8 @@ func TestNewStoreEnsuresWorkspaceCommunicationRules(t *testing.T) {
 		t.Fatalf("AGENTS.md does not contain one managed block:\n%s", content)
 	}
 	for _, marker := range []string{
-		"read soul.md once",
-		"re-read only if it changes",
 		"## Role",
+		"## Communication",
 		"## Context",
 		"## Lifecycle",
 		"## Workspace",
@@ -395,10 +370,8 @@ func TestNewStoreEnsuresCurrentAndPolicyDocs(t *testing.T) {
 	}
 	for _, marker := range []string{
 		"# Current Brain Context",
-		"## Active Objective",
-		"## Decisions",
-		"## Open Threads",
-		"## Next",
+		"Work/Event state is authoritative",
+		"delete finished items",
 	} {
 		if !strings.Contains(string(current), marker) {
 			t.Fatalf("current.md missing %q:\n%s", marker, current)
@@ -485,16 +458,8 @@ func TestNewStoreEnsuresWorklogReadme(t *testing.T) {
 	content := string(raw)
 	for _, marker := range []string{
 		"# Brain Worklog",
-		"YYYY-MM-DD-short-title.md",
-		"- Status:",
-		"- Date:",
-		"## Context",
-		"## Objective",
-		"## Todo",
-		"## Progress",
-		"## Verification",
-		"## Result",
-		"## Follow-up",
+		"YYYY-MM-DD-topic.md",
+		"delete records that no longer matter",
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("worklog README missing %q:\n%s", marker, content)
