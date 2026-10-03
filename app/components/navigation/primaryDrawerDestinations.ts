@@ -24,14 +24,14 @@ export interface PrimaryDrawerDestination {
 /**
  * Drawer destinations, grouped by owner. The first group acts on the current
  * server; the second is the app itself. Each destination appears exactly
- * once, and every row pushes a screen.
+ * once, and every row pushes a screen. Browser is temporarily hidden from the
+ * drawer; its route and server resources remain.
  */
 export const PRIMARY_DRAWER_GROUPS: readonly (readonly PrimaryDrawerDestination[])[] = [
   [
     { key: "plugins", label: "Plugins", pathname: "/plugins", icon: "plugins" },
     { key: "skills", label: "Skills", pathname: "/skills", icon: "skills" },
     { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
-    { key: "browser", label: "Browser", pathname: "/browser", icon: "browser" },
     {
       key: "resources",
       label: "Resources",

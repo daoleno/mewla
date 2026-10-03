@@ -1,8 +1,9 @@
 # Persistent Browser (candidate)
 
 Browser is a user-owned named resource on the **current Zen server**. Opening
-Browser from the drawer opens the default browser on that server (the remembered
-one, else a running one, else the oldest). Tapping **Open browser** the first time
+the `/browser` route opens the default browser on that server (the remembered
+one, else a running one, else the oldest). The Browser entry is temporarily
+hidden from the navigation drawer; its route and server resources remain. Tapping **Open browser** the first time
 creates one named "Browser"; there is no naming or permission step. Sign in on the
 host through the viewer. Agent tasks on the same server can use that browser: there
 is no per-Agent or per-brand permission switch, and leases only resolve who is

@@ -31,7 +31,7 @@ function rows(node: ts.Node) {
 describe("primary drawer destinations", () => {
   test("lists each destination exactly once, current-server tools before Settings", () => {
     expect(PRIMARY_DRAWER_GROUPS.map((group) => group.map((item) => item.label))).toEqual([
-      ["Plugins", "Skills", "Stats", "Browser", "Resources"],
+      ["Plugins", "Skills", "Stats", "Resources"],
       ["Settings"],
     ]);
     for (const key of ["key", "label", "pathname", "icon"] as const) {
