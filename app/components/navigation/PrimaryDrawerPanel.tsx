@@ -54,6 +54,9 @@ const DRAWER_ROW_ICONS = {
   plugins: NavPluginsIcon,
   skills: NavSkillsIcon,
   stats: NavStatsIcon,
+  browser: ({ color, size }: { color: string; size: number }) => (
+    <Ionicons name="globe-outline" color={color} size={size} />
+  ),
   resources: NavResourcesIcon,
   settings: NavSettingsIcon,
 } satisfies Record<PrimaryDrawerIcon, unknown>;

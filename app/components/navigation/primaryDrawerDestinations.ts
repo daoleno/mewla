@@ -2,6 +2,7 @@ export type PrimaryDrawerIcon =
   | "plugins"
   | "skills"
   | "stats"
+  | "browser"
   | "resources"
   | "settings";
 
@@ -9,6 +10,7 @@ export type PrimaryDrawerPathname =
   | "/plugins"
   | "/skills"
   | "/stats"
+  | "/browser"
   | "/resources"
   | "/settings";
 
@@ -29,6 +31,7 @@ export const PRIMARY_DRAWER_GROUPS: readonly (readonly PrimaryDrawerDestination[
     { key: "plugins", label: "Plugins", pathname: "/plugins", icon: "plugins" },
     { key: "skills", label: "Skills", pathname: "/skills", icon: "skills" },
     { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
+    { key: "browser", label: "Browser", pathname: "/browser", icon: "browser" },
     {
       key: "resources",
       label: "Resources",

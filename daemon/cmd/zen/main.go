@@ -21,6 +21,7 @@ import (
 
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/zen/daemon/browser"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/connections"
@@ -106,6 +107,8 @@ func run(args []string, stderr io.Writer) error {
 			return runBrainCommand(args[1:], stderr)
 		case "calendar":
 			return runCalendarCommand(args[1:], stderr)
+		case "browser":
+			return runBrowserCommand(args[1:], stderr)
 		case "connections":
 			return runConnectionsCommand(args[1:], stderr)
 		case "telegram":
@@ -371,6 +374,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
+	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend())
+	if err != nil {
+		return fmt.Errorf("initialize Browser: %w", err)
+	}
+	defer browserManager.Close()
+	srv.SetBrowser(browserManager)
+	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager
 	srv.SetTelegram(telegramManager)
@@ -1001,6 +1011,7 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.Name, "name", "", "visible Worker name")
 	fs.StringVar(&req.Executor, "executor", "", "configured executor name")
+	fs.StringVar(&req.BrowserID, "browser", "", "explicit persistent Browser resource to attach")
 	fs.StringVar(&req.Command, "command", "", "explicit command override (delegated client policy still applies)")
 	fs.StringVar(&req.ModelID, "model", "", "single-launch model override")
 	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "single-launch reasoning override")

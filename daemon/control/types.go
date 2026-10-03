@@ -7,6 +7,7 @@ import (
 
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/zen/daemon/browser"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/lifecycle"
@@ -19,6 +20,8 @@ import (
 const SocketName = "zen.sock"
 
 type Request struct {
+	BrowserID            string                                 `json:"browser_id,omitempty"`
+	BrowserRequest       *browser.Request                       `json:"browser_request,omitempty"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
@@ -93,6 +96,7 @@ type PairingInfo struct {
 }
 
 type Response struct {
+	Browser            *browser.Response                        `json:"browser,omitempty"`
 	Connections        *connections.Response                    `json:"connections,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	WorkerDefaults     *work.WorkerDefaults                     `json:"worker_defaults,omitempty"`

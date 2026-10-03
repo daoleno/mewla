@@ -21,6 +21,7 @@ const (
 
 // Worker holds the current state and metadata for a single execution session.
 type Worker struct {
+	BrowserID           string      `json:"browser_id,omitempty"`
 	ID                  string      `json:"id"`
 	Name                string      `json:"name"`
 	Project             string      `json:"project,omitempty"`

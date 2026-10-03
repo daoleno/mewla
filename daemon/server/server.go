@@ -28,6 +28,7 @@ import (
 	"github.com/daoleno/zen/daemon/attachment"
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/zen/daemon/browser"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/codexctl"
@@ -82,6 +83,7 @@ type notificationPusher interface {
 
 // Server handles WebSocket connections from the zen mobile app.
 type Server struct {
+	browsers                     *browser.Manager
 	connections                  *connections.Manager
 	auth                         *auth.Manager
 	watcher                      *watcher.Watcher
@@ -180,8 +182,9 @@ type codexConversationSubscription struct {
 }
 
 type authenticatedClient struct {
-	deviceID string
-	revoked  atomic.Bool
+	browserOwner *browser.Owner
+	deviceID     string
+	revoked      atomic.Bool
 }
 
 type terminalCleanupState uint8
@@ -253,7 +256,8 @@ func (o *terminalCleanupOwner) Drain() {
 }
 
 type clientDetachWork struct {
-	conn *websocket.Conn
+	browserOwner *browser.Owner
+	conn         *websocket.Conn
 }
 
 // New creates a WebSocket server.
@@ -305,6 +309,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 }
 
 type clientMessage struct {
+	BrowserID            string                                 `json:"browser_id"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request"`
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
 	ServiceID            string                                 `json:"service_id"`
@@ -391,6 +396,8 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
+	mux.HandleFunc("/browser", s.handleBrowser)
+	mux.HandleFunc("/browser/viewer", s.handleBrowserViewer)
 	mux.HandleFunc("/plugins/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		if s.connections == nil {
 			http.Error(w, "Plugins unavailable", http.StatusServiceUnavailable)
@@ -624,16 +631,23 @@ func (s *Server) removeClientLocked(
 	delete(s.active, conn)
 	delete(s.writes, conn)
 	delete(s.codexSubs, conn)
+	var browserOwner *browser.Owner
+	if owner != nil {
+		browserOwner = owner.browserOwner
+	}
 	return clientDetachWork{
-		conn: conn,
+		browserOwner: browserOwner,
+		conn:         conn,
 	}
 }
 
 func (s *Server) completeClientDetach(work clientDetachWork) {
-	if work.conn == nil {
-		return
+	if work.conn != nil {
+		_ = work.conn.Close()
 	}
-	_ = work.conn.Close()
+	if work.browserOwner != nil && s.browsers != nil {
+		s.browsers.ReleaseOwner(*work.browserOwner)
+	}
 }
 
 func (s *Server) clientCount() int {
@@ -1009,9 +1023,10 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			connectionID = strings.TrimSpace(raw.ProfileID)
 		}
 		workerID, routeSnap, persist, err := s.createSessionWithProfiles(raw.TargetID, watcher.CreateSessionOptions{
-			Cwd:     raw.Cwd,
-			Command: command,
-			Name:    raw.Name,
+			BrowserID: raw.BrowserID,
+			Cwd:       raw.Cwd,
+			Command:   command,
+			Name:      raw.Name,
 		}, connectionID, raw.ModelID)
 		if err != nil && (!persist.Applied || strings.TrimSpace(workerID) == "") {
 			code := "create_session_failed"
@@ -3318,7 +3333,11 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 func (s *Server) broadcast(data []byte) {
 	s.mu.Lock()
 	conns := make([]*websocket.Conn, 0, len(s.clients))
-	for conn := range s.clients {
+	for conn, owner := range s.clients {
+		// Viewer sockets have an independent bounded writer/protocol.
+		if owner != nil && owner.browserOwner != nil {
+			continue
+		}
 		conns = append(conns, conn)
 	}
 	s.mu.Unlock()
