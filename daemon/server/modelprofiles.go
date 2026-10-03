@@ -723,6 +723,17 @@ func (s *Server) sendModelProfileError(conn *websocket.Conn, requestID string, e
 }
 
 func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.CreateSessionOptions, profileID, modelID string) (string, *modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error) {
+	if opts.BrowserID != "" {
+		if err := s.browsers.ValidateAttachment(context.Background(), opts.BrowserID); err != nil {
+			return "", nil, modelprofiles.PersistResult{}, err
+		}
+		opts.ProgressEnv = true
+		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"ZEN_STATE_DIR": s.auth.StorageDir(), "ZEN_WORKER_ID": ""})
+		id := opts.BrowserID
+		opts.PrepareLaunch = func(command string) (string, error) {
+			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), s.auth.StorageDir(), id)
+		}
+	}
 	owner := s.modelProfiles()
 	if owner == nil {
 		workerID, err := s.watcher.CreateSession(preferredTarget, opts)

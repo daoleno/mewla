@@ -4265,13 +4265,15 @@ func (w *Watcher) SendAction(sessionID, action string) error {
 }
 
 type CreateSessionOptions struct {
-	Cwd         string
-	Command     string
-	Name        string
-	Detached    bool
-	Hidden      bool
-	Env         map[string]string
-	ProgressEnv bool
+	BrowserID     string
+	PrepareLaunch func(string) (string, error)
+	Cwd           string
+	Command       string
+	Name          string
+	Detached      bool
+	Hidden        bool
+	Env           map[string]string
+	ProgressEnv   bool
 	// PrepareWorkspace applies the provider adapter before starting a delegated process.
 	PrepareWorkspace func(command, cwd string, env map[string]string) (string, error)
 	Delegated        bool
@@ -4366,6 +4368,13 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 				}
 			}()
 		}
+	}
+	if opts.PrepareLaunch != nil {
+		command, err := opts.PrepareLaunch(opts.Command)
+		if err != nil {
+			return "", err
+		}
+		opts.Command = command
 	}
 	applyProviderTmuxIsolation(&opts, w)
 
@@ -4522,6 +4531,7 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 		w.resourceManager().Bind(target, opts.resource.Unit)
 	}
 	worker := &classifier.Worker{
+		BrowserID: opts.BrowserID,
 		ID:        target,
 		Name:      formatWorkerName(createdSessionName(opts), target),
 		Project:   projectNameFromPath(cwd),

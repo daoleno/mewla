@@ -35,6 +35,7 @@ import {
 } from "../../../services/providers";
 
 interface CreateTerminalInput {
+  browserId?: string;
   cwd: string;
   command: string;
   name: string;
@@ -227,6 +228,7 @@ export function useTerminalSessionActions({
         const selection = await resolveLaunchSelection(serverId, input.command);
         if (!isCurrentServer(serverId)) return;
         const pending = wsClient.createSession(serverId, {
+          browserId: input.browserId,
           targetId: workerId,
           cwd: input.cwd,
           command: input.command,

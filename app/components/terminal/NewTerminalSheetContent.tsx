@@ -1,4 +1,5 @@
 import React from "react";
+import { BrowserAttachmentPicker } from "../browser/BrowserAttachmentPicker";
 import {
   ScrollView,
   StyleSheet,
@@ -11,6 +12,8 @@ import {
 } from "./NewTerminalQuickLaunchSection";
 
 interface NewTerminalSheetContentProps {
+  browserId?: string;
+  onBrowserChange(value?: string): void;
   title: string;
   command: string;
   submitting: boolean;
@@ -29,6 +32,8 @@ interface NewTerminalSheetContentProps {
 }
 
 export function NewTerminalSheetContent({
+  browserId,
+  onBrowserChange,
   title,
   command,
   submitting,
@@ -54,6 +59,7 @@ export function NewTerminalSheetContent({
       <AppText variant="title" style={styles.title}>
         {title}
       </AppText>
+      <BrowserAttachmentPicker value={browserId} onChange={onBrowserChange} />
       <NewTerminalQuickLaunchSection
         command={command}
         cwd={cwd}

@@ -677,6 +677,7 @@ export class MultiServerWebSocketClient {
   createSession(
     serverId: string,
     options?: {
+      browserId?: string;
       targetId?: string;
       cwd?: string;
       command?: string;
@@ -777,6 +778,7 @@ export class MultiServerWebSocketClient {
         {
           type: "create_session",
           request_id: requestId,
+          ...(options?.browserId ? { browser_id: options.browserId } : {}),
           target_id: options?.targetId,
           cwd: options?.cwd,
           command: options?.command,

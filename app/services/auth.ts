@@ -36,6 +36,8 @@ export interface LocalDeviceIdentity {
 
 export type AuthPurpose =
   | "zen-connect"
+  | "zen-browser"
+  | `zen-browser-view:${string}`
   | "zen-upload"
   | "zen-probe"
   | "zen-session-file";

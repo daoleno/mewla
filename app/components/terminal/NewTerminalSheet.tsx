@@ -41,6 +41,7 @@ interface NewTerminalSheetProps {
     command: string;
     name: string;
     serverId?: string;
+    browserId?: string;
   }): void;
 }
 
@@ -56,6 +57,7 @@ export function NewTerminalSheet({
   onSubmit,
 }: NewTerminalSheetProps) {
   const { isCurrentServer } = useCurrentServer();
+  const [browserId, setBrowserId] = useState<string>();
   const [form, setForm] = useState<NewTerminalSheetFormState>(() =>
     createNewTerminalSheetFormState({
       cwd: initialCwd,
@@ -83,6 +85,7 @@ export function NewTerminalSheet({
       invalidateDirectoryRequests();
       return;
     }
+    setBrowserId(undefined);
     setForm(
       createNewTerminalSheetFormState({
         cwd: initialCwd,
@@ -134,6 +137,7 @@ export function NewTerminalSheet({
     if (!serverId || !isCurrentServer(serverId)) return;
     onSubmit({
       ...input,
+      browserId,
       serverId,
     });
   };
@@ -230,6 +234,8 @@ export function NewTerminalSheet({
         />
       ) : (
         <NewTerminalSheetContent
+          browserId={browserId}
+          onBrowserChange={setBrowserId}
           title={title}
           command={form.command}
           submitting={submitting}

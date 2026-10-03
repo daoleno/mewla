@@ -12,6 +12,7 @@ import (
 
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/zen/daemon/browser"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/connections"
@@ -55,6 +56,7 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
+	browsers          *browser.Manager
 	connections       *connections.Manager
 	resourceSampler   *watcher.ResourceSampler
 	auth              *auth.Manager
@@ -82,6 +84,8 @@ const delegatedInitialReadinessBudget = 45 * time.Second
 
 func (a *controlApp) HandleControlRequest(req control.Request) control.Response {
 	switch strings.TrimSpace(req.Type) {
+	case "browser":
+		return a.handleBrowserControl(req)
 	case "connections":
 		if req.ConnectionRequest == nil {
 			return control.ErrorResponse("invalid_request", "Plugin request is required")
@@ -582,6 +586,17 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		PrepareWorkspace: work.PrepareDelegatedWorkspace,
 		Delegated:        !req.Hidden,
 		Env:              progressEnvForStateDir(a.stateDir),
+	}
+	if req.BrowserID != "" {
+		if err := a.browsers.ValidateAttachment(context.Background(), req.BrowserID); err != nil {
+			a.recordSpawnWorkFailure(ownedWork, err, autoCreatedWork)
+			return control.ErrorResponse("browser_attachment", err.Error())
+		}
+		createOpts.BrowserID = req.BrowserID
+		createOpts.Env["ZEN_WORKER_ID"] = ""
+		createOpts.PrepareLaunch = func(command string) (string, error) {
+			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), a.stateDir, req.BrowserID)
+		}
 	}
 	var routeSnap *modelprofiles.WireSessionSnapshot
 	var routePersist modelprofiles.PersistResult
