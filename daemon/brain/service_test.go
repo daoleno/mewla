@@ -1250,7 +1250,7 @@ func TestBDD_ZEN003_BusyBrainDefersUntilProviderTurnEnds(t *testing.T) {
 		t.Fatalf("pending review delivered through wrong Host: %+v", lease)
 	}
 	if len(fw.sentCalls) != 2 || !strings.Contains(fw.sentCalls[1].text, event.ID) ||
-		!strings.Contains(fw.sentCalls[0].text, brainWorkerRoleContract) {
+		!strings.Contains(fw.sentCalls[0].text, "Brain Host activation contract:") {
 		t.Fatalf("Host calls=%+v, want activation then terminal-triggered review %s", fw.sentCalls, event.ID)
 	}
 }
@@ -1737,7 +1737,7 @@ func TestServiceSnapshotMissingTmuxResumePreservesChatThreadIdentity(t *testing.
 		t.Fatalf("resume must preserve the Host and send one private activation: killed=%#v sent=%#v", fw.killed, fw.sentCalls)
 	}
 	if activation := fw.sentCalls[0].text; !strings.Contains(activation, "Brain Host activation contract:") ||
-		!strings.Contains(activation, brainWorkerRoleContract) ||
+		strings.Contains(activation, brainWorkerRoleContract) ||
 		strings.Contains(activation, "You are Brain inside zen") {
 		t.Fatalf("native-resume activation = %q", activation)
 	}
@@ -2517,7 +2517,7 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 	}
 	prompt := fw.sentCalls[0].text
 	for _, want := range []string{
-		"Delegated executor: codex", brainWorkerRoleContract,
+		"Delegated executor: codex",
 		"Read AGENTS.md before continuing", "Managed worktree root:", "Zen CLI:",
 	} {
 		if !strings.Contains(prompt, want) {
@@ -2686,8 +2686,8 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 		t.Fatal("handoff embeds private current.md instead of reading its current version")
 	}
 	for _, want := range []string{
-		"Brain host executor handoff:", "Previous host executor: grok",
-		"Current host executor: codex", "Delegated executor: grok",
+		"Brain host executor handoff:", "changed from grok to codex",
+		"delegated executor: grok",
 		"AGENTS.md", "current.md", "policies/handoff.md", "pending Event identities",
 	} {
 		if !strings.Contains(handoff, want) {
@@ -2876,7 +2876,6 @@ func TestServiceNewChatReplacesHostAndStartsFreshThread(t *testing.T) {
 	}
 	bootstrap := fw.sentCalls[0].text
 	for _, want := range []string{
-		brainWorkerRoleContract,
 		"Read AGENTS.md before continuing",
 		"Managed worktree root:",
 	} {

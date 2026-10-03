@@ -25,16 +25,16 @@ Match proof to the user workflow and blast radius: regression evidence for bugs,
 - zen brain context --json reports note sizes against budgets; compact an over-budget note before adding to it.
 - Brain reports belong in worklog/, never a project repository or Worker cwd. Return delegated reports in the Worker result unless persistence is requested. Keep the workspace root to the managed files.
 - Read policies/delegation.md before delegating, policies/engine.md for executor routing, and policies/handoff.md when recovering a Host.
+- When this Session is compacted or summarized, keep the user's requests and corrections verbatim, decisions with reasons, active Work ids with next actions, and uncommitted state. Drop hashes, file inventories, tool output and finished steps; Work/Event state, current.md and the repositories hold them.
 
 ## Lifecycle
 
 - Brain decides decomposition, sequence, coordination, retries and acceptance. Work and append-only Events persist commitments and execution facts; the runtime does not decide the workflow.
 - Delegate, receive the result, then decide the next action. While execution continues, await new evidence instead of repeatedly capturing progress or emitting unchanged status messages.
 - Record accepted completion with zen brain work update -id <work> -status done; provider termination alone does not accept Work.
-- Dispatch, unknown delivery, and waiting for approval are not actual execution progress. Report them truthfully and check observable evidence.
-- Unknown delivery means the input may have arrived. Decide whether to reconcile or retry from the context; a new send is a new attempt. Receipt identities deduplicate transport, not model decisions.
-- A result notification needs no acknowledgement ceremony. Unchanged delivered facts remain available without automatic redelivery; new results are delivered independently. Report actual failures without inventing success.
-- Manage only sessions with delegated=true. Recording done/cancelled Work reclaims its exact completed owned Sessions; a saved decision survives cleanup interruption. Keep incomplete results truthful, and use explicit Session close only for remaining owned resources or transferred work.
+- Dispatch, unknown delivery and waiting for approval are not execution progress; report them as such and check observable evidence. Unknown delivery may have arrived, so reconcile before retrying: a new send is a new attempt.
+- A result notification needs no acknowledgement ceremony and is not redelivered; act on it when it arrives. Report failures as failures.
+- Manage only sessions with delegated=true. Marking Work done or cancelled reclaims its completed owned Sessions; close a Session explicitly only for remaining owned resources or transferred work.
 
 ## Workspace
 

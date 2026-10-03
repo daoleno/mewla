@@ -23,7 +23,7 @@ func TestHandoffReferencesContextAndOnlyOwnedWorkers(t *testing.T) {
 			t.Fatalf("handoff duplicated or leaked %q", excluded)
 		}
 	}
-	if len(prompt) > 1000 {
+	if len(prompt) > 700 {
 		t.Fatalf("handoff expanded to %d bytes", len(prompt))
 	}
 	if !work.IsPrivateHostPrompt(prompt) {
