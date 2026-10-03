@@ -110,6 +110,8 @@ export class BrowserViewer {
       resource(value: BrowserResource): void;
       /** Socket liveness; status strings stay informational. */
       connection?(state: "live" | "lost"): void;
+      /** Whether this viewer holds a server-issued input lease. */
+      lease?(held: boolean): void;
     },
   ) {}
   async connect() {
@@ -125,6 +127,8 @@ export class BrowserViewer {
       if (this.closed) return;
       this.handlers.status("Viewing");
       this.handlers.connection?.("live");
+      // Fresh control state for this connection; cached state may predate a drop.
+      socket.send(JSON.stringify({ type: "ping" }));
       this.timer = setInterval(() => {
         if (this.closed || socket.readyState !== WebSocket.OPEN) return;
         socket.send(JSON.stringify({ type: "ping" }));
@@ -144,12 +148,16 @@ export class BrowserViewer {
         this.pending.delete(message.request_id);
         if (pending.revision !== this.revision) { pending.reject(new Error("Control changed")); return; }
         if (message.error) {
+          if (this.lease) this.handlers.lease?.(false);
           this.lease = undefined;
           this.handlers.status(message.error);
           pending.reject(new Error(message.error));
         } else {
           const result: BrowserResponse = message.response;
-          if (result.lease) this.lease = result.lease;
+          if (result.lease) {
+            if (!this.lease) this.handlers.lease?.(true);
+            this.lease = result.lease;
+          }
           if (result.resource) this.handlers.resource(result.resource);
           pending.resolve(result);
         }

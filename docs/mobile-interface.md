@@ -82,7 +82,7 @@ Loading, offline, empty and error states use the shared empty state with **Try a
 
 ## Browser
 
-Browser manages reusable browsers on the current server: sign in once, then Agent tasks can reuse those sign-ins. The list shows server context, each browser's state and Agent access, and a create row; the viewer keeps one primary control action (Take control / Release control / Reconnect). Errors use readable cards with a single recovery and collapsed details. See [persistent-browser.md](persistent-browser.md).
+Browser opens the current server's default browser straight into the viewer: page view, address bar and Tabs. The app requests input only when nobody is in control. When an Agent or another device is in control it offers Take over. Switching, New browser, Close, Delete and Connection details live in the options menu. A dropped view reconnects up to three times before showing Reconnect. Agent tasks on the same server can use the browser with no per-Agent switch. See [persistent-browser.md](persistent-browser.md).
 
 ## Model Providers
 

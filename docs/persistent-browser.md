@@ -1,9 +1,12 @@
 # Persistent Browser (candidate)
 
-Browser is a user-owned named resource on the **current Zen server**. Open Browser
-from the drawer without an Agent task, create a profile, open it, take control,
-and sign in on the host. Enable managed Agent access deliberately for that profile.
-Closing the viewer or finishing a task releases input; it does not stop the
+Browser is a user-owned named resource on the **current Zen server**. Opening
+Browser from the drawer opens the default browser on that server (the remembered
+one, else a running one, else the oldest). Tapping **Open browser** the first time
+creates one named "Browser"; there is no naming or permission step. Sign in on the
+host through the viewer. Agent tasks on the same server can use that browser: there
+is no per-Agent or per-brand permission switch, and leases only resolve who is
+typing at a given moment. Closing the viewer or finishing a task releases input; it does not stop the
 browser or delete its cookies. Stop ends the runtime. Delete profile is a separate
 confirmed destructive operation. Use different names/profiles for accounts or
 projects that must remain separate. Site expiry and reauthentication still apply.
@@ -18,12 +21,16 @@ This is a page viewport, not an entire desktop: native browser chrome, file pick
 extension windows and device-bound passkeys are outside the current viewer.
 Google/MFA acceptance has not been established by the local synthetic login test.
 
-The Browser page leads with the current server and each browser's state: Closed,
-Open, Agent is using it, In use on another device, You're in control, or Needs
-restart. Each card has one primary **Open browser** action, an explicit Agent
-access switch, Close, and a confirmed Delete. In the viewer the primary action is
-Take control, Release control, or Reconnect after the view drops; address, tab and
-key tools appear only while this phone holds control. Failures (server without
+The Browser page is the viewer: the page view, an address bar with Tabs and keys,
+and nothing else on the main surface. Switching browsers, New browser, Stop
+controlling, the page dialog, Close browser, confirmed Delete and Connection
+details are in the header options menu. The app asks for input only after the
+connection's first fresh state shows nobody in control. Input is enabled only once
+the server grants a lease. When an Agent or another device holds control, the page
+shows who is using it and **Take over**. A dropped view reconnects automatically up
+to three times (1 s, 2 s, 4 s), then offers one Reconnect action. Leaving the page
+or backgrounding the app releases this phone's lease and keeps the browser, its
+sign-ins and any task running. Failures (server without
 Browser, pairing rejected, unreachable server, control taken, restart required,
 non-JSON responses) are shown as readable cards with one recovery action; the raw
 message and HTTP status stay behind a collapsed Details row.
@@ -65,8 +72,12 @@ recovery still belongs to Chrome.
 
 ## Managed Agent attachment
 
-After enabling managed Agents for an open Browser, select that resource in the
-normal new-session sheet and launch Codex or Claude. No global provider/MCP
+Open browsers on the current server are listed in the normal new-session sheet.
+The remembered default browser is preselected when it is running and the command
+can attach it (Codex or Claude). Other commands launch without a browser unless one
+was chosen explicitly. Opening a browser from the app also grants it to Agents on
+this server once, so browsers created before this default keep working with the
+existing grant check. No global provider/MCP
 configuration is changed. Zen injects the selected resource into that invocation's
 stdio MCP configuration and supplies the real managed task identity. Unsupported
 providers or conflicting command-level MCP overrides return an explicit error.
@@ -95,12 +106,13 @@ cancellation allows human credentials to race unfinished automation. Leases carr
 epoch, process generation and exact target. Old queued mobile commands are
 discarded on control changes. Another Agent cannot preempt the current owner.
 Human disconnect, backgrounding, current-server switch and device revocation
-release held keys/buttons. Reconnect views the same browser but never silently
-reacquires input.
+release held keys/buttons. Reconnect views the same browser and requests input only
+when the fresh state after reconnecting shows the browser idle. It never preempts an
+Agent or device that took control in the meantime.
 
 **Security scope:** the existing daemon principal is the server owner represented
-by paired devices, not a new multi-user login model. Profile Agent access is
-explicit, but the local control socket is accessible to the owner UID. Managed
+by paired devices, not a new multi-user login model. Agent access is limited to
+the same server and owner, but the local control socket is accessible to the owner UID. Managed
 tools enforce leases; an arbitrary same-UID shell can discover loopback CDP or
 read the profile and bypass them. Loopback and mode-0700 directories are not a
 sandbox. Separate UID/network namespace/container execution would be needed for

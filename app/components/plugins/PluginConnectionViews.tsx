@@ -374,7 +374,7 @@ export function ConnectOfferView({
 }) {
   return (
     <>
-      <ListSection title="Access you’re granting" footer={`You choose the account in ${plugin.name}’s official sign-in. Credentials stay on ${serverName}.`}>
+      <ListSection title="Access you're granting" footer={`You choose the account in ${plugin.name}'s official sign-in. Credentials stay on ${serverName}.`}>
         <ListRow icon="eye-outline" title="Read and search" subtitle={job?.read} numberOfLines={3} value="Included" />
         <ListRow
           icon="create-outline"
@@ -385,7 +385,7 @@ export function ConnectOfferView({
         />
       </ListSection>
       {confirmIdentity !== null ? (
-        <ListSection title="Use the account signed in on this server?" footer="Connect copies this account’s credential into Zen’s private store. Future sign-ins on the server won’t change this connection.">
+        <ListSection title="Use the account signed in on this server?" footer="Connect copies this account's credential into Zen's private store. Future sign-ins on the server won't change this connection.">
           <ListRow icon="person-circle-outline" title={confirmIdentity || `${plugin.name} account`} subtitle={`${plugin.name} · identity verified`} />
           <View style={styles.cardActions}>
             <Button label={`Connect ${confirmIdentity || "this account"}`} variant="filled" block loading={busy} onPress={onImport} />
@@ -482,7 +482,7 @@ export function PermissionsView({
               key={group}
               icon={group === "read" ? "eye-outline" : "create-outline"}
               title={label}
-              subtitle={state === "unavailable" ? "Not included in this account’s authorization. Reconnect to request access." : group === "read" ? job?.read : job?.write}
+              subtitle={state === "unavailable" ? "Not included in this account's authorization. Reconnect to request access." : group === "read" ? job?.read : job?.write}
               numberOfLines={3}
               trailing={<Switch accessibilityLabel={label} disabled={busy || state === "unavailable"} value={state === "allowed"} onValueChange={(allowed) => onChange(group, allowed)} />}
             />
