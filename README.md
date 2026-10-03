@@ -110,7 +110,7 @@ zen worker close -id <id>
 zen brain executors --json         # Brain host and delegated executors
 zen brain use <executor>           # switch the agent that runs Brain
 zen brain set-delegated <executor> # change the default for new Workers, live
-zen brain work list --json         # durable Work
+zen brain work list --json         # open Work (-all, -full, -id for history)
 zen brain work update -id <work> -status done
 ```
 
