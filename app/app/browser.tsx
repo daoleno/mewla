@@ -1,1 +1,3 @@
-export { BrowserScreen as default } from "../components/browser/BrowserScreen";
+import { BrowserScreen } from "../components/browser/BrowserScreen";
+
+export default BrowserScreen;
