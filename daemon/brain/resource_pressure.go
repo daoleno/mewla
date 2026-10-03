@@ -113,7 +113,10 @@ func (s *Service) RouteResourcePressure(event watcher.ResourcePressureEvent) err
 		event.Consumers = event.Consumers[:len(event.Consumers)-1]
 		payload, _ = json.Marshal(event)
 	}
-	id := "resource-pressure:" + event.SampledAt.UTC().Format("20060102T150405.000000000Z")
+	id := resourcePressureWorkPrefix + event.SampledAt.UTC().Format("20060102T150405.000000000Z")
+	if err = s.supersedeResourcePressureWork(id); err != nil {
+		return err
+	}
 	_, _, err = s.store.EnsureWork(Work{ID: id, Title: "Machine resource pressure: " + event.State, Objective: "Assess the machine resource event and decide whether any Worker action is needed.", CompletionPolicy: CompletionBounded, ContextRef: "get_resource_telemetry", NextAction: "Decide whether to defer dispatch, ask a Worker to release resources, or close it. No daemon resource intervention occurred."})
 	if err != nil {
 		return err
@@ -133,6 +136,32 @@ func (s *Service) RouteResourcePressure(event watcher.ResourcePressureEvent) err
 	}
 	_, err = s.ReconcileHostLane()
 	return err
+}
+
+const resourcePressureWorkPrefix = "resource-pressure:"
+
+// supersedeResourcePressureWork cancels earlier pressure Work that Brain has
+// not engaged: each event carries the full current state, so an unreviewed
+// older transition is stale and would otherwise accumulate as open Work.
+// Work with a delivery lease, an Attempt or a Brain decision is left alone.
+func (s *Service) supersedeResourcePressureWork(currentID string) error {
+	items, err := s.store.ListWork()
+	if err != nil {
+		return err
+	}
+	cancelled := WorkCancelled
+	next := "Superseded by " + currentID + "."
+	for _, item := range items {
+		if item.ID == currentID || !strings.HasPrefix(item.ID, resourcePressureWorkPrefix) ||
+			item.Status == WorkDone || item.Status == WorkCancelled ||
+			item.AttemptSessionID != "" || item.Review == nil || item.Review.Lease != nil {
+			continue
+		}
+		if _, err := s.UpdateWork(item.ID, WorkUpdate{Status: &cancelled, NextAction: &next}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resourcePressureDetails(kind, details string) json.RawMessage {

@@ -69,3 +69,45 @@ func TestResourcePressureUsesDurableEventLaneAndKeepsPayload(t *testing.T) {
 		t.Fatal("recovery not independently queued", items)
 	}
 }
+
+func TestResourcePressureSupersedesOnlyUnengagedEarlierWork(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.SetChatState(ChatState{ThreadID: "resource-test-thread"}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store, &fakeWatcher{}, nil)
+	now := time.Now().UTC()
+	route := func(state string, at time.Time) string {
+		_ = service.RouteResourcePressure(watcher.ResourcePressureEvent{State: state, PreviousState: "normal", SampledAt: at, SnapshotEndpoint: "get_resource_telemetry"})
+		return resourcePressureWorkPrefix + at.UTC().Format("20060102T150405.000000000Z")
+	}
+	status := func(id string) WorkStatus {
+		item, err := store.Work(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return item.Status
+	}
+
+	first := route("elevated", now)
+	second := route("critical", now.Add(time.Minute))
+	if status(first) != WorkCancelled {
+		t.Fatalf("unreviewed earlier pressure Work stays %s", status(first))
+	}
+	if s := status(second); s == WorkDone || s == WorkCancelled {
+		t.Fatalf("latest pressure Work must stay open, got %s", status(second))
+	}
+
+	// A Host delivery lease means Brain is handling it; a newer event must not
+	// cancel it underneath that turn.
+	if _, claimed, err := store.ClaimNextReviewAction("host:@1"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	third := route("normal", now.Add(2*time.Minute))
+	if status(second) == WorkCancelled || status(third) == WorkCancelled {
+		t.Fatalf("engaged=%s latest=%s", status(second), status(third))
+	}
+}
