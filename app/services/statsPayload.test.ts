@@ -176,3 +176,27 @@ describe('provider-aware current-server costs', () => {
     ]);
   });
 });
+
+describe('native Claude usage from the current server', () => {
+  test('keeps native cache buckets and estimated cost without inventing subscription utilization', () => {
+    const native = {
+      id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic',
+      inputTokens: 13, outputTokens: 12, cacheRead: 100, cacheCreate: 20,
+      totalTokens: 145, reasoningTokens: 0, sessions: 1,
+      totalTokensKnown: true, tokenBreakdownKnown: true,
+      cost: 0.001, costKnown: true, costReported: 0, costEstimated: 0.001,
+      costProvenance: 'estimated', referenceProvider: 'anthropic',
+    };
+    const first = normalizeStatsPayload(wirePayload({ day: rangeWith([native]) }));
+    expect(first.ranges.day.models).toEqual([native]);
+    expect(first.ranges.day.models[0].totalTokens).toBe(13 + 12 + 100 + 20);
+    expect(first.codexSubscriptions).toEqual([]);
+    expect('claudeSubscription' in first).toBe(false);
+    // Changing canonical servers replaces the entire snapshot; old Claude
+    // history must not bleed into an empty server's ranges or cost totals.
+    const next = normalizeStatsPayload({ ...wirePayload({ day: rangeWith([]) }), serverId: 'server-b' });
+    expect(next.ranges.day.models).toEqual([]);
+    expect(next.ranges.day.totalTokens).toBe(0);
+    expect(first.ranges.day.models[0].totalTokens).toBe(145);
+  });
+});
