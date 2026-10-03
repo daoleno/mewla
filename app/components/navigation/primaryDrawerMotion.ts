@@ -28,6 +28,8 @@ export interface PrimaryDrawerMotion {
 export interface PrimaryDrawerEffects {
   /** Animate `position` toward `target`, seeding the normalized velocity. */
   settle(target: number, velocity: number): void;
+  /** Stop any settle in flight so the finger owns `position`. */
+  hold(): void;
   /** Report a target change to React. Called only when the target changes. */
   notify(target: number): void;
 }
@@ -75,8 +77,14 @@ export function requestDrawerTarget(
   commitDrawerTarget(motion, open ? 1 : 0, 0, effects);
 }
 
-export function beginDrawerDrag(motion: PrimaryDrawerMotion): void {
+export function beginDrawerDrag(
+  motion: PrimaryDrawerMotion,
+  effects: PrimaryDrawerEffects,
+): void {
   "worklet";
+  // Without this, a settle still running at activation keeps moving the
+  // drawer until the first update, which then snaps it back to `dragStart`.
+  effects.hold();
   motion.dragging.value = true;
   motion.dragStart.value = motion.position.value;
   motion.pending.value = NO_REQUEST;
@@ -124,13 +132,17 @@ export function resolveDrawerRelease(
 
 /**
  * Finish a drag, including cancelled and interrupted ones: the drawer always
- * settles to a definite target and React hears about any change.
+ * settles to a definite target and React hears about any change. A drag the
+ * system cancelled (`completed` false) was not a decision, so the drawer
+ * returns to its previous target unless an explicit request arrived meanwhile.
+ * Touches that never activated a drag change nothing.
  */
 export function endDrawerDrag(
   motion: PrimaryDrawerMotion,
   translationX: number,
   velocityX: number,
   drawerWidth: number,
+  completed: boolean,
   effects: PrimaryDrawerEffects,
 ): void {
   "worklet";
@@ -142,6 +154,10 @@ export function endDrawerDrag(
   motion.pending.value = NO_REQUEST;
   if (pending !== NO_REQUEST) {
     commitDrawerTarget(motion, pending, 0, effects);
+    return;
+  }
+  if (!completed) {
+    commitDrawerTarget(motion, motion.target.value, 0, effects);
     return;
   }
   const next = resolveDrawerRelease(motion.target.value, translationX, velocityX);

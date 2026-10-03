@@ -7,6 +7,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   ReduceMotion,
   runOnJS,
   runOnUI,
@@ -31,13 +32,15 @@ const DRAWER_ACTIVATION_DISTANCE = 12;
 /** Vertical travel that hands the touch to scrolling instead. */
 const DRAWER_VERTICAL_FAIL_DISTANCE = 5;
 const OVERLAY_ACTIVE_PROGRESS = 0.05;
-// Overdamped and clamped, matching the previous drawer's settle.
+// Overdamped and clamped, matching the previous drawer's settle. With the
+// system's reduced-motion setting on, the drawer jumps to its target; the
+// finger still moves it directly during a drag.
 const DRAWER_SPRING = {
   stiffness: 1000,
   damping: 500,
   mass: 3,
   overshootClamping: true,
-  reduceMotion: ReduceMotion.Never,
+  reduceMotion: ReduceMotion.System,
 } as const;
 
 export interface PrimaryDrawerController {
@@ -89,6 +92,10 @@ export function usePrimaryDrawerController(
           ...DRAWER_SPRING,
           velocity,
         });
+      },
+      hold() {
+        "worklet";
+        cancelAnimation(motion.position);
       },
       notify(target) {
         "worklet";
@@ -169,7 +176,7 @@ export function PrimaryDrawer({
         touchStartX.value = event.x;
       })
       .onStart(() => {
-        beginDrawerDrag(motion);
+        beginDrawerDrag(motion, effects);
         runOnJS(beginDrag)();
       })
       .onUpdate((event) => {
@@ -182,12 +189,14 @@ export function PrimaryDrawer({
             : event.translationX;
         updateDrawerDrag(motion, offsetX, drawerWidth);
       })
-      .onFinalize((event) => {
+      .onFinalize((event, success) => {
+        // `success` is false when the system cancels an active drag.
         endDrawerDrag(
           motion,
           event.translationX,
           event.velocityX,
           drawerWidth,
+          success,
           effects,
         );
       });

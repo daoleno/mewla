@@ -15,11 +15,23 @@ const WIDTH = 320;
  * Two-thread harness. UI work runs immediately or from `ui` queue; anything
  * the UI thread sends to JS (notify) waits in the `js` queue, which is how
  * runOnJS behaves while JS is busy. React's mirror is updated only from
- * notifications, exactly like the shell.
+ * notifications, exactly like the shell. `position` behaves like a
+ * Reanimated shared value: a settle animates it frame by frame until it
+ * completes, and any direct write cancels the settle.
  */
 function harness() {
+  let rendered = 0;
+  let spring: { target: number } | null = null;
   const motion: PrimaryDrawerMotion = {
-    position: { value: 0 },
+    position: {
+      get value() {
+        return rendered;
+      },
+      set value(next: number) {
+        spring = null;
+        rendered = next;
+      },
+    },
     target: { value: 0 },
     dragging: { value: false },
     dragStart: { value: 0 },
@@ -28,16 +40,24 @@ function harness() {
   const ui: Array<() => void> = [];
   const js: Array<() => void> = [];
   const mirror = { open: false };
+  const notified: number[] = [];
   const effects: PrimaryDrawerEffects = {
     settle(target) {
-      // One frame of a spring is enough for these assertions: settle later.
+      const current = { target };
+      spring = current;
+      // Queued completion: the spring reaches its target unless cancelled.
       ui.push(() => {
-        if (!motion.dragging.value && motion.target.value === target) {
-          motion.position.value = target;
+        if (spring === current) {
+          rendered = target;
+          spring = null;
         }
       });
     },
+    hold() {
+      spring = null;
+    },
     notify(target) {
+      notified.push(target);
       js.push(() => {
         mirror.open = target === 1;
       });
@@ -52,14 +72,26 @@ function harness() {
   return {
     motion,
     mirror,
+    notified,
+    /** One spring frame: halfway to the target. */
+    frame() {
+      if (spring) rendered += (spring.target - rendered) / 2;
+    },
+    /** A drag the system cancels after it became active. */
+    cancelledDrag(dx: number, velocityX: number, request?: boolean) {
+      beginDrawerDrag(motion, effects);
+      updateDrawerDrag(motion, dx, WIDTH);
+      if (request !== undefined) requestDrawerTarget(motion, request, effects);
+      endDrawerDrag(motion, dx, velocityX, WIDTH, false, effects);
+    },
     /** A JS request (menu, close button, Back) hops to the UI thread. */
     request(open: boolean) {
       ui.push(() => requestDrawerTarget(motion, open, effects));
     },
     swipe(dx: number, velocityX: number) {
-      beginDrawerDrag(motion);
+      beginDrawerDrag(motion, effects);
       updateDrawerDrag(motion, dx, WIDTH);
-      endDrawerDrag(motion, dx, velocityX, WIDTH, effects);
+      endDrawerDrag(motion, dx, velocityX, WIDTH, true, effects);
     },
     effects,
     runUi,
@@ -173,7 +205,7 @@ describe("primary drawer motion ownership", () => {
     expect(h.mirror.open).toBe(false);
   });
 
-  test("a short, slow or cancelled drag returns to where it started", () => {
+  test("a short or slow drag returns to where it started", () => {
     const h = harness();
     h.request(true);
     h.flush();
@@ -186,12 +218,12 @@ describe("primary drawer motion ownership", () => {
 
   test("a request during a drag waits for release and then wins", () => {
     const h = harness();
-    beginDrawerDrag(h.motion);
+    beginDrawerDrag(h.motion, h.effects);
     updateDrawerDrag(h.motion, WIDTH * 0.6, WIDTH);
     requestDrawerTarget(h.motion, false, h.effects); // Back while dragging.
     expect(h.motion.target.value).toBe(0);
     expect(h.motion.position.value).toBeCloseTo(0.6);
-    endDrawerDrag(h.motion, WIDTH * 0.6, 900, WIDTH, h.effects);
+    endDrawerDrag(h.motion, WIDTH * 0.6, 900, WIDTH, true, h.effects);
     h.flush();
     expect(h.motion.target.value).toBe(0);
     expect(h.motion.position.value).toBe(0);
@@ -213,14 +245,29 @@ describe("primary drawer motion ownership", () => {
 
   test("drag clamps to the drawer and ignores updates after release", () => {
     const h = harness();
-    beginDrawerDrag(h.motion);
+    beginDrawerDrag(h.motion, h.effects);
     updateDrawerDrag(h.motion, WIDTH * 3, WIDTH);
     expect(h.motion.position.value).toBe(1);
     updateDrawerDrag(h.motion, -WIDTH * 3, WIDTH);
     expect(h.motion.position.value).toBe(0);
-    endDrawerDrag(h.motion, -WIDTH * 3, -900, WIDTH, h.effects);
+    endDrawerDrag(h.motion, -WIDTH * 3, -900, WIDTH, true, h.effects);
     updateDrawerDrag(h.motion, WIDTH, WIDTH);
     expect(h.motion.position.value).toBe(0);
+  });
+
+  test("a drag that interrupts a settle owns the drawer from activation", () => {
+    const h = harness();
+    requestDrawerTarget(h.motion, true, h.effects); // Opening spring starts.
+    h.frame();
+    h.frame();
+    expect(h.motion.position.value).toBe(0.75);
+    beginDrawerDrag(h.motion, h.effects);
+    h.frame(); // A frame lands before the first pan update.
+    expect(h.motion.position.value).toBe(0.75);
+    updateDrawerDrag(h.motion, 0, WIDTH);
+    expect(h.motion.position.value).toBe(0.75);
+    h.runUi(); // The interrupted spring never completes over the finger.
+    expect(h.motion.position.value).toBe(0.75);
   });
 
   test("release thresholds match the previous drawer", () => {
@@ -239,5 +286,66 @@ describe("primary drawer motion ownership", () => {
     expect(resolveDrawerRelease(0, 90, -120)).toBe(1);
     // A real fling back still wins.
     expect(resolveDrawerRelease(1, -114, 900)).toBe(1);
+  });
+});
+
+describe("primary drawer cancellation", () => {
+  test("a long cancelled opening drag stays closed", () => {
+    const h = harness();
+    h.cancelledDrag(WIDTH * 0.8, 1500);
+    h.flush();
+    expect(h.motion.target.value).toBe(0);
+    expect(h.motion.position.value).toBe(0);
+    expect(h.mirror.open).toBe(false);
+    expect(h.notified).toEqual([]);
+  });
+
+  test("a long cancelled closing drag stays open", () => {
+    const h = harness();
+    h.request(true);
+    h.flush();
+    h.cancelledDrag(-WIDTH * 0.8, -1500);
+    h.flush();
+    expect(h.motion.target.value).toBe(1);
+    expect(h.motion.position.value).toBe(1);
+    expect(h.mirror.open).toBe(true);
+    expect(h.notified).toEqual([1]);
+  });
+
+  test("an explicit request during a cancelled drag still wins", () => {
+    const h = harness();
+    h.request(true);
+    h.flush();
+    h.cancelledDrag(-WIDTH * 0.1, 0, false); // Back or navigation mid-drag.
+    h.flush();
+    expect(h.motion.target.value).toBe(0);
+    expect(h.motion.position.value).toBe(0);
+    expect(h.mirror.open).toBe(false);
+
+    h.cancelledDrag(WIDTH * 0.1, 0, true);
+    h.flush();
+    expect(h.motion.target.value).toBe(1);
+    expect(h.mirror.open).toBe(true);
+  });
+
+  test("the next gesture after a cancellation works normally", () => {
+    const h = harness();
+    h.cancelledDrag(WIDTH * 0.8, 1500);
+    h.flush();
+    h.swipe(WIDTH * 0.8, 1200);
+    h.flush();
+    expect(h.motion.target.value).toBe(1);
+    expect(h.motion.position.value).toBe(1);
+    expect(h.mirror.open).toBe(true);
+  });
+
+  test("touches that never activated a drag change nothing", () => {
+    const h = harness();
+    endDrawerDrag(h.motion, WIDTH, 2000, WIDTH, false, h.effects);
+    endDrawerDrag(h.motion, WIDTH, 2000, WIDTH, true, h.effects);
+    h.flush();
+    expect(h.motion.target.value).toBe(0);
+    expect(h.motion.position.value).toBe(0);
+    expect(h.notified).toEqual([]);
   });
 });
