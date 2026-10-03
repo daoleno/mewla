@@ -296,6 +296,7 @@ function PluginsList(
       <PluginState
         icon="server-outline"
         title="No current server"
+        detail="Choose one in Settings."
         action="Open Settings"
         onAction={props.onOpenSettings}
       />

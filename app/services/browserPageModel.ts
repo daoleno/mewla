@@ -20,36 +20,36 @@ export function browserIssue(error: unknown, server: string): BrowserIssue | nul
   const issue = (title: string, detail: string, recovery: BrowserRecovery, tone: BrowserIssue["tone"] = "danger"): BrowserIssue =>
     ({ title, detail, recovery, tone, diagnostic });
   if (status === 404 || status === 405) {
-    return issue("Browser isn't on this server yet", `Update Zen on ${server} to keep a browser you can reuse.`, "retry", "warning");
+    return issue("Browser isn't on this server yet", `Update Zen on ${server} to use Browser.`, "retry", "warning");
   }
   if (status === 401 || status === 403) {
-    return issue("This phone needs to pair again", `${server} didn't accept this phone. Pair it again in Settings.`, "settings");
+    return issue("This phone needs to pair again", `${server} didn't accept this phone. Pair again in Settings.`, "settings");
   }
   if (status === 503) {
-    return issue("Browser is off on this server", `Browser isn't running on ${server} right now. Try again in a moment.`, "retry", "warning");
+    return issue("Browser is off on this server", "Try again in a moment.", "retry", "warning");
   }
   if (/controlled by someone else/i.test(message)) {
-    return issue("Someone else is in control", "Another device or an Agent task is using this browser. Try again after they release it.", "take_control", "warning");
+    return issue("Someone else is in control", "Another device or an Agent is using it.", "take_control", "warning");
   }
   if (/control changed|take control before/i.test(message)) {
-    return issue("You're no longer in control", "Take control again to keep browsing.", "take_control", "warning");
+    return issue("You're no longer in control", "Another device or an Agent took over.", "take_control", "warning");
   }
   if (/could not be drained|needs restart/i.test(message)) {
     return issue("This browser needs a restart", "Close it, then open it again. Your sign-ins are kept.", "restart");
   }
   if (/browser not found|invalid browser resource/i.test(message)) {
-    return issue("This browser was removed", `Refresh to see the browsers on ${server}.`, "retry", "warning");
+    return issue("This browser was removed", "Try again to open another browser.", "retry", "warning");
   }
   if (/input is busy/i.test(message)) {
     return issue("Still sending your last action", "Wait a moment, then try again.", "none", "warning");
   }
   if (/timed out|disconnected|viewer closed|connection failed/i.test(message)) {
-    return issue("Lost connection to the browser", `The browser is still open on ${server}. Reconnect to keep viewing it.`, "reconnect", "warning");
+    return issue("Lost connection to the browser", `Still open on ${server}.`, "reconnect", "warning");
   }
   if (error instanceof TypeError || /network request failed|failed to fetch/i.test(message)) {
-    return issue(`Can't reach ${server}`, "Check that the server is online and this phone has a connection.", "retry");
+    return issue(`Can't reach ${server}`, "Check the server and this phone's connection.", "retry");
   }
-  return issue("That didn't finish", "Try again. If it keeps happening, the details below can help.", "retry");
+  return issue("That didn't finish", "If it keeps failing, check Connection details in the options menu.", "retry");
 }
 
 export const DEFAULT_BROWSER_NAME = "Browser";
@@ -101,7 +101,7 @@ export function recoveryLabel(recovery: BrowserRecovery): string | null {
   switch (recovery) {
     case "retry": return "Try again";
     case "reconnect": return "Reconnect";
-    case "take_control": return "Take control";
+    case "take_control": return "Take over";
     case "settings": return "Open Settings";
     case "restart": return "Close browser";
     default: return null;

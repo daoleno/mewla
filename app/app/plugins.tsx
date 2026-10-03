@@ -274,7 +274,7 @@ function PluginCatalog({ serverId, serverName, connection, deferredName, deferRe
     <Stack.Screen options={{ title, headerLeft: () => <Button label="Back" accessibilityLabel="Back" icon="chevron-back" variant="plain" onPress={back} />, gestureEnabled: page === "catalog" }} />
     <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
       {page === "catalog" && serverId ? <ServerContextRow name={serverName} connection={connection} /> : null}
-      {deferredName ? <InlineNotice tone="warning" icon="swap-horizontal-outline" title={`Authorization saved for ${deferredName}`} detail="Choose that server in Settings to finish connecting. This server has not received it." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
+      {deferredName ? <InlineNotice tone="warning" icon="swap-horizontal-outline" title={`Authorization saved for ${deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {showError ? <InlineNotice tone={phase === "cancelled" ? "neutral" : "danger"} title={phase === "cancelled" ? "Connection cancelled" : phase === "failed" ? "Connection didn't finish" : "Request failed"} detail={error} action={page === "catalog" ? { label: "Try again", onPress: () => void send({ action: "list" }), disabled: busy } : undefined} /> : null}
       {!error && phase === "cancelled" ? <InlineNotice title="Connection cancelled" detail="You can try again." /> : null}
       {!serverId ? <NoServerState onOpenSettings={() => router.push("/settings")} /> : null}
@@ -282,7 +282,6 @@ function PluginCatalog({ serverId, serverName, connection, deferredName, deferRe
         sections={sections}
         loading={busy}
         error={catalogFailed ? error : ""}
-        serverName={serverName}
         onRetry={() => void send({ action: "list" })}
         onOpenAccount={(plugin, item) => void choose(plugin, item)}
         onOpenService={(plugin) => void choose(plugin)}

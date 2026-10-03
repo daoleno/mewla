@@ -61,6 +61,8 @@ test("Browser screen has no per-Agent permission step and gates input on the ser
   const source = await Bun.file(new URL("../components/browser/BrowserScreen.tsx", import.meta.url)).text();
   expect(source).not.toMatch(/setStatus\(|\.message\)|JSON\.stringify\(value|<Switch/);
   expect(source).toContain("browserIssue(error, serverName)");
+  // No background copy about what Agents may do later.
+  expect(source).not.toMatch(/Agents (can|on this server)/);
   expect(source).toContain("lease(held) { if (active()) setMine(held); }");
   expect(source).toContain('message.type === "input" && message.input && mine');
   // Auto-claim waits for this connection's fresh state, never cached state.
