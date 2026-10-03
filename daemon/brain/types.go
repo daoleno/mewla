@@ -33,9 +33,6 @@ type WorkerRef struct {
 }
 
 type Snapshot struct {
-	Memory            string                `json:"memory"`
-	Profile           string                `json:"profile"`
-	Current           string                `json:"current,omitempty"`
 	Personality       string                `json:"personality"`
 	CurrentWork       []CurrentWork         `json:"current_work"`
 	WorkBacklog       WorkBacklog           `json:"work_backlog"`
@@ -54,9 +51,7 @@ type BrainContext struct {
 	ThreadID          string                `json:"thread_id,omitempty"`
 	Workspace         string                `json:"workspace,omitempty"`
 	WorklogPath       string                `json:"worklog_path,omitempty"`
-	Current           string                `json:"current,omitempty"`
-	Memory            string                `json:"memory,omitempty"`
-	Profile           string                `json:"profile,omitempty"`
+	Notes             []WorkspaceNote       `json:"notes"`
 	Personality       string                `json:"personality,omitempty"`
 	CurrentWork       []CurrentWork         `json:"current_work"`
 	WorkBacklog       WorkBacklog           `json:"work_backlog"`
@@ -69,17 +64,27 @@ type BrainContext struct {
 	GeneratedAt       time.Time             `json:"generated_at"`
 }
 
+// WorkspaceNote locates a private Brain note without inlining it; Brain reads
+// the file when it is relevant. Over-budget notes need compaction.
+type WorkspaceNote struct {
+	Path        string `json:"path"`
+	Bytes       int64  `json:"bytes"`
+	BudgetBytes int64  `json:"budget_bytes"`
+	OverBudget  bool   `json:"over_budget,omitempty"`
+}
+
 type HousekeepingReport struct {
-	Workspace            string      `json:"workspace,omitempty"`
-	CurrentPath          string      `json:"current_path"`
-	SoulPath             string      `json:"soul_path"`
-	PolicyPaths          []string    `json:"policy_paths"`
-	PlaybookPaths        []string    `json:"playbook_paths"`
-	WorklogPath          string      `json:"worklog_path"`
-	OpenDelegatedWorkers []WorkerRef `json:"open_delegated_workers"`
-	ChangedPaths         []string    `json:"changed_paths"`
-	RecommendedNextSteps []string    `json:"recommended_next_steps,omitempty"`
-	GeneratedAt          time.Time   `json:"generated_at"`
+	Workspace            string          `json:"workspace,omitempty"`
+	CurrentPath          string          `json:"current_path"`
+	Notes                []WorkspaceNote `json:"notes"`
+	UnmanagedPaths       []string        `json:"unmanaged_paths,omitempty"`
+	PolicyPaths          []string        `json:"policy_paths"`
+	PlaybookPaths        []string        `json:"playbook_paths"`
+	WorklogPath          string          `json:"worklog_path"`
+	OpenDelegatedWorkers []WorkerRef     `json:"open_delegated_workers"`
+	ChangedPaths         []string        `json:"changed_paths"`
+	RecommendedNextSteps []string        `json:"recommended_next_steps,omitempty"`
+	GeneratedAt          time.Time       `json:"generated_at"`
 }
 
 type WorkspaceTree struct {

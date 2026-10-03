@@ -39,7 +39,7 @@ fi
 if [[ "$1 $2 $3" == "brain playbooks --json" ]]; then
   [[ "$mode" != "bad-json" ]] || { printf '{\n'; exit 0; }
   [[ "$mode" != "command-nonzero" ]] || exit 9
-  printf '%s\n' '{"ok":true,"playbooks":{"playbooks":[{"name":"brain-flows"}]}}'
+  printf '%s\n' '{"ok":true,"playbooks":{"playbooks":[{"name":"delegate-brief"}]}}'
   exit 0
 fi
 if [[ "$1 $2 $3" == "brain context --json" ]]; then

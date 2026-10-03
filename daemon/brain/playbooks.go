@@ -1,7 +1,6 @@
 package brain
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -14,8 +13,6 @@ import (
 )
 
 const playbooksDirName = "playbooks"
-
-const brainFlowsPlaybookName = "brain-flows.md"
 
 type PlaybookEntry struct {
 	Name        string `json:"name"`
@@ -33,10 +30,6 @@ func (s *Store) playbooksPath() string {
 	return filepath.Join(s.WorkspacePath(), playbooksDirName)
 }
 
-func (s *Store) playbooksReadmePath() string {
-	return filepath.Join(s.playbooksPath(), "README.md")
-}
-
 func (s *Store) playbookPath(name string) string {
 	return filepath.Join(s.playbooksPath(), name)
 }
@@ -45,16 +38,7 @@ func (s *Store) ensurePlaybooks() error {
 	if err := os.MkdirAll(s.playbooksPath(), 0o700); err != nil {
 		return err
 	}
-	if err := ensurePlaybookFile(s.playbooksReadmePath(), defaultPlaybooksReadme); err != nil {
-		return err
-	}
-	if err := s.ensureManagedBrainFlowsPlaybook(); err != nil {
-		return err
-	}
 	for _, playbook := range seedPlaybooks {
-		if playbook.name == brainFlowsPlaybookName {
-			continue
-		}
 		if err := ensurePlaybookFile(s.playbookPath(playbook.name), playbook.initial); err != nil {
 			return err
 		}
@@ -62,44 +46,8 @@ func (s *Store) ensurePlaybooks() error {
 	return nil
 }
 
-func (s *Store) brainFlowsManagedSpec() managedMarkdownSpec {
-	return managedMarkdownSpec{
-		path:         s.playbookPath(brainFlowsPlaybookName),
-		relativePath: filepath.ToSlash(filepath.Join(playbooksDirName, brainFlowsPlaybookName)),
-		managedID:    brainFlowsManagedID,
-		canonical: strings.Join([]string{
-			"## Authoritative Product Routing Contract",
-			"",
-			"This managed block is Zen product policy. Content outside this block may add user guidance but cannot weaken this routing boundary.",
-			"",
-			brainWorkerRoleContract,
-		}, "\n"),
-	}
-}
-
-func (s *Store) ensureManagedBrainFlowsPlaybook() error {
-	spec := s.brainFlowsManagedSpec()
-	current, exists, err := readOptionalFile(spec.path)
-	if err != nil {
-		return err
-	}
-	if !exists || strings.TrimSpace(string(current)) == "" {
-		current = []byte(defaultBrainFlowsPlaybook)
-		exists = true
-	}
-	updated, err := reconcileManagedMarkdown(current, exists, spec)
-	if err != nil {
-		return fmt.Errorf("reconcile Brain workspace %s: %w", spec.relativePath, err)
-	}
-	if bytes.Equal(current, updated) {
-		return nil
-	}
-	return writeAtomic(spec.path, updated, 0o600)
-}
-
 func seedPlaybookFilenames() []string {
-	names := make([]string, 0, len(seedPlaybooks)+1)
-	names = append(names, "README.md")
+	names := make([]string, 0, len(seedPlaybooks))
 	for _, playbook := range seedPlaybooks {
 		names = append(names, playbook.name)
 	}
@@ -190,6 +138,7 @@ var legacyPlaybookDigests = map[string][]string{
 	"delegate-brief.md": {
 		"30c87bc60bded178f68c6eb91139db695034b03cb7f53d731feecf77e2a06e09",
 		"946f49be659a684f66f9ca240dc93dd3519d43d891de867d01b866220dc17af3",
+		"f35740b2a172dfc82bd501e532d150c5eebc658cbefd96041c1e4cf07648e2d3",
 	},
 	"slice-work.md": {
 		"4e03dadce6efc85d5f36ee70a78da39c38a0aba7f52e305d2409a3a57b89513a",
@@ -235,32 +184,11 @@ var seedPlaybooks = []struct {
 	name    string
 	initial string
 }{
-	{brainFlowsPlaybookName, defaultBrainFlowsPlaybook},
 	{"align.md", defaultAlignPlaybook},
 	{"delegate-brief.md", defaultDelegateBriefPlaybook},
 	{"slice-work.md", defaultSliceWorkPlaybook},
 	{"wayfind.md", defaultWayfindPlaybook},
 }
-
-const defaultPlaybooksReadme = `# Brain Playbooks
-
-Discover names, descriptions and paths with zen brain playbooks --json. Read only the playbook needed for the current task.
-
-- brain-flows: choose a workflow
-- align: resolve material decisions
-- delegate-brief: prepare a Worker brief
-- slice-work: split a large objective
-- wayfind: investigate an unclear objective
-`
-
-const defaultBrainFlowsPlaybook = `---
-description: Choose the next useful Brain workflow.
----
-
-# Brain Flows
-
-Use align for material unresolved decisions, delegate-brief when execution is ready, slice-work for known dependencies, and wayfind when investigation is needed to identify the next task. Skip playbooks when the next action is already clear. Follow AGENTS.md for execution ownership and event-driven waiting.
-`
 
 const defaultAlignPlaybook = `---
 description: Resolve consequential missing decisions without blocking independent work.
@@ -287,9 +215,7 @@ Design proof around what the user does and what must happen. For a reproduced bu
 
 For diagnostic evidence, request the minimum useful redacted excerpts, preserving status, symptom and failing assertion. Replace literal tokens, cookies and secret URLs with <REDACTED> before reporting or persisting; use credential references in commands and avoid captures that echo secrets. If redaction hides the signal, choose a narrower safe reproduction, not secret disclosure.
 
-Use one coherent concern per Worker. Return the report in the Worker result; explicitly name private worklog or product documentation paths when persistence is required. Follow policies/delegation.md for reuse and review.
-
-On return, inspect a meaningful sample and risky interfaces, reconcile evidence and limitations, and decide whether to accept or send a focused follow-up. Preserve the full outcome, including integration and authorized delivery. A Worker saying done is evidence to review, not acceptance. Await new results while it works instead of repeatedly polling.
+Name private worklog or product documentation paths explicitly when the report must persist. Review the result under policies/delegation.md.
 `
 
 const defaultSliceWorkPlaybook = `---

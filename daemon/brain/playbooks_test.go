@@ -25,19 +25,6 @@ func TestNewStoreEnsuresSeedPlaybooks(t *testing.T) {
 		}
 	}
 
-	readme, err := os.ReadFile(store.playbooksReadmePath())
-	if err != nil {
-		t.Fatalf("read playbooks README: %v", err)
-	}
-	for _, marker := range []string{"Discover names, descriptions and paths", "zen brain playbooks --json", "Read only the playbook needed"} {
-		if !strings.Contains(string(readme), marker) {
-			t.Fatalf("playbooks README missing %q:\n%s", marker, readme)
-		}
-	}
-	if !strings.Contains(string(readme), "resolve material decisions") {
-		t.Fatalf("playbooks README missing decision-frontier catalog wording:\n%s", readme)
-	}
-
 	align, err := os.ReadFile(store.playbookPath("align.md"))
 	if err != nil {
 		t.Fatalf("read align playbook: %v", err)
@@ -62,7 +49,7 @@ func TestNewStoreEnsuresSeedPlaybooks(t *testing.T) {
 		t.Fatalf("read delegate-brief playbook: %v", err)
 	}
 	for _, marker := range []string{
-		"outcome, cwd, necessary context, acceptance criteria", "verification and expected report", "one coherent concern",
+		"outcome, cwd, necessary context, acceptance criteria", "verification and expected report",
 	} {
 		if !strings.Contains(string(delegateBrief), marker) {
 			t.Fatalf("delegate-brief playbook missing %q:\n%s", marker, delegateBrief)
@@ -99,77 +86,30 @@ func TestNewStorePreservesCustomNonProductPlaybookContent(t *testing.T) {
 	}
 }
 
-func TestNewStoreUpgradesBrainFlowsManagedContractAndPreservesUserContent(t *testing.T) {
-	t.Run("unmarked create-only seed", func(t *testing.T) {
-		root := t.TempDir()
-		path := filepath.Join(root, "workspace", "playbooks", brainFlowsPlaybookName)
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		stale := []byte("---\ndescription: Existing Brain flows.\n---\n\n# Brain Flows\n\nUse judgment when direct action is clearly the better path.\n\nUser routing note must survive.\n")
-		if err := os.WriteFile(path, stale, 0o640); err != nil {
-			t.Fatal(err)
-		}
-
-		store, err := NewStore(root)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.HasPrefix(got, stale) {
-			t.Fatalf("unmarked brain-flows content changed:\n%s", got)
-		}
-		spec := store.brainFlowsManagedSpec()
-		if strings.Count(string(got), managedStartMarker(brainFlowsManagedID)) != 1 ||
-			!bytes.Contains(got, canonicalManagedBlock(spec)) ||
-			!strings.Contains(string(got), brainWorkerRoleContract) ||
-			!strings.Contains(string(got), "Content outside this block may add user guidance but cannot weaken") {
-			t.Fatalf("authoritative block not appended:\n%s", got)
-		}
-		assertFileMode(t, path, 0o600)
-
-		before := append([]byte(nil), got...)
-		if _, err := NewStore(root); err != nil {
-			t.Fatal(err)
-		}
-		if after, err := os.ReadFile(path); err != nil || !bytes.Equal(after, before) {
-			t.Fatalf("second reconciliation changed bytes: err=%v\nbefore:\n%s\nafter:\n%s", err, before, after)
-		}
-	})
-
-	t.Run("stale managed block", func(t *testing.T) {
-		root := t.TempDir()
-		path := filepath.Join(root, "workspace", "playbooks", brainFlowsPlaybookName)
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		prefix := []byte("---\ndescription: Custom Brain flows.\n---\n\n# User Prefix\n\nKeep prefix exactly.  \n\n")
-		staleBlock := []byte(managedStartMarker(brainFlowsManagedID) + "\nold permissive product routing\n" + managedEndMarker(brainFlowsManagedID))
-		suffix := []byte("\n\n# User Suffix\n\nKeep suffix exactly.\n")
-		original := append(append(append([]byte{}, prefix...), staleBlock...), suffix...)
-		if err := os.WriteFile(path, original, 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		store, err := NewStore(root)
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := append(append(append([]byte{}, prefix...), canonicalManagedBlock(store.brainFlowsManagedSpec())...), suffix...)
-		got, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(got, want) {
-			t.Fatalf("managed brain-flows migration changed user bytes\ngot:\n%s\nwant:\n%s", got, want)
-		}
-		if bytes.Contains(got, []byte("old permissive product routing")) {
-			t.Fatalf("stale managed policy survived:\n%s", got)
-		}
-	})
+func TestRetiringEditedBrainFlowsKeepsUserNotesAndDropsProductBlock(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "workspace", "playbooks", "brain-flows.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	user := "---\ndescription: Existing Brain flows.\n---\n\n# Brain Flows\n\nUser routing note must survive.\n"
+	stale := user + "\n" + managedStartMarker(brainFlowsManagedID) + "\nold product contract\n" + managedEndMarker(brainFlowsManagedID) + "\n"
+	if err := os.WriteFile(path, []byte(stale), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(root); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != user {
+		t.Fatalf("edited brain-flows = %q, err=%v; want user notes only", got, err)
+	}
+	if _, err := NewStore(root); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := os.ReadFile(path); !bytes.Equal(again, got) {
+		t.Fatalf("second reconciliation changed bytes:\n%s", again)
+	}
 }
 
 func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
@@ -182,15 +122,15 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlaybookCatalog() error = %v", err)
 	}
-	if len(catalog.Playbooks) != 5 {
-		t.Fatalf("catalog playbooks = %d, want 5: %#v", len(catalog.Playbooks), catalog.Playbooks)
+	if len(catalog.Playbooks) != 4 {
+		t.Fatalf("catalog playbooks = %d, want 4: %#v", len(catalog.Playbooks), catalog.Playbooks)
 	}
 
 	byName := map[string]PlaybookEntry{}
 	for _, entry := range catalog.Playbooks {
 		byName[entry.Name] = entry
 	}
-	for _, name := range []string{"align", "brain-flows", "delegate-brief", "slice-work", "wayfind"} {
+	for _, name := range []string{"align", "delegate-brief", "slice-work", "wayfind"} {
 		entry, ok := byName[name]
 		if !ok {
 			t.Fatalf("catalog missing playbook %q: %#v", name, catalog.Playbooks)
@@ -201,9 +141,6 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 		if strings.TrimSpace(entry.Description) == "" {
 			t.Fatalf("playbook %q missing description", name)
 		}
-	}
-	if !strings.Contains(byName["brain-flows"].Description, "next useful Brain workflow") {
-		t.Fatalf("brain-flows description = %q", byName["brain-flows"].Description)
 	}
 	if !strings.Contains(byName["align"].Description, "consequential missing decisions") {
 		t.Fatalf("align description = %q", byName["align"].Description)
@@ -274,7 +211,7 @@ func TestHousekeepingCreatesMissingPlaybooks(t *testing.T) {
 			t.Fatalf("changed paths %v missing %q", report.ChangedPaths, path)
 		}
 	}
-	if len(report.PlaybookPaths) != 6 {
+	if len(report.PlaybookPaths) != 4 {
 		t.Fatalf("playbook paths = %#v", report.PlaybookPaths)
 	}
 	if _, err := os.Stat(store.playbookPath("delegate-brief.md")); err != nil {

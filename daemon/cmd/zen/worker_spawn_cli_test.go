@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -119,5 +121,17 @@ func TestWorkerSpawnPendingAdmissionResponseIsSuccessfulCLIJSON(t *testing.T) {
 func TestWorkerSpawnControlTimeoutContainsBoundedAdmission(t *testing.T) {
 	if workerSpawnControlTimeout <= time.Minute {
 		t.Fatalf("agent spawn control timeout = %s, must contain startup plus provider admission", workerSpawnControlTimeout)
+	}
+}
+
+func TestWorkerSpawnResolvesRelativePromptFileAgainstCallerCwd(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	_, req, err := parseWorkerSpawnArgs([]string{"-cwd", "/elsewhere", "-prompt-file", "notes/brief.md"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "notes", "brief.md"); req.PromptFile != want {
+		t.Fatalf("prompt file = %q, want %q", req.PromptFile, want)
 	}
 }

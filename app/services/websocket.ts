@@ -229,9 +229,7 @@ export interface BrainContextPayload {
   thread_id?: string;
   workspace?: string;
   worklog_path?: string;
-  current?: string;
-  memory?: string;
-  profile?: string;
+  notes?: { path: string; bytes: number; budget_bytes: number; over_budget?: boolean }[];
   personality?: string;
   host_worker?: any;
   host_executor?: any;
@@ -244,6 +242,8 @@ export interface BrainContextPayload {
 export interface BrainHousekeepingPayload {
   workspace?: string;
   current_path?: string;
+  notes?: { path: string; bytes: number; budget_bytes: number; over_budget?: boolean }[];
+  unmanaged_paths?: string[];
   policy_paths?: string[];
   worklog_path?: string;
   open_delegated_workers?: any[];

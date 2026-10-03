@@ -1039,6 +1039,14 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	if fs.NArg() > 0 {
 		return cliConfig{}, control.Request{}, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
+	// The daemon reads the file, so resolve it against the caller's cwd.
+	if promptFile := strings.TrimSpace(req.PromptFile); promptFile != "" && !filepath.IsAbs(promptFile) {
+		abs, err := filepath.Abs(promptFile)
+		if err != nil {
+			return cliConfig{}, control.Request{}, fmt.Errorf("resolve prompt file: %w", err)
+		}
+		req.PromptFile = abs
+	}
 	req.BrainWork = &brain.Work{
 		CompletionPolicy: brain.CompletionPolicy(strings.TrimSpace(completionPolicy)),
 		DoneCriteriaRef:  strings.TrimSpace(doneCriteriaRef),

@@ -35,7 +35,6 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 		"AGENTS":     read(store.workspaceInstructionsPath()),
 		"activation": brainHostActivationPrompt(),
 		"bootstrap":  service.hostBootstrapPrompt(service.hostExecutor()),
-		"routing":    read(store.playbookPath(brainFlowsPlaybookName)),
 	} {
 		if strings.Count(surface, brainWorkerRoleContract) != 1 || strings.Contains(surface, brainWorkerRoleContractPlaceholder) {
 			t.Fatalf("%s has missing/duplicate role or unresolved placeholder", name)
@@ -57,12 +56,12 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 		t.Fatal("role lost explicit user override or failure boundary")
 	}
 	bootstrap := service.hostBootstrapPrompt(service.hostExecutor())
-	for _, marker := range []string{"Brain Worklog (private): " + store.WorklogPath(), "return delegated reports in the Worker result"} {
+	for _, marker := range []string{"Brain Worklog (private): " + store.WorklogPath(), "current.md", "zen brain context --json"} {
 		if !strings.Contains(bootstrap, marker) {
 			t.Fatalf("bootstrap missing %q", marker)
 		}
 	}
-	if len(bootstrap) > 2200 {
+	if len(bootstrap) > 1400 {
 		t.Fatalf("bootstrap expanded to %d bytes", len(bootstrap))
 	}
 	t.Logf("rendered bootstrap: %d bytes", len(bootstrap))
@@ -292,7 +291,7 @@ func TestLiveHostActivationQueuesWithUserInputsOutsideSnapshot(t *testing.T) {
 	if elapsed := time.Since(startedAt); elapsed > 100*time.Millisecond {
 		t.Fatalf("read-only Snapshot entered Host input delivery: %s", elapsed)
 	}
-	if snapshot.HostWorker == nil || snapshot.HostWorker.ID != hostID || snapshot.Memory != memorySecret || snapshot.Profile != profileSecret {
+	if snapshot.HostWorker == nil || snapshot.HostWorker.ID != hostID {
 		t.Fatalf("Snapshot client data was not projected while activation was busy: %+v", snapshot)
 	}
 	if len(fw.sentCalls) != 1 || fw.readyInputCalls != 0 {

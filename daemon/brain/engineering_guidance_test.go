@@ -79,8 +79,8 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 6500 {
 		t.Fatalf("standing guidance missing or oversized: %d bytes", len(agents))
 	}
-	if len(catalog.Playbooks) != 5 {
-		t.Fatalf("expected five lazy playbooks, got %d", len(catalog.Playbooks))
+	if len(catalog.Playbooks) != 4 {
+		t.Fatalf("expected four lazy playbooks, got %d", len(catalog.Playbooks))
 	}
 	methodMarkers := map[string][]string{
 		"slice-work":     {"small relevant sample of actual session evidence", "navigation or information-access gaps", "missing or wrong tests", "inappropriate task decomposition", "ineffective instructions", "available, adequate guidance needs no rewrite"},
@@ -135,7 +135,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 					}
 				}
 			}
-			if len(activation) > 800 || len(bootstrap) > 2400 || len(handoff) > 1000 {
+			if len(activation) > 700 || len(bootstrap) > 1400 || len(handoff) > 600 {
 				t.Fatalf("prompt growth: activation=%d bootstrap=%d handoff=%d", len(activation), len(bootstrap), len(handoff))
 			}
 			t.Logf("%s: AGENTS=%d bootstrap=%d activation=%d handoff=%d bytes", provider, len(agents), len(bootstrap), len(activation), len(handoff))
@@ -288,7 +288,7 @@ func TestEngineeringGuidanceRefreshesExistingHost(t *testing.T) {
 
 func TestHostContractDigestTracksReleaseGuidance(t *testing.T) {
 	original := brainHostContractDigest()
-	for _, source := range []*string{&productWorkspaceInstructions, &productDelegationPolicy, &productEnginePolicy, &productHandoffPolicy, &seedPlaybooks[1].initial, &seedPlaybooks[2].initial, &seedPlaybooks[3].initial, &seedPlaybooks[4].initial} {
+	for _, source := range []*string{&productWorkspaceInstructions, &productDelegationPolicy, &productEnginePolicy, &productHandoffPolicy, &seedPlaybooks[0].initial, &seedPlaybooks[1].initial, &seedPlaybooks[2].initial, &seedPlaybooks[3].initial} {
 		before := *source
 		*source += "\nChanged release guidance.\n"
 		changed := brainHostContractDigest()

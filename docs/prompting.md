@@ -22,12 +22,12 @@ Async tool calling, mid-turn steering and cached reasoning updates require harne
 | --- | --- |
 | Repository `AGENTS.md` | Code layout, Android/iOS and current-server invariants, commands, repository verification and safety. |
 | `daemon/modelprofiles/codex_catalog_instructions.md` | Zen-owned generic coding defaults for managed Codex catalogs; not a verbatim upstream persona. |
-| `daemon/brain/templates/AGENTS.md` | Brain context map, concise engineering judgment and method routing, authorization, scheduler and event-driven waiting rules. |
+| `daemon/brain/templates/AGENTS.md` | Brain context map, communication, concise engineering judgment and method routing, authorization, scheduler and event-driven waiting rules. |
 | `daemon/brain/delegation_contract.go` | Compact Host/Worker role used for activation and managed role projection. |
-| `daemon/brain/templates/soul.md` | Default expression and judgment; existing private soul files remain user-owned. |
 | `daemon/brain/templates/policies/` | On-demand delegation, executor routing and Host recovery rules. |
 | `daemon/brain/playbooks.go` | Optional short alignment, brief, decomposition and investigation procedures. |
-| Host bootstrap in `daemon/brain/service.go` | Paths, actual executors/capabilities, personality and loading instructions; no repeated policy manual. |
+| Host bootstrap in `daemon/brain/service.go` | Paths, actual executors/capabilities and personality; reading rules live in AGENTS.md. |
+| `zen brain context --json` | Live Work, Workers, executors and note sizes/budgets; private note contents are read from files on demand. |
 | Host handoff in `daemon/brain/service.go` | Thread/executor identities and owned Worker IDs/statuses. Read current.md rather than embedding its history or Worker summaries. |
 | Worker builders in `daemon/cmd/zen/control_app.go` | Scoped execution and resource protocol, progress vocabulary and one exact turn argument. Preserve original user bytes. |
 | `daemon/work/dispatch.go` | Short Work-file pointer and terminal frontmatter requirement; retained because its file workflow consumes it. |
@@ -61,6 +61,6 @@ The compact role is repeated at Host activation intentionally: a resumed provide
 
 Tests cover generated payload preservation, one exact turn identity, mandatory progress fields, prompt size limits, instruction ownership, transcript privacy and preservation of private runtime overlays. These are deterministic contract tests, not model behavior or latency evaluations.
 
-Representative same-configuration measurements: bootstrap 13,145 to 1,604 bytes; initial Worker prompt 4,230 to 2,017 bytes. A handoff fixture with 1,000 historical lines shrank from 21,375 to 548 bytes. Bootstrap comparison uses the same current role constant on both sides. Exact sizes vary with paths and task content; bytes are not token counts.
+Representative same-configuration measurements: bootstrap 13,145 to 1,604 bytes; initial Worker prompt 4,230 to 2,017 bytes. A handoff fixture with 1,000 historical lines shrank from 21,375 to 548 bytes. Bootstrap comparison uses the same current role constant on both sides. Removing `soul.md`, the duplicate role playbook and repeated loading rules took bootstrap from 1,792 to 1,199 bytes; `zen brain context --json` for a workspace with 85, 64 and 16 KB notes went from 167,263 to 2,349 bytes because notes are now referenced, not inlined. Exact sizes vary with paths and task content; bytes are not token counts.
 
-Managed workspace repair updates product-owned blocks and preserves user-authored content. Nonempty soul.md and customized playbooks are not overwritten. Only byte-identical recognized shipped playbook seeds upgrade automatically. Existing private files can still contain conflicting guidance and need explicit review when adopting the new defaults. A Host already running with old instructions does not retroactively lose its context; normal activation asks it to re-read product guidance. Deploy and activate the source changes through the normal authorized service lifecycle; do not rewrite live private overlays or restart services as an incidental prompt edit.
+Managed workspace repair updates product-owned blocks and preserves user-authored content. Customized playbooks are not overwritten; retired shipped files are deleted only when untouched. Only byte-identical recognized shipped playbook seeds upgrade automatically. Existing private files can still contain conflicting guidance and need explicit review when adopting the new defaults. A Host already running with old instructions does not retroactively lose its context; normal activation asks it to re-read product guidance. Deploy and activate the source changes through the normal authorized service lifecycle; do not rewrite live private overlays or restart services as an incidental prompt edit.

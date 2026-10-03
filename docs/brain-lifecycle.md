@@ -115,16 +115,14 @@ See [Work Lifecycle](work-lifecycle.md) for responsibilities and transitions.
 Fresh Brain homes receive the provider-neutral lifecycle and delegated
 Worker protocol from the versioned templates under `daemon/brain/templates/`.
 Managed-block repair refreshes those product-owned blocks while preserving
-user-authored text and the private `soul.md`, `profile.md`, `memory.md`,
-`current.md`, and worklogs. `soul.md` owns stable expression and judgment
-principles. `profile.md` owns user background and preferences. `memory.md` owns
-durable facts and decisions. Fresh and upgraded homes receive a missing or
-empty `soul.md` with mode `0600`; reconciliation and `zen brain gc` preserve
-every nonempty `soul.md` byte for byte. Brain Host startup and managed
-`AGENTS.md` require the Host to read `soul.md` once when each Brain Host Session
-starts or is replaced, before its first response or work. The Host follows the
-loaded principles for that Session and re-reads the file only if it changes.
-The bootstrap prompt references the file but never copies its private contents.
+user-authored text and the private `profile.md`, `memory.md`, `current.md`, and
+worklogs. `current.md` is the short active-work handoff, `profile.md` owns user
+background and preferences, and `memory.md` owns durable facts and decisions.
+Brain reads them on demand: `zen brain context --json` and `brain_snapshot`
+carry only their paths, sizes and budgets (16, 32 and 8 KiB), never their
+contents, and `zen brain gc` recommends compaction when a note exceeds its
+budget. Communication principles live in the managed `AGENTS.md`; Zen no longer
+creates or reads `soul.md` and deletes an untouched shipped copy.
 
 Brain Worklog boundary: internal audits, handoffs, and delegated reports belong
 under the configured Brain workspace's `worklog/` directory (normally
@@ -133,7 +131,7 @@ repository, a Worker cwd, or `cwd/docs/worklog`. Delegated reports should be
 returned in the Worker result unless persistence is explicitly requested. Product
 documentation is separate and must name its repository path explicitly.
 
-The shipped `soul.md` asks for concise, direct prose in the user's language,
-useful structure, and a clear distinction between facts, assumptions and
+The managed `AGENTS.md` asks for concise, direct prose in the user's language,
+leading with the result, and a clear distinction between facts, assumptions and
 recommendations. It does not impose a technical-writing standard or a fixed
 response template. Prompt ownership and model guidance are in [prompting.md](prompting.md).
