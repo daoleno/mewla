@@ -22,6 +22,7 @@ if (!process.env.ZEN_PREVIEW_HOOK_CHILD) {
     React.createElement(name, props, props.children);
   mock.module("react-native", () => ({
     ActivityIndicator: host("spinner"),
+    Image: host("image"),
     ScrollView: host("scroll"),
     Text: host("text"),
     TouchableOpacity: host("button"),
@@ -29,6 +30,8 @@ if (!process.env.ZEN_PREVIEW_HOOK_CHILD) {
     StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 },
   }));
   mock.module("@expo/vector-icons", () => ({ Ionicons: host("icon") }));
+  mock.module("react-native-svg", () => ({ SvgXml: host("svg") }));
+  mock.module("expo-file-system", () => ({ File: class {} }));
   mock.module("expo-clipboard", () => ({ setStringAsync: async () => {} }));
   mock.module("../../constants/tokens", () => ({ Typography: {} }));
   mock.module("../../services/websocket", () => ({ wsClient: {} }));
@@ -49,6 +52,9 @@ if (!process.env.ZEN_PREVIEW_HOOK_CHILD) {
     minDistance() {
       return this;
     },
+    numberOfTaps() {
+      return this;
+    },
     onUpdate() {
       return this;
     },
@@ -57,11 +63,11 @@ if (!process.env.ZEN_PREVIEW_HOOK_CHILD) {
     },
   });
   mock.module("react-native-gesture-handler", () => ({
-    Gesture: { Pinch: gesture, Pan: gesture, Simultaneous: () => ({}) },
+    Gesture: { Pinch: gesture, Pan: gesture, Tap: gesture, Simultaneous: () => ({}) },
     GestureDetector: ({ children }: any) => children,
   }));
   mock.module("react-native-reanimated", () => ({
-    default: { Image: host("image") },
+    default: { Image: host("image"), View: host("animated-view") },
     useSharedValue: (value: unknown) => React.useRef({ value }).current,
     useAnimatedStyle: (worklet: () => unknown) => worklet(),
   }));

@@ -23,7 +23,12 @@ function renderContentBlock(source: string): string {
 
 describe("AgentKindIcon OpenCode and Pi brand marks", () => {
   test("uses LobeHub OpenCode and local PiMark on the shared component path", () => {
-    expect(iconSource).toContain("import { Claude, Codex, Grok, OpenCode } from '@lobehub/icons-rn'");
+    const brandImport = iconSource.match(/import \{([^}]+)\} from '@lobehub\/icons-rn'/);
+    expect(brandImport).not.toBeNull();
+    const brands = brandImport![1].split(',').map((name) => name.trim());
+    for (const brand of ['Claude', 'Codex', 'Grok', 'OpenCode']) {
+      expect(brands).toContain(brand);
+    }
     expect(iconSource).toContain("import { PiMark } from '../icons/PiMark'");
     expect(iconSource).toContain("variant?: 'compact' | 'avatar'");
 
