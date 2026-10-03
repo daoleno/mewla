@@ -88,7 +88,11 @@ func TestResourceConfigurationRecoveryAndHistory(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "resource-telemetry.json")); err != nil {
 		t.Fatal(err)
 	}
-	s.Sample(nil, time.Now().Add(5*time.Second))
+	// The test advances the sample timestamp without waiting for a real kernel
+	// tick. Seed the CPU baseline so two immediate /proc reads cannot produce
+	// an unavailable delta merely because the counters have not advanced.
+	s.previousCPU = map[string]cpuCounters{"cpu": {}}
+	snap, _ := s.Sample(nil, time.Now().Add(5*time.Second))
 	if s.machine.Config.SustainSeconds != 20 {
 		t.Fatal("defaults not restored")
 	}
@@ -97,8 +101,27 @@ func TestResourceConfigurationRecoveryAndHistory(t *testing.T) {
 		t.Fatal(points)
 	}
 	p := points[1]
-	if p.CPUPercent == nil || p.MemoryUsedBytes == nil || p.SwapUsedBytes == nil || p.PSICPUSomeAvg10 == nil || p.PSIMemorySomeAvg10 == nil || p.PSIIOSomeAvg10 == nil {
+	if p.CPUPercent == nil || p.MemoryUsedBytes == nil || p.SwapUsedBytes == nil {
 		t.Fatal("chart history fields missing")
+	}
+	// PSI depends on the host kernel. History must preserve every available
+	// metric and leave unsupported metrics absent instead of inventing zeroes.
+	for _, metric := range []struct {
+		name    string
+		history *float64
+		sampled *PressureAverages
+	}{
+		{"cpu", p.PSICPUSomeAvg10, snap.PSI.CPU.Some},
+		{"memory", p.PSIMemorySomeAvg10, snap.PSI.Memory.Some},
+		{"io", p.PSIIOSomeAvg10, snap.PSI.IO.Some},
+	} {
+		if metric.sampled == nil {
+			if metric.history != nil {
+				t.Fatalf("history invented unavailable %s PSI", metric.name)
+			}
+		} else if metric.history == nil || *metric.history != metric.sampled.Avg10 {
+			t.Fatalf("history did not preserve %s PSI", metric.name)
+		}
 	}
 	at := time.Now().UTC()
 	s.pending = []ResourcePressureEvent{{SampledAt: at, State: "elevated"}}
