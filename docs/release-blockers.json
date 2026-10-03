@@ -1,7 +1,26 @@
 {
   "schema_version": 1,
-  "updated": "2026-08-27",
-  "blockers": [],
+  "updated": "2026-10-03",
+  "blockers": [
+    {
+      "id": "github-plugin-publisher-registration",
+      "severity": "release-blocking",
+      "summary": "New public release artifacts require the approved Zen GitHub OAuth app's public Client ID; the tracked value is null",
+      "paths": [
+        {
+          "path": "release/plugin-publishers.json",
+          "referenced_by_app": false
+        },
+        {
+          "path": ".github/workflows/release-artifacts.yml",
+          "referenced_by_app": false
+        }
+      ],
+      "acceptance": "Commit the public Client ID of the daoleno-owned Zen OAuth app with Device Flow enabled and pass python3 scripts/plugin-publisher-flags.py --require github before release preparation",
+      "pipeline_status": "blocked-on-public-configuration",
+      "evidence": "The tracked GitHub client_id is null and the artifact workflow validates --require github before building"
+    }
+  ],
   "resolved": [
     {
       "id": "android-native-terminal-artifacts",
