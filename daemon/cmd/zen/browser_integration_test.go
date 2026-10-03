@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -157,6 +158,15 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 					return
 				}
 				if string(msg["type"]) == `"frame"` {
+					var data string
+					json.Unmarshal(msg["data"], &data)
+					jpg, _ := base64.StdEncoding.DecodeString(data)
+					config, decodeErr := jpeg.DecodeConfig(bytes.NewReader(jpg))
+					var metadata struct{ DeviceWidth, DeviceHeight int }
+					json.Unmarshal(msg["metadata"], &metadata)
+					if decodeErr != nil || config.Width != 1280 || config.Height != 800 || metadata.DeviceWidth != config.Width || metadata.DeviceHeight != config.Height {
+						t.Errorf("frame/input coordinate mismatch: JPEG %dx%d, metadata %dx%d, decode %v", config.Width, config.Height, metadata.DeviceWidth, metadata.DeviceHeight, decodeErr)
+					}
 					var seq uint64
 					json.Unmarshal(msg["seq"], &seq)
 					frameMu.Lock()
@@ -164,9 +174,6 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 					frameSequences = append(frameSequences, seq)
 					frameMu.Unlock()
 					if evidence != "" {
-						var data string
-						json.Unmarshal(msg["data"], &data)
-						jpg, _ := base64.StdEncoding.DecodeString(data)
 						os.WriteFile(filepath.Join(evidence, "product-viewer-latest.jpg"), jpg, 0600)
 					}
 					v.mu.Lock()

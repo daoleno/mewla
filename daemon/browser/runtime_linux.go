@@ -264,6 +264,9 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	if _, err = r.cli(ctx, "--pin-tab", "tab", "list"); err != nil {
 		return nil, err
 	}
+	if err = r.configureViewport(ctx); err != nil {
+		return nil, err
+	}
 	success = true
 	return r, nil
 }
@@ -394,6 +397,16 @@ func validURL(value string) bool {
 	u, e := url.Parse(value)
 	return e == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && len(value) <= 4096
 }
+
+// A CDP attachment starts with agent-browser's default viewport metadata, which
+// can differ from the headed window's actual page size. Configure both through
+// the maintained API so rendered pixels and pointer coordinates share a space.
+// Newly selected popup pages need the same override as the original tab.
+func (r *linuxRuntime) configureViewport(ctx context.Context) error {
+	_, err := r.cli(ctx, "set", "viewport", "1280", "800", "1")
+	return err
+}
+
 func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage, error) {
 	if !r.Alive() {
 		return nil, ErrUnavailable
@@ -434,6 +447,9 @@ func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage,
 			r.mu.Lock()
 			r.target = c.Target
 			r.mu.Unlock()
+			if err = r.configureViewport(ctx); err != nil {
+				return nil, ErrUncertain
+			}
 		}
 		return v, err
 	case "navigate", "new_tab":
@@ -453,6 +469,9 @@ func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage,
 				r.mu.Lock()
 				r.target = q.TargetID
 				r.mu.Unlock()
+			}
+			if err = r.configureViewport(ctx); err != nil {
+				return nil, ErrUncertain
 			}
 		}
 		return v, err

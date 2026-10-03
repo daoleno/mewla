@@ -11,6 +11,9 @@ projects that must remain separate. Site expiry and reauthentication still apply
 The phone WebView renders remote pixels. The target website and its cookies exist
 in the host browser. Navigation, new tabs, tab selection, pointer/scroll input,
 text entry and explicit JavaScript dialog handling use the same managed instance.
+The first adapter configures a 1280×800 page viewport through agent-browser on
+launch and tab selection, keeping the encoded frame and input coordinates aligned
+even when a headed window's decorations reduce its initial content area.
 This is a page viewport, not an entire desktop: native browser chrome, file pickers,
 extension windows and device-bound passkeys are outside the current viewer.
 Google/MFA acceptance has not been established by the local synthetic login test.
