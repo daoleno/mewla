@@ -36,6 +36,8 @@ Terminal and take over. Only Brain or you can mark Work done.
 
 Work, Attempt, Wake, Review and append-only Event records live in the daemon and
 survive restarts. A quiet pane or an exited process never completes Work.
+Details: [Architecture](docs/architecture.md), [Brain lifecycle](docs/brain-lifecycle.md),
+[Work lifecycle](docs/work-lifecycle.md).
 
 ## Routing
 
@@ -51,6 +53,8 @@ preference, Brain rewrites the line.
 ```sh
 zen worker spawn -name "Fix flaky test" -executor claude -model claude-opus-5-5 -reasoning high -cwd ~/repo -prompt "..."
 ```
+
+See [Worker routing](docs/executors.md#worker-routing) for each client's flags.
 
 ## Models
 
@@ -191,7 +195,8 @@ bun run site:dev                         # prints the local preview URL
 Layout: `daemon/` Go daemon (`cmd/zen`, `server`, `auth`, `brain`, `work`,
 `lifecycle`, `terminal`, `watcher`); `app/` Expo app (routes in `app/app/`,
 components, services, store); `docs/` product and operator docs; `site/`
-landing page, whose `site/assets/*.svg` drawings this README also uses;
+landing page, whose `site/assets/*.svg` drawings this README also uses
+(generators in `scripts/site-svg/`);
 `scripts/` build and release tooling.
 
 The native terminal uses libghostty; see [Android](docs/android.md#architecture--abi-contract)
