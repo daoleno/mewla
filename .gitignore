@@ -57,8 +57,10 @@ app/bun.lockb
 # Daemon binary
 /daemon/zen-daemon
 
-# Playwright
+# Playwright and local UI captures
 .playwright-mcp/
+/app/__screenshots__/
+test-results/
 
 # Local zen workspace state
 .zen/
