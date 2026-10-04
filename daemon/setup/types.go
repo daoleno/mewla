@@ -37,7 +37,6 @@ const (
 type Options struct {
 	NonInteractive bool
 	Host           string
-	Delegated      string
 	Profile        Profile
 	// Yes confirms Autonomous. Required in non-interactive Autonomous mode.
 	Yes bool
@@ -70,7 +69,6 @@ type Result struct {
 	Step            string        `json:"step"`
 	Profile         Profile       `json:"profile,omitempty"`
 	Host            string        `json:"host,omitempty"`
-	Delegated       string        `json:"delegated,omitempty"`
 	BrainConfigured bool          `json:"brain_configured"`
 	ConfigPath      string        `json:"config_path,omitempty"`
 	BackupPath      string        `json:"backup_path,omitempty"`
@@ -81,7 +79,7 @@ type Result struct {
 	Message         string        `json:"message,omitempty"`
 }
 
-// Candidate is one selectable executor for Host/Delegated.
+// Candidate is one selectable executor for the Brain host.
 type Candidate struct {
 	ID                    string           `json:"id"`
 	Provider              string           `json:"provider"`

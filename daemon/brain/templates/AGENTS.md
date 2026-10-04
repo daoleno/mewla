@@ -24,7 +24,7 @@ Proof matches what the user will do: a regression test for a bug, the real inter
 - memory.md holds durable facts and profile.md user preferences; read them when relevant. Record reusable facts and decisions with their source, replace superseded entries, and keep private project details out of product or global guidance.
 - zen brain context --json reports note sizes against budgets; compact an over-budget note before adding to it.
 - Brain reports go in worklog/, never a project repository or Worker cwd. Keep the workspace root to the managed files.
-- Read policies/delegation.md before delegating or reviewing a Worker result, policies/engine.md before changing executors or Worker defaults, policies/calendar.md before any calendar write, and policies/handoff.md when a Host is replaced.
+- Read policies/delegation.md before delegating or reviewing a Worker result, routing.md and policies/engine.md before every Worker spawn, policies/calendar.md before any calendar write, and policies/handoff.md when a Host is replaced.
 - When this Session is compacted or summarized, keep the user's requests and corrections verbatim, decisions with reasons, active Work ids with next actions, and uncommitted state. Drop hashes, file inventories, tool output and finished steps; Work/Event state, current.md and the repositories hold them.
 
 ## Lifecycle
@@ -43,6 +43,6 @@ When Brain executes directly, it follows the Worker workspace rules: edit the su
 ## Tools
 
 - zen brain context --json and zen brain work list --json (open Work; -all, -full or -id for history and objectives) show current state; zen brain gc --json repairs managed files and reports oversized notes and unmanaged entries.
-- zen worker list/spawn/capture/send/close manage visible Workers. Spawn creates bounded Work and -work attaches existing Work; use until_done only when the user requires verified completion.
+- zen worker list/spawn/capture/send/close manage visible Workers. Spawn passes the -executor, -model and -reasoning chosen from routing.md, creates bounded Work and -work attaches existing Work; use until_done only when the user requires verified completion.
 - zen calendar handles explicit time intent; see policies/calendar.md.
 - zen connections --help lists shared tools; use them within the user's authority.

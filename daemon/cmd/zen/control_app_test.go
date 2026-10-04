@@ -597,7 +597,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex --no-alt-screen"},
 		}),
 		stateDir: "/tmp/zen state",
@@ -759,7 +759,7 @@ func TestControlAppHiddenSpawnCreatesNoWork(t *testing.T) {
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -782,7 +782,7 @@ func TestControlAppHiddenSpawnCreatesNoWork(t *testing.T) {
 	}
 }
 
-func TestControlAppWorkerSpawnFromBrainDefaultsToDelegatedExecutor(t *testing.T) {
+func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 	store, err := brain.NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -794,142 +794,58 @@ func TestControlAppWorkerSpawnFromBrainDefaultsToDelegatedExecutor(t *testing.T)
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: store,
-		execs: work.NewExecutorConfig("grok", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"claude": {Name: "claude", Command: "claude"},
 			"codex":  {Name: "codex", Command: "codex"},
-			"grok":   {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions"},
+			"pi":     {Name: "pi", Command: "pi", Kind: "pi"},
 		}),
 	}
 
-	resp := app.HandleControlRequest(control.Request{
-		Type:     "worker_spawn",
-		WorkerID: "zen-worker-brain-hidden:@1",
-		Name:     "Research",
-		Cwd:      "/repo/zen",
-		Prompt:   "look around",
+	// Brain names executor, model and reasoning per launch.
+	routed := app.HandleControlRequest(control.Request{
+		Type:            "worker_spawn",
+		WorkerID:        "zen-worker-brain-hidden:@1",
+		Executor:        "codex",
+		ModelID:         "gpt-6-astra",
+		ReasoningEffort: "high",
+		Name:            "Patch",
+		Cwd:             "/repo/zen",
+		Prompt:          "make the scoped patch",
 	})
-
-	if !resp.OK || resp.Worker == nil {
-		t.Fatalf("response = %#v", resp)
+	if !routed.OK || routed.Worker == nil {
+		t.Fatalf("routed response = %#v", routed)
 	}
-	if len(fw.created) != 1 {
-		t.Fatalf("created = %#v", fw.created)
-	}
-	if got := fw.created[0].Command; got != "grok --no-alt-screen --permission-mode bypassPermissions --sandbox off" {
-		t.Fatalf("command = %q", got)
+	if got := fw.created[0].Command; got != `codex --model gpt-6-astra -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox` {
+		t.Fatalf("routed command = %q", got)
 	}
 
-	explicit := app.HandleControlRequest(control.Request{
-		Type:     "worker_spawn",
-		WorkerID: "zen-worker-brain-hidden:@1",
-		Executor: "codex",
-		Name:     "Patch",
-		Cwd:      "/repo/zen",
-		Prompt:   "make the scoped patch",
-	})
-	if !explicit.OK || explicit.Worker == nil {
-		t.Fatalf("explicit response = %#v", explicit)
-	}
-	if got := fw.created[1].Command; got != "codex --dangerously-bypass-approvals-and-sandbox" {
-		t.Fatalf("explicit command = %q", got)
-	}
-
-	regular := app.HandleControlRequest(control.Request{
+	// Without -executor the launch uses the executor the user runs Brain on.
+	fallback := app.HandleControlRequest(control.Request{
 		Type:   "worker_spawn",
 		Name:   "General",
 		Cwd:    "/repo/zen",
 		Prompt: "general spawn",
 	})
-	if !regular.OK || regular.Worker == nil {
-		t.Fatalf("regular response = %#v", regular)
+	if !fallback.OK || fallback.Worker == nil {
+		t.Fatalf("fallback response = %#v", fallback)
 	}
-	if got := fw.created[2].Command; got != "grok --no-alt-screen --permission-mode bypassPermissions --sandbox off" {
-		t.Fatalf("regular command = %q", got)
-	}
-}
-
-func TestControlAppWorkerSpawnFromBrainUsesDelegatedExecutorNotHost(t *testing.T) {
-	store, err := brain.NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SetHostSession("zen-worker-brain-hidden:@1", "codex"); err != nil {
-		t.Fatal(err)
-	}
-	fw := newFakeControlWatcher()
-	app := &controlApp{
-		watcher:    fw,
-		brainStore: store,
-		execs: work.NewExecutorConfig("agent", map[string]work.Executor{
-			"agent": {Name: "agent", Command: "cursor-agent --force --sandbox disabled", Kind: "cursor"},
-			"codex": {Name: "codex", Command: "codex"},
-		}),
+	if got := fw.created[1].Command; got != "claude --permission-mode bypassPermissions" {
+		t.Fatalf("fallback command = %q", got)
 	}
 
-	brainSpawn := app.HandleControlRequest(control.Request{
-		Type:     "worker_spawn",
-		WorkerID: "zen-worker-brain-hidden:@1",
-		Name:     "Brain Delegated",
-		Cwd:      "/repo/zen",
-		Prompt:   "use delegated executor",
+	unsupported := app.HandleControlRequest(control.Request{
+		Type:            "worker_spawn",
+		Executor:        "pi",
+		ReasoningEffort: "extreme",
+		Name:            "Bad",
+		Cwd:             "/repo/zen",
+		Prompt:          "x",
 	})
-	if !brainSpawn.OK || brainSpawn.Worker == nil {
-		t.Fatalf("brain spawn response = %#v", brainSpawn)
+	if unsupported.OK || unsupported.Error == nil || !strings.Contains(unsupported.Error.Message, "unsupported pi reasoning level") {
+		t.Fatalf("unsupported response = %#v", unsupported)
 	}
-	if got := fw.created[0].Command; got != "cursor-agent --force --sandbox disabled --trust --approve-mcps" {
-		t.Fatalf("brain delegated command = %q", got)
-	}
-
-	regular := app.HandleControlRequest(control.Request{
-		Type:   "worker_spawn",
-		Name:   "General",
-		Cwd:    "/repo/zen",
-		Prompt: "use delegated executor",
-	})
-	if !regular.OK || regular.Worker == nil {
-		t.Fatalf("regular response = %#v", regular)
-	}
-	if got := fw.created[1].Command; got != "cursor-agent --force --sandbox disabled --trust --approve-mcps" {
-		t.Fatalf("regular command = %q", got)
-	}
-}
-
-func TestControlAppWorkerSpawnFromBrainHonorsDelegatedExecutorEnvOverride(t *testing.T) {
-	t.Setenv("ZEN_DELEGATED_EXECUTOR", "codex")
-	store, err := brain.NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SetHostSession("zen-worker-brain-hidden:@1", "claude"); err != nil {
-		t.Fatal(err)
-	}
-	fw := newFakeControlWatcher()
-	app := &controlApp{
-		watcher:    fw,
-		brainStore: store,
-		execs: work.NewExecutorConfig("grok", map[string]work.Executor{
-			"claude": {Name: "claude", Command: "claude"},
-			"codex":  {Name: "codex", Command: "codex"},
-			"grok":   {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions"},
-		}),
-	}
-
-	resp := app.HandleControlRequest(control.Request{
-		Type:     "worker_spawn",
-		WorkerID: "zen-worker-brain-hidden:@1",
-		Name:     "Env Delegated",
-		Cwd:      "/repo/zen",
-		Prompt:   "use env override",
-	})
-
-	if !resp.OK || resp.Worker == nil {
-		t.Fatalf("response = %#v", resp)
-	}
-	if len(fw.created) != 1 {
-		t.Fatalf("created = %#v", fw.created)
-	}
-	if got := fw.created[0].Command; got != "codex --dangerously-bypass-approvals-and-sandbox" {
-		t.Fatalf("command = %q", got)
+	if len(fw.created) != 2 {
+		t.Fatalf("rejected launch created a session: %#v", fw.created)
 	}
 }
 
@@ -938,7 +854,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: newControlBrainStore(t),
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex":  {Name: "codex", Command: "codex"},
 			"claude": {Name: "claude", Command: "claude"},
 		}),
@@ -1392,7 +1308,7 @@ func TestControlAppWorkerSpawnSubmissionFailureReturnsErrorAndAttention(t *testi
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: newControlBrainStore(t),
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -1438,7 +1354,7 @@ func TestControlAppSpawnSubmissionFailureReconcilesExactlyOnceAcrossRestart(t *t
 	}
 	app := &controlApp{
 		watcher: fw, brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -1515,7 +1431,7 @@ func TestControlAppAmbiguousSpawnWithVanishedOwnedSessionStillReturnsFailure(t *
 	fw.turnStore = store
 	app := &controlApp{
 		watcher: fw, brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -1542,7 +1458,7 @@ func TestControlAppPreSubmitLaunchFailureRemainsDefinitive(t *testing.T) {
 	store := newControlBrainStore(t)
 	app := &controlApp{
 		watcher: fw, brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -1572,7 +1488,7 @@ func TestControlAppDefinitelyNotSubmittedSpawnFailureStillProjectsFailure(t *tes
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: newControlBrainStore(t),
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -2014,7 +1930,7 @@ func TestControlAppBrainContextReturnsStructuredContext(t *testing.T) {
 	}
 	app := &controlApp{
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -2028,7 +1944,7 @@ func TestControlAppBrainContextReturnsStructuredContext(t *testing.T) {
 	if !ok {
 		t.Fatalf("context type = %T", resp.Context)
 	}
-	if context.ThreadID != "thread-main" || len(context.Notes) != 3 || context.Notes[0].Path != "current.md" || context.Notes[0].Bytes == 0 {
+	if context.ThreadID != "thread-main" || len(context.Notes) != 4 || context.Notes[3].Path != "routing.md" || context.Notes[0].Path != "current.md" || context.Notes[0].Bytes == 0 {
 		t.Fatalf("context = %#v", context)
 	}
 	if len(context.Playbooks) != 3 {
@@ -2076,7 +1992,7 @@ func TestControlAppBrainGCReturnsHousekeepingReport(t *testing.T) {
 	}
 	app := &controlApp{
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}
@@ -2106,7 +2022,7 @@ func TestControlAppBrainExecutorsListCodexHostFallback(t *testing.T) {
 	}
 	app := &controlApp{
 		brainStore: store,
-		execs: work.NewExecutorConfig("claude", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"claude": {Name: "claude", Command: "claude"},
 			"codex":  {Name: "codex", Command: "codex"},
 		}),
@@ -2120,9 +2036,6 @@ func TestControlAppBrainExecutorsListCodexHostFallback(t *testing.T) {
 	if len(resp.Executors) != 2 || resp.Executors[0].ID != "codex" || !resp.Executors[0].Host {
 		t.Fatalf("executors = %#v", resp.Executors)
 	}
-	if resp.DelegatedExecutor == nil || resp.DelegatedExecutor.ID != "claude" {
-		t.Fatalf("delegated executor = %#v", resp.DelegatedExecutor)
-	}
 	if !resp.Executor.Capabilities.InteractiveTTY {
 		t.Fatalf("codex capabilities = %+v", resp.Executor.Capabilities)
 	}
@@ -2135,7 +2048,7 @@ func TestControlAppBrainExecutorsFallbackToCodexNotGeneralDefault(t *testing.T) 
 	}
 	app := &controlApp{
 		brainStore: store,
-		execs: work.NewExecutorConfig("agent", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"agent": {Name: "agent", Command: "cursor-agent --force --sandbox disabled", Kind: "cursor"},
 			"codex": {Name: "codex", Command: "codex"},
 		}),
@@ -2149,66 +2062,6 @@ func TestControlAppBrainExecutorsFallbackToCodexNotGeneralDefault(t *testing.T) 
 	if len(resp.Executors) != 2 || resp.Executors[0].ID != "codex" || !resp.Executors[0].Host {
 		t.Fatalf("executors = %#v", resp.Executors)
 	}
-	if resp.DelegatedExecutor == nil || resp.DelegatedExecutor.ID != "agent" {
-		t.Fatalf("delegated executor = %#v", resp.DelegatedExecutor)
-	}
-}
-
-func TestControlAppSetDelegatedExecutorSameProcessSwitch(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "executors.toml")
-	if err := os.WriteFile(path, []byte(`
-delegated_executor = "codex"
-
-[[executors]]
-name = "codex"
-command = "codex"
-
-[[executors]]
-name = "grok"
-command = "grok --flag"
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	execs, err := work.LoadExecutors(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, err := brain.NewStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	app := &controlApp{
-		watcher:    newFakeControlWatcher(),
-		brainStore: store,
-		execs:      execs,
-	}
-
-	before := app.HandleControlRequest(control.Request{Type: "brain_executors"})
-	if !before.OK || before.DelegatedExecutor == nil || before.DelegatedExecutor.ID != "codex" {
-		t.Fatalf("before = %#v", before)
-	}
-
-	resp := app.HandleControlRequest(control.Request{Type: "set_delegated_executor", ExecutorID: "grok"})
-	if !resp.OK || resp.DelegatedExecutor == nil || resp.DelegatedExecutor.ID != "grok" {
-		t.Fatalf("set response = %#v", resp)
-	}
-	if execs.GetDelegatedExecutor() != "grok" {
-		t.Fatalf("live owner = %q", execs.GetDelegatedExecutor())
-	}
-
-	spawn := app.HandleControlRequest(control.Request{
-		Type:   "worker_spawn",
-		Cwd:    dir,
-		Name:   "delegated-after-switch",
-		Prompt: "use live delegated selection",
-	})
-	if !spawn.OK || spawn.Worker == nil {
-		t.Fatalf("spawn = %#v", spawn)
-	}
-	if !strings.Contains(spawn.Worker.Command, "grok") {
-		t.Fatalf("spawn command = %q, want grok", spawn.Worker.Command)
-	}
 }
 
 func TestControlAppBrainSetExecutorPersistsConfiguredExecutor(t *testing.T) {
@@ -2218,7 +2071,7 @@ func TestControlAppBrainSetExecutorPersistsConfiguredExecutor(t *testing.T) {
 	}
 	app := &controlApp{
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"claude": {Name: "claude", Command: "claude"},
 			"codex":  {Name: "codex", Command: "codex"},
 		}),
@@ -2250,7 +2103,7 @@ func TestControlAppBrainSetExecutorStartsSelectedHostWhenWatcherAvailable(t *tes
 	app := &controlApp{
 		watcher:    fw,
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"claude": {Name: "claude", Command: "claude"},
 			"codex":  {Name: "codex", Command: "codex"},
 		}),
@@ -2295,9 +2148,9 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name: "bare default Claude gets hardened",
-			req:  control.Request{},
-			execs: work.NewExecutorConfig("claude", map[string]work.Executor{
+			name: "named Claude gets hardened",
+			req:  control.Request{Executor: "claude"},
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude"},
 			}),
 			want: "claude --permission-mode bypassPermissions",
@@ -2305,7 +2158,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "configured Claude default gets hardened",
 			req:  control.Request{Executor: "claude"},
-			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude --profile my-profile"},
 			}),
 			want: "claude --profile my-profile --permission-mode bypassPermissions",
@@ -2313,7 +2166,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "explicit Claude permission mode preserved",
 			req:  control.Request{Executor: "claude"},
-			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude --permission-mode dontAsk"},
 			}),
 			wantError: true,
@@ -2321,7 +2174,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "explicit Claude dangerously-skip-permissions preserved",
 			req:  control.Request{Executor: "claude"},
-			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude --dangerously-skip-permissions"},
 			}),
 			want: "claude --dangerously-skip-permissions",
@@ -2334,7 +2187,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "custom executor unchanged",
 			req:  control.Request{Executor: "my-agent"},
-			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"my-agent": {Name: "my-agent", Command: "/usr/local/bin/my-agent --flag"},
 			}),
 			want: "/usr/local/bin/my-agent --flag",
@@ -2342,7 +2195,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "Codex default hardened unchanged",
 			req:  control.Request{},
-			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"codex": {Name: "codex", Command: "codex"},
 			}),
 			want: "codex --dangerously-bypass-approvals-and-sandbox",
@@ -2350,7 +2203,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "non-Claude provider unchanged",
 			req:  control.Request{Executor: "grok"},
-			execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"grok": {Name: "grok", Command: "grok --no-alt-screen"},
 			}),
 			want: "grok --no-alt-screen --permission-mode bypassPermissions --sandbox off",
@@ -2384,7 +2237,7 @@ func TestControlAppBrainSetExecutorRejectsUnknownExecutor(t *testing.T) {
 	}
 	app := &controlApp{
 		brainStore: store,
-		execs: work.NewExecutorConfig("codex", map[string]work.Executor{
+		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		}),
 	}

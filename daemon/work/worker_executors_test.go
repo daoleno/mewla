@@ -158,7 +158,7 @@ func TestScheduledActionCommandRejectsExplicitNonUnattendedModes(t *testing.T) {
 }
 
 func TestWorkerExecutorInfersProviderRuntimeAndCapabilities(t *testing.T) {
-	cfg := NewExecutorConfig("claude", map[string]Executor{
+	cfg := NewExecutorConfig(map[string]Executor{
 		"agent":  {Name: "agent", Command: "cursor-agent --force --sandbox disabled", Kind: "cursor"},
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "/opt/codex --no-alt-screen"},
@@ -254,54 +254,5 @@ func TestProfileClientExecutorSeparatesAliasFromCanonicalClient(t *testing.T) {
 	ae := NewWorkerExecutor("primary", Executor{Name: "primary", Command: "codex", Kind: "codex"})
 	if ae.ID != "primary" || ae.ProfileClientExecutor() != WorkerProviderCodex {
 		t.Fatalf("AgentExecutor=%+v hint=%q", ae, ae.ProfileClientExecutor())
-	}
-}
-
-func TestDelegatedWorkerExecutorUsesConfiguredDelegatedExecutor(t *testing.T) {
-	cfg := NewExecutorConfig("claude", map[string]Executor{
-		"claude": {Name: "claude", Command: "claude"},
-		"codex":  {Name: "codex", Command: "codex"},
-	})
-
-	got, ok := cfg.DelegatedWorkerExecutor()
-	if !ok {
-		t.Fatal("delegated executor missing")
-	}
-	if got.ID != "claude" || !got.Delegated {
-		t.Fatalf("delegated executor = %+v", got)
-	}
-}
-
-func TestDelegatedWorkerExecutorFallsBackToCodexWhenUnset(t *testing.T) {
-	cfg := &ExecutorConfig{
-		ByName: map[string]Executor{
-			"claude": {Name: "claude", Command: "claude"},
-			"codex":  {Name: "codex", Command: "codex"},
-		},
-	}
-
-	got, ok := cfg.DelegatedWorkerExecutor()
-	if !ok {
-		t.Fatal("delegated executor missing")
-	}
-	if got.ID != "codex" || !got.Delegated {
-		t.Fatalf("delegated executor = %+v", got)
-	}
-}
-
-func TestDelegatedWorkerExecutorFallsBackToFirstConfiguredExecutor(t *testing.T) {
-	cfg := &ExecutorConfig{
-		ByName: map[string]Executor{
-			"claude": {Name: "claude", Command: "claude"},
-			"grok":   {Name: "grok", Command: "grok"},
-		},
-	}
-
-	got, ok := cfg.DelegatedWorkerExecutor()
-	if !ok {
-		t.Fatal("delegated executor missing")
-	}
-	if got.ID != "claude" || !got.Delegated {
-		t.Fatalf("delegated executor = %+v", got)
 	}
 }

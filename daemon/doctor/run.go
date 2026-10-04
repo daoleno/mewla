@@ -358,7 +358,9 @@ func (e env) checkExecutors() ExecutorsCheck {
 		check.Summary = "failed to load executors.toml"
 		return check
 	}
-	check.DelegatedExecutor = cfg.GetDelegatedExecutor()
+	if len(cfg.DeprecatedKeys) > 0 {
+		check.Warnings = append(check.Warnings, fmt.Sprintf("executors.toml: %s are retired and ignored; Brain routes Workers from its routing.md", strings.Join(cfg.DeprecatedKeys, ", ")))
+	}
 
 	for _, name := range cfg.Roles() {
 		executor := cfg.ByName[name]
@@ -389,15 +391,14 @@ func (e env) checkExecutors() ExecutorsCheck {
 		}
 	}
 	check.RecommendedHost = recommendHost(recommendFrom)
-	check.RecommendedDelegated = recommendDelegated(recommendFrom, cfg.GetDelegatedExecutor(), check.RecommendedHost)
 
 	switch {
 	case check.VerifiedCount > 0:
 		check.Status = StatusOK
-		check.Summary = fmt.Sprintf("%d usable executor(s), %d verified; host=%s delegated=%s", check.UsableCount, check.VerifiedCount, check.RecommendedHost, check.RecommendedDelegated)
+		check.Summary = fmt.Sprintf("%d usable executor(s), %d verified; host=%s", check.UsableCount, check.VerifiedCount, check.RecommendedHost)
 	case check.UsableCount > 0:
 		check.Status = StatusWarn
-		check.Summary = fmt.Sprintf("%d runnable executor(s) with unverified auth; host=%s delegated=%s", check.UsableCount, check.RecommendedHost, check.RecommendedDelegated)
+		check.Summary = fmt.Sprintf("%d runnable executor(s) with unverified auth; host=%s", check.UsableCount, check.RecommendedHost)
 		check.Warnings = append(check.Warnings, "auth state is unknown for recommended executors; Zen did not pretend they are authenticated")
 		if check.RecommendationConfidence == ConfidenceUnverified {
 			check.Warnings = append(check.Warnings, "recommendations selected auth-unknown candidates because no verified authenticated executor exists")
@@ -802,21 +803,6 @@ func recommendHost(usable []ExecutorCheck) string {
 		}
 	}
 	return usable[0].ID
-}
-
-func recommendDelegated(usable []ExecutorCheck, configured, host string) string {
-	if len(usable) == 0 {
-		return ""
-	}
-	for _, item := range usable {
-		if item.ID == configured {
-			return item.ID
-		}
-	}
-	if host != "" {
-		return host
-	}
-	return recommendHost(usable)
 }
 
 func firstCommandToken(command string) string {

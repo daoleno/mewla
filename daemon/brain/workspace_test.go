@@ -381,7 +381,7 @@ func TestNewStoreEnsuresCurrentAndPolicyDocs(t *testing.T) {
 	}{
 		{store.policyPath("delegation.md"), "Required repository gates are part of acceptance"},
 		{store.policyPath("delegation.md"), "Check each result against its acceptance criteria"},
-		{store.policyPath("engine.md"), "Keep the configured executor unless the user asks for another"},
+		{store.policyPath("engine.md"), "read routing.md and pass -executor, -model and -reasoning"},
 		{store.policyPath("handoff.md"), "The visible Brain chat survives a Host executor switch."},
 		{store.policyPath("calendar.md"), "-source-thread"},
 	} {
@@ -571,11 +571,17 @@ func TestNewStorePreservesCurrentAndUpgradesExistingPolicyDocs(t *testing.T) {
 	for _, want := range []string{
 		"Keep this too.",
 		"Policy",
-		"Keep the configured executor unless the user asks for another",
-		"the kind of task alone is not a reason to switch",
+		"read routing.md and pass -executor, -model and -reasoning",
+		"The task's nature and difficulty are reasons to pick a different executor",
+		"Replace outdated entries instead of appending",
 	} {
 		if !strings.Contains(engineContent, want) {
 			t.Fatalf("engine policy missing %q:\n%s", want, engineContent)
+		}
+	}
+	for _, retired := range []string{"the kind of task alone is not a reason to switch", "Keep the configured executor", "zen worker defaults"} {
+		if strings.Contains(engineContent, retired) {
+			t.Fatalf("engine policy keeps retired %q:\n%s", retired, engineContent)
 		}
 	}
 	readHandoff, err := os.ReadFile(filepath.Join(policies, "handoff.md"))

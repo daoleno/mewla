@@ -35,9 +35,9 @@ func NewLauncher(run SessionRunner, execs *ExecutorConfig) *Launcher {
 	}
 }
 
-// StartDedicated always spawns a fresh configured delegated executor session.
-// The caller is responsible for persisting the returned started metadata.
-func (l *Launcher) StartDedicated(item *Item, cwd string) (*Item, error) {
+// StartDedicated always spawns a fresh session of the named executor. The
+// caller chooses the executor and persists the returned started metadata.
+func (l *Launcher) StartDedicated(item *Item, cwd, role string) (*Item, error) {
 	if item == nil {
 		return nil, fmt.Errorf("work item required")
 	}
@@ -48,23 +48,12 @@ func (l *Launcher) StartDedicated(item *Item, cwd string) (*Item, error) {
 		return nil, fmt.Errorf("executor config required")
 	}
 
-	l.execs.mu.RLock()
-	role := l.execs.effectiveDelegatedLocked()
+	role = strings.TrimSpace(role)
 	executor, ok := l.execs.ByName[role]
 	if !ok {
-		l.execs.mu.RUnlock()
 		return nil, fmt.Errorf("%w: %s", ErrExecutorNotConfigured, role)
 	}
-	if NewWorkerExecutor(role, executor).Provider == WorkerProviderCodex && (l.execs.delegatedModel != "" || l.execs.delegatedReasoning != "") {
-		resolved, err := l.execs.resolveWorkerCommandLocked(role, "", "", "", true)
-		if err != nil {
-			l.execs.mu.RUnlock()
-			return nil, fmt.Errorf("%w: %v", ErrScheduledActionUnattended, err)
-		}
-		executor.Command = resolved
-	}
 	command, err := ScheduledActionCommand(role, executor)
-	l.execs.mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}

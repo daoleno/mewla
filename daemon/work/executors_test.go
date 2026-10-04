@@ -3,6 +3,7 @@ package work
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -11,8 +12,8 @@ func TestLoadExecutors_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadExecutors: %v", err)
 	}
-	if cfg.GetDelegatedExecutor() != "codex" {
-		t.Fatalf("delegated executor = %q", cfg.GetDelegatedExecutor())
+	if len(cfg.DeprecatedKeys) != 0 {
+		t.Fatalf("deprecated keys = %v", cfg.DeprecatedKeys)
 	}
 	if _, ok := cfg.ByName["claude"]; !ok {
 		t.Fatal("claude missing")
@@ -35,6 +36,8 @@ func TestLoadExecutors_CustomFile(t *testing.T) {
 	path := filepath.Join(dir, "executors.toml")
 	err := os.WriteFile(path, []byte(`
 delegated_executor = "gpt5"
+delegated_model = "gpt-6-astra"
+delegated_reasoning = "high"
 
 [[executors]]
 name = "claude"
@@ -56,8 +59,12 @@ command = "/opt/gpt5"
 	if err != nil {
 		t.Fatalf("LoadExecutors: %v", err)
 	}
-	if cfg.GetDelegatedExecutor() != "gpt5" {
-		t.Fatalf("delegated executor = %q", cfg.GetDelegatedExecutor())
+	// Retired routing keys still load; they are reported, never applied.
+	if strings.Join(cfg.DeprecatedKeys, ",") != "delegated_executor,delegated_model,delegated_reasoning" {
+		t.Fatalf("deprecated keys = %v", cfg.DeprecatedKeys)
+	}
+	if got, err := cfg.ResolveWorkerCommand("codex", "", "", "", true); err != nil || strings.Contains(got, "gpt-6-astra") || strings.Contains(got, "reasoning") {
+		t.Fatalf("retired defaults applied: %q, %v", got, err)
 	}
 	if cfg.ByName["claude"].Command != "/opt/claude" {
 		t.Fatalf("claude = %+v", cfg.ByName["claude"])

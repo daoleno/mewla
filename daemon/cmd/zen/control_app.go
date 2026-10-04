@@ -108,8 +108,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return control.Response{OK: true, ResourceTelemetry: &snap}
 	case "worker_list":
 		return a.handleWorkerList()
-	case "worker_defaults_get", "worker_defaults_set":
-		return a.handleWorkerDefaults(req)
 	case "worker_spawn":
 		return a.handleWorkerSpawn(req)
 	case "claude_launch":
@@ -169,8 +167,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainWorkResolve(req)
 	case "brain_set_executor":
 		return a.handleBrainSetExecutor(req)
-	case "set_delegated_executor":
-		return a.handleSetDelegatedExecutor(req)
 	case "brain_workspace":
 		if a == nil || a.brainStore == nil {
 			return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
@@ -1395,15 +1391,14 @@ func mapWatcherSessionPresence(presence watcher.SessionPresence, err error) (mod
 }
 
 func (a *controlApp) handleBrainExecutors() control.Response {
-	executor, delegatedExecutor, executors, resp := a.brainExecutorSnapshot()
+	executor, executors, resp := a.brainExecutorSnapshot()
 	if !resp.OK || resp.Error != nil {
 		return resp
 	}
 	return control.Response{
-		OK:                true,
-		Executor:          executor,
-		DelegatedExecutor: delegatedExecutor,
-		Executors:         executors,
+		OK:        true,
+		Executor:  executor,
+		Executors: executors,
 	}
 }
 
@@ -1483,70 +1478,32 @@ func (a *controlApp) handleBrainSetExecutor(req control.Request) control.Respons
 	return a.handleBrainExecutors()
 }
 
-// handleSetDelegatedExecutor switches the live Delegated Executor on the shared
-// ExecutorConfig owner. Existing sessions are not migrated.
-func (a *controlApp) handleSetDelegatedExecutor(req control.Request) control.Response {
-	if a == nil || a.execs == nil {
-		return control.ErrorResponse("executors_unavailable", "Executor config is not available.")
-	}
-	executorID := strings.TrimSpace(req.ExecutorID)
-	if executorID == "" {
-		return control.ErrorResponse("missing_executor", "Delegated executor id is required.")
-	}
-	if err := a.execs.SetDelegatedExecutor(executorID); err != nil {
-		if errors.Is(err, work.ErrUnknownExecutor) {
-			return control.ErrorResponse("invalid_executor", err.Error())
-		}
-		if errors.Is(err, work.ErrDelegatedExecutorLocked) {
-			return control.ErrorResponse("delegated_executor_locked_by_env", err.Error())
-		}
-		return control.ErrorResponse("set_delegated_executor_failed", err.Error())
-	}
-	return a.handleBrainExecutors()
-}
-
-func (a *controlApp) brainExecutorSnapshot() (*control.Executor, *control.Executor, []control.Executor, control.Response) {
+func (a *controlApp) brainExecutorSnapshot() (*control.Executor, []control.Executor, control.Response) {
 	if a == nil || a.brainStore == nil {
-		return nil, nil, nil, control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
+		return nil, nil, control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
 	}
 	if a.execs == nil {
-		return nil, nil, nil, control.ErrorResponse("executors_unavailable", "Executor config is not available.")
+		return nil, nil, control.ErrorResponse("executors_unavailable", "Executor config is not available.")
 	}
 	current, ok := a.currentBrainExecutor()
 	if !ok {
-		return nil, nil, nil, control.ErrorResponse("executor_unavailable", "No Brain host executors are configured.")
-	}
-	delegated, ok := a.brainDelegatedExecutor()
-	if !ok {
-		return nil, nil, nil, control.ErrorResponse("executor_unavailable", "No delegated executors are configured.")
+		return nil, nil, control.ErrorResponse("executor_unavailable", "No Brain host executors are configured.")
 	}
 	executors := a.execs.WorkerExecutors()
 	out := make([]control.Executor, 0, len(executors))
 	for _, executor := range executors {
 		executor.Host = executor.ID == current.ID
-		executor.Delegated = executor.ID == delegated.ID
 		out = append(out, controlExecutor(executor))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Host != out[j].Host {
 			return out[i].Host
 		}
-		if out[i].Delegated != out[j].Delegated {
-			return out[i].Delegated
-		}
 		return out[i].ID < out[j].ID
 	})
 	current.Host = true
-	if current.ID == delegated.ID {
-		current.Delegated = true
-	}
-	delegated.Delegated = true
-	if delegated.ID == current.ID {
-		delegated.Host = true
-	}
 	converted := controlExecutor(current)
-	convertedDelegated := controlExecutor(delegated)
-	return &converted, &convertedDelegated, out, control.Response{OK: true}
+	return &converted, out, control.Response{OK: true}
 }
 
 func (a *controlApp) currentBrainExecutor() (work.WorkerExecutor, bool) {
@@ -1599,34 +1556,17 @@ func (a *controlApp) resolveSpawnCommand(req control.Request) (string, error) {
 		}
 		return work.PrepareDelegatedCommand(work.InferWorkerProvider(name), name)
 	}
-	return a.execs.ResolveWorkerCommand(req.Executor, req.Command, req.ModelID, req.ReasoningEffort, !req.Hidden)
-}
-
-func (a *controlApp) brainCallerDelegatedExecutor(workerID string) (string, bool) {
-	if a == nil || a.brainStore == nil || a.execs == nil {
-		return "", false
+	executor := strings.TrimSpace(req.Executor)
+	if executor == "" && strings.TrimSpace(req.Command) == "" {
+		// Brain names the executor for every delegated launch. Other callers
+		// get the executor the user runs Brain on, never a configured default.
+		host, ok := a.currentBrainExecutor()
+		if !ok {
+			return "", fmt.Errorf("%w: pass -executor", work.ErrUnknownExecutor)
+		}
+		executor = host.ID
 	}
-	workerID = strings.TrimSpace(workerID)
-	if workerID == "" {
-		return "", false
-	}
-	host, err := a.brainStore.HostSession()
-	if err != nil || strings.TrimSpace(host.ID) == "" || strings.TrimSpace(host.ID) != workerID {
-		return "", false
-	}
-	if delegatedExecutor, ok := a.brainDelegatedExecutor(); ok {
-		return delegatedExecutor.ID, true
-	}
-	return "", false
-}
-
-func (a *controlApp) brainDelegatedExecutor() (work.WorkerExecutor, bool) {
-	if a == nil || a.execs == nil {
-		return work.WorkerExecutor{}, false
-	}
-	// Effective delegated selection (including startup env lock) lives only on
-	// the shared ExecutorConfig owner — no parallel env readers here.
-	return a.execs.DelegatedWorkerExecutor()
+	return a.execs.ResolveWorkerCommand(executor, req.Command, req.ModelID, req.ReasoningEffort, !req.Hidden)
 }
 
 func brainHostExecutorOverride() string {
@@ -1687,8 +1627,7 @@ func controlExecutor(executor work.WorkerExecutor) control.Executor {
 			InteractiveTTY:   executor.Capabilities.InteractiveTTY,
 			StructuredEvents: executor.Capabilities.StructuredEvents,
 		},
-		Host:      executor.Host,
-		Delegated: executor.Delegated,
+		Host: executor.Host,
 	}
 }
 

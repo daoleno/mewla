@@ -2438,13 +2438,13 @@ func TestServiceSnapshotAuditsProviderMismatchReplacement(t *testing.T) {
 	}
 }
 
-func TestServiceSnapshotFallsBackToCodexNotDelegatedExecutor(t *testing.T) {
+func TestServiceSnapshotFallsBackToCodexHost(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("claude", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
@@ -2468,7 +2468,7 @@ func TestServiceSnapshotHonorsHostExecutorOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex":  {Name: "codex", Command: "codex"},
 		"claude": {Name: "claude", Command: "claude"},
 	}))
@@ -2505,7 +2505,7 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -2517,14 +2517,14 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 	}
 	prompt := fw.sentCalls[0].text
 	for _, want := range []string{
-		"Delegated executor: codex",
+		"Host executor: codex.",
 		"Read AGENTS.md before continuing", "Managed worktree root:", "Zen CLI:",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("bootstrap missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{"agent spawn", "agent capture", "Zen CLI quick reference", "Current memory:", "Current profile notes:", "soul.md", "Brain owns orchestration"} {
+	for _, unwanted := range []string{"Delegated executor", "agent spawn", "agent capture", "Zen CLI quick reference", "Current memory:", "Current profile notes:", "soul.md", "Brain owns orchestration"} {
 		if strings.Contains(prompt, unwanted) {
 			t.Fatalf("bootstrap retains %q", unwanted)
 		}
@@ -2550,7 +2550,7 @@ func TestServiceBootstrapPromptReferencesPrivateWorkspaceWithoutEmbeddingIt(t *t
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -2589,7 +2589,7 @@ func TestServiceSetHostExecutorPersistsAndStartsSelectedHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex":  {Name: "codex", Command: "codex"},
 		"claude": {Name: "claude", Command: "claude"},
 	}))
@@ -2646,7 +2646,7 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("grok", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
 		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
 	}))
@@ -2687,7 +2687,6 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Brain host executor handoff:", "changed from grok to codex",
-		"delegated executor: grok",
 		"AGENTS.md", "current.md", "policies/handoff.md", "pending Event identities",
 	} {
 		if !strings.Contains(handoff, want) {
@@ -2736,7 +2735,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 			},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
 	}))
 
@@ -2772,7 +2771,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(engine), "Keep the configured executor unless the user asks for another") {
+	if !strings.Contains(string(engine), "read routing.md and pass -executor, -model and -reasoning") {
 		t.Fatalf("engine policy was not backfilled:\n%s", engine)
 	}
 	handoff, err := os.ReadFile(store.policyPath("handoff.md"))
@@ -2824,7 +2823,7 @@ func TestServiceNewChatReplacesHostAndStartsFreshThread(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("claude", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude", Kind: "claude", Runtime: work.WorkerRuntimeTmux},
 	}))
 
@@ -2899,49 +2898,12 @@ func TestServiceSetHostExecutorRejectsUnknownAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
 	if _, err := service.SetHostExecutor("claude"); err == nil {
 		t.Fatal("expected unknown executor error")
-	}
-}
-
-func TestServiceSnapshotSeesLiveDelegatedExecutorSwitch(t *testing.T) {
-	store, err := NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	execs := work.NewExecutorConfig("codex", map[string]work.Executor{
-		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
-		"grok":  {Name: "grok", Command: "grok --live", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
-	})
-	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{}}
-	service := NewService(store, fw, execs)
-
-	before, err := service.Context()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if before.DelegatedExecutor == nil || before.DelegatedExecutor.ID != "codex" {
-		t.Fatalf("before delegated = %#v", before.DelegatedExecutor)
-	}
-
-	if err := execs.SetDelegatedExecutor("grok"); err != nil {
-		t.Fatalf("SetDelegatedExecutor: %v", err)
-	}
-
-	after, err := service.Context()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.DelegatedExecutor == nil || after.DelegatedExecutor.ID != "grok" {
-		t.Fatalf("after delegated = %#v", after.DelegatedExecutor)
-	}
-	// Host executor is independent of delegated selection.
-	if after.HostExecutor == nil || after.HostExecutor.ID == "" {
-		t.Fatalf("host executor missing after delegated switch: %#v", after.HostExecutor)
 	}
 }
 
@@ -3010,7 +2972,7 @@ func TestServiceSnapshotPreservesCodexHostWithoutFullAuthorization(t *testing.T)
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[oldID])
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -3244,7 +3206,7 @@ func TestServiceHousekeepingRepairsCalendarContractWithoutOverwritingUserContent
 	if err := os.WriteFile(store.workspaceInstructionsPath(), []byte(customInstructions), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 

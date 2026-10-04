@@ -215,6 +215,7 @@ func standardWorkspaceRelativePaths() []string {
 		"current.md",
 		"memory.md",
 		"profile.md",
+		routingGuideName,
 		"policies/delegation.md",
 		"policies/engine.md",
 		"policies/handoff.md",

@@ -33,35 +33,33 @@ type WorkerRef struct {
 }
 
 type Snapshot struct {
-	Personality       string                `json:"personality"`
-	CurrentWork       []CurrentWork         `json:"current_work"`
-	WorkBacklog       WorkBacklog           `json:"work_backlog"`
-	Workers           []WorkerRef           `json:"workers"`
-	HostWorker        *WorkerRef            `json:"host_worker,omitempty"`
-	HostExecutor      *work.WorkerExecutor  `json:"host_executor,omitempty"`
-	DelegatedExecutor *work.WorkerExecutor  `json:"delegated_executor,omitempty"`
-	Executors         []work.WorkerExecutor `json:"executors"`
-	ChatThreadID      string                `json:"chat_thread_id,omitempty"`
-	Workspace         string                `json:"workspace,omitempty"`
-	WorklogPath       string                `json:"worklog_path,omitempty"`
-	GeneratedAt       time.Time             `json:"generated_at"`
+	Personality  string                `json:"personality"`
+	CurrentWork  []CurrentWork         `json:"current_work"`
+	WorkBacklog  WorkBacklog           `json:"work_backlog"`
+	Workers      []WorkerRef           `json:"workers"`
+	HostWorker   *WorkerRef            `json:"host_worker,omitempty"`
+	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`
+	Executors    []work.WorkerExecutor `json:"executors"`
+	ChatThreadID string                `json:"chat_thread_id,omitempty"`
+	Workspace    string                `json:"workspace,omitempty"`
+	WorklogPath  string                `json:"worklog_path,omitempty"`
+	GeneratedAt  time.Time             `json:"generated_at"`
 }
 
 type BrainContext struct {
-	ThreadID          string                `json:"thread_id,omitempty"`
-	Workspace         string                `json:"workspace,omitempty"`
-	WorklogPath       string                `json:"worklog_path,omitempty"`
-	Notes             []WorkspaceNote       `json:"notes"`
-	Personality       string                `json:"personality,omitempty"`
-	CurrentWork       []CurrentWork         `json:"current_work"`
-	WorkBacklog       WorkBacklog           `json:"work_backlog"`
-	Playbooks         []PlaybookEntry       `json:"playbooks,omitempty"`
-	HostWorker        *WorkerRef            `json:"host_worker,omitempty"`
-	HostExecutor      *work.WorkerExecutor  `json:"host_executor,omitempty"`
-	DelegatedExecutor *work.WorkerExecutor  `json:"delegated_executor,omitempty"`
-	Executors         []work.WorkerExecutor `json:"executors"`
-	Workers           []WorkerRef           `json:"workers"`
-	GeneratedAt       time.Time             `json:"generated_at"`
+	ThreadID     string                `json:"thread_id,omitempty"`
+	Workspace    string                `json:"workspace,omitempty"`
+	WorklogPath  string                `json:"worklog_path,omitempty"`
+	Notes        []WorkspaceNote       `json:"notes"`
+	Personality  string                `json:"personality,omitempty"`
+	CurrentWork  []CurrentWork         `json:"current_work"`
+	WorkBacklog  WorkBacklog           `json:"work_backlog"`
+	Playbooks    []PlaybookEntry       `json:"playbooks,omitempty"`
+	HostWorker   *WorkerRef            `json:"host_worker,omitempty"`
+	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`
+	Executors    []work.WorkerExecutor `json:"executors"`
+	Workers      []WorkerRef           `json:"workers"`
+	GeneratedAt  time.Time             `json:"generated_at"`
 }
 
 // WorkspaceNote locates a private Brain note without inlining it; Brain reads

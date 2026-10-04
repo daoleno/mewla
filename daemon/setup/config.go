@@ -13,16 +13,14 @@ import (
 )
 
 type executorFile struct {
-	DelegatedExecutor string          `toml:"delegated_executor"`
-	Executors         []work.Executor `toml:"executors"`
+	Executors []work.Executor `toml:"executors"`
 }
 
 type configWriteRequest struct {
-	Path      string
-	Delegated string
-	Profile   Profile
-	Selected  []selectedExecutor
-	Now       time.Time
+	Path     string
+	Profile  Profile
+	Selected []selectedExecutor
+	Now      time.Time
 }
 
 type selectedExecutor struct {
@@ -39,9 +37,6 @@ type configWriteResult struct {
 func writeExecutorsConfig(req configWriteRequest) (configWriteResult, error) {
 	if strings.TrimSpace(req.Path) == "" {
 		return configWriteResult{}, fmt.Errorf("executors path required")
-	}
-	if strings.TrimSpace(req.Delegated) == "" {
-		return configWriteResult{}, fmt.Errorf("delegated executor required")
 	}
 	if req.Now.IsZero() {
 		req.Now = time.Now().UTC()
@@ -108,8 +103,7 @@ func writeExecutorsConfig(req configWriteRequest) (configWriteResult, error) {
 	sort.Strings(names)
 
 	file := executorFile{
-		DelegatedExecutor: req.Delegated,
-		Executors:         make([]work.Executor, 0, len(names)),
+		Executors: make([]work.Executor, 0, len(names)),
 	}
 	for _, name := range names {
 		file.Executors = append(file.Executors, outByName[name])
@@ -153,8 +147,7 @@ func renderExecutorsTOML(file executorFile, profile Profile) ([]byte, error) {
 		b.WriteString("# Safe/manual profile: no bypass flags were injected by setup.\n")
 	}
 	b.WriteString("# Restart zen after changing executor definitions or commands.\n")
-	b.WriteString("# Delegated selection can be switched live: zen brain set-delegated <id>\n\n")
-	b.WriteString("delegated_executor = \"" + escapeTOMLString(file.DelegatedExecutor) + "\"\n\n")
+	b.WriteString("# Brain picks each Worker's executor, model and reasoning from its routing.md.\n\n")
 	for _, executor := range file.Executors {
 		b.WriteString("[[executors]]\n")
 		b.WriteString("name = \"" + escapeTOMLString(executor.Name) + "\"\n")

@@ -21,6 +21,7 @@ type scheduledActionWatcher struct {
 type scheduledActionThreadRegistry struct {
 	known  bool
 	thread string
+	host   string
 }
 
 type scheduledActionLaunchRunner struct {
@@ -56,6 +57,10 @@ func (r *scheduledActionLaunchRunner) Abort(sessionID string) error {
 func (r *scheduledActionThreadRegistry) HasChatThread(threadID string) (bool, error) {
 	r.thread = threadID
 	return r.known, nil
+}
+
+func (r *scheduledActionThreadRegistry) HostExecutorID() string {
+	return r.host
 }
 
 func (w scheduledActionWatcher) GetWorker(string) *classifier.Worker {
@@ -416,14 +421,14 @@ func TestRunScheduledActionPersistsFreshDelegatedLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmux := &scheduledActionLaunchRunner{}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig("claude", map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude --configured"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
 	runner := &WorkRunner{
 		Store:    store,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true},
+		Brain:    &scheduledActionThreadRegistry{known: true, host: "claude"},
 	}
 	run := Run{ID: "run-1", Title: "Frozen title", SourceThreadID: "captured-thread"}
 
@@ -484,13 +489,13 @@ func TestUnsupportedScheduledExecutorFailsOccurrenceBeforeAnyPromptCanRun(t *tes
 		t.Fatal(err)
 	}
 	tmux := &scheduledActionLaunchRunner{}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig("my-agent", map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
 		"my-agent": {Name: "my-agent", Command: "my-agent --interactive", Kind: "custom"},
 	}))
 	runner := &WorkRunner{
 		Store:    workStore,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true},
+		Brain:    &scheduledActionThreadRegistry{known: true, host: "my-agent"},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -542,13 +547,13 @@ func TestSchedulerHandoffTimeoutFailsOccurrenceOnceBoundedly(t *testing.T) {
 	}
 	notReady := errors.New("Session input was definitely not submitted: agent input not ready for \"opencode\"")
 	tmux := &scheduledActionLaunchRunner{sendReadyErr: notReady}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig("opencode", map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
 		Store:    workStore,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true},
+		Brain:    &scheduledActionThreadRegistry{known: true, host: "opencode"},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -627,13 +632,13 @@ func TestSchedulerHandoffAmbiguousFailsOccurrenceWithoutReplay(t *testing.T) {
 	}
 	ambiguous := errors.New("Session input outcome is unknown and will not be replayed: provider admission not observed")
 	tmux := &scheduledActionLaunchRunner{sendReadyErr: ambiguous}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig("opencode", map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
 		Store:    workStore,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true},
+		Brain:    &scheduledActionThreadRegistry{known: true, host: "opencode"},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -679,7 +684,7 @@ func TestSchedulerDelayedReadinessHandoffLaunchesOnceAndRoutsResult(t *testing.T
 		t.Fatal(err)
 	}
 	tmux := &scheduledActionLaunchRunner{newID: "opencode-scheduled"}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig("opencode", map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
@@ -689,7 +694,7 @@ func TestSchedulerDelayedReadinessHandoffLaunchesOnceAndRoutsResult(t *testing.T
 			State:   classifier.StateRunning,
 			Summary: "OpenCode working on the scheduled briefing",
 		}},
-		Brain: &scheduledActionThreadRegistry{known: true},
+		Brain: &scheduledActionThreadRegistry{known: true, host: "opencode"},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }

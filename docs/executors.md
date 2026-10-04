@@ -18,7 +18,7 @@ When the file is absent, zen uses approximately:
 
 | Name | Default command | Notes |
 | --- | --- | --- |
-| `codex` | `codex` | Default **delegated** executor for Brain |
+| `codex` | `codex` | |
 | `claude` | `claude` | |
 | `agent` | `cursor-agent --force --sandbox disabled` | Permission / sandbox bypass |
 | `grok` | `grok --no-alt-screen --permission-mode bypassPermissions` | Permission bypass |
@@ -34,50 +34,56 @@ cp executors.example.toml ~/.zen/executors.toml
 # edit executor definitions/commands, then restart zen so the catalog reloads
 ```
 
-`delegated_executor` names which executor Brain uses for delegated work and ordinary default session creation. Only that CLI needs to be installed if you only use Brain delegation plus that tool.
+Executor definitions are a static catalog of launch commands. Nothing in the
+file selects which executor a Worker uses.
 
-Switch the live Delegated Executor without restarting the daemon:
+## Worker routing
 
-```bash
-zen brain set-delegated grok
-```
-
-That validates the id against the loaded catalog, persists `delegated_executor` atomically, and updates every future launch/read boundary in the same process. Existing Worker sessions keep their original executor. Editing executor definitions or commands still requires a restart so the static catalog reloads.
-
-## Default delegated Worker configuration
-
-Use one atomic operation against the running daemon:
+Brain picks every Worker's executor, model and reasoning for the task at hand.
+It reads `routing.md` in its workspace before each spawn and always passes all
+three:
 
 ```sh
-zen worker defaults -executor codex -model gpt-6-astra -reasoning medium
-zen worker defaults --json
+zen worker spawn -name "Fix flaky test" -executor claude -model claude-opus-5-5 -reasoning high -cwd /repo -prompt "..."
 ```
 
-The response includes `executor`, `model`, `reasoning`, and the actual resolved
-`command`. The existing `ExecutorConfig` owns all three values in
-`~/.zen/executors.toml` (`delegated_executor`, `delegated_model`,
-`delegated_reasoning`). No Provider model or native Codex configuration is
-rewritten. Persistence succeeds before live state changes; a failed save leaves
-all three prior values effective. The next delegated spawn uses the new snapshot
-without a service restart. Already running Sessions are unchanged.
+`routing.md` is plain Markdown judgment guidance, not configuration. Zen never
+parses it. The first workspace creation seeds a short generic guide, and product
+upgrades never overwrite it. After that, Brain and the user maintain it. Brain
+revises it when the user states a routing preference, when a new executor or
+model becomes available, or when a Worker result shows a routing choice was a
+poor fit. It replaces outdated lines instead of appending, so the guide stays
+short.
 
-The model/effort fields are Worker-only. The executor catalog command remains
-the host/manual command, so changing Worker defaults cannot rewrite Brain's
-model. Native Codex config (including `$CODEX_HOME/config.toml`), selected
-profiles and resumed thread settings are lower priority than explicit Worker
-launch options. No duplicate model/effort options are appended. Precedence is:
+Per-launch model and reasoning map to each client's own flags (verified against
+codex 0.159.3, claude 2.1.289 and pi 0.99.1):
 
-1. Single-launch `-model` / `-reasoning` values.
-2. Model/effort explicitly present in `-command` (including `codex resume ID`).
-3. Saved Worker model/effort, when launching the selected default client.
-4. Catalog command, then the native client's configuration when omitted.
+| Executor | `-model` | `-reasoning` |
+| --- | --- | --- |
+| `codex` | `--model` | `-c model_reasoning_effort="…"` (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`) |
+| `claude` | `--model` | `--effort` (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `pi` | `--model provider/id` | `--thinking` (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
+| `grok` | `--model` | unsupported |
+| `agent` (Cursor) | `--model` | unsupported |
+| `opencode` | `--model provider/model` | unsupported |
 
-Setting requires all three flags; pass an empty model or reasoning to clear that
-override. `zen brain set-delegated CLIENT` remains the executor-only operation:
-changing clients clears Worker model/effort overrides rather than carrying a
-Codex model to another client. The startup `ZEN_DELEGATED_EXECUTOR` lock is
-respected. The adapter currently accepts model/reasoning selection for Codex;
-other clients can be selected with empty values and keep native selection.
+A launch value replaces the same flag in the catalog command (for example a
+catalog `claude --model X` becomes `claude --model Y --effort high`). A client
+or level that cannot take the requested option fails the spawn with an
+explanation; nothing is silently dropped. Empty values keep the client's own
+default. Model/reasoning overrides need a plain command without shell
+composition or a `--` terminator.
+
+When no one chooses an executor (`zen worker spawn` without `-executor`, or a
+Calendar `scheduled_action`), the Worker runs on the Brain host executor. That
+executor is the one the user picked for Brain and is known to work. It still has
+no model or reasoning override.
+
+Older `~/.zen/executors.toml` files may still contain `delegated_executor`,
+`delegated_model` or `delegated_reasoning`. They load normally, but these keys
+are ignored, and `zen doctor` prints a one-line note that they are retired.
+Delete them at any time. The `zen worker defaults` and `zen brain set-delegated`
+commands and the `ZEN_DELEGATED_EXECUTOR` lock no longer exist.
 
 Claude, Cursor and Grok delegated launches reuse the existing unattended client
 adapters. Claude `--permission-mode auto`, `dontAsk`, and `acceptEdits` are not
@@ -119,12 +125,6 @@ definite non-submission. The normal inventory pass and explicit Session close
 use the same retirement boundary. Accepted/ambiguous and Host/review admissions
 keep their existing handling rules. A final presence check prevents spawn from
 reporting a fabricated running Worker when its pane disappeared during handoff.
-
-Control requests: `worker_defaults_get`, `worker_defaults_set` with `executor`,
-`model_id`, `reasoning_effort`. Authenticated WebSocket equivalents are
-`get_worker_defaults` / `set_worker_defaults` using `executor_id`, `model_id`,
-`reasoning_effort`. Both call the same owner; no UI-specific default store exists.
-Brain should perform routine configuration directly, then read back the result.
 
 ## Permission bypass risks
 
@@ -257,16 +257,14 @@ Zen does not synthesize timed typewriter output and does not derive structured C
 
 ## Diagnostics
 
-`zen doctor` reports which configured executors are on `PATH` and best-effort auth hints. Guided `zen setup` can write `~/.zen/executors.toml` for you (Safe vs Autonomous, Host/Delegated). It never runs sudo, never logs into providers, and requires explicit confirmation for Autonomous. Restart `zen` after setup (or after editing executor definitions/commands) so the daemon reloads the static catalog. Once zen is running, change only the Delegated Executor with `zen brain set-delegated <id>` — no restart.
+`zen doctor` reports which configured executors are on `PATH` and best-effort auth hints. Guided `zen setup` can write `~/.zen/executors.toml` for you (Safe vs Autonomous, Brain host). It never runs sudo, never logs into providers, and requires explicit confirmation for Autonomous. Restart `zen` after setup (or after editing executor definitions/commands) so the daemon reloads the static catalog.
 
-## Worker model and reasoning defaults
+## Executor identity and model choice
 
 Executor IDs identify the agent client (`codex`, `claude`, `pi`, and so on).
-Model and reasoning effort are separate model-profile settings; do not create
-capability-suffixed executor IDs such as `codex-medium` or `codex-high`.
-
-Keep the delegated executor set to `codex`, then choose the Codex model profile
-and its reasoning effort in **Settings > Agents > Model Providers**. A
-profile selecting `gpt-6-sol` with `medium` effort applies to future delegated
-Workers while preserving the existing `codex` executor identity. Existing
-Sessions retain their current route and model until explicitly changed.
+Model and reasoning effort are separate. Do not create capability-suffixed
+executor IDs such as `codex-medium` or `codex-high`. Brain passes `-model` and
+`-reasoning` per Worker (see [Worker routing](#worker-routing)), and Model
+Provider profiles in **Settings > Agents > Model Providers** still apply their
+connections at launch. Existing Sessions retain their current route and model
+until explicitly changed.

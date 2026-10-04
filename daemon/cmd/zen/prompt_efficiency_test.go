@@ -86,7 +86,7 @@ func TestEngineeringScenarioBriefsReachNativeWorkers(t *testing.T) {
 				}
 				fw := newFakeControlWatcher()
 				fw.turnStore = store
-				app := &controlApp{watcher: fw, brainStore: store, execs: work.NewExecutorConfig(provider, map[string]work.Executor{
+				app := &controlApp{watcher: fw, brainStore: store, execs: work.NewExecutorConfig(map[string]work.Executor{
 					provider: {Name: provider, Command: provider, Kind: provider},
 				})}
 				cwd := filepath.Join(t.TempDir(), "unrelated-project")
