@@ -22,21 +22,25 @@ type tlsHTTPListener struct {
 }
 
 func (l *tlsHTTPListener) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if err != nil {
-		return nil, err
+	for {
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		reader := bufio.NewReader(conn)
+		first, err := reader.Peek(1)
+		if err != nil {
+			// The failure belongs to this connection. net/http stops the
+			// listener when Accept returns a non-temporary error.
+			_ = conn.Close()
+			continue
+		}
+		inner := peekedConn{Conn: conn, reader: reader}
+		_ = conn.SetDeadline(time.Time{})
+		if first[0] == 0x16 {
+			return tls.Server(inner, l.config), nil
+		}
+		return inner, nil
 	}
-	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-	reader := bufio.NewReader(conn)
-	first, err := reader.Peek(1)
-	if err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
-	inner := peekedConn{Conn: conn, reader: reader}
-	_ = conn.SetDeadline(time.Time{})
-	if first[0] == 0x16 {
-		return tls.Server(inner, l.config), nil
-	}
-	return inner, nil
 }
