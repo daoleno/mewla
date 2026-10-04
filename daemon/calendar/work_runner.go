@@ -23,6 +23,9 @@ type WorkRunner struct {
 	}
 	Brain interface {
 		HasChatThread(string) (bool, error)
+		// HostExecutorID runs scheduled_action Work: the action fires without
+		// Brain choosing an executor, so it uses the one the user runs Brain on.
+		HostExecutorID() string
 	}
 }
 
@@ -155,7 +158,7 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("create visible Work item: %w", err)
 	}
-	started, err := r.Launcher.StartDedicated(created, cwd)
+	started, err := r.Launcher.StartDedicated(created, cwd, r.Brain.HostExecutorID())
 	if err != nil {
 		return ActionResult{WorkID: created.ID}, fmt.Errorf("start visible Work item: %w", err)
 	}

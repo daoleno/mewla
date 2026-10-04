@@ -79,10 +79,10 @@ proxy with `zen pair https://your-origin`. See [Connect and pair](docs/connect-a
 - **Brain.** A long-lived agent Session with a private workspace under
   `~/.zen/brain/` (memory, profile, current focus, worklogs). It delegates with
   the same `zen worker` CLI you can use yourself.
-- **Workers and executors.** An executor is an agent CLI definition. New Workers
-  run on the default delegated executor (`codex` unless changed) unless you ask
-  for another; `zen worker spawn -executor` sets it explicitly. A running Worker
-  keeps its executor.
+- **Workers and executors.** An executor is an agent CLI definition. Brain picks
+  each Worker's executor, model and reasoning from `routing.md`, a short guide in
+  its workspace that it keeps current with you. `zen worker spawn -executor
+  -model -reasoning` sets them explicitly. A running Worker keeps its executor.
 - **Trust.** The daemon has an Ed25519 identity. Devices enroll once with a
   short-lived pairing token, then every request is signed. There is no shared
   secret for normal traffic. Paired phones receive what you open; model
@@ -101,15 +101,14 @@ zen devices revoke -id <device-id>
 zen update                         # verify and install the latest release
 
 zen worker list --json             # visible Workers
-zen worker spawn -name "Review docs" -executor claude -cwd ~/repo -prompt "Inspect docs"
+zen worker spawn -name "Review docs" -executor claude -model claude-opus-5-5 -reasoning high -cwd ~/repo -prompt "Inspect docs"
 zen worker capture -id <id> --json # transcript
 zen worker receipt -id <id> --work-id <work>  # was an input accepted?
 zen worker send -id <id> --work-id <work> -text "follow-up"
 zen worker close -id <id>
 
-zen brain executors --json         # Brain host and delegated executors
+zen brain executors --json         # Brain host and available executors
 zen brain use <executor>           # switch the agent that runs Brain
-zen brain set-delegated <executor> # change the default for new Workers, live
 zen brain work list --json         # open Work (-all, -full, -id for history)
 zen brain work update -id <work> -status done
 ```

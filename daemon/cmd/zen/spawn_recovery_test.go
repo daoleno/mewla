@@ -18,7 +18,7 @@ func TestSpawnPendingSuccessThenPaneGoneCanRespawnSameWork(t *testing.T) {
 	fw := newFakeControlWatcher()
 	fw.turnStore = store
 	fw.sendErr = &watcher.InputSubmissionError{Result: watcher.InputResult{Outcome: watcher.InputAmbiguous}, Cause: errors.New("provider admission pending")}
-	app := &controlApp{watcher: fw, brainStore: store, execs: work.NewExecutorConfig("codex", map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}})}
+	app := &controlApp{watcher: fw, brainStore: store, execs: work.NewExecutorConfig(map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}})}
 	first := app.HandleControlRequest(control.Request{Type: "worker_spawn", Name: "first", Cwd: "/repo", Prompt: "brief"})
 	if !first.OK || first.Confirmation == "" || first.BrainWork == nil {
 		t.Fatalf("first spawn: %+v", first)
@@ -54,7 +54,7 @@ func TestSpawnDeadPreparedSessionThenRespawnSameWork(t *testing.T) {
 	}
 	fw := newFakeControlWatcher()
 	fw.turnStore = store
-	app := &controlApp{watcher: fw, brainStore: store, execs: work.NewExecutorConfig("codex", map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}})}
+	app := &controlApp{watcher: fw, brainStore: store, execs: work.NewExecutorConfig(map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}})}
 	resp := app.HandleControlRequest(control.Request{Type: "worker_spawn", Name: "replacement", Cwd: "/repo", WorkID: item.ID, Prompt: "explicit replacement input"})
 	if !resp.OK {
 		t.Fatalf("dead preparation stranded Work: %+v", resp.Error)
@@ -74,7 +74,7 @@ func TestSpawnDeadPreparedSessionThenRespawnSameWork(t *testing.T) {
 func TestSpawnSuccessfulTransportThenPaneVanishes(t *testing.T) {
 	fw := newFakeControlWatcher()
 	fw.dropWorkerOnSend = true
-	app := &controlApp{watcher: fw, brainStore: newControlBrainStore(t), execs: work.NewExecutorConfig("codex", map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}})}
+	app := &controlApp{watcher: fw, brainStore: newControlBrainStore(t), execs: work.NewExecutorConfig(map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}})}
 	resp := app.HandleControlRequest(control.Request{Type: "worker_spawn", Name: "vanishes", Cwd: "/repo", Prompt: "brief"})
 	if resp.OK || resp.Error == nil {
 		t.Fatal("spawn fabricated success for a vanished provider pane")

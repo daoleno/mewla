@@ -55,10 +55,9 @@ func WriteHuman(w io.Writer, report Report) error {
 		}
 	}
 
-	if report.Executors.RecommendedHost != "" || report.Executors.RecommendedDelegated != "" {
+	if report.Executors.RecommendedHost != "" {
 		fmt.Fprintln(w, "")
 		fmt.Fprintf(w, "Recommended host executor: %s\n", emptyDash(report.Executors.RecommendedHost))
-		fmt.Fprintf(w, "Recommended delegated executor: %s\n", emptyDash(report.Executors.RecommendedDelegated))
 		fmt.Fprintf(w, "Recommendation confidence: %s\n", emptyDash(string(report.Executors.RecommendationConfidence)))
 	}
 

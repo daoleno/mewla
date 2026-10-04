@@ -384,8 +384,8 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	workerHelp := workerOutput.String()
 	for _, want := range []string{
-		"Usage: zen worker <defaults|list|spawn|send|capture|status|receipt|progress|release|close> [flags]",
-		"zen worker spawn -name",
+		"Usage: zen worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]",
+		"zen worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high",
 		"zen worker capture -id",
 		"zen worker status -id",
 		"zen worker progress --status running",
@@ -421,14 +421,13 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	brainHelp := brainOutput.String()
 	for _, want := range []string{
-		"Usage: zen brain <workspace|context|playbooks|gc|work|executors|use|set-delegated> [flags]",
+		"Usage: zen brain <workspace|context|playbooks|gc|work|executors|use> [flags]",
 		"Reconcile product-owned Brain workspace blocks while preserving user content",
 		"zen brain workspace --json",
 		"zen brain context --json",
 		"zen brain playbooks --json",
 		"zen brain gc --json",
 		"zen brain executors --json",
-		"zen brain set-delegated grok",
 	} {
 		if !strings.Contains(brainHelp, want) {
 			t.Fatalf("brain help missing %q:\n%s", want, brainHelp)

@@ -28,7 +28,6 @@ func successLines(result Result) []string {
 		"zen setup complete",
 		fmt.Sprintf("  profile: %s", result.Profile),
 		fmt.Sprintf("  host: %s", result.Host),
-		fmt.Sprintf("  delegated: %s", result.Delegated),
 		fmt.Sprintf("  config: %s", result.ConfigPath),
 	}
 	if result.BackupPath != "" {
@@ -41,7 +40,6 @@ func successLines(result Result) []string {
 	}
 	if result.RestartRequired {
 		lines = append(lines, "  Restart zen to load new or changed executor definitions")
-		lines = append(lines, "  (delegated selection can later switch live: zen brain set-delegated <id>)")
 	}
 	for _, warning := range result.Warnings {
 		lines = append(lines, "  warning: "+warning)
@@ -62,7 +60,7 @@ func formatCandidates(candidates []Candidate) []string {
 		}
 		lines = append(lines, fmt.Sprintf("  - %s [%s] auth=%s", c.ID, c.Provider, auth))
 	}
-	lines = append(lines, "One executor is enough. Host and Delegated may be the same.")
+	lines = append(lines, "One executor is enough. Brain routes Workers to any configured executor.")
 	return lines
 }
 

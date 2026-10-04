@@ -112,7 +112,7 @@ func (s *Store) retireBrainFlowsPlaybook() error {
 
 // productWorkspaceRoot lists the top-level entries Zen owns in the Brain
 // workspace. Anything else visible at the root is user or tool clutter.
-var productWorkspaceRoot = []string{"AGENTS.md", "current.md", "memory.md", "profile.md", "policies", "playbooks", "worklog"}
+var productWorkspaceRoot = []string{"AGENTS.md", "current.md", "memory.md", "profile.md", routingGuideName, "policies", "playbooks", "worklog"}
 
 func (s *Store) unmanagedWorkspaceEntries() ([]string, error) {
 	entries, err := os.ReadDir(s.WorkspacePath())
@@ -154,6 +154,7 @@ var workspaceNoteBudgets = []struct {
 	{"current.md", 16 << 10},
 	{"memory.md", 32 << 10},
 	{"profile.md", 8 << 10},
+	{routingGuideName, 4 << 10},
 }
 
 func (s *Store) WorkspaceNotes() ([]WorkspaceNote, error) {

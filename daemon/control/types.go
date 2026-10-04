@@ -14,7 +14,6 @@ import (
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	telegramchannel "github.com/daoleno/zen/daemon/telegram"
 	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
 )
 
 const SocketName = "zen.sock"
@@ -99,14 +98,12 @@ type Response struct {
 	Browser            *browser.Response                        `json:"browser,omitempty"`
 	Connections        *connections.Response                    `json:"connections,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
-	WorkerDefaults     *work.WorkerDefaults                     `json:"worker_defaults,omitempty"`
 	OK                 bool                                     `json:"ok"`
 	Error              *Error                                   `json:"error,omitempty"`
 	Worker             *Worker                                  `json:"worker,omitempty"`
 	Workers            []Worker                                 `json:"workers,omitempty"`
 	WorkerReceipt      *WorkerReceipt                           `json:"worker_receipt,omitempty"`
 	Executor           *Executor                                `json:"executor,omitempty"`
-	DelegatedExecutor  *Executor                                `json:"delegated_executor,omitempty"`
 	Executors          []Executor                               `json:"executors,omitempty"`
 	Context            any                                      `json:"context,omitempty"`
 	Housekeeping       any                                      `json:"housekeeping,omitempty"`
@@ -186,7 +183,6 @@ type Executor struct {
 	Runtime      string               `json:"runtime"`
 	Capabilities ExecutorCapabilities `json:"capabilities"`
 	Host         bool                 `json:"host,omitempty"`
-	Delegated    bool                 `json:"delegated,omitempty"`
 }
 
 type Handler interface {

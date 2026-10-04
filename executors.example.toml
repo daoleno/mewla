@@ -4,7 +4,7 @@
 #   cp executors.example.toml ~/.zen/executors.toml
 #
 # Edit executor definitions/commands and restart zen so the catalog reloads.
-# Change only the Delegated Executor live with: zen brain set-delegated <id>
+# Brain picks each Worker's executor, model and reasoning from its routing.md.
 # If this file is absent, zen keeps its built-in defaults from
 # daemon/work/executors.go — shipping this example does NOT change those
 # runtime defaults.
@@ -13,8 +13,6 @@
 #
 # WARNING: Autonomous / bypass profiles can run shell and tools with little or
 # no interactive approval. Prefer the safe profile on machines with secrets.
-
-delegated_executor = "codex"
 
 # ---------------------------------------------------------------------------
 # Safe / manual profile (recommended starting point)

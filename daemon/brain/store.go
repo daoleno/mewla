@@ -393,6 +393,9 @@ func (s *Store) ensureFiles() error {
 	if err := s.ensurePlaybooks(); err != nil {
 		return err
 	}
+	if err := ensurePlaybookFile(s.routingGuidePath(), defaultRoutingGuide); err != nil {
+		return err
+	}
 	if err := s.ensureWorklog(); err != nil {
 		return err
 	}

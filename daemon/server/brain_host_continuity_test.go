@@ -22,7 +22,7 @@ func brainContinuityFixture(t *testing.T) (*Server, *brain.Store, *killTrackingW
 		t.Fatal(err)
 	}
 	fw := &killTrackingWatcher{}
-	service := brain.NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := brain.NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	return &Server{brain: service, brainHostRecovery: make(chan struct{}, 1)}, store, fw
 }
 

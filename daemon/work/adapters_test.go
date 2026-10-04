@@ -378,10 +378,10 @@ created: 2026-07-17T00:00:00Z
 		commitOK:         true,
 		commitNotDurable: true,
 	}
-	launcher := NewLauncher(TmuxRunner{Watcher: fw2, Profiles: profiles2}, NewExecutorConfig("codex", map[string]Executor{
+	launcher := NewLauncher(TmuxRunner{Watcher: fw2, Profiles: profiles2}, NewExecutorConfig(map[string]Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
-	if _, err := launcher.StartDedicated(item, "/repo"); err == nil || !strings.Contains(err.Error(), "not durable") {
+	if _, err := launcher.StartDedicated(item, "/repo", "codex"); err == nil || !strings.Contains(err.Error(), "not durable") {
 		t.Fatalf("launcher err=%v", err)
 	}
 	if len(fw2.killed) != 1 {

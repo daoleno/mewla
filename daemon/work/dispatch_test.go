@@ -51,7 +51,7 @@ func (f *fakeRunner) Abort(sessionID string) error {
 
 func TestLauncher_StartDedicatedNeverReusesIdleOrMentionedSession(t *testing.T) {
 	run := &fakeRunner{newID: "claude-scheduled"}
-	execs := NewExecutorConfig("claude", map[string]Executor{
+	execs := NewExecutorConfig(map[string]Executor{
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "codex"},
 	})
@@ -67,7 +67,7 @@ Treat @codex#interactive-session as ordinary instruction text.
 		t.Fatal(err)
 	}
 
-	started, err := NewLauncher(run, execs).StartDedicated(item, "/p")
+	started, err := NewLauncher(run, execs).StartDedicated(item, "/p", "claude")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestLauncher_StartDedicatedUsesFreshConfiguredExecutor(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			role := test.role
 			run := &fakeRunner{newID: role + "-scheduled"}
-			execs := NewExecutorConfig(role, map[string]Executor{
+			execs := NewExecutorConfig(map[string]Executor{
 				role: test.executor,
 			})
 			item := &Item{
@@ -155,7 +155,7 @@ func TestLauncher_StartDedicatedUsesFreshConfiguredExecutor(t *testing.T) {
 				},
 			}
 
-			started, err := NewLauncher(run, execs).StartDedicated(item, " /calendar ")
+			started, err := NewLauncher(run, execs).StartDedicated(item, " /calendar ", role)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -213,8 +213,8 @@ func TestLauncher_StartDedicatedRejectsProviderExecutableMismatchBeforeSpawn(t *
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			run := &fakeRunner{newID: test.role + "-scheduled"}
-			execs := NewExecutorConfig(test.role, map[string]Executor{test.role: test.executor})
-			_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar")
+			execs := NewExecutorConfig(map[string]Executor{test.role: test.executor})
+			_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar", test.role)
 			if !errors.Is(err, ErrScheduledActionUnattended) {
 				t.Fatalf("error = %v, want ErrScheduledActionUnattended", err)
 			}
@@ -237,10 +237,10 @@ func TestLauncher_StartDedicatedRejectsInvalidScheduledArgvBeforeSpawn(t *testin
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			run := &fakeRunner{newID: "codex-scheduled"}
-			execs := NewExecutorConfig("codex", map[string]Executor{
+			execs := NewExecutorConfig(map[string]Executor{
 				"codex": {Name: "codex", Kind: WorkerProviderCodex, Command: test.command},
 			})
-			_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar")
+			_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar", "codex")
 			if !errors.Is(err, ErrScheduledActionUnattended) {
 				t.Fatalf("error = %v, want ErrScheduledActionUnattended", err)
 			}
@@ -257,7 +257,7 @@ func TestLauncher_StartDedicatedAlreadyStarted(t *testing.T) {
 	launcher := NewLauncher(run, &ExecutorConfig{})
 	item := &Item{Frontmatter: Frontmatter{ID: "scheduled", Started: &now}}
 
-	if _, err := launcher.StartDedicated(item, "/calendar"); !errors.Is(err, ErrAlreadyStarted) {
+	if _, err := launcher.StartDedicated(item, "/calendar", "codex"); !errors.Is(err, ErrAlreadyStarted) {
 		t.Fatalf("error = %v, want ErrAlreadyStarted", err)
 	}
 	if run.spawnCalls != 0 {
@@ -265,11 +265,11 @@ func TestLauncher_StartDedicatedAlreadyStarted(t *testing.T) {
 	}
 }
 
-func TestLauncher_StartDedicatedRequiresConfiguredDelegatedExecutor(t *testing.T) {
+func TestLauncher_StartDedicatedRequiresConfiguredExecutor(t *testing.T) {
 	run := &fakeRunner{}
-	execs := NewExecutorConfig("missing", map[string]Executor{})
+	execs := NewExecutorConfig(map[string]Executor{})
 
-	_, err := NewLauncher(run, execs).StartDedicated(&Item{}, "/calendar")
+	_, err := NewLauncher(run, execs).StartDedicated(&Item{}, "/calendar", "missing")
 	if !errors.Is(err, ErrExecutorNotConfigured) {
 		t.Fatalf("error = %v, want ErrExecutorNotConfigured", err)
 	}
@@ -279,14 +279,14 @@ func TestLauncher_StartDedicatedRequiresConfiguredDelegatedExecutor(t *testing.T
 }
 
 func TestLauncher_StartDedicatedReportsSpawnAndReadySendFailures(t *testing.T) {
-	execs := NewExecutorConfig("claude", map[string]Executor{
+	execs := NewExecutorConfig(map[string]Executor{
 		"claude": {Name: "claude", Command: "claude"},
 	})
 	item := &Item{Path: "/tmp/scheduled.md"}
 
 	t.Run("spawn", func(t *testing.T) {
 		run := &fakeRunner{spawnErr: errors.New("tmux failed")}
-		if _, err := NewLauncher(run, execs).StartDedicated(item, "/calendar"); !errors.Is(err, ErrSpawnFailed) {
+		if _, err := NewLauncher(run, execs).StartDedicated(item, "/calendar", "claude"); !errors.Is(err, ErrSpawnFailed) {
 			t.Fatalf("error = %v, want ErrSpawnFailed", err)
 		}
 		if len(run.sendReadyCalls) != 0 {
@@ -299,7 +299,7 @@ func TestLauncher_StartDedicatedReportsSpawnAndReadySendFailures(t *testing.T) {
 
 	t.Run("ready send", func(t *testing.T) {
 		run := &fakeRunner{newID: "claude-scheduled", sendReadyErr: errors.New("send failed")}
-		if _, err := NewLauncher(run, execs).StartDedicated(item, "/calendar"); !errors.Is(err, ErrSpawnFailed) {
+		if _, err := NewLauncher(run, execs).StartDedicated(item, "/calendar", "claude"); !errors.Is(err, ErrSpawnFailed) {
 			t.Fatalf("error = %v, want ErrSpawnFailed", err)
 		}
 		if run.spawnCalls != 1 || len(run.sendReadyCalls) != 1 {
@@ -316,7 +316,7 @@ func TestLauncher_StartDedicatedReportsSpawnAndReadySendFailures(t *testing.T) {
 			sendReadyErr: errors.New("send failed"),
 			abortErr:     errors.New("kill failed"),
 		}
-		_, err := NewLauncher(run, execs).StartDedicated(item, "/calendar")
+		_, err := NewLauncher(run, execs).StartDedicated(item, "/calendar", "claude")
 		if !errors.Is(err, ErrSpawnFailed) {
 			t.Fatalf("error = %v, want ErrSpawnFailed", err)
 		}
@@ -341,10 +341,10 @@ func TestLauncher_StartDedicatedExhaustedHandoffBudgetFailsOccurrenceOnce(t *tes
 			"Session input was definitely not submitted: agent input not ready for \"opencode\"",
 		),
 	}
-	execs := NewExecutorConfig("opencode", map[string]Executor{
+	execs := NewExecutorConfig(map[string]Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	})
-	_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar")
+	_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar", "opencode")
 	if !errors.Is(err, ErrSpawnFailed) {
 		t.Fatalf("error = %v, want ErrSpawnFailed", err)
 	}
@@ -363,10 +363,10 @@ func TestLauncher_StartDedicatedAmbiguousHandoffAbortsOnceNeverReplays(t *testin
 		newID:        "opencode-scheduled",
 		sendReadyErr: errors.New("Session input outcome is unknown and will not be replayed: provider admission not observed"),
 	}
-	execs := NewExecutorConfig("opencode", map[string]Executor{
+	execs := NewExecutorConfig(map[string]Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	})
-	_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar")
+	_, err := NewLauncher(run, execs).StartDedicated(&Item{Path: "/tmp/scheduled.md"}, "/calendar", "opencode")
 	if !errors.Is(err, ErrSpawnFailed) {
 		t.Fatalf("error = %v, want ErrSpawnFailed", err)
 	}

@@ -20,16 +20,14 @@ func runSetupCommand(args []string, stderr io.Writer) error {
 		asJSON         bool
 		nonInteractive bool
 		host           string
-		delegated      string
 		profile        string
 		yes            bool
 		stateDir       string
 		addr           string
 	)
 	fs.BoolVar(&asJSON, "json", false, "print machine-readable JSON result")
-	fs.BoolVar(&nonInteractive, "non-interactive", false, "run without prompts (requires --host, --delegated, --profile)")
+	fs.BoolVar(&nonInteractive, "non-interactive", false, "run without prompts (requires --host, --profile)")
 	fs.StringVar(&host, "host", "", "host executor id")
-	fs.StringVar(&delegated, "delegated", "", "delegated executor id")
 	fs.StringVar(&profile, "profile", "safe", "permission profile: safe or autonomous")
 	fs.BoolVar(&yes, "yes", false, "confirm Autonomous profile (required with --profile=autonomous in non-interactive mode)")
 	fs.StringVar(&stateDir, "state-dir", "", "state directory for daemon identity")
@@ -59,7 +57,6 @@ func runSetupCommand(args []string, stderr io.Writer) error {
 	result, runErr := setup.Run(setup.Options{
 		NonInteractive: nonInteractive,
 		Host:           host,
-		Delegated:      delegated,
 		Profile:        normalized,
 		Yes:            yes,
 		StateDir:       stateDir,
@@ -115,6 +112,6 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  zen setup")
-	fmt.Fprintln(w, "  zen setup --non-interactive --host codex --delegated codex --profile safe")
-	fmt.Fprintln(w, "  zen setup --non-interactive --host codex --delegated codex --profile autonomous --yes")
+	fmt.Fprintln(w, "  zen setup --non-interactive --host codex --profile safe")
+	fmt.Fprintln(w, "  zen setup --non-interactive --host codex --profile autonomous --yes")
 }

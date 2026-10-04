@@ -475,21 +475,12 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	delegatedExecutor := s.brainDelegatedExecutor()
 	if host.ID != "" {
 		snapshot.HostWorker = &host
 	}
 	hostExecutor.Host = true
-	if hostExecutor.ID == delegatedExecutor.ID {
-		hostExecutor.Delegated = true
-	}
 	snapshot.HostExecutor = &hostExecutor
-	delegatedExecutor.Delegated = true
-	if delegatedExecutor.ID == hostExecutor.ID {
-		delegatedExecutor.Host = true
-	}
-	snapshot.DelegatedExecutor = &delegatedExecutor
-	snapshot.Executors = s.workerExecutors(hostExecutor.ID, delegatedExecutor.ID)
+	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(presentDelegatedSessions(snapshot.Workers))
@@ -525,21 +516,12 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	delegatedExecutor := s.brainDelegatedExecutor()
 	if host.ID != "" {
 		snapshot.HostWorker = &host
 	}
 	hostExecutor.Host = true
-	if hostExecutor.ID == delegatedExecutor.ID {
-		hostExecutor.Delegated = true
-	}
 	snapshot.HostExecutor = &hostExecutor
-	delegatedExecutor.Delegated = true
-	if delegatedExecutor.ID == hostExecutor.ID {
-		delegatedExecutor.Host = true
-	}
-	snapshot.DelegatedExecutor = &delegatedExecutor
-	snapshot.Executors = s.workerExecutors(hostExecutor.ID, delegatedExecutor.ID)
+	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(presentDelegatedSessions(snapshot.Workers))
@@ -603,20 +585,19 @@ func (s *Service) Context() (BrainContext, error) {
 		return BrainContext{}, err
 	}
 	return BrainContext{
-		ThreadID:          snapshot.ChatThreadID,
-		Workspace:         snapshot.Workspace,
-		WorklogPath:       snapshot.WorklogPath,
-		Notes:             notes,
-		Personality:       snapshot.Personality,
-		CurrentWork:       snapshot.CurrentWork,
-		WorkBacklog:       snapshot.WorkBacklog,
-		Playbooks:         playbooks.Playbooks,
-		HostWorker:        snapshot.HostWorker,
-		HostExecutor:      snapshot.HostExecutor,
-		DelegatedExecutor: snapshot.DelegatedExecutor,
-		Executors:         snapshot.Executors,
-		Workers:           snapshot.Workers,
-		GeneratedAt:       s.nowUTC(),
+		ThreadID:     snapshot.ChatThreadID,
+		Workspace:    snapshot.Workspace,
+		WorklogPath:  snapshot.WorklogPath,
+		Notes:        notes,
+		Personality:  snapshot.Personality,
+		CurrentWork:  snapshot.CurrentWork,
+		WorkBacklog:  snapshot.WorkBacklog,
+		Playbooks:    playbooks.Playbooks,
+		HostWorker:   snapshot.HostWorker,
+		HostExecutor: snapshot.HostExecutor,
+		Executors:    snapshot.Executors,
+		Workers:      snapshot.Workers,
+		GeneratedAt:  s.nowUTC(),
 	}, nil
 }
 
@@ -3362,29 +3343,23 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 	return work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux})
 }
 
-func (s *Service) brainDelegatedExecutor() work.WorkerExecutor {
-	// Effective delegated selection (including startup env lock) is owned only
-	// by ExecutorConfig — no parallel env readers on Brain paths.
-	if s != nil && s.execs != nil {
-		if executor, ok := s.execs.DelegatedWorkerExecutor(); ok {
-			return executor
-		}
-	}
-	return s.hostExecutor()
+// HostExecutorID names the executor running Brain. Launches Brain does not
+// choose itself (Calendar scheduled_action, spawn without -executor) use it.
+func (s *Service) HostExecutorID() string {
+	return s.hostExecutor().ID
 }
 
 func brainHostExecutorOverride() string {
 	return strings.TrimSpace(os.Getenv("ZEN_BRAIN_HOST_EXECUTOR"))
 }
 
-func (s *Service) workerExecutors(hostExecutorID, delegatedExecutorID string) []work.WorkerExecutor {
+func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
 	if s == nil || s.execs == nil {
 		if hostExecutorID == "" {
 			hostExecutorID = "codex"
 		}
 		executor := work.NewWorkerExecutor(hostExecutorID, work.Executor{Name: hostExecutorID, Command: hostExecutorID})
 		executor.Host = true
-		executor.Delegated = delegatedExecutorID == "" || executor.ID == delegatedExecutorID
 		return []work.WorkerExecutor{executor}
 	}
 	executors := s.execs.WorkerExecutors()
@@ -3394,19 +3369,14 @@ func (s *Service) workerExecutors(hostExecutorID, delegatedExecutorID string) []
 		}
 		executor := work.NewWorkerExecutor(hostExecutorID, work.Executor{Name: hostExecutorID, Command: hostExecutorID})
 		executor.Host = true
-		executor.Delegated = delegatedExecutorID == "" || executor.ID == delegatedExecutorID
 		return []work.WorkerExecutor{executor}
 	}
 	for i := range executors {
 		executors[i].Host = executors[i].ID == hostExecutorID
-		executors[i].Delegated = executors[i].ID == delegatedExecutorID
 	}
 	sort.Slice(executors, func(i, j int) bool {
 		if executors[i].Host != executors[j].Host {
 			return executors[i].Host
-		}
-		if executors[i].Delegated != executors[j].Delegated {
-			return executors[i].Delegated
 		}
 		return executors[i].ID < executors[j].ID
 	})
@@ -3600,17 +3570,16 @@ func (s *Service) hostBootstrapPrompt(executor work.WorkerExecutor) string {
 	if err != nil {
 		return ""
 	}
-	delegated := s.brainDelegatedExecutor()
 	worktreeRoot, _ := work.DefaultWorktreeRoot()
 	return brainHostActivationPrompt() + "\n\n" + strings.TrimSpace(fmt.Sprintf(`
 You are Brain inside zen.
 Brain workspace: %s (private reports in worklog/)
 Managed worktree root: %s
-Host executor: %s. Delegated executor: %s.
+Host executor: %s.
 Zen CLI: %s
 Recover active work from current.md and zen brain context --json.
 Personality: %s
-`, snapshot.Workspace, worktreeRoot, executor.ID, delegated.ID, zenCLICommand(),
+`, snapshot.Workspace, worktreeRoot, executor.ID, zenCLICommand(),
 		strings.TrimSpace(snapshot.Personality)))
 }
 
@@ -3623,8 +3592,7 @@ func (s *Service) handoffHostSession(threadID, previousExecutorID, nextExecutorI
 	if threadID == "" || nextHostID == "" {
 		return nil
 	}
-	delegatedExecutor := s.brainDelegatedExecutor()
-	prompt := formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID, delegatedExecutor.ID, workers)
+	prompt := formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID, workers)
 	if prompt != "" {
 		hostCmd, err := s.hostCommand(s.hostExecutor())
 		if err != nil {
@@ -3637,15 +3605,15 @@ func (s *Service) handoffHostSession(threadID, previousExecutorID, nextExecutorI
 	return nil
 }
 
-func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID, delegatedExecutorID string, workers []WorkerRef) string {
+func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string, workers []WorkerRef) string {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return ""
 	}
 	lines := []string{
 		"Brain host executor handoff:",
-		fmt.Sprintf("Host executor changed from %s to %s (delegated executor: %s) in thread %s. Continue the same visible Brain chat in the user's language; keep this handoff private.",
-			strings.TrimSpace(previousExecutorID), strings.TrimSpace(nextExecutorID), strings.TrimSpace(delegatedExecutorID), threadID),
+		fmt.Sprintf("Host executor changed from %s to %s in thread %s. Continue the same visible Brain chat in the user's language; keep this handoff private.",
+			strings.TrimSpace(previousExecutorID), strings.TrimSpace(nextExecutorID), threadID),
 		"Read AGENTS.md, policies/handoff.md and current.md; zen brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
 	}
 	active := []string{}

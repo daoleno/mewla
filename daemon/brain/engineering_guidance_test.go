@@ -142,12 +142,12 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	}
 	for _, provider := range []string{"pi", "codex"} {
 		t.Run(provider, func(t *testing.T) {
-			service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(provider, map[string]work.Executor{
+			service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 				provider: {Name: provider, Command: provider, Kind: provider},
 			}))
 			bootstrap := service.hostBootstrapPrompt(service.hostExecutor())
 			activation := brainHostActivationPrompt()
-			handoff := formatHostHandoffPrompt("arbitrary-project", provider, provider, provider, nil)
+			handoff := formatHostHandoffPrompt("arbitrary-project", provider, provider, nil)
 			for name, prompt := range map[string]string{"bootstrap": bootstrap, "activation": activation, "handoff": handoff} {
 				if !strings.Contains(prompt, "AGENTS.md") || !work.IsPrivateHostPrompt(prompt) {
 					t.Fatalf("%s lost guidance pointer or privacy", name)
@@ -289,7 +289,7 @@ func TestEngineeringGuidanceRefreshesExistingHost(t *testing.T) {
 		},
 		ownedGenerations: map[string]string{hostID: generation},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 	// Previous releases hashed only the role, so a method-only update was invisible.

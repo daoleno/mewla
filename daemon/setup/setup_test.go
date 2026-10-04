@@ -22,7 +22,6 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Delegated:      "codex",
 		Profile:        ProfileSafe,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".zen"),
@@ -60,7 +59,6 @@ func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Delegated:      "codex",
 		Profile:        ProfileSafe,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".zen"),
@@ -113,7 +111,6 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Delegated:      "codex",
 		Profile:        ProfileSafe,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".zen"),
@@ -168,7 +165,6 @@ func TestSetupAutonomousRequiresExplicitConsent(t *testing.T) {
 	_, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Delegated:      "codex",
 		Profile:        ProfileAutonomous,
 		Yes:            false,
 		Home:           home,
@@ -196,8 +192,7 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 
 	result, err := Run(Options{
 		NonInteractive: true,
-		Host:           "codex",
-		Delegated:      "agent",
+		Host:           "agent",
 		Profile:        ProfileAutonomous,
 		Yes:            true,
 		Home:           home,
@@ -230,7 +225,7 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HostSession: %v", err)
 	}
-	if host.ExecutorID != "codex" {
+	if host.ExecutorID != "agent" {
 		t.Fatalf("brain host = %#v", host)
 	}
 }
@@ -249,11 +244,11 @@ name = "keep"
 command = "keep-cmd"
 `)
 
-	first, err := Run(baseOpts(home, binDir, ProfileSafe, "codex", "codex"))
+	first, err := Run(baseOpts(home, binDir, ProfileSafe, "codex"))
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	second, err := Run(baseOpts(home, binDir, ProfileSafe, "codex", "codex"))
+	second, err := Run(baseOpts(home, binDir, ProfileSafe, "codex"))
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
@@ -274,8 +269,9 @@ command = "keep-cmd"
 	if err := toml.Unmarshal(raw, &parsed); err != nil {
 		t.Fatalf("toml: %v", err)
 	}
-	if parsed.DelegatedExecutor != "codex" {
-		t.Fatalf("delegated = %q", parsed.DelegatedExecutor)
+	// Setup rewrites drop the retired routing key (the backup keeps it).
+	if parsed.DelegatedExecutor != "" {
+		t.Fatalf("retired delegated_executor rewritten = %q", parsed.DelegatedExecutor)
 	}
 	foundKeep := false
 	for _, e := range parsed.Executors {
@@ -306,7 +302,7 @@ func TestSetupNonInteractiveInvalidArgs(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 
-	_, err = Run(baseOpts(home, binDir, Profile("nope"), "codex", "codex"))
+	_, err = Run(baseOpts(home, binDir, Profile("nope"), "codex"))
 	if !errors.Is(err, ErrInvalidArgs) {
 		t.Fatalf("bad profile err = %v", err)
 	}
@@ -318,7 +314,7 @@ func TestSetupDoesNotEmitSecrets(t *testing.T) {
 	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using an API key - sk-SECRETVALUE")
 	var out bytes.Buffer
-	opts := baseOpts(home, binDir, ProfileSafe, "codex", "codex")
+	opts := baseOpts(home, binDir, ProfileSafe, "codex")
 	opts.Stdout = &out
 	result, err := Run(opts)
 	if err != nil {
@@ -370,11 +366,10 @@ func fixedNow() time.Time {
 	return time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
 }
 
-func baseOpts(home, binDir string, profile Profile, host, delegated string) Options {
+func baseOpts(home, binDir string, profile Profile, host string) Options {
 	return Options{
 		NonInteractive: true,
 		Host:           host,
-		Delegated:      delegated,
 		Profile:        profile,
 		Yes:            profile == ProfileAutonomous,
 		Home:           home,

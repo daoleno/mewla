@@ -136,7 +136,7 @@ func TestBrainSnapshotBroadcastDoesNotAdmitHostActivation(t *testing.T) {
 			State: classifier.StateRunning, Summary: "Processing current provider turn",
 		},
 	}}
-	service := brain.NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := brain.NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 	srv := &Server{brain: service}

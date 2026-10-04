@@ -12,7 +12,7 @@ func TestHandoffReferencesContextAndOnlyOwnedWorkers(t *testing.T) {
 		{ID: "owned:@1", Status: "running", Delegated: true, Summary: strings.Repeat("private-history", 1000)},
 		{ID: "external:@2", Status: "running"},
 	}
-	prompt := formatHostHandoffPrompt("thread-one", "codex", "grok", "codex", workers)
+	prompt := formatHostHandoffPrompt("thread-one", "codex", "grok", workers)
 	for _, required := range []string{"current.md", "AGENTS.md", "policies/handoff.md", "thread-one", "owned:@1", "pending Event identities"} {
 		if !strings.Contains(prompt, required) {
 			t.Fatalf("handoff missing %q", required)
@@ -29,7 +29,7 @@ func TestHandoffReferencesContextAndOnlyOwnedWorkers(t *testing.T) {
 	if !work.IsPrivateHostPrompt(prompt) {
 		t.Fatal("compact handoff lost transcript privacy")
 	}
-	if formatHostHandoffPrompt(" ", "codex", "grok", "codex", workers) != "" {
+	if formatHostHandoffPrompt(" ", "codex", "grok", workers) != "" {
 		t.Fatal("blank thread produced a handoff")
 	}
 }

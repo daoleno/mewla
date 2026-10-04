@@ -56,7 +56,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 		t.Fatal(err)
 	}
 
-	service := NewService(store, nil, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, nil, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
 	}))
@@ -115,7 +115,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 			},
 		},
 	}
-	service = NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service = NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
 	}))
@@ -347,7 +347,7 @@ func TestHostSwitchGrokWorkEventAmbiguousReceiptSettlesWithoutQuarantine(t *test
 		t.Fatal(err)
 	}
 
-	execs := work.NewExecutorConfig("codex", map[string]work.Executor{
+	execs := work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
 	})

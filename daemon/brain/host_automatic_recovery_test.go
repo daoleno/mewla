@@ -51,7 +51,7 @@ func TestAutomaticHostContinuityCapturesNativeSwitchAndResumesAfterExit(t *testi
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{
 		hostID: {ID: hostID, Name: "Brain", Command: "codex", Hidden: true, ProcessID: cmd.Process.Pid, Cwd: store.WorkspacePath()},
 	}}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Command: `codex --model old-default -c 'model_reasoning_effort="low"'`, Kind: "codex"},
 	}))
 	// No transcript subscription or user input is needed to persist identity.
@@ -121,7 +121,7 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 			}
 			before, _ := os.ReadFile(store.HostSessionPath())
 			fw := &fakeWatcher{probeErr: tc.probeErr}
-			service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+			service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 			if changed, err := service.ReconcileHostContinuity(); err == nil || changed {
 				t.Fatalf("unsafe recovery: %v %v", changed, err)
 			}
@@ -150,7 +150,7 @@ func TestAutomaticHostContinuityAmbiguousActivationDoesNotDisableLaterRecovery(t
 		t.Fatal(err)
 	}
 	fw.setReceiptOutcome(hostActivationReceipt(hostID, owned.Generation, brainHostContractDigest()), watcher.InputAmbiguous)
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	for i := 0; i < 3; i++ {
 		if changed, err := service.ReconcileHostContinuity(); changed || !errors.Is(err, ErrHostActivationAmbiguous) {
 			t.Fatalf("ambiguous reconcile: %v %v", changed, err)

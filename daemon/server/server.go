@@ -889,10 +889,6 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainWorkRead(conn, raw)
 	case "brain_set_executor":
 		s.handleBrainSetExecutor(conn, raw)
-	case "get_worker_defaults", "set_worker_defaults":
-		s.handleWorkerDefaults(conn, raw)
-	case "set_delegated_executor":
-		s.handleSetDelegatedExecutor(conn, raw)
 	case "brain_chat_new":
 		s.handleBrainChatNew(conn, raw)
 	case "brain_workspace_tree":
@@ -2721,54 +2717,6 @@ func (s *Server) handleBrainSetExecutor(conn *websocket.Conn, raw clientMessage)
 	})
 }
 
-// handleSetDelegatedExecutor switches the live/persisted default Agents executor
-// through ExecutorConfig.SetDelegatedExecutor. Existing sessions are not migrated.
-func (s *Server) handleSetDelegatedExecutor(conn *websocket.Conn, raw clientMessage) {
-	if s.execs == nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "executors_unavailable", "Executor config is not available.")
-		return
-	}
-	if s.brain == nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
-		return
-	}
-	executorID := strings.TrimSpace(raw.ExecutorID)
-	if executorID == "" {
-		executorID = strings.TrimSpace(raw.AdapterID)
-	}
-	if executorID == "" {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "missing_executor", "Delegated executor id is required.")
-		return
-	}
-	if err := s.execs.SetDelegatedExecutor(executorID); err != nil {
-		if errors.Is(err, work.ErrUnknownExecutor) {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "invalid_executor", err.Error())
-			return
-		}
-		if errors.Is(err, work.ErrDelegatedExecutorLocked) {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "delegated_executor_locked_by_env", err.Error())
-			return
-		}
-		s.sendErrorWithRequestID(conn, raw.RequestID, "set_delegated_executor_failed", err.Error())
-		return
-	}
-	snapshot, err := s.brain.Snapshot()
-	if err != nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_snapshot_failed", err.Error())
-		return
-	}
-	payload, err := s.brainSnapshotWire(snapshot)
-	if err != nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_snapshot_failed", err.Error())
-		return
-	}
-	s.sendJSON(conn, map[string]any{
-		"type":       "brain_snapshot",
-		"request_id": raw.RequestID,
-		"brain":      payload,
-	})
-}
-
 func (s *Server) handleBrainContext(conn *websocket.Conn, raw clientMessage) {
 	if s.brain == nil {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
@@ -2852,9 +2800,6 @@ func (s *Server) brainSnapshotWire(snapshot brain.Snapshot) (any, error) {
 	}
 	if _, ok := payload["host_adapter"]; !ok && snapshot.HostExecutor != nil {
 		payload["host_adapter"] = snapshot.HostExecutor
-	}
-	if _, ok := payload["delegated_adapter"]; !ok && snapshot.DelegatedExecutor != nil {
-		payload["delegated_adapter"] = snapshot.DelegatedExecutor
 	}
 	if _, ok := payload["adapters"]; !ok && snapshot.Executors != nil {
 		payload["adapters"] = snapshot.Executors
@@ -3730,25 +3675,4 @@ func (s *Server) writeMessage(conn *websocket.Conn, messageType int, data []byte
 	writeMu.Lock()
 	defer writeMu.Unlock()
 	return conn.WriteMessage(messageType, data)
-}
-
-// Worker defaults use the same owner as the CLI/control socket. This is a
-// delegated-only setting; the manual create_session flow is unchanged.
-func (s *Server) handleWorkerDefaults(conn *websocket.Conn, raw clientMessage) {
-	if s.execs == nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "executors_unavailable", "Executor config unavailable")
-		return
-	}
-	var d work.WorkerDefaults
-	var err error
-	if raw.Type == "set_worker_defaults" {
-		d, err = s.execs.SetWorkerDefaults(work.WorkerDefaults{Executor: raw.ExecutorID, Model: raw.ModelID, Reasoning: raw.ReasoningEffort})
-	} else {
-		d, err = s.execs.WorkerDefaults()
-	}
-	if err != nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "worker_defaults_failed", err.Error())
-		return
-	}
-	s.sendJSON(conn, map[string]any{"type": "worker_defaults", "request_id": raw.RequestID, "worker_defaults": d})
 }

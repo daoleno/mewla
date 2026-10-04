@@ -81,7 +81,7 @@ func TestRealCLIIsolatedCodexSpawn(t *testing.T) {
 	}
 	// Suppress the new-user wizard without loading the user's shell startup.
 	write(filepath.Join(root, "home", ".zshrc"), nil, 0600)
-	for _, key := range []string{"ZEN_AGENT_ID", "ZEN_AGENT_PROGRESS_CMD", "ZEN_WORKER_ID", "ZEN_WORKER_PROGRESS_CMD", "ZEN_STATE_DIR", "ZEN_DELEGATED_EXECUTOR", "ZEN_BRAIN_HOST_EXECUTOR", "TMUX", "TMUX_PANE"} {
+	for _, key := range []string{"ZEN_AGENT_ID", "ZEN_AGENT_PROGRESS_CMD", "ZEN_WORKER_ID", "ZEN_WORKER_PROGRESS_CMD", "ZEN_STATE_DIR", "ZEN_BRAIN_HOST_EXECUTOR", "TMUX", "TMUX_PANE"} {
 		t.Setenv(key, "")
 	}
 	t.Setenv("HOME", filepath.Join(root, "home"))
@@ -152,7 +152,7 @@ exit "$rc"
 		t.Fatal(err)
 	}
 
-	execs := work.NewExecutorConfig("codex", map[string]work.Executor{
+	execs := work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	})
 	service := brain.NewService(store, w, execs)

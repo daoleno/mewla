@@ -1,15 +1,10 @@
 package work
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"os"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/BurntSushi/toml"
 )
@@ -18,87 +13,22 @@ import (
 // that is not present in the loaded catalog.
 var ErrUnknownExecutor = errors.New("unknown executor")
 
-// ErrDelegatedExecutorLocked is returned when a live selection change conflicts
-// with a startup environment lock (ZEN_DELEGATED_EXECUTOR).
-var ErrDelegatedExecutorLocked = errors.New("delegated executor locked by environment")
-
-// ExecutorConfig holds the parsed executors.toml content plus built-in defaults.
-//
-// ByName is a static catalog snapshot. The effective Delegated Executor is the
-// sole live setting owned here, including any startup ZEN_DELEGATED_EXECUTOR
-// lock. One process-wide owner updates durable selection and exposes one
-// effective value so Brain, ordinary default spawn, and Calendar agree without
-// restart, polling, or per-call file reloads.
+// ExecutorConfig is the static launch catalog parsed from executors.toml plus
+// built-in defaults. It holds no Worker routing: Brain chooses each delegated
+// Worker's executor, model and reasoning per launch from its routing guide.
 type ExecutorConfig struct {
-	mu sync.RWMutex
-
-	path               string // durable file; empty means memory-only
-	delegatedModel     string
-	delegatedReasoning string
-	delegatedExecutor  string // durable selection (file / live Set)
-	envLock            string // startup ZEN_DELEGATED_EXECUTOR, captured once
-	ByName             map[string]Executor
+	ByName map[string]Executor
+	// DeprecatedKeys lists retired top-level keys (delegated_executor,
+	// delegated_model, delegated_reasoning) found in the file. They are ignored.
+	DeprecatedKeys []string
 }
 
-// NewExecutorConfig builds an in-memory ExecutorConfig (no durable path).
-func NewExecutorConfig(delegated string, byName map[string]Executor) *ExecutorConfig {
+// NewExecutorConfig builds an in-memory ExecutorConfig.
+func NewExecutorConfig(byName map[string]Executor) *ExecutorConfig {
 	if byName == nil {
 		byName = map[string]Executor{}
 	}
-	return &ExecutorConfig{
-		delegatedExecutor: strings.TrimSpace(delegated),
-		envLock:           strings.TrimSpace(os.Getenv("ZEN_DELEGATED_EXECUTOR")),
-		ByName:            byName,
-	}
-}
-
-// GetDelegatedExecutor returns the effective delegated selection.
-// A valid startup env lock wins over the durable selection.
-func (c *ExecutorConfig) GetDelegatedExecutor() string {
-	if c == nil {
-		return ""
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.effectiveDelegatedLocked()
-}
-
-// SetDelegatedExecutor validates id against the loaded catalog, persists the
-// durable selection atomically when a path is configured, then updates memory.
-// Existing sessions are not migrated or restarted.
-//
-// Already-effective ids (durable or env lock) are a zero-write no-op.
-// A conflicting set while the env lock is active returns
-// ErrDelegatedExecutorLocked without changing memory or disk. Validation or
-// persistence failure keeps the previous durable selection and file bytes.
-func (c *ExecutorConfig) SetDelegatedExecutor(id string) error {
-	if c == nil {
-		return fmt.Errorf("executor config required")
-	}
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return fmt.Errorf("%w: delegated executor id is required", ErrUnknownExecutor)
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if _, ok := c.ByName[id]; !ok {
-		return fmt.Errorf("%w: %s", ErrUnknownExecutor, id)
-	}
-	if c.effectiveDelegatedLocked() == id {
-		return nil
-	}
-	if lock, active := c.activeEnvLockLocked(); active {
-		return fmt.Errorf("%w: %s (ZEN_DELEGATED_EXECUTOR)", ErrDelegatedExecutorLocked, lock)
-	}
-	if err := c.persistWorkerDefaultsLocked(WorkerDefaults{Executor: id}); err != nil {
-		return err
-	}
-	c.delegatedExecutor = id
-	c.delegatedModel = ""
-	c.delegatedReasoning = ""
-	return nil
+	return &ExecutorConfig{ByName: byName}
 }
 
 // Roles returns executor names sorted alphabetically.
@@ -114,39 +44,15 @@ func (c *ExecutorConfig) Roles() []string {
 	return out
 }
 
-func (c *ExecutorConfig) effectiveDelegatedLocked() string {
-	if lock, active := c.activeEnvLockLocked(); active {
-		return lock
-	}
-	return strings.TrimSpace(c.delegatedExecutor)
-}
-
-func (c *ExecutorConfig) activeEnvLockLocked() (string, bool) {
-	lock := strings.TrimSpace(c.envLock)
-	if lock == "" {
-		return "", false
-	}
-	if _, ok := c.ByName[lock]; !ok {
-		return "", false
-	}
-	return lock, true
-}
-
 type executorFile struct {
-	DelegatedExecutor  string     `toml:"delegated_executor"`
-	DelegatedModel     string     `toml:"delegated_model"`
-	DelegatedReasoning string     `toml:"delegated_reasoning"`
-	Executors          []Executor `toml:"executors"`
+	Executors []Executor `toml:"executors"`
 }
+
+var retiredExecutorKeys = []string{"delegated_executor", "delegated_model", "delegated_reasoning"}
 
 // LoadExecutors reads path, or returns built-in defaults when missing.
-// The config retains path for live persistence and captures any startup
-// ZEN_DELEGATED_EXECUTOR lock into the same owner.
 func LoadExecutors(path string) (*ExecutorConfig, error) {
 	cfg := &ExecutorConfig{
-		path:              path,
-		delegatedExecutor: "codex",
-		envLock:           strings.TrimSpace(os.Getenv("ZEN_DELEGATED_EXECUTOR")),
 		ByName: map[string]Executor{
 			"agent":    {Name: "agent", Command: "cursor-agent --force --sandbox disabled", Kind: "cursor"},
 			"claude":   {Name: "claude", Command: "claude"},
@@ -167,14 +73,15 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 	}
 
 	var file executorFile
-	if err := toml.Unmarshal(raw, &file); err != nil {
+	meta, err := toml.Decode(string(raw), &file)
+	if err != nil {
 		return nil, err
 	}
-	if trimmed := strings.TrimSpace(file.DelegatedExecutor); trimmed != "" {
-		cfg.delegatedExecutor = trimmed
+	for _, key := range retiredExecutorKeys {
+		if meta.IsDefined(key) {
+			cfg.DeprecatedKeys = append(cfg.DeprecatedKeys, key)
+		}
 	}
-	cfg.delegatedModel = file.DelegatedModel
-	cfg.delegatedReasoning = file.DelegatedReasoning
 	for _, executor := range file.Executors {
 		name := strings.TrimSpace(executor.Name)
 		if name == "" {
@@ -188,118 +95,4 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 		cfg.ByName[name] = executor
 	}
 	return cfg, nil
-}
-
-func (c *ExecutorConfig) persistDelegatedExecutorLocked(id string) error {
-	path := strings.TrimSpace(c.path)
-	if path == "" {
-		return nil
-	}
-
-	var raw []byte
-	existing, err := os.ReadFile(path)
-	if err == nil {
-		raw = existing
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return atomicWriteFile(path, rewriteDelegatedExecutorTOML(raw, id), 0o600)
-}
-
-// Matches a single-line top-level delegated_executor assignment in the
-// currently supported config shape (quoted value, optional inline comment).
-var topLevelDelegatedExecutorAssignRE = regexp.MustCompile(
-	`(?m)^([ \t]*delegated_executor[ \t]*=[ \t]*)("[^"]*"|'[^']*')([ \t]*(?:#[^\r\n]*)?\r?\n?)`,
-)
-
-var tableHeaderLineRE = regexp.MustCompile(`^[ \t]*\[`)
-
-// rewriteDelegatedExecutorTOML updates only the top-level selection value.
-func rewriteDelegatedExecutorTOML(raw []byte, id string) []byte {
-	quoted := "\"" + escapeTOMLString(id) + "\""
-	if len(raw) == 0 {
-		return []byte("delegated_executor = " + quoted + "\n")
-	}
-	prefix, rest := splitTopLevelPrefix(raw)
-	loc := topLevelDelegatedExecutorAssignRE.FindSubmatchIndex(prefix)
-	if loc != nil && len(loc) >= 8 && loc[4] >= 0 && loc[6] >= 0 {
-		out := make([]byte, 0, len(raw)+len(quoted))
-		out = append(out, prefix[:loc[4]]...)
-		out = append(out, quoted...)
-		out = append(out, prefix[loc[6]:loc[1]]...)
-		out = append(out, prefix[loc[1]:]...)
-		out = append(out, rest...)
-		return out
-	}
-	line := "delegated_executor = " + quoted + "\n"
-	out := make([]byte, 0, len(line)+2+len(raw))
-	out = append(out, line...)
-	if raw[0] != '\n' {
-		out = append(out, '\n')
-	}
-	return append(out, raw...)
-}
-
-func splitTopLevelPrefix(raw []byte) (prefix, rest []byte) {
-	if len(raw) == 0 {
-		return nil, nil
-	}
-	offset := 0
-	for offset < len(raw) {
-		end := bytes.IndexByte(raw[offset:], '\n')
-		var line []byte
-		next := len(raw)
-		if end < 0 {
-			line = raw[offset:]
-		} else {
-			line = raw[offset : offset+end]
-			next = offset + end + 1
-		}
-		if tableHeaderLineRE.Match(bytes.TrimRight(line, "\r")) {
-			return raw[:offset], raw[offset:]
-		}
-		offset = next
-		if end < 0 {
-			break
-		}
-	}
-	return raw, nil
-}
-
-func escapeTOMLString(value string) string {
-	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value)
-}
-
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".executors-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
-	}
-	cleanup = false
-	return nil
 }

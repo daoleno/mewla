@@ -692,8 +692,6 @@ func runWorkerCommand(args []string, stderr io.Writer) error {
 		return flag.ErrHelp
 	}
 	switch args[0] {
-	case "defaults":
-		return runWorkerDefaults(args[1:], stderr)
 	case "list":
 		return runWorkerList(args[1:], stderr)
 	case "spawn":
@@ -737,8 +735,6 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 		return runBrainExecutors(args[1:], stderr)
 	case "use":
 		return runBrainUse(args[1:], stderr)
-	case "set-delegated":
-		return runBrainSetDelegated(args[1:], stderr)
 	default:
 		return fmt.Errorf("unknown brain command: %s", args[0])
 	}
@@ -880,10 +876,9 @@ func isHelpArg(value string) bool {
 }
 
 func printWorkerUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen worker <defaults|list|spawn|send|capture|status|receipt|progress|release|close> [flags]")
+	fmt.Fprintln(w, "Usage: zen worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  defaults   Set or query effective defaults for delegated Workers")
 	fmt.Fprintln(w, "  list       List visible Zen Workers")
 	fmt.Fprintln(w, "  spawn      Create a visible delegated Zen Worker")
 	fmt.Fprintln(w, "  send       Send text to a Zen Worker")
@@ -896,7 +891,7 @@ func printWorkerUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  zen worker list --json")
-	fmt.Fprintln(w, "  zen worker spawn -name \"Review docs\" -executor codex -cwd /repo -prompt \"Inspect docs\"")
+	fmt.Fprintln(w, "  zen worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high -cwd /repo -prompt \"Inspect docs\"")
 	fmt.Fprintln(w, "  zen worker capture -id zen-worker-review-docs:@1 --json")
 	fmt.Fprintln(w, "  zen worker status -id zen-worker-review-docs:@1 --json")
 	fmt.Fprintln(w, "  zen worker progress --status running --phase working --attention none --summary \"Reading files\" --task-class lasting_design --event-kind invariant --lease 300")
@@ -910,7 +905,7 @@ func printWorkerUsage(w io.Writer) {
 }
 
 func printBrainUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen brain <workspace|context|playbooks|gc|work|executors|use|set-delegated> [flags]")
+	fmt.Fprintln(w, "Usage: zen brain <workspace|context|playbooks|gc|work|executors|use> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  workspace      Print the Brain workspace path")
@@ -918,9 +913,8 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  playbooks      Print the Brain playbook catalog")
 	fmt.Fprintln(w, "  gc             Reconcile product-owned Brain workspace blocks while preserving user content")
 	fmt.Fprintln(w, "  work           List, create, update, or append an event to durable Active work")
-	fmt.Fprintln(w, "  executors      List configured Brain host and delegated executors")
+	fmt.Fprintln(w, "  executors      List configured executors and the Brain host")
 	fmt.Fprintln(w, "  use            Switch the Brain host executor")
-	fmt.Fprintln(w, "  set-delegated  Switch the live Delegated Executor (no restart)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  zen brain workspace --json")
@@ -930,7 +924,6 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  zen brain work list --json [-all] [-full] [-id <work>]")
 	fmt.Fprintln(w, "  zen brain executors --json")
 	fmt.Fprintln(w, "  zen brain use codex")
-	fmt.Fprintln(w, "  zen brain set-delegated grok")
 }
 
 func runWorkerList(args []string, stderr io.Writer) error {
@@ -1010,11 +1003,11 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.Name, "name", "", "visible Worker name")
-	fs.StringVar(&req.Executor, "executor", "", "configured executor name")
+	fs.StringVar(&req.Executor, "executor", "", "configured executor name (default: the Brain host executor)")
 	fs.StringVar(&req.BrowserID, "browser", "", "explicit persistent Browser resource to attach")
 	fs.StringVar(&req.Command, "command", "", "explicit command override (delegated client policy still applies)")
-	fs.StringVar(&req.ModelID, "model", "", "single-launch model override")
-	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "single-launch reasoning override")
+	fs.StringVar(&req.ModelID, "model", "", "model for this launch (codex, claude, pi, grok, agent, opencode); empty keeps the client default")
+	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "reasoning level for this launch (codex, claude, pi); empty keeps the client default")
 	fs.StringVar(&req.Cwd, "cwd", "", "Worker working directory")
 	fs.StringVar(&req.Prompt, "prompt", "", "initial prompt text")
 	fs.StringVar(&req.PromptFile, "prompt-file", "", "file containing the initial prompt")
@@ -1677,36 +1670,6 @@ func runBrainUse(args []string, stderr io.Writer) error {
 	return writeControlResponse(os.Stdout, resp, cfg.json)
 }
 
-func runBrainSetDelegated(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain set-delegated", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	cfg := cliConfig{json: true}
-	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
-	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
-	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen brain set-delegated <executor> [flags]")
-		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Switches the live Delegated Executor in the running daemon without restart.")
-		fmt.Fprintln(stderr, "Existing Worker sessions keep their original executor.")
-		fmt.Fprintln(stderr, "")
-		fs.PrintDefaults()
-	}
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: zen brain set-delegated <executor> [flags]")
-	}
-	resp, err := callControl(cfg, control.Request{
-		Type:       "set_delegated_executor",
-		ExecutorID: fs.Arg(0),
-	})
-	if err != nil {
-		return err
-	}
-	return writeControlResponse(os.Stdout, resp, cfg.json)
-}
-
 func parseCLIConfig(name string, args []string, stderr io.Writer) (cliConfig, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -1757,11 +1720,6 @@ func writeControlResponse(w io.Writer, resp control.Response, asJSON bool) error
 		}
 		return controlResponseError(resp)
 	}
-	if resp.WorkerDefaults != nil {
-		d := resp.WorkerDefaults
-		fmt.Fprintf(w, "executor=%s model=%s reasoning=%s\n%s\n", d.Executor, d.Model, d.Reasoning, d.Command)
-		return nil
-	}
 	if resp.Workspace != "" {
 		fmt.Fprintln(w, resp.Workspace)
 		return nil
@@ -1794,13 +1752,6 @@ func writeControlResponse(w io.Writer, resp control.Response, asJSON bool) error
 			marker := "  "
 			if executor.Host || (resp.Executor != nil && resp.Executor.ID == executor.ID) {
 				marker = "H "
-			}
-			if executor.Delegated || (resp.DelegatedExecutor != nil && resp.DelegatedExecutor.ID == executor.ID) {
-				if strings.TrimSpace(marker) == "H" {
-					marker = "HD"
-				} else {
-					marker = "D "
-				}
 			}
 			fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\n", marker, executor.ID, executor.Provider, executor.Runtime, executor.Command)
 		}

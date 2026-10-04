@@ -59,12 +59,8 @@ func Run(opts Options) (Result, error) {
 	}
 
 	hostDefault := report.Executors.RecommendedHost
-	delegatedDefault := report.Executors.RecommendedDelegated
 	if hostDefault == "" {
 		hostDefault = candidates[0].ID
-	}
-	if delegatedDefault == "" {
-		delegatedDefault = hostDefault
 	}
 
 	profile := opts.Profile
@@ -77,15 +73,14 @@ func Run(opts Options) (Result, error) {
 	}
 
 	host := strings.TrimSpace(opts.Host)
-	delegated := strings.TrimSpace(opts.Delegated)
 	configureBrain := false
 
 	if opts.NonInteractive {
-		if host == "" || delegated == "" {
-			return result, fmt.Errorf("%w: --host and --delegated are required in --non-interactive mode", ErrInvalidArgs)
+		if host == "" {
+			return result, fmt.Errorf("%w: --host is required in --non-interactive mode", ErrInvalidArgs)
 		}
-		if !isCandidate(candidates, host) || !isCandidate(candidates, delegated) {
-			return result, fmt.Errorf("%w: host/delegated must be runnable candidates", ErrInvalidArgs)
+		if !isCandidate(candidates, host) {
+			return result, fmt.Errorf("%w: host must be a runnable candidate", ErrInvalidArgs)
 		}
 		if profile == ProfileAutonomous && !opts.Yes {
 			writeLines(out, PermissionExplanation()...)
@@ -102,10 +97,6 @@ func Run(opts Options) (Result, error) {
 		writeLines(out, "zen setup", "")
 		writeLines(out, formatCandidates(candidates)...)
 		host, err = promptChoice(opts, out, errOut, "Host executor", hostDefault, candidateIDs(candidates))
-		if err != nil {
-			return result, err
-		}
-		delegated, err = promptChoice(opts, out, errOut, "Delegated executor", delegatedDefault, candidateIDs(candidates))
 		if err != nil {
 			return result, err
 		}
@@ -140,7 +131,6 @@ func Run(opts Options) (Result, error) {
 	}
 
 	result.Host = host
-	result.Delegated = delegated
 	result.Profile = profile
 	result.Step = "config"
 
@@ -150,7 +140,7 @@ func Run(opts Options) (Result, error) {
 	}
 	result.ConfigPath = paths.ExecutorsPath
 
-	selectedIDs := uniqueStrings(host, delegated)
+	selectedIDs := uniqueStrings(host)
 	selected := make([]selectedExecutor, 0, len(selectedIDs))
 	for _, id := range selectedIDs {
 		item := findDoctorExecutor(report, id)
@@ -165,11 +155,10 @@ func Run(opts Options) (Result, error) {
 	}
 
 	written, err := writeExecutorsConfig(configWriteRequest{
-		Path:      paths.ExecutorsPath,
-		Delegated: delegated,
-		Profile:   profile,
-		Selected:  selected,
-		Now:       now().UTC(),
+		Path:     paths.ExecutorsPath,
+		Profile:  profile,
+		Selected: selected,
+		Now:      now().UTC(),
 	})
 	if err != nil {
 		return result, err

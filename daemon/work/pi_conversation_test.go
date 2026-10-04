@@ -366,9 +366,6 @@ func TestLoadExecutorsIncludesPiAndOpenCodeDefaults(t *testing.T) {
 			t.Fatalf("%s missing StructuredEvents", id)
 		}
 	}
-	if cfg.GetDelegatedExecutor() != "codex" {
-		t.Fatalf("delegated default changed: %q", cfg.GetDelegatedExecutor())
-	}
 }
 
 func writePiFixture(t *testing.T, path, cwd, userText string) {

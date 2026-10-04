@@ -44,7 +44,7 @@ if [[ "$1 $2 $3" == "brain playbooks --json" ]]; then
 fi
 if [[ "$1 $2 $3" == "brain context --json" ]]; then
   [[ "$mode" != "bad-json" ]] || { printf '{\n'; exit 0; }
-  printf '%s\n' '{"ok":true,"context":{"host_executor":{"id":"codex"},"delegated_executor":{"id":"pi"}}}'
+  printf '%s\n' '{"ok":true,"context":{"host_executor":{"id":"codex"},"executors":[{"id":"codex"},{"id":"pi"}]}}'
   exit 0
 fi
 if [[ "$1 $2 $3" == "worker list --json" ]]; then

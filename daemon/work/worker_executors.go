@@ -537,7 +537,6 @@ type WorkerExecutor struct {
 	Runtime      string             `json:"runtime"`
 	Capabilities WorkerCapabilities `json:"capabilities"`
 	Host         bool               `json:"host,omitempty"`
-	Delegated    bool               `json:"delegated,omitempty"`
 }
 
 // WorkerExecutors returns all configured executors as portable executor records.
@@ -569,28 +568,6 @@ func (c *ExecutorConfig) WorkerExecutor(name string) (WorkerExecutor, bool) {
 		return WorkerExecutor{}, false
 	}
 	return NewWorkerExecutor(name, executor), true
-}
-
-// DelegatedAgentExecutor returns the configured executor for delegated execution.
-// It always reads the live delegated selection owned by ExecutorConfig.
-func (c *ExecutorConfig) DelegatedWorkerExecutor() (WorkerExecutor, bool) {
-	if c == nil {
-		return WorkerExecutor{}, false
-	}
-	if executor, ok := c.WorkerExecutor(c.GetDelegatedExecutor()); ok {
-		executor.Delegated = true
-		return executor, true
-	}
-	if executor, ok := c.WorkerExecutor("codex"); ok {
-		executor.Delegated = true
-		return executor, true
-	}
-	executors := c.WorkerExecutors()
-	if len(executors) == 0 {
-		return WorkerExecutor{}, false
-	}
-	executors[0].Delegated = true
-	return executors[0], true
 }
 
 // NewWorkerExecutor converts one executor entry into Brain's portable executor

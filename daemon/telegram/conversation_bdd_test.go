@@ -146,7 +146,7 @@ func realConversationFixture(t *testing.T) (*Manager, *brain.Store, *brain.Servi
 		"session-b": {ID: "session-b", Name: "Session B", Delegated: true, State: classifier.StateRunning},
 		"manual":    {ID: "manual", Name: "Session A", State: classifier.StateRunning},
 	}, path: filepath.Join(root, "provider-receipts.json")}
-	service := brain.NewService(s, p, work.NewExecutorConfig("claude", map[string]work.Executor{"claude": {Name: "claude", Kind: "claude", Command: "claude", Runtime: work.WorkerRuntimeTmux}}))
+	service := brain.NewService(s, p, work.NewExecutorConfig(map[string]work.Executor{"claude": {Name: "claude", Kind: "claude", Command: "claude", Runtime: work.WorkerRuntimeTmux}}))
 	api := &fakeAPI{bot: User{ID: 7001, IsBot: true, Username: "fixture_bot", Topics: true, UserTopics: true}}
 	m, err := NewManagerWithOptions(root, service, Options{API: api, TypingDeadline: time.Millisecond})
 	if err != nil {

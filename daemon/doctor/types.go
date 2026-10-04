@@ -137,7 +137,6 @@ type ListenCheck struct {
 type ExecutorsCheck struct {
 	ConfigPath               string                   `json:"config_path"`
 	ConfigExists             bool                     `json:"config_exists"`
-	DelegatedExecutor        string                   `json:"delegated_executor,omitempty"`
 	Status                   Status                   `json:"status"`
 	Remediation              Remediation              `json:"remediation,omitempty"`
 	Summary                  string                   `json:"summary"`
@@ -145,7 +144,6 @@ type ExecutorsCheck struct {
 	UsableCount              int                      `json:"usable_count"`
 	VerifiedCount            int                      `json:"verified_count"`
 	RecommendedHost          string                   `json:"recommended_host,omitempty"`
-	RecommendedDelegated     string                   `json:"recommended_delegated,omitempty"`
 	RecommendationConfidence RecommendationConfidence `json:"recommendation_confidence"`
 	Warnings                 []string                 `json:"warnings,omitempty"`
 }

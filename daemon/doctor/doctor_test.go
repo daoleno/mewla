@@ -314,9 +314,9 @@ command = "grok"
 	if report.Executors.RecommendedHost != "codex" {
 		t.Fatalf("recommended host = %q, want codex over grok", report.Executors.RecommendedHost)
 	}
-	// Even though delegated_executor=grok, verified auth wins when selecting recommendations.
-	if report.Executors.RecommendedDelegated != "codex" {
-		t.Fatalf("recommended delegated = %q, want verified codex", report.Executors.RecommendedDelegated)
+	// The retired delegated_executor key loads, is ignored and is reported.
+	if !strings.Contains(strings.Join(report.Executors.Warnings, "\n"), "delegated_executor are retired and ignored") {
+		t.Fatalf("missing retired-key warning: %v", report.Executors.Warnings)
 	}
 	if report.Executors.RecommendationConfidence != ConfidenceVerified {
 		t.Fatalf("confidence = %s", report.Executors.RecommendationConfidence)

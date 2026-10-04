@@ -20,7 +20,7 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 	read := func(path string) string {
@@ -50,7 +50,7 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 	}
 	for name, surface := range map[string]string{
 		"delegation": read(store.policyPath("delegation.md")),
-		"handoff":    formatHostHandoffPrompt("thread-one", "grok", "codex", "codex", nil),
+		"handoff":    formatHostHandoffPrompt("thread-one", "grok", "codex", nil),
 	} {
 		if strings.Contains(surface, brainWorkerRoleContract) {
 			t.Fatalf("%s must reference the role owner without repeating it", name)
@@ -89,7 +89,7 @@ func TestHostActivationUsesProductContentDigest(t *testing.T) {
 	if err := store.MarkHostActivation(HostActivation{SessionID: id, HostGeneration: generation, ContractDigest: "different-content"}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 	for attempt := 0; attempt < 2; attempt++ {
@@ -115,7 +115,7 @@ func TestHostActivationContractDeliveredOncePerProcessGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 
@@ -200,7 +200,7 @@ func TestNewHostActivationAcceptedReceiptSettlesPersistenceGapWithoutReplay(t *t
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 
@@ -281,7 +281,7 @@ func TestLiveHostActivationQueuesWithUserInputsOutsideSnapshot(t *testing.T) {
 			hostID: {ID: "active-provider-turn", Status: "running", StartedAt: time.Now().UTC()},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 
@@ -373,7 +373,7 @@ func TestLiveHostActivationAmbiguousReceiptIsNeverReplayed(t *testing.T) {
 		ownedGenerations: map[string]string{hostID: hostGeneration},
 		outcomes:         map[string]watcher.InputOutcome{receipt: watcher.InputAmbiguous},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig("codex", map[string]work.Executor{
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 
