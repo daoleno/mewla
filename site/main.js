@@ -1,325 +1,228 @@
 (() => {
-  const SVG = "http://www.w3.org/2000/svg";
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const root = document.documentElement;
+  let motionPaused = false;
+  const players = [];
 
-  // A clock that stops while the user has paused or the figure is off screen.
-  function makeClock() {
-    const clock = { paused: false, hidden: true, waiters: [] };
-    clock.running = () => !clock.paused && !clock.hidden;
-    clock.update = () => {
-      if (!clock.running()) return;
-      const waiters = clock.waiters.splice(0);
-      waiters.forEach((resolve) => resolve());
-    };
-    clock.whenRunning = () =>
-      clock.running() ? Promise.resolve() : new Promise((resolve) => clock.waiters.push(resolve));
-    clock.tween = (duration, step) =>
-      new Promise((resolve) => {
-        let elapsed = 0;
-        let last = null;
-        const frame = (now) => {
-          if (clock.running()) {
-            if (last !== null) elapsed += now - last;
-            last = now;
-          } else {
-            last = null;
-          }
-          const t = Math.min(elapsed / duration, 1);
-          step(t);
-          if (t < 1) requestAnimationFrame(frame);
-          else resolve();
-        };
-        requestAnimationFrame(frame);
+  // Header hairline once the page scrolls.
+  const top = document.querySelector(".top");
+  const onScroll = () => top.classList.toggle("scrolled", scrollY > 8);
+  addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  // One switch stops every animation and autoplay on the page.
+  const motionButton = document.querySelector("[data-motion]");
+  motionButton.addEventListener("click", () => {
+    motionPaused = !motionPaused;
+    root.classList.toggle("paused", motionPaused);
+    motionButton.setAttribute("aria-pressed", String(motionPaused));
+    motionButton.textContent = motionPaused ? "Play motion" : "Pause motion";
+    players.forEach((p) => p.sync());
+  });
+
+  // The SVG files under assets/ are shared with the README, where they play
+  // their own CSS loop. Here they are inlined so the page can drive them.
+  async function inline(img) {
+    const res = await fetch(img.currentSrc || img.src);
+    if (!res.ok) throw new Error(`${res.status} ${img.src}`);
+    const doc = new DOMParser().parseFromString(await res.text(), "image/svg+xml");
+    const svg = document.importNode(doc.documentElement, true);
+    if (svg.nodeName !== "svg") throw new Error(`not an SVG: ${img.src}`);
+    svg.classList.add("is-live");
+    const live = svg.getAttribute("data-live-viewbox");
+    if (live) svg.setAttribute("viewBox", live);
+    svg.setAttribute("width", img.getAttribute("width"));
+    svg.setAttribute("height", img.getAttribute("height"));
+    img.replaceWith(svg);
+    return svg;
+  }
+
+  // Narrow layout: attributes named data-n-<attr> replace <attr> when the
+  // figure is too small for the wide drawing.
+  function responsive(svg, figure) {
+    const swaps = [];
+    [svg, ...svg.querySelectorAll("*")].forEach((el) => {
+      for (const { name, value } of [...el.attributes]) {
+        if (!name.startsWith("data-n-")) continue;
+        let attr = name.slice(7);
+        if (attr === "viewbox") attr = "viewBox";
+        swaps.push({ el, attr, narrow: value, wide: el.getAttribute(attr) });
+      }
+    });
+    if (!swaps.length) return;
+    let current = null;
+    const apply = () => {
+      const narrow = figure.clientWidth < Number(figure.dataset.narrowBelow || 600);
+      if (narrow === current) return;
+      current = narrow;
+      swaps.forEach(({ el, attr, narrow: n, wide: w }) => {
+        const v = narrow ? n : w;
+        if (v === null) el.removeAttribute(attr);
+        else el.setAttribute(attr, v);
       });
-    clock.sleep = (duration) => clock.tween(duration, () => {});
-    return clock;
+      const [, , vw, vh] = svg.getAttribute("viewBox").split(/\s+/).map(Number);
+      svg.setAttribute("width", vw);
+      svg.setAttribute("height", vh);
+    };
+    new ResizeObserver(apply).observe(figure);
+    apply();
   }
 
-  function watchVisibility(el, clock) {
-    const observer = new IntersectionObserver(([entry]) => {
-      clock.hidden = !entry.isIntersecting || document.hidden;
-      clock.update();
-    });
-    observer.observe(el);
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) clock.hidden = true;
-      else clock.hidden = el.getBoundingClientRect().bottom < 0 || el.getBoundingClientRect().top > innerHeight;
-      clock.update();
-    });
+  // Steps through numbered states while visible, until the reader takes over.
+  function player(figure, svg, count, interval, onState) {
+    const p = { state: 1, auto: true, visible: false, timer: null };
+    const set = (n) => {
+      p.state = n;
+      svg.setAttribute("data-state", String(n));
+      onState(n);
+    };
+    p.sync = () => {
+      clearInterval(p.timer);
+      if (p.auto && p.visible && !motionPaused && !reduced.matches) {
+        p.timer = setInterval(() => set((p.state % count) + 1), interval);
+      }
+    };
+    p.take = (n) => {
+      p.auto = false;
+      set(n);
+      p.sync();
+    };
+    new IntersectionObserver(([e]) => {
+      p.visible = e.isIntersecting;
+      p.sync();
+    }, { threshold: 0.35 }).observe(figure);
+    reduced.addEventListener("change", p.sync);
+    players.push(p);
+    set(1);
+    return p;
   }
 
-  // Draws connectors between elements inside a positioned stage.
-  function makeWires(stage, pairs, shape) {
-    const svg = stage.querySelector(".wires");
-    const paths = new Map();
-    pairs.forEach(({ id }) => {
-      const path = document.createElementNS(SVG, "path");
-      path.dataset.id = id;
-      svg.appendChild(path);
-      paths.set(id, path);
+  function stepped(figure, svg) {
+    const buttons = [...figure.querySelectorAll(".stepper button")];
+    const captions = [...figure.querySelectorAll("[data-caption]")];
+    const p = player(figure, svg, Number(figure.dataset.states), Number(figure.dataset.interval), (n) => {
+      buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === String(n))));
+      captions.forEach((c) => (c.hidden = c.dataset.caption !== String(n)));
     });
-    const layout = () => {
-      const box = stage.getBoundingClientRect();
-      svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
-      pairs.forEach(({ id, from, to }) => {
-        const a = from.getBoundingClientRect();
-        const b = to.getBoundingClientRect();
-        const rel = (r) => ({
-          l: r.left - box.left, r: r.right - box.left,
-          t: r.top - box.top, b: r.bottom - box.top,
-          cx: r.left - box.left + r.width / 2, cy: r.top - box.top + r.height / 2,
-        });
-        paths.get(id).setAttribute("d", shape(rel(a), rel(b)));
+    buttons.forEach((b) => b.addEventListener("click", () => p.take(Number(b.dataset.state))));
+  }
+
+  // switch.svg: the client seats inside the drawing are the controls.
+  function switcher(figure, svg) {
+    const order = ["codex", "claude", "pi", "grok", "agent", "opencode"];
+    // Its seats are controls, so the drawing cannot be a single image.
+    svg.setAttribute("role", "group");
+    const picks = [...svg.querySelectorAll("[data-pick]")];
+    const label = (el) => el.getAttribute("aria-label");
+    const mark = () =>
+      picks.forEach((el) => {
+        const key = el.dataset.pick === "host" ? "data-host" : "data-exec";
+        el.setAttribute("aria-pressed", String(svg.getAttribute(key) === el.dataset.value));
       });
-    };
-    new ResizeObserver(layout).observe(stage);
-    layout();
-    return { svg, paths, visible: () => getComputedStyle(svg).display !== "none" };
-  }
-
-  function horizontal(a, b) {
-    const x1 = a.r, y1 = a.cy, x2 = b.l, y2 = b.cy;
-    const dx = (x2 - x1) / 2;
-    return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
-  }
-
-  // Brain on the left of Workers, or stacked above them on narrow screens.
-  function orchestraShape(a, b) {
-    if (b.l >= a.r - 1) return horizontal(a, b);
-    const x = b.l - 14, r = 8;
-    return `M${x},${a.b} V${b.cy - r} Q${x},${b.cy} ${x + r},${b.cy} H${b.l}`;
-  }
-
-  function packet(clock, wires, id, duration, returning) {
-    if (!wires.visible()) return clock.sleep(duration);
-    const dot = document.createElementNS(SVG, "circle");
-    dot.setAttribute("r", "4.5");
-    dot.setAttribute("class", returning ? "pkt ret" : "pkt");
-    wires.svg.appendChild(dot);
-    return clock
-      .tween(duration, (t) => {
-        const path = wires.paths.get(id);
-        const len = path.getTotalLength();
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        const p = path.getPointAtLength(len * (returning ? 1 - eased : eased));
-        dot.setAttribute("cx", p.x);
-        dot.setAttribute("cy", p.y);
-      })
-      .then(() => dot.remove());
-  }
-
-  function bindPause(button, clock) {
-    if (!button) return;
-    button.addEventListener("click", () => {
-      clock.paused = !clock.paused;
-      button.setAttribute("aria-pressed", String(clock.paused));
-      button.textContent = clock.paused ? "Play animation" : "Pause animation";
-      clock.update();
-    });
-  }
-
-  /* Hero: Brain dispatches, Workers report evidence, Brain accepts. */
-  function orchestra() {
-    const fig = document.getElementById("orchestra");
-    if (!fig) return;
-    const stage = fig.querySelector(".orch-stage");
-    const brain = fig.querySelector('[data-anchor="brain"]');
-    const status = fig.querySelector("[data-brain-status]");
-    const steps = [...fig.querySelectorAll(".phases li")];
-    const workers = [...fig.querySelectorAll(".worker")].map((el) => ({
-      el,
-      exec: el.querySelector("[data-exec]"),
-      state: el.querySelector("[data-state]"),
-      bar: el.querySelector(".bar span"),
-    }));
-    const rotations = [
-      ["codex", "claude", "opencode"],
-      ["claude", "pi", "codex"],
-      ["codex", "grok", "claude"],
-    ];
-    const order = steps.map((li) => li.dataset.step);
-
-    const setPhase = (name) => {
-      fig.dataset.phase = name;
-      const at = order.indexOf(name);
-      steps.forEach((li, i) => {
-        li.classList.toggle("on", i === at);
-        li.classList.toggle("past", i < at);
+    picks.forEach((el) => {
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-label", label(el));
+      const choose = () => {
+        p.auto = false;
+        p.sync();
+        svg.setAttribute(el.dataset.pick === "host" ? "data-host" : "data-exec", el.dataset.value);
+        mark();
+      };
+      el.addEventListener("click", choose);
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          choose();
+        }
       });
-    };
-    const setWorker = (w, cls, text, fill) => {
-      w.el.classList.remove("running", "reported", "accepted");
-      if (cls) w.el.classList.add(cls);
-      w.state.textContent = text;
-      if (fill !== undefined) w.bar.style.width = `${fill * 100}%`;
-    };
+    });
+    // Autoplay alternates: move Brain, then pick a Worker client.
+    const p = player(figure, svg, order.length * 2, 2600, (n) => {
+      const i = Math.floor((n - 1) / 2);
+      if (n % 2) svg.setAttribute("data-host", order[i]);
+      else svg.setAttribute("data-exec", order[(i + 1) % order.length]);
+      mark();
+    });
+    svg.removeAttribute("data-state");
+  }
 
-    if (reduced.matches) {
-      setPhase("accept");
-      steps.forEach((li) => li.classList.add("past"));
-      status.textContent = "Accepted after review";
-      workers.forEach((w) => setWorker(w, "accepted", "accepted", 1));
+  document.querySelectorAll("img[data-inline]").forEach(async (img) => {
+    const figure = img.closest("figure");
+    try {
+      const svg = await inline(img);
+      responsive(svg, figure);
+      const kind = figure.dataset.figure;
+      if (kind === "dispatch" || kind === "routing") stepped(figure, svg);
+      if (kind === "switch") switcher(figure, svg);
+    } catch (err) {
+      // The <img> stays and plays the SVG's own loop.
+      console.warn("inline SVG skipped:", err.message);
+    }
+  });
+
+  // Durable Work: replay a restart in the Event trail.
+  const ledger = document.querySelector("[data-ledger]");
+  const restart = document.querySelector("[data-restart]");
+  restart.addEventListener("click", () => {
+    const marker = ledger.querySelector(".restart");
+    const later = [...ledger.querySelectorAll(".later")];
+    if (!marker.hidden) {
+      marker.hidden = true;
+      later.forEach((li) => (li.hidden = true));
+      restart.textContent = "Restart the daemon";
       return;
     }
-
-    const clock = makeClock();
-    watchVisibility(fig, clock);
-    bindPause(fig.querySelector("[data-pause]"), clock);
-    const wires = makeWires(
-      stage,
-      workers.map((w, i) => ({ id: `w${i}`, from: brain, to: w.el })),
-      orchestraShape,
-    );
-    const wire = (i, cls) => wires.paths.get(`w${i}`).setAttribute("class", cls || "");
-
-    const run = async (w, i, duration, labels) => {
-      await clock.tween(duration, (t) => {
-        w.bar.style.width = `${t * 100}%`;
-        w.state.textContent = labels[Math.min(Math.floor(t * labels.length), labels.length - 1)];
-      });
-      setWorker(w, "reported", "reported", 1);
-      wire(i, "back");
-      await packet(clock, wires, `w${i}`, 700, true);
-    };
-
-    const cycle = async (n) => {
-      const execs = rotations[n % rotations.length];
-      workers.forEach((w, i) => {
-        setWorker(w, "", "queued", 0);
-        wire(i, "");
-        if (w.exec.textContent !== execs[i]) {
-          w.exec.classList.remove("swap");
-          void w.exec.offsetWidth;
-          w.exec.classList.add("swap");
-          setTimeout(() => (w.exec.textContent = execs[i]), 240);
-        }
-      });
-      setPhase("plan");
-      status.textContent = "Planning three scoped concerns";
-      await clock.sleep(1500);
-
-      setPhase("delegate");
-      status.textContent = `Spawning Workers on ${[...new Set(execs)].join(", ")}`;
-      await Promise.all(
-        workers.map(async (w, i) => {
-          await clock.sleep(i * 200);
-          wire(i, "live");
-          await packet(clock, wires, `w${i}`, 800, false);
-          setWorker(w, "running", "running", 0);
-        }),
-      );
-
-      setPhase("execute");
-      status.textContent = "Workers checking in";
-      const durations = [2600, 3400, 2000];
-      let reported = 0;
-      await Promise.all(
-        workers.map((w, i) =>
-          run(w, i, durations[i], ["reading", "editing", "testing"]).then(() => {
-            reported += 1;
-            setPhase("evidence");
-            status.textContent = `Reviewing evidence · ${reported} of ${workers.length}`;
-          }),
-        ),
-      );
-
-      const follow = workers[1];
-      status.textContent = "Follow-up sent to ios-regression";
-      await clock.sleep(500);
-      wire(1, "live");
-      await packet(clock, wires, "w1", 700, false);
-      setWorker(follow, "running", "follow-up", 0);
-      await run(follow, 1, 1500, ["follow-up", "testing"]);
-      status.textContent = "Evidence reviewed";
-      await clock.sleep(600);
-
-      setPhase("accept");
-      status.textContent = "Accepted after review";
-      workers.forEach((w, i) => {
-        setWorker(w, "accepted", "accepted", 1);
-        wire(i, "back");
-      });
-      await clock.sleep(2800);
-    };
-
-    (async () => {
-      for (let n = 0; ; n += 1) await cycle(n);
-    })();
-  }
-
-  /* Switchboard: Brain routes each task to an executor and reasoning level from routing.md. */
-  function board() {
-    const fig = document.getElementById("board");
-    if (!fig) return;
-    const stage = fig.querySelector(".board-stage");
-    const router = fig.querySelector('[data-anchor="router"]');
-    const note = fig.querySelector("[data-route-note]");
-    const tasks = [...fig.querySelectorAll("[data-task]")];
-    const execs = new Map([...fig.querySelectorAll("[data-exec]")].map((el) => [el.dataset.exec, el]));
-    // [task index, executor, reasoning] as Brain would choose from routing.md
-    const plan = [[0, "claude", "high"], [1, "codex", "medium"], [2, "pi", "low"], [3, "grok", null]];
-
-    if (reduced.matches) return;
-
-    const clock = makeClock();
-    watchVisibility(fig, clock);
-    const pairs = [
-      ...tasks.map((el, i) => ({ id: `t${i}`, from: el, to: router })),
-      ...[...execs].map(([name, el]) => ({ id: `e:${name}`, from: router, to: el })),
-    ];
-    const wires = makeWires(stage, pairs, horizontal);
-    const paint = (cls) => wires.paths.forEach((p) => p.setAttribute("class", cls));
-    const clear = () => {
-      tasks.forEach((t) => t.classList.remove("on"));
-      execs.forEach((e) => e.classList.remove("on"));
-      paint("faint");
-    };
-
-    (async () => {
-      for (;;) {
-        tasks.forEach((t) => t.classList.remove("done"));
-        note.textContent = "routing.md";
-        for (const [task, exec, reasoning] of plan) {
-          clear();
-          tasks[task].classList.add("on");
-          wires.paths.get(`t${task}`).setAttribute("class", "live");
-          await packet(clock, wires, `t${task}`, 700, false);
-          note.textContent = `-executor ${exec}${reasoning ? ` -reasoning ${reasoning}` : ""}`;
-          wires.paths.get(`e:${exec}`).setAttribute("class", "back");
-          await packet(clock, wires, `e:${exec}`, 700, false);
-          execs.get(exec).classList.add("on");
-          await clock.sleep(1500);
-          tasks[task].classList.remove("on");
-          tasks[task].classList.add("done");
-          note.textContent = "routing.md";
-          await clock.sleep(400);
-        }
-        await clock.sleep(1200);
-      }
-    })();
-  }
-
-  function copyButtons() {
-    document.querySelectorAll("[data-copy]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const text = document.getElementById(button.dataset.copy).textContent;
-        try {
-          await navigator.clipboard.writeText(text);
-          button.textContent = "Copied";
-        } catch {
-          const range = document.createRange();
-          range.selectNodeContents(document.getElementById(button.dataset.copy));
-          const selection = getSelection();
-          selection.removeAllRanges();
-          selection.addRange(range);
-          button.textContent = "Selected";
-        }
-        setTimeout(() => (button.textContent = "Copy"), 1600);
-      });
+    ledger.classList.remove("rebooting");
+    void ledger.offsetWidth;
+    ledger.classList.add("rebooting");
+    marker.hidden = false;
+    marker.classList.add("enter");
+    const quick = reduced.matches || motionPaused;
+    later.forEach((li, i) => {
+      const show = () => {
+        li.hidden = false;
+        li.classList.add("enter");
+      };
+      quick ? show() : setTimeout(show, 500 + i * 420);
     });
-  }
+    restart.textContent = "Reset the trail";
+  });
 
-  orchestra();
-  board();
-  copyButtons();
+  // Phone screens.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  const selectTab = (tab, focus) => {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      const note = document.querySelector(`[data-note="${t.id.slice(4)}"]`);
+      if (note) note.hidden = !on;
+    });
+    if (focus) tab.focus();
+  };
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => selectTab(tab));
+    tab.addEventListener("keydown", (ev) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[ev.key];
+      if (step) selectTab(tabs[(i + step + tabs.length) % tabs.length], true);
+      if (ev.key === "Home") selectTab(tabs[0], true);
+      if (ev.key === "End") selectTab(tabs[tabs.length - 1], true);
+    });
+  });
+
+  // Copy buttons.
+  document.querySelectorAll("[data-copy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const text = document.getElementById(button.dataset.copy).textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select";
+      }
+      setTimeout(() => (button.textContent = "Copy"), 1600);
+    });
+  });
 })();

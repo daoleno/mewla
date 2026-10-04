@@ -1,0 +1,231 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="dp" viewBox="0 0 960 600" data-live-viewbox="0 0 960 536" data-n-viewbox="0 0 420 700" data-state="1" role="img" aria-labelledby="dp-title dp-desc">
+<title id="dp-title">Brain plans, delegates, reviews and accepts Work</title>
+<desc id="dp-desc">You give Brain one goal from your phone. Brain records three Work items and hands each to a visible Worker Session on a different agent. Workers check in while they run. Brain reviews each result, sends one Worker back with a follow-up, and accepts the Work only after reading the diffs and checks. Your phone gets one notification when it is done.</desc>
+<style>
+.dp{--ink:#171a18;--ink2:#4a504c;--mute:#7a817c;--line:#e4e0d6;--sage:#559e72;--sage7:#2a5f41;--sage1:#dcf2e3;--sage0:#f1f9f3;--clay:#b47c6c;--clay1:#fbe7e1;--well:#f6f5f1}
+.dp text{white-space:pre;font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:var(--ink)}
+.dp .m,.dp .m text{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+.dp .mute{fill:var(--mute)}.dp .ink2{fill:var(--ink2)}.dp .sage{fill:var(--sage7)}.dp .clay{fill:#8f5a4b}
+.dp .cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;fill:var(--mute)}
+.dp .card{fill:#fff;stroke:var(--line)}
+.dp .ghost{fill:#fff;stroke:var(--line);stroke-dasharray:4 5}
+.dp .wire{fill:none;stroke:var(--sage);stroke-width:2;stroke-linecap:round;stroke-dasharray:3 6}
+.dp .wire.back{stroke:var(--sage7)}
+.dp .wire.follow{stroke:var(--clay)}
+.dp-s{opacity:0}.dp-s1{opacity:1}
+.dp.is-live .dp-s{opacity:0;transition:opacity .35s ease}
+.dp.is-live[data-state="1"] .dp-s1,.dp.is-live[data-state="2"] .dp-s2,.dp.is-live[data-state="3"] .dp-s3,.dp.is-live[data-state="4"] .dp-s4,.dp.is-live[data-state="5"] .dp-s5{opacity:1}
+.dp.is-live .dp-track{display:none}
+@media (prefers-reduced-motion:no-preference){
+.dp:not(.is-live) .dp-s{animation:dp-cycle 18s infinite both}
+.dp:not(.is-live) .dp-s2{animation-delay:-14.4s}.dp:not(.is-live) .dp-s3{animation-delay:-10.8s}.dp:not(.is-live) .dp-s4{animation-delay:-7.2s}.dp:not(.is-live) .dp-s5{animation-delay:-3.6s}
+.dp .wire{animation:dp-flow 1.2s linear infinite}
+.dp .wire.back{animation-direction:reverse}
+.dp .pulse{animation:dp-pulse 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+}
+@keyframes dp-cycle{0%{opacity:0}2.5%,18%{opacity:1}20%,100%{opacity:0}}
+@keyframes dp-flow{to{stroke-dashoffset:-18}}
+@keyframes dp-pulse{0%{opacity:.5;transform:scale(1)}100%{opacity:0;transform:scale(1.45)}}
+</style>
+<rect class="dp-bg" width="100%" height="100%" rx="22" fill="#fbfaf7"/>
+
+<g class="dp-phone" data-n-visibility="hidden">
+<rect x="32" y="36" width="212" height="484" rx="34" fill="#1f2421"/>
+<rect x="41" y="45" width="194" height="466" rx="26" fill="#fff"/>
+<rect x="112" y="53" width="52" height="14" rx="7" fill="#1f2421"/>
+<text x="62" y="65" font-size="11" font-weight="600">9:41</text>
+<text x="110" y="96" font-size="13" font-weight="700">Brain</text><text x="160" y="96" font-size="13" class="mute">Sessions</text>
+<path d="M108 103h42" stroke="#2a5f41" stroke-width="2" stroke-linecap="round"/>
+<path d="M41 111.5h194" stroke="#ece9e1"/>
+<rect x="84" y="124" width="140" height="58" rx="15" fill="#dcf2e3"/>
+<text x="97" y="145" font-size="12">Ship the 0.2 beta</text>
+<text x="97" y="161" font-size="12">while I’m out</text>
+<text x="97" y="177" font-size="12">tonight.</text>
+<g class="dp-s dp-s1">
+<circle cx="60" cy="207" r="4" fill="#559e72"/><text x="70" y="211" font-size="10.5" class="mute">Brain</text>
+<text x="56" y="232" font-size="12.5">Planning. Three Work</text>
+<text x="56" y="249" font-size="12.5">items, in order.</text>
+</g>
+<g class="dp-s dp-s2">
+<circle cx="60" cy="207" r="4" fill="#559e72"/><text x="70" y="211" font-size="10.5" class="mute">Brain</text>
+<text x="56" y="232" font-size="12.5">Delegated. Each Worker</text>
+<text x="56" y="249" font-size="12.5">is a Session you can</text>
+<text x="56" y="266" font-size="12.5">open from Sessions.</text>
+</g>
+<g class="dp-s dp-s3">
+<circle cx="60" cy="207" r="4" fill="#559e72"/><text x="70" y="211" font-size="10.5" class="mute">Brain</text>
+<text x="56" y="232" font-size="12.5">Workers are checking in.</text>
+<text x="56" y="249" font-size="12.5">I’ll review results</text>
+<text x="56" y="266" font-size="12.5">as they land.</text>
+</g>
+<g class="dp-s dp-s4">
+<circle cx="60" cy="207" r="4" fill="#559e72"/><text x="70" y="211" font-size="10.5" class="mute">Brain</text>
+<text x="56" y="232" font-size="12.5">Reviewing. The Android</text>
+<text x="56" y="249" font-size="12.5">Worker goes back for</text>
+<text x="56" y="266" font-size="12.5">two flaky tests.</text>
+</g>
+<g class="dp-s dp-s5">
+<circle cx="60" cy="207" r="4" fill="#559e72"/><text x="70" y="211" font-size="10.5" class="mute">Brain</text>
+<text x="56" y="232" font-size="12.5">Accepted all three after</text>
+<text x="56" y="249" font-size="12.5">reading diffs and</text>
+<text x="56" y="266" font-size="12.5">checks.</text>
+</g>
+<rect x="52.5" y="300.5" width="172" height="38" rx="10" fill="#fbfaf7" stroke="#ece9e1"/>
+<text x="64" y="316" font-size="11.5" font-weight="600">Session auth</text>
+<text x="64" y="330" font-size="10" class="m mute">codex</text>
+<text x="214" y="324" font-size="10.5" text-anchor="end" class="mute dp-s dp-s1">planned</text>
+<text x="214" y="324" font-size="10.5" text-anchor="end" class="mute dp-s dp-s2">running</text>
+<text x="214" y="324" font-size="10.5" text-anchor="end" class="mute dp-s dp-s3">running</text>
+<text x="214" y="324" font-size="10.5" text-anchor="end" class="sage dp-s dp-s4">result</text>
+<text x="214" y="324" font-size="10.5" text-anchor="end" class="sage dp-s dp-s5">done</text>
+<rect x="52.5" y="346.5" width="172" height="38" rx="10" fill="#fbfaf7" stroke="#ece9e1"/>
+<text x="64" y="362" font-size="11.5" font-weight="600">Android crash</text>
+<text x="64" y="376" font-size="10" class="m mute">claude</text>
+<text x="214" y="370" font-size="10.5" text-anchor="end" class="mute dp-s dp-s1">planned</text>
+<text x="214" y="370" font-size="10.5" text-anchor="end" class="mute dp-s dp-s2">running</text>
+<text x="214" y="370" font-size="10.5" text-anchor="end" class="mute dp-s dp-s3">running</text>
+<text x="214" y="370" font-size="10.5" text-anchor="end" class="clay dp-s dp-s4">follow-up</text>
+<text x="214" y="370" font-size="10.5" text-anchor="end" class="sage dp-s dp-s5">done</text>
+<rect x="52.5" y="392.5" width="172" height="38" rx="10" fill="#fbfaf7" stroke="#ece9e1"/>
+<text x="64" y="408" font-size="11.5" font-weight="600">Release notes</text>
+<text x="64" y="422" font-size="10" class="m mute">pi</text>
+<text x="214" y="416" font-size="10.5" text-anchor="end" class="mute dp-s dp-s1">planned</text>
+<text x="214" y="416" font-size="10.5" text-anchor="end" class="mute dp-s dp-s2">running</text>
+<text x="214" y="416" font-size="10.5" text-anchor="end" class="mute dp-s dp-s3">running</text>
+<text x="214" y="416" font-size="10.5" text-anchor="end" class="sage dp-s dp-s4">result</text>
+<text x="214" y="416" font-size="10.5" text-anchor="end" class="sage dp-s dp-s5">done</text>
+<rect x="52.5" y="468.5" width="172" height="30" rx="15" fill="#fff" stroke="#e4e0d6"/>
+<text x="68" y="488" font-size="12" class="mute">Ask Brain</text>
+<g class="dp-s dp-s5"><rect x="48" y="52" width="180" height="46" rx="13" fill="#1f2421"/><circle cx="66" cy="75" r="8" fill="#559e72"/><path d="M62 75l3 3 5-6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><text x="82" y="71" font-size="11" font-weight="600" style="fill:#fff">Work done</text><text x="82" y="87" font-size="10.5" style="fill:#c9d3cc">Release 0.2 is ready for you</text></g>
+</g>
+<g data-n-visibility="hidden"><path d="M244 150C282 150 290 120 318 120" fill="none" stroke="#c9c4b8" stroke-width="1.6" stroke-dasharray="2 5"/><text x="281" y="172" text-anchor="middle" font-size="10" class="mute">signed</text></g>
+<g class="dp-brain" data-n-transform="translate(-260 0)">
+<circle class="pulse" cx="360" cy="120" r="40" fill="none" stroke="#559e72" stroke-width="1.5"/>
+<circle cx="360" cy="120" r="40" fill="#f1f9f3" stroke="#559e72" stroke-width="1.5"/>
+<g transform="translate(333 93) scale(.053)" fill="none" stroke="#2a5f41" stroke-linecap="round" stroke-linejoin="round"><path d="M790 372C724 252 590 209 461 244C334 279 252 393 266 524C282 675 411 778 558 760C650 749 731 697 781 620" stroke-width="64"/><path d="M334 430C470 352 622 334 665 371C694 396 671 440 601 495C486 586 401 663 437 705C472 747 606 730 722 801" stroke-width="78"/></g>
+<text x="360" y="181" text-anchor="middle" font-size="14" font-weight="600">Brain</text>
+</g>
+<g class="dp-plan" data-n-transform="translate(-72 -170)">
+<rect class="card" x="268.5" y="190.5" width="184" height="210" rx="14"/>
+<text x="286" y="216" class="cap">Work</text>
+<text x="306" y="252" font-size="13" font-weight="600">Session auth</text>
+<text x="306" y="269" font-size="10.5" class="m mute">w_31 · codex</text>
+<g class="dp-s dp-s1"><circle cx="291" cy="248" r="5.5" fill="#fff" stroke="#a8ada9" stroke-width="1.5"/></g>
+<g class="dp-s dp-s2"><circle cx="291" cy="248" r="5.5" fill="#dcf2e3" stroke="#559e72" stroke-width="1.5"/><circle cx="291" cy="248" r="2.4" fill="#559e72"/></g>
+<g class="dp-s dp-s3"><circle cx="291" cy="248" r="5.5" fill="#dcf2e3" stroke="#559e72" stroke-width="1.5"/><circle cx="291" cy="248" r="2.4" fill="#559e72"/></g>
+<g class="dp-s dp-s4"><circle cx="291" cy="248" r="5.5" fill="#559e72"/><path d="M288 248h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+<g class="dp-s dp-s5"><circle cx="291" cy="248" r="6" fill="#2a5f41"/><path d="M288 248l2.2 2.2 4-4.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="306" y="304" font-size="13" font-weight="600">Android crash</text>
+<text x="306" y="321" font-size="10.5" class="m mute">w_32 · claude</text>
+<g class="dp-s dp-s1"><circle cx="291" cy="300" r="5.5" fill="#fff" stroke="#a8ada9" stroke-width="1.5"/></g>
+<g class="dp-s dp-s2"><circle cx="291" cy="300" r="5.5" fill="#dcf2e3" stroke="#559e72" stroke-width="1.5"/><circle cx="291" cy="300" r="2.4" fill="#559e72"/></g>
+<g class="dp-s dp-s3"><circle cx="291" cy="300" r="5.5" fill="#dcf2e3" stroke="#559e72" stroke-width="1.5"/><circle cx="291" cy="300" r="2.4" fill="#559e72"/></g>
+<g class="dp-s dp-s4"><circle cx="291" cy="300" r="5.5" fill="#b47c6c"/><path d="M288.5 297.5l5 2.5-5 2.5" fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></g>
+<g class="dp-s dp-s5"><circle cx="291" cy="300" r="6" fill="#2a5f41"/><path d="M288 300l2.2 2.2 4-4.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="306" y="356" font-size="13" font-weight="600">Release notes</text>
+<text x="306" y="373" font-size="10.5" class="m mute">w_33 · pi</text>
+<g class="dp-s dp-s1"><circle cx="291" cy="352" r="5.5" fill="#fff" stroke="#a8ada9" stroke-width="1.5"/></g>
+<g class="dp-s dp-s2"><circle cx="291" cy="352" r="5.5" fill="#dcf2e3" stroke="#559e72" stroke-width="1.5"/><circle cx="291" cy="352" r="2.4" fill="#559e72"/></g>
+<g class="dp-s dp-s3"><circle cx="291" cy="352" r="5.5" fill="#dcf2e3" stroke="#559e72" stroke-width="1.5"/><circle cx="291" cy="352" r="2.4" fill="#559e72"/></g>
+<g class="dp-s dp-s4"><circle cx="291" cy="352" r="5.5" fill="#559e72"/><path d="M288 352h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+<g class="dp-s dp-s5"><circle cx="291" cy="352" r="6" fill="#2a5f41"/><path d="M288 352l2.2 2.2 4-4.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+</g>
+<g class="dp-wires" data-n-visibility="hidden">
+<path d="M452 252C500 252 500 100 548 100" fill="none" stroke="#ebe7de" stroke-width="2"/>
+<path d="M452 304C500 304 500 250 548 250" fill="none" stroke="#ebe7de" stroke-width="2"/>
+<path d="M452 356C500 356 500 400 548 400" fill="none" stroke="#ebe7de" stroke-width="2"/>
+<path class="wire dp-s dp-s2" d="M452 252C500 252 500 100 548 100"/>
+<path class="wire dp-s dp-s2" d="M452 304C500 304 500 250 548 250"/>
+<path class="wire dp-s dp-s2" d="M452 356C500 356 500 400 548 400"/>
+<path class="wire back dp-s dp-s3" d="M452 252C500 252 500 100 548 100"/>
+<path class="wire back dp-s dp-s3" d="M452 304C500 304 500 250 548 250"/>
+<path class="wire back dp-s dp-s3" d="M452 356C500 356 500 400 548 400"/>
+<path class="wire back dp-s dp-s4" d="M452 252C500 252 500 100 548 100"/>
+<path class="wire follow dp-s dp-s4" d="M452 304C500 304 500 250 548 250"/>
+<path class="wire back dp-s dp-s4" d="M452 356C500 356 500 400 548 400"/>
+</g>
+<g class="dp-workers" data-n-transform="translate(-528 214)">
+<rect class="card" x="548.5" y="36.5" width="380" height="128" rx="14"/>
+<g class="dp-s dp-s1"><rect class="ghost" x="548.5" y="36.5" width="380" height="128" rx="14"/></g>
+<text x="566" y="64" font-size="14" font-weight="600">Session auth</text>
+<circle cx="856.0" cy="59" r="4.5" fill="#4e6ba2"/><text x="910" y="64" text-anchor="end" font-size="12.5" class="m">codex</text>
+<text x="566" y="82" font-size="11" class="m mute">gpt-6-astra · high</text>
+<rect x="564" y="92" width="348" height="42" rx="8" fill="#f6f5f1"/>
+<g class="dp-s dp-s1 m" font-size="11.5"><text x="576" y="109" class="mute">waiting for Brain</text><text x="576" y="126" class="ink2"></text></g>
+<text x="566" y="152" font-size="11" class="mute dp-s dp-s1">queued</text>
+<g class="dp-s dp-s2 m" font-size="11.5"><text x="576" y="109" class="sage">spawned · fence 1</text><text x="576" y="126" class="ink2">reading daemon/auth</text></g>
+<text x="566" y="152" font-size="11" class="mute dp-s dp-s2">running</text>
+<rect class="dp-s dp-s2" x="752" y="147" width="32" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s3 m" font-size="11.5"><text x="576" y="109" class="sage">progress · verifying</text><text x="576" y="126" class="ink2">38 of 42 checks green</text></g>
+<text x="566" y="152" font-size="11" class="mute dp-s dp-s3">checked in 40s ago</text>
+<rect class="dp-s dp-s3" x="752" y="147" width="106" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s4 m" font-size="11.5"><text x="576" y="109" class="sage">result · diff +128 −41</text><text x="576" y="126" class="ink2">42 of 42 checks green</text></g>
+<text x="566" y="152" font-size="11" class="sage dp-s dp-s4">result in</text>
+<rect class="dp-s dp-s4" x="752" y="147" width="160" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s5 m" font-size="11.5"><text x="576" y="109" class="sage">accepted by Brain</text><text x="576" y="126" class="ink2">diff and checks reviewed</text></g>
+<text x="566" y="152" font-size="11" class="sage dp-s dp-s5">done</text>
+<rect class="dp-s dp-s5" x="752" y="147" width="160" height="4" rx="2" fill="#559e72"/>
+<rect x="752" y="147" width="160" height="4" rx="2" fill="none" stroke="#e4e0d6"/>
+<rect class="card" x="548.5" y="186.5" width="380" height="128" rx="14"/>
+<g class="dp-s dp-s1"><rect class="ghost" x="548.5" y="186.5" width="380" height="128" rx="14"/></g>
+<text x="566" y="214" font-size="14" font-weight="600">Android crash on resume</text>
+<circle cx="848.4" cy="209" r="4.5" fill="#b47c6c"/><text x="910" y="214" text-anchor="end" font-size="12.5" class="m">claude</text>
+<text x="566" y="232" font-size="11" class="m mute">claude-opus-5-5 · high</text>
+<rect x="564" y="242" width="348" height="42" rx="8" fill="#f6f5f1"/>
+<g class="dp-s dp-s1 m" font-size="11.5"><text x="576" y="259" class="mute">waiting for Brain</text><text x="576" y="276" class="ink2"></text></g>
+<text x="566" y="302" font-size="11" class="mute dp-s dp-s1">queued</text>
+<g class="dp-s dp-s2 m" font-size="11.5"><text x="576" y="259" class="sage">spawned · fence 1</text><text x="576" y="276" class="ink2">reproducing on device</text></g>
+<text x="566" y="302" font-size="11" class="mute dp-s dp-s2">running</text>
+<rect class="dp-s dp-s2" x="752" y="297" width="32" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s3 m" font-size="11.5"><text x="576" y="259" class="sage">progress · working</text><text x="576" y="276" class="ink2">crash reproduced, fixing</text></g>
+<text x="566" y="302" font-size="11" class="mute dp-s dp-s3">checked in 1m ago</text>
+<rect class="dp-s dp-s3" x="752" y="297" width="80" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s4 m" font-size="11.5"><text x="576" y="259" class="sage">result · 2 tests flaky</text><text x="576" y="276" class="clay">Brain: fix the two flaky cases</text></g>
+<text x="566" y="302" font-size="11" class="clay dp-s dp-s4">follow-up sent</text>
+<rect class="dp-s dp-s4" x="752" y="297" width="48" height="4" rx="2" fill="#b47c6c"/>
+<g class="dp-s dp-s5 m" font-size="11.5"><text x="576" y="259" class="sage">fence 2 · 44 of 44 green</text><text x="576" y="276" class="ink2">accepted by Brain</text></g>
+<text x="566" y="302" font-size="11" class="sage dp-s dp-s5">done</text>
+<rect class="dp-s dp-s5" x="752" y="297" width="160" height="4" rx="2" fill="#559e72"/>
+<rect x="752" y="297" width="160" height="4" rx="2" fill="none" stroke="#e4e0d6"/>
+<rect class="card" x="548.5" y="336.5" width="380" height="128" rx="14"/>
+<g class="dp-s dp-s1"><rect class="ghost" x="548.5" y="336.5" width="380" height="128" rx="14"/></g>
+<text x="566" y="364" font-size="14" font-weight="600">Release notes</text>
+<circle cx="878.8" cy="359" r="4.5" fill="#559e72"/><text x="910" y="364" text-anchor="end" font-size="12.5" class="m">pi</text>
+<text x="566" y="382" font-size="11" class="m mute">opencode-go/deepseek-v4.1-flash · low</text>
+<rect x="564" y="392" width="348" height="42" rx="8" fill="#f6f5f1"/>
+<g class="dp-s dp-s1 m" font-size="11.5"><text x="576" y="409" class="mute">waiting for Brain</text><text x="576" y="426" class="ink2"></text></g>
+<text x="566" y="452" font-size="11" class="mute dp-s dp-s1">queued</text>
+<g class="dp-s dp-s2 m" font-size="11.5"><text x="576" y="409" class="sage">spawned · fence 1</text><text x="576" y="426" class="ink2">collecting merged changes</text></g>
+<text x="566" y="452" font-size="11" class="mute dp-s dp-s2">running</text>
+<rect class="dp-s dp-s2" x="752" y="447" width="32" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s3 m" font-size="11.5"><text x="576" y="409" class="sage">progress · working</text><text x="576" y="426" class="ink2">2 of 3 sections drafted</text></g>
+<text x="566" y="452" font-size="11" class="mute dp-s dp-s3">checked in 20s ago</text>
+<rect class="dp-s dp-s3" x="752" y="447" width="128" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s4 m" font-size="11.5"><text x="576" y="409" class="sage">result · notes drafted</text><text x="576" y="426" class="ink2">links verified</text></g>
+<text x="566" y="452" font-size="11" class="sage dp-s dp-s4">result in</text>
+<rect class="dp-s dp-s4" x="752" y="447" width="160" height="4" rx="2" fill="#559e72"/>
+<g class="dp-s dp-s5 m" font-size="11.5"><text x="576" y="409" class="sage">accepted by Brain</text><text x="576" y="426" class="ink2">ready to publish</text></g>
+<text x="566" y="452" font-size="11" class="sage dp-s dp-s5">done</text>
+<rect class="dp-s dp-s5" x="752" y="447" width="160" height="4" rx="2" fill="#559e72"/>
+<rect x="752" y="447" width="160" height="4" rx="2" fill="none" stroke="#e4e0d6"/>
+</g>
+<g class="dp-track" data-n-visibility="hidden">
+<path d="M300 552H900" stroke="#e4e0d6" stroke-width="2"/>
+<circle cx="300" cy="552" r="7" fill="#fff" stroke="#c9c4b8" stroke-width="1.5"/>
+<text x="300" y="580" text-anchor="middle" font-size="12" class="mute">Plan</text>
+<g class="dp-s dp-s1"><circle cx="300" cy="552" r="7" fill="#2a5f41"/><circle cx="300" cy="552" r="13" fill="none" stroke="#559e72" stroke-opacity=".35" stroke-width="4"/><rect x="256" y="566" width="88" height="20" fill="#fbfaf7"/><text x="300" y="580" text-anchor="middle" font-size="12" font-weight="700">Plan</text></g>
+<circle cx="450" cy="552" r="7" fill="#fff" stroke="#c9c4b8" stroke-width="1.5"/>
+<text x="450" y="580" text-anchor="middle" font-size="12" class="mute">Delegate</text>
+<g class="dp-s dp-s2"><circle cx="450" cy="552" r="7" fill="#2a5f41"/><circle cx="450" cy="552" r="13" fill="none" stroke="#559e72" stroke-opacity=".35" stroke-width="4"/><rect x="406" y="566" width="88" height="20" fill="#fbfaf7"/><text x="450" y="580" text-anchor="middle" font-size="12" font-weight="700">Delegate</text></g>
+<circle cx="600" cy="552" r="7" fill="#fff" stroke="#c9c4b8" stroke-width="1.5"/>
+<text x="600" y="580" text-anchor="middle" font-size="12" class="mute">Check in</text>
+<g class="dp-s dp-s3"><circle cx="600" cy="552" r="7" fill="#2a5f41"/><circle cx="600" cy="552" r="13" fill="none" stroke="#559e72" stroke-opacity=".35" stroke-width="4"/><rect x="556" y="566" width="88" height="20" fill="#fbfaf7"/><text x="600" y="580" text-anchor="middle" font-size="12" font-weight="700">Check in</text></g>
+<circle cx="750" cy="552" r="7" fill="#fff" stroke="#c9c4b8" stroke-width="1.5"/>
+<text x="750" y="580" text-anchor="middle" font-size="12" class="mute">Review</text>
+<g class="dp-s dp-s4"><circle cx="750" cy="552" r="7" fill="#2a5f41"/><circle cx="750" cy="552" r="13" fill="none" stroke="#559e72" stroke-opacity=".35" stroke-width="4"/><rect x="706" y="566" width="88" height="20" fill="#fbfaf7"/><text x="750" y="580" text-anchor="middle" font-size="12" font-weight="700">Review</text></g>
+<circle cx="900" cy="552" r="7" fill="#fff" stroke="#c9c4b8" stroke-width="1.5"/>
+<text x="900" y="580" text-anchor="middle" font-size="12" class="mute">Accept</text>
+<g class="dp-s dp-s5"><circle cx="900" cy="552" r="7" fill="#2a5f41"/><circle cx="900" cy="552" r="13" fill="none" stroke="#559e72" stroke-opacity=".35" stroke-width="4"/><rect x="856" y="566" width="88" height="20" fill="#fbfaf7"/><text x="900" y="580" text-anchor="middle" font-size="12" font-weight="700">Accept</text></g>
+<text x="32" y="557" class="cap">Lifecycle</text>
+</g>
+</svg>
