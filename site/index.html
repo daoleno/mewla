@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zen · a Brain for everyone who runs agents alone</title>
-  <meta name="description" content="Zen runs a Brain on your own computer. It splits your goal into Work, gives each part to the right coding agent and model, reviews the results and reports to your phone. Open source, Android and iOS.">
-  <meta name="theme-color" content="#f7f6f2">
-  <meta name="color-scheme" content="light">
+  <title>Zen · every agent you run, in one hand</title>
+  <meta name="description" content="Zen is a phone app and a small daemon on your own computer. Every coding agent and shell there becomes a Session you can read as chat, drive as a live terminal, or hand to a Brain that delegates. Open source, Android and iOS.">
+  <meta name="theme-color" content="#0c0d0a">
+  <meta name="color-scheme" content="dark">
   <link rel="icon" href="assets/zen-mark.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -18,232 +18,228 @@
 
   <header class="top">
     <a class="brand" href="#top" aria-label="Zen home">
-      <img src="assets/zen-mark.svg" alt="" width="26" height="26">
+      <img src="assets/zen-mark.svg" alt="" width="24" height="24">
       <span>Zen</span>
     </a>
     <nav aria-label="Primary">
       <ul>
+        <li><a href="#sessions">Sessions</a></li>
         <li><a href="#brain">Brain</a></li>
-        <li><a href="#routing">Routing</a></li>
-        <li><a href="#models">Models</a></li>
-        <li><a href="#phone">Phone</a></li>
+        <li><a href="#instruments">Instruments</a></li>
+        <li><a href="#owner">Ownership</a></li>
         <li><a href="#install">Install</a></li>
       </ul>
     </nav>
-    <div class="top-end">
-      <button class="motion" type="button" aria-pressed="false" data-motion>Pause motion</button>
-      <a class="gh" href="https://github.com/daoleno/zen">GitHub</a>
-    </div>
+    <a class="gh" href="https://github.com/daoleno/zen">GitHub</a>
   </header>
 
   <main id="main">
     <section class="hero" id="top" aria-labelledby="hero-title">
+      <figure class="hero-art">
+        <picture>
+          <source media="(max-width: 1000px)" srcset="assets/hero-narrow.svg">
+          <img src="assets/hero.svg" width="1200" height="760" alt="Ten Sessions on your computer, agents on six clients plus a shell and Brain, all running into the Sessions list on one phone. One needs you." data-inline>
+        </picture>
+      </figure>
       <div class="hero-copy">
-        <p class="eyebrow">Open source · self-hosted · Android and iOS</p>
-        <h1 id="hero-title">Run more agents than you can <em>watch.</em></h1>
-        <p class="lede">Zen puts a Brain on your own computer. Give it a goal from your phone. It splits the work, picks an agent and model for each part, reviews what comes back and tells you when it is done.</p>
+        <p class="kicker">Open source · self-hosted · Android and iOS · beta</p>
+        <h1 id="hero-title"><span>Every agent</span> <span>you run,</span> <em>in one hand.</em></h1>
+        <p class="lede">Zen is a phone app and a small daemon on your own computer. Every coding agent and shell there becomes a Session you can read as chat, drive as a live terminal, or hand to a Brain that splits the work.</p>
         <div class="ctas">
           <a class="btn primary" href="#install">Install</a>
           <a class="btn" href="https://github.com/daoleno/zen">Source on GitHub</a>
         </div>
+        <dl class="readout">
+          <div><dt>Launch presets</dt><dd>8</dd></div>
+          <div><dt>Views per Session</dt><dd>Chat · Terminal</dd></div>
+          <div><dt>Brain executors</dt><dd>6</dd></div>
+          <div><dt>Owners</dt><dd>1</dd></div>
+        </dl>
       </div>
-      <figure class="art hero-art" data-figure="hero" data-narrow-below="440">
-        <img src="assets/hero.svg" width="760" height="560" alt="Your phone talks to one Brain on your computer, which runs eight Workers on different agent clients." data-inline>
-      </figure>
     </section>
 
-    <section class="band" id="brain" aria-labelledby="brain-title">
-      <div class="head">
-        <p class="eyebrow">Brain</p>
-        <h2 id="brain-title">Say the goal once.</h2>
-        <p>Brain holds the plan. It records each part as Work, hands it to a Worker and reads the result before closing it. Workers are ordinary tmux Sessions, so you can open any of them and take over.</p>
+    <section class="sec sessions" id="sessions" aria-labelledby="sessions-title">
+      <div class="sessions-body" data-fig data-autoplay="4200">
+        <figure class="phone-art">
+          <img src="assets/sessions.svg" width="380" height="760" alt="A phone showing one claude Session: the New session sheet, the Chat view, the live Terminal and the Git diff." data-inline>
+        </figure>
+        <div class="sessions-side">
+          <div class="sec-head">
+            <p class="idx">01 · Sessions</p>
+            <h2 id="sessions-title">Every agent is a Session. Open it two ways.</h2>
+          </div>
+        <div class="facts" role="group" aria-label="Session views">
+          <button type="button" data-state="1" aria-pressed="true">
+            <span class="n">New</span>
+            <b>Start anything, anywhere on the machine</b>
+            <span>Claude, Codex, Cursor, Grok, Pi, OpenCode, DSH or a plain Shell, in any directory. Each one is a tmux session you can also reach from the desk.</span>
+          </button>
+          <button type="button" data-state="2" aria-pressed="false">
+            <span class="n">Chat</span>
+            <b>Read it as a conversation</b>
+            <span>Messages, tool calls and plans laid out for a phone. Attach files and images, stop a run, switch the model.</span>
+          </button>
+          <button type="button" data-state="3" aria-pressed="false">
+            <span class="n">Terminal</span>
+            <b>Or take the real terminal</b>
+            <span>The same session, rendered natively with libghostty, with a key row for esc, tab, ctrl and arrows. Shell sessions open here.</span>
+          </button>
+          <button type="button" data-state="4" aria-pressed="false">
+            <span class="n">Git</span>
+            <b>Review what changed</b>
+            <span>All, Working and Staged diffs for the Session's repository. Read-only: reviewing never stages or discards.</span>
+          </button>
+        </div>
+          <p class="facts-cap" data-caption aria-live="polite"></p>
+        </div>
       </div>
-      <figure class="art" data-figure="dispatch" data-states="5" data-interval="3800">
-        <div class="stepper" role="group" aria-label="Work lifecycle">
+      <p class="clients"><code>claude</code><code>codex</code><code>cursor-agent</code><code>grok</code><code>pi</code><code>opencode</code><span>Chat works with these six. Any other command still gets the terminal. One authenticated CLI is enough.</span></p>
+    </section>
+
+    <section class="sec brain" id="brain" aria-labelledby="brain-title">
+      <div class="sec-head split">
+        <div>
+          <p class="idx">02 · Brain</p>
+          <h2 id="brain-title">Hand over the goal, keep the judgment.</h2>
+        </div>
+        <p>Brain is a long-running agent on your computer. It writes each part of a goal down as durable Work, picks a Worker for it using <code>routing.md</code>, a few lines of Markdown it rewrites when you state a preference, and reads every result before closing it. Workers are ordinary Sessions, so you can open any of them and take over. <code>zen brain use claude</code> moves Brain itself to another client without losing the thread.</p>
+      </div>
+      <figure class="wide-art" data-fig data-autoplay="3800">
+        <div class="steps" role="group" aria-label="Brain stages">
           <button type="button" data-state="1" aria-pressed="true"><b>1</b>Plan</button>
           <button type="button" data-state="2" aria-pressed="false"><b>2</b>Delegate</button>
-          <button type="button" data-state="3" aria-pressed="false"><b>3</b>Check in</button>
-          <button type="button" data-state="4" aria-pressed="false"><b>4</b>Review</button>
-          <button type="button" data-state="5" aria-pressed="false"><b>5</b>Accept</button>
+          <button type="button" data-state="3" aria-pressed="false"><b>3</b>Review</button>
         </div>
-        <img src="assets/dispatch.svg" width="960" height="600" alt="Brain plans three Work items, delegates them to Workers on codex, claude and pi, receives check-ins, reviews results and accepts the Work." data-inline>
-        <figcaption aria-live="polite">
-          <span data-caption="1">Brain writes each part down as Work with an objective and a finish line.</span>
-          <span data-caption="2">Each Work goes to a visible Worker Session on the agent that suits it.</span>
-          <span data-caption="3">Workers check in against their exact turn. Brain waits without polling.</span>
-          <span data-caption="4">Results arrive with diffs and checks. When one falls short, Brain sends the Worker back.</span>
-          <span data-caption="5">Only Brain or you can close Work. An exited process never counts as done.</span>
-        </figcaption>
+        <picture>
+          <source media="(max-width: 760px)" srcset="assets/brain-narrow.svg">
+          <img src="assets/brain.svg" width="1100" height="376" alt="A goal from the phone becomes three Work items. Brain reads routing.md and gives them to claude, codex and pi Workers, then accepts two results and sends one back for a test." data-inline>
+        </picture>
       </figure>
     </section>
 
-    <section class="band" id="routing" aria-labelledby="routing-title">
-      <div class="head">
-        <p class="eyebrow">Routing</p>
-        <h2 id="routing-title">Brain picks the agent for each task.</h2>
-        <p>The routing guide is <code>routing.md</code>, a few lines of Markdown in Brain's workspace. Before every spawn Brain reads it and makes the call: which client, which model, how much reasoning. Tell Brain a preference and it rewrites the line.</p>
-      </div>
-      <figure class="art" data-figure="routing" data-states="4" data-interval="4200">
-        <div class="stepper chips" role="group" aria-label="Example tasks">
-          <button type="button" data-state="1" aria-pressed="true">Onboarding redesign</button>
-          <button type="button" data-state="2" aria-pressed="false">Changelog typo</button>
-          <button type="button" data-state="3" aria-pressed="false">Reconnect race</button>
-          <button type="button" data-state="4" aria-pressed="false">“Use grok”</button>
+    <section class="sec instruments" id="instruments" aria-labelledby="inst-title">
+      <div class="sec-head split">
+        <div>
+          <p class="idx">03 · Instruments</p>
+          <h2 id="inst-title">The rest of the machine, at hand.</h2>
         </div>
-        <img src="assets/routing.svg" width="960" height="560" alt="A task arrives, Brain reads routing.md, judges a fit and spawns a Worker with an executor, model and reasoning level." data-inline>
-      </figure>
-    </section>
-
-    <section class="band" id="models" aria-labelledby="models-title">
-      <div class="head">
-        <p class="eyebrow">Models</p>
-        <h2 id="models-title">Change the agent behind anything.</h2>
-        <p>One command moves Brain to another client, and the conversation carries over. Every Worker gets its own executor, model and reasoning level, using each client's own scale. Pick one in the drawing.</p>
+        <p>Everything below reads from the server you are connected to, and only that one. The dashed outlines in each drawing are controls.</p>
       </div>
-      <figure class="art" data-figure="switch">
-        <img src="assets/switch.svg" width="960" height="520" alt="Brain inside a ring of six agent clients, and a Worker picker with executor, model and reasoning." data-inline>
-        <figcaption class="clients">
-          <code>codex</code> <code>claude</code> <code>pi</code> <code>grok</code> <code>agent</code> (Cursor) <code>opencode</code>. One authenticated CLI is enough.
-        </figcaption>
-      </figure>
-    </section>
+      <div class="rack">
+        <article class="mod" data-fig aria-labelledby="m-models">
+          <header><span class="i">03.1</span><h3 id="m-models">Model Providers</h3><span class="tag">Beta</span></header>
+          <p>Choose how Codex and Claude reach models: the official login, or your own OpenAI, Anthropic, DeepSeek, OpenRouter or custom gateway keys. Keys stay on the daemon and are never shown back.</p>
+          <div class="art">
+            <img src="assets/models.svg" width="480" height="300" alt="Model Providers with a Codex and Claude switch, the official login and saved providers." data-inline>
+            <button class="hot" type="button" data-state="1" aria-pressed="true" style="left:4.17%;top:6.67%;width:20.83%;height:10%">Codex</button>
+            <button class="hot" type="button" data-state="2" aria-pressed="false" style="left:25%;top:6.67%;width:20.83%;height:10%">Claude</button>
+          </div>
+        </article>
 
-    <section class="band split" id="work" aria-labelledby="work-title">
-      <div class="head">
-        <p class="eyebrow">Durable Work</p>
-        <h2 id="work-title">Work outlives the process.</h2>
-        <p>Every Work, Attempt and Event is stored by the daemon in one transactional store. A laptop can sleep, a provider can drop, the daemon can update. Timers rebuild from that record, and a Worker that goes quiet becomes a decision for Brain.</p>
-        <button class="btn" type="button" data-restart>Restart the daemon</button>
+        <article class="mod" data-fig aria-labelledby="m-skills">
+          <header><span class="i">03.2</span><h3 id="m-skills">Skills</h3><span class="tag">Beta</span></header>
+          <p>See which Skills and Agent Plugins your agents load on this server, where each copy came from, and remove one exact copy.</p>
+          <div class="art">
+            <img src="assets/skills.svg" width="480" height="300" alt="Skills list with sources and agents, and Agent Plugins with their Skills." data-inline>
+            <button class="hot" type="button" data-state="1" aria-pressed="true" style="left:4.17%;top:6.67%;width:25%;height:10%">Skills</button>
+            <button class="hot" type="button" data-state="2" aria-pressed="false" style="left:29.17%;top:6.67%;width:25%;height:10%">Agent Plugins</button>
+          </div>
+        </article>
+
+        <article class="mod tall" data-fig aria-labelledby="m-res">
+          <header><span class="i">03.3</span><h3 id="m-res">Resources</h3><span class="tag">Beta</span></header>
+          <p>CPU, memory, disk and pressure on the host, and which Worker, Brain, container or app is using them. A Worker left behind shows as Residual, with its last status.</p>
+          <div class="art">
+            <img src="assets/resources.svg" width="480" height="560" alt="Resource trends and processes attributed to Workers, Brain, Docker and the user." data-inline>
+            <button class="hot" type="button" data-state="1" aria-pressed="true" style="left:4.17%;top:44.29%;width:9.79%;height:4.64%">All</button>
+            <button class="hot" type="button" data-state="2" aria-pressed="false" style="left:15.63%;top:44.29%;width:15.63%;height:4.64%">Workers</button>
+            <button class="hot" type="button" data-state="3" aria-pressed="false" style="left:32.92%;top:44.29%;width:12.71%;height:4.64%">Brain</button>
+            <button class="hot" type="button" data-state="4" aria-pressed="false" style="left:47.29%;top:44.29%;width:14.17%;height:4.64%">Docker</button>
+          </div>
+        </article>
+
+        <article class="mod" data-fig aria-labelledby="m-plugins">
+          <header><span class="i">03.4</span><h3 id="m-plugins">Plugins</h3><span class="tag preview">Preview</span></header>
+          <p>Connect Linear, Notion, GitHub, Slack or Google Workspace with each service's own sign-in, or your own MCP and OpenAPI services. Brain reads by default; changes are a separate switch. First-time sign-in is not ready for every service yet.</p>
+          <div class="art">
+            <img src="assets/plugins.svg" width="480" height="300" alt="Brain connected to Linear, Notion, GitHub, Slack, Google Workspace and custom services, with read and change permissions." data-inline>
+            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:60.83%;top:50%;width:35%;height:10.67%">Allow changes when asked</button>
+          </div>
+        </article>
+
+        <article class="mod" data-fig aria-labelledby="m-usage">
+          <header><span class="i">03.5</span><h3 id="m-usage">Usage</h3><span class="tag">Beta</span></header>
+          <p>Tokens, sessions and cost per model from your agents' own history. Reported charges, estimates and unknowns are marked apart; a missing price stays a dash.</p>
+          <div class="art">
+            <img src="assets/stats.svg" width="480" height="300" alt="Usage per model with reported, estimated and unknown costs." data-inline>
+            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:4.17%;top:78.67%;width:91.67%;height:16%">gpt-6-astra details</button>
+          </div>
+        </article>
+
+        <article class="mod" data-fig aria-labelledby="m-cal">
+          <header><span class="i">03.6</span><h3 id="m-cal">Calendar</h3><span class="tag">Beta</span></header>
+          <p>Events, reminders and deadlines, plus scheduled actions: at the set time an agent runs the instruction as visible Work and posts the result to the Brain thread it came from.</p>
+          <div class="art">
+            <img src="assets/calendar.svg" width="480" height="300" alt="A day with an event, a reminder, a deadline and a scheduled action that runs as Work." data-inline>
+            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:12.5%;top:25.33%;width:41.67%;height:11.33%">Run the scheduled action</button>
+          </div>
+        </article>
+
+        <article class="mod" data-fig aria-labelledby="m-svc">
+          <header><span class="i">03.7</span><h3 id="m-svc">Services</h3><span class="tag">Beta</span></header>
+          <p>Every port your Sessions opened, grouped by project. Open it, jump to its terminal, or share it for a while through a Cloudflare Quick Tunnel.</p>
+          <div class="art">
+            <img src="assets/services.svg" width="480" height="300" alt="Listening ports owned by Sessions and a persistent unit, one made public with a Quick Tunnel." data-inline>
+            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:4.17%;top:46.67%;width:91.67%;height:13.33%">Share port 5173 with a Quick Tunnel</button>
+          </div>
+        </article>
+
+        <article class="mod" aria-labelledby="m-alerts">
+          <header><span class="i">03.8</span><h3 id="m-alerts">Alerts and Telegram</h3><span class="tag">Beta</span></header>
+          <p>Your phone buzzes when a Session is blocked, fails or finishes, and stays quiet otherwise. Telegram is a second way to talk to the same Brain.</p>
+          <div class="art">
+            <img src="assets/alerts.svg" width="480" height="300" alt="Three push alerts for blocked, failed and finished Sessions, and a Telegram chat with Brain." data-inline>
+          </div>
+        </article>
       </div>
-      <figure class="ledger" data-ledger aria-labelledby="ledger-cap">
-        <p class="ledger-head"><span>w_32</span><span>Android crash on resume</span></p>
-        <ol>
-          <li><time>21:04</time><span class="k">created</span><span class="m">objective and finish line recorded</span></li>
-          <li><time>21:04</time><span class="k">attempt</span><span class="m">Worker on <code>claude</code> · fence 1</span></li>
-          <li><time>21:31</time><span class="k">progress</span><span class="m">crash reproduced, fixing</span></li>
-          <li class="restart" hidden><span>daemon restarted · timers rebuilt from stored state</span></li>
-          <li class="later" hidden><time>22:10</time><span class="k">result</span><span class="m">fixed, 2 tests flaky</span></li>
-          <li class="later" hidden><time>22:12</time><span class="k clay">attempt</span><span class="m">Brain sends a follow-up · fence 2</span></li>
-          <li class="later" hidden><time>22:40</time><span class="k">result</span><span class="m">44 of 44 green</span></li>
-          <li class="later" hidden><time>22:41</time><span class="k done">accepted</span><span class="m">Brain read the evidence and closed it</span></li>
-        </ol>
-        <figcaption id="ledger-cap">An append-only Event trail for one Work item.</figcaption>
-      </figure>
     </section>
 
-    <section class="band split rev" id="phone" aria-labelledby="phone-title">
-      <div class="head">
-        <p class="eyebrow">Phone</p>
-        <h2 id="phone-title">Your computer, in your pocket.</h2>
-        <p>The Android and iOS app talks to your daemon. Read a Worker as Chat, drop into its live Terminal, check the machine, review a diff.</p>
-        <div class="tabs" role="tablist" aria-label="App screens">
-          <button role="tab" id="tab-chat" aria-controls="scr-chat" aria-selected="true">Chat</button>
-          <button role="tab" id="tab-term" aria-controls="scr-term" aria-selected="false" tabindex="-1">Terminal</button>
-          <button role="tab" id="tab-cal" aria-controls="scr-cal" aria-selected="false" tabindex="-1">Calendar</button>
-          <button role="tab" id="tab-res" aria-controls="scr-res" aria-selected="false" tabindex="-1">Resources</button>
-          <button role="tab" id="tab-diff" aria-controls="scr-diff" aria-selected="false" tabindex="-1">Diff</button>
+    <section class="sec owner" id="owner" aria-labelledby="owner-title">
+      <div class="owner-grid" data-fig>
+        <div>
+          <p class="idx">04 · Ownership</p>
+          <h2 id="owner-title">Your computer, your keys, your phone.</h2>
+          <ul class="points">
+            <li><b>Signed devices.</b> The daemon has an Ed25519 identity. A phone pairs once with a short-lived code, then signs every request. <code>zen devices revoke</code> cuts one off.</li>
+            <li><b>Your network.</b> LAN, Tailscale, or a Cloudflare Tunnel or reverse proxy you run. No hosted relay sits in between.</li>
+            <li><b>One current server.</b> Pair several machines; the app follows exactly one at a time and never mixes their data.</li>
+            <li><b>Nothing leaves by default.</b> Repositories, credentials and agent state stay on the host. Model providers see what agents send them.</li>
+          </ul>
         </div>
-        <p class="tabnote" data-note="chat">Structured messages, tool calls and plans for any of the six clients.</p>
-        <p class="tabnote" data-note="term" hidden>The same tmux Session, rendered natively with libghostty. Type, scroll, take over.</p>
-        <p class="tabnote" data-note="cal" hidden>Scheduled actions run as visible Work and post the result back to the Brain thread they came from.</p>
-        <p class="tabnote" data-note="res" hidden>CPU, memory, pressure and disk, with processes attributed to Workers, Brain or Docker. Brain hears about pressure too.</p>
-        <p class="tabnote" data-note="diff" hidden>All, working and staged changes of a Session's repository. Read-only.</p>
+        <figure class="owner-art">
+          <div class="steps" role="group" aria-label="Ownership">
+            <button type="button" data-state="1" aria-pressed="true">Pair</button>
+            <button type="button" data-state="2" aria-pressed="false">Switch server</button>
+          </div>
+          <img src="assets/owner.svg" width="480" height="300" alt="A phone reaches the zen daemon over LAN, Tailscale or your tunnel, signing each request, and follows one current server." data-inline>
+        </figure>
       </div>
-      <div class="device" aria-label="Zen app mockup">
-        <div class="screen">
-          <div class="bar"><span>9:41</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+      <p class="warn"><b>Unattended means trusted.</b> Several default executor commands bypass approval prompts so agents can work while you are away. On a machine with secrets or production access, use the safe profile from <a href="https://github.com/daoleno/zen/blob/main/docs/executors.md#permission-bypass-risks">executor risks</a>.</p>
+    </section>
 
-          <div class="scr" id="scr-chat" role="tabpanel" aria-labelledby="tab-chat">
-            <p class="scr-title"><span class="dot claude"></span>ios-crash <small>claude</small></p>
-            <div class="msg me">Why does resume crash?</div>
-            <div class="tool"><b>Read</b> app/services/session.ts</div>
-            <div class="tool"><b>Bash</b> bun test session <span class="ok">12 passed</span></div>
-            <div class="msg">The resume path reads a token before the store hydrates. I moved the read behind <code>ready()</code> and added a test.</div>
-            <div class="plan"><p>Plan</p><span class="d">Reproduce</span><span class="d">Fix hydration order</span><span>Run device check</span></div>
-            <div class="composer">Message ios-crash</div>
-          </div>
-
-          <div class="scr term" id="scr-term" role="tabpanel" aria-labelledby="tab-term" hidden>
-            <p class="scr-title dark"><span class="dot claude"></span>ios-crash <small>terminal</small></p>
-<pre><span class="g">❯</span> bun test session
- <span class="g">✓</span> resume waits for hydration
- <span class="g">✓</span> token read after ready()
- <span class="g">✓</span> 10 more
- <span class="d">12 pass · 0 fail · 1.84s</span>
-<span class="g">❯</span> git diff --stat
- app/services/session.ts | 9 <span class="g">++++</span><span class="r">--</span>
- app/services/session.test.ts | 31 <span class="g">+++++</span>
-<span class="g">❯</span> <span class="cur"> </span></pre>
-            <div class="keys" aria-hidden="true"><span>esc</span><span>tab</span><span>ctrl</span><span>↑</span><span>↓</span></div>
-          </div>
-
-          <div class="scr" id="scr-cal" role="tabpanel" aria-labelledby="tab-cal" hidden>
-            <p class="scr-title">Calendar <small>today</small></p>
-            <div class="cal-item"><time>08:30</time><div><b>Summarize overnight CI</b><span class="tag sage">scheduled action · weekdays</span><span class="res">Result posted to Brain</span></div></div>
-            <div class="cal-item"><time>11:00</time><div><b>Review release notes</b><span class="tag">reminder</span></div></div>
-            <div class="cal-item"><time>18:00</time><div><b>Beta build cut</b><span class="tag clay">deadline</span></div></div>
-            <div class="cal-item"><time>22:00</time><div><b>Dependency audit</b><span class="tag sage">scheduled action</span></div></div>
-          </div>
-
-          <div class="scr" id="scr-res" role="tabpanel" aria-labelledby="tab-res" hidden>
-            <p class="scr-title">Resources <small class="clay-t">elevated</small></p>
-            <div class="meter"><span>CPU</span><b>68%</b><i style="--v:.68"></i></div>
-            <div class="meter"><span>Memory</span><b>21.4 / 32 GB</b><i style="--v:.67"></i></div>
-            <div class="meter"><span>Disk</span><b>412 / 1000 GB</b><i style="--v:.41"></i></div>
-            <p class="sub">Processes</p>
-            <div class="proc"><span class="tag sage">worker</span>codex · session-auth<b>2.1 GB</b></div>
-            <div class="proc"><span class="tag sage">worker</span>claude · ios-crash<b>1.4 GB</b></div>
-            <div class="proc"><span class="tag">brain</span>claude · host<b>0.9 GB</b></div>
-            <div class="proc"><span class="tag">docker</span>postgres<b>0.6 GB</b></div>
-            <p class="sub">CPU · last 30 min</p>
-            <svg class="spark" viewBox="0 0 280 64" aria-hidden="true"><path d="M0 52L14 50 28 51 42 46 56 47 70 40 84 42 98 30 112 34 126 28 140 31 154 22 168 26 182 18 196 24 210 20 224 26 238 16 252 21 266 18 280 22V64H0Z" fill="#e3f3e8"/><path d="M0 52L14 50 28 51 42 46 56 47 70 40 84 42 98 30 112 34 126 28 140 31 154 22 168 26 182 18 196 24 210 20 224 26 238 16 252 21 266 18 280 22" fill="none" stroke="#559e72" stroke-width="2" stroke-linejoin="round"/></svg>
-          </div>
-
-          <div class="scr" id="scr-diff" role="tabpanel" aria-labelledby="tab-diff" hidden>
-            <p class="scr-title">Changes <small>working</small></p>
-            <p class="file">app/services/session.ts <span class="g">+6</span> <span class="r">−3</span></p>
-<pre class="diff"><span class="h">@@ -41,9 +41,12 @@</span>
- export async function resume() {
-<span class="r">-  const token = readToken();</span>
-<span class="r">-  await store.hydrate();</span>
-<span class="g">+  await store.hydrate();</span>
-<span class="g">+  await ready();</span>
-<span class="g">+  const token = readToken();</span>
-   if (!token) return signIn();</pre>
-            <p class="ro">Read-only. Nothing is staged or discarded from the phone.</p>
-          </div>
+    <section class="sec install" id="install" aria-labelledby="install-title">
+      <div class="sec-head split">
+        <div>
+          <p class="idx">05 · Install</p>
+          <h2 id="install-title">Running in a few minutes.</h2>
         </div>
-      </div>
-    </section>
-
-    <section class="band" id="own" aria-labelledby="own-title">
-      <div class="head">
-        <p class="eyebrow">Yours</p>
-        <h2 id="own-title">One owner, one machine.</h2>
-        <p>Zen is built for a single person. Your repositories, credentials and agent state stay on your host; the phone sees what you open, and model providers see what agents send them.</p>
-      </div>
-      <ul class="facts">
-        <li><h3>Signed devices</h3><p>The daemon has an Ed25519 identity. A phone pairs once with a short-lived code, then signs every request. Revoke with <code>zen devices revoke</code>.</p></li>
-        <li><h3>Your network</h3><p>Trusted LAN, Tailscale, a Cloudflare Tunnel or your own reverse proxy. No hosted relay sits in between.</p></li>
-        <li><h3>One server at a time</h3><p>Every screen follows the current server. Switching servers never mixes their data.</p></li>
-        <li><h3>Quiet by default</h3><p>Push notifications fire when a Worker is blocked, fails or finishes, and never for the Session on your screen.</p></li>
-      </ul>
-      <aside class="note">
-        <b>Unattended means trusted.</b> Several default executor commands bypass approval prompts so Workers can run while you are away. On a machine with secrets or production access, use the safe profile from <a href="https://github.com/daoleno/zen/blob/main/docs/executors.md#permission-bypass-risks">executor risks</a>.
-      </aside>
-    </section>
-
-    <section class="band install" id="install" aria-labelledby="install-title">
-      <div class="head">
-        <p class="eyebrow">Install</p>
-        <h2 id="install-title">Set up in a few minutes.</h2>
         <p>Linux (amd64, arm64), WSL2 or an Apple Silicon Mac, with <code>tmux</code> and one authenticated agent CLI.</p>
       </div>
-      <ol class="steps">
+      <ol class="install-steps">
         <li>
           <h3>Install the daemon</h3>
           <div class="copyline"><code id="cmd-install">curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh</code><button type="button" class="copy" data-copy="cmd-install">Copy</button></div>
-          <p>Checks the release checksum. No sudo, no telemetry, no agent CLIs installed for you.</p>
+          <p>Verifies the release checksum. No sudo, no telemetry, no agent CLIs installed for you.</p>
         </li>
         <li>
           <h3>Check the host and start</h3>
@@ -252,16 +248,16 @@
         </li>
         <li>
           <h3>Pair your phone</h3>
-          <p>Android: the arm64 APK on <a href="https://github.com/daoleno/zen/releases">GitHub Releases</a>. iOS: <a href="https://github.com/daoleno/zen/blob/main/docs/ios.md">build from source</a>; a <a href="https://testflight.apple.com/join/rTKCDzMt">TestFlight preview</a> awaits Apple review. Scan the code and open Brain.</p>
+          <p>Android: the arm64 APK on <a href="https://github.com/daoleno/zen/releases">GitHub Releases</a>. iOS: <a href="https://github.com/daoleno/zen/blob/main/docs/ios.md">build from source</a>; a <a href="https://testflight.apple.com/join/rTKCDzMt">TestFlight preview</a> is awaiting Apple review. Scan the code and you are in.</p>
         </li>
       </ol>
-      <p class="status">Beta. Calendar and the Telegram channel are beta; Connections to Linear, Notion, GitHub, Slack and Google are a preview, and not every service can connect for the first time yet. <a href="https://github.com/daoleno/zen/blob/main/docs/release-blockers.md">Known issues</a>.</p>
+      <p class="status">Beta. Plugins are a preview. Zen Link relay is source only; no hosted relay is operated. Known issues: <a href="https://github.com/daoleno/zen/blob/main/docs/release-blockers.md">release blockers</a>.</p>
     </section>
   </main>
 
   <footer class="foot">
     <div class="foot-brand">
-      <img src="assets/zen-mark.svg" alt="" width="32" height="32">
+      <img src="assets/zen-mark.svg" alt="" width="28" height="28">
       <p>Open source under the <a href="https://github.com/daoleno/zen/blob/main/LICENSE">Apache License 2.0</a>. Go daemon, Expo React Native app.</p>
     </div>
     <nav aria-label="Project">
