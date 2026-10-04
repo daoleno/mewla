@@ -1,153 +1,121 @@
-#!/usr/bin/env python3
-# Generates site/assets/hero.svg, shared by the landing page and README.
-# Run from the repo root: python3 scripts/site-svg/hero.py > site/assets/hero.svg
-import math
-import sys
-from html import escape as e
+# Hero: every Session on the host converges into one phone.
+from common import C, Svg, phone, dot
 
-SANS = 'Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif'
-MONO = '"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace'
-COL = {"codex": "#4e6ba2", "claude": "#b47c6c", "pi": "#559e72", "grok": "#3f4441", "agent": "#8a7c66", "opencode": "#c08a3e"}
-
-TILES = [
-    ("onboarding", "claude"),
-    ("session-auth", "codex"),
-    ("ios-crash", "claude"),
-    ("changelog", "pi"),
-    ("parser-port", "grok"),
-    ("flaky-tests", "codex"),
-    ("deps-bump", "pi"),
-    ("docs-sync", "opencode"),
+SESSIONS = [
+    ("claude", "onboarding", "run"),
+    ("codex", "session-auth", "need"),
+    ("pi", "changelog", "done"),
+    ("shell", "~/zen", "run"),
+    ("claude", "ios-crash", "run"),
+    ("grok", "parser-port", "run"),
+    ("opencode", "docs-sync", "done"),
+    ("cursor", "flaky-tests", "run"),
+    ("codex", "deps-bump", "done"),
+    ("brain", "Brain", "run"),
 ]
-# per tile: status cycle offset (s) and which statuses it shows in reduced motion
-STATIC = ["work", "work", "you", "done", "work", "work", "done", "work"]
+STATUS = {"run": "running", "need": "needs you", "done": "done"}
 
-TW, TH = 146, 52
-BX, BY = 466, 272          # Brain centre (wide)
-NBX, NBY = 210, 258        # Brain centre (narrow)
+CSS = """
+.{k} .lp{{stroke:#34352d;transition:stroke .25s}}
+.{k} .lane.run .lp{{stroke:#3c4a40}}
+.{k} .lane.need .lp{{stroke:#5a3a2c}}
+.{k} .pu{{stroke-dasharray:46 1000;stroke-dashoffset:1046;animation:{k}-run var(--d,7s) linear infinite;animation-delay:var(--o,0s)}}
+.{k} .need .pu{{stroke:#f0895c}}
+.{k} .blink{{animation:{k}-blink 2.4s ease-in-out infinite}}
+.{k} .hit{{stroke:transparent;stroke-width:22;pointer-events:stroke}}
+.{k} .rowbg{{transition:fill .25s}}
+.{k} .lane:hover .lp{{stroke:#8fcfa6}}
+.{k} .lane.need:hover .lp{{stroke:#f0895c}}
+.{k} .lane:hover .rowbg{{fill:#22231d}}
+@keyframes {k}-run{{to{{stroke-dashoffset:0}}}}
+@keyframes {k}-blink{{50%{{opacity:.25}}}}
+@media (prefers-reduced-motion:reduce){{.{k} .pu{{display:none}}.{k} .blink{{animation:none}}}}
+"""
 
-def wide_pos(i):
-    a = math.radians(-90 + 45 * i + 22.5)
-    return BX + 200 * math.cos(a), BY + 196 * math.sin(a)
 
-def narrow_pos(i):
-    side = 0 if i in (5, 6, 7, 4) else 1
-    order = {5: 0, 6: 1, 7: 2, 4: 3, 0: 0, 1: 1, 2: 2, 3: 3}[i]
-    # left column for 4..7, right column for 0..3 (keeps wide reading order roughly)
-    x = 16 + TW / 2 if side == 0 else 404 - TW / 2
-    y = 70 + order * 126
-    return x, y
+def build(narrow=False):
+    k = "hn" if narrow else "hw"
+    W, H = (400, 540) if narrow else (1200, 760)
+    s = Svg(k, W, H,
+            "Every Session on your computer, in one phone",
+            "Ten Sessions on your own computer: agents on claude, codex, pi, grok, opencode and cursor, a plain shell and Brain. "
+            "Each one runs into the phone's Sessions list. Most are running, three are done and one needs you.",
+            css=CSS.format(k=k))
 
-def edge(cx, cy, tx, ty, r_tile=True):
-    dx, dy = tx - cx, ty - cy
-    d = math.hypot(dx, dy)
-    x1, y1 = cx + dx / d * 50, cy + dy / d * 50
-    # clip to tile rect
-    sx = (TW / 2) / abs(dx) if dx else 1e9
-    sy = (TH / 2) / abs(dy) if dy else 1e9
-    s = min(sx, sy)
-    x2, y2 = tx - dx * s - dx / d * 6, ty - dy * s - dy / d * 6
-    return f"M{x1:.1f} {y1:.1f}L{x2:.1f} {y2:.1f}"
+    # Labels across the top, two rows when narrow.
+    sessions = [SESSIONS[i] for i in (0, 1, 3, 5, 9)] if narrow else SESSIONS
+    if narrow:
+        pos = [(16 + i * 78, 20) for i in range(len(sessions))]
+        px, py, pw, ph = 105, 250, 190, 400
+    else:
+        pos = [(36 + i * 114, 22) for i in range(len(SESSIONS))]
+        px, py, pw, ph = 880, 318, 250, 520
 
-out = []
-w = out.append
-w(f'''<svg xmlns="http://www.w3.org/2000/svg" class="hr" viewBox="0 0 760 560" data-n-viewbox="0 0 420 560" role="img" aria-labelledby="hr-title hr-desc">
-<title id="hr-title">One phone, one Brain, many agents on your computer</title>
-<desc id="hr-desc">Your phone talks to one Brain on your own computer. Brain runs eight Workers on different agent clients: codex, claude, pi, grok and opencode. Some are working, some are done, one needs you.</desc>
-<style>
-.hr text{{white-space:pre;font-family:{SANS};fill:#171a18}}
-.hr .m,.hr .m text{{font-family:{MONO}}}
-.hr .mute{{fill:#7a817c}}.hr .ink2{{fill:#4a504c}}
-.hr .tile rect.t{{fill:#fff;stroke:#e4e0d6;transition:stroke .2s}}
-.hr .tile:hover rect.t{{stroke:#559e72}}
-.hr .spoke{{stroke:#d9e8dd;stroke-width:1.5}}
-.hr .st{{opacity:0}}
-.hr .st-work{{opacity:1}}
-.hr .static-you .st-work,.hr .static-done .st-work{{opacity:0}}
-.hr .static-you .st-you,.hr .static-done .st-done{{opacity:1}}
-@media (prefers-reduced-motion:no-preference){{
-.hr .tile .st{{animation:hr-st 15s infinite both}}
-.hr .tile .st-work{{animation-name:hr-work}}
-.hr .tile .st-done{{animation-name:hr-done}}
-.hr .tile .st-you{{animation-name:hr-you}}
-.hr .live{{animation:hr-breathe 2.4s ease-in-out infinite;transform-origin:center;transform-box:fill-box}}
-.hr .packet{{animation:hr-packet 3s ease-in-out infinite}}
-.hr .halo{{animation:hr-halo 3.6s ease-out infinite;transform-origin:center;transform-box:fill-box}}
-}}
-@keyframes hr-work{{0%,55%{{opacity:1}}58%,100%{{opacity:0}}}}
-@keyframes hr-done{{0%,57%{{opacity:0}}60%,97%{{opacity:1}}100%{{opacity:0}}}}
-@keyframes hr-you{{0%,100%{{opacity:0}}}}
-@keyframes hr-breathe{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.35)}}}}
-@keyframes hr-packet{{0%{{stroke-dashoffset:0}}100%{{stroke-dashoffset:-160}}}}
-@keyframes hr-halo{{0%{{opacity:.5;transform:scale(1)}}100%{{opacity:0;transform:scale(1.5)}}}}
-''')
-# per-tile animation offsets; the "needs you" tile keeps its clay state
-for i in range(len(TILES)):
-    w(f'.hr .tile-{i} .st{{animation-delay:-{(i*3.7) % 15:.1f}s}}')
-w('.hr .tile-2 .st-you{animation-name:none;opacity:1}.hr .tile-2 .st-work,.hr .tile-2 .st-done{animation-name:none;opacity:0}')
-w('</style>')
-w('<rect class="hr-bg" width="100%" height="100%" rx="24" fill="#fbfaf7"/>')
+    # Faint construction grid, behind everything.
+    if not narrow:
+        for gx in range(0, W + 1, 120):
+            s.line(gx, 96, gx, H, stroke="#15160f")
+        s.line(0, 96, W, 96, stroke="line")
+        s.text(px - 18, py + 40, "YOUR PHONE", size=10, fill="faint", mono=True, anchor="end", extra=' letter-spacing="1.5"')
+        s.line(px - 12, py + 37, px - 2, py + 37, stroke="line2")
 
-# machine panel
-w('<g class="hr-panel">')
-w('<rect x="188.5" y="28.5" width="548" height="500" rx="26" fill="#f4f2ec" stroke="#e7e3d9" data-n-x="8.5" data-n-y="10.5" data-n-width="403" data-n-height="538"/>')
-w('<text x="212" y="56" class="m mute" font-size="11.5" data-n-x="28" data-n-y="38">your computer · zen daemon</text>')
-w('</g>')
+    n = len(sessions)
+    ex0, ex1 = px + pw * 0.2, px + pw * 0.8
+    ends = [ex0 + (ex1 - ex0) * i / (n - 1) for i in range(n)]
 
-# spokes
-for i in range(len(TILES)):
-    tx, ty = wide_pos(i)
-    nx, ny = narrow_pos(i)
-    w(f'<path class="spoke" d="{edge(BX, BY, tx, ty)}" data-n-d="{edge(NBX, NBY, nx, ny)}"/>')
+    sx, sy, sw, sh = None, None, None, None
+    # Phone first so lanes sit on top of its frame edge.
+    s.g()
+    sx, sy, sw, sh = phone(s, px, py, pw, ph)
+    s.end()
 
-# tiles
-for i, (name, ex) in enumerate(TILES):
-    tx, ty = wide_pos(i)
-    nx, ny = narrow_pos(i)
-    dx, dy = nx - tx, ny - ty
-    cls = f"tile tile-{i}"
-    if STATIC[i] != "work":
-        cls += f" static-{STATIC[i]}"
-    x, y = tx - TW / 2, ty - TH / 2
-    w(f'<g class="{cls}" data-n-transform="translate({dx:.1f} {dy:.1f})">')
-    w(f'<rect class="t" x="{x+.5:.1f}" y="{y+.5:.1f}" width="{TW}" height="{TH}" rx="14"/>')
-    w(f'<text x="{x+16:.1f}" y="{y+22:.1f}" font-size="13" font-weight="600" class="m">{e(name)}</text>')
-    w(f'<circle cx="{x+19:.1f}" cy="{y+36:.1f}" r="3.5" fill="{COL[ex]}"/>')
-    w(f'<text x="{x+28:.1f}" y="{y+40:.1f}" font-size="11" class="m mute">{ex}</text>')
-    sx, sy = x + TW - 18, y + TH / 2
-    w(f'<g class="st st-work"><circle class="live" cx="{sx:.1f}" cy="{sy:.1f}" r="4.5" fill="#559e72"/></g>')
-    w(f'<g class="st st-done"><circle cx="{sx:.1f}" cy="{sy:.1f}" r="7" fill="#2a5f41"/><path d="M{sx-3.2:.1f} {sy:.1f}l2.2 2.2 4.2-4.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>')
-    w(f'<g class="st st-you"><circle cx="{sx:.1f}" cy="{sy:.1f}" r="7" fill="#b47c6c"/><path d="M{sx:.1f} {sy-3.5:.1f}v3.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="{sx:.1f}" cy="{sy+3.2:.1f}" r="1.1" fill="#fff"/></g>')
-    w('</g>')
+    rs = 0.76 if narrow else 1.0
+    bar_y = sy + 40 * rs
+    # App bar: segmented Brain / Sessions.
+    seg_w = 120 * rs
+    s.rect(sx + sw / 2 - seg_w / 2, bar_y, seg_w, 24 * rs, rx=12 * rs, fill="panel3")
+    s.rect(sx + sw / 2, bar_y + 2 * rs, seg_w / 2 - 2 * rs, 20 * rs, rx=10 * rs, fill="#33342c")
+    s.text(sx + sw / 2 - seg_w / 4, bar_y + 16 * rs, "Brain", size=11 * rs, fill="dim", anchor="middle")
+    s.text(sx + sw / 2 + seg_w / 4, bar_y + 16 * rs, "Sessions", size=11 * rs, fill="ink", anchor="middle", weight=600)
+    s.circle(sx + 22 * rs, bar_y + 12 * rs, 11 * rs, fill="panel3")
+    s.circle(sx + sw - 22 * rs, bar_y + 12 * rs, 11 * rs, fill="panel3")
+    s.text(sx + 16 * rs, bar_y + 46 * rs + 8, "~/zen", size=10 * rs, fill="faint", mono=True)
 
-# Brain
-w(f'<g class="hr-brain" data-n-transform="translate({NBX-BX} {NBY-BY})">')
-w(f'<circle class="halo" cx="{BX}" cy="{BY}" r="46" fill="none" stroke="#559e72" stroke-width="1.5"/>')
-w(f'<circle cx="{BX}" cy="{BY}" r="46" fill="#f1f9f3" stroke="#559e72" stroke-width="1.5"/>')
-w(f'<g transform="translate({BX-29} {BY-36}) scale(.056)" fill="none" stroke="#2a5f41" stroke-linecap="round" stroke-linejoin="round">'
-  '<path d="M790 372C724 252 590 209 461 244C334 279 252 393 266 524C282 675 411 778 558 760C650 749 731 697 781 620" stroke-width="64"/>'
-  '<path d="M334 430C470 352 622 334 665 371C694 396 671 440 601 495C486 586 401 663 437 705C472 747 606 730 722 801" stroke-width="78"/></g>')
-w(f'<text x="{BX}" y="{BY+27}" text-anchor="middle" font-size="12" font-weight="600" style="fill:#2a5f41">Brain</text>')
-w('</g>')
+    row_y0 = bar_y + 58 * rs + 8
+    row_h = 37 * rs
 
-# phone (wide only)
-w('<g class="hr-phone" data-n-visibility="hidden">')
-w('<path class="packet" d="M170 300C240 300 320 284 414 276" fill="none" stroke="#559e72" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 10 2 146"/>')
-w('<path d="M170 300C240 300 320 284 414 276" fill="none" stroke="#cfd9d1" stroke-width="1.5" stroke-dasharray="2 5"/>')
-w('<rect x="22" y="132" width="176" height="356" rx="30" fill="#1f2421"/>')
-w('<rect x="30" y="140" width="160" height="340" rx="23" fill="#fff"/>')
-w('<rect x="88" y="147" width="44" height="12" rx="6" fill="#1f2421"/>')
-w('<text x="110" y="186" text-anchor="middle" font-size="12" font-weight="700">Brain</text>')
-w('<rect x="62" y="200" width="116" height="40" rx="13" fill="#dcf2e3"/>')
-w('<text x="72" y="216" font-size="10.5">Finish the release.</text><text x="72" y="231" font-size="10.5">Ping me if stuck.</text>')
-w('<circle cx="46" cy="257" r="3.5" fill="#559e72"/><text x="54" y="261" font-size="9.5" class="mute">Brain</text>')
-w('<text x="42" y="280" font-size="10.5">8 Workers running.</text><text x="42" y="295" font-size="10.5">One question for you.</text>')
-rows = [("ios-crash", "needs you", "#8f5a4b"), ("changelog", "done", "#2a5f41"), ("session-auth", "working", "#7a817c")]
-for i, (n, s, c) in enumerate(rows):
-    y = 314 + i * 38
-    w(f'<rect x="40.5" y="{y+.5}" width="139" height="30" rx="9" fill="#fbfaf7" stroke="#ece9e1"/>')
-    w(f'<text x="50" y="{y+19.5}" font-size="9.5" class="m">{n}</text><text x="171" y="{y+19.5}" font-size="9.5" text-anchor="end" style="fill:{c}">{s}</text>')
-w('<rect x="40.5" y="440.5" width="139" height="26" rx="13" fill="#fff" stroke="#e4e0d6"/><text x="54" y="457" font-size="10" class="mute">Ask Brain</text>')
-w('</g>')
-w('</svg>\n')
-sys.stdout.write("\n".join(out))
+    for i, ((client, name, st), (lx, ly)) in enumerate(zip(sessions, pos)):
+        s.g(f"lane {st}")
+        # lane
+        x0, y0 = lx + 4, ly + 34
+        x1, y1 = ends[i], py - 2
+        mid = y0 + (y1 - y0) * 0.55
+        d = f"M{x0:.1f} {y0:.1f}C{x0:.1f} {mid:.1f},{x1:.1f} {mid - (y1 - y0) * 0.1:.1f},{x1:.1f} {y1:.1f}"
+        s.path(d, cls="hit")
+        s.path(d, stroke="#34352d", sw=1, cls="lp")
+        if st != "done":
+            dur = 6 + (i * 1.7) % 5
+            off = -(i * 2.3) % dur
+            s.path(d, stroke="sage", sw=1.6, cls="pu", extra=f' pathLength="1000" stroke-linecap="round" style="--d:{dur:.1f}s;--o:{off:.1f}s"')
+        s.circle(x1, y1, 1.8, fill="line2")
+        # label
+        dot(s, lx + 4, ly + 6, st, r=3, cls="blink" if st == "need" else "")
+        s.text(lx + 13, ly + 10, client, size=10.5 if not narrow else 9.5, fill="faint", mono=True)
+        s.text(lx, ly + 27, name, size=13 if not narrow else 11, fill="ink" if st != "done" else "dim", weight=500)
+        # phone row
+        ry = row_y0 + i * row_h
+        if ry + row_h < sy + sh - 6:
+            s.rect(sx + 8 * rs, ry, sw - 16 * rs, row_h - 4 * rs, rx=9 * rs, fill="panel2" if st != "need" else "emberD", cls="rowbg")
+            dot(s, sx + 20 * rs, ry + (row_h - 4 * rs) / 2, st, r=3.2 * rs, cls="blink" if st == "need" else "")
+            s.text(sx + 32 * rs, ry + 14 * rs, name, size=11.5 * rs, fill="ink", weight=500)
+            s.text(sx + 32 * rs, ry + 27 * rs, client, size=9.5 * rs, fill="faint", mono=True)
+            s.text(sx + sw - 16 * rs, ry + 20 * rs, STATUS[st], size=9.5 * rs,
+                   fill={"run": "sage", "need": "ember", "done": "teal"}[st], anchor="end", mono=True)
+        s.end()
+
+    return s.render(rx=0)
+
+
+if __name__ == "__main__":
+    import sys
+    sys.stdout.write(build("--narrow" in sys.argv))
