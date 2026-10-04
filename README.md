@@ -5,8 +5,8 @@
 <h1 align="center">Zen</h1>
 
 <p align="center">
-  <strong>Run more agents than you can watch.</strong><br>
-  A Brain on your own computer plans the work, gives each part to the right coding agent and reports to your phone.
+  <strong>Every agent you run, in one hand.</strong><br>
+  A phone app and a small daemon on your own computer. Every coding agent and shell there becomes a Session you can read as chat, drive as a live terminal, or hand to a Brain that splits the work.
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="site/assets/hero.svg" width="760" alt="Your phone talks to one Brain on your computer, which runs eight Workers on different agent clients">
+  <img src="site/assets/hero.svg" width="880" alt="Ten Sessions on your computer, agents on six clients plus a shell and Brain, all running into the Sessions list on one phone">
 </p>
 
 Zen is for one person running many coding agents. A Go daemon runs on your
@@ -25,50 +25,61 @@ Android and iOS app connects to it. Zen is in **beta**; see [Status](#status).
 
 Visit the [Zen homepage](https://daoleno.github.io/zen/) for an interactive overview.
 
+## Sessions
+
+Start Claude, Codex, Cursor, Grok, Pi, OpenCode, DSH or a plain Shell in any
+directory on the host. Each one is a `tmux` session, so it is also there at the
+desk. On the phone, open a Session as structured **Chat** (messages, tool calls,
+plans, attachments) or as the live **Terminal**, rendered natively with
+libghostty. **Git** shows read-only All, Working and Staged diffs for its
+repository. Chat works with the six agent clients; any other command gets the
+terminal.
+
+<p align="center">
+  <img src="site/assets/sessions-pair.svg" width="560" alt="The same claude Session as Chat and as the live Terminal">
+</p>
+
 ## Brain
 
-Give Brain a goal once. It records each part as durable Work, hands it to a
-Worker, reads the result and decides what happens next. Workers are visible
-`tmux` Sessions running an agent CLI; open any of them as Chat or as the live
-Terminal and take over. Only Brain or you can mark Work done.
+Give Brain a goal once. It records each part as durable Work, picks a Worker
+for it, reads the result and decides what happens next. Workers are ordinary
+Sessions; open any of them and take over. Only Brain or you can mark Work done.
+
+Brain's routing guide is `routing.md`, a few lines of Markdown in its
+workspace. It reads the guide before each spawn to choose the executor, model
+and reasoning level, and rewrites a line when you state a preference.
+`zen brain use <executor>` moves Brain itself to another client and keeps its
+thread.
 
 <p align="center">
-  <img src="site/assets/dispatch.svg" width="880" alt="Brain plans three Work items, delegates them to Workers on codex, claude and pi, receives check-ins, reviews results and accepts the Work">
+  <img src="site/assets/brain.svg" width="880" alt="A goal becomes three Work items; Brain reads routing.md and gives them to claude, codex and pi Workers">
 </p>
 
-Work, Attempt, Wake, Review and append-only Event records live in the daemon and
-survive restarts. A quiet pane or an exited process never completes Work.
 Details: [Architecture](docs/architecture.md), [Brain lifecycle](docs/brain-lifecycle.md),
-[Work lifecycle](docs/work-lifecycle.md).
+[Work lifecycle](docs/work-lifecycle.md), [Worker routing](docs/executors.md#worker-routing).
 
-## Routing
+## Around the agents
 
-Brain picks the executor, model and reasoning level for every Worker. Its guide
-is `routing.md`, a few lines of Markdown in Brain's workspace. Zen never parses
-it: Brain reads it before each spawn and judges the fit. When you state a
-preference, Brain rewrites the line.
+Everything reads from the one server the app is connected to.
 
-<p align="center">
-  <img src="site/assets/routing.svg" width="880" alt="A task arrives, Brain reads routing.md, judges a fit and spawns a Worker with an executor, model and reasoning level">
-</p>
-
-```sh
-zen worker spawn -name "Fix flaky test" -executor claude -model claude-opus-5-5 -reasoning high -cwd ~/repo -prompt "..."
-```
-
-See [Worker routing](docs/executors.md#worker-routing) for each client's flags.
-
-## Models
-
-`zen brain use <executor>` moves Brain to another agent client and keeps its
-thread and history. Each Worker gets its own executor, model and reasoning; a
-running Worker keeps the executor it started with. `codex`, `claude` and `pi`
-take a reasoning level on their own scale. `grok`, `agent` (Cursor) and
-`opencode` take a model only.
-
-<p align="center">
-  <img src="site/assets/switch.svg" width="880" alt="Brain inside a ring of six agent clients, and a Worker picker with executor, model and reasoning">
-</p>
+<table>
+  <tr>
+    <td width="50%"><img src="site/assets/models.svg" alt="Model Providers for Codex and Claude"><br><b>Model Providers</b>: official login or your own OpenAI, Anthropic, DeepSeek, OpenRouter or custom gateway keys, stored on the daemon.</td>
+    <td width="50%"><img src="site/assets/skills.svg" alt="Skills and Agent Plugins"><br><b>Skills</b>: the Skills and Agent Plugins your agents load, where each copy came from, and exact-copy removal.</td>
+  </tr>
+  <tr>
+    <td><img src="site/assets/plugins.svg" alt="Plugins connected to Brain"><br><b>Plugins</b> (preview): Linear, Notion, GitHub, Slack, Google Workspace, custom MCP and OpenAPI. Read by default; changes are a separate switch.</td>
+    <td><img src="site/assets/stats.svg" alt="Usage per model"><br><b>Usage</b>: tokens, sessions and cost per model, with reported, estimated and unknown costs kept apart.</td>
+  </tr>
+  <tr>
+    <td><img src="site/assets/calendar.svg" alt="Calendar with a scheduled action"><br><b>Calendar</b>: events, reminders, deadlines and scheduled actions that run as visible Work and post back to their Brain thread.</td>
+    <td><img src="site/assets/services.svg" alt="Services with a Quick Tunnel"><br><b>Services</b>: ports your Sessions opened, by project, with an optional temporary Cloudflare Quick Tunnel.</td>
+  </tr>
+  <tr>
+    <td><img src="site/assets/resources.svg" alt="Resources dashboard"><br><b>Resources</b>: CPU, memory, disk and pressure, with processes attributed to Workers, Brain, Docker or you.</td>
+    <td><img src="site/assets/alerts.svg" alt="Push alerts and Telegram"><br><b>Alerts and Telegram</b>: push only when a Session is blocked, fails or finishes; Telegram as a second channel to the same Brain.</td>
+  </tr>
+</table>
 
 ## Quick start
 
@@ -94,18 +105,6 @@ zen --lan
 Away from your LAN, use Tailscale (`zen -addr "$(tailscale ip -4):9876"`), or a
 Cloudflare Tunnel or reverse proxy with `zen pair https://your-origin`. See
 [Connect and pair](docs/connect-and-pair.md).
-
-## On your phone
-
-- **Brain** and **Sessions**: a Worker as structured Chat, or its live Terminal
-  rendered natively with libghostty.
-- **Calendar**: reminders, deadlines and scheduled actions that run as visible
-  Work and post their result to the Brain thread they came from.
-- **Resources**: CPU, memory, pressure and disk, with processes attributed to
-  Workers, Brain or Docker.
-- **Git review**: read-only diffs of a Session's repository.
-- **Stats**: usage per model, with unknown prices shown as unknown.
-- Push notifications only when a Worker is blocked, fails or finishes.
 
 ## One owner
 
@@ -198,7 +197,7 @@ Layout: `daemon/` Go daemon (`cmd/zen`, `server`, `auth`, `brain`, `work`,
 `lifecycle`, `terminal`, `watcher`); `app/` Expo app (routes in `app/app/`,
 components, services, store); `docs/` product and operator docs; `site/`
 landing page, whose `site/assets/*.svg` drawings this README also uses
-(generators in `scripts/site-svg/`);
+(regenerate with `python3 scripts/site-svg/build.py`);
 `scripts/` build and release tooling.
 
 The native terminal uses libghostty; see [Android](docs/android.md#architecture--abi-contract)
