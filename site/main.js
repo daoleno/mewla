@@ -247,18 +247,17 @@
     })();
   }
 
-  /* Switchboard: new Workers use the default executor unless another is requested. */
+  /* Switchboard: Brain routes each task to an executor and reasoning level from routing.md. */
   function board() {
     const fig = document.getElementById("board");
     if (!fig) return;
     const stage = fig.querySelector(".board-stage");
     const router = fig.querySelector('[data-anchor="router"]');
     const note = fig.querySelector("[data-route-note]");
-    const badge = fig.querySelector("[data-default]");
     const tasks = [...fig.querySelectorAll("[data-task]")];
     const execs = new Map([...fig.querySelectorAll("[data-exec]")].map((el) => [el.dataset.exec, el]));
-    // [task index, requested executor or null for the default]
-    const plan = [[0, null], [1, "claude"], ["set-delegated", "opencode"], [2, null], [3, "grok"]];
+    // [task index, executor, reasoning] as Brain would choose from routing.md
+    const plan = [[0, "claude", "high"], [1, "codex", "medium"], [2, "pi", "low"], [3, "grok", null]];
 
     if (reduced.matches) return;
 
@@ -270,10 +269,6 @@
     ];
     const wires = makeWires(stage, pairs, horizontal);
     const paint = (cls) => wires.paths.forEach((p) => p.setAttribute("class", cls));
-    const setDefault = (name) => {
-      execs.get(name).appendChild(badge);
-      note.textContent = `default: ${name}`;
-    };
     const clear = () => {
       tasks.forEach((t) => t.classList.remove("on"));
       execs.forEach((e) => e.classList.remove("on"));
@@ -283,30 +278,20 @@
     (async () => {
       for (;;) {
         tasks.forEach((t) => t.classList.remove("done"));
-        setDefault("codex");
-        let current = "codex";
-        for (const [task, requested] of plan) {
+        note.textContent = "routing.md";
+        for (const [task, exec, reasoning] of plan) {
           clear();
-          if (task === "set-delegated") {
-            note.textContent = `set-delegated ${requested}`;
-            await clock.sleep(1200);
-            current = requested;
-            setDefault(current);
-            await clock.sleep(1000);
-            continue;
-          }
-          const exec = requested || current;
           tasks[task].classList.add("on");
           wires.paths.get(`t${task}`).setAttribute("class", "live");
           await packet(clock, wires, `t${task}`, 700, false);
-          note.textContent = `-executor ${exec === "agent" ? "cursor-agent" : exec}`;
+          note.textContent = `-executor ${exec}${reasoning ? ` -reasoning ${reasoning}` : ""}`;
           wires.paths.get(`e:${exec}`).setAttribute("class", "back");
           await packet(clock, wires, `e:${exec}`, 700, false);
           execs.get(exec).classList.add("on");
           await clock.sleep(1500);
           tasks[task].classList.remove("on");
           tasks[task].classList.add("done");
-          note.textContent = `default: ${current}`;
+          note.textContent = "routing.md";
           await clock.sleep(400);
         }
         await clock.sleep(1200);

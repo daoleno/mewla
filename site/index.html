@@ -166,25 +166,25 @@
       <div class="band-copy wide">
         <p class="eyebrow">Agent clients</p>
         <h2 id="switch-title">Switch agents, keep the workflow.</h2>
-        <p>Zen is agent-neutral. New Workers run on your default delegated executor, or on the one you ask Brain for. Change the default live, without a restart. A running Worker keeps the agent it started with.</p>
+        <p>Zen is agent-neutral. Brain picks each Worker's executor, model and reasoning from a short routing guide that it keeps current with you. A running Worker keeps the agent it started with.</p>
       </div>
 
       <figure class="board" id="board" aria-labelledby="board-cap">
         <div class="board-stage">
           <svg class="wires" aria-hidden="true"></svg>
           <ul class="tasks" aria-label="Incoming concerns">
-            <li data-task="0"><span>Refactor session auth</span><small>default</small></li>
-            <li data-task="1"><span>Draft onboarding copy</span><small>“use claude”</small></li>
-            <li data-task="2"><span>Bisect flaky test</span><small>default</small></li>
+            <li data-task="0"><span>Refactor session auth</span><small>cross-cutting</small></li>
+            <li data-task="1"><span>Draft onboarding copy</span><small>routine</small></li>
+            <li data-task="2"><span>Rename a config key</span><small>mechanical</small></li>
             <li data-task="3"><span>Port parser to Go</span><small>“use grok”</small></li>
           </ul>
           <div class="router" data-anchor="router">
             <div class="brain-ring small" aria-hidden="true"><span></span></div>
             <p>Brain</p>
-            <small data-route-note>default: codex</small>
+            <small data-route-note>routing.md</small>
           </div>
           <ul class="execs" aria-label="Supported agent CLIs">
-            <li data-exec="codex"><code>codex</code><small>Codex</small><b class="def" data-default>default</b></li>
+            <li data-exec="codex"><code>codex</code><small>Codex</small></li>
             <li data-exec="claude"><code>claude</code><small>Claude Code</small></li>
             <li data-exec="agent"><code>cursor-agent</code><small>Cursor</small></li>
             <li data-exec="grok"><code>grok</code><small>Grok CLI</small></li>
@@ -192,12 +192,12 @@
             <li data-exec="opencode"><code>opencode</code><small>OpenCode</small></li>
           </ul>
         </div>
-        <figcaption id="board-cap">Workers spawn on the default delegated executor unless you request another. <code>zen brain set-delegated</code> changes the default for Workers spawned afterward; existing Workers keep theirs.</figcaption>
+        <figcaption id="board-cap">Before each spawn Brain reads <code>routing.md</code> and passes <code>-executor</code>, <code>-model</code> and <code>-reasoning</code>. Brain revises the guide when your preferences or the available models change.</figcaption>
       </figure>
 
       <div class="cmds">
         <div><code>zen brain use claude</code><span>Switch the agent that runs Brain itself.</span></div>
-        <div><code>zen brain set-delegated grok</code><span>Change the default for new Workers, live.</span></div>
+        <div><code>routing.md</code><span>Tell Brain how you like work routed; it keeps the guide current.</span></div>
         <div><code>~/.zen/executors.toml</code><span>Add custom executors or safer command profiles.</span></div>
       </div>
     </section>
