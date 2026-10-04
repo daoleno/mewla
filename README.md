@@ -23,6 +23,8 @@ Zen is for one person running many coding agents. A Go daemon runs on your
 Linux or macOS machine next to your repositories, `tmux` and agent CLIs. The
 Android and iOS app connects to it. Zen is in **beta**; see [Status](#status).
 
+Visit the [Zen homepage](https://daoleno.github.io/zen/) for an interactive overview.
+
 ## Brain
 
 Give Brain a goal once. It records each part as durable Work, hands it to a
