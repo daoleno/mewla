@@ -99,14 +99,12 @@ export type BrainExecutorRef = {
   runtime?: string;
   capabilities?: BrainExecutorCapabilities;
   host?: boolean;
-  delegated?: boolean;
 };
 
 export type BrainSnapshot = {
   workers?: BrainWorkerRef[];
   host_worker?: BrainWorkerRef | null;
   host_executor?: BrainExecutorRef | null;
-  delegated_executor?: BrainExecutorRef | null;
   executors?: BrainExecutorRef[];
   chat_thread_id?: string;
   scheduled_results?: BrainScheduledResult[];
@@ -158,7 +156,6 @@ function normalizeSnapshot(
   serverUrl: string,
 ): BrainServerState {
   const hostExecutor = raw?.host_executor;
-  const delegatedExecutor = raw?.delegated_executor;
   const executors = Array.isArray(raw?.executors)
     ? raw.executors
     : [];
@@ -177,10 +174,6 @@ function normalizeSnapshot(
     host_executor:
       hostExecutor && typeof hostExecutor === "object"
         ? normalizeExecutorRef(hostExecutor)
-        : undefined,
-    delegated_executor:
-      delegatedExecutor && typeof delegatedExecutor === "object"
-        ? normalizeExecutorRef(delegatedExecutor)
         : undefined,
     executors: executors.map(normalizeExecutorRef).filter((adapter) => adapter.id),
     chat_thread_id:
@@ -473,7 +466,6 @@ function normalizeExecutorRef(raw: any): BrainExecutorRef {
     runtime: typeof raw?.runtime === "string" ? raw.runtime : undefined,
     capabilities: normalizeExecutorCapabilities(raw?.capabilities),
     host: typeof raw?.host === "boolean" ? raw.host : undefined,
-    delegated: typeof raw?.delegated === "boolean" ? raw.delegated : undefined,
   };
 }
 
@@ -550,7 +542,6 @@ function brainServerStatesEqual(
     left.worklog_path === right.worklog_path &&
     workerRefsEqual(left.host_worker, right.host_worker) &&
     executorRefsEqual(left.host_executor, right.host_executor) &&
-    executorRefsEqual(left.delegated_executor, right.delegated_executor) &&
     workerRefArraysEqual(left.workers ?? [], right.workers ?? []) &&
     executorRefArraysEqual(left.executors ?? [], right.executors ?? []) &&
     scheduledResultArraysEqual(
@@ -757,7 +748,6 @@ function executorRefsEqual(
     left.command === right.command &&
     left.runtime === right.runtime &&
     left.host === right.host &&
-    left.delegated === right.delegated &&
     executorCapabilitiesEqual(left.capabilities, right.capabilities)
   );
 }

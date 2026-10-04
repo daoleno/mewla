@@ -979,74 +979,41 @@ describe("Provider public WebSocket boundary", () => {
 });
 
 describe("executor switch transport", () => {
-  test("setDelegatedExecutor is request-correlated and returns the brain snapshot", async () => {
+  test("setBrainExecutor is request-correlated and returns the brain snapshot", async () => {
     const client = new MultiServerWebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
-    const pending = client.setDelegatedExecutor(server.id, "grok");
+    const pending = client.setBrainExecutor(server.id, "claude");
     const outbound = JSON.parse(socket.sent.at(-1)!);
-    expect(outbound.type).toBe("set_delegated_executor");
-    expect(outbound.executor_id).toBe("grok");
-    expect(outbound.adapter_id).toBe("grok");
+    expect(outbound.type).toBe("brain_set_executor");
+    expect(outbound.executor_id).toBe("claude");
+    expect(outbound.adapter_id).toBe("claude");
     expect(typeof outbound.request_id).toBe("string");
 
     socket.receive({
       type: "brain_snapshot",
+      request_id: "other-request",
+      brain: { host_executor: { id: "codex", name: "Codex" } },
+    });
+    socket.receive({
+      type: "brain_snapshot",
       request_id: outbound.request_id,
-      brain: {
-        delegated_executor: { id: "grok", name: "Grok", provider: "grok" },
-        host_executor: { id: "codex", name: "Codex", provider: "codex" },
-      },
+      brain: { host_executor: { id: "claude", name: "Claude Code", provider: "claude" } },
     });
 
     await expect(pending).resolves.toEqual({
-      delegated_executor: { id: "grok", name: "Grok", provider: "grok" },
-      host_executor: { id: "codex", name: "Codex", provider: "codex" },
+      host_executor: { id: "claude", name: "Claude Code", provider: "claude" },
     });
     client.disconnectAll();
   });
 
-  test("setBrainExecutor and setDelegatedExecutor stay on distinct operations", async () => {
+  test("setBrainExecutor rejects only the matching request error", async () => {
     const client = new MultiServerWebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
-    const hostPending = client.setBrainExecutor(server.id, "claude");
-    const hostOutbound = JSON.parse(socket.sent.at(-1)!);
-    const delegatedPending = client.setDelegatedExecutor(server.id, "grok");
-    const delegatedOutbound = JSON.parse(socket.sent.at(-1)!);
-
-    expect(hostOutbound.type).toBe("brain_set_executor");
-    expect(delegatedOutbound.type).toBe("set_delegated_executor");
-    expect(hostOutbound.request_id).not.toBe(delegatedOutbound.request_id);
-
-    socket.receive({
-      type: "brain_snapshot",
-      request_id: hostOutbound.request_id,
-      brain: { host_executor: { id: "claude", name: "Claude" } },
-    });
-    socket.receive({
-      type: "brain_snapshot",
-      request_id: delegatedOutbound.request_id,
-      brain: { delegated_executor: { id: "grok", name: "Grok" } },
-    });
-
-    await expect(hostPending).resolves.toEqual({
-      host_executor: { id: "claude", name: "Claude" },
-    });
-    await expect(delegatedPending).resolves.toEqual({
-      delegated_executor: { id: "grok", name: "Grok" },
-    });
-    client.disconnectAll();
-  });
-
-  test("setDelegatedExecutor rejects only the matching request error", async () => {
-    const client = new MultiServerWebSocketClient();
-    const socket = await connectClient(client);
-    socket.open();
-
-    const pending = client.setDelegatedExecutor(server.id, "missing");
+    const pending = client.setBrainExecutor(server.id, "missing");
     const outbound = JSON.parse(socket.sent.at(-1)!);
 
     socket.receive({
