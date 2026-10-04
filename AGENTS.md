@@ -27,4 +27,4 @@ Read the relevant code and directory instructions before editing. Complete autho
 
 Use TypeScript, two-space indentation in TS/TSX, gofmt for Go, PascalCase components, use-prefixed hooks and camelCase functions. Keep terminal/provider UI in app/components/terminal. Use structured APIs instead of string parsing when available.
 
-Update relevant product docs. When authorized to commit, use short imperative messages and scoped commits. Report behavior changes, verification and remaining risks; include screenshots for visible UI changes. Do not publish, deploy or restart live services without authorization.
+Update relevant product docs. When authorized to commit, use short imperative messages and scoped commits. Report behavior changes, verification and remaining risks; include screenshots for visible UI changes. Do not publish or deploy without authorization.
