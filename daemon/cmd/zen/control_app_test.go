@@ -2031,7 +2031,7 @@ func TestControlAppBrainContextReturnsStructuredContext(t *testing.T) {
 	if context.ThreadID != "thread-main" || len(context.Notes) != 3 || context.Notes[0].Path != "current.md" || context.Notes[0].Bytes == 0 {
 		t.Fatalf("context = %#v", context)
 	}
-	if len(context.Playbooks) != 4 {
+	if len(context.Playbooks) != 3 {
 		t.Fatalf("playbooks = %#v", context.Playbooks)
 	}
 }
@@ -2052,17 +2052,17 @@ func TestControlAppBrainPlaybooksReturnsCatalog(t *testing.T) {
 	if !ok {
 		t.Fatalf("playbooks type = %T", resp.Playbooks)
 	}
-	if len(catalog.Playbooks) != 4 {
+	if len(catalog.Playbooks) != 3 {
 		t.Fatalf("catalog = %#v", catalog)
 	}
-	foundAlign := false
+	foundWayfind := false
 	for _, entry := range catalog.Playbooks {
-		if entry.Name == "align" && strings.Contains(entry.Description, "consequential missing decisions") {
-			foundAlign = true
+		if entry.Name == "wayfind" && strings.Contains(entry.Description, "check reuse before building") {
+			foundWayfind = true
 		}
 	}
-	if !foundAlign {
-		t.Fatalf("catalog missing align entry: %#v", catalog.Playbooks)
+	if !foundWayfind {
+		t.Fatalf("catalog missing wayfind entry: %#v", catalog.Playbooks)
 	}
 }
 

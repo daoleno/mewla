@@ -1,7 +1,3 @@
 # Brain Handoff Policy
 
-Host executor switching preserves the visible Brain chat.
-
-Read current.md and authoritative Work state to resume the active objective, decisions, Event obligations and next action. Inspect delegated results when an event requires review; do not restart or poll Workers merely because the Host changed.
-
-Keep handoff prompts private and reset transcript baselines. Do not announce the handoff unless asked.
+The visible Brain chat survives a Host executor switch. Resume from current.md and Work state: the active objective, decisions, pending Event obligations and next action. Review delegated results only when an event asks for it; a Host change is no reason to restart or poll Workers. The handoff prompt is private: do not quote or announce it unless asked.

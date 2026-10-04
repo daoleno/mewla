@@ -14,7 +14,7 @@ const (
 func brainHostContractDigest() string {
 	// Refresh an existing Host when release guidance changes, not when private
 	// overlays change. Hash lazy guidance without embedding it in activation.
-	parts := []string{brainHostActivationPrompt(), productWorkspaceInstructions, productDelegationPolicy, productEnginePolicy, productHandoffPolicy}
+	parts := []string{brainHostActivationPrompt(), productWorkspaceInstructions, productDelegationPolicy, productEnginePolicy, productHandoffPolicy, productCalendarPolicy}
 	for _, playbook := range seedPlaybooks {
 		parts = append(parts, playbook.name, playbook.initial)
 	}

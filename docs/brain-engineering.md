@@ -36,14 +36,15 @@ existing catalog in `daemon/brain/playbooks.go`:
 
 | Playbook | When it helps |
 | --- | --- |
-| `align` | A consequential missing decision, as distinct from an observable fact. |
 | `wayfind` | How a system works, why it has that shape, prior decisions, or uncertain library fit. |
 | `slice-work` | A high-risk first experiment, coherent decomposition, or a repeatedly failing approach. |
 | `delegate-brief` | A context-bearing brief, workflow-specific proof, and evidence-based acceptance. |
 
 The managed `AGENTS.md` names when each method helps. Brain discovers paths
 with the normal `zen brain playbooks --json` catalog and reads only relevant files. This is a
-Brain skill expressed through native playbooks, not four new user commands.
+Brain skill expressed through native playbooks, not new user commands. The former
+`align` playbook is now two sentences in the AGENTS.md Role section; an
+unmodified shipped copy is removed on upgrade and an edited one is left in place.
 
 `templates/policies/delegation.md` directs Brain to carry the selected method
 into the actual task brief as concrete work and evidence requirements. Workers

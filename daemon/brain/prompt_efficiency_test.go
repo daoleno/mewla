@@ -36,16 +36,16 @@ func TestHandoffReferencesContextAndOnlyOwnedWorkers(t *testing.T) {
 
 func TestPromptOwnersCoverAutonomyWaitingAndVerification(t *testing.T) {
 	for _, required := range []string{
-		"complete authorized work", "finish independent authorized preparation first",
+		"finish authorized work", "keep doing independent preparation",
 		"User instructions override skill guidelines within platform constraints",
-		"Brain decides decomposition", "a new send is a new attempt",
-		"A result notification needs no acknowledgement ceremony",
+		"Brain decides decomposition", "a resend is a second attempt",
+		"act on them without acknowledgement",
 	} {
 		if !strings.Contains(productWorkspaceInstructions, required) {
 			t.Fatalf("workspace missing %q", required)
 		}
 	}
-	for _, required := range []string{"Scale verification to risk", "required repository gates", "Do not replace a full-task requirement with a passing subset", "there is no second continuation command", "Runtime preserves both outcomes"} {
+	for _, required := range []string{"Required repository gates are part of acceptance", "a passing subset does not replace a full-task requirement", "that is the whole step, with no separate resolve", "weigh the cost of a duplicate effect"} {
 		if !strings.Contains(productDelegationPolicy, required) {
 			t.Fatalf("delegation missing %q", required)
 		}
