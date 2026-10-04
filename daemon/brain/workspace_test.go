@@ -136,7 +136,7 @@ func TestNewStoreCreatesMinimalUserOwnedProfile(t *testing.T) {
 }
 
 func TestWorkspaceCommunicationGuidanceLivesInAgents(t *testing.T) {
-	for _, marker := range []string{"## Communication", "user's language", "Lead with the answer", "Separate facts, assumptions and recommendations"} {
+	for _, marker := range []string{"## Communication", "user's language", "Lead with the answer", "Mark what is inferred rather than observed"} {
 		if !strings.Contains(productWorkspaceInstructions, marker) {
 			t.Fatalf("AGENTS.md missing %q", marker)
 		}
@@ -299,13 +299,10 @@ func TestGeneratedWorkspaceDirectRepositoryAndDelivery(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, required := range []string{
-			"Edit the supplied repository and cwd directly by default",
+			"edit the supplied checkout in place",
 			"preserve unrelated changes",
-			"explicit user request, concrete conflicting edits, or a justified necessary isolation reason",
-			"Briefly explain the actual reason",
-			"concurrent Workers do not necessarily conflict",
-			"integration into the owning target repository and requested delivery remain part of completion",
-			"A candidate branch or passing tests alone are not a delivered outcome",
+			"only on request, for concrete conflicting edits or a stated isolation need",
+			"integrate it into the owning repository before calling it delivered",
 		} {
 			if !strings.Contains(string(raw), required) {
 				t.Errorf("generated %s missing %q", path, required)
@@ -340,7 +337,7 @@ func TestNewStoreEnsuresWorkspaceCommunicationRules(t *testing.T) {
 		"policies/delegation.md",
 		"policies/engine.md",
 		"$ZEN_WORKTREE_ROOT",
-		"TMPDIR/TMP/TEMP",
+		"TMPDIR",
 		"$ZEN_BUILD_TMPDIR",
 	} {
 		if !strings.Contains(content, marker) {
@@ -382,11 +379,11 @@ func TestNewStoreEnsuresCurrentAndPolicyDocs(t *testing.T) {
 		path   string
 		marker string
 	}{
-		{store.policyPath("delegation.md"), "AGENTS.md"},
-		{store.policyPath("delegation.md"), "Scale verification to risk"},
-		{store.policyPath("delegation.md"), "Inspect every delegated result"},
-		{store.policyPath("engine.md"), "Use configured routing unless the user requests another executor"},
-		{store.policyPath("handoff.md"), "Host executor switching preserves the visible Brain chat."},
+		{store.policyPath("delegation.md"), "Required repository gates are part of acceptance"},
+		{store.policyPath("delegation.md"), "Check each result against its acceptance criteria"},
+		{store.policyPath("engine.md"), "Keep the configured executor unless the user asks for another"},
+		{store.policyPath("handoff.md"), "The visible Brain chat survives a Host executor switch."},
+		{store.policyPath("calendar.md"), "-source-thread"},
 	} {
 		raw, err := os.ReadFile(policy.path)
 		if err != nil {
@@ -420,14 +417,14 @@ func TestNewStoreUpgradesExistingDelegationPolicyWithoutOverwriting(t *testing.T
 	content := string(readDelegation)
 	for _, want := range []string{
 		"Keep my local rule.",
-		"## Brief And Review",
-		"AGENTS.md",
-		"Inspect every delegated result",
-		"observable acceptance criteria",
-		"Scale verification to risk",
-		"same viable Worker",
+		"## Brief",
+		"## Review",
+		"Check each result against its acceptance criteria",
+		"acceptance criteria, constraints, the proof you need",
+		"Required repository gates are part of acceptance",
+		"Reuse a capable Worker across stages",
 		"## Continuation",
-		"Runtime preserves both outcomes",
+		"weigh the cost of a duplicate effect",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("delegation policy missing %q:\n%s", want, content)
@@ -574,8 +571,8 @@ func TestNewStorePreservesCurrentAndUpgradesExistingPolicyDocs(t *testing.T) {
 	for _, want := range []string{
 		"Keep this too.",
 		"Policy",
-		"Use configured routing unless the user requests another executor",
-		"task type alone does not authorize switching",
+		"Keep the configured executor unless the user asks for another",
+		"the kind of task alone is not a reason to switch",
 	} {
 		if !strings.Contains(engineContent, want) {
 			t.Fatalf("engine policy missing %q:\n%s", want, engineContent)
@@ -589,8 +586,8 @@ func TestNewStorePreservesCurrentAndUpgradesExistingPolicyDocs(t *testing.T) {
 	for _, want := range []string{
 		"Keep this handoff rule.",
 		"Policy",
-		"Host executor switching preserves the visible Brain chat.",
-		"Keep handoff prompts private",
+		"The visible Brain chat survives a Host executor switch.",
+		"The handoff prompt is private",
 	} {
 		if !strings.Contains(handoffContent, want) {
 			t.Fatalf("handoff policy missing %q:\n%s", want, handoffContent)

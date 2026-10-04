@@ -15,7 +15,7 @@ import (
 )
 
 func TestEngineeringPlaybookUpgradePreservesCustomFiles(t *testing.T) {
-	for _, name := range []string{"align.md", "wayfind.md", "slice-work.md", "delegate-brief.md"} {
+	for _, name := range []string{"wayfind.md", "slice-work.md", "delegate-brief.md"} {
 		for _, customized := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/custom=%t", name, customized), func(t *testing.T) {
 				root := t.TempDir()
@@ -66,6 +66,30 @@ func TestEngineeringPlaybookUpgradePreservesCustomFiles(t *testing.T) {
 	}
 }
 
+func TestRetiredAlignPlaybookRemovedOnlyWhenShipped(t *testing.T) {
+	for _, customized := range []bool{false, true} {
+		root := t.TempDir()
+		store, err := NewStore(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		legacy := mustReadFile(t, filepath.Join("testdata", "engineering-v1", "align.md"))
+		if customized {
+			legacy = append(legacy, []byte("\nUser-owned override.\n")...)
+		}
+		if err := os.WriteFile(store.playbookPath("align.md"), legacy, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := NewService(store, nil, nil).Housekeeping(); err != nil {
+			t.Fatal(err)
+		}
+		_, statErr := os.Stat(store.playbookPath("align.md"))
+		if customized != (statErr == nil) {
+			t.Fatalf("custom=%t: align.md exists=%t", customized, statErr == nil)
+		}
+	}
+}
+
 func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -76,21 +100,20 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 		t.Fatal(err)
 	}
 	agents := string(mustReadFile(t, store.workspaceInstructionsPath()))
-	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 6500 {
+	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 5300 {
 		t.Fatalf("standing guidance missing or oversized: %d bytes", len(agents))
 	}
-	if len(catalog.Playbooks) != 4 {
-		t.Fatalf("expected four lazy playbooks, got %d", len(catalog.Playbooks))
+	if len(catalog.Playbooks) != 3 {
+		t.Fatalf("expected three lazy playbooks, got %d", len(catalog.Playbooks))
 	}
 	methodMarkers := map[string][]string{
-		"slice-work":     {"small relevant sample of actual session evidence", "navigation or information-access gaps", "missing or wrong tests", "inappropriate task decomposition", "ineffective instructions", "available, adequate guidance needs no rewrite"},
-		"delegate-brief": {"minimum useful redacted excerpts", "preserving status, symptom and failing assertion", "tokens, cookies and secret URLs", "before reporting or persisting", "avoid captures that echo secrets", "narrower safe reproduction"},
+		"slice-work":     {"read a few actual session transcripts", "missing information", "a wrong or missing test", "a bad split", "an unclear instruction", "fix that cause"},
+		"delegate-brief": {"smallest excerpt", "keeps the status, symptom and failing assertion", "tokens, cookies and secret URLs", "before reporting or saving", "reference credentials instead of echoing them", "narrower safe reproduction"},
 	}
 	detailMarkers := map[string]string{
-		"align":          "suggested implementation",
-		"wayfind":        "licensing",
-		"slice-work":     "discriminating experiment",
-		"delegate-brief": "fail-before/pass-after",
+		"wayfind":        "license",
+		"slice-work":     "could prove the approach wrong",
+		"delegate-brief": "fails before the fix and passes after",
 	}
 	for _, entry := range catalog.Playbooks {
 		marker, relevant := detailMarkers[entry.Name]
@@ -288,7 +311,7 @@ func TestEngineeringGuidanceRefreshesExistingHost(t *testing.T) {
 
 func TestHostContractDigestTracksReleaseGuidance(t *testing.T) {
 	original := brainHostContractDigest()
-	for _, source := range []*string{&productWorkspaceInstructions, &productDelegationPolicy, &productEnginePolicy, &productHandoffPolicy, &seedPlaybooks[0].initial, &seedPlaybooks[1].initial, &seedPlaybooks[2].initial, &seedPlaybooks[3].initial} {
+	for _, source := range []*string{&productWorkspaceInstructions, &productDelegationPolicy, &productEnginePolicy, &productHandoffPolicy, &seedPlaybooks[0].initial, &seedPlaybooks[1].initial, &seedPlaybooks[2].initial, &productCalendarPolicy} {
 		before := *source
 		*source += "\nChanged release guidance.\n"
 		changed := brainHostContractDigest()

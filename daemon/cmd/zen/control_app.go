@@ -1769,7 +1769,7 @@ Run risk-proportionate checks and the required repository gates; rerun only afte
 Shared tools: zen connections --help.
 Progress: run "$ZEN_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; ZEN_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
   --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
-  optional: --task-class exploration|mechanical_change|lasting_design --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease 300
+  optional: --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease <seconds> (running status lapses to unknown after the lease; renew it during long quiet steps)
 Use --attention user_input only for a necessary decision, and --status done --attention done only after acceptance and feasible verification.`, normalizeWorkerProfile(profile)))
 }
 

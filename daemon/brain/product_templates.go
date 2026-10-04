@@ -21,3 +21,6 @@ var productEnginePolicy string
 
 //go:embed templates/policies/handoff.md
 var productHandoffPolicy string
+
+//go:embed templates/policies/calendar.md
+var productCalendarPolicy string

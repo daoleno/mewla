@@ -2529,7 +2529,7 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 			t.Fatalf("bootstrap retains %q", unwanted)
 		}
 	}
-	for _, want := range []string{"delegated=true", "Brain decides decomposition", "source-thread", "scheduled_action", "first/second", "no acknowledgement ceremony"} {
+	for _, want := range []string{"delegated=true", "Brain decides decomposition", "policies/calendar.md before any calendar write", "without acknowledgement"} {
 		if !strings.Contains(productWorkspaceInstructions, want) {
 			t.Fatalf("loaded AGENTS missing %q", want)
 		}
@@ -2761,8 +2761,8 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 	}
 	for _, want := range []string{
 		"Keep delegated notes.",
-		"## Brief And Review",
-		"Inspect every delegated result",
+		"## Review",
+		"Check each result against its acceptance criteria",
 	} {
 		if !strings.Contains(string(delegation), want) {
 			t.Fatalf("delegation policy missing %q:\n%s", want, delegation)
@@ -2772,7 +2772,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(engine), "Use configured routing unless the user requests another executor") {
+	if !strings.Contains(string(engine), "Keep the configured executor unless the user asks for another") {
 		t.Fatalf("engine policy was not backfilled:\n%s", engine)
 	}
 	handoff, err := os.ReadFile(store.policyPath("handoff.md"))
@@ -2782,7 +2782,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 	for _, want := range []string{
 		"Keep handoff notes.",
 		"Policy",
-		"Host executor switching preserves the visible Brain chat.",
+		"The visible Brain chat survives a Host executor switch.",
 	} {
 		if !strings.Contains(string(handoff), want) {
 			t.Fatalf("handoff policy missing %q:\n%s", want, handoff)
@@ -3099,8 +3099,8 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertCalendarPromptContract(t, string(instructions))
-	if !strings.Contains(string(instructions), "current.md is the short handoff for active work; database Work/Event state is authoritative") {
+	assertCalendarPromptContract(t, string(mustReadFile(t, store.policyPath("calendar.md"))))
+	if !strings.Contains(string(instructions), "current.md is the short handoff for active work; Work/Event state in the database is authoritative") {
 		t.Fatalf("workspace instructions do not describe current.md:\n%s", instructions)
 	}
 	if !strings.Contains(string(instructions), "Read policies/delegation.md before delegating") {
@@ -3110,10 +3110,10 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 		t.Fatalf("workspace instructions do not describe playbooks:\n%s", instructions)
 	}
 	for _, want := range []string{
-		brainWorkerRoleContract, "Brain decides decomposition", "no acknowledgement ceremony",
-		"finish independent authorized preparation first", "materially changes scope, risk, or user values",
+		brainWorkerRoleContract, "Brain decides decomposition", "without acknowledgement",
+		"keep doing independent preparation", "changes scope, risk or user values",
 		"zen worker list/spawn/capture/send/close", "delegated=true",
-		"$ZEN_WORKTREE_ROOT", "TMPDIR/TMP/TEMP", "$ZEN_BUILD_TMPDIR",
+		"$ZEN_WORKTREE_ROOT", "TMPDIR", "$ZEN_BUILD_TMPDIR",
 		"policies/delegation.md",
 	} {
 		if !strings.Contains(string(instructions), want) {
@@ -3124,7 +3124,7 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Inspect every delegated result", "same viable Worker", "acceptance criteria", "verification", "no second continuation command"} {
+	for _, want := range []string{"Check each result against its acceptance criteria", "Reuse a capable Worker", "acceptance criteria", "proof", "with no separate resolve"} {
 		if !strings.Contains(string(delegation), want) {
 			t.Fatalf("loaded delegation policy missing %q", want)
 		}
@@ -3263,25 +3263,27 @@ func TestServiceHousekeepingRepairsCalendarContractWithoutOverwritingUserContent
 	if !strings.Contains(instructions, "Keep this user-authored rule.") {
 		t.Fatalf("housekeeping overwrote user content:\n%s", instructions)
 	}
-	assertCalendarPromptContract(t, instructions)
+	if !strings.Contains(instructions, "policies/calendar.md before any calendar write") {
+		t.Fatalf("repaired instructions do not route calendar writes to the policy:\n%s", instructions)
+	}
+	assertCalendarPromptContract(t, string(mustReadFile(t, store.policyPath("calendar.md"))))
 }
 
 func assertCalendarPromptContract(t *testing.T, value string) {
 	t.Helper()
 	for _, want := range []string{
-		"calendar list/get/create/update/cancel/run",
-		"only for explicit time intent",
+		"calendar list/get/create/update/cancel/run only when the user states a time intent",
 		"event, reminder and deadline are passive",
-		"scheduled_action executes work",
-		"current thread_id from zen brain context --json",
-		"pass it as -source-thread",
-		"Never invent or retarget the result destination",
-		"A recurring series continues after a failed occurrence",
-		"local YYYY-MM-DD, HH:MM and IANA timezone",
-		"first/second for a repeated DST time",
-		"After create/update/run",
+		"scheduled_action runs work",
+		"current thread_id from zen brain context --json as -source-thread",
+		"never invent or retarget it",
+		"A recurring series keeps running after one occurrence fails",
+		"local YYYY-MM-DD and HH:MM with an IANA timezone",
+		"occurs twice at a DST change",
+		"first or second",
+		"After create, update or run",
 		"resolved local time",
-		"recurrence/effect and result destination",
+		"recurrence or effect, and result destination",
 	} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("Calendar prompt contract missing %q:\n%s", want, value)

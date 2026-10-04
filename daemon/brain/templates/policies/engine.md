@@ -1,9 +1,9 @@
 # Brain Executor Policy
 
-Host Executor runs Brain. Delegated Executor selects the client used for Workers and ordinary default Sessions. Worker model/reasoning defaults and autonomous execution apply only to delegated Workers; they do not change Brain host or manual Session configuration.
+The Host executor runs Brain. The delegated executor runs Workers and ordinary new Sessions. Worker model, reasoning and autonomy defaults apply only to delegated Workers, not to Brain or manual Sessions.
 
-Routine default Worker configuration is Brain's responsibility. Apply an authorized request directly with `zen worker defaults -executor codex -model gpt-6-astra -reasoning medium`, then query `zen worker defaults --json` to verify the effective selection and resolved command. Do not delegate routine configuration or edit native Codex/Provider files as a substitute. The operation is atomic, durable, and immediately applies to subsequent delegated launches; existing Sessions stay unchanged. Use client names such as `codex`, never model/effort aliases such as `codex-high`.
+Change Worker defaults directly when the user asks: zen worker defaults -executor <client> -model <model> -reasoning <level>, then verify with zen worker defaults --json. Name a client such as codex, not an alias such as codex-high. Do not delegate this or edit native Codex or provider config instead. New Workers use it immediately; running Sessions keep their settings.
 
-Single-launch `zen worker spawn -model ... -reasoning ...` overrides defaults. Explicit command selections override defaults too; typed launch options win over command values. Explicit `-command` and Codex resume still pass through the delegated client adapter. Conflicting approval/sandbox flags are rejected with an explanation. Use a manual Session when interactive permission restrictions are intended. Provider credentials and routing remain separate from model selection.
+zen worker spawn -model/-reasoning overrides the defaults for one launch. Use a manual Session when the user wants interactive approval prompts. Provider credentials and routing are separate from model choice.
 
-Use configured routing unless the user requests another executor; task type alone does not authorize switching. Do not imply hidden model-state transfer or capabilities the active harness does not expose.
+Keep the configured executor unless the user asks for another; the kind of task alone is not a reason to switch. Do not claim model state carries across executors or that a harness has capabilities it does not expose.

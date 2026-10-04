@@ -20,6 +20,11 @@ var retiredWorkspaceDefaults = map[string][]string{
 		"c2b866be13290e45eed27eab647d60465aa03334ca4ec2ea6a1ea4f1a89414cc",
 	},
 	"playbooks/README.md": {"e3dedafb4c59b3fa8c6fa7a2a00814d0e8ba89922c49cf69f3ae64970da305ab"},
+	// align folded into the AGENTS.md Role section.
+	"playbooks/align.md": {
+		"6fd71ab61bcc85cf89124f3402d9f2dd9dd5ed007e0302b4ffa78f61b2badf8e",
+		"50613fbc28dddbba12088f1b9a9a6d28127012b3e85c368d5051a34c7fc1bfb6",
+	},
 }
 
 // brain-flows.md shipped as a default seed plus a managed role block. It is

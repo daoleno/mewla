@@ -25,22 +25,13 @@ func TestNewStoreEnsuresSeedPlaybooks(t *testing.T) {
 		}
 	}
 
-	align, err := os.ReadFile(store.playbookPath("align.md"))
-	if err != nil {
-		t.Fatalf("read align playbook: %v", err)
+	// Align was folded into the AGENTS.md Role section.
+	if _, err := os.Stat(store.playbookPath("align.md")); !os.IsNotExist(err) {
+		t.Fatalf("retired align playbook was seeded: %v", err)
 	}
-	for _, marker := range []string{
-		"check discoverable facts", "Continue authorized preparation", "independent material decisions together",
-		"recommended default", "remaining unknowns have safe defaults", "completion is observable",
-		"actual permission boundary",
-	} {
-		if !strings.Contains(string(align), marker) {
-			t.Fatalf("align playbook missing %q:\n%s", marker, align)
-		}
-	}
-	for _, obsolete := range []string{"one question at a time", "Grill before you delegate", "Do not stack questions"} {
-		if strings.Contains(string(align), obsolete) {
-			t.Fatalf("align playbook retained obsolete %q:\n%s", obsolete, align)
+	for _, marker := range []string{"neither facts nor a small test can settle it", "ask every open decision at once", "recommended default", "keep doing independent preparation"} {
+		if !strings.Contains(productWorkspaceInstructions, marker) {
+			t.Fatalf("AGENTS.md missing alignment rule %q", marker)
 		}
 	}
 
@@ -49,7 +40,7 @@ func TestNewStoreEnsuresSeedPlaybooks(t *testing.T) {
 		t.Fatalf("read delegate-brief playbook: %v", err)
 	}
 	for _, marker := range []string{
-		"outcome, cwd, necessary context, acceptance criteria", "verification and expected report",
+		"Turn the chosen method into concrete work", "Design proof around what the user does",
 	} {
 		if !strings.Contains(string(delegateBrief), marker) {
 			t.Fatalf("delegate-brief playbook missing %q:\n%s", marker, delegateBrief)
@@ -122,15 +113,15 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlaybookCatalog() error = %v", err)
 	}
-	if len(catalog.Playbooks) != 4 {
-		t.Fatalf("catalog playbooks = %d, want 4: %#v", len(catalog.Playbooks), catalog.Playbooks)
+	if len(catalog.Playbooks) != 3 {
+		t.Fatalf("catalog playbooks = %d, want 3: %#v", len(catalog.Playbooks), catalog.Playbooks)
 	}
 
 	byName := map[string]PlaybookEntry{}
 	for _, entry := range catalog.Playbooks {
 		byName[entry.Name] = entry
 	}
-	for _, name := range []string{"align", "delegate-brief", "slice-work", "wayfind"} {
+	for _, name := range []string{"delegate-brief", "slice-work", "wayfind"} {
 		entry, ok := byName[name]
 		if !ok {
 			t.Fatalf("catalog missing playbook %q: %#v", name, catalog.Playbooks)
@@ -142,10 +133,7 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 			t.Fatalf("playbook %q missing description", name)
 		}
 	}
-	if !strings.Contains(byName["align"].Description, "consequential missing decisions") {
-		t.Fatalf("align description = %q", byName["align"].Description)
-	}
-	if !strings.Contains(byName["wayfind"].Description, "next executable concern") {
+	if !strings.Contains(byName["wayfind"].Description, "check reuse before building") {
 		t.Fatalf("wayfind description = %q", byName["wayfind"].Description)
 	}
 }
@@ -211,7 +199,7 @@ func TestHousekeepingCreatesMissingPlaybooks(t *testing.T) {
 			t.Fatalf("changed paths %v missing %q", report.ChangedPaths, path)
 		}
 	}
-	if len(report.PlaybookPaths) != 4 {
+	if len(report.PlaybookPaths) != 3 {
 		t.Fatalf("playbook paths = %#v", report.PlaybookPaths)
 	}
 	if _, err := os.Stat(store.playbookPath("delegate-brief.md")); err != nil {
