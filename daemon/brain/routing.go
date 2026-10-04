@@ -24,5 +24,6 @@ Read before every zen worker spawn and pass -executor, -model and -reasoning. Th
 | --- | --- | --- | --- |
 | Tiny mechanical edit | pi | a fast, inexpensive model | low |
 | Routine implementation | codex | client default | medium |
+| Visual design, frontend, product copy | claude | client default | high |
 | Hard design or debugging | claude | the strongest available | high |
 `
