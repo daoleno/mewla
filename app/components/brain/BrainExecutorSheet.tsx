@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -17,37 +17,23 @@ import type { ResolvedZenTheme } from "../../theme";
 import { surfacesFromTheme } from "../../constants/themedSurfaces";
 import type { BrainExecutorRef } from "../../store/brain";
 import { BrainExecutorIcon } from "./BrainExecutorIcon";
-import {
-  brainAdapterLabel,
-  brainProviderLabel,
-  type ExecutorTarget,
-} from "./brainPresentation";
-
-export type { ExecutorTarget };
+import { brainAdapterLabel, brainProviderLabel } from "./brainPresentation";
 
 interface BrainExecutorSheetProps {
   visible: boolean;
   executors: BrainExecutorRef[];
   hostAdapterId?: string;
-  delegatedAdapterId?: string;
-  hostExecutor?: BrainExecutorRef | null;
-  delegatedExecutor?: BrainExecutorRef | null;
   switchingAdapterId: string | null;
-  switchingTarget: ExecutorTarget | null;
   error?: string | null;
   onClose: () => void;
-  onSelect: (adapter: BrainExecutorRef, target: ExecutorTarget) => void;
+  onSelect: (adapter: BrainExecutorRef) => void;
 }
 
 export function BrainExecutorSheet({
   visible,
   executors,
   hostAdapterId,
-  delegatedAdapterId,
-  hostExecutor,
-  delegatedExecutor,
   switchingAdapterId,
-  switchingTarget,
   error,
   onClose,
   onSelect,
@@ -56,17 +42,7 @@ export function BrainExecutorSheet({
   const colors = theme.colors;
   const themed = useMemo(() => surfacesFromTheme(theme), [theme]);
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [target, setTarget] = useState<ExecutorTarget>("brain");
-
-  useEffect(() => {
-    if (visible) {
-      setTarget("brain");
-    }
-  }, [visible]);
-
-  const activeAdapterId =
-    target === "brain" ? hostAdapterId : delegatedAdapterId;
-  const interactionLocked = Boolean(switchingAdapterId && switchingTarget);
+  const interactionLocked = Boolean(switchingAdapterId);
 
   return (
     <BottomSheetFrame
@@ -76,42 +52,18 @@ export function BrainExecutorSheet({
       maxHeight="72%"
       contentStyle={styles.sheetContent}
     >
-      <Text style={styles.title}>Executors</Text>
+      <Text style={styles.title}>Brain host</Text>
       <Text style={styles.lead}>
-        Running sessions keep their current executor.
+        Brain picks each Worker's executor from its routing guide. Running
+        sessions keep their current executor.
       </Text>
-
-      <View style={styles.targets}>
-        <TargetChip
-          label="Brain"
-          adapter={hostExecutor}
-          selected={target === "brain"}
-          disabled={interactionLocked}
-          styles={styles}
-          colors={colors}
-          themed={themed}
-          onPress={() => setTarget("brain")}
-        />
-        <TargetChip
-          label="Workers"
-          adapter={delegatedExecutor}
-          selected={target === "workers"}
-          disabled={interactionLocked}
-          styles={styles}
-          colors={colors}
-          themed={themed}
-          onPress={() => setTarget("workers")}
-        />
-      </View>
 
       <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
         {executors.map((adapter) => {
           const disabled = interactionLocked;
-          const active = adapter.id === activeAdapterId;
+          const active = adapter.id === hostAdapterId;
           const rowShowsSpinner =
-            interactionLocked &&
-            switchingTarget === target &&
-            switchingAdapterId === adapter.id;
+            interactionLocked && switchingAdapterId === adapter.id;
           const provider = brainProviderLabel(adapter.provider);
           const label = brainAdapterLabel(adapter);
           const titleColor = interactionLocked
@@ -129,11 +81,7 @@ export function BrainExecutorSheet({
                 disabled,
                 busy: rowShowsSpinner,
               }}
-              accessibilityLabel={
-                target === "brain"
-                  ? `Set Brain host to ${label}`
-                  : `Set Worker executor to ${label}`
-              }
+              accessibilityLabel={`Set Brain host to ${label}`}
               disabled={disabled}
               preset="press"
               scale={0.98}
@@ -153,7 +101,7 @@ export function BrainExecutorSheet({
                   return;
                 }
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onSelect(adapter, target);
+                onSelect(adapter);
               }}
             >
               <BrainExecutorIcon adapter={adapter} size={17} />
@@ -204,74 +152,6 @@ export function BrainExecutorSheet({
   );
 }
 
-function TargetChip({
-  label,
-  adapter,
-  selected,
-  disabled,
-  styles,
-  colors,
-  themed,
-  onPress,
-}: {
-  label: string;
-  adapter?: BrainExecutorRef | null;
-  selected: boolean;
-  disabled: boolean;
-  styles: ReturnType<typeof createStyles>;
-  colors: ResolvedZenTheme["colors"];
-  themed: ReturnType<typeof surfacesFromTheme>;
-  onPress: () => void;
-}) {
-  return (
-    <AnimatedPressable
-      accessibilityRole="button"
-      accessibilityState={{ selected, disabled }}
-      accessibilityLabel={`${label} executor${
-        adapter ? `, ${brainAdapterLabel(adapter)}` : ""
-      }`}
-      disabled={disabled}
-      preset="press"
-      scale={0.98}
-      style={[
-        styles.targetChip,
-        {
-          borderColor: selected ? colors.accent : themed.border,
-          backgroundColor: disabled
-            ? colors.disabledSurface
-            : selected
-              ? colors.surfaceActive
-              : themed.surface,
-        },
-      ]}
-      onPress={() => {
-        if (disabled) {
-          return;
-        }
-        Haptics.selectionAsync();
-        onPress();
-      }}
-    >
-      {adapter ? <BrainExecutorIcon adapter={adapter} size={14} /> : null}
-      <Text
-        style={[
-          styles.targetLabel,
-          {
-            color: disabled
-              ? colors.disabledText
-              : selected
-                ? colors.textPrimary
-                : colors.textSecondary,
-          },
-        ]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-    </AnimatedPressable>
-  );
-}
-
 function createStyles(theme: ResolvedZenTheme) {
   const colors = theme.colors;
   return StyleSheet.create({
@@ -290,28 +170,6 @@ function createStyles(theme: ResolvedZenTheme) {
       ...TypeScale.compact,
       color: colors.textSecondary,
       marginBottom: 14,
-    },
-    targets: {
-      flexDirection: "row",
-      gap: 8,
-      marginBottom: 14,
-    },
-    targetChip: {
-      flex: 1,
-      minHeight: 44,
-      ...outlinedSurface(Radii.md),
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-    },
-    targetLabel: {
-      ...UiTextMetrics,
-      fontFamily: Typography.uiFontMedium,
-      fontSize: 14,
-      lineHeight: uiLineHeight(14),
     },
     list: {
       gap: 10,

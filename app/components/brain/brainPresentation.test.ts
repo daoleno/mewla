@@ -4,7 +4,6 @@ import {
   brainWorkspaceEntryAccessibilityLabel,
   brainWorkspaceEntryIconName,
   brainWorkspaceMarkdownPath,
-  distinctExecutorAdapters,
   switchExecutorAccessibilityLabel,
 } from "./brainPresentation";
 
@@ -56,18 +55,17 @@ describe("brainWorkspaceEntryIconName", () => {
   });
 });
 
-describe("executor trailing identity helpers", () => {
-  test("distinctExecutorAdapters avoids duplicate identical ids", () => {
-    const shared = { id: "codex", name: "Codex", provider: "codex" };
-    expect(distinctExecutorAdapters(shared, { ...shared })).toEqual([shared]);
-  });
-
-  test("switchExecutorAccessibilityLabel covers both roles", () => {
+describe("switchExecutorAccessibilityLabel", () => {
+  test("names the Brain host", () => {
     expect(
-      switchExecutorAccessibilityLabel(
-        { id: "claude", name: "Claude Code", provider: "claude" },
-        { id: "codex", name: "Codex", provider: "codex" },
-      ),
-    ).toBe("Switch executor, Brain Claude Code, Agents Codex");
+      switchExecutorAccessibilityLabel({
+        id: "claude",
+        name: "Claude Code",
+        provider: "claude",
+      }),
+    ).toBe("Switch Brain host, Claude Code");
+    expect(switchExecutorAccessibilityLabel(null)).toBe(
+      "Switch Brain host, unavailable",
+    );
   });
 });

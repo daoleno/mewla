@@ -81,10 +81,6 @@ export function BrainExecutorMentionPicker({
                 <Text style={styles.meta} numberOfLines={1}>
                   host
                 </Text>
-              ) : item.delegated ? (
-                <Text style={styles.meta} numberOfLines={1}>
-                  delegated
-                </Text>
               ) : null}
             </Pressable>
           );

@@ -233,7 +233,6 @@ export interface BrainContextPayload {
   personality?: string;
   host_worker?: any;
   host_executor?: any;
-  delegated_executor?: any;
   executors?: any[];
   workers?: any[];
   generated_at?: string;
@@ -3760,19 +3759,10 @@ export class MultiServerWebSocketClient {
     );
   }
 
-  setDelegatedExecutor(serverId: string, executorId: string) {
-    return this.setExecutorByOperation(
-      serverId,
-      executorId,
-      "set_delegated_executor",
-      "Worker executor",
-    );
-  }
-
   private setExecutorByOperation(
     serverId: string,
     executorId: string,
-    type: "brain_set_executor" | "set_delegated_executor",
+    type: "brain_set_executor",
     failureLabel: string,
   ) {
     const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

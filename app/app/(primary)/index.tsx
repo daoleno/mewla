@@ -11,7 +11,6 @@ import {
 } from "react-native-safe-area-context";
 import {
   BrainExecutorSheet,
-  type ExecutorTarget,
 } from "../../components/brain/BrainExecutorSheet";
 import { BrainExecutorIcon } from "../../components/brain/BrainExecutorIcon";
 import { BrainExecutorMentionPicker } from "../../components/brain/BrainExecutorMentionPicker";
@@ -21,7 +20,6 @@ import { SessionModelSheet } from "../../components/providers/SessionModelSheet"
 import { useSessionProviderSheet } from "../../components/terminal/screen/useSessionProviderSheet";
 import {
   brainProviderLabel,
-  distinctExecutorAdapters,
   switchExecutorAccessibilityLabel,
 } from "../../components/brain/brainPresentation";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
@@ -75,9 +73,6 @@ export default function BrainScreen() {
   const [switchingAdapterId, setSwitchingAdapterId] = useState<string | null>(
     null,
   );
-  const [switchingTarget, setSwitchingTarget] = useState<ExecutorTarget | null>(
-    null,
-  );
   const [adapterSwitchError, setAdapterSwitchError] = useState<string | null>(
     null,
   );
@@ -123,7 +118,6 @@ export default function BrainScreen() {
     : null;
   const hostWorker = activeBrain?.host_worker ?? null;
   const hostExecutor = activeBrain?.host_executor ?? null;
-  const delegatedExecutor = activeBrain?.delegated_executor ?? null;
   const routedThreadId = routeServerMatches ? params.brainThreadId : undefined;
   const displayedThreadId = routedThreadId || activeBrain?.chat_thread_id;
   const targetedThreadReadOnly = isTargetedBrainThreadReadOnly(
@@ -220,37 +214,28 @@ export default function BrainScreen() {
   }, [activeBrain?.hydrated, activeServer, newChatLoading]);
 
   const switchExecutor = useCallback(
-    async (adapter: BrainExecutorRef, target: ExecutorTarget) => {
+    async (adapter: BrainExecutorRef) => {
       if (!activeServer || !adapter.id || switchingAdapterId) {
         return;
       }
-      const currentId =
-        target === "brain" ? hostExecutor?.id : delegatedExecutor?.id;
-      if (adapter.id === currentId) {
+      if (adapter.id === hostExecutor?.id) {
         closeAdapterSheet();
         return;
       }
-      setSwitchingTarget(target);
       setSwitchingAdapterId(adapter.id);
       setAdapterSwitchError(null);
       try {
-        if (target === "brain") {
-          await wsClient.setBrainExecutor(activeServer.id, adapter.id);
-        } else {
-          await wsClient.setDelegatedExecutor(activeServer.id, adapter.id);
-        }
+        await wsClient.setBrainExecutor(activeServer.id, adapter.id);
         closeAdapterSheet();
       } catch (error: any) {
         setAdapterSwitchError(error?.message || "Failed to switch executor.");
       } finally {
         setSwitchingAdapterId(null);
-        setSwitchingTarget(null);
       }
     },
     [
       activeServer,
       closeAdapterSheet,
-      delegatedExecutor?.id,
       hostExecutor?.id,
       switchingAdapterId,
     ],
@@ -292,21 +277,12 @@ export default function BrainScreen() {
             {
               key: "executor",
               label: "Switch executor",
-              accessibilityLabel: switchExecutorAccessibilityLabel(
-                hostExecutor,
-                delegatedExecutor,
-              ),
+              accessibilityLabel:
+                switchExecutorAccessibilityLabel(hostExecutor),
               icon: "swap-horizontal-outline" as const,
-              trailing: distinctExecutorAdapters(
-                hostExecutor,
-                delegatedExecutor,
-              ).map((adapter) => (
-                <BrainExecutorIcon
-                  key={adapter.id}
-                  adapter={adapter}
-                  size={14}
-                />
-              )),
+              trailing: hostExecutor?.id ? (
+                <BrainExecutorIcon adapter={hostExecutor} size={14} />
+              ) : undefined,
               onPress: openAdapterSheet,
             },
           ]
@@ -337,7 +313,6 @@ export default function BrainScreen() {
       canOpenTerminal,
       canOpenWorkspace,
       canSwitchAdapter,
-      delegatedExecutor,
       hostExecutor,
       newChatLoading,
       openAdapterSheet,
@@ -496,14 +471,10 @@ export default function BrainScreen() {
         visible={adapterSheetVisible}
         executors={availableExecutors}
         hostAdapterId={hostExecutor?.id}
-        delegatedAdapterId={delegatedExecutor?.id}
-        hostExecutor={hostExecutor}
-        delegatedExecutor={delegatedExecutor}
         switchingAdapterId={switchingAdapterId}
-        switchingTarget={switchingTarget}
         error={adapterSwitchError}
         onClose={closeAdapterSheet}
-        onSelect={(adapter, target) => void switchExecutor(adapter, target)}
+        onSelect={(adapter) => void switchExecutor(adapter)}
       />
 
       <ActionMenu

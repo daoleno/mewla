@@ -1,7 +1,5 @@
 import type { BrainExecutorRef } from "../../store/brain";
 
-export type ExecutorTarget = "brain" | "workers";
-
 export function brainProviderLabel(value?: string): string {
   const normalized = value?.trim().toLowerCase();
   switch (normalized) {
@@ -50,28 +48,10 @@ export function brainAdapterProviderKey(
   return "custom";
 }
 
-/** Current Brain Host and Agents executors for trailing Action icons; same id is not duplicated. */
-export function distinctExecutorAdapters(
-  host?: BrainExecutorRef | null,
-  delegated?: BrainExecutorRef | null,
-): BrainExecutorRef[] {
-  const out: BrainExecutorRef[] = [];
-  if (host?.id) {
-    out.push(host);
-  }
-  if (delegated?.id && delegated.id !== host?.id) {
-    out.push(delegated);
-  }
-  return out;
-}
-
 export function switchExecutorAccessibilityLabel(
   host?: BrainExecutorRef | null,
-  delegated?: BrainExecutorRef | null,
 ): string {
-  const brain = brainAdapterLabel(host) || "unavailable";
-  const agents = brainAdapterLabel(delegated) || "unavailable";
-  return `Switch executor, Brain ${brain}, Agents ${agents}`;
+  return `Switch Brain host, ${brainAdapterLabel(host) || "unavailable"}`;
 }
 
 export function brainStatusLine({
