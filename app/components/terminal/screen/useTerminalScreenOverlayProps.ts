@@ -167,6 +167,8 @@ export function useTerminalScreenOverlayProps({
       closeMenu,
       connectionConnected,
       creatingSession,
+      createDurabilityWarning,
+      onDismissCreateDurabilityWarning,
       gitDiff.sheetProps,
       handleCloseNewTerminal,
       handleCloseRename,
