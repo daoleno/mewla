@@ -86,7 +86,7 @@ def build():
     y += 72
     tool_row(s, sx + 18, y, sw, "R", "Read", "components/ui/EmptyState.tsx")
     y += 36
-    tool_row(s, sx + 18, y, sw, "E", "Edited 2 files", "+38 −12")
+    tool_row(s, sx + 18, y, sw, "E", "Edited 2 files", "+35 −12")
     y += 36
     tool_row(s, sx + 18, y, sw, "$", "Ran bunx tsc --noEmit", "exit 0 · 14.2s")
     y += 58
@@ -124,7 +124,7 @@ def build():
         ("● ", "teal", "Read(components/ui/EmptyState.tsx)"),
         ("  ⎿ ", "faint", "Read 142 lines"),
         ("● ", "teal", "Update(EmptyState.tsx, tokens.ts)"),
-        ("  ⎿ ", "faint", "+38 −12"),
+        ("  ⎿ ", "faint", "+35 −12"),
         ("● ", "teal", "Bash(bunx tsc --noEmit)"),
         ("  ⎿ ", "faint", "exit 0 · 14.2s"),
         ("", "", ""),

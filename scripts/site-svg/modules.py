@@ -237,10 +237,10 @@ def stats():
             "and gpt-6-astra shows a dash because its price is not in the catalog.",
             states=2)
     s.text(20, 34, "≈ $182.20", size=24, weight=600, mono=True)
-    s.text(20, 54, "41.2M tokens · 126 sessions · this month", size=11, fill="faint")
+    s.text(20, 54, "48.1M tokens · 126 sessions · this month", size=11, fill="faint")
     rows = [("claude-opus-5-5", "$96.40", 0.53, "18.3M tokens · 41 sessions", "rep"),
             ("gpt-5", "≈ $61.10", 0.34, "14.9M tokens · 52 sessions", "est"),
-            ("claude-sonnet-5-5", "$24.70", 0.14, "6.2M tokens · 27 sessions", "rep"),
+            ("deepseek-v4-flash", "$24.70", 0.14, "6.2M tokens · 27 sessions", "rep"),
             ("gpt-6-astra", "—", 0.0, "8.7M tokens · 6 sessions", "unk")]
     s.g("st s1")
     for i, (m, amt, frac, sub, kind) in enumerate(rows):

@@ -34,7 +34,8 @@ FILES = {
     "hero-narrow.svg": lambda: hero.build(True),
     "sessions.svg": sessions.build,
     "sessions-pair.svg": sessions_pair,
-    "brain.svg": lambda: brain.build(False),
+    # Static viewers (README) see Delegate; the page resets to Plan when it binds.
+    "brain.svg": lambda: brain.build(False).replace("<svg ", '<svg data-state="2" ', 1),
     "brain-narrow.svg": lambda: brain.build(True),
     **{f"{k}.svg": f for k, f in modules.ALL.items()},
 }

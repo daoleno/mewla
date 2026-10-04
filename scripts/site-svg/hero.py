@@ -36,10 +36,11 @@ CSS = """
 def build(narrow=False):
     k = "hn" if narrow else "hw"
     W, H = (400, 540) if narrow else (1200, 760)
-    s = Svg(k, W, H,
-            "Every Session on your computer, in one phone",
+    desc = ("Five Sessions on your own computer: agents on claude, codex and grok, a plain shell and Brain. "
+            "Each one runs into the phone's Sessions list. Four are running and one needs you.") if narrow else (
             "Ten Sessions on your own computer: agents on claude, codex, pi, grok, opencode and cursor, a plain shell and Brain. "
-            "Each one runs into the phone's Sessions list. Most are running, three are done and one needs you.",
+            "Each one runs into the phone's Sessions list. Most are running, three are done and one needs you.")
+    s = Svg(k, W, H, "Every Session on your computer, in one phone", desc,
             css=CSS.format(k=k))
 
     # Labels across the top, two rows when narrow.
