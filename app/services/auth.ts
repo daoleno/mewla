@@ -1,9 +1,8 @@
 import * as Crypto from "expo-crypto";
 import * as Device from "expo-device";
-import * as SecureStore from "expo-secure-store";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import nacl from "tweetnacl";
+import { secureStorage } from "./secureStorage";
 import { bytesToHex, hexToBytes, normalizeFixedHex } from "./protocolCrypto";
 import { normalizeDaemonId, signDeviceAuthorization } from "./deviceAuthContract";
 
@@ -25,7 +24,6 @@ const DEVICE_ID_KEY = "zen.device.v3.id";
 const DEVICE_NAME_KEY = "zen.device.v3.name";
 const DEVICE_SEED_KEY = "zen.device.v3.seed";
 const DEVICE_PUBLIC_KEY_KEY = "zen.device.v3.public-key";
-const WEB_SECURE_STORE_PREFIX = "zen:secure:";
 
 export interface LocalDeviceIdentity {
   deviceId: string;
@@ -52,10 +50,10 @@ export function normalizePairingToken(
 export async function getOrCreateLocalDeviceIdentity(): Promise<LocalDeviceIdentity> {
   const [storedDeviceId, storedName, storedSeedHex, storedPublicKeyHex] =
     await Promise.all([
-      getSecureItem(DEVICE_ID_KEY),
-      getSecureItem(DEVICE_NAME_KEY),
-      getSecureItem(DEVICE_SEED_KEY),
-      getSecureItem(DEVICE_PUBLIC_KEY_KEY),
+      secureStorage.getItemAsync(DEVICE_ID_KEY),
+      secureStorage.getItemAsync(DEVICE_NAME_KEY),
+      secureStorage.getItemAsync(DEVICE_SEED_KEY),
+      secureStorage.getItemAsync(DEVICE_PUBLIC_KEY_KEY),
     ]);
 
   const normalizedSeedHex = normalizeFixedHex(storedSeedHex, 64);
@@ -79,10 +77,10 @@ export async function getOrCreateLocalDeviceIdentity(): Promise<LocalDeviceIdent
   };
 
   await Promise.all([
-    setSecureItem(DEVICE_ID_KEY, nextIdentity.deviceId),
-    setSecureItem(DEVICE_NAME_KEY, nextIdentity.deviceName),
-    setSecureItem(DEVICE_SEED_KEY, nextIdentity.seedHex),
-    setSecureItem(DEVICE_PUBLIC_KEY_KEY, nextIdentity.publicKeyHex),
+    secureStorage.setItemAsync(DEVICE_ID_KEY, nextIdentity.deviceId),
+    secureStorage.setItemAsync(DEVICE_NAME_KEY, nextIdentity.deviceName),
+    secureStorage.setItemAsync(DEVICE_SEED_KEY, nextIdentity.seedHex),
+    secureStorage.setItemAsync(DEVICE_PUBLIC_KEY_KEY, nextIdentity.publicKeyHex),
   ]);
 
   return nextIdentity;
@@ -116,19 +114,4 @@ function defaultDeviceName(): string {
     return os ? `Zen Web (${os})` : "Zen Web";
   }
   return Device.deviceName?.trim() || Device.modelName?.trim() || "Zen mobile";
-}
-
-async function getSecureItem(key: string): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return AsyncStorage.getItem(`${WEB_SECURE_STORE_PREFIX}${key}`);
-  }
-  return SecureStore.getItemAsync(key);
-}
-
-async function setSecureItem(key: string, value: string): Promise<void> {
-  if (Platform.OS === "web") {
-    await AsyncStorage.setItem(`${WEB_SECURE_STORE_PREFIX}${key}`, value);
-    return;
-  }
-  await SecureStore.setItemAsync(key, value);
 }
