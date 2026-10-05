@@ -90,17 +90,18 @@ Requirements: Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac, with
 # 1. Install the daemon (checksum-verified, no sudo, no telemetry)
 curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh
 
-# 2. Check the host, then start on a trusted private network
+# 2. Check the host, then start on a trusted private network.
+#    With no device paired yet, zen prints a pairing QR code and link.
 zen doctor
 zen --lan
-
-# 3. In another terminal, run the exact `zen pair ...` command that zen printed
 ```
 
-4. Install the app: the Android arm64 APK from
+3. Install the app: the Android arm64 APK from
    [Releases](https://github.com/daoleno/zen/releases) (see [Android](docs/android.md)),
    or build iOS from source (see [iOS](docs/ios.md)).
-5. Scan the pairing code, then open **Brain**.
+4. Scan the QR code (or paste the link in **Settings > Pair Server**), then open **Brain**.
+5. Later devices: run `zen pair` for a fresh code, or open Zen in a browser on an
+   HTTPS address and approve it from a paired device by matching the number it shows.
 
 Away from your LAN, use Tailscale (`zen -addr "$(tailscale ip -4):9876"`), or a
 Cloudflare Tunnel or reverse proxy with `zen pair https://your-origin`. See
