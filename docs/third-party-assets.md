@@ -10,6 +10,19 @@ Inclusion does not imply endorsement. Prefer verifiable upstream license text ov
 | `SourceHanSansSC-Medium.otf`  | same                                                                          | same                                                                                                                          | SIL OFL 1.1                                    |
 | `MapleMono-CN-Regular.ttf`    | [subframe7536/maple-font](https://github.com/subframe7536/maple-font)         | Name table: Maple Mono Project Authors + SIL OFL 1.1; upstream `OFL.txt`                                                      | SIL OFL 1.1                                    |
 | `MapleMono-CN-SemiBold.ttf`   | same                                                                          | same                                                                                                                          | SIL OFL 1.1                                    |
+| `web/MapleMono-Subset-Regular.ttf`, `web/MapleMono-Subset-SemiBold.ttf` | Subsets of the two Maple Mono files above, for the web UI terminal | Name table kept, including the OFL notice (`nameID` 0/13/14); no Reserved Font Name is declared | SIL OFL 1.1 |
+
+The web subsets keep only Latin, punctuation, arrows, technical symbols, box
+drawing, shapes, dingbats, braille, and Powerline glyphs, with no layout
+features. To regenerate them from `app/`, run this for `Regular` and `SemiBold`:
+
+```bash
+pyftsubset assets/fonts/MapleMono-CN-Regular.ttf \
+  --unicodes='U+0020-007E,U+00A0-017F,U+2000-206F,U+20A0-20CF,U+2100-214F,U+2190-23FF,U+2460-24FF,U+2500-27BF,U+2800-28FF,U+E0A0-E0D7,U+FFFD' \
+  --layout-features='' --name-IDs='*' --name-legacy --name-languages='*' \
+  --notdef-outline --drop-tables+=meta \
+  --output-file=assets/fonts/web/MapleMono-Subset-Regular.ttf
+```
 
 OFL redistribution still expects copyright/license notice availability to recipients; keep this file (and upstream LICENSE links) with source releases.
 
