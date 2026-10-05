@@ -29,17 +29,18 @@
 .hero-copy { position: relative; z-index: 2; padding: 24px 0; }
 .hero-copy h1 { max-width: 11.5em; }
 .hero-art { position: relative; z-index: 1; display: grid; place-items: center; min-height: 640px; }
-.hero-art .rings { position: absolute; width: 440px; height: 440px; left: 50%; top: 44%; transform: translate(-74%, -64%); }
-.hero-phone { --pw: 292px; position: relative; transform: translate(34%, 8%) rotate(2.4deg); }
-.js .hero-phone { animation: rise 1.4s 0.15s cubic-bezier(.2, .7, .2, 1) both; }
-@keyframes rise { from { opacity: 0; transform: translate(34%, 14%) rotate(2.4deg); } }
+/* The whole interlock stays visible: the phone may only touch the lower-left band, where no crossing lies. */
+.hero-art .rings { position: absolute; width: 330px; height: 330px; left: -34px; top: 1%; }
+.hero-phone { --pw: 286px; position: relative; transform: translate(46%, 12%) rotate(2.4deg); }
+.js .hero-phone { animation: rise 1.4s 0.15s cubic-bezier(.2, .7, .2, 1) backwards; }
+@keyframes rise { from { opacity: 0; transform: translate(46%, 18%) rotate(2.4deg); } }
 
 .credit { position: absolute; right: var(--gutter); bottom: 14px; margin: 0; font-size: 11.5px; color: var(--ink-3); z-index: 2; }
 
 .brush-rule { position: relative; z-index: 1; color: var(--ink); max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); opacity: 0.88; }
 .brush-rule svg { width: 100%; height: 34px; }
-.js .brush-rule svg { clip-path: inset(0 100% 0 0); transition: clip-path 1.6s cubic-bezier(.6, .05, .25, 1); }
-.js .brush-rule.in svg { clip-path: inset(0 0 0 0); }
+.brush-rule.arm svg { clip-path: inset(0 100% 0 0); }
+.brush-rule.arm.play svg { clip-path: inset(0 0 0 0); transition: clip-path 1.6s cubic-bezier(.6, .05, .25, 1); }
 
 /* Capabilities: each phone stands in a pale ink wash */
 .dir-a .cap .stage::before {
@@ -48,9 +49,9 @@
   transform: rotate(-8deg) scaleX(1.12);
 }
 .dir-a .cap .stage .phone { z-index: 1; }
-.stamp { right: -26px; top: 36%; transform: rotate(-9deg) scale(1); opacity: 1; mix-blend-mode: multiply; z-index: 2; }
-.js .stamp { opacity: 0; transform: rotate(-4deg) scale(1.6); }
-.js .stamp.in { animation: stamp 0.62s 0.5s cubic-bezier(.3, 1.5, .5, 1) forwards; }
+.stamp { right: -26px; top: 36%; transform: rotate(-9deg); opacity: 0.94; mix-blend-mode: multiply; z-index: 2; }
+.stamp.arm { opacity: 0; }
+.stamp.arm.play { animation: stamp 0.62s 0.5s cubic-bezier(.3, 1.5, .5, 1) both; }
 @keyframes stamp {
   0% { opacity: 0; transform: rotate(-4deg) scale(1.6); filter: blur(2px); }
   55% { opacity: 1; transform: rotate(-10deg) scale(0.94); filter: blur(0); }
@@ -68,16 +69,14 @@
   .hero-copy { padding: 6px 0 0; }
   h1 { font-size: 34px; }
   .hero-art { min-height: 400px; margin-top: 4px; }
-  .hero-art .rings { width: 330px; height: 330px; top: 44%; transform: translate(-64%, -56%); }
-  .hero-phone { --pw: 184px; transform: translate(30%, 0) rotate(2.4deg); }
+  .hero-art .rings { width: 168px; height: 168px; left: -6px; top: 14px; }
+  .hero-phone { --pw: 190px; transform: translate(38%, 0) rotate(2.4deg); }
   .js .hero-phone { animation-name: rise-m; }
-  @keyframes rise-m { from { opacity: 0; transform: translate(30%, 8%) rotate(2.4deg); } }
+  @keyframes rise-m { from { opacity: 0; transform: translate(38%, 8%) rotate(2.4deg); } }
   .hero-a .painting { width: 150vw; right: -46vw; bottom: 0; }
   .credit { position: static; padding: 6px var(--gutter) 0; text-align: right; }
   .stamp { right: -18px; width: 62px; height: 62px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .mist { animation: none; }
-  .js .brush-rule svg { clip-path: none; transition: none; }
-  .js .stamp { opacity: 0.94; transform: rotate(-9deg); animation: none; }
 }
