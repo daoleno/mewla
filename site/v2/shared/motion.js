@@ -23,18 +23,20 @@ export function inView(el) {
 // Calls arm() when el's edge enters the viewport and play() once it is well in
 // view. If el is already on screen, plays at once. Returns false when motion is
 // off, so the caller keeps the finished state.
-export function reveal(el, { arm, play, ratio = 0.3 }) {
+export function reveal(el, { arm, play, ratio = 0.15 }) {
   if (reduceMotion || frozen() || !("IntersectionObserver" in window)) return false;
   if (inView(el)) { arm?.(); play(); return true; }
-  let armed = false;
+  let armed = false, done = false, timer = 0;
+  const go = () => { if (done) return; done = true; clearTimeout(timer); io.disconnect(); play(); };
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
-      if (!armed) { armed = true; arm?.(); }
+      // armed means hidden: never leave it that way, even if scrolling stops here
+      if (!armed) { armed = true; arm?.(); timer = setTimeout(go, 450); }
       const seen = e.intersectionRect.height / Math.min(innerHeight, e.boundingClientRect.height || 1);
-      if (seen >= ratio) { io.disconnect(); play(); }
+      if (seen >= ratio) go();
     }
-  }, { threshold: [0, 0.1, 0.2, 0.3, 0.45, 0.6] });
+  }, { threshold: [0, 0.05, 0.1, 0.15, 0.2, 0.3] });
   io.observe(el);
   return true;
 }
