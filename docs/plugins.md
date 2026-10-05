@@ -10,9 +10,9 @@ The catalog names the current server and its connection state. It lists **Connec
 
 | Service | Built-in authorization | Current implementation boundary |
 | --- | --- | --- |
-| Linear | DCR + PKCE + fixed native return | Live DCR accepted `zen://plugins`; account consent still needed. |
-| Notion | Official remote MCP, DCR + PKCE; native return implemented but not vendor-verified | Metadata now returns200 and unauthenticated Streamable HTTP returns the expected401 challenge. Native redirect acceptance and account consent remain unverified; the earlier403 did not establish redirect incompatibility. |
-| GitHub | Official device authorization, or preview and explicitly import a server-signed-in identity through `gh` | Dev, local and release builds use the committed Zen-owned public client ID. Existing identity import is not first-time signup proof. |
+| Linear | DCR + PKCE + fixed native return | Live daemon DCR accepted `zen://plugins`; the official Approve screen opens. User approval/login still needed. |
+| Notion | Official remote MCP, DCR + PKCE | Live daemon DCR accepts `zen://plugins` and opens the official Notion login. Account consent and native return after login still need user verification. |
+| GitHub | Official device authorization, or preview and explicitly import a server-signed-in identity through `gh` | Dev, local and release builds use the committed Zen-owned public client ID. Live device-code issuance and the official login page are verified; user login/consent remains. Existing identity import is not first-time signup proof. |
 | Slack | Official public-client PKCE with user scopes and rotating tokens | Requires Zen publisher registration with PKCE enabled and a public client ID in the release. No shared client secret or public daemon callback. |
 | Google Workspace | Existing operator-owned Web OAuth works on an already configured daemon | The prepared Google-only exchange and daemon adapter support distributed no-configuration background access once publisher hosting/registration is provisioned. No end-user configuration workaround is offered. |
 
