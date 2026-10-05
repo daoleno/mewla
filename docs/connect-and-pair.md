@@ -5,13 +5,12 @@ computer. LAN, Tailscale, Cloudflare Tunnel, and reverse proxies are the normal
 self-managed paths. **Zen Link** is optional and exists only when an operator
 has explicitly configured relay and daemon infrastructure.
 
-- `zen pair` uses configured Zen Link and emits Pairing V2.
+- `zen` prints a pairing QR and link when starting with no paired devices.
+- `zen pair` uses configured Zen Link when present, otherwise the daemon address book.
 - `zen pair <origin>` always keeps the existing Pairing V1 contract for a
   phone-reachable self-managed full origin.
 
-Zen never invents a production Link endpoint. If `<state>/link.json` is absent,
-the no-argument command reports how to configure Link or use an explicit
-endpoint.
+Zen never invents a production Link endpoint. Without Link, an address-book entry or explicit reachable endpoint is required.
 
 ## Model
 
@@ -39,9 +38,11 @@ plain HTTP remote Host still receives no web UI. `-web-origin` remains a
 backward-compatible seed for proxies that terminate TLS.
 
 After the first phone is paired, a new browser can open any HTTPS address and
-request enrollment. The page shows a three-digit number; an existing client
+automatically request enrollment. The waiting page shows a three-digit number; an existing client
 shows the device, origin, and several number choices. Only the matching choice
-can approve it. Requests expire after five minutes, are capped at 32 pending
+can approve it. Wrong choices show an error and leave the sheet open; denial and expiry give the requester a retry. Approval opens Sessions directly. The sheet is shared by Android, iOS and web, bound to the current server, and pending requests are recovered on reconnect or foreground resume. Push notification delivery is not implemented.
+
+First-device QR/link import remains available from the waiting page. Requests expire after five minutes, are capped at 32 pending
 entries, and are rate limited. The host can perform the same action:
 
 ```bash
@@ -185,7 +186,7 @@ Pairing tokens expire (default TTL is 15 minutes). Generate a fresh link for eac
 
 In the Android or iOS app Settings:
 
-- paste the printed `zen://...` link
+- paste the printed HTTPS `/#pair=...` link or legacy `zen://...` link
 - scan the QR
 - import a screenshot/photo of the QR
 - or use clipboard import
@@ -212,3 +213,7 @@ zen devices revoke -id <device-id>
 Removing a server in Settings only removes the local app record. Revoking a device removes its trusted key, immediately closes its authenticated live connections, and rejects subsequent signed requests. Every currently trusted device may revoke itself or another trusted device; this capability does not define separate administrator roles.
 
 Optional before pairing: `zen doctor` to confirm tmux/state/port/executors on the host.
+
+## Network diagnosis
+
+`zen doctor` gives Tailscale netcheck up to 15 seconds and reads the human report, including UDP availability, destination-dependent mapping and the nearest DERP region. UDP availability means a direct path can be attempted; it does not prove that a particular peer is using a direct path. The normal HTTP probes keep their shorter timeout.

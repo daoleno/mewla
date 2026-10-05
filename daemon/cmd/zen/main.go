@@ -186,6 +186,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	lifecycleLock, authManager, err := acquireDaemonAuthOwner(cfg.stateDir)
 	if err != nil {
+		if len(args) == 0 && strings.Contains(err.Error(), "another Zen daemon owns") {
+			devices, listErr := listDevices(cfg.stateDir)
+			if listErr == nil && len(devices) == 0 {
+				return runPairCommand(nil, stderr)
+			}
+		}
 		return err
 	}
 	defer lifecycleLock.Close()
@@ -555,6 +561,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 			name: "HTTP server",
 			run: func(ctx context.Context) error {
 				return srv.RunWithReady(ctx, cfg.addr, func() {
+					if err := printFirstDevicePairing(stderr, authManager, book); err != nil {
+						fmt.Fprintf(stderr, "Could not create first-device pairing link: %v\n", err)
+					}
 					if linkEnabled {
 						printLinkStartupInfo(stderr, cfg.addr, cfg.stateDir)
 						return

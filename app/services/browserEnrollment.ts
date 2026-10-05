@@ -20,13 +20,16 @@ export async function requestBrowserEnrollment(origin: string, fetcher: typeof f
   const base = normalizeOrigin(origin);
   const response = await fetcher(`${base}/enrollment/request`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_id: identity.deviceId, device_name: identity.deviceName, platform: "web", origin: base, device_public_key: identity.publicKeyHex }) });
   if (!response.ok) throw new Error("Zen is waiting for approval, but the request could not be created.");
-  return response.json() as Promise<BrowserEnrollmentPrompt>;
+  const raw = await response.json();
+  if (!raw.request_id || !raw.secret || !/^\d{3}$/.test(raw.verification_number) || !Number.isFinite(Date.parse(raw.expires_at))) throw new Error("Invalid enrollment response.");
+  return { requestId: raw.request_id, secret: raw.secret, verificationNumber: raw.verification_number, expiresAt: raw.expires_at };
 }
 
 export async function readBrowserEnrollmentStatus(origin: string, prompt: BrowserEnrollmentPrompt, fetcher: typeof fetch = fetch): Promise<BrowserEnrollmentStatus> {
   const response = await fetcher(`${normalizeOrigin(origin)}/enrollment/status?id=${encodeURIComponent(prompt.requestId)}&secret=${encodeURIComponent(prompt.secret)}`);
   if (!response.ok) throw new Error("The enrollment request is no longer available.");
-  return response.json() as Promise<BrowserEnrollmentStatus>;
+  const raw = await response.json();
+  return { status: raw.status, daemonId: raw.daemon_id, daemonPublicKey: raw.daemon_public_key, deviceId: raw.device_id };
 }
 
 export function browserEnrollmentServer(origin: string, status: BrowserEnrollmentStatus): StoredServerInput | null {

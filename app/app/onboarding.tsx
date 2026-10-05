@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCurrentServer } from "../store/currentServer";
 import { useWorkerServerSummary } from "../store/workers";
@@ -7,12 +7,15 @@ import { wsClient } from "../services/websocket";
 import { setServerAutoConnect } from "../services/storage";
 import { OnboardingPresentation } from "../components/onboarding/OnboardingPresentation";
 
+import { BrowserEnrollmentScreen } from "../components/enrollment/BrowserEnrollmentScreen";
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const { paired } = useLocalSearchParams<{ paired?: string }>();
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { serverConnections, serverConnectionIssues } = useWorkerServerSummary();
   const server = paired === "1" ? currentServer : null;
+  if (Platform.OS === "web" && !currentServer) return <BrowserEnrollmentScreen />;
   return (
     <OnboardingPresentation
       serverName={server?.name}

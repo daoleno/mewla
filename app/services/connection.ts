@@ -88,7 +88,12 @@ export function parseConnectLink(
   if (!trimmed) return null;
 
   try {
-    const parsed = new URL(trimmed);
+    let parsed = new URL(trimmed);
+    if (parsed.protocol === "https:" || (parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname))) {
+      const link = new URLSearchParams(parsed.hash.slice(1)).get("pair");
+      if (!link || link.length > MAX_CONNECT_PAYLOAD_CHARACTERS) return null;
+      parsed = new URL(link);
+    }
     if (parsed.protocol !== "zen:") {
       return null;
     }
