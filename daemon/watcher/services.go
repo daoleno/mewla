@@ -261,7 +261,7 @@ func (w *Watcher) listServicePanes() ([]servicePane, error) {
 }
 
 func listServicePanesOn(socket string) ([]servicePane, error) {
-	out, err := tmuxCommand(socket, "list-panes", "-a", "-F", "#{session_name}:#{window_id}\t#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{pane_active}").CombinedOutput()
+	out, err := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{pane_active}").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("tmux list-panes: %w: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -270,6 +270,7 @@ func listServicePanesOn(socket string) ([]servicePane, error) {
 
 func parseServicePanes(output string) []servicePane {
 	var panes []servicePane
+	seen := map[string]bool{}
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -281,10 +282,11 @@ func parseServicePanes(output string) []servicePane {
 		}
 		target := strings.TrimSpace(parts[0])
 		sessionName := strings.SplitN(target, ":", 2)[0]
-		if target == "" || strings.HasPrefix(sessionName, "zen-view-") {
+		if target == "" || strings.HasPrefix(sessionName, "zen-view-") || seen[parts[1]] {
 			continue
 		}
 
+		seen[parts[1]] = true
 		panePID, _ := strconv.Atoi(strings.TrimSpace(parts[5]))
 		pane := servicePane{
 			target:  target,

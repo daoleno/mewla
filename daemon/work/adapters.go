@@ -65,7 +65,7 @@ type TmuxRunner struct {
 }
 
 // Spawn creates a detached tmux session and returns the watcher-compatible
-// session identifier "<session>:<window_id>".
+// session identifier "%pane_id".
 func (r TmuxRunner) Spawn(role, cwd, command string) (string, error) {
 	if r.Watcher == nil {
 		return "", fmt.Errorf("delegated watcher is required")

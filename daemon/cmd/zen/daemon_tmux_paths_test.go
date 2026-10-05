@@ -90,7 +90,7 @@ func TestCurrentWorkerIDQueryNeverAutostartsServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "-S\n/tmp/tmux-1000/default\n-N\ndisplay-message\n-p\n-t\n%7\n#{session_name}:#{window_id}\n"
+	want := "-S\n/tmp/tmux-1000/default\n-N\ndisplay-message\n-p\n-t\n%7\n#{pane_id}\n"
 	if string(argv) != want {
 		t.Fatalf("worker query argv = %q, want %q", argv, want)
 	}

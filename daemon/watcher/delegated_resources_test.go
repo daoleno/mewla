@@ -33,7 +33,7 @@ func (m *fakeDelegatedResourceManager) UnitForTarget(target string) string {
 	return ""
 }
 
-func (*fakeDelegatedResourceManager) Reconcile([]tmuxWindow) {}
+func (*fakeDelegatedResourceManager) Reconcile([]tmuxPane) {}
 
 func (m *fakeDelegatedResourceManager) Release(target, unit string) error {
 	m.released = append(m.released, target+"\t"+unit)
@@ -136,7 +136,7 @@ func TestCreateDelegatedSessionPassesOwnedResourceToTmux(t *testing.T) {
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
 case "$1" in
-  new-session) printf 'zen-worker-test:@1\n' ;;
+  new-session) printf '%%1\n' ;;
 esac
 exit 0
 `
@@ -170,7 +170,7 @@ exit 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target != "zen-worker-test:@1" || manager.boundTarget != target || manager.boundUnit != unit {
+	if target != "%1" || manager.boundTarget != target || manager.boundUnit != unit {
 		t.Fatalf("target/binding = %q %q %q", target, manager.boundTarget, manager.boundUnit)
 	}
 	if _, exists := callerEnv[delegatedMarkerEnv]; exists {
@@ -186,8 +186,8 @@ exit 0
 		delegatedResourceUnitEnv + "=" + unit,
 		"TMPDIR=" + filepath.Join(dir, "owned-tmp"),
 		"ZEN_BUILD_TMPDIR=" + filepath.Join(dir, "owned-tmp"),
-		"set-option -w -t " + target + " @zen_worker_delegated 1",
-		"set-option -w -t " + target + " @zen_worker_resource_unit " + unit,
+		"set-option -p -t " + target + " @zen_worker_delegated 1",
+		"set-option -p -t " + target + " @zen_worker_resource_unit " + unit,
 	} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("tmux calls missing %q:\n%s", want, calls)
@@ -202,7 +202,7 @@ func TestCreateDelegatedSessionRollsBackWhenOwnershipMarkersFail(t *testing.T) {
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
 case "$1" in
-  new-session) printf 'zen-worker-test:@7\n' ;;
+  new-session) printf '%%7\n' ;;
   set-option)
     case "$*" in
       *@zen_worker_resource_unit*) exit 1 ;;
@@ -234,7 +234,7 @@ exit 0
 		Name:      "test",
 		Detached:  true,
 		Delegated: true,
-	}); err == nil || !strings.Contains(err.Error(), "mark owned tmux window") {
+	}); err == nil || !strings.Contains(err.Error(), "mark owned tmux pane") {
 		t.Fatalf("CreateSession error = %v", err)
 	}
 	if len(manager.released) != 1 || manager.released[0] != "\t"+unit {
@@ -244,7 +244,7 @@ exit 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "kill-window -t zen-worker-test:@7") {
+	if !strings.Contains(string(raw), "kill-pane -t %7") {
 		t.Fatalf("unmarked window was not rolled back:\n%s", raw)
 	}
 }
@@ -542,8 +542,8 @@ func TestPortableResourceReconcilePreservesOrphanUntilExplicitCleanup(t *testing
 	if err := os.Mkdir(foreignTemp, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	manager.Reconcile([]tmuxWindow{{
-		target:       "main:@1",
+	manager.Reconcile([]tmuxPane{{
+		target:       "%1",
 		delegated:    true,
 		resourceUnit: live,
 	}})
@@ -587,8 +587,8 @@ func TestPortableResourceReconcileLeavesRetiredLayoutUntouched(t *testing.T) {
 		reserved: make(map[string]time.Time),
 		now:      time.Now,
 	}
-	manager.Reconcile([]tmuxWindow{{
-		target:       "main:@1",
+	manager.Reconcile([]tmuxPane{{
+		target:       "%1",
 		delegated:    true,
 		resourceUnit: live,
 	}})
@@ -631,7 +631,7 @@ for arg in "$@"; do
   prev=$arg
 done
 if [ "$1" = "list-panes" ]; then
-  echo "$target"
+  echo "%42"
   exit 0
 fi
 if [ "$1" = "show-options" ]; then
@@ -645,20 +645,20 @@ exit 0
 	t.Setenv("PATH", dir)
 	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
-	manager := &fakeDelegatedResourceManager{boundTarget: "main:@42", boundUnit: unit}
+	manager := &fakeDelegatedResourceManager{boundTarget: "%42", boundUnit: unit}
 	w := New(0)
 	w.resources = manager
-	if err := w.KillSession("main:@42"); err != nil {
+	if err := w.KillSession("%42"); err != nil {
 		t.Fatal(err)
 	}
-	if len(manager.released) != 1 || manager.released[0] != "main:@42\t"+unit {
+	if len(manager.released) != 1 || manager.released[0] != "%42\t"+unit {
 		t.Fatalf("released = %#v", manager.released)
 	}
 	raw, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "kill-window -t main:@42") {
+	if !strings.Contains(string(raw), "kill-pane -t %42") {
 		t.Fatalf("tmux calls:\n%s", raw)
 	}
 }

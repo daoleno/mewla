@@ -98,7 +98,7 @@ func newZeroViewCodexTitleFixture(t *testing.T) *zeroViewCodexTitleFixture {
 	}
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@1'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)

@@ -42,18 +42,18 @@ func TestBDD_ZEN007_CompletedCleanupSerializesWithNewInput(t *testing.T) {
 func TestBDD_ZEN008_AlreadyReclaimedSessionCleanupIsIdempotent(t *testing.T) {
 	// Given exact completed ownership in the ledger but a reclaimed tmux window.
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\necho \"can't find window: missing:@1\" >&2\nexit 1\n"), 0o700); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\necho \"can't find window: %1\" >&2\nexit 1\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"missing:@1": {SessionID: "missing:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
 	// When cleanup is reconciled repeatedly, proven absence is success, not an
 	// ownership conflict. Other ownership checks remain covered separately.
 	for range 2 {
-		if err := w.KillCompletedSession("missing:@1", "completed"); err != nil {
+		if err := w.KillCompletedSession("%1", "completed"); err != nil {
 			t.Fatalf("already reclaimed: %v", err)
 		}
 	}
@@ -78,17 +78,17 @@ func TestBDD_ZEN014_QuietMissingSessionCleanupIsAbsentNotUnowned(t *testing.T) {
 	// proves is gone, completed cleanup must be idempotent absence — not Unowned.
 	dir := writeFakeTmux(t, `cmd=
 for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-window) cmd=$arg ;; esac
+  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
 done
 if [ "$cmd" = "list-panes" ]; then
-  echo "can't find session: gone:@1" >&2
+  echo "can't find session: %1" >&2
   exit 1
 fi
 if [ "$cmd" = "show-options" ]; then
   exit 0
 fi
-if [ "$cmd" = "kill-window" ]; then
-  echo "kill-window must not run for a proven-absent target" >&2
+if [ "$cmd" = "kill-pane" ]; then
+  echo "kill-pane must not run for a proven-absent target" >&2
   exit 1
 fi
 echo "unexpected tmux invocation: $*" >&2
@@ -97,14 +97,14 @@ exit 1
 	t.Setenv("PATH", dir)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"gone:@1": {SessionID: "gone:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
 	for range 2 {
-		if err := w.KillCompletedSession("gone:@1", "completed"); err != nil {
+		if err := w.KillCompletedSession("%1", "completed"); err != nil {
 			t.Fatalf("quiet missing session: %v", err)
 		}
 	}
-	present, owned, err := probeTmuxTargetOwnership("", "gone:@1")
+	present, owned, err := probeTmuxTargetOwnership("", "%1")
 	if err != nil || present || owned {
 		t.Fatalf("quiet missing classified as present=%v owned=%v err=%v", present, owned, err)
 	}
@@ -121,16 +121,16 @@ for arg in "$@"; do
 done
 cmd=
 for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-window) cmd=$arg ;; esac
+  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
 done
 if [ "$cmd" = "list-panes" ]; then
-  echo "ambient:@1"
+  echo "%1"
   exit 0
 fi
 if [ "$cmd" = "show-options" ]; then
   exit 0
 fi
-if [ "$cmd" = "kill-window" ]; then
+if [ "$cmd" = "kill-pane" ]; then
   echo "killed $target" >>"$log"
   exit 0
 fi
@@ -141,10 +141,10 @@ exit 0
 	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"ambient:@1": {SessionID: "ambient:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
 	for range 2 {
-		err := w.KillCompletedSession("ambient:@1", "completed")
+		err := w.KillCompletedSession("%1", "completed")
 		if !errors.Is(err, ErrUnownedTmuxTarget) {
 			t.Fatalf("unowned present err=%v", err)
 		}
@@ -153,7 +153,7 @@ exit 0
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "killed ") || strings.Contains(string(raw), "kill-window") {
+	if strings.Contains(string(raw), "killed ") || strings.Contains(string(raw), "kill-pane") {
 		t.Fatalf("unowned target was mutated:\n%s", raw)
 	}
 }
@@ -163,8 +163,8 @@ func TestCompletedCleanupRejectsReusedOwnedGeneration(t *testing.T) {
 	t.Setenv("PATH", dir)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"worker:@1": {
-			SessionID: "worker:@1", TurnID: "old", Status: TurnDone, SignalProtocol: true,
+		"%1": {
+			SessionID: "%1", TurnID: "old", Status: TurnDone, SignalProtocol: true,
 			ProcessIdentity: "old-process", PaneGeneration: "old-pane",
 		},
 	}})
@@ -172,7 +172,7 @@ func TestCompletedCleanupRejectsReusedOwnedGeneration(t *testing.T) {
 		return targetProcessIdentity{Command: "cursor-agent", ProcessID: 99, ProcessStart: 99}, true
 	}
 	w.SetPollSources(PollSources{PaneGeneration: func(string) string { return "new-pane" }})
-	if err := w.KillCompletedSession("worker:@1", "old"); err == nil || !strings.Contains(err.Error(), "generation changed") {
+	if err := w.KillCompletedSession("%1", "old"); err == nil || !strings.Contains(err.Error(), "generation changed") {
 		t.Fatalf("reused identity err=%v", err)
 	}
 }
@@ -184,19 +184,19 @@ exit 1
 	t.Setenv("PATH", dir)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"worker:@1": {SessionID: "worker:@1", TurnID: "done", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "done", Status: TurnDone, SignalProtocol: true},
 	}})
-	err := w.KillCompletedSession("worker:@1", "done")
+	err := w.KillCompletedSession("%1", "done")
 	if err == nil || errors.Is(err, ErrUnownedTmuxTarget) {
 		t.Fatalf("unreachable classified as success or unowned: %v", err)
 	}
-	if presence, probeErr := w.ProbeSession("worker:@1"); presence != SessionPresenceUnknown || probeErr == nil {
+	if presence, probeErr := w.ProbeSession("%1"); presence != SessionPresenceUnknown || probeErr == nil {
 		t.Fatalf("unreachable probe presence=%v err=%v", presence, probeErr)
 	}
 }
 
 func TestCompletedCleanupMissingScratchAfterAbsenceSucceeds(t *testing.T) {
-	dir := writeFakeTmux(t, `echo "can't find session: missing:@1" >&2
+	dir := writeFakeTmux(t, `echo "can't find session: %1" >&2
 exit 1
 `)
 	t.Setenv("PATH", dir)
@@ -206,16 +206,16 @@ exit 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager.Bind("missing:@1", unit)
+	manager.Bind("%1", unit)
 	if err := os.RemoveAll(tempDir); err != nil {
 		t.Fatal(err)
 	}
 	w := New(0)
 	w.resources = manager
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"missing:@1": {SessionID: "missing:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
-	if err := w.KillCompletedSession("missing:@1", "completed"); err != nil {
+	if err := w.KillCompletedSession("%1", "completed"); err != nil {
 		t.Fatalf("temp dir already gone: %v", err)
 	}
 }
@@ -233,20 +233,20 @@ printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
 state=$(cat "$ZEN_TEST_TMUX_STATE")
 cmd=
 for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-window) cmd=$arg ;; esac
+  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
 done
 if [ "$state" = "absent" ]; then
-  echo "can't find session: race:@1" >&2
+  echo "can't find session: %1" >&2
   exit 1
 fi
 if [ "$cmd" = "list-panes" ]; then
-  echo "race:@1"
+  echo "%1"
   exit 0
 fi
 if [ "$cmd" = "show-options" ]; then
   exit 0
 fi
-if [ "$cmd" = "kill-window" ]; then
+if [ "$cmd" = "kill-pane" ]; then
   echo killed >> "$ZEN_TEST_TMUX_LOG"
   exit 0
 fi
@@ -260,20 +260,20 @@ exit 0
 	t.Setenv("ZEN_TEST_TMUX_STATE", statePath)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"race:@1": {SessionID: "race:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		errs <- w.KillCompletedSession("race:@1", "completed")
+		errs <- w.KillCompletedSession("%1", "completed")
 	}()
 	go func() {
 		defer wg.Done()
 		time.Sleep(5 * time.Millisecond)
 		_ = os.WriteFile(statePath, []byte("unowned\n"), 0o600)
-		errs <- w.KillCompletedSession("race:@1", "completed")
+		errs <- w.KillCompletedSession("%1", "completed")
 	}()
 	wg.Wait()
 	close(errs)
@@ -331,12 +331,12 @@ func TestBDD_ZEN019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
-			manager := &fakeDelegatedResourceManager{boundTarget: "worker:@1", boundUnit: unit}
+			manager := &fakeDelegatedResourceManager{boundTarget: "%1", boundUnit: unit}
 			turn := TurnSnapshot{
-				SessionID: "worker:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
+				SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
 				ProcessIdentity: recorded, PaneGeneration: "pane-1",
 			}
-			ledger := &fakeTurnLedger{turns: map[string]TurnSnapshot{"worker:@1": turn}}
+			ledger := &fakeTurnLedger{turns: map[string]TurnSnapshot{"%1": turn}}
 			w := New(0)
 			w.resources = manager
 			w.SetTurnLedger(ledger)
@@ -344,8 +344,8 @@ func TestBDD_ZEN019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 				return tc.current, tc.known
 			}
 			w.SetPollSources(PollSources{PaneGeneration: func(string) string { return tc.pane }})
-			err := w.KillCompletedSession("worker:@1", "completed")
-			after, found, _ := ledger.Turn("worker:@1")
+			err := w.KillCompletedSession("%1", "completed")
+			after, found, _ := ledger.Turn("%1")
 			if !found || after.TurnID != turn.TurnID || after.ProcessIdentity != turn.ProcessIdentity || after.Status != turn.Status {
 				t.Fatalf("ledger mutated: %+v", after)
 			}
@@ -353,7 +353,7 @@ func TestBDD_ZEN019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
-			killed := strings.Contains(string(raw), "kill-window")
+			killed := strings.Contains(string(raw), "kill-pane")
 			if tc.wantKill {
 				if err != nil {
 					t.Fatalf("expected successful cleanup: %v", err)
@@ -382,32 +382,32 @@ func TestCompletedCleanupKnownMatchAndAbsentSucceedRepeatedly(t *testing.T) {
 	t.Setenv("PATH", dir)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"worker:@1": {
-			SessionID: "worker:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
+		"%1": {
+			SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
 			ProcessIdentity: delegatedTurnIdentity(identity), PaneGeneration: "pane-1",
 		},
 	}})
 	w.targetProcessResolver = func(string) (targetProcessIdentity, bool) { return identity, true }
 	w.SetPollSources(PollSources{PaneGeneration: func(string) string { return "pane-1" }})
 	for range 2 {
-		if err := w.KillCompletedSession("worker:@1", "completed"); err != nil {
+		if err := w.KillCompletedSession("%1", "completed"); err != nil {
 			t.Fatalf("known match: %v", err)
 		}
 	}
 
-	missing := writeFakeTmux(t, `echo "can't find window: missing:@1" >&2
+	missing := writeFakeTmux(t, `echo "can't find window: %1" >&2
 exit 1
 `)
 	t.Setenv("PATH", missing)
 	absent := New(0)
 	absent.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"missing:@1": {
-			SessionID: "missing:@1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
+		"%1": {
+			SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
 			ProcessIdentity: delegatedTurnIdentity(identity), PaneGeneration: "pane-1",
 		},
 	}})
 	for range 2 {
-		if err := absent.KillCompletedSession("missing:@1", "completed"); err != nil {
+		if err := absent.KillCompletedSession("%1", "completed"); err != nil {
 			t.Fatalf("absent recorded identity: %v", err)
 		}
 	}
@@ -433,18 +433,18 @@ for arg in "$@"; do
 done
 cmd=
 for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-window) cmd=$arg ;; esac
+  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
 done
 if [ "$cmd" = "list-panes" ]; then
-  echo "$target"
+  echo "%1"
   exit 0
 fi
 if [ "$cmd" = "show-options" ]; then
   echo 1
   exit 0
 fi
-if [ "$cmd" = "kill-window" ]; then
-  echo "kill-window -t $target" >>"$log"
+if [ "$cmd" = "kill-pane" ]; then
+  echo "kill-pane -t $target" >>"$log"
   exit 0
 fi
 exit 0

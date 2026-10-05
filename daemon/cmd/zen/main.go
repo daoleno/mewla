@@ -273,6 +273,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("load executors: %w", err)
 	}
 
+	routesPath, err := work.DefaultRouteBindingsPath()
+	if err != nil {
+		return fmt.Errorf("resolve route bindings path: %w", err)
+	}
+	if err := brain.MigrateWorkerPaneIdentity(brainRoot, w, brain.PaneMigrationPaths{RouteBindings: routesPath, TelegramState: filepath.Join(authManager.StorageDir(), "telegram", "state.json")}); err != nil {
+		return fmt.Errorf("migrate Worker pane identities: %w", err)
+	}
 	brainStore, err := brain.NewStore(brainRoot)
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
@@ -307,10 +314,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	profilesPath, err := work.DefaultModelProfilesPath()
 	if err != nil {
 		return fmt.Errorf("resolve model profiles path: %w", err)
-	}
-	routesPath, err := work.DefaultRouteBindingsPath()
-	if err != nil {
-		return fmt.Errorf("resolve route bindings path: %w", err)
 	}
 	listenerPath, err := work.DefaultRouteListenerPath()
 	if err != nil {
@@ -1110,7 +1113,7 @@ func currentWorkerID() string {
 	if pane == "" {
 		return ""
 	}
-	args := []string{"display-message", "-p", "-t", pane, "#{session_name}:#{window_id}"}
+	args := []string{"display-message", "-p", "-t", pane, "#{pane_id}"}
 	if socket := tmuxClientSocket(); socket != "" {
 		// -N keeps this read-only query from starting a server when the
 		// caller's server is gone; a missing server yields no worker ID.

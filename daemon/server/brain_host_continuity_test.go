@@ -91,7 +91,7 @@ func TestHostContinuityStartsAfterDiscoveryAndStopsWithRuntime(t *testing.T) {
 	var firstInventory sync.Once
 	w := watcher.New(time.Millisecond)
 	w.SetPollSources(watcher.PollSources{
-		ListWindows: func() ([]watcher.PollWindow, error) {
+		ListPanes: func() ([]watcher.PollPane, error) {
 			firstInventory.Do(func() { close(listed); <-release })
 			return nil, nil
 		},

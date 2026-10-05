@@ -585,3 +585,24 @@ func TestTmuxBackendViewSessionLivesOnTargetSocket(t *testing.T) {
 	}
 	_ = closed
 }
+
+func TestTmuxWorkerPaneViewResolvesExactWindowAndRefusesGonePane(t *testing.T) {
+	requireTmux(t)
+	isolateTmuxServer(t)
+	runTmuxTestCommand(t, "-f", "/dev/null", "new-session", "-d", "-s", "pane-source", "cat")
+	pane := tmuxTestOutput(t, "display-message", "-p", "-t", "pane-source", "#{pane_id}")
+	window := tmuxTestOutput(t, "display-message", "-p", "-t", pane, "#{window_id}")
+	runTmuxTestCommand(t, "split-window", "-h", "-t", pane, "cat")
+	view, _, err := tmuxLinkedViewSession(context.Background(), "", pane)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killTmuxSessionBounded("", view) })
+	if got := tmuxTestOutput(t, "display-message", "-p", "-t", view, "#{window_id}"); got != window {
+		t.Fatalf("linked %s want %s", got, window)
+	}
+	runTmuxTestCommand(t, "kill-pane", "-t", pane)
+	if _, _, err := tmuxLinkedViewSession(context.Background(), "", pane); err == nil {
+		t.Fatal("gone pane fell back to surviving window")
+	}
+}

@@ -14,7 +14,7 @@ func TestKillSessionMissingIsIdempotentSuccess(t *testing.T) {
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
-echo "can't find window: missing:@1" >&2
+echo "can't find window: %1" >&2
 exit 1
 `
 	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
@@ -23,7 +23,7 @@ exit 1
 	t.Setenv("PATH", dir)
 	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
 	w := New(0)
-	if err := w.KillSession("missing:@1"); err != nil {
+	if err := w.KillSession("%1"); err != nil {
 		t.Fatalf("missing target must be idempotent success: %v", err)
 	}
 }
@@ -41,7 +41,7 @@ for arg in "$@"; do
   prev=$arg
 done
 if [ "$1" = "list-panes" ]; then
-  echo "$target"
+  echo "%42"
   exit 0
 fi
 if [ "$1" = "show-options" ]; then
@@ -56,13 +56,13 @@ exit 0
 	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{
-		boundTarget: "main:@42",
+		boundTarget: "%42",
 		boundUnit:   unit,
 		releaseErr:  errors.New("injected cgroup release failure"),
 	}
 	w := New(0)
 	w.resources = manager
-	err := w.KillSession("main:@42")
+	err := w.KillSession("%42")
 	if err == nil || !errors.Is(err, ErrDelegatedResourceRelease) {
 		t.Fatalf("err=%v", err)
 	}
@@ -89,10 +89,10 @@ exit 1
 	t.Setenv("PATH", dir)
 	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
-	manager := &fakeDelegatedResourceManager{boundTarget: "main:@42", boundUnit: unit}
+	manager := &fakeDelegatedResourceManager{boundTarget: "%42", boundUnit: unit}
 	w := New(0)
 	w.resources = manager
-	if err := w.KillSession("main:@42"); err != nil {
+	if err := w.KillSession("%42"); err != nil {
 		t.Fatal(err)
 	}
 	if len(manager.released) != 1 {
@@ -113,14 +113,14 @@ for arg in "$@"; do
   prev=$arg
 done
 if [ "$1" = "list-panes" ]; then
-  echo "$target"
+  echo "%42"
   exit 0
 fi
 if [ "$1" = "show-options" ]; then
   echo 1
   exit 0
 fi
-if echo "$*" | grep -q 'kill-window'; then
+if echo "$*" | grep -q 'kill-pane'; then
   echo "can't find window" >&2
   exit 1
 fi
@@ -133,17 +133,17 @@ exit 0
 	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{
-		boundTarget: "main:@42",
+		boundTarget: "%42",
 		boundUnit:   unit,
 		releaseErr:  errors.New("first release fail"),
 	}
 	w := New(0)
 	w.resources = manager
-	if err := w.KillSession("main:@42"); !errors.Is(err, ErrDelegatedResourceRelease) {
+	if err := w.KillSession("%42"); !errors.Is(err, ErrDelegatedResourceRelease) {
 		t.Fatalf("first=%v", err)
 	}
 	manager.releaseErr = nil
-	if err := w.KillSession("main:@42"); err != nil {
+	if err := w.KillSession("%42"); err != nil {
 		t.Fatalf("retry=%v", err)
 	}
 	if len(manager.released) != 2 {
@@ -165,21 +165,21 @@ func TestProbeSessionDistinguishesAbsentFromTransportError(t *testing.T) {
 	writeTmux(`echo "failed to connect to server" >&2
 exit 1`)
 	w := New(0)
-	presence, err := w.ProbeSession("main:@1")
+	presence, err := w.ProbeSession("%1")
 	if err != nil || presence != SessionPresenceAbsent {
 		t.Fatalf("no-server presence=%v err=%v", presence, err)
 	}
 
-	writeTmux(`echo "can't find session: main:@1" >&2
+	writeTmux(`echo "can't find session: %1" >&2
 exit 1`)
-	presence, err = w.ProbeSession("main:@1")
+	presence, err = w.ProbeSession("%1")
 	if err != nil || presence != SessionPresenceAbsent {
 		t.Fatalf("missing presence=%v err=%v", presence, err)
 	}
 
 	writeTmux(`echo "permission denied reading tmux socket" >&2
 exit 1`)
-	presence, err = w.ProbeSession("main:@1")
+	presence, err = w.ProbeSession("%1")
 	if presence != SessionPresenceUnknown || err == nil {
 		t.Fatalf("transport presence=%v err=%v", presence, err)
 	}
@@ -189,20 +189,20 @@ for arg in "$@"; do
   case "$arg" in list-panes|show-options) cmd=$arg ;; esac
 done
 if [ "$cmd" = "list-panes" ]; then
-  echo "can't find session: main:@1" >&2
+  echo "can't find session: %1" >&2
   exit 1
 fi
 if [ "$cmd" = "show-options" ]; then
   exit 0
 fi
 exit 1`)
-	presence, err = w.ProbeSession("main:@1")
+	presence, err = w.ProbeSession("%1")
 	if err != nil || presence != SessionPresenceAbsent {
 		t.Fatalf("quiet-missing presence=%v err=%v", presence, err)
 	}
 
 	writeTmux(`exit 0`)
-	presence, err = w.ProbeSession("main:@1")
+	presence, err = w.ProbeSession("%1")
 	if presence != SessionPresenceUnknown || err == nil || !errors.Is(err, ErrOwnershipProbeUnavailable) {
 		t.Fatalf("empty list-panes presence=%v err=%v", presence, err)
 	}

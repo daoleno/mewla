@@ -36,8 +36,8 @@ func TestWatcherPropagatesPreciseProcessStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	restore := w.SetPollSources(PollSources{
-		ListWindows: func() ([]PollWindow, error) {
-			return []PollWindow{{
+		ListPanes: func() ([]PollPane, error) {
+			return []PollPane{{
 				Target:  "probe:@1",
 				Name:    "pi",
 				Cwd:     "/tmp",

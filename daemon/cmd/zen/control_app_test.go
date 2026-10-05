@@ -2248,3 +2248,5 @@ func TestControlAppBrainSetExecutorRejectsUnknownExecutor(t *testing.T) {
 		t.Fatalf("response = %#v", resp)
 	}
 }
+
+func (w *fakeControlWatcher) CanonicalWorkerID(id string) string { return id }

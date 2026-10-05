@@ -822,11 +822,11 @@ func TestSessionInputSerializesConcurrentProducersPerSession(t *testing.T) {
 	}
 }
 
-func TestSessionInputTargetGenerationChangeIsDefinitelyNotSubmitted(t *testing.T) {
+func TestSessionInputOwnedPaneRemovalIsDefinitelyNotSubmitted(t *testing.T) {
 	io := newFakeSessionInputIO()
 	io.afterLoad = func() {
 		io.mu.Lock()
-		io.paneValue.generation = "generation-2"
+		io.paneValue = sessionInputPane{}
 		io.mu.Unlock()
 	}
 	owner := newSessionInputOwner(io)
@@ -1317,7 +1317,7 @@ func TestSessionInputBaselineIdentityReplacementNeverStartsProviderQueue(t *test
 			name: "pane",
 			replace: func(io *fakeSessionInputIO, _ *targetProcessIdentity) {
 				io.mu.Lock()
-				io.paneValue = sessionInputPane{alive: true, paneID: "%replacement", generation: "replacement"}
+				io.paneValue = sessionInputPane{}
 				io.mu.Unlock()
 			},
 		},
@@ -2969,7 +2969,7 @@ func TestWatcherPollResolvesOnlyExactPendingRowAmongCoexistingRows(t *testing.T)
 		AdmissionStream: "opencode_db\x00coexist\x00/db", AdmissionID: "msg-b",
 		AdmissionCursor: 2, AdmissionAt: now, InputSHA256: digestB, Structured: true,
 	}
-	windows := []tmuxWindow{{target: sessionID, name: "worker", cwd: "/repo/zen", command: "opencode", panePID: 333, delegated: true}}
+	windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/zen", command: "opencode", panePID: 333, delegated: true}}
 	restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, now)})
 	defer restore()
 	w.poll()
