@@ -80,7 +80,7 @@
       const rings = 3;
       const ringGap = gap;
       const A = stone.r + ringGap * (rings + 0.9);
-      const step = narrow ? 5 : 6;
+      const step = narrow ? 8 : 6;
       const xs = [];
       for (let x = -step; x <= W + step; x += step) xs.push(x);
       g = { gap, n, y0, stone, rings, ringGap, A, xs, narrow, shape: stoneShape(stone.r), lines: [], solvedFor: -1 };
