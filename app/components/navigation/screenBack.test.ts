@@ -4,35 +4,26 @@ import { join } from "node:path";
 import { resolveScreenBack, screenBackParent } from "./screenBack";
 
 describe("screen back", () => {
-  test("an in-screen step wins over popping the stack", () => {
-    expect(resolveScreenBack({ handledInScreen: true, canGoBack: true })).toBe(
-      "in-screen",
-    );
-    expect(resolveScreenBack({ handledInScreen: true, canGoBack: false })).toBe(
-      "in-screen",
-    );
-  });
-
   test("pops when history exists and lands on the parent otherwise", () => {
-    expect(resolveScreenBack({ handledInScreen: false, canGoBack: true })).toBe(
-      "pop",
-    );
-    expect(
-      resolveScreenBack({ handledInScreen: false, canGoBack: false }),
-    ).toBe("parent");
+    expect(resolveScreenBack({ canGoBack: true })).toBe("pop");
+    expect(resolveScreenBack({ canGoBack: false })).toBe("parent");
   });
 
   test("deep-linked screens land on their logical parent", () => {
     expect(screenBackParent("model-profiles")).toBe("/settings");
     for (const route of [
       "calendar",
-      "plugins",
       "skills",
       "stats",
       "browser",
       "resources",
       "settings",
       "work/[id]",
+      // Nested Plugins stack
+      "index",
+      "custom",
+      "[service]/index",
+      "[service]/permissions",
     ]) {
       expect(screenBackParent(route)).toBe("/");
     }

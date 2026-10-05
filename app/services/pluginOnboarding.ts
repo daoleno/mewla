@@ -24,6 +24,14 @@ export async function retainPluginReturn(serverIds: string[], callback: string, 
   }
   return null;
 }
+// Any authorization return addressed to Plugins. The Plugins flow consumes it
+// from Linking; while the app runs it must not also become a navigation.
+export function isPluginReturnUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "zen:" && parsed.host === "plugins" && parsed.searchParams.has("state");
+  } catch { return false; }
+}
 export function matchesPluginReturn(url: string, flow: ConnectFlow): boolean {
   try {
     const parsed = new URL(url);

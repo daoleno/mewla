@@ -84,8 +84,11 @@ describe("Expo Router terminal route boundary", () => {
   });
 
   test("every route-tree TS/TSX module has a default export", () => {
+    // +native-intent is an Expo Router hook module (named redirectSystemPath),
+    // not a route.
     const routeModules = listFilesRecursive(routeTreeRoot)
       .filter((path) => /\.(ts|tsx)$/.test(path))
+      .filter((path) => relative(routeTreeRoot, path) !== "+native-intent.tsx")
       .sort();
 
     expect(routeModules.length).toBeGreaterThan(0);

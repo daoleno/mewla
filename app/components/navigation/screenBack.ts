@@ -1,18 +1,16 @@
 /** Where a screen's Back lands when it has no history below it. */
 export type ScreenBackParent = "/" | "/list" | "/settings";
 
-export type ScreenBackDecision = "in-screen" | "pop" | "parent";
+export type ScreenBackDecision = "pop" | "parent";
 
 /**
  * One Back rule for the header button, the Android hardware button and the
- * iOS edge swipe: an in-screen step (a sub-page) wins, then the stack pops,
- * and a deep-linked screen with nothing below it lands on its logical parent.
+ * iOS edge swipe: the stack pops, and a deep-linked screen with nothing below
+ * it lands on its logical parent. Sub-pages are routes, so they pop too.
  */
 export function resolveScreenBack(input: {
-  handledInScreen: boolean;
   canGoBack: boolean;
 }): ScreenBackDecision {
-  if (input.handledInScreen) return "in-screen";
   return input.canGoBack ? "pop" : "parent";
 }
 
@@ -20,11 +18,13 @@ export function resolveScreenBack(input: {
  * Logical parent for each root Stack route that shows the Stack header.
  * Headerless routes return null: native-stack still renders `headerLeft` for a
  * hidden header, so they get no default Back (and no hardware-back listener).
- * The Session screen draws its own Back with "/list" as the parent.
+ * The Session screen draws its own Back with "/list" as the parent; Plugins
+ * draws its header in its own nested Stack.
  */
 export function screenBackParent(routeName: string): ScreenBackParent | null {
   switch (routeName) {
     case "(primary)":
+    case "plugins":
     case "terminal/[id]":
     case "onboarding":
     case "screenshot-demo":

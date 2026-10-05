@@ -239,24 +239,35 @@ describe("local-only Skills surface contract", () => {
 });
 
 describe("Plugins connection route contract", () => {
-  const route = readFileSync(join(import.meta.dir, "../app/plugins.tsx"), "utf8");
-  const views = readFileSync(
-    join(import.meta.dir, "../components/plugins/PluginConnectionViews.tsx"),
-    "utf8",
-  );
-  test("server switches remount the page and every page shares one keyboard-aware scroll view", () => {
-    expect(route).toContain('key={currentServerId ?? "none"}');
-    expect(route.match(/<KeyboardAwareScrollView/g)?.length).toBe(1);
-    expect(route).toContain('gestureEnabled: page === "catalog"');
+  const read = (path: string) => readFileSync(join(import.meta.dir, "..", path), "utf8");
+  const layout = read("app/plugins/_layout.tsx");
+  const flow = read("components/plugins/PluginsFlow.tsx");
+  const routes = ["index", "custom", "[service]/index", "[service]/accounts", "[service]/permissions", "[service]/tools"]
+    .map((name) => read(`app/plugins/${name}.tsx`));
+  const views = read("components/plugins/PluginConnectionViews.tsx");
+  test("server switches remount the flow and every page shares one keyboard-aware scroll view", () => {
+    expect(layout).toContain('key={currentServerId ?? "none"}');
+    expect(layout).toContain('initialRouteName: "index"');
+    expect(flow.match(/<KeyboardAwareScrollView/g)?.length).toBe(1);
+    for (const route of routes) {
+      expect(route).toContain("<PluginsPage");
+      expect(route).not.toContain("KeyboardAwareScrollView");
+    }
+  });
+  test("sub-pages are routes, not in-page steps", () => {
+    for (const source of [flow, ...routes]) {
+      expect(source).not.toContain("setPage(");
+      expect(source).not.toContain("BackHandler");
+      expect(source).not.toContain("headerLeft");
+    }
   });
   test("consent and destructive changes keep their confirmations", () => {
     for (const title of [
       "Disconnect this account?",
       "Allow changes when asked?",
       "Allow this tool?",
-      "Leave this connection?",
     ])
-      expect(route).toContain(title);
+      expect(flow).toContain(title);
   });
   test("built-in connection views contain no text input", () => {
     expect(views).not.toContain("TextInput");

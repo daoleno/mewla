@@ -68,7 +68,7 @@ Settings is one grouped list:
 
 ## Plugins
 
-Plugins connects outside services to the current server. A context row names that server and its connection state. **Connected** lists each active account with a status pill (Connected, Not verified, Last call failed, Reconnect required, Disabled). **Add a service** lists the reviewed services, and **Custom services** holds MCP and OpenAPI. A service page shows the service, then either the connection steps, the connected account, or the access to grant before connecting. See [Plugins](plugins.md).
+Plugins connects outside services to the current server. A context row names that server and its connection state. **Connected** lists each active account with a status pill (Connected, Not verified, Last call failed, Reconnect required, Disabled). **Add a service** lists the reviewed services, and **Custom services** holds MCP and OpenAPI. A service page shows the service, then either the connection steps, the connected account, or the access to grant before connecting. Every page is its own route (`/plugins`, `/plugins/custom`, `/plugins/<service>`, and its `accounts`, `permissions` and `tools` pages), so Back walks Slack → catalog → where you came from. A service page opened by link still has the catalog below it. Leaving a service page cancels a connection that has not finished. See [Plugins](plugins.md).
 
 ## Skills
 
@@ -91,7 +91,7 @@ A segmented **Codex / Claude** switch picks the agent. Below it, one grouped lis
 ## Shared patterns
 
 - **Back** is one control everywhere: `HeaderBackButton`, an icon-only chevron in a 40pt disc with a touch target of at least 44pt, labelled "Back", next to a centred title. Every pushed screen (Calendar, Plugins, Skills, Stats, Browser, Resources, Settings, Model Providers, Work detail) gets it from the root Stack header. The Session screen puts it in its first glass capsule. Full-screen pages inside a sheet, such as Settings → Telegram, use the same header row. Back inside a sheet uses the same chevron and names its destination ("Back to services").
-- **Back behaviour** has one rule (`useScreenBack`): an in-screen step comes first (a Plugins sub-page goes back to the catalog), then the stack pops, and a screen opened by deep link with nothing below it lands on its logical parent: Brain, Sessions for a Session, Settings for Model Providers. Android hardware Back and the iOS edge swipe run the same rule. On web, browser Back pops the same history; Plugins sub-pages are not browser history entries.
+- **Back behaviour** has one rule (`useScreenBack`): the stack pops, and a screen opened by deep link with nothing below it lands on its logical parent: Brain, Sessions for a Session, Settings for Model Providers. Sub-pages are routes, never in-page steps, so Android hardware Back, the iOS edge swipe and browser Back on web all walk the same history.
 - **Overflow menus** always use the bottom-sheet `ActionMenu`. This covers Brain, Sessions, Session, Work detail, per-server actions in Settings, and per-Provider actions.
 - **Destructive actions** go through `confirmDestructive` or a native alert where the destructive button is never the default. This covers terminating Sessions, removing a server, deleting a Work item, deleting a Provider, and removing or unlinking Telegram.
 - **Status** uses `StatusPill`, whose live pulse stops under Reduce Motion. Recoverable problems and in-flow status use `InlineNotice`, and empty, loading, and blocking error states use `EmptyState`.
