@@ -166,7 +166,7 @@ export function sweepOver(dst, scratch, L, startDeg, p, feather) {
 }
 
 // Union of several arcs, used when many strokes build one ring (direction B).
-export function sweepArcs(dst, scratch, layer, arcs, alpha = 1) {
+export function sweepArcs(dst, scratch, layer, arcs, alpha = 1, op = "source-over") {
   if (!arcs.length) return;
   const s = scratch.getContext("2d"), W = scratch.width, k = W / 1000, R = 760 * k;
   s.globalCompositeOperation = "copy";
@@ -183,8 +183,16 @@ export function sweepArcs(dst, scratch, layer, arcs, alpha = 1) {
   s.fill();
   s.globalCompositeOperation = "source-over";
   dst.globalAlpha = alpha;
+  dst.globalCompositeOperation = op;
   dst.drawImage(scratch, 0, 0);
+  dst.globalCompositeOperation = "source-over";
   dst.globalAlpha = 1;
+}
+
+// sweepArcs for a ring that crosses over: clear what lies beneath, then ink.
+export function sweepArcsOver(dst, scratch, L, arcs) {
+  sweepArcs(dst, scratch, L.solid, arcs, 1, "destination-out");
+  sweepArcs(dst, scratch, L.top, arcs);
 }
 
 export function sizeCanvas(el, cssW, cssH = cssW) {
