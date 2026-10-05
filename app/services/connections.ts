@@ -2,6 +2,7 @@ export type PluginIntegration = {
   id: string;
   name: string;
   available: boolean;
+  unavailable_reason?: string;
   setup_url: string;
   description: string;
 };

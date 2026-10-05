@@ -122,7 +122,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if !ok && in.Mobile && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "mcp") {
 		client.RedirectURL = NativeCallback
 	} else if !ok {
-		return Response{}, errors.New("Zen has not finished setting up authorization for this service. No account was connected.")
+		return Response{}, errors.New("Sign-in is not set up for this service yet.")
 	}
 	if in.Mobile && (in.Integration == "notion" || in.Integration == "linear") {
 		client = OAuthClientConfig{RedirectURL: NativeCallback}

@@ -88,6 +88,20 @@ func paritySnapshot(t *testing.T, moduleDir string) string {
 	if _, err := os.Stat(filepath.Join(destination, "tmp")); err == nil {
 		t.Fatal("snapshot unexpectedly contains a tmp build directory")
 	}
+	// Dev builds share the release publisher validator and manifest.
+	for _, relative := range []string{"scripts/plugin-publisher-flags.py", "release/plugin-publishers.json"} {
+		data, err := os.ReadFile(filepath.Join(moduleDir, "..", relative))
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(destination, "..", relative)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return destination
 }
 
