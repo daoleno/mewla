@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { BackHandler, Platform } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 import { resolveScreenBack, type ScreenBackParent } from "./screenBack";
@@ -12,8 +12,6 @@ export interface ScreenBackNavigation {
 
 interface UseScreenBackInput {
   parent: ScreenBackParent;
-  /** Returns true when it took an in-screen step (e.g. left a sub-page). */
-  onInScreenBack?: () => boolean;
   /**
    * The screen's own navigation. Required from header components: native
    * stack renders them outside the screen's navigation context.
@@ -28,24 +26,15 @@ interface UseScreenBackInput {
  */
 export function useScreenBack({
   parent,
-  onInScreenBack,
   navigation: screenNavigation,
 }: UseScreenBackInput) {
   const contextNavigation = useNavigation();
   const navigation = screenNavigation ?? contextNavigation;
   const router = useRouter();
-  const inScreenRef = useRef(onInScreenBack);
-  useEffect(() => {
-    inScreenRef.current = onInScreenBack;
-  }, [onInScreenBack]);
 
   const run = useCallback(
     (fromHardware: boolean): boolean => {
-      const decision = resolveScreenBack({
-        handledInScreen: inScreenRef.current?.() ?? false,
-        canGoBack: navigation.canGoBack(),
-      });
-      if (decision === "in-screen") return true;
+      const decision = resolveScreenBack({ canGoBack: navigation.canGoBack() });
       if (decision === "pop") {
         if (fromHardware) return false;
         navigation.goBack();

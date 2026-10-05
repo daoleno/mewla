@@ -41,7 +41,9 @@ describe("primary drawer destinations", () => {
 
   test("every destination is a runtime route", () => {
     for (const { pathname } of destinations) {
-      expect(existsSync(new URL(`../../app${pathname}.tsx`, import.meta.url))).toBe(true);
+      const file = new URL(`../../app${pathname}.tsx`, import.meta.url);
+      const index = new URL(`../../app${pathname}/index.tsx`, import.meta.url);
+      expect(existsSync(file) || existsSync(index)).toBe(true);
     }
   });
 

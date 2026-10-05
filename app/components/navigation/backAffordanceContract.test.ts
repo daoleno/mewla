@@ -34,11 +34,18 @@ describe("back affordance", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the root Stack owns one default header Back", () => {
-    const layout = readFileSync(join(appRoot, "app/_layout.tsx"), "utf8");
-    expect(layout.match(/headerLeft:/g)).toHaveLength(1);
-    expect(layout).toContain("<StackBackButton");
-    expect(layout).toContain("...webHeaderInsets");
-    expect(layout).toContain('headerTitleAlign: "center"');
+  test("every Stack takes its header and Back from one shared options hook", () => {
+    const read = (path: string) => readFileSync(join(appRoot, path), "utf8");
+    const options = read("components/navigation/stackScreenOptions.tsx");
+    expect(options.match(/headerLeft:/g)).toHaveLength(1);
+    expect(options).toContain("<StackBackButton");
+    expect(options).toContain("...webHeaderInsets");
+    expect(options).toContain('headerTitleAlign: "center"');
+    for (const layout of ["app/_layout.tsx", "app/plugins/_layout.tsx"]) {
+      const source = read(layout);
+      expect(source).toContain("screenOptions={screenOptions}");
+      expect(source).toContain("useStackScreenOptions()");
+      expect(source).not.toContain("headerLeft");
+    }
   });
 });

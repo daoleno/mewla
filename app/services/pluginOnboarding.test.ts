@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { finishPluginReturn, matchesPluginReturn, pendingConnectionKey, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
+import { finishPluginReturn, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
 const pending: PendingConnection = { serverId: "server-a", flow: { id: "flow-a", integration: "linear", status: "waiting", expires: new Date(Date.now() + 60000).toISOString(), authorization_url: "https://mcp.linear.app/authorize?state=secret-state" } };
 test("native return is bound to exact URI and original state", () => {
   expect(matchesPluginReturn("zen://plugins?state=secret-state&code=one", pending.flow)).toBe(true);
@@ -28,4 +28,12 @@ test("return during a server switch is saved only for its original unexpired flo
   values.set(pendingConnectionKey("server-a"), JSON.stringify({ ...pending, flow: { ...pending.flow, expires: new Date(0).toISOString() } }));
   expect(await retainPluginReturn(["server-a"], callback, storage)).toBe(null);
   expect(JSON.parse(values.get(pendingConnectionKey("server-a"))!).callback).toBeUndefined();
+});
+
+test("only Plugins authorization returns are recognised as returns", () => {
+  expect(isPluginReturnUrl("zen://plugins?state=abc&code=1")).toBe(true);
+  expect(isPluginReturnUrl("zen://plugins")).toBe(false);
+  expect(isPluginReturnUrl("zen://settings?p=abc")).toBe(false);
+  expect(isPluginReturnUrl("https://zen.example/#pair=abc")).toBe(false);
+  expect(isPluginReturnUrl("/plugins?state=abc")).toBe(false);
 });
