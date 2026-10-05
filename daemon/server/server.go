@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -125,6 +126,8 @@ type Server struct {
 	runtimeClosing             bool
 	terminalCleanup            terminalCleanupOwner
 	tlsConfig                  *tls.Config
+	webOrigins                 []string
+	webUIFiles                 fs.FS
 
 	workSubID                   int
 	workSub                     <-chan work.Event
@@ -419,6 +422,7 @@ func (s *Server) Handler() http.Handler {
 			"daemon_public_key": s.auth.PublicKeyHex(),
 		})
 	})
+	mux.Handle("/", s.webUIHandler())
 	return withCORS(mux)
 }
 

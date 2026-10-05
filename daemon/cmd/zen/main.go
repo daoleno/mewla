@@ -45,6 +45,26 @@ type daemonConfig struct {
 	stateDir       string
 	linkConfigPath string
 	lan            bool
+	webOrigins     []string
+}
+
+// webOriginsFlag collects repeated -web-origin values in canonical form.
+type webOriginsFlag struct{ origins *[]string }
+
+func (f webOriginsFlag) String() string {
+	if f.origins == nil {
+		return ""
+	}
+	return strings.Join(*f.origins, ",")
+}
+
+func (f webOriginsFlag) Set(value string) error {
+	origin, err := server.ParseWebOrigin(value)
+	if err != nil {
+		return err
+	}
+	*f.origins = append(*f.origins, origin)
+	return nil
 }
 
 type pairConfig struct {
@@ -91,6 +111,8 @@ func run(args []string, stderr io.Writer) error {
 			return runDaemon(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
+		case "web":
+			return runWebCommand(args[1:], os.Stdout, stderr)
 		case "doctor":
 			return runDoctorCommand(args[1:], stderr)
 		case "setup":
@@ -366,6 +388,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
 	srv.SetResourceSampler(resourceSampler)
+	srv.SetWebOrigins(cfg.webOrigins)
 	telegramManager, err := telegramchannel.NewManagerWithOptions(authManager.StorageDir(), brainService, telegramchannel.Options{Attachments: srv.AttachmentStore()})
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)
@@ -1795,17 +1818,15 @@ func controlResponseError(resp control.Response) error {
 	return fmt.Errorf("control request failed")
 }
 
-func runPairCommand(args []string, stderr io.Writer) error {
-	cfg, err := parsePairConfig(args, stderr)
-	if err != nil {
-		return err
-	}
+// requestPairingToken asks the daemon's runtime owner for a one-time
+// enrollment token, the same authority `zen pair` uses.
+func requestPairingToken(stateDir string) (*control.PairingInfo, error) {
 	retry := time.NewTicker(25 * time.Millisecond)
 	defer retry.Stop()
 	deadline := time.NewTimer(2 * time.Second)
 	defer deadline.Stop()
 	ownerResult, err := withAuthRuntimeOwnerWait(
-		cfg.stateDir,
+		stateDir,
 		control.Request{Type: "pair"},
 		retry.C,
 		deadline.C,
@@ -1815,32 +1836,44 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		},
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	response := ownerResult.Response
 	if err := controlResponseError(response); err != nil {
-		return err
+		return nil, err
 	}
 	if response.Pairing == nil ||
 		strings.TrimSpace(response.Pairing.Token) == "" ||
 		strings.TrimSpace(response.Pairing.DaemonID) == "" ||
 		strings.TrimSpace(response.Pairing.DaemonPublicKey) == "" {
-		return errors.New("runtime owner returned incomplete pairing information")
+		return nil, errors.New("runtime owner returned incomplete pairing information")
+	}
+	return response.Pairing, nil
+}
+
+func runPairCommand(args []string, stderr io.Writer) error {
+	cfg, err := parsePairConfig(args, stderr)
+	if err != nil {
+		return err
+	}
+	pairingInfo, err := requestPairingToken(cfg.stateDir)
+	if err != nil {
+		return err
 	}
 	pairing := auth.PairingToken{
-		Value:     response.Pairing.Token,
-		ExpiresAt: response.Pairing.ExpiresAt,
+		Value:     pairingInfo.Token,
+		ExpiresAt: pairingInfo.ExpiresAt,
 	}
 	if strings.TrimSpace(cfg.endpoint) != "" {
 		offers, offerErr := buildConnectionOffersWithPublicKey(
 			cfg.endpoint,
-			response.Pairing.DaemonPublicKey,
+			pairingInfo.DaemonPublicKey,
 			pairing,
 		)
 		if offerErr != nil {
 			return fmt.Errorf("build connection info: %w", offerErr)
 		}
-		printPairCommandInfo(stderr, response.Pairing.DaemonID, offers)
+		printPairCommandInfo(stderr, pairingInfo.DaemonID, offers)
 		return nil
 	}
 
@@ -1848,8 +1881,8 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize auth manager: %w", err)
 	}
-	if authManager.DaemonID() != response.Pairing.DaemonID ||
-		authManager.PublicKeyHex() != response.Pairing.DaemonPublicKey {
+	if authManager.DaemonID() != pairingInfo.DaemonID ||
+		authManager.PublicKeyHex() != pairingInfo.DaemonPublicKey {
 		return errors.New("runtime owner pairing identity changed")
 	}
 	linkConfig, linkConfigPath, enabled, err := loadOptionalLinkConfig(
@@ -1905,7 +1938,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 			break
 		}
 	}
-	printPairCommandInfo(stderr, response.Pairing.DaemonID, []connectionOffer{{
+	printPairCommandInfo(stderr, pairingInfo.DaemonID, []connectionOffer{{
 		Label:       "Zen Link",
 		URL:         primaryURL,
 		ConnectLink: connectLink,
@@ -1922,6 +1955,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	fs.BoolVar(&cfg.lan, "lan", false, "listen on all IPv4 interfaces for trusted private-network access")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Zen Link config (default: <state-dir>/link.json when present)")
+	fs.Var(webOriginsFlag{origins: &cfg.webOrigins}, "web-origin", "serve the web UI to browsers on this https origin (repeatable; TLS terminated by a trusted proxy)")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: zen [flags]")
 		fmt.Fprintln(stderr, "")
@@ -1930,6 +1964,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve      Start the daemon")
 		fmt.Fprintln(stderr, "  pair       Generate a fresh pairing link")
+		fmt.Fprintln(stderr, "  web        Open the web UI in a browser, paired as a new device")
 		fmt.Fprintln(stderr, "  doctor     Diagnose machine readiness for Zen")
 		fmt.Fprintln(stderr, "  setup      Guided first-run setup (uses doctor)")
 		fmt.Fprintln(stderr, "  update     Verify and install the latest Zen release")
