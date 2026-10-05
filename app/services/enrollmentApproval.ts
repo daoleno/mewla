@@ -12,13 +12,19 @@ export type EnrollmentDecision = "approve" | "deny";
 export function verificationChoices(number: string): string[] {
   const normalized = number.trim();
   if (!/^\d{3}$/.test(normalized)) return [];
-  const choices = new Set([normalized]);
-  const value = Number(normalized);
-  for (const offset of [1, -1, 10, -10]) {
-    const candidate = String((value + offset + 1000) % 1000).padStart(3, "0");
-    choices.add(candidate);
+  // Independent decoys and shuffled positions keep the matching answer from
+  // being identifiable by its position or its distance from its neighbours.
+  const choices = [normalized];
+  const pool = Array.from({ length: 1000 }, (_, value) => String(value).padStart(3, "0")).filter((value) => value !== normalized);
+  for (let index = 0; index < 3; index++) {
+    const selected = Math.floor(Math.random() * pool.length);
+    choices.push(pool.splice(selected, 1)[0]);
   }
-  return [...choices].slice(0, 4);
+  for (let index = choices.length - 1; index > 0; index--) {
+    const selected = Math.floor(Math.random() * (index + 1));
+    [choices[index], choices[selected]] = [choices[selected], choices[index]];
+  }
+  return choices;
 }
 
 export function canApproveEnrollment(

@@ -52,6 +52,7 @@ import {
 } from "../services/storage";
 import { importConnection } from "../services/importConnection";
 import { readInitialConnectLink } from "../services/initialConnectLink";
+import { EnrollmentApprovalHost } from "../components/enrollment/EnrollmentApprovalHost";
 import { PairingCancelledError } from "../services/pairingScope";
 import {
   clearNativeTerminalCrashBreadcrumb,
@@ -148,6 +149,7 @@ function LiveAppRuntime() {
       <CurrentServerConnectionBinder />
       <LatencySampler />
       <NotificationObserver />
+      <EnrollmentApprovalHost />
       <AppNavigator bootstrapResolved={bootstrapResolved} />
     </>
   );
@@ -214,8 +216,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
           onImported: async (importedServer) => {
             await refreshServers(importedServer.id);
             routerRef.current.replace({
-              pathname: "/settings",
-              params: { refresh: Date.now().toString() },
+              pathname: "/list",
             });
           },
         });
@@ -395,7 +396,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
           isOnboarded(),
           getServers(),
         ]);
-        if (!onboarded && servers.length === 0) {
+        if (servers.length === 0) {
           routerRef.current.replace("/onboarding");
           return;
         }

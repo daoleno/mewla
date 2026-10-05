@@ -374,7 +374,7 @@ export default function SettingsScreen() {
       if (!savedServer) {
         Alert.alert(
           "Invalid import",
-          "Could not parse the pairing link. Import the zen:// link or QR printed by zen.",
+          "Could not parse the pairing link. Import the HTTPS or zen:// pairing link or QR printed by zen.",
         );
         return false;
       }
@@ -968,7 +968,7 @@ export default function SettingsScreen() {
                   value={draftImportValue}
                   onChangeText={setDraftImportValue}
                   accessibilityLabel="Pairing link"
-                  placeholder="zen://settings?p=..."
+                  placeholder="https://your-zen-address/#pair=…"
                   placeholderTextColor={colors.textSecondary}
                   selectionColor={colors.selectionBackground}
                   cursorColor={colors.accentStrong}

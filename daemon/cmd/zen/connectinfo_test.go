@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/zen/daemon/addressbook"
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
 	"github.com/daoleno/zen/daemon/control"
@@ -724,4 +725,25 @@ func waitForCLISocketPath(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for control socket at %s", path)
+}
+
+func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
+	manager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := addressbook.New(manager.StorageDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = book.Add("http://127.0.0.1:9876", addressbook.SourceDiscovered)
+	_, _ = book.Add("https://zen.example", addressbook.SourceManual)
+	var output bytes.Buffer
+	if err := printFirstDevicePairing(&output, manager, book); err != nil {
+		t.Fatal(err)
+	}
+	text := output.String()
+	if !strings.Contains(text, "https://zen.example/#pair=") || !strings.Contains(text, "Scan on your phone") || !strings.Contains(text, "█") {
+		t.Fatal("fresh startup must print HTTPS link and QR")
+	}
 }

@@ -106,3 +106,13 @@ describe("Pairing V2", () => {
     expect(parseConnectLink(oversized)).toBeNull();
   });
 });
+
+test("QR and paste accept HTTPS fragment links as well as legacy zen links", () => {
+  const legacy = `zen://settings?u=${encodeURIComponent("wss://zen.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
+  const expected = parseConnectLink(legacy);
+  expect(expected).not.toBeNull();
+  expect(parseConnectLink(`https://zen.example/#pair=${encodeURIComponent(legacy)}`)).toEqual(expected);
+  expect(parseConnectLink("https://zen.example/")).toBeNull();
+  expect(parseConnectLink("https://zen.example/#pair=https%3A%2F%2Fevil.example")).toBeNull();
+  expect(parseConnectLink(`http://untrusted.example/#pair=${encodeURIComponent(legacy)}`)).toBeNull();
+});

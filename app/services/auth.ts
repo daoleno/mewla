@@ -39,6 +39,7 @@ export type AuthPurpose =
   | "zen-browser"
   | `zen-browser-view:${string}`
   | "zen-upload"
+  | "zen-enrollment:decision:POST:/enrollment/decision"
   | "zen-probe"
   | "zen-session-file";
 

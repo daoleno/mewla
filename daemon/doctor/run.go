@@ -103,32 +103,36 @@ func (e env) checkNetwork() NetworkCheck {
 		return check
 	}
 	check.TailscaleFound = true
-	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
+	// A complete netcheck takes about five seconds even on a healthy host.
+	// Its JSON format is unstable and stderr includes diagnostic prefixes.
+	timeout := max(e.opts.ProbeTimeout, 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	output, err := e.opts.RunCommand(ctx, path, "netcheck", "--format=json")
+	output, err := e.opts.RunCommand(ctx, path, "netcheck")
 	if err != nil {
 		check.Status = StatusWarn
 		check.Summary = "Tailscale found, but netcheck failed"
+		if ctx.Err() != nil {
+			check.Summary = "Tailscale netcheck timed out"
+		}
 		return check
 	}
-	var payload struct {
-		UDP                   bool   `json:"UDP"`
-		DERP                  string `json:"PreferredDERP"`
-		MappingVariesByDestIP bool   `json:"MappingVariesByDestIP"`
-	}
-	if json.Unmarshal(output, &payload) != nil {
+	udp, mapping, relay, ok := parseNetcheckText(string(output))
+	if !ok {
 		check.Status = StatusWarn
 		check.Summary = "Tailscale netcheck returned an unreadable result"
 		return check
 	}
-	check.Direct = payload.UDP
-	check.Relay = payload.DERP
-	if payload.MappingVariesByDestIP {
+	check.Direct = udp
+	check.Relay = relay
+	if mapping == "true" {
 		check.NATType = "symmetric"
-	} else if payload.UDP {
+	} else if udp && mapping == "false" {
 		check.NATType = "cone/endpoint-independent"
-	} else {
+	} else if !udp {
 		check.NATType = "blocked"
+	} else {
+		check.NATType = "unknown"
 	}
 	if check.Direct {
 		check.Status = StatusOK
@@ -138,6 +142,40 @@ func (e env) checkNetwork() NetworkCheck {
 		check.Summary = "Tailscale will use DERP relay; direct UDP is unavailable"
 	}
 	return check
+}
+
+// parseNetcheckText reads only named report fields, ignoring diagnostic logs.
+func parseNetcheckText(output string) (udp bool, mapping, relay string, ok bool) {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "*"))
+		key, value, found := strings.Cut(line, ":")
+		if !found {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		switch key {
+		case "UDP":
+			if value == "true" || value == "false" {
+				udp, ok = value == "true", true
+			}
+		case "MappingVariesByDestIP":
+			mapping = value
+		case "Nearest DERP":
+			relay = value
+		}
+	}
+	// Human output gives the region name; its latency row supplies the code.
+	if relay != "" {
+		for _, line := range strings.Split(output, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "- ") && strings.HasSuffix(line, "("+relay+")") {
+				code, _, _ := strings.Cut(strings.TrimPrefix(line, "- "), ":")
+				relay = code
+				break
+			}
+		}
+	}
+	return
 }
 
 func (e env) checkAddresses(stateDir string) []AddressCheck {

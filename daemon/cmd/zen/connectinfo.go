@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/daoleno/zen/daemon/addressbook"
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/mdp/qrterminal/v3"
 )
@@ -57,6 +58,46 @@ func buildConnectionOffersWithPublicKey(
 		pairing,
 	)
 	return []connectionOffer{offer}, nil
+}
+
+// Print bootstrap credentials only when there is no trusted device yet.
+func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbook.Store) error {
+	if len(manager.ListDevices()) != 0 {
+		return nil
+	}
+	entries, err := book.List()
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	// Prefer HTTPS, then private-network endpoints, then loopback.
+	rank := func(raw string) int {
+		u, _ := url.Parse(raw)
+		if u.Scheme == "https" {
+			return 0
+		}
+		if isLoopbackHost(u.Hostname()) {
+			return 2
+		}
+		return 1
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return rank(entries[i].URL) < rank(entries[j].URL) })
+	token, err := manager.IssuePairingToken(auth.DefaultPairingTTL)
+	if err != nil {
+		return err
+	}
+	offers, err := buildConnectionOffersWithPublicKey(entries[0].URL, manager.PublicKeyHex(), token)
+	if err != nil {
+		return err
+	}
+	if strings.HasPrefix(entries[0].URL, "https://") {
+		offers[0].ConnectLink = strings.TrimRight(entries[0].URL, "/") + "/#pair=" + url.QueryEscape(offers[0].ConnectLink)
+	}
+	fmt.Fprintln(w, "First device: scan this QR or open the pairing link.")
+	printPairingInfo(w, offers)
+	return nil
 }
 
 func printStartupInfo(w io.Writer, listenAddr, stateDir string, addresses []privateNetworkAddress) {
