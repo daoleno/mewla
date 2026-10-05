@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, BackHandler, Linking, StyleSheet, View } from "react-native";
+import { Alert, AppState, Linking, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { openPluginAuthorization } from "../services/pluginBrowser";
 import * as SecureStore from "expo-secure-store";
@@ -11,6 +11,8 @@ import { Button, InlineNotice } from "../components/ui";
 import { CustomServiceForm } from "../components/plugins/CustomServiceForm";
 import { AccountsView, CatalogView, ConnectOfferView, ConnectProgressCard, CustomCatalogView, LinkedAccountView, NoServerState, PermissionsView, ServiceHeader, ToolsView } from "../components/plugins/PluginConnectionViews";
 import { ServerContextRow, type ServerConnection } from "../components/extensions/ServerContextRow";
+import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
+import { useScreenBack } from "../components/navigation/useScreenBack";
 import { useWorkers } from "../store/workers";
 import { isConnecting, pluginCatalogSections, type AccountRecoveryAction } from "../services/pluginConnectionsModel";
 import { wsClient } from "../services/websocket";
@@ -223,23 +225,26 @@ function PluginCatalog({ serverId, serverName, connection, deferredName, deferRe
     const existing = chosen ?? accounts.find((item) => item.integration === plugin.id && item.status !== "disconnected");
     if (existing) await send({ action: "get", id: existing.id });
   };
-  const back = () => {
+  // In-page step for the header button, hardware back and swipe; false at the
+  // catalog so useScreenBack leaves the screen.
+  const back = (): boolean => {
     if (["opening", "waiting", "verifying"].includes(phase)) {
-      Alert.alert("Leave this connection?", "You can connect again later.", [{ text: "Keep connecting", style: "cancel" }, { text: "Cancel connection", onPress: () => { void cancel().then(() => { if (valid()) setPage("catalog"); }); } }]); return;
+      Alert.alert("Leave this connection?", "You can connect again later.", [{ text: "Keep connecting", style: "cancel" }, { text: "Cancel connection", onPress: () => { void cancel().then(() => { if (valid()) setPage("catalog"); }); } }]); return true;
     }
     if (pending.current) {
       void cancel().then(() => {
         if (!valid()) return;
         setError(""); setPhase("idle"); setPage("catalog"); setSelected(null); setAccount(null);
       });
-      return;
+      return true;
     }
     setError("");
-    if (page === "catalog") { router.back(); return; }
+    if (page === "catalog") return false;
     if (page === "permissions" || page === "advanced" || page === "accounts") setPage("service");
     else { setPage("catalog"); setSelected(null); setAccount(null); }
+    return true;
   };
-  useEffect(() => { const listener = BackHandler.addEventListener("hardwareBackPress", () => { back(); return true; }); return () => listener.remove(); });
+  const goBack = useScreenBack({ parent: "/", onInScreenBack: back });
   const changeGroup = (group: "read" | "write", allowed: boolean) => {
     if (!account) return;
     const id = account.id;
@@ -271,7 +276,7 @@ function PluginCatalog({ serverId, serverName, connection, deferredName, deferRe
   const catalogFailed = page === "catalog" && !catalog.length;
   const showError = Boolean(error) && !catalogFailed;
   return <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
-    <Stack.Screen options={{ title, headerLeft: () => <Button label="Back" accessibilityLabel="Back" icon="chevron-back" variant="plain" onPress={back} />, gestureEnabled: page === "catalog" }} />
+    <Stack.Screen options={{ title, headerLeft: () => <HeaderBackButton onPress={goBack} />, gestureEnabled: page === "catalog" }} />
     <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
       {page === "catalog" && serverId ? <ServerContextRow name={serverName} connection={connection} /> : null}
       {deferredName ? <InlineNotice tone="warning" icon="swap-horizontal-outline" title={`Authorization saved for ${deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}

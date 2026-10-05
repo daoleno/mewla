@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import BottomSheet, { BottomSheetScrollView } from "@expo/ui/community/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
+import { HeaderBackButton } from "../navigation/HeaderBackButton";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import type { ProviderError, ThreadRuntimeChoice } from "../../services/providers";
@@ -84,14 +85,12 @@ export function SessionModelSheet({
     >
       <View style={styles.header}>
         {effectTarget ? (
-          <Pressable
-            style={styles.iconButton}
-            onPress={() => setEffectTarget(null)}
-            accessibilityRole="button"
+          <HeaderBackButton
+            surface="bare"
+            color={chrome.text}
             accessibilityLabel="Back to Model and Effect"
-          >
-            <Ionicons name="chevron-back" size={20} color={chrome.text} />
-          </Pressable>
+            onPress={() => setEffectTarget(null)}
+          />
         ) : null}
         <Text style={[styles.title, { color: chrome.text }]}>
           {effectTarget ? "Effect" : "Model & Effect"}

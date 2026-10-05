@@ -8,10 +8,11 @@ import {
   Text,
   View,
 } from "react-native";
-import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { useCurrentServer } from "../../store/currentServer";
 import * as Haptics from "expo-haptics";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Radii, Spacing, Typography, useAppColors, shadow, type AppColors } from "../../constants/tokens";
 import { useWork, type WorkItem } from "../../store/work";
 import {
@@ -28,6 +29,8 @@ import {
   StatusPill,
   confirmDestructive,
 } from "../../components/ui";
+import { HeaderBackButton } from "../../components/navigation/HeaderBackButton";
+import { useScreenBack } from "../../components/navigation/useScreenBack";
 import type { StatusTone } from "../../components/ui/StatusPill";
 
 const AUTOSAVE_DELAY_MS = 600;
@@ -51,10 +54,11 @@ export default function WorkDetailScreen() {
 function CurrentWorkDetail() {
   const params = useLocalSearchParams<{ id?: string; serverId?: string }>();
   const { isCurrentServer } = useCurrentServer();
-  const router = useRouter();
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const goBack = useScreenBack({ parent: "/" });
   const { state, dispatch } = useWork();
 
   const itemId = typeof params.id === "string" ? params.id : "";
@@ -178,7 +182,7 @@ function CurrentWorkDetail() {
         try {
           await wsClient.deleteWorkItem(serverId, item.id);
           if (!isCurrentServer(serverId)) return;
-          router.back();
+          goBack();
         } catch (error: any) {
           if (!isCurrentServer(serverId)) return;
           Alert.alert(
@@ -200,14 +204,14 @@ function CurrentWorkDetail() {
 
   if (!item) {
     return (
-      <SafeAreaView style={styles.emptyScreen} edges={["top"]}>
+      <View style={styles.emptyScreen}>
+        <Stack.Screen options={{ title: "", headerLeft: () => <HeaderBackButton onPress={goBack} /> }} />
         <EmptyState
           icon="document-text-outline"
           title="Work item not found"
           detail="It may have been deleted or belongs to another server."
-          action={{ label: "Go back", icon: "chevron-back", onPress: () => router.back() }}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -222,41 +226,34 @@ function CurrentWorkDetail() {
   }`;
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
+    <View style={styles.screen}>
+      <Stack.Screen
+        options={{
+          title: headerTitle,
+          headerLeft: () => <HeaderBackButton onPress={goBack} />,
+          headerRight: () => (
+            <View style={styles.headerActions}>
+              <IconButton
+                icon={editing ? "eye-outline" : "create-outline"}
+                size={40}
+                accessibilityLabel={editing ? "Preview" : "Edit"}
+                onPress={() => void toggleEditing()}
+              />
+              <IconButton
+                icon="ellipsis-horizontal"
+                size={40}
+                accessibilityLabel="Work actions"
+                onPress={() => setMenuOpen(true)}
+              />
+            </View>
+          ),
+        }}
+      />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={headerHeight}
       >
-        <View style={styles.header}>
-          <IconButton
-            icon="chevron-back"
-            iconSize={21}
-            size={40}
-            accessibilityLabel="Back"
-            onPress={() => router.back()}
-          />
-
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {headerTitle}
-            </Text>
-          </View>
-
-          <IconButton
-            icon={editing ? "eye-outline" : "create-outline"}
-            size={40}
-            accessibilityLabel={editing ? "Preview" : "Edit"}
-            onPress={() => void toggleEditing()}
-          />
-
-          <IconButton
-            icon="ellipsis-horizontal"
-            size={40}
-            accessibilityLabel="Work actions"
-            onPress={() => setMenuOpen(true)}
-          />
-        </View>
-
         <View style={styles.context}>
           <View style={styles.statusRow}>
             <StatusPill
@@ -356,7 +353,7 @@ function CurrentWorkDetail() {
           },
         ]}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -483,24 +480,10 @@ function createStyles(colors: AppColors) {
     justifyContent: "center",
     backgroundColor: colors.bgPrimary,
   },
-  header: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-    minWidth: 0,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: Typography.uiFontMedium,
-    fontSize: 15,
-    lineHeight: 18,
   },
   context: {
     paddingHorizontal: 16,

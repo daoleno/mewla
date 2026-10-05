@@ -141,23 +141,6 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
           Calendar
         </Text>
       ),
-      headerLeft: () => (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          hitSlop={8}
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              router.back();
-              return;
-            }
-            router.replace("/");
-          }}
-          style={styles.calendarHeaderAction}
-        >
-          <Ionicons name="chevron-back" size={23} color={colors.textPrimary} />
-        </Pressable>
-      ),
       headerRight: () => (
         <View style={styles.calendarHeaderActions}>
           <Pressable
@@ -199,7 +182,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
         </View>
       ),
     });
-  }, [activeServer, colors, monthExpanded, navigation, router, styles]);
+  }, [activeServer, colors, monthExpanded, navigation, styles]);
   useEffect(() => {
     if (props.notificationStateOverride) return;
     let active = true;
@@ -1285,8 +1268,10 @@ function createStyles(colors: any) {
       justifyContent: "center",
     },
     calendarHeaderActions: { flexDirection: "row", alignItems: "center" },
+    // Same face and size as the shared Stack header title.
     headerTitle: {
-      ...TypeScale.title,
+      fontFamily: Typography.uiFontMedium,
+      fontSize: 17,
       color: colors.textPrimary,
     },
     permission: {
