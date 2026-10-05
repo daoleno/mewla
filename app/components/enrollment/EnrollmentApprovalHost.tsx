@@ -10,12 +10,12 @@ import { Button } from "../ui/Button";
 
 export function EnrollmentApprovalHost() {
   const { currentServer, isCurrentServer } = useCurrentServer();
-  const [requests, setRequests] = useState<PendingEnrollment[]>([]);
+  const [requests, setRequests] = useState<Array<PendingEnrollment & { serverId: string }>>([]);
   useEffect(() => {
     setRequests([]);
     if (!currentServer) return;
     let active = true;
-    const add = (request: PendingEnrollment) => setRequests((items) => [...items.filter((item) => item.id !== request.id), request]);
+    const add = (request: PendingEnrollment) => setRequests((items) => [...items.filter((item) => item.id !== request.id), { ...request, serverId: currentServer.id }]);
     const incoming = (data: any) => {
       if (!active || data.serverId !== currentServer.id) return;
       const request = decodePendingEnrollment(data);
@@ -25,9 +25,11 @@ export function EnrollmentApprovalHost() {
       if (data.serverId === currentServer.id) setRequests((items) => items.filter((item) => item.id !== data.request_id));
     };
     const refresh = () => void pendingEnrollments(currentServer).then((pending) => {
-      if (active && isCurrentServer(currentServer.id)) setRequests(pending);
+      if (active && isCurrentServer(currentServer.id)) setRequests(pending.map((request) => ({ ...request, serverId: currentServer.id })));
     }).catch(() => {});
     const connected = (data: any) => { if (data.serverId === currentServer.id) refresh(); };
+    const disconnected = (data: { serverId: string }) => { if (data.serverId === currentServer.id) setRequests([]); };
+    wsClient.on("disconnected", disconnected);
     wsClient.on("enrollment_request", incoming);
     wsClient.on("enrollment_decision", decision);
     wsClient.on("connected", connected);
@@ -38,12 +40,13 @@ export function EnrollmentApprovalHost() {
       active = false;
       clearInterval(timer);
       subscription.remove();
+      wsClient.off("disconnected", disconnected);
       wsClient.off("enrollment_request", incoming);
       wsClient.off("enrollment_decision", decision);
       wsClient.off("connected", connected);
     };
   }, [currentServer, isCurrentServer]);
-  const request = requests[0];
+  const request = requests.find((item) => item.serverId === currentServer?.id);
   if (!request || !currentServer) return null;
   return <EnrollmentApprovalSheet key={request.id} request={request} onDecide={async (number, approve) => {
     if (!isCurrentServer(currentServer.id)) return;

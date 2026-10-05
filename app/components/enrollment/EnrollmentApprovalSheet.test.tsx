@@ -10,14 +10,17 @@ if (!process.env.ZEN_ENROLLMENT_UI_TEST) {
   });
 } else {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  mock.module("react-native", () => ({ Modal: "Modal", ScrollView: "ScrollView", View: "View", StyleSheet: { create: (s: unknown) => s }, AppState: {} }));
+  mock.module("react-native", () => ({ Modal: "Modal", ScrollView: "ScrollView", View: "View", StyleSheet: { create: (s: unknown) => s }, AppState: { addEventListener: () => ({ remove: () => {} }) } }));
   mock.module("../../constants/tokens", () => ({ useAppTheme: () => ({ colors: {} }) }));
   mock.module("../ui/AppText", () => ({ AppText: "Text" }));
   mock.module("../ui/Button", () => ({ Button: "Button" }));
-  mock.module("../../services/enrollmentAPI", () => ({ decideEnrollment: () => {}, decodePendingEnrollment: () => {}, pendingEnrollments: () => {} }));
-  mock.module("../../services/websocket", () => ({ wsClient: {} }));
-  mock.module("../../store/currentServer", () => ({ useCurrentServer: () => ({}) }));
-  const { EnrollmentApprovalSheet } = await import("./EnrollmentApprovalHost");
+  const handlers = new Map<string, (data: any) => void>();
+  let currentServer = { id: "server-a" };
+  const isCurrentServer = (id: string) => id === currentServer.id;
+  mock.module("../../services/enrollmentAPI", () => ({ decideEnrollment: async () => {}, decodePendingEnrollment: (data: any) => data, pendingEnrollments: async () => [] }));
+  mock.module("../../services/websocket", () => ({ wsClient: { on: (name: string, handler: (data: any) => void) => handlers.set(name, handler), off: (name: string) => handlers.delete(name) } }));
+  mock.module("../../store/currentServer", () => ({ useCurrentServer: () => ({ currentServer, isCurrentServer }) }));
+  const { EnrollmentApprovalSheet, EnrollmentApprovalHost } = await import("./EnrollmentApprovalHost");
   const request = { id: "r", deviceName: "Test browser", platform: "web", origin: "https://zen.example", verificationNumber: "042", expiresAt: new Date(Date.now() + 300000).toISOString() };
   test("requires a selection, retains errors for retry, approves and denies", async () => {
     const decisions: Array<[string, boolean]> = [];
@@ -38,4 +41,18 @@ if (!process.env.ZEN_ENROLLMENT_UI_TEST) {
     expect(decisions).toEqual([[wrong, true], ["042", true], ["042", false]]);
     await act(async () => renderer.unmount());
   });
+  test("clears approval sheets on disconnect and server switch", async () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<EnrollmentApprovalHost />); });
+    await act(async () => { handlers.get("enrollment_request")?.({ ...request, serverId: "server-a" }); });
+    expect(renderer.root.findAllByType("Modal" as any)).toHaveLength(1);
+    await act(async () => { handlers.get("disconnected")?.({ serverId: "server-a" }); });
+    expect(renderer.root.findAllByType("Modal" as any)).toHaveLength(0);
+    await act(async () => { handlers.get("enrollment_request")?.({ ...request, serverId: "server-a" }); });
+    currentServer = { id: "server-b" };
+    await act(async () => { renderer.update(<EnrollmentApprovalHost />); });
+    expect(renderer.root.findAllByType("Modal" as any)).toHaveLength(0);
+    await act(async () => renderer.unmount());
+  });
+
 }
