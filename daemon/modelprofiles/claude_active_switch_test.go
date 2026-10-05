@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestClaudeActiveSelectionCannotOutrunNativeCLI(t *testing.T) {
+func TestClaudeProviderSelectionRetargetsLiveRoute(t *testing.T) {
 	owner := startTestOwner(t, readyLookup("x"))
 	first := claudeMessagesProfile("claude-first", "claude-sonnet-4-6", "claude-sonnet-4-6")
 	second := claudeMessagesProfile("claude-second", "claude-sonnet-4-6", "claude-sonnet-4-6")
@@ -43,18 +43,27 @@ func TestClaudeActiveSelectionCannotOutrunNativeCLI(t *testing.T) {
 	if _, _, _, err := owner.ActivateSession("claude-session", second.ID, before.Generation); !errors.Is(err, ErrBindingNotRouted) {
 		t.Fatalf("activated route-only Claude mutation: %v", err)
 	}
-	if _, err := owner.SwitchProvider(ClientClaude, second.ID, owner.Catalog().Revision); !errors.Is(err, ErrBindingNotRouted) {
-		t.Fatalf("retargeted live Claude session: %v", err)
-	}
-	if got := owner.Catalog().Defaults[ClientClaude]; got != first.ID {
-		t.Fatalf("rejected switch changed default: %q", got)
+	// Selecting a Claude Provider retargets the live route in place: the CLI
+	// keeps its loopback URL and client model, the next request reaches the
+	// newly selected upstream.
+	projection, err := owner.SetProviderConnection(ClientClaude, second.ID, owner.Catalog().Revision)
+	if err != nil || projection.Defaults[ClientClaude].ConnectionID != second.ID {
+		t.Fatalf("select Claude Provider: projection=%#v err=%v", projection.Defaults, err)
 	}
 	after, _ := owner.Table().Get("claude-session")
-	if after.Generation != before.Generation || after.Binding.ProfileID != first.ID {
-		t.Fatalf("rejected mutation changed route: before=%#v after=%#v", before.Binding, after.Binding)
+	if after.Binding.ProfileID != second.ID || after.Binding.UpstreamBaseURL != second.BaseURL {
+		t.Fatalf("live Claude route not retargeted: %#v", after.Binding)
 	}
-	if projection, err := owner.SetProviderConnection(ClientClaude, second.ID, owner.Catalog().Revision); err != nil ||
-		projection.Defaults[ClientClaude].ConnectionID != second.ID {
-		t.Fatalf("future-launch default must remain selectable: projection=%#v err=%v", projection.Defaults, err)
+	if after.Generation != before.Generation+1 || after.Binding.RouteID != before.Binding.RouteID {
+		t.Fatalf("retarget must keep the route and bump generation: before=%#v after=%#v", before, after)
+	}
+	if after.Binding.ClientModel != before.Binding.ClientModel {
+		t.Fatalf("client model changed: %q -> %q", before.Binding.ClientModel, after.Binding.ClientModel)
+	}
+	if _, err := owner.SwitchProvider(ClientClaude, first.ID, owner.Catalog().Revision); err != nil {
+		t.Fatalf("switch back: %v", err)
+	}
+	if back, _ := owner.Table().Get("claude-session"); back.Binding.ProfileID != first.ID {
+		t.Fatalf("switch back not applied: %#v", back.Binding)
 	}
 }
