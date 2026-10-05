@@ -10,6 +10,7 @@ This documentation is organized by what you are trying to accomplish. If you onl
 4. Install or build a mobile client:
    - [Android app](android.md)
    - [iOS app](ios.md)
+   - [Web UI in a browser](web-ui.md)
 
 If something does not work, run `zen doctor` on the host and continue with [Troubleshooting](troubleshooting.md).
 

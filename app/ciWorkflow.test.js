@@ -19,9 +19,10 @@ describe("ordinary CI contract", () => {
     );
   });
 
-  it("exports both Android and iOS JS bundles in the App job", () => {
+  it("exports Android, iOS and web JS bundles in the App job", () => {
     expect(workflow).toContain("bunx expo export --platform android");
     expect(workflow).toContain("bunx expo export --platform ios");
+    expect(workflow).toContain("bunx expo export --platform web");
   });
 
   it("runs tests, vet, and build in the daemon job", () => {

@@ -16,6 +16,7 @@
     "site:dev": "bun site/index.html",
     "android:debug:apk": "cd app && bun run build:apk:debug",
     "daemon:build": "./scripts/build-zen-local.sh bin/zen",
+    "web:build": "./scripts/build-web-ui.sh",
     "daemon:build:linux": "./scripts/build-daemon-linux.sh",
     "daemon:test": "cd daemon && go test ./...",
     "installer:test": "./scripts/tests/install_test.sh",
