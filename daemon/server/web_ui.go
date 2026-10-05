@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/daoleno/zen/daemon/addressbook"
+	"github.com/daoleno/zen/daemon/enrollment"
 	"github.com/daoleno/zen/daemon/webui"
 )
 
@@ -34,6 +36,14 @@ func ParseWebOrigin(raw string) (string, error) {
 func (s *Server) SetWebOrigins(origins []string) {
 	s.webOrigins = append([]string(nil), origins...)
 }
+
+// SetAddressBook binds web admission to the daemon-owned, live-reloaded
+// address book. The existing -web-origin values remain valid seeds.
+func (s *Server) SetAddressBook(book *addressbook.Store) { s.addresses = book }
+
+func (s *Server) AddressBook() *addressbook.Store { return s.addresses }
+
+func (s *Server) SetEnrollmentManager(manager *enrollment.Manager) { s.enrollments = manager }
 
 // webUIHandler serves the browser app only where the operator expects it:
 // loopback clients addressing a loopback host, or an explicit web origin.
@@ -84,6 +94,19 @@ func (s *Server) webUIAdmitted(r *http.Request) bool {
 		return isLoopbackRemote(r.RemoteAddr)
 	}
 	requested := "https://" + strings.TrimSuffix(strings.ToLower(r.Host), ":443")
+	if s.addresses != nil && s.addresses.Contains(requested) {
+		return true
+	}
+	for _, origin := range s.webOrigins {
+		if origin == requested {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) isConfiguredWebHost(rawHost string) bool {
+	requested := "https://" + strings.TrimSuffix(strings.ToLower(rawHost), ":443")
 	for _, origin := range s.webOrigins {
 		if origin == requested {
 			return true

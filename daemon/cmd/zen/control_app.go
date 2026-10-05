@@ -17,6 +17,7 @@ import (
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/control"
+	"github.com/daoleno/zen/daemon/enrollment"
 	"github.com/daoleno/zen/daemon/lifecycle"
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	telegramchannel "github.com/daoleno/zen/daemon/telegram"
@@ -60,6 +61,7 @@ type controlApp struct {
 	connections       *connections.Manager
 	resourceSampler   *watcher.ResourceSampler
 	auth              *auth.Manager
+	enrollments       *enrollment.Manager
 	watcher           controlWatcher
 	execs             *work.ExecutorConfig
 	brainStore        *brain.Store
@@ -193,6 +195,34 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleDeviceRevoke(req)
 	case "pair":
 		return a.handlePair()
+	case "enrollment_list":
+		if a.enrollments == nil {
+			return control.ErrorResponse("enrollment_unavailable", "Enrollment is unavailable.")
+		}
+		items, err := a.enrollments.List()
+		if err != nil {
+			return control.ErrorResponse("enrollment_failed", err.Error())
+		}
+		return control.Response{OK: true, Enrollments: items}
+	case "enrollment_decide":
+		if a.enrollments == nil || req.Approve == nil {
+			return control.ErrorResponse("enrollment_unavailable", "Enrollment is unavailable.")
+		}
+		approver := "host-cli"
+		item, err := a.enrollments.Decide(req.EnrollmentID, req.VerificationNumber, approver, *req.Approve)
+		if err != nil {
+			return control.ErrorResponse("enrollment_failed", err.Error())
+		}
+		if *req.Approve {
+			token, tokenErr := a.auth.IssuePairingToken(auth.DefaultPairingTTL)
+			if tokenErr != nil {
+				return control.ErrorResponse("enrollment_failed", tokenErr.Error())
+			}
+			if _, err = a.auth.EnrollDevice(token.Value, a.auth.DaemonID(), a.auth.PublicKeyHex(), item.DeviceID, item.DeviceName, item.DevicePublicKey); err != nil {
+				return control.ErrorResponse("enrollment_failed", err.Error())
+			}
+		}
+		return control.Response{OK: true, Enrollments: []enrollment.Request{item}}
 	case "telegram_setup":
 		return a.handleTelegramSetup(req)
 	case "telegram_status":

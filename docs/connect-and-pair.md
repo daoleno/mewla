@@ -21,6 +21,40 @@ endpoint.
 
 There is no long-lived shared secret for normal traffic.
 
+## One address and later-device approval
+
+The daemon keeps its reachable entry points in `~/.zen/addresses.json`. It
+seeds loopback/LAN addresses and configured HTTPS origins, learns an HTTPS Host
+only after a signed device request, and reloads the file live. Operators can
+manage the list without a restart:
+
+```bash
+zen address list
+zen address add https://zen.example.com
+zen address remove https://zen.example.com
+```
+
+The web UI is admitted on loopback and the HTTPS addresses in this book. A
+plain HTTP remote Host still receives no web UI. `-web-origin` remains a
+backward-compatible seed for proxies that terminate TLS.
+
+After the first phone is paired, a new browser can open any HTTPS address and
+request enrollment. The page shows a three-digit number; an existing client
+shows the device, origin, and several number choices. Only the matching choice
+can approve it. Requests expire after five minutes, are capped at 32 pending
+entries, and are rate limited. The host can perform the same action:
+
+```bash
+zen devices pending
+zen devices approve -id REQUEST_ID -number 042
+zen devices deny -id REQUEST_ID -number 042
+```
+
+The enrollment device key is generated locally and bound to the pending
+request. The daemon enrolls that exact key only after a currently trusted
+device's signed decision. The request endpoint does not disclose the daemon
+identity or other pending requests.
+
 ## Optional: Zen Link
 
 Zen Link keeps the daemon loopback listener private. A daemon Connector opens

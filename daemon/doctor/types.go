@@ -77,9 +77,31 @@ type Report struct {
 	StateDir     StateDirCheck  `json:"state_dir"`
 	Listen       ListenCheck    `json:"listen"`
 	Executors    ExecutorsCheck `json:"executors"`
+	Addresses    []AddressCheck `json:"addresses,omitempty"`
+	Network      NetworkCheck   `json:"network"`
 	Checks       []NamedCheck   `json:"checks"`
 	Warnings     []string       `json:"warnings,omitempty"`
 	Remediations []Remediation  `json:"remediations"`
+}
+
+type AddressCheck struct {
+	URL       string `json:"url"`
+	Reachable bool   `json:"reachable"`
+	TLS       bool   `json:"tls"`
+	LatencyMS int64  `json:"latency_ms,omitempty"`
+	Status    Status `json:"status"`
+	Summary   string `json:"summary"`
+}
+
+type NetworkCheck struct {
+	TailscaleFound bool   `json:"tailscale_found"`
+	Direct         bool   `json:"direct"`
+	Relay          string `json:"relay,omitempty"`
+	NATType        string `json:"nat_type,omitempty"`
+	ProxySignature string `json:"proxy_signature,omitempty"`
+	Cloudflare     string `json:"cloudflare,omitempty"`
+	Status         Status `json:"status"`
+	Summary        string `json:"summary"`
 }
 
 // NamedCheck is a flat summary entry for UI/API consumers.

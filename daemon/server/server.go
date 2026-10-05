@@ -26,6 +26,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/daoleno/zen/daemon/addressbook"
 	"github.com/daoleno/zen/daemon/attachment"
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
@@ -34,6 +35,7 @@ import (
 	"github.com/daoleno/zen/daemon/classifier"
 	"github.com/daoleno/zen/daemon/codexctl"
 	"github.com/daoleno/zen/daemon/connections"
+	"github.com/daoleno/zen/daemon/enrollment"
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	"github.com/daoleno/zen/daemon/push"
 	skillmgmt "github.com/daoleno/zen/daemon/skills"
@@ -127,6 +129,8 @@ type Server struct {
 	terminalCleanup            terminalCleanupOwner
 	tlsConfig                  *tls.Config
 	webOrigins                 []string
+	addresses                  *addressbook.Store
+	enrollments                *enrollment.Manager
 	webUIFiles                 fs.FS
 
 	workSubID                   int
@@ -149,6 +153,8 @@ type Server struct {
 	pluginsMutations   map[*websocket.Conn]pluginsMutationRequest
 	pluginRuntime      skillmgmt.PluginRuntime
 	mu                 sync.Mutex
+	enrollmentRateMu   sync.Mutex
+	enrollmentRates    map[string][]time.Time
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
@@ -292,6 +298,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		pluginsInventories: make(map[*websocket.Conn]pluginsInventoryRequest),
 		pluginsMutations:   make(map[*websocket.Conn]pluginsMutationRequest),
 		pluginRuntime:      skillmgmt.NewPluginRuntime(),
+		enrollmentRates:    make(map[string][]time.Time),
 	}
 	if brainService != nil {
 		srv.brainWorkSubID, srv.brainWorkSub = brainService.SubscribeWork()
@@ -410,8 +417,19 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("/resources", s.handleResourceTelemetryHTTP)
 	mux.HandleFunc("/pair", s.handlePair)
+	mux.HandleFunc("/enrollment/request", s.handleEnrollmentRequest)
+	mux.HandleFunc("/enrollment/status", s.handleEnrollmentStatus)
+	mux.HandleFunc("/enrollment/pending", s.handleEnrollmentPending)
+	mux.HandleFunc("/enrollment/decision", s.handleEnrollmentDecision)
+	// Short aliases keep links easy to type while the longer paths remain the
+	// documented API.
+	mux.HandleFunc("/enroll/request", s.handleEnrollmentRequest)
+	mux.HandleFunc("/enroll/status", s.handleEnrollmentStatus)
+	mux.HandleFunc("/enroll/pending", s.handleEnrollmentPending)
+	mux.HandleFunc("/enroll/decision", s.handleEnrollmentDecision)
 	mux.HandleFunc("/auth-check", s.handleAuthCheck)
 	mux.HandleFunc("/devices", s.handleDevices)
+	mux.HandleFunc("/addresses", s.handleAddresses)
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)
@@ -3450,6 +3468,11 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return nil, false
+	}
+	// A valid device signature is the proof that the owner reached this Host.
+	// Only then may an HTTPS address enter the daemon's address book.
+	if s.addresses != nil && (r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") || s.isConfiguredWebHost(r.Host)) {
+		_ = s.addresses.Learn(r.Host)
 	}
 	return device, true
 }
