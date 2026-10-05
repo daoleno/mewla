@@ -294,6 +294,10 @@ export function useTerminalSession(
       wsClient.resizeTerminal(serverId, sessionId, nextCols, nextRows);
       return true;
     }
+    if (!wsClient.isConnected(serverId)) {
+      reopenOnConnectRef.current = true;
+      return false;
+    }
     if (correlationRef.current.beginOpen()) {
       wsClient.openTerminal(
         serverId,
