@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -28,5 +31,34 @@ func TestRunSurfacesUnexpectedDaemonExit(t *testing.T) {
 	if got := unexpectedDaemonExit(nil); got == nil ||
 		got.Error() != "daemon exited unexpectedly" {
 		t.Fatalf("clean child exit diagnostic=%v", got)
+	}
+}
+
+func TestDevBuildUsesReleasePublisherIdentity(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	flags, err := publisherFlags(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "..", "release", "plugin-publishers.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		GitHub struct {
+			ClientID string `json:"client_id"`
+		} `json:"github"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.GitHub.ClientID == "" || !strings.Contains(flags, "connections.GitHubPublicClientID="+manifest.GitHub.ClientID) {
+		t.Fatalf("dev publisher flags: %q", flags)
+	}
+	if _, err := publisherFlags(t.TempDir()); err == nil {
+		t.Fatal("missing publisher configuration silently ignored")
 	}
 }

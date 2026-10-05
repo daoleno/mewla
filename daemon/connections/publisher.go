@@ -32,3 +32,40 @@ func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
 	}
 	return client, ok, err
 }
+
+// Availability describes starting a new built-in connection on this daemon.
+// Existing accounts remain visible and usable independently of publisher setup.
+func (m *Manager) unavailableReason(kind string) string {
+	switch kind {
+	case "github", "slack", "google":
+	default:
+		return ""
+	}
+	if kind == "google" && GoogleExchangeOrigin != "" {
+		return ""
+	}
+	client, ok, err := m.clientConfig(kind)
+	if err != nil {
+		return "Connection settings are unavailable. Try again later."
+	}
+	ready := ok && client.ClientID != ""
+	if kind == "google" {
+		ready = ready && client.ClientSecret != "" && validCallback(client.RedirectURL)
+	}
+	if kind == "slack" {
+		ready = ready && (client.RedirectURL == NativeCallback && client.ClientSecret == "" || validCallback(client.RedirectURL) && client.ClientSecret != "")
+	}
+	if !ready {
+		return serviceName(kind) + " sign-in is not set up yet."
+	}
+	return ""
+}
+
+func (m *Manager) catalog() []Integration {
+	catalog := Catalog()
+	for i := range catalog {
+		catalog[i].UnavailableReason = m.unavailableReason(catalog[i].ID)
+		catalog[i].Available = catalog[i].UnavailableReason == ""
+	}
+	return catalog
+}

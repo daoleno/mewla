@@ -105,11 +105,13 @@ export function CatalogView({
             key={plugin.id}
             leading={<ServiceGlyph id={plugin.id} />}
             title={plugin.name}
-            subtitle={plugin.description}
-            value={accountCount ? `${accountCount} connected` : undefined}
-            accessory="chevron"
-            numberOfLines={1}
-            disabled={loading}
+            subtitle={plugin.available ? plugin.description : plugin.unavailable_reason || "Sign-in is not set up yet."}
+            value={plugin.available && accountCount ? `${accountCount} connected` : undefined}
+            trailing={!plugin.available ? <StatusPill label="Not yet available" tone="neutral" /> : undefined}
+            accessory={plugin.available ? "chevron" : undefined}
+            numberOfLines={2}
+            disabled={loading || !plugin.available}
+            accessibilityLabel={plugin.available ? plugin.name : `${plugin.name}, Not yet available. ${plugin.unavailable_reason || "Sign-in is not set up yet."}`}
             onPress={() => onOpenService(plugin)}
           />
         ))}
@@ -362,6 +364,9 @@ export function ConnectOfferView({
   onChooseAnother(): void;
   onRetryVerification?(): void;
 }) {
+  if (!plugin.available) {
+    return <InlineNotice title="Not yet available" detail={plugin.unavailable_reason || "Sign-in is not set up yet."} />;
+  }
   return (
     <>
       <ListSection title="Access you're granting" footer={`Credentials stay on ${serverName}.`}>

@@ -149,7 +149,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 			accounts = append(accounts, a)
 		}
 		sort.Slice(accounts, func(i, j int) bool { return accounts[i].Name < accounts[j].Name })
-		return Response{Catalog: Catalog(), Accounts: accounts, OAuthConfigured: m.oauthConfigured()}, nil
+		return Response{Catalog: m.catalog(), Accounts: accounts, OAuthConfigured: m.oauthConfigured()}, nil
 	case "oauth_configure":
 		return m.configureOAuth(q.Input)
 	case "oauth_start":

@@ -42,6 +42,10 @@ class PublisherTests(unittest.TestCase):
                 (root / name).mkdir()
             for name in ['plugin-publisher-flags.py', 'build-zen-local.sh', 'build-daemon-linux.sh']:
                 shutil.copy(ROOT / 'scripts' / name, root / 'scripts' / name)
+            # Web assets are outside this linker-identity test.
+            web_build = root / 'scripts/build-web-ui.sh'
+            web_build.write_text('#!/usr/bin/env bash\nexit 0\n')
+            web_build.chmod(0o755)
             (root / 'release/plugin-publishers.json').write_text(json.dumps(self.config))
             (root / 'app/app.base.json').write_text('{"expo":{"version":"0.0.0"}}')
             fake_go = root / 'fake-bin/go'

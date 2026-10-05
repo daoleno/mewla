@@ -276,7 +276,11 @@ func (t *watchTree) relevantPath(path string) (string, bool) {
 
 func (r *devRunner) rebuild() error {
 	built := r.binary + ".building"
-	args := []string{"build", "-o", built}
+	flags, err := publisherFlags(r.root)
+	if err != nil {
+		return err
+	}
+	args := []string{"build", "-ldflags=" + flags, "-o", built}
 	args = append(args, "./cmd/zen")
 	cmd := exec.Command("go", args...)
 	cmd.Dir = r.root
@@ -421,4 +425,15 @@ func isDoneProcess(err error) bool {
 		return false
 	}
 	return strings.Contains(err.Error(), "process already finished")
+}
+
+// Use the same validated public identities as release and local build scripts.
+// Resolve from the source root, never from the daemon's runtime state.
+func publisherFlags(daemonRoot string) (string, error) {
+	cmd := exec.Command("python3", filepath.Join(daemonRoot, "..", "scripts", "plugin-publisher-flags.py"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("publisher configuration: %w: %s", err, out)
+	}
+	return strings.TrimSpace(string(out)), nil
 }

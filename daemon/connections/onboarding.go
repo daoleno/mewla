@@ -111,6 +111,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		}
 		in := *q.Input
 		in.Mobile = true
+		if reason := m.unavailableReason(in.Integration); reason != "" {
+			return Response{}, errors.New(reason)
+		}
 		if in.Integration == "google" && GoogleExchangeOrigin != "" {
 			return m.startGoogleExchange(ctx, &in)
 		}

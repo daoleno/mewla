@@ -11,22 +11,23 @@ const MaxInputBytes = 64 << 10
 const MaxTools = 200
 
 type Integration struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Available   bool   `json:"available"`
-	SetupURL    string `json:"setup_url"`
-	Description string `json:"description"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Available         bool   `json:"available"`
+	SetupURL          string `json:"setup_url"`
+	Description       string `json:"description"`
+	UnavailableReason string `json:"unavailable_reason,omitempty"`
 }
 
 func Catalog() []Integration {
 	return []Integration{
-		{"github", "GitHub", true, "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", "Repositories, issues and pull requests"},
-		{"notion", "Notion", true, "https://www.notion.so/profile/integrations", "Pages, search and workspace content"},
-		{"google", "Google Workspace", true, "https://developers.google.com/workspace/guides/configure-oauth-consent", "Files, email and calendar events"},
-		{"slack", "Slack", true, "https://api.slack.com/apps", "Channels, conversations and messages"},
-		{"linear", "Linear", true, "https://linear.app/settings/account/security", "Issues, projects and team activity"},
-		{"mcp", "Remote MCP", true, "https://modelcontextprotocol.io", "Discover tools from a remote MCP server"},
-		{"openapi", "OpenAPI", true, "https://spec.openapis.org/oas/v3.0.3", "Discover operations from an OpenAPI 3 document"},
+		{ID: "github", Name: "GitHub", Available: true, SetupURL: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", Description: "Repositories, issues and pull requests"},
+		{ID: "notion", Name: "Notion", Available: true, SetupURL: "https://www.notion.so/profile/integrations", Description: "Pages, search and workspace content"},
+		{ID: "google", Name: "Google Workspace", Available: true, SetupURL: "https://developers.google.com/workspace/guides/configure-oauth-consent", Description: "Files, email and calendar events"},
+		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
+		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
+		{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},
+		{ID: "openapi", Name: "OpenAPI", Available: true, SetupURL: "https://spec.openapis.org/oas/v3.0.3", Description: "Discover operations from an OpenAPI 3 document"},
 	}
 }
 
