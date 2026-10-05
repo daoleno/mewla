@@ -25,6 +25,12 @@ The pairing link is carried in the URL fragment. Browsers never send the
 fragment to the server, and the app removes it from the address bar once it has
 read it.
 
+You can also paste a `zen://` pairing link in Settings. A browser pairs only
+with the daemon that serves the page. A link for the same daemon at another
+address, such as its tunnel hostname, pairs and connects through the page you
+are on. A link for a different daemon shows an error: open that daemon's own
+web UI or run `zen web` on that computer.
+
 ## Open it from another device
 
 Remote access is off by default. On the default bind, the daemon serves the
