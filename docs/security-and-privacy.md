@@ -96,6 +96,9 @@ accounts, billing, or a global abuse database.
 - All transports preserve `/ws`, `/health`, `/auth-check`, `/pair`, `/upload`,
   `/session-file-capability`, `/session-file`, and (for device administration)
   `/devices`.
+- The [web UI](web-ui.md) page is served only to loopback clients on a loopback
+  `Host`, or on an HTTPS origin named with `-web-origin`. Serving the page grants
+  nothing; the browser must still pair as a device.
 
 ## Data locations on the daemon host
 
@@ -122,7 +125,8 @@ Treat the state directory like SSH keys: directory mode `0700`, private files
 ## Mobile storage and pinned loopback bridge
 
 The device Ed25519 seed is held in platform secure storage. Server identity,
-transport candidates, route, and public SPKI pin are app metadata.
+transport candidates, route, and public SPKI pin are app metadata. The web UI
+has no keychain and keeps the seed in the origin's local storage.
 
 For Link, the shared TypeScript owner asks the Android/iOS native module for a
 loopback-only local L4 bridge. That bridge opens TLS 1.3 to the selected relay

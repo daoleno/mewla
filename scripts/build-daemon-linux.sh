@@ -2,6 +2,7 @@
 # Build release-shaped zen binaries for Linux amd64/arm64 and macOS arm64.
 #
 # Reads product version from app/app.base.json (expo.version) unless ZEN_VERSION is set.
+# Embeds the web UI via scripts/build-web-ui.sh (needs `bun install`).
 # Does not publish, tag, sign Android APKs, or read release keystores.
 #
 # Usage:
@@ -48,6 +49,8 @@ export GOFLAGS="${GOFLAGS:-} -trimpath"
 if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
   export GOSUMDB="${GOSUMDB:-sum.golang.org}"
 fi
+
+"$ROOT/scripts/build-web-ui.sh"
 
 PUBLISHER_FLAGS="$(python3 "$ROOT/scripts/plugin-publisher-flags.py")"
 LDFLAGS="-s -w -buildid= -X main.Version=${VERSION} ${PUBLISHER_FLAGS}"
