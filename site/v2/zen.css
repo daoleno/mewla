@@ -165,6 +165,7 @@ h1 { font-size: clamp(36px, 4.7vw, 64px); line-height: 1.04; text-wrap: balance;
   .hero-phone { width: 280px; }
 }
 @media (max-width: 760px) {
+  :root { --gutter: 16px; }
   .hero { display: block; min-height: 0; padding-top: 330px; padding-bottom: 56px; }
   .scene { inset: -8px 0 auto; height: 420px; }
   .layer img { object-position: 86% 6%; }
