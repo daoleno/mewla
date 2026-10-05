@@ -6,6 +6,7 @@ import {
   type StoredServer,
 } from "./storage";
 import { enrollWithDaemon } from "./pairing";
+import { resolveBrowserPairingURL } from "./browserPairingOrigin";
 import { confirmPairingScope } from "./confirmPairingScope";
 import { PairingCancelledError } from "./pairingScope";
 import {
@@ -39,7 +40,11 @@ export async function importConnection(
         transportPin: payload.link.transportPin,
         url: payload.url,
       })
-    : payload.url;
+    : await resolveBrowserPairingURL({
+        url: payload.url,
+        daemonId: payload.daemonId,
+        daemonPublicKey: payload.daemonPublicKey,
+      });
   let pairing: Awaited<ReturnType<typeof enrollWithDaemon>>;
   try {
     pairing = await enrollWithDaemon({
@@ -54,12 +59,13 @@ export async function importConnection(
     }
   }
 
-  const primaryStableURL =
-    payload.link?.candidates.find(
-      (candidate) => candidate.admissionUrl === payload.url,
-    )?.url ||
-    payload.link?.candidates[0]?.url ||
-    payload.url;
+  const primaryStableURL = payload.link
+    ? payload.link.candidates.find(
+        (candidate) => candidate.admissionUrl === payload.url,
+      )?.url ||
+      payload.link.candidates[0]?.url ||
+      payload.url
+    : pairingURL;
   const savedServer = await saveServer({
     name: payload.name || "",
     url: primaryStableURL,
