@@ -5,56 +5,9 @@
 // so the over-under weave is correct at every frame of a draw.
 import { RINGS } from "./rings-geo.js";
 
-const TAU = Math.PI * 2;
+import { rng } from "./motion.js";
+
 const DEG = Math.PI / 180;
-export const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// One clock for every animation on the page. ?t=1234 or window.__zenT freezes it
-// so frames can be captured deterministically.
-const fixedT = new URLSearchParams(location.search).get("t");
-export const Clock = {
-  t0: performance.now(),
-  frozen() { return window.__zenT != null || fixedT != null; },
-  now() {
-    if (window.__zenT != null) return window.__zenT;
-    if (fixedT != null) return +fixedT;
-    return performance.now() - this.t0;
-  },
-};
-const renderers = new Set();
-window.__zenRender = () => renderers.forEach((r) => r());
-
-export function loop(render, { root, until } = {}) {
-  renderers.add(render);
-  if (reduceMotion || Clock.frozen()) { render(); return; }
-  let raf = 0, visible = true;
-  const tick = () => {
-    raf = 0;
-    const done = render();
-    if (done && until) return;
-    if (visible && !document.hidden) raf = requestAnimationFrame(tick);
-  };
-  const kick = () => { if (!raf && visible && !document.hidden) raf = requestAnimationFrame(tick); };
-  if (root && "IntersectionObserver" in window) {
-    new IntersectionObserver(([e]) => { visible = e.isIntersecting; kick(); }).observe(root);
-  }
-  document.addEventListener("visibilitychange", kick);
-  kick();
-}
-
-export const ease = {
-  inOut: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : 0.5 - Math.cos(Math.PI * x) / 2),
-  // a brush: slow press, quick middle, slow lift
-  brush: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
-  out: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3)),
-};
-export const clamp01 = (x) => Math.max(0, Math.min(1, x));
-
-// Deterministic noise so captures are repeatable.
-function rng(seed) {
-  let s = seed >>> 0;
-  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-}
 
 export const ring = {
   cx: RINGS.cx, cy: RINGS.cy,
@@ -241,4 +194,4 @@ export function sizeCanvas(el, cssW, cssH = cssW) {
   return dpr;
 }
 
-export { canvas as makeCanvas, rng };
+export { canvas as makeCanvas };
