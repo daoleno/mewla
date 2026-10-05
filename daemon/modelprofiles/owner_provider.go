@@ -796,12 +796,19 @@ func (o *Owner) CodexRoutedDefault() bool {
 
 // SetProviderConnection selects the future-launch connection for a client.
 // Model selection remains an Agent/session concern and is never persisted here.
+// Zen-launched Claude Sessions reach the Provider through their own route, so
+// selecting a Claude connection also retargets every routed Claude Session in
+// the same transaction.
 func (o *Owner) SetProviderConnection(clientOrExecutor, connectionID string, revision int64) (ProviderCatalogProjection, error) {
 	if o == nil || !o.started || o.store == nil {
 		return ProviderCatalogProjection{}, fmt.Errorf("%w: owner not started", ErrInvalid)
 	}
 	client := clientFromExecutor(clientOrExecutor)
 	connectionID = normalizeID(connectionID)
+	if client == ClientClaude && connectionID != "" && o.table != nil && o.routes != nil &&
+		normalizeID(o.store.ClientDefault(client)) != "" {
+		return o.SwitchProvider(clientOrExecutor, connectionID, revision)
+	}
 	o.mu.Lock()
 	applyErr := func() error {
 		if err := o.ensureProviderSwitchJournalClearedLocked(); err != nil {
@@ -822,14 +829,11 @@ func (o *Owner) SetProviderConnection(clientOrExecutor, connectionID string, rev
 }
 
 // SwitchProvider atomically updates the future-launch connection and retargets
-// routed Codex sessions. Claude uses SetProviderConnection: its interactive CLI
-// cannot acknowledge a route-only active-session switch.
+// routed Sessions of that client. The Router reads the binding per request, so
+// the next request of a live CLI reaches the new connection without restart.
 func (o *Owner) SwitchProvider(clientOrExecutor, connectionID string, revision int64) (ProviderCatalogProjection, error) {
 	if o == nil || !o.started || o.store == nil || o.table == nil || o.routes == nil {
 		return ProviderCatalogProjection{}, fmt.Errorf("%w: owner not started", ErrInvalid)
-	}
-	if clientFromExecutor(clientOrExecutor) == ClientClaude {
-		return ProviderCatalogProjection{}, fmt.Errorf("%w: Claude provider switch has no native live control; change the future-launch default instead", ErrBindingNotRouted)
 	}
 	o.mu.Lock()
 	persist, err := o.switchProviderLocked(clientOrExecutor, connectionID, revision)
