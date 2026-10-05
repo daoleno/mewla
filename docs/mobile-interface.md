@@ -90,6 +90,8 @@ A segmented **Codex / Claude** switch picks the agent. Below it, one grouped lis
 
 ## Shared patterns
 
+- **Back** is one control everywhere: `HeaderBackButton`, an icon-only chevron in a 40pt disc with a touch target of at least 44pt, labelled "Back", next to a centred title. Every pushed screen (Calendar, Plugins, Skills, Stats, Browser, Resources, Settings, Model Providers, Work detail) gets it from the root Stack header. The Session screen puts it in its first glass capsule. Full-screen pages inside a sheet, such as Settings → Telegram, use the same header row. Back inside a sheet uses the same chevron and names its destination ("Back to services").
+- **Back behaviour** has one rule (`useScreenBack`): an in-screen step comes first (a Plugins sub-page goes back to the catalog), then the stack pops, and a screen opened by deep link with nothing below it lands on its logical parent: Brain, Sessions for a Session, Settings for Model Providers. Android hardware Back and the iOS edge swipe run the same rule. On web, browser Back pops the same history; Plugins sub-pages are not browser history entries.
 - **Overflow menus** always use the bottom-sheet `ActionMenu`. This covers Brain, Sessions, Session, Work detail, per-server actions in Settings, and per-Provider actions.
 - **Destructive actions** go through `confirmDestructive` or a native alert where the destructive button is never the default. This covers terminating Sessions, removing a server, deleting a Work item, deleting a Provider, and removing or unlinking Telegram.
 - **Status** uses `StatusPill`, whose live pulse stops under Reduce Motion. Recoverable problems and in-flow status use `InlineNotice`, and empty, loading, and blocking error states use `EmptyState`.

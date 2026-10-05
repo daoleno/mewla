@@ -3,7 +3,6 @@ import { AppState, Platform } from "react-native";
 import {
   Stack,
   useGlobalSearchParams,
-  useNavigation,
   useRouter,
   useSegments,
 } from "expo-router";
@@ -33,7 +32,15 @@ import {
 } from "../store/currentServer";
 import { syncCalendarNotifications } from "../services/calendarNotifications";
 import { Typography, useAppTheme } from "../constants/tokens";
-import { IconButton } from "../components/ui/IconButton";
+import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
+import {
+  useScreenBack,
+  type ScreenBackNavigation,
+} from "../components/navigation/useScreenBack";
+import {
+  screenBackParent,
+  type ScreenBackParent,
+} from "../components/navigation/screenBack";
 import { ToastProvider } from "../components/ui/Toast";
 import { AlertHost } from "../components/ui/AlertHost";
 import { appFontAssets } from "../constants/appFontAssets";
@@ -648,6 +655,17 @@ interface AppNavigatorProps {
   bootstrapResolved: boolean;
 }
 
+// Native headers inset their leading and trailing items by 16pt. The web
+// Stack header (JS Header) reads these container styles instead; they are not
+// part of the native-stack option type.
+const webHeaderInsets: object =
+  Platform.OS === "web"
+    ? {
+        headerLeftContainerStyle: { paddingStart: 16 },
+        headerRightContainerStyle: { paddingEnd: 16 },
+      }
+    : {};
+
 const AppNavigator = memo(function AppNavigator({
   bootstrapResolved,
 }: AppNavigatorProps) {
@@ -659,71 +677,46 @@ const AppNavigator = memo(function AppNavigator({
 
   return (
     <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.bgPrimary },
-        headerTintColor: colors.textPrimary,
-        headerShadowVisible: false,
-        headerTitleAlign: "center",
-        headerTitleStyle: {
-          fontFamily: Typography.uiFontMedium,
-          fontSize: 17,
-          color: colors.textPrimary,
-        },
-        contentStyle: { backgroundColor: colors.bgPrimary },
-        animation: "slide_from_right",
-        fullScreenGestureEnabled: true,
+      screenOptions={({ navigation, route }) => {
+        const backParent = screenBackParent(route.name);
+        return {
+          headerStyle: { backgroundColor: colors.bgPrimary },
+          headerTintColor: colors.textPrimary,
+          headerShadowVisible: false,
+          headerTitleAlign: "center",
+          headerTitleStyle: {
+            fontFamily: Typography.uiFontMedium,
+            fontSize: 17,
+            color: colors.textPrimary,
+          },
+          // Headerless routes get none: native-stack renders headerLeft even
+          // for a hidden header, which would register a hardware-back listener.
+          headerLeft: backParent
+            ? () => (
+                <StackBackButton navigation={navigation} parent={backParent} />
+              )
+            : undefined,
+          contentStyle: { backgroundColor: colors.bgPrimary },
+          animation: "slide_from_right",
+          fullScreenGestureEnabled: true,
+          ...webHeaderInsets,
+        };
       }}
     >
       <Stack.Screen name="(primary)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="calendar"
-        options={{
-          title: "Calendar",
-          headerLeft: () => <SecondaryBackButton />,
-        }}
-      />
-      <Stack.Screen name="plugins" options={{ title: "Plugins", headerLeft: () => <SecondaryBackButton /> }} />
-      <Stack.Screen
-        name="skills"
-        options={{
-          title: "Skills",
-          headerLeft: () => <SecondaryBackButton />,
-        }}
-      />
-      <Stack.Screen
-        name="stats"
-        options={{
-          title: "Stats",
-          headerLeft: () => <SecondaryBackButton />,
-        }}
-      />
-      <Stack.Screen name="browser" options={{ title: "Browser", headerLeft: () => <SecondaryBackButton /> }} />
-      <Stack.Screen
-        name="resources"
-        options={{
-          title: "Resources",
-          headerLeft: () => <SecondaryBackButton />,
-        }}
-      />
-      <Stack.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          headerLeft: () => <SecondaryBackButton />,
-        }}
-      />
-      <Stack.Screen
-        name="model-profiles"
-        options={{
-          title: "Model Providers",
-          headerLeft: () => <SecondaryBackButton />,
-        }}
-      />
+      <Stack.Screen name="calendar" options={{ title: "Calendar" }} />
+      <Stack.Screen name="plugins" options={{ title: "Plugins" }} />
+      <Stack.Screen name="skills" options={{ title: "Skills" }} />
+      <Stack.Screen name="stats" options={{ title: "Stats" }} />
+      <Stack.Screen name="browser" options={{ title: "Browser" }} />
+      <Stack.Screen name="resources" options={{ title: "Resources" }} />
+      <Stack.Screen name="settings" options={{ title: "Settings" }} />
+      <Stack.Screen name="model-profiles" options={{ title: "Model Providers" }} />
       <Stack.Screen
         name="terminal/[id]"
         options={{ headerShown: false, animation: "none" }}
       />
-      <Stack.Screen name="work/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="work/[id]" options={{ title: "" }} />
       <Stack.Screen
         name="onboarding"
         options={{ headerShown: false, presentation: "modal" }}
@@ -735,28 +728,16 @@ const AppNavigator = memo(function AppNavigator({
 
 AppNavigator.displayName = "AppNavigator";
 
-function SecondaryBackButton() {
-  const router = useRouter();
-  const navigation = useNavigation();
-  const { colors } = useAppTheme();
-  return (
-    <IconButton
-      icon="chevron-back"
-      size={36}
-      iconSize={21}
-      color={colors.textPrimary}
-      accessibilityLabel="Back"
-      haptic={false}
-      onPress={() => {
-        // Deep-link entries have no stack below them; land on Brain instead.
-        if (navigation.canGoBack()) {
-          router.back();
-          return;
-        }
-        router.replace("/");
-      }}
-    />
-  );
+/** Default header Back for every pushed screen; see useScreenBack. */
+function StackBackButton({
+  navigation,
+  parent,
+}: {
+  navigation: ScreenBackNavigation;
+  parent: ScreenBackParent;
+}) {
+  const goBack = useScreenBack({ parent, navigation });
+  return <HeaderBackButton onPress={goBack} />;
 }
 
 function ThemedStatusBar() {

@@ -11,6 +11,7 @@ import { AppText } from "./ui/AppText";
 import { BottomSheetFrame } from "./ui/BottomSheetFrame";
 import { EmptyState } from "./ui/EmptyState";
 import { IconButton } from "./ui/IconButton";
+import { HeaderBackButton } from "./navigation/HeaderBackButton";
 import { InlineNotice } from "./ui/InlineNotice";
 import { ListRow, ListSection } from "./ui/ListSection";
 import { StatusPill } from "./ui/StatusPill";
@@ -261,8 +262,7 @@ function ServiceDetail({
   return (
     <>
       <View style={styles.header}>
-        <IconButton
-          icon="chevron-back"
+        <HeaderBackButton
           accessibilityLabel="Back to services"
           onPress={onBack}
         />

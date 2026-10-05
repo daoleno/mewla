@@ -25,7 +25,7 @@ interface UseTerminalTopBarPropsInput {
   >;
   navigationActions: Pick<
     ReturnType<typeof useTerminalNavigationActions>,
-    "goToInbox"
+    "goBack"
   >;
   interfaceRenderMode: StoredInterfaceRenderMode;
   gitDiffDisabled: boolean;
@@ -77,7 +77,7 @@ export function useTerminalTopBarProps({
       isStructuredChatWorker,
       delegated,
       status,
-      onBack: navigationActions.goToInbox,
+      onBack: navigationActions.goBack,
       onOpenSessionDetails,
       onOpenGitDiff: openGitDiff,
       onOpenMenu: chromeLayout.openMenu,
@@ -100,7 +100,7 @@ export function useTerminalTopBarProps({
       onOpenSessionDetails,
       openGitDiff,
       onToggleInterfaceRenderMode,
-      navigationActions.goToInbox,
+      navigationActions.goBack,
       terminalTheme.background,
       terminalTheme.green,
       terminalTheme.red,

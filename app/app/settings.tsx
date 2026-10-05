@@ -37,6 +37,7 @@ import {
   ContinuousCorners,
   Radii,
   TypeScale,
+  Typography,
   UiTextMetrics,
   useAppColors,
   useAppTheme,
@@ -92,6 +93,10 @@ import { ZenLogoMark } from "../components/ui/ZenLogoMark";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
 import { RisingSheet } from "../components/ui/RisingSheet";
+import {
+  HEADER_BACK_BUTTON_SIZE,
+  HeaderBackButton,
+} from "../components/navigation/HeaderBackButton";
 import { TelegramConnectionPanel } from "../components/settings/TelegramConnectionPanel";
 import { cancelCalendarNotifications } from "../services/calendarNotifications";
 import { useCurrentServer } from "../store/currentServer";
@@ -1301,10 +1306,9 @@ function TelegramConnectionRow({
         <SafeAreaView style={{ flex: 1 }}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
             <View style={styles.detailHeader}>
-              <AnimatedPressable onPress={closeDetails} accessibilityRole="button" accessibilityLabel="Back to Settings" style={styles.detailBack}>
-                <Ionicons name="chevron-back" size={24} color={colors.accentStrong} />
-                <Text style={[styles.detailBackText, { color: colors.accentStrong }]}>Settings</Text>
-              </AnimatedPressable>
+              <HeaderBackButton accessibilityLabel="Back to Settings" onPress={closeDetails} />
+              <Text accessibilityRole="header" numberOfLines={1} style={[styles.detailTitle, { color: colors.textPrimary }]}>Telegram</Text>
+              <View style={styles.detailHeaderEnd} />
             </View>
             <TelegramConnectionPanel
               status={visibleStatus} connected={Boolean(activeServerId)} loading={loading} busy={busy}
@@ -1456,22 +1460,21 @@ function createStyles(theme: ResolvedZenTheme) {
       height: 12,
       borderRadius: 6,
     },
+    // Mirrors the Stack header: Back, centred title, balancing end slot.
     detailHeader: {
-      minHeight: 52,
+      minHeight: 56,
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 4,
+      paddingHorizontal: 16,
     },
-    detailBack: {
-      minHeight: 48,
-      paddingRight: 12,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 2,
+    detailTitle: {
+      flex: 1,
+      textAlign: "center",
+      fontFamily: Typography.uiFontMedium,
+      fontSize: 17,
     },
-    detailBackText: {
-      ...UiTextMetrics,
-      ...TypeScale.body,
+    detailHeaderEnd: {
+      width: HEADER_BACK_BUTTON_SIZE,
     },
     noticeCard: {
       marginTop: 12,

@@ -4,6 +4,7 @@ import { confirmDestructive } from "../../ui/confirmDestructive";
 import { useRouter } from "expo-router";
 import type { Worker, ConnectionState } from "../../../store/workers";
 import { dismissTerminalToSessions } from "../../../services/terminalExitNavigation";
+import { useScreenBack } from "../../navigation/useScreenBack";
 import { wsClient } from "../../../services/websocket";
 
 interface UseTerminalNavigationActionsInput {
@@ -26,11 +27,12 @@ export function useTerminalNavigationActions({
   closeMenu,
 }: UseTerminalNavigationActionsInput) {
   const router = useRouter();
+  const screenBack = useScreenBack({ parent: "/list" });
 
-  const goToInbox = useCallback(() => {
+  const goBack = useCallback(() => {
     closeMenu();
-    dismissTerminalToSessions(router);
-  }, [closeMenu, router]);
+    screenBack();
+  }, [closeMenu, screenBack]);
 
   const performTerminateWorker = useCallback(async () => {
     if (!sessionKey || !serverId || !workerId) return;
@@ -75,7 +77,7 @@ export function useTerminalNavigationActions({
   ]);
 
   return {
-    goToInbox,
+    goBack,
     handleTerminateWorker,
   };
 }

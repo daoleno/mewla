@@ -27,6 +27,7 @@ import {
   type BrainWorkspaceTree,
 } from "../../services/websocket";
 import { AppText, BottomSheetFrame, IconButton } from "../ui";
+import { HeaderBackButton } from "../navigation/HeaderBackButton";
 import { ZenImage, ZenImageOwnerContext } from "../terminal/ZenImage";
 import type { ZenImageOwner } from "../../services/imageSource";
 import { InterfaceNativeMarkdownBody } from "../terminal/InterfaceNativeMarkdownBody";
@@ -335,12 +336,8 @@ export function BrainWorkspaceViewer({
     >
       <View style={styles.header}>
         {canGoBack ? (
-          <IconButton
-            icon="arrow-back-outline"
-            size={44}
-            iconSize={19}
-            tone="ghost"
-            accessibilityRole="button"
+          <HeaderBackButton
+            surface="bare"
             accessibilityLabel={
               showingFile ? "Back to folder" : "Back to parent folder"
             }

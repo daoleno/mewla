@@ -24,6 +24,7 @@ import {
   CHAT_HEADER_OUTER_GAP,
 } from './chatChromeMetrics';
 import { SessionAvatar } from '../ui/SessionAvatar';
+import { HeaderBackButton } from '../navigation/HeaderBackButton';
 import { relativeLuminance } from '../../theme/colorUtils';
 
 interface TelegramChatHeaderAction {
@@ -105,20 +106,11 @@ export function TelegramChatHeader({
               flat ? styles.flatChrome : null,
             ]}
           >
-            <AnimatedPressable
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              style={[styles.iconButton, flat ? styles.iconButtonFlat : null]}
-              preset="press"
-              scale={0.92}
+            <HeaderBackButton
+              surface="bare"
+              color={styles.iconColor.color}
               onPress={onBack}
-            >
-              <Ionicons
-                name="chevron-back"
-                size={22}
-                color={styles.iconColor.color}
-              />
-            </AnimatedPressable>
+            />
           </Capsule>
         ) : null}
 

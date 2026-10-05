@@ -17,7 +17,8 @@ describe("Calendar screen contract", () => {
     expect(source).not.toContain('"day"');
   });
   test("keeps a compact, separate Calendar hierarchy", () => {
-    expect(source).toContain('accessibilityLabel="Back"');
+    // Back comes from the shared Stack header, not a Calendar-local button.
+    expect(source).not.toContain("headerLeft");
     expect(source).toContain('accessibilityLabel="Add calendar item"');
     expect(source).toContain("headerShown: true");
     expect(source).toContain('edges={["bottom"]}');
