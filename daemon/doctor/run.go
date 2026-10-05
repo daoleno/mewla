@@ -159,7 +159,11 @@ func (e env) checkAddresses(stateDir string) []AddressCheck {
 		if probeErr == nil && status == http.StatusOK {
 			check.Reachable = true
 			check.Status = StatusOK
-			check.Summary = "reachable and TLS verified"
+			if parsedTLS {
+				check.Summary = "reachable and TLS verified"
+			} else {
+				check.Summary = "reachable over local HTTP"
+			}
 		} else {
 			check.Status = StatusWarn
 			check.Summary = "unreachable"
