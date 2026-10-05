@@ -138,10 +138,6 @@ func run(args []string, stderr io.Writer) error {
 			return runConnectionsCommand(args[1:], stderr)
 		case "telegram":
 			return runTelegramCommand(args[1:], stderr)
-		case "codex-gateway":
-			return runCodexGatewayCommand(args[1:], stderr)
-		case "claude":
-			return runClaudeCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
 		case "address":
@@ -370,6 +366,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 		GatewayAddr:     modelprofiles.DefaultGatewayListenAddr,
 		GatewayStateDir: filepath.Join(authManager.StorageDir(), "codex-gateway"),
 		CodexConfigPath: modelprofiles.DefaultCodexConfigPath(),
+		// Every Claude on the machine (plain shells, IDEs) reaches the selected
+		// Claude Provider through the same gateway via the env block of the
+		// user's Claude Code settings; Zen-launched Sessions keep their routes.
+		ClaudeSettingsPath: modelprofiles.DefaultClaudeSettingsPath(),
 	})
 	if err != nil {
 		return fmt.Errorf("start model profiles owner: %w", err)
@@ -991,38 +991,6 @@ func runWorkerList(args []string, stderr io.Writer) error {
 		return err
 	}
 	resp, err := callControl(cfg, control.Request{Type: "worker_list"})
-	if err != nil {
-		return err
-	}
-	return writeControlResponse(os.Stdout, resp, cfg.json)
-}
-
-// runCodexGatewayCommand manages the machine-level Codex gateway takeover:
-// status | enable | disable | restore-backup.
-func runCodexGatewayCommand(args []string, stderr io.Writer) error {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: zen codex-gateway <status|enable|disable|restore-backup> [flags]")
-		return errors.New("codex-gateway subcommand is required")
-	}
-	cfg, err := parseCLIConfig("zen codex-gateway "+args[0], args[1:], stderr)
-	if err != nil {
-		return err
-	}
-	reqType := ""
-	switch args[0] {
-	case "status":
-		reqType = "codex_gateway_status"
-	case "enable":
-		reqType = "codex_gateway_enable"
-	case "disable":
-		reqType = "codex_gateway_disable"
-	case "restore-backup", "restore":
-		reqType = "codex_gateway_restore_backup"
-	default:
-		fmt.Fprintln(stderr, "Usage: zen codex-gateway <status|enable|disable|restore-backup> [flags]")
-		return fmt.Errorf("unknown codex-gateway subcommand %q", args[0])
-	}
-	resp, err := callControl(cfg, control.Request{Type: reqType})
 	if err != nil {
 		return err
 	}

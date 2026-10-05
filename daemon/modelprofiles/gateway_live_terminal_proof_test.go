@@ -163,7 +163,7 @@ func waitControl(t *testing.T, socketPath string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if _, err := control.Call(socketPath, control.Request{Type: "codex_gateway_status"}); err == nil {
+		if _, err := control.Call(socketPath, control.Request{Type: "provider_list"}); err == nil {
 			return
 		}
 		time.Sleep(250 * time.Millisecond)
@@ -288,20 +288,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 	}
 	waitControl(t, socketPath, 30*time.Second)
 
-	// Truthful status before/after enable.
-	statusResp := controlCall(t, socketPath, control.Request{Type: "codex_gateway_status"})
-	if statusResp.Gateway == nil || statusResp.Gateway.State != modelprofiles.TakeoverStateInactive {
-		state := ""
-		if statusResp.Gateway != nil {
-			state = statusResp.Gateway.State
-		}
-		t.Fatalf("pre-enable gateway state = %q, want inactive", state)
-	}
-	controlCall(t, socketPath, control.Request{Type: "codex_gateway_enable"})
-	statusResp = controlCall(t, socketPath, control.Request{Type: "codex_gateway_status"})
-	if statusResp.Gateway == nil || statusResp.Gateway.State != modelprofiles.TakeoverStateActive {
-		t.Fatalf("post-enable gateway = %+v", statusResp.Gateway)
-	}
+	// The daemon projects the gateway into the Codex config on start.
 	projected, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
@@ -374,10 +361,6 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		ProfileID:  "conn-proof-b",
 		Revision:   projResp.Providers.Revision,
 	})
-	statusResp = controlCall(t, socketPath, control.Request{Type: "codex_gateway_status"})
-	if statusResp.Gateway == nil || statusResp.Gateway.UpstreamProfileID != "conn-proof-b" {
-		t.Fatalf("gateway upstream after switch = %+v", statusResp.Gateway)
-	}
 
 	// Prompt 2 in the SAME pane/process -> upstream B.
 	bodyB := submitTurn("reply with the single word beta", upB, `"reply with the single word beta"`)
@@ -413,17 +396,6 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		if !bytes.Contains(captured, []byte(marker)) {
 			t.Fatalf("pane did not render %s: %s", marker, trimTo(captured, 1200))
 		}
-	}
-
-	// Disable: removes only the Zen-owned projection, keeps the user model.
-	controlCall(t, socketPath, control.Request{Type: "codex_gateway_disable"})
-	statusResp = controlCall(t, socketPath, control.Request{Type: "codex_gateway_status"})
-	if statusResp.Gateway == nil || statusResp.Gateway.State != modelprofiles.TakeoverStateInactive {
-		t.Fatalf("post-disable gateway = %+v", statusResp.Gateway)
-	}
-	after, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
-	if !bytes.Contains(after, []byte("gpt-5.6-sol")) || bytes.Contains(after, []byte(modelprofiles.GatewayProviderName)) {
-		t.Fatalf("disable left a broken config: %s", after)
 	}
 
 	_ = exec.Command("tmux", "-S", tmuxSocket, "kill-session", "-t", "zenproof").Run()
@@ -616,7 +588,7 @@ func proofEnv(zenHome, codexHome, scratch, tmuxSocket string) []string {
 		key, _, _ := strings.Cut(e, "=")
 		switch key {
 		case "HOME", "CODEX_HOME", "OPENAI_API_KEY", "OPENAI_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
-			"ANTHROPIC_BASE_URL", "TMUX", "ZEN_STATE_DIR", "BUN_INSTALL", "GOROOT", "GOPATH":
+			"ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "TMUX", "ZEN_STATE_DIR", "BUN_INSTALL", "GOROOT", "GOPATH":
 			continue
 		}
 		out = append(out, e)

@@ -282,30 +282,6 @@ func TestTakeoverMalformedConfigFailsSafe(t *testing.T) {
 	}
 }
 
-// TestTakeoverBackupRestore: the recorded rollback restores the exact
-// pre-takeover bytes even after user edits.
-func TestTakeoverBackupRestore(t *testing.T) {
-	takeover, _, configPath := takeoverFixture(t)
-	original := readFileBytes(t, configPath)
-	if _, err := takeover.Enable(DefaultGatewayListenAddr); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(configPath, []byte("model = \"something-else\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	status, err := takeover.RestoreBackup()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status.State != TakeoverStateInactive {
-		t.Fatalf("status after restore = %+v", status)
-	}
-	restored := readFileBytes(t, configPath)
-	if !bytes.Equal(restored, original) {
-		t.Fatalf("backup restore did not return exact original bytes:\n--- got ---\n%s\n--- want ---\n%s", restored, original)
-	}
-}
-
 // TestTakeoverRestartRepairSimulation: a fresh Takeover over the same state
 // dir (daemon restart) with a drifted live config repairs to active.
 func TestTakeoverRestartRepairSimulation(t *testing.T) {

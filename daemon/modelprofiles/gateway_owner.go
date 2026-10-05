@@ -2,15 +2,18 @@ package modelprofiles
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// gatewayOwnerFile groups the Owner integration of the machine-level Codex
-// gateway and its config takeover. The gateway is independent of Session
-// route bindings: any Codex process whose native config points at the stable
-// loopback endpoint is routed through the currently selected Provider.
+// gatewayOwnerFile groups the Owner integration of the machine-level gateway
+// and its client config takeovers. There is one gateway for every client: the
+// daemon projects it into Codex's config.toml and Claude Code's settings env
+// on start, so any process launched outside Zen reaches the currently
+// selected Provider. Selecting a Provider is the only control; there is no
+// separate enable step.
 
 // SetGatewayBypass installs the takeover-readiness callback consulted by
 // PrepareLaunchModel: when it reports true, new managed Codex launches use the
@@ -73,10 +76,15 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	o.gateway = gateway
 	if stateDir != "" {
 		o.takeover = NewTakeover(cfg.CodexConfigPath, stateDir, gateway)
+		if path := strings.TrimSpace(cfg.ClaudeSettingsPath); path != "" {
+			o.claudeTakeover = NewClaudeTakeover(path, stateDir)
+		}
 	}
 	if err := gateway.Listen(); err != nil {
 		// Non-fatal: takeover status reports broken; honest connection
-		// failures reach every routed Codex process.
+		// failures reach every routed Codex process. Claude settings get the
+		// user's own values back rather than a dead endpoint.
+		o.syncClaudeTakeover()
 		return nil
 	}
 	// Restore the same listener address / upstream profile across restarts.
@@ -89,6 +97,9 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	} else {
 		gateway.ClearUpstream()
 	}
+	// Re-project on every start: the listener may have fallen back to another
+	// port, and the Claude selection may have changed while the daemon was down.
+	o.syncClaudeTakeover()
 	if o.takeover != nil {
 		state, err := o.takeover.LoadState()
 		if err != nil {
@@ -108,6 +119,7 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 				return repairErr
 			}
 		}
+		o.refreshGatewayUpstream()
 	}
 	return nil
 }
@@ -120,10 +132,10 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 	if modelID == "" {
 		return GatewayUpstream{}, ErrModelUnsupported
 	}
-	wantClient := ClientCodex
 	if protocol == GatewayProtocolAnthropic {
-		wantClient = ClientClaude
+		return o.selectedClaudeGatewayUpstream()
 	}
+	wantClient := ClientCodex
 	parts := strings.SplitN(modelID, "/", 2)
 	wantSlug, wantModel := "", modelID
 	if len(parts) == 2 {
@@ -176,6 +188,32 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 	return GatewayUpstreamFromProfile(matches[0]), nil
 }
 
+// selectedClaudeGatewayUpstream is the Anthropic gateway target: the currently
+// selected Claude connection, whatever model the client asks for. The gateway
+// is a passthrough for Claude, so model choice stays between the CLI and the
+// Provider.
+func (o *Owner) selectedClaudeGatewayUpstream() (GatewayUpstream, error) {
+	selected := normalizeID(o.store.ClientDefault(ClientClaude))
+	if selected == "" {
+		return GatewayUpstream{}, fmt.Errorf("%w: no Claude connection selected", ErrNotFound)
+	}
+	profile, err := o.store.Get(selected)
+	if err != nil {
+		return GatewayUpstream{}, err
+	}
+	if !o.connectionReady(profile) {
+		return GatewayUpstream{}, fmt.Errorf("%w: %s", ErrCredentialNotReady, selected)
+	}
+	target, err := CompileConnectionTarget(profile, ClientClaude, "", "")
+	if err != nil {
+		return GatewayUpstream{}, err
+	}
+	if routeProtocolFor(target.Protocol) != GatewayProtocolAnthropic {
+		return GatewayUpstream{}, fmt.Errorf("%w: Claude connection %s does not speak Anthropic Messages", ErrUpstreamInvalid, selected)
+	}
+	return GatewayUpstreamFromProfile(target), nil
+}
+
 func (o *Owner) gatewayModelDisabled(connectionID, modelID string) bool {
 	if o == nil {
 		return false
@@ -214,70 +252,15 @@ func gatewayStateFilePath(stateDir string) string {
 	return filepath.Join(strings.TrimSpace(stateDir), "gateway.json")
 }
 
-// EnableCodexGateway activates the machine-level takeover and points the
-// gateway at the currently selected Codex Provider connection.
-func (o *Owner) EnableCodexGateway(listenAddr string) (TakeoverStatus, error) {
-	if o == nil || o.takeover == nil {
-		return TakeoverStatus{}, fmt.Errorf("%w: codex gateway is not configured", ErrInvalid)
-	}
-	listenAddr = strings.TrimSpace(listenAddr)
-	if listenAddr == "" {
-		listenAddr = DefaultGatewayListenAddr
-	}
-	if gateway := o.Gateway(); gateway != nil && isDefaultGatewayAddress(listenAddr) {
-		if actual := gateway.ActualAddr(); actual != "" {
-			listenAddr = actual
-		}
-	}
-	status, err := o.takeover.Enable(listenAddr)
-	if err != nil {
-		return status, err
-	}
-	o.refreshGatewayUpstream()
-	return o.GatewayStatus(), nil
-}
-
-// DisableCodexGateway removes the Zen-owned projection and restores the
-// pre-takeover config; the gateway listener stays up (harmless, and
-// re-enable is instant).
-func (o *Owner) DisableCodexGateway() (TakeoverStatus, error) {
-	if o == nil || o.takeover == nil {
-		return TakeoverStatus{}, fmt.Errorf("%w: codex gateway is not configured", ErrInvalid)
-	}
-	status, err := o.takeover.Disable()
-	if err != nil {
-		return status, err
-	}
-	return o.GatewayStatus(), nil
-}
-
-// RestoreCodexGatewayBackup rolls the exact pre-takeover config backup back.
-func (o *Owner) RestoreCodexGatewayBackup() (TakeoverStatus, error) {
-	if o == nil || o.takeover == nil {
-		return TakeoverStatus{}, fmt.Errorf("%w: codex gateway is not configured", ErrInvalid)
-	}
-	status, err := o.takeover.RestoreBackup()
-	if err != nil {
-		return status, err
-	}
-	return o.GatewayStatus(), nil
-}
-
-// GatewayStatus returns the truthful takeover + gateway status.
-func (o *Owner) GatewayStatus() TakeoverStatus {
-	if o == nil || o.takeover == nil {
-		return TakeoverStatus{State: TakeoverStateInactive}
-	}
-	return o.takeover.Status()
-}
-
 // refreshGatewayUpstream points the gateway at the currently selected Codex
 // Provider connection when takeover is active. Called after Provider switches
 // and default changes.
 func (o *Owner) refreshGatewayUpstream() {
+	o.syncClaudeTakeover()
 	if o == nil || o.gateway == nil || o.takeover == nil {
 		return
 	}
+	o.syncCodexTakeover()
 	state, err := o.takeover.LoadState()
 	if err != nil || !state.Enabled {
 		return
@@ -291,6 +274,69 @@ func (o *Owner) refreshGatewayUpstream() {
 		return
 	}
 	o.gateway.ClearUpstream()
+}
+
+// syncCodexTakeover projects the gateway into the Codex config while a Codex
+// Provider connection is selected and the gateway listens, with no opt-in.
+// Official login (no selection) gives the config back so Codex uses its own
+// login. A config Zen cannot safely project stays untouched and is logged.
+func (o *Owner) syncCodexTakeover() {
+	state, err := o.takeover.LoadState()
+	if err != nil {
+		log.Printf("WARN codex config takeover: %v", err)
+		return
+	}
+	selected := o.store != nil && normalizeID(o.store.DefaultProfileID(ExecutorCodex)) != ""
+	switch {
+	case selected && !state.Enabled && o.gateway.Listening():
+		_, err = o.takeover.Enable(o.gateway.ActualAddr())
+	case !selected && state.Enabled:
+		_, err = o.takeover.Disable()
+	}
+	if err != nil {
+		log.Printf("WARN codex config takeover: %v", err)
+	}
+}
+
+// syncClaudeTakeover keeps Claude Code's user settings pointed at the gateway
+// while a Claude connection is selected and the gateway listens, and puts the
+// user's own values back otherwise. Failures leave the settings untouched and
+// are logged: a projection problem must never block a Provider switch.
+func (o *Owner) syncClaudeTakeover() {
+	if o == nil || o.claudeTakeover == nil || o.store == nil {
+		return
+	}
+	var err error
+	if addr, withToken, ok := o.claudeTakeoverTarget(); ok {
+		err = o.claudeTakeover.Project("http://"+addr, withToken)
+	} else {
+		err = o.claudeTakeover.Release()
+	}
+	if err != nil {
+		log.Printf("WARN claude settings takeover: %v", err)
+	}
+}
+
+func (o *Owner) claudeTakeoverTarget() (addr string, withToken bool, ok bool) {
+	gateway := o.gateway
+	if gateway == nil || !gateway.Listening() {
+		return "", false, false
+	}
+	addr = gateway.ActualAddr()
+	selected := normalizeID(o.store.ClientDefault(ClientClaude))
+	if addr == "" || selected == "" {
+		return "", false, false
+	}
+	profile, err := o.store.Get(selected)
+	if err != nil {
+		return "", false, false
+	}
+	target, err := CompileConnectionTarget(profile, ClientClaude, "", "")
+	if err != nil {
+		return "", false, false
+	}
+	// A native-passthrough connection relies on the CLI's own login.
+	return addr, normalizeID(target.AuthMode) != AuthModeNativePassthrough, true
 }
 
 // resolveGatewayUpstream derives the machine-level gateway upstream for a

@@ -338,39 +338,6 @@ func (t *Takeover) Repair(listenAddr string) (TakeoverStatus, error) {
 	return t.Status(), nil
 }
 
-// RestoreBackup rolls the exact pre-takeover backup over the current config.
-// This is the recorded rollback procedure; it discards any changes made to the
-// config while takeover was enabled.
-func (t *Takeover) RestoreBackup() (TakeoverStatus, error) {
-	if t == nil {
-		return TakeoverStatus{}, fmt.Errorf("%w: takeover not configured", ErrInvalid)
-	}
-	state, err := t.LoadState()
-	if err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
-	}
-	if strings.TrimSpace(state.BackupPath) == "" {
-		return TakeoverStatus{State: TakeoverStateDrifted, Detail: "no takeover backup exists", ConfigPath: t.configPath}, nil
-	}
-	backup, err := os.ReadFile(state.BackupPath)
-	if err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: "read backup: " + err.Error(), ConfigPath: t.configPath}, err
-	}
-	if len(backup) > 0 {
-		if err := validateConfigTOML(backup); err != nil {
-			return TakeoverStatus{State: TakeoverStateDrifted, Detail: "backup is not valid TOML: " + err.Error(), ConfigPath: t.configPath}, err
-		}
-	}
-	if err := writeAtomicFile(t.configPath, backup, 0o600); err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
-	}
-	state.Enabled = false
-	if err := t.persistState(state); err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
-	}
-	return t.Status(), nil
-}
-
 // Status computes the truthful takeover status.
 func (t *Takeover) Status() TakeoverStatus {
 	status := TakeoverStatus{

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -426,6 +425,18 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			writeGatewayResolutionError(w, err)
 			return
 		}
+		// Claude Code marks its one-million context choice with a "[1m]"
+		// model suffix that no Provider serves; drop it exactly as the
+		// per-session router does. Every other byte passes through.
+		if protocol == GatewayProtocolAnthropic {
+			if normalized, ok := normalizeClaudeContextModel(modelID); ok {
+				if bodyBytes, err = rewriteRequestModel(bodyBytes, normalized); err != nil {
+					writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+					return
+				}
+				req.ContentLength = int64(len(bodyBytes))
+			}
+		}
 	}
 	if upstream.BaseURL == "" {
 		writeRouteError(w, http.StatusServiceUnavailable, ErrUpstreamInvalid)
@@ -517,7 +528,7 @@ func gatewayProtocolForPath(path string) (string, bool) {
 	switch path {
 	case "/v1/responses":
 		return GatewayProtocolResponses, true
-	case "/v1/messages":
+	case "/v1/messages", "/v1/messages/count_tokens":
 		return GatewayProtocolAnthropic, true
 	default:
 		return "", false
@@ -671,10 +682,4 @@ func LoadGatewayState(path string) (listenAddr, upstreamProfileID string, err er
 		return "", "", fmt.Errorf("%w: gateway state: %v", ErrRouteSnapshotInvalid, err)
 	}
 	return strings.TrimSpace(doc.ListenAddr), strings.TrimSpace(doc.UpstreamProfileID), nil
-}
-
-// gatewayStateDirDefault returns the daemon-owned gateway state directory
-// under the Zen storage root.
-func gatewayStateDirDefault(storageDir string) string {
-	return filepath.Join(strings.TrimSpace(storageDir), "codex-gateway")
 }

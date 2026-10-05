@@ -112,8 +112,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleWorkerList()
 	case "worker_spawn":
 		return a.handleWorkerSpawn(req)
-	case "claude_launch":
-		return a.handleClaudeLaunch(req)
 	case "worker_send":
 		return a.handleWorkerSend(req)
 	case "worker_capture":
@@ -256,14 +254,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleProviderSetConnection(req)
 	case "provider_switch":
 		return a.handleProviderSwitch(req)
-	case "codex_gateway_status":
-		return a.handleCodexGatewayStatus()
-	case "codex_gateway_enable":
-		return a.handleCodexGatewayEnable()
-	case "codex_gateway_disable":
-		return a.handleCodexGatewayDisable()
-	case "codex_gateway_restore_backup":
-		return a.handleCodexGatewayRestoreBackup()
 	case "provider_set_models":
 		return a.handleProviderSetModels(req)
 	case "provider_discover":
@@ -279,43 +269,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 	default:
 		return control.ErrorResponse("unknown_request", fmt.Sprintf("Unknown control request: %s", req.Type))
 	}
-}
-
-// handleClaudeLaunch prepares and commits a route for a direct, interactive
-// Claude process. The process is owned by the caller rather than tmux; the
-// synthetic session id lets the router authenticate requests without relying
-// on inherited shell state.
-func (a *controlApp) handleClaudeLaunch(req control.Request) control.Response {
-	if a == nil || a.profiles == nil {
-		return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Zen model routing is unavailable.")
-	}
-	command := strings.TrimSpace(req.Command)
-	if command == "" {
-		return control.ErrorResponse("claude_command_required", "native Claude command is required")
-	}
-	plan, err := a.profiles.PrepareLaunchModel(modelprofiles.ExecutorClaude, strings.TrimSpace(req.ConnectionID), strings.TrimSpace(req.ModelID), command)
-	if err != nil {
-		return control.ErrorResponse(modelprofiles.ControlErrorCode(err), err.Error())
-	}
-	if plan.Bypass || !plan.Applied {
-		return control.ErrorResponse(modelprofiles.CodeProfileNotFound, "No Zen Claude Provider connection is selected.")
-	}
-	sessionID := strings.TrimSpace(req.WorkerID)
-	if sessionID == "" {
-		sessionID = "cli:claude:" + uuid.NewString()
-	}
-	_, snap, persist, commitErr := a.profiles.CommitLaunch(plan.ProvisionalID, sessionID)
-	if !persist.Applied {
-		_, _ = a.profiles.AbortLaunch(plan.ProvisionalID)
-		if commitErr == nil {
-			commitErr = fmt.Errorf("Claude route commit was not applied")
-		}
-		return control.ErrorResponse(modelprofiles.ControlErrorCode(commitErr), commitErr.Error())
-	}
-	if commitErr != nil {
-		return control.ErrorResponse(modelprofiles.ControlErrorCode(commitErr), commitErr.Error())
-	}
-	return control.Response{OK: true, LaunchCommand: plan.Command, LaunchEnv: plan.Env, LaunchSessionID: sessionID, SessionRoute: &snap}
 }
 
 func (a *controlApp) handleTelegramSetup(req control.Request) control.Response {
@@ -1852,54 +1805,6 @@ func (a *controlApp) handleProviderSetConnection(req control.Request) control.Re
 	}
 	proj, err := a.profiles.SetProviderConnection(executorID, connectionID, req.Revision)
 	return a.providersMutationResponse(proj, err)
-}
-
-// handleCodexGatewayStatus reports the truthful machine-level Codex gateway
-// takeover state.
-func (a *controlApp) handleCodexGatewayStatus() control.Response {
-	if a == nil || a.profiles == nil {
-		return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
-	}
-	status := a.profiles.GatewayStatus()
-	return control.Response{OK: true, Gateway: &status}
-}
-
-// handleCodexGatewayEnable activates the machine-level takeover: exact backup
-// of the CLI config, atomic projection to the stable gateway endpoint, and the
-// gateway pointed at the currently selected Codex Provider.
-func (a *controlApp) handleCodexGatewayEnable() control.Response {
-	if a == nil || a.profiles == nil {
-		return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
-	}
-	status, err := a.profiles.EnableCodexGateway(modelprofiles.DefaultGatewayListenAddr)
-	if err != nil {
-		return control.ErrorResponse(modelprofiles.ControlErrorCode(err), err.Error())
-	}
-	return control.Response{OK: true, Gateway: &status}
-}
-
-// handleCodexGatewayDisable removes only the Zen-owned projection.
-func (a *controlApp) handleCodexGatewayDisable() control.Response {
-	if a == nil || a.profiles == nil {
-		return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
-	}
-	status, err := a.profiles.DisableCodexGateway()
-	if err != nil {
-		return control.ErrorResponse(modelprofiles.ControlErrorCode(err), err.Error())
-	}
-	return control.Response{OK: true, Gateway: &status}
-}
-
-// handleCodexGatewayRestoreBackup rolls the exact pre-takeover config back.
-func (a *controlApp) handleCodexGatewayRestoreBackup() control.Response {
-	if a == nil || a.profiles == nil {
-		return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
-	}
-	status, err := a.profiles.RestoreCodexGatewayBackup()
-	if err != nil {
-		return control.ErrorResponse(modelprofiles.ControlErrorCode(err), err.Error())
-	}
-	return control.Response{OK: true, Gateway: &status}
 }
 
 func (a *controlApp) handleProviderSwitch(req control.Request) control.Response {
