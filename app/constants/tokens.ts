@@ -2,6 +2,7 @@ import { Platform, type TextStyle, type ViewStyle } from "react-native";
 import type { AppColors } from "../theme/palette";
 import { useZenTheme } from "../theme/provider";
 import type { MaterialPalette } from "../theme/types";
+import { FontFamilies } from "./fontFamilies";
 
 export type { AppColors } from "../theme/palette";
 export type { MaterialPalette } from "../theme/types";
@@ -93,14 +94,14 @@ export function uiLineHeight(fontSize: number): number {
 }
 
 export const Typography = {
-  uiFont: 'SourceHanSansSC-Regular',
-  uiFontMedium: 'SourceHanSansSC-Medium',
-  terminalFont: 'MapleMono-CN-Regular',
-  terminalFontBold: 'MapleMono-CN-SemiBold',
-  chatFont: 'SourceHanSansSC-Regular',
-  chatFontMedium: 'SourceHanSansSC-Medium',
-  chatMonoFont: 'MapleMono-CN-Regular',
-  chatMonoFontBold: 'MapleMono-CN-SemiBold',
+  uiFont: FontFamilies.ui,
+  uiFontMedium: FontFamilies.uiMedium,
+  terminalFont: FontFamilies.mono,
+  terminalFontBold: FontFamilies.monoBold,
+  chatFont: FontFamilies.ui,
+  chatFontMedium: FontFamilies.uiMedium,
+  chatMonoFont: FontFamilies.mono,
+  chatMonoFontBold: FontFamilies.monoBold,
   // UI mono typography (chat code blocks, previews). The terminal GRID has
   // its own denser typography in terminalFontDensity.ts: grid glyph size is
   // the PTY column budget and is deliberately smaller than readable UI copy.

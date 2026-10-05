@@ -35,6 +35,8 @@ import { syncCalendarNotifications } from "../services/calendarNotifications";
 import { Typography, useAppTheme } from "../constants/tokens";
 import { IconButton } from "../components/ui/IconButton";
 import { ToastProvider } from "../components/ui/Toast";
+import { AlertHost } from "../components/ui/AlertHost";
+import { appFontAssets } from "../constants/appFontAssets";
 import { ThemeProvider } from "../theme";
 import { MermaidEngineHost } from "../components/markdown/MermaidEngineHost";
 import { wsClient } from "../services/websocket";
@@ -49,6 +51,7 @@ import {
   markOnboarded,
 } from "../services/storage";
 import { importConnection } from "../services/importConnection";
+import { readInitialConnectLink } from "../services/initialConnectLink";
 import { PairingCancelledError } from "../services/pairingScope";
 import {
   clearNativeTerminalCrashBreadcrumb,
@@ -382,7 +385,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
 
     (async () => {
       try {
-        const initialURL = await Linking.getInitialURL();
+        const initialURL = await readInitialConnectLink();
         const imported = await importConnectLink(initialURL);
         if (imported) {
           return;
@@ -761,12 +764,7 @@ function ThemedStatusBar() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    "SourceHanSansSC-Regular": require("../assets/fonts/SourceHanSansSC-Regular.otf"),
-    "SourceHanSansSC-Medium": require("../assets/fonts/SourceHanSansSC-Medium.otf"),
-    "MapleMono-CN-Regular": require("../assets/fonts/MapleMono-CN-Regular.ttf"),
-    "MapleMono-CN-SemiBold": require("../assets/fonts/MapleMono-CN-SemiBold.ttf"),
-  });
+  const [fontsLoaded, fontError] = useFonts(appFontAssets);
 
   useEffect(() => {
     if (fontError) {
@@ -793,6 +791,7 @@ export default function RootLayout() {
                           <ThemedStatusBar />
                           <MermaidEngineHost />
                           <AppRuntime />
+                          <AlertHost />
                         </ToastProvider>
                       </SafeAreaProvider>
                     </CalendarProvider>
