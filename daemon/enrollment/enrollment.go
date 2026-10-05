@@ -85,7 +85,7 @@ func (m *Manager) Create(deviceID, deviceName, platform, origin, publicKey strin
 		return Request{}, "", err
 	}
 	now := m.now().UTC()
-	requests = prune(requests, now)
+	requests, _ = prune(requests, now)
 	active := 0
 	for _, item := range requests {
 		if item.Status == Pending {
@@ -123,22 +123,31 @@ func (m *Manager) Create(deviceID, deviceName, platform, origin, publicKey strin
 	return public, hex.EncodeToString(secretBytes), nil
 }
 
-func (m *Manager) List() ([]Request, error) {
+// Pending returns only actionable requests, oldest first, and persists expiry
+// and retention cleanup without exposing the requesters' status capabilities.
+func (m *Manager) Pending() ([]Request, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	requests, err := m.loadLocked()
 	if err != nil {
 		return nil, err
 	}
-	pruned := prune(requests, m.now().UTC())
-	if len(pruned) != len(requests) {
-		_ = m.saveLocked(pruned)
+	pruned, changed := prune(requests, m.now().UTC())
+	if changed {
+		if err := m.saveLocked(pruned); err != nil {
+			return nil, err
+		}
 	}
-	for i := range pruned {
-		pruned[i].SecretHash = ""
+	pending := make([]Request, 0, len(pruned))
+	for _, request := range pruned {
+		if request.Status != Pending {
+			continue
+		}
+		request.SecretHash = ""
+		pending = append(pending, request)
 	}
-	sort.Slice(pruned, func(i, j int) bool { return pruned[i].CreatedAt.Before(pruned[j].CreatedAt) })
-	return pruned, nil
+	sort.Slice(pending, func(i, j int) bool { return pending[i].CreatedAt.Before(pending[j].CreatedAt) })
+	return pending, nil
 }
 
 func (m *Manager) Status(id, secret string) (Request, bool) {
@@ -149,7 +158,7 @@ func (m *Manager) Status(id, secret string) (Request, bool) {
 		return Request{}, false
 	}
 	now := m.now().UTC()
-	requests = prune(requests, now)
+	requests, _ = prune(requests, now)
 	for _, request := range requests {
 		if request.ID == strings.TrimSpace(id) && equalHash(request.SecretHash, secret) {
 			if request.Status == Pending && now.After(request.ExpiresAt) {
@@ -162,9 +171,8 @@ func (m *Manager) Status(id, secret string) (Request, bool) {
 	return Request{}, false
 }
 
-// Decide atomically records a signed approver's choice. The caller performs
-// device enrollment between validation and MarkApproved so auth remains the
-// sole trusted-device store.
+// Decide atomically records an approver's choice. The caller performs device
+// enrollment through the auth manager, the sole trusted-device store.
 func (m *Manager) Decide(id, number, approver string, approve bool) (Request, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -177,7 +185,10 @@ func (m *Manager) Decide(id, number, approver string, approve bool) (Request, er
 		if requests[i].ID != strings.TrimSpace(id) {
 			continue
 		}
-		if requests[i].Status != Pending || now.After(requests[i].ExpiresAt) {
+		if requests[i].Status != Pending {
+			return Request{}, errors.New("enrollment is no longer pending")
+		}
+		if !now.Before(requests[i].ExpiresAt) {
 			requests[i].Status = Expired
 			_ = m.saveLocked(requests)
 			return Request{}, errors.New("enrollment is no longer pending")
@@ -201,19 +212,30 @@ func (m *Manager) Decide(id, number, approver string, approve bool) (Request, er
 	return Request{}, errors.New("enrollment request not found")
 }
 
-func prune(requests []Request, now time.Time) []Request {
+func prune(requests []Request, now time.Time) ([]Request, bool) {
 	next := requests[:0]
+	changed := false
 	for _, item := range requests {
-		if item.Status == Pending && now.After(item.ExpiresAt) {
+		if item.Status == Pending && !now.Before(item.ExpiresAt) {
 			item.Status = Expired
+			changed = true
 		}
-		if item.Status == Expired && now.Sub(item.ExpiresAt) > time.Hour {
-			continue
+		switch item.Status {
+		case Approved, Denied, Expired:
+			terminalAt := item.ExpiresAt
+			if item.DecisionAt != nil {
+				terminalAt = *item.DecisionAt
+			}
+			if !now.Before(terminalAt.Add(time.Hour)) {
+				changed = true
+				continue
+			}
 		}
 		next = append(next, item)
 	}
-	return next
+	return next, changed
 }
+
 func hash(secret []byte) string { sum := sha256.Sum256(secret); return hex.EncodeToString(sum[:]) }
 func equalHash(stored, secret string) bool {
 	raw, err := hex.DecodeString(strings.TrimSpace(secret))

@@ -199,7 +199,7 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if a.enrollments == nil {
 			return control.ErrorResponse("enrollment_unavailable", "Enrollment is unavailable.")
 		}
-		items, err := a.enrollments.List()
+		items, err := a.enrollments.Pending()
 		if err != nil {
 			return control.ErrorResponse("enrollment_failed", err.Error())
 		}

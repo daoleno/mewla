@@ -51,6 +51,8 @@ zen devices approve -id REQUEST_ID -number 042
 zen devices deny -id REQUEST_ID -number 042
 ```
 
+`zen devices pending` and the signed pending API list only unexpired pending requests. Approved, denied and expired audit records retain their terminal status and are pruned one hour after the decision, or expiry when there was no decision.
+
 The enrollment device key is generated locally and bound to the pending
 request. The daemon enrolls that exact key only after a currently trusted
 device's signed decision. The request endpoint does not disclose the daemon
