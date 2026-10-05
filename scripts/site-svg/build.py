@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# Writes every drawing under site/assets/, shared by the homepage and README.
+# Writes the README drawings under site/assets/. The homepage no longer uses
+# them; its ensō comes from enso.py.
 # Run from anywhere: python3 scripts/site-svg/build.py
 import os
 import re
@@ -31,12 +32,9 @@ def sessions_pair():
 
 FILES = {
     "hero.svg": lambda: hero.build(False),
-    "hero-narrow.svg": lambda: hero.build(True),
-    "sessions.svg": sessions.build,
     "sessions-pair.svg": sessions_pair,
-    # Static viewers (README) see Delegate; the page resets to Plan when it binds.
+    # The README is static, so show the Delegate state.
     "brain.svg": lambda: brain.build(False).replace("<svg ", '<svg data-state="2" ', 1),
-    "brain-narrow.svg": lambda: brain.build(True),
     **{f"{k}.svg": f for k, f in modules.ALL.items()},
 }
 

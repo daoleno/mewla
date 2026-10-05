@@ -389,49 +389,8 @@ def alerts():
     return s.render()
 
 
-def owner():
-    s = Svg("ow", W, 300, "One owner, one current server",
-            "The phone pairs with your daemon once using a short-lived code, then signs every request with its own key. "
-            "It reaches the daemon over your LAN, Tailscale, or a tunnel you run. Exactly one server is current; switching rebinds everything.",
-            states=2,
-            css=".ow .flow{stroke-dasharray:3 6;animation:ow-f 1.5s linear infinite}@keyframes ow-f{to{stroke-dashoffset:-18}}"
-                "@media (prefers-reduced-motion:reduce){.ow .flow{animation:none}}")
-    # phone
-    s.rect(24, 60, 92, 180, rx=18, stroke="line2", sw=1.2, fill="panel")
-    s.rect(54, 68, 32, 8, rx=4, fill="#050504")
-    s.text(70, 160, "phone", size=11, fill="dim", anchor="middle", mono=True)
-    # host
-    s.rect(W - 156, 80, 132, 140, rx=14, stroke="line2", sw=1.2, fill="panel")
-    s.text(W - 90, 112, "zen daemon", size=12, weight=600, anchor="middle")
-    s.text(W - 90, 130, "your computer", size=10, fill="faint", anchor="middle", mono=True)
-    for i, t in enumerate(["repos", "tmux", "credentials", "agent state"]):
-        s.text(W - 140, 156 + i * 16, "· " + t, size=10.5, fill="dim", mono=True)
-    # routes
-    routes = [("LAN", 100), ("Tailscale", 150), ("your tunnel", 200)]
-    for name, y in routes:
-        s.path(f"M116 150C170 150,180 {y},220 {y}H{W - 210}C{W - 180} {y},{W - 180} 150,{W - 156} 150", stroke="line2", sw=1)
-        s.text(240, y - 6, name, size=10.5, fill="faint", mono=True)
-    s.path(f"M116 150C170 150,180 150,220 150H{W - 210}C{W - 180} 150,{W - 180} 150,{W - 156} 150", stroke="sage", sw=1.4, cls="flow")
-    s.g("st s1")
-    s.text(24, 36, "Pair once, sign every request", size=13, weight=600)
-    s.rect(124, 250, 252, 30, rx=8, fill="panel2")
-    s.text(136, 270, "Ed25519 · device key · one-time code", size=10.5, fill="sage", mono=True)
-    s.end()
-    s.g("st s2")
-    s.text(24, 36, "Exactly one current server", size=13, weight=600)
-    for i, (n, cur) in enumerate([("homelab", True), ("studio-mac", False)]):
-        y = 248 + i * 0
-        x = 132 + i * 112
-        s.rect(x, 250, 104, 30, rx=8, fill="sageD" if cur else "panel2", stroke="sage2" if cur else None)
-        s.text(x + 12, 270, n, size=11, mono=True)
-        if cur:
-            s.text(x + 92, 270, "In use", size=9.5, fill="sage", anchor="end")
-    s.end()
-    return s.render()
-
-
 ALL = {"models": models, "skills": skills, "plugins": plugins, "resources": resources, "stats": stats,
-       "calendar": calendar, "services": services, "alerts": alerts, "owner": owner}
+       "calendar": calendar, "services": services, "alerts": alerts}
 
 if __name__ == "__main__":
     import sys

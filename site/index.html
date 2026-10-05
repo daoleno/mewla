@@ -3,271 +3,132 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zen · every agent you run, in one hand</title>
-  <meta name="description" content="Zen is a phone app and a small daemon on your own computer. Every coding agent and shell there becomes a Session you can read as chat, drive as a live terminal, or hand to a Brain that delegates. Open source, Android and iOS.">
-  <meta name="theme-color" content="#0c0d0a">
-  <meta name="color-scheme" content="dark">
+  <title>Zen · let them work</title>
+  <meta name="description" content="Zen is an open-source, self-hosted phone app for the coding agents on your own computer. Let them work; you are called only when one needs you. Android and iOS, beta.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f2ede3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="assets/zen-mark.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..400;1,6..72,300&amp;display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..400;1,6..72,300&amp;display=swap"></noscript>
   <link rel="stylesheet" href="styles.css">
+  <script>document.documentElement.classList.add("js")</script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
 
   <header class="top">
-    <a class="brand" href="#top" aria-label="Zen home">
-      <img src="assets/zen-mark.svg" alt="" width="24" height="24">
-      <span>Zen</span>
-    </a>
+    <a class="word" href="#top" aria-label="Zen home">zen</a>
     <nav aria-label="Primary">
-      <ul>
-        <li><a href="#sessions">Sessions</a></li>
-        <li><a href="#brain">Brain</a></li>
-        <li><a href="#instruments">Instruments</a></li>
-        <li><a href="#owner">Ownership</a></li>
-        <li><a href="#install">Install</a></li>
-      </ul>
+      <a href="#install">Install</a>
+      <a href="https://github.com/daoleno/zen">Source</a>
     </nav>
-    <a class="gh" href="https://github.com/daoleno/zen">GitHub</a>
   </header>
 
   <main id="main">
     <section class="hero" id="top" aria-labelledby="hero-title">
-      <figure class="hero-art">
-        <picture>
-          <source media="(max-width: 1000px)" srcset="assets/hero-narrow.svg">
-          <img src="assets/hero.svg" width="1200" height="760" alt="Ten Sessions on your computer, agents on six clients plus a shell and Brain, all running into the Sessions list on one phone. One needs you." data-inline>
-        </picture>
-      </figure>
+      <svg class="enso" viewBox="0 0 400 400" aria-hidden="true" focusable="false">
+        <defs>
+          <mask id="enso-reveal" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="400">
+            <path class="enso-mask" pathLength="1" d="M266.6 63.4L260.1 59.7L253.4 56.2L246.4 53.2L239.3 50.5L232.0 48.2L224.6 46.3L217.1 44.8L209.5 43.8L201.8 43.3L194.1 43.2L186.4 43.6L178.7 44.4L171.1 45.8L163.6 47.5L156.2 49.7L149.0 52.3L141.9 55.3L135.0 58.7L128.4 62.5L121.9 66.6L115.7 71.0L109.8 75.7L104.1 80.6L98.6 85.8L93.4 91.3L88.5 96.9L83.9 102.7L79.5 108.8L75.4 115.0L71.6 121.3L68.0 127.8L64.8 134.4L61.8 141.2L59.1 148.1L56.8 155.1L54.7 162.2L53.0 169.3L51.6 176.6L50.6 183.9L50.0 191.3L49.7 198.6L49.8 206.0L50.3 213.4L51.2 220.7L52.6 228.0L54.3 235.2L56.4 242.2L58.9 249.1L61.8 255.9L65.1 262.4L68.7 268.8L72.6 274.9L76.9 280.8L81.5 286.4L86.3 291.8L91.4 296.9L96.7 301.7L102.2 306.2L107.9 310.4L113.8 314.4L119.8 318.1L125.9 321.5L132.2 324.6L138.5 327.5L145.0 330.2L151.5 332.6L158.1 334.7L164.7 336.6L171.5 338.3L178.3 339.7L185.2 340.9L192.1 341.7L199.0 342.4L206.1 342.7L213.1 342.7L220.2 342.5L227.3 341.9L234.4 340.9L241.4 339.6L248.4 338.0L255.3 336.0L262.2 333.6L268.9 330.8L275.5 327.6L281.9 324.1L288.1 320.2L294.0 315.9L299.7 311.3L305.2 306.4L310.3 301.1L315.1 295.5L319.6 289.7L323.8 283.7L327.6 277.4L331.0 270.9L334.1 264.3L336.9 257.5L339.2 250.6L341.3 243.6L342.9 236.5L344.3 229.4L345.3 222.2L345.9 215.0L346.3 207.8L346.3 200.6L346.0 193.5L345.4 186.3L344.5 179.2L343.3 172.1L341.7 165.1L339.9 158.2L337.7 151.3L335.2 144.6L332.4 138.0L329.3 131.5L325.8 125.2L322.0 119.1L317.9 113.2L313.4 107.5L308.7 102.1"/>
+          </mask>
+        </defs>
+        <g mask="url(#enso-reveal)" fill="currentColor">
+          <path fill-rule="evenodd" d="M273.3 52.5L269.8 50.3L266.6 47.7L262.9 45.8L259.4 43.5L255.6 41.6L251.7 40.2L247.9 38.4L243.8 37.3L239.8 36.0L235.6 35.2L231.4 34.6L227.2 33.8L223.1 32.7L218.8 32.7L214.6 32.4L210.4 31.6L206.3 30.6L202.0 30.3L197.8 30.4L193.5 29.9L189.3 30.6L185.0 30.5L180.8 31.3L176.6 32.2L172.5 33.2L168.3 34.1L164.1 34.5L160.1 35.9L155.9 36.9L151.8 37.9L147.9 39.5L143.9 40.9L140.2 42.9L136.6 45.0L132.9 46.9L129.0 48.5L125.3 50.4L121.8 52.6L118.2 54.6L114.7 56.9L111.4 59.4L107.8 61.5L104.4 63.8L101.5 66.7L98.3 69.3L95.3 72.0L92.0 74.5L89.0 77.2L86.4 80.4L83.4 83.1L81.1 86.5L78.6 89.6L75.9 92.6L73.8 96.1L71.5 99.3L69.6 102.8L67.1 106.0L64.7 109.2L62.6 112.5L60.2 115.8L58.6 119.4L56.6 122.9L54.8 126.4L53.1 130.0L51.7 133.7L49.8 137.3L48.1 140.9L46.9 144.7L45.6 148.4L45.0 152.4L43.7 156.2L42.6 160.0L41.2 163.8L40.2 167.7L39.9 171.7L39.5 175.7L38.8 179.7L39.0 183.7L38.7 187.7L38.8 191.7L38.9 195.7L39.2 199.7L38.7 203.7L39.2 207.7L39.6 211.7L39.9 215.7L39.8 219.7L40.8 223.6L41.4 227.6L42.1 231.5L42.5 235.6L43.2 239.5L44.1 243.5L45.7 247.2L47.2 250.9L48.9 254.6L50.1 258.4L51.4 262.3L53.7 265.6L55.9 269.0L58.1 272.3L60.4 275.6L62.4 278.9L64.5 282.3L67.0 285.4L69.8 288.2L72.1 291.3L74.7 294.3L77.1 297.3L79.4 300.6L82.0 303.4L84.8 306.1L87.7 308.7L90.5 311.3L93.9 313.3L96.6 316.0L99.5 318.5L102.5 321.0L105.6 323.2L108.9 325.0L112.3 326.7L115.8 328.2L119.0 330.1L122.6 331.4L126.1 332.7L129.5 334.2L132.9 335.5L136.3 337.0L139.8 338.1L143.3 339.2L146.8 340.4L150.2 341.5L153.7 342.8L157.2 343.6L160.5 345.4L164.0 346.6L167.6 347.2L171.2 347.9L174.8 348.7L178.4 349.4L182.0 349.7L185.6 350.9L189.2 352.0L192.9 352.3L196.6 352.6L200.3 352.3L204.1 352.2L207.8 352.2L211.6 352.1L215.3 352.6L219.1 352.1L222.8 351.5L226.7 351.8L230.5 351.5L234.2 350.6L238.0 350.2L241.7 349.0L245.5 348.4L249.4 348.1L253.2 347.5L257.0 346.5L260.6 344.9L264.3 343.4L267.8 341.7L271.5 340.5L275.1 338.9L278.8 337.4L282.2 335.4L285.5 333.1L289.0 331.4L292.7 329.7L296.1 327.7L299.4 325.4L302.7 323.1L305.8 320.6L308.4 317.5L311.3 314.7L313.9 311.7L316.3 308.4L318.6 305.2L321.1 302.1L323.5 299.0L326.2 296.1L329.0 293.2L331.1 289.9L333.6 286.8L336.4 283.8L338.2 280.3L339.4 276.4L340.3 272.5L341.2 268.6L342.1 264.8L342.9 261.0L344.1 257.3L345.5 253.7L346.6 250.1L347.2 246.3L347.9 242.5L348.7 238.8L348.5 234.9L349.1 231.2L349.7 227.5L350.1 223.8L350.3 220.0L350.2 216.3L349.6 212.5L349.8 208.8L349.3 205.1L349.3 201.5L349.4 197.8L348.7 194.1L348.0 190.5L347.9 186.9L347.3 183.2L346.1 179.7L344.8 176.3L343.7 172.8L343.3 169.2L342.6 165.6L340.9 162.3L340.5 162.4L341.5 165.9L342.3 169.4L343.1 172.9L344.0 176.4L344.6 180.0L345.3 183.5L345.5 187.1L345.7 190.7L345.4 194.3L345.1 197.9L345.1 201.5L344.6 205.1L344.2 208.7L343.3 212.2L342.9 215.7L342.1 219.2L341.5 222.7L340.8 226.2L340.0 229.7L338.5 233.0L337.3 236.3L335.8 239.6L335.1 243.0L333.5 246.2L332.1 249.4L331.1 252.7L330.2 256.1L328.5 259.2L326.8 262.2L324.8 265.1L322.9 268.1L320.8 270.8L318.6 273.5L316.9 276.5L315.2 279.5L313.7 282.6L312.2 285.7L309.9 288.3L307.5 290.8L305.1 293.3L303.1 296.1L300.5 298.3L297.8 300.4L294.9 302.3L292.1 304.3L289.3 306.2L286.6 308.3L283.9 310.3L281.3 312.4L278.3 313.9L275.6 316.0L272.7 317.8L269.7 319.3L266.6 320.6L263.7 322.4L260.6 323.7L257.4 324.8L254.3 326.3L251.0 327.0L247.9 328.5L244.7 329.5L241.4 330.1L238.1 331.0L234.9 332.1L231.5 332.4L228.2 332.8L224.8 332.8L221.5 333.0L218.1 333.0L214.8 333.3L211.4 333.2L208.1 333.7L204.8 333.7L201.4 333.5L198.1 333.2L194.8 332.6L191.5 332.0L188.3 331.3L185.1 330.5L181.8 330.1L178.6 329.0L175.5 328.0L172.2 327.7L169.0 327.0L165.9 325.9L162.7 324.9L159.5 324.4L156.5 322.8L153.3 322.1L150.4 320.5L147.2 319.5L144.1 318.4L140.9 317.7L138.1 315.9L135.1 314.4L132.0 313.2L129.3 311.2L126.7 309.2L123.8 307.6L121.0 305.9L117.9 304.6L115.4 302.4L112.9 300.2L110.0 298.5L107.0 296.9L104.4 294.8L102.1 292.4L99.8 290.0L97.1 287.9L95.1 285.2L93.1 282.6L91.3 279.7L88.8 277.5L86.4 275.1L83.8 272.9L82.2 269.9L80.2 267.2L78.2 264.5L76.5 261.6L75.2 258.4L73.6 255.4L72.0 252.5L71.1 249.2L69.5 246.2L68.4 243.0L67.6 239.7L66.8 236.4L65.9 233.2L65.2 229.9L65.0 226.5L64.2 223.2L63.1 220.0L62.8 216.6L62.6 213.3L61.9 209.9L62.2 206.5L61.6 203.2L61.1 199.8L61.7 196.4L61.7 193.0L61.7 189.6L62.4 186.2L62.4 182.8L62.5 179.3L62.7 175.9L63.7 172.6L64.6 169.2L65.9 166.0L66.9 162.7L68.4 159.6L70.0 156.6L71.0 153.3L71.9 150.0L73.2 146.8L75.1 143.9L76.2 140.6L77.5 137.4L78.9 134.3L80.2 131.1L81.9 128.1L83.7 125.2L85.7 122.3L87.4 119.3L89.4 116.5L91.5 113.7L93.6 110.9L95.9 108.3L97.7 105.4L99.8 102.6L102.0 99.9L104.4 97.3L106.5 94.6L109.1 92.2L111.9 90.0L114.4 87.6L117.4 85.7L119.9 83.3L122.6 81.1L125.4 78.9L128.4 77.1L131.3 75.1L134.1 72.9L137.0 71.1L140.3 69.6L143.2 67.6L146.5 66.5L149.9 65.3L153.1 64.0L156.6 63.3L159.9 62.3L163.3 61.3L166.7 60.5L169.9 59.2L173.4 58.7L176.7 57.6L180.1 56.9L183.6 56.5L187.1 56.3L190.6 55.4L194.1 55.6L197.6 55.6L201.0 56.0L204.5 56.0L208.0 56.6L211.4 57.2L214.7 58.2L218.0 59.8L221.3 60.6L224.6 61.5L227.7 62.8L231.1 63.6L234.2 64.8L237.5 65.8L240.9 66.4L243.9 68.1L246.9 69.7L250.0 71.0L253.1 72.5L256.2 73.8L259.7 74.8L262.5 75.8L265.3 76.7L268.1 77.0L270.9 76.8L273.5 76.1L275.8 74.9L277.8 73.2L279.4 71.2L280.5 68.9L281.0 66.4L281.0 63.7L280.4 61.1L279.3 58.5L277.7 56.1L275.7 54.1ZM126.9 325.8L131.1 327.9L135.3 330.1L139.6 331.9L143.9 333.7L148.2 335.4L152.7 336.9L157.1 338.4L161.5 339.9L166.0 341.1L170.6 342.3L175.1 343.4L179.8 344.1L184.4 344.9L189.1 345.5L193.8 346.2L198.5 346.6L203.2 346.9L208.0 347.1L212.8 347.1L217.5 347.0L222.4 346.7L227.1 346.1L231.9 345.3L236.7 344.5L241.5 343.5L246.2 342.4L251.0 341.2L255.7 339.9L260.3 338.3L264.9 336.6L269.5 334.7L274.0 332.5L278.3 330.1L282.6 327.7L286.9 325.2L291.0 322.4L295.0 319.4L298.9 316.3L302.6 313.0L306.3 309.6L306.2 309.6L302.4 312.8L298.6 315.9L294.7 319.0L290.7 321.9L286.5 324.6L282.2 326.9L277.9 329.4L273.6 331.7L269.0 333.6L264.6 335.6L259.9 337.2L255.3 338.7L250.6 340.1L245.9 341.3L241.2 342.2L236.5 343.2L231.7 344.0L227.0 344.7L222.2 345.1L217.5 345.3L212.7 345.3L208.0 345.3L203.3 345.2L198.6 345.0L193.9 344.6L189.3 344.1L184.6 343.3L180.0 342.6L175.5 341.8L170.9 341.0L166.3 340.0L161.8 338.8L157.4 337.5L152.9 336.2L148.4 334.9L144.0 333.4L139.7 331.7L135.3 330.0L131.0 328.0L126.8 325.9ZM208.9 340.2L213.9 340.4L218.9 340.2L224.0 340.0L229.0 339.4L234.0 338.9L239.1 338.2L244.1 337.1L249.1 336.0L254.0 334.7L259.0 333.2L263.8 331.4L268.6 329.4L273.4 327.3L278.0 324.9L282.4 322.2L286.8 319.3L291.1 316.3L295.3 313.2L299.3 309.9L303.1 306.3L306.8 302.6L310.4 298.8L313.9 294.9L317.1 290.7L320.2 286.5L323.2 282.2L325.7 277.6L328.3 273.1L330.8 268.5L333.0 263.8L334.9 258.9L336.7 254.0L338.3 249.1L339.8 244.1L341.1 239.1L342.1 234.0L343.0 228.9L343.6 223.8L344.0 218.6L344.3 213.5L344.7 213.5L344.1 218.6L343.4 223.7L342.7 228.8L341.5 233.9L340.2 238.9L338.8 243.8L337.2 248.7L335.4 253.6L333.5 258.4L331.4 263.1L329.1 267.7L326.8 272.3L324.2 276.8L321.6 281.2L318.7 285.5L315.6 289.6L312.3 293.6L309.0 297.6L305.4 301.2L301.6 304.7L297.8 308.2L293.9 311.5L289.8 314.6L285.6 317.6L281.2 320.2L276.8 322.8L272.3 325.1L267.7 327.4L263.1 329.5L258.3 331.4L253.5 333.1L248.7 334.7L243.8 336.2L238.9 337.3L233.9 338.1L228.9 338.9L223.9 339.4L218.9 339.8L213.9 340.2L208.9 340.2ZM276.3 329.1L279.9 327.4L283.3 325.4L286.7 323.2L290.0 320.9L293.3 318.6L296.5 316.2L299.6 313.6L302.6 311.0L305.6 308.3L308.6 305.6L311.5 302.8L314.3 299.9L316.9 296.8L319.4 293.6L321.8 290.4L324.1 287.1L326.3 283.7L328.4 280.2L330.3 276.7L332.3 273.2L334.0 269.5L335.6 265.9L337.2 262.2L338.7 258.5L340.0 254.7L341.1 250.9L342.1 247.0L343.1 243.2L344.0 239.3L344.9 235.4L345.6 231.5L346.3 227.6L346.6 223.7L346.8 219.8L347.1 215.8L347.4 211.9L347.4 208.0L347.4 204.1L347.1 200.2L346.9 196.3L347.1 196.3L347.1 200.2L347.0 204.1L346.9 208.0L346.9 211.9L346.6 215.8L346.5 219.7L346.1 223.6L345.5 227.5L344.7 231.4L344.1 235.3L343.2 239.1L342.2 242.9L341.3 246.8L340.2 250.6L338.9 254.3L337.4 258.0L336.1 261.7L334.6 265.4L332.9 269.0L331.1 272.6L329.2 276.1L327.3 279.6L325.2 283.0L323.0 286.3L320.8 289.6L318.3 292.8L315.8 295.9L313.2 298.9L310.6 302.0L307.9 304.9L305.1 307.8L302.3 310.6L299.3 313.3L296.2 315.9L293.0 318.2L289.7 320.5L286.3 322.6L283.0 324.8L279.6 326.9L276.1 328.9Z"/>
+          <path d="M330.9 262.9L332.0 260.5L332.8 258.1L333.6 255.7L334.5 253.3L335.4 250.9L336.2 248.4L336.9 246.0L337.7 243.5L338.5 241.1L339.0 238.6L339.4 236.1L339.9 233.6L340.5 231.1L341.0 228.6L341.2 226.0L341.7 223.5L342.1 221.0L342.4 218.5L342.6 215.9L343.0 213.4L343.1 210.9L343.4 208.3L343.4 205.8L343.3 203.2L343.5 200.7L343.4 198.1L343.6 195.6L343.5 193.0L343.2 190.5L342.9 188.0L342.7 185.4L342.6 182.9L342.5 180.3L342.0 177.8L341.6 175.3L341.1 172.8L340.8 170.3L340.2 167.8L339.5 165.4L338.8 162.9L338.1 160.5L337.6 158.0L337.0 155.5L336.2 153.0L335.5 150.6L334.7 148.2L333.6 145.8L332.4 143.6L331.6 141.2L330.5 138.8L330.3 138.9L331.3 141.3L332.1 143.7L332.8 146.2L333.8 148.5L334.7 150.9L335.7 153.2L336.6 155.6L337.1 158.1L337.7 160.6L338.2 163.1L338.9 165.5L339.2 168.0L339.7 170.5L340.2 173.0L340.5 175.5L340.7 178.0L341.1 180.5L341.5 183.0L341.6 185.6L342.0 188.1L342.0 190.6L341.9 193.1L341.7 195.7L341.8 198.2L341.9 200.7L341.8 203.2L341.5 205.8L341.5 208.3L341.2 210.8L340.8 213.3L340.7 215.8L340.4 218.3L340.0 220.8L339.4 223.2L339.0 225.7L338.8 228.2L338.6 230.7L338.2 233.2L337.6 235.7L337.4 238.2L336.8 240.7L336.6 243.2L336.1 245.7L335.5 248.2L334.7 250.6L333.9 253.1L333.2 255.5L332.4 258.0L331.6 260.4L330.9 262.9ZM333.3 263.9L335.0 260.8L336.4 257.6L337.6 254.3L338.9 251.1L340.1 247.8L341.4 244.5L342.3 241.1L343.3 237.8L344.3 234.4L345.2 231.0L345.7 227.6L346.1 224.1L346.4 220.6L346.6 217.1L346.8 213.6L347.0 210.2L346.9 206.7L346.9 203.2L346.9 199.8L346.7 196.3L346.4 192.9L346.0 189.4L345.7 186.0L345.3 182.5L345.1 179.1L344.7 175.7L344.2 172.2L343.3 168.9L342.4 165.5L341.4 162.2L340.4 158.9L339.5 155.6L338.4 152.3L337.1 149.1L335.9 145.9L334.6 142.7L333.3 139.5L331.9 136.3L330.4 133.2L328.8 130.1L326.9 127.2L325.3 124.2L323.3 121.3L321.4 118.5L319.3 115.7L317.3 112.9L315.1 110.3L312.8 107.7L310.4 105.2L307.9 102.8L308.4 102.4L310.6 105.0L312.8 107.7L314.9 110.4L316.8 113.3L318.8 116.1L320.8 118.8L322.6 121.8L324.3 124.7L325.9 127.8L327.7 130.7L329.2 133.8L330.5 137.0L331.8 140.1L333.1 143.3L334.5 146.4L335.6 149.7L336.6 152.9L337.4 156.2L338.3 159.5L339.0 162.8L339.8 166.1L340.5 169.5L340.9 172.9L341.6 176.2L342.1 179.5L342.4 182.9L342.6 186.3L343.0 189.7L343.1 193.1L343.4 196.5L343.4 199.8L343.6 203.2L343.4 206.6L343.1 210.0L342.7 213.4L342.1 216.8L341.8 220.1L341.5 223.5L341.1 226.9L340.5 230.2L339.8 233.6L339.5 237.0L339.0 240.3L338.5 243.7L337.6 247.1L336.8 250.4L336.1 253.8L335.2 257.2L334.1 260.5L333.0 263.8ZM335.8 265.0L337.0 262.2L338.2 259.4L339.5 256.7L340.7 253.9L341.7 251.1L342.7 248.2L343.9 245.4L344.7 242.5L345.6 239.6L346.3 236.6L347.0 233.7L347.8 230.7L348.4 227.8L348.7 224.8L348.9 221.8L349.2 218.8L349.2 215.7L349.1 212.7L349.4 209.7L349.4 206.7L349.4 203.7L349.3 200.8L349.3 197.8L349.0 194.8L348.6 191.8L348.1 188.9L347.7 185.9L347.4 183.0L347.1 180.0L346.4 177.1L345.9 174.2L345.2 171.3L344.5 168.4L343.6 165.6L342.8 162.7L342.1 159.9L341.4 157.0L340.3 154.2L339.4 151.4L338.5 148.6L337.6 145.8L336.3 143.1L335.0 140.4L334.0 137.7L332.8 134.9L331.4 132.3L329.8 129.8L328.5 127.1L326.9 124.6L325.5 122.0L325.6 122.0L326.9 124.6L328.5 127.1L329.7 129.8L331.1 132.5L332.4 135.1L333.5 137.9L334.7 140.6L335.7 143.3L336.6 146.2L337.6 148.9L338.4 151.8L339.2 154.6L340.2 157.4L341.1 160.2L341.7 163.0L342.5 165.9L343.2 168.7L343.6 171.6L344.2 174.5L344.6 177.4L345.2 180.3L345.5 183.2L345.9 186.1L346.2 189.1L346.4 192.0L346.7 194.9L346.8 197.9L347.0 200.8L346.9 203.7L347.0 206.7L346.8 209.6L346.8 212.6L346.7 215.6L346.3 218.5L346.2 221.5L345.9 224.4L345.4 227.3L344.8 230.3L344.3 233.2L343.9 236.1L343.3 239.0L342.6 241.9L341.8 244.8L341.1 247.7L340.5 250.7L339.7 253.6L338.6 256.4L337.8 259.3L336.6 262.1L335.7 264.9ZM337.8 265.9L339.0 263.8L339.9 261.7L340.7 259.4L341.7 257.3L342.5 255.1L343.6 253.0L344.2 250.7L345.2 248.5L346.1 246.4L346.8 244.1L347.5 241.9L347.9 239.5L348.7 237.3L349.1 235.0L349.7 232.7L350.3 230.4L350.4 228.1L350.8 225.8L351.2 223.5L351.1 221.1L351.1 218.8L351.3 216.4L351.2 214.1L351.3 211.8L351.2 209.4L351.3 207.1L351.0 204.8L350.9 202.5L350.9 200.2L350.6 197.9L350.3 195.6L350.1 193.3L349.8 191.0L349.3 188.8L348.9 186.5L348.5 184.3L348.4 182.0L348.1 179.7L347.8 177.4L347.2 175.2L346.8 173.0L346.1 170.8L345.5 168.6L345.0 166.4L344.3 164.2L343.8 161.9L343.2 159.8L342.6 157.6L342.0 155.4L341.1 153.3L341.1 153.3L341.6 155.5L342.2 157.7L342.9 159.8L343.6 162.0L344.3 164.2L344.8 166.4L345.2 168.6L345.6 170.9L346.4 173.0L346.7 175.3L347.2 177.5L347.7 179.8L348.0 182.0L348.4 184.3L348.8 186.5L349.1 188.8L349.4 191.1L349.5 193.4L349.7 195.6L349.7 197.9L349.7 200.2L349.9 202.5L349.9 204.8L349.8 207.1L350.0 209.4L350.0 211.7L349.9 214.0L350.0 216.3L349.8 218.6L349.4 220.9L349.0 223.2L348.6 225.5L348.2 227.8L347.8 230.0L347.6 232.3L347.3 234.6L346.7 236.9L346.4 239.2L345.7 241.4L345.2 243.7L344.5 245.9L343.8 248.1L343.2 250.4L342.4 252.6L341.7 254.8L341.1 257.1L340.2 259.2L339.4 261.4L338.5 263.6L337.6 265.7Z"/>
+        </g>
+      </svg>
       <div class="hero-copy">
-        <p class="kicker">Open source · self-hosted · Android and iOS · beta</p>
-        <h1 id="hero-title"><span>Every agent</span> <span>you run,</span> <em>in one hand.</em></h1>
-        <p class="lede">Zen is a phone app and a small daemon on your own computer. Every coding agent and shell there becomes a Session you can read as chat, drive as a live terminal, or hand to a Brain that splits the work.</p>
-        <div class="ctas">
-          <a class="btn primary" href="#install">Install</a>
-          <a class="btn" href="https://github.com/daoleno/zen">Source on GitHub</a>
-        </div>
-        <dl class="readout">
-          <div><dt>Launch presets</dt><dd>8</dd></div>
-          <div><dt>Views per Session</dt><dd>Chat · Terminal</dd></div>
-          <div><dt>Brain executors</dt><dd>6</dd></div>
-          <div><dt>Owners</dt><dd>1</dd></div>
-        </dl>
+        <h1 id="hero-title">Let them work.<br>Look up when it matters.</h1>
+        <p>Zen is an open-source phone app for the coding agents on your own computer.</p>
       </div>
     </section>
 
-    <section class="sec sessions" id="sessions" aria-labelledby="sessions-title">
-      <div class="sessions-body" data-fig data-autoplay="4200">
-        <figure class="phone-art">
-          <img src="assets/sessions.svg" width="380" height="760" alt="A phone showing one claude Session: the New session sheet, the Chat view, the live Terminal and the Git diff." data-inline>
-        </figure>
-        <div class="sessions-side">
-          <div class="sec-head">
-            <p class="idx">01 · Sessions</p>
-            <h2 id="sessions-title">Every agent is a Session. Open it two ways.</h2>
-          </div>
-        <div class="facts" role="group" aria-label="Session views">
-          <button type="button" data-state="1" aria-pressed="true">
-            <span class="n">New</span>
-            <b>Start anything, anywhere on the machine</b>
-            <span>Claude, Codex, Cursor, Grok, Pi, OpenCode, DSH or a plain Shell, in any directory. Each one is a tmux session you can also reach from the desk.</span>
-          </button>
-          <button type="button" data-state="2" aria-pressed="false">
-            <span class="n">Chat</span>
-            <b>Read it as a conversation</b>
-            <span>Messages, tool calls and plans laid out for a phone. Attach files and images, stop a run, switch the model.</span>
-          </button>
-          <button type="button" data-state="3" aria-pressed="false">
-            <span class="n">Terminal</span>
-            <b>Or take the real terminal</b>
-            <span>The same session, rendered natively with libghostty, with a key row for esc, tab, ctrl and arrows. Shell sessions open here.</span>
-          </button>
-          <button type="button" data-state="4" aria-pressed="false">
-            <span class="n">Git</span>
-            <b>Review what changed</b>
-            <span>All, Working and Staged diffs for the Session's repository. Read-only: reviewing never stages or discards.</span>
-          </button>
-        </div>
-          <p class="facts-cap" data-caption></p>
-        </div>
-      </div>
-      <p class="clients"><code>claude</code><code>codex</code><code>cursor-agent</code><code>grok</code><code>pi</code><code>opencode</code><span>Chat works with these six. Any other command still gets the terminal. One authenticated CLI is enough.</span></p>
-    </section>
+    <figure class="garden" aria-labelledby="garden-cap">
+      <canvas role="img" aria-label="Raked lines, one for each running agent, flow across the page and part around a single stone, the Session that needs you."></canvas>
+      <figcaption id="garden-cap">Each line is an agent at work. The stone is the one that needs you.</figcaption>
+    </figure>
 
-    <section class="sec brain" id="brain" aria-labelledby="brain-title">
-      <div class="sec-head split">
-        <div>
-          <p class="idx">02 · Brain</p>
-          <h2 id="brain-title">Hand over the goal, keep the judgment.</h2>
-        </div>
-        <p>Brain is a long-running agent on your computer. It writes each part of a goal down as durable Work, picks a Worker for it using <code>routing.md</code>, a few lines of Markdown it rewrites when you state a preference, and reads every result before closing it. Workers are ordinary Sessions, so you can open any of them and take over. <code>zen brain use claude</code> moves Brain itself to another client without losing the thread.</p>
-      </div>
-      <figure class="wide-art" data-fig data-autoplay="3800">
-        <div class="steps" role="group" aria-label="Brain stages">
-          <button type="button" data-state="1" aria-pressed="true"><b>1</b>Plan</button>
-          <button type="button" data-state="2" aria-pressed="false"><b>2</b>Delegate</button>
-          <button type="button" data-state="3" aria-pressed="false"><b>3</b>Review</button>
-        </div>
-        <picture>
-          <source media="(max-width: 760px)" srcset="assets/brain-narrow.svg">
-          <img src="assets/brain.svg" width="1100" height="376" alt="A goal from the phone becomes three Work items. Brain reads routing.md and gives them to claude, codex and pi Workers, then accepts two results and sends one back for a test." data-inline>
-        </picture>
+    <div class="movements">
+      <section class="mv mv-begin rv" aria-labelledby="mv-begin">
+        <p class="n" aria-hidden="true">i</p>
+        <h2 id="mv-begin">Begin</h2>
+        <p>Start any agent in any folder on your computer. Each one is a Session: read it as a conversation, or take the live terminal.</p>
+        <p class="names">claude · codex · cursor · grok · pi · opencode · shell</p>
+      </section>
+
+      <section class="mv mv-letgo rv" aria-labelledby="mv-letgo">
+        <p class="n" aria-hidden="true">ii</p>
+        <h2 id="mv-letgo">Let go</h2>
+        <p>Give Brain a goal. It writes the Work down, hands each part to a Worker Session, and reads every result before closing it. Open any Worker to take over.</p>
+      </section>
+
+      <section class="mv mv-return rv" aria-labelledby="mv-return">
+        <p class="n" aria-hidden="true">iii</p>
+        <h2 id="mv-return">Return</h2>
+        <p>While they run, your phone stays quiet. When a Session is blocked, fails or finishes, you are called, here or on Telegram.</p>
+      </section>
+
+      <figure class="glimpse rv" aria-label="The Sessions list on the phone. Five run quietly; one, session-auth, needs you.">
+        <svg viewBox="0 0 230 430" aria-hidden="true" focusable="false">
+          <rect class="frame" x="1" y="1" width="228" height="428" rx="34"/>
+          <rect class="faint-fill" x="88" y="16" width="54" height="7" rx="3.5"/>
+          <text class="t-small" x="24" y="62">Sessions</text>
+          <g class="rows">
+            <g transform="translate(0 92)"><circle cx="28" cy="0" r="2.5"/><text x="40" y="4">onboarding</text><text class="t-faint" x="206" y="4" text-anchor="end">claude</text></g>
+            <g transform="translate(0 132)"><circle cx="28" cy="0" r="2.5"/><text x="40" y="4">changelog</text><text class="t-faint" x="206" y="4" text-anchor="end">pi</text></g>
+            <g transform="translate(0 172)" class="needs"><rect x="24.5" y="-3.5" width="7" height="7" transform="rotate(4 28 0)"/><text x="40" y="4">session-auth</text><text x="206" y="4" text-anchor="end">needs you</text></g>
+            <g transform="translate(0 212)"><circle cx="28" cy="0" r="2.5"/><text x="40" y="4">ios-crash</text><text class="t-faint" x="206" y="4" text-anchor="end">claude</text></g>
+            <g transform="translate(0 252)"><circle cx="28" cy="0" r="2.5"/><text x="40" y="4">docs-sync</text><text class="t-faint" x="206" y="4" text-anchor="end">opencode</text></g>
+            <g transform="translate(0 292)"><circle cx="28" cy="0" r="2.5"/><text x="40" y="4">~/zen</text><text class="t-faint" x="206" y="4" text-anchor="end">shell</text></g>
+          </g>
+        </svg>
       </figure>
+
+      <section class="mv mv-yours rv" aria-labelledby="mv-yours">
+        <p class="n" aria-hidden="true">iv</p>
+        <h2 id="mv-yours">Yours</h2>
+        <p>Zen runs on your computer and answers to one owner. A phone pairs once, then signs every request. Code, keys and agent state stay with you; model providers see only what agents send them.</p>
+        <p class="aside">Agents left to work alone skip approval prompts by default. On a machine with secrets, use the <a href="https://github.com/daoleno/zen/blob/main/docs/executors.md#permission-bypass-risks">safe profile</a>.</p>
+      </section>
+    </div>
+
+    <section class="also rv" aria-labelledby="also-title">
+      <h2 id="also-title">Also within reach</h2>
+      <dl>
+        <div><dt>Model providers</dt><dd>official login or your own keys</dd></div>
+        <div><dt>Skills</dt><dd>what your agents load</dd></div>
+        <div><dt>Resources</dt><dd>CPU, memory and disk, by Worker</dd></div>
+        <div><dt>Plugins</dt><dd>Linear, Notion, GitHub, Slack; preview</dd></div>
+        <div><dt>Usage</dt><dd>tokens and cost per model</dd></div>
+        <div><dt>Calendar</dt><dd>scheduled actions run as Work</dd></div>
+        <div><dt>Services</dt><dd>ports your Sessions opened</dd></div>
+        <div><dt>Alerts</dt><dd>push, or Telegram</dd></div>
+      </dl>
     </section>
 
-    <section class="sec instruments" id="instruments" aria-labelledby="inst-title">
-      <div class="sec-head split">
-        <div>
-          <p class="idx">03 · Instruments</p>
-          <h2 id="inst-title">The rest of the machine, at hand.</h2>
-        </div>
-        <p>Everything below reads from the server you are connected to, and only that one. The dashed outlines in each drawing are controls.</p>
+    <section class="install" id="install" aria-labelledby="install-title">
+      <h2 id="install-title">One line to begin.</h2>
+      <div class="cmd">
+        <code id="cmd-install">curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh</code>
+        <button type="button" class="copy" data-copy="cmd-install">Copy</button>
       </div>
-      <div class="rack">
-        <article class="mod" data-fig aria-labelledby="m-models">
-          <header><span class="i">03.1</span><h3 id="m-models">Model Providers</h3><span class="tag">Beta</span></header>
-          <p>Choose how Codex and Claude reach models: the official login, or your own OpenAI, Anthropic, DeepSeek, OpenRouter or custom gateway keys. Keys stay on the daemon and are never shown back.</p>
-          <div class="art">
-            <img src="assets/models.svg" width="480" height="300" alt="Model Providers with a Codex and Claude switch, the official login and saved providers." data-inline>
-            <button class="hot" type="button" data-state="1" aria-pressed="true" style="left:4.17%;top:6.67%;width:20.83%;height:10%">Codex</button>
-            <button class="hot" type="button" data-state="2" aria-pressed="false" style="left:25%;top:6.67%;width:20.83%;height:10%">Claude</button>
-          </div>
-        </article>
-
-        <article class="mod" data-fig aria-labelledby="m-skills">
-          <header><span class="i">03.2</span><h3 id="m-skills">Skills</h3><span class="tag">Beta</span></header>
-          <p>See which Skills and Agent Plugins your agents load on this server, where each copy came from, and remove one exact copy.</p>
-          <div class="art">
-            <img src="assets/skills.svg" width="480" height="300" alt="Skills list with sources and agents, and Agent Plugins with their Skills." data-inline>
-            <button class="hot" type="button" data-state="1" aria-pressed="true" style="left:4.17%;top:6.67%;width:25%;height:10%">Skills</button>
-            <button class="hot" type="button" data-state="2" aria-pressed="false" style="left:29.17%;top:6.67%;width:25%;height:10%">Agent Plugins</button>
-          </div>
-        </article>
-
-        <article class="mod tall" data-fig aria-labelledby="m-res">
-          <header><span class="i">03.3</span><h3 id="m-res">Resources</h3><span class="tag">Beta</span></header>
-          <p>CPU, memory, disk and pressure on the host, and which Worker, Brain, container or app is using them. A Worker left behind shows as Residual, with its last status.</p>
-          <div class="art">
-            <img src="assets/resources.svg" width="480" height="560" alt="Resource trends and processes attributed to Workers, Brain, Docker and the user." data-inline>
-            <button class="hot" type="button" data-state="1" aria-pressed="true" style="left:4.17%;top:44.29%;width:9.79%;height:4.64%">All</button>
-            <button class="hot" type="button" data-state="2" aria-pressed="false" style="left:15.63%;top:44.29%;width:15.63%;height:4.64%">Workers</button>
-            <button class="hot" type="button" data-state="3" aria-pressed="false" style="left:32.92%;top:44.29%;width:12.71%;height:4.64%">Brain</button>
-            <button class="hot" type="button" data-state="4" aria-pressed="false" style="left:47.29%;top:44.29%;width:14.17%;height:4.64%">Docker</button>
-          </div>
-        </article>
-
-        <article class="mod" data-fig aria-labelledby="m-plugins">
-          <header><span class="i">03.4</span><h3 id="m-plugins">Plugins</h3><span class="tag preview">Preview</span></header>
-          <p>Connect Linear, Notion, GitHub, Slack or Google Workspace with each service's own sign-in, or your own MCP and OpenAPI services. Brain reads by default; changes are a separate switch. First-time sign-in is not ready for every service yet.</p>
-          <div class="art">
-            <img src="assets/plugins.svg" width="480" height="300" alt="Brain connected to Linear, Notion, GitHub, Slack, Google Workspace and custom services, with read and change permissions." data-inline>
-            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:60.83%;top:50%;width:35%;height:10.67%">Allow changes when asked</button>
-          </div>
-        </article>
-
-        <article class="mod" data-fig aria-labelledby="m-usage">
-          <header><span class="i">03.5</span><h3 id="m-usage">Usage</h3><span class="tag">Beta</span></header>
-          <p>Tokens, sessions and cost per model from your agents' own history. Reported charges, estimates and unknowns are marked apart; a missing price stays a dash.</p>
-          <div class="art">
-            <img src="assets/stats.svg" width="480" height="300" alt="Usage per model with reported, estimated and unknown costs." data-inline>
-            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:4.17%;top:78.67%;width:91.67%;height:16%">gpt-6-astra details</button>
-          </div>
-        </article>
-
-        <article class="mod" data-fig aria-labelledby="m-cal">
-          <header><span class="i">03.6</span><h3 id="m-cal">Calendar</h3><span class="tag">Beta</span></header>
-          <p>Events, reminders and deadlines, plus scheduled actions: at the set time an agent runs the instruction as visible Work and posts the result to the Brain thread it came from.</p>
-          <div class="art">
-            <img src="assets/calendar.svg" width="480" height="300" alt="A day with an event, a reminder, a deadline and a scheduled action that runs as Work." data-inline>
-            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:12.5%;top:25.33%;width:41.67%;height:11.33%">Run the scheduled action</button>
-          </div>
-        </article>
-
-        <article class="mod" data-fig aria-labelledby="m-svc">
-          <header><span class="i">03.7</span><h3 id="m-svc">Services</h3><span class="tag">Beta</span></header>
-          <p>Every port your Sessions opened, grouped by project. Open it, jump to its terminal, or share it for a while through a Cloudflare Quick Tunnel.</p>
-          <div class="art">
-            <img src="assets/services.svg" width="480" height="300" alt="Listening ports owned by Sessions and a persistent unit, one made public with a Quick Tunnel." data-inline>
-            <button class="hot" type="button" data-toggle aria-pressed="false" style="left:4.17%;top:46.67%;width:91.67%;height:13.33%">Share port 5173 with a Quick Tunnel</button>
-          </div>
-        </article>
-
-        <article class="mod" aria-labelledby="m-alerts">
-          <header><span class="i">03.8</span><h3 id="m-alerts">Alerts and Telegram</h3><span class="tag">Beta</span></header>
-          <p>Your phone buzzes when a Session is blocked, fails or finishes, and stays quiet otherwise. Telegram is a second way to talk to the same Brain.</p>
-          <div class="art">
-            <img src="assets/alerts.svg" width="480" height="300" alt="Three push alerts for blocked, failed and finished Sessions, and a Telegram chat with Brain." data-inline>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="sec owner" id="owner" aria-labelledby="owner-title">
-      <div class="owner-grid" data-fig>
-        <div>
-          <p class="idx">04 · Ownership</p>
-          <h2 id="owner-title">One owner, end to end.</h2>
-          <ul class="points">
-            <li><b>Signed devices.</b> The daemon has an Ed25519 identity. A phone pairs once with a short-lived code, then signs every request. <code>zen devices revoke</code> cuts one off.</li>
-            <li><b>Your network.</b> LAN, Tailscale, or a Cloudflare Tunnel or reverse proxy you run. No hosted relay sits in between.</li>
-            <li><b>One current server.</b> Pair several machines; the app follows exactly one at a time and never mixes their data.</li>
-            <li><b>Nothing leaves by default.</b> Repositories, credentials and agent state stay on the host. Model providers see what agents send them.</li>
-          </ul>
-        </div>
-        <figure class="owner-art">
-          <div class="steps" role="group" aria-label="Ownership">
-            <button type="button" data-state="1" aria-pressed="true">Pair</button>
-            <button type="button" data-state="2" aria-pressed="false">Switch server</button>
-          </div>
-          <img src="assets/owner.svg" width="480" height="300" alt="A phone reaches the zen daemon over LAN, Tailscale or your tunnel, signing each request, and follows one current server." data-inline>
-        </figure>
-      </div>
-      <p class="warn"><b>Unattended means trusted.</b> Several default executor commands bypass approval prompts so agents can work while you are away. On a machine with secrets or production access, use the safe profile from <a href="https://github.com/daoleno/zen/blob/main/docs/executors.md#permission-bypass-risks">executor risks</a>.</p>
-    </section>
-
-    <section class="sec install" id="install" aria-labelledby="install-title">
-      <div class="sec-head split">
-        <div>
-          <p class="idx">05 · Install</p>
-          <h2 id="install-title">Running in a few minutes.</h2>
-        </div>
-        <p>Linux (amd64, arm64), WSL2 or an Apple Silicon Mac, with <code>tmux</code> and one authenticated agent CLI.</p>
-      </div>
-      <ol class="install-steps">
-        <li>
-          <h3>Install the daemon</h3>
-          <div class="copyline"><code id="cmd-install">curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh</code><button type="button" class="copy" data-copy="cmd-install">Copy</button></div>
-          <p>Verifies the release checksum. No sudo, no telemetry, no agent CLIs installed for you.</p>
-        </li>
-        <li>
-          <h3>Check the host and start</h3>
-          <div class="copyline"><code id="cmd-run">zen doctor &amp;&amp; zen --lan</code><button type="button" class="copy" data-copy="cmd-run">Copy</button></div>
-          <p>Then run the <code>zen pair</code> command it prints. Away from home, use Tailscale or <code>zen pair https://your-origin</code>.</p>
-        </li>
-        <li>
-          <h3>Pair your phone</h3>
-          <p>Android: the arm64 APK on <a href="https://github.com/daoleno/zen/releases">GitHub Releases</a>. iOS: <a href="https://github.com/daoleno/zen/blob/main/docs/ios.md">build from source</a>; a <a href="https://testflight.apple.com/join/rTKCDzMt">TestFlight preview</a> is awaiting Apple review. Scan the code and you are in.</p>
-        </li>
-      </ol>
-      <p class="status">Beta. Plugins are a preview. Zen Link relay is source only; no hosted relay is operated. Known issues: <a href="https://github.com/daoleno/zen/blob/main/docs/release-blockers.md">release blockers</a>.</p>
+      <!-- zen-connect-ux: replace this pairing line when the flow becomes "run zen, scan the code". -->
+      <p>Then start <code>zen --lan</code>, run the <code>zen pair</code> command it prints, and scan the code with the app.</p>
+      <p class="aside">Linux, WSL2 or an Apple Silicon Mac, with tmux and one signed-in agent CLI. The app: Android on <a href="https://github.com/daoleno/zen/releases">Releases</a>; iOS <a href="https://github.com/daoleno/zen/blob/main/docs/ios.md">from source</a>, with a <a href="https://testflight.apple.com/join/rTKCDzMt">TestFlight preview</a> awaiting review.</p>
     </section>
   </main>
 
   <footer class="foot">
-    <div class="foot-brand">
-      <img src="assets/zen-mark.svg" alt="" width="28" height="28">
-      <p>Open source under the <a href="https://github.com/daoleno/zen/blob/main/LICENSE">Apache License 2.0</a>. Go daemon, Expo React Native app.</p>
-    </div>
+    <p>Beta. Apache 2.0.</p>
     <nav aria-label="Project">
-      <ul>
-        <li><a href="https://github.com/daoleno/zen">Source</a></li>
-        <li><a href="https://github.com/daoleno/zen/tree/main/docs">Docs</a></li>
-        <li><a href="https://github.com/daoleno/zen/blob/main/docs/architecture.md">Architecture</a></li>
-        <li><a href="https://github.com/daoleno/zen/blob/main/SECURITY.md">Security</a></li>
-        <li><a href="https://github.com/daoleno/zen/releases">Releases</a></li>
-      </ul>
+      <a href="https://github.com/daoleno/zen">Source</a>
+      <a href="https://github.com/daoleno/zen/tree/main/docs">Docs</a>
+      <a href="https://github.com/daoleno/zen/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/daoleno/zen/releases">Releases</a>
+      <a href="https://github.com/daoleno/zen/blob/main/docs/release-blockers.md">Known issues</a>
     </nav>
   </footer>
 
