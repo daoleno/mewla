@@ -10,6 +10,7 @@ import (
 	"github.com/daoleno/zen/daemon/browser"
 	"github.com/daoleno/zen/daemon/calendar"
 	"github.com/daoleno/zen/daemon/connections"
+	"github.com/daoleno/zen/daemon/enrollment"
 	"github.com/daoleno/zen/daemon/lifecycle"
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	telegramchannel "github.com/daoleno/zen/daemon/telegram"
@@ -66,6 +67,9 @@ type Request struct {
 	Revision             int64                                  `json:"revision,omitempty"`
 	Actor                string                                 `json:"actor,omitempty"`
 	Reason               string                                 `json:"reason,omitempty"`
+	EnrollmentID         string                                 `json:"enrollment_id,omitempty"`
+	VerificationNumber   string                                 `json:"verification_number,omitempty"`
+	Approve              *bool                                  `json:"approve,omitempty"`
 	CalendarItem         *calendar.Item                         `json:"calendar_item,omitempty"`
 	BrainWork            *brain.Work                            `json:"brain_work,omitempty"`
 	BrainWorkEvent       *brain.WorkEvent                       `json:"brain_work_event,omitempty"`
@@ -113,6 +117,7 @@ type Response struct {
 	CalendarItem       *calendar.Item                           `json:"calendar_item,omitempty"`
 	CalendarItems      []calendar.Item                          `json:"calendar_items,omitempty"`
 	Devices            []auth.DeviceInfo                        `json:"devices,omitempty"`
+	Enrollments        []enrollment.Request                     `json:"enrollments,omitempty"`
 	Pairing            *PairingInfo                             `json:"pairing,omitempty"`
 	PersistenceOutcome PersistenceOutcome                       `json:"persistence_outcome,omitempty"`
 	PersistenceDurable *bool                                    `json:"persistence_durable,omitempty"`

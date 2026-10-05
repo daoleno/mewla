@@ -41,6 +41,7 @@ import {
 } from "../../store/brain";
 import type { BrainWorkResultEvent } from "../../components/brain/brainWorkEvent";
 import { useCurrentServer } from "../../store/currentServer";
+import { ConnectionPathIndicator } from "../../components/connection/ConnectionPathIndicator";
 
 const BRAIN_EMPTY_TITLE = "No messages yet";
 
@@ -407,6 +408,12 @@ export default function BrainScreen() {
       ) : null}
 
       <View style={styles.surface}>
+        <ConnectionPathIndicator
+          connected={connectionState === "connected"}
+          latencyMs={activeServer ? workerState.serverLatencyById[activeServer.id]?.latencyMs : undefined}
+          transportKind={activeServer?.transportKind}
+          issue={connectionIssue?.title}
+        />
         <ChatCanvas chrome={chrome}>
           {canUseStructuredBrainInterface ? (
             <InterfaceChatSurface

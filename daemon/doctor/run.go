@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/zen/daemon/addressbook"
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/control"
 	"github.com/daoleno/zen/daemon/work"
@@ -79,6 +80,8 @@ func Run(opts Options) (Report, error) {
 	report.StateDir = e.checkStateDir()
 	report.Listen = e.checkListen(report.StateDir.Path)
 	report.Executors = e.checkExecutors()
+	report.Addresses = e.checkAddresses(report.StateDir.Path)
+	report.Network = e.checkNetwork()
 
 	report.Checks = []NamedCheck{
 		{ID: "platform", Status: report.Platform.Status, Remediation: report.Platform.Remediation, Summary: report.Platform.Summary},
@@ -91,6 +94,82 @@ func Run(opts Options) (Report, error) {
 	report.Warnings = collectWarnings(report)
 	report.Ready = isReady(report)
 	return report, nil
+}
+
+func (e env) checkNetwork() NetworkCheck {
+	check := NetworkCheck{Status: StatusUnknown, Summary: "Tailscale netcheck unavailable"}
+	path, err := e.opts.LookPath("tailscale")
+	if err != nil || path == "" {
+		return check
+	}
+	check.TailscaleFound = true
+	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
+	defer cancel()
+	output, err := e.opts.RunCommand(ctx, path, "netcheck", "--format=json")
+	if err != nil {
+		check.Status = StatusWarn
+		check.Summary = "Tailscale found, but netcheck failed"
+		return check
+	}
+	var payload struct {
+		UDP                   bool   `json:"UDP"`
+		DERP                  string `json:"PreferredDERP"`
+		MappingVariesByDestIP bool   `json:"MappingVariesByDestIP"`
+	}
+	if json.Unmarshal(output, &payload) != nil {
+		check.Status = StatusWarn
+		check.Summary = "Tailscale netcheck returned an unreadable result"
+		return check
+	}
+	check.Direct = payload.UDP
+	check.Relay = payload.DERP
+	if payload.MappingVariesByDestIP {
+		check.NATType = "symmetric"
+	} else if payload.UDP {
+		check.NATType = "cone/endpoint-independent"
+	} else {
+		check.NATType = "blocked"
+	}
+	if check.Direct {
+		check.Status = StatusOK
+		check.Summary = "Tailscale can attempt a direct UDP path"
+	} else {
+		check.Status = StatusWarn
+		check.Summary = "Tailscale will use DERP relay; direct UDP is unavailable"
+	}
+	return check
+}
+
+func (e env) checkAddresses(stateDir string) []AddressCheck {
+	book, err := addressbook.New(stateDir)
+	if err != nil {
+		return nil
+	}
+	entries, err := book.List()
+	if err != nil {
+		return nil
+	}
+	checks := make([]AddressCheck, 0, len(entries))
+	for _, entry := range entries {
+		started := time.Now()
+		status, _, probeErr := e.opts.HTTPGet(context.Background(), strings.TrimRight(entry.URL, "/")+"/health")
+		check := AddressCheck{URL: entry.URL, LatencyMS: time.Since(started).Milliseconds()}
+		parsedTLS := strings.HasPrefix(entry.URL, "https://")
+		check.TLS = parsedTLS
+		if probeErr == nil && status == http.StatusOK {
+			check.Reachable = true
+			check.Status = StatusOK
+			check.Summary = "reachable and TLS verified"
+		} else {
+			check.Status = StatusWarn
+			check.Summary = "unreachable"
+			if parsedTLS {
+				check.Summary = "unreachable or TLS failed"
+			}
+		}
+		checks = append(checks, check)
+	}
+	return checks
 }
 
 func isReady(report Report) bool {

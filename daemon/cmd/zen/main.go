@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/zen/daemon/addressbook"
 	"github.com/daoleno/zen/daemon/auth"
 	"github.com/daoleno/zen/daemon/brain"
 	"github.com/daoleno/zen/daemon/browser"
@@ -27,6 +29,7 @@ import (
 	"github.com/daoleno/zen/daemon/connections"
 	"github.com/daoleno/zen/daemon/control"
 	"github.com/daoleno/zen/daemon/doctor"
+	"github.com/daoleno/zen/daemon/enrollment"
 	"github.com/daoleno/zen/daemon/link"
 	"github.com/daoleno/zen/daemon/modelprofiles"
 	"github.com/daoleno/zen/daemon/push"
@@ -141,6 +144,8 @@ func run(args []string, stderr io.Writer) error {
 			return runClaudeCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
+		case "address":
+			return runAddressCommand(args[1:], stderr)
 		case "boot":
 			return runBootCommand(args[1:], stderr)
 		}
@@ -389,6 +394,28 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
 	srv.SetResourceSampler(resourceSampler)
 	srv.SetWebOrigins(cfg.webOrigins)
+	book, err := addressbook.New(authManager.StorageDir())
+	if err != nil {
+		return fmt.Errorf("initialize address book: %w", err)
+	}
+	port := "9876"
+	if _, configuredPort, splitErr := net.SplitHostPort(cfg.addr); splitErr == nil && configuredPort != "" {
+		port = configuredPort
+	}
+	_, _ = book.Add("http://127.0.0.1:"+port, addressbook.SourceDiscovered)
+	for _, origin := range cfg.webOrigins {
+		_, _ = book.Add(origin, addressbook.SourceManual)
+	}
+	for _, detected := range detectPrivateNetworkAddresses() {
+		_, _ = book.Add("http://"+net.JoinHostPort(detected.ip.String(), port), addressbook.SourceDiscovered)
+	}
+	srv.SetAddressBook(book)
+	enrollmentManager, err := enrollment.New(authManager.StorageDir())
+	if err != nil {
+		return fmt.Errorf("initialize enrollment manager: %w", err)
+	}
+	srv.SetEnrollmentManager(enrollmentManager)
+	controlHandler.enrollments = enrollmentManager
 	telegramManager, err := telegramchannel.NewManagerWithOptions(authManager.StorageDir(), brainService, telegramchannel.Options{Attachments: srv.AttachmentStore()})
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)
@@ -1893,10 +1920,26 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		return err
 	}
 	if !enabled {
-		return fmt.Errorf(
-			"Zen Link is not configured; create %s or run zen pair <endpoint> for an Advanced/Self-managed connection",
-			link.DefaultConfigPath(authManager.StorageDir()),
-		)
+		book, bookErr := addressbook.New(authManager.StorageDir())
+		if bookErr != nil {
+			return bookErr
+		}
+		entries, listErr := book.List()
+		if listErr != nil || len(entries) == 0 {
+			return fmt.Errorf("Zen Link is not configured and the daemon has no reachable address; run zen pair <endpoint>")
+		}
+		offers := make([]connectionOffer, 0, len(entries))
+		for _, entry := range entries {
+			offer, offerErr := buildConnectionOffersWithPublicKey(entry.URL, pairingInfo.DaemonPublicKey, pairing)
+			if offerErr == nil {
+				offers = append(offers, offer...)
+			}
+		}
+		if len(offers) == 0 {
+			return fmt.Errorf("the daemon address book has no usable entry points")
+		}
+		printPairCommandInfo(stderr, pairingInfo.DaemonID, offers)
+		return nil
 	}
 	identity, err := link.LoadOrCreateTransportIdentity(
 		authManager.StorageDir(),
@@ -1971,6 +2014,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "  worker     List, spawn, inspect, message, progress, and close Zen Workers")
 		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
 		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
+		fmt.Fprintln(stderr, "  address    Add, remove, or list daemon entry points")
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -2045,7 +2089,7 @@ func loadOptionalLinkConfig(
 
 func runDevicesCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen devices <list|revoke> [-state-dir DIR] [flags]")
+		fmt.Fprintln(stderr, "Usage: zen devices <list|pending|approve|deny|revoke> [-state-dir DIR] [flags]")
 		return flag.ErrHelp
 	}
 	switch args[0] {
@@ -2101,6 +2145,51 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 			strings.TrimSpace(deviceID),
 			result,
 		)
+	case "pending":
+		fs := flag.NewFlagSet("zen devices pending", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		var stateDir string
+		fs.StringVar(&stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+		}
+		resp, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "enrollment_list"})
+		if err != nil {
+			return err
+		}
+		if err := controlResponseError(resp); err != nil {
+			return err
+		}
+		for _, item := range resp.Enrollments {
+			fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\texpires %s\n", item.ID, item.DeviceName, item.Platform, item.Number, item.ExpiresAt.Local().Format("15:04:05"))
+		}
+		return nil
+	case "approve", "deny":
+		fs := flag.NewFlagSet("zen devices "+args[0], flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		var stateDir, id, number string
+		fs.StringVar(&stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+		fs.StringVar(&id, "id", "", "pending enrollment id")
+		fs.StringVar(&number, "number", "", "verification number shown on the new device")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 || strings.TrimSpace(id) == "" || strings.TrimSpace(number) == "" {
+			return fmt.Errorf("-id and -number are required")
+		}
+		approve := args[0] == "approve"
+		resp, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "enrollment_decide", EnrollmentID: id, VerificationNumber: number, Approve: &approve})
+		if err != nil {
+			return err
+		}
+		if err := controlResponseError(resp); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stdout, "%s\n", args[0])
+		return nil
 	default:
 		return fmt.Errorf("unknown devices command: %s", args[0])
 	}

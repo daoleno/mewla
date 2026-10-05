@@ -32,6 +32,19 @@ func WriteHuman(w io.Writer, report Report) error {
 	writeCheck(w, "State dir", report.StateDir.Status, report.StateDir.Summary)
 	writeCheck(w, "Listen", report.Listen.Status, report.Listen.Summary)
 	writeCheck(w, "Executors", report.Executors.Status, report.Executors.Summary)
+	if len(report.Addresses) > 0 {
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "Daemon addresses:")
+		for _, address := range report.Addresses {
+			fmt.Fprintf(w, "  - %s [%s] %s\n", address.URL, strings.ToUpper(string(address.Status)), address.Summary)
+		}
+	}
+	if report.Network.Summary != "" {
+		fmt.Fprintf(w, "Network: %s\n", report.Network.Summary)
+		if report.Network.Relay != "" {
+			fmt.Fprintf(w, "  Tailscale relay: %s (NAT: %s)\n", report.Network.Relay, emptyDash(report.Network.NATType))
+		}
+	}
 
 	if len(report.Executors.Items) > 0 {
 		fmt.Fprintln(w, "")
