@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Prints the homepage ensō: one open brush stroke as filled outlines, plus the
 # centerline the page uses as a reveal mask. Paste the output into
-# site/index.html. Run: python3 scripts/site-svg/enso.py
+# site/index.html and keep the printed length in step with styles.css.
+# Run: python3 scripts/site-svg/enso.py
 import math
 import random
 
@@ -102,10 +103,13 @@ def strands():
 
 def centerline():
     pts = [point(i / 120) for i in range(121)]
-    return "M" + "L".join(f"{x:.1f} {y:.1f}" for x, y in pts)
+    length = sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+    return "M" + "L".join(f"{x:.1f} {y:.1f}" for x, y in pts), length
 
 
 if __name__ == "__main__":
     print(f'<path fill-rule="evenodd" d="{body()}{streaks()}"/>')
     print(f'<path d="{strands()}"/>')
-    print(f'<path class="enso-mask" pathLength="1" d="{centerline()}"/>')
+    d, length = centerline()
+    # The reveal dashes in user units, not pathLength; styles.css uses this length.
+    print(f'<path class="enso-mask" d="{d}"/>  <!-- length {length:.0f} -->')
