@@ -5,7 +5,7 @@
 // rings and only faint wakes remain, the lines of command to the phone.
 // Below, each capability row runs a short sword sequence of its own.
 import { timeline, ease, span } from "../shared/motion.js";
-import { buildLayers, sweepArcs, sweepArcsOver, sizeCanvas, makeCanvas, ring, ringPoint } from "../shared/rings.js";
+import { buildLayers, sweepArcs, sweepArcsOver, sizeCanvas, ring, ringPoint } from "../shared/rings.js";
 import { cubic, join, polyline, stroke, sword } from "../shared/ink.js";
 
 const dark = matchMedia("(prefers-color-scheme: dark)").matches;
@@ -76,14 +76,14 @@ function layoutHero() {
     return { ...e, el: s.el, order: s.i, path, cut: run.L / path.L, t0: T0 + s.i * STAGGER };
   });
   if (!H || H.px !== px) {
-    H = { px, layers: buildLayers(px, tones, { dry: 0.55, strands: 150, bleedBlur: 10 }), scratch: makeCanvas(px) };
+    H = { px, layers: buildLayers(px, tones, { dry: 0.55, strands: 150, bleedBlur: 10 }) };
   }
   Object.assign(H, { swords, dpr, ctx: flight.getContext("2d"), wctx: wake.getContext("2d"), rctx: ringsEl.getContext("2d") });
 }
 
 function heroFrame(t) {
   if (!H) layoutHero();
-  const { ctx, wctx, rctx, dpr, layers, scratch } = H;
+  const { ctx, wctx, rctx, dpr, layers } = H;
   for (const c of [ctx, wctx]) {
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, flight.width, flight.height);
@@ -107,12 +107,12 @@ function heroFrame(t) {
     if (s.el) s.el.style.opacity = t >= HERO_END ? "" : String(0.4 + 0.6 * span(t, s.t0 - 260, s.t0));
   }
   rctx.clearRect(0, 0, ringsEl.width, ringsEl.height);
-  sweepArcs(rctx, scratch, layers.sage.pass, arcs.sage);
-  sweepArcs(rctx, scratch, layers.ivory.pass, arcs.ivory);
-  sweepArcs(rctx, scratch, layers.sage.bleed, arcs.sage, 0.5 * settle);
-  sweepArcs(rctx, scratch, layers.ivory.bleed, arcs.ivory, 0.5 * settle);
-  sweepArcsOver(rctx, scratch, layers.ivory, arcs.ivory);
-  sweepArcsOver(rctx, scratch, layers.sage, arcs.sage);
+  sweepArcs(rctx, layers.sage.pass, arcs.sage);
+  sweepArcs(rctx, layers.ivory.pass, arcs.ivory);
+  sweepArcs(rctx, layers.sage.bleed, arcs.sage, 0.5 * settle);
+  sweepArcs(rctx, layers.ivory.bleed, arcs.ivory, 0.5 * settle);
+  sweepArcsOver(rctx, layers.ivory, arcs.ivory);
+  sweepArcsOver(rctx, layers.sage, arcs.sage);
 }
 
 const hero = timeline(document.querySelector(".hero-b"), heroFrame, HERO_END);
@@ -178,7 +178,7 @@ let w = innerWidth;
 addEventListener("resize", () => {
   if (innerWidth === w) return;
   w = innerWidth;
-  H = H && { px: H.px, layers: H.layers, scratch: H.scratch };
+  H = H && { px: H.px, layers: H.layers };
   layoutHero();
   hero.redraw();
   rows.forEach((r) => r());

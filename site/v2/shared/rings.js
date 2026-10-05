@@ -134,29 +134,41 @@ export function buildLayers(px, tones, opts = {}) {
 }
 
 // Mask a layer by a sweep around the logo centre: [start, start + p*360], with a
-// feathered leading edge like the wet front of a brush.
+// feathered leading edge like the wet front of a brush. Only the swept wedge is
+// touched, and a finished sweep is drawn straight from the layer.
 export function sweep(dst, scratch, layer, startDeg, p, feather = 0.03, alpha = 1, op = "source-over") {
-  if (p <= 0) return;
-  const s = scratch.getContext("2d"), W = scratch.width, k = W / 1000;
-  s.globalCompositeOperation = "copy";
-  s.drawImage(layer, 0, 0);
-  if (p < 1) {
-    s.globalCompositeOperation = "destination-in";
-    const g = s.createConicGradient(startDeg * DEG, ring.cx * k, ring.cy * k);
-    const f = Math.min(feather, p);
-    g.addColorStop(0, "rgba(0,0,0,1)");
-    g.addColorStop(Math.max(0, p - f), "rgba(0,0,0,1)");
-    g.addColorStop(p, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    s.fillStyle = g;
-    s.fillRect(0, 0, W, W);
-  }
-  s.globalCompositeOperation = "source-over";
+  if (p <= 0 || alpha <= 0) return;
+  dst.save();
   dst.globalAlpha = alpha;
   dst.globalCompositeOperation = op;
+  if (p >= 1) {
+    dst.drawImage(layer, 0, 0);
+    dst.restore();
+    return;
+  }
+  const s = scratch.getContext("2d"), W = scratch.width, k = W / 1000;
+  const cx = ring.cx * k, cy = ring.cy * k, a0 = startDeg * DEG;
+  const wedge = new Path2D();
+  wedge.moveTo(cx, cy);
+  wedge.arc(cx, cy, 760 * k, a0, a0 + p * 2 * Math.PI);
+  wedge.closePath();
+  s.save();
+  s.clip(wedge);
+  s.globalCompositeOperation = "copy";
+  s.drawImage(layer, 0, 0);
+  s.globalCompositeOperation = "destination-in";
+  const g = s.createConicGradient(a0, cx, cy);
+  const f = Math.min(feather, p);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(Math.max(0, p - f), "rgba(0,0,0,1)");
+  g.addColorStop(p, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  s.fillStyle = g;
+  s.fillRect(0, 0, W, W);
+  s.restore();
+  dst.clip(wedge);
   dst.drawImage(scratch, 0, 0);
-  dst.globalCompositeOperation = "source-over";
-  dst.globalAlpha = 1;
+  dst.restore();
 }
 
 // An over-crossing hides what lies beneath it, even where its ink is thin.
@@ -166,33 +178,29 @@ export function sweepOver(dst, scratch, L, startDeg, p, feather) {
 }
 
 // Union of several arcs, used when many strokes build one ring (direction B).
-export function sweepArcs(dst, scratch, layer, arcs, alpha = 1, op = "source-over") {
-  if (!arcs.length) return;
-  const s = scratch.getContext("2d"), W = scratch.width, k = W / 1000, R = 760 * k;
-  s.globalCompositeOperation = "copy";
-  s.drawImage(layer, 0, 0);
-  s.globalCompositeOperation = "destination-in";
-  s.beginPath();
+// Clips dst to the wedges and draws the layer once: no scratch round trip.
+export function sweepArcs(dst, layer, arcs, alpha = 1, op = "source-over") {
+  if (!arcs.length || alpha <= 0) return;
+  const k = layer.width / 1000, R = 760 * k, cx = ring.cx * k, cy = ring.cy * k;
+  dst.save();
+  dst.beginPath();
   for (const [a0, a1] of arcs) {
     if (a1 <= a0) continue;
-    s.moveTo(ring.cx * k, ring.cy * k);
-    s.arc(ring.cx * k, ring.cy * k, R, a0 * DEG, a1 * DEG);
-    s.closePath();
+    dst.moveTo(cx, cy);
+    dst.arc(cx, cy, R, a0 * DEG, a1 * DEG);
+    dst.closePath();
   }
-  s.fillStyle = "#000";
-  s.fill();
-  s.globalCompositeOperation = "source-over";
+  dst.clip();
   dst.globalAlpha = alpha;
   dst.globalCompositeOperation = op;
-  dst.drawImage(scratch, 0, 0);
-  dst.globalCompositeOperation = "source-over";
-  dst.globalAlpha = 1;
+  dst.drawImage(layer, 0, 0);
+  dst.restore();
 }
 
 // sweepArcs for a ring that crosses over: clear what lies beneath, then ink.
-export function sweepArcsOver(dst, scratch, L, arcs) {
-  sweepArcs(dst, scratch, L.solid, arcs, 1, "destination-out");
-  sweepArcs(dst, scratch, L.top, arcs);
+export function sweepArcsOver(dst, L, arcs) {
+  sweepArcs(dst, L.solid, arcs, 1, "destination-out");
+  sweepArcs(dst, L.top, arcs);
 }
 
 export function sizeCanvas(el, cssW, cssH = cssW) {
