@@ -110,6 +110,10 @@ export async function buildAuthorizationHeader(input: {
 }
 
 function defaultDeviceName(): string {
+  if (Platform.OS === "web") {
+    const os = Device.osName?.trim();
+    return os ? `Zen Web (${os})` : "Zen Web";
+  }
   return Device.deviceName?.trim() || Device.modelName?.trim() || "Zen mobile";
 }
 
