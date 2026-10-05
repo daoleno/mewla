@@ -241,6 +241,9 @@ func (io realSessionInputIO) socket(sessionID string) string {
 }
 
 func (io realSessionInputIO) pane(socket, sessionID string) sessionInputPane {
+	if !isPaneID(sessionID) {
+		return sessionInputPane{}
+	}
 	out, err := tmuxCommand(
 		socket,
 		"display-message",
@@ -260,7 +263,7 @@ func (io realSessionInputIO) pane(socket, sessionID string) sessionInputPane {
 		return sessionInputPane{}
 	}
 	fields := strings.Split(strings.TrimSuffix(string(out), "\n"), "\t")
-	if len(fields) != 2 || fields[0] == "1" || strings.TrimSpace(fields[1]) == "" {
+	if len(fields) != 2 || fields[0] == "1" || strings.TrimSpace(fields[1]) != sessionID {
 		return sessionInputPane{}
 	}
 	paneID := strings.TrimSpace(fields[1])
@@ -326,7 +329,7 @@ func (realSessionInputIO) runQueue(
 }
 
 func (io realSessionInputIO) receiptLedger(socket, target string) (sessionInputReceiptLedger, error) {
-	value, err := tmuxWindowUserOption(socket, target, sessionInputReceiptOption)
+	value, err := tmuxPaneUserOption(socket, target, sessionInputReceiptOption)
 	if err != nil {
 		return sessionInputReceiptLedger{}, err
 	}
@@ -344,7 +347,7 @@ func (io realSessionInputIO) writeReceiptLedger(socket, target string, ledger se
 	out, err := tmuxCommand(
 		socket,
 		"set-option",
-		"-w",
+		"-p",
 		"-t",
 		target,
 		"@"+sessionInputReceiptOption,
@@ -482,7 +485,7 @@ func (owner *sessionInputOwner) receiptOutcome(
 			return err
 		}
 		current := owner.io.pane(socket, sessionID)
-		if err := validateSameSessionInputPane(baseline, current); err != nil {
+		if err := validateSessionInputPane(current); err != nil {
 			return err
 		}
 		if submissions, ok := owner.ledger.(InputAdmissionLedger); ok {
@@ -680,7 +683,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 			return definitelyNotSubmitted(result.Receipt, err)
 		}
 		current := owner.io.pane(socket, sessionID)
-		if err := validateSameSessionInputPane(baseline, current); err != nil {
+		if err := validateSessionInputPane(current); err != nil {
 			return definitelyNotSubmitted(result.Receipt, err)
 		}
 		if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
@@ -782,7 +785,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 						return definitelyNotSubmitted(result.Receipt, err)
 					}
-					if err := validateSameSessionInputPane(current, owner.io.pane(socket, current.paneID)); err != nil {
+					if err := validateSessionInputPane(owner.io.pane(socket, current.paneID)); err != nil {
 						return definitelyNotSubmitted(result.Receipt, err)
 					}
 					if err := repair.AbortUnmarkedInputAdmission(prior); err != nil {
@@ -843,7 +846,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 			}
 			afterMarker := owner.io.pane(socket, current.paneID)
-			if err := validateSameSessionInputPane(current, afterMarker); err != nil {
+			if err := validateSessionInputPane(afterMarker); err != nil {
 				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 			}
 		}
@@ -872,7 +875,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				return err
 			}
 			boundaryPane := owner.io.pane(socket, current.paneID)
-			if err := validateSameSessionInputPane(current, boundaryPane); err != nil {
+			if err := validateSessionInputPane(boundaryPane); err != nil {
 				return err
 			}
 			if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
@@ -918,7 +921,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					return ambiguousSubmission(result.Receipt, err)
 				}
 				confirmedPane := owner.io.pane(socket, current.paneID)
-				if err := validateSameSessionInputPane(current, confirmedPane); err != nil {
+				if err := validateSessionInputPane(confirmedPane); err != nil {
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, err)
 				}
@@ -957,7 +960,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					return ambiguousSubmission(result.Receipt, err)
 				}
 				confirmedPane := owner.io.pane(socket, current.paneID)
-				if err := validateSameSessionInputPane(current, confirmedPane); err != nil {
+				if err := validateSessionInputPane(confirmedPane); err != nil {
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, err)
 				}
@@ -1500,16 +1503,6 @@ func validateSessionInputPane(pane sessionInputPane) error {
 	default:
 		return nil
 	}
-}
-
-func validateSameSessionInputPane(expected, current sessionInputPane) error {
-	if err := validateSessionInputPane(current); err != nil {
-		return err
-	}
-	if current.paneID != expected.paneID || current.generation != expected.generation {
-		return fmt.Errorf("target pane generation changed before mutation")
-	}
-	return nil
 }
 
 func sessionInputSubmitQueue(

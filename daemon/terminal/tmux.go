@@ -685,7 +685,17 @@ func tmuxLinkedViewSession(
 	ctx context.Context,
 	socket, targetID string,
 ) (string, *exec.Cmd, error) {
+	// Worker IDs are immutable pane IDs. Window linkage is only a Terminal
+	// presentation detail and is resolved from that exact pane at open time.
 	sourceTarget, err := tmuxSourceWindowTarget(targetID)
+	if strings.HasPrefix(targetID, "%") {
+		out, probeErr := tmuxCommandContext(ctx, socket, "display-message", "-p", "-t", targetID, "#{pane_id}\t#{window_id}").Output()
+		fields := strings.Split(strings.TrimSpace(string(out)), "\t")
+		if probeErr != nil || len(fields) != 2 || fields[0] != targetID {
+			return "", nil, fmt.Errorf("Worker pane %s is unavailable", targetID)
+		}
+		sourceTarget, err = fields[1], nil
+	}
 	if err != nil {
 		return "", nil, err
 	}

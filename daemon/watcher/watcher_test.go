@@ -115,7 +115,7 @@ func TestBuildWindowCommandForShellInjectsWorkerProgressEnv(t *testing.T) {
 	for _, want := range []string{
 		"ZEN_WORKER_ID",
 		"ZEN_WORKER_PROGRESS_CMD",
-		"tmux display-message",
+		`ZEN_WORKER_ID="$TMUX_PANE"`,
 		"codex --dangerously-bypass-approvals-and-sandbox",
 	} {
 		if !strings.Contains(got, want) {
@@ -247,7 +247,7 @@ func TestWorkerProgressEnvScriptAssignsSingleToken(t *testing.T) {
 }
 
 func TestTmuxWindowEnvironmentPreservesUsefulEnvAndSkipsTmuxManagedKeys(t *testing.T) {
-	got := tmuxWindowEnvironment([]string{
+	got := tmuxPaneEnvironment([]string{
 		"OPENAI_API_KEY=test-key",
 		"PATH=/usr/local/bin:/usr/bin",
 		"TMUX=/tmp/tmux-1000/default,123,0",
@@ -262,14 +262,7 @@ func TestTmuxWindowEnvironmentPreservesUsefulEnvAndSkipsTmuxManagedKeys(t *testi
 		"PATH=/usr/local/bin:/usr/bin",
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("tmuxWindowEnvironment() = %v, want %v", got, want)
-	}
-}
-
-func TestBaseSessionNameHandlesStableWindowIDs(t *testing.T) {
-	got := baseSessionName("main:@3198")
-	if got != "main" {
-		t.Fatalf("baseSessionName() = %q, want %q", got, "main")
+		t.Fatalf("tmuxPaneEnvironment() = %v, want %v", got, want)
 	}
 }
 
@@ -336,7 +329,7 @@ func TestBuildNewSessionArgsCreatesDetachedSession(t *testing.T) {
 		"-d",
 		"-P",
 		"-F",
-		"#{session_name}:#{window_id}",
+		"#{pane_id}",
 		"-s",
 		"zen-worker-codex-123",
 	}

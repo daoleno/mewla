@@ -196,20 +196,20 @@ func TestSessionDiscoveryActivityTimePriority(t *testing.T) {
 
 func installFakePollSeams(
 	w *Watcher,
-	windows []tmuxWindow,
+	windows []tmuxPane,
 	contentByTarget map[string]string,
 	processes map[int]processInfo,
 ) func() {
-	previousList := w.listWindows
+	previousList := w.listPanes
 	previousCapture := w.capturePane
 	previousSnapshot := w.snapshotProcesses
-	w.listWindows = func() ([]tmuxWindow, error) { return windows, nil }
+	w.listPanes = func() ([]tmuxPane, error) { return windows, nil }
 	w.capturePane = func(target string) (string, bool, int) {
 		return contentByTarget[target], true, -1
 	}
 	w.snapshotProcesses = func() map[int]processInfo { return processes }
 	return func() {
-		w.listWindows = previousList
+		w.listPanes = previousList
 		w.capturePane = previousCapture
 		w.snapshotProcesses = previousSnapshot
 	}
@@ -248,8 +248,8 @@ func drainWatcherEvents(w *Watcher) {
 	}
 }
 
-func testWindows() []tmuxWindow {
-	return []tmuxWindow{
+func testWindows() []tmuxPane {
+	return []tmuxPane{
 		{target: "sess-a:@1", name: "alpha", cwd: "/repo/a", command: "claude", panePID: 111},
 		{target: "sess-b:@2", name: "beta", cwd: "/repo/b", command: "claude", panePID: 222},
 	}
@@ -380,7 +380,7 @@ func TestHiddenHostProviderTerminalEmitsActivityChangeWithoutPaneOutput(t *testi
 		{ID: "host-activity", Status: "running", StartedAt: started, Structured: true},
 		{ID: "host-activity", Status: "completed", StartedAt: started, SettledAt: settled, Structured: true},
 	}}
-	windows := []tmuxWindow{{
+	windows := []tmuxPane{{
 		target: "zen-worker-brain-provider-boundary:@1", name: "Brain", cwd: "/brain",
 		command: "codex", panePID: 111, hidden: true,
 	}}
@@ -537,7 +537,7 @@ func TestPollTurnSettlementSeedsActivityAndRepeatsPreserveIt(t *testing.T) {
 		Summary:    "Finished verification",
 	})
 	w.turnLedger = ledger
-	windows := []tmuxWindow{
+	windows := []tmuxPane{
 		{target: "zen-worker-worker:@1", name: "worker", cwd: "/repo/zen", command: "claude", panePID: 333},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{

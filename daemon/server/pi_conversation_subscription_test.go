@@ -30,7 +30,7 @@ func TestPiLiveSubscriptionBindsOwnedTranscriptSnapshotAndDelta(t *testing.T) {
 	writePiServerFixture(t, owned, cwd)
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@1'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
@@ -161,7 +161,7 @@ func TestPiLiveSubscriptionAmbiguityFailsClosed(t *testing.T) {
 	writePiServerFixture(t, foreign, filepath.Join(t.TempDir(), "elsewhere"))
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@2'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%2'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
@@ -231,7 +231,7 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 	quoted := "'" + spaced + "'"
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@3'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%3'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
@@ -317,7 +317,7 @@ func TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript(t *testing.T) {
 	writePiServerFixtureAt(t, owned, cwd, time.Date(2026, 8, 7, 10, 0, 3, 0, time.UTC))
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@1'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
@@ -343,8 +343,8 @@ func TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript(t *testing.T) {
 	// fall inside the owned transcript's created-at window.
 	w2 := watcher.New(10 * time.Millisecond)
 	restore := w2.SetPollSources(watcher.PollSources{
-		ListWindows: func() ([]watcher.PollWindow, error) {
-			return []watcher.PollWindow{{
+		ListPanes: func() ([]watcher.PollPane, error) {
+			return []watcher.PollPane{{
 				Target:  workerID,
 				Name:    "pi",
 				Cwd:     cwd,
@@ -500,7 +500,7 @@ func TestPiLiveSubscriptionRebindsOwnedTranscriptAcrossDaemonRestart(t *testing.
 	writePiServerFixture(t, owned, cwd)
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@1'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
@@ -524,8 +524,8 @@ func TestPiLiveSubscriptionRebindsOwnedTranscriptAcrossDaemonRestart(t *testing.
 	// the argv-rewritten pi process (pane command "pi").
 	w2 := watcher.New(10 * time.Millisecond)
 	restore := w2.SetPollSources(watcher.PollSources{
-		ListWindows: func() ([]watcher.PollWindow, error) {
-			return []watcher.PollWindow{{
+		ListPanes: func() ([]watcher.PollPane, error) {
+			return []watcher.PollPane{{
 				Target:           workerID,
 				Name:             "pi",
 				Cwd:              cwd,
@@ -615,7 +615,7 @@ func TestPiLiveSubscriptionUnavailableLoadNeverErasesHistory(t *testing.T) {
 	hidden := owned + ".hidden"
 
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'zero-view:@1'\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)

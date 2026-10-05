@@ -2,9 +2,9 @@ package watcher
 
 import "time"
 
-// PollWindow is the wire shape of one tmux window inventory entry for the
+// PollPane is the wire shape of one tmux pane inventory entry for the
 // test-only poll source seam.
-type PollWindow struct {
+type PollPane struct {
 	Target           string
 	Name             string
 	Cwd              string
@@ -28,12 +28,12 @@ type PollProcess struct {
 	Args      string
 }
 
-// PollSources injects the polling loop's external reads (tmux window
+// PollSources injects the polling loop's external reads (tmux pane
 // inventory, pane capture, process snapshot, pane generation). Production
 // callers never install it; it exists so end-to-end tests can drive the real
 // poll loop against a real canonical ledger without tmux.
 type PollSources struct {
-	ListWindows       func() ([]PollWindow, error)
+	ListPanes         func() ([]PollPane, error)
 	CapturePane       func(target string) (content string, alive bool, deadStatus int)
 	SnapshotProcesses func() map[int]PollProcess
 	// PaneGeneration returns the pane generation for a target; nil keeps
@@ -47,19 +47,19 @@ type PollSources struct {
 func (w *Watcher) SetPollSources(sources PollSources) func() {
 	w.mu.Lock()
 	previousSources := w.pollSources
-	previousList := w.listWindows
+	previousList := w.listPanes
 	previousCapture := w.capturePane
 	previousSnapshot := w.snapshotProcesses
 	w.pollSources = &sources
-	if sources.ListWindows != nil {
-		w.listWindows = func() ([]tmuxWindow, error) {
-			windows, err := sources.ListWindows()
+	if sources.ListPanes != nil {
+		w.listPanes = func() ([]tmuxPane, error) {
+			windows, err := sources.ListPanes()
 			if err != nil {
 				return nil, err
 			}
-			out := make([]tmuxWindow, 0, len(windows))
+			out := make([]tmuxPane, 0, len(windows))
 			for _, win := range windows {
-				out = append(out, tmuxWindow{
+				out = append(out, tmuxPane{
 					target: win.Target, name: win.Name, cwd: win.Cwd,
 					command: win.Command, piSessionBinding: win.PiSessionBinding, panePID: win.PanePID,
 					hidden: win.Hidden, delegated: win.Delegated,
@@ -89,7 +89,7 @@ func (w *Watcher) SetPollSources(sources PollSources) func() {
 	w.mu.Unlock()
 	return func() {
 		w.mu.Lock()
-		w.listWindows = previousList
+		w.listPanes = previousList
 		w.capturePane = previousCapture
 		w.snapshotProcesses = previousSnapshot
 		w.pollSources = previousSources

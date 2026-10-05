@@ -11,25 +11,40 @@ func TestPollUnavailableInventoryRetainsLiveOwnership(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			script := `cmd=
 for arg in "$@"; do
- case "$arg" in list-windows|list-panes|show-options) cmd=$arg ;; esac
+ case "$arg" in list-panes|show-options) cmd=$arg ;; esac
+ case "$arg" in *window_name*) cmd=inventory ;; esac
 done
 `
 			switch phase {
 			case "inventory":
 				script += `echo 'no server running on fixture' >&2; exit 1`
 			case "presence":
-				script += `if [ "$cmd" = list-windows ]; then printf 'missing:@1\tfixture\t/repo\tcodex\t1\t0\t1\t\t\n'; exit 0; fi
+				script += `if [ "$cmd" = inventory ]; then printf '%%1\tfixture\t/repo\tcodex\t1\t0\t1\t\t\n'; exit 0; fi
 echo 'no server running on fixture' >&2; exit 1`
 			case "ownership":
-				script += `if [ "$cmd" = list-windows ]; then printf 'missing:@1\tfixture\t/repo\tcodex\t1\t0\t1\t\t\n'; exit 0; fi
-if [ "$cmd" = list-panes ]; then printf 'missing:@1\n'; exit 0; fi
+				script += `if [ "$cmd" = inventory ]; then printf '%%1\tfixture\t/repo\tcodex\t1\t0\t1\t\t\n'; exit 0; fi
+if [ "$cmd" = list-panes ]; then printf '%%1\n'; exit 0; fi
 echo 'no server running on fixture' >&2; exit 1`
 			}
 			t.Setenv("PATH", writeFakeTmux(t, script))
 			w, ledger := missingWorkerFixture(t)
-			w.listWindows = w.listTmuxWindows
+			worker := w.workers["missing:@1"]
+			delete(w.workers, "missing:@1")
+			worker.ID = "%1"
+			w.workers["%1"] = worker
+			w.workerOrder = []string{"%1"}
+			w.workerEpoch["%1"] = w.workerEpoch["missing:@1"]
+			cached := w.ledgerTurns["missing:@1"]
+			cached.SessionID = "%1"
+			w.ledgerTurns["%1"] = cached
+			if turn, ok := ledger.turns["missing:@1"]; ok {
+				delete(ledger.turns, "missing:@1")
+				turn.SessionID = "%1"
+				ledger.turns["%1"] = turn
+			}
+			w.listPanes = w.listTmuxPanes
 			w.poll()
-			if w.GetWorker("missing:@1") == nil {
+			if w.GetWorker("%1") == nil {
 				t.Fatal("unavailable observation discarded owned live Session")
 			}
 			if len(ledger.applied) != 0 || len(w.events) != 0 {
@@ -40,9 +55,9 @@ echo 'no server running on fixture' >&2; exit 1`
 			}
 			// A later successful inventory is still authoritative: retaining
 			// Unknown must not cache an identity forever after real removal.
-			w.listWindows = func() ([]tmuxWindow, error) { return nil, nil }
+			w.listPanes = func() ([]tmuxPane, error) { return nil, nil }
 			w.poll()
-			if w.GetWorker("missing:@1") != nil || len(ledger.applied) != 1 || !ledger.applied[0].ProcessDead {
+			if w.GetWorker("%1") != nil || len(ledger.applied) != 1 || !ledger.applied[0].ProcessDead {
 				t.Fatal("confirmed absence did not converge after the observation gap")
 			}
 

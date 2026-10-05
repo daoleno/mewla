@@ -32,7 +32,7 @@ type delegatedResourceManager interface {
 	Prepare(activeSessions int) (*delegatedResourceSpec, error)
 	Bind(target, unit string)
 	UnitForTarget(target string) string
-	Reconcile(windows []tmuxWindow)
+	Reconcile(windows []tmuxPane)
 	Release(target, unit string) error
 }
 
@@ -46,7 +46,7 @@ func (noopDelegatedResourceManager) Bind(string, string) {}
 
 func (noopDelegatedResourceManager) UnitForTarget(string) string { return "" }
 
-func (noopDelegatedResourceManager) Reconcile([]tmuxWindow) {}
+func (noopDelegatedResourceManager) Reconcile([]tmuxPane) {}
 
 func (noopDelegatedResourceManager) Release(string, string) error { return nil }
 
@@ -60,7 +60,7 @@ func (unavailableDelegatedResourceManager) Bind(string, string) {}
 
 func (unavailableDelegatedResourceManager) UnitForTarget(string) string { return "" }
 
-func (unavailableDelegatedResourceManager) Reconcile([]tmuxWindow) {}
+func (unavailableDelegatedResourceManager) Reconcile([]tmuxPane) {}
 
 func (unavailableDelegatedResourceManager) Release(string, string) error { return nil }
 

@@ -27,6 +27,7 @@ import (
 )
 
 type controlWatcher interface {
+	CanonicalWorkerID(id string) string
 	Workers() []*classifier.Worker
 	GetWorker(id string) *classifier.Worker
 	HasSession(target string) bool
@@ -85,6 +86,9 @@ type telegramControlManager interface {
 const delegatedInitialReadinessBudget = 45 * time.Second
 
 func (a *controlApp) HandleControlRequest(req control.Request) control.Response {
+	if a.watcher != nil {
+		req.WorkerID = a.watcher.CanonicalWorkerID(req.WorkerID)
+	}
 	switch strings.TrimSpace(req.Type) {
 	case "browser":
 		return a.handleBrowserControl(req)

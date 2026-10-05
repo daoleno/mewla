@@ -239,7 +239,7 @@ func createHarnessPane(t *testing.T, socket, session, command string) string {
 	if out, err := exec.Command("tmux", "-S", socket, "-f", "/dev/null", "new-session", "-d", "-s", session, command).CombinedOutput(); err != nil {
 		t.Fatalf("create %s on %q: %v: %s", session, socket, err, out)
 	}
-	out, err := tmuxHarnessCommand(socket, "display-message", "-p", "-t", session, "#{session_name}:#{window_id}").Output()
+	out, err := tmuxHarnessCommand(socket, "display-message", "-p", "-t", session, "#{pane_id}").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestRealTmuxCustomServerVisibleAndSupportsTwoAttachedClients(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := baseSessionName(target)
+	session := harnessSessionName(t, h.selected, target)
 	ls, err := exec.Command(h.realTmux, "-S", h.physical, "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil || !strings.Contains(string(ls), session) {
 		t.Fatalf("ordinary custom-socket list = %q err=%v, want %q", ls, err, session)
@@ -373,8 +373,8 @@ func TestRealTmuxOutsideTmuxUsesOrdinaryDefaultServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ordinary tmux ls: %v: %s", err, out)
 	}
-	if !strings.Contains(string(out), baseSessionName(target)) {
-		t.Fatalf("ordinary default-server listing %q does not contain %q", out, baseSessionName(target))
+	if !strings.Contains(string(out), harnessSessionName(t, h.selected, target)) {
+		t.Fatalf("ordinary default-server listing %q does not contain %q", out, harnessSessionName(t, h.selected, target))
 	}
 	if got := h.w.socketPathFor(target); got != "" {
 		t.Fatalf("outside-tmux watcher selected custom socket %q", got)
@@ -493,4 +493,13 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	if err != nil || string(ambientName) != string(originalAmbientName) {
 		t.Fatalf("ambient window renamed: before=%q after=%q err=%v", originalAmbientName, ambientName, err)
 	}
+}
+
+func harnessSessionName(t *testing.T, socket, pane string) string {
+	t.Helper()
+	out, err := tmuxHarnessCommand(socket, "display-message", "-p", "-t", pane, "#{session_name}").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(out))
 }

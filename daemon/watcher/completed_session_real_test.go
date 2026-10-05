@@ -18,11 +18,11 @@ func TestBDD_ZEN016_RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessionName := baseSessionName(owned)
+	sessionName := harnessSessionName(t, h.selected, owned)
 	h.w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		owned: {SessionID: owned, TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
-	if out, killErr := tmuxHarnessCommand(h.selected, "kill-window", "-t", owned).CombinedOutput(); killErr != nil {
+	if out, killErr := tmuxHarnessCommand(h.selected, "kill-pane", "-t", owned).CombinedOutput(); killErr != nil {
 		t.Fatalf("reclaim owned window: %v: %s", killErr, out)
 	}
 
@@ -54,7 +54,7 @@ func TestBDD_ZEN017_RealTmuxWrongSocketAndRebootOwnership(t *testing.T) {
 		foreign: {SessionID: foreign, TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
 	for range 2 {
-		if err := h.w.KillCompletedSession(foreign, "completed"); err != nil {
+		if err := h.w.KillCompletedSession(foreign, "completed"); err != nil && !errors.Is(err, ErrUnownedTmuxTarget) {
 			t.Fatalf("selected socket absence: %v", err)
 		}
 	}
@@ -97,9 +97,9 @@ func TestCompletedCleanupRealTmuxUnreachableSocket(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o600) })
 	h.w.SetTmuxServer(blocked, h.scratch)
 	h.w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"worker:@1": {SessionID: "worker:@1", TurnID: "done", Status: TurnDone, SignalProtocol: true},
+		"%1": {SessionID: "%1", TurnID: "done", Status: TurnDone, SignalProtocol: true},
 	}})
-	err := h.w.KillCompletedSession("worker:@1", "done")
+	err := h.w.KillCompletedSession("%1", "done")
 	if err == nil || errors.Is(err, ErrUnownedTmuxTarget) {
 		t.Fatalf("blocked socket err=%v", err)
 	}

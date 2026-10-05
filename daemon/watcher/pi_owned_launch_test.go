@@ -190,15 +190,15 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 		time.Date(2026, 8, 7, 10, 0, 3, 0, time.UTC),
 	})
 	launchCommand := "env PATH=/x pi --session " + owned
-	w.registerCreatedSession("zen-worker-pi:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("%1", "/repo/zen", CreateSessionOptions{
 		Command:   launchCommand,
 		Name:      "Pi task",
 		Delegated: true,
 	}, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))
 	drainWatcherEvents(w)
 
-	windows := []tmuxWindow{
-		{target: "zen-worker-pi:@1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 444, delegated: true},
+	windows := []tmuxPane{
+		{target: "%1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 444, delegated: true},
 	}
 	processes := map[int]processInfo{
 		444: {
@@ -209,14 +209,14 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 		},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
-		"zen-worker-pi:@1": "pi v0.73.1\nworking\n",
+		"%1": "pi v0.73.1\nworking\n",
 	}, processes)
 	defer restore()
 
 	for poll := 1; poll <= 2; poll++ {
 		w.poll()
 		drainWatcherEvents(w)
-		worker := workerByID(w.Workers(), "zen-worker-pi:@1")
+		worker := workerByID(w.Workers(), "%1")
 		if worker == nil {
 			t.Fatalf("poll %d: agent missing", poll)
 		}
@@ -234,10 +234,10 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 
 	// A provider switch clears the stale Pi ownership.
 	restore()
-	restore = installFakePollSeams(w, []tmuxWindow{
-		{target: "zen-worker-pi:@1", name: "codex", cwd: "/repo/zen", command: "codex", panePID: 555, delegated: true},
+	restore = installFakePollSeams(w, []tmuxPane{
+		{target: "%1", name: "codex", cwd: "/repo/zen", command: "codex", panePID: 555, delegated: true},
 	}, map[string]string{
-		"zen-worker-pi:@1": "Codex\n",
+		"%1": "Codex\n",
 	}, map[int]processInfo{
 		555: {
 			pid: 555, ppid: 1, pgid: 555, tpgid: 555,
@@ -249,7 +249,7 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 	defer restore()
 	w.poll()
 	drainWatcherEvents(w)
-	worker := workerByID(w.Workers(), "zen-worker-pi:@1")
+	worker := workerByID(w.Workers(), "%1")
 	if worker == nil {
 		t.Fatal("agent missing after provider switch")
 	}
@@ -272,17 +272,17 @@ func TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 		time.Date(2026, 8, 7, 10, 0, 2, 0, time.UTC),
 	})
-	w.registerCreatedSession("zen-worker-pi-quoted:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("%1", "/repo/zen", CreateSessionOptions{
 		Command:   launchCommand,
 		Name:      "Pi quoted task",
 		Delegated: true,
 	}, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))
 	drainWatcherEvents(w)
 
-	restore := installFakePollSeams(w, []tmuxWindow{
-		{target: "zen-worker-pi-quoted:@1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 448, delegated: true},
+	restore := installFakePollSeams(w, []tmuxPane{
+		{target: "%1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 448, delegated: true},
 	}, map[string]string{
-		"zen-worker-pi-quoted:@1": "pi v0.73.1\nworking\n",
+		"%1": "pi v0.73.1\nworking\n",
 	}, map[int]processInfo{
 		448: {pid: 448, ppid: 1, pgid: 448, tpgid: 448, startedAt: time.Date(2026, 8, 7, 9, 0, 5, 0, time.UTC), comm: "pi", args: "pi"},
 	})
@@ -292,7 +292,7 @@ func TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 	for poll := 1; poll <= 2; poll++ {
 		w.poll()
 		drainWatcherEvents(w)
-		worker := workerByID(w.Workers(), "zen-worker-pi-quoted:@1")
+		worker := workerByID(w.Workers(), "%1")
 		if worker == nil {
 			t.Fatalf("poll %d: agent missing", poll)
 		}
@@ -318,24 +318,24 @@ func TestPollPiSiblingWorkersNeverShareOwnedPaths(t *testing.T) {
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 		time.Date(2026, 8, 7, 10, 0, 2, 0, time.UTC),
 	})
-	w.registerCreatedSession("zen-worker-pi-a:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("%1", "/repo/zen", CreateSessionOptions{
 		Command:   "pi --session " + ownedA,
 		Name:      "Pi A",
 		Delegated: true,
 	}, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))
-	w.registerCreatedSession("zen-worker-pi-b:@2", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("%2", "/repo/zen", CreateSessionOptions{
 		Command:   "pi --session " + ownedB,
 		Name:      "Pi B",
 		Delegated: true,
 	}, time.Date(2026, 8, 7, 9, 0, 1, 0, time.UTC))
 	drainWatcherEvents(w)
 
-	restore := installFakePollSeams(w, []tmuxWindow{
-		{target: "zen-worker-pi-a:@1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 610, delegated: true},
-		{target: "zen-worker-pi-b:@2", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 620, delegated: true},
+	restore := installFakePollSeams(w, []tmuxPane{
+		{target: "%1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 610, delegated: true},
+		{target: "%2", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 620, delegated: true},
 	}, map[string]string{
-		"zen-worker-pi-a:@1": "pi\nworking A\n",
-		"zen-worker-pi-b:@2": "pi\nworking B\n",
+		"%1": "pi\nworking A\n",
+		"%2": "pi\nworking B\n",
 	}, map[int]processInfo{
 		610: {pid: 610, ppid: 1, pgid: 610, tpgid: 610, startedAt: time.Date(2026, 8, 7, 9, 0, 5, 0, time.UTC), comm: "pi", args: "pi"},
 		620: {pid: 620, ppid: 1, pgid: 620, tpgid: 620, startedAt: time.Date(2026, 8, 7, 9, 0, 6, 0, time.UTC), comm: "pi", args: "pi"},
@@ -344,8 +344,8 @@ func TestPollPiSiblingWorkersNeverShareOwnedPaths(t *testing.T) {
 
 	w.poll()
 	drainWatcherEvents(w)
-	workerA := workerByID(w.Workers(), "zen-worker-pi-a:@1")
-	workerB := workerByID(w.Workers(), "zen-worker-pi-b:@2")
+	workerA := workerByID(w.Workers(), "%1")
+	workerB := workerByID(w.Workers(), "%2")
 	if workerA == nil || workerB == nil {
 		t.Fatalf("siblings missing: a=%v b=%v", workerA, workerB)
 	}
@@ -369,10 +369,10 @@ func TestPollDiscoveredPiWithoutLaunchCommandKeepsDetectedIdentity(t *testing.T)
 	w.pollNow = fakePollClock([]time.Time{
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxWindow{
-		{target: "main:@0", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 710},
+	restore := installFakePollSeams(w, []tmuxPane{
+		{target: "%0", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 710},
 	}, map[string]string{
-		"main:@0": "pi\n",
+		"%0": "pi\n",
 	}, map[int]processInfo{
 		710: {pid: 710, ppid: 1, pgid: 710, tpgid: 710, startedAt: time.Date(2026, 8, 7, 9, 0, 5, 0, time.UTC), comm: "pi", args: "pi"},
 	})
@@ -380,7 +380,7 @@ func TestPollDiscoveredPiWithoutLaunchCommandKeepsDetectedIdentity(t *testing.T)
 
 	w.poll()
 	drainWatcherEvents(w)
-	worker := workerByID(w.Workers(), "main:@0")
+	worker := workerByID(w.Workers(), "%0")
 	if worker == nil || worker.Command != "pi" {
 		t.Fatalf("rediscovered pi agent = %#v, want command %q", worker, "pi")
 	}
@@ -409,14 +409,14 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 		time.Date(2026, 8, 7, 10, 0, 2, 0, time.UTC),
 		time.Date(2026, 8, 7, 10, 0, 3, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxWindow{
+	restore := installFakePollSeams(w, []tmuxPane{
 		{
-			target: "zen-worker-pi-restart:@1", name: "pi", cwd: "/repo/zen",
+			target: "%1", name: "pi", cwd: "/repo/zen",
 			command: "pi", panePID: 900,
 			piSessionBinding: binding,
 		},
 	}, map[string]string{
-		"zen-worker-pi-restart:@1": "pi v0.73.1\nworking\n",
+		"%1": "pi v0.73.1\nworking\n",
 	}, map[int]processInfo{
 		900: {pid: 900, ppid: 1, pgid: 900, tpgid: 900, startedAt: time.Date(2026, 8, 7, 9, 0, 5, 0, time.UTC), comm: "pi", args: "pi"},
 	})
@@ -425,7 +425,7 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 	for poll := 1; poll <= 2; poll++ {
 		w.poll()
 		drainWatcherEvents(w)
-		worker := workerByID(w.Workers(), "zen-worker-pi-restart:@1")
+		worker := workerByID(w.Workers(), "%1")
 		if worker == nil {
 			t.Fatalf("poll %d: rediscovered agent missing", poll)
 		}
@@ -443,7 +443,7 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 // contract: owned paths containing tabs, newlines, double quotes, backslashes,
 // and shell metacharacters must round-trip exactly through the encoded tmux
 // option value, and the encoded value itself must be a single delimiter-safe
-// token that cannot corrupt the tab-separated list-windows projection. The
+// token that cannot corrupt the tab-separated list-panes projection. The
 // canonical reconstructed command must also survive the watcher flag parser.
 // An embedded apostrophe still round-trips exactly through the encoding; the
 // command parser fails closed on it (documented shell-quoting contract),
@@ -527,14 +527,14 @@ func TestPollPiSessionBindingFailsClosedOnCorruptedOption(t *testing.T) {
 	w.pollNow = fakePollClock([]time.Time{
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxWindow{
+	restore := installFakePollSeams(w, []tmuxPane{
 		{
-			target: "zen-worker-pi-corrupt:@1", name: "pi", cwd: "/repo/zen",
+			target: "%1", name: "pi", cwd: "/repo/zen",
 			command: "pi", panePID: 910,
 			piSessionBinding: "corrupted value with \t tab",
 		},
 	}, map[string]string{
-		"zen-worker-pi-corrupt:@1": "pi\n",
+		"%1": "pi\n",
 	}, map[int]processInfo{
 		910: {pid: 910, ppid: 1, pgid: 910, tpgid: 910, startedAt: time.Date(2026, 8, 7, 9, 0, 5, 0, time.UTC), comm: "pi", args: "pi"},
 	})
@@ -542,7 +542,7 @@ func TestPollPiSessionBindingFailsClosedOnCorruptedOption(t *testing.T) {
 
 	w.poll()
 	drainWatcherEvents(w)
-	worker := workerByID(w.Workers(), "zen-worker-pi-corrupt:@1")
+	worker := workerByID(w.Workers(), "%1")
 	if worker == nil {
 		t.Fatal("agent missing")
 	}
@@ -559,14 +559,14 @@ func TestPollPiSessionBindingClearedOnProviderSwitch(t *testing.T) {
 	w.pollNow = fakePollClock([]time.Time{
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxWindow{
+	restore := installFakePollSeams(w, []tmuxPane{
 		{
-			target: "zen-worker-pi-switch:@1", name: "codex", cwd: "/repo/zen",
+			target: "%1", name: "codex", cwd: "/repo/zen",
 			command: "codex", panePID: 920,
 			piSessionBinding: EncodePiSessionBinding("--session", "/repo/owned.jsonl"),
 		},
 	}, map[string]string{
-		"zen-worker-pi-switch:@1": "Codex\n",
+		"%1": "Codex\n",
 	}, map[int]processInfo{
 		920: {pid: 920, ppid: 1, pgid: 920, tpgid: 920, startedAt: time.Date(2026, 8, 7, 9, 0, 5, 0, time.UTC), comm: "codex", args: "codex"},
 	})
@@ -574,7 +574,7 @@ func TestPollPiSessionBindingClearedOnProviderSwitch(t *testing.T) {
 
 	w.poll()
 	drainWatcherEvents(w)
-	worker := workerByID(w.Workers(), "zen-worker-pi-switch:@1")
+	worker := workerByID(w.Workers(), "%1")
 	if worker == nil {
 		t.Fatal("agent missing")
 	}
@@ -646,7 +646,7 @@ func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
 			if err := os.Remove(logPath); err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)
 			}
-			if err := markCreatedSession("", "main:@9", CreateSessionOptions{Command: tc.command}); err != nil {
+			if err := markCreatedSession("", "%9", CreateSessionOptions{Command: tc.command}); err != nil {
 				t.Fatal(err)
 			}
 			found := false
@@ -674,15 +674,15 @@ func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
 }
 
 // TestListTmuxWindowsParsesPiSessionBinding pins the wire format of the
-// durable Pi binding: list-windows must carry the encoded binding as its own
+// durable Pi binding: list-panes must carry the encoded binding as its own
 // field so rediscovery can restore owned Pi bindings after a daemon restart.
 func TestListTmuxWindowsParsesPiSessionBinding(t *testing.T) {
 	binDir := t.TempDir()
 	binding := EncodePiSessionBinding("--session", filepath.Join(t.TempDir(), "My Zen", "owned file.jsonl"))
-	line := "main:@1\tpi\t/repo/zen\tpi\t900\t\t\t\t\t" + binding
+	line := "%1\tpi\t/repo/zen\tpi\t900\t\t\t\t" + binding + "\tfixture"
 	tmuxPath := filepath.Join(binDir, "tmux")
 	script := "#!/bin/sh\n" +
-		"if [ \"$1\" = \"list-windows\" ]; then\n" +
+		"if [ \"$1\" = \"list-panes\" ]; then\n" +
 		"  cat <<'EOF'\n" +
 		line + "\n" +
 		"EOF\n" +
@@ -694,7 +694,7 @@ func TestListTmuxWindowsParsesPiSessionBinding(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	windows, err := listTmuxWindowsOn("")
+	windows, err := listTmuxPanesOn("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -702,7 +702,7 @@ func TestListTmuxWindowsParsesPiSessionBinding(t *testing.T) {
 		t.Fatalf("windows = %#v, want 1", windows)
 	}
 	win := windows[0]
-	if win.target != "main:@1" || win.command != "pi" || win.panePID != 900 {
+	if win.target != "%1" || win.command != "pi" || win.panePID != 900 {
 		t.Fatalf("parsed window = %#v", win)
 	}
 	if win.piSessionBinding != binding {

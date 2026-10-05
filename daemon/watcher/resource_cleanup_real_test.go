@@ -53,7 +53,7 @@ func TestRealWorkerCloseCleansDetachedDescendantsWithoutSupervisor(t *testing.T)
 	replacement := newTestPortableResourceManager(t, "cleanupfixture")
 	replacement.leaseDir = manager.leaseDir
 	replacement.tempRoot = manager.tempRoot
-	replacement.Reconcile([]tmuxWindow{{target: target, delegated: true, resourceUnit: tool.ResourceID}})
+	replacement.Reconcile([]tmuxPane{{target: target, delegated: true, resourceUnit: tool.ResourceID}})
 	h.w.resources = replacement
 	if !h.w.HasSession(target) {
 		t.Fatal("re-observation killed the live Worker")
