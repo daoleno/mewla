@@ -208,8 +208,9 @@ func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRou
 	// credentials) plus the starting Claude Code permission mode. Zen defaults
 	// routed sessions to Auto. An explicit --permission-mode or
 	// --dangerously-skip-permissions flag on the base command still outranks a
-	// settings file, so explicit authorization choices are preserved, and the
-	// user's own ~/.claude/settings.json is never rewritten.
+	// settings file, so explicit authorization choices are preserved. The
+	// --settings env outranks the machine-level gateway projection in the
+	// user's settings, so a routed Session keeps its own route.
 	settingsEnv := map[string]string(nil)
 	if normalizeID(profile.AuthMode) != AuthModeNativePassthrough {
 		env[EnvAnthropicAuthToken] = LoopbackAuthPlaceholder

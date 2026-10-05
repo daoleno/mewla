@@ -82,6 +82,10 @@ type OwnerConfig struct {
 	// CodexConfigPath is the CLI's native Codex config file for the takeover
 	// projection (CODEX_HOME-aware; empty disables takeover management).
 	CodexConfigPath string
+	// ClaudeSettingsPath is Claude Code's user settings file. When set, the
+	// gateway is projected into its env so every Claude on the machine reaches
+	// the selected Claude Provider (empty disables the projection).
+	ClaudeSettingsPath string
 }
 
 // Owner is the production lifecycle owner for catalog + RouteTable + loopback Router.
@@ -97,6 +101,7 @@ type Owner struct {
 	table           *RouteTable
 	codexControlDir string
 	gateway         *Gateway
+	claudeTakeover  *ClaudeTakeover
 	takeover        *Takeover
 	gatewayBypass   func() bool
 	// nativeMu guards the per-route native-settings monitor registry.
@@ -839,9 +844,7 @@ func (o *Owner) SetDefault(executorID, profileID string, expectedRevision int64)
 	if err != nil && !errors.Is(err, ErrPersistDirSync) {
 		return CatalogProjection{}, err
 	}
-	if normalizeID(executorID) == ExecutorCodex || normalizeID(executorID) == "codex" {
-		o.refreshGatewayUpstream()
-	}
+	o.refreshGatewayUpstream()
 	catalog, views := o.store.Projection()
 	return CatalogProjection{Catalog: catalog, Views: views}, err
 }

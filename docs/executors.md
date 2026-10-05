@@ -147,18 +147,34 @@ Recommendations:
 
 ## Credentials
 
-### Direct Claude entry design
+### Machine-level gateway
 
-Zen follows the boundary documented by [yetone/magpie](https://github.com/yetone/magpie):
-Magpie uses a localhost gateway and per-agent process/config projection, while
-its Claude subscription path invokes the genuine local Claude binary. Zen's
-equivalent path is implemented in `daemon/cmd/zen/claude_cli.go` (PATH shim,
-environment scrub, native binary resolution), `daemon/cmd/zen/control_app.go`
-(`claude_launch` route binding), and `daemon/modelprofiles/compile.go`
-(route-scoped `ANTHROPIC_BASE_URL` and non-secret placeholders). The installer
-writes only the credential-free `~/.local/bin/claude` shim; provider credentials
-remain in Zen's private store and are injected by the daemon router at request
-time.
+Zen runs one local gateway (`127.0.0.1:3425`, or the next free port) for every
+client. It is a passthrough: each request goes to the currently selected
+Provider connection for that client, with the placeholder credential replaced by
+the connection's stored key. The body is forwarded unchanged, except that a
+Claude `[1m]` model suffix is removed because no Provider serves it. Claude
+requests go to the selected Claude connection whatever model they name; Codex
+requests are resolved by model, preferring the selected Codex connection.
+
+On every start, the daemon projects the gateway into each client's own
+configuration, so a process started outside Zen (a plain shell, an IDE) is
+routed without a wrapper:
+
+- Codex: a marked block in `CODEX_HOME/config.toml`, with an exact backup of
+  the previous file.
+- Claude Code: `env.ANTHROPIC_BASE_URL` (the gateway root, no `/v1`) and, unless
+  the connection uses native login, a non-secret `env.ANTHROPIC_AUTH_TOKEN`
+  placeholder in `~/.claude/settings.json` (`CLAUDE_CONFIG_DIR`-aware). Every
+  other key is preserved and symlinks are followed. The original bytes are
+  backed up under the daemon state directory, and the user's previous values
+  for these two keys are restored if no Claude connection is selected. A value
+  the user edits afterwards is never overwritten on restore.
+
+Selecting a Provider connection is the only control: there is no enable step
+and no separate client command. While the daemon is stopped, the projected
+endpoint refuses connections; restore the backup or edit the two `env` keys to
+use a client without Zen.
 
 For **Official login / Direct**, authenticate each CLI on the daemon host using
 its own login flow. For a custom Codex or Claude endpoint, **Settings > Agents >
@@ -196,28 +212,13 @@ native-login sessions retain their own authentication behavior. The same
 session settings set `permissions.defaultMode` to `auto`, so a routed Claude
 launch starts in Claude Code's Auto permission mode; an explicit
 `--permission-mode` or `--dangerously-skip-permissions` on the launch command
-still takes precedence, and Zen never rewrites the user's own
-`~/.claude/settings.json`.
-This loopback handoff applies to every Claude launch started through Zen. The
-release installer places a small `claude` shim beside `zen`; from any new
-terminal it asks the daemon for a route-scoped launch plan and then `exec`s the
-native Claude binary. The shim removes inherited `ANTHROPIC_*` and Bedrock /
-Vertex / Foundry overrides before applying only the process-local Zen values.
-It never writes credentials to shell startup files. The native binary is
-resolved from the remaining `PATH` entries, so the shim cannot recurse.
-
-The direct entry requires the Zen daemon and a saved Claude Provider
-connection/default. If no Zen Claude connection is selected it fails with an
-actionable error instead of silently falling back to Anthropic login. To run
-the unmodified native CLI, invoke its absolute path (or temporarily remove
-the Zen install directory from `PATH`).
-
-This shell takeover is only the interactive user entry point. Brain and other
-control-plane callers use the executor catalog name `claude` through the
-provider-neutral `zen worker spawn -executor claude` and `zen worker send`
-protocol. They do not invoke `zen claude`, add a Claude-specific completion
-path, or use a separate Worker lifecycle; Claude-specific startup and input
-readiness remain inside its executor adapter.
+still takes precedence. The session settings outrank the machine-level
+gateway projection in `~/.claude/settings.json`, so a managed session keeps its
+own route.
+Brain and other control-plane callers use the executor catalog name `claude`
+through the provider-neutral `zen worker spawn -executor claude` and
+`zen worker send` protocol; Claude-specific startup and input readiness remain
+inside its executor adapter.
 
 ## Custom executors
 
@@ -251,7 +252,7 @@ Update granularity is intentionally limited to what each current Zen adapter rec
 
 The CLIs themselves have richer direct protocols that the current tmux/transcript integration does not own: Codex app-server emits item-keyed assistant/reasoning/output deltas, Claude supports `stream-json` with partial message events, and Cursor supports `stream-json --stream-partial-output`. Genuine delta support for those providers requires a daemon-owned structured executor runtime that owns process or app-server I/O, translates native lifecycle notifications into this reducer, persists reconnectable snapshots, and coordinates send/interrupt/terminal attachment. Adding flags to the existing interactive tmux command is not sufficient, and parsing raw NDJSON from terminal chrome would violate the protocol boundary.
 
-On Linux, managed Claude sessions read project JSONL from the owning process's `CLAUDE_CONFIG_DIR` (or its `HOME/.claude`) when available. Other hosts retain the established default-home lookup; custom per-process config roots have not been verified there. On all hosts, an explicit `--resume <id>` binds only that ID, even when its transcript is older than the ordinary discovery window; if the file is missing, Zen does not select a different same-directory chat. Provider connection changes apply to future launches, but Zen does not claim that changing the gateway route updates an already-running interactive Claude process. Its active Provider/model picker is unavailable until a native process-control owner can acknowledge such changes; the existing session and transcript remain intact.
+On Linux, managed Claude sessions read project JSONL from the owning process's `CLAUDE_CONFIG_DIR` (or its `HOME/.claude`) when available. Other hosts retain the established default-home lookup; custom per-process config roots have not been verified there. On all hosts, an explicit `--resume <id>` binds only that ID, even when its transcript is older than the ordinary discovery window; if the file is missing, Zen does not select a different same-directory chat. Selecting a Claude Provider connection updates future launches and retargets every routed, running Claude session in the same transaction: the process keeps its loopback route URL and client model, and its next request reaches the newly selected connection. Cross-provider history is sent through the portable strip boundary (thinking blocks removed). The per-session Provider/model picker stays unavailable because no native process-control owner can acknowledge a model change.
 
 Zen does not synthesize timed typewriter output and does not derive structured Chat from terminal screenshots, prompt echoes, or pane chrome. The live Terminal path remains independent and unchanged.
 

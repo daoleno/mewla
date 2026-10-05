@@ -105,7 +105,7 @@ func TestProviderGatewayNeverBindsNonLoopback(t *testing.T) {
 	}
 }
 
-func TestProviderGatewayAllowsOnlyResponsesAndAnthropicMessages(t *testing.T) {
+func TestProviderGatewayAllowsOnlyResponsesAndAnthropicEndpoints(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, `{"ok":true}`)
@@ -119,7 +119,7 @@ func TestProviderGatewayAllowsOnlyResponsesAndAnthropicMessages(t *testing.T) {
 	}
 	defer g.Close()
 
-	for _, path := range []string{"/v1/chat/completions", "/v1/gemini", "/v1/models", "/v1/messages/count_tokens"} {
+	for _, path := range []string{"/v1/chat/completions", "/v1/gemini", "/v1/models"} {
 		req := httptest.NewRequest(http.MethodPost, "http://"+g.ActualAddr()+path, strings.NewReader(`{"model":"gpt-5"}`))
 		req.RemoteAddr = "127.0.0.1:1234"
 		res := httptest.NewRecorder()
@@ -128,7 +128,7 @@ func TestProviderGatewayAllowsOnlyResponsesAndAnthropicMessages(t *testing.T) {
 			t.Errorf("path %s status = %d, want 404", path, res.Code)
 		}
 	}
-	for _, path := range []string{"/v1/responses", "/v1/messages"} {
+	for _, path := range []string{"/v1/responses", "/v1/messages", "/v1/messages/count_tokens"} {
 		req := httptest.NewRequest(http.MethodGet, "http://"+g.ActualAddr()+path, nil)
 		req.RemoteAddr = "127.0.0.1:1234"
 		res := httptest.NewRecorder()

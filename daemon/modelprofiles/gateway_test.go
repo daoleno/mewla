@@ -349,11 +349,8 @@ func TestSetProviderConnectionRetargetsGatewayUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 	setDefaultRevision := pp.Revision
-	if _, err := owner.EnableCodexGateway(""); err != nil {
-		t.Fatal(err)
-	}
 	if up, ok := owner.Gateway().Upstream(); !ok || up.ProfileID != "conn-a" {
-		t.Fatalf("gateway upstream after enable = %+v ok=%v, want conn-a", up, ok)
+		t.Fatalf("gateway upstream after selection = %+v ok=%v, want conn-a", up, ok)
 	}
 
 	// Settings Provider selection -> default moves to conn-b -> the gateway
@@ -428,12 +425,9 @@ func TestGatewayUpstreamCompilesAccountConnectionAuth(t *testing.T) {
 	if _, err := owner.SetProviderConnection("codex", "conn-gw-a", proj.Revision); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := owner.EnableCodexGateway(""); err != nil {
-		t.Fatal(err)
-	}
 	up, ok := owner.Gateway().Upstream()
 	if !ok {
-		t.Fatal("gateway has no upstream after enable")
+		t.Fatal("gateway has no upstream after selection")
 	}
 	if normalizeID(up.AuthMode) != AuthModeBearerEnv {
 		t.Fatalf("gateway upstream auth_mode = %q, want bearer_env (per-client compile)", up.AuthMode)
@@ -525,9 +519,6 @@ func TestGatewayRequestPrefersSelectedProviderWhenModelIsShared(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := owner.SetProviderConnection("codex", "conn-selected", proj.Revision); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := owner.EnableCodexGateway(""); err != nil {
 		t.Fatal(err)
 	}
 
