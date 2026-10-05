@@ -97,7 +97,7 @@ func (s *Server) handleEnrollmentPending(w http.ResponseWriter, r *http.Request)
 	if _, ok := s.authenticateRequest(w, r, enrollmentDecisionPurpose); !ok {
 		return
 	}
-	requests, err := s.enrollments.List()
+	requests, err := s.enrollments.Pending()
 	if err != nil {
 		http.Error(w, "enrollment unavailable", http.StatusInternalServerError)
 		return
