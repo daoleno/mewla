@@ -1,293 +1,173 @@
-(() => {
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const dark = matchMedia("(prefers-color-scheme: dark)");
+// Zen landing: the seals, the cat and its toys, and the small bits.
+import { buildSeal, startCat } from './sealcat.js';
 
-  // Parts of the page arrive slowly as they come into view.
-  const parts = document.querySelectorAll(".rv");
-  if (!reduced && "IntersectionObserver" in window) {
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) {
-          e.target.classList.add("in");
-          io.unobserve(e.target);
-        }
-      }
-    }, { rootMargin: "0px 0px -12% 0px" });
-    parts.forEach((el) => io.observe(el));
-  } else {
-    parts.forEach((el) => el.classList.add("in"));
+// Every URL that depends on where Zen's source and builds are published, in one
+// place. An empty value hides every link (and the install command) that uses it.
+const LINKS = {
+  source: 'https://github.com/daoleno/zen',
+  releases: 'https://github.com/daoleno/zen/releases',
+  apk: 'https://github.com/daoleno/zen/releases/latest',
+  installScript: 'https://raw.githubusercontent.com/daoleno/zen/main/install.sh',
+};
+for (const node of document.querySelectorAll('[data-link]')) {
+  const url = LINKS[node.dataset.link];
+  node.hidden = !url;
+  if (!url) continue;
+  if (node.tagName === 'A') node.href = url;
+  for (const code of node.querySelectorAll('[data-cmd]')) code.textContent = code.dataset.cmd.replace('{}', url);
+}
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+buildSeal(document.querySelector('[data-seal="mini"]'), { icon: true });
+buildSeal(document.querySelector('[data-seal="foot"]'), { icon: true });
+const sealSvg = document.querySelector('[data-seal="hero"]');
+buildSeal(sealSvg, { ghost: true });
+const cat = startCat(sealSvg, { onPlay: (e) => onPlay(e) });
+window.zenSeal = cat;
+
+// ---- playtime: pick a toy, keep score, optional sound ------------------------
+const MODES = {
+  yarn: { name: 'Yarn', unit: ['swat', 'swats'] },
+  laser: { name: 'Laser dot', unit: ['catch', 'catches'] },
+  feather: { name: 'Feather', unit: ['swat', 'swats'] },
+  treats: { name: 'Treats', unit: ['treat', 'treats'] },
+};
+const toy = document.querySelector('.toy');
+const menu = toy.querySelector('.toy-menu'), hud = toy.querySelector('.toy-hud');
+const openBtn = toy.querySelector('.toy-btn'), modeBtn = toy.querySelector('.toy-mode');
+const hits = hud.querySelector('.toy-score b'), unit = hud.querySelector('.toy-score span');
+const streak = hud.querySelector('.toy-streak'), soundBtn = hud.querySelector('.toy-sound');
+const sound = makeSound();
+
+function showMenu(open) {
+  menu.hidden = !open;
+  for (const b of [openBtn, modeBtn]) b.setAttribute('aria-expanded', String(open));
+  if (open) (menu.querySelector('[aria-pressed="true"]') ?? menu.querySelector('button')).focus();
+}
+function bump(node) { node.classList.remove('bump'); void node.offsetWidth; node.classList.add('bump'); }
+
+function onPlay(e) {
+  if (e.type === 'start') {
+    const m = MODES[e.mode];
+    modeBtn.querySelector('use').setAttribute('href', `#ti-${e.mode}`);
+    modeBtn.querySelector('.nm').textContent = m.name;
+    for (const b of menu.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === e.mode));
+    document.documentElement.classList.toggle('toy-laser', e.mode === 'laser');
   }
+  if (e.type === 'stop') {
+    hud.hidden = true; openBtn.hidden = false;
+    for (const b of menu.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', 'false');
+    document.documentElement.classList.remove('toy-laser');
+    return;
+  }
+  const m = MODES[e.mode];
+  if (hits.textContent !== String(e.hits)) { hits.textContent = e.hits; bump(hits); }
+  unit.textContent = m.unit[e.hits === 1 ? 0 : 1];
+  streak.hidden = e.streak < 2;
+  if (e.streak >= 2) { streak.querySelector('b').textContent = e.streak; bump(streak); }
+  sound.play(e.sound ?? e.type);
+  if (e.big) sound.play('streak');
+}
 
-  // Copy the install line.
-  document.querySelectorAll("[data-copy]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const text = document.getElementById(btn.dataset.copy).textContent;
-      try {
-        await navigator.clipboard.writeText(text);
-        btn.textContent = "Copied";
-      } catch {
-        btn.textContent = "Select it";
-      }
-      setTimeout(() => { btn.textContent = "Copy"; }, 1800);
-    });
+if (!reduce) {
+  toy.hidden = false;
+  openBtn.addEventListener('click', () => showMenu(menu.hidden));
+  modeBtn.addEventListener('click', () => showMenu(menu.hidden));
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    showMenu(false);
+    cat.play(b.dataset.mode);
+    hud.hidden = false; openBtn.hidden = true;
+    modeBtn.focus();
   });
+  hud.querySelector('.toy-close').addEventListener('click', () => { showMenu(false); cat.stop(); openBtn.focus(); });
+  soundBtn.addEventListener('click', () => {
+    sound.set(!sound.on);
+    soundBtn.setAttribute('aria-pressed', String(sound.on));
+  });
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!menu.hidden) { showMenu(false); (cat.playing ? modeBtn : openBtn).focus(); }
+    else if (cat.playing) { cat.stop(); openBtn.focus(); }
+  });
+  addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.toy')) showMenu(false); }, { passive: true });
+}
 
-  garden(document.querySelector(".garden canvas"));
-
-  // Karesansui. Each raked line is an agent at work; they flow as streamlines
-  // of still water around one stone, the Session that needs you. Line shapes
-  // are solved once per size; a frame only adds a slow drift and the ripple
-  // left by the pointer or by scrolling.
-  function garden(canvas) {
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const KX = 1.4; // stretch the stone's field sideways, as a raked garden does
-    const LABELS = ["claude · onboarding", "codex · tests", "brain", "pi · changelog", "opencode · docs", "shell · ~/zen"];
-    let W = 0, H = 0, dpr = 1;
-    let colors = {};
-    let g = null; // geometry for the current size
-    let arrive = reduced ? 1 : 0; // the stone settles in, 0..1
-    let arrivedAt = 0;
-    let running = false, visible = false, seen = false, raf = 0;
-    let t = 0, last = 0;
-    const ptr = { x: -1e4, y: -1e4, ex: -1e4, ey: -1e4, e: 0, inside: false };
-    let phase = 0, stir = 0, lastScroll = scrollY;
-
-    function readColors() {
-      const s = getComputedStyle(document.documentElement);
-      const v = (n) => s.getPropertyValue(n).trim();
-      colors = { ink: v("--ink"), ink2: v("--ink2"), faint: v("--faint"), rake: v("--rake"), seal: v("--seal") };
-    }
-
-    function layout() {
-      const r = canvas.getBoundingClientRect();
-      W = r.width;
-      H = r.height;
-      dpr = Math.min(2, devicePixelRatio || 1);
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
-      const narrow = W < 640;
-      const gap = narrow ? 13 : 15;
-      const pad = gap * 1.2;
-      const n = Math.floor((H - 2 * pad) / gap);
-      const y0 = (H - (n - 1) * gap) / 2;
-      const j = Math.round(n * 0.52);
-      const stone = {
-        x: W * (narrow ? 0.64 : 0.66),
-        y: y0 + (j - 0.5) * gap,
-        r: Math.max(22, Math.min(54, Math.min(W, H) * 0.075)),
-      };
-      const rings = 3;
-      const ringGap = gap;
-      const A = stone.r + ringGap * (rings + 0.9);
-      const step = narrow ? 8 : 6;
-      const xs = [];
-      for (let x = -step; x <= W + step; x += step) xs.push(x);
-      g = { gap, n, y0, stone, rings, ringGap, A, xs, narrow, shape: stoneShape(stone.r), lines: [], solvedFor: -1 };
-      solve(arrive);
-    }
-
-    // A pebble-like outline: an ellipse with a little irregularity, fixed per size.
-    function stoneShape(r) {
-      const pts = [];
-      let seed = 11;
-      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-      const k = [rnd(), rnd(), rnd()];
-      for (let i = 0; i < 48; i++) {
-        const a = (i / 48) * Math.PI * 2;
-        const w = 1 + 0.06 * Math.sin(a * 2 + k[0] * 6) + 0.04 * Math.sin(a * 3 + k[1] * 6) + 0.02 * Math.sin(a * 5 + k[2] * 6);
-        pts.push([Math.cos(a) * r * 1.32 * w, Math.sin(a) * r * 0.82 * w - (Math.sin(a) < 0 ? r * 0.08 : 0)]);
-      }
-      return pts;
-    }
-
-    // Streamline of potential flow around a cylinder of radius A:
-    // psi = Y (1 - A^2 / (X^2 + Y^2)). Solve Y for a given X and psi.
-    function streamY(X, psi, A) {
-      if (A <= 0 || psi === 0) return psi;
-      const s = Math.sign(psi), p = Math.abs(psi);
-      const A2 = A * A, X2 = X * X;
-      let lo = Math.max(p, Math.sqrt(Math.max(0, A2 - X2))), hi = p + A;
-      for (let i = 0; i < 18; i++) {
-        const m = (lo + hi) / 2;
-        if (m * (1 - A2 / (X2 + m * m)) < p) lo = m; else hi = m;
-      }
-      return s * (lo + hi) / 2;
-    }
-
-    function solve(k) {
-      const { n, y0, gap, stone, xs } = g;
-      const A = g.A * ease(k);
-      g.lines = [];
-      for (let i = 0; i < n; i++) {
-        const psi = y0 + i * gap - stone.y;
-        const ys = new Float32Array(xs.length);
-        for (let q = 0; q < xs.length; q++) ys[q] = stone.y + streamY((xs[q] - stone.x) / KX, psi, A);
-        g.lines.push(ys);
-      }
-      g.solvedFor = k;
-    }
-
-    function ease(x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
-
-    function draw() {
-      const { xs, stone, narrow } = g;
-      const k = ease(arrive);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-
-      // Ripple from the eased pointer, and a drift that never quite stops.
-      const e = ptr.e, sig = 92, sig2 = 2 * sig * sig;
-      const drift = reduced ? 0 : 0.9 + e * 1.4 + stir * 2.2;
-      ctx.beginPath();
-      for (let i = 0; i < g.lines.length; i++) {
-        const ys = g.lines[i];
-        for (let q = 0; q < xs.length; q++) {
-          const x = xs[q];
-          let y = ys[q];
-          if (!reduced) {
-            y += drift * Math.sin(x * 0.0085 + t * 0.32 + i * 0.6 + phase);
-            if (e > 0.002) {
-              const dx = x - ptr.ex, dy = y - ptr.ey, d2 = dx * dx + dy * dy;
-              if (d2 < sig2 * 4) {
-                const f = Math.exp(-d2 / sig2);
-                y += e * f * (12 * Math.tanh(dy / 26) + 2.4 * Math.sin(Math.sqrt(d2) * 0.07 - t * 1.4));
-              }
-            }
-          }
-          if (q === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-      }
-
-      // Rings raked around the stone.
-      for (let r = 1; r <= g.rings; r++) {
-        const rad = (stone.r + g.ringGap * (r - 0.1)) * k;
-        const wob = reduced ? 0 : 0.5 * Math.sin(t * 0.4 + r) * k;
-        if (rad + wob <= 0) continue;
-        ctx.moveTo(stone.x + (rad + wob) * KX, stone.y);
-        ctx.ellipse(stone.x, stone.y, (rad + wob) * KX, rad + wob, 0, 0, Math.PI * 2);
-      }
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = colors.rake;
-      ctx.stroke();
-
-      // The stone.
-      if (k > 0) {
-        ctx.save();
-        ctx.translate(stone.x, stone.y);
-        ctx.scale(k, k);
-        ctx.beginPath();
-        g.shape.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-        ctx.closePath();
-        ctx.globalAlpha = 0.92;
-        ctx.fillStyle = colors.ink2;
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // Labels sit on the lines; each clears a little space in the gravel.
-      ctx.font = `italic 300 ${narrow ? 12 : 13}px Newsreader, Georgia, serif`;
-      ctx.textBaseline = "middle";
-      const lx = narrow ? 16 : Math.max(24, W * 0.05);
-      const names = narrow ? [LABELS[0], LABELS[2], LABELS[5]] : LABELS;
-      const step = Math.floor(g.lines.length / (names.length + 1));
-      const q0 = Math.max(0, Math.round(lx / (xs[1] - xs[0])) + 1);
-      names.forEach((name, i) => {
-        const line = g.lines[Math.min(g.lines.length - 1, step * (i + 1) - (i % 2))];
-        label(name, lx, line[q0], colors.faint);
-      });
-      if (k > 0.6) {
-        ctx.globalAlpha = Math.min(1, (k - 0.6) / 0.4);
-        const sx = narrow ? stone.x - stone.r * 1.2 : stone.x + g.A * KX + 18;
-        const sy = narrow ? stone.y + g.A + 20 : stone.y;
-        label("session-auth", sx + 14, sy - 9, colors.ink, 8);
-        label("needs you", sx + 14, sy + 10, colors.seal);
-        ctx.fillStyle = colors.seal;
-        ctx.save();
-        ctx.translate(sx + 3.5, sy - 9);
-        ctx.rotate(0.07);
-        ctx.fillRect(-3.5, -3.5, 7, 7);
-        ctx.restore();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    function label(text, x, y, color, padLeft = 0) {
-      const w = ctx.measureText(text).width;
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = "#000";
-      ctx.fillRect(x - 8 - padLeft, y - 9, w + 16 + padLeft, 18);
-      ctx.restore();
-      ctx.fillStyle = color;
-      ctx.fillText(text, x, y);
-    }
-
-    function frame(now) {
-      raf = 0;
-      if (!running) return;
-      const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
-      last = now;
-      t += dt;
-      if (arrive < 1 && seen) {
-        if (!arrivedAt) arrivedAt = now + 700;
-        arrive = Math.max(0, Math.min(1, (now - arrivedAt) / 2600));
-        solve(arrive);
-      } else if (arrive >= 1 && g.solvedFor !== 1) {
-        solve(1);
-      }
-      const follow = 1 - Math.pow(0.04, dt); // reaches the pointer in about a second
-      ptr.ex += (ptr.x - ptr.ex) * follow;
-      ptr.ey += (ptr.y - ptr.ey) * follow;
-      ptr.e *= Math.pow(0.35, dt);
-      stir *= Math.pow(0.3, dt);
-      draw();
-      raf = requestAnimationFrame(frame);
-    }
-
-    function sync() {
-      const go = visible && !document.hidden && !reduced;
-      if (go && !running) {
-        running = true;
-        last = 0;
-        raf = requestAnimationFrame(frame);
-      } else if (!go && running) {
-        running = false;
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-    }
-
-    readColors();
-    layout();
-    draw();
-    new ResizeObserver(() => { layout(); draw(); }).observe(canvas);
-    dark.addEventListener("change", () => { readColors(); draw(); });
-    if (document.fonts) document.fonts.ready.then(draw);
-    if (reduced) return;
-
-    // The stone settles in once the garden is well in view.
-    new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting;
-      if (entry.intersectionRatio >= 0.35) seen = true;
-      sync();
-    }, { threshold: [0, 0.35] }).observe(canvas);
-    document.addEventListener("visibilitychange", sync);
-    canvas.addEventListener("pointermove", (ev) => {
-      const r = canvas.getBoundingClientRect();
-      const x = ev.clientX - r.left, y = ev.clientY - r.top;
-      if (!ptr.inside) { ptr.ex = x; ptr.ey = y; ptr.inside = true; }
-      ptr.e = Math.min(1, ptr.e + Math.hypot(x - ptr.x, y - ptr.y) * 0.004);
-      ptr.x = x;
-      ptr.y = y;
-    }, { passive: true });
-    canvas.addEventListener("pointerleave", () => { ptr.inside = false; }, { passive: true });
-    addEventListener("scroll", () => {
-      if (!visible) return;
-      const d = scrollY - lastScroll;
-      lastScroll = scrollY;
-      phase += d * 0.004;
-      stir = Math.min(1, stir + Math.abs(d) * 0.006);
-    }, { passive: true });
+// Tiny synthesized blips. Off by default; the audio context starts only when a
+// visitor turns sound on, so it always follows a gesture.
+function makeSound() {
+  let ctx = null, on = false;
+  function tone(f0, f1, ms, type = 'triangle', gain = 0.1, at = 0) {
+    const t = ctx.currentTime + at, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + ms / 1000);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+    o.connect(g).connect(ctx.destination);
+    o.start(t); o.stop(t + ms / 1000 + 0.02);
   }
-})();
+  function hiss(ms, gain = 0.06, freq = 1200) {
+    const n = Math.ceil(ctx.sampleRate * ms / 1000), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; g.gain.value = gain;
+    src.connect(f).connect(g).connect(ctx.destination);
+    src.start();
+  }
+  const fx = {
+    hit: () => tone(700, 320, 90, 'triangle', 0.14),
+    miss: () => hiss(180, 0.07, 900),
+    pounce: () => { hiss(120, 0.05, 2400); tone(220, 110, 140, 'sine', 0.16, 0.05); },
+    catch: () => { tone(523, 523, 90, 'square', 0.05); tone(784, 784, 140, 'square', 0.05, 0.09); },
+    chomp: () => { tone(320, 180, 50, 'square', 0.06); tone(300, 160, 50, 'square', 0.06, 0.1); },
+    snack: () => fx.chomp(),
+    tug: () => hiss(140, 0.06, 3000),
+    toss: () => tone(900, 1400, 70, 'sine', 0.05),
+    tick: () => tone(1800, 1200, 25, 'sine', 0.03),
+    streak: () => [0, 4, 7, 12].forEach((s, i) => tone(523 * 2 ** (s / 12), 523 * 2 ** (s / 12), 110, 'triangle', 0.07, i * 0.07)),
+  };
+  return {
+    get on() { return on; },
+    set(v) {
+      on = v;
+      if (on && !ctx) ctx = new AudioContext();
+      if (on) ctx.resume();
+    },
+    play(name) { if (on && ctx && fx[name]) fx[name](); },
+  };
+}
+
+// the works-with strip loops: a second, hidden copy follows the first
+const row = document.querySelector('.works .row');
+const twin = row.cloneNode(true);
+twin.setAttribute('aria-hidden', 'true');
+row.after(twin);
+
+// illustrations play once, as they come into view
+const shown = document.querySelectorAll('.rv');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -12% 0px' });
+  shown.forEach((n) => io.observe(n));
+} else shown.forEach((n) => n.classList.add('in'));
+
+const bar = document.querySelector('.bar');
+const onScroll = () => bar.classList.toggle('scrolled', scrollY > 8);
+addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+
+for (const btn of document.querySelectorAll('[data-copy]')) {
+  btn.addEventListener('click', async () => {
+    const text = btn.previousElementSibling.textContent.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'Copied';
+    } catch {
+      btn.textContent = 'Select';
+    }
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+  });
+}
