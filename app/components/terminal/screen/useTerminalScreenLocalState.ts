@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { makeSessionKey } from "../../../services/sessionKeys";
+import { decodeWorkerRouteId } from "../../../services/workerRouteId";
 import type { StoredInterfaceRenderMode } from "../../../services/storage";
 import type { TerminalSurfaceHandle } from "../TerminalSurface";
 import {
@@ -31,7 +32,8 @@ export function useTerminalScreenLocalState() {
     skillsHandoff?: string;
     createDurabilityWarning?: string;
   }>();
-  const workerId = paramString(params.id);
+  const workerRouteId = paramString(params.id);
+  const workerId = workerRouteId ? decodeWorkerRouteId(workerRouteId) : "";
   const serverId = paramString(params.serverId);
   const initialInterfaceRenderMode = paramInterfaceRenderMode(
     params.initialInterfaceRenderMode,

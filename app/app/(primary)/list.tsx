@@ -63,6 +63,7 @@ import {
 } from "../../services/providers";
 import { isWorkerSessionListFreshForConnection } from "../../store/workers";
 import { makeSessionKey } from "../../services/sessionKeys";
+import { encodeWorkerRouteId } from "../../services/workerRouteId";
 import { presentWorker } from "../../services/workerPresentation";
 import {
   addSessionToSelection,
@@ -217,7 +218,7 @@ export default function InboxScreen() {
       void markWorkerOpened(agent.key, openedAt);
       router.push({
         pathname: "/terminal/[id]",
-        params: { id: agent.id, serverId: agent.serverId },
+        params: { id: encodeWorkerRouteId(agent.id), serverId: agent.serverId },
       });
     },
     [router, isCurrentServer],
@@ -389,7 +390,7 @@ export default function InboxScreen() {
       pathname: "/terminal/[id]",
       params: hint
         ? {
-            id: workerId,
+            id: encodeWorkerRouteId(workerId),
             serverId,
             cwd: hint.cwd,
             command: hint.command,
@@ -400,7 +401,7 @@ export default function InboxScreen() {
               ? { createDurabilityWarning: hint.durabilityWarning }
               : {}),
           }
-        : { id: workerId, serverId },
+        : { id: encodeWorkerRouteId(workerId), serverId },
     });
   };
 
@@ -620,7 +621,7 @@ export default function InboxScreen() {
     setServiceSheetVisible(false);
     router.push({
       pathname: "/terminal/[id]",
-      params: { id: service.worker_id, serverId: service.serverId },
+      params: { id: encodeWorkerRouteId(service.worker_id), serverId: service.serverId },
     });
   };
 

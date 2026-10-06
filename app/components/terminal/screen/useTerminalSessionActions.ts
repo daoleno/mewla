@@ -29,6 +29,7 @@ import {
   type CreateAmbiguityGateState,
 } from "../../../services/providers";
 import { wsClient } from "../../../services/websocket";
+import { encodeWorkerRouteId } from "../../../services/workerRouteId";
 import {
   launchSelectionFromSnapshot,
   providerClientForCommand,
@@ -273,7 +274,7 @@ export function useTerminalSessionActions({
         router.replace({
           pathname: "/terminal/[id]",
           params: {
-            id: nextWorkerId,
+            id: encodeWorkerRouteId(nextWorkerId),
             serverId,
             cwd: input.cwd,
             command: input.command,
