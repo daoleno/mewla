@@ -222,3 +222,32 @@ section { padding: clamp(64px, 9vw, 112px) 0 0; }
   .hint { display: none; }
   .btn { transition: none; }
 }
+
+/* playing with the cat */
+.cat-fx { position: absolute; left: 0; top: 0; z-index: 4; overflow: visible; pointer-events: none; }
+.cat-fx text { font-family: var(--serif); }
+.cat-carrying, .cat-carrying * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.toy-btn {
+  position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 6;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px; border-radius: 999px;
+  border: 1.5px solid rgba(200, 55, 43, .35); background: rgba(255, 253, 249, .94); color: var(--red-ink);
+  font: 700 14px var(--sans); box-shadow: var(--shadow); cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.toy-btn .ball { width: 16px; height: 16px; border-radius: 50%; background: var(--red); box-shadow: inset -3px -3px 0 rgba(0, 0, 0, .12); }
+.toy-btn[aria-pressed="true"] { background: var(--red); color: #fff; border-color: var(--red); }
+.toy-btn[aria-pressed="true"] .ball { background: #fbf6ec; }
+/* phones: just the ball, so it never sits over a heading; the label stays for screen readers */
+@media (max-width: 640px) {
+  .toy-btn { width: 48px; height: 48px; padding: 0; justify-content: center; }
+  .toy-btn .ball { width: 20px; height: 20px; }
+  .toy-btn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.plan li { position: relative; transition: box-shadow .2s; }
+.plan li.stamped { box-shadow: inset 4px 0 0 var(--red); }
+.plan li.stamped::after { content: ""; position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 2px; background: var(--red); animation: thump .32s ease-out; }
+.stamp.stamped, .confirm .yes.stamped { animation: thump .36s ease-out; }
+.confirm .yes.stamped { background: var(--red); border-color: var(--red); }
+@keyframes thump { 0% { transform: scale(1.5) rotate(-6deg); opacity: 0; } 60% { transform: scale(.94) rotate(-6deg); opacity: 1; } 100% { transform: scale(1) rotate(-6deg); } }
+.plan li.stamped::after, .confirm .yes.stamped { animation-name: thump-flat; }
+@keyframes thump-flat { 0% { transform: scale(1.5); opacity: 0; } 60% { transform: scale(.94); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .toy-btn { display: none; } }

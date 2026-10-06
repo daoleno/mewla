@@ -37,7 +37,7 @@
     <div class="wrap hero-grid">
       <div class="hero-art">
         <svg class="seal" viewBox="0 0 100 100" role="img" aria-label="The Zen seal: Brain as a cat, asleep under a crescent moon" data-seal="hero" data-perch="seal"></svg>
-        <p class="hint" aria-hidden="true">This cat is Brain. Scroll and it gets to work; tap, pet or pick it up.</p>
+        <p class="hint" aria-hidden="true">This cat is Brain. Scroll and it gets to work. Tap it, pet it, or pick it up and put it somewhere.</p>
       </div>
       <div class="hero-copy">
         <p class="eyebrow">Open source · self-hosted · Android and iOS beta</p>
@@ -71,7 +71,7 @@
           <h3>You say it once.</h3>
           <p>Type the goal to Brain in the app, or send it from Telegram, a second channel to the same Brain. Then put the phone away.</p>
         </div>
-        <div class="scr" data-perch="0.8" aria-hidden="true">
+        <div class="scr" data-act="wake" data-perch="0.8" aria-hidden="true">
           <div class="scr-top"><span class="seg"><b>Brain</b><i>Sessions</i></span></div>
           <div class="bubble me">Ship atlas-notes v1.4 this week: fix the sync conflict bug, tidy the settings copy, write the release notes and publish them to Notion. Check crash reports next Monday.</div>
           <div class="bubble brain">On it. Four parts, each recorded as Work. I’ll tell you when something needs you.</div>
@@ -85,7 +85,7 @@
           <h3>Brain splits it into Work.</h3>
           <p>Each part becomes a durable Work item with its attempt, wake timer and review. Work survives restarts, and Brain doesn’t poll: agents report back, and timers wake it when something is due.</p>
         </div>
-        <div class="scr" data-perch="0.78" aria-hidden="true">
+        <div class="scr" data-act="stamp" data-stamp=".plan li" data-perch="0.78" aria-hidden="true">
           <p class="lbl">Updated plan</p>
           <ul class="plan">
             <li><span>Fix the sync conflict bug</span><b class="st working">Working</b></li>
@@ -102,7 +102,7 @@
           <h3>Who does what is plain Markdown.</h3>
           <p>Before each hand-off, Brain reads <code>routing.md</code> to pick the agent, model and reasoning level. Your team is whatever you have signed in: Claude, Codex, Cursor, Grok, Pi or OpenCode. Tell Brain a preference and it rewrites the line.</p>
         </div>
-        <div class="scr file" data-perch="0.8" aria-hidden="true">
+        <div class="scr file" data-act="read" data-perch="0.8" aria-hidden="true">
           <p class="lbl mono">routing.md</p>
 <pre><span class="c"># who does what</span>
 - Bugs, Go and tests: codex, high
@@ -118,7 +118,7 @@
           <h3>Every agent works in the open.</h3>
           <p>Each one runs as an ordinary Session on your computer, in <code>tmux</code>, so it is also there at the desk. Open any of them on the phone as <strong>Chat</strong>, as the live <strong>Terminal</strong>, or as read-only <strong>Git</strong> diffs, and take over whenever you like.</p>
         </div>
-        <div class="scr" data-perch="0.78" aria-hidden="true">
+        <div class="scr" data-act="patrol" data-perch="0.78" aria-hidden="true">
           <div class="scr-top"><span class="seg"><i>Brain</i><b>Sessions</b></span></div>
           <ul class="sess">
             <li class="on"><span class="av">Cx</span><span><b>Sync conflict fix</b><small class="g">Running the sync tests</small></span></li>
@@ -135,7 +135,7 @@
           <h3>You hear about it only when it matters.</h3>
           <p>Your phone gets a push when a Session needs input, fails or finishes, and stays quiet otherwise. Tap it, answer in a line, and the agent carries on.</p>
         </div>
-        <div class="scr" data-perch="0.8" aria-hidden="true">
+        <div class="scr" data-act="perk" data-perch="0.8" aria-hidden="true">
           <div class="push"><span class="app"></span><span><b>Sync conflict fix needs input</b><small>Keep both copies, or let the newest edit win?</small></span></div>
           <div class="bubble me">Keep both, and name the older one “conflicted copy”.</div>
           <div class="bubble agent">Got it. Writing the test for that now.</div>
@@ -148,7 +148,7 @@
           <h3>Nothing is done until Brain has checked it.</h3>
           <p>Brain reads every result, then accepts it or sends it back with a note. Only Brain or you can mark Work done, and an agent that goes missing shows up as <em>Needs review</em>, never as a success.</p>
         </div>
-        <div class="scr" data-perch="0.8" aria-hidden="true">
+        <div class="scr" data-act="stamp" data-stamp=".stamp" data-perch="0.8" aria-hidden="true">
           <div class="card ready"><p class="lbl">Sync conflict fix</p><b class="st ready">Ready</b><p>Both copies kept. 41 sync tests pass.</p></div>
           <div class="card"><p class="lbl">Settings copy</p><b class="st reviewing">Reviewing</b><p>Sent back: “Shorter, and keep the word ‘sync’.”</p></div>
           <div class="card done"><p class="lbl">Conflict wording</p><b class="st done">Done</b></div>
@@ -162,7 +162,7 @@
           <h3>Then Brain reaches past your computer. <span class="tag">Preview</span></h3>
           <p>With <strong>Plugins</strong>, Brain works in the tools you already use: Linear, Notion, GitHub, Slack, Google Workspace, or your own MCP and OpenAPI servers. Reading is on by default. Making changes is a separate switch, and Brain still asks before it acts.</p>
         </div>
-        <div class="scr" data-perch="0.8" aria-hidden="true">
+        <div class="scr" data-act="stamp" data-stamp=".confirm .yes" data-perch="0.8" aria-hidden="true">
           <p class="lbl">Brain wants to make changes</p>
           <ul class="acts">
             <li><span class="pi">N</span>Publish “atlas-notes 1.4” release notes</li>
@@ -179,7 +179,7 @@
           <h3>Monday is already on the calendar.</h3>
           <p>You asked for a check next Monday, so Brain put it on its <strong>Calendar</strong>. When it is due, the check runs as visible Work and the result lands back in the same Brain thread. Until then, Brain goes back to sleep.</p>
         </div>
-        <div class="scr" data-perch="0.8" aria-hidden="true">
+        <div class="scr" data-act="sleep" data-perch="0.8" aria-hidden="true">
           <p class="lbl">Next week</p>
           <div class="cal"><span class="t">Mon<br>09:00</span><span><b>Check atlas-notes 1.4 crash reports</b><small>Scheduled action · runs as Work</small></span></div>
           <div class="cal soft"><span class="t">Fri<br>17:00</span><span><b>atlas-notes 1.4 released</b><small>Done</small></span></div>
@@ -266,6 +266,8 @@
     </div>
   </section>
 </main>
+
+<button class="toy-btn" type="button" aria-pressed="false" hidden><span class="ball" aria-hidden="true"></span><span class="lbl">Play with Brain</span></button>
 
 <footer class="foot">
   <div class="wrap foot-row">
