@@ -172,16 +172,6 @@ td code { overflow-wrap: normal; box-decoration-break: clone; -webkit-box-decora
 .callout-caution::before { content: "Caution"; }
 .callout-warning, .callout-caution { background: var(--red-soft); border-color: #f1d3ca; }
 
-.pending {
-  text-decoration: underline dashed var(--red); text-underline-offset: 3px;
-  cursor: help;
-}
-.pending::after {
-  content: "pending"; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
-  font: 600 10.5px/1.6 var(--sans); letter-spacing: .04em; text-transform: uppercase;
-  color: var(--red-ink); background: var(--red-soft); vertical-align: 2px;
-}
-
 /* Pager and footer */
 .d-pager { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 720px; margin-top: 48px; }
 .d-pager a {

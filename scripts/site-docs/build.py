@@ -5,8 +5,9 @@ Copies site/ to --out, then renders the pages listed in nav.json (plus every
 docs/releases/v*.md) to <out>/docs/<slug>/index.html. Styling lives in
 site/docs/docs.css and search in site/docs/search.js.
 
-The build fails when a published page links to an unpublished file or to the
-private repository, or contains anything the public-safety scan rejects.
+The build fails when a published page links to an unpublished file or contains
+anything the public-safety scan rejects, and when any file copied from site/
+uses the anonymised repository slug.
 
     python3 scripts/site-docs/build.py --out /tmp/zen-site
 """
@@ -36,15 +37,9 @@ ALERT_RE = re.compile(
     r"^> \[!(" + "|".join(ALERT_KINDS) + r")\][ \t]*\n((?:>.*(?:\n|$))*)", re.M
 )
 REPO_ONLY_RE = re.compile(r"<!-- repo-only -->.*?<!-- /repo-only -->\n?", re.S)
-IF_PENDING_RE = re.compile(
-    r"<!-- if-pending ([A-Z_]+) -->\n?(.*?)<!-- /if-pending -->\n?", re.S
-)
-PLACEHOLDER_RE = re.compile(r"\{\{([A-Z_]+)\}\}")
-FENCE_SPLIT_RE = re.compile(r"(^[ \t]*```.*?^[ \t]*```[ \t]*$)", re.M | re.S)
 RELEASE_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$")
 HREF_RE = re.compile(r'(<a\b[^>]*?\bhref=")([^"]*)(")')
 SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]*)(")')
-PENDING_LINK_RE = re.compile(r'<a href="#pending-([A-Z_]+)">(.*?)</a>', re.S)
 TAG_RE = re.compile(r"<[^>]+>")
 BLOCK_TAG_RE = re.compile(r"</?(?:p|li|ul|ol|h[1-6]|pre|table|tr|td|th|div|blockquote|br|hr)\b[^>]*>")
 
@@ -53,12 +48,12 @@ PRIVATE_IP = (
     r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
     r"|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])(?:\.\d{1,3}){2})\b"
 )
+ANON_SLUG = (re.compile(r"\b(?:github|githubusercontent)\.com/user/", re.I), "anonymised repository slug")
 UNSAFE = [
     (re.compile(r"/home/[A-Za-z0-9_.-]+"), "personal home path"),
     (re.compile(r"/Users/[A-Za-z0-9_.-]+"), "personal home path"),
     (re.compile(r"\b[A-Za-z0-9-]+\.ts\.net\b"), "tailnet hostname"),
-    (re.compile(r"github\.com/(?:daoleno|user)/zen\b", re.I), "private repository link"),
-    (re.compile(r"raw\.githubusercontent\.com"), "private repository link"),
+    ANON_SLUG,
     (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,})"), "GitHub token"),
     (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"), "Slack token"),
     (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"), "API key"),
@@ -157,45 +152,8 @@ def release_list(pages: list[Page]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def preprocess(text: str, page: Page, pages: list[Page], placeholders: dict) -> str:
+def preprocess(text: str, page: Page, pages: list[Page]) -> str:
     text = REPO_ONLY_RE.sub("", text)
-
-    def if_pending(m):
-        key = m.group(1)
-        if key not in placeholders:
-            raise BuildError(f"{rel(page.source)}: unknown placeholder {key}")
-        return m.group(2) if placeholders[key] is None else ""
-
-    text = IF_PENDING_RE.sub(if_pending, text)
-
-    def link_placeholder(m):
-        key = m.group(1)
-        if key not in placeholders:
-            raise BuildError(f"{rel(page.source)}: unknown placeholder {key}")
-        value = placeholders[key]
-        return f"]({value}" if value else f"](#pending-{key}"
-
-    text = re.sub(r"\]\(\{\{([A-Z_]+)\}\}", link_placeholder, text)
-
-    def bare_placeholder(in_code):
-        def sub(m):
-            key = m.group(1)
-            if key not in placeholders:
-                raise BuildError(f"{rel(page.source)}: unknown placeholder {key}")
-            value = placeholders[key]
-            if in_code:
-                return value or f"<{key}>"
-            if value:
-                return f"<{value}>" if re.match(r"(https?://|mailto:)", value) else value
-            return f'<span class="pending" title="{key}: not decided yet">{key}</span>'
-
-        return sub
-
-    text = "".join(
-        PLACEHOLDER_RE.sub(bare_placeholder(i % 2 == 1), chunk)
-        for i, chunk in enumerate(FENCE_SPLIT_RE.split(text))
-    )
-
     if page.release_index:
         if "<!-- release-list -->" not in text:
             raise BuildError(f"{rel(page.source)}: missing <!-- release-list --> marker")
@@ -235,15 +193,11 @@ def rewrite_links(body: str, page: Page, by_source: dict, assets: set) -> str:
         raise BuildError(f"{rel(page.source)}: link to unpublished file '{href}'")
 
     body = HREF_RE.sub(lambda m: m.group(1) + html.escape(target_for(html.unescape(m.group(2)), "href")) + m.group(3), body)
-    body = SRC_RE.sub(lambda m: m.group(1) + html.escape(target_for(html.unescape(m.group(2)), "src")) + m.group(3), body)
-    return PENDING_LINK_RE.sub(
-        lambda m: f'<span class="pending" title="{m.group(1)}: public location not decided yet">{m.group(2)}</span>',
-        body,
-    )
+    return SRC_RE.sub(lambda m: m.group(1) + html.escape(target_for(html.unescape(m.group(2)), "src")) + m.group(3), body)
 
 
-def render(page: Page, pages: list[Page], by_source: dict, assets: set, placeholders: dict) -> None:
-    text = preprocess(page.source.read_text(encoding="utf-8"), page, pages, placeholders)
+def render(page: Page, pages: list[Page], by_source: dict, assets: set) -> None:
+    text = preprocess(page.source.read_text(encoding="utf-8"), page, pages)
     md = markdown.Markdown(
         extensions=[
             "tables",
@@ -272,6 +226,17 @@ def scan(page: Page) -> list[str]:
             if m:
                 problems.append(f"{rel(page.source)}: {label}: {m.group(0)!r}")
                 break
+    return problems
+
+
+def scan_site() -> list[str]:
+    pattern, label = ANON_SLUG
+    problems = []
+    for path in sorted(SITE.rglob("*")):
+        if path.suffix in (".html", ".js", ".css", ".json", ".txt", ".xml"):
+            m = pattern.search(path.read_text(encoding="utf-8", errors="replace"))
+            if m:
+                problems.append(f"{rel(path)}: {label}: {m.group(0)!r}")
     return problems
 
 
@@ -414,16 +379,15 @@ def search_index(pages: list[Page]) -> list[dict]:
 
 def build(out: Path) -> list[str]:
     config = json.loads((HERE / "nav.json").read_text(encoding="utf-8"))
-    placeholders = config["placeholders"]
     pages = load_pages(config)
     by_source = {p.source.resolve(): p for p in pages}
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(SITE, out)
     assets: set[Path] = set()
-    problems: list[str] = []
+    problems = scan_site()
     for page in pages:
-        render(page, pages, by_source, assets, placeholders)
+        render(page, pages, by_source, assets)
         problems.extend(scan(page))
     if problems:
         raise BuildError("public-safety scan failed:\n  " + "\n  ".join(problems))
@@ -438,10 +402,7 @@ def build(out: Path) -> list[str]:
     (out / "docs" / "search-index.json").write_text(
         json.dumps(search_index(pages), ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
     )
-    pending = [k for k, v in placeholders.items() if v is None]
-    return [f"{len(pages)} pages written to {out}/docs"] + (
-        [f"unresolved placeholders (rendered as pending): {', '.join(pending)}"] if pending else []
-    )
+    return [f"{len(pages)} pages written to {out}/docs"]
 
 
 def main() -> int:
