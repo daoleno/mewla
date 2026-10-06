@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zen cat styles</title>
+<meta name="color-scheme" content="light">
+<style>
+  :root {
+    --bg: #f6f2ea;
+    --paper: #fffdf9;
+    --ink: #2a2420;
+    --soft: #776a60;
+    --line: rgba(50, 35, 25, .12);
+    --accent: #c4713b;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    overflow-x: clip;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 18px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; color: var(--accent); font-weight: 700; margin: 0 0 6px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 0 0 8px; letter-spacing: -.01em; }
+  .lede { color: var(--soft); max-width: 62ch; margin: 0; }
+
+  .grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 720px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 1120px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .card {
+    display: flex; flex-direction: column; text-align: left; padding: 0; font: inherit; color: inherit;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; cursor: zoom-in;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(70, 45, 20, .12); }
+  .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .card canvas { display: block; width: 100%; aspect-ratio: 10 / 7; background: #ece6da; }
+  .meta { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px 2px; flex-wrap: wrap; }
+  .num { font: 600 13px ui-monospace, "SF Mono", Menlo, monospace; color: var(--accent); }
+  .name { font-weight: 700; font-size: 17px; }
+  .era { color: var(--soft); font-size: 13px; }
+  .note { display: block; padding: 2px 14px 14px; color: var(--soft); font-size: 14px; line-height: 1.5; }
+
+  dialog { border: 0; padding: 0; width: min(1200px, calc(100vw - 32px), calc((100vh - 150px) * 10 / 7)); max-height: calc(100vh - 32px); background: var(--paper); border-radius: 18px; overflow: auto; }
+  dialog::backdrop { background: rgba(30, 22, 16, .6); }
+  dialog canvas { display: block; width: 100%; aspect-ratio: 10 / 7; }
+  .dlg-bar { display: flex; align-items: center; gap: 10px 14px; padding: 12px 14px; flex-wrap: wrap; }
+  .dlg-bar h2 { font-size: 17px; margin: 0; flex: 1 1 auto; }
+  .dlg-bar p { margin: 0; color: var(--soft); font-size: 14px; flex: 1 1 100%; order: 3; }
+  .btn { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer; color: var(--ink); }
+  footer { padding: 36px 0 48px; color: var(--soft); font-size: 13px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="kicker">Zen 吉祥物 · 画风选择</p>
+    <h1>同一只睡猫，十五种画法</h1>
+    <p class="lede">从史前岩画到像素和机器，每张都是同一个姿势，只换画风。点开可以放大看，左右键翻页。先挑画风（也可以挑两三种混搭），定了再做动作。</p>
+  </header>
+  <div class="grid" id="grid"></div>
+</main>
+<dialog id="big" aria-label="放大查看">
+  <canvas role="img" aria-label="放大的睡猫"></canvas>
+  <div class="dlg-bar">
+    <h2></h2>
+    <button type="button" class="btn" data-prev aria-label="上一张">←</button>
+    <button type="button" class="btn" data-next aria-label="下一张">→</button>
+    <button type="button" class="btn" data-close>关闭</button>
+    <p></p>
+  </div>
+</dialog>
+<footer class="wrap">设计稿，仅供评审。每一张都是 canvas 程序现画的，只借用各时期的画法，没有参考或使用任何具体作品。</footer>
+<script type="module" src="styles.js"></script>
+</body>
+</html>
