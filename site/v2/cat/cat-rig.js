@@ -380,8 +380,8 @@ const blit = (ctx, sp) => ctx.drawImage(sp.cv, sp.x, sp.y, sp.w, sp.h);
 const TAIL = [[494, 318], [484, 366], [424, 384], [356, 383], [314, 370], [295, 351]];
 const TAIL_STRANDS = (() => {
   const R = rng(71), out = [];
-  for (let i = 0; i < 220; i++) out.push({ u: 0.1 + R() * 0.88, side: R() < 0.5 ? 1 : -1, len: 2.5 + R() * 3, rot: R() - 0.5, bend: R() - 0.5, jit: R() - 0.5 });
-  for (let i = 0; i < 80; i++) out.push({ u: 0.04 + R() * 0.9, v: (R() - 0.5) * 1.5, len: 5 + R() * 5, rot: R() - 0.5, bend: R() - 0.5, jit: R() - 0.5 });
+  for (let i = 0; i < 300; i++) out.push({ u: 0.1 + R() * 0.88, side: R() < 0.5 ? 1 : -1, len: 2.5 + R() * 3, rot: R() - 0.5, bend: R() - 0.5, jit: R() - 0.5 });
+  for (let i = 0; i < 110; i++) out.push({ u: 0.04 + R() * 0.9, v: (R() - 0.5) * 1.5, len: 5 + R() * 5, rot: R() - 0.5, bend: R() - 0.5, jit: R() - 0.5 });
   return out;
 })();
 // [position, half-width]
