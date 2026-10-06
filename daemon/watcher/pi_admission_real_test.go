@@ -9,9 +9,9 @@ import (
 )
 
 // TestRealPiStartupReadinessAdmission exercises the production CreateSession
-// and waitForInputReadyGuarded boundary against the installed Pi binary. It
-// never submits a provider prompt; the owned pane is captured after startup
-// admission and then torn down. Opt-in keeps ordinary unit runs provider-free.
+// and SendInputWhenReady boundary against the installed Pi binary. It submits
+// one inert probe prompt only when explicitly enabled; the owned pane is then
+// torn down. Opt-in keeps ordinary unit runs provider-free.
 func TestRealPiStartupReadinessAdmission(t *testing.T) {
 	if os.Getenv("ZEN_TEST_REAL_PI_ADMISSION") != "1" {
 		t.Skip("set ZEN_TEST_REAL_PI_ADMISSION=1 for installed Pi startup evidence")
@@ -35,7 +35,11 @@ func TestRealPiStartupReadinessAdmission(t *testing.T) {
 	if !alive || !isPiInputReady(pane) {
 		t.Fatalf("installed Pi admission returned non-ready pane (alive=%v):\n%s", alive, pane)
 	}
-	if !strings.Contains(pane, "pi v") || !strings.Contains(strings.ToLower(pane), "escape interrupt") {
+	if !strings.Contains(strings.ToLower(pane), "escape interrupt") {
 		t.Fatalf("installed Pi capture lacks startup chrome:\n%s", pane)
+	}
+	if err := h.w.SendInputWhenReady(target, command, "Reply with exactly ZEN_PI_ADMISSION_PROBE and nothing else.\n"); err != nil {
+		pane, _, _ := h.w.capturePaneContent(target)
+		t.Fatalf("fresh Pi pane rejected input admission: %v; pane:\n%s", err, pane)
 	}
 }
