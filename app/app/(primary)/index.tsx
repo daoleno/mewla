@@ -32,7 +32,7 @@ import { InterfaceChatSurface } from "../../components/terminal/InterfaceChatSur
 import { buildChatChrome } from "../../theme";
 import { useAppTheme } from "../../constants/tokens";
 import { wsClient } from "../../services/websocket";
-import { encodeWorkerRouteId } from "../../services/workerRouteId";
+import { terminalRouteParams } from "../../services/workerRouteId";
 import { shouldShowBrainLoadingState } from "../../services/connectionLifecycle";
 import { isTargetedBrainThreadReadOnly } from "../../services/brainThreadRouting";
 import { useWorkers, type ConnectionState } from "../../store/workers";
@@ -186,11 +186,9 @@ export default function BrainScreen() {
     }
     router.push({
       pathname: "/terminal/[id]",
-      params: {
-        id: encodeWorkerRouteId(hostWorker.id),
-        serverId: activeServer.id,
+      params: terminalRouteParams(hostWorker.id, activeServer.id, {
         initialInterfaceRenderMode: "terminal",
-      },
+      }),
     });
   }, [activeServer, hostWorker?.id, router]);
 
@@ -386,7 +384,7 @@ export default function BrainScreen() {
         onOpenSession={detailEvent?.session_id && openSessionIds.has(detailEvent.session_id) && activeServer ? () => {
           const id = detailEvent.session_id!;
           setSelectedWorkResult(null);
-          router.push({ pathname: "/terminal/[id]", params: { id: encodeWorkerRouteId(id), serverId: activeServer.id } });
+          router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(id, activeServer.id) });
         } : undefined}
       />
       {brainActionError || targetedThreadReadOnly ? (
