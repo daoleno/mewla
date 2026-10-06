@@ -1,4 +1,3 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 import { catSVG, zzz } from '../shared/cat.js';
 
 // ---- 2D mascot inside the page -------------------------------------------
@@ -60,7 +59,18 @@ const hint = document.getElementById('cat-hint');
 const stage = canvas && canvas.closest('.cat-stage');
 const tag = stage && stage.querySelector('.stage-tag');
 
+// three.js loads on its own, so a blocked CDN only leaves the stage empty.
+let THREE = null;
 if (canvas) {
+  try {
+    THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
+  } catch {
+    // fall back to the drawn cat
+    if (stage) { stage.classList.add('no-3d'); stage.insertAdjacentHTML('beforeend', catSVG('sleep')); }
+  }
+}
+
+if (THREE) {
   const FUR = 0xf2a95c;
   const FUR_DARK = 0xdf8a3c;
   const CREAM = 0xfbe0bd;
