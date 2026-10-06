@@ -1,10 +1,4 @@
 {
-  "placeholders": {
-    "ZEN_INSTALL_URL": null,
-    "ZEN_RELEASES_URL": null,
-    "ZEN_SOURCE_URL": null,
-    "ZEN_SECURITY_CONTACT": null
-  },
   "home": { "source": "docs/README.md", "title": "Zen documentation" },
   "groups": [
     {

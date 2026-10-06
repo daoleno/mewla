@@ -13,15 +13,8 @@ Install the daemon first; the app is useless without it.
 
 ## Install the daemon
 
-<!-- if-pending ZEN_INSTALL_URL -->
-> [!NOTE]
-> The public download location for the installer and release archives has not
-> been published yet. Commands below show it as `<ZEN_INSTALL_URL>` or link to
-> it as pending.
-
-<!-- /if-pending -->
 ```sh
-curl -fsSL {{ZEN_INSTALL_URL}} | sh
+curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh
 ```
 
 The installer picks the newest release for your platform, downloads the archive
@@ -43,7 +36,7 @@ Options, set as environment variables on `sh`:
 | `ZEN_DRY_RUN=1` | Print the platform, version and destination; change nothing |
 
 ```sh
-curl -fsSL {{ZEN_INSTALL_URL}} | ZEN_INSTALL_DIR="$HOME/bin" sh
+curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | ZEN_INSTALL_DIR="$HOME/bin" sh
 ```
 
 If the installer added a directory to your shell profile, open a new terminal
@@ -52,7 +45,7 @@ or run the `export PATH=...` line it printed.
 ### Manual download
 
 Download the archive for your host and `SHA256SUMS` from the
-[release downloads]({{ZEN_RELEASES_URL}}), then verify and install:
+[GitHub Releases](https://github.com/daoleno/zen/releases), then verify and install:
 
 ```sh
 # Linux (use zen-linux-arm64.tar.gz on ARM)
@@ -151,7 +144,7 @@ zen pair -state-dir /path/to/state https://zen.example.com
 ### Android
 
 Download `zen-android-arm64-v<version>.apk` and `SHA256SUMS` from the
-[release downloads]({{ZEN_RELEASES_URL}}) and verify the APK:
+[GitHub Releases](https://github.com/daoleno/zen/releases) and verify the APK:
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing
@@ -179,9 +172,10 @@ You need full Xcode, an iOS Simulator runtime or a signed device target,
 CocoaPods, Bun, and network access for the first native build. Installing on a
 physical iPhone also needs an Apple development team.
 
-Get the source from {{ZEN_SOURCE_URL}}, then from the repository root:
+Clone the source, then from the repository root:
 
 ```sh
+git clone https://github.com/daoleno/zen.git && cd zen
 bun install
 bun run native:build:ios     # builds the pinned terminal library
 bun run native:verify:ios
