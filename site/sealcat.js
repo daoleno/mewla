@@ -568,11 +568,15 @@ export function startCat(sealSvg) {
     return clamp(x - scrollX, Math.max(30, col.left + 56), Math.min(innerWidth - 30, col.right - 56)) + scrollX;
   }
   // look straight down from a page point for the first solid thing to stand on
-  const SOLID = 'a.btn, button, h1, h2, h3, p, li, pre, figure, aside, [data-perch], .scr, .three, .end-card';
+  const SOLID = 'a.btn, button, h1, h2, h3, p, li, pre, figure, aside, [data-perch], .vis, .ctas, .runs, .works, .steps, .trust, .end-card';
   function surfaceUnder(x, y) {
     for (let vy = Math.max(70, y - scrollY); vy < innerHeight - 4; vy += 6) {
-      const n = document.elementsFromPoint(x - scrollX, vy).find((m) => !m.closest('svg.cat, .cat-fx, .toy-btn, .bar'));
-      const solid = n?.closest(SOLID);
+      // three probes across the paws, so a gap between two buttons is not a hole
+      let solid = null;
+      for (const dx of [0, -22, 22]) {
+        const n = document.elementsFromPoint(x - scrollX + dx, vy).find((m) => !m.closest('svg.cat, .cat-fx, .toy-btn, .bar'));
+        if ((solid = n?.closest(SOLID))) break;
+      }
       if (!solid || solid === sealSvg) continue;
       const r = solid.getBoundingClientRect();
       // never a ledge hidden under the header
