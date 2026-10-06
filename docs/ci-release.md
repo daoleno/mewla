@@ -6,14 +6,14 @@ The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow 
 
 ## Ordinary CI triggers
 
-| Event | Fast checks (`installer`, `daemon`, `app`, `native-contract`, `release-identity`) | Native checks (`ios-native`, `android-native`, Android/iOS JS exports) |
+| Event | Fast checks (`installer`, `daemon`, `app`, `native-contract`, `release-identity`) | Native/packaging checks (`ios-native`, `android-native`, Android/iOS JS exports, daemon release binaries) |
 | --- | --- | --- |
 | Push to `main` | yes | no |
 | Pull request | yes | no |
 | Release tag push (`vX.Y.Z` / `vX.Y.Z-beta.N`) | yes | yes |
 | Manual `workflow_dispatch` of `ci.yml` | yes | yes |
 
-The `app` fast job runs unit tests, typecheck, and only the web export; the Android and iOS exports run with the native checks. `ci.yml` cancels superseded runs for the same ref.
+The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check; the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64, darwin arm64, with the embedded web UI) build only with the native/packaging checks. The `app` fast job runs unit tests, typecheck, and only the web export; the Android and iOS exports run with the native checks. `ci.yml` cancels superseded runs for the same ref.
 
 The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml` and `ios-release.yml`. Those workflows build the signed Android APK and the signed iOS IPA, so an Android native break is caught by `release-artifacts.yml` before the public release is published, and an iOS compile break is caught by `ios-release.yml` before the IPA is exported or uploaded. The unsigned Simulator build and the bounded Android native link additionally run on a manual `ci.yml` dispatch and on a maintainer-pushed release tag.
 
@@ -142,7 +142,7 @@ Do not create a GitHub Release by hand. Recovery repeats every identity, SHA, ma
 
 Android SDK setup explicitly requests `platform-tools` because the action's default also requests the removed SDK package `tools`. The following install step retains the pinned Android platform, build-tools, NDK, and CMake packages.
 
-The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Native CI (release tag pushes and manual `ci.yml` dispatch) builds Android debug/release variants with development signing; official certificate verification remains in the release workflow.
+The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Native CI (release tag pushes and manual `ci.yml` dispatch) builds Android debug/release variants with development signing and the release-shaped daemon binaries; official certificate verification remains in the release workflow, and `release-artifacts.yml` rebuilds the daemon archives before publishing.
 
 Recent pre-change GitHub runs on July 14, 2026 put the combined release-assets job at about 20–27 minutes warm/cold. Android dominated: clean prebuild plus Gradle took roughly 14–22 minutes, native Ghostty took 2–3 minutes, and all three daemon binaries took about 40 seconds at the end. The old redundant tag-triggered `native-libs` workflow also consumed about 25–35 minutes, including duplicate iOS/Android native builds.
 

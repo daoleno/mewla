@@ -48,13 +48,19 @@ describe("ordinary CI contract", () => {
     }
   });
 
-  it("runs tests, vet, and build in the daemon job", () => {
+  it("runs daemon tests and vet on every push and gates release targets", () => {
     const daemonJob = workflow.slice(
       workflow.indexOf("  daemon:"),
       workflow.indexOf("  app:"),
     );
     expect(daemonJob).toMatch(
-      /run: go test \.\/\.\.\.[\s\S]*run: go vet \.\/\.\.\.[\s\S]*run: \.\/scripts\/build-daemon-linux\.sh --out-dir/,
+      /run: go test \.\/\.\.\.[\s\S]*run: go vet \.\/\.\.\.[\s\S]*run: python3 scripts\/test-plugin-publisher-flags\.py/,
+    );
+    expect(daemonJob).toMatch(
+      /name: Build release targets\s*\n\s*if: github\.event_name == 'workflow_dispatch' \|\| github\.ref_type == 'tag'/,
+    );
+    expect(daemonJob).toMatch(
+      /name: Install web UI build dependencies\s*\n\s*if: github\.event_name == 'workflow_dispatch' \|\| github\.ref_type == 'tag'/,
     );
   });
 
