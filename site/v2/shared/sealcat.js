@@ -345,6 +345,9 @@ export function startCat(sealSvg) {
   ghost.style.transition = 'opacity .3s';
   atHome(true);
   root.addEventListener('click', hopInPlace);
+  // at home the carving is what you tap
+  sealSvg.addEventListener('click', () => { if (cat.home) hopInPlace(); });
+  sealSvg.style.cursor = 'pointer';
   if (reduce) {
     // no hopping: the cat stays asleep in the seal
     render(performance.now());
