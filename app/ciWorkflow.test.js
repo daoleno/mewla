@@ -19,10 +19,33 @@ describe("ordinary CI contract", () => {
     );
   });
 
-  it("exports Android, iOS and web JS bundles in the App job", () => {
-    expect(workflow).toContain("bunx expo export --platform android");
-    expect(workflow).toContain("bunx expo export --platform ios");
-    expect(workflow).toContain("bunx expo export --platform web");
+  it("exports only the web bundle on an ordinary push and gates native exports", () => {
+    const appJob = workflow.slice(
+      workflow.indexOf("  app:"),
+      workflow.indexOf("  ios-native:"),
+    );
+    expect(appJob).toContain("bunx expo export --platform web");
+    expect(appJob).toMatch(
+      /name: Android export\s*\n\s*if: github\.event_name == 'workflow_dispatch' \|\| github\.ref_type == 'tag'/,
+    );
+    expect(appJob).toMatch(
+      /name: iOS export\s*\n\s*if: github\.event_name == 'workflow_dispatch' \|\| github\.ref_type == 'tag'/,
+    );
+  });
+
+  it("runs native jobs only on tag pushes or manual dispatch", () => {
+    expect(workflow).toMatch(/push:\s*\n\s*branches: \[main\]\s*\n\s*tags:\s*\n\s*- "v\*\.\*\.\*"\s*\n\s*- "v\*\.\*\.\*-beta\.\*"/);
+    expect(workflow).toMatch(/pull_request:\s*\n\s*workflow_dispatch:/);
+    for (const [job, name] of [
+      ["ios-native", "iOS native"],
+      ["android-native", "Android native"],
+    ]) {
+      expect(workflow).toMatch(
+        new RegExp(
+          `${job}:\\s*\\n\\s*name: ${name}[^\\n]*\\n\\s*if: github\\.event_name == 'workflow_dispatch' \\|\\| github\\.ref_type == 'tag'`,
+        ),
+      );
+    }
   });
 
   it("runs tests, vet, and build in the daemon job", () => {
@@ -35,7 +58,7 @@ describe("ordinary CI contract", () => {
     );
   });
 
-  it("keeps bounded Android native PR evidence beside the iOS native job", () => {
+  it("keeps bounded Android native evidence beside the iOS native job", () => {
     expect(workflow).toMatch(
       /ios-native:\s*[\s\S]*?name: iOS native \(unsigned Simulator\)/,
     );
