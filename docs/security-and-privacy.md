@@ -1,181 +1,127 @@
 # Security and privacy
 
+Zen is self-hosted. Your repositories, credentials and agent state stay on your
+computer, and Zen operates no cloud service that stores your transcripts.
+
 ## Trust model
 
-Zen's normal self-managed path separates daemon identity and device
-authorization from reachability. Optional Zen Link adds a distinct transport
-identity. Across all configured paths, the boundaries are:
+Zen separates three things:
 
-1. **Reachability** — Zen Link, LAN, Tailnet, tunnel, or reverse proxy.
-2. **Daemon identity** — persistent Ed25519 key under the daemon state directory.
-3. **Link transport identity** — separate Ed25519 TLS key and X.509 certificate,
-   whose SPKI pin is signed by the daemon identity in Pairing V2.
-4. **Device authorization** — enrolled phone Ed25519 keys and purpose-bound
-   `ZenDevice` request signatures.
+1. **Reachability**: how the phone reaches the daemon (LAN, Tailscale, a
+   tunnel or a reverse proxy). Reaching the daemon grants nothing by itself.
+2. **Daemon identity**: a persistent Ed25519 key in the state directory.
+3. **Device authorization**: each phone or browser enrolls its own Ed25519 key
+   once, with a pairing code that expires after 15 minutes and works once.
+   Every later request is signed by the device and checked by the daemon.
 
-The relay is not an application trust anchor. In hosted mode the phone opens
-TLS 1.3 through the relay and verifies the Pairing V2 SPKI pin; only the daemon
-possesses that inner TLS key. The relay terminates a separate outer connector
-TLS session but sees only encrypted inner records.
+There is no long-lived shared secret for normal traffic, and no separate admin
+role: every paired device can list and revoke devices, including itself.
 
-An enrolled device that can control a live Terminal is trusted with the host
-authority already exposed by that Session. Session File Preview is read-only
-and bounded, but it is not a workspace sandbox: absolute paths and symlinks
-resolve on the daemon host. Pair only devices you trust with Terminal access.
+## What a paired device can do
 
-## Pairing and replay boundaries
-
-- V1 manual pairing and V2 Link pairing both use the existing one-time daemon
-  enrollment token (15-minute default).
-- V2 adds a random, short-lived relay admission alias. Relay routing reserves
-  it for one stream, but only the Connector's daemon-signed confirmation of an
-  actual `POST /pair` atomically consumes it. Empty TLS preflights and wrong
-  paths release the reservation; expiry, replay, route, daemon, and stream
-  binding remain enforced.
-- V2 signs daemon ID/key, route, transport pin, all relay candidates,
-  admission, enrollment token, and expiry with the daemon identity.
-- Connector control requests use short timestamps, random nonces, an
-  operator-provisioned service-admission token, and a daemon signature.
-- Relay stream attachment tickets are random, short-lived, and single-use.
-- Normal requests bind device, daemon, purpose, timestamp, and nonce.
-
-The connector token is not a user password and is not sufficient to decrypt,
-pair with, or impersonate a daemon. Keep it secret because it controls who may
-consume relay route capacity.
-
-## Relay-visible metadata
-
-The MVP relay necessarily observes:
-
-- connection source/destination IP and port
-- connection timing, duration, direction, and byte counts
-- aggregate active route/stream counts
-- TLS ClientHello routing SNI (an unguessable route/admission label)
-- daemon identity and route during authenticated connector registration
-- selected protocol version and error class
-
-It must not log or expose as metric labels:
-
-- Pairing/enrollment tokens, connector tokens, stream tickets, or private keys
-- Terminal, Chat, Brain, Calendar, Work, or agent messages
-- HTTP methods, paths, query strings, headers, device signatures, or cookies
-- filenames, host paths, MIME types, file bodies, upload names, or Range values
-- daemon IDs, route IDs, admission aliases, SNI values, or device IDs
-
-The shipped operator endpoints expose aggregate metadata only:
-`/healthz`, `/readyz`, and `/metrics`.
-
-## Bounds and abuse resistance
-
-The relay enforces:
-
-- bounded client and connector handshake concurrency
-- bounded total streams and streams per route
-- 64 KiB maximum routing ClientHello and 64 KiB maximum control frame
-- TLS/auth, connector attach, and bidirectional idle deadlines
-- fixed 32 KiB copy buffers and TCP backpressure
-- one-time admissions/nonces/tickets and explicit route conflict rejection
-- graceful listener shutdown and connector re-registration after restart
-
-The daemon independently enforces device authorization and route-specific size
-limits. A public Link operator still needs network DDoS controls, egress alerts,
-per-admission rate policy, token rotation, and regional capacity alarms before
-claiming production readiness. The MVP intentionally does not implement user
-accounts, billing, or a global abuse database.
+A paired device can open any Session's live terminal, so it has the same power
+over your computer as those Sessions. File preview is read-only, but it is not
+a sandbox: it can open files anywhere the daemon's user can read. **Pair only
+devices you trust with a terminal on that computer.**
 
 ## What to expose
 
-- Default daemon bind remains `127.0.0.1:9876`.
-- Zen Link opens only outbound connector connections and requires no new daemon
-  public port.
-- `zen --lan` plus `http://` does not encrypt the LAN hop. Use it only on a
-  trusted private network and restrict port 9876 with the host firewall.
-- Tailscale IP HTTP remains inside the encrypted Tailnet and its ACL boundary.
-- A Cloudflare/reverse-proxy HTTPS origin remains public according to that
-  operator's policy and must forward the full origin.
-- All transports preserve `/ws`, `/health`, `/auth-check`, `/pair`, `/upload`,
-  `/session-file-capability`, `/session-file`, and (for device administration)
-  `/devices`.
-- The [web UI](web-ui.md) page is served only to loopback clients on a loopback
-  `Host`, or on an HTTPS origin named with `-web-origin`. Serving the page grants
-  nothing; the browser must still pair as a device.
+- The daemon listens on `127.0.0.1:9876` by default, reachable only from the
+  same computer.
+- `zen --lan` serves plain HTTP on every IPv4 interface. Use it only on a
+  network you trust, and restrict port `9876` with a firewall.
+- Through Tailscale, traffic stays inside your tailnet and its access rules.
+- An HTTPS tunnel or reverse proxy makes the daemon reachable from the
+  internet according to that service's settings. `/health` answers without
+  authentication; every other route needs a pairing code or a device signature.
+- The web UI is served only to the same computer, or on HTTPS origins you allow
+  with `-web-origin`. Loading the page grants nothing; the browser must still
+  pair.
 
-## Data locations on the daemon host
+See [Connect and pair](connect-and-pair.md) for each route.
 
-| Path                                                            | Contents                                                                    |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `~/.zen/identity.json`                                          | Daemon Ed25519 private key                                                  |
-| `~/.zen/link-identity.json`                                     | Link route and TLS Ed25519 private key                                      |
-| `~/.zen/link.json`                                              | Optional relay candidates and connector token source                        |
-| `~/.zen/trusted-devices.json`                                   | Enrolled device public keys                                                 |
-| `~/.zen/pairing-tokens.json`                                    | Short-lived outstanding enrollment tokens                                   |
-| `<state>/uploads/`                                              | Authenticated uploads: **2 GiB/file, 8 GiB aggregate, seven-day retention** |
-| `~/.zen/work/`, `~/.zen/brain/`                                 | User-owned Work and Brain data                                              |
-| Agent homes                                                     | Provider transcripts Zen may read for Chat                                  |
-| `~/.zen/worktrees/`, `~/.zen/run/worker-resources/`, `~/.zen/t/` | Explicit agent worktree, lease, and owned temporary state                   |
+## Agents and model providers
 
-The previous documentation values of 32 MiB/file and 512 MiB aggregate were
-stale. The authoritative daemon constants and app preflight are 2 GiB/file and
-8 GiB aggregate. Tests exercise boundaries with limit readers/small fixtures,
-not multi-GiB repository artifacts.
+Agents run with your user's permissions, and some run without approval prompts.
+That is a choice about your computer, not something Zen's network layer can
+contain. Read [Permission bypass risks](executors.md#permission-bypass-risks).
 
-Treat the state directory like SSH keys: directory mode `0700`, private files
-`0600`, never commit it, and never publish a pairing link.
+Model providers see whatever the agents send them. Zen reads agent transcripts
+from each agent's own home directory to show Chat and Stats.
 
-## Mobile storage and pinned loopback bridge
+## Data on your computer
 
-The device Ed25519 seed is held in platform secure storage. Server identity,
-transport candidates, route, and public SPKI pin are app metadata. The web UI
-has no keychain and keeps the seed in the origin's local storage.
+All paths are under the state directory, `~/.zen` by default.
 
-For Link, the shared TypeScript owner asks the Android/iOS native module for a
-loopback-only local L4 bridge. That bridge opens TLS 1.3 to the selected relay
-hostname, sets SNI, verifies SHA-256 of the daemon certificate SPKI in constant
-time, and streams bytes with bounded buffers/backpressure. The same bridge is
-used by WSS, Pair/Probe HTTP, native streaming upload, and Session File/Range.
-It is not a WebSocket-only pin. Pairing starts the bridge in on-demand mode so
-creating the local listener cannot spend a one-time admission. Every
-post-pairing HTTP/WSS owner accepts the canonical `StoredServer`, not a bare
-Link URL; missing route, pin, or candidate availability fails closed with a
-Zen Link setup/offline error. Manual V1/self-managed servers continue to return
-their original endpoint.
+| Path | Contents |
+| --- | --- |
+| `identity.json` | The daemon's private key |
+| `trusted-devices.json` | Public keys of paired devices |
+| `pairing-tokens.json` | Unused pairing codes until they expire |
+| `addresses.json` | Addresses the daemon can be reached at |
+| `uploads/` | Files sent from the app or Telegram: at most 2 GiB per file and 8 GiB in total, deleted after seven days |
+| `work/`, `brain/` | Work records and Brain's workspace |
+| `calendar/` | Calendar items |
+| `telegram/` | Telegram binding and delivery state; the bot token is in its own private file |
+| `worktrees/`, `t/` | Worker scratch space and temporary files |
 
-Native image/PDF loaders may issue HEAD, Range, and automatic retries. Zen does
-not place a replay-protected ordinary `ZenDevice` nonce in that reusable
-resource URL. A fresh signed POST to `/session-file-capability` instead returns
-separate two-minute GET and HEAD daemon signatures. Each signature is bound to
-daemon, enrolled device, live Session/process/start, exact path, inspected file
-generation, method, and expiry. Range may repeat within that exact file and
-method scope; changed fields, expiry, or device revocation fail with 401.
+Plugin and Model Provider credentials are stored in private files in the state
+directory, never shown back in the app.
 
-Expo Go cannot provide this custom native module. Use a current Android/iOS
-development or release build for Zen Link.
+Treat the state directory like your SSH keys: keep it private (`0700`), never
+commit it, and never share a pairing link.
 
-## Device revocation
+## Data on your phone
 
-Removing a server in mobile Settings is local and does not revoke its key.
-On the daemon host:
+The device's private key is kept in the platform's secure storage (Keychain on
+iOS, Keystore-backed storage on Android). A paired browser keeps its key in the
+page's local storage, which is weaker; pair only browser profiles you control.
 
-```bash
+## Outbound connections
+
+The daemon connects out only for features you use:
+
+| Destination | When |
+| --- | --- |
+| The release server | `zen update`, and an occasional update hint when you start `zen` in a terminal |
+| `models.dev` | Model names and reference prices for Stats and Model Providers |
+| Expo push service | Sending a push notification to your phone |
+| The model provider you selected | Requests from Codex and Claude Code through the local gateway |
+| Connected plugin services | Calls Brain or Workers make |
+| Telegram Bot API | When Telegram is connected |
+| Cloudflare | When you start a Quick Tunnel |
+
+Zen sends no telemetry.
+
+## Revoke a device
+
+Removing a server in the app only forgets it on that phone. To revoke a device's
+key, on the computer:
+
+```sh
 zen devices list
 zen devices revoke -id <device-id>
 ```
 
-The authenticated protocol owner is `GET /devices` with the operation-specific `zen-device-admin:list:GET:/devices` purpose and `DELETE /devices` with `zen-device-admin:revoke:DELETE:/devices:sha256=<digest>`, where the digest binds the trimmed target device ID. Every trusted device may revoke itself or another trusted device; there is no separate administrator role. A successful revocation persists the removed trusted key, immediately closes that device's authenticated WebSockets, and rejects its subsequent signed requests. The CLI asks the running daemon to perform listing and revocation through its private local control socket; it constructs a direct state owner only after an exclusive lifecycle lock proves the daemon is offline.
+Revocation closes the device's live connections immediately and rejects its
+later requests.
 
-## Executor risk
+## Diagrams in Markdown
 
-Some host executor configurations can disable sandbox or approval prompts.
-That is a daemon-host trust choice, not authority granted to the relay. See
-[executors.md](executors.md).
+Mermaid diagrams in agent output are treated as untrusted. They render in an
+isolated view that cannot load network resources, open windows or run click
+handlers; unsupported or oversized diagrams are shown as source.
 
-## Untrusted Markdown diagrams
+## Report a vulnerability
 
-Fenced Mermaid flowcharts are untrusted input. Zen strips init/frontmatter
-overrides and `click` statements, disables HTML labels except line breaks,
-locks `securityLevel` to `strict`, and renders in a local WebView that cannot
-navigate, fetch, open windows, or expose host bridge methods. Render jobs share
-one engine WebView with a bounded queue; preview WebViews are also capped.
-Unsupported diagram types and oversize sources fall back to readable code.
+Report security issues privately to the Zen maintainers, as described in the
+[security policy](https://github.com/daoleno/zen/security/policy). Please
+include:
 
-Report vulnerabilities through [SECURITY.md](../SECURITY.md).
+- the affected part (daemon, app, pairing, upload, executor launch);
+- steps to reproduce;
+- the impact (for example authentication bypass, code execution on the host,
+  data exposure).
+
+Do not open a public issue for an unpatched flaw that can be exploited
+remotely. Security fixes target the latest stable release and the main branch.

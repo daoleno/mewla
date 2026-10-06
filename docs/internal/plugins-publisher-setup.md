@@ -46,7 +46,7 @@ GitHub now defaults new OAuth apps to expiring tokens. Device-issued refresh use
 
 ### Slack release artifact
 
-Import/review `docs/plugins-slack-manifest.json` in the confirmed Slack publisher account. Enabling PKCE marks the app public and is a one-way setting except via Slack support. Register `zen://plugins`, user scopes `channels:read`, `channels:history`, `search:read`, with `chat:write` requested only for the changes group. No bot scopes on native redirects. Ship only `connections.SlackPublicClientID`; no client secret. Custom-scheme authorization always rotates tokens, even if rotation is switched off, and refresh tokens for PKCE apps expire after 30 days. Zen's adapter handles rotation and surfaces reconnect on expired authorization.
+Import/review `docs/internal/plugins-slack-manifest.json` in the confirmed Slack publisher account. Enabling PKCE marks the app public and is a one-way setting except via Slack support. Register `zen://plugins`, user scopes `channels:read`, `channels:history`, `search:read`, with `chat:write` requested only for the changes group. No bot scopes on native redirects. Ship only `connections.SlackPublicClientID`; no client secret. Custom-scheme authorization always rotates tokens, even if rotation is switched off, and refresh tokens for PKCE apps expire after 30 days. Zen's adapter handles rotation and surfaces reconnect on expired authorization.
 
 This removes the earlier proposed Slack HTTPS/static handoff. The earlier advice to disable Slack token rotation was incorrect and is superseded by this document.
 

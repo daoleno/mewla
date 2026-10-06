@@ -1,0 +1,38 @@
+{
+  "home": { "source": "docs/README.md", "title": "Zen documentation" },
+  "groups": [
+    {
+      "title": "Start",
+      "pages": [
+        { "source": "docs/get-started.md", "slug": "get-started", "title": "Get started" },
+        { "source": "docs/install-daemon.md", "slug": "install", "title": "Install" },
+        { "source": "docs/connect-and-pair.md", "slug": "connect-and-pair", "title": "Connect and pair" }
+      ]
+    },
+    {
+      "title": "Agents",
+      "pages": [
+        { "source": "docs/executors.md", "slug": "agents", "title": "Agents and executors" },
+        { "source": "docs/brain-and-work.md", "slug": "brain-and-work", "title": "Brain and Work" }
+      ]
+    },
+    {
+      "title": "Around the agents",
+      "pages": [
+        { "source": "docs/plugins.md", "slug": "plugins", "title": "Plugins" },
+        { "source": "docs/calendar.md", "slug": "calendar", "title": "Calendar" },
+        { "source": "docs/services.md", "slug": "services", "title": "Services" },
+        { "source": "docs/notifications.md", "slug": "notifications", "title": "Notifications and Telegram" },
+        { "source": "docs/providers-and-usage.md", "slug": "providers-and-usage", "title": "Providers and usage" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        { "source": "docs/security-and-privacy.md", "slug": "security", "title": "Security and privacy" },
+        { "source": "docs/troubleshooting.md", "slug": "troubleshooting", "title": "Troubleshooting" },
+        { "source": "docs/releases/README.md", "slug": "releases", "title": "Releases", "release_index": true }
+      ]
+    }
+  ]
+}

@@ -1,44 +1,49 @@
 # Zen documentation
 
-This documentation is organized by what you are trying to accomplish. If you only want to use Zen, start with the first three guides; architecture and release documents are for contributors and maintainers.
+Zen is a phone app plus a small daemon on your own computer. Every coding agent
+and shell on that computer becomes a Session you can read as chat, drive as a
+live terminal, or hand to Brain, which splits a goal into Work for other agents.
 
-## Get Zen running
+New here? Read [Get started](get-started.md), then follow the guides in order.
 
-1. [Install or upgrade the daemon](install-daemon.md)
-2. [Connect the daemon and pair your phone](connect-and-pair.md)
-3. [Configure an AI executor](executors.md)
-4. Install or build a mobile client:
-   - [Android app](android.md)
-   - [iOS app](ios.md)
-   - [Web UI in a browser](web-ui.md)
+## Start
 
-If something does not work, run `zen doctor` on the host and continue with [Troubleshooting](troubleshooting.md).
+1. [Get started](get-started.md): what Zen is and how the pieces fit.
+2. [Install](install-daemon.md): the daemon on your computer and the app on your phone.
+3. [Connect and pair](connect-and-pair.md): reach the daemon from your phone, on the same Wi-Fi or from anywhere.
 
-## Understand the product
+## Agents
 
-- [Security and privacy](security-and-privacy.md) explains keys, pairing, exposed routes, local data, and executor risk.
-- [Architecture](architecture.md) explains the app, daemon, network, tmux, and provider boundaries.
-- [Optional Zen Link Relay operations](zen-link-relay.md) covers the inert-by-default single-region relay source, explicit connector config, local E2E, limits, upgrade, and rollback. No Link service is deployed by this repository.
-- [Brain lifecycle](brain-lifecycle.md) explains Work, Event, Session, active Attempt, current operational relationships, and durable backlog.
-- [Notifications](notifications.md) explains the current notification model.
-- [Telegram setup and recovery](telegram-brain-connection.md#setup-and-recovery)
-- [Usage and pricing](usage-and-pricing.md)
-- [Git review](git-review.md)
-- [Verification of control-plane changes](verification.md)
-- [Services](services.md) explains the mobile Services sheet and the retained-service handoff for persistent Agent services.
-- [Mobile copy boundaries](mobile-copy.md)
-- [Mobile interface structure](mobile-interface.md) describes the shell, Brain, Sessions overview, Session chrome, and shared menu, confirm, and status patterns.
+- [Agents and executors](executors.md): which agent CLIs Zen runs, the safe profile, and how Brain picks a model.
+- [Brain and Work](brain-and-work.md): give Brain a goal and follow the Work it hands to Workers.
 
-## Development and maintenance
+## Around the agents
 
-- [Contributing](../CONTRIBUTING.md)
-- [Design lint setup and commands](design-lint.md)
-- [Android native terminal and ABI contract](android.md#architecture--abi-contract)
-- [iOS source build and Ghostty XCFramework contract](ios.md#native-terminal--xcframework-contract)
-- [iOS CI, signing, and TestFlight automation](ios-ci-release.md)
-- [CI release pipeline](ci-release.md)
-- [Versioned release notes](releases/)
-- [Third-party assets and licenses](third-party-assets.md)
+- [Plugins](plugins.md): connect Linear, Notion, GitHub, Slack, Google Workspace or a custom service.
+- [Calendar](calendar.md): events, reminders, deadlines and scheduled actions.
+- [Services](services.md): ports your agents opened, with an optional temporary public URL.
+- [Notifications and Telegram](notifications.md): when Zen interrupts you, and Telegram as a second channel.
+- [Providers and usage](providers-and-usage.md): your own model endpoints and keys, and what each model cost.
+
+## Reference
+
+- [Security and privacy](security-and-privacy.md): what is trusted, what is exposed and where data lives.
+- [Troubleshooting](troubleshooting.md): fixes for the common problems.
+- [Releases](releases/README.md): release notes and known issues.
+
+<!-- repo-only -->
+## For contributors
+
+These files stay in the repository and are not published on the docs site.
+
+- [Contributing](../CONTRIBUTING.md) and [internal engineering notes](internal/README.md)
+- [Architecture](architecture.md)
+- [Work lifecycle](work-lifecycle.md) and [behavior testing](behavior-testing.md)
+- [Resource telemetry contract](resource-telemetry.md)
+- [CI release pipeline](ci-release.md) and [iOS CI and TestFlight](ios-ci-release.md)
 - [Known release blockers](release-blockers.md)
+- [Third-party assets and licenses](third-party-assets.md)
 
-Design explorations and implementation notes may also live in this directory. They are not part of the installation path unless linked from one of the guides above.
+The public docs site is generated from the pages above by
+`scripts/site-docs/build.py`; its page list is `scripts/site-docs/nav.json`.
+<!-- /repo-only -->

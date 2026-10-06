@@ -175,4 +175,4 @@ native-process recovery after the underlying tmux Session truly disappears.
 The process may still run outside discoverable ownership; that uncertainty
 must remain distinct from success and must never authorize business replay.
 
-Worker pane ownership and migration are described in [Worker pane identity](worker-pane-identity.md). The real-tmux regressions are `TestRealTmuxWorkerOwnsPaneAcrossSplitAndRemoval`, `TestRealTmuxWorkerEnvironmentAndOwnershipStayInPane`, and `TestPaneMigrationPreservesRunningTurnAcrossRestart`. All mutations use owned scratch sockets.
+Worker pane ownership and migration are described in [Worker pane identity](internal/worker-pane-identity.md). The real-tmux regressions are `TestRealTmuxWorkerOwnsPaneAcrossSplitAndRemoval`, `TestRealTmuxWorkerEnvironmentAndOwnershipStayInPane`, and `TestPaneMigrationPreservesRunningTurnAcrossRestart`. All mutations use owned scratch sockets.

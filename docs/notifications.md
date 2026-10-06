@@ -1,135 +1,100 @@
-# Notifications
+# Notifications and Telegram
 
-This document defines the OSS-core notification policy for zen.
+Zen interrupts you only when an agent needs you or finished while you were
+away. It is not a progress feed.
 
-Calendar reminder notifications are covered separately in [calendar.md](calendar.md). They are explicit user commitments, so they are scheduled locally after sync and are not subject to the agent-state suppression rules below.
+## Push notifications
 
-## Goal
+The daemon sends a push for three agent states:
 
-zen notifications are not a progress feed.
-They should only interrupt the user when one of two things is true:
+| State | Title | Priority |
+| --- | --- | --- |
+| Needs input | `<name> needs input` | High |
+| Failed | `<name> failed` | High |
+| Finished | `<name> finished` | Default |
 
-1. The agent needs attention now.
-2. The agent finished while the user was away from that session.
+The name is the Session's alias or project, not a raw `tmux` name. "Finished"
+means the Session ended, not that the task succeeded; open it to check.
 
-That keeps the system simple, predictable, and low-noise.
+Zen stays silent while an agent is running, while its state is unknown, and for
+connection changes.
 
-## Current Product Policy
+If you are looking at that exact Session in the app, Zen does not notify you.
+Anywhere else, including another Session or with the app in the background, it
+sends the push.
 
-zen should notify on these agent states:
+Calendar sends two other kinds of alert:
 
-- `blocked`
-- `failed`
-- `done`
+- **Reminders** are scheduled on the phone itself, so they fire without a
+  connection to the daemon.
+- A **scheduled action** sends one push when its result is ready, which opens
+  the Brain thread that holds the result. The alert never contains the result
+  itself.
 
-zen should stay silent for these states and events:
+Each push is a single attempt. If delivery fails or the daemon restarts at the
+wrong moment, there may be no alert, but the state and results are still there
+when you open the app.
 
-- `running`
-- `unknown`
-- reconnect / disconnect / websocket chatter
-- periodic refreshes with no meaningful state change
+Push delivery in your own builds of the app needs your own Expo project; Zen
+works without push.
 
-## Suppression Rule
+## Telegram
 
-There is one primary suppression rule:
+Telegram is a second way to talk to the current server's Brain and Workers. It
+uses a Telegram bot that you create; messages go to the same Brain thread as
+the app.
 
-- If the exact Worker session is currently open and focused, do not notify.
+### Connect
 
-Everything else should stay straightforward:
+1. Create a bot with Telegram's [BotFather](https://t.me/BotFather) and copy
+   its token.
+2. In the app, open **Settings > Channels > Telegram**, paste the token and tap
+   **Verify token**.
+3. Tap **Connect Telegram**. It opens a short-lived link to your bot; tap
+   **Start** in the bot chat. Zen binds to your Telegram account and private
+   chat, not to a username.
 
-- If the app is foregrounded but the user is looking at another session, the daemon still attempts a remote push.
-- If the app is backgrounded, suspended, or not running, the daemon uses the same remote-push path.
-- We do not need reminder ladders, digests, or a manager layer in OSS core right now.
+**Disconnect** pauses delivery and keeps the binding; **Reconnect** resumes it.
+Messages sent while disconnected are not delivered later. **Advanced** holds
+token replacement, unlinking your account and removing the bot.
 
-## Notification Copy
+From the computer, `zen telegram setup`, `status`, `enable` and `disable`
+configure the running daemon. They never take a token as a command-line
+argument.
 
-### Blocked
+### Talk to Brain and Sessions
 
-Use when the agent cannot continue without the user.
+Plain messages go to Brain. If your bot chat has topics enabled, Zen creates a
+**Brain** topic and one topic per Worker Session; writing in a Session's topic
+sends to that Session. When a Session is gone for good, its topic and its
+messages are deleted. Pin the Brain topic yourself in Telegram if you want it
+on top.
 
-- Title: `<label> needs input`
-- Body: cleaned summary, or `Waiting for your response.`
-- Priority: high
+| Command | Effect |
+| --- | --- |
+| `/sessions` | List current Worker Sessions |
+| `/use <number or session id>` | Send following messages to that Session (chats without topics) |
+| `/brain` | Go back to Brain |
+| `/status` | Show the current Session, turn and Work state |
+| `/new` | Start a fresh Brain thread (in a Session topic it does not reset Brain) |
+| `/help` | Show the command list |
 
-### Failed
+A selected Session that disappears stays selected and unavailable, so your next
+message never silently goes to Brain instead.
 
-Use when the session ended in a failure state that likely needs inspection.
+### Files
 
-- Title: `<label> failed`
-- Body: cleaned summary, or `Check the terminal for details.`
-- Priority: high
+Photos, documents, voice notes and stickers you send reach Brain or the
+selected Session as attachments, the same way as uploads from the app. Limits:
+20 MiB per file or album, ten files per album. Zen does not transcribe audio or
+interpret video; what the agent can do with a file depends on the agent. Zen
+replies "Files received by Zen" once the files are accepted.
 
-### Done
+Replies from Brain and Sessions arrive as text. Zen does not send files back to
+Telegram.
 
-Use when the session finished and the user is not currently in that session.
+### What Telegram can see
 
-- Title: `<label> finished`
-- Body: cleaned summary, or `Session finished.`
-- Priority: default
-
-Important:
-
-- `done` should use neutral wording.
-- Do not say `completed successfully`.
-- Today the classifier can tell that the session finished, but not that the underlying business task fully succeeded.
-
-## Content Rules
-
-### Labels
-
-Prefer a short user-facing label, not raw tmux or shell names.
-
-Preferred order when available:
-
-1. Explicit user alias
-2. Project name
-3. Cleaned agent name
-4. Agent ID as fallback
-
-Examples:
-
-- good: `backend-api`
-- good: `release-cut`
-- bad: `./bin/zen (main:7)`
-- bad: `server_mnguamzs_a1sz5a`
-
-### Body text
-
-The body should explain why the notification matters.
-
-Rules:
-
-- Prefer the most actionable summary we have.
-- Strip timestamps.
-- Strip shell noise when it is not the actual reason.
-- Keep it concise, roughly within 100 to 120 characters.
-- Avoid echoing internal IDs unless that is the only identifier available.
-
-## Runtime ownership
-
-Brain review events are separate from classifier OS alerts. Loss of delegated
-execution evidence opens one canonical review event even if no provider result
-arrives. Its lineage card shows **Needs review**, not Working or a fabricated
-completion. Claiming that event shows Reviewing; ending a handling attempt does
-not automatically replay input or reopen an unchanged event. A newer canonical
-result can replace the loss event. These facts do not imply guaranteed OS push
-delivery or that an accepted prompt was never received.
-
-Current OSS-core behavior is intentionally simple:
-
-- The daemon is the only runtime lifecycle/result OS-alert producer. The app registers its Expo token, presents incoming pushes, and handles deep links; it does not mirror agent or scheduled-result state into local alerts.
-- Ordinary delegated `blocked`, `failed`, and `done` transitions each trigger one best-effort daemon attempt unless that exact agent is actively viewed. Viewing a different agent or a non-Terminal screen does not suppress it.
-- Scheduled actions run in non-delegated sessions and never enter the generic agent-lifecycle alert path. The first successfully persisted Calendar terminal result makes one separate best-effort push attempt for either completion or failure, deep-linking to the frozen Brain thread.
-- Explicit future Calendar reminders remain locally scheduled after sync. They are a separate user commitment, not a runtime lifecycle producer.
-
-Runtime delivery is intentionally at-most-once attempt, not reliable delivery. Missing registration, Expo/HTTP failure, a transient in-process Calendar event drop, or a daemon crash after the terminal commit can produce no OS alert. Zen does not retain an outbox or retry; the durable Calendar result and Brain projection remain available when the user next opens the app.
-
-## Future Work
-
-If notification behavior needs to expand later, evaluate it from observed product needs. Plausible independent additions are:
-
-1. multi-device push registrations
-2. richer classifier reasons for better summaries
-3. optional per-run `notify_on_completion`
-
-Those are later improvements, not prerequisites for shipping the OSS core.
+Bot chats are Telegram cloud chats, so Telegram stores their history. Removing
+Zen's configuration does not delete that history. Only your own account in the
+bound private chat can send input; groups and other users are ignored.

@@ -55,7 +55,7 @@ thread.
   <img src="site/assets/brain.svg" width="880" alt="A goal becomes three Work items; Brain reads routing.md and gives them to claude, codex and pi Workers">
 </p>
 
-Details: [Architecture](docs/architecture.md), [Brain lifecycle](docs/brain-lifecycle.md),
+Details: [Architecture](docs/architecture.md), [Brain and Work](docs/brain-and-work.md),
 [Work lifecycle](docs/work-lifecycle.md), [Worker routing](docs/executors.md#worker-routing).
 
 ## Around the agents
@@ -97,8 +97,8 @@ zen --lan
 ```
 
 3. Install the app: the Android arm64 APK from
-   [Releases](https://github.com/daoleno/zen/releases) (see [Android](docs/android.md)),
-   or build iOS from source (see [iOS](docs/ios.md)).
+   [Releases](https://github.com/daoleno/zen/releases) (see [Install](docs/install-daemon.md#android)),
+   or build iOS from source (see [Install](docs/install-daemon.md#ios)).
 4. Scan the QR code (or paste the link in **Settings > Pair Server**), then open **Brain**.
 5. Later devices: run `zen pair` for a fresh code, or open Zen in a browser on an
    HTTPS address and approve it from a paired device by matching the number it shows.
@@ -167,9 +167,9 @@ shown back, and are separate from the Brain executor choice.
 | Android app (arm64 APK on Releases) | Beta, released |
 | iOS app | Source build. A [TestFlight preview](https://testflight.apple.com/join/rTKCDzMt) is awaiting Apple review |
 | Brain, Workers, routing, durable Work lifecycle | Beta |
-| Calendar scheduled actions, Telegram channel | Beta ([Calendar](docs/calendar.md), [Telegram](docs/telegram-brain-connection.md)) |
+| Calendar scheduled actions, Telegram channel | Beta ([Calendar](docs/calendar.md), [Telegram](docs/notifications.md#telegram)) |
 | Plugins (Linear, Notion, GitHub, Slack, Google Workspace) | Preview; first-time connection is not ready for every service ([Plugins](docs/plugins.md)) |
-| Zen Link relay | Optional source only. No hosted relay is operated. See [Zen Link Relay](docs/zen-link-relay.md) |
+| Zen Link relay | Optional source only. No hosted relay is operated. See [Zen Link Relay](docs/internal/zen-link-relay.md) |
 | Web client | Out of scope |
 
 Known release issues: [docs/release-blockers.md](docs/release-blockers.md).
@@ -201,8 +201,8 @@ landing page, whose `site/assets/*.svg` drawings this README also uses
 (regenerate with `python3 scripts/site-svg/build.py`);
 `scripts/` build and release tooling.
 
-The native terminal uses libghostty; see [Android](docs/android.md#architecture--abi-contract)
-and [iOS](docs/ios.md#native-terminal--xcframework-contract) for build contracts.
+The native terminal uses libghostty; see [Android](docs/internal/android-development.md#architecture--abi-contract)
+and [iOS](docs/internal/ios-development.md#native-terminal--xcframework-contract) for build contracts.
 All documentation starts at [docs/README.md](docs/README.md).
 
 ## Contributing

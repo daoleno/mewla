@@ -1,7 +1,7 @@
 # Evaluate Brain engineering guidance
 
 Use the five cases in
-[`engineering-scenarios.json`](../daemon/brain/testdata/engineering-scenarios.json).
+[`engineering-scenarios.json`](../../daemon/brain/testdata/engineering-scenarios.json).
 They contain user requests, bounded context, acceptable judgments, rejection
 signals and illustrative briefs. The examples are not golden model outputs;
 judge decisions and proportionality, not exact wording or playbook names.

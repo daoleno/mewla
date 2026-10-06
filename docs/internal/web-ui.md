@@ -40,7 +40,7 @@ does not expose the web UI over plain HTTP.
 
 To use it remotely, put the daemon behind an HTTPS endpoint the browser trusts,
 such as Tailscale Serve, Cloudflare Tunnel, or a reverse proxy. The endpoint
-must forward the full origin (see [Connect and pair](connect-and-pair.md)) and
+must forward the full origin (see [Connect and pair](../connect-and-pair.md)) and
 keep the original `Host` header. Then allow that exact origin:
 
 ```bash
