@@ -2,7 +2,20 @@
 
 Release preparation starts in the manual [`.github/workflows/release-next-beta.yml`](../.github/workflows/release-next-beta.yml) workflow. Verified artifact construction and public GitHub Release publication remain in [`.github/workflows/release-artifacts.yml`](../.github/workflows/release-artifacts.yml); the preparation workflow does not build or publish public assets itself.
 
-The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow builds the same pinned `libghostty-vt` C ABI for Android on Linux and as an iOS device/simulator XCFramework on macOS. Normal CI compiles and links an unsigned iOS Simulator app on macOS. Signed iOS archive/export and optional TestFlight upload are isolated in [`ios-release.yml`](../.github/workflows/ios-release.yml); see [iOS CI and release automation](ios-ci-release.md).
+The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow builds the same pinned `libghostty-vt` C ABI for Android on Linux and as an iOS device/simulator XCFramework on macOS. Ordinary `push` to `main` and pull requests run only fast checks in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Signed iOS archive/export and optional TestFlight upload are isolated in [`ios-release.yml`](../.github/workflows/ios-release.yml); see [iOS CI and release automation](ios-ci-release.md).
+
+## Ordinary CI triggers
+
+| Event | Fast checks (`installer`, `daemon`, `app`, `native-contract`, `release-identity`) | Native checks (`ios-native`, `android-native`, Android/iOS JS exports) |
+| --- | --- | --- |
+| Push to `main` | yes | no |
+| Pull request | yes | no |
+| Release tag push (`vX.Y.Z` / `vX.Y.Z-beta.N`) | yes | yes |
+| Manual `workflow_dispatch` of `ci.yml` | yes | yes |
+
+The `app` fast job runs unit tests, typecheck, and only the web export; the Android and iOS exports run with the native checks. `ci.yml` cancels superseded runs for the same ref.
+
+The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml` and `ios-release.yml`. Those workflows build the signed Android APK and the signed iOS IPA, so an Android native break is caught by `release-artifacts.yml` before the public release is published, and an iOS compile break is caught by `ios-release.yml` before the IPA is exported or uploaded. The unsigned Simulator build and the bounded Android native link additionally run on a manual `ci.yml` dispatch and on a maintainer-pushed release tag.
 
 ## What it does
 
@@ -129,7 +142,7 @@ Do not create a GitHub Release by hand. Recovery repeats every identity, SHA, ma
 
 Android SDK setup explicitly requests `platform-tools` because the action's default also requests the removed SDK package `tools`. The following install step retains the pinned Android platform, build-tools, NDK, and CMake packages.
 
-The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Ordinary native CI builds Android debug/release variants with development signing; official certificate verification remains in the release workflow.
+The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Native CI (release tag pushes and manual `ci.yml` dispatch) builds Android debug/release variants with development signing; official certificate verification remains in the release workflow.
 
 Recent pre-change GitHub runs on July 14, 2026 put the combined release-assets job at about 20–27 minutes warm/cold. Android dominated: clean prebuild plus Gradle took roughly 14–22 minutes, native Ghostty took 2–3 minutes, and all three daemon binaries took about 40 seconds at the end. The old redundant tag-triggered `native-libs` workflow also consumed about 25–35 minutes, including duplicate iOS/Android native builds.
 

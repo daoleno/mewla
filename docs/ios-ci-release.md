@@ -4,7 +4,7 @@ Zen deliberately uses two different Apple artifacts because CI validation and en
 
 | Path | Trigger | Signing | Artifact | Intended use |
 | --- | --- | --- | --- | --- |
-| iOS native CI | push to `main` or pull request | none | `Zen.app` for Apple Silicon iOS Simulator | Compile/link validation on macOS; not installable on an iPhone |
+| iOS native CI | release tag push or manual `ci.yml` dispatch | none | `Zen.app` for Apple Silicon iOS Simulator | Compile/link validation on macOS; not installable on an iPhone |
 | iOS signed production | manual `workflow_dispatch` with `app_identity=production` (default) | `app-store-connect` environment | `Zen` / `com.daoleno.zen` App Store Connect IPA | Canonical formal release path; never automatic |
 | iOS signed Preview | pushed annotated `vX.Y.Z` or `vX.Y.Z-beta.N` tag, or manual `workflow_dispatch` with `app_identity=preview` | `app-store-connect-preview` environment | `Zen` / `com.daoleno.zen.preview` App Store Connect IPA | Automatic TestFlight path plus explicit manual recovery/testing |
 | Android release | the same release tag push; manual reviewed recovery/build | Android release keystore | arm64 signed APK | Direct sideload and automated GitHub Release attachment |
@@ -15,7 +15,7 @@ An iPhone build must be signed and provisioned. App Store distribution IPAs are 
 
 ## Unsigned macOS CI
 
-The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on the Apple Silicon `macos-26` image and:
+The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on the Apple Silicon `macos-26` image. Ordinary `push` to `main` and pull requests run only fast Linux checks and do not allocate a macOS runner; this job runs on a release tag push or a manual `ci.yml` dispatch. It:
 
 1. installs the locked Bun workspace;
 2. validates the shared Android/iOS native contract;
@@ -25,7 +25,9 @@ The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml
 6. verifies the `.app` bundle identifier and Mach-O executable;
 7. uploads the unsigned Simulator `.app` as a seven-day workflow artifact.
 
-This job contains no Apple credentials. A JavaScript-only Expo export remains in the Linux app job, but it is not a substitute for this macOS compile/link job.
+This job contains no Apple credentials. The Linux `app` job keeps unit tests, typecheck, and the web export on every push; the Android and iOS JS exports are gated to the same release-tag and manual-dispatch triggers as this job, and none of them is a substitute for this macOS compile/link job.
+
+Because ordinary pushes no longer compile iOS, an iOS compile break is caught at release time by the signed archive in [`ios-release.yml`](../.github/workflows/ios-release.yml), which runs on every release before any IPA is exported or uploaded, and earlier by this unsigned job on a manual `ci.yml` dispatch or a maintainer-pushed release tag.
 
 The optional [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow uses the same canonical iOS build script and artifact layout only when manually requested. Its redundant release tag trigger was removed; release workflows build and verify the required native outputs themselves.
 

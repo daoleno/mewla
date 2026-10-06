@@ -1,9 +1,17 @@
 name: CI
 
+# Ordinary push/PR runs only fast checks. Native work (unsigned iOS Simulator
+# build, Android native link, Android/iOS JS exports) runs on release tag pushes
+# and manual dispatch; the release flow builds the signed artifacts in
+# release-artifacts.yml and ios-release.yml.
 on:
   push:
     branches: [main]
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-beta.*"
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -85,9 +93,11 @@ jobs:
         run: bunx tsc --noEmit
         working-directory: app
       - name: Android export
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: bunx expo export --platform android
         working-directory: app
       - name: iOS export
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: bunx expo export --platform ios
         working-directory: app
       - name: Web export
@@ -96,6 +106,7 @@ jobs:
 
   ios-native:
     name: iOS native (unsigned Simulator)
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
     runs-on: macos-26
     timeout-minutes: 120
     permissions:
@@ -161,6 +172,7 @@ jobs:
 
   android-native:
     name: Android native (bounded link)
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
