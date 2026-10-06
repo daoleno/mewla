@@ -1249,9 +1249,7 @@ func (s *Service) reconcileReviewLeasesLocked() error {
 			}
 			// Receipt absent: host receipts are written before the host
 			// mutates, so the mutation provably never began. Release.
-			if releaseErr := s.store.ReleaseReviewLease(
-				claimed.WorkID, claimed.HandlingID, claimed.ProviderTurnID,
-			); releaseErr != nil {
+			if releaseErr := s.reconcileUnsentReview(claimed); releaseErr != nil {
 				return fmt.Errorf("release provably-unsent Work review %s: %w", claimed.WorkID, releaseErr)
 			}
 			continue
@@ -1306,14 +1304,25 @@ func (s *Service) reconcileReviewLeasesLocked() error {
 			}
 		default:
 			// InputNotSubmitted: the receipt exists and proves non-submission.
-			if releaseErr := s.store.ReleaseReviewLease(
-				claimed.WorkID, claimed.HandlingID, claimed.ProviderTurnID,
-			); releaseErr != nil {
+			if releaseErr := s.reconcileUnsentReview(claimed); releaseErr != nil {
 				return fmt.Errorf("release definitely unsent Work review %s: %w", claimed.WorkID, releaseErr)
 			}
 		}
 	}
 	return nil
+}
+
+// Missing transport evidence cannot downgrade a canonical mutation fence.
+// Hold that exact capability while unrelated reviews keep making progress.
+func (s *Service) reconcileUnsentReview(action WorkReviewAction) error {
+	err := s.store.FailReviewDelivery(action, fmt.Errorf("Host receipt proves review input was not submitted"))
+	if !errors.Is(err, lifecycle.ErrReviewLease) {
+		return err
+	}
+	_, _, noteErr := s.store.AppendDeliveryNote(action.WorkID, action.EventID,
+		"delivery.ambiguous", "delivery:"+action.EventID+":ambiguous",
+		"Review delivery is unconfirmed: canonical admission may have mutated the provider despite missing transport confirmation; automatic replay is held.", false)
+	return noteErr
 }
 
 // recoverAmbiguousReviewLocked re-enters only an already-persisted exact
@@ -1585,21 +1594,11 @@ func (s *Service) deliverClaimedReviewLocked(action WorkReviewAction) (bool, err
 	hostID := strings.TrimSpace(action.DeliveryHostSessionID)
 	item, err := s.store.Work(action.WorkID)
 	if err != nil {
-		if releaseErr := s.store.ReleaseReviewLease(
-			action.WorkID, action.HandlingID, action.ProviderTurnID,
-		); releaseErr != nil {
-			return false, fmt.Errorf("release undeliverable Work review %s: %w", action.WorkID, releaseErr)
-		}
-		return false, err
+		return false, s.failReviewDelivery(action, err)
 	}
 	payload, err := marshalDirectWorkEventInput(action, item)
 	if err != nil {
-		if releaseErr := s.store.ReleaseReviewLease(
-			action.WorkID, action.HandlingID, action.ProviderTurnID,
-		); releaseErr != nil {
-			return false, fmt.Errorf("release invalid Work review input %s: %w", action.WorkID, releaseErr)
-		}
-		return false, err
+		return false, s.failReviewDelivery(action, err)
 	}
 	acceptedAt := s.now().UTC()
 	if action.ClaimedAt != nil {
@@ -1610,11 +1609,7 @@ func (s *Service) deliverClaimedReviewLocked(action WorkReviewAction) (bool, err
 	)
 	if sendErr != nil {
 		if result.Outcome == watcher.InputNotSubmitted {
-			if releaseErr := s.store.ReleaseReviewLease(
-				action.WorkID, action.HandlingID, action.ProviderTurnID,
-			); releaseErr != nil {
-				return false, fmt.Errorf("release definitely unsent Work review %s: %w", action.WorkID, releaseErr)
-			}
+			return false, s.failReviewDelivery(action, sendErr)
 		}
 		if result.Outcome == watcher.InputAmbiguous {
 			if recovered, _, recoveryErr := s.recoverAmbiguousReviewLocked(action); recoveryErr == nil && recovered {
@@ -1622,6 +1617,9 @@ func (s *Service) deliverClaimedReviewLocked(action WorkReviewAction) (bool, err
 			}
 		}
 		return false, sendErr
+	}
+	if result.Outcome == watcher.InputNotSubmitted {
+		return false, s.failReviewDelivery(action, fmt.Errorf("Session Input did not submit the review"))
 	}
 	if result.Outcome != watcher.InputAccepted {
 		if result.Outcome == watcher.InputAmbiguous {
@@ -1645,6 +1643,13 @@ func (s *Service) deliverClaimedReviewLocked(action WorkReviewAction) (bool, err
 		return false, fmt.Errorf("consume accepted Work review %s: %w", action.WorkID, err)
 	}
 	return true, nil
+}
+
+func (s *Service) failReviewDelivery(action WorkReviewAction, cause error) error {
+	if err := s.store.FailReviewDelivery(action, cause); err != nil {
+		return fmt.Errorf("record Work review %s delivery failure (%v): %w", action.WorkID, cause, err)
+	}
+	return cause
 }
 
 // NoteUserSteering recognizes the Host agent and enters the lane for

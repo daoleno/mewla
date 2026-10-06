@@ -340,6 +340,17 @@ func Reduce(prev *State, ev Event) *State {
 		}
 		now := ev.At
 		s.Review.Handler.DeliveredAt = &now
+		s.Review.DeliveryFailure = nil
+
+	case KReviewDeliveryFailed:
+		p := payload[ReviewDeliveryFailedPayload](ev)
+		if s.Review == nil || s.Review.Handler == nil || p.EventID != s.Review.EventID ||
+			p.HandlerToken != s.Review.Handler.HandlerToken || s.Review.Handler.DeliveredAt != nil {
+			return noop(s, ev)
+		}
+		failure := p.Failure
+		s.Review.DeliveryFailure = &failure
+		s.Review.Handler = nil
 
 	case KReviewReleased:
 		if s.Review == nil || s.Review.Handler == nil {

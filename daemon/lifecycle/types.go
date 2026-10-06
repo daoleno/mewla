@@ -70,6 +70,7 @@ const (
 	KReviewClaimed             Kind = "review.claimed"
 	KReviewDelivered           Kind = "review.delivered"
 	KReviewReleased            Kind = "review.released"
+	KReviewDeliveryFailed      Kind = "review.delivery_failed"
 	KReviewDeliveryResolved    Kind = "review.delivery_resolved"
 	KReviewResolved            Kind = "review.resolved"
 )
@@ -253,6 +254,12 @@ func decodePayload(kind Kind, raw json.RawMessage) (any, error) {
 		return p, nil
 	case KReviewDelivered:
 		var p ReviewDeliveredPayload
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		return p, nil
+	case KReviewDeliveryFailed:
+		var p ReviewDeliveryFailedPayload
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
@@ -449,6 +456,26 @@ type ReviewReleasedPayload struct {
 	HandlerToken TurnToken `json:"handler_token"`
 }
 
+// ReviewDeliveryFailure is durable retry state for a definitely unsent review.
+// Exhaustion keeps the obligation open but stops automatic mutation attempts.
+type ReviewDeliveryFailure struct {
+	Attempts     int       `json:"attempts"`
+	Error        string    `json:"error"`
+	LastFailedAt time.Time `json:"last_failed_at"`
+	RetryAt      time.Time `json:"retry_at,omitzero"`
+	Exhausted    bool      `json:"exhausted"`
+}
+
+type ReviewDeliveryFailedPayload struct {
+	EventID      string                `json:"event_id"`
+	HandlerToken TurnToken             `json:"handler_token"`
+	Failure      ReviewDeliveryFailure `json:"failure"`
+}
+
+func (r *ReviewState) DeliveryReady(now time.Time) bool {
+	return r != nil && (r.DeliveryFailure == nil || (!r.DeliveryFailure.Exhausted && !now.Before(r.DeliveryFailure.RetryAt)))
+}
+
 // ReviewDeliveryResolvedPayload records an explicit actor judgment for an
 // ambiguous, not-yet-confirmed Host delivery. The canonical log is the audit;
 // no parallel event or submission row participates in the transition.
@@ -493,11 +520,12 @@ type WakeState struct {
 
 // ReviewState is the stable attention obligation Brain must disposition.
 type ReviewState struct {
-	EventID  string         `json:"event_id"`
-	Reason   string         `json:"reason"` // turn_done | turn_failed | lease_expired | turn_lost
-	Ref      string         `json:"ref,omitempty"`
-	OpenedAt time.Time      `json:"opened_at"`
-	Handler  *ReviewHandler `json:"handler,omitempty"`
+	DeliveryFailure *ReviewDeliveryFailure `json:"delivery_failure,omitempty"`
+	EventID         string                 `json:"event_id"`
+	Reason          string                 `json:"reason"` // turn_done | turn_failed | lease_expired | turn_lost
+	Ref             string                 `json:"ref,omitempty"`
+	OpenedAt        time.Time              `json:"opened_at"`
+	Handler         *ReviewHandler         `json:"handler,omitempty"`
 }
 
 // ReviewHandler is the single Brain handling lease for the open Event.
@@ -599,6 +627,10 @@ func (s *State) clone(includeSeenSources bool) *State {
 	}
 	if s.Review != nil {
 		r := *s.Review
+		if r.DeliveryFailure != nil {
+			f := *r.DeliveryFailure
+			r.DeliveryFailure = &f
+		}
 		if s.Review.Handler != nil {
 			h := *s.Review.Handler
 			r.Handler = &h

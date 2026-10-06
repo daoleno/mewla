@@ -706,6 +706,11 @@ func workCardTimelineItem(workItem Work, event WorkEvent, unread bool) TimelineI
 			summary = nextAction
 		}
 	}
+	attention := strings.TrimSpace(event.Attention)
+	if failure := reviewDeliveryFailureSummary(workItem.Review); failure != "" {
+		summary = failure + "\n" + summary
+		attention = "failed" // Keep delivery diagnostics visible on minimal result cards too.
+	}
 	summary = compactWorkResultText(summary)
 	title := strings.TrimSpace(workItem.Title)
 	body := firstNonEmpty(summary, title, event.Kind)
@@ -725,7 +730,7 @@ func workCardTimelineItem(workItem Work, event WorkEvent, unread bool) TimelineI
 		Summary:         summary,
 		SessionName:     strings.TrimSpace(event.SourceName),
 		Phase:           strings.TrimSpace(event.Phase),
-		Attention:       strings.TrimSpace(event.Attention),
+		Attention:       attention,
 		WorkerEventKind: strings.TrimSpace(event.EventKind),
 		DetailsJSON:     strings.TrimSpace(event.DetailsJSON),
 		NextAction:      strings.TrimSpace(workItem.NextAction),

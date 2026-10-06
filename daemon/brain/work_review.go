@@ -18,7 +18,8 @@ import (
 // durable Work state. EventID is the sole identity from actionable fact
 // through claim, notification, card, and resolution.
 type WorkReview struct {
-	EventID string `json:"event_id"`
+	DeliveryFailure *lifecycle.ReviewDeliveryFailure `json:"delivery_failure,omitempty"`
+	EventID         string                           `json:"event_id"`
 	// RequiredAt is the immutable Event birth. Queue order is oldest first.
 	RequiredAt time.Time `json:"required_at"`
 	// Lease is nil while the review is pending/claimable.
@@ -165,6 +166,10 @@ func cloneWorkReview(review *WorkReview) *WorkReview {
 		return nil
 	}
 	copy := *review
+	if review.DeliveryFailure != nil {
+		failure := *review.DeliveryFailure
+		copy.DeliveryFailure = &failure
+	}
 	copy.EventID = strings.TrimSpace(copy.EventID)
 	copy.Resolution = strings.TrimSpace(copy.Resolution)
 	copy.ResolvedBy = strings.TrimSpace(copy.ResolvedBy)
@@ -346,4 +351,43 @@ func (s *Store) RecoverReviewLease(workID, handlingID, providerTurnID string) (b
 	}
 	s.broadcastWorkChange(workID)
 	return true, nil
+}
+
+// FailReviewDelivery durably parks a definitely unsent review. The original
+// review remains the sole action and card identity; failure is delivery state.
+func (s *Store) FailReviewDelivery(action WorkReviewAction, cause error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return err
+	}
+	if reviewLeaseByCapability(database, action.WorkID, action.HandlingID, action.ProviderTurnID) < 0 {
+		return ErrEventClaim
+	}
+	if _, err := s.fsm.FailReviewDelivery(lifecycle.WorkID(action.WorkID), lifecycle.TurnToken(action.ProviderTurnID), cause.Error()); err != nil {
+		return err
+	}
+	if err := s.fsmSyncWorkLocked(&database, action.WorkID, s.nowUTC()); err != nil {
+		return err
+	}
+	if err := s.persistPresentationLocked(database); err != nil {
+		return err
+	}
+	if err := s.rebuildWorkCardsLocked(database, []string{action.WorkID}); err != nil {
+		return err
+	}
+	s.broadcastWorkChange(action.WorkID)
+	return nil
+}
+
+func reviewDeliveryFailureSummary(review *WorkReview) string {
+	if review == nil || review.DeliveryFailure == nil {
+		return ""
+	}
+	failure := review.DeliveryFailure
+	if failure.Exhausted {
+		return fmt.Sprintf("Review delivery failed after %d attempts; automatic delivery stopped: %s", failure.Attempts, failure.Error)
+	}
+	return fmt.Sprintf("Review delivery failed (attempt %d); retry at %s: %s", failure.Attempts, failure.RetryAt.UTC().Format(time.RFC3339), failure.Error)
 }

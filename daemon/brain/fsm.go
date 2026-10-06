@@ -212,6 +212,11 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 				EventID:    st.Review.EventID,
 			}
 		}
+		item.Review.DeliveryFailure = nil
+		if st.Review.DeliveryFailure != nil {
+			failure := *st.Review.DeliveryFailure
+			item.Review.DeliveryFailure = &failure
+		}
 		if st.Review.Handler == nil && item.Review.Lease != nil {
 			// The canonical handler was released (end/recovery/actor closure);
 			// the disposable delivery lease projection goes with it.
