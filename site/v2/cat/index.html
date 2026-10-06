@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zen cat study</title>
+<meta name="color-scheme" content="light">
+<style>
+  :root {
+    --bg: #f7f1e8;
+    --paper: #fbf7f1;
+    --ink: #2f241e;
+    --soft: #7a6a5e;
+    --line: rgba(60, 40, 25, .12);
+    --accent: #c9773f;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    overflow-x: clip;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 0 0 6px; }
+  h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 0 0 8px; font-weight: 700; letter-spacing: -.01em; }
+  .lede { color: var(--soft); max-width: 60ch; margin: 0; }
+
+  .stage {
+    position: relative; margin-top: 22px; border-radius: 28px; overflow: hidden;
+    background:
+      radial-gradient(70% 60% at 38% 30%, #fffdf9 0%, rgba(255, 253, 249, 0) 70%),
+      linear-gradient(#fbf6ee, #f1e6d6);
+    border: 1px solid var(--line);
+    box-shadow: 0 20px 50px rgba(90, 60, 30, .10);
+  }
+  .stage canvas { display: block; width: 100%; aspect-ratio: 16 / 10; cursor: pointer; touch-action: manipulation; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 4px 0; }
+  .hint { color: var(--soft); font-size: 14px; margin: 0; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--paper); }
+  .seg button { border: 0; background: none; padding: 6px 12px; font: inherit; font-size: 14px; color: var(--soft); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .btn { border: 1px solid var(--line); background: var(--paper); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer; color: var(--ink); }
+  .btn:hover { border-color: rgba(60, 40, 25, .3); }
+
+  h2 { font-size: 20px; margin: 44px 0 4px; }
+  .sub { color: var(--soft); margin: 0 0 16px; font-size: 15px; }
+  .tiles { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 980px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .tile { background: var(--paper); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; }
+  .tile canvas { display: block; width: 100%; aspect-ratio: 4 / 3; background: linear-gradient(#fbf6ee, #f1e6d6); }
+  .tile .meta { padding: 12px 14px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; }
+  .tile h3 { margin: 0; font-size: 16px; }
+  .tile p { margin: 0; grid-column: 1; color: var(--soft); font-size: 14px; line-height: 1.5; }
+  .tile .btn { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+
+  .palette { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .palette li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--soft); }
+  .palette span { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); }
+  footer { padding: 40px 0 48px; color: var(--soft); font-size: 13px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="kicker">Zen 吉祥物 · 设计稿 01</p>
+    <h1>睡猫：先把这一只画对</h1>
+    <p class="lede">手绘质感的橘色虎斑猫：柔光、毛流方向的条纹、边缘毛发和纸面颗粒。上面是它自己活着的样子，下面把每个动作单独拆开，方便逐个看。</p>
+  </header>
+
+  <section class="stage">
+    <canvas id="hero" aria-label="一只蜷着睡觉的橘猫，会呼吸、抖耳朵、动尾巴，点它会醒来打哈欠"></canvas>
+  </section>
+  <div class="bar">
+    <p class="hint">点一下猫会醒来打个哈欠；鼠标左右移动，耳朵会跟着转。</p>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="播放速度">
+        <button type="button" data-speed="1" aria-pressed="true">1×</button>
+        <button type="button" data-speed="0.5" aria-pressed="false">½×</button>
+        <button type="button" data-speed="0.25" aria-pressed="false">¼×</button>
+      </div>
+      <button type="button" class="btn" id="wake">叫醒它</button>
+    </div>
+  </div>
+
+  <h2>动作分解</h2>
+  <p class="sub">每格只放一个动作，循环播放；“重播”立刻再来一次。速度开关对所有格子生效。</p>
+  <div class="tiles" id="tiles"></div>
+
+  <h2>配色</h2>
+  <ul class="palette">
+    <li><span style="background:#f4cd9a"></span>亮部</li>
+    <li><span style="background:#e2a068"></span>主色</li>
+    <li><span style="background:#be7448"></span>暗部</li>
+    <li><span style="background:#b8663a"></span>条纹</li>
+    <li><span style="background:#f9eede"></span>奶油白</li>
+    <li><span style="background:#d68c80"></span>鼻子</li>
+    <li><span style="background:#deba5c"></span>眼睛</li>
+  </ul>
+</main>
+<footer class="wrap">设计稿，仅供评审。猫是在 canvas 里逐层画出来的，没有使用任何外部素材。</footer>
+<script type="module" src="study.js"></script>
+</body>
+</html>
