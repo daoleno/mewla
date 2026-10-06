@@ -788,6 +788,16 @@ export function startCat(sealSvg) {
     return best;
   }
 
+  function nearest() {
+    const mid = innerHeight * 0.42;
+    let best = sealSvg, bd = Infinity;
+    for (const p of perches()) {
+      const d = Math.abs(p.getBoundingClientRect().top - mid);
+      if (d < bd) { bd = d; best = p; }
+    }
+    return best;
+  }
+
   function tick(now) {
     const dt = Math.min(50, now - last);
     last = now;
@@ -808,6 +818,8 @@ export function startCat(sealSvg) {
       if (now > cat.lockUntil && !cat.purr) {
         const p = pick();
         if (p && p !== cat.perch && !(p === sealSvg && cat.porch)) queue = travel(p);
+        // set down on plain text with no perch in view: never nap on it, go to the nearest perch
+        else if (!p && cat.perch && cat.perch !== sealSvg && cat.perch.dataset.perch == null) queue = travel(nearest());
         else if (cat.porch && p === sealSvg) { cat.porch = false; queue = [...crouch(), fly(() => spot(sealSvg)), land(), pop(true, true)]; }
         else if (!cat.curled && !cat.home) {
           // awake with nothing to do: fidget once, then curl up for a nap
