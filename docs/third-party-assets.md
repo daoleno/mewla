@@ -46,7 +46,7 @@ Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and
 | Notice in APK                                                  | same                                                          | MIT                                                             | Expo plugin `withZenAndroidRelease` copies the notice to `android/app/src/main/assets/notices/GHOSTTY-MIT.txt` → APK path `assets/notices/GHOSTTY-MIT.txt`. Verify: `./scripts/verify-apk-notice.sh <apk>`.                                                        |
 | Notice in iOS app / IPA                                        | same                                                          | MIT                                                             | Expo plugin `withZenIOSBuild` copies the notice into the Xcode app resources → bundle path `GHOSTTY-MIT.txt` at the app root (Xcode flattens ordinary files; see `native.lock.json` `ios.notice_bundle_path`). Verify: `./scripts/verify-ios-artifact.sh simulator | ipa <artifact>`. |
 
-**ABI contract:** only `arm64-v8a` (device/sideload) and `x86_64` (emulator). See [android.md](android.md).
+**ABI contract:** only `arm64-v8a` (device/sideload) and `x86_64` (emulator). See [android.md](internal/android-development.md).
 
 **Redistribution:** APKs and iOS app bundles/IPAs must embed the MIT notice (paths above). Prebuilt `.so` / XCFramework archives should include an adjacent `GHOSTTY-MIT.txt` (written by the platform build scripts).
 

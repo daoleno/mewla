@@ -6,7 +6,7 @@ search, and navigation. Reviewing does not stage, discard, or otherwise modify
 the repository.
 
 Interaction layout, navigation, scrolling, safe-area and acceptance criteria are
-specified in `docs/git-diff-design.md`. The notes below cover data and freshness
+specified in `docs/internal/git-diff-design.md`. The notes below cover data and freshness
 semantics.
 
 ## Comparisons

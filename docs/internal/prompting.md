@@ -44,7 +44,7 @@ the result path and do not accept the larger Work.
 Unchanged delivery does not demand another capture, reply or resolution attempt.
 Check-in expiry stays supervision evidence; terminal results remain deliverable
 after Host interruption. These guarantees are implemented and tested in
-[Work Lifecycle](work-lifecycle.md), not merely requested in prompts. Provider
+[Work Lifecycle](../work-lifecycle.md), not merely requested in prompts. Provider
 parsers, permission UI and historical documents are not active instructions.
 Private runtime overlays remain outside repository ownership.
 

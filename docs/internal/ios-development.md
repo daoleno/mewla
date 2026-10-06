@@ -83,7 +83,7 @@ zen --lan
 # In another terminal, run the LAN or Tailscale pair command Zen prints.
 ```
 
-For Simulator testing on the same Mac, a locally reachable address can be used. For a physical iPhone, use `zen --lan` with the Mac's printed LAN/Tailscale address on a trusted private network, or use an HTTPS origin that forwards every required route to bare `zen`. See [Connect and pair](connect-and-pair.md).
+For Simulator testing on the same Mac, a locally reachable address can be used. For a physical iPhone, use `zen --lan` with the Mac's printed LAN/Tailscale address on a trusted private network, or use an HTTPS origin that forwards every required route to bare `zen`. See [Connect and pair](../connect-and-pair.md).
 
 An end-to-end terminal check should cover:
 
@@ -102,7 +102,7 @@ The Objective-C++ bridge shares the native row formatter and update cache.
 
 The machine-readable source of truth is:
 
-[`app/modules/zen-terminal-vt/native.lock.json`](../app/modules/zen-terminal-vt/native.lock.json)
+[`app/modules/zen-terminal-vt/native.lock.json`](../../app/modules/zen-terminal-vt/native.lock.json)
 
 Important invariants:
 
@@ -132,4 +132,4 @@ Then perform a real Xcode build-and-run. Static checks do not replace launching 
 
 ## Current distribution status
 
-The source-build path is working, but a bare clone does not contain the ignored Ghostty XCFramework. CI rebuilds/checksums it and compiles an unsigned Simulator app. The protected Preview workflow has signed, exported, verified, and uploaded an IPA to App Store Connect; Apple Beta App Review remains the gate before public-link testers can install it. Zen does not claim a generally available App Store build. See [iOS CI and release automation](ios-ci-release.md).
+The source-build path is working, but a bare clone does not contain the ignored Ghostty XCFramework. CI rebuilds/checksums it and compiles an unsigned Simulator app. The protected Preview workflow has signed, exported, verified, and uploaded an IPA to App Store Connect; Apple Beta App Review remains the gate before public-link testers can install it. Zen does not claim a generally available App Store build. See [iOS CI and release automation](../ios-ci-release.md).
