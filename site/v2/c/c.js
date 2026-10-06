@@ -59,25 +59,26 @@ const hint = document.getElementById('cat-hint');
 const stage = canvas && canvas.closest('.cat-stage');
 const tag = stage && stage.querySelector('.stage-tag');
 
-// three.js loads on its own, so a blocked CDN only leaves the stage empty.
+// three.js loads on its own; if it or WebGL is missing, the drawn cat takes the stage.
 let THREE = null;
+let renderer = null;
 if (canvas) {
   try {
     THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   } catch {
     // fall back to the drawn cat
     if (stage) { stage.classList.add('no-3d'); stage.insertAdjacentHTML('beforeend', catSVG('sleep')); }
   }
 }
 
-if (THREE) {
+if (renderer) {
   const FUR = 0xf2a95c;
   const FUR_DARK = 0xdf8a3c;
   const CREAM = 0xfbe0bd;
   const INK = 0x3d2b21;
   const BLUSH = 0xef9e9e;
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
