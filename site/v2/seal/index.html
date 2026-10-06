@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Zen · a personal agent that sleeps until you have a goal</title>
-<meta name="description" content="Zen is an open-source, self-hosted personal agent for one person. Brain takes your goal, splits it into Work, hands each part to a coding agent on your own computer and reviews the result. Android and iOS, beta.">
+<title>Zen · One person. A whole team.</title>
+<meta name="description" content="Zen is an open-source, self-hosted personal agent. Brain, your butler, takes one goal, splits it into Work, hands each part to an agent on your own computer and reviews what comes back. Android and iOS, beta.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#faf7f0">
 <link rel="icon" href="seal-icon.svg" type="image/svg+xml">
@@ -23,8 +23,8 @@
       <span>Zen</span>
     </a>
     <nav aria-label="Sections">
-      <a href="#brain">Brain</a>
-      <a href="#sessions">Sessions</a>
+      <a href="#story">How it works</a>
+      <a href="#house">Everything else</a>
       <a href="#install">Install</a>
       <a class="btn primary small" href="#install">Get Zen</a>
     </nav>
@@ -32,150 +32,177 @@
 </header>
 
 <main id="main">
-  <!-- Hero: the cat is asleep in the seal -->
+  <!-- Hero: Brain is the cat, asleep in the seal -->
   <section class="hero" id="top">
     <div class="wrap hero-grid">
       <div class="hero-art">
-        <svg class="seal" viewBox="0 0 100 100" role="img" aria-label="The Zen seal: a cat asleep under a crescent moon" data-seal="hero" data-perch="seal"></svg>
-        <p class="hint" aria-hidden="true">Scroll, and the cat comes along. Tap it to make it hop.</p>
+        <svg class="seal" viewBox="0 0 100 100" role="img" aria-label="The Zen seal: Brain as a cat, asleep under a crescent moon" data-seal="hero" data-perch="seal"></svg>
+        <p class="hint" aria-hidden="true">This cat is Brain. Scroll and it gets to work; tap, pet or pick it up.</p>
       </div>
       <div class="hero-copy">
         <p class="eyebrow">Open source · self-hosted · Android and iOS beta</p>
-        <h1>A personal agent that sleeps until <em>you have a goal.</em></h1>
-        <p class="lede">Zen is a phone app and a small daemon on your own computer. Every coding agent there becomes a Session you can carry, and <strong>Brain</strong>, your butler, turns one goal into finished, reviewed work.</p>
+        <h1>One person.<br><em>A whole team.</em></h1>
+        <p class="lede">Zen gives you a butler called <strong>Brain</strong>. Say what you want done; Brain splits it up, hands each part to an agent on your own computer, checks what comes back and calls you only when it matters.</p>
         <div class="ctas">
           <a class="btn primary" href="#install">Get Zen</a>
-          <a class="btn" href="https://github.com/user/zen">Source on GitHub</a>
+          <a class="btn" href="#story">Follow one goal</a>
         </div>
         <ul class="facts">
           <li>Apache-2.0</li>
-          <li>Linux, WSL2 or Apple Silicon Mac</li>
+          <li>Runs on your Linux, WSL2 or Apple Silicon Mac</li>
           <li>Android APK · iOS preview</li>
         </ul>
       </div>
     </div>
   </section>
 
-  <!-- Brain first -->
-  <section class="brain" id="brain">
+  <!-- The storyline: one goal, start to finish -->
+  <section class="story" id="story">
     <div class="wrap">
-      <p class="kicker">Brain</p>
-      <h2>Say it once. The butler runs the rest.</h2>
+      <p class="kicker">One goal, start to finish</p>
+      <h2>Ship atlas-notes v1.4 this week.</h2>
+      <p class="sub">Follow one release through Zen: a bug to fix, copy to rewrite, notes to write, a page to publish and a check-in next week. The screens below are illustrations of the app.</p>
     </div>
-    <div class="wrap brain-grid">
-      <ol class="steps">
-        <li class="step">
+
+    <ol class="wrap beats">
+      <li class="beat" data-beat="wake">
+        <div class="beat-copy">
           <span class="num" aria-hidden="true">1</span>
           <h3>You say it once.</h3>
-          <p>Type a goal to Brain on the phone, or send it from Telegram. Then put the phone away.</p>
-          <p class="example">“Ship dark mode for atlas-notes this week, and keep the release notes current.”</p>
-        </li>
-        <li class="step" data-perch="0.8">
+          <p>Type the goal to Brain in the app, or send it from Telegram, a second channel to the same Brain. Then put the phone away.</p>
+        </div>
+        <div class="scr" data-perch="0.8" aria-hidden="true">
+          <div class="scr-top"><span class="seg"><b>Brain</b><i>Sessions</i></span></div>
+          <div class="bubble me">Ship atlas-notes v1.4 this week: fix the sync conflict bug, tidy the settings copy, write the release notes and publish them to Notion. Check crash reports next Monday.</div>
+          <div class="bubble brain">On it. Four parts, each recorded as Work. I’ll tell you when something needs you.</div>
+          <div class="ask"><span>＋</span>Ask Brain</div>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="split">
+        <div class="beat-copy">
           <span class="num" aria-hidden="true">2</span>
-          <h3>Each part becomes durable Work.</h3>
-          <p>Brain records every part as Work, with its attempts, wake timers and review state. Work survives restarts, and Brain doesn’t poll: Workers report back and timers wake it when something is due.</p>
-        </li>
-        <li class="step">
+          <h3>Brain splits it into Work.</h3>
+          <p>Each part becomes a durable Work item with its attempt, wake timer and review. Work survives restarts, and Brain doesn’t poll: agents report back, and timers wake it when something is due.</p>
+        </div>
+        <div class="scr" data-perch="0.78" aria-hidden="true">
+          <p class="lbl">Updated plan</p>
+          <ul class="plan">
+            <li><span>Fix the sync conflict bug</span><b class="st working">Working</b></li>
+            <li><span>Rewrite the settings copy</span><b class="st working">Working</b></li>
+            <li><span>See how other note apps word conflicts</span><b class="st working">Working</b></li>
+            <li><span>Release notes from the merged changes</span><b class="st waiting">Waiting</b></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="route">
+        <div class="beat-copy">
           <span class="num" aria-hidden="true">3</span>
-          <h3>You set the routing in plain Markdown.</h3>
-          <p>Before each spawn, Brain reads <code>routing.md</code> to choose the executor, model and reasoning level for each part. Tell Brain a preference and it rewrites the line.</p>
-          <pre class="note" aria-label="Example routing.md"><span class="c"># routing.md (example)</span>
-- UI and copy: claude, high reasoning
-- Go daemon and tests: codex
+          <h3>Who does what is plain Markdown.</h3>
+          <p>Before each hand-off, Brain reads <code>routing.md</code> to pick the agent, model and reasoning level. Your team is whatever you have signed in: Claude, Codex, Cursor, Grok, Pi or OpenCode. Tell Brain a preference and it rewrites the line.</p>
+        </div>
+        <div class="scr file" data-perch="0.8" aria-hidden="true">
+          <p class="lbl mono">routing.md</p>
+<pre><span class="c"># who does what</span>
+- Bugs, Go and tests: codex, high
+- Copy, writing, research: claude
 - Quick lookups: pi</pre>
-        </li>
-        <li class="step" data-perch="0.78">
+          <div class="chips"><span>sync bug → codex</span><span>settings copy → claude</span><span>wording research → claude</span></div>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="work">
+        <div class="beat-copy">
           <span class="num" aria-hidden="true">4</span>
-          <h3>Workers are ordinary Sessions.</h3>
-          <p>Every Worker is a normal agent Session on your computer, running in tmux. Open any of them to read along, answer a question or take over.</p>
-        </li>
-        <li class="step">
+          <h3>Every agent works in the open.</h3>
+          <p>Each one runs as an ordinary Session on your computer, in <code>tmux</code>, so it is also there at the desk. Open any of them on the phone as <strong>Chat</strong>, as the live <strong>Terminal</strong>, or as read-only <strong>Git</strong> diffs, and take over whenever you like.</p>
+        </div>
+        <div class="scr" data-perch="0.78" aria-hidden="true">
+          <div class="scr-top"><span class="seg"><i>Brain</i><b>Sessions</b></span></div>
+          <ul class="sess">
+            <li class="on"><span class="av">Cx</span><span><b>Sync conflict fix</b><small class="g">Running the sync tests</small></span></li>
+            <li class="on"><span class="av">Cl</span><span><b>Settings copy</b><small class="g">Rewriting 12 strings</small></span></li>
+            <li><span class="av">Cl</span><span><b>Conflict wording</b><small>Compared five apps</small></span><i class="ok">✓</i></li>
+            <li><span class="av">$</span><span><b>Shell</b><small>~/atlas-notes</small></span></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="ask">
+        <div class="beat-copy">
           <span class="num" aria-hidden="true">5</span>
-          <h3>Nothing is done until it’s reviewed.</h3>
-          <p>Brain reads each result and decides the next step. Only Brain or you can mark Work done. A Worker that goes missing shows up as <em>Needs review</em>, not as a success.</p>
-          <span class="stamp" aria-hidden="true">reviewed</span>
-        </li>
-      </ol>
-      <div class="brain-phone">
-        <figure class="phone" data-perch="0.72">
-          <picture>
-            <source type="image/avif" srcset="../img/app-brain-640.avif 640w, ../img/app-brain-960.avif 960w" sizes="(max-width: 760px) 72vw, 320px">
-            <img src="../img/app-brain-640.webp" srcset="../img/app-brain-640.webp 640w, ../img/app-brain-960.webp 960w" sizes="(max-width: 760px) 72vw, 320px" width="390" height="844" loading="lazy" alt="The Brain screen in Zen: the goal ‘Ship dark mode for atlas-notes this week’, a three-part plan, one Work item done, one ready for review, and Brain’s note on what happens next.">
-          </picture>
-        </figure>
-      </div>
-    </div>
+          <h3>You hear about it only when it matters.</h3>
+          <p>Your phone gets a push when a Session needs input, fails or finishes, and stays quiet otherwise. Tap it, answer in a line, and the agent carries on.</p>
+        </div>
+        <div class="scr" data-perch="0.8" aria-hidden="true">
+          <div class="push"><span class="app"></span><span><b>Sync conflict fix needs input</b><small>Keep both copies, or let the newest edit win?</small></span></div>
+          <div class="bubble me">Keep both, and name the older one “conflicted copy”.</div>
+          <div class="bubble agent">Got it. Writing the test for that now.</div>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="review">
+        <div class="beat-copy">
+          <span class="num" aria-hidden="true">6</span>
+          <h3>Nothing is done until Brain has checked it.</h3>
+          <p>Brain reads every result, then accepts it or sends it back with a note. Only Brain or you can mark Work done, and an agent that goes missing shows up as <em>Needs review</em>, never as a success.</p>
+        </div>
+        <div class="scr" data-perch="0.8" aria-hidden="true">
+          <div class="card ready"><p class="lbl">Sync conflict fix</p><b class="st ready">Ready</b><p>Both copies kept. 41 sync tests pass.</p></div>
+          <div class="card"><p class="lbl">Settings copy</p><b class="st reviewing">Reviewing</b><p>Sent back: “Shorter, and keep the word ‘sync’.”</p></div>
+          <div class="card done"><p class="lbl">Conflict wording</p><b class="st done">Done</b></div>
+          <span class="stamp">reviewed</span>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="publish">
+        <div class="beat-copy">
+          <span class="num" aria-hidden="true">7</span>
+          <h3>Then Brain reaches past your computer. <span class="tag">Preview</span></h3>
+          <p>With <strong>Plugins</strong>, Brain works in the tools you already use: Linear, Notion, GitHub, Slack, Google Workspace, or your own MCP and OpenAPI servers. Reading is on by default. Making changes is a separate switch, and Brain still asks before it acts.</p>
+        </div>
+        <div class="scr" data-perch="0.8" aria-hidden="true">
+          <p class="lbl">Brain wants to make changes</p>
+          <ul class="acts">
+            <li><span class="pi">N</span>Publish “atlas-notes 1.4” release notes</li>
+            <li><span class="pi">L</span>Close 3 Linear issues fixed in 1.4</li>
+            <li><span class="pi">G</span>Comment “Fixed in 1.4” on issue #212</li>
+          </ul>
+          <div class="confirm"><span class="no">Not now</span><span class="yes">Confirm</span></div>
+        </div>
+      </li>
+
+      <li class="beat" data-beat="sleep">
+        <div class="beat-copy">
+          <span class="num" aria-hidden="true">8</span>
+          <h3>Monday is already on the calendar.</h3>
+          <p>You asked for a check next Monday, so Brain put it on its <strong>Calendar</strong>. When it is due, the check runs as visible Work and the result lands back in the same Brain thread. Until then, Brain goes back to sleep.</p>
+        </div>
+        <div class="scr" data-perch="0.8" aria-hidden="true">
+          <p class="lbl">Next week</p>
+          <div class="cal"><span class="t">Mon<br>09:00</span><span><b>Check atlas-notes 1.4 crash reports</b><small>Scheduled action · runs as Work</small></span></div>
+          <div class="cal soft"><span class="t">Fri<br>17:00</span><span><b>atlas-notes 1.4 released</b><small>Done</small></span></div>
+        </div>
+      </li>
+    </ol>
   </section>
 
-  <!-- What Brain looks after -->
-  <section class="keeps" id="keeps">
+  <!-- Everything not already met in the story -->
+  <section class="house" id="house">
     <div class="wrap">
-      <p class="kicker">Brain keeps</p>
-      <h2>What the butler looks after.</h2>
-    </div>
-    <div class="wrap keeps-grid">
-      <ul class="cards">
-        <li><h3>Memory you can read</h3><p><code>current.md</code>, <code>profile.md</code>, <code>memory.md</code> and a worklog, as plain files in its workspace.</p></li>
-        <li><h3>Switch the host, keep the thread</h3><p><code>zen brain use codex</code> moves Brain itself to another agent client, thread intact.</p></li>
-        <li data-perch="0.8"><h3>Calendar <span class="tag">Beta</span></h3><p>Events, reminders and deadlines. A scheduled action runs as visible Work and posts its result back.</p></li>
-        <li><h3>Telegram <span class="tag">Beta</span></h3><p>A second channel to the same Brain, for when the app isn’t open.</p></li>
-        <li><h3>Plugins <span class="tag">Preview</span></h3><p>Linear, Notion, GitHub, Slack, Google Workspace, or your own MCP and OpenAPI servers. Reading is on by default; writing is a separate switch.</p></li>
-        <li data-perch="0.76"><h3>Resources</h3><p>CPU, memory, disk and pressure, each process attributed to a Worker, Brain, Docker or you. Brain is told when the machine runs short.</p></li>
+      <p class="kicker">The rest of the house</p>
+      <h2>Everything else Brain and its team share.</h2>
+      <ul class="list">
+        <li><h3>Memory you can read</h3><p><code>current.md</code>, <code>profile.md</code>, <code>memory.md</code> and a <code>worklog/</code>, as plain files in Brain’s workspace.</p></li>
+        <li><h3>Switch the host</h3><p><code>zen brain use codex</code> moves Brain itself to another agent client, thread intact.</p></li>
+        <li data-perch="0.8"><h3>Model Providers</h3><p>Official login for Codex and Claude, or your own OpenAI, Anthropic, DeepSeek, OpenRouter or gateway keys. Keys stay on your computer.</p></li>
+        <li><h3>Skills</h3><p>See the Skills and Agent Plugins your agents load and where each copy came from; remove one exact copy.</p></li>
+        <li><h3>Stats</h3><p>Tokens, Sessions and cost per model and project, with reported, estimated and unknown costs kept apart.</p></li>
+        <li data-perch="0.76"><h3>Services</h3><p>Ports your Sessions opened, by project, with an optional temporary Cloudflare Quick Tunnel.</p></li>
+        <li><h3>Resources</h3><p>CPU, memory, disk and pressure, each process attributed to an agent, Brain, Docker or you.</p></li>
+        <li><h3>More Sessions</h3><p>Besides the team, start a DSH session or a plain Shell in any directory, from the phone.</p></li>
       </ul>
-      <figure class="phone side" data-perch="0.7">
-        <picture>
-          <source type="image/avif" srcset="../img/app-calendar-640.avif 640w, ../img/app-calendar-960.avif 960w" sizes="(max-width: 760px) 72vw, 300px">
-          <img src="../img/app-calendar-640.webp" srcset="../img/app-calendar-640.webp 640w, ../img/app-calendar-960.webp 960w" sizes="(max-width: 760px) 72vw, 300px" width="390" height="844" loading="lazy" alt="Zen Calendar: a weekday dependency audit running as a scheduled action, a reminder, a weekly planning event and a release deadline.">
-        </picture>
-      </figure>
-    </div>
-  </section>
-
-  <!-- Sessions -->
-  <section class="sessions" id="sessions">
-    <div class="wrap split">
-      <figure class="phone" data-perch="0.7">
-        <picture>
-          <source type="image/avif" srcset="../img/app-sessions-640.avif 640w, ../img/app-sessions-960.avif 960w" sizes="(max-width: 760px) 72vw, 320px">
-          <img src="../img/app-sessions-640.webp" srcset="../img/app-sessions-640.webp 640w, ../img/app-sessions-960.webp 960w" sizes="(max-width: 760px) 72vw, 320px" width="390" height="844" loading="lazy" alt="The Sessions list: Codex running the settings tests, Claude waiting for an answer, a finished Claude Session, Cursor profiling a cold start, and a finished OpenCode Session.">
-        </picture>
-      </figure>
-      <div class="sessions-copy">
-        <p class="kicker">Sessions</p>
-        <h2>Every agent you run, in one hand.</h2>
-        <p>Start an agent in any directory on your computer. Each one is a <code>tmux</code> session, so it is also there at the desk.</p>
-        <ul class="agents" aria-label="Supported agents">
-          <li>Claude</li><li>Codex</li><li>Cursor</li><li>Grok</li><li>Pi</li><li>OpenCode</li><li>DSH</li><li>Shell</li>
-        </ul>
-        <dl class="views">
-          <div><dt>Chat</dt><dd>Messages, tool calls, plans and attachments, laid out for reading.</dd></div>
-          <div><dt>Terminal</dt><dd>The live terminal, rendered natively with libghostty.</dd></div>
-          <div><dt>Git</dt><dd>Read-only diffs of the repository: all, working or staged.</dd></div>
-        </dl>
-        <p class="alerts"><span class="dot" aria-hidden="true"></span>Your phone gets a push only when a Session needs input, fails or finishes.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Around the agents -->
-  <section class="around" id="around">
-    <div class="wrap">
-      <p class="kicker">Around the agents</p>
-      <h2>The rest of the house, from the same server.</h2>
-    </div>
-    <div class="wrap keeps-grid">
-      <ul class="cards two">
-        <li><h3>Model Providers</h3><p>Official login for Codex and Claude, or your own OpenAI, Anthropic, DeepSeek, OpenRouter or gateway keys. Keys stay on the daemon and are never shown again.</p></li>
-        <li><h3>Skills</h3><p>See the Skills and Agent Plugins your agents load, and where each copy came from. Remove one exact copy without touching the rest.</p></li>
-        <li data-perch="0.8"><h3>Stats</h3><p>Tokens, Sessions and cost per model and project. Reported, estimated and unknown costs stay apart.</p></li>
-        <li><h3>Services</h3><p>Ports your Sessions opened, grouped by project. Open one through a temporary Cloudflare Quick Tunnel when you need it.</p></li>
-      </ul>
-      <figure class="phone side" data-perch="0.7">
-        <picture>
-          <source type="image/avif" srcset="../img/app-stats-640.avif 640w, ../img/app-stats-960.avif 960w" sizes="(max-width: 760px) 72vw, 300px">
-          <img src="../img/app-stats-640.webp" srcset="../img/app-stats-640.webp 640w, ../img/app-stats-960.webp 960w" sizes="(max-width: 760px) 72vw, 300px" width="390" height="844" loading="lazy" alt="Zen Stats with fictional demo numbers: subscription limits left, estimated cost and tokens, and cost and tokens per model.">
-        </picture>
-      </figure>
     </div>
   </section>
 
@@ -184,6 +211,7 @@
     <div class="wrap">
       <p class="kicker">Install</p>
       <h2>Three steps from your terminal to your pocket.</h2>
+      <p class="req">You need Linux (amd64 or arm64), WSL2 or an Apple Silicon Mac, with <code>tmux</code> and at least one signed-in agent CLI, and a few minutes in a terminal.</p>
       <ol class="three" data-perch="0.84">
         <li>
           <h3><span class="num" aria-hidden="true">1</span>Install the daemon</h3>
@@ -197,11 +225,11 @@
         </li>
         <li>
           <h3><span class="num" aria-hidden="true">3</span>Scan the code</h3>
-          <p>Open the app and scan the QR code <code>zen</code> prints. Pair once, then open Brain.</p>
+          <p>Open the app and scan the QR code <code>zen</code> prints. Pair once, then wake Brain.</p>
           <p class="get"><a href="https://github.com/user/zen/releases">Android APK</a> · <a href="https://testflight.apple.com/join/rTKCDzMt">iOS TestFlight preview</a> (awaiting review) · <a href="https://github.com/user/zen/blob/main/docs/ios.md">iOS from source</a></p>
         </li>
       </ol>
-      <p class="req">Needs Linux (amd64 or arm64), WSL2 or an Apple Silicon Mac, with <code>tmux</code> and at least one signed-in agent CLI. <a href="https://github.com/user/zen/blob/main/docs/connect-and-pair.md">Connect and pair</a></p>
+      <p class="req"><a href="https://github.com/user/zen/blob/main/docs/connect-and-pair.md">Connect and pair</a></p>
     </div>
   </section>
 
@@ -209,7 +237,7 @@
   <section class="yours" id="yours">
     <div class="wrap">
       <p class="kicker">One owner</p>
-      <h2>Yours, on your own machine.</h2>
+      <h2>Your team, on your own machine.</h2>
       <div class="yours-grid">
         <div>
           <p>Zen serves one person. The daemon has an Ed25519 identity, and a phone enrolls once with a short-lived pairing code, then signs every request. The app follows exactly one current server, and switching servers never mixes their data.</p>
@@ -229,7 +257,7 @@
   <section class="end">
     <div class="wrap">
       <div class="end-card" data-perch="0.5">
-        <h2>Let it work.<br>Look up when it matters.</h2>
+        <h2>Say it once.<br>Let the team work.</h2>
         <div class="ctas">
           <a class="btn primary" href="#install">Get Zen</a>
           <a class="btn" href="https://github.com/user/zen">Source on GitHub</a>
@@ -248,7 +276,7 @@
     <a href="https://github.com/user/zen/releases">Releases</a>
     <a href="https://github.com/user/zen/blob/main/docs/release-blockers.md">Known issues</a>
   </div>
-  <p class="wrap credit">Screens are the real app with demo data. The seal and the cat are drawn in SVG by hand.</p>
+  <p class="wrap credit">App screens on this page are illustrations with a made-up project. The seal and the cat are drawn in SVG by hand.</p>
 </footer>
 </body>
 </html>
