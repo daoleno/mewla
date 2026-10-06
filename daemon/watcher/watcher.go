@@ -5538,6 +5538,29 @@ func detectWorkerProcess(baseCommand string, panePID int, processes map[int]proc
 	return command, baseStartedAt, basePID
 }
 
+// Preserve only the explicit transcript identity from the proven provider
+// process. Other launch arguments (including settings/credentials) are private.
+func claudeProcessCommand(command, args string) string {
+	fields := splitZenLaunchFields(args)
+	for i, field := range fields {
+		flag, value, hasValue := strings.Cut(field, "=")
+		switch flag {
+		case "--resume", "-r", "--session-id":
+			if !hasValue && i+1 < len(fields) {
+				value = fields[i+1]
+			}
+			if value == "" || strings.HasPrefix(value, "-") {
+				continue
+			}
+			if flag == "-r" {
+				flag = "--resume"
+			}
+			return command + " " + flag + " " + shellQuoteForLaunch(value)
+		}
+	}
+	return command
+}
+
 func workerCommandFromProcess(proc processInfo) string {
 	lowerComm := normalizeCommand(proc.comm)
 	lowerArgs := strings.ToLower(proc.args)
@@ -5549,13 +5572,13 @@ func workerCommandFromProcess(proc processInfo) string {
 	}
 
 	if lowerComm == "claude" || lowerComm == "claude-code" || lowerComm == "cc" {
-		return lowerComm
+		return claudeProcessCommand(lowerComm, proc.args)
 	}
 	// Provider identity comes from the executable, not option values. Cursor
 	// can run --model claude-opus-5-5-high without becoming a Claude process.
 	argsExecutable := processArgsExecutableBase(lowerArgs)
 	if argsExecutable == "claude" || argsExecutable == "claude-code" || argsExecutable == "cc" {
-		return "claude"
+		return claudeProcessCommand("claude", proc.args)
 	}
 	if lowerComm == "codex" || lowerArgs == "codex" || strings.Contains(lowerArgs, "/bin/codex") || strings.Contains(lowerArgs, " codex ") || strings.HasPrefix(lowerArgs, "codex ") {
 		if resume, sessionID := commandResumeArg(lowerArgs); resume {
@@ -5643,8 +5666,8 @@ func workerProcessScore(proc processInfo, detected string) int {
 			return 100
 		}
 		return 50
-	case detected == "claude" || detected == "claude-code" || detected == "cc":
-		if lowerComm == detected {
+	case detectedName == "claude" || detectedName == "claude-code" || detectedName == "cc":
+		if lowerComm == detectedName {
 			return 100
 		}
 		return 50

@@ -54,3 +54,11 @@ plus subsequent deltas after repairing a cross-provider transcript binding.
 The App hook test also checks input targets, subscription cleanup, Activity,
 assistant replies, errors, and late old-subscription frames. These are local
 behavioral tests, not evidence of a real provider call or native device UI.
+
+Review delivery preserves the explicit Claude resume/session identity from the
+live provider process. The failure regressions reject repeated immediate claims,
+deliver a later review while the older one backs off, and retain retry exhaustion
+across restart. Context exposes `current_work[].review_delivery` for failures,
+including attempts, reason, retry time and exhaustion. A CLI preflight alone does
+not prove delivery: inspect exact canonical `review.delivered` identities and the
+provider transcript input after the existing supervisor reloads the daemon.

@@ -13,7 +13,10 @@
         "daemon/work/live_host_identity.go",
         "daemon/modelprofiles/live_route_endpoints.go",
         "daemon/brain/store.go",
-        "daemon/work/host_transcript.go"
+        "daemon/work/host_transcript.go",
+        "daemon/brain/work_review.go",
+        "daemon/lifecycle/reduce.go",
+        "daemon/watcher/session_input.go"
       ],
       "test_paths": [
         "daemon/brain/service_test.go",
@@ -27,7 +30,10 @@
         "daemon/brain/host_transcript_binding_race_test.go",
         "daemon/server/brain_executor_transcript_switch_test.go",
         "daemon/work/host_transcript_provider_binding_test.go",
-        "app/components/terminal/brainExecutorSwitch.test.tsx"
+        "app/components/terminal/brainExecutorSwitch.test.tsx",
+        "daemon/brain/review_delivery_retry_test.go",
+        "daemon/watcher/claude_resume_identity_test.go",
+        "daemon/lifecycle/review_delivery_failure_test.go"
       ]
     },
     {

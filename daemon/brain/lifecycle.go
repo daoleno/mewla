@@ -253,17 +253,18 @@ const (
 // WorkBacklog; they are not execution relationships merely because they are
 // unread or once named a Session.
 type CurrentWork struct {
-	ID               string             `json:"work_id"`
-	Revision         uint64             `json:"revision"`
-	Title            string             `json:"title"`
-	Status           WorkStatus         `json:"status"`
-	ProgressMode     WorkProgressMode   `json:"progress_mode,omitempty"`
-	AttemptSessionID string             `json:"attempt_session_id,omitempty"`
-	AttemptDelegated bool               `json:"attempt_delegated,omitempty"`
-	WaitFor          string             `json:"wait_for,omitempty"`
-	Wake             *WorkWake          `json:"wake,omitempty"`
-	AttentionState   WorkAttentionState `json:"attention_state,omitempty"`
-	UnreadResult     bool               `json:"unread_result"`
+	ReviewDelivery   *lifecycle.ReviewDeliveryFailure `json:"review_delivery,omitempty"`
+	ID               string                           `json:"work_id"`
+	Revision         uint64                           `json:"revision"`
+	Title            string                           `json:"title"`
+	Status           WorkStatus                       `json:"status"`
+	ProgressMode     WorkProgressMode                 `json:"progress_mode,omitempty"`
+	AttemptSessionID string                           `json:"attempt_session_id,omitempty"`
+	AttemptDelegated bool                             `json:"attempt_delegated,omitempty"`
+	WaitFor          string                           `json:"wait_for,omitempty"`
+	Wake             *WorkWake                        `json:"wake,omitempty"`
+	AttentionState   WorkAttentionState               `json:"attention_state,omitempty"`
+	UnreadResult     bool                             `json:"unread_result"`
 }
 
 // WorkBacklog keeps durable history/repair truth explicit without projecting
@@ -2433,7 +2434,7 @@ func (s *Store) ClaimNextReviewAction(hostSessionID string) (WorkReviewAction, b
 	}
 	candidates := []candidate{}
 	for _, st := range s.fsm.ListViews() {
-		if st.Review == nil || st.Review.Handler != nil || st.Status.Terminal() || st.ActiveAdmission() != nil {
+		if st.Review == nil || st.Review.Handler != nil || !st.Review.DeliveryReady(s.nowUTC()) || st.Status.Terminal() || st.ActiveAdmission() != nil {
 			continue
 		}
 		candidates = append(candidates, candidate{id: string(st.ID), openedAt: st.Review.OpenedAt})
@@ -2760,6 +2761,9 @@ func (s *Store) ConsumeReviewDelivery(workID, claimToken, providerTurnID string)
 					item = database.BrainWork[itemIndex]
 					action, _ = reviewActionFromReview(database, item.Review)
 					err = s.persistPresentationLocked(database)
+					if err == nil {
+						err = s.rebuildWorkCardsLocked(database, []string{workID})
+					}
 				}
 			}
 		}
@@ -3243,7 +3247,7 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 		} else if _, selected := queueRank[item.ID]; selected {
 			attentionState = WorkAttentionQueued
 		}
-		include := attentionState != ""
+		include := attentionState != "" || item.Review != nil && item.Review.DeliveryFailure != nil
 		terminal := item.Status == WorkDone || item.Status == WorkCancelled
 		if !terminal {
 			switch mode {
@@ -3259,7 +3263,12 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			continue
 		}
 		currentIDs[item.ID] = true
+		var deliveryFailure *lifecycle.ReviewDeliveryFailure
+		if review := cloneWorkReview(item.Review); review != nil {
+			deliveryFailure = review.DeliveryFailure
+		}
 		current = append(current, CurrentWork{
+			ReviewDelivery:   deliveryFailure,
 			ID:               item.ID,
 			Revision:         item.Revision,
 			Title:            item.Title,

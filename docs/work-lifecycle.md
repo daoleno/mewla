@@ -215,6 +215,29 @@ actor lease-recovery command can authorize replay. Its ended state is canonical
 and survives restart. An ended or superseded capability cannot disposition a
 new decision. Repeated ending, claim attempts, and resolution are idempotent.
 
+Definitely unsent review input records `review.delivery_failed` atomically with
+release of the exact claim. The original Event stays open. Retry delays are 5
+seconds, 30 seconds, 2 minutes and 10 minutes; the fifth failure stops automatic
+delivery for that Event. Every attempt stores its cause. Backoff and exhausted
+reviews are skipped when choosing the oldest eligible review, so they cannot
+starve later Work. This state survives restart and does not depend on watcher
+poll frequency. Successful delivery clears the failure; a new review starts with
+its own retry budget. No automatic resolution, cancellation or discard occurs.
+
+The shared Android/iOS Work card displays the delivery failure and retry/stop
+message while retaining the Worker result. `zen brain context --json` exposes
+`current_work[].review_delivery` with `attempts`, `error`, `retry_at` and
+`exhausted`, including failures beyond the usual four-item attention window.
+An exhausted review remains open for diagnosis and an explicit owner decision;
+it must never be cleared by editing state or resolving Work just to empty a queue.
+Ambiguous or accepted provider mutations keep their existing non-replay fence.
+
+Claude process observation retains explicit `--resume`, `-r` and `--session-id`
+identities as a minimal command. Admission probes can therefore read a resumed
+transcript older than the Host process, using the same provider-native session
+identity as the visible conversation. Unavailable activity still blocks mutation,
+and diagnostics distinguish `unlocatable` from `unreadable` probe state.
+
 Unknown submission outcomes remain durable evidence across model-directed
 retries and restart. Only one prepared transport transaction may exist per
 Work; older ambiguous outcomes do not prevent reopening the store.

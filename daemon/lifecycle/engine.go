@@ -909,7 +909,7 @@ func (e *Engine) ClaimReview(id WorkID, hostSessionID, handlerID string, handler
 		if handlerToken == "" {
 			return nil, fmt.Errorf("%w: handler turn token required", ErrInvalidCommand)
 		}
-		if st.Review.Handler != nil {
+		if st.Review.Handler != nil || !st.Review.DeliveryReady(now) {
 			return nil, ErrReviewLease
 		}
 		if handlerID == "" {
@@ -926,6 +926,46 @@ func (e *Engine) ClaimReview(id WorkID, hostSessionID, handlerID string, handler
 			},
 		}}
 		return events, nil
+	})
+}
+
+// FailReviewDelivery releases only a definitely unsent exact capability and
+// records bounded backoff in the same canonical commit. Ambiguous transport
+// remains held; this command must never authorize a duplicate submission.
+func (e *Engine) FailReviewDelivery(id WorkID, token TurnToken, cause string) (*State, error) {
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		if st.Review == nil || st.Review.Handler == nil || st.Review.Handler.HandlerToken != token || st.Review.Handler.DeliveredAt != nil {
+			return nil, ErrReviewLease
+		}
+		var events []Event
+		if a := st.Admissions[token]; a != nil && a.Status != AdmissionAborted {
+			if a.Status != AdmissionPrepared || a.TransportStartedAt != nil {
+				return nil, ErrReviewLease
+			}
+			events = append(events, Event{WorkID: id, Kind: KAdmissionAborted, TurnToken: token,
+				SourceID: "admission-abort:" + string(token), At: now,
+				Payload: AdmissionAbortedPayload{Reason: "review_proved_not_submitted"}})
+		}
+		attempts := 1
+		if st.Review.DeliveryFailure != nil {
+			attempts += st.Review.DeliveryFailure.Attempts
+		}
+		delays := [...]time.Duration{5 * time.Second, 30 * time.Second, 2 * time.Minute, 10 * time.Minute}
+		failure := ReviewDeliveryFailure{Attempts: attempts, Error: strings.TrimSpace(cause), LastFailedAt: now, Exhausted: attempts > len(delays)}
+		if failure.Error == "" {
+			return nil, fmt.Errorf("%w: delivery failure reason required", ErrInvalidCommand)
+		}
+		if len(failure.Error) > 1024 {
+			failure.Error = failure.Error[:1024]
+		}
+		if !failure.Exhausted {
+			failure.RetryAt = now.Add(delays[attempts-1])
+		}
+		return append(events, Event{WorkID: id, Kind: KReviewDeliveryFailed, SourceID: "delivery-failed:" + e.newID(), At: now,
+			Payload: ReviewDeliveryFailedPayload{EventID: st.Review.EventID, HandlerToken: token, Failure: failure}}), nil
 	})
 }
 

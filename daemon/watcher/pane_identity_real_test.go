@@ -29,6 +29,10 @@ func TestRealTmuxWorkerOwnsPaneAcrossSplitAndRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Transport acceptance precedes execution by the scratch shell.
+	waitForHarness(t, "owned pane execution", func() bool {
+		return strings.Contains(captureHarnessPane(t, h.selected, owned), "OWNED_DELIVERY")
+	})
 	a, b := captureHarnessPane(t, h.selected, owned), captureHarnessPane(t, h.selected, other)
 	t.Logf("target=%s owned=%s sibling=%s outcome=%s owned_received=%t sibling_received=%t", target, owned, other, result.Outcome, strings.Contains(a, "OWNED_DELIVERY"), strings.Contains(b, "OWNED_DELIVERY"))
 	if !strings.Contains(a, "OWNED_DELIVERY") || strings.Contains(b, "OWNED_") {
@@ -177,9 +181,9 @@ func TestRealTmuxWorkersRemainDistinctInOneWindow(t *testing.T) {
 		if err != nil || result.Duplicate {
 			t.Fatalf("pane=%s receipt crossed Worker boundary: %+v %v", pane, result, err)
 		}
-		if !strings.Contains(captureHarnessPane(t, h.selected, pane), "PANE_RECEIPT") {
-			t.Fatal("owned pane did not receive its input")
-		}
+		waitForHarness(t, "owned pane receipt", func() bool {
+			return strings.Contains(captureHarnessPane(t, h.selected, pane), "PANE_RECEIPT")
+		})
 	}
 	if err := h.w.KillSession(first); err != nil {
 		t.Fatal(err)

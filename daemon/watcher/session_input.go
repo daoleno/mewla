@@ -723,8 +723,8 @@ func (owner *sessionInputOwner) submitWithTurn(
 				// Turn. Unreadable provider state still fails before mutation.
 				if providerBaseline.ProbeState.Loss() {
 					return definitelyNotSubmitted(result.Receipt, fmt.Errorf(
-						"%w: Brain Host provider activity is unreadable",
-						errDelegatedProviderOwnershipMismatch,
+						"%w: Brain Host provider activity is unavailable (probe_state=%s)",
+						errDelegatedProviderOwnershipMismatch, providerBaseline.ProbeState,
 					))
 				}
 				if strings.TrimSpace(providerBaseline.ID) != "" && !providerActivityTerminal(providerBaseline.Status) {
