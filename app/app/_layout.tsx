@@ -31,7 +31,7 @@ import {
   useCurrentServer,
 } from "../store/currentServer";
 import { syncCalendarNotifications } from "../services/calendarNotifications";
-import { encodeWorkerRouteId } from "../services/workerRouteId";
+import { terminalRouteParams } from "../services/workerRouteId";
 import { useAppTheme } from "../constants/tokens";
 import { useStackScreenOptions } from "../components/navigation/stackScreenOptions";
 import { ToastProvider } from "../components/ui/Toast";
@@ -601,10 +601,7 @@ const NotificationObserver = memo(function NotificationObserver() {
           case "terminal":
             routerRef.current.push({
               pathname: "/terminal/[id]",
-              params: {
-                id: encodeWorkerRouteId(destination.workerId),
-                serverId: destination.serverId,
-              },
+              params: terminalRouteParams(destination.workerId, destination.serverId),
             });
             break;
           case "inbox":
