@@ -41,9 +41,7 @@ a:hover { text-decoration-color: var(--ink); }
   position: sticky; top: 0; z-index: 30;
   display: flex; align-items: center; gap: 12px;
   height: var(--top); padding: 0 24px;
-  background: rgba(251, 250, 247, .92);
-  backdrop-filter: saturate(1.2) blur(10px);
-  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
 .d-word { font: 800 26px/1 var(--display); letter-spacing: -.03em; text-decoration: none; }
