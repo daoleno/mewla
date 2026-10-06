@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the current Linear-style task tracker with a file-first, Markdown-per-issue system rooted at `~/.zen/issues/<project>/*.md`. Spec: `docs/issues-redesign.md`.
+**Goal:** Replace the current Linear-style task tracker with a file-first, Markdown-per-issue system rooted at `~/.zen/issues/<project>/*.md`. Spec: `docs/internal/issues-redesign.md`.
 
 **Architecture:** Daemon owns `~/.zen/issues/` via fsnotify; an `issue/` package parses, stores, and dispatches. Server exposes new WebSocket messages (`list_issues`, `write_issue`, `send_issue`, `redispatch_issue`, `delete_issue`, `list_executors`) and broadcasts `issue_changed` / `issue_deleted` / `issues_snapshot`. App uses a new `store/issues.tsx` Context+reducer, rewrites the list and detail screens, and adds a Markdown editor with `@role` mention picker. Old `daemon/task/` package, old WebSocket handlers, `app/store/tasks.tsx`, and all current `app/components/issue/*` files are removed at the end.
 

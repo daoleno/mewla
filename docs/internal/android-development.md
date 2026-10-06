@@ -4,7 +4,7 @@
 
 Open [GitHub Releases](https://github.com/daoleno/zen/releases) and download the newest `zen-android-arm64-v*.apk` together with `SHA256SUMS`.
 
-The APK supports 64-bit ARM Android devices (`arm64-v8a`). It does not support x86 phones or 32-bit ARM devices. iOS uses a separate source build; see [iOS app](ios.md).
+The APK supports 64-bit ARM Android devices (`arm64-v8a`). It does not support x86 phones or 32-bit ARM devices. iOS uses a separate source build; see [iOS app](ios-development.md).
 
 Before installing, download `SHA256SUMS` from the same release and verify the APK:
 
@@ -21,7 +21,7 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 
 Android will ask you to allow installation from the browser or file manager you used. A Play Protect warning is possible because Zen is distributed outside Play Store.
 
-After installation, follow [Connect and pair](connect-and-pair.md): use `zen --lan` on a trusted private network or keep bare `zen` behind an HTTPS endpoint, then scan or import the generated pairing code in Settings.
+After installation, follow [Connect and pair](../connect-and-pair.md): use `zen --lan` on a trusted private network or keep bare `zen` behind an HTTPS endpoint, then scan or import the generated pairing code in Settings.
 
 ## Current scope
 
@@ -30,7 +30,7 @@ After installation, follow [Connect and pair](connect-and-pair.md): use `zen --l
 | Pair, reconnect, session list, structured Chat | Supported release surface                                                                            |
 | Native terminal (Ghostty VT)                   | Requires built `libghostty_vt.so` for **arm64-v8a** (devices) and optionally **x86_64** (emulator)  |
 | Structured agent interfaces                    | Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode share the same React Native Chat/Terminal UI used on iOS |
-| iOS                                            | Separate source-build target; see [ios.md](ios.md)                                                  |
+| iOS                                            | Separate source-build target; see [ios.md](ios-development.md)                                                  |
 | Expo Go                                        | Can paste/scan pairing links; custom `zen://` deep links need a dev build/APK                       |
 | Play Store                                     | Not part of this release foundation                                                                 |
 
@@ -38,7 +38,7 @@ After installation, follow [Connect and pair](connect-and-pair.md): use `zen --l
 
 Canonical machine-readable contract:
 
-[`app/modules/zen-terminal-vt/native.lock.json`](../app/modules/zen-terminal-vt/native.lock.json)
+[`app/modules/zen-terminal-vt/native.lock.json`](../../app/modules/zen-terminal-vt/native.lock.json)
 
 | Android ABI | Zig target              | Role                              | Sideload required |
 | ----------- | ----------------------- | --------------------------------- | ----------------- |
@@ -263,13 +263,13 @@ export ZEN_ANDROID_KEY_PASSWORD='…'
 
 ## Package identity
 
-Canonical tracked identity is [`app/app.base.json`](../app/app.base.json) (loaded by [`app/app.config.js`](../app/app.config.js)):
+Canonical tracked identity is [`app/app.base.json`](../../app/app.base.json) (loaded by [`app/app.config.js`](../../app/app.config.js)):
 
 | Field                 | Owner                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
-| `expo.version`        | [`app/app.base.json`](../app/app.base.json)                                                          |
-| `android.package`     | [`app/app.base.json`](../app/app.base.json) (`com.daoleno.zen`)                                      |
-| `android.versionCode` | [`app/app.base.json`](../app/app.base.json) (read the live integer; do not copy a stale table value) |
+| `expo.version`        | [`app/app.base.json`](../../app/app.base.json)                                                          |
+| `android.package`     | [`app/app.base.json`](../../app/app.base.json) (`com.daoleno.zen`)                                      |
+| `android.versionCode` | [`app/app.base.json`](../../app/app.base.json) (read the live integer; do not copy a stale table value) |
 
 Verify with `./scripts/verify-release-identity.sh` (also `bun run release:identity`).
 
@@ -297,15 +297,15 @@ Each release has versioned notes under `docs/releases/`; the release page includ
 
 ### CI (GitHub Actions)
 
-Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../.github/workflows/release-artifacts.yml). After gated aggregation and verification, the workflow publishes the matching GitHub Release. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Required secret **names** and release preparation details: [ci-release.md](ci-release.md).
+Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). After gated aggregation and verification, the workflow publishes the matching GitHub Release. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
 
 ## Related docs
 
-- [CI release pipeline](ci-release.md)
-- [Connect and pair](connect-and-pair.md)
-- [Third-party assets (Ghostty MIT)](third-party-assets.md)
-- [Release blockers](release-blockers.md)
-- [Troubleshooting](troubleshooting.md)
+- [CI release pipeline](../ci-release.md)
+- [Connect and pair](../connect-and-pair.md)
+- [Third-party assets (Ghostty MIT)](../third-party-assets.md)
+- [Release blockers](../release-blockers.md)
+- [Troubleshooting](../troubleshooting.md)
 
 ### Attachment document providers
 

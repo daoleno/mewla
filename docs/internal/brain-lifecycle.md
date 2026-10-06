@@ -110,7 +110,7 @@ Delivered facts are not repeatedly admitted when a Host ends without resolving
 them. They remain discoverable, explicit redelivery is possible, and independent
 Work results proceed. New terminal evidence replaces an earlier provisional
 exception and its current card; it cannot be stranded behind an old handling.
-See [Work Lifecycle](work-lifecycle.md) for responsibilities and transitions.
+See [Work Lifecycle](../work-lifecycle.md) for responsibilities and transitions.
 
 Fresh Brain homes receive the provider-neutral lifecycle and delegated
 Worker protocol from the versioned templates under `daemon/brain/templates/`.

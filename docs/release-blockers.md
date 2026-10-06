@@ -8,14 +8,15 @@ This file records release-readiness blockers and the evidence that resolved them
 
 ## Open blockers
 
-### `github-plugin-publisher-registration`
-
-- **Summary:** The artifact workflow requires a registered Zen GitHub publisher before building a new public release, but `release/plugin-publishers.json` still has a null GitHub `client_id`.
-- **Acceptance:** The approved owner `daoleno` supplies the public Client ID of the Zen OAuth app with Device Flow enabled; commit that public value to the manifest and pass `python3 scripts/plugin-publisher-flags.py --require github` before dispatching release preparation.
-- **Evidence:** `.github/workflows/release-artifacts.yml` runs that validation before tag/identity validation. With the current manifest it reports `github: Zen publisher registration is not configured; cannot publish`.
-- **Handoff:** Follow [Publisher setup](plugins-publisher-setup.md#github-approved-owner-and-concrete-registration-handoff) in the owner's browser. The missing value is public configuration; release publication is already authorized. Do not distribute a client secret or substitute another application's identity.
+None.
 
 ## Resolved
+
+### `github-plugin-publisher-registration` (resolved 2026-10-04)
+
+- **Summary:** The artifact workflow requires a registered Zen GitHub publisher before building a public release.
+- **Resolution evidence:** commit `9a8988cd` commits the public Client ID of the `daoleno`-owned Zen OAuth app to `release/plugin-publishers.json`; `python3 scripts/plugin-publisher-flags.py --require github` passes.
+- **Handoff (historical):** [Publisher setup](internal/plugins-publisher-setup.md#github-approved-owner-and-concrete-registration-handoff).
 
 ### `android-native-terminal-artifacts` (resolved 2026-08-24)
 
