@@ -1177,6 +1177,12 @@ func (e *Engine) Sweep() error {
 					at.Before(current.Review.Handler.ClaimExpiresAt) {
 					return nil, nil
 				}
+				// A live admission owns this exact capability until evidence
+				// resolves or aborts it. Wall-clock expiry cannot erase it,
+				// even before transport starts (which can race this sweep).
+				if a := current.Admissions[current.Review.Handler.HandlerToken]; a != nil && a.Status != AdmissionAborted {
+					return nil, nil
+				}
 				return []Event{{
 					WorkID: id, Kind: KReviewReleased,
 					SourceID: "claim-expired:" + current.Review.EventID, At: at,

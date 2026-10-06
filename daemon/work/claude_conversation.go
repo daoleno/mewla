@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -608,9 +609,12 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 		Source:    claudeConversationSource,
 	}
 	if role == "user" {
-		// Claude exposes the native structured user field. It is already the
-		// authoritative payload, even when the user types wrapper-like text.
+		// Retain literal native bytes as well as the strict transport-envelope
+		// alternative. A user can also submit literal wrapper-like text.
 		event.AdmissionSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(exact)))
+		if inner, ok := claudePastedInput(exact); ok {
+			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(inner)))
+		}
 	}
 	b.addEvent(event)
 }
@@ -816,4 +820,18 @@ func claudeToolInputString(raw json.RawMessage, key string) string {
 		return ""
 	}
 	return jsonString(input[key])
+}
+
+// Claude Code 2.1.285 wraps bracketed terminal pastes with these exact outer
+// bytes. Decode one whole envelope only; do not trim, normalize, search for a
+// payload substring, or recursively unwrap. Both IDs must match. Unknown or
+// nested forms stay raw and therefore fail closed for an inner submission.
+var claudePasteEnvelope = regexp.MustCompile(`(?s)\A\n\n<pasted_content id="([0-9a-f]{4})">\n(.*)\n</pasted_content id="([0-9a-f]{4})">\n\z`)
+
+func claudePastedInput(raw string) (string, bool) {
+	parts := claudePasteEnvelope.FindStringSubmatch(raw)
+	if parts == nil || parts[1] != parts[3] || strings.Contains(parts[2], "<pasted_content") || strings.Contains(parts[2], "</pasted_content") {
+		return "", false
+	}
+	return parts[2], true
 }

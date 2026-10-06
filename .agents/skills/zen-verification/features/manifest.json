@@ -16,7 +16,9 @@
         "daemon/work/host_transcript.go",
         "daemon/brain/work_review.go",
         "daemon/lifecycle/reduce.go",
-        "daemon/watcher/session_input.go"
+        "daemon/watcher/session_input.go",
+        "daemon/work/claude_conversation.go",
+        "daemon/cmd/zen/provider_activity_probe.go"
       ],
       "test_paths": [
         "daemon/brain/service_test.go",
@@ -33,7 +35,12 @@
         "app/components/terminal/brainExecutorSwitch.test.tsx",
         "daemon/brain/review_delivery_retry_test.go",
         "daemon/watcher/claude_resume_identity_test.go",
-        "daemon/lifecycle/review_delivery_failure_test.go"
+        "daemon/lifecycle/review_delivery_failure_test.go",
+        "daemon/work/claude_paste_admission_test.go",
+        "daemon/watcher/claude_paste_admission_test.go",
+        "daemon/brain/claude_paste_admission_test.go",
+        "daemon/cmd/zen/claude_paste_admission_test.go",
+        "daemon/lifecycle/review_admission_expiry_test.go"
       ]
     },
     {

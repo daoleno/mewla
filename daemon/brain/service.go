@@ -1528,8 +1528,14 @@ func eventMatchesPendingPayloadDigest(event work.CodexConversationEvent, wantDig
 	if wantDigest == "" {
 		return false
 	}
-	if strings.TrimSpace(event.AdmissionSHA256) == wantDigest {
+	if strings.TrimSpace(event.AdmissionSHA256) == wantDigest ||
+		strings.TrimSpace(event.AdmissionUnwrappedSHA256) == wantDigest {
 		return true
+	}
+	// Claude has exact native byte evidence; display normalization cannot
+	// override a mismatch (including malformed paste envelopes).
+	if event.Source == "claude_code_transcript" && event.AdmissionSHA256 != "" {
+		return false
 	}
 	body := strings.TrimSpace(event.Body)
 	if body == "" {

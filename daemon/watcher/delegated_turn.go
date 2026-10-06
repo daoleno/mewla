@@ -44,14 +44,15 @@ type ProviderActivityObservation struct {
 	StartedAt time.Time
 	SettledAt time.Time
 	// ProgressAt is source event time, never the time a cached status was read.
-	ProgressAt      time.Time
-	AdmissionStream string
-	AdmissionID     string
-	AdmissionCursor uint64
-	AdmissionAt     time.Time
-	InputSHA256     string
-	Structured      bool
-	FallbackAllowed bool
+	ProgressAt           time.Time
+	AdmissionStream      string
+	AdmissionID          string
+	AdmissionCursor      uint64
+	AdmissionAt          time.Time
+	InputSHA256          string
+	InputUnwrappedSHA256 string
+	Structured           bool
+	FallbackAllowed      bool
 	// ProbeState is the channel-health classification of this observation:
 	// OK (read succeeded, possibly no new fact) vs unlocatable/unreadable.
 	ProbeState ProviderProbeState

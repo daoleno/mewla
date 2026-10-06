@@ -221,6 +221,9 @@ type CodexConversationEvent struct {
 	// AdmissionSHA256 is the exact provider-native user input digest when the
 	// source preserves those bytes separately from its display projection.
 	AdmissionSHA256 string `json:"-"`
+	// AdmissionUnwrappedSHA256 preserves an exact alternative only when a provider
+	// adds a recognized whole-message transport envelope. Never a display digest.
+	AdmissionUnwrappedSHA256 string `json:"-"`
 }
 
 // CodexConversationFileChange is the provider-neutral, display-only summary

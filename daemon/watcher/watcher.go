@@ -2120,6 +2120,7 @@ func providerObservationForTurn(
 		provider.AdmissionCursor = 0
 		provider.AdmissionAt = time.Time{}
 		provider.InputSHA256 = ""
+		provider.InputUnwrappedSHA256 = ""
 		return provider
 	}
 	return provider
@@ -3277,6 +3278,9 @@ func (w *Watcher) delegatedInputConfirmer(
 					payloadSHA256,
 				) {
 				case delegatedAdmissionAccepted:
+					// Persist the exact submitted digest, including when the provider
+					// added a strictly recognized paste envelope.
+					evidence.InputSHA256 = strings.TrimSpace(payloadSHA256)
 					return delegatedInputConfirmation{
 						Outcome:          InputAccepted,
 						ProviderActivity: strings.TrimSpace(observation.ID),
@@ -3308,11 +3312,12 @@ func delegatedAdmissionEvidenceFromObservation(
 	observation ProviderActivityObservation,
 ) delegatedAdmissionEvidence {
 	return delegatedAdmissionEvidence{
-		Stream:      strings.TrimSpace(observation.AdmissionStream),
-		ID:          strings.TrimSpace(observation.AdmissionID),
-		Cursor:      observation.AdmissionCursor,
-		StartedAt:   observation.AdmissionAt.UTC(),
-		InputSHA256: strings.TrimSpace(observation.InputSHA256),
+		Stream:               strings.TrimSpace(observation.AdmissionStream),
+		ID:                   strings.TrimSpace(observation.AdmissionID),
+		Cursor:               observation.AdmissionCursor,
+		StartedAt:            observation.AdmissionAt.UTC(),
+		InputSHA256:          strings.TrimSpace(observation.InputSHA256),
+		InputUnwrappedSHA256: strings.TrimSpace(observation.InputUnwrappedSHA256),
 	}
 }
 
@@ -3339,7 +3344,7 @@ func correlateDelegatedAdmission(
 		current.StartedAt.Before(mutationBoundary.UTC()) {
 		return delegatedAdmissionMissing
 	}
-	if current.InputSHA256 != strings.TrimSpace(payloadSHA256) {
+	if !current.matchesPayload(strings.TrimSpace(payloadSHA256)) {
 		return delegatedAdmissionMismatched
 	}
 	return delegatedAdmissionAccepted
