@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zen · a personal agent that sleeps until you have a goal</title>
+<meta name="description" content="Zen is an open-source, self-hosted personal agent for one person. Brain takes your goal, splits it into Work, hands each part to a coding agent on your own computer and reviews the result. Android and iOS, beta.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#faf7f0">
+<link rel="icon" href="seal-icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=Nunito:wght@400;600;700&amp;display=swap">
+<link rel="stylesheet" href="seal.css">
+<script type="module" src="main.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="bar">
+  <div class="wrap bar-row">
+    <a class="brand" href="#top" aria-label="Zen, back to top">
+      <svg class="mini" viewBox="0 0 100 100" aria-hidden="true" data-seal="mini"></svg>
+      <span>Zen</span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="#brain">Brain</a>
+      <a href="#sessions">Sessions</a>
+      <a href="#install">Install</a>
+      <a class="btn primary small" href="#install">Get Zen</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <!-- Hero: the cat is asleep in the seal -->
+  <section class="hero" id="top">
+    <div class="wrap hero-grid">
+      <div class="hero-art">
+        <svg class="seal" viewBox="0 0 100 100" role="img" aria-label="The Zen seal: a cat asleep under a crescent moon" data-seal="hero" data-perch="seal"></svg>
+        <p class="hint" aria-hidden="true">Scroll, and the cat comes along. Tap it to make it hop.</p>
+      </div>
+      <div class="hero-copy">
+        <p class="eyebrow">Open source · self-hosted · Android and iOS beta</p>
+        <h1>A personal agent that sleeps until <em>you have a goal.</em></h1>
+        <p class="lede">Zen is a phone app and a small daemon on your own computer. Every coding agent there becomes a Session you can carry, and <strong>Brain</strong>, your butler, turns one goal into finished, reviewed work.</p>
+        <div class="ctas">
+          <a class="btn primary" href="#install">Get Zen</a>
+          <a class="btn" href="https://github.com/user/zen">Source on GitHub</a>
+        </div>
+        <ul class="facts">
+          <li>Apache-2.0</li>
+          <li>Linux, WSL2 or Apple Silicon Mac</li>
+          <li>Android APK · iOS preview</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Brain first -->
+  <section class="brain" id="brain">
+    <div class="wrap">
+      <p class="kicker">Brain</p>
+      <h2>Say it once. The butler runs the rest.</h2>
+    </div>
+    <div class="wrap brain-grid">
+      <ol class="steps">
+        <li class="step">
+          <span class="num" aria-hidden="true">1</span>
+          <h3>You say it once.</h3>
+          <p>Type a goal to Brain on the phone, or send it from Telegram. Then put the phone away.</p>
+          <p class="example">“Ship dark mode for atlas-notes this week, and keep the release notes current.”</p>
+        </li>
+        <li class="step" data-perch="0.8">
+          <span class="num" aria-hidden="true">2</span>
+          <h3>Each part becomes durable Work.</h3>
+          <p>Brain records every part as Work, with its attempts, wake timers and review state. Work survives restarts, and Brain doesn’t poll: Workers report back and timers wake it when something is due.</p>
+        </li>
+        <li class="step">
+          <span class="num" aria-hidden="true">3</span>
+          <h3>You set the routing in plain Markdown.</h3>
+          <p>Before each spawn, Brain reads <code>routing.md</code> to choose the executor, model and reasoning level for each part. Tell Brain a preference and it rewrites the line.</p>
+          <pre class="note" aria-label="Example routing.md"><span class="c"># routing.md (example)</span>
+- UI and copy: claude, high reasoning
+- Go daemon and tests: codex
+- Quick lookups: pi</pre>
+        </li>
+        <li class="step" data-perch="0.78">
+          <span class="num" aria-hidden="true">4</span>
+          <h3>Workers are ordinary Sessions.</h3>
+          <p>Every Worker is a normal agent Session on your computer, running in tmux. Open any of them to read along, answer a question or take over.</p>
+        </li>
+        <li class="step">
+          <span class="num" aria-hidden="true">5</span>
+          <h3>Nothing is done until it’s reviewed.</h3>
+          <p>Brain reads each result and decides the next step. Only Brain or you can mark Work done. A Worker that goes missing shows up as <em>Needs review</em>, not as a success.</p>
+          <span class="stamp" aria-hidden="true">reviewed</span>
+        </li>
+      </ol>
+      <div class="brain-phone">
+        <figure class="phone" data-perch="0.72">
+          <picture>
+            <source type="image/avif" srcset="../img/app-brain-640.avif 640w, ../img/app-brain-960.avif 960w" sizes="(max-width: 760px) 72vw, 320px">
+            <img src="../img/app-brain-640.webp" srcset="../img/app-brain-640.webp 640w, ../img/app-brain-960.webp 960w" sizes="(max-width: 760px) 72vw, 320px" width="390" height="844" loading="lazy" alt="The Brain screen in Zen: the goal ‘Ship dark mode for atlas-notes this week’, a three-part plan, one Work item done, one ready for review, and Brain’s note on what happens next.">
+          </picture>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- What Brain looks after -->
+  <section class="keeps" id="keeps">
+    <div class="wrap">
+      <p class="kicker">Brain keeps</p>
+      <h2>What the butler looks after.</h2>
+    </div>
+    <div class="wrap keeps-grid">
+      <ul class="cards">
+        <li><h3>Memory you can read</h3><p><code>current.md</code>, <code>profile.md</code>, <code>memory.md</code> and a worklog, as plain files in its workspace.</p></li>
+        <li><h3>Switch the host, keep the thread</h3><p><code>zen brain use codex</code> moves Brain itself to another agent client, thread intact.</p></li>
+        <li data-perch="0.8"><h3>Calendar <span class="tag">Beta</span></h3><p>Events, reminders and deadlines. A scheduled action runs as visible Work and posts its result back.</p></li>
+        <li><h3>Telegram <span class="tag">Beta</span></h3><p>A second channel to the same Brain, for when the app isn’t open.</p></li>
+        <li><h3>Plugins <span class="tag">Preview</span></h3><p>Linear, Notion, GitHub, Slack, Google Workspace, or your own MCP and OpenAPI servers. Reading is on by default; writing is a separate switch.</p></li>
+        <li data-perch="0.76"><h3>Resources</h3><p>CPU, memory, disk and pressure, each process attributed to a Worker, Brain, Docker or you. Brain is told when the machine runs short.</p></li>
+      </ul>
+      <figure class="phone side" data-perch="0.7">
+        <picture>
+          <source type="image/avif" srcset="../img/app-calendar-640.avif 640w, ../img/app-calendar-960.avif 960w" sizes="(max-width: 760px) 72vw, 300px">
+          <img src="../img/app-calendar-640.webp" srcset="../img/app-calendar-640.webp 640w, ../img/app-calendar-960.webp 960w" sizes="(max-width: 760px) 72vw, 300px" width="390" height="844" loading="lazy" alt="Zen Calendar: a weekday dependency audit running as a scheduled action, a reminder, a weekly planning event and a release deadline.">
+        </picture>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Sessions -->
+  <section class="sessions" id="sessions">
+    <div class="wrap split">
+      <figure class="phone" data-perch="0.7">
+        <picture>
+          <source type="image/avif" srcset="../img/app-sessions-640.avif 640w, ../img/app-sessions-960.avif 960w" sizes="(max-width: 760px) 72vw, 320px">
+          <img src="../img/app-sessions-640.webp" srcset="../img/app-sessions-640.webp 640w, ../img/app-sessions-960.webp 960w" sizes="(max-width: 760px) 72vw, 320px" width="390" height="844" loading="lazy" alt="The Sessions list: Codex running the settings tests, Claude waiting for an answer, a finished Claude Session, Cursor profiling a cold start, and a finished OpenCode Session.">
+        </picture>
+      </figure>
+      <div class="sessions-copy">
+        <p class="kicker">Sessions</p>
+        <h2>Every agent you run, in one hand.</h2>
+        <p>Start an agent in any directory on your computer. Each one is a <code>tmux</code> session, so it is also there at the desk.</p>
+        <ul class="agents" aria-label="Supported agents">
+          <li>Claude</li><li>Codex</li><li>Cursor</li><li>Grok</li><li>Pi</li><li>OpenCode</li><li>DSH</li><li>Shell</li>
+        </ul>
+        <dl class="views">
+          <div><dt>Chat</dt><dd>Messages, tool calls, plans and attachments, laid out for reading.</dd></div>
+          <div><dt>Terminal</dt><dd>The live terminal, rendered natively with libghostty.</dd></div>
+          <div><dt>Git</dt><dd>Read-only diffs of the repository: all, working or staged.</dd></div>
+        </dl>
+        <p class="alerts"><span class="dot" aria-hidden="true"></span>Your phone gets a push only when a Session needs input, fails or finishes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Around the agents -->
+  <section class="around" id="around">
+    <div class="wrap">
+      <p class="kicker">Around the agents</p>
+      <h2>The rest of the house, from the same server.</h2>
+    </div>
+    <div class="wrap keeps-grid">
+      <ul class="cards two">
+        <li><h3>Model Providers</h3><p>Official login for Codex and Claude, or your own OpenAI, Anthropic, DeepSeek, OpenRouter or gateway keys. Keys stay on the daemon and are never shown again.</p></li>
+        <li><h3>Skills</h3><p>See the Skills and Agent Plugins your agents load, and where each copy came from. Remove one exact copy without touching the rest.</p></li>
+        <li data-perch="0.8"><h3>Stats</h3><p>Tokens, Sessions and cost per model and project. Reported, estimated and unknown costs stay apart.</p></li>
+        <li><h3>Services</h3><p>Ports your Sessions opened, grouped by project. Open one through a temporary Cloudflare Quick Tunnel when you need it.</p></li>
+      </ul>
+      <figure class="phone side" data-perch="0.7">
+        <picture>
+          <source type="image/avif" srcset="../img/app-stats-640.avif 640w, ../img/app-stats-960.avif 960w" sizes="(max-width: 760px) 72vw, 300px">
+          <img src="../img/app-stats-640.webp" srcset="../img/app-stats-640.webp 640w, ../img/app-stats-960.webp 960w" sizes="(max-width: 760px) 72vw, 300px" width="390" height="844" loading="lazy" alt="Zen Stats with fictional demo numbers: subscription limits left, estimated cost and tokens, and usage per model.">
+        </picture>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Install -->
+  <section class="install" id="install">
+    <div class="wrap">
+      <p class="kicker">Install</p>
+      <h2>Three steps from your terminal to your pocket.</h2>
+      <ol class="three" data-perch="0.84">
+        <li>
+          <h3><span class="num" aria-hidden="true">1</span>Install the daemon</h3>
+          <div class="cmd"><code>curl -fsSL https://raw.githubusercontent.com/user/zen/main/install.sh | sh</code><button type="button" data-copy>Copy</button></div>
+          <p>Checksum-verified, no sudo, no telemetry. Then run <code>zen doctor</code> to check the host.</p>
+        </li>
+        <li>
+          <h3><span class="num" aria-hidden="true">2</span>Start it on your network</h3>
+          <div class="cmd"><code>zen --lan</code><button type="button" data-copy>Copy</button></div>
+          <p>On a trusted private network. Away from home, use Tailscale: <code>zen -addr "$(tailscale ip -4):9876"</code>.</p>
+        </li>
+        <li>
+          <h3><span class="num" aria-hidden="true">3</span>Scan the code</h3>
+          <p>Open the app and scan the QR code <code>zen</code> prints. Pair once, then open Brain.</p>
+          <p class="get"><a href="https://github.com/user/zen/releases">Android APK</a> · <a href="https://testflight.apple.com/join/rTKCDzMt">iOS TestFlight preview</a> (awaiting review) · <a href="https://github.com/user/zen/blob/main/docs/ios.md">iOS from source</a></p>
+        </li>
+      </ol>
+      <p class="req">Needs Linux (amd64 or arm64), WSL2 or an Apple Silicon Mac, with <code>tmux</code> and at least one signed-in agent CLI. <a href="https://github.com/user/zen/blob/main/docs/connect-and-pair.md">Connect and pair</a></p>
+    </div>
+  </section>
+
+  <!-- Ownership -->
+  <section class="yours" id="yours">
+    <div class="wrap">
+      <p class="kicker">One owner</p>
+      <h2>Yours, on your own machine.</h2>
+      <div class="yours-grid">
+        <div>
+          <p>Zen serves one person. The daemon has an Ed25519 identity, and a phone enrolls once with a short-lived pairing code, then signs every request. The app follows exactly one current server, and switching servers never mixes their data.</p>
+          <p>Repositories, credentials and agent state stay on your computer. Paired phones see what you open; model providers see what your agents send them.</p>
+          <p class="ext"><a href="https://github.com/user/zen/blob/main/docs/security-and-privacy.md">Security and privacy</a> · <a href="https://github.com/user/zen/blob/main/SECURITY.md">Report a vulnerability</a></p>
+        </div>
+        <aside class="warn" data-perch="0.82">
+          <h3>Read this before you run it on a work machine</h3>
+          <p>Several defaults bypass approval prompts so agents can work unattended: <code>cursor-agent --force --sandbox disabled</code>, <code>grok --permission-mode bypassPermissions</code>, and Brain-delegated Codex adds <code>--dangerously-bypass-approvals-and-sandbox</code>. On machines with secrets or production access, use the safe profile in <code>executors.example.toml</code>.</p>
+          <p class="ext"><a href="https://github.com/user/zen/blob/main/docs/executors.md#permission-bypass-risks">Executors: permission bypass risks</a></p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- Close -->
+  <section class="end">
+    <div class="wrap">
+      <div class="end-card" data-perch="0.5">
+        <h2>Let it work.<br>Look up when it matters.</h2>
+        <div class="ctas">
+          <a class="btn primary" href="#install">Get Zen</a>
+          <a class="btn" href="https://github.com/user/zen">Source on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-row">
+    <span class="brand small"><img src="seal-icon.svg" width="22" height="22" alt=""><span>Zen</span></span>
+    <span>Beta · Apache-2.0</span>
+    <a href="https://github.com/user/zen">GitHub</a>
+    <a href="https://github.com/user/zen/tree/main/docs">Docs</a>
+    <a href="https://github.com/user/zen/releases">Releases</a>
+    <a href="https://github.com/user/zen/blob/main/docs/release-blockers.md">Known issues</a>
+  </div>
+  <p class="wrap credit">Screens are the real app with demo data. The seal and the cat are drawn in SVG by hand.</p>
+</footer>
+</body>
+</html>
