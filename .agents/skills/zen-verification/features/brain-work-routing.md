@@ -62,3 +62,12 @@ across restart. Context exposes `current_work[].review_delivery` for failures,
 including attempts, reason, retry time and exhaustion. A CLI preflight alone does
 not prove delivery: inspect exact canonical `review.delivered` identities and the
 provider transcript input after the existing supervisor reloads the daemon.
+
+Claude Code can wrap a large terminal paste in a whole `pasted_content` envelope.
+Admission keeps the raw digest and an exact inner digest only for the recognized
+fixed envelope with matching IDs. Confirmation and pending recovery retain all
+identity, cursor and time fences; malformed, nested, prefixed or suffixed forms
+cannot match an inner payload. Sweep retains a review handler while its exact
+admission is live, so expiry cannot erase the recovery capability. Runtime proof
+requires a real wrapped native user event correlated to the canonical admitted
+digest and `review.delivered`; the CLI preflight does not send such an event.

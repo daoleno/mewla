@@ -207,7 +207,10 @@ identity.
 
 An open Review is the durable delivery obligation. A handler atomically claims
 it by `Review.EventID`. If it disappears before confirmed delivery,
-`claim_expires_at` releases the claim and the same Review becomes claimable.
+`claim_expires_at` releases the claim only if no live admission owns its exact
+capability. Prepared, ambiguous and accepted admissions retain their handler
+until authoritative evidence resolves delivery; elapsed time cannot erase that
+recovery authority. An unsent expired claim makes the same Review claimable.
 Confirmed delivery is consumed even if the handling fails to resolve. Ending
 that handling does not release it for automatic redelivery. The unresolved
 Review remains visible and does not hold the Host lane; the existing explicit
@@ -231,6 +234,17 @@ message while retaining the Worker result. `zen brain context --json` exposes
 An exhausted review remains open for diagnosis and an explicit owner decision;
 it must never be cleared by editing state or resolving Work just to empty a queue.
 Ambiguous or accepted provider mutations keep their existing non-replay fence.
+
+Claude Code may record a large terminal paste inside a `pasted_content` envelope.
+Zen preserves the native raw SHA-256 and derives an alternative inner SHA-256
+only for the exact whole-message envelope (fixed separators, matching four-digit
+hex IDs, no nested wrappers). It never trims or normalizes the inner bytes.
+Initial confirmation and pending reconciliation require one of those complete
+exact digests plus the existing native identity and admission-time fences. Raw
+literal wrapper input remains matchable. Malformed wrappers and a different
+inner payload stay ambiguous; they are not automatically replayed. A previously
+expired or superseded handler is not recreated by digest matching, and evidence
+from a different or older native activity cannot be attributed to today's turn.
 
 Claude process observation retains explicit `--resume`, `-r` and `--session-id`
 identities as a minimal command. Admission probes can therefore read a resumed

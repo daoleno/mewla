@@ -63,11 +63,12 @@ type delegatedTurnDraft struct {
 // delegatedAdmissionEvidence is the provider-native admission tuple observed
 // before and after the mutation boundary.
 type delegatedAdmissionEvidence struct {
-	Stream      string
-	ID          string
-	Cursor      uint64
-	StartedAt   time.Time
-	InputSHA256 string
+	Stream               string
+	ID                   string
+	Cursor               uint64
+	StartedAt            time.Time
+	InputSHA256          string
+	InputUnwrappedSHA256 string
 }
 
 // complete reports whether this is a full provider-native admission tuple. The
@@ -1116,7 +1117,7 @@ func (owner *sessionInputOwner) resolvePendingFromBaseline(
 		return InputAdmission{}, fmt.Errorf("pending provider admission has no authoritative lifecycle status")
 	}
 	admission := baseline.Admission
-	if strings.TrimSpace(admission.InputSHA256) != submission.PayloadSHA256 {
+	if !admission.matchesPayload(submission.PayloadSHA256) {
 		return InputAdmission{}, fmt.Errorf("provider admission digest does not match the pending payload; ownership was rejected")
 	}
 	return owner.resolveInputAdmission(InputAdmissionResolution{
@@ -1125,7 +1126,7 @@ func (owner *sessionInputOwner) resolvePendingFromBaseline(
 		ActivityID: strings.TrimSpace(provider.ID),
 		Admission: TurnAdmission{
 			Stream: strings.TrimSpace(admission.Stream), ID: strings.TrimSpace(admission.ID),
-			Cursor: admission.Cursor, SHA256: strings.TrimSpace(admission.InputSHA256),
+			Cursor: admission.Cursor, SHA256: submission.PayloadSHA256,
 			At: admission.StartedAt.UTC(),
 		},
 		ResolvedAt: owner.nowUTC(),
@@ -1562,4 +1563,10 @@ func ambiguousSubmission(receipt string, cause error) error {
 		Result: InputResult{Outcome: InputAmbiguous, Receipt: receipt},
 		Cause:  cause,
 	}
+}
+
+// Compare complete exact digests only. The alternative is emitted solely by
+// the native parser for a strictly validated provider transport envelope.
+func (e delegatedAdmissionEvidence) matchesPayload(digest string) bool {
+	return digest != "" && (e.InputSHA256 == digest || e.InputUnwrappedSHA256 == digest)
 }

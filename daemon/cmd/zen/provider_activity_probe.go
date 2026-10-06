@@ -136,6 +136,7 @@ func (p *workProviderActivityProbe) ObserveProviderActivity(
 			observation.AdmissionAt = parseProviderActivityTime(event.Timestamp)
 		}
 		observation.InputSHA256 = strings.TrimSpace(event.AdmissionSHA256)
+		observation.InputUnwrappedSHA256 = strings.TrimSpace(event.AdmissionUnwrappedSHA256)
 		break
 	}
 	return observation
