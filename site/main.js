@@ -21,6 +21,21 @@ if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && brain.playing) set(false); });
 }
 
+// the works-with strip loops: a second, hidden copy follows the first
+const row = document.querySelector('.works .row');
+const twin = row.cloneNode(true);
+twin.setAttribute('aria-hidden', 'true');
+row.after(twin);
+
+// illustrations play once, as they come into view
+const shown = document.querySelectorAll('.rv');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -12% 0px' });
+  shown.forEach((n) => io.observe(n));
+} else shown.forEach((n) => n.classList.add('in'));
+
 const bar = document.querySelector('.bar');
 const onScroll = () => bar.classList.toggle('scrolled', scrollY > 8);
 addEventListener('scroll', onScroll, { passive: true });
