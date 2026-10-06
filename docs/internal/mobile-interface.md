@@ -68,7 +68,7 @@ Settings is one grouped list:
 
 ## Plugins
 
-Plugins connects outside services to the current server. A context row names that server and its connection state. **Connected** lists each active account with a status pill (Connected, Not verified, Last call failed, Reconnect required, Disabled). **Add a service** lists the reviewed services, and **Custom services** holds MCP and OpenAPI. A service page shows the service, then either the connection steps, the connected account, or the access to grant before connecting. Every page is its own route (`/plugins`, `/plugins/custom`, `/plugins/<service>`, and its `accounts`, `permissions` and `tools` pages), so Back walks Slack → catalog → where you came from. A service page opened by link still has the catalog below it. Leaving a service page cancels a connection that has not finished. See [Plugins](plugins.md).
+Plugins connects outside services to the current server. A context row names that server and its connection state. **Connected** lists each active account with a status pill (Connected, Not verified, Last call failed, Reconnect required, Disabled). **Add a service** lists the reviewed services, and **Custom services** holds MCP and OpenAPI. A service page shows the service, then either the connection steps, the connected account, or the access to grant before connecting. Every page is its own route (`/plugins`, `/plugins/custom`, `/plugins/<service>`, and its `accounts`, `permissions` and `tools` pages), so Back walks Slack → catalog → where you came from. A service page opened by link still has the catalog below it. Leaving a service page cancels a connection that has not finished. See [Plugins](plugins-engineering.md).
 
 ## Skills
 

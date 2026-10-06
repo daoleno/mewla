@@ -1,339 +1,222 @@
-# Install the daemon
+# Install
 
-This guide installs the daemon that owns Zen's state, pairing identity, tmux sessions, and executor processes. The Android or iOS app connects to this daemon; installing a mobile client alone is not enough.
+Zen has two parts: the daemon on your computer and the app on your phone.
+Install the daemon first; the app is useless without it.
 
 ## What you need
 
-- Linux `amd64`/`arm64` or an Apple Silicon Mac
-- `curl`, `tar`, and either `sha256sum` (Linux) or `shasum` (macOS)
+- Linux `amd64`/`arm64`, WSL2, or an Apple Silicon Mac
+- `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS)
 - `tmux` on `PATH`
-- At least one AI CLI on `PATH` and already authenticated (`codex`, `claude`, `cursor-agent`, `grok`, `pi`, or `opencode`)
+- At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
+  `cursor-agent`, `grok`, `pi` or `opencode`. One is enough.
 
-You do not need every executor. One is enough.
+## Install the daemon
 
-## Install with one command
+<!-- if-pending ZEN_INSTALL_URL -->
+> [!NOTE]
+> The public download location for the installer and release archives has not
+> been published yet. Commands below show it as `<ZEN_INSTALL_URL>` or link to
+> it as pending.
 
+<!-- /if-pending -->
 ```sh
-curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh
+curl -fsSL {{ZEN_INSTALL_URL}} | sh
 ```
 
-On every fresh bootstrap run without `ZEN_VERSION`, the installer queries GitHub at run time and selects the SemVer-highest public nondraft Release whose tag matches supported `vX.Y.Z` or `vX.Y.Z-beta.N` syntax. GitHub's `prerelease` flag does not affect eligibility: strict SemVer ordering makes a stable tag outrank a beta at the same core version, while a beta with a higher core version outranks a stable release with a lower core. The default follows the highest published version without an embedded version that needs routine README or script updates. `ZEN_VERSION` is optional pinning only.
+The installer picks the newest release for your platform, downloads the archive
+and its `SHA256SUMS`, verifies the checksum, and installs `zen` into a
+user-owned directory on your `PATH` (or `~/.local/bin`). It never uses `sudo`,
+installs packages, installs agent CLIs, signs in anywhere or sends telemetry.
+When it finishes, it runs `zen doctor`.
 
-The installer detects the supported platform, downloads the selected release's exact archive and `SHA256SUMS` from the official [`daoleno/zen`](https://github.com/daoleno/zen) release, verifies SHA-256, rejects unexpected archive entries and links, and atomically installs a mode-`0755` executable. It never invokes `sudo`, installs packages, installs AI CLIs, logs in, or sends telemetry.
+If `zen` is already installed, the same command runs `zen update` instead,
+unless you set `ZEN_VERSION` or `ZEN_INSTALL_DIR`.
 
-If a usable Zen executable already exists at a safe user-owned location, the default command runs its built-in `zen update` instead. That updater verifies the signed schema-v2 release manifest and authenticated archive checksum before replacing the executable. Setting `ZEN_VERSION` or `ZEN_INSTALL_DIR` requests a fresh bootstrap install instead:
+Options, set as environment variables on `sh`:
 
-```sh
-# Exact supported tag; no other tag syntax is accepted.
-curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | \
-  ZEN_VERSION=v0.1.15 sh
-
-# Explicit user-owned destination.
-curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | \
-  ZEN_INSTALL_DIR="$HOME/bin" sh
-
-# Do not edit a shell profile (useful for managed hosts and CI).
-curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | \
-  ZEN_NO_PATH_UPDATE=1 sh
-```
-
-`ZEN_DRY_RUN=1` prints the selected platform, requested version, and destination without downloading or changing files. The installer is noninteractive and uses nonzero exits with specific errors, so version pins and custom destinations work in CI as well.
-
-### Install location and PATH
-
-With no `ZEN_INSTALL_DIR`, the installer preserves a safe existing user-owned Zen location. Otherwise, it selects an existing writable user-owned `bin` directory on `PATH` only when there is exactly one unambiguous choice; the fallback is `~/.local/bin`. It refuses root/system directories and refuses to run as root.
-
-When the fallback is not already on `PATH`, the installer can append one marked, idempotent entry to `.zshrc`, `.bashrc`, or `.config/fish/config.fish`, according to `SHELL`. It will not edit a symlinked or foreign-owned profile. A piped installer cannot modify its parent shell, so the final output prints the exact `export PATH=...` or `fish_add_path ...` command to run immediately and the full installed path to use in the meantime. Set `ZEN_NO_PATH_UPDATE=1` to suppress all profile changes; the immediate command is still printed.
-
-After installation, the script runs a safe `--help` execution check followed by `zen doctor` using the full installed path. Missing `tmux`, an agent CLI, or authentication is reported as host setup guidance rather than a corrupt installation; the installer never tries to remedy those dependencies itself.
-
-### Bootstrap trust boundary
-
-The first `install.sh`, release archive, and `SHA256SUMS` arrive over GitHub HTTPS. The checksum detects a damaged or mismatched archive, but because the checksum is delivered through the same HTTPS trust boundary, the bootstrap does **not** claim Ed25519 authentication. Review the repository-root [`install.sh`](../install.sh), pin its commit in the raw URL if your policy requires reviewed immutable bootstrap code, or use the manual path below.
-
-As optional transport hardening on curl versions that support these flags, require HTTPS for the initial script request:
+| Variable | Effect |
+| --- | --- |
+| `ZEN_VERSION=v0.1.15` | Install this exact release tag instead of the newest |
+| `ZEN_INSTALL_DIR="$HOME/bin"` | Install into this user-owned directory |
+| `ZEN_NO_PATH_UPDATE=1` | Do not add the install directory to your shell profile |
+| `ZEN_DRY_RUN=1` | Print the platform, version and destination; change nothing |
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh
+curl -fsSL {{ZEN_INSTALL_URL}} | ZEN_INSTALL_DIR="$HOME/bin" sh
 ```
 
-After the first install, `zen update` has a stronger trust path: the installed binary contains Zen's Ed25519 public key and requires the signed schema-v2 manifest before accepting an archive. The bootstrap never downloads remote shell code and pipes it into a second shell.
+If the installer added a directory to your shell profile, open a new terminal
+or run the `export PATH=...` line it printed.
 
-## Supported platforms
+### Manual download
 
-| Host                                        | Archive                   | Status                                                                |
-| ------------------------------------------- | ------------------------- | --------------------------------------------------------------------- |
-| Linux `amd64` / `x86_64`                    | `zen-linux-amd64.tar.gz`  | Supported                                                             |
-| Linux `arm64` / `aarch64`                   | `zen-linux-arm64.tar.gz`  | Supported                                                             |
-| WSL2 on either supported Linux architecture | matching Linux archive    | Supported                                                             |
-| Apple Silicon macOS                         | `zen-darwin-arm64.tar.gz` | Supported                                                             |
-| Intel macOS                                 | —                         | Unsupported; build from source if you are evaluating an untested host |
-| Native Windows                              | —                         | Unsupported; use WSL2 or build from source for development            |
+Download the archive for your host and `SHA256SUMS` from the
+[release downloads]({{ZEN_RELEASES_URL}}), then verify and install:
 
-The installer fails on unsupported platforms before downloading an archive. It does not present native Windows or Intel macOS as release-supported hosts.
-
-## Manual release download and checksum verification
-
-Open [GitHub Releases](https://github.com/daoleno/zen/releases) and download:
-
-- `zen-linux-amd64.tar.gz` for most Intel/AMD Linux machines
-- `zen-linux-arm64.tar.gz` for 64-bit ARM Linux machines
-- `zen-darwin-arm64.tar.gz` for Apple Silicon Macs
-- `SHA256SUMS` to verify the download
-
-```bash
-# Linux
+```sh
+# Linux (use zen-linux-arm64.tar.gz on ARM)
 grep 'zen-linux-amd64.tar.gz$' SHA256SUMS | sha256sum -c -
+tar -xzf zen-linux-amd64.tar.gz
 
 # macOS
 grep 'zen-darwin-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -
+tar -xzf zen-darwin-arm64.tar.gz
 
-tar -xzf zen-<platform>-<architecture>.tar.gz
 mkdir -p ~/.local/bin
 install -m 755 zen ~/.local/bin/zen
-~/.local/bin/zen --help
 ~/.local/bin/zen doctor
 ```
 
-Replace the Linux archive name with `zen-linux-arm64.tar.gz` on ARM64. Before accepting the checksum line, inspect it and confirm there is exactly one entry for the archive you downloaded. Manual installation has the same initial GitHub HTTPS trust boundary described above.
+On macOS, install `tmux` with `brew install tmux`. If macOS blocks the binary,
+confirm it came from an official Zen release, then run
+`xattr -d com.apple.quarantine ~/.local/bin/zen`.
 
-After the first install, Zen can update itself in place:
+## Supported platforms
 
-```bash
-zen update --check
-zen update
+| Host | Archive | Status |
+| --- | --- | --- |
+| Linux `amd64` / `x86_64` | `zen-linux-amd64.tar.gz` | Supported |
+| Linux `arm64` / `aarch64` | `zen-linux-arm64.tar.gz` | Supported |
+| WSL2 on either architecture | The matching Linux archive | Supported |
+| Apple Silicon macOS | `zen-darwin-arm64.tar.gz` | Supported |
+| Intel macOS | None | Not supported |
+| Native Windows | None | Not supported; use WSL2 |
+
+The installer stops on an unsupported platform before downloading anything.
+
+## Check the host
+
+```sh
+zen doctor          # tmux, state directory, listen port, agent CLIs
+zen doctor --json
 ```
 
-`zen update` selects the supported archive for the current OS and architecture, verifies the release's signed manifest and archive checksum, then atomically replaces the current user-owned executable. It never uses `sudo` or restarts Zen. If the daemon is running, stop and start it when convenient to use the new binary.
+`zen doctor` exits nonzero when the host is not ready and says why. It never
+installs packages or prints credentials.
 
-An interactive daemon startup may print one cached `zen update` hint. The check runs asynchronously, never delays startup, and stays silent in noninteractive output and on network failure.
+To write an executor configuration interactively, run `zen setup`. See
+[Agents and executors](executors.md#configure-executors).
 
-On macOS, install `tmux` separately if needed. If macOS blocks the downloaded binary, confirm that it came from the official Zen release before removing the quarantine attribute with `xattr -d com.apple.quarantine ~/.local/bin/zen`.
+## Update
 
-If `~/.local/bin` is not on your `PATH`, install into another user-owned directory that is, or add it to your shell configuration.
-
-## Build from source
-
-Startup prints the listening address, available private-network addresses, and one pairing command. Saved model routes are reclaimed when the selected tmux server confirms their sessions are absent. Live or unobservable sessions retain their routes; a model-settings warning for a retained route does not mean the HTTP server failed to start.
-
-Source builds require the Go toolchain declared in `daemon/go.mod`:
-
-```bash
-git clone https://github.com/daoleno/zen.git
-cd zen
-bun run daemon:build
-./bin/zen --help
-./bin/zen doctor
+```sh
+zen update --check  # is there a newer release?
+zen update          # verify and install it
 ```
 
-`bun run daemon:build` and `cd daemon && go run ./cmd/zen-dev` build with
-`CGO_ENABLED=0`. The development watcher rebuilds Go source changes and restarts
-the daemon with its existing arguments. No display libraries are required.
-
-Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/zen/version.go` and can be overridden at link time (`-X main.Version=…`).
-
-## Release binaries (Linux and Apple Silicon macOS)
-
-`scripts/build-daemon-linux.sh` builds Linux amd64, Linux arm64 and Darwin
-arm64 binaries with `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false` and stripped
-ldflags. All targets use the same daemon feature set.
-
-```bash
-./scripts/build-daemon-linux.sh
-# → dist-download/staging/bin/zen-linux-amd64
-# → dist-download/staging/bin/zen-linux-arm64
-# → dist-download/staging/bin/zen-darwin-arm64
-```
-
-Full local stage (clean directory each run; **no** GitHub Release):
-
-```bash
-./scripts/stage-release.sh
-# → dist-download/vVERSION/
-#    zen-linux-amd64.tar.gz
-#    zen-linux-arm64.tar.gz
-#    zen-darwin-arm64.tar.gz
-#    SHA256SUMS  release-manifest.json  release-manifest.json.sig
-```
-
-Each archive contains the `zen` binary plus `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. The command prints the exact stage path; tracked release notes remain on the GitHub Release page instead of becoming duplicate download assets.
-
-Release staging requires the Ed25519 manifest key through `ZEN_UPDATE_SIGNING_KEY` (a local PEM path) or `ZEN_UPDATE_SIGNING_KEY_BASE64` (CI). The committed public key is the trust root embedded in the daemon; private key material is never stored in Git.
-
-Verify identity sources and stage checksums:
-
-```bash
-./scripts/verify-release-identity.sh
-VERSION="$(python3 -c "import json; print(json.load(open('app/app.base.json'))['expo']['version'])")"
-./scripts/verify-release-identity.sh --stage "dist-download/v$VERSION"
-(cd "dist-download/v$VERSION" && sha256sum -c SHA256SUMS)
-```
-
-## Install via Go modules (optional)
-
-```bash
-go install github.com/daoleno/zen/daemon/cmd/zen@latest
-zen
-```
-
-This path depends on the published module and Go proxy state. If `@latest` fails, build from a clone as above.
-
-## Run as a background service
-
-`zen` is the whole runtime. Running it in a persistent shell or tmux session
-and running it under systemd are equivalent deployment choices: the same ELF,
-the same arguments, the same `-state-dir`, identity, port and authority. The
-development command `zen-dev` exists only to rebuild and restart that same
-runtime while you edit source; it is not a different daemon and adds no
-separate trust, enrollment, scope or state database. A build failure leaves the
-last healthy daemon running.
-
-Zen does not install a system service automatically. Start `zen` in a
-persistent shell, a tmux session, or a service you manage. Do not run the
-daemon as root merely to keep it alive.
-
-## Defaults
-
-| Setting                  | Value                                                                  |
-| ------------------------ | ---------------------------------------------------------------------- |
-| Listen                   | `127.0.0.1:9876`                                                       |
-| State directory          | `~/.zen`                                                               |
-| Work log                 | `~/.zen/work`                                                          |
-| Executors file           | `~/.zen/executors.toml` (optional; built-in defaults apply if missing) |
-| Brain data               | `~/.zen/brain`                                                         |
-| Optional Zen Link config | `~/.zen/link.json`                                                     |
-
-To keep a custom location:
-
-```bash
-zen -state-dir /path/to/state
-zen pair -state-dir /path/to/state https://your-host.example
-```
-
-Use the same `-state-dir` for the daemon and for `zen pair`.
-
-## Starting and pairing are separate
-
-Choose one connectivity route:
-
-1. **Direct private network:** run `zen --lan` on the computer while the phone
-   is on the same trusted Wi-Fi or Tailnet. Zen listens on `0.0.0.0:9876` and
-   prints usable pair commands for detected private addresses. Run one in
-   another terminal; never pair with `0.0.0.0`.
-2. **HTTPS endpoint:** run bare `zen` on its secure loopback default, forward
-   the full `http://127.0.0.1:9876` origin through an HTTPS ingress, then run
-   `zen pair https://your-zen-host.example` in another terminal.
-3. **Optional Zen Link:** after an operator explicitly configures
-   `~/.zen/link.json` and relay infrastructure, run bare `zen`, then run
-   `zen pair` in another terminal. Link keeps the daemon loopback-only and
-   opens outbound connections. This repository does not configure or start it;
-   see [Zen Link Relay operations](zen-link-relay.md).
-
-`-addr` remains available for an advanced explicit bind. It cannot be combined with `--lan`.
-
-There is no `-advertise-url` flag. Pairing V1 receives its external origin at
-pair time; Pairing V2 receives candidates from explicit Link config.
+`zen update` checks the release's signed manifest and the archive checksum
+before it replaces the binary. It does not restart a running daemon; stop and
+start `zen` when convenient.
 
 ## Keep it running
 
-For personal use, a tmux pane, a user service, or a system service are all
-supported because the runtime is identical. Example user unit (adjust paths):
+`zen` is the whole runtime. Run it in a terminal or a `tmux` window, or, on
+Linux with systemd, let Zen install a user service for you:
 
-```ini
-[Unit]
-Description=zen worker control plane
-After=network.target
-
-[Service]
-ExecStart=%h/bin/zen -addr 127.0.0.1:9876 -state-dir %h/.zen
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
-
-For an optional boot installation, one command renders and enables a standard
-systemd user unit for the same binary, state, address and working directory:
-
-```bash
-zen boot install                 # this executable, default state/address
-zen boot install -binary ./tmp/zen-dev -work-dir "$PWD"   # DEV runner
+```sh
+zen boot install          # this binary, default state and address
+zen boot install -lan     # same, listening on the private network
+zen boot install -dry-run # print the unit without installing it
 zen boot status
 zen boot uninstall
 ```
 
-The unit carries the explicit runtime contract: an absolute `ExecStart` with
-`-state-dir` and `-addr` (or `-lan`), `WorkingDirectory`, and the non-secret
-`HOME`/`PATH` environment. Relative paths and `~` are resolved at install time
-against the invoking directory, so a relative `-state-dir` never becomes a
-second state, identity or loopback bind. Pointing `-binary` at `zen-dev`
-requires `-work-dir` (by default the current directory) to be the source
-module root because the DEV runner rebuilds there.
+`zen boot install` refuses to run as root and refuses to start a second daemon
+on a state directory that is already in use; stop the running `zen` first.
+Restarting the service never stops your `tmux` sessions or agents. To start it
+before you log in, enable lingering with `loginctl enable-linger` (the command
+tells you when this is needed).
 
-Install validates the contract before writing anything: it refuses to run as
-root, refuses a binary or working directory this user cannot execute, refuses a
-foreign `zen.service`, and refuses when the state directory is already locked
-by a process outside the installed unit's own systemd cgroup, or when the
-listen address is unavailable. It never kills those processes; stop them
-first. After `enable --now` (or `restart` for a changed contract) it verifies
-that the unit is active, its main process is the installed binary, a process
-inside the unit's own cgroup holds the installed state's lifecycle lock, and
-`/health` on the installed address serves the installed state's `daemon_id`.
-Only then does it report success. Re-running `install` with the same contract
-leaves a healthy daemon running; any changed runtime context (binary, state,
-address, working directory, `HOME`/`PATH`) updates the unit and restarts it
-explicitly.
+Do not run the daemon as root.
 
-The unit is enabled into `default.target` without `After=default.target`: a
-target already orders itself after the units it wants, so that line would form
-an ordering cycle at boot and drop the implicit ordering. Ownership is bound
-to the unit, not to a same-binary guess: an active unit that owns a different
-state does not satisfy the cgroup-lock and identity checks above.
-`KillMode=process` is intentional: the daemon reuses the user's ordinary tmux
-server, a shared per-user resource, so stopping or restarting `zen.service`
-terminates only the daemon and never tears down tmux or Worker sessions; tmux,
-Worker sessions and the pairing/state files are outside the unit's lifecycle.
+## Defaults
 
-Known dependency: the DEV runner (`zen-dev`) binds its daemon child to the
-watcher lifetime on Linux (`PR_SET_PDEATHSIG`), so an abrupt watcher death
-stops the child and releases the state lock. Even with that binding, `zen boot
-install` and `uninstall` treat a process inside the unit cgroup that still
-holds the state lock as an own leftover and refuse or retain the configuration
-instead of deleting it; real guest acceptance of the DEV crash path is still
-owned by the runtime worker.
+| Setting | Value |
+| --- | --- |
+| Listen address | `127.0.0.1:9876` (`zen --lan` uses `0.0.0.0:9876`) |
+| State directory | `~/.zen` |
+| Executor configuration | `~/.zen/executors.toml` (optional) |
+| Brain workspace | `~/.zen/brain` |
 
-Lingering starts the unit before an interactive login (`zen boot install`
-reports `sudo loginctl enable-linger <user>` when it cannot enable it itself).
-`zen boot status` always reads the installed unit configuration rather than the
-invocation defaults, shows the installed binary hash, and attributes `/health`
-to the installed state identity. `zen boot uninstall` requires readable
-installed metadata, stops the unit, confirms it is no longer active and that
-no process inside (or unattributable to) the unit still holds the state lock,
-then disables and removes only its own unit and metadata; on any metadata,
-stop, disable or ownership failure — including a still-held lifecycle lock
-whose holder cannot be attributed — it retains the unit and configuration for
-a retry and never deletes a running owner. Daemon state and pairing are never
-touched.
+To use another state directory, pass the same `-state-dir` to every command:
 
-## Docker (advanced)
-
-See `daemon/Dockerfile`. Prefer the host binary so tmux and local agent CLIs share the same environment. Container use requires mounting state, publishing or proxying port 9876, and arranging access to host agent tools yourself.
-
-## Diagnostics
-
-```bash
-zen doctor
-zen doctor --json
+```sh
+zen -state-dir /path/to/state
+zen pair -state-dir /path/to/state https://zen.example.com
 ```
 
-`zen doctor` reports whether tmux, the state directory, the listen address, and executors look ready. It does not install packages or print credentials.
+## Install the app
 
-Guided config write:
+### Android
 
-```bash
-zen setup
-# or automation:
-zen setup --non-interactive --host codex --profile safe
+Download `zen-android-arm64-v<version>.apk` and `SHA256SUMS` from the
+[release downloads]({{ZEN_RELEASES_URL}}) and verify the APK:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-`zen setup` stops cleanly with install hints when tmux/state-dir block readiness. Restart the daemon after it writes `~/.zen/executors.toml` so new executor definitions load. Brain picks each Worker's executor, model and reasoning from its `routing.md`; no Worker default is configured.
+The APK supports 64-bit ARM phones (`arm64-v8a`) only. Android asks you to
+allow installs from your browser or file manager, and Play Protect may warn
+because Zen is not on the Play Store. The official signing certificate's SHA-256
+fingerprint is:
+
+```text
+C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
+4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD
+```
+
+### iOS
+
+A [TestFlight preview](https://testflight.apple.com/join/rTKCDzMt) is set up
+but still awaiting Apple's beta review, so the link may not let you install yet.
+Until then, build the app from source on an Apple Silicon Mac.
+
+#### Build the iOS app from source
+
+You need full Xcode, an iOS Simulator runtime or a signed device target,
+CocoaPods, Bun, and network access for the first native build. Installing on a
+physical iPhone also needs an Apple development team.
+
+Get the source from {{ZEN_SOURCE_URL}}, then from the repository root:
+
+```sh
+bun install
+bun run native:build:ios     # builds the pinned terminal library
+bun run native:verify:ios
+cd app
+bunx expo prebuild --platform ios --clean
+cd ios && pod install && cd ..
+bun run ios
+```
+
+You can also open `app/ios/Zen.xcworkspace` in Xcode after `pod install`. The
+app targets iOS 16.4 or newer and asks for local-network access (to reach your
+daemon) and camera access (to scan pairing codes).
+
+### Web UI
+
+The daemon also serves the app as a web page for a browser on the same
+computer or behind HTTPS. See [Pair a browser](connect-and-pair.md#pair-a-browser).
+
+## Build the daemon from source
+
+With the Go version named in `daemon/go.mod` and Bun installed, from the
+repository root:
+
+```sh
+bun install
+bun run daemon:build   # writes bin/zen
+./bin/zen doctor
+```
+
+A source build serves a placeholder instead of the web UI unless you first run
+`bun run web:build`.
+
+## Uninstall
+
+1. Run `zen boot uninstall` if you installed the service, and stop `zen`.
+2. Delete the binary (`command -v zen` shows where it is).
+3. Optionally delete `~/.zen`. It holds the daemon's identity, paired devices,
+   Work and Brain data; deleting it unpairs every phone.

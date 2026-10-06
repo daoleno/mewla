@@ -1,96 +1,70 @@
 # Services
 
-The mobile Services sheet lists TCP services the daemon can attribute to
-Agent work: listening ports owned by live Zen tmux Sessions, plus explicitly
-registered persistent services that outlive their creating Session (for
-example a user systemd unit kept running after its Worker was reclaimed).
+The **Services** sheet in the app lists the network services your agents
+started: development servers, previews, APIs. It shows them by project and can
+give one a temporary public URL.
 
-## What the sheet shows
+## What appears
 
-Every row comes from one authenticated `list_session_services` snapshot, so
-the panel, `zen service list --json`, and the daemon agree. Rows carry a
-source:
+| Source | Shown when |
+| --- | --- |
+| **Session** | A process inside a live Zen Session is listening on a port. The row can open that Session's terminal. |
+| **Persistent** | A registered user `systemd` service is running and listening. It has no terminal, because the Session that created it is gone. |
 
-- **Session** — a listening port inside a live Zen-owned tmux pane process
-  tree. The row offers a terminal action into that Session.
-- **Persistent · `<unit>`** — a port owned by a registered persistent unit,
-  verified live on every snapshot against structured user-systemd properties
-  (`ActiveState`, `MainPID`) plus cgroup membership and the listening socket
-  PID. These rows never carry a Worker id and never offer a terminal action:
-  the creating Session is gone, so there is no live target.
+A service bound only to `127.0.0.1` shows its bind address and is marked local;
+Zen does not invent a network URL for it. A registered service that stopped
+shows as **Inactive**, and one whose state cannot be read shows **Error** with
+the reason.
 
-Loopback-only services appear with a bind chip (for example
-`127.0.0.1:3080`) and `local_only`; the sheet never invents a LAN URL for
-them. A registered unit that is stopped appears as `Inactive`; a unit whose
-live state cannot be determined appears as `Error` with the reason — never
-as a silently healthy row.
-
-## Retained-service handoff (Workers)
-
-A service started outside tmux must be registered at handoff or it stays
-invisible. Registration is explicit, read-only toward the unit (it never
-restarts, stops, or reconfigures anything), and goes through the daemon:
-
-```sh
-zen service register -unit dsh-web.service -name "DeepSeek Harness" \
-  -project dsh-smoke -port 3080 -cwd ~/workspace/dsh-smoke
-```
-
-Only plain user unit names are accepted — no paths, no name/port guessing,
-no machine-wide scan. The daemon persists the descriptor (unit, display
-name, project, expected port, owning Worker/Work provenance) in daemon
-state, so completed Worker cleanup or a daemon restart cannot lose it.
-Liveness is always re-derived: a restarted unit with a new PID is picked up
-automatically, and a stopped, replaced, or foreign unit can never produce a
-stale positive row.
-
-```sh
-zen service list --json        # same authoritative snapshot as the sheet
-zen service unregister -unit dsh-web.service   # removes registration only
-```
-
-On platforms without Linux user systemd, registration reports an honest
-unsupported error; tmux session discovery keeps working.
-
-## Temporary public Quick Tunnels
-
-A service row can start, inspect, open, copy or stop one temporary Cloudflare Quick
-Tunnel. Starting is explicit and exposes only that selected service. Zen confirms
-HTTP with a bounded local request; a TCP listener alone is not HTTP evidence.
-Authentication challenges and known control services are not publishable.
-
-Each tunnel binds to the current daemon, service ID, listener PID and process birth
-identity. Duplicate starts return the existing operation. A private loopback proxy
-rechecks the origin's process and listener before and after connecting, so a reused
-port cannot silently become the tunnel's new application. Origin loss stops the
-tunnel and clears its URL. Stopping a tunnel never stops the origin. Linux binds
-cloudflared to daemon death; restart begins with no tunnel and no stale URL. Other
-daemon operating systems report that this lifecycle mode is unsupported.
-
-Zen passes an isolated empty config and filters Cloudflare-specific inherited
-configuration variables. It does not modify `~/.cloudflared/config.yaml`, named
-tunnel credentials, system units or unrelated cloudflared processes. Temporary
-URLs are kept in memory, not the repository or persistent service registry. The
-installed binary must support `--output json`; readiness requires its native
-connection confirmation and DNS publication as well as the generated URL.
-While publication is pending, Open/Copy remain unavailable. A bounded publication
-timeout stops the tunnel and offers an actionable retry instead of a stale URL.
-
-Quick Tunnel URLs are random and temporary. Anyone with the URL can access the
-selected service. Cloudflare limits Quick Tunnels to 200 in-flight requests and
-does not support Server-Sent Events (SSE). HTTP and WebSocket behavior must be
-verified on the deployment's network; receiving a URL is not public reachability
-proof. Apps requiring SSE should use their private connection or an appropriate
-managed hosting/tunnel configuration.
-
-The existing CLI exposes the same owner:
+The CLI reads the same list:
 
 ```sh
 zen service list --json
-zen service tunnel start -id SERVICE_ID -generation PROCESS_GENERATION
-zen service tunnel status -id SERVICE_ID -generation PROCESS_GENERATION
-zen service tunnel stop -id SERVICE_ID -generation PROCESS_GENERATION
 ```
 
-Use the exact ID and generation from the current Services snapshot; stale rows
-cannot start a tunnel on a replacement process.
+## Keep a service after its Worker ends
+
+A service started outside `tmux`, for example as a user `systemd` unit, is
+invisible until it is registered. Registering never starts, stops or changes
+the unit:
+
+```sh
+zen service register -unit my-preview.service -name "Docs preview" \
+  -project docs -port 3080 -cwd ~/projects/docs
+zen service unregister -unit my-preview.service   # removes the registration only
+```
+
+Only plain user unit names are accepted. The registration survives daemon
+restarts and Worker cleanup, and Zen rechecks on every refresh that the unit
+is really running and owns the port. Registration needs Linux with a user
+`systemd`; elsewhere it reports that it is unsupported.
+
+## Temporary public URLs
+
+A service row can start a temporary Cloudflare **Quick Tunnel**, which gives
+that one service a random public `trycloudflare.com` URL. You need
+`cloudflared` installed on the computer; no Cloudflare account is required.
+
+- Starting a tunnel is always your explicit action, and exposes only the
+  selected service. Zen first checks that the service answers HTTP.
+- **Anyone with the URL can reach the service.** Do not tunnel anything that
+  holds secrets or has no login of its own.
+- The tunnel follows the exact process that owns the port. If that process
+  exits, the tunnel stops; stopping a tunnel never stops the service.
+- URLs are temporary and kept in memory only. After a daemon restart there is
+  no tunnel until you start one again.
+- Cloudflare limits Quick Tunnels to 200 concurrent requests and does not
+  support Server-Sent Events.
+
+Zen uses an empty `cloudflared` configuration for these tunnels and does not
+touch your own named tunnels or `~/.cloudflared`. On non-Linux daemons, Quick
+Tunnels report that they are unsupported.
+
+From the computer, use the service ID and generation shown by
+`zen service list --json`:
+
+```sh
+zen service tunnel start  -id SERVICE_ID -generation PROCESS_GENERATION
+zen service tunnel status -id SERVICE_ID -generation PROCESS_GENERATION
+zen service tunnel stop   -id SERVICE_ID -generation PROCESS_GENERATION
+```

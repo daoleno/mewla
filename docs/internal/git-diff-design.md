@@ -14,7 +14,7 @@
 Product and interaction specification for the Git Diff review surface opened from
 a Terminal. This document is the source of truth for information hierarchy,
 navigation, scrolling, safe-area and accessibility behavior. It accompanies
-`docs/git-review.md` (data/protocol semantics) and does not replace it.
+`docs/internal/git-review.md` (data/protocol semantics) and does not replace it.
 
 ## 1. Existing Problems
 
