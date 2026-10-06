@@ -28,7 +28,7 @@
   .top b { font-size: 19px; letter-spacing: -.01em; }
   .top span { margin-left: auto; color: var(--soft); font-size: 13px; }
   .hero { display: grid; justify-items: center; text-align: center; padding: 56px 0 40px; }
-  .hero .seal { width: min(220px, 52vw); aspect-ratio: 1; display: block; }
+  .hero .seal { width: min(280px, 64vw); aspect-ratio: 1; display: block; }
   .hero h1 { font-size: clamp(30px, 6vw, 48px); line-height: 1.1; margin: 28px 0 8px; letter-spacing: -.02em; }
   .hero p { color: var(--soft); margin: 0; max-width: 40ch; }
   .hint { margin-top: 18px; font-size: 13px; color: var(--red); }
@@ -43,15 +43,19 @@
   footer { padding: 80px 0 120px; color: var(--soft); font-size: 13px; text-align: center; }
   /* the cat lives in page coordinates */
   .cat { position: absolute; left: 0; top: 0; z-index: 4; overflow: visible; cursor: pointer; will-change: transform; -webkit-tap-highlight-color: transparent; }
-  .cat .zz { font: 700 9px ui-sans-serif, system-ui, sans-serif; fill: var(--zz); opacity: 0; animation: zz 3.6s linear infinite; }
-  .cat .zz:nth-of-type(2) { animation-delay: 1.2s; }
-  .cat .zz:nth-of-type(3) { animation-delay: 2.4s; }
+  .cat .zz, .seal .zz { font: 700 9px ui-sans-serif, system-ui, sans-serif; fill: var(--zz); opacity: 0; animation: zz 3.6s linear infinite; }
+  .seal .zz { --zz: #fbf6ec; font-size: 7px; }
+  .zz:nth-of-type(2) { animation-delay: 1.2s; }
+  .zz:nth-of-type(3) { animation-delay: 2.4s; }
+  .seal .home > g, .seal .home { transform-box: fill-box; }
+  .seal .home { transform-origin: 50% 100%; animation: breathe 3.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.01, 1.025); } }
   @keyframes zz {
     0% { opacity: 0; transform: translate(0, 0) scale(.6); }
     20% { opacity: .9; }
     100% { opacity: 0; transform: translate(10px, -22px) scale(1.15); }
   }
-  @media (prefers-reduced-motion: reduce) { .cat .zz { animation: none; opacity: .8; } }
+  @media (prefers-reduced-motion: reduce) { .zz { animation: none; opacity: .8; } .seal .home { animation: none; } }
 </style>
 </head>
 <body>
