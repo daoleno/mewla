@@ -161,8 +161,8 @@ export function screenshotResourceTelemetry(now = Date.now()): ResourceTelemetry
         kinds: ["node"],
       },
       {
-        commands: ["zen"],
-        processes: [{ pid: 901, command: "zen brain", rssBytes: 0.6 * GB }],
+        commands: ["mewla"],
+        processes: [{ pid: 901, command: "mewla brain", rssBytes: 0.6 * GB }],
         owner: "brain",
         title: "Brain",
         status: "idle",
