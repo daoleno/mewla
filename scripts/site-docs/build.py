@@ -286,7 +286,7 @@ def description(page: Page) -> str:
 
 
 def icon_href() -> str:
-    for candidate in ("seal-icon.svg", "assets/zen-mark.svg"):
+    for candidate in ("seal-icon.svg",):
         if (SITE / candidate).is_file():
             return candidate
     return ""
