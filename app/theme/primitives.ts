@@ -179,7 +179,8 @@ export function buildLightAppColors({ ramp, light: a }: ZenAccent): AppColors {
     accent: a.accent,
     accentSoft: a.active,
     accentStrong: a.accentStrong,
-    logoDetail: ramp[900],
+    // The Zen mark keeps its sage-ink ribbon until the rename replaces it.
+    logoDetail: ZEN_SAGE[900],
     statusFailed: ZEN_LIGHT_STATUS.danger,
     statusBlocked: ZEN_LIGHT_STATUS.warning,
     statusUnknown: ZEN_LIGHT_NEUTRALS.textTertiary,

@@ -47,6 +47,7 @@ export function InterfaceTimelineEmptyContent({
           title={emptyTitle}
           body={emptyBody}
           busy
+          conversationEmpty
         />
       );
     }
@@ -73,6 +74,7 @@ export function InterfaceTimelineEmptyContent({
           title={emptyTitle}
           body={emptyBody}
           busy
+          conversationEmpty
         />
       );
     }
@@ -101,6 +103,7 @@ export function InterfaceTimelineEmptyContent({
         chrome={chrome}
         title={emptyTitle}
         body={emptyBody}
+        conversationEmpty
       />
     );
   }
