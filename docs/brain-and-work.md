@@ -34,16 +34,25 @@ The card shows the task, its status (done, failed or stopped), and its
 duration, tool uses and tokens when Claude reports them. Tap it to read the
 full result.
 
-The cat at the bottom of the Brain chat shows what Brain is doing:
+Each piece of Work shows up in the Brain chat as a card with its state:
+a green check for Ready, a blue spinning arc while it runs, an amber triangle
+for a warning, a crossed box with the cause when it failed, and a dashed ring
+when it is blocked or waiting. Work that needs you has a red "Needs you" label
+and a dark outline. Red always means "needs you", never "failed".
+
+The cat shows what Brain is doing, in one place at a time:
 
 - **Asleep in the seal:** Brain is idle.
 - **One eye open:** the app is connecting.
 - **Walking:** Brain is working on your message.
+- **Sitting on a card, ears up:** that Work needs your input.
 - **Sitting by moving dots:** Workers hold delegated Work.
-- **Ears up with a red dot:** Work needs your input.
 - **Lying beside a parcel:** a result is waiting for you to read.
 - **Grey seal:** your computer is offline.
 - **Empty seal:** no computer is paired yet.
+
+The menu (☰, or the sidebar on a wide screen) holds Calendar, Plugins,
+Skills, Stats, Resources and Settings.
 
 The cat stays still when your device asks for reduced motion.
 

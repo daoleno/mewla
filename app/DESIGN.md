@@ -9,59 +9,88 @@ separate change.
 
 ## Principles
 
+The chosen direction is **Seal & Slip (quiet)**: neutral paper and ink chrome,
+Work arriving as plain slips, and the red cat in exactly one meaningful place.
+
 1. **Paper and ink.** Content sits on warm white paper with warm-ink text. Use
-   hairlines and tint for structure, not colour.
-2. **One accent.** Vermilion is the seal. It marks the one thing that wants you
-   (the primary action, the selection, the unread dot), and it is never a
-   status.
-3. **One cat.** The cat is Brain. It appears only where Brain is, and every
-   pose it takes reflects a real Brain state. It never decorates.
-4. **Quiet motion.** Motion eases out on the landing's curve, stops when the
+   hairlines and tint for structure, not colour. Buttons, links, switches and
+   selection are ink (`accent` is ink).
+2. **Vermilion has three jobs only.** The seal (the cat and the logo), Send,
+   and "Needs you" (its pill, its dot). It is never the chrome and never a
+   failure. This is the YouTube/Netflix/Airbnb pattern; in Chinese reading a
+   vermilion seal is a sign-off (盖章), so "Needs you" reads as "this needs
+   your mark".
+3. **One focal point per screen.** On Brain it is the slip that needs you.
+4. **One cat.** The cat is Brain. It appears only where Brain is, at most once
+   per screen, and every pose reflects a real Brain state.
+5. **Every state has its own glyph** (`components/ui/StatusMark.tsx`), so the
+   six Work states survive greyscale; colour only reinforces them.
+6. **Quiet motion.** Motion eases out on the landing's curve, stops when the
    screen is hidden, and is off under reduced motion.
 
 ## Colour
 
 All colours are `AppColors` fields built in `theme/primitives.ts`.
-`theme/contrast.test.ts` enforces WCAG AA in both schemes: 4.5:1 for text,
-3:1 for affordances, and OKLab ΔE > 0.06 between statuses.
+`theme/contrast.test.ts` enforces WCAG AA in both schemes (4.5:1 for text,
+including every status word, 3:1 for affordances), OKLab ΔE > 0.06 between
+the six Work states, and ΔE > 0.15 between the seal and failure.
 
 | Landing token | Role | `AppColors` | Light | Dark |
 | --- | --- | --- | --- | --- |
 | `--bg` paper | canvas | `bgPrimary`, chat background | `#FBFAF7` | `#141210` (`--dark`) |
-| `--card` | cards, composer | `bgSurface`, `inputBackground` | `#FFFFFF` | `#201D19` |
+| `--card` | slips, cards, composer | `bgSurface`, `inputBackground` | `#FFFFFF` | `#201D19` |
 | `--tint` | raised fill, quiet wells | `bgElevated`, `surfaceSubtle`, chat `surfaceMuted` | `#F5F3EE` | `#2C2823` |
 | – | pressed well | `surfacePressed` | `#ECE8DF` | `#3A3530` |
-| `--ink` | text | `textPrimary` | `#161412` | `#F4F0EA` |
-| `--soft` | secondary text | `textSecondary` / `textTertiary` | `#57514A` / `#6C665D` | `#C9C1B6` / `#A9A196` |
-| `--line` | hairline | `borderSubtle` / `border` | `#EBE6DC` / `#DDD6C9` | `#2A2622` / `#3F3933` |
+| `--ink` | text, the chrome accent | `textPrimary`, `accent`, `accentStrong` | `#161412` | `#F4F0EA` |
+| – | text on ink buttons | `textOnAccent` | `#FBFAF7` | `#141210` |
+| – | selected row | `accentSoft`, `surfaceActive` | `#EFEBE3` | `#322D28` |
+| `--soft` | secondary text, icons | `textSecondary` / `textTertiary` | `#57514A` / `#6C665D` | `#C9C1B6` / `#A9A196` |
+| `--line` | hairline | `borderSubtle` / `border` | `#ECE7DE` / `#DDD6C9` | `#2A2622` / `#3F3933` |
 | `--faint` | decoration only | `borderStrong` (3:1) | `#857E73` | `#8A8378` |
-| `--red` | accent (seal) | `accent` / `accentStrong` | `#BC3328`* / `#A92B21` | `#FF8F80` / `#FFB3A8` |
-| `--red-soft` | selection wash | `accentSoft`, `surfaceActive` | `#FBEBE6` | `#3A1F1B` |
+| `--red` | the seal | `seal` (fill) / `sealText` (words) / `onSeal` | `#C8372B` / `#BC3328` / white | `#D2412F` / `#FF9466` / white |
+| `--red-soft` | seal wash | `sealSoft` | `#FBEBE6` | `#3A1F1B` |
 
-\* Light `accent` is a hair deeper than the seal's `#C8372B` (ΔE 0.026,
-below a just-noticeable difference) so it still reads at 4.5:1 on pressed
-paper. The seal artwork keeps `#C8372B` (`ZEN_BRAND_COLORS.vermilion`).
-`--faint` (`#A29B90`) fails text contrast, so it is reserved for decoration.
+`materials.tint` is a neutral ink wash (6% light, 8% dark), not a colour.
+Focus rings and text selection use the Running blue. The Stats heatmap ramps
+toward the Ready green, because activity is good news.
 
-**Chat.** Your messages sit in an ink bubble with paper text, as on the
-landing; Brain's replies sit on the paper. In dark mode, sent messages use a
-lit warm panel (`#35302A`) instead. Code, tables and attachments inside the
-bubble use wells mixed from the bubble colour, never canvas fills.
-`chrome.surfaceMuted` is the tint, decoupled from the sent bubble.
+**Chat.** Your messages sit on a quiet paper tint (`#F0ECE4`, dark
+`#2E2A25`) in ink; Brain's replies sit on the page. Links are ink and
+underlined. The conversation is capped at a reading width of 820 pt
+(`ChatCanvas`).
 
-**Status.** These are the landing's status chips. Every status ships with a
-glyph and a label, so hue is never the only signal.
+**Work states.** Each state is a 13 pt glyph plus a word in soft type.
 
-| Status | Light | Dark | Notes |
-| --- | --- | --- | --- |
-| running | `#2C55C0` | `#8FB0FF` | the landing's "run" blue; never the accent |
-| done / success | `#22703C` on `#E3F4E8` | `#7BD394` on `#12291A` | |
-| blocked / warning | `#94600A` on `#FDF1DC` | `#F6C16B` on `#302412` | |
-| failed / danger | `#A3194F` on `#FBE4EC` | `#F584C0` on `#3A1A2A` | rose crimson, ΔE > 0.1 from vermilion |
-| unknown | `textTertiary` | `textTertiary` | |
+| State | Light | Dark | Glyph | Slip |
+| --- | --- | --- | --- | --- |
+| Ready | `#2F6B4F` | `#74C79B` | filled circle with a check | plain |
+| Running | `#2C55C0` | `#9AB6FF` | spinning arc | plain |
+| Needs you | seal | seal | the seal pill | ink outline, the cat perched on it |
+| Warning | `#9A6212` | `#EDBA5A` | open triangle | plain |
+| Failed | `#7D1F35` | `#F2A0B1` | crossed box, plus the cause | plain |
+| Blocked | `#736C61` | `#9C9589` | dashed ring | dashed, unfilled |
 
-The old sage, ink, clay and stone accents and their Settings picker are gone.
-A stored legacy accent preference resolves to vermilion.
+`StatusPill` renders these marks: `success` Ready, `accent` Running, `warning`,
+`danger` Failed, `needs` the seal pill, and `neutral` a plain paper tag.
+Brain lifecycles map onto the six states in `brainWorkLifecycleStatus`
+(Reviewing runs, Waiting and Cancelled are inert, Needs review warns, Done
+and Ready share the check).
+
+The old sage, ink, clay and stone accent picker is gone; any stored accent
+preference resolves to ink.
+
+## Navigation
+
+- **Phone.** The app bar has the menu (☰), the Brain · Sessions switch (text
+  tabs with an ink underline; a seal dot on Sessions when a Session needs
+  you) and one ⋯ page action. The menu slides over the page.
+- **Wide (≥ 1024 pt, any platform).** The menu docks as a permanent sidebar
+  with Brain and Sessions as its first rows; the app bar shows the page title.
+- **Menu.** The current server (read-only; switching lives in Settings), then
+  *On this computer*: Calendar, Plugins, Skills, Stats, Resources; then
+  *App*: Settings. Rows are a soft-ink glyph and a label, no tiles.
+- Settings holds Servers, Channels (Telegram), Agents (Model Providers),
+  Appearance and About. Browser stays hidden from the menu.
 
 ## Type
 
@@ -157,70 +186,49 @@ look, with the landing's bolder carving at small sizes.
 
 ### State map
 
-| Product state | Cat | Where | v1 |
-| --- | --- | --- | --- |
-| Brain idle, empty chat | Curled in the seal, breathing, three z's | Brain empty state | ✅ |
-| Connecting or loading | In the seal, one eye open | Brain empty state (busy), status screen | ✅ |
-| Brain's turn running | Out of the seal, walking in place | Working row, newest edge of the Brain timeline | ✅ |
-| Delegated Work on Workers | Sitting, tail swaying, dispatch dots | Tail row, "Waiting on Workers · title" | ✅ |
-| Work needs your input | Alert: ears up, wide eyes, vermilion ping | Tail row, "Needs you · title" | ✅ |
-| Unread result | Loafing, happy eyes, a parcel at its paws | Tail row, "Brought something back · title" | ✅ |
-| Offline | Asleep in a greyed seal | Brain status screen | ✅ |
-| No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, "Give Brain a home" | ✅ |
-| Failure | Ears back (rig `dangle`/ears) | Failure cards keep their glyph and label | later |
-| Onboarding and pairing | Hops out of the seal on success | Onboarding | later |
-| Pull to refresh / loading | Peeking seal | Lists | later |
-| App icon, splash | The seal (`seal-icon.svg`) | Native assets | later (rename) |
-| Notification icon | Seal silhouette, monochrome | Android small icon | later (rename) |
-| Haptics | One soft tick when the cat brings a result | Delivered | later |
+| Product state | Cat | Where |
+| --- | --- | --- |
+| Brain idle, empty chat | Curled in the seal, breathing, three z's | Brain empty state |
+| Connecting or loading | In the seal, one eye open | Brain empty state (busy), status screen |
+| Brain's turn running | Out of the seal, walking in place | Working row, newest edge of the Brain timeline |
+| Work needs your input | Alert, ears up, seal ping | **Perched on that Work's newest slip**; the tail row only when the slip is not in this conversation |
+| Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on Workers · title" |
+| Unread result | Loafing with a parcel | Tail row, "Brought something back · title" |
+| Offline | Asleep in a greyed seal | Brain status screen |
+| No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Onboarding "Give Brain a home" |
+| Paired | Asleep in the seal (moved in) | Onboarding, connected |
+| Failure, pull to refresh, app icon, splash, notification icon, haptics | — | later |
 
-The v1 scope is the Brain screen only, because that is where Brain is. State
-comes from `resolveBrainCatPresence` (`components/mewla/brainCatState.ts`), a
-pure, tested function of the connection and `BrainCurrentWork`. A running
-turn always wins through the Working row. Between turns the order is
-attention, then a delivered result, then delegated Work, then idle. The
-Brain screen opts in through `BrainCompanionContext`. Session chats never
-provide that context, so they keep their usual rows and no cat.
-
-There is never more than one cat on screen at a time. Play from the landing
-(petting, toys) stays on the landing, because an assistant you rely on
-shouldn't wander around your work.
+State comes from `resolveBrainCatPresence` (`components/mewla/brainCatState.ts`).
+Placement comes from `mergeBrainPresenceIntoTimeline`
+(`brainPresenceTimeline.ts`): a running turn keeps the cat in the Working
+row; otherwise "attention" perches it on the newest slip whose `work_id`
+matches, and the tail row is dropped. Both are pure and tested, and there is
+never more than one cat on screen. Session chats never provide
+`BrainCompanionContext`, so they have no cat.
 
 ## Rollout
 
-Each slice can go to a Worker independently once this foundation merges.
-Every slice must pass `cd app && bunx tsc --noEmit`, `bun test` and
-`lint:design`, plus Android and iOS export. Visible changes need before and
-after screenshots in light and dark.
+Stage A (branch `mewla-seal-slip`) shipped the tokens and contrast tests,
+StatusMark and StatusPill, list rows, empty states and notices, Send, the
+navigation shell (menu, switch, sidebar), the Brain slips and the cat's
+perch, TaskNotificationCard, Settings, Plugins, Onboarding and the Session
+row marks. Still to get a dedicated pass:
 
-1. **Shared components first.** Button, ListSection/ListRow, SegmentedControl,
-   StatusPill, InlineNotice, ActionMenu, BottomSheetFrame, Toast, IconButton.
-   Apply pill buttons, hairlines over shadows, the `title` role for sheet
-   titles and the status chip styling. Everything downstream inherits from
-   these.
-2. **Navigation shell.** PrimaryDrawerShell, the app bar and drawer: the
-   Brain/Sessions switch, the drawer list and the wordmark (after the rename).
-   This slice could also hold a small presence dot for the cat.
-3. **Sessions.** The Sessions list, Session rows and avatars, and the Session
-   chat header. Chat content is already done by the tokens.
-4. **Brain and Work cards.** BrainWorkEventCard, TaskNotificationCard and the
-   Work screens. Other Workers edit these, so coordinate. Decide whether a
-   "Ready" result keeps the vermilion wash or moves to a neutral card with a
-   vermilion dot.
-5. **Settings, Skills, Plugins, Providers, Stats, Calendar.** Mostly
-   token-driven; check hard-coded colours (`rg '#[0-9A-Fa-f]{6}' app/components`).
-6. **Onboarding and pairing.** Add the cat's "moves in" moment on a
-   successful pair.
-7. **Brand assets (with the rename).** App icon, adaptive icon, monochrome
-   icon, splash and notification icon, all from `seal-icon.svg`, replacing
-   `assets/branding/zen-*`.
+1. **Sessions list and Worker chat chrome**: the server header pill, the FAB,
+   the activity rows' mono status words, the chat header.
+2. **Calendar**: the coloured event-type bars and its status words.
+3. **Skills, Stats, Resources, Model Providers, Browser, Work**: they take the
+   tokens; check hard-coded colours (`rg '#[0-9A-Fa-f]{6}' app/components`).
+4. **Brand assets (with the rename)**: wordmark, app icon, adaptive and
+   monochrome icons, splash, notification icon, all from `seal-icon.svg`.
 
 Risky areas to watch:
 
 - **Terminal.** The ANSI palette and two renderers. Keep it in its own slice
   with screenshots of real TUIs (vim, htop, git diff).
 - **Markdown.** Native enriched-markdown styles and the mermaid theme read
-  `surfaceMuted` and the accent. Check tables and code inside the ink bubble.
+  `surfaceMuted` and the accent (ink). Check tables and code in sent messages.
 - **Native modules and fonts.** Font registration differs per platform. Check
   CJK fallback on real iOS and Android devices. Decide whether to drop the
   bundled Source Han Sans SC files, which would save about 33 MB.
