@@ -60,7 +60,7 @@ func TestMintFixtureLinkShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	parsed, err := url.Parse(got)
-	if err != nil || parsed.Scheme != "zen" || parsed.Query().Get("v") != "2" {
+	if err != nil || parsed.Scheme != "mewla" || parsed.Query().Get("v") != "2" {
 		t.Fatalf("link envelope wrong: %q", got)
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parsed.Query().Get("p"))
@@ -135,5 +135,5 @@ func mintFixtureLink(m *auth.Manager, servedCert *x509.Certificate, baseURL stri
 	values := url.Values{}
 	values.Set("v", fmt.Sprintf("%d", link.PairingVersion))
 	values.Set("p", base64.RawURLEncoding.EncodeToString(raw))
-	return "zen://settings?" + values.Encode(), nil
+	return "mewla://settings?" + values.Encode(), nil
 }

@@ -42,12 +42,7 @@ test("default config retains local dotenv behavior without overwriting explicit 
   assert.equal(result.config.extra.eas.projectId, "explicit-project");
 });
 
-test("MEWLA_EXPO_PROJECT_ID wins over the legacy ZEN_EXPO_PROJECT_ID", () => {
-  const result = load({ EXPO_NO_DOTENV: "1", MEWLA_EXPO_PROJECT_ID: "mewla-project", ZEN_EXPO_PROJECT_ID: "zen-project" }, true);
-  assert.equal(result.config.extra.eas.projectId, "mewla-project");
-});
-
-test("legacy ZEN_EXPO_PROJECT_ID is still honoured when MEWLA_EXPO_PROJECT_ID is unset", () => {
+test("ZEN_EXPO_PROJECT_ID is not read", () => {
   const result = load({ EXPO_NO_DOTENV: "1", ZEN_EXPO_PROJECT_ID: "zen-project" }, true);
-  assert.equal(result.config.extra.eas.projectId, "zen-project");
+  assert.equal(result.config.extra.eas, undefined);
 });

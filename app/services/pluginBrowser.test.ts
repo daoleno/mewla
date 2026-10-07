@@ -52,9 +52,9 @@ if (!process.env.ZEN_PLUGIN_BROWSER_TEST_CHILD) {
   test("matching clients retain native auth success, cancellation and exact callback", async () => {
     nativeAvailable = true;
     const url = "https://mcp.notion.com/authorize?state=bound-state";
-    nativeResult = { type: "success", url: "zen://plugins?state=bound-state&code=one" };
+    nativeResult = { type: "success", url: "mewla://plugins?state=bound-state&code=one" };
     expect(await openPluginAuthorization(url, false)).toEqual(nativeResult);
-    expect(authCalls).toEqual([[url, "zen://plugins"]]);
+    expect(authCalls).toEqual([[url, "mewla://plugins"]]);
     nativeResult = { type: "cancel" };
     expect(String((await openPluginAuthorization(url, false)).type)).toBe("cancel");
     expect(await openPluginAuthorization("https://github.com/login/device", true)).toEqual({ type: "external" });

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/branding/mewla-icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": ["mewla", "zen"],
+    "scheme": "mewla",
     "ios": {
       "bundleIdentifier": "com.daoleno.mewla",
       "icon": {

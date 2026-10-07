@@ -33,12 +33,12 @@ func TestNativeReturnBoundToFlowAndServer(t *testing.T) {
 	if strings.Contains(string(data), "pending") {
 		t.Fatal("unfinished account persisted")
 	}
-	for _, callback := range []string{"https://evil.example/?state=state-a&code=x", "zen://plugins?state=wrong&code=x", "zen://plugins/extra?state=state-a&code=x"} {
+	for _, callback := range []string{"https://evil.example/?state=state-a&code=x", "zen://plugins?state=state-a&code=x", "mewla://plugins?state=wrong&code=x", "mewla://plugins/extra?state=state-a&code=x"} {
 		if _, err := m.Handle(context.Background(), Request{Action: "connect_finish", FlowID: f.ID, Callback: callback}); err == nil {
 			t.Fatal("unbound callback accepted")
 		}
 	}
-	if _, err := other.Handle(context.Background(), Request{Action: "connect_finish", FlowID: f.ID, Callback: "zen://plugins?state=state-a&code=x"}); err == nil {
+	if _, err := other.Handle(context.Background(), Request{Action: "connect_finish", FlowID: f.ID, Callback: "mewla://plugins?state=state-a&code=x"}); err == nil {
 		t.Fatal("another server accepted callback")
 	}
 	w := httptest.NewRecorder()
@@ -46,11 +46,11 @@ func TestNativeReturnBoundToFlowAndServer(t *testing.T) {
 	if w.Code != 400 || m.pending["state-a"] == nil {
 		t.Fatal("public callback consumed native flow")
 	}
-	denied := mustHandle(t, m, Request{Action: "connect_finish", FlowID: f.ID, Callback: "zen://plugins?state=state-a&error=access_denied"})
+	denied := mustHandle(t, m, Request{Action: "connect_finish", FlowID: f.ID, Callback: "mewla://plugins?state=state-a&error=access_denied"})
 	if denied.Flow.Status != "failed" || len(m.records) != 0 || len(m.pending) != 0 {
 		t.Fatal("denial left a pending account")
 	}
-	if _, err := m.Handle(context.Background(), Request{Action: "connect_finish", FlowID: f.ID, Callback: "zen://plugins?state=state-a&code=x"}); err == nil {
+	if _, err := m.Handle(context.Background(), Request{Action: "connect_finish", FlowID: f.ID, Callback: "mewla://plugins?state=state-a&code=x"}); err == nil {
 		t.Fatal("denial replay accepted")
 	}
 }

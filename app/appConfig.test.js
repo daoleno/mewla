@@ -51,8 +51,8 @@ describe("native platform config", () => {
     expect(config.ios.buildNumber).toBe(expectedBuildNumber);
   });
 
-  it("registers mewla as the primary scheme and keeps legacy zen deep links", () => {
-    expect(config.scheme).toEqual(["mewla", "zen"]);
+  it("registers only the mewla scheme", () => {
+    expect(config.scheme).toBe("mewla");
   });
 
   it("selects the Preview bundle identity while keeping the installed name Mewla", () => {
@@ -83,13 +83,13 @@ describe("native platform config", () => {
     expect(preview.android).toEqual(config.android);
   });
 
-  it("prefers MEWLA_* identity variables and still honours legacy ZEN_* names", () => {
-    const legacy = withIdentityEnv(
+  it("reads only MEWLA_* identity variables", () => {
+    const ignored = withIdentityEnv(
       { ZEN_IOS_APP_VARIANT: "preview", ZEN_IOS_BUILD_NUMBER: "77" },
       () => createConfig(),
     );
-    expect(legacy.ios.bundleIdentifier).toBe("com.daoleno.mewla.preview");
-    expect(legacy.ios.buildNumber).toBe("77");
+    expect(ignored.ios.bundleIdentifier).toBe("com.daoleno.mewla");
+    expect(ignored.ios.buildNumber).toBe(String(trackedIOSBuildNumber));
 
     const preferred = withIdentityEnv(
       {
