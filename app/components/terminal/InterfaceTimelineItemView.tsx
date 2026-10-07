@@ -17,6 +17,12 @@ import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
 import { withAlpha } from "./colorWithAlpha";
 import { TaskNotificationCard } from "./TaskNotificationCard";
+import {
+  BRAIN_PRESENCE_ITEM_PREFIX,
+  BrainCatRow,
+  useBrainCompanion,
+} from "../mewla/BrainCompanion";
+import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "./InterfaceTimelineModel";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 import {
   ZenAssistantMessage,
@@ -95,7 +101,7 @@ function ZenTimelineItemViewImpl({
       />
     );
   }
-  return (
+  const activity = (
     <ZenActivityEvent
       item={item}
       chrome={chrome}
@@ -103,6 +109,38 @@ function ZenTimelineItemViewImpl({
       loadAssetPreview={loadAssetPreview}
       formatPatchPath={formatPatchPath}
       truncateBody={truncateBody}
+    />
+  );
+  if (
+    item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX) ||
+    item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX)
+  ) {
+    return <BrainActivityRow item={item} chrome={chrome} fallback={activity} />;
+  }
+  return activity;
+}
+
+/** Brain's Working and presence rows carry the cat; Sessions keep the row. */
+function BrainActivityRow({
+  item,
+  chrome,
+  fallback,
+}: {
+  item: ZenTimelineItem;
+  chrome: TerminalThemeChrome;
+  fallback: React.ReactElement;
+}) {
+  const companion = useBrainCompanion();
+  if (!companion || item.type !== "activity") {
+    return item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX) ? null : fallback;
+  }
+  const working = item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX);
+  return (
+    <BrainCatRow
+      companion={working ? { ...companion, presence: { state: "working" } } : companion}
+      label={item.title}
+      detail={item.detail}
+      chrome={chrome}
     />
   );
 }
