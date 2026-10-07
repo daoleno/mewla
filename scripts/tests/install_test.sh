@@ -452,6 +452,19 @@ EOF
   [[ -x "$HOME_DIR/bin/mewla" ]] || fail "mewla was not installed beside the legacy zen"
   [[ $(readlink "$HOME_DIR/bin/zen") == mewla ]] || fail "legacy zen binary was not replaced by the alias"
 
+  # A legacy zen that self-updated in place links mewla -> zen beside itself.
+  new_case legacy-self-updated
+  make_archive
+  mkdir -p "$HOME_DIR/bin"
+  printf '#!/bin/sh\n[ "${1:-}" = --help ] && exit 0\nexit 2\n' > "$HOME_DIR/bin/zen"
+  chmod +x "$HOME_DIR/bin/zen"
+  ln -s zen "$HOME_DIR/bin/mewla"
+  FAKE_BIN="$FAKE_BIN:$HOME_DIR/bin"
+  run_installer MEWLA_VERSION=v1.2.3
+  [[ -f "$HOME_DIR/bin/mewla" && ! -L "$HOME_DIR/bin/mewla" ]] || fail "the mewla -> zen link was not replaced by the binary"
+  [[ $(readlink "$HOME_DIR/bin/zen") == mewla ]] || fail "self-updated legacy zen was not replaced by the alias"
+  "$HOME_DIR/bin/zen" --help >/dev/null || fail "the zen alias does not run mewla"
+
   new_case legacy-profile-marker
   make_archive
   printf '\n# >>> zen installer PATH >>>\nexport PATH="$HOME/.local/bin:$PATH"\n# <<< zen installer PATH <<<\n' > "$HOME_DIR/.zshrc"
