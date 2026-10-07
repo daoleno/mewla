@@ -1,4 +1,6 @@
 import type { BrainCurrentWork, BrainWorkerRef } from "../../store/brain";
+
+export type { BrainCurrentWork, BrainObjective, BrainWorkerRef } from "../../store/brain";
 import type { WorkStatus } from "../ui/workStatus";
 import { brainProviderLabel } from "./brainPresentation";
 import {
