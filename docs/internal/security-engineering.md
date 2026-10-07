@@ -1,16 +1,16 @@
 # Security engineering notes
 
 Transport, relay, mobile-bridge and device-administration details behind
-[Security and privacy](../security-and-privacy.md). Zen Link is optional and
-no hosted relay is operated; see [Zen Link Relay operations](zen-link-relay.md).
+[Security and privacy](../security-and-privacy.md). Mewla Link is optional and
+no hosted relay is operated; see [Mewla Link Relay operations](zen-link-relay.md).
 
-## Trust model with Zen Link
+## Trust model with Mewla Link
 
-Zen's normal self-managed path separates daemon identity and device
-authorization from reachability. Optional Zen Link adds a distinct transport
+Mewla's normal self-managed path separates daemon identity and device
+authorization from reachability. Optional Mewla Link adds a distinct transport
 identity. Across all configured paths, the boundaries are:
 
-1. **Reachability** — Zen Link, LAN, Tailnet, tunnel, or reverse proxy.
+1. **Reachability** — Mewla Link, LAN, Tailnet, tunnel, or reverse proxy.
 2. **Daemon identity** — persistent Ed25519 key under the daemon state directory.
 3. **Link transport identity** — separate Ed25519 TLS key and X.509 certificate,
    whose SPKI pin is signed by the daemon identity in Pairing V2.
@@ -104,10 +104,10 @@ It is not a WebSocket-only pin. Pairing starts the bridge in on-demand mode so
 creating the local listener cannot spend a one-time admission. Every
 post-pairing HTTP/WSS owner accepts the canonical `StoredServer`, not a bare
 Link URL; missing route, pin, or candidate availability fails closed with a
-Zen Link setup/offline error. Manual V1/self-managed servers continue to return
+Mewla Link setup/offline error. Manual V1/self-managed servers continue to return
 their original endpoint.
 
-Native image/PDF loaders may issue HEAD, Range, and automatic retries. Zen does
+Native image/PDF loaders may issue HEAD, Range, and automatic retries. Mewla does
 not place a replay-protected ordinary `ZenDevice` nonce in that reusable
 resource URL. A fresh signed POST to `/session-file-capability` instead returns
 separate two-minute GET and HEAD daemon signatures. Each signature is bound to
@@ -121,7 +121,7 @@ method scope; changed fields, expiry, or device revocation fail with 401.
 
 ## Untrusted Markdown diagrams
 
-Fenced Mermaid flowcharts are untrusted input. Zen strips init/frontmatter
+Fenced Mermaid flowcharts are untrusted input. Mewla strips init/frontmatter
 overrides and `click` statements, disables HTML labels except line breaks,
 locks `securityLevel` to `strict`, and renders in a local WebView that cannot
 navigate, fetch, open windows, or expose host bridge methods. Render jobs share

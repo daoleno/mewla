@@ -1,18 +1,18 @@
-# Zen Prompt Design
+# Mewla Prompt Design
 
-Zen uses short standing instructions and task-specific context. Model guidance is based on the official [Using GPT-6 Astra](https://developers.openai.com/api/docs/guides/latest-model) guide, retrieved September 6, 2026. The guide identifies the model as `gpt-6-astra`.
+Mewla uses short standing instructions and task-specific context. Model guidance is based on the official [Using GPT-6 Astra](https://developers.openai.com/api/docs/guides/latest-model) guide, retrieved September 6, 2026. The guide identifies the model as `gpt-6-astra`.
 
 ## Astra Behavior
 
-| Documented tendency | Zen instruction |
+| Documented tendency | Mewla instruction |
 | --- | --- |
 | Clarifies when input could materially change the result | Complete routine authorized work and independent preparation; ask for consequential missing decisions or new authority. |
 | Sensitive to skills and instruction-file conflicts | Give each rule one owner; user instructions override skill guidelines within platform constraints. Identify the specific rule when a skill blocks work. |
 | Detailed, formatted output | Prefer concise prose and useful structure. Report changed results or blockers, not unchanged progress. |
-| May delegate less than desired | Define the visible Zen Worker boundary explicitly, including an explicit user request for direct Brain execution. Provider-native agents and internal subagents are not Zen Workers. |
+| May delegate less than desired | Define the visible Mewla Worker boundary explicitly, including an explicit user request for direct Brain execution. Provider-native agents and internal subagents are not Mewla Workers. |
 | Can over-test small coding changes | Use meaningful checks proportional to risk and required repository gates. Repeat or broaden only for changes, failures or unresolved concerns. |
 
-Astra fits complex, multistep engineering and tool workflows. This is task-suitability guidance, not a claim about a best time of day or a benchmark of Zen latency. Routine follow-ups may need less reasoning than architecture or difficult debugging. Brain sets each Worker's effort from its routing guide, and there is no configured default to preserve. Astra does not support `none`; the guide recommends starting at `low` when migrating from `none` or `minimal`.
+Astra fits complex, multistep engineering and tool workflows. This is task-suitability guidance, not a claim about a best time of day or a benchmark of Mewla latency. Routine follow-ups may need less reasoning than architecture or difficult debugging. Brain sets each Worker's effort from its routing guide, and there is no configured default to preserve. Astra does not support `none`; the guide recommends starting at `low` when migrating from `none` or `minimal`.
 
 Async tool calling, mid-turn steering and cached reasoning updates require harness support. Instructions alone cannot enable them. This refactor does not change models, routing, effort, API endpoints or request parameters.
 
@@ -21,14 +21,14 @@ Async tool calling, mid-turn steering and cached reasoning updates require harne
 | Surface | Responsibility |
 | --- | --- |
 | Repository `AGENTS.md` | Code layout, Android/iOS and current-server invariants, commands, repository verification and safety. |
-| `daemon/modelprofiles/codex_catalog_instructions.md` | Zen-owned generic coding defaults for managed Codex catalogs; not a verbatim upstream persona. |
+| `daemon/modelprofiles/codex_catalog_instructions.md` | Mewla-owned generic coding defaults for managed Codex catalogs; not a verbatim upstream persona. |
 | `daemon/brain/templates/AGENTS.md` | Brain context map, communication, concise engineering judgment and method routing, authorization, scheduler and event-driven waiting rules. |
 | `daemon/brain/delegation_contract.go` | Brain role projected once into AGENTS.md; the activation only asks the Host to re-read it. |
 | `daemon/brain/templates/policies/` | On-demand delegation, executor routing, calendar and Host recovery rules, each loaded at a named trigger in AGENTS.md. |
 | Workspace `routing.md` (seed in `daemon/brain/routing.go`) | Brain's Worker routing judgment: executor, model and reasoning per task. It is seeded once with generic principles and a small example table, and is never overwritten. Brain revises it on a stated preference, a new executor or model, or a poor-fit result, replacing lines instead of appending. No code parses it. |
 | `daemon/brain/playbooks.go` | Optional short brief, decomposition and investigation procedures. |
 | Host bootstrap in `daemon/brain/service.go` | Paths, actual executors and personality; reading rules live in AGENTS.md. |
-| `zen brain context --json` | Live Work, Workers, executors and note sizes/budgets; private note contents are read from files on demand. |
+| `mewla brain context --json` | Live Work, Workers, executors and note sizes/budgets; private note contents are read from files on demand. |
 | Host handoff in `daemon/brain/service.go` | Thread/executor identities and owned Worker IDs/statuses. Read current.md rather than embedding its history or Worker summaries. |
 | Worker builders in `daemon/cmd/mewla/control_app.go` | Scoped execution and resource protocol, progress vocabulary and one exact turn argument. Preserve original user bytes. |
 | `daemon/work/dispatch.go` | Short Work-file pointer and terminal frontmatter requirement; retained because its file workflow consumes it. |
@@ -48,7 +48,7 @@ after Host interruption. These guarantees are implemented and tested in
 parsers, permission UI and historical documents are not active instructions.
 Private runtime overlays remain outside repository ownership.
 
-Prompt wording follows three rules. Hard invariants (acceptance through `zen brain work update`, private-data boundaries, calendar result destination, DST disambiguation) keep absolute wording with a short reason. Judgment guidance is stated once as a principle rather than as never/always lists. A sentence must name something the model can do or check; descriptions of what the runtime does internally belong in docs, not prompts. The Worker protocol is read by the delegated executor's model, so it keeps explicit flag vocabulary.
+Prompt wording follows three rules. Hard invariants (acceptance through `mewla brain work update`, private-data boundaries, calendar result destination, DST disambiguation) keep absolute wording with a short reason. Judgment guidance is stated once as a principle rather than as never/always lists. A sentence must name something the model can do or check; descriptions of what the runtime does internally belong in docs, not prompts. The Worker protocol is read by the delegated executor's model, so it keeps explicit flag vocabulary.
 
 Brain and Worker guidance defaults to editing the supplied repository directly,
 preserving unrelated changes. Worktrees are exceptions for an explicit user
@@ -64,6 +64,6 @@ The role has one owner, AGENTS.md, which Hosts load as project instructions. Act
 
 Tests cover generated payload preservation, one exact turn identity, mandatory progress fields, prompt size limits, instruction ownership, transcript privacy and preservation of private runtime overlays. These are deterministic contract tests, not model behavior or latency evaluations.
 
-Representative same-configuration measurements: bootstrap 13,145 to 1,604 bytes; initial Worker prompt 4,230 to 2,017 bytes. A handoff fixture with 1,000 historical lines shrank from 21,375 to 548 bytes. Bootstrap comparison uses the same current role constant on both sides. Removing `soul.md`, the duplicate role playbook and repeated loading rules took bootstrap from 1,792 to 1,199 bytes; `zen brain context --json` for a workspace with 85, 64 and 16 KB notes went from 167,263 to 2,349 bytes because notes are now referenced, not inlined. Moving the role to a single owner and dropping derivable bootstrap lines took activation from 805 to 230 bytes and bootstrap from 1,199 to about 640. Machine `resource_pressure` events carry a Brain-specific brief instead of the telemetry snapshot (a recorded 7,248-byte payload is 1,086 bytes); recovery to normal is not delivered. The Worker lifecycle protocol went from 2,488 to about 2,120 bytes with the same rules. A wording pass for frontier models removed runtime-internal sentences a model cannot act on, restated defaults and cross-file duplicates, folded the `align` playbook into the AGENTS.md Role section and moved calendar rules to an on-demand policy: AGENTS.md went from 6,025 to 5,053 template bytes, and policies plus playbooks from about 11.8 to 7.8 KB. Exact sizes vary with paths and task content; bytes are not token counts.
+Representative same-configuration measurements: bootstrap 13,145 to 1,604 bytes; initial Worker prompt 4,230 to 2,017 bytes. A handoff fixture with 1,000 historical lines shrank from 21,375 to 548 bytes. Bootstrap comparison uses the same current role constant on both sides. Removing `soul.md`, the duplicate role playbook and repeated loading rules took bootstrap from 1,792 to 1,199 bytes; `mewla brain context --json` for a workspace with 85, 64 and 16 KB notes went from 167,263 to 2,349 bytes because notes are now referenced, not inlined. Moving the role to a single owner and dropping derivable bootstrap lines took activation from 805 to 230 bytes and bootstrap from 1,199 to about 640. Machine `resource_pressure` events carry a Brain-specific brief instead of the telemetry snapshot (a recorded 7,248-byte payload is 1,086 bytes); recovery to normal is not delivered. The Worker lifecycle protocol went from 2,488 to about 2,120 bytes with the same rules. A wording pass for frontier models removed runtime-internal sentences a model cannot act on, restated defaults and cross-file duplicates, folded the `align` playbook into the AGENTS.md Role section and moved calendar rules to an on-demand policy: AGENTS.md went from 6,025 to 5,053 template bytes, and policies plus playbooks from about 11.8 to 7.8 KB. Exact sizes vary with paths and task content; bytes are not token counts.
 
 Managed workspace repair updates product-owned blocks and preserves user-authored content. Customized playbooks and `routing.md` are not overwritten; retired shipped files are deleted only when untouched. Only byte-identical recognized shipped playbook seeds upgrade automatically. Existing private files can still contain conflicting guidance and need explicit review when adopting the new defaults. A Host already running with old instructions does not retroactively lose its context; normal activation asks it to re-read product guidance. Deploy and activate the source changes through the normal authorized service lifecycle; do not rewrite live private overlays or restart services as an incidental prompt edit.

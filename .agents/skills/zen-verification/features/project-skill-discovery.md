@@ -11,7 +11,7 @@ Zen's native Skill loaders and shared inventory discover the project Skill from 
 ## How to get to it (user POV)
 
 - Open `.agents/skills/zen-verification/SKILL.md` in a Zen checkout.
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-zen-state` to validate the map against the checkout.
+- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` to validate the map against the checkout.
 
 ## Driving it with the Zen CLI
 

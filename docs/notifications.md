@@ -1,6 +1,6 @@
 # Notifications and Telegram
 
-Zen interrupts you only when an agent needs you or finished while you were
+Mewla interrupts you only when an agent needs you or finished while you were
 away. It is not a progress feed.
 
 ## Push notifications
@@ -16,10 +16,10 @@ The daemon sends a push for three agent states:
 The name is the Session's alias or project, not a raw `tmux` name. "Finished"
 means the Session ended, not that the task succeeded; open it to check.
 
-Zen stays silent while an agent is running, while its state is unknown, and for
+Mewla stays silent while an agent is running, while its state is unknown, and for
 connection changes.
 
-If you are looking at that exact Session in the app, Zen does not notify you.
+If you are looking at that exact Session in the app, Mewla does not notify you.
 Anywhere else, including another Session or with the app in the background, it
 sends the push.
 
@@ -35,7 +35,7 @@ Each push is a single attempt. If delivery fails or the daemon restarts at the
 wrong moment, there may be no alert, but the state and results are still there
 when you open the app.
 
-Push delivery in your own builds of the app needs your own Expo project; Zen
+Push delivery in your own builds of the app needs your own Expo project; Mewla
 works without push.
 
 ## Telegram
@@ -51,20 +51,20 @@ the app.
 2. In the app, open **Settings > Channels > Telegram**, paste the token and tap
    **Verify token**.
 3. Tap **Connect Telegram**. It opens a short-lived link to your bot; tap
-   **Start** in the bot chat. Zen binds to your Telegram account and private
+   **Start** in the bot chat. Mewla binds to your Telegram account and private
    chat, not to a username.
 
 **Disconnect** pauses delivery and keeps the binding; **Reconnect** resumes it.
 Messages sent while disconnected are not delivered later. **Advanced** holds
 token replacement, unlinking your account and removing the bot.
 
-From the computer, `zen telegram setup`, `status`, `enable` and `disable`
+From the computer, `mewla telegram setup`, `status`, `enable` and `disable`
 configure the running daemon. They never take a token as a command-line
 argument.
 
 ### Talk to Brain and Sessions
 
-Plain messages go to Brain. If your bot chat has topics enabled, Zen creates a
+Plain messages go to Brain. If your bot chat has topics enabled, Mewla creates a
 **Brain** topic and one topic per Worker Session; writing in a Session's topic
 sends to that Session. When a Session is gone for good, its topic and its
 messages are deleted. Pin the Brain topic yourself in Telegram if you want it
@@ -86,15 +86,15 @@ message never silently goes to Brain instead.
 
 Photos, documents, voice notes and stickers you send reach Brain or the
 selected Session as attachments, the same way as uploads from the app. Limits:
-20 MiB per file or album, ten files per album. Zen does not transcribe audio or
-interpret video; what the agent can do with a file depends on the agent. Zen
-replies "Files received by Zen" once the files are accepted.
+20 MiB per file or album, ten files per album. Mewla does not transcribe audio or
+interpret video; what the agent can do with a file depends on the agent. Mewla
+replies "Files received by Mewla" once the files are accepted.
 
-Replies from Brain and Sessions arrive as text. Zen does not send files back to
+Replies from Brain and Sessions arrive as text. Mewla does not send files back to
 Telegram.
 
 ### What Telegram can see
 
 Bot chats are Telegram cloud chats, so Telegram stores their history. Removing
-Zen's configuration does not delete that history. Only your own account in the
+Mewla's configuration does not delete that history. Only your own account in the
 bound private chat can send input; groups and other users are ignored.

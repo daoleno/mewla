@@ -1,6 +1,6 @@
 # OpenCode Local Usage
 
-Zen Stats aggregates OpenCode model usage entirely from the OpenCode CLI's
+Mewla Stats aggregates OpenCode model usage entirely from the OpenCode CLI's
 local structured database. There is no subscription probing, no credential
 read, no OpenCode-internal configuration, and no upstream API access: Stats
 needs nothing beyond the data the OpenCode CLI already writes on the host.
@@ -15,7 +15,7 @@ The OpenCode CLI stores one row per message in its SQLite database:
 - Windows: `%LOCALAPPDATA%\opencode\opencode.db`
 
 The `message` table's `data` column is JSON metadata; each assistant message
-records the exact usage fields Zen aggregates:
+records the exact usage fields Mewla aggregates:
 
 ```
 role, modelID, cost, tokens.{input,output,reasoning,cache.{read,write}},

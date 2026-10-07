@@ -1,9 +1,9 @@
 # Architecture
 
-Zen is a mobile-native control plane for coding agents that continue to run on
+Mewla is a mobile-native control plane for coding agents that continue to run on
 the user's computer. The daemon remains the business-logic and data owner.
 Self-managed Pair/direct connectivity is the normal path. Explicitly configured
-Zen Link adds an optional reachability path; it does not move Sessions,
+Mewla Link adds an optional reachability path; it does not move Sessions,
 Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
 
 ## System shape
@@ -18,7 +18,7 @@ Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
           │                           │
           │ inner TLS 1.3 carrying HTTP/1.1 + WSS
           ▼                           ▼
-┌──────────────── Regional Zen Link Relay ────────────────┐
+┌──────────────── Regional Mewla Link Relay ────────────────┐
 │ bounded TLS ClientHello SNI routing only                │
 │ opaque bidirectional L4 streams; no inner TLS keys      │
 │ in-memory route presence and one-time admissions        │
@@ -38,7 +38,7 @@ Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
 ```
 
 LAN, Tailscale, Cloudflare Tunnel, and reverse-proxy origins continue to call
-the exact same daemon HTTP handler without Zen Link. The daemon opens no new
+the exact same daemon HTTP handler without Mewla Link. The daemon opens no new
 public listener for Link.
 
 ## Durable invariants
@@ -60,7 +60,7 @@ public listener for Link.
 
 ## Execution Ownership
 
-Brain owns objectives, scheduling, review and acceptance. A Zen Worker is its
+Brain owns objectives, scheduling, review and acceptance. A Mewla Worker is its
 managed execution unit, distinct from provider-native Agent roles and Codex
 internal subagents. The lifecycle engine serializes Work transitions; Watcher
 supplies exact Session/process evidence and publishes ordered projections.
@@ -81,7 +81,7 @@ Unsaved Work text remains in the app-lifetime Work draft store, keyed by server
 and document. This is not durable offline storage; daemon saves remain the
 durable document authority.
 
-## Zen Link relay protocol
+## Mewla Link relay protocol
 
 The MVP deliberately uses standard, widely implemented primitives:
 
@@ -147,14 +147,14 @@ have it:
 
 ### Pairing V1 — preserved
 
-`zen pair <origin>` remains the existing compact binary V1 payload. It includes
+`mewla pair <origin>` remains the existing compact binary V1 payload. It includes
 the full phone-reachable `/ws` URL, daemon public key, and one-time enrollment
 token. HTTP(S) is normalized to WS(S); the app derives the other root routes.
 This is the contract for LAN, Tailscale, Cloudflare Tunnel, and reverse proxies.
 
-### Pairing V2 — Zen Link
+### Pairing V2 — Mewla Link
 
-When `link.json` exists, `zen pair` with no endpoint requests a short-lived
+When `link.json` exists, `mewla pair` with no endpoint requests a short-lived
 relay admission and emits a JSON V2 payload inside URL-safe base64. It includes:
 
 - daemon ID and public key
@@ -184,7 +184,7 @@ change. Current purposes cover connection, probe, upload, Session File, and
 device administration. Daemon response assertions still prove the paired
 daemon on Pair, Health, and probes.
 
-`zen devices list` and `zen devices revoke -id <device-id>` provide the minimum
+`mewla devices list` and `mewla devices revoke -id <device-id>` provide the minimum
 host owner for revocation. When the daemon is running, revoke goes through its
 mode-0600 local control socket so an in-flight authorization update cannot
 resurrect a stale key; offline revoke updates the same state directly.

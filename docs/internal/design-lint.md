@@ -1,6 +1,6 @@
 # Design lint setup
 
-The `app` workspace owns Zen's UI lint configuration and the `@shadcn/lint`
+The `app` workspace owns Mewla's UI lint configuration and the `@shadcn/lint`
 and Oxlint development dependencies. Install dependencies from the repository
 root with `bun install`; the shared lockfile is `bun.lock`.
 
@@ -21,7 +21,7 @@ produce warnings or a nonzero exit status. Distinguish those findings from
 configuration or plugin-loading errors. This setup verifies lint integration;
 it does not enforce a design system.
 
-Zen uses Expo/React Native components and native style tokens. This setup
+Mewla uses Expo/React Native components and native style tokens. This setup
 does not add Tailwind or translate native styles into Tailwind policies.
 Future rule choices belong in `app/.oxlintrc.json` after an explicit policy
 decision. See the official [setup instructions](https://github.com/shadcn-ui/lint/blob/main/SETUP.md),

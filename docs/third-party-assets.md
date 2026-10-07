@@ -32,8 +32,8 @@ OFL redistribution still expects copyright/license notice availability to recipi
 
 | Path                                                                          | Provenance                              | License notes                                                              |
 | ----------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
-| `app/assets/branding/*` (logos, rings, SVGs)                                  | First-party Zen artwork                 | Product assets; not third-party.                                           |
-| `app/assets/icon.png`, `splash-icon.png`, `favicon.png`, `android-icon-*.png` | First-party / derived from Zen branding | Product assets.                                                            |
+| `app/assets/branding/*` (logos, rings, SVGs)                                  | First-party Mewla artwork                 | Product assets; not third-party.                                           |
+| `app/assets/icon.png`, `splash-icon.png`, `favicon.png`, `android-icon-*.png` | First-party / derived from Mewla branding | Product assets.                                                            |
 | Shell sky backdrop                                                            | First-party code                        | `SkyNatureBackdrop` uses only `LinearGradient` colors (no bundled raster). |
 | `app/assets/theme/`                                                           | No bundled rasters                      | README only; do not add unattributed stock.                                |
 

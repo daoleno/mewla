@@ -1,6 +1,6 @@
-# Zen Work Lifecycle
+# Mewla Work Lifecycle
 
-Zen's durable coordination model has one `Work` aggregate with at most one
+Mewla's durable coordination model has one `Work` aggregate with at most one
 `Attempt`, one `Wake`, one `Review`, and append-only `Event` records. They are persisted by one lifecycle authority under
 `state/lifecycle/`; current rows and append-only scheduler events commit in one
 transaction. Provider, tmux, PID, transcript, and UI state are evidence or
@@ -85,8 +85,8 @@ active Attempt. Without an Attempt, wait retains its usual typed external Wake.
 Normal operation is one command per decision:
 
 ```sh
-zen worker send -id <session-id> --work-id <work-id> -text '<scoped follow-up>'
-zen brain work update -id <work-id> -status done
+mewla worker send -id <session-id> --work-id <work-id> -text '<scoped follow-up>'
+mewla brain work update -id <work-id> -status done
 ```
 
 Sending a follow-up mints an internal Turn identity. Exact acceptance records the
@@ -174,7 +174,7 @@ opt-in provider gate are documented in [Behavior Testing](behavior-testing.md).
 ## Worker Upgrade
 
 The Worker release changes CLI/control and mobile wire names together. Use
-`zen worker`; `zen agent` and the old control aliases are not supported. Native
+`mewla worker`; `mewla agent` and the old control aliases are not supported. Native
 provider Agent names and Codex subagents are separate concepts and are not
 renamed. Mobile and daemon versions must be upgraded together.
 
@@ -192,7 +192,7 @@ old daemon/hot watcher and retire old managed Sessions through their existing
 owner. Do not cancel or mark unfinished Work complete merely to permit an
 upgrade. Deploy the new daemon/mobile pair and create or resume Sessions through
 the new owner. Keep archived data until the new state and native resume paths are
-verified. Do not integrate source into a running `zen-dev` tree as a shortcut.
+verified. Do not integrate source into a running `mewla-dev` tree as a shortcut.
 
 Both completion policies leave acceptance to Brain. Neither queues a
 continuation, selects an executor or manufactures a prompt. Worker/provider
@@ -228,7 +228,7 @@ poll frequency. Successful delivery clears the failure; a new review starts with
 its own retry budget. No automatic resolution, cancellation or discard occurs.
 
 The shared Android/iOS Work card displays the delivery failure and retry/stop
-message while retaining the Worker result. `zen brain context --json` exposes
+message while retaining the Worker result. `mewla brain context --json` exposes
 `current_work[].review_delivery` with `attempts`, `error`, `retry_at` and
 `exhausted`, including failures beyond the usual four-item attention window.
 An exhausted review remains open for diagnosis and an explicit owner decision;
@@ -236,7 +236,7 @@ it must never be cleared by editing state or resolving Work just to empty a queu
 Ambiguous or accepted provider mutations keep their existing non-replay fence.
 
 Claude Code may record a large terminal paste inside a `pasted_content` envelope.
-Zen preserves the native raw SHA-256 and derives an alternative inner SHA-256
+Mewla preserves the native raw SHA-256 and derives an alternative inner SHA-256
 only for the exact whole-message envelope (fixed separators, matching four-digit
 hex IDs, no nested wrappers). It never trims or normalizes the inner bytes.
 Initial confirmation and pending reconciliation require one of those complete

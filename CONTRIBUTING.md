@@ -1,19 +1,19 @@
 # Contributing
 
-Thanks for helping with Zen.
+Thanks for helping with Mewla.
 
 ## Scope of this beta
 
 The daemon runs on Linux and Apple Silicon macOS. Android and iOS share the
 mobile product contract; platform-specific adapters must expose explicit
-behavior on both. One supported coding CLI is enough to run a Zen Worker.
+behavior on both. One supported coding CLI is enough to run a Mewla Worker.
 
 ## Before you start
 
 - Read `README.md` and `docs/architecture.md` for pairing/auth invariants.
-- Do not commit pairing links, `~/.zen` state, `.env.local`, tunnel URLs, or APK signing keys.
-- Zen is licensed under the [Apache License 2.0](LICENSE). By contributing, you agree that your contributions are licensed under the same terms.
-- Zen product names and logos are trademarks; see [TRADEMARKS.md](TRADEMARKS.md). Contributions do not transfer trademark rights.
+- Do not commit pairing links, `~/.mewla` state, `.env.local`, tunnel URLs, or APK signing keys.
+- Mewla is licensed under the [Apache License 2.0](LICENSE). By contributing, you agree that your contributions are licensed under the same terms.
+- Mewla product names and logos are trademarks; see [TRADEMARKS.md](TRADEMARKS.md). Contributions do not transfer trademark rights.
 - Prefer small, reviewable changes. Bug reports, design feedback, documentation corrections, and focused patches are welcome.
 
 ## Development
@@ -23,7 +23,7 @@ behavior on both. One supported coding CLI is enough to run a Zen Worker.
 bun run daemon:build && cd daemon && go test ./...
 
 # Direct Go build
-cd daemon && go test ./... && go build -o bin/zen ./cmd/mewla/
+cd daemon && go test ./... && go build -o bin/mewla ./cmd/mewla/
 
 
 # App
@@ -34,7 +34,7 @@ cd app && bun test && bunx tsc --noEmit
 Optional Grok real-session integration tests (maintainer machines only):
 
 ```bash
-ZEN_GROK_REAL_SESSION=1 go test ./work -run Grok
+MEWLA_GROK_REAL_SESSION=1 go test ./work -run Grok
 ```
 
 ## Style

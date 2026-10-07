@@ -10,14 +10,14 @@ Zen exposes visible Worker identities through the canonical control socket. This
 
 ## How to get to it (user POV)
 
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-zen-state` from the repository root.
+- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
 - Read the `worker_list` entry and its `runtime.worker_count` value.
 
 ## Driving it with the Zen CLI
 
 Preconditions:
 
-- `zen doctor --json` passes for the exact daemon state.
+- `mewla doctor --json` passes for the exact daemon state.
 - The control socket is owned by that daemon.
 
 - **List.** Run the lever. The report contains `worker_list: pass` and a numeric Worker count.
@@ -53,10 +53,10 @@ native Cloudflare connection confirmation alone is not public reachability proof
 
 ## Machine telemetry and ownership cleanup
 
-`zen resources --json` reads the cached machine snapshot and chart history.
+`mewla resources --json` reads the cached machine snapshot and chart history.
 The authenticated API contract is in `docs/resource-telemetry.md`. Threshold
 transitions use the durable Brain Work Event lane; they do not authorize daemon
-resource intervention. `zen worker release -id SESSION -pid PID -start START`
+resource intervention. `mewla worker release -id SESSION -pid PID -start START`
 releases a selected exact tool tree while retaining its provider.
 
 `resource_cleanup_real_test.go` launches a plain inert tmux Worker, re-observes

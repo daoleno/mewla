@@ -12,7 +12,7 @@ CSS = """
 """
 
 
-def header(s, sx, sy, sw, title="onboarding", sub="claude · ~/zen"):
+def header(s, sx, sy, sw, title="onboarding", sub="claude · ~/mewla"):
     y = sy + 52
     s.circle(sx + 30, y + 18, 18, fill="panel3")
     s.path(f"M{sx + 33} {y + 11}l-7 7 7 7", stroke="ink", sw=1.6)
@@ -38,7 +38,7 @@ def build():
     W, H = 380, 760
     s = Svg(k, W, H,
             "One Session, four views on the phone",
-            "A phone showing one claude Session in ~/zen. New session lists Shell, Claude, Codex, Cursor, Grok, Pi, OpenCode and DSH. "
+            "A phone showing one claude Session in ~/mewla. New session lists Shell, Claude, Codex, Cursor, Grok, Pi, OpenCode and DSH. "
             "Chat shows the request, tool rows and the reply. Terminal shows the same Session as the live terminal grid. "
             "Git shows three changed files and a diff.",
             states=4, css=CSS.format(k=k))
@@ -56,7 +56,7 @@ def build():
     s.rect(sx + sw / 2 - 18, top + 9, 36, 4, rx=2, fill="line2")
     s.text(sx + 22, top + 46, "New session", size=17, weight=600)
     s.rect(sx + 18, top + 62, sw - 36, 38, rx=12, fill="panel3")
-    s.text(sx + 32, top + 86, "~/zen", size=12.5, mono=True)
+    s.text(sx + 32, top + 86, "~/mewla", size=12.5, mono=True)
     s.text(sx + sw - 32, top + 86, "Change", size=11.5, fill="sage", anchor="end")
     s.text(sx + 22, top + 126, "START WITH", size=9.5, fill="faint", mono=True, extra=' letter-spacing="1.2"')
     tw, th = (sw - 36 - 10) / 2, 44

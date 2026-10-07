@@ -73,33 +73,33 @@ instead of being treated as finished.
 You can do the same from the computer:
 
 ```sh
-zen brain work list --json                 # open Work
-zen brain work list --json -all -full      # include finished Work and objectives
-zen brain work list --json -id <work-id>   # one Work with its history
-zen brain work update -id <work-id> -status done
+mewla brain work list --json                 # open Work
+mewla brain work list --json -all -full      # include finished Work and objectives
+mewla brain work list --json -id <work-id>   # one Work with its history
+mewla brain work update -id <work-id> -status done
 ```
 
 ## Watch and steer Workers
 
 ```sh
-zen worker list --json
-zen worker status -id <session-id> --json
-zen worker capture -id <session-id> --json      # transcript
-zen worker send -id <session-id> --work-id <work-id> -text "Also update the tests"
-zen worker receipt -id <session-id> --work-id <work-id> --turn-id <turn>
-zen worker close -id <session-id>
+mewla worker list --json
+mewla worker status -id <session-id> --json
+mewla worker capture -id <session-id> --json      # transcript
+mewla worker send -id <session-id> --work-id <work-id> -text "Also update the tests"
+mewla worker receipt -id <session-id> --work-id <work-id> --turn-id <turn>
+mewla worker close -id <session-id>
 ```
 
-`zen worker send` with `--work-id` hands the follow-up to the Worker as part of
+`mewla worker send` with `--work-id` hands the follow-up to the Worker as part of
 that Work. If a send's outcome is unknown, the input may still have arrived;
-`zen worker receipt` reads whether it was accepted without sending it again.
+`mewla worker receipt` reads whether it was accepted without sending it again.
 
 Closing a Worker, or accepting its Work, stops the processes that Worker
 started. Your own Sessions and Brain are never cleaned up this way.
 
 ## Brain's workspace
 
-Brain keeps its notes in a workspace under `~/.zen/brain`. `zen brain workspace`
+Brain keeps its notes in a workspace under `~/.mewla/brain`. `mewla brain workspace`
 prints the exact path.
 
 | File | Purpose |
@@ -108,18 +108,18 @@ prints the exact path.
 | `profile.md` | Your background and preferences |
 | `memory.md` | Durable facts and decisions |
 | `current.md` | A short handoff of the active work |
-| `AGENTS.md` | Brain's standing instructions, partly managed by Zen |
+| `AGENTS.md` | Brain's standing instructions, partly managed by Mewla |
 | `worklog/` | Brain's reports and handoffs |
 
-You can edit these files. Zen refreshes only its own managed blocks in
-`AGENTS.md` and never overwrites your text. `zen brain gc` reports when a note
+You can edit these files. Mewla refreshes only its own managed blocks in
+`AGENTS.md` and never overwrites your text. `mewla brain gc` reports when a note
 has grown past its size budget.
 
 ## Switch Brain to another agent
 
 ```sh
-zen brain executors --json
-zen brain use claude
+mewla brain executors --json
+mewla brain use claude
 ```
 
 The conversation and its history move with Brain. In the app, **New Chat**

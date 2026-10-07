@@ -70,7 +70,7 @@ def build(narrow=False):
     rh = 44 + len(ROUTES) * 40
     s.rect(rx_, ry_, rw, rh, rx=14, fill="panel", stroke="line")
     s.text(rx_ + 16, ry_ + 26, "routing.md", size=12, mono=True, weight=500)
-    s.text(rx_ + rw - 16, ry_ + 26, "~/.zen/brain/workspace", size=10, fill="faint", mono=True, anchor="end")
+    s.text(rx_ + rw - 16, ry_ + 26, "~/.mewla/brain/workspace", size=10, fill="faint", mono=True, anchor="end")
     s.line(rx_, ry_ + 40, rx_ + rw, ry_ + 40, stroke="line")
     used = {w[2]: i for i, w in enumerate(WORK)}
     for i, (task, ex, model, rsn) in enumerate(ROUTES):

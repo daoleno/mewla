@@ -100,7 +100,7 @@ go test ./server -run '^$' -bench '^BenchmarkGitDiff$' -benchtime=3x
 
 The benchmark includes small, medium, many-file, large-single-file, and long-line
 repositories. `TestGitDiffNativeFixtureServer` is opt-in with
-`ZEN_GIT_DIFF_NATIVE=1`; it binds only loopback port 8097 and uses the production
+`MEWLA_GIT_DIFF_NATIVE=1`; it binds only loopback port 8097 and uses the production
 authenticated WebSocket handler against temporary repositories. `/stop` shuts
 down this test resource. It is not a daemon entry point or a product route.
 

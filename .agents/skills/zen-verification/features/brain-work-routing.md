@@ -10,14 +10,14 @@ Brain is the canonical owner of current work, executor routing, and discoverable
 
 ## How to get to it (user POV)
 
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-zen-state` from the repository root.
+- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
 - Read the `brain_context` and `brain_playbooks` entries in the report.
 
 ## Driving it with the Zen CLI
 
 Preconditions:
 
-- The exact Zen daemon is running and passes `zen doctor --json`.
+- The exact Zen daemon is running and passes `mewla doctor --json`.
 - The checkout contains the source and test anchors in `features/manifest.json`.
 
 - **Context.** Run the lever. The report contains a passing `brain_context` runtime check, a separate runtime daemon identity, a host executor ID, a delegated executor ID, and a Worker count.

@@ -1,11 +1,11 @@
 # Security and privacy
 
-Zen is self-hosted. Your repositories, credentials and agent state stay on your
-computer, and Zen operates no cloud service that stores your transcripts.
+Mewla is self-hosted. Your repositories, credentials and agent state stay on your
+computer, and Mewla operates no cloud service that stores your transcripts.
 
 ## Trust model
 
-Zen separates three things:
+Mewla separates three things:
 
 1. **Reachability**: how the phone reaches the daemon (LAN, Tailscale, a
    tunnel or a reverse proxy). Reaching the daemon grants nothing by itself.
@@ -28,7 +28,7 @@ devices you trust with a terminal on that computer.**
 
 - The daemon listens on `127.0.0.1:9876` by default, reachable only from the
   same computer.
-- `zen --lan` serves plain HTTP on every IPv4 interface. Use it only on a
+- `mewla --lan` serves plain HTTP on every IPv4 interface. Use it only on a
   network you trust, and restrict port `9876` with a firewall.
 - Through Tailscale, traffic stays inside your tailnet and its access rules.
 - An HTTPS tunnel or reverse proxy makes the daemon reachable from the
@@ -43,15 +43,15 @@ See [Connect and pair](connect-and-pair.md) for each route.
 ## Agents and model providers
 
 Agents run with your user's permissions, and some run without approval prompts.
-That is a choice about your computer, not something Zen's network layer can
+That is a choice about your computer, not something Mewla's network layer can
 contain. Read [Permission bypass risks](executors.md#permission-bypass-risks).
 
-Model providers see whatever the agents send them. Zen reads agent transcripts
+Model providers see whatever the agents send them. Mewla reads agent transcripts
 from each agent's own home directory to show Chat and Stats.
 
 ## Data on your computer
 
-All paths are under the state directory, `~/.zen` by default.
+All paths are under the state directory, `~/.mewla` by default.
 
 | Path | Contents |
 | --- | --- |
@@ -83,7 +83,7 @@ The daemon connects out only for features you use:
 
 | Destination | When |
 | --- | --- |
-| The release server | `zen update`, and an occasional update hint when you start `zen` in a terminal |
+| The release server | `mewla update`, and an occasional update hint when you start `mewla` in a terminal |
 | `models.dev` | Model names and reference prices for Stats and Model Providers |
 | Expo push service | Sending a push notification to your phone |
 | The model provider you selected | Requests from Codex and Claude Code through the local gateway |
@@ -91,7 +91,7 @@ The daemon connects out only for features you use:
 | Telegram Bot API | When Telegram is connected |
 | Cloudflare | When you start a Quick Tunnel |
 
-Zen sends no telemetry.
+Mewla sends no telemetry.
 
 ## Revoke a device
 
@@ -99,8 +99,8 @@ Removing a server in the app only forgets it on that phone. To revoke a device's
 key, on the computer:
 
 ```sh
-zen devices list
-zen devices revoke -id <device-id>
+mewla devices list
+mewla devices revoke -id <device-id>
 ```
 
 Revocation closes the device's live connections immediately and rejects its
@@ -114,7 +114,7 @@ handlers; unsupported or oversized diagrams are shown as source.
 
 ## Report a vulnerability
 
-Report security issues privately to the Zen maintainers, as described in the
+Report security issues privately to the Mewla maintainers, as described in the
 [security policy](https://github.com/daoleno/mewla/security/policy). Please
 include:
 
