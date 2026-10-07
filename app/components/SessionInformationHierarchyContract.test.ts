@@ -33,7 +33,7 @@ describe("Session list information hierarchy", () => {
     expect(rowSource).not.toContain("workerStatusLabel");
     expect(rowSource).not.toContain("statusText");
     expect(rowSource).not.toContain("statusDot");
-    expect(rowSource).toContain("workerStatusIndicatorIcon(status)");
+    expect(rowSource).toContain("WORKER_STATUS_MARK[status]");
 
     const indicator = rowSource.slice(
       rowSource.indexOf("style={styles.statusIndicator}"),

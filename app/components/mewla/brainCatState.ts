@@ -28,6 +28,7 @@ export interface BrainCatPresence {
   state: BrainCatState;
   /** The Work the state is about, when there is one. */
   workTitle?: string;
+  workId?: string;
 }
 
 /**
@@ -50,15 +51,15 @@ export function resolveBrainCatPresence({
   if (connection !== "connected" || !hydrated) return { state: "waking" };
   const work = currentWork ?? [];
   const needsInput = work.find((item) => item.status === "needs_input");
-  if (needsInput) return { state: "attention", workTitle: needsInput.title };
+  if (needsInput) return { state: "attention", workTitle: needsInput.title, workId: needsInput.work_id };
   const unread = work.find((item) => item.unread_result);
-  if (unread) return { state: "delivered", workTitle: unread.title };
+  if (unread) return { state: "delivered", workTitle: unread.title, workId: unread.work_id };
   const delegated = work.find(
     (item) =>
       item.attempt_delegated &&
       (item.status === "running" || item.status === "waiting"),
   );
-  if (delegated) return { state: "delegating", workTitle: delegated.title };
+  if (delegated) return { state: "delegating", workTitle: delegated.title, workId: delegated.work_id };
   return { state: "idle" };
 }
 

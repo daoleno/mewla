@@ -31,14 +31,17 @@ describe("resolveBrainCatPresence", () => {
     expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated, unread, needs] })).toEqual({
       state: "attention",
       workTitle: "Approve deploy",
+      workId: "a",
     });
     expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated, unread] })).toEqual({
       state: "delivered",
       workTitle: "Weekly report",
+      workId: "b",
     });
     expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated] })).toEqual({
       state: "delegating",
       workTitle: "Regression sweep",
+      workId: "c",
     });
   });
 

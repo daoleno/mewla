@@ -52,7 +52,7 @@ export function ListSection({ title, footer, accessory, children, style }: ListS
           styles.card,
           {
             backgroundColor: colors.bgSurface,
-            borderColor: theme.isLight ? "transparent" : theme.materials.stroke,
+            borderColor: theme.isLight ? colors.borderSubtle : theme.materials.stroke,
           },
         ]}
       >
@@ -120,11 +120,12 @@ export function ListRow({
   accessibilityRole,
   numberOfLines = 1,
 }: ListRowProps) {
-  const { colors, theme } = useAppTheme();
-  const tint = destructive ? colors.dangerText : iconColor ?? colors.accentStrong;
+  const { colors } = useAppTheme();
+  // Seal & Slip: a bare soft-ink glyph, no coloured tile; the label leads.
+  const tint = destructive ? colors.dangerText : iconColor ?? colors.textSecondary;
   const leadingNode = leading ?? (icon ? (
-    <View style={[styles.iconTile, { backgroundColor: destructive ? colors.dangerSoft : theme.materials.tint }]}>
-      <Ionicons name={icon} size={18} color={tint} />
+    <View style={styles.iconTile}>
+      <Ionicons name={icon} size={20} color={tint} />
     </View>
   ) : null);
   const content = (
@@ -158,7 +159,7 @@ export function ListRow({
         <Ionicons
           name="checkmark"
           size={20}
-          color={selected ? colors.accentStrong : "transparent"}
+          color={selected ? colors.textPrimary : "transparent"}
         />
       ) : null}
     </>

@@ -43,7 +43,7 @@ const DISC_TRAILING_INSET = 5;
 /**
  * Trailing Composer action. The whole 44 pt slot is the touch target; the
  * visible control is a 34 pt disc inside it:
- * - ready: filled accent disc, arrow in textOnAccent;
+ * - ready: the seal disc (Send is one of the seal's three jobs), white arrow;
  * - disabled: quiet neutral disc, subtle glyph;
  * - sending: neutral disc with the loading mark;
  * - running: neutral disc with a stop square, widening into a capsule when
@@ -72,10 +72,10 @@ export function ComposerSendButton({
   const foreground = running
     ? chrome.text
     : ready
-      ? chrome.textOnAccent
+      ? chrome.onSeal
       : chrome.textSubtle;
   const discColor = ready
-    ? chrome.accent
+    ? chrome.seal
     : running
       ? composerNeutralFill(chrome, "strong")
       : composerNeutralFill(chrome);
@@ -83,7 +83,7 @@ export function ComposerSendButton({
     ? running
       ? chrome.border
       : ready
-        ? chrome.accent
+        ? chrome.seal
         : "transparent"
     : "transparent";
 
@@ -125,7 +125,7 @@ export function ComposerSendButton({
           : null,
         fixedWidth ? { width: fixedWidth, minWidth: fixedWidth, maxWidth: fixedWidth } : null,
         standalone
-          ? { backgroundColor: ready ? chrome.accent : chrome.composerInput, borderColor }
+          ? { backgroundColor: ready ? chrome.seal : chrome.composerInput, borderColor }
           : null,
       ]}
       onPress={onPress}

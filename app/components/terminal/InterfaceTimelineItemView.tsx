@@ -15,7 +15,6 @@ import type {
 import { ZenPlanUpdate } from "./InterfaceTimelinePlan";
 import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
-import { withAlpha } from "./colorWithAlpha";
 import { TaskNotificationCard } from "./TaskNotificationCard";
 import {
   BRAIN_PRESENCE_ITEM_PREFIX,
@@ -85,8 +84,6 @@ function ZenTimelineItemViewImpl({
       <BrainWorkEventCard
         item={item}
         chrome={chrome}
-        attentionColor={theme.yellow}
-        attentionBackground={withAlpha(theme.yellow, 0.14)}
       />
     );
   }
@@ -96,8 +93,6 @@ function ZenTimelineItemViewImpl({
         item={item}
         chrome={chrome}
         theme={theme}
-        attentionColor={theme.yellow}
-        attentionBackground={withAlpha(theme.yellow, 0.14)}
       />
     );
   }

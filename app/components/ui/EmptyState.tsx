@@ -7,7 +7,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle } from "react-native-svg";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
 import { Button } from "./Button";
@@ -53,9 +53,9 @@ export function EmptyState({
   art,
   style,
 }: EmptyStateProps) {
-  const { colors } = useAppTheme();
+  const { colors, theme } = useAppTheme();
   const danger = tone === "danger";
-  const glyphColor = danger ? colors.dangerText : colors.accentStrong;
+  const glyphColor = danger ? colors.dangerText : colors.textSecondary;
 
   if (size === "inline") {
     return (
@@ -85,7 +85,7 @@ export function EmptyState({
         accessible={false}
         importantForAccessibility="no-hide-descendants"
       >
-        {art ?? <Halo color={glyphColor} busy={busy} icon={icon} />}
+        {art ?? <Halo color={glyphColor} fill={danger ? colors.dangerSoft : theme.materials.tint} busy={busy} icon={icon} />}
       </View>
       {title ? (
         <AppText
@@ -112,32 +112,17 @@ export function EmptyState({
   );
 }
 
-function Halo({ color, busy, icon }: { color: string; busy: boolean; icon?: Icon }) {
+/** A quiet paper disc with a soft-ink glyph: no glow, no colour. */
+function Halo({ color, fill, busy, icon }: { color: string; fill: string; busy: boolean; icon?: Icon }) {
   return (
     <>
       <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill}>
-        <Defs>
-          <RadialGradient id="halo" cx="50%" cy="42%" r="58%">
-            <Stop offset="0" stopColor={color} stopOpacity={0.2} />
-            <Stop offset="0.72" stopColor={color} stopOpacity={0.06} />
-            <Stop offset="1" stopColor={color} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2} fill="url(#halo)" />
-        <Circle
-          cx={HALO / 2}
-          cy={HALO / 2}
-          r={HALO / 2 - 14}
-          fill="none"
-          stroke={color}
-          strokeOpacity={0.18}
-          strokeWidth={1}
-        />
+        <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 10} fill={fill} />
       </Svg>
       {busy ? (
         <ActivityIndicator color={color} />
       ) : icon ? (
-        <Ionicons name={icon} size={30} color={color} />
+        <Ionicons name={icon} size={28} color={color} />
       ) : null}
     </>
   );

@@ -3,6 +3,7 @@ import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { BrainCurrentWork } from "../../store/brain";
 import {
   brainCurrentWorkLifecycle,
+  brainWorkLifecycleStatus,
   brainWorkEventAccessibilityLabel,
   brainWorkEventLifecycle,
   brainWorkEventReviewLabel,
@@ -279,5 +280,18 @@ describe("Brain Work event source presentation", () => {
       tone: "neutral",
       terminal: true,
     });
+  });
+});
+
+describe("Seal & Slip state for each lifecycle", () => {
+  test("only Needs you is the seal and failure is its own state", () => {
+    expect(brainWorkLifecycleStatus("needs_you")).toBe("needs");
+    expect(brainWorkLifecycleStatus("failed")).toBe("failed");
+    expect(brainWorkLifecycleStatus("ready")).toBe("ready");
+    expect(brainWorkLifecycleStatus("working")).toBe("running");
+    expect(brainWorkLifecycleStatus("uncertain")).toBe("warning");
+    expect(brainWorkLifecycleStatus("waiting")).toBe("blocked");
+    const all = ["working", "blocked", "ready", "reviewing", "waiting", "done", "cancelled", "needs_you", "uncertain", "failed"] as const;
+    expect(all.filter((lifecycle) => brainWorkLifecycleStatus(lifecycle) === "needs")).toEqual(["needs_you"]);
   });
 });

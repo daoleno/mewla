@@ -83,7 +83,7 @@ export function ActionMenu({ visible, title, items, onClose }: ActionMenuProps) 
               <Ionicons
                 name={item.icon}
                 size={20}
-                color={item.destructive && !item.disabled ? colors.dangerText : item.disabled ? colors.disabledText : colors.accentStrong}
+                color={item.destructive && !item.disabled ? colors.dangerText : item.disabled ? colors.disabledText : colors.textSecondary}
               />
               <View style={styles.copy}>
                 <AppText variant="body" numberOfLines={1} style={{ color: ink }}>

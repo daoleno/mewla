@@ -10,3 +10,10 @@ export { IconButton } from "./IconButton";
 export { ListRow, ListSection } from "./ListSection";
 export { StatusPill } from "./StatusPill";
 export { ToastProvider, useToast } from "./Toast";
+export { StatusMark } from "./StatusMark";
+export {
+  WORK_STATUS_LABELS,
+  workStatusInk,
+  workStatusTextInk,
+  type WorkStatus,
+} from "./workStatus";
