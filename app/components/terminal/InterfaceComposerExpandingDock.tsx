@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet, View, type TextInput as TextInputInstance } from "react-native";
+import { Platform, StyleSheet, View, type TextInput as TextInputInstance } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -159,7 +159,9 @@ export function InterfaceComposerExpandingDock({
           // Flat capsule: the one continuous outline is its only edge. A lit
           // top band or an elevation shadow would break it at the corners.
           backgroundColor: chrome.composerInput,
-          borderColor: chrome.border,
+          // Web focus shows on the capsule's one outline, in the focus blue,
+          // instead of a browser ring around the text inside it.
+          borderColor: Platform.OS === "web" && focused ? chrome.focus : chrome.border,
         },
       ]}
     >
