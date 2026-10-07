@@ -102,6 +102,7 @@ import { ServerContextRow } from "../components/extensions/ServerContextRow";
 import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
 import { pluginJobs } from "../services/pluginOnboarding";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
+import { ResourcesScreenshotDemo, SkillsScreenshotDemo, WorkScreenshotDemo } from "../components/screenshotDemo/ToolsScreenshotDemos";
 
 const NOOP = () => undefined;
 const loadNoDemoAsset = async () => null;
@@ -146,6 +147,12 @@ export default function ScreenshotDemoRoute() {
       return <ProvidersDemo />;
     case "plugins":
       return <PluginsDemo />;
+    case "skills":
+      return <SkillsScreenshotDemo header={<DemoStackHeader title="Skills" />} />;
+    case "resources":
+      return <ResourcesScreenshotDemo header={<DemoStackHeader title="Resources" />} />;
+    case "work":
+      return <WorkScreenshotDemo />;
     case "profile":
       return <InterfaceDevicePerformanceDemoGate />;
     case "reading":
