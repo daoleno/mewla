@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { ResourcesView } from "../resources/ResourcesView";
 import { SkillsPresentation } from "../skills/SkillsPresentation";
 import { groupLogicalSkills } from "../../services/skillsScreenModel";
@@ -15,6 +15,7 @@ import {
   screenshotWorkItems,
 } from "../../services/screenshotToolsFixtures";
 import { useWorkDispatch } from "../../store/work";
+import WorkDetailScreen from "../../app/work/[id]";
 
 const NOOP = () => undefined;
 
@@ -131,13 +132,13 @@ export function ResourcesScreenshotDemo({ header }: { header: React.ReactNode })
 }
 
 /**
- * Seeds the Work store and opens the real Work route. Needs the seeded
- * current server `demo-server`; `fixture` picks the item (running by default).
+ * Seeds the Work store and renders the real Work screen in place. The URL
+ * carries `id` (w-running, w-blocked, w-failed, w-done, w-queued) and
+ * `serverId=demo-server`, which must be the seeded current server.
  */
-export function WorkScreenshotDemo() {
-  const fixture = fixtureParam(useLocalSearchParams<{ fixture?: string | string[] }>().fixture);
+export function WorkScreenshotDemo({ header }: { header: React.ReactNode }) {
   const dispatch = useWorkDispatch();
-  const router = useRouter();
+  const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     dispatch({
       type: "WORK_ITEMS_SNAPSHOT",
@@ -146,10 +147,12 @@ export function WorkScreenshotDemo() {
       serverUrl: "https://demo.invalid",
       workItems: screenshotWorkItems(),
     });
-    router.replace({
-      pathname: "/work/[id]",
-      params: { id: `w-${fixture ?? "running"}`, serverId: SCREENSHOT_WORK_SERVER_ID },
-    });
-  }, [dispatch, fixture, router]);
-  return null;
+    setSeeded(true);
+  }, [dispatch]);
+  return (
+    <>
+      {header}
+      {seeded ? <WorkDetailScreen /> : null}
+    </>
+  );
 }

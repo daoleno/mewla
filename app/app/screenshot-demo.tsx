@@ -152,7 +152,7 @@ export default function ScreenshotDemoRoute() {
     case "resources":
       return <ResourcesScreenshotDemo header={<DemoStackHeader title="Resources" />} />;
     case "work":
-      return <WorkScreenshotDemo />;
+      return <WorkScreenshotDemo header={<DemoStackHeader title="" />} />;
     case "profile":
       return <InterfaceDevicePerformanceDemoGate />;
     case "reading":
