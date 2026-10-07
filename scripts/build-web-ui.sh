@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Export the Expo web app and stage it for embedding in the zen daemon.
+# Export the Expo web app and stage it for embedding in the mewla daemon.
 #
 # Every exported file is stored gzip-only in daemon/webui/dist; the daemon
 # serves the compressed bytes directly. Run before `go build ./cmd/mewla`.

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Build release-shaped zen binaries for Linux amd64/arm64 and macOS arm64.
+# Build release-shaped mewla binaries for Linux amd64/arm64 and macOS arm64.
 #
-# Reads product version from app/app.base.json (expo.version) unless ZEN_VERSION is set.
+# Reads product version from app/app.base.json (expo.version) unless MEWLA_VERSION (or legacy ZEN_VERSION) is set.
 # Embeds the web UI via scripts/build-web-ui.sh (needs `bun install`).
 # Does not publish, tag, sign Android APKs, or read release keystores.
 #
 # Usage:
 #   ./scripts/build-daemon-linux.sh
 #   ./scripts/build-daemon-linux.sh --out-dir dist-download/staging/bin
-#   ZEN_VERSION=0.1.2 ./scripts/build-daemon-linux.sh
+#   MEWLA_VERSION=0.1.2 ./scripts/build-daemon-linux.sh
 
 set -euo pipefail
 
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-VERSION="${ZEN_VERSION:-}"
+VERSION="${MEWLA_VERSION:-${ZEN_VERSION:-}}"
 if [[ -z "$VERSION" ]]; then
   VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
 fi
@@ -70,12 +70,12 @@ build_one() {
   chmod +x "$out_path"
 }
 
-build_one linux amd64 "zen-linux-amd64" 0
-build_one linux arm64 "zen-linux-arm64" 0
-build_one darwin arm64 "zen-darwin-arm64" 0
+build_one linux amd64 "mewla-linux-amd64" 0
+build_one linux arm64 "mewla-linux-arm64" 0
+build_one darwin arm64 "mewla-darwin-arm64" 0
 
 echo ""
 echo "VERSION=$VERSION"
 echo "OUT_DIR=$OUT_DIR"
-ls -la "$OUT_DIR"/zen-linux-amd64 "$OUT_DIR"/zen-linux-arm64 "$OUT_DIR"/zen-darwin-arm64
+ls -la "$OUT_DIR"/mewla-linux-amd64 "$OUT_DIR"/mewla-linux-arm64 "$OUT_DIR"/mewla-darwin-arm64
 echo "Done (no publish)."

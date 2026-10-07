@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build the local Zen daemon without native display dependencies.
+# Build the local Mewla daemon without native display dependencies.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${1:-$ROOT/bin/zen}"
+OUT="${1:-$ROOT/bin/mewla}"
 if [[ "$OUT" != /* ]]; then
   OUT="$ROOT/$OUT"
 fi
