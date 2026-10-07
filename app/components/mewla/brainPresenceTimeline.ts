@@ -1,4 +1,5 @@
 import type { ZenTimelineItem } from "../terminal/InterfaceTimelineItemView";
+import type { ZenActivityTimelineItem } from "../terminal/InterfaceTimelineActivityTypes";
 import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "../terminal/InterfaceTimelineModel";
 import type { BrainWorkEventTimelineItem } from "../brain/BrainWorkEventCard";
 import { brainCatTailLabel, type BrainCatPresence } from "./brainCatState";
@@ -58,4 +59,64 @@ function perchIndex(items: ZenTimelineItem[], workIds: readonly string[] | undef
     if (item.type === "brain-work-event" && needs.has(item.event.work_id)) return index;
   }
   return -1;
+}
+
+/** Timeline id prefix for a folded run of Brain's tool rows. */
+export const BRAIN_STEPS_ITEM_PREFIX = "brain-steps:";
+
+/**
+ * Brain only: a turn's tool rows (Search, Read, Run …) fold into one quiet
+ * "Worked · N steps" row that expands to the steps, so the conversation
+ * reads as messages and Work slips. A single row stays as it is, and a
+ * still-running row stays visible on its own.
+ */
+export function foldBrainToolRows(items: ZenTimelineItem[]): ZenTimelineItem[] {
+  const out: ZenTimelineItem[] = [];
+  let run: ZenActivityTimelineItem[] = [];
+  const flush = () => {
+    if (run.length > 1) out.push(foldedSteps(run));
+    else out.push(...run);
+    run = [];
+  };
+  for (const item of items) {
+    if (isFoldableToolRow(item)) {
+      run.push(item);
+      continue;
+    }
+    flush();
+    out.push(item);
+  }
+  flush();
+  return out.length === items.length ? items : out;
+}
+
+function isFoldableToolRow(item: ZenTimelineItem): item is ZenActivityTimelineItem {
+  return (
+    item.type === "activity" &&
+    item.tone !== "running" &&
+    !item.streaming &&
+    !item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX) &&
+    !item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX)
+  );
+}
+
+function foldedSteps(run: ZenActivityTimelineItem[]): ZenActivityTimelineItem {
+  const failed = run.filter((item) => item.tone === "failed").length;
+  const title = `Worked · ${run.length} steps${failed ? ` · ${failed} failed` : ""}`;
+  return {
+    type: "activity",
+    id: `${BRAIN_STEPS_ITEM_PREFIX}${run[0].id}`,
+    timestamp: run[run.length - 1].timestamp ?? run[0].timestamp,
+    statusKey: failed ? "failed" : "done",
+    title,
+    tone: failed ? "failed" : "neutral",
+    icon: failed ? "alert-circle-outline" : "layers-outline",
+    defaultExpanded: false,
+    accessibilityLabel: title,
+    children: run.flatMap((item) =>
+      item.children?.length
+        ? item.children
+        : [{ id: item.id, title: item.title, tone: item.tone, providerToolId: item.providerToolId }],
+    ),
+  };
 }

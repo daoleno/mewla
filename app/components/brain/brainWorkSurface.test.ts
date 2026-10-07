@@ -106,6 +106,12 @@ describe("brainWorkSurface", () => {
   });
 });
 
+test("a bare wake reference is not shown as the summary", () => {
+  const ref = "operator:29850172-4342-479d-a39d-2d98ae1dc87a";
+  const surface = brainWorkSurface([work({ status: "waiting", progress_mode: "waiting", wait_for: ref, wake: { kind: "user_input", ref } })], []);
+  expect(surface.slips[0].summary).toBeUndefined();
+});
+
 describe("brainWorkSummaryLine", () => {
   test("reads like the mock and drops empty groups", () => {
     expect(brainWorkSummaryLine({ needs: 1, running: 3, back: 0, waiting: 0 })).toBe("1 needs you · 3 running");
