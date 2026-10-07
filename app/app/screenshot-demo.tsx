@@ -671,10 +671,10 @@ function TerminalPaletteDemo() {
 
 /** Brain fixtures: the cat's state between turns, keyed by `fixture`. */
 const BRAIN_DEMO_PRESENCE: Record<string, BrainCatPresence> = {
-  attention: { state: "attention", workTitle: "Sync fix needs your call", workId: "desk-sync" },
-  work: { state: "attention", workTitle: "Sync fix needs your call", workId: "desk-sync" },
-  delivered: { state: "delivered", workTitle: "Weekly dependency report" },
-  delegating: { state: "delegating", workTitle: "Mobile regression sweep" },
+  attention: { state: "attention", count: 1, workIds: ["desk-sync"] },
+  work: { state: "attention", count: 1, workIds: ["desk-sync"] },
+  delivered: { state: "delivered", count: 1 },
+  delegating: { state: "delegating", count: 3 },
 };
 
 function BrainDemo() {

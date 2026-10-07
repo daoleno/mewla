@@ -1,5 +1,6 @@
 import type { BrainCurrentWork } from "../../store/brain";
 import type { ConnectionState } from "../../store/workers";
+import { brainWorkSurface } from "../brain/brainWorkSurface";
 
 /**
  * What the one cat is doing. It mirrors Brain's real state and nothing else:
@@ -26,14 +27,16 @@ export type BrainCatState =
 
 export interface BrainCatPresence {
   state: BrainCatState;
-  /** The Work the state is about, when there is one. */
-  workTitle?: string;
-  workId?: string;
+  /** How many Work items the state is about (needs you, back, delegated). */
+  count?: number;
+  /** Work that needs you, newest-first by the daemon's order; the cat perches on one of its slips. */
+  workIds?: readonly string[];
 }
 
 /**
  * Brain's state between turns. A running turn is "working" and belongs to the
- * timeline's Working row, which outranks every state here.
+ * timeline's Working row, which outranks every state here. It reads the same
+ * grouping as the Work surface, so the cat and the summary line agree.
  */
 export function resolveBrainCatPresence({
   hasServer,
@@ -49,29 +52,34 @@ export function resolveBrainCatPresence({
   if (!hasServer) return { state: "homeless" };
   if (connection === "offline") return { state: "offline" };
   if (connection !== "connected" || !hydrated) return { state: "waking" };
-  const work = currentWork ?? [];
-  const needsInput = work.find((item) => item.status === "needs_input");
-  if (needsInput) return { state: "attention", workTitle: needsInput.title, workId: needsInput.work_id };
-  const unread = work.find((item) => item.unread_result);
-  if (unread) return { state: "delivered", workTitle: unread.title, workId: unread.work_id };
-  const delegated = work.find(
+  const { slips, counts } = brainWorkSurface(currentWork, undefined);
+  if (counts.needs) {
+    return {
+      state: "attention",
+      count: counts.needs,
+      workIds: slips.filter((slip) => slip.group === "needs").map((slip) => slip.workId),
+    };
+  }
+  if (counts.back) return { state: "delivered", count: counts.back };
+  const delegated = (currentWork ?? []).filter(
     (item) =>
       item.attempt_delegated &&
       (item.status === "running" || item.status === "waiting"),
-  );
-  if (delegated) return { state: "delegating", workTitle: delegated.title, workId: delegated.work_id };
+  ).length;
+  if (delegated) return { state: "delegating", count: delegated };
   return { state: "idle" };
 }
 
 /** States the timeline's tail row announces when no turn is running. */
 export function brainCatTailLabel(presence: BrainCatPresence): string | null {
+  const count = presence.count ?? 1;
   switch (presence.state) {
     case "attention":
-      return "Needs you";
+      return count > 1 ? `${count} need you` : "Needs you";
     case "delivered":
-      return "Brought something back";
+      return count > 1 ? `Brought ${count} things back` : "Brought something back";
     case "delegating":
-      return "Waiting on Workers";
+      return count > 1 ? `Waiting on ${count} Workers` : "Waiting on a Worker";
     default:
       return null;
   }

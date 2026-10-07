@@ -11,7 +11,8 @@ export const BRAIN_PRESENCE_ITEM_PREFIX = "brain-presence:";
  * - a running turn's Working row already carries it (walking);
  * - when Work needs you, it hops onto that Work's newest slip;
  * - otherwise it holds the newest edge to say what is waiting: your input
- *   (when its slip is not in this conversation), a result, or Workers.
+ *   (when no such slip is in this conversation), results, or Workers, as a
+ *   count; tapping it opens the Work list.
  * An empty chat has the seal instead. Never more than one of these.
  */
 export function mergeBrainPresenceIntoTimeline(
@@ -27,7 +28,7 @@ export function mergeBrainPresenceIntoTimeline(
   ) {
     return items;
   }
-  const perch = presence.state === "attention" ? perchIndex(items, presence.workId) : -1;
+  const perch = presence.state === "attention" ? perchIndex(items, presence.workIds) : -1;
   if (perch >= 0) {
     const next = items.slice();
     next[perch] = { ...(items[perch] as BrainWorkEventTimelineItem), catPerched: true };
@@ -38,8 +39,8 @@ export function mergeBrainPresenceIntoTimeline(
     {
       type: "activity",
       id: `${BRAIN_PRESENCE_ITEM_PREFIX}${presence.state}`,
+      // Presence only: one Work's title here went stale; the Work list names them.
       title: label,
-      detail: presence.workTitle,
       tone: "neutral",
       icon: "paw-outline",
       statusKey: presence.state,
@@ -48,12 +49,13 @@ export function mergeBrainPresenceIntoTimeline(
   ];
 }
 
-/** The newest slip for the Work that needs you, or -1. */
-function perchIndex(items: ZenTimelineItem[], workId: string | undefined): number {
-  if (!workId) return -1;
+/** The newest slip of any Work that needs you, or -1. */
+function perchIndex(items: ZenTimelineItem[], workIds: readonly string[] | undefined): number {
+  if (!workIds?.length) return -1;
+  const needs = new Set(workIds);
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.type === "brain-work-event" && item.event.work_id === workId) return index;
+    if (item.type === "brain-work-event" && needs.has(item.event.work_id)) return index;
   }
   return -1;
 }

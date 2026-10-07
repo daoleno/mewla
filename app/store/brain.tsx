@@ -60,6 +60,16 @@ export type BrainCurrentWork = {
   attention_state?: BrainWorkAttentionState;
   session_finalizations?: BrainSessionFinalization[];
   unread_result: boolean;
+  /** One line about the newest outcome; daemons before 0.2.1 omit it. */
+  summary?: string;
+  updated_at?: string;
+};
+
+/** Brain's declared current objective and how much of its Work is back. */
+export type BrainObjective = {
+  title: string;
+  total: number;
+  back: number;
 };
 
 export type BrainWorkBacklog = {
@@ -110,6 +120,7 @@ export type BrainSnapshot = {
   scheduled_results?: BrainScheduledResult[];
   current_work?: BrainCurrentWork[];
   work_backlog?: BrainWorkBacklog;
+  objective?: BrainObjective;
   workspace?: string;
   worklog_path?: string;
   generated_at?: string;
@@ -132,11 +143,12 @@ export const initialBrainState: BrainState = {
 
 type RawBrainSnapshot = Omit<
   Partial<BrainSnapshot>,
-  "scheduled_results" | "current_work" | "work_backlog"
+  "scheduled_results" | "current_work" | "work_backlog" | "objective"
 > & {
   scheduled_results?: unknown[];
   current_work?: unknown[];
   work_backlog?: unknown;
+  objective?: unknown;
 };
 
 type Action =
@@ -185,6 +197,7 @@ function normalizeSnapshot(
       ? normalizeCurrentWork(raw.current_work)
       : [],
     work_backlog: normalizeWorkBacklog(raw?.work_backlog),
+    objective: normalizeObjective(raw?.objective),
     workspace: typeof raw?.workspace === "string" ? raw.workspace : undefined,
     worklog_path:
       typeof raw?.worklog_path === "string" ? raw.worklog_path : undefined,
@@ -239,9 +252,32 @@ function normalizeCurrentWork(raw: unknown[]): BrainCurrentWork[] {
         item.session_finalizations,
       ),
       unread_result: item.unread_result === true,
+      summary:
+        typeof item.summary === "string" && item.summary.trim()
+          ? item.summary.trim()
+          : undefined,
+      updated_at:
+        typeof item.updated_at === "string" && item.updated_at.trim()
+          ? item.updated_at.trim()
+          : undefined,
     });
   });
   return Array.from(byId.values());
+}
+
+function normalizeObjective(raw: unknown): BrainObjective | undefined {
+  const value =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  const title = typeof value?.title === "string" ? value.title.trim() : "";
+  if (!value || !title) {
+    return undefined;
+  }
+  const count = (input: unknown) =>
+    typeof input === "number" && Number.isSafeInteger(input) && input >= 0
+      ? input
+      : 0;
+  const total = count(value.total);
+  return { title, total, back: Math.min(count(value.back), total) };
 }
 
 function normalizeWorkAttentionState(
@@ -549,7 +585,10 @@ function brainServerStatesEqual(
       right.scheduled_results ?? [],
     ) &&
     currentWorkArraysEqual(left.current_work ?? [], right.current_work ?? []) &&
-    workBacklogEqual(left.work_backlog, right.work_backlog)
+    workBacklogEqual(left.work_backlog, right.work_backlog) &&
+    left.objective?.title === right.objective?.title &&
+    left.objective?.total === right.objective?.total &&
+    left.objective?.back === right.objective?.back
   );
 }
 
@@ -582,7 +621,9 @@ function currentWorkEqual(
       left.session_finalizations ?? [],
       right.session_finalizations ?? [],
     ) &&
-    left.unread_result === right.unread_result
+    left.unread_result === right.unread_result &&
+    left.summary === right.summary &&
+    left.updated_at === right.updated_at
   );
 }
 
