@@ -240,7 +240,7 @@ function CalendarDemo() {
       serverName: "Studio Mac",
       serverUrl: "https://calendar.example.invalid",
       items:
-        fixture === "empty" || fixture === "loading" ? [] : calendarFixtures(),
+        fixture === "empty" || fixture === "loading" ? [] : calendarFixtures(fixture === "states"),
     });
   }, [dispatch, fixture]);
 
@@ -258,7 +258,8 @@ function CalendarDemo() {
   );
 }
 
-function calendarFixtures(): CalendarItem[] {
+/** `states` adds the due (Needs you), completed and cancelled items. */
+function calendarFixtures(allStates = false): CalendarItem[] {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const at = (dayOffset: number, hour: number, minute = 0) => {
@@ -274,7 +275,41 @@ function calendarFixtures(): CalendarItem[] {
     updated_at: at(-1, 9),
     revision: 1,
   };
+  const extra: CalendarItem[] = allStates
+    ? [
+        {
+          ...base,
+          id: "demo-due",
+          title: "Approve the App Store screenshots",
+          kind: "deadline",
+          status: "waiting",
+          due_at: at(0, 9),
+          next_at: at(0, 9),
+        },
+        {
+          ...base,
+          id: "demo-standup",
+          title: "Morning check-in",
+          kind: "event",
+          status: "completed",
+          start_at: at(0, 8),
+          end_at: at(0, 8, 15),
+          next_at: at(0, 8),
+        },
+        {
+          ...base,
+          id: "demo-cancelled",
+          title: "Old release dry run",
+          kind: "scheduled_action",
+          status: "cancelled",
+          due_at: at(1, 16),
+          next_at: at(1, 16),
+          action_instruction: "Run the release dry run.",
+        },
+      ]
+    : [];
   return [
+    ...extra,
     {
       ...base,
       id: "demo-reminder",

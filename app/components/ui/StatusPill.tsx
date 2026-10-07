@@ -7,10 +7,10 @@ import { workStatusTextInk, type WorkStatus } from "./workStatus";
 
 /**
  * success: Ready check · warning: amber triangle · danger: Failed box ·
- * needs: the seal pill · neutral: a plain paper tag · accent: an ink tag, or
+ * blocked: stone dashed ring · needs: the seal pill · neutral: a plain paper tag · accent: an ink tag, or
  * the spinning Running arc when `live`.
  */
-export type StatusTone = "success" | "warning" | "danger" | "accent" | "needs" | "neutral";
+export type StatusTone = "success" | "warning" | "danger" | "blocked" | "accent" | "needs" | "neutral";
 
 interface StatusPillProps {
   label: string;
@@ -24,6 +24,7 @@ const TONE_STATUS: Record<Exclude<StatusTone, "neutral">, WorkStatus> = {
   success: "ready",
   warning: "warning",
   danger: "failed",
+  blocked: "blocked",
   accent: "running",
   needs: "needs",
 };

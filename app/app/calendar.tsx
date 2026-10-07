@@ -31,12 +31,16 @@ import {
 } from "../constants/tokens";
 import {
   calendarDateKey,
+  calendarStatusLabel,
+  calendarStatusMark,
   formatCalendarTime,
   groupAgenda,
   itemInstant,
   kindLabel,
   viewerTimezone,
 } from "../services/calendarPresentation";
+import { StatusMark } from "../components/ui/StatusMark";
+import { workStatusTextInk } from "../components/ui/workStatus";
 import {
   formatResolvedInstant,
   localFieldsFromInstant,
@@ -62,26 +66,6 @@ import { useCurrentServer } from "../store/currentServer";
 
 type ServerItem = CalendarItem & { serverId: string; serverName: string };
 const CALENDAR_FONT_SCALE_MAX = 1.25;
-const statuses: Record<CalendarItem["status"], string> = {
-  scheduled: "Scheduled",
-  waiting: "Waiting",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
-};
-const statusIcons: Record<
-  CalendarItem["status"],
-  React.ComponentProps<typeof Ionicons>["name"]
-> = {
-  scheduled: "time-outline",
-  waiting: "notifications-outline",
-  running: "play-circle-outline",
-  completed: "checkmark-circle-outline",
-  failed: "alert-circle-outline",
-  cancelled: "close-circle-outline",
-};
-
 type CalendarScreenProps = {
   notificationStateOverride?: CalendarNotificationState;
   initialError?: string;
@@ -482,7 +466,7 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${kindLabel[item.kind]}, ${statuses[item.status]}`}
+      accessibilityLabel={`${item.title}, ${kindLabel[item.kind]}, ${calendarStatusLabel[item.status]}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
@@ -495,19 +479,7 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
             timeZone: item.timezone,
           })}
         </Text>
-        <View
-          style={[
-            styles.kindRail,
-            {
-              backgroundColor:
-                item.status === "failed"
-                  ? colors.statusFailed
-                  : item.status === "running"
-                    ? colors.statusRunning
-                    : colors.accent,
-            },
-          ]}
-        />
+        <View style={styles.kindRail} />
       </View>
       <View style={styles.rowMain}>
         <Text style={styles.rowTitle} numberOfLines={2}>
@@ -516,22 +488,45 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
         <View style={styles.meta}>
           <Text style={styles.metaText}>{kindLabel[item.kind]}</Text>
           <Text style={styles.metaDot}>·</Text>
-          <Ionicons
-            name={statusIcons[item.status]}
-            size={13}
-            color={
-              item.status === "failed"
-                ? colors.statusFailed
-                : colors.textTertiary
-            }
-          />
-          <Text style={styles.metaText}>{statuses[item.status]}</Text>
+          <CalendarStatus status={item.status} />
         </View>
       </View>
       <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />
     </Pressable>
   );
 }
+/** The status word with its Seal & Slip mark; Scheduled stays a plain word. */
+function CalendarStatus({ status }: { status: CalendarItem["status"] }) {
+  const colors = useAppColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const mark = calendarStatusMark[status];
+  return (
+    <View style={styles.status}>
+      {mark ? <StatusMark status={mark} /> : null}
+      <Text
+        style={[
+          styles.metaText,
+          mark && mark !== "blocked"
+            ? {
+                color: workStatusTextInk(mark, {
+                  statusReady: colors.statusDone,
+                  statusRunning: colors.statusRunning,
+                  seal: colors.seal,
+                  sealText: colors.sealText,
+                  statusWarning: colors.statusWarning,
+                  statusFailed: colors.statusFailed,
+                  statusBlocked: colors.statusBlocked,
+                }),
+              }
+            : null,
+        ]}
+      >
+        {calendarStatusLabel[status]}
+      </Text>
+    </View>
+  );
+}
+
 function MonthNavigator({
   items,
   month,
@@ -711,9 +706,11 @@ function DetailModal({
           <View style={styles.sheetHandle} />
           <View style={styles.detailHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.detailKind}>
-                {kindLabel[item.kind]} · {statuses[item.status]}
-              </Text>
+              <View style={[styles.meta, styles.detailMeta]}>
+                <Text style={styles.detailKind}>{kindLabel[item.kind]}</Text>
+                <Text style={styles.metaDot}>·</Text>
+                <CalendarStatus status={item.status} />
+              </View>
               <Text style={styles.detailTitle}>{item.title}</Text>
             </View>
             <Pressable
@@ -765,7 +762,10 @@ function DetailModal({
             ) : null}
             {item.failure_reason ? (
               <View style={styles.failure}>
-                <Text style={styles.failureTitle}>Why it failed</Text>
+                <View style={styles.failureHeading}>
+                  <StatusMark status="failed" knockout={colors.surfaceSubtle} />
+                  <Text style={styles.failureTitle}>Why it failed</Text>
+                </View>
                 <Text style={styles.failureBody}>{item.failure_reason}</Text>
               </View>
             ) : null}
@@ -1363,7 +1363,13 @@ function createStyles(colors: any) {
       justifyContent: "space-between",
     },
     rowTime: { ...TypeScale.caption, color: colors.textSecondary, width: 58 },
-    kindRail: { width: 3, alignSelf: "stretch", borderRadius: 2 },
+    // A plain hairline between time and title; state lives in the mark.
+    kindRail: {
+      width: StyleSheet.hairlineWidth * 2,
+      alignSelf: "stretch",
+      backgroundColor: colors.border,
+    },
+    status: { flexDirection: "row", alignItems: "center", gap: 4 },
     rowMain: { flex: 1, gap: 5 },
     rowTitle: { ...TypeScale.body, color: colors.textPrimary },
     meta: {
@@ -1461,7 +1467,8 @@ function createStyles(colors: any) {
       marginTop: 8,
     },
     detailHeader: { padding: 16, flexDirection: "row", gap: 12 },
-    detailKind: { ...TypeScale.label, color: colors.accent, marginBottom: 5 },
+    detailMeta: { marginBottom: 5 },
+    detailKind: { ...TypeScale.label, color: colors.textSecondary },
     detailTitle: { ...TypeScale.title, color: colors.textPrimary },
     detailContent: { paddingHorizontal: 16, paddingBottom: 20, gap: 14 },
     info: { gap: 3 },
@@ -1479,6 +1486,7 @@ function createStyles(colors: any) {
       backgroundColor: colors.surfaceSubtle,
       gap: 4,
     },
+    failureHeading: { flexDirection: "row", alignItems: "center", gap: 6 },
     failureTitle: { ...TypeScale.label, color: colors.statusFailed },
     failureBody: { ...TypeScale.compact, color: colors.textSecondary },
     actions: {
