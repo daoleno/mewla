@@ -49,6 +49,8 @@ import {
 import { buildChatChrome } from "../theme";
 import {
   SCREENSHOT_BRAIN_EVENTS,
+  SCREENSHOT_BRAIN_NEEDS,
+  SCREENSHOT_BRAIN_WORK_DESK,
   SCREENSHOT_CHAT_EVENTS,
   SCREENSHOT_SESSION_AGENTS,
   SCREENSHOT_STATS_FIXTURE,
@@ -524,7 +526,8 @@ function ChatDemo() {
 
 /** Brain fixtures: the cat's state between turns, keyed by `fixture`. */
 const BRAIN_DEMO_PRESENCE: Record<string, BrainCatPresence> = {
-  attention: { state: "attention", workTitle: "Approve the beta release notes" },
+  attention: { state: "attention", workTitle: "Sync fix needs your call", workId: "desk-sync" },
+  work: { state: "attention", workTitle: "Sync fix needs your call", workId: "desk-sync" },
   delivered: { state: "delivered", workTitle: "Weekly dependency report" },
   delegating: { state: "delegating", workTitle: "Mobile regression sweep" },
 };
@@ -547,12 +550,16 @@ function BrainDemo() {
   const companion: BrainCompanion = { presence: presence ?? { state: "idle" }, animate: true };
   return (
     <BrainCompanionContext.Provider value={companion}>
-      <BrainChatDemo empty={fixture === "empty"} running={fixture !== "empty" && !presence} />
+      <BrainChatDemo
+        empty={fixture === "empty"}
+        running={fixture !== "empty" && !presence}
+        events={fixture === "work" ? SCREENSHOT_BRAIN_WORK_DESK : fixture === "attention" ? SCREENSHOT_BRAIN_NEEDS : SCREENSHOT_BRAIN_EVENTS}
+      />
     </BrainCompanionContext.Provider>
   );
 }
 
-function BrainChatDemo({ empty, running }: { empty: boolean; running: boolean }) {
+function BrainChatDemo({ empty, running, events }: { empty: boolean; running: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS }) {
   const { theme: zenTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { chrome, theme } = useMemo(
@@ -576,7 +583,7 @@ function BrainChatDemo({ empty, running }: { empty: boolean; running: boolean })
     [providerActivityStartedAt],
   );
   const timeline = useInterfaceTimelineItems({
-    events: empty ? emptyPending : SCREENSHOT_BRAIN_EVENTS,
+    events: empty ? emptyPending : events,
     pendingUserMessages: emptyPending,
     runningActivity: running ? runningActivity : undefined,
     onRetryPendingUserMessage: NOOP,
