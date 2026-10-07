@@ -55,7 +55,7 @@ func newFakeBotAPIServer(t *testing.T) *fakeBotAPIServer {
 		var result any = true
 		switch method {
 		case "getMe":
-			result = map[string]any{"id": 7001, "is_bot": true, "first_name": "Zen", "username": "zen_fixture_bot"}
+			result = map[string]any{"id": 7001, "is_bot": true, "first_name": "Mewla", "username": "zen_fixture_bot"}
 		case "getWebhookInfo":
 			result = map[string]any{"url": "", "pending_update_count": 0}
 		case "getUpdates":

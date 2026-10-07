@@ -22,7 +22,7 @@ var terminalIDCounter atomic.Int64
 
 // tmuxCommand builds a tmux invocation bound to the given server socket; an
 // empty socketPath means the user's default server (manual Terminal
-// Sessions). Zen-owned Brain/delegated Sessions live on the daemon-namespaced
+// Sessions). Mewla-owned Brain/delegated Sessions live on the daemon-namespaced
 // server, so their linked view sessions are created there too.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
 	return exec.Command("tmux", append(tmuxSocketArgs(socketPath), args...)...)
@@ -70,7 +70,7 @@ type tmuxSession struct {
 	id       string
 	targetID string
 	// socket is the tmux server for the target: the daemon-namespaced server
-	// for Zen-owned Brain/delegated Sessions, or "" (the user's default
+	// for Mewla-owned Brain/delegated Sessions, or "" (the user's default
 	// server) for manual Terminal Sessions. The linked view session lives on
 	// the same server so link-window stays server-local.
 	socket        string

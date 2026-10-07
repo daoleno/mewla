@@ -29,10 +29,10 @@ import (
 
 // TestLiveSameModelEffortConvergence is the end-to-end acceptance proof for
 // the same-model effort-only Terminal change: with the real Codex 0.147 app
-// server + TUI routed through the Zen loopback router, a native
+// server + TUI routed through the Mewla loopback router, a native
 // thread/settings/update (the exact mutation /model performs) on the SAME
 // model changes the TUI footer and native settings, and the next request —
-// which carries no model-switch fragment — converges the Zen route binding
+// which carries no model-switch fragment — converges the Mewla route binding
 // and the Interface WebSocket projection to the same effort, with the request
 // forwarded unchanged. No process restart.
 //

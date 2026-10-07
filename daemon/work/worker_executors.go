@@ -23,7 +23,7 @@ const (
 	// confirmation prompts and disables sandbox restrictions, providing the
 	// most permissive non-interactive authorization mode available.
 	// Brain-delegated Codex sessions use this so internal progress commands
-	// never block on approval prompts (e.g. when the Zen control socket lives
+	// never block on approval prompts (e.g. when the Mewla control socket lives
 	// outside the Codex sandbox).
 	CodexFullAuthorizationFlag = "--dangerously-bypass-approvals-and-sandbox"
 
@@ -354,7 +354,7 @@ func scheduledProviderExecutable(provider, executable string) bool {
 }
 
 // splitSupportedLaunchFields only recognizes the direct executable and
-// env-assignment launch shapes Zen emits. It handles shell quoting needed to
+// env-assignment launch shapes Mewla emits. It handles shell quoting needed to
 // recover argv but deliberately rejects shell comments, command composition,
 // and substitution.
 func splitSupportedLaunchFields(command string) ([]string, bool) {
@@ -704,7 +704,7 @@ func workerCapabilities(provider, runtime string) WorkerCapabilities {
 		caps.NativeResume = true
 	case WorkerProviderPi:
 		// Pi exposes structured chat via an owned JSONL session file. Resume is
-		// the same absolute --session path Zen injected at launch.
+		// the same absolute --session path Mewla injected at launch.
 		caps.StructuredEvents = true
 		caps.NativeResume = true
 	case WorkerProviderOpenCode:

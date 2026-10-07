@@ -6,15 +6,15 @@ import (
 )
 
 func TestRenderMarkdownTelegramRichText(t *testing.T) {
-	source := "# Heading\n\n**bold and *nested*** plus ~~gone~~ and [Zen](https://zen.example).\n\n" +
+	source := "# Heading\n\n**bold and *nested*** plus ~~gone~~ and [Mewla](https://zen.example).\n\n" +
 		"`inline`\n\n> quoted **strong**\n\n- first\n- [x] done\n- [ ] pending\n\n" +
-		"| Name | State |\n| --- | --- |\n| Zen | ready |\n\n```go\nfmt.Println(\"hi\")\n```\n\n" +
+		"| Name | State |\n| --- | --- |\n| Mewla | ready |\n\n```go\nfmt.Println(\"hi\")\n```\n\n" +
 		"    indented code\n\n<span>visible &amp; safe</span>\n\nemoji 🧠"
 	rendered := renderMarkdown(source)
 
 	for _, visible := range []string{
-		"Heading", "bold and nested", "gone", "Zen", "inline", "quoted strong",
-		"- first", "- [x] done", "- [ ] pending", "Name | State", "Zen | ready",
+		"Heading", "bold and nested", "gone", "Mewla", "inline", "quoted strong",
+		"- first", "- [x] done", "- [ ] pending", "Name | State", "Mewla | ready",
 		"fmt.Println", "indented code", "<span>visible & safe</span>", "emoji 🧠",
 	} {
 		if !strings.Contains(rendered.Text, visible) {

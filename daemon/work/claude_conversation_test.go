@@ -488,7 +488,7 @@ func TestEncodeClaudeProjectDirMatchesClaudeLayout(t *testing.T) {
 		want string
 	}{
 		{
-			name: "zen brain workspace",
+			name: "mewla brain workspace",
 			cwd:  "/home/daoleno/.zen/brain/workspace",
 			want: "-home-daoleno--zen-brain-workspace",
 		},

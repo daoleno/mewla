@@ -14,14 +14,14 @@ import (
 
 func runAddressCommand(args []string, stderr interface{ Write([]byte) (int, error) }) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen address <add|remove|list> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla address <add|remove|list> [flags]")
 		return flag.ErrHelp
 	}
-	fs := flag.NewFlagSet("zen address "+args[0], flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla address "+args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var stateDir string
 	var outputJSON bool
-	fs.StringVar(&stateDir, "state-dir", "", "state directory (default: ~/.zen)")
+	fs.StringVar(&stateDir, "state-dir", "", "state directory (default: ~/.mewla)")
 	fs.BoolVar(&outputJSON, "json", false, "print JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -33,7 +33,7 @@ func runAddressCommand(args []string, stderr interface{ Write([]byte) (int, erro
 	switch args[0] {
 	case "add":
 		if fs.NArg() != 1 {
-			return fmt.Errorf("usage: zen address add <https-url>")
+			return fmt.Errorf("usage: mewla address add <https-url>")
 		}
 		entry, err := book.Add(fs.Arg(0), addressbook.SourceManual)
 		if err != nil {
@@ -43,7 +43,7 @@ func runAddressCommand(args []string, stderr interface{ Write([]byte) (int, erro
 		return nil
 	case "remove":
 		if fs.NArg() != 1 {
-			return fmt.Errorf("usage: zen address remove <https-url>")
+			return fmt.Errorf("usage: mewla address remove <https-url>")
 		}
 		return book.Remove(fs.Arg(0))
 	case "list":

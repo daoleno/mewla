@@ -76,7 +76,7 @@ type browserToolInput struct {
 
 func runBrowserCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen browser mcp --id PROFILE_ID --task WORKER_ID [--state-dir DIR]\nAttach this MCP server to the selected task. Open Browser in Zen and enable Agent access first. Browser/profile outlives this process.")
+		fmt.Fprintln(stderr, "Usage: mewla browser mcp --id PROFILE_ID --task WORKER_ID [--state-dir DIR]\nAttach this MCP server to the selected task. Open Browser in Mewla and enable Agent access first. Browser/profile outlives this process.")
 		return flag.ErrHelp
 	}
 	if args[0] != "mcp" {
@@ -88,7 +88,7 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	var id, task string
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "daemon state directory")
 	fs.StringVar(&id, "id", "", "explicit browser resource")
-	fs.StringVar(&task, "task", os.Getenv("MEWLA_WORKER_ID"), "active Zen Worker ID (provided by managed launch)")
+	fs.StringVar(&task, "task", os.Getenv("MEWLA_WORKER_ID"), "active Mewla Worker ID (provided by managed launch)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	}
 	defer func() { _, _ = call(browser.Request{Action: "release"}) }()
 	server := mcp.NewServer(&mcp.Implementation{Name: "zen-browser", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use the explicitly selected persistent Zen Browser. Request control before reading or acting. Human control denies ALL managed reads and actions. Never ask for credentials. release detaches this task without closing the browser."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use the explicitly selected persistent Mewla Browser. Request control before reading or acting. Human control denies ALL managed reads and actions. Never ask for credentials. release detaches this task without closing the browser."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		q := browser.Request{Action: "command", Lease: lease}

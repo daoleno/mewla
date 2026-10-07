@@ -31,7 +31,7 @@ func runServiceCommand(args []string, stderr io.Writer) error {
 }
 
 func printServiceUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen service <list|register|unregister> [flags]")
+	fmt.Fprintln(w, "Usage: mewla service <list|register|unregister> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  list        List Agent-visible services (tmux sessions + registered persistent units)")
@@ -39,13 +39,13 @@ func printServiceUsage(w io.Writer) {
 	fmt.Fprintln(w, "  unregister  Remove one persistent service registration (never stops the unit)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  zen service list --json")
-	fmt.Fprintln(w, "  zen service register -unit dsh-web.service -name \"DeepSeek Harness\" -project dsh -port 3080")
-	fmt.Fprintln(w, "  zen service unregister -unit dsh-web.service")
+	fmt.Fprintln(w, "  mewla service list --json")
+	fmt.Fprintln(w, "  mewla service register -unit dsh-web.service -name \"DeepSeek Harness\" -project dsh -port 3080")
+	fmt.Fprintln(w, "  mewla service unregister -unit dsh-web.service")
 }
 
 func runServiceList(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen service list", args, stderr)
+	cfg, err := parseCLIConfig("mewla service list", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func runServiceList(args []string, stderr io.Writer) error {
 }
 
 func runServiceRegister(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen service register", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla service register", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	desc := watcher.ManagedServiceDescriptor{}
@@ -72,7 +72,7 @@ func runServiceRegister(args []string, stderr io.Writer) error {
 	fs.StringVar(&desc.RegisteredBy, "registered-by", "", "owning Worker id (defaults to MEWLA_WORKER_ID)")
 	fs.StringVar(&workID, "work", "", "Brain Work id owning this service")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen service register -unit dsh-web.service -name \"DeepSeek Harness\" [-project dsh] [-port 3080] [-cwd ~/workspace/dsh-smoke]")
+		fmt.Fprintln(stderr, "Usage: mewla service register -unit dsh-web.service -name \"DeepSeek Harness\" [-project dsh] [-port 3080] [-cwd ~/workspace/dsh-smoke]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -98,7 +98,7 @@ func runServiceRegister(args []string, stderr io.Writer) error {
 }
 
 func runServiceUnregister(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen service unregister", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla service unregister", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	var unit string
@@ -106,7 +106,7 @@ func runServiceUnregister(args []string, stderr io.Writer) error {
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&unit, "unit", "", "registered user systemd unit to remove")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen service unregister -unit dsh-web.service")
+		fmt.Fprintln(stderr, "Usage: mewla service unregister -unit dsh-web.service")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -153,7 +153,7 @@ func serviceDisplayName(service watcher.SessionService) string {
 
 func runServiceTunnel(args []string, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: zen service tunnel <start|status|stop> -id ID -generation GENERATION")
+		return fmt.Errorf("usage: mewla service tunnel <start|status|stop> -id ID -generation GENERATION")
 	}
 	action := args[0]
 	if action != "start" && action != "stop" && action != "status" {
@@ -170,7 +170,7 @@ func runServiceTunnel(args []string, stderr io.Writer) error {
 		return err
 	}
 	if id == "" || generation == "" {
-		return fmt.Errorf("id and generation from zen service list are required")
+		return fmt.Errorf("id and generation from mewla service list are required")
 	}
 	response, err := callControl(cfg, control.Request{Type: "service_tunnel", ServiceID: id, ServiceGeneration: generation, TunnelAction: action})
 	if err != nil {

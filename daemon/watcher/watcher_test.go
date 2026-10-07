@@ -124,8 +124,8 @@ func TestBuildWindowCommandForShellInjectsWorkerProgressEnv(t *testing.T) {
 	}
 	// The injected assignment must not embed a space-separated command string
 	// (that breaks under zsh, which does not word-split unquoted variables).
-	if strings.Contains(got, `MEWLA_WORKER_PROGRESS_CMD="zen worker progress"`) ||
-		strings.Contains(got, "MEWLA_WORKER_PROGRESS_CMD=zen worker progress") {
+	if strings.Contains(got, `MEWLA_WORKER_PROGRESS_CMD="mewla worker progress"`) ||
+		strings.Contains(got, "MEWLA_WORKER_PROGRESS_CMD=mewla worker progress") {
 		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD must be a single executable token:\n%s", got)
 	}
 }
@@ -232,7 +232,7 @@ func TestWorkerProgressEnvScriptAssignsSingleToken(t *testing.T) {
 		t.Fatalf("script missing MEWLA_WORKER_PROGRESS_CMD assignment:\n%s", script)
 	}
 	// The assignment must not embed a space-separated command string.
-	if strings.Contains(script, "zen worker progress") {
+	if strings.Contains(script, "mewla worker progress") {
 		t.Fatalf("script must not embed space-separated command:\n%s", script)
 	}
 	// The injected value must be the current executable's path (shell-quoted),
@@ -1403,7 +1403,7 @@ func TestProviderCommandDetectionDirectAndEnvWrapped(t *testing.T) {
 	const zenPathWrap = "env PATH='/opt/zen/bin':$PATH"
 	// Exact Host form from withZenCLIOnPath(shellQuote(dir)): quoted dir may
 	// contain spaces, with :$PATH and other PATH entries appended outside quotes.
-	const zenPathWrapSpaced = "env PATH='/Applications/Zen CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
+	const zenPathWrapSpaced = "env PATH='/Applications/Mewla CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
 	tests := []struct {
 		name    string
 		command string

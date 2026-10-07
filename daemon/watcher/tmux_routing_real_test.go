@@ -422,7 +422,7 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 		t.Fatalf("owned probe = %v err=%v", presence, err)
 	}
 	if presence, err := h.w.ProbeSession(ambientTarget); err != nil || presence != SessionPresenceAbsent {
-		t.Fatalf("ambient probe = %v err=%v, want absent from Zen", presence, err)
+		t.Fatalf("ambient probe = %v err=%v, want absent from Mewla", presence, err)
 	}
 
 	// Input and capture use production tmux I/O, with the process-identity seam

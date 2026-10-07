@@ -13,15 +13,15 @@ import (
 
 var (
 	// ErrBlocked is returned when platform/tmux/state-dir (or listen) blocks readiness.
-	ErrBlocked = errors.New("zen setup: machine is not ready")
+	ErrBlocked = errors.New("mewla setup: machine is not ready")
 	// ErrNoExecutor is returned when no runnable executor is available.
-	ErrNoExecutor = errors.New("zen setup: no runnable executor")
+	ErrNoExecutor = errors.New("mewla setup: no runnable executor")
 	// ErrConsentRequired is returned when Autonomous is selected without confirmation.
-	ErrConsentRequired = errors.New("zen setup: autonomous profile requires explicit confirmation")
+	ErrConsentRequired = errors.New("mewla setup: autonomous profile requires explicit confirmation")
 	// ErrInvalidArgs is returned for invalid non-interactive flags.
-	ErrInvalidArgs = errors.New("zen setup: invalid arguments")
+	ErrInvalidArgs = errors.New("mewla setup: invalid arguments")
 	// ErrIncomplete is returned when interactive input is missing required answers.
-	ErrIncomplete = errors.New("zen setup: incomplete input")
+	ErrIncomplete = errors.New("mewla setup: incomplete input")
 )
 
 // Profile selects permission posture for written executor commands.

@@ -58,10 +58,10 @@ func TestResourcePressureUsesDurableEventLaneAndKeepsPayload(t *testing.T) {
 	if err = json.Unmarshal(input.ResourcePressure, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.State != "elevated" || payload.MemoryGiB == 0 || len(payload.Consumers) != 1 || payload.Consumers[0].WorkerID != "worker1" || payload.Snapshot != "zen resources --json" {
+	if payload.State != "elevated" || payload.MemoryGiB == 0 || len(payload.Consumers) != 1 || payload.Consumers[0].WorkerID != "worker1" || payload.Snapshot != "mewla resources --json" {
 		t.Fatal(payload)
 	}
-	// Process rows, trend and PSI stay in zen resources --json.
+	// Process rows, trend and PSI stay in mewla resources --json.
 	for _, detail := range []string{"commands", "trend", "psi", "qemu"} {
 		if strings.Contains(string(input.ResourcePressure), detail) {
 			t.Fatalf("envelope kept snapshot detail %q: %s", detail, input.ResourcePressure)

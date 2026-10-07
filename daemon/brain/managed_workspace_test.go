@@ -78,7 +78,7 @@ func TestCleanHomeShipsAutonomousPolicyAndRepairPreservesPrivateOverlays(t *test
 
 	for _, contract := range []string{
 		"Brain owns conversation",
-		"visible Zen Worker",
+		"visible Mewla Worker",
 		"Check each result against its acceptance criteria",
 		"with no separate resolve",
 		"Brain decides decomposition",

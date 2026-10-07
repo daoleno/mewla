@@ -165,7 +165,7 @@ func validateDelegatedWorkspacePath(cwd string) (string, error) {
 			rootResolved = value
 		}
 		if pathWithinRoot(absolute, rootAbsolute) || pathWithinRoot(resolved, rootResolved) {
-			return "", fmt.Errorf("delegated Zen Worker cwd %q is on volatile or memory-backed temporary storage; use a durable workspace such as $MEWLA_WORKTREE_ROOT (default ~/.zen/worktrees)", cwd)
+			return "", fmt.Errorf("delegated Mewla Worker cwd %q is on volatile or memory-backed temporary storage; use a durable workspace such as $MEWLA_WORKTREE_ROOT (default ~/.mewla/worktrees)", cwd)
 		}
 	}
 	return resolved, nil

@@ -351,7 +351,7 @@ func TestResolveBootConfigDefaults(t *testing.T) {
 	defer func() { _ = os.Chdir(previous) }()
 	t.Setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
 
-	config, err := parseBootConfig("zen boot install", nil)
+	config, err := parseBootConfig("mewla boot install", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +397,7 @@ func TestResolveBootConfigRelativePathsAndHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	config, err := parseBootConfig("zen boot install", []string{
+	config, err := parseBootConfig("mewla boot install", []string{
 		"-binary", "./bin/zen",
 		"-state-dir", "state",
 		"-work-dir", ".",
@@ -423,14 +423,14 @@ func TestResolveBootConfigRelativePathsAndHome(t *testing.T) {
 }
 
 func TestParseBootConfigRejectsLANWithAddr(t *testing.T) {
-	if _, err := parseBootConfig("zen boot install", []string{"-lan", "-addr", "127.0.0.1:9999"}); err == nil {
+	if _, err := parseBootConfig("mewla boot install", []string{"-lan", "-addr", "127.0.0.1:9999"}); err == nil {
 		t.Fatal("lan plus explicit addr was accepted")
 	}
 }
 
 func TestParseBootConfigRejectsInvalidAddress(t *testing.T) {
 	for _, value := range []string{"127.0.0.1", "127.0.0.1:", "no-port"} {
-		if _, err := parseBootConfig("zen boot install", []string{"-addr", value}); err == nil {
+		if _, err := parseBootConfig("mewla boot install", []string{"-addr", value}); err == nil {
 			t.Fatalf("invalid address %q was accepted", value)
 		}
 	}

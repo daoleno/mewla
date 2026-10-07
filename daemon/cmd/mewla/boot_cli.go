@@ -26,13 +26,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// `zen boot` is the single optional boot-persistence entry for the SAME runtime
+// `mewla boot` is the single optional boot-persistence entry for the SAME runtime
 // used by `zen` and the DEV runner: it renders a standard systemd user unit for
 // the reviewed binary and does not introduce a second identity, state
 // directory or supervisor.
 //
 // Ownership: the state lifecycle lock and the unit's systemd cgroup identify
-// the owner. `zen boot` requires a process inside zen.service's cgroup to hold
+// the owner. `mewla boot` requires a process inside zen.service's cgroup to hold
 // the installed state's lifecycle lock and /health to serve that state's
 // identity; a manual daemon using another state cannot satisfy that even when
 // it runs the same binary. The boot CLI never kills a process it did not
@@ -46,7 +46,7 @@ import (
 // leftover in the unit cgroup rather than deleting its configuration.
 
 const (
-	bootManagedMarker  = "# Managed by zen boot install"
+	bootManagedMarker  = "# Managed by mewla boot install"
 	bootServiceName    = "zen.service"
 	bootDefaultAddr    = "127.0.0.1:9876"
 	bootLANAddr        = "0.0.0.0:9876"
@@ -97,7 +97,7 @@ func runBootCommand(args []string, stderr io.Writer) error {
 	}
 	switch args[0] {
 	case "install":
-		config, err := parseBootConfig("zen boot install", args[1:])
+		config, err := parseBootConfig("mewla boot install", args[1:])
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func runBootCommand(args []string, stderr io.Writer) error {
 	case "status":
 		if len(args[1:]) > 0 {
 			if !isHelpArg(args[1]) {
-				return fmt.Errorf("zen boot status takes no flags; it reports the installed unit")
+				return fmt.Errorf("mewla boot status takes no flags; it reports the installed unit")
 			}
 			printBootUsage(stderr)
 			return flag.ErrHelp
@@ -114,7 +114,7 @@ func runBootCommand(args []string, stderr io.Writer) error {
 	case "uninstall":
 		if len(args[1:]) > 0 {
 			if !isHelpArg(args[1]) {
-				return fmt.Errorf("zen boot uninstall takes no flags")
+				return fmt.Errorf("mewla boot uninstall takes no flags")
 			}
 			printBootUsage(stderr)
 			return flag.ErrHelp
@@ -126,25 +126,25 @@ func runBootCommand(args []string, stderr io.Writer) error {
 }
 
 func printBootUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen boot <install|status|uninstall> [flags]")
+	fmt.Fprintln(w, "Usage: mewla boot <install|status|uninstall> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  install    Render and enable a systemd user unit for this same zen runtime")
+	fmt.Fprintln(w, "  install    Render and enable a systemd user unit for this same mewla runtime")
 	fmt.Fprintln(w, "  status     Report the installed unit, its configuration, owner and /health")
 	fmt.Fprintln(w, "  uninstall  Stop, disable and remove only the unit this command installed")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Install flags:")
-	fmt.Fprintln(w, "  -binary <path>      zen or zen-dev executable to run (default: this executable)")
-	fmt.Fprintln(w, "  -state-dir <path>   daemon state directory (default: ~/.zen)")
+	fmt.Fprintln(w, "  -binary <path>      mewla or mewla-dev executable to run (default: this executable)")
+	fmt.Fprintln(w, "  -state-dir <path>   daemon state directory (default: ~/.mewla)")
 	fmt.Fprintln(w, "  -addr <host:port>   daemon listen address (default: 127.0.0.1:9876)")
 	fmt.Fprintln(w, "  -work-dir <path>    daemon working directory (default: current directory)")
 	fmt.Fprintln(w, "  -path-env <dirs>    executable search PATH stored in the unit (default: current PATH)")
-	fmt.Fprintln(w, "  -lan                bind 0.0.0.0:9876 like `zen -lan`")
+	fmt.Fprintln(w, "  -lan                bind 0.0.0.0:9876 like `mewla -lan`")
 	fmt.Fprintln(w, "  -dry-run            print the unit without writing or enabling")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The unit starts the same unprivileged runtime before an interactive")
 	fmt.Fprintln(w, "login only when the user manager lingers (loginctl enable-linger).")
-	fmt.Fprintln(w, "`zen boot status` always reads the installed unit configuration.")
+	fmt.Fprintln(w, "`mewla boot status` always reads the installed unit configuration.")
 }
 
 func parseBootConfig(name string, args []string) (bootConfig, error) {
@@ -152,7 +152,7 @@ func parseBootConfig(name string, args []string) (bootConfig, error) {
 	addrExplicit := false
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	flags.StringVar(&config.Binary, "binary", "", "zen or zen-dev executable to run")
+	flags.StringVar(&config.Binary, "binary", "", "mewla or mewla-dev executable to run")
 	flags.StringVar(&config.StateDir, "state-dir", "", "daemon state directory")
 	flags.StringVar(&config.Addr, "addr", "", "daemon listen address")
 	flags.StringVar(&config.WorkDir, "work-dir", "", "daemon working directory")
@@ -263,7 +263,7 @@ func bootAbsolutePath(value, base, label string) (string, error) {
 }
 
 // bootResolvePathEnv keeps the invoking PATH contract while making every entry
-// absolute, so `zen boot install` from a relative directory cannot leak a
+// absolute, so `mewla boot install` from a relative directory cannot leak a
 // relative executable path into the unit.
 func bootResolvePathEnv(value, base string) (string, error) {
 	entries := make([]string, 0, 8)
@@ -387,7 +387,7 @@ func renderBootUnit(config bootConfig) (string, error) {
 	var builder strings.Builder
 	builder.WriteString(bootManagedMarker + "\n")
 	builder.WriteString("[Unit]\n")
-	builder.WriteString("Description=Zen daemon (same runtime as `zen` and `zen-dev`)\n")
+	builder.WriteString("Description=Mewla daemon (same runtime as `mewla` and `mewla-dev`)\n")
 	// default.target automatically orders itself after the units it wants, so
 	// an explicit After=default.target would form an ordering cycle at boot.
 	builder.WriteString("\n[Service]\n")
@@ -1048,7 +1048,7 @@ func (snapshot bootOwnerSnapshot) verified(config bootConfig) error {
 	return nil
 }
 
-// describe renders the ownership state for `zen boot status` without
+// describe renders the ownership state for `mewla boot status` without
 // claiming ownership when any fact is unknown.
 func (snapshot bootOwnerSnapshot) describe() string {
 	switch {
@@ -1064,9 +1064,9 @@ func (snapshot bootOwnerSnapshot) describe() string {
 	case snapshot.LockPID > 0:
 		return fmt.Sprintf("state directory is owned by zen.service cgroup process PID %d while the unit is %s", snapshot.LockPID, snapshot.UnitState)
 	case snapshot.LockHeld && snapshot.ControlGroup == "":
-		return "state lifecycle lock is held, but the zen.service scope is unknown; zen boot never kills it"
+		return "state lifecycle lock is held, but the zen.service scope is unknown; mewla boot never kills it"
 	case snapshot.LockHeld:
-		return "state lifecycle lock is held by a process outside zen.service; zen boot never kills it"
+		return "state lifecycle lock is held by a process outside zen.service; mewla boot never kills it"
 	case snapshot.Active && (snapshot.MainPID <= 0 || !snapshot.MainMatches):
 		return "unit is active but its main process is not the installed binary"
 	default:
@@ -1122,10 +1122,10 @@ func bootVerifyOwner(config bootConfig, runner bootRunner) error {
 
 func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 	if runtime.GOOS != "linux" {
-		return errors.New("zen boot install requires Linux user systemd")
+		return errors.New("mewla boot install requires Linux user systemd")
 	}
 	if bootEffectiveUID() == 0 {
-		return errors.New("zen boot install must run as the unprivileged user that owns the daemon state; refusing root")
+		return errors.New("mewla boot install must run as the unprivileged user that owns the daemon state; refusing root")
 	}
 	unit, err := renderBootUnit(config)
 	if err != nil {
@@ -1141,7 +1141,7 @@ func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 	metadataPath := bootMetadataPath(path)
 	existingUnit, readErr := os.ReadFile(path)
 	if readErr == nil && !strings.Contains(string(existingUnit), bootManagedMarker) {
-		return fmt.Errorf("refusing to replace a unit not managed by zen boot: %s", path)
+		return fmt.Errorf("refusing to replace a unit not managed by mewla boot: %s", path)
 	}
 	if readErr != nil && !os.IsNotExist(readErr) {
 		return fmt.Errorf("read existing boot unit: %w", readErr)
@@ -1167,7 +1167,7 @@ func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 	case preflight.LockHeld && preflight.Active && preflight.ControlGroup == "":
 		return fmt.Errorf("state directory %s is locked, but %s ControlGroup is unreadable; refusing to claim ownership", config.StateDir, bootServiceName)
 	case preflight.LockHeld:
-		return fmt.Errorf("state directory %s is owned by a running process outside %s; stop that process first (zen boot never kills it)", config.StateDir, bootServiceName)
+		return fmt.Errorf("state directory %s is owned by a running process outside %s; stop that process first (mewla boot never kills it)", config.StateDir, bootServiceName)
 	}
 	active, activeState := preflight.Active, preflight.UnitState
 
@@ -1263,7 +1263,7 @@ func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 		}
 	}
 	fmt.Fprintln(out, "Linger: enabled (starts before an interactive login)")
-	fmt.Fprintln(out, "Stop/rollback: zen boot uninstall")
+	fmt.Fprintln(out, "Stop/rollback: mewla boot uninstall")
 	return nil
 }
 
@@ -1296,7 +1296,7 @@ func bootStatus(runner bootRunner, out io.Writer) error {
 		return err
 	}
 	if !strings.Contains(string(data), bootManagedMarker) {
-		fmt.Fprintf(out, "%s: present but not managed by zen boot (%s)\n", bootServiceName, path)
+		fmt.Fprintf(out, "%s: present but not managed by mewla boot (%s)\n", bootServiceName, path)
 		return nil
 	}
 	fmt.Fprintf(out, "unit: %s\n", path)
@@ -1310,7 +1310,7 @@ func bootStatus(runner bootRunner, out io.Writer) error {
 
 	metadata, metadataErr := readBootMetadata(bootMetadataPath(path))
 	if metadataErr != nil {
-		fmt.Fprintf(out, "configuration: unavailable (%v); reinstall with `zen boot install`\n", metadataErr)
+		fmt.Fprintf(out, "configuration: unavailable (%v); reinstall with `mewla boot install`\n", metadataErr)
 	} else {
 		fmt.Fprintf(out, "binary: %s\n", metadata.Binary)
 		if hash, err := bootFileHash(metadata.Binary); err == nil {
@@ -1353,12 +1353,12 @@ func bootUninstall(runner bootRunner, out io.Writer) error {
 		return err
 	}
 	if !strings.Contains(string(data), bootManagedMarker) {
-		return fmt.Errorf("refusing to remove a unit not managed by zen boot: %s", path)
+		return fmt.Errorf("refusing to remove a unit not managed by mewla boot: %s", path)
 	}
 	metadataPath := bootMetadataPath(path)
 	metadata, metadataErr := readBootMetadata(metadataPath)
 	if metadataErr != nil {
-		return fmt.Errorf("uninstall requires the installed configuration metadata: %v (unit and configuration retained; reinstall with `zen boot install` before uninstalling)", metadataErr)
+		return fmt.Errorf("uninstall requires the installed configuration metadata: %v (unit and configuration retained; reinstall with `mewla boot install` before uninstalling)", metadataErr)
 	}
 
 	// Capture the unit's cgroup before stopping so a DEV leftover daemon can
@@ -1368,7 +1368,7 @@ func bootUninstall(runner bootRunner, out io.Writer) error {
 	// Stop first and keep the unit and metadata on any failure so the
 	// configuration stays recoverable; never remove a still-running owner.
 	if output, err := runner.run("systemctl", "--user", "stop", bootServiceName); err != nil {
-		return fmt.Errorf("systemctl --user stop %s: %v: %s (unit and configuration retained; retry `zen boot uninstall`)", bootServiceName, err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("systemctl --user stop %s: %v: %s (unit and configuration retained; retry `mewla boot uninstall`)", bootServiceName, err, strings.TrimSpace(string(output)))
 	}
 	if state, active, err := bootUnitActive(runner); err != nil {
 		return fmt.Errorf("confirm %s stopped: %w (unit and configuration retained)", bootServiceName, err)

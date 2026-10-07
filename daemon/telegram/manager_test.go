@@ -355,7 +355,7 @@ func configuredManager(t *testing.T) (*Manager, *fakeBrain, *fakeAPI, string) {
 	t.Helper()
 	root := t.TempDir()
 	owner := &fakeBrain{threadID: "thread-1"}
-	api := &fakeAPI{bot: User{ID: 7001, IsBot: true, FirstName: "Zen", Username: "zen_test_bot", Topics: true}}
+	api := &fakeAPI{bot: User{ID: 7001, IsBot: true, FirstName: "Mewla", Username: "zen_test_bot", Topics: true}}
 	manager := newTestManager(t, root, owner, api)
 	if _, err := manager.Configure(context.Background(), "123456:test-token"); err != nil {
 		t.Fatal(err)

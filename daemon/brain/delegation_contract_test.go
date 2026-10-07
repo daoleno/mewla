@@ -61,7 +61,7 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 		t.Fatal("role lost explicit user override or failure boundary")
 	}
 	bootstrap := service.hostBootstrapPrompt(service.hostExecutor())
-	for _, marker := range []string{store.WorkspacePath() + " (private reports in worklog/)", "current.md", "zen brain context --json"} {
+	for _, marker := range []string{store.WorkspacePath() + " (private reports in worklog/)", "current.md", "mewla brain context --json"} {
 		if !strings.Contains(bootstrap, marker) {
 			t.Fatalf("bootstrap missing %q", marker)
 		}

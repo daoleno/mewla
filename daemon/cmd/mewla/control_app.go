@@ -465,19 +465,19 @@ func (a *controlApp) handleCalendarRun(req control.Request) control.Response {
 func calendarControlResponse(item calendar.Item, verb string) control.Response {
 	loc, _ := time.LoadLocation(item.Timezone)
 	local := item.TriggerAt().In(loc).Format("2006-01-02 15:04:05 MST")
-	action := "Zen will show it in Calendar"
+	action := "Mewla will show it in Calendar"
 	if verb == "Cancelled" {
-		action = "Zen will keep it visible as cancelled and will not act on it"
+		action = "Mewla will keep it visible as cancelled and will not act on it"
 	} else {
 		switch item.Kind {
 		case calendar.KindReminder:
-			action = "Zen will notify you"
+			action = "Mewla will notify you"
 		case calendar.KindDeadline:
-			action = "Zen will keep the deadline visible"
+			action = "Mewla will keep the deadline visible"
 		case calendar.KindScheduledAction:
-			action = "Zen will launch visible Work when the daemon is online"
+			action = "Mewla will launch visible Work when the daemon is online"
 		case calendar.KindEvent:
-			action = "Zen will reserve the start/end time"
+			action = "Mewla will reserve the start/end time"
 		}
 	}
 	confirmation := fmt.Sprintf("%s %s for %s (%s). %s.", verb, item.Kind, local, item.Timezone, action)
@@ -490,7 +490,7 @@ func calendarRunControlResponse(item calendar.Item) control.Response {
 	}
 	loc, _ := time.LoadLocation(item.Timezone)
 	local := startedAt.In(loc).Format("2006-01-02 15:04:05 MST")
-	confirmation := fmt.Sprintf("Started scheduled_action at %s (%s). Zen launched visible Work and will reconcile it to completed or failed.", local, item.Timezone)
+	confirmation := fmt.Sprintf("Started scheduled_action at %s (%s). Mewla launched visible Work and will reconcile it to completed or failed.", local, item.Timezone)
 	if item.Status == calendar.StatusFailed {
 		confirmation = fmt.Sprintf("Could not start scheduled_action at %s (%s). No execution is running: %s", local, item.Timezone, item.FailureReason)
 	}
@@ -753,7 +753,7 @@ func spawnAdmissionConfirmation(pending bool) string {
 
 // keepSpawnAdmissionPending owns only the initial spawn response boundary.
 // Once the non-replayable input owner reports an ambiguous mutation, a live
-// Zen-owned tmux Session means the canonical pending submission is still the
+// Mewla-owned tmux Session means the canonical pending submission is still the
 // truthful result. Exact turn-scoped progress or the existing provider/liveness
 // reconciliation paths will settle that transaction; this owner must neither
 // report a definitive launch failure nor replay the prompt. Proved absence and
@@ -1072,7 +1072,7 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 		return control.ErrorResponse(workerOwnershipErrorCode(ownershipErr), ownershipErr.Error())
 	}
 	if worker != nil && !worker.Delegated && !worker.Hidden && !req.Force {
-		return control.ErrorResponse("worker_not_delegated", "Refusing to send input to a session that was not created as a Brain delegated Zen Worker. Use --force only when you intentionally want to control this external session.")
+		return control.ErrorResponse("worker_not_delegated", "Refusing to send input to a session that was not created as a Brain delegated Mewla Worker. Use --force only when you intentionally want to control this external session.")
 	}
 	payload := req.Text
 	if strings.TrimSpace(payload) == "" && !req.Submit {
@@ -1170,7 +1170,7 @@ func (a *controlApp) submitWorkerHandoff(workerID, command, payload, workID stri
 // intentionally turn-scoped rather than process environment: a reusable
 // Session receives a different identity with every admitted prompt.
 func delegatedLifecyclePayload(payload, turnID string) string {
-	contract := fmt.Sprintf(`Zen delegated turn contract:
+	contract := fmt.Sprintf(`Mewla delegated turn contract:
 Use this turn's identity for every progress command; never reuse an earlier turn's identity:
   "$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id %s --status running --phase working --attention none --summary "Current work" --lease 300`, strings.TrimSpace(turnID))
 	return payload + "\n\n" + contract
@@ -1310,7 +1310,7 @@ func (a *controlApp) handleWorkerClose(req control.Request) control.Response {
 	}
 	worker := a.watcher.GetWorker(workerID)
 	if worker != nil && !worker.Delegated && !worker.Hidden && !req.Force {
-		return control.ErrorResponse("worker_not_delegated", "Refusing to close a session that was not created as a Brain delegated Zen Worker. Use --force only when you intentionally want to close this external session.")
+		return control.ErrorResponse("worker_not_delegated", "Refusing to close a session that was not created as a Brain delegated Mewla Worker. Use --force only when you intentionally want to close this external session.")
 	}
 	requiresForce := worker != nil && !req.Force && closeRequiresForce(worker)
 	if worker != nil && !req.Force && a.brainStore != nil {
@@ -1443,7 +1443,7 @@ func (a *controlApp) handleBrainSetExecutor(req control.Request) control.Respons
 		return control.ErrorResponse("missing_executor", "Brain host executor is required.")
 	}
 	if locked := brainHostExecutorOverride(); locked != "" && locked != executorID {
-		return control.ErrorResponse("brain_executor_locked_by_env", "A Brain host executor environment override is set; unset it before changing the host executor through zen.")
+		return control.ErrorResponse("brain_executor_locked_by_env", "A Brain host executor environment override is set; unset it before changing the host executor through mewla.")
 	}
 	if a.execs == nil {
 		return control.ErrorResponse("executors_unavailable", "Executor config is not available.")
@@ -1684,7 +1684,7 @@ func canonicalCloseAdmission(turn watcher.TurnSnapshot, hasTurn bool) bool {
 }
 
 func lifecycleProtocol(profile string) string {
-	return strings.TrimSpace(fmt.Sprintf(`Zen lifecycle protocol:
+	return strings.TrimSpace(fmt.Sprintf(`Mewla lifecycle protocol:
 Profile: %s.
 You are the delegated Worker: execute the assigned work directly. Brain workspace role/delegation instructions apply to Brain, not this Worker Session.
 Complete the objective and acceptance criteria. Ask Brain only for a material decision or missing authority; otherwise keep going.
@@ -1692,7 +1692,7 @@ Edit the supplied repository and cwd directly; preserve unrelated changes. Use a
 Scratch goes in TMPDIR/TMP/TEMP, large builds in $MEWLA_BUILD_TMPDIR. Keep processes and resources inside this Session, reuse named resources, report resource limits rather than bypassing them, and clean up owned scratch and children before completion.
 Return the report in the Worker result. Persist it only where the brief names a path; Brain reports go in the Brain worklog/, never in the project repository.
 Run risk-proportionate checks and the required repository gates; rerun only after edits, failures or open concerns, and report what stays unverified.
-Shared tools: zen connections --help.
+Shared tools: mewla connections --help.
 Progress: run "$MEWLA_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; MEWLA_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
   --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
   optional: --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease <seconds> (running status lapses to unknown after the lease; renew it during long quiet steps)

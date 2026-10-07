@@ -47,7 +47,7 @@ type devRunner struct {
 func main() {
 	envcompat.Normalize()
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintf(os.Stderr, "zen-dev: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mewla-dev: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -101,7 +101,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	for {
 		select {
 		case <-signals:
-			fmt.Fprintln(stderr, "\nzen-dev shutting down...")
+			fmt.Fprintln(stderr, "\nmewla-dev shutting down...")
 			return nil
 		case err := <-childDone:
 			// The daemon is the service; the watcher must never remain alive as
@@ -118,7 +118,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			}
 
 			if err := tree.handleEvent(event); err != nil {
-				fmt.Fprintf(stderr, "zen-dev watch error: %v\n", err)
+				fmt.Fprintf(stderr, "mewla-dev watch error: %v\n", err)
 			}
 
 			rel, ok := tree.relevantPath(event.Name)
@@ -133,16 +133,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 			if !ok {
 				return fmt.Errorf("watcher error channel closed")
 			}
-			fmt.Fprintf(stderr, "zen-dev watch error: %v\n", err)
+			fmt.Fprintf(stderr, "mewla-dev watch error: %v\n", err)
 		case <-debounceC:
 			debounceC = nil
 
 			changedFiles := mapKeys(pending)
 			pending = map[string]struct{}{}
 
-			fmt.Fprintf(stderr, "\nzen-dev detected changes: %s\n", strings.Join(changedFiles, ", "))
+			fmt.Fprintf(stderr, "\nmewla-dev detected changes: %s\n", strings.Join(changedFiles, ", "))
 			if err := runner.rebuild(); err != nil {
-				fmt.Fprintf(stderr, "zen-dev build failed:\n%v\n", err)
+				fmt.Fprintf(stderr, "mewla-dev build failed:\n%v\n", err)
 				continue
 			}
 			if err := runner.restart(); err != nil {
@@ -305,7 +305,7 @@ func (r *devRunner) rebuild() error {
 
 func commitBuiltBinary(built, dest string) error {
 	if err := os.Rename(built, dest); err != nil {
-		return fmt.Errorf("install built zen: %w", err)
+		return fmt.Errorf("install built mewla: %w", err)
 	}
 	return nil
 }

@@ -1,7 +1,7 @@
 package modelprofiles_test
 
 // Shared helpers for external-package Codex live proofs (real installed CLI
-// against loopback Zen-shaped endpoints). They live here so the scripted
+// against loopback Mewla-shaped endpoints). They live here so the scripted
 // upstream probes and CLI proofs do not duplicate env scrubbing / tail
 // trimming logic.
 

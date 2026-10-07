@@ -32,13 +32,13 @@ func runTelegramCommandWithDeps(
 	call telegramControlCaller,
 ) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen telegram <setup|status|enable|disable> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla telegram <setup|status|enable|disable> [flags]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Configures the running local Zen daemon and returns a one-time owner-binding URL.")
+		fmt.Fprintln(stderr, "Configures the running local Mewla daemon and returns a one-time owner-binding URL.")
 		return flag.ErrHelp
 	}
 	if args[0] == "status" || args[0] == "enable" || args[0] == "disable" {
-		cfg, err := parseCLIConfig("zen telegram "+args[0], args[1:], stderr)
+		cfg, err := parseCLIConfig("mewla telegram "+args[0], args[1:], stderr)
 		if err != nil {
 			return err
 		}
@@ -55,7 +55,7 @@ func runTelegramCommandWithDeps(
 		return fmt.Errorf("unknown telegram command: %s", args[0])
 	}
 
-	fs := flag.NewFlagSet("zen telegram setup", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla telegram setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon control socket")

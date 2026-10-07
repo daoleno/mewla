@@ -169,7 +169,7 @@ func TestQuickTunnelLogOnlyAcceptsStructuredCloudflareURLs(t *testing.T) {
 			t.Fatal("accepted unrelated output")
 		}
 	}
-	if !privateService(SessionService{Process: "zen serve"}) || !privateService(SessionService{Command: "zen dsh-session"}) {
+	if !privateService(SessionService{Process: "mewla serve"}) || !privateService(SessionService{Command: "mewla dsh-session"}) {
 		t.Fatal("control service publishable")
 	}
 }

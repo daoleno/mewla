@@ -293,7 +293,7 @@ func TestNotionReadAndAuthorizedUpdateUseSameWorkspace(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/v1/users/me":
-			return reply(200, `{"id":"bot-id","name":"Zen","bot":{"workspace_name":"Fixture workspace"}}`), nil
+			return reply(200, `{"id":"bot-id","name":"Mewla","bot":{"workspace_name":"Fixture workspace"}}`), nil
 		case "/v1/search":
 			if r.Method != "POST" {
 				t.Fatal("search must use official POST API")
@@ -328,9 +328,9 @@ func TestNotionReadAndAuthorizedUpdateUseSameWorkspace(t *testing.T) {
 func TestSlackDiscoveryUsesActualScopesAndDoesNotAssumeBotSearch(t *testing.T) {
 	for _, bot := range []bool{true, false} {
 		m := testManager(t, func(r *http.Request) (*http.Response, error) {
-			raw := `{"ok":true,"team":"Fixture","user":"Zen","user_id":"U1"}`
+			raw := `{"ok":true,"team":"Fixture","user":"Mewla","user_id":"U1"}`
 			if bot {
-				raw = `{"ok":true,"team":"Fixture","user":"Zen","user_id":"U1","bot_id":"B1"}`
+				raw = `{"ok":true,"team":"Fixture","user":"Mewla","user_id":"U1","bot_id":"B1"}`
 			}
 			response := reply(200, raw)
 			response.Header.Set("X-OAuth-Scopes", "channels:read,search:read,chat:write")

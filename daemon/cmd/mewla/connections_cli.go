@@ -19,7 +19,7 @@ import (
 
 func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, `Usage: zen connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|enable|disable|disconnect|policy> [flags]
+		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name.
 Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination.
@@ -33,7 +33,7 @@ Never send messages or make updates without task-specific user authorization, ev
 		return flag.ErrHelp
 	}
 	action := args[0]
-	fs := flag.NewFlagSet("zen connections "+action, flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla connections "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{}
 	q := connections.Request{Action: action}

@@ -56,7 +56,7 @@ func TestLiveTelegramLocalFileFormatting(t *testing.T) {
 	}
 	t.Log("Telegram rejected local-file URL entity with HTTP 400; raw API description withheld")
 	time.Sleep(1100 * time.Millisecond)
-	rendered := renderMarkdown("**Zen QA**: [fixture.go](/workspace/fixture.go)")
+	rendered := renderMarkdown("**Mewla QA**: [fixture.go](/workspace/fixture.go)")
 	message, err := client.SendMessage(t.Context(), token, SendRequest{ChatID: state.ChatID, MessageThreadID: topic, Text: rendered.Text, Entities: rendered.Entities})
 	if err != nil || message.MessageThreadID != topic {
 		t.Fatal("corrected formatter did not deliver to exact QA topic")

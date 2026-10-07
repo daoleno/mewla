@@ -126,8 +126,8 @@ func flushOutbox(t *testing.T, m *Manager) {
 // deliver provider assistant output to the fake Bot API on their own.
 func TestTelegramBrainReplyArrivesWithoutAppSubscription(t *testing.T) {
 	m, store, service, provider, api, root := realConversationFixture(t)
-	const prompt = "Zen QA only: hello brain"
-	const reply = "Zen QA only: canonical reply without any app"
+	const prompt = "Mewla QA only: hello brain"
+	const reply = "Mewla QA only: canonical reply without any app"
 	transcript := filepath.Join(root, "host-transcript.jsonl")
 	provider.mu.Lock()
 	provider.workers["host:@1"].Command = "pi --session " + transcript
@@ -197,7 +197,7 @@ func TestTelegramBrainReplyArrivesWithoutAppSubscription(t *testing.T) {
 func TestTelegramDelegatedSessionReplyWithoutAppSubscription(t *testing.T) {
 	m, _, service, provider, api, root := realConversationFixture(t)
 	transcript := filepath.Join(root, "session-a-transcript.jsonl")
-	const reply = "Zen QA only: delegated reply without any app"
+	const reply = "Mewla QA only: delegated reply without any app"
 	provider.mu.Lock()
 	provider.workers["session-a"].Command = "pi --session " + transcript
 	provider.workers["session-a"].Cwd = root
@@ -218,7 +218,7 @@ func TestTelegramDelegatedSessionReplyWithoutAppSubscription(t *testing.T) {
 
 	// The transcript appears after the topic boundary, exactly like a live
 	// provider turn.
-	writeTelegramPiFixture(t, transcript, "fixture-session-a", "Zen QA only: session question", reply)
+	writeTelegramPiFixture(t, transcript, "fixture-session-a", "Mewla QA only: session question", reply)
 	projection, err := service.SessionProjection("session-a")
 	if err != nil || len(projection.Assistant) == 0 {
 		t.Fatalf("real provider transcript projection missing: items=%d err=%v", len(projection.Assistant), err)

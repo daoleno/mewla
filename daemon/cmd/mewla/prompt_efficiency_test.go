@@ -25,7 +25,7 @@ func TestWorkerPromptKeepsPayloadAndOneExactTurn(t *testing.T) {
 	if assertDelegatedLifecyclePayload(t, result, prompt) != "turn:exact-current" {
 		t.Fatal("wrong turn identity")
 	}
-	if strings.Count(result, "Zen lifecycle protocol:") != 1 || strings.Count(result, "Zen delegated turn contract:") != 1 {
+	if strings.Count(result, "Mewla lifecycle protocol:") != 1 || strings.Count(result, "Mewla delegated turn contract:") != 1 {
 		t.Fatal("duplicate protocol")
 	}
 	if len(result)-len(user) > 2500 {

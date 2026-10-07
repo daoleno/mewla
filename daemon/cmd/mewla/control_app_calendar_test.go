@@ -22,7 +22,7 @@ func TestCalendarControlToolsCRUDAndResolvedTimeConfirmation(t *testing.T) {
 	if !resp.OK || resp.CalendarItem == nil {
 		t.Fatalf("create = %#v", resp)
 	}
-	for _, want := range []string{"2026-07-15 09:30:00 CST", "Asia/Shanghai", "Zen will notify you"} {
+	for _, want := range []string{"2026-07-15 09:30:00 CST", "Asia/Shanghai", "Mewla will notify you"} {
 		if !strings.Contains(resp.Confirmation, want) {
 			t.Fatalf("confirmation %q missing %q", resp.Confirmation, want)
 		}

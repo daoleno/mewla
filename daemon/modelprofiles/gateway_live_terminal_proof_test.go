@@ -1,7 +1,7 @@
 package modelprofiles_test
 
 // Opt-in live proof: an ORDINARY Terminal Codex (started directly, not via
-// `zen worker spawn`) routes through the machine-level gateway, and a Settings
+// `mewla worker spawn`) routes through the machine-level gateway, and a Settings
 // Provider switch retargets the same long-lived CLI process to the new
 // upstream.
 //
@@ -12,12 +12,12 @@ package modelprofiles_test
 //	  go test ./modelprofiles -run TestIsolatedDirectTerminalGatewayProof -count=1 -timeout 240s
 //
 // Everything runs inside one isolated scratch root: a temporary HOME (sandbox
-// Zen state), a temporary CODEX_HOME (projected by the real takeover Enable),
+// Mewla state), a temporary CODEX_HOME (projected by the real takeover Enable),
 // a dedicated tmux server socket, two scripted 127.0.0.1 upstream providers
 // (A then B), and a sandbox daemon with -addr 127.0.0.1:0.
 //
 // The proof: takeover enabled → the projected native config points plain
-// `codex` at the gateway → first prompt reaches upstream A through Zen with
+// `codex` at the gateway → first prompt reaches upstream A through Mewla with
 // the exact client model bytes → provider_set_connection(B) flips the gateway's
 // upstream → the SAME pane/PID sends the second prompt → it reaches upstream
 // B, and the rendered replies (A then B) prove the same process/thread
@@ -325,7 +325,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		t.Fatal("direct codex pane has no pid")
 	}
 
-	// Prompt 1 -> upstream A through Zen. The TUI input pipeline is
+	// Prompt 1 -> upstream A through Mewla. The TUI input pipeline is
 	// event-driven; resend Enter until the upstream observes the turn (bounded
 	// retry, never duplicates the prompt text).
 	submitTurn := func(text string, up *proofUpstream, want string) []byte {

@@ -95,7 +95,7 @@ func Run(opts Options) (Result, error) {
 			configureBrain = true
 		}
 	} else {
-		writeLines(out, "zen setup", "")
+		writeLines(out, "mewla setup", "")
 		writeLines(out, formatCandidates(candidates)...)
 		host, err = promptChoice(opts, out, errOut, "Host executor", hostDefault, candidateIDs(candidates))
 		if err != nil {
@@ -421,13 +421,13 @@ func writeLines(w io.Writer, lines ...string) {
 }
 
 func nextSteps(stateDir string) []string {
-	pairHint := "zen pair https://your-zen-host.example"
+	pairHint := "mewla pair https://your-mewla-host.example"
 	if strings.TrimSpace(stateDir) != "" {
-		pairHint = "zen pair -state-dir " + stateDir + " https://your-zen-host.example"
+		pairHint = "mewla pair -state-dir " + stateDir + " https://your-mewla-host.example"
 	}
 	return []string{
-		"Same trusted Wi-Fi or direct Tailnet: start Zen with zen --lan, then run a pair command it prints",
-		"HTTPS endpoint: start Zen with zen, expose the full loopback origin, then run " + pairHint,
-		"Optional: re-check with zen doctor",
+		"Same trusted Wi-Fi or direct Tailnet: start Mewla with mewla --lan, then run a pair command it prints",
+		"HTTPS endpoint: start Mewla with zen, expose the full loopback origin, then run " + pairHint,
+		"Optional: re-check with mewla doctor",
 	}
 }

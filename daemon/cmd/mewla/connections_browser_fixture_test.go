@@ -63,7 +63,7 @@ func newPluginsBrowserFixture(t *testing.T, manager *connections.Manager, root s
 		}
 		if r.Method == "GET" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			page := `<!doctype html><meta name="viewport" content="width=device-width"><title>Owned OAuth fixture</title><h1>Authorize Zen</h1><p>Local test provider. Grants access to one read-only fixture tool.</p><form method="POST" action="/authorize">`
+			page := `<!doctype html><meta name="viewport" content="width=device-width"><title>Owned OAuth fixture</title><h1>Authorize Mewla</h1><p>Local test provider. Grants access to one read-only fixture tool.</p><form method="POST" action="/authorize">`
 			for _, key := range []string{"redirect_uri", "state", "code_challenge", "code_challenge_method"} {
 				page += `<input type="hidden" name="` + key + `" value="` + html.EscapeString(r.Form.Get(key)) + `">`
 			}

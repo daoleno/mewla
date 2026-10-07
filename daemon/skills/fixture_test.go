@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Fixture builds an isolated HOME + project + Zen state dir so every test runs
+// Fixture builds an isolated HOME + project + Mewla state dir so every test runs
 // against real filesystem behavior without ever touching a user installation.
 type fixture struct {
 	T        *testing.T

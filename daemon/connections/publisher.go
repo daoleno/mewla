@@ -2,9 +2,9 @@ package connections
 
 import "encoding/json"
 
-// Set these public values once in Zen's release build after publisher
+// Set these public values once in Mewla's release build after publisher
 // registration. They contain no secret and require no end-user configuration.
-// They are intentionally empty until Zen-owned registrations actually exist.
+// They are intentionally empty until Mewla-owned registrations actually exist.
 var GitHubPublicClientID string
 var SlackPublicClientID string
 

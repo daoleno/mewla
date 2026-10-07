@@ -17,7 +17,7 @@ func (m *Manager) mediaRecipient(state durableState, message Message, updateID i
 	if mapping, ok := topicMappingByThread(state, message.MessageThreadID); ok {
 		input.SessionID = mapping.SessionID
 	} else if !isGeneralThread(message.MessageThreadID) && !slices.Contains(state.BrainTopics, message.MessageThreadID) {
-		return input, fmt.Errorf("This topic is not mapped to Zen.")
+		return input, fmt.Errorf("This topic is not mapped to Mewla.")
 	} else if message.ReplyToMessage != nil && message.ReplyToMessage.From != nil && message.ReplyToMessage.From.ID == state.BotID && state.ReplySessions[message.ReplyToMessage.MessageID] != "" {
 		input.SessionID = state.ReplySessions[message.ReplyToMessage.MessageID]
 	} else if !state.TopicsAvailable {

@@ -2,7 +2,7 @@ package skills
 
 import "time"
 
-// Agent is one supported local Agent family whose native Skills roots Zen can
+// Agent is one supported local Agent family whose native Skills roots Mewla can
 // discover. Custom executor names may resolve to one of these families.
 type Agent string
 
@@ -61,7 +61,7 @@ type DeleteCapability struct {
 }
 
 // InstalledSkill is one physical directory entry discovered beneath one
-// allowed Skills root. RootPath identifies the entry Zen may remove;
+// allowed Skills root. RootPath identifies the entry Mewla may remove;
 // CanonicalPath is its resolved content location and is diagnostic identity,
 // never a deletion target supplied by the App.
 type InstalledSkill struct {

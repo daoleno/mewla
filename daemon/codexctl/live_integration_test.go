@@ -177,12 +177,12 @@ func TestLiveNativeThreadSettings(t *testing.T) {
 	mu.Unlock()
 	assertBodyModelEffort(t, secondBody, "gpt-5.5", "high")
 	// Codex's native model-switch developer fragment is present — the same
-	// signal Zen's router uses to converge the Interface projection.
+	// signal Mewla's router uses to converge the Interface projection.
 	if !strings.Contains(secondBody, "<model_switch>") || !strings.Contains(secondBody, "previously using a different model") {
 		t.Fatalf("native model_switch signal missing from next request: %s", trimTail(secondBody, 600))
 	}
 
-	// Effort reset to model default: Zen's "default" maps to the native
+	// Effort reset to model default: Mewla's "default" maps to the native
 	// ReasoningEffort::None. The footer must show "default" and the next
 	// request must carry the native default effort value "none" — one state
 	// everywhere, never a stale explicit effort.

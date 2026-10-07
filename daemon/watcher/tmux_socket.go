@@ -11,7 +11,7 @@ import (
 
 // tmux server layout:
 //
-// Zen-owned Brain and delegated Sessions live on the ONE caller-visible tmux
+// Mewla-owned Brain and delegated Sessions live on the ONE caller-visible tmux
 // server selected at daemon startup: the exact inherited socket when the
 // daemon starts inside tmux, or the user's default server otherwise. Provider
 // panes lose that host capability after deriving their target identity: TMUX

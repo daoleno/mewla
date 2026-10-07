@@ -17,7 +17,7 @@ func TestSetupHelp(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	out := stderr.String()
-	for _, want := range []string{"Usage: zen setup", "--non-interactive", "--profile", "--yes"} {
+	for _, want := range []string{"Usage: mewla setup", "--non-interactive", "--profile", "--yes"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help missing %q:\n%s", want, out)
 		}

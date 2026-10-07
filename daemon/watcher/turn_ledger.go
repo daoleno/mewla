@@ -352,7 +352,7 @@ type AdmittedTurn struct {
 	PaneGeneration  string
 	PayloadSHA256   string
 	// TranscriptBinding is the provider-native transcript identity known at
-	// admission time (currently the Zen-owned Pi session flag/path from the
+	// admission time (currently the Mewla-owned Pi session flag/path from the
 	// launch command). It is persisted with the ledger so provider evidence
 	// survives daemon restart without tmux option state.
 	TranscriptBinding TranscriptBinding

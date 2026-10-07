@@ -12,7 +12,7 @@ import (
 // reported by the app server: the `thread/resume` response at attach time and
 // every `thread/settings/updated` notification afterwards.
 //
-// Effort follows Zen semantics: the native default (ReasoningEffort::None,
+// Effort follows Mewla semantics: the native default (ReasoningEffort::None,
 // wire "none") is normalized to "" so callers compare one vocabulary.
 type NativeSettings struct {
 	ThreadID string
@@ -239,7 +239,7 @@ func (m *Monitor) markDead() {
 	m.ready = false
 }
 
-// normalizeNativeEffort maps the native effort vocabulary to Zen's: the
+// normalizeNativeEffort maps the native effort vocabulary to Mewla's: the
 // native model default ("none" / null / empty) is "".
 func normalizeNativeEffort(effort string) string {
 	effort = strings.ToLower(strings.TrimSpace(effort))

@@ -2048,7 +2048,7 @@ func (s *Store) SettleBrainInputAdmission(
 				Role:      "assistant",
 				Kind:      timelineKindAssistantMessage,
 				Title:     "Input delivery uncertain",
-				Body:      "Zen could not prove whether this message reached the previous Host. It was not replayed automatically.",
+				Body:      "Mewla could not prove whether this message reached the previous Host. It was not replayed automatically.",
 				CreatedAt: settledAt,
 			})
 			if err != nil {

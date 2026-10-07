@@ -33,7 +33,7 @@ type ProviderConversationReader struct {
 	// openCodeOwnedFromLaunch records that the pinned session id was declared
 	// by an explicit -s/--session ses_* launch token. Declared ownership
 	// outranks temporal origin: a resumed thread legitimately predates the
-	// Zen agent process, so launch-owned pins are never released by the
+	// Mewla agent process, so launch-owned pins are never released by the
 	// started-at origin gate that governs discovered bindings.
 	openCodeOwnedFromLaunch bool
 

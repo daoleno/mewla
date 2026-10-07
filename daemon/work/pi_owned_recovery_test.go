@@ -10,7 +10,7 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 )
 
-// ownedPiFixtureDir returns the Zen-owned Pi session directory for the given
+// ownedPiFixtureDir returns the Mewla-owned Pi session directory for the given
 // HOME, mirroring piOwnedSessionRoot("") with HOME overridden in tests.
 func ownedPiFixtureDir(t *testing.T, home string) string {
 	t.Helper()
@@ -23,7 +23,7 @@ func ownedPiFixtureDir(t *testing.T, home string) string {
 
 // writeOwnedPiRecoveryFixture writes a realistic version-3 Pi session (user
 // text, reasoning, text, tool call, tool result, final text) into the
-// Zen-owned sessions directory and returns its path and header CreatedAt.
+// Mewla-owned sessions directory and returns its path and header CreatedAt.
 func writeOwnedPiRecoveryFixture(t *testing.T, dir, cwd string, created time.Time) string {
 	t.Helper()
 	path := filepath.Join(dir, "recovery-"+strings.ReplaceAll(created.Format("150405"), ":", "")+".jsonl")
@@ -62,7 +62,7 @@ func writeOwnedPiRecoveryFixtureNamed(t *testing.T, dir, cwd string, created tim
 // TestPiOwnedDirAutoBindAfterBindingLoss reproduces the real cold-replay case
 // end to end at the reader boundary: a Pi window whose durable owned binding
 // is unavailable (pre-durable-binding sessions, argv-rewritten pi, daemon
-// restart) must auto-bind the exact Zen-owned transcript for its cwd via the
+// restart) must auto-bind the exact Mewla-owned transcript for its cwd via the
 // startedAt window, project messages plus reasoning and tool calls, and keep
 // stable event IDs as the transcript grows — never a transcript_not_found
 // empty projection while the authoritative JSONL exists and is fresh.
@@ -78,7 +78,7 @@ func TestPiOwnedDirAutoBindAfterBindingLoss(t *testing.T) {
 
 	// Pre-fix launch shape: the pane command is bare "pi" (node-based Pi
 	// rewrites its argv), no durable tmux binding, no --session in the
-	// command. The owned transcript lives only in the Zen-owned directory.
+	// command. The owned transcript lives only in the Mewla-owned directory.
 	worker := classifier.Worker{
 		ID:        "recovery-agent",
 		Name:      "recovery",
@@ -383,7 +383,7 @@ func TestPiOwnedDirAutoBindRealGeometryOldOwnedNewShared(t *testing.T) {
 	created := time.Date(2026, 8, 8, 10, 0, 0, 0, time.UTC)
 	restartAt := created.Add(time.Hour)
 
-	// Pre-restart transcript stays in the Zen-owned directory; its mtime
+	// Pre-restart transcript stays in the Mewla-owned directory; its mtime
 	// freezes before the restart (the old process stopped writing it).
 	ownedDir := ownedPiFixtureDir(t, home)
 	oldPath := writeOwnedPiRecoveryFixture(t, ownedDir, cwd, created)

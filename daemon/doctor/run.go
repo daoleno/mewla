@@ -292,7 +292,7 @@ func (e env) checkPlatform() PlatformCheck {
 		check.Supported = false
 		check.Status = StatusFail
 		check.Remediation = RemediationUnsupportedPlatform
-		check.Summary = fmt.Sprintf("%s/%s is not supported; Zen requires Linux or macOS", check.OS, check.Arch)
+		check.Summary = fmt.Sprintf("%s/%s is not supported; Mewla requires Linux or macOS", check.OS, check.Arch)
 	}
 	return check
 }
@@ -398,7 +398,7 @@ func (e env) checkListen(stateDir string) ListenCheck {
 		check.DaemonID = daemonID
 		check.Available = false
 		check.Status = StatusOK
-		check.Summary = "Zen daemon already running"
+		check.Summary = "Mewla daemon already running"
 		return check
 	}
 
@@ -414,7 +414,7 @@ func (e env) checkListen(stateDir string) ListenCheck {
 	check.Available = false
 	check.Status = StatusFail
 	check.Remediation = RemediationPortInUse
-	check.Summary = fmt.Sprintf("listen address %s is in use by a non-Zen process", e.opts.Addr)
+	check.Summary = fmt.Sprintf("listen address %s is in use by a non-Mewla process", e.opts.Addr)
 	return check
 }
 
@@ -521,7 +521,7 @@ func (e env) checkExecutors() ExecutorsCheck {
 	case check.UsableCount > 0:
 		check.Status = StatusWarn
 		check.Summary = fmt.Sprintf("%d runnable executor(s) with unverified auth; host=%s", check.UsableCount, check.RecommendedHost)
-		check.Warnings = append(check.Warnings, "auth state is unknown for recommended executors; Zen did not pretend they are authenticated")
+		check.Warnings = append(check.Warnings, "auth state is unknown for recommended executors; Mewla did not pretend they are authenticated")
 		if check.RecommendationConfidence == ConfidenceUnverified {
 			check.Warnings = append(check.Warnings, "recommendations selected auth-unknown candidates because no verified authenticated executor exists")
 		}

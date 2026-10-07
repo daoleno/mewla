@@ -303,7 +303,7 @@ func TestOpenCodeBindFreshestRootWhenStartWindowMisses(t *testing.T) {
 	}
 }
 
-// A newly created Zen OpenCode session races its own provider row: OpenCode
+// A newly created Mewla OpenCode session races its own provider row: OpenCode
 // writes the session row lazily, so early polls see only the previous
 // session's row. A row created before the agent started provably belongs to
 // another conversation and must never bind — not even as the freshest root —
@@ -425,7 +425,7 @@ func TestOpenCodePinReleasesWhenStartEvidenceArrivesLate(t *testing.T) {
 }
 
 // An explicit -s ses_* launch token declares ownership: a resumed thread
-// legitimately predates the Zen agent process, so the origin gate must never
+// legitimately predates the Mewla agent process, so the origin gate must never
 // release a launch-owned binding.
 func TestOpenCodeLaunchTokenOwnsPreStartRow(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "opencode.db")
