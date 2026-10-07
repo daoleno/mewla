@@ -239,17 +239,16 @@ describe("Brain Work Event dedicated card projection", () => {
     expect(source).toContain("{presentation.label}");
   });
 
-  test("card source uses word-safe wrapping and has no break-all behavior", () => {
-    const source = readFileSync(
-      join(import.meta.dir, "BrainWorkEventCard.tsx"),
-      "utf8",
-    );
-    expect(source).toContain(
-      "numberOfLines={BRAIN_WORK_CARD_TITLE_LINES}",
-    );
-    expect(source).toContain("style={styles.compactTitle}");
-    expect(source).not.toContain("break-all");
-    expect(source).not.toContain("wordBreak");
+  test("slip source uses word-safe wrapping and has no break-all behavior", () => {
+    // Inline slips and the Work column share WorkSlip's anatomy.
+    const card = readFileSync(join(import.meta.dir, "BrainWorkEventCard.tsx"), "utf8");
+    const slip = readFileSync(join(import.meta.dir, "WorkSlip.tsx"), "utf8");
+    expect(card).toContain("<WorkSlip");
+    expect(slip).toContain("numberOfLines={BRAIN_WORK_CARD_TITLE_LINES}");
+    for (const source of [card, slip]) {
+      expect(source).not.toContain("break-all");
+      expect(source).not.toContain("wordBreak");
+    }
   });
 
   test("InterfaceTimelineItemView owns BrainWorkEventCard for work events", () => {

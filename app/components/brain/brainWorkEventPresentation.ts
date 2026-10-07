@@ -148,7 +148,9 @@ export function brainCurrentWorkLifecycle(
   if (work.status === "done") {
     return lifecyclePresentation("done");
   }
-  if (event?.attention === "user_input") {
+  // Brain parked the Work on you (a user_input wake): the Work column says
+  // Needs you for the same Work, so the slip does too.
+  if (event?.attention === "user_input" || work.wake?.kind === "user_input") {
     return lifecyclePresentation("needs_you");
   }
   if (event?.attention === "blocked") {
@@ -172,10 +174,11 @@ export function brainCurrentWorkLifecycle(
   ) {
     return lifecyclePresentation("ready");
   }
-  if (work.status === "waiting" || work.progress_mode === "waiting") {
-    return lifecyclePresentation("waiting");
-  }
+  // A Worker's question Brain is not reviewing is waiting on you.
   if (work.status === "needs_input") {
+    return lifecyclePresentation("needs_you");
+  }
+  if (work.status === "waiting" || work.progress_mode === "waiting") {
     return lifecyclePresentation("waiting");
   }
   const eventPresentation = event ? brainWorkEventLifecycle(event) : undefined;

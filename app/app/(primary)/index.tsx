@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import {
   useIsFocused,
   useLocalSearchParams,
@@ -23,7 +23,22 @@ import {
   switchExecutorAccessibilityLabel,
 } from "../../components/brain/brainPresentation";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
-import { resolvePrimaryAppBarGeometry } from "../../components/navigation/PrimaryDrawerShell";
+import {
+  PRIMARY_SIDEBAR_BREAKPOINT,
+  resolvePrimaryAppBarGeometry,
+} from "../../components/navigation/PrimaryDrawerShell";
+import {
+  BrainWorkColumn,
+  BrainWorkDetailSheet,
+  BrainWorkHeader,
+  BrainWorkSheet,
+} from "../../components/brain/BrainWorkPanel";
+import {
+  brainWorkSurface,
+  workerWho,
+  type BrainWorkSlip,
+} from "../../components/brain/brainWorkSurface";
+import { INTERFACE_TIMELINE_HORIZONTAL_INSET } from "../../components/terminal/interfaceTimelineGeometry";
 import { ActionMenu, EmptyState, InlineNotice } from "../../components/ui";
 import { setServerAutoConnect } from "../../services/storage";
 import { ChatCanvas } from "../../components/terminal/ChatCanvas";
@@ -139,18 +154,56 @@ export default function BrainScreen() {
     : undefined;
 
   const ready = Boolean(activeServer && activeBrain?.hydrated && hostWorker?.id);
-  const brainCompanion = useMemo<BrainCompanion>(
-    () => ({
-      presence: resolveBrainCatPresence({
-        hasServer: Boolean(activeServer),
-        connection: connectionState,
-        hydrated: Boolean(activeBrain?.hydrated),
-        currentWork: activeBrain?.current_work,
-      }),
-      animate: screenFocused,
-    }),
-    [activeBrain?.current_work, activeBrain?.hydrated, activeServer, connectionState, screenFocused],
+  const { width: windowWidth } = useWindowDimensions();
+  // Wide screens get the Work column; it holds the cat and Brain's presence.
+  const workColumn = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
+  const workSurface = useMemo(
+    () => brainWorkSurface(activeBrain?.current_work, activeBrain?.workers),
+    [activeBrain?.current_work, activeBrain?.workers],
   );
+  const [workSheetVisible, setWorkSheetVisible] = useState(false);
+  const [selectedWorkSlip, setSelectedWorkSlip] = useState<BrainWorkSlip | null>(null);
+  useEffect(() => {
+    setWorkSheetVisible(false);
+    setSelectedWorkSlip(null);
+  }, [activeServer?.id]);
+  const openWorkList = useCallback(() => setWorkSheetVisible(true), []);
+  const sessionLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const worker of activeBrain?.workers ?? []) {
+      const label = workerWho(worker);
+      if (label) labels.set(worker.id, label);
+    }
+    return labels;
+  }, [activeBrain?.workers]);
+  const brainCompanion = useMemo<BrainCompanion>(() => {
+    const presence = resolveBrainCatPresence({
+      hasServer: Boolean(activeServer),
+      connection: connectionState,
+      hydrated: Boolean(activeBrain?.hydrated),
+      currentWork: activeBrain?.current_work,
+    });
+    const betweenTurns =
+      presence.state === "attention" ||
+      presence.state === "delivered" ||
+      presence.state === "delegating";
+    return {
+      // The Work column already shows what is waiting, with the cat on it.
+      presence: workColumn && betweenTurns ? { state: "idle" } : presence,
+      animate: screenFocused,
+      sessionLabels,
+      onOpenWork: workColumn ? undefined : openWorkList,
+    };
+  }, [
+    activeBrain?.current_work,
+    activeBrain?.hydrated,
+    activeServer,
+    connectionState,
+    openWorkList,
+    screenFocused,
+    sessionLabels,
+    workColumn,
+  ]);
   const showBrainLoading = shouldShowBrainLoadingState({
     hydrated: Boolean(activeBrain?.hydrated),
     hasHostWorker: Boolean(hostWorker?.id),
@@ -391,6 +444,28 @@ export default function BrainScreen() {
     [activeBrain?.workers],
   );
   const detailEvent = selectedWorkResult?.serverId === activeServer?.id ? selectedWorkResult?.event ?? null : null;
+  const openWorkSlip = useCallback(
+    (slip: BrainWorkSlip) => {
+      setWorkSheetVisible(false);
+      if (slip.sessionId && activeServer) {
+        router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(slip.sessionId, activeServer.id) });
+        return;
+      }
+      setSelectedWorkSlip(slip);
+    },
+    [activeServer, router],
+  );
+  const [workHeaderHeight, setWorkHeaderHeight] = useState(0);
+  const workHeader = canUseStructuredBrainInterface ? (
+    <BrainWorkHeader
+      objective={activeBrain?.objective}
+      surface={workSurface}
+      chrome={chrome}
+      showSummary={!workColumn}
+      onOpenWork={openWorkList}
+    />
+  ) : null;
+  const chatTopInset = topChromeInset + (workHeader ? workHeaderHeight : 0);
 
   return (
     <SafeAreaView
@@ -426,11 +501,12 @@ export default function BrainScreen() {
         </View>
       ) : null}
 
+      <View style={styles.row}>
       <View style={styles.surface}>
         {/* Below the overlaid app bar, and only over the chat: the status
             screen already says when Brain is offline. */}
         {canUseStructuredBrainInterface ? (
-          <View pointerEvents="none" style={[styles.connectionPath, { top: topChromeInset + 2 }]}>
+          <View pointerEvents="none" style={[styles.connectionPath, { top: chatTopInset + 2 }]}>
             <ConnectionPathIndicator
               connected={connectionState === "connected"}
               issue={connectionIssue?.title}
@@ -438,6 +514,14 @@ export default function BrainScreen() {
           </View>
         ) : null}
         <ChatCanvas chrome={chrome}>
+          {workHeader ? (
+            <View
+              onLayout={(event) => setWorkHeaderHeight(Math.ceil(event.nativeEvent.layout.height))}
+              style={[styles.workHeader, { top: topChromeInset, backgroundColor: chrome.appBackground }]}
+            >
+              {workHeader}
+            </View>
+          ) : null}
           <BrainCompanionContext.Provider value={brainCompanion}>
             {canUseStructuredBrainInterface ? (
               <InterfaceChatSurface
@@ -460,7 +544,7 @@ export default function BrainScreen() {
                 theme={theme}
                 chrome={chrome}
                 screenFocused={screenFocused}
-                topChromeInset={topChromeInset}
+                topChromeInset={chatTopInset}
                 onBrainWorkEventActivate={
                   targetedThreadReadOnly ? undefined : activateWorkResult
                 }
@@ -468,6 +552,8 @@ export default function BrainScreen() {
                 openSessionIds={openSessionIds}
                 readOnly={targetedThreadReadOnly}
                 onSwitchToTerminal={openBrainTerminal}
+                // Brain is who you talk to; the host executor is an implementation detail.
+                placeholder={connectionState === "connected" ? "Tell Brain…" : undefined}
                 emptyTitle={BRAIN_EMPTY_TITLE}
                 emptyBody={BRAIN_EMPTY_BODY}
                 renderComposerAccessory={renderBrainComposerAccessory}
@@ -500,6 +586,30 @@ export default function BrainScreen() {
           </BrainCompanionContext.Provider>
         </ChatCanvas>
       </View>
+      {workColumn && canUseStructuredBrainInterface ? (
+        <BrainWorkColumn
+          surface={workSurface}
+          chrome={chrome}
+          topInset={topChromeInset}
+          animate={screenFocused}
+          onOpenSlip={openWorkSlip}
+        />
+      ) : null}
+      </View>
+
+      <BrainWorkSheet
+        visible={workSheetVisible && !workColumn}
+        surface={workSurface}
+        chrome={chrome}
+        onClose={() => setWorkSheetVisible(false)}
+        onOpenSlip={openWorkSlip}
+      />
+      <BrainWorkDetailSheet
+        slip={selectedWorkSlip}
+        waitFor={activeBrain?.current_work?.find((work) => work.work_id === selectedWorkSlip?.workId)?.wait_for}
+        chrome={chrome}
+        onClose={() => setSelectedWorkSlip(null)}
+      />
 
       <BrainExecutorSheet
         visible={adapterSheetVisible}
@@ -600,8 +710,19 @@ function createStyles() {
     screen: {
       flex: 1,
     },
+    row: {
+      flex: 1,
+      flexDirection: "row",
+    },
     surface: {
       flex: 1,
+    },
+    workHeader: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      zIndex: 2,
+      paddingHorizontal: INTERFACE_TIMELINE_HORIZONTAL_INSET + 2,
     },
     connectionPath: {
       position: "absolute",

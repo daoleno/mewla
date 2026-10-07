@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import type { BrainCatPresence } from "./brainCatState";
@@ -9,6 +9,10 @@ export interface BrainCompanion {
   presence: BrainCatPresence;
   /** False while the Brain screen is hidden, so the cat stops moving. */
   animate: boolean;
+  /** Live Session id → "Claude Code · perpetuo", for the slips' meta line. */
+  sessionLabels?: ReadonlyMap<string, string>;
+  /** Opens the Work list; the tail row hands off to it. */
+  onOpenWork?: () => void;
 }
 
 /**
@@ -35,18 +39,24 @@ export function BrainCatRow({
   label,
   detail,
   chrome,
+  onPress,
 }: {
   companion: BrainCompanion;
   label: string;
   detail?: string;
   chrome: TerminalThemeChrome;
+  /** Between turns the row opens the Work list. */
+  onPress?: () => void;
 }) {
   return (
-    <View
-      style={styles.row}
+    <Pressable
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
       accessible
-      accessibilityRole="text"
+      accessibilityRole={onPress ? "button" : "text"}
       accessibilityLabel={detail ? `Brain: ${label}, ${detail}` : `Brain: ${label}`}
+      accessibilityHint={onPress ? "Opens the Work list" : undefined}
       accessibilityLiveRegion="polite"
     >
       <SealCat state={companion.presence.state} size={ROW_CAT} animate={companion.animate} />
@@ -60,7 +70,7 @@ export function BrainCatRow({
           </Text>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -70,6 +80,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 10,
     paddingVertical: 6,
+  },
+  pressed: {
+    opacity: 0.72,
   },
   copy: {
     flexShrink: 1,
