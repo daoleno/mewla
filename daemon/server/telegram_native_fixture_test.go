@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/telegram"
 )
 
 // Opt-in, loopback-only native UI fixture. Real authentication/WS handlers,

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // P1 regression: deleted SQLite rows must leave the projected conversation.

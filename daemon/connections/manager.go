@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
 )

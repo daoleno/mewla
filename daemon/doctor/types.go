@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // ErrNotReady is returned by the CLI after a successful diagnosis when Ready

@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/daoleno/zen/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/daoleno/zen?sort=semver&include_prereleases"></a>
-  <a href="https://github.com/daoleno/zen/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/daoleno/zen/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/daoleno/mewla/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/daoleno/mewla?sort=semver&include_prereleases"></a>
+  <a href="https://github.com/daoleno/mewla/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/daoleno/mewla/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
 </p>
 
@@ -23,7 +23,7 @@ Zen is for one person running many coding agents. A Go daemon runs on your
 Linux or macOS machine next to your repositories, `tmux` and agent CLIs. The
 Android and iOS app connects to it. Zen is in **beta**; see [Status](#status).
 
-Visit the [Zen homepage](https://daoleno.github.io/zen/) for an interactive overview.
+Visit the [Zen homepage](https://daoleno.github.io/mewla/) for an interactive overview.
 
 ## Sessions
 
@@ -97,7 +97,7 @@ zen --lan
 ```
 
 3. Install the app: the Android arm64 APK from
-   [Releases](https://github.com/daoleno/zen/releases) (see [Install](docs/install-daemon.md#android)),
+   [Releases](https://github.com/daoleno/mewla/releases) (see [Install](docs/install-daemon.md#android)),
    or build iOS from source (see [Install](docs/install-daemon.md#ios)).
 4. Scan the QR code (or paste the link in **Settings > Pair Server**), then open **Brain**.
 5. Later devices: run `zen pair` for a fresh code, or open Zen in a browser on an
@@ -182,7 +182,7 @@ bun install                              # workspace deps (Bun 1.3)
 # Daemon
 bun run daemon:build                     # builds bin/zen
 cd daemon && go test ./...
-cd daemon && go run ./cmd/zen-dev        # hot-reloading dev daemon
+cd daemon && go run ./cmd/mewla-dev        # hot-reloading dev daemon
 
 # App
 bun run app:start                        # Expo dev server
@@ -194,7 +194,7 @@ cd app && bun test && bunx tsc --noEmit
 bun run site:dev                         # prints the local preview URL
 ```
 
-Layout: `daemon/` Go daemon (`cmd/zen`, `server`, `auth`, `brain`, `work`,
+Layout: `daemon/` Go daemon (`cmd/mewla`, `server`, `auth`, `brain`, `work`,
 `lifecycle`, `terminal`, `watcher`); `app/` Expo app (routes in `app/app/`,
 components, services, store); `docs/` product and operator docs; `site/`
 landing page, whose `site/assets/*.svg` drawings this README also uses

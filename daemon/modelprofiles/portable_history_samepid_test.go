@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
 
 // Opt-in same-tmux / same-OS-PID portable switch proof.

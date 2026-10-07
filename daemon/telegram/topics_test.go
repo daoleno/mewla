@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 // topicFixture returns a configured, bound manager whose fake brain exposes one

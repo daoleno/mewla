@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/attachment"
 )
 
 // mediaRecipient captures the same exact destination for an attachment and

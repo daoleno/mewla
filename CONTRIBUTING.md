@@ -23,7 +23,7 @@ behavior on both. One supported coding CLI is enough to run a Zen Worker.
 bun run daemon:build && cd daemon && go test ./...
 
 # Direct Go build
-cd daemon && go test ./... && go build -o bin/zen ./cmd/zen/
+cd daemon && go test ./... && go build -o bin/zen ./cmd/mewla/
 
 
 # App

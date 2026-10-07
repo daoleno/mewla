@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/addressbook"
 )
 
 const addressBookPurpose = "zen-address-book"

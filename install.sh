@@ -4,7 +4,7 @@
 set -eu
 set -f
 
-REPOSITORY="daoleno/zen"
+REPOSITORY="daoleno/mewla"
 GITHUB_WEB="https://github.com/$REPOSITORY"
 GITHUB_API="https://api.github.com/repos/$REPOSITORY"
 PATH_MARKER="# >>> zen installer PATH >>>"
@@ -247,7 +247,7 @@ curl_https() {
   output=$2
   accept=${3:-application/octet-stream}
   case $url in
-    https://api.github.com/repos/daoleno/zen/*|https://github.com/daoleno/zen/releases/download/*) ;;
+    https://api.github.com/repos/daoleno/mewla/*|https://github.com/daoleno/mewla/releases/download/*) ;;
     *) die "refusing non-official download URL: $url" ;;
   esac
   curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location \

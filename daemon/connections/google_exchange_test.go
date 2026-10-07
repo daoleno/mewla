@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/daoleno/zen/daemon/googleauth"
+	"github.com/daoleno/mewla/daemon/googleauth"
 	"golang.org/x/oauth2"
 	"io"
 	"net/http"

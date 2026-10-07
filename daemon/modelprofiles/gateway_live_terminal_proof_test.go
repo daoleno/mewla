@@ -40,9 +40,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/control"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func gatewayPortFree() bool {

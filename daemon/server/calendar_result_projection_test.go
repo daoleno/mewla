@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/calendar"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/calendar"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestBrainSnapshotProjectsOnlyKnownThreadCalendarRunsWithoutWriting(t *testing.T) {

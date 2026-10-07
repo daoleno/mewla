@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/daoleno/zen/daemon/browser"
+	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )

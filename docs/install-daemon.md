@@ -45,7 +45,7 @@ or run the `export PATH=...` line it printed.
 ### Manual download
 
 Download the archive for your host and `SHA256SUMS` from the
-[GitHub Releases](https://github.com/daoleno/zen/releases), then verify and install:
+[GitHub Releases](https://github.com/daoleno/mewla/releases), then verify and install:
 
 ```sh
 # Linux (use zen-linux-arm64.tar.gz on ARM)
@@ -144,7 +144,7 @@ zen pair -state-dir /path/to/state https://zen.example.com
 ### Android
 
 Download `zen-android-arm64-v<version>.apk` and `SHA256SUMS` from the
-[GitHub Releases](https://github.com/daoleno/zen/releases) and verify the APK:
+[GitHub Releases](https://github.com/daoleno/mewla/releases) and verify the APK:
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing
@@ -175,7 +175,7 @@ physical iPhone also needs an Apple development team.
 Clone the source, then from the repository root:
 
 ```sh
-git clone https://github.com/daoleno/zen.git && cd zen
+git clone https://github.com/daoleno/mewla.git && cd zen
 bun install
 bun run native:build:ios     # builds the pinned terminal library
 bun run native:verify:ios

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // claudeBurstSession is one delegated Claude Worker from the 2026-10-07 07:26Z

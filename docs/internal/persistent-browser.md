@@ -148,7 +148,7 @@ epoch/target, control drain and uncertain actions.
 
 Opt-in real synthetic proof (never uses personal accounts):
 
-    ZEN_BROWSER_INTEGRATION=1 go test -tags browserfixture ./cmd/zen \
+    ZEN_BROWSER_INTEGRATION=1 go test -tags browserfixture ./cmd/mewla \
       -run '^TestBrowserFirstProductFlow$' -v -count=1
 
 It uses a headed private runtime, authenticated product viewer, later real stdio

@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	DefaultAPIURL       = "https://api.github.com/repos/daoleno/zen/releases?per_page=100"
+	DefaultAPIURL       = "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
 	ManifestAsset       = "release-manifest.json"
 	ManifestSignature   = "release-manifest.json.sig"
 	maxManifestSize     = 1 << 20

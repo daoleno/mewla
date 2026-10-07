@@ -1,4 +1,4 @@
-module github.com/daoleno/zen/daemon
+module github.com/daoleno/mewla/daemon
 
 go 1.25.5
 

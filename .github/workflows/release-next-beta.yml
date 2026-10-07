@@ -105,7 +105,7 @@ jobs:
 
       - name: Test daemon release identity
         working-directory: daemon
-        run: go test ./cmd/zen
+        run: go test ./cmd/mewla
 
       - name: Test App release contracts
         working-directory: app
