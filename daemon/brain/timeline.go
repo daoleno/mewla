@@ -89,12 +89,19 @@ func providerRowMatchesAdmissionWindow(item TimelineItem, admission BrainInputAd
 		!strings.EqualFold(strings.TrimSpace(item.Role), "user") {
 		return false
 	}
+	var legacyDigests []string
+	if inner, ok := work.UnwrapClaudePasteDisplay(strings.TrimSpace(item.Body)); ok {
+		// Rows materialized before paste unwrapping kept Claude's envelope, so
+		// their echo never matched and showed as a second bubble.
+		legacyDigests = append(legacyDigests, AdmissionDigest(strings.TrimSpace(inner)))
+	}
 	return providerEchoMatchesAdmission(
 		admission,
 		item.ThreadID,
 		item.SessionID,
 		item.Body,
 		item.CreatedAt,
+		legacyDigests...,
 	)
 }
 
@@ -871,6 +878,16 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 func timelineItemsToConversationEvents(items []TimelineItem) []work.CodexConversationEvent {
 	out := make([]work.CodexConversationEvent, 0, len(items))
 	for index, item := range items {
+		if notifications, ok := durableTaskNotifications(item); ok {
+			for offset, notification := range notifications {
+				out = append(out, notification.ConversationEvent(
+					work.TaskNotificationEventID(item.ID, offset),
+					index+1,
+					item.CreatedAt.Format(time.RFC3339Nano),
+				))
+			}
+			continue
+		}
 		event, ok := timelineItemToConversationEvent(item, index+1)
 		if !ok {
 			continue
@@ -878,6 +895,16 @@ func timelineItemsToConversationEvents(items []TimelineItem) []work.CodexConvers
 		out = append(out, event)
 	}
 	return out
+}
+
+// durableTaskNotifications re-projects provider user rows materialized before
+// task notifications had their own card. Brain admissions are always the
+// user's own words and never become cards.
+func durableTaskNotifications(item TimelineItem) ([]work.TaskNotification, bool) {
+	if item.Kind != timelineKindUserMessage || IsBrainInputAdmission(item) {
+		return nil, false
+	}
+	return work.ParseTaskNotifications(item.Body)
 }
 
 // TimelineItemsToConversationEvents projects durable timeline rows into the
@@ -906,6 +933,8 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 		}
 		if IsBrainInputAdmission(item) {
 			event.AdmissionSHA256 = admissionCorrelationDigest(item)
+		} else if inner, ok := work.UnwrapClaudePasteDisplay(strings.TrimSpace(item.Body)); ok && strings.TrimSpace(inner) != "" {
+			event.Body = strings.TrimSpace(inner)
 		}
 		return event, true
 	case timelineKindAssistantMessage:

@@ -393,6 +393,17 @@ type claudeConversationBuilder struct {
 	events            []CodexConversationEvent
 	eventByCall       map[string]int
 	activityLifecycle providerActivityLifecycle
+	// pendingTaskTurn holds the activity a task notification would open. It
+	// starts only once the provider actually answers with an assistant record.
+	pendingTaskTurn claudePendingTaskTurn
+	// seenTaskNotifications drops the rare second copy when Claude records one
+	// notification both as a mid-turn attachment and as a later prompt.
+	seenTaskNotifications map[string]bool
+}
+
+type claudePendingTaskTurn struct {
+	id        string
+	startedAt string
 }
 
 func newClaudeConversationBuilder(sourceID string) *claudeConversationBuilder {
@@ -422,7 +433,12 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		CWD         string `json:"cwd"`
 		IsMeta      bool   `json:"isMeta"`
 		IsSidechain bool   `json:"isSidechain"`
-		Message     struct {
+		TurnOrigin  string `json:"turnOrigin"`
+		Origin      struct {
+			Kind string `json:"kind"`
+		} `json:"origin"`
+		Attachment json.RawMessage `json:"attachment"`
+		Message    struct {
 			Role       string          `json:"role"`
 			Content    json.RawMessage `json:"content"`
 			StopReason string          `json:"stop_reason"`
@@ -454,14 +470,25 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		if envelope.IsMeta {
 			return
 		}
+		activityID := providerActivityID(firstNonEmpty(b.sessionID, b.sourceID), recordID, lineNumber)
+		if b.consumeTaskNotification(lineNumber, recordID, timestamp, envelope.Origin.Kind, envelope.TurnOrigin, envelope.Message.Content) {
+			if !b.activityLifecycle.running() {
+				b.pendingTaskTurn = claudePendingTaskTurn{id: activityID, startedAt: timestamp}
+			}
+			return
+		}
 		if b.consumeUserContent(lineNumber, recordID, timestamp, envelope.Message.Content) &&
 			!b.activityLifecycle.running() {
-			b.activityLifecycle.start(
-				providerActivityID(firstNonEmpty(b.sessionID, b.sourceID), recordID, lineNumber),
-				timestamp,
-			)
+			b.pendingTaskTurn = claudePendingTaskTurn{}
+			b.activityLifecycle.start(activityID, timestamp)
 		}
 	case "assistant":
+		if pending := b.pendingTaskTurn; pending.id != "" {
+			b.pendingTaskTurn = claudePendingTaskTurn{}
+			if !b.activityLifecycle.running() {
+				b.activityLifecycle.start(pending.id, pending.startedAt)
+			}
+		}
 		b.consumeAssistantContent(lineNumber, recordID, timestamp, envelope.Message.Content)
 		if !claudeAssistantRecordContinuesTurn(
 			envelope.Message.StopReason,
@@ -469,8 +496,12 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		) {
 			b.activityLifecycle.settle("", ProviderActivityCompleted, timestamp)
 		}
+	case "attachment":
+		// A notification delivered mid-turn rides along with the running turn;
+		// it never opens activity of its own.
+		b.consumeTaskNotificationAttachment(lineNumber, recordID, timestamp, envelope.Attachment)
 	default:
-		// Skip system/attachment/permission-mode/file-history-snapshot and other
+		// Skip system/permission-mode/file-history-snapshot and other
 		// provider-internal records from the shared conversation surface.
 	}
 }
@@ -539,6 +570,100 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 	return hasUserText
 }
 
+// consumeTaskNotification projects a provider background-task notification as
+// a system card. Claude marks these records with origin.kind
+// "task-notification"; records without origin fall back to the strict block
+// parser. Human-origin input (including a pasted notification) stays a user
+// message.
+func (b *claudeConversationBuilder) consumeTaskNotification(lineNumber int, recordID, timestamp, originKind, turnOrigin string, raw json.RawMessage) bool {
+	originKind = strings.ToLower(strings.TrimSpace(originKind))
+	if originKind == "human" {
+		return false
+	}
+	text, ok := claudeUserPlainText(raw)
+	if !ok {
+		return false
+	}
+	notifications, parsed := ParseTaskNotifications(text)
+	if !parsed {
+		if originKind != "task-notification" && strings.TrimSpace(turnOrigin) != "task_notification" {
+			return false
+		}
+		// A structurally marked notification in an unknown shape still is not
+		// user input; show its cleaned text on a neutral card.
+		body := CleanCodexDisplayText(text)
+		if body == "" {
+			return true
+		}
+		notifications = []TaskNotification{{Body: body}}
+	}
+	baseID := b.messageEventID(recordID, "user", 0)
+	for index, notification := range notifications {
+		if notification.TaskID != "" {
+			key := notification.TaskID + "\x00" + notification.Summary + "\x00" + notification.Body
+			if b.seenTaskNotifications[key] {
+				continue
+			}
+			if b.seenTaskNotifications == nil {
+				b.seenTaskNotifications = map[string]bool{}
+			}
+			b.seenTaskNotifications[key] = true
+		}
+		b.addEvent(notification.ConversationEvent(
+			TaskNotificationEventID(baseID, index),
+			claudeEventSeq(lineNumber, index),
+			timestamp,
+		))
+	}
+	return true
+}
+
+// consumeTaskNotificationAttachment projects queued task notifications that
+// Claude delivered into an already running turn. Other queued commands (for
+// example queued human prompts) are left to their existing handling.
+func (b *claudeConversationBuilder) consumeTaskNotificationAttachment(lineNumber int, recordID, timestamp string, raw json.RawMessage) {
+	var attachment struct {
+		Type        string          `json:"type"`
+		CommandMode string          `json:"commandMode"`
+		Prompt      json.RawMessage `json:"prompt"`
+		Origin      struct {
+			Kind string `json:"kind"`
+		} `json:"origin"`
+	}
+	if json.Unmarshal(raw, &attachment) != nil || attachment.Type != "queued_command" {
+		return
+	}
+	if attachment.CommandMode != "task-notification" && attachment.Origin.Kind != "task-notification" {
+		return
+	}
+	b.consumeTaskNotification(lineNumber, recordID, timestamp, "task-notification", "", attachment.Prompt)
+}
+
+// claudeUserPlainText returns the text of a user record made only of text
+// content (a string, or text blocks). Tool results disqualify the record.
+func claudeUserPlainText(raw json.RawMessage) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return "", false
+	}
+	if raw[0] == '"' {
+		var text string
+		return text, json.Unmarshal(raw, &text) == nil
+	}
+	var items []claudeContentBlock
+	if json.Unmarshal(raw, &items) != nil || len(items) == 0 {
+		return "", false
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if !strings.EqualFold(strings.TrimSpace(item.Type), "text") {
+			return "", false
+		}
+		parts = append(parts, item.Text)
+	}
+	return strings.Join(parts, "\n"), true
+}
+
 func claudeVisibleUserText(text string) bool {
 	text = CleanCodexDisplayText(text)
 	return text != "" && !isTranscriptBoilerplate(text)
@@ -595,6 +720,17 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 	if text == "" || isTranscriptBoilerplate(text) {
 		return
 	}
+	inner, pasted := "", false
+	if role == "user" {
+		inner, pasted = claudePastedInput(exact)
+		// Visibility is decided on the native wrapped bytes above; the paste
+		// envelope itself is transport, so show only what the user submitted.
+		if display := cleanConversationText(inner); pasted && display != "" {
+			text = display
+		} else if stripped := stripClaudeEmbeddedPasteEnvelopes(text); !pasted && stripped != "" {
+			text = stripped
+		}
+	}
 	kind := "assistant_message"
 	if role == "user" {
 		kind = "user_message"
@@ -612,7 +748,7 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 		// Retain literal native bytes as well as the strict transport-envelope
 		// alternative. A user can also submit literal wrapper-like text.
 		event.AdmissionSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(exact)))
-		if inner, ok := claudePastedInput(exact); ok {
+		if pasted {
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(inner)))
 		}
 	}
@@ -834,4 +970,53 @@ func claudePastedInput(raw string) (string, bool) {
 		return "", false
 	}
 	return parts[2], true
+}
+
+// claudePasteDisplayEnvelope is the same envelope after display trimming, the
+// form durable presentation rows kept before paste envelopes were unwrapped.
+var claudePasteDisplayEnvelope = regexp.MustCompile(`(?s)\A<pasted_content id="([0-9a-f]{4})">\n(.*)\n</pasted_content id="([0-9a-f]{4})">\z`)
+
+// UnwrapClaudePasteDisplay recovers the submitted text from a display-trimmed
+// Claude paste envelope. It is a presentation repair for legacy rows only;
+// admission evidence uses the exact native bytes (claudePastedInput).
+func UnwrapClaudePasteDisplay(body string) (string, bool) {
+	parts := claudePasteDisplayEnvelope.FindStringSubmatch(body)
+	if parts == nil || parts[1] != parts[3] || strings.Contains(parts[2], "<pasted_content") || strings.Contains(parts[2], "</pasted_content") {
+		return "", false
+	}
+	return parts[2], true
+}
+
+var claudeEmbeddedPasteOpen = regexp.MustCompile(`<pasted_content id="([0-9a-f]{4})">\n`)
+
+// stripClaudeEmbeddedPasteEnvelopes removes paste envelopes that Claude puts
+// around a paste inside typed text (for example "Execute: " followed by a
+// pasted brief). Display only: each pair needs matching IDs and no nesting,
+// and admission digests keep the native bytes.
+func stripClaudeEmbeddedPasteEnvelopes(text string) string {
+	if !strings.Contains(text, "<pasted_content") {
+		return text
+	}
+	var out strings.Builder
+	rest := text
+	for {
+		loc := claudeEmbeddedPasteOpen.FindStringSubmatchIndex(rest)
+		if loc == nil {
+			break
+		}
+		closeTag := "\n</pasted_content id=\"" + rest[loc[2]:loc[3]] + "\">"
+		end := strings.Index(rest[loc[1]:], closeTag)
+		if end < 0 {
+			break
+		}
+		inner := rest[loc[1] : loc[1]+end]
+		if strings.Contains(inner, "<pasted_content") || strings.Contains(inner, "</pasted_content") {
+			break
+		}
+		out.WriteString(rest[:loc[0]])
+		out.WriteString(inner)
+		rest = rest[loc[1]+end+len(closeTag):]
+	}
+	out.WriteString(rest)
+	return strings.TrimSpace(out.String())
 }
