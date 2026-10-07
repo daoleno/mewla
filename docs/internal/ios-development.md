@@ -2,7 +2,7 @@
 
 The iOS client is available as a source build. It has been validated on an Apple Silicon Mac with Xcode 26.6 and an iPhone 17 Pro / iOS 26.5 Simulator, including pairing, daemon reconnect, session discovery, tmux attachment, Ghostty rendering, and terminal input/output.
 
-Zen does not currently claim a generally available App Store build. The repository includes macOS CI for an unsigned Simulator app and a manual, credential-gated signed IPA/TestFlight workflow. A physical-device source install requires an Apple development team and signing configuration.
+Mewla does not currently claim a generally available App Store build. The repository includes macOS CI for an unsigned Simulator app and a manual, credential-gated signed IPA/TestFlight workflow. A physical-device source install requires an Apple development team and signing configuration.
 
 ## TestFlight Preview access
 
@@ -70,20 +70,20 @@ cd ..
 bun run ios
 ```
 
-You can also open `app/ios/Zen.xcworkspace` in Xcode after `pod install`. The `app/ios/` directory is generated and gitignored; make durable native configuration changes through Expo config or the local Expo module instead of editing generated files.
+You can also open `app/ios/Mewla.xcworkspace` in Xcode after `pod install`. The `app/ios/` directory is generated and gitignored; make durable native configuration changes through Expo config or the local Expo module instead of editing generated files.
 
-The app uses bundle identifier `com.daoleno.zen`, targets iOS 16.4 or newer, and declares local-network access because Zen connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
+The app uses bundle identifier `com.daoleno.mewla`, targets iOS 16.4 or newer, and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
 
 ## Pair and validate
 
 Start a reachable daemon, create a fresh pairing link, and import it in the iOS app:
 
 ```bash
-zen --lan
-# In another terminal, run the LAN or Tailscale pair command Zen prints.
+mewla --lan
+# In another terminal, run the LAN or Tailscale pair command Mewla prints.
 ```
 
-For Simulator testing on the same Mac, a locally reachable address can be used. For a physical iPhone, use `zen --lan` with the Mac's printed LAN/Tailscale address on a trusted private network, or use an HTTPS origin that forwards every required route to bare `zen`. See [Connect and pair](../connect-and-pair.md).
+For Simulator testing on the same Mac, a locally reachable address can be used. For a physical iPhone, use `mewla --lan` with the Mac's printed LAN/Tailscale address on a trusted private network, or use an HTTPS origin that forwards every required route to bare `mewla`. See [Connect and pair](../connect-and-pair.md).
 
 An end-to-end terminal check should cover:
 
@@ -132,4 +132,4 @@ Then perform a real Xcode build-and-run. Static checks do not replace launching 
 
 ## Current distribution status
 
-The source-build path is working, but a bare clone does not contain the ignored Ghostty XCFramework. CI rebuilds/checksums it and compiles an unsigned Simulator app. The protected Preview workflow has signed, exported, verified, and uploaded an IPA to App Store Connect; Apple Beta App Review remains the gate before public-link testers can install it. Zen does not claim a generally available App Store build. See [iOS CI and release automation](../ios-ci-release.md).
+The source-build path is working, but a bare clone does not contain the ignored Ghostty XCFramework. CI rebuilds/checksums it and compiles an unsigned Simulator app. The protected Preview workflow has signed, exported, verified, and uploaded an IPA to App Store Connect; Apple Beta App Review remains the gate before public-link testers can install it. Mewla does not claim a generally available App Store build. See [iOS CI and release automation](../ios-ci-release.md).

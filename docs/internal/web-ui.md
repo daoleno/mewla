@@ -1,6 +1,6 @@
 # Web UI
 
-The daemon serves the Zen app as a web page. It is the same app as Android and
+The daemon serves the Mewla app as a web page. It is the same app as Android and
 iOS, with the same Brain, Sessions, Terminal, Work, and Settings screens. A
 browser pairs as its own trusted device, so it has the same authority as a
 paired phone and you can revoke it the same way.
@@ -8,7 +8,7 @@ paired phone and you can revoke it the same way.
 ## Open it on this computer
 
 ```bash
-zen web
+mewla web
 ```
 
 This asks the running daemon for a one-time pairing token. It then opens
@@ -16,26 +16,26 @@ This asks the running daemon for a one-time pairing token. It then opens
 grant access** and the browser lands in Settings, connected. Later visits to
 `http://127.0.0.1:9876/` reuse that pairing.
 
-- `zen web -no-open` prints the link instead of opening it. The link works once
+- `mewla web -no-open` prints the link instead of opening it. The link works once
   and expires after 15 minutes. Do not share or paste it anywhere else.
-- `zen web -origin http://localhost:9876` uses a different loopback address.
+- `mewla web -origin http://localhost:9876` uses a different loopback address.
   The origin must be the address the browser loads the page from.
 
 The pairing link is carried in the URL fragment. Browsers never send the
 fragment to the server, and the app removes it from the address bar once it has
 read it.
 
-You can also paste a `zen://` pairing link in Settings. A browser pairs only
+You can also paste a `mewla://` pairing link in Settings. A browser pairs only
 with the daemon that serves the page. A link for the same daemon at another
 address, such as its tunnel hostname, pairs and connects through the page you
 are on. A link for a different daemon shows an error: open that daemon's own
-web UI or run `zen web` on that computer.
+web UI or run `mewla web` on that computer.
 
 ## Open it from another device
 
 Remote access is off by default. On the default bind, the daemon serves the
 page only to loopback clients that use a loopback `Host`. Requests from any
-other address or hostname get 404, including DNS-rebinding attempts. `zen --lan`
+other address or hostname get 404, including DNS-rebinding attempts. `mewla --lan`
 does not expose the web UI over plain HTTP.
 
 To use it remotely, put the daemon behind an HTTPS endpoint the browser trusts,
@@ -44,9 +44,9 @@ must forward the full origin (see [Connect and pair](../connect-and-pair.md)) an
 keep the original `Host` header. Then allow that exact origin:
 
 ```bash
-zen -web-origin https://zen.example.com
+mewla -web-origin https://mewla.example.com
 # in another terminal, on the daemon host:
-zen web -origin https://zen.example.com -no-open
+mewla web -origin https://mewla.example.com -no-open
 ```
 
 Open the printed link on the remote device. `-web-origin` accepts only `https`
@@ -59,8 +59,8 @@ Clearing site data in the browser forgets the pairing locally, but the daemon
 still trusts that key. To revoke it on the daemon:
 
 ```bash
-zen devices list          # browser devices are named "Zen Web (...)"
-zen devices revoke -id <device-id>
+mewla devices list          # browser devices are named "Mewla Web (...)"
+mewla devices revoke -id <device-id>
 ```
 
 ## Differences from the mobile apps
@@ -69,8 +69,8 @@ zen devices revoke -id <device-id>
 | -------------------------------- | ------------------------------------------------------- |
 | Brain, Sessions, Work, Settings  | Same as mobile                                          |
 | Terminal                         | xterm.js renderer with the same terminal protocol       |
-| Pairing                          | `zen web` or paste a `zen://` link; no QR camera scan   |
-| Zen Link (relay with pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
+| Pairing                          | `mewla web` or paste a `mewla://` link; no QR camera scan   |
+| Mewla Link (relay with pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
 | Push notifications               | Unsupported                                             |
 | Mermaid diagrams                 | Shown as source                                         |
 | File upload from the device      | Unsupported                                             |

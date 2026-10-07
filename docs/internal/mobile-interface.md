@@ -86,7 +86,7 @@ Browser opens the current server's default browser straight into the viewer: pag
 
 ## Model Providers
 
-A segmented **Codex / Claude** switch picks the agent. Below it, one grouped list shows which connection that agent uses: **Official login** first, then saved Providers. Each has a radio mark, its host, model count and catalog age, and any test result. A **Key required** pill marks Providers without a credential. Each Provider's **…** opens an action menu: Models, Test connection, Edit, and Delete (confirmed). **Add** sits in the section header. Search appears only once the list is long. The Zen Provider Gateway is its own row with a status pill, and tapping it copies the endpoint.
+A segmented **Codex / Claude** switch picks the agent. Below it, one grouped list shows which connection that agent uses: **Official login** first, then saved Providers. Each has a radio mark, its host, model count and catalog age, and any test result. A **Key required** pill marks Providers without a credential. Each Provider's **…** opens an action menu: Models, Test connection, Edit, and Delete (confirmed). **Add** sits in the section header. Search appears only once the list is long. The Mewla Provider Gateway is its own row with a status pill, and tapping it copies the endpoint.
 
 ## Shared patterns
 

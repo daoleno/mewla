@@ -1,5 +1,5 @@
 {
-  "display_information": { "name": "Zen", "description": "Connect your workspace to your private Zen server" },
+  "display_information": { "name": "Mewla", "description": "Connect your workspace to your private Mewla server" },
   "oauth_config": {
     "redirect_urls": ["zen://plugins"],
     "scopes": { "user": ["channels:read", "channels:history", "search:read", "chat:write"] },

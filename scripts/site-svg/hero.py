@@ -5,7 +5,7 @@ SESSIONS = [
     ("claude", "onboarding", "run"),
     ("codex", "session-auth", "need"),
     ("pi", "changelog", "done"),
-    ("shell", "~/zen", "run"),
+    ("shell", "~/mewla", "run"),
     ("claude", "ios-crash", "run"),
     ("grok", "parser-port", "run"),
     ("opencode", "docs-sync", "done"),
@@ -80,7 +80,7 @@ def build(narrow=False):
     s.text(sx + sw / 2 + seg_w / 4, bar_y + 16 * rs, "Sessions", size=11 * rs, fill="ink", anchor="middle", weight=600)
     s.circle(sx + 22 * rs, bar_y + 12 * rs, 11 * rs, fill="panel3")
     s.circle(sx + sw - 22 * rs, bar_y + 12 * rs, 11 * rs, fill="panel3")
-    s.text(sx + 16 * rs, bar_y + 46 * rs + 8, "~/zen", size=10 * rs, fill="faint", mono=True)
+    s.text(sx + 16 * rs, bar_y + 46 * rs + 8, "~/mewla", size=10 * rs, fill="faint", mono=True)
 
     row_y0 = bar_y + 58 * rs + 8
     row_h = 37 * rs

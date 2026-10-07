@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="app/assets/branding/zen-logo-mark-transparent.png" width="88" alt="Zen logo">
+  <img src="app/assets/branding/zen-logo-mark-transparent.png" width="88" alt="Mewla logo">
 </p>
 
-<h1 align="center">Zen</h1>
+<h1 align="center">Mewla</h1>
 
 <p align="center">
   <strong>Every agent you run, in one hand.</strong><br>
@@ -19,11 +19,11 @@
   <img src="site/assets/hero.svg" width="880" alt="Ten Sessions on your computer, agents on six clients plus a shell and Brain, all running into the Sessions list on one phone">
 </p>
 
-Zen is for one person running many coding agents. A Go daemon runs on your
+Mewla is for one person running many coding agents. A Go daemon runs on your
 Linux or macOS machine next to your repositories, `tmux` and agent CLIs. The
-Android and iOS app connects to it. Zen is in **beta**; see [Status](#status).
+Android and iOS app connects to it. Mewla is in **beta**; see [Status](#status).
 
-Visit the [Zen homepage](https://daoleno.github.io/mewla/) for an interactive overview.
+Visit the [Mewla homepage](https://daoleno.github.io/mewla/) for an interactive overview.
 
 ## Sessions
 
@@ -48,7 +48,7 @@ Sessions; open any of them and take over. Only Brain or you can mark Work done.
 Brain's routing guide is `routing.md`, a few lines of Markdown in its
 workspace. It reads the guide before each spawn to choose the executor, model
 and reasoning level, and rewrites a line when you state a preference.
-`zen brain use <executor>` moves Brain itself to another client and keeps its
+`mewla brain use <executor>` moves Brain itself to another client and keeps its
 thread.
 
 <p align="center">
@@ -88,28 +88,28 @@ Requirements: Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac, with
 
 ```sh
 # 1. Install the daemon (checksum-verified, no sudo, no telemetry)
-curl -fsSL https://raw.githubusercontent.com/daoleno/zen/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/daoleno/mewla/main/install.sh | sh
 
 # 2. Check the host, then start on a trusted private network.
-#    With no device paired yet, zen prints a pairing QR code and link.
-zen doctor
-zen --lan
+#    With no device paired yet, mewla prints a pairing QR code and link.
+mewla doctor
+mewla --lan
 ```
 
 3. Install the app: the Android arm64 APK from
    [Releases](https://github.com/daoleno/mewla/releases) (see [Install](docs/install-daemon.md#android)),
    or build iOS from source (see [Install](docs/install-daemon.md#ios)).
 4. Scan the QR code (or paste the link in **Settings > Pair Server**), then open **Brain**.
-5. Later devices: run `zen pair` for a fresh code, or open Zen in a browser on an
+5. Later devices: run `mewla pair` for a fresh code, or open Mewla in a browser on an
    HTTPS address and approve it from a paired device by matching the number it shows.
 
-Away from your LAN, use Tailscale (`zen -addr "$(tailscale ip -4):9876"`), or a
-Cloudflare Tunnel or reverse proxy with `zen pair https://your-origin`. See
+Away from your LAN, use Tailscale (`mewla -addr "$(tailscale ip -4):9876"`), or a
+Cloudflare Tunnel or reverse proxy with `mewla pair https://your-origin`. See
 [Connect and pair](docs/connect-and-pair.md).
 
 ## One owner
 
-Zen serves one person. The daemon has an Ed25519 identity; a phone enrolls once
+Mewla serves one person. The daemon has an Ed25519 identity; a phone enrolls once
 with a short-lived pairing code, then signs every request. The app follows
 exactly one current server, and switching servers never mixes their data.
 Repositories, credentials and agent state stay on your host. Paired phones see
@@ -119,22 +119,22 @@ what you open; model providers see what agents send them.
 ## Everyday commands
 
 ```sh
-zen doctor                         # diagnose tmux, state, port and executors
-zen pair [origin]                  # new one-time pairing code
-zen devices list                   # paired phones
-zen devices revoke -id <device-id>
-zen update                         # verify and install the latest release
+mewla doctor                         # diagnose tmux, state, port and executors
+mewla pair [origin]                  # new one-time pairing code
+mewla devices list                   # paired phones
+mewla devices revoke -id <device-id>
+mewla update                         # verify and install the latest release
 
-zen brain executors --json         # Brain host and available executors
-zen brain use <executor>           # switch the agent that runs Brain
-zen brain work list --json         # open Work (-all, -full, -id for history)
-zen brain work update -id <work> -status done
+mewla brain executors --json         # Brain host and available executors
+mewla brain use <executor>           # switch the agent that runs Brain
+mewla brain work list --json         # open Work (-all, -full, -id for history)
+mewla brain work update -id <work> -status done
 
-zen worker list --json             # visible Workers
-zen worker capture -id <id> --json # transcript
-zen worker receipt -id <id> --work-id <work>  # was an input accepted?
-zen worker send -id <id> --work-id <work> -text "follow-up"
-zen worker close -id <id>
+mewla worker list --json             # visible Workers
+mewla worker capture -id <id> --json # transcript
+mewla worker receipt -id <id> --work-id <work>  # was an input accepted?
+mewla worker send -id <id> --work-id <work> -text "follow-up"
+mewla worker close -id <id>
 ```
 
 ## Configure executors
@@ -144,7 +144,7 @@ No configuration is required: built-in defaults cover `codex`, `claude`,
 authenticated CLI is enough. To customise:
 
 ```sh
-cp executors.example.toml ~/.zen/executors.toml   # then restart zen
+cp executors.example.toml ~/.mewla/executors.toml   # then restart mewla
 ```
 
 > [!WARNING]
@@ -169,7 +169,7 @@ shown back, and are separate from the Brain executor choice.
 | Brain, Workers, routing, durable Work lifecycle | Beta |
 | Calendar scheduled actions, Telegram channel | Beta ([Calendar](docs/calendar.md), [Telegram](docs/notifications.md#telegram)) |
 | Plugins (Linear, Notion, GitHub, Slack, Google Workspace) | Preview; first-time connection is not ready for every service ([Plugins](docs/plugins.md)) |
-| Zen Link relay | Optional source only. No hosted relay is operated. See [Zen Link Relay](docs/internal/zen-link-relay.md) |
+| Mewla Link relay | Optional source only. No hosted relay is operated. See [Mewla Link Relay](docs/internal/zen-link-relay.md) |
 | Web client | Out of scope |
 
 Known release issues: [docs/release-blockers.md](docs/release-blockers.md).
@@ -180,7 +180,7 @@ Known release issues: [docs/release-blockers.md](docs/release-blockers.md).
 bun install                              # workspace deps (Bun 1.3)
 
 # Daemon
-bun run daemon:build                     # builds bin/zen
+bun run daemon:build                     # builds bin/mewla
 cd daemon && go test ./...
 cd daemon && go run ./cmd/mewla-dev        # hot-reloading dev daemon
 
@@ -208,11 +208,11 @@ All documentation starts at [docs/README.md](docs/README.md).
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Keep
-changes small, run the relevant checks, and never commit pairing links, `~/.zen`
+changes small, run the relevant checks, and never commit pairing links, `~/.mewla`
 state, tunnel URLs or `.env.local`. Report vulnerabilities as described in
 [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The Zen name
+Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The Mewla name
 and logos are covered by [TRADEMARKS.md](TRADEMARKS.md).

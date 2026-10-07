@@ -1,4 +1,4 @@
-// Zen docs: mobile menu and client-side search over docs/search-index.json,
+// Mewla docs: mobile menu and client-side search over docs/search-index.json,
 // which scripts/site-docs/build.py writes as [{t: title, u: url, h: [[heading, id]], x: text}].
 (() => {
   const root = document.body.dataset.docsRoot || "./";

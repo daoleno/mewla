@@ -1,19 +1,19 @@
 # Get started
 
-Zen is for one person running many coding agents. A small Go daemon runs on
+Mewla is for one person running many coding agents. A small Go daemon runs on
 your Linux or macOS computer, next to your repositories, `tmux` and agent CLIs.
 The Android or iOS app connects to that daemon. Your code, credentials and agent
 state stay on your computer.
 
-Zen is in **beta**.
+Mewla is in **beta**.
 
 ## The pieces
 
 | Piece | Where it runs | What it does |
 | --- | --- | --- |
-| Daemon (`zen`) | Your computer | Owns Sessions, Brain, Work, pairing and settings. One binary, no cloud service. |
+| Daemon (`mewla`) | Your computer | Owns Sessions, Brain, Work, pairing and settings. One binary, no cloud service. |
 | App | Your phone | Shows the daemon's Sessions, Brain and settings. It connects to exactly one daemon at a time. |
-| Agent CLIs | Your computer | Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode. Zen launches and reads them; you sign in to each one yourself. |
+| Agent CLIs | Your computer | Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode. Mewla launches and reads them; you sign in to each one yourself. |
 | `tmux` | Your computer | Every Session is a `tmux` session, so it is also there at your desk. |
 
 ## Sessions
@@ -52,7 +52,7 @@ Everything below reads from the one daemon the app is connected to.
 
 ## One owner, one server
 
-Zen serves one person. The daemon has its own key; each phone enrolls once with
+Mewla serves one person. The daemon has its own key; each phone enrolls once with
 a short-lived pairing code and then signs every request. The app follows
 exactly one current server, and switching servers never mixes their data. See
 [Security and privacy](security-and-privacy.md).
@@ -66,8 +66,8 @@ exactly one current server, and switching servers never mixes their data. See
 
 ## Your first ten minutes
 
-1. [Install](install-daemon.md) the daemon and run `zen doctor`.
-2. Start it with `zen --lan` and scan the pairing QR code with the app.
+1. [Install](install-daemon.md) the daemon and run `mewla doctor`.
+2. Start it with `mewla --lan` and scan the pairing QR code with the app.
    [Connect and pair](connect-and-pair.md) covers other networks.
 3. Open **Sessions**, start an agent in one of your repositories and switch
    between Chat and Terminal.

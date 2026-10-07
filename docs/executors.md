@@ -1,12 +1,12 @@
 # Agents and executors
 
-Zen runs agent CLIs that are already installed and signed in on your computer.
+Mewla runs agent CLIs that are already installed and signed in on your computer.
 An **executor** is a named launch command, such as `claude` or
 `cursor-agent --force --sandbox disabled`. You need only one.
 
 ## Built-in executors
 
-With no configuration file, Zen uses these defaults:
+With no configuration file, Mewla uses these defaults:
 
 | Executor | Command | Approval prompts |
 | --- | --- | --- |
@@ -27,18 +27,18 @@ started with a Claude model is still a Cursor Session.
 
 ## Configure executors
 
-The configuration file `~/.zen/executors.toml` is optional. To write one with
+The configuration file `~/.mewla/executors.toml` is optional. To write one with
 prompts, run:
 
 ```sh
-zen setup
+mewla setup
 # or without prompts:
-zen setup --non-interactive --host codex --profile safe
+mewla setup --non-interactive --host codex --profile safe
 ```
 
 `--host` chooses the executor that runs Brain. `--profile` is `safe` or
 `autonomous`; autonomous asks for confirmation (`--yes` without prompts).
-`zen setup` never installs packages, runs `sudo` or signs in to providers.
+`mewla setup` never installs packages, runs `sudo` or signs in to providers.
 
 Or write the file yourself. Each `[[executors]]` entry overrides a built-in
 executor or adds a new one; an unknown command becomes a custom terminal agent:
@@ -53,7 +53,7 @@ name = "aider"
 command = "aider"
 ```
 
-Restart `zen` after changing the file. The file is only a catalog of launch
+Restart `mewla` after changing the file. The file is only a catalog of launch
 commands; nothing in it chooses which executor a Worker uses.
 
 ## Permission bypass risks
@@ -67,7 +67,7 @@ built-in `agent` (Cursor) and `grok` commands bypass approvals; `pi` is always
 permissive.
 
 **Brain Workers and Calendar scheduled actions** always run unattended,
-whatever your configuration says. Zen adds:
+whatever your configuration says. Mewla adds:
 
 | Agent | Added for unattended work |
 | --- | --- |
@@ -85,12 +85,12 @@ Recommendations:
    Brain.
 2. Use Brain and scheduled actions on machines and workspaces you are willing
    to let an agent change without asking.
-3. Remember that Zen reads agent transcripts from each agent's own home
+3. Remember that Mewla reads agent transcripts from each agent's own home
    directory, and that model providers see what agents send them.
 
 ### Safe profile
 
-Put this in `~/.zen/executors.toml` and restart `zen` so Sessions you start ask
+Put this in `~/.mewla/executors.toml` and restart `mewla` so Sessions you start ask
 for approval in their terminal:
 
 ```toml
@@ -122,7 +122,7 @@ command = "opencode"
 kind = "opencode"
 ```
 
-Delete the entries for agents you do not use. `zen setup --profile safe` writes
+Delete the entries for agents you do not use. `mewla setup --profile safe` writes
 an equivalent file.
 
 ## Worker routing
@@ -131,13 +131,13 @@ Brain chooses the executor, model and reasoning level for every Worker. Before
 each launch it reads `routing.md` in its workspace, a few lines of plain
 Markdown such as "use Codex with high reasoning for refactors". Brain rewrites
 a line when you state a preference, when a new model appears, or when a choice
-turned out badly. Zen itself never parses the file, and upgrades never
+turned out badly. Mewla itself never parses the file, and upgrades never
 overwrite it.
 
 A Worker launch looks like this:
 
 ```sh
-zen worker spawn -name "Fix flaky test" -executor claude \
+mewla worker spawn -name "Fix flaky test" -executor claude \
   -model claude-opus-5-5 -reasoning high -cwd /path/to/repo -prompt "..."
 ```
 
@@ -145,13 +145,13 @@ Without `-executor`, the Worker uses Brain's own executor. To move Brain itself
 to another agent, keeping its conversation:
 
 ```sh
-zen brain executors --json   # Brain's executor and the available ones
-zen brain use codex
+mewla brain executors --json   # Brain's executor and the available ones
+mewla brain use codex
 ```
 
 ### Model and reasoning flags
 
-Zen maps `-model` and `-reasoning` to each client's own flags:
+Mewla maps `-model` and `-reasoning` to each client's own flags:
 
 | Executor | `-model` becomes | `-reasoning` becomes |
 | --- | --- | --- |
@@ -172,14 +172,14 @@ Keep executor names for clients, not for capabilities: do not create
 
 Older configuration files may contain `delegated_executor`,
 `delegated_model` or `delegated_reasoning`. These keys are ignored, and
-`zen doctor` points them out; you can delete them.
+`mewla doctor` points them out; you can delete them.
 
 ## Check your agents
 
 ```sh
-zen doctor
+mewla doctor
 ```
 
-`zen doctor` reports which configured agents are on `PATH` and gives hints when
+`mewla doctor` reports which configured agents are on `PATH` and gives hints when
 one looks signed out. Model endpoints and API keys for Codex and Claude are set
 in the app; see [Providers and usage](providers-and-usage.md).

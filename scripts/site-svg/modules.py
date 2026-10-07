@@ -25,7 +25,7 @@ def radio(s, x, y, on, cls=""):
 def models():
     s = Svg("mp", W, 300, "Model Providers",
             "Model Providers for Codex and Claude. Codex uses the official login; OpenAI, DeepSeek and OpenRouter are saved providers, "
-            "DeepSeek still needs a key. Claude uses the Anthropic API. The Zen Provider Gateway is running.",
+            "DeepSeek still needs a key. Claude uses the Anthropic API. The Mewla Provider Gateway is running.",
             states=2)
     seg(s, 20, 20, 200, ["Codex", "Claude"], [[1], [2]])
     s.text(W - 20, 40, "Add", size=12, fill="sage", anchor="end", weight=500)
@@ -55,7 +55,7 @@ def models():
         s.end()
     y = 262
     s.rect(20, y - 4, W - 40, 34, rx=12, fill="panel2")
-    s.text(36, y + 17, "Zen Provider Gateway", size=12.5, weight=500)
+    s.text(36, y + 17, "Mewla Provider Gateway", size=12.5, weight=500)
     pill(s, W - 34, y + 3, "Running", fill="sageD", col="sage", size=10, anchor="end")
     return s.render()
 
@@ -263,7 +263,7 @@ def stats():
         s.text(36, y, k_, size=11.5, fill="faint")
         s.text(136, y, v, size=11.5, fill="amber" if k_ == "Reason" else "ink", mono=k_ in ("Input", "Output"))
     s.line(36, 252, W - 36, 252, stroke="line")
-    s.text(36, 270, "Unknown is not zero. Zen never borrows another model's price.", size=10.5, fill="dim")
+    s.text(36, 270, "Unknown is not zero. Mewla never borrows another model's price.", size=10.5, fill="dim")
     s.end()
     return s.render()
 
@@ -326,7 +326,7 @@ def services():
             states=2)
     s.text(20, 32, "Services", size=14, weight=600)
     s.text(W - 20, 32, "3 ports", size=10.5, fill="faint", anchor="end", mono=True)
-    groups = [("~/zen", [("8081", "metro", "Session · onboarding", "lan")]),
+    groups = [("~/mewla", [("8081", "metro", "Session · onboarding", "lan")]),
               ("~/site", [("5173", "vite", "Session · docs-sync", "lan"),
                           ("5432", "postgres", "Persistent · pg.service", "local")])]
     y = 50
@@ -352,7 +352,7 @@ def services():
     s.text(34, y + 36, "https://<random>.trycloudflare.com", size=11.5, fill="sage", mono=True)
     s.end()
     s.g("st s1")
-    s.text(20, y + 24, "Loopback stays local. Zen never invents a LAN URL.", size=11, fill="faint")
+    s.text(20, y + 24, "Loopback stays local. Mewla never invents a LAN URL.", size=11, fill="faint")
     s.end()
     return s.render()
 

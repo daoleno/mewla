@@ -62,7 +62,7 @@ or blocked diagrams fall back to the source with a short status label.
 Development fixture:
 
 ```text
-zen://screenshot-demo?demo=1&state=mermaid
+mewla://screenshot-demo?demo=1&state=mermaid
 ```
 
 Requires `EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1` in a development build.
@@ -78,7 +78,7 @@ component for cold first open, second open and late-response rejection.
 The existing development-only screenshot route has a `reading` scenario:
 
 ```text
-zen://screenshot-demo?demo=1&state=reading
+mewla://screenshot-demo?demo=1&state=reading
 ```
 
 It requires `EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1` in a development build. It uses
@@ -99,7 +99,7 @@ client release or iOS device proof.
 Message attachments, tool images, Markdown images and composer previews use the
 same typed image sources and fullscreen viewer on Android and iOS. Phone upload
 URIs retain their original grants. Persisted provider paths resolve through the
-Session's generation-bound file capability. External HTTP images receive no Zen
+Session's generation-bound file capability. External HTTP images receive no Mewla
 authorization. Images contain their full aspect ratio in bounded previews; tap
 opens inspection with pinch, pan, double-tap and gallery navigation. Text and code
 remain selectable. Markdown extraction uses structured tokens, including reference
@@ -120,7 +120,7 @@ shows subtle progress while pending and compact retry/remove on failure. Ready
 attachments show only their thumbnail or file chip, with no success label. Sending
 waits until attachments are ready or removed. Switching server or Session cancels
 pending work without deleting previously ready attachments. Android requires the
-updated Zen Debug native module; iOS uses Expo's multi-document picker.
+updated Mewla Debug native module; iOS uses Expo's multi-document picker.
 
 Attachment envelopes retain `content_type`, so a supported image without a file
 extension remains an image when history reloads. Data URLs are accepted for
