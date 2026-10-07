@@ -26,6 +26,7 @@ import { WorkerSessionSelectionBar } from "../components/workers/WorkerSessionSe
 import { usePrimarySelectionBar } from "../components/navigation/PrimarySelectionBar";
 import { groupWorkersByDirectory } from "../services/workerDirectory";
 import {
+  PRIMARY_SIDEBAR_BREAKPOINT,
   PrimaryDrawerShell,
   resolvePrimaryAppBarGeometry,
 } from "../components/navigation/PrimaryDrawerShell";
@@ -94,6 +95,13 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { sessionEmptyState } from "../services/sessionEmptyState";
 import { BrainCompanionContext, type BrainCompanion } from "../components/mewla/BrainCompanion";
 import type { BrainCatPresence, BrainCatState } from "../components/mewla/brainCatState";
+import { BrainWorkColumn, BrainWorkHeader } from "../components/brain/BrainWorkPanel";
+import {
+  brainWorkSurface,
+  type BrainCurrentWork,
+  type BrainObjective,
+  type BrainWorkerRef,
+} from "../components/brain/brainWorkSurface";
 import { BrainStatusState } from "../components/mewla/BrainStatusState";
 import { SealCat } from "../components/mewla/SealCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
@@ -671,10 +679,30 @@ function TerminalPaletteDemo() {
 
 /** Brain fixtures: the cat's state between turns, keyed by `fixture`. */
 const BRAIN_DEMO_PRESENCE: Record<string, BrainCatPresence> = {
-  attention: { state: "attention", workTitle: "Sync fix needs your call", workId: "desk-sync" },
-  work: { state: "attention", workTitle: "Sync fix needs your call", workId: "desk-sync" },
-  delivered: { state: "delivered", workTitle: "Weekly dependency report" },
-  delegating: { state: "delegating", workTitle: "Mobile regression sweep" },
+  attention: { state: "attention", count: 1, workIds: ["desk-sync"] },
+  work: { state: "attention", count: 1, workIds: ["desk-sync"] },
+  delivered: { state: "delivered", count: 1 },
+  delegating: { state: "delegating", count: 3 },
+};
+
+type BrainWorkDemo = {
+  objective: BrainObjective;
+  currentWork: BrainCurrentWork[];
+  workers: BrainWorkerRef[];
+};
+
+/** Fixture for the goal line and Work column: the mock's atlas-notes desk. */
+const BRAIN_GOAL_DEMO: BrainWorkDemo = {
+  objective: { title: "Ship atlas-notes v1.4 this week", total: 5, back: 2 },
+  currentWork: [
+    { work_id: "desk-sync", revision: 3, title: "Sync fix needs your call", status: "waiting", progress_mode: "waiting", unread_result: true, wait_for: "Keep both copies, or the newest edit?", wake: { kind: "user_input", ref: "Keep both copies, or the newest edit?" }, updated_at: new Date(Date.now() - 4 * 60_000).toISOString() },
+    { work_id: "desk-settings", revision: 2, title: "Tidy the settings copy", status: "running", progress_mode: "owned", attempt_session_id: "%41", attempt_delegated: true, unread_result: false, updated_at: new Date(Date.now() - 60_000).toISOString() },
+    { work_id: "desk-wording", revision: 4, title: "Conflict wording", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true, summary: "Five apps compared. “Conflicted copy” wins 3 of 5.", updated_at: new Date(Date.now() - 18 * 60_000).toISOString() },
+    { work_id: "desk-notes", revision: 1, title: "Draft the release notes", status: "waiting", progress_mode: "waiting", unread_result: false, wait_for: "Waiting on the sync fix", wake: { kind: "session_terminal", ref: "%40" }, updated_at: new Date(Date.now() - 30 * 60_000).toISOString() },
+  ],
+  workers: [
+    { id: "%41", name: "settings-copy", status: "running", command: "claude", cwd: "/home/me/atlas-notes", summary: "Rewriting strings · 7 of 12" },
+  ],
 };
 
 function BrainDemo() {
@@ -691,20 +719,21 @@ function BrainDemo() {
       </PrimaryDrawerShell>
     );
   }
-  const presence = fixture ? BRAIN_DEMO_PRESENCE[fixture] : undefined;
+  const presence = fixture === "goal" ? { state: "idle" as const } : fixture ? BRAIN_DEMO_PRESENCE[fixture] : undefined;
   const companion: BrainCompanion = { presence: presence ?? { state: "idle" }, animate: true };
   return (
     <BrainCompanionContext.Provider value={companion}>
       <BrainChatDemo
         empty={fixture === "empty"}
         running={fixture !== "empty" && !presence}
-        events={fixture === "work" ? SCREENSHOT_BRAIN_WORK_DESK : fixture === "attention" ? SCREENSHOT_BRAIN_NEEDS : SCREENSHOT_BRAIN_EVENTS}
+        events={fixture === "work" || fixture === "goal" ? SCREENSHOT_BRAIN_WORK_DESK : fixture === "attention" ? SCREENSHOT_BRAIN_NEEDS : SCREENSHOT_BRAIN_EVENTS}
+        work={fixture === "goal" ? BRAIN_GOAL_DEMO : undefined}
       />
     </BrainCompanionContext.Provider>
   );
 }
 
-function BrainChatDemo({ empty, running, events }: { empty: boolean; running: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS }) {
+function BrainChatDemo({ empty, running, events, work }: { empty: boolean; running: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS; work?: BrainWorkDemo }) {
   const { theme: zenTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { chrome, theme } = useMemo(
@@ -734,11 +763,26 @@ function BrainChatDemo({ empty, running, events }: { empty: boolean; running: bo
     onRetryPendingUserMessage: NOOP,
   });
   const hasContent = draft.trim().length > 0;
-  const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
+  const appBarInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
+  const { width } = useWindowDimensions();
+  const workColumn = Boolean(work) && width >= PRIMARY_SIDEBAR_BREAKPOINT;
+  const surface = useMemo(() => brainWorkSurface(work?.currentWork, work?.workers), [work]);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const topChromeInset = appBarInset + (work ? headerHeight : 0);
 
   return (
     <PrimaryDrawerShell activePrimaryRoute="brain" onSelectPrimaryRoute={NOOP}>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+      <View style={{ flex: 1 }}>
       <ChatCanvas chrome={chrome}>
+        {work ? (
+          <View
+            onLayout={(event) => setHeaderHeight(Math.ceil(event.nativeEvent.layout.height))}
+            style={{ position: "absolute", top: appBarInset, left: 0, right: 0, zIndex: 2, paddingHorizontal: 16, backgroundColor: chrome.appBackground }}
+          >
+            <BrainWorkHeader objective={work.objective} surface={surface} chrome={chrome} showSummary={!workColumn} onOpenWork={NOOP} />
+          </View>
+        ) : null}
         <InterfaceChatKeyboardFrame
           enabled
           keyboardVerticalOffset={0}
@@ -748,7 +792,7 @@ function BrainChatDemo({ empty, running, events }: { empty: boolean; running: bo
             <InterfaceChatComposer
               inputRef={inputRef}
               draft={draft}
-              placeholder="Ask Brain"
+              placeholder="Tell Brain…"
               editable
               focused={focused}
               canAttach
@@ -825,6 +869,11 @@ function BrainChatDemo({ empty, running, events }: { empty: boolean; running: bo
           )}
         />
       </ChatCanvas>
+      </View>
+      {workColumn ? (
+        <BrainWorkColumn surface={surface} chrome={chrome} topInset={appBarInset} animate onOpenSlip={NOOP} />
+      ) : null}
+      </View>
     </PrimaryDrawerShell>
   );
 }

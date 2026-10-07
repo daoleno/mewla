@@ -489,6 +489,11 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	}
 	snapshot.CurrentWork = inventory.Current
 	snapshot.WorkBacklog = inventory.Backlog
+	objective, err := s.store.CurrentObjective()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snapshot.Objective = objective
 	snapshot.WorklogPath = s.store.WorklogPath()
 	return snapshot, nil
 }
@@ -530,6 +535,11 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	}
 	snapshot.CurrentWork = inventory.Current
 	snapshot.WorkBacklog = inventory.Backlog
+	objective, err := s.store.CurrentObjective()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snapshot.Objective = objective
 	return snapshot, nil
 }
 
@@ -592,6 +602,7 @@ func (s *Service) Context() (BrainContext, error) {
 		Personality:  snapshot.Personality,
 		CurrentWork:  snapshot.CurrentWork,
 		WorkBacklog:  snapshot.WorkBacklog,
+		Objective:    snapshot.Objective,
 		Playbooks:    playbooks.Playbooks,
 		HostWorker:   snapshot.HostWorker,
 		HostExecutor: snapshot.HostExecutor,
@@ -2633,7 +2644,7 @@ func calendarWaitCondition(run calendar.Run) string {
 
 func calendarWorkID(itemID, runID string) string {
 	digest := sha256.Sum256([]byte(strings.TrimSpace(itemID) + "\x00" + strings.TrimSpace(runID)))
-	return fmt.Sprintf("calendar-%x", digest[:12])
+	return fmt.Sprintf("%s%x", calendarWorkPrefix, digest[:12])
 }
 
 // Host replacement reasons are durable audit tags written to host_replacements.jsonl.

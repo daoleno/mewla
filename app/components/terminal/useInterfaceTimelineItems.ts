@@ -18,7 +18,10 @@ import {
 } from "./projectZenTimeline";
 import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 import { useBrainCompanion } from "../mewla/BrainCompanion";
-import { mergeBrainPresenceIntoTimeline } from "../mewla/brainPresenceTimeline";
+import {
+  foldBrainToolRows,
+  mergeBrainPresenceIntoTimeline,
+} from "../mewla/brainPresenceTimeline";
 
 type StableTimelineEntry = {
   item: ZenTimelineItem;
@@ -123,7 +126,9 @@ export function useInterfaceTimelineItems({
     () =>
       mergeBrainPresenceIntoTimeline(
         mergeRunningActivityIntoTimeline(
-          providerTimelineItemsWithTurnFocus,
+          brainPresence
+            ? foldBrainToolRows(providerTimelineItemsWithTurnFocus)
+            : providerTimelineItemsWithTurnFocus,
           runningActivity,
         ),
         brainPresence,
