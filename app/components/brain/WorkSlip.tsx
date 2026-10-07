@@ -66,16 +66,25 @@ export function WorkSlip({
         pressed ? styles.slipPressed : null,
       ]}
     >
-      <View style={styles.meta}>
-        <Text numberOfLines={1} style={styles.who}>
-          {meta}
-        </Text>
+      {/* With no who · when to show, the state sits beside the title. */}
+      <View style={meta ? styles.meta : styles.titleRow}>
+        {meta ? (
+          <Text numberOfLines={1} style={styles.who}>
+            {meta}
+          </Text>
+        ) : (
+          <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={[styles.title, styles.titleInRow]}>
+            {title}
+          </Text>
+        )}
         {unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
         <WorkStatusWord status={status} label={statusLabel} chrome={chrome} />
       </View>
-      <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
-        {title}
-      </Text>
+      {meta ? (
+        <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
+          {title}
+        </Text>
+      ) : null}
       {summary ? (
         <Text numberOfLines={BRAIN_WORK_CARD_SUMMARY_LINES} style={styles.summary}>
           {summary}
@@ -172,6 +181,15 @@ function createWorkSlipStyles(chrome: TerminalThemeChrome) {
       alignItems: "center",
       gap: BRAIN_WORK_CARD_GAP,
       marginBottom: 6,
+    },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: BRAIN_WORK_CARD_GAP,
+    },
+    titleInRow: {
+      flex: 1,
+      minWidth: 0,
     },
     who: {
       ...TypeScale.caption,

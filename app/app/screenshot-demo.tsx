@@ -96,8 +96,12 @@ import { sessionEmptyState } from "../services/sessionEmptyState";
 import { BrainCompanionContext, type BrainCompanion } from "../components/mewla/BrainCompanion";
 import type { BrainCatPresence, BrainCatState } from "../components/mewla/brainCatState";
 import { BrainWorkColumn, BrainWorkHeader } from "../components/brain/BrainWorkPanel";
-import { brainWorkSurface } from "../components/brain/brainWorkSurface";
-import type { BrainCurrentWork, BrainObjective, BrainWorkerRef } from "../store/brain";
+import {
+  brainWorkSurface,
+  type BrainCurrentWork,
+  type BrainObjective,
+  type BrainWorkerRef,
+} from "../components/brain/brainWorkSurface";
 import { BrainStatusState } from "../components/mewla/BrainStatusState";
 import { SealCat } from "../components/mewla/SealCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
