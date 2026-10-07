@@ -111,6 +111,9 @@ func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTransc
 		// from the daemon's cwd. Never bind another account's HOME transcript.
 		return claudeTranscriptCandidate{}, false, nil
 	}
+	if candidate, owned, found := claudeProcessOwnedTranscript(worker, configDir); owned {
+		return candidate, found, nil
+	}
 
 	var candidates []claudeTranscriptCandidate
 	for _, candidateCWD := range transcriptCWDCandidates(cwd) {
@@ -179,6 +182,36 @@ func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTransc
 		return freshCandidates[0], true, nil
 	}
 	return claudeTranscriptCandidate{}, false, nil
+}
+
+// claudeProcessOwnedTranscript binds the transcript named by Claude's process
+// registry (<config>/sessions/<pid>.json) for the Worker's live process. The
+// start-time heuristic below cannot separate Sessions launched within seconds
+// in one cwd; the registry is exact. owned reports a live record for this
+// process: its transcript is then the only candidate, even before Claude's
+// first write creates it. Registry failures (missing, stale, malformed or
+// other-cwd records) are not evidence loss; they leave the heuristic in charge.
+func claudeProcessOwnedTranscript(worker classifier.Worker, configDir string) (candidate claudeTranscriptCandidate, owned, found bool) {
+	if worker.ProcessID <= 0 {
+		return claudeTranscriptCandidate{}, false, false
+	}
+	record, live, err := claudeProcessRecord(configDir, worker.ProcessID)
+	if err != nil || !live || !pathsEquivalent(record.Cwd, worker.Cwd) {
+		return claudeTranscriptCandidate{}, false, false
+	}
+	path := filepath.Join(configDir, "projects", encodeClaudeProjectDir(record.Cwd), record.SessionID+".jsonl")
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return claudeTranscriptCandidate{}, true, false
+	}
+	updated := info.ModTime()
+	return claudeTranscriptCandidate{
+		ID:        record.SessionID,
+		CWD:       record.Cwd,
+		Path:      path,
+		CreatedAt: claudeTranscriptCreatedAt(path, updated),
+		Updated:   updated,
+	}, true, true
 }
 
 func isClaudeTranscriptFresh(updated, now time.Time) bool {
