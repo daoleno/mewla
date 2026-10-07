@@ -322,9 +322,10 @@ export function BrowserScreen() {
             <EmptyState icon="construct-outline" title="Browser needs setup on this server" detail={reason}
               action={{ label: "Check again", icon: "refresh", onPress: () => void run("enter", enter), loading: busy === "enter" }} />
           ) : (
+            // While a notice offers recovery, it is the screen's one action.
             <EmptyState icon="globe-outline" title="No browser yet"
               detail={`Sign-ins are kept on ${serverName}.`}
-              action={{ label: "Open browser", icon: "open-outline", onPress: () => void run("open", () => open(target)) }} />
+              action={issue ? undefined : { label: "Open browser", icon: "open-outline", onPress: () => void run("open", () => open(target)) }} />
           )}
         </View>
       </View>
