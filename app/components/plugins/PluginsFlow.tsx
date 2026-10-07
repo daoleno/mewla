@@ -335,4 +335,4 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
     </KeyboardAwareScrollView>
   </View>;
 }
-const styles = StyleSheet.create({ content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16 } });
+const styles = StyleSheet.create({ content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: 760, alignSelf: "center" } });
