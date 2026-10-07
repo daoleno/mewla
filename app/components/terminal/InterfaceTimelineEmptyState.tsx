@@ -22,6 +22,8 @@ interface InterfaceTimelineEmptyStateProps {
   actionLabel?: string;
   actionIcon?: IoniconName;
   onAction?: () => void;
+  /** An empty or loading conversation: Brain shows its seal cat here. */
+  conversationEmpty?: boolean;
 }
 
 /**
@@ -40,11 +42,12 @@ export function InterfaceTimelineEmptyState({
   actionLabel,
   actionIcon = "terminal-outline",
   onAction,
+  conversationEmpty = false,
 }: InterfaceTimelineEmptyStateProps) {
   const ink = tone === "error" ? chrome.danger : chrome.accent;
   const inkSoft = tone === "error" ? chrome.dangerSoft : chrome.accentSoft;
   const companion = useBrainCompanion();
-  const seal = companion && tone !== "error";
+  const seal = companion && conversationEmpty;
   return (
     <View style={styles.emptyState} accessibilityLiveRegion="polite">
       {seal ? (
