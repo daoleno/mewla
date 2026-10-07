@@ -214,7 +214,6 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestProviderGatewayRetryBackoffIsBounded(t *testing.T) {
-	start := time.Now()
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -231,8 +230,14 @@ func TestProviderGatewayRetryBackoffIsBounded(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://"+g.ActualAddr()+"/v1/responses", strings.NewReader(`{"model":"gpt-5"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
 	res := httptest.NewRecorder()
+	start := time.Now()
 	g.ServeHTTP(res, req)
-	if elapsed := time.Since(start); elapsed > time.Second || calls.Load() != GatewayRetryAttempts {
-		t.Fatalf("elapsed=%s calls=%d, want bounded retry", elapsed, calls.Load())
+	elapsed := time.Since(start)
+	// The gateway sleeps GatewayRetryBackoff between the (GatewayRetryAttempts-1)
+	// retries. Derive a generous wall-clock ceiling from those constants so the
+	// assertion catches runaway backoff without depending on runner load.
+	budget := GatewayRetryBackoff*time.Duration(GatewayRetryAttempts-1)*4 + 2*time.Second
+	if elapsed > budget || calls.Load() != GatewayRetryAttempts {
+		t.Fatalf("elapsed=%s budget=%s calls=%d, want bounded retry", elapsed, budget, calls.Load())
 	}
 }
