@@ -13,14 +13,14 @@ interface ZenPlanStepRowProps {
   theme: TerminalThemePalette;
 }
 
-export function ZenPlanStepRow({ step, chrome, theme }: ZenPlanStepRowProps) {
+export function ZenPlanStepRow({ step, chrome }: ZenPlanStepRowProps) {
   const completed = step.status === "completed";
   const inProgress = step.status === "in_progress";
   const marker = completed ? "\u2714" : "\u25a1";
   const color = completed
     ? chrome.textSubtle
     : inProgress
-      ? theme.cyan
+      ? chrome.statusRunning
       : chrome.textMuted;
 
   return (

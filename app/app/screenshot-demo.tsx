@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRootNavigationState, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRootNavigationState, useRouter } from "expo-router";
 import { useWindowDimensions } from "react-native";
 import {
   SafeAreaView,
@@ -52,6 +52,8 @@ import {
   SCREENSHOT_BRAIN_NEEDS,
   SCREENSHOT_BRAIN_WORK_DESK,
   SCREENSHOT_CHAT_EVENTS,
+  SCREENSHOT_PLUGIN_ACCOUNTS,
+  SCREENSHOT_PLUGINS,
   SCREENSHOT_SESSION_AGENTS,
   SCREENSHOT_STATS_FIXTURE,
   screenshotChatPendingUserMessages,
@@ -85,6 +87,10 @@ import type { BrainCatPresence, BrainCatState } from "../components/mewla/brainC
 import { BrainStatusState } from "../components/mewla/BrainStatusState";
 import { SealCat } from "../components/mewla/SealCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
+import { CatalogView, LinkedAccountView, ServiceHeader } from "../components/plugins/PluginConnectionViews";
+import { ServerContextRow } from "../components/extensions/ServerContextRow";
+import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
+import { pluginJobs } from "../services/pluginOnboarding";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
 
 const NOOP = () => undefined;
@@ -128,6 +134,8 @@ export default function ScreenshotDemoRoute() {
       return <CalendarDemo />;
     case "providers":
       return <ProvidersDemo />;
+    case "plugins":
+      return <PluginsDemo />;
     case "profile":
       return <InterfaceDevicePerformanceDemoGate />;
     case "reading":
@@ -1418,3 +1426,77 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
 });
+
+/**
+ * Plugins without a live server: the real catalog and service views with
+ * fixture accounts, under the same header the Plugins stack uses.
+ */
+function PluginsDemo() {
+  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  const colors = useAppColors();
+  const P = SCREENSHOT_PLUGINS;
+  const A = SCREENSHOT_PLUGIN_ACCOUNTS;
+  const github = fixture === "github";
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: github ? "GitHub" : "Plugins",
+          headerStyle: { backgroundColor: colors.bgPrimary },
+          headerTintColor: colors.textPrimary,
+          headerShadowVisible: false,
+          headerTitleAlign: "center",
+          headerTitleStyle: { fontFamily: TypeScale.label.fontFamily, fontSize: 17, color: colors.textPrimary },
+          headerLeft: () => <HeaderBackButton onPress={NOOP} />,
+        }}
+      />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: 760, alignSelf: "center" }}>
+        {github ? (
+          <>
+            <ServiceHeader plugin={P.github} account={A.github} />
+            <LinkedAccountView
+              plugin={P.github}
+              account={A.github}
+              job={pluginJobs.github}
+              custom={false}
+              busy={false}
+              accountCount={1}
+              onRecover={NOOP}
+              onOpenPermissions={NOOP}
+              onOpenAccounts={NOOP}
+              onOpenTools={NOOP}
+            />
+          </>
+        ) : (
+          <>
+            <ServerContextRow name="Studio computer" connection="connected" />
+            <CatalogView
+              sections={{
+                connected: [
+                  { account: A.github, plugin: P.github },
+                  { account: A.notion, plugin: P.notion },
+                  { account: A.linear, plugin: P.linear },
+                ],
+                services: [
+                  { plugin: P.google, accountCount: 0 },
+                  { plugin: P.slack, accountCount: 0 },
+                ],
+                custom: [
+                  { plugin: P.mcp, accountCount: 0 },
+                  { plugin: P.openapi, accountCount: 0 },
+                ],
+              }}
+              loading={false}
+              error=""
+              onRetry={NOOP}
+              onOpenAccount={NOOP}
+              onOpenService={NOOP}
+              onOpenCustom={NOOP}
+            />
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}

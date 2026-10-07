@@ -38,7 +38,7 @@ export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
       importantForAccessibility="no-hide-descendants"
       style={[styles.glyph, { width: size, height: size, borderRadius: size * 0.3, backgroundColor: theme.materials.tint }]}
     >
-      <Ionicons name={SERVICE_ICONS[id] ?? "extension-puzzle-outline"} size={Math.round(size * 0.6)} color={colors.accentStrong} />
+      <Ionicons name={SERVICE_ICONS[id] ?? "extension-puzzle-outline"} size={Math.round(size * 0.6)} color={colors.textPrimary} />
     </View>
   );
 }

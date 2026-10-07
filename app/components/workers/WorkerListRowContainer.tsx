@@ -90,6 +90,7 @@ function WorkerListRowContainerComponent({
           : formatTelegramListTime(agent.updated_at)
       }
       status={agent.status}
+      needsYou={agent.needs_attention === true}
       brainDelegated={Boolean(agent.delegated)}
       onPress={handlePress}
       onLongPress={handleLongPress}

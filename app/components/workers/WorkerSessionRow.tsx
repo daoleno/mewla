@@ -35,6 +35,8 @@ interface WorkerSessionRowProps {
   previewPrefix?: string;
   timeLabel: string;
   status: WorkerStatus;
+  /** The Session waits on you: the seal mark replaces the status glyph. */
+  needsYou?: boolean;
   brainDelegated?: boolean;
   onPress: () => void;
   onLongPress: () => void;
@@ -59,6 +61,7 @@ export function WorkerSessionRow({
   previewPrefix,
   timeLabel,
   status,
+  needsYou = false,
   brainDelegated = false,
   onPress,
   onLongPress,
@@ -73,7 +76,7 @@ export function WorkerSessionRow({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const previewColor = previewToneColor(previewTone, colors);
   const activelyRunning = isWorkerActivelyRunning(status);
-  const statusMark = WORKER_STATUS_MARK[status];
+  const statusMark = needsYou ? 'needs' : WORKER_STATUS_MARK[status];
   const inSelectionMode = selectionMode;
   const rowDisabled = inSelectionMode && selectionDisabled;
 
@@ -82,7 +85,7 @@ export function WorkerSessionRow({
       style={[
         styles.row,
         cornerStyle,
-        (activelyRunning || (inSelectionMode && selected)) && styles.rowActive,
+        inSelectionMode && selected && styles.rowActive,
       ]}
       preset="card"
       onPress={inSelectionMode ? onToggleSelection : onPress}
@@ -175,6 +178,8 @@ function previewToneColor(tone: SessionPreviewTone, colors: AppColors): string {
       return colors.accent;
     case 'danger':
       return colors.dangerText;
+    case 'needs':
+      return colors.sealText;
     case 'success':
       return colors.success;
     case 'muted':

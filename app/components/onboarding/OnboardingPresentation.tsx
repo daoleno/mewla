@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { ZenLogoMark } from "../ui/ZenLogoMark";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { SealCat } from "../mewla/SealCat";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 
@@ -42,13 +43,18 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
             detail={error || serverName}
             icon={connected ? "checkmark-circle-outline" : "server-outline"}
             busy={connecting}
+            // The cat's first moment: it moves into the seal once paired.
+            art={<SealCat state={connected ? "idle" : connecting ? "waking" : "offline"} size={120} />}
             action={connected ? { label: "Open Brain", icon: "arrow-forward", onPress: onContinue } : connecting ? undefined : { label: "Retry connection", icon: "refresh-outline", onPress: onRetry }}
             secondary={!connected ? { label: "Server settings", icon: "settings-outline", onPress: onSettings } : undefined}
           />
         ) : (
           <>
             <View style={styles.heading}>
-              <Text accessibilityRole="header" style={[styles.title, { color: colors.textPrimary }]}>Connect your computer</Text>
+              {/* An empty seal until a computer is paired: Brain has no home yet. */}
+              <SealCat state="homeless" size={120} />
+              <Text accessibilityRole="header" style={[styles.title, { color: colors.textPrimary }]}>Give Brain a home</Text>
+              <Text style={[styles.lede, { color: colors.textSecondary }]}>Brain lives on your computer. Pair this phone with it once.</Text>
             </View>
             <View style={styles.actions}>
               <Button variant="filled" size="lg" block icon="qr-code-outline" label="Scan pairing code"
@@ -97,8 +103,9 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, width: "100%", maxWidth: 520, alignSelf: "center", padding: 24, paddingBottom: 32 },
   brand: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 18 },
   brandName: { ...TypeScale.heading, fontSize: 27, letterSpacing: 0 },
-  heading: { gap: 10, paddingTop: 24, paddingBottom: 28 },
-  title: { ...TypeScale.heading, fontSize: 26, lineHeight: 33, letterSpacing: 0 },
+  heading: { gap: 10, paddingTop: 32, paddingBottom: 32, alignItems: "center" },
+  title: { ...TypeScale.largeTitle, marginTop: 14, textAlign: "center" },
+  lede: { ...TypeScale.body, textAlign: "center", maxWidth: 300 },
   actions: { gap: 12 },
   setup: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 32 },
   setupHeader: { minHeight: 60, paddingVertical: 14, gap: 10, flexDirection: "row", alignItems: "center" },

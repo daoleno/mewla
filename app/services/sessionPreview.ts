@@ -1,7 +1,7 @@
 import type { Worker } from '../store/workers';
 import { stripAnsiText } from './ansiText';
 
-export type SessionPreviewTone = 'default' | 'muted' | 'accent' | 'danger' | 'success';
+export type SessionPreviewTone = 'default' | 'muted' | 'accent' | 'danger' | 'success' | 'needs';
 
 export type SessionPreview = {
   text: string;
@@ -59,9 +59,11 @@ export function formatWorkerSessionPreview(
 
   if (agent.status === 'blocked' || agent.status === 'failed') {
     const detail = agent.attention?.trim() || agent.phase?.trim();
+    // Seal & Slip: only failure is oxblood; a waiting Session is the seal
+    // when it waits on you, and plain otherwise.
     return {
       text: lastLine || summary || detail || 'No recent output',
-      tone: 'danger',
+      tone: agent.status === 'failed' ? 'danger' : agent.needs_attention ? 'needs' : 'default',
       prefix: serverPrefix,
     };
   }
@@ -77,7 +79,7 @@ export function formatWorkerSessionPreview(
   if (agent.needs_attention) {
     return {
       text: agent.attention?.trim() || 'Waiting for input',
-      tone: 'danger',
+      tone: 'needs',
       prefix: serverPrefix,
     };
   }

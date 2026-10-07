@@ -570,11 +570,11 @@ export default function SettingsScreen() {
                   title={server.name}
                   subtitle={`${status} · ${endpoint}`}
                   leading={
-                    <View style={[styles.serverGlyph, { backgroundColor: theme.materials.tint }]}>
+                    <View style={styles.serverGlyph}>
                       <Ionicons
                         name="desktop-outline"
-                        size={17}
-                        color={colors.accentStrong}
+                        size={20}
+                        color={colors.textSecondary}
                       />
                       {/* Healthy servers stay clean; only a state to act on gets a dot. */}
                       {connectionIssue || connectionState !== "connected" ? (
@@ -594,7 +594,7 @@ export default function SettingsScreen() {
                   }
                   trailing={
                     current ? (
-                      <AppText variant="micro" style={[styles.inUse, { color: colors.accentStrong, backgroundColor: theme.materials.tint }]}>
+                      <AppText variant="micro" style={[styles.inUse, { color: colors.textPrimary, backgroundColor: theme.materials.tint }]}>
                         In use
                       </AppText>
                     ) : null
@@ -1259,8 +1259,8 @@ function TelegramConnectionRow({
         title="Telegram"
         subtitle={visibleStatus?.bot_username ? `@${visibleStatus.bot_username}` : stateLabel}
         leading={
-          <View style={[styles.serverGlyph, { backgroundColor: theme.materials.tint }]}>
-            <Ionicons name="paper-plane" size={16} color={colors.accentStrong} />
+          <View style={styles.serverGlyph}>
+            <Ionicons name="paper-plane-outline" size={20} color={colors.textSecondary} />
           </View>
         }
         trailing={
