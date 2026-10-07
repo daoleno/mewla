@@ -18,7 +18,7 @@ function createNativeAndroidDownloadBackend(): SessionFileDownloadBackend {
     async pickDirectory() {
       if (!native?.download) {
         throw new Error(
-          "This Zen build does not include the native Android download transport. Install the latest Android build and try again.",
+          "This Mewla build does not include the native Android download transport. Install the latest Android build and try again.",
         );
       }
       const directory = await Directory.pickDirectoryAsync();
@@ -40,7 +40,7 @@ function createNativeAndroidDownloadBackend(): SessionFileDownloadBackend {
     async download(uri, destination, options) {
       if (!native?.download) {
         throw new Error(
-          "This Zen build does not include the native Android download transport.",
+          "This Mewla build does not include the native Android download transport.",
         );
       }
       await native.download({

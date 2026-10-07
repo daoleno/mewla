@@ -1,6 +1,7 @@
 /**
  * Expo config plugin: package Ghostty MIT notice into Android assets and
- * wire optional release signing from ZEN_ANDROID_* environment variables.
+ * wire optional release signing from MEWLA_ANDROID_* environment variables
+ * (legacy ZEN_ANDROID_* names are still honoured; MEWLA_* wins).
  *
  * Secrets are read only from process environment inside Gradle (never printed).
  * Idempotent: re-running prebuild replaces the @generated blocks.
@@ -48,7 +49,7 @@ function injectMetroGradle(contents) {
 
 function writeMetroDebugSources(platformRoot) {
   const root = path.join(platformRoot, 'app/src/debug');
-  const java = path.join(root, 'java/com/daoleno/zen');
+  const java = path.join(root, 'java/com/daoleno/mewla');
   fs.mkdirSync(java, { recursive: true });
   fs.copyFileSync(path.join(__dirname, 'android/MetroConnectActivity.kt'), path.join(java, 'MetroConnectActivity.kt'));
   fs.copyFileSync(path.join(__dirname, 'android/metro-debug-manifest.xml'), path.join(root, 'AndroidManifest.xml'));
@@ -77,17 +78,17 @@ function escapeRegExp(s) {
 }
 
 /**
- * Pure helper: debug buildType shows as "Zen Debug" with a separate package id
- * so it can sit alongside the release "Zen" install.
+ * Pure helper: debug buildType shows as "Mewla Debug" with a separate package id
+ * so it can sit alongside the release "Mewla" install.
  */
 function injectDebugIdentityGradle(contents) {
   let next = stripGenerated(contents, BEGIN_DEBUG_BT, END_DEBUG_BT);
 
   const debugIdentity = `
             ${BEGIN_DEBUG_BT}
-            // Side-by-side with release: launcher "Zen Debug", package *.debug
+            // Side-by-side with release: launcher "Mewla Debug", package *.debug
             applicationIdSuffix ".debug"
-            resValue "string", "app_name", "Zen Debug"
+            resValue "string", "app_name", "Mewla Debug"
             ${END_DEBUG_BT}
 `;
 
@@ -115,12 +116,12 @@ function injectReleaseSigningGradle(contents) {
         ${BEGIN_SIGNING}
         release {
             // Optional release keystore via env (never commit secrets).
-            def zenKs = System.getenv("ZEN_ANDROID_KEYSTORE")
+            def zenKs = System.getenv("MEWLA_ANDROID_KEYSTORE") ?: System.getenv("ZEN_ANDROID_KEYSTORE")
             if (zenKs != null && !zenKs.toString().trim().isEmpty()) {
                 storeFile file(zenKs.toString())
-                storePassword System.getenv("ZEN_ANDROID_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("ZEN_ANDROID_KEY_ALIAS")
-                keyPassword System.getenv("ZEN_ANDROID_KEY_PASSWORD")
+                storePassword (System.getenv("MEWLA_ANDROID_KEYSTORE_PASSWORD") ?: System.getenv("ZEN_ANDROID_KEYSTORE_PASSWORD"))
+                keyAlias (System.getenv("MEWLA_ANDROID_KEY_ALIAS") ?: System.getenv("ZEN_ANDROID_KEY_ALIAS"))
+                keyPassword (System.getenv("MEWLA_ANDROID_KEY_PASSWORD") ?: System.getenv("ZEN_ANDROID_KEY_PASSWORD"))
             }
         }
         ${END_SIGNING}
@@ -145,8 +146,8 @@ function injectReleaseSigningGradle(contents) {
 
   const releaseSigningUse = `
             ${BEGIN_RELEASE_BT}
-            // Prefer ZEN_ANDROID_KEYSTORE env when set; otherwise debug keystore (dev sideload).
-            def zenKs = System.getenv("ZEN_ANDROID_KEYSTORE")
+            // Prefer MEWLA_ANDROID_KEYSTORE (legacy ZEN_ANDROID_KEYSTORE) env when set; otherwise debug keystore (dev sideload).
+            def zenKs = System.getenv("MEWLA_ANDROID_KEYSTORE") ?: System.getenv("ZEN_ANDROID_KEYSTORE")
             if (zenKs != null && !zenKs.toString().trim().isEmpty()) {
                 signingConfig signingConfigs.release
             } else {

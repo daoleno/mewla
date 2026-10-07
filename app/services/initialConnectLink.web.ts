@@ -1,7 +1,7 @@
 const PAIR_FRAGMENT_KEY = "pair";
 
 /**
- * `zen web` opens `<origin>/#pair=<zen pairing link>`. The fragment never
+ * `mewla web` opens `<origin>/#pair=<mewla pairing link>`. The fragment never
  * reaches the daemon or proxies; it is read once and removed from history.
  */
 export async function readInitialConnectLink(): Promise<string | null> {

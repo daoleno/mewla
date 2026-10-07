@@ -34,6 +34,8 @@ const CONNECT_PARAM_ALIASES = {
   enrollmentToken: ["t", "enrollment_token"],
 } as const;
 const CONNECT_PARAM_PAYLOAD = "p";
+// mewla:// is current; zen:// links printed by older daemons stay importable.
+const CONNECT_LINK_PROTOCOLS: readonly string[] = ["mewla:", "zen:"];
 const CONNECT_PAYLOAD_VERSION = 1;
 const CONNECT_PUBLIC_KEY_BYTES = 32;
 const CONNECT_TOKEN_BYTES = 32;
@@ -94,7 +96,7 @@ export function parseConnectLink(
       if (!link || link.length > MAX_CONNECT_PAYLOAD_CHARACTERS) return null;
       parsed = new URL(link);
     }
-    if (parsed.protocol !== "zen:") {
+    if (!CONNECT_LINK_PROTOCOLS.includes(parsed.protocol)) {
       return null;
     }
 

@@ -231,7 +231,7 @@ export function useGhosttyTerminalController({
       inputRef.current?.blur();
     },
     onExit: ({ session_id, exit_code }) => {
-      const message = `\r\n[Zen] session exited with code ${exit_code}\r\n`;
+      const message = `\r\n[Mewla] session exited with code ${exit_code}\r\n`;
       if (ghostty.writeOutput(session_id, message)) {
         scheduleRenderState();
       }
@@ -240,7 +240,7 @@ export function useGhosttyTerminalController({
       if (!session_id) {
         return;
       }
-      if (ghostty.writeOutput(session_id, `\r\n[Zen] ${message}\r\n`)) {
+      if (ghostty.writeOutput(session_id, `\r\n[Mewla] ${message}\r\n`)) {
         scheduleRenderState();
       }
     },

@@ -7,7 +7,7 @@ if (!integrationEnabled) {
 } else {
   const linkServer = {
     id: "link-current",
-    name: "Zen Link workstation",
+    name: "Mewla Link workstation",
     url: "wss://11111111111111111111111111111111.link.test/ws",
     daemonId: "2".repeat(64),
     daemonPublicKey: "3".repeat(64),
@@ -167,7 +167,7 @@ if (!integrationEnabled) {
       });
 
       expect(issue.code).toBe("network_unreachable");
-      expect(issue.detail).toContain("Zen Link is offline");
+      expect(issue.detail).toContain("Mewla Link is offline");
       expect(nativeStarts).toBe(1);
       expect(fetchCalls).toBe(0);
     });
@@ -175,7 +175,7 @@ if (!integrationEnabled) {
     test("latency auth-check never calls ordinary fetch when pin transport fails", async () => {
       await expect(
         measureServerLatency({ server: linkServer }),
-      ).rejects.toThrow("Zen Link is offline");
+      ).rejects.toThrow("Mewla Link is offline");
       expect(nativeStarts).toBe(1);
       expect(fetchCalls).toBe(0);
     });
@@ -219,14 +219,14 @@ if (!integrationEnabled) {
           linkServer.daemonId,
           request,
         ),
-      ).rejects.toThrow("Zen Link is offline");
+      ).rejects.toThrow("Mewla Link is offline");
       await expect(
         buildSessionFileBinarySource(
           linkServer.id,
           linkServer.daemonId,
           request,
         ),
-      ).rejects.toThrow("Zen Link is offline");
+      ).rejects.toThrow("Mewla Link is offline");
       expect(nativeStarts).toBe(2);
       expect(fetchCalls).toBe(0);
     });

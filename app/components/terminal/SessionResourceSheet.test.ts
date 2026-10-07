@@ -185,7 +185,7 @@ describe("SessionResourceSheet presentation model", () => {
       },
       host: { available_bytes: 10 * 1024 ** 3, pressure: "ok" },
     });
-    expect(model?.unmanagedNote).toBe("Not resource-managed by Zen");
+    expect(model?.unmanagedNote).toBe("Not resource-managed by Mewla");
     expect(model?.showSessionHero).toBe(false);
     expect(model?.memoryLabel).toBeNull();
     expect(model?.qualifier).toBeUndefined();

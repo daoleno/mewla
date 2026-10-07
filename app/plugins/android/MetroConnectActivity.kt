@@ -1,4 +1,4 @@
-package com.daoleno.zen
+package com.daoleno.mewla
 
 import android.app.Activity
 import android.content.Intent
@@ -32,7 +32,7 @@ class MetroConnectActivity : Activity() {
       val padding = (24 * resources.displayMetrics.density).toInt()
       setPadding(padding, padding * 3, padding, padding)
     }
-    layout.addView(TextView(this).apply { text = "Zen Development"; textSize = 24f })
+    layout.addView(TextView(this).apply { text = "Mewla Development"; textSize = 24f })
     val address = EditText(this).apply {
       hint = "Metro host:port"
       contentDescription = "Metro host and port"

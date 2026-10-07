@@ -14,7 +14,7 @@ if (!enabled) {
     bridgePort <= 0 ||
     !expectedStableURL
   ) {
-    throw new Error("Zen Link Relay E2E fixture environment is incomplete.");
+    throw new Error("Mewla Link Relay E2E fixture environment is incomplete.");
   }
 
   const secureValues = new Map<string, string>();

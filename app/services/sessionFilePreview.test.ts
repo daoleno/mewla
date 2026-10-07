@@ -149,7 +149,7 @@ describe("current-Session file renderer contract", () => {
     expect(metadata.tooLarge).toBe(true);
     expect(metadata.previewLimitBytes).toBe(50 * 1024 * 1024);
     expect(sessionFileTooLargeMessage(metadata)).toBe(
-      "This 50 MB file exceeds Zen's 50 MB preview limit. It was not downloaded.",
+      "This 50 MB file exceeds Mewla's 50 MB preview limit. It was not downloaded.",
     );
 
     const opened = reduceSessionFilePreviewState(

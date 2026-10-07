@@ -66,11 +66,11 @@ export const TerminalSurface = forwardRef<
       atBottomRef.current = at_bottom;
     },
     onExit: ({ exit_code }) => {
-      termRef.current?.write(`\r\n[Zen] session exited with code ${exit_code}\r\n`);
+      termRef.current?.write(`\r\n[Mewla] session exited with code ${exit_code}\r\n`);
     },
     onError: ({ session_id, message }) => {
       if (session_id) {
-        termRef.current?.write(`\r\n[Zen] ${message}\r\n`);
+        termRef.current?.write(`\r\n[Mewla] ${message}\r\n`);
       }
     },
   });

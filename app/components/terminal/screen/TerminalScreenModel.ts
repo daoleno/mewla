@@ -69,8 +69,8 @@ export function buildTerminalFallbackPresentation({
       ? "Open this terminal again from the Agents tab."
       : connectionIssue?.detail ||
         (connectionState === "connecting"
-          ? "Zen is reconnecting before reopening this terminal."
-          : "Start zen on that machine, or bring the network or tunnel back."),
+          ? "Mewla is reconnecting before reopening this terminal."
+          : "Start mewla on that machine, or bring the network or tunnel back."),
     hint: !hasTerminalRoute
       ? "The app kept your route, but the live terminal is not ready yet."
       : connectionIssue?.hint ||
