@@ -1310,7 +1310,7 @@ export function startCat(sealSvg, { onPlay } = {}) {
   return {
     cat, P, render, game,
     play: setPlay, stop: stopPlay,
-    // for checking poses by hand: zenSeal.strike('sit')
+    // for checking poses by hand: mewlaSeal.strike('sit')
     strike: (name) => { cat.curled = false; Object.assign(P, pose(name)); },
     get playing() { return game.mode; },
     pause: () => { queue = []; current = { ms: 1e9, step() {}, t0: performance.now() }; },

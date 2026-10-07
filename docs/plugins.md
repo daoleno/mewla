@@ -9,6 +9,8 @@ shows that server's accounts and never moves an account between servers.
 
 ## Connect a service
 
+![Plugins: GitHub and Linear connected, Notion asking to reconnect, Google and custom services to add](assets/plugins.svg)
+
 1. Open the menu and choose **Plugins**.
 2. Under **Add a service**, pick the service.
 3. Review what Brain may do. **Read and search** is included; **Make changes

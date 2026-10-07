@@ -23,7 +23,7 @@ buildSeal(document.querySelector('[data-seal="foot"]'), { icon: true });
 const sealSvg = document.querySelector('[data-seal="hero"]');
 buildSeal(sealSvg, { ghost: true });
 const cat = startCat(sealSvg, { onPlay: (e) => onPlay(e) });
-window.zenSeal = cat;
+window.mewlaSeal = cat;
 
 // ---- playtime: pick a toy, keep score, optional sound ------------------------
 const MODES = {

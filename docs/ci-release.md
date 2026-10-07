@@ -45,7 +45,7 @@ Configure under GitHub → Settings → Secrets and variables → Actions. Value
 | `ZEN_ANDROID_KEYSTORE_PASSWORD` | Keystore password |
 | `ZEN_ANDROID_KEY_ALIAS` | Key alias inside the keystore |
 | `ZEN_ANDROID_KEY_PASSWORD` | Key password |
-| `ZEN_UPDATE_SIGNING_KEY_BASE64` | Base64 encoding of the Ed25519 private PEM matching `release/zen-update-public-key.pem` |
+| `ZEN_UPDATE_SIGNING_KEY_BASE64` | Base64 encoding of the Ed25519 private PEM matching `release/mewla-update-public-key.pem` |
 
 Runtime mapping (CI materializes the file, mode `0600`, then shreds it):
 
@@ -56,7 +56,7 @@ Runtime mapping (CI materializes the file, mode `0600`, then shreds it):
 | `ZEN_ANDROID_KEY_ALIAS` | secret of same name |
 | `ZEN_ANDROID_KEY_PASSWORD` | secret of same name |
 
-Local maintainer builds continue to use a filesystem path via `ZEN_ANDROID_KEYSTORE` (see [android.md](internal/android-development.md)); agents must not read `~/.mewla/release-keys`.
+Local maintainer builds use a filesystem path via `MEWLA_ANDROID_KEYSTORE` (see [android.md](internal/android-development.md)); agents must not read `~/.mewla/release-keys`.
 
 ## Public certificate identity
 

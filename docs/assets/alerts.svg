@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="al" viewBox="0 0 480 540" width="480" height="540" role="img" aria-labelledby="al-t al-d" fill="none"><title id="al-t">Push alerts and Telegram</title><desc id="al-d">Push notifications only when a Session needs input, fails or finishes. Below, Telegram as a second channel to the same Brain thread.</desc><style>.al text{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;white-space:pre}.al .m{font-family:"Maple Mono","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}.al .d{font-family:"Bricolage Grotesque",Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:-.02em}.al .spin{transform-box:fill-box;transform-origin:center;animation:al-spin 1.1s linear infinite}@keyframes al-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.al .spin{animation:none}}</style><rect width="480" height="540" rx="20" fill="#F1EEE7"/><rect x="12" y="12" width="456" height="516" rx="22" fill="#FBFAF7" stroke="#DDD6C9" stroke-width="1"/><text x="30" y="46" font-size="11" fill="#857E73" class="m" letter-spacing="1.4">PUSH</text><rect x="30" y="58" width="420" height="64" rx="18" fill="#FFFFFF" stroke="#ECE7DE" stroke-width="1"/><svg x="44" y="72" width="34" height="34" viewBox="0 0 100 100"><path d="M 4 5.2 Q 4 4 5.2 4 L 94.8 4 Q 96 4 96 5.2 L 96 94.8 Q 96 96 94.8 96 L 5.2 96 Q 4 96 4 94.8 Z" fill="#c8372b"/>
+  <circle cx="79" cy="19" r="7.4" fill="#fbf6ec"/>
+  <circle cx="82.6" cy="16.4" r="6.4" fill="#c8372b"/>
+  <g fill="#fbf6ec">
+    <path d="M 4 31 L 6.2 32.4 L 5.4 35 L 4 35.6 Z"/>
+    <path d="M 63 96 L 64.6 93.6 L 67.4 94.4 L 68 96 Z"/>
+    <path d="M 96 70 L 94.4 71.2 L 94.8 73.4 L 96 73.8 Z"/>
+  </g>
+  <g transform="translate(44.6 77) scale(0.9)" fill="#fbf6ec" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 41 -12 C 46 4 24 7.5 4 5.5 C -6 4.6 -14 4 -20 4.6 C -28 5.2 -34 3 -36 -3" fill="none" stroke="#fbf6ec" stroke-width="9"/>
+    <path d="M -14 2 C -26 1 -30 -12 -22 -24 C -14 -38 2 -47 18 -45 C 34 -43 44 -30 43 -16 C 42 -4 34 2 22 2 Z"/>
+    <path d="M -35.5 -30 C -37.5 -38 -38 -46 -36 -53 C -30 -49 -25.5 -45 -22.5 -40.5 Z"/>
+    <path d="M -14.5 -41 C -10 -46 -5.5 -50 0 -52 C 1 -46 0.5 -39 -2 -33 Z"/>
+    <ellipse cx="-19" cy="-25" rx="18.5" ry="16" transform="rotate(-6 -19 -25)"/>
+    <path d="M -31 -10 C -34 -4 -29 0 -21 0 C -15 0 -12 -3 -14 -7 C -17 -10 -26 -11 -31 -10 Z"/>
+    <g fill="none" stroke="#c8372b" stroke-width="2.4">
+      <path d="M -2.2 -38 C 3 -30 3 -18 -3 -10"/>
+      <path d="M 36 -5 C 33 -16 22 -20 13 -13"/>
+      <path d="M 38.4 -8 C 40 2 24 3.2 6 1.2"/>
+      <path d="M -30 -26.5 Q -27 -23.6 -24 -26.5"/>
+      <path d="M -15.5 -27 Q -12.5 -24.1 -9.5 -27"/>
+    </g>
+    <g fill="none" stroke="#c8372b" stroke-width="2.8">
+      <path d="M 9 -43.4 C 11.2 -40 11.8 -37 11.2 -33.8"/>
+      <path d="M 18.8 -44 C 20.6 -40.6 20.8 -37.4 19.8 -34.4"/>
+      <path d="M 28.6 -41.4 C 29.8 -38.4 29.8 -35.6 28.8 -33"/>
+    </g>
+    <path d="M -21.4 -21.6 L -17.8 -21.6 L -19.6 -19.5 Z" fill="#c8372b" stroke="#c8372b" stroke-width="0.8"/>
+  </g></svg><text x="90" y="86" font-size="14.5" fill="#161412" font-weight="600">Sync fix needs input</text><text x="90" y="106" font-size="13" fill="#57514A">Keep both copies, or the newest edit?</text><text x="436" y="86" font-size="11.5" fill="#57514A" text-anchor="end">now</text><rect x="30" y="132" width="420" height="64" rx="18" fill="#FFFFFF" stroke="#ECE7DE" stroke-width="1"/><svg x="44" y="146" width="34" height="34" viewBox="0 0 100 100"><path d="M 4 5.2 Q 4 4 5.2 4 L 94.8 4 Q 96 4 96 5.2 L 96 94.8 Q 96 96 94.8 96 L 5.2 96 Q 4 96 4 94.8 Z" fill="#c8372b"/>
+  <circle cx="79" cy="19" r="7.4" fill="#fbf6ec"/>
+  <circle cx="82.6" cy="16.4" r="6.4" fill="#c8372b"/>
+  <g fill="#fbf6ec">
+    <path d="M 4 31 L 6.2 32.4 L 5.4 35 L 4 35.6 Z"/>
+    <path d="M 63 96 L 64.6 93.6 L 67.4 94.4 L 68 96 Z"/>
+    <path d="M 96 70 L 94.4 71.2 L 94.8 73.4 L 96 73.8 Z"/>
+  </g>
+  <g transform="translate(44.6 77) scale(0.9)" fill="#fbf6ec" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 41 -12 C 46 4 24 7.5 4 5.5 C -6 4.6 -14 4 -20 4.6 C -28 5.2 -34 3 -36 -3" fill="none" stroke="#fbf6ec" stroke-width="9"/>
+    <path d="M -14 2 C -26 1 -30 -12 -22 -24 C -14 -38 2 -47 18 -45 C 34 -43 44 -30 43 -16 C 42 -4 34 2 22 2 Z"/>
+    <path d="M -35.5 -30 C -37.5 -38 -38 -46 -36 -53 C -30 -49 -25.5 -45 -22.5 -40.5 Z"/>
+    <path d="M -14.5 -41 C -10 -46 -5.5 -50 0 -52 C 1 -46 0.5 -39 -2 -33 Z"/>
+    <ellipse cx="-19" cy="-25" rx="18.5" ry="16" transform="rotate(-6 -19 -25)"/>
+    <path d="M -31 -10 C -34 -4 -29 0 -21 0 C -15 0 -12 -3 -14 -7 C -17 -10 -26 -11 -31 -10 Z"/>
+    <g fill="none" stroke="#c8372b" stroke-width="2.4">
+      <path d="M -2.2 -38 C 3 -30 3 -18 -3 -10"/>
+      <path d="M 36 -5 C 33 -16 22 -20 13 -13"/>
+      <path d="M 38.4 -8 C 40 2 24 3.2 6 1.2"/>
+      <path d="M -30 -26.5 Q -27 -23.6 -24 -26.5"/>
+      <path d="M -15.5 -27 Q -12.5 -24.1 -9.5 -27"/>
+    </g>
+    <g fill="none" stroke="#c8372b" stroke-width="2.8">
+      <path d="M 9 -43.4 C 11.2 -40 11.8 -37 11.2 -33.8"/>
+      <path d="M 18.8 -44 C 20.6 -40.6 20.8 -37.4 19.8 -34.4"/>
+      <path d="M 28.6 -41.4 C 29.8 -38.4 29.8 -35.6 28.8 -33"/>
+    </g>
+    <path d="M -21.4 -21.6 L -17.8 -21.6 L -19.6 -19.5 Z" fill="#c8372b" stroke="#c8372b" stroke-width="0.8"/>
+  </g></svg><text x="90" y="160" font-size="14.5" fill="#161412" font-weight="600">Release notes failed</text><text x="90" y="180" font-size="13" fill="#57514A">Notion said 401: the token expired.</text><text x="436" y="160" font-size="11.5" fill="#57514A" text-anchor="end">2m</text><rect x="30" y="206" width="420" height="64" rx="18" fill="#FFFFFF" stroke="#ECE7DE" stroke-width="1"/><svg x="44" y="220" width="34" height="34" viewBox="0 0 100 100"><path d="M 4 5.2 Q 4 4 5.2 4 L 94.8 4 Q 96 4 96 5.2 L 96 94.8 Q 96 96 94.8 96 L 5.2 96 Q 4 96 4 94.8 Z" fill="#c8372b"/>
+  <circle cx="79" cy="19" r="7.4" fill="#fbf6ec"/>
+  <circle cx="82.6" cy="16.4" r="6.4" fill="#c8372b"/>
+  <g fill="#fbf6ec">
+    <path d="M 4 31 L 6.2 32.4 L 5.4 35 L 4 35.6 Z"/>
+    <path d="M 63 96 L 64.6 93.6 L 67.4 94.4 L 68 96 Z"/>
+    <path d="M 96 70 L 94.4 71.2 L 94.8 73.4 L 96 73.8 Z"/>
+  </g>
+  <g transform="translate(44.6 77) scale(0.9)" fill="#fbf6ec" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 41 -12 C 46 4 24 7.5 4 5.5 C -6 4.6 -14 4 -20 4.6 C -28 5.2 -34 3 -36 -3" fill="none" stroke="#fbf6ec" stroke-width="9"/>
+    <path d="M -14 2 C -26 1 -30 -12 -22 -24 C -14 -38 2 -47 18 -45 C 34 -43 44 -30 43 -16 C 42 -4 34 2 22 2 Z"/>
+    <path d="M -35.5 -30 C -37.5 -38 -38 -46 -36 -53 C -30 -49 -25.5 -45 -22.5 -40.5 Z"/>
+    <path d="M -14.5 -41 C -10 -46 -5.5 -50 0 -52 C 1 -46 0.5 -39 -2 -33 Z"/>
+    <ellipse cx="-19" cy="-25" rx="18.5" ry="16" transform="rotate(-6 -19 -25)"/>
+    <path d="M -31 -10 C -34 -4 -29 0 -21 0 C -15 0 -12 -3 -14 -7 C -17 -10 -26 -11 -31 -10 Z"/>
+    <g fill="none" stroke="#c8372b" stroke-width="2.4">
+      <path d="M -2.2 -38 C 3 -30 3 -18 -3 -10"/>
+      <path d="M 36 -5 C 33 -16 22 -20 13 -13"/>
+      <path d="M 38.4 -8 C 40 2 24 3.2 6 1.2"/>
+      <path d="M -30 -26.5 Q -27 -23.6 -24 -26.5"/>
+      <path d="M -15.5 -27 Q -12.5 -24.1 -9.5 -27"/>
+    </g>
+    <g fill="none" stroke="#c8372b" stroke-width="2.8">
+      <path d="M 9 -43.4 C 11.2 -40 11.8 -37 11.2 -33.8"/>
+      <path d="M 18.8 -44 C 20.6 -40.6 20.8 -37.4 19.8 -34.4"/>
+      <path d="M 28.6 -41.4 C 29.8 -38.4 29.8 -35.6 28.8 -33"/>
+    </g>
+    <path d="M -21.4 -21.6 L -17.8 -21.6 L -19.6 -19.5 Z" fill="#c8372b" stroke="#c8372b" stroke-width="0.8"/>
+  </g></svg><text x="90" y="234" font-size="14.5" fill="#161412" font-weight="600">Conflict wording finished</text><text x="90" y="254" font-size="13" fill="#57514A">Five apps compared. “Conflicted copy” wins.</text><text x="436" y="234" font-size="11.5" fill="#57514A" text-anchor="end">2m</text><text x="30" y="300" font-size="13" fill="#57514A">Nothing for routine progress.</text><text x="30" y="338" font-size="11" fill="#857E73" class="m" letter-spacing="1.4">TELEGRAM</text><rect x="30" y="350" width="420" height="164" rx="16" fill="#FFFFFF" stroke="#ECE7DE" stroke-width="1"/><svg x="46" y="364" width="20" height="20" viewBox="0 0 24 24" color="#161412"><g fill="#26A5E4"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></g></svg><text x="74" y="379" font-size="14" fill="#161412" font-weight="600">Mewla Brain</text><path d="M30 394L450 394" stroke="#ECE7DE" stroke-width="1"/><rect x="302" y="406" width="132" height="32" rx="16" fill="#F0ECE4"/><text x="368" y="427" font-size="13.5" fill="#161412" text-anchor="middle">where are we?</text><rect x="46" y="446" width="340" height="54" rx="14" fill="#F5F3EE"/><text x="60" y="468" font-size="13" fill="#161412">2 of 5 back. Sync fix needs you:</text><text x="60" y="488" font-size="13" fill="#161412">keep both copies, or the newest edit?</text></svg>

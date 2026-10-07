@@ -1,7 +1,7 @@
-# Install
+# Install and update
 
-Mewla has two parts: the daemon on your computer and the app on your phone.
-Install the daemon first; the app is useless without it.
+Everything [Get started](get-started.md) skips: platforms, manual downloads,
+running as a service, updates, the app builds and uninstalling.
 
 ## What you need
 
@@ -89,7 +89,7 @@ mewla doctor --json
 installs packages or prints credentials.
 
 To write an executor configuration interactively, run `mewla setup`. See
-[Agents and executors](executors.md#configure-executors).
+[Agents and models](executors.md#executorstoml).
 
 ## Update
 
@@ -101,23 +101,6 @@ mewla update          # verify and install it
 `mewla update` checks the release's signed manifest and the archive checksum
 before it replaces the binary. It does not restart a running daemon; stop and
 start `mewla` when convenient.
-
-## Coming from Zen
-
-Mewla was previously called Zen. Updating keeps your setup:
-
-- The command is now `mewla`. The old `zen` command remains as an alias during
-  the transition.
-- The first time `mewla` runs, it moves the state directory from `~/.zen` to
-  `~/.mewla` and leaves `~/.zen` as a symlink, so the daemon's identity, Brain
-  notes and `executors.toml` carry over. If a daemon started from `~/.zen` is still
-  running, the move waits until that daemon stops. To move it yourself, stop
-  the daemon and run `mewla state migrate`.
-- Environment variables are now named `MEWLA_*`. The old `ZEN_*` names still
-  work; when both are set, `MEWLA_*` wins.
-- The phone app is a new app (`com.daoleno.mewla`). An installed Zen app stays
-  a separate app with its own pairing; install the Mewla app and pair it with
-  `mewla pair`. Old `zen://` links are still accepted.
 
 ## Keep it running
 
@@ -179,9 +162,8 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 
 ### iOS
 
-A [TestFlight preview](https://testflight.apple.com/join/rTKCDzMt) is set up
-but still awaiting Apple's beta review, so the link may not let you install yet.
-Until then, build the app from source on an Apple Silicon Mac.
+There is no TestFlight build yet. Build the app from source on an Apple
+Silicon Mac.
 
 #### Build the iOS app from source
 

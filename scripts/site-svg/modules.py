@@ -1,391 +1,323 @@
-# The rest of the product, one small instrument each. 480 wide so they stay
-# legible at phone width; the page drives data-state from real buttons.
-from common import C, Svg, dot, pill
+# One drawing per tool screen, drawn from the app's Seal & Slip screens with
+# the atlas-notes demo data. Each is a phone-width screen on paper.
+from common import (C, Svg, chevron, client_badge, dots_icon, logo, mark, round_button, screen_header,
+                    seal, segmented, state, tw)
 
 W = 480
 
 
-def seg(s, x, y, w, labels, state_of):
-    """Segmented control drawn in the figure, following data-state."""
-    n = len(labels)
-    sw = w / n
-    s.rect(x, y, w, 30, rx=15, fill="panel3")
-    for i, lab in enumerate(labels):
-        cls = "st " + " ".join(f"s{v}" for v in state_of[i])
-        s.rect(x + 2 + sw * i, y + 2, sw - 4, 26, rx=13, fill="#3a3b33", cls=cls)
-        s.text(x + sw * i + sw / 2, y + 19.5, lab, size=12, fill="ink", anchor="middle", weight=500)
+def screen(k, h, title, desc):
+    s = Svg(k, W, h, title, desc)
+    s.rect(12, 12, W - 24, h - 24, rx=22, fill="paper", stroke="border")
+    return s, 12, 12, W - 24
 
 
-def radio(s, x, y, on, cls=""):
-    s.circle(x, y, 7.5, stroke="sage" if on else "faint", sw=1.4, cls=cls)
-    if on:
-        s.circle(x, y, 3.8, fill="sage", cls=cls)
+def card(s, x, y, w, h):
+    s.rect(x, y, w, h, rx=16, fill="card", stroke="line")
+
+
+def caption(s, x, y, text):
+    s.text(x, y, text, size=13, fill="soft")
+
+
+def server_line(s, x, y, w, word="Connected", kind="ready"):
+    s.rect(x, y - 11, 13, 10, rx=2, stroke="soft", sw=1.3)
+    s.line(x + 3, y + 2, x + 10, y + 2, stroke="soft", sw=1.3)
+    s.text(x + 22, y, "Studio Mac", size=13.5)
+    state(s, kind, x + w, y, size=12.5, word=word)
 
 
 def models():
-    s = Svg("mp", W, 300, "Model Providers",
-            "Model Providers for Codex and Claude. Codex uses the official login; OpenAI, DeepSeek and OpenRouter are saved providers, "
-            "DeepSeek still needs a key. Claude uses the Anthropic API. The Mewla Provider Gateway is running.",
-            states=2)
-    seg(s, 20, 20, 200, ["Codex", "Claude"], [[1], [2]])
-    s.text(W - 20, 40, "Add", size=12, fill="sage", anchor="end", weight=500)
-    lists = {
-        1: [("Official login", "signed in on this host", True, None),
-            ("OpenAI", "api.openai.com · 14 models · 2d", False, None),
-            ("DeepSeek", "api.deepseek.com · 3 models", False, "Key required"),
-            ("OpenRouter", "openrouter.ai · 212 models · 5h", False, None)],
-        2: [("Official login", "not signed in", False, None),
-            ("Anthropic", "api.anthropic.com · 9 models · 1d", True, None),
-            ("Custom Gateway", "llm.home.lan · 6 models", False, None),
-            ("DeepSeek", "api.deepseek.com · 3 models", False, "Key required")],
-    }
-    for st, rows in lists.items():
-        s.g(f"st s{st}")
-        s.rect(20, 66, W - 40, 4 * 46, rx=14, fill="panel2")
-        for i, (name, sub, on, tag) in enumerate(rows):
-            y = 66 + i * 46
-            if i:
-                s.line(52, y, W - 20, y, stroke="line")
-            radio(s, 40, y + 23, on)
-            s.text(58, y + 20, name, size=13, weight=500)
-            s.text(58, y + 35, sub, size=10.5, fill="faint", mono=True)
-            if tag:
-                pill(s, W - 64, y + 13, tag, fill="emberD", col="ember", size=10, anchor="end")
-            s.text(W - 38, y + 27, "···", size=13, fill="dim", anchor="middle")
-        s.end()
-    y = 262
-    s.rect(20, y - 4, W - 40, 34, rx=12, fill="panel2")
-    s.text(36, y + 17, "Mewla Provider Gateway", size=12.5, weight=500)
-    pill(s, W - 34, y + 3, "Running", fill="sageD", col="sage", size=10, anchor="end")
+    s, x, y, w = screen("pm", 540, "Model Providers for Codex",
+                        "Codex can use the official login or your own OpenAI, DeepSeek or OpenRouter keys. DeepSeek is selected. "
+                        "The Mewla Provider Gateway is ready.")
+    screen_header(s, x, y + 6, w, "Model Providers")
+    sx, sw = x + 18, w - 36
+    s.rect(sx, y + 66, sw, 44, rx=22, fill="tint")
+    s.rect(sx + 4, y + 70, sw / 2 - 8, 36, rx=18, fill="card", stroke="line")
+    logo(s, "codex", sx + sw / 4 - 38, y + 79, 18)
+    s.text(sx + sw / 4 - 14, y + 93, "Codex", size=14, weight=500)
+    logo(s, "claude", sx + 3 * sw / 4 - 54, y + 79, 18)
+    s.text(sx + 3 * sw / 4 - 30, y + 93, "Claude Code", size=14, fill="soft")
+    caption(s, sx + 4, y + 140, "Codex uses")
+    s.text(sx + sw - 4, y + 140, "+ Add", size=13.5, weight=500, anchor="end")
+    rows = [("Official login", "Direct · uses the native account", False, False),
+            ("OpenAI", "api.openai.com · 14 models", False, True),
+            ("DeepSeek", "api.deepseek.com · 3 models", True, True),
+            ("OpenRouter", "openrouter.ai · 212 models", False, True)]
+    cy = y + 154
+    card(s, sx, cy, sw, 64 * len(rows))
+    for i, (name, sub, on, more) in enumerate(rows):
+        ry = cy + i * 64
+        if i:
+            s.line(sx + 52, ry, sx + sw, ry, stroke="line")
+        s.circle(sx + 26, ry + 32, 9, stroke="ink" if on else "faint", sw=1.6)
+        if on:
+            s.circle(sx + 26, ry + 32, 4.5, fill="ink")
+        s.text(sx + 52, ry + 28, name, size=15, weight=500)
+        s.text(sx + 52, ry + 47, sub, size=12.5, fill="soft")
+        if more:
+            dots_icon(s, sx + sw - 24, ry + 32, col="soft")
+    gy = cy + 64 * len(rows) + 34
+    caption(s, sx + 4, gy, "Gateway")
+    card(s, sx, gy + 12, sw, 52)
+    s.text(sx + 18, gy + 43, "Mewla Provider Gateway", size=15, weight=500)
+    state(s, "ready", sx + sw - 16, gy + 43, size=12.5)
     return s.render()
 
 
 def skills():
-    s = Svg("sk", W, 300, "Skills and Agent Plugins",
-            "Skills on the current server: standalone, built-in and plugin-provided Skills with the agents that load them, "
-            "and installed Agent Plugins with their Skills, Agents and copies.",
-            states=2)
-    seg(s, 20, 20, 240, ["Skills", "Agent Plugins"], [[1], [2]])
-    s.rect(W - 128, 20, 108, 30, rx=15, fill="panel3")
-    s.circle(W - 110, 34, 5, stroke="faint", sw=1.3)
-    s.line(W - 106, 38, W - 103, 41, stroke="faint", sw=1.3)
-    s.text(W - 96, 39.5, "Search", size=11.5, fill="faint")
-    rows = [("release-notes", "Standalone", ["claude", "codex"]),
-            ("ios-build", "Standalone", ["codex"]),
-            ("brainstorming", "From superpowers", ["claude"]),
-            ("frontend-design", "From superpowers", ["claude"]),
-            ("skill-creator", "Built-in", ["claude"])]
-    s.g("st s1")
-    for i, (name, src, agents) in enumerate(rows):
-        y = 66 + i * 45
-        s.rect(20, y, W - 40, 39, rx=11, fill="panel2")
-        s.rect(32, y + 10, 19, 19, rx=5, fill="sageD")
-        s.path(f"M37 {y + 19.5}h9M41.5 {y + 15}v9", stroke="sage", sw=1.3)
-        s.text(62, y + 18, name, size=12.5, weight=500, mono=True)
-        s.text(62, y + 32, src, size=10.5, fill="faint" if src != "Built-in" else "dim")
-        x = W - 32
-        for a in reversed(agents):
-            x -= pill(s, x, y + 10, a, size=10, mono=True, anchor="end") + 6
-    s.end()
-    s.g("st s2")
-    plugins = [("superpowers", "14 Skills · 3 Agents · 2 copies", ["brainstorming", "frontend-design", "systematic-debugging"]),
-               ("release-kit", "4 Skills · 1 command · 1 copy", ["changelog", "tag-release"])]
-    y = 66
-    for name, meta, sks in plugins:
-        h = 44 + len(sks) * 24
-        s.rect(20, y, W - 40, h, rx=12, fill="panel2")
-        s.text(36, y + 24, name, size=13, weight=600, mono=True)
-        s.text(W - 36, y + 24, meta, size=10.5, fill="faint", anchor="end")
-        for j, sk in enumerate(sks):
-            yy = y + 46 + j * 24
-            s.line(40, yy - 9, 40, yy + 4, stroke="line2")
-            s.line(40, yy - 2, 50, yy - 2, stroke="line2")
-            s.text(58, yy + 2, sk, size=11.5, fill="dim", mono=True)
-        y += h + 10
-    s.end()
+    s, x, y, w = screen("sk", 480, "Skills and Agent Plugins",
+                        "The Skills your agents load on Studio Mac, with the agent that loads each one, a search field "
+                        "and a delete action per row.")
+    screen_header(s, x, y + 6, w, "Skills")
+    sx, sw = x + 18, w - 36
+    server_line(s, sx, y + 86, sw)
+    segmented(s, sx, y + 104, sw, ["Skills", "Agent Plugins"])
+    s.rect(sx, y + 158, sw, 44, rx=12, fill="card", stroke="line")
+    s.circle(sx + 22, y + 178, 6.5, stroke="soft", sw=1.5)
+    s.line(sx + 27, y + 183, sx + 31, y + 187, stroke="soft", sw=1.5)
+    s.text(sx + 42, y + 185, "Search Skills", size=14.5, fill="faint")
+    rows = [("codex", "release-notes", "Write release notes from merged pull requests"),
+            ("codex", "go-tests", "Run and triage the Go test suite"),
+            ("claude", "brand-voice", "Check copy against the brand voice guide"),
+            ("claude", "design-audit", "Check a screen against the design language")]
+    ry = y + 218
+    for client, name, desc in rows:
+        logo(s, client, sx + 2, ry + 14, 16)
+        s.text(sx + 30, ry + 26, name, size=15, weight=500)
+        s.text(sx + 30, ry + 47, desc if len(desc) < 42 else desc[:40] + "…", size=13, fill="soft")
+        # trash
+        tx, ty = sx + sw - 18, ry + 30
+        s.path(f"M{tx - 6} {ty - 6}h12M{tx - 2} {ty - 8.5}h4M{tx - 4.5} {ty - 6}l.8 12h7.4l.8-12", stroke="soft", sw=1.3,
+               extra=' stroke-linecap="round" stroke-linejoin="round"')
+        s.line(sx, ry + 62, sx + sw, ry + 62, stroke="line")
+        ry += 62
     return s.render()
 
 
 def plugins():
-    s = Svg("pl", W, 300, "Plugins connect outside services to Brain",
-            "Linear, Notion, GitHub, Slack and Google Workspace connect to Brain through each service's own authorization, "
-            "plus custom MCP and OpenAPI services. Read and search is included; making changes is a separate switch.",
-            states=2,
-            css=".pl .flow{stroke-dasharray:3 5;animation:pl-f 1.4s linear infinite}@keyframes pl-f{to{stroke-dashoffset:-16}}"
-                "@media (prefers-reduced-motion:reduce){.pl .flow{animation:none}}")
-    svc = [("Linear", "L"), ("Notion", "N"), ("GitHub", "G"), ("Slack", "S"), ("Google Workspace", "W"), ("MCP · OpenAPI", "{ }")]
-    bx, by = 70, 150
-    from brain import brain_mark
-    brain_mark(s, bx, by, r=22)
-    s.text(bx, by + 50, "Brain", size=12, weight=600, anchor="middle")
-    for i, (name, g) in enumerate(svc):
-        y = 28 + i * 42
-        x = 150
-        s.path(f"M{bx + 30} {by}C{bx + 60} {by},{x - 40} {y + 14},{x} {y + 14}", stroke="line2", sw=1)
-        if i == 0:
-            s.path(f"M{bx + 30} {by}C{bx + 60} {by},{x - 40} {y + 14},{x} {y + 14}", stroke="sage", sw=1.3, cls="st s2 flow")
-        s.rect(x, y, 128, 28, rx=8, fill="panel2", stroke="line")
-        s.text(x + 14, y + 18.5, g, size=10.5, fill="sage", mono=True, weight=500)
-        s.text(x + 36, y + 18.5, name, size=11.5, fill="ink" if i < 5 else "dim")
-    # What Brain can do
-    px = 292
-    s.rect(px, 28, W - px - 20, 244, rx=14, fill="panel2")
-    s.text(px + 14, 52, "Linear", size=13, weight=600)
-    s.text(px + 14, 68, "one connected account", size=10.5, fill="faint")
-    s.text(px + 14, 98, "WHAT BRAIN CAN DO", size=9, fill="faint", mono=True, extra=' letter-spacing="1"')
-    def sw(y, label, on_states):
-        s.text(px + 14, y + 13, label[0], size=11.5)
-        s.text(px + 14, y + 27, label[1], size=10, fill="faint")
-        x = W - 34 - 30
-        off = [v for v in (1, 2) if v not in on_states]
-        on_cls = "st " + " ".join(f"s{v}" for v in on_states) if off else ""
-        if off:
-            off_cls = "st " + " ".join(f"s{v}" for v in off)
-            s.rect(x, y + 3, 30, 18, rx=9, fill="panel3", cls=off_cls)
-            s.circle(x + 9, y + 12, 7, fill="dim", cls=off_cls)
-        s.rect(x, y + 3, 30, 18, rx=9, fill="sage2", cls=on_cls)
-        s.circle(x + 21, y + 12, 7, fill="ink", cls=on_cls)
-    sw(108, ("Read and search", "included"), (1, 2))
-    sw(150, ("Make changes", "when you ask"), (2,))
-    s.g("st s2")
-    s.line(px + 14, 198, W - 34, 198, stroke="line")
-    s.text(px + 14, 220, "Brain › Linear", size=10, fill="faint", mono=True)
-    s.text(px + 14, 238, "create_issue", size=11.5, fill="sage", mono=True)
-    s.text(px + 14, 254, "“Resume crash on Pixel 9”", size=10.5, fill="dim")
-    s.end()
-    s.g("st s1")
-    s.line(px + 14, 198, W - 34, 198, stroke="line")
-    s.text(px + 14, 222, "Changes stay off until", size=10.5, fill="faint")
-    s.text(px + 14, 238, "you switch them on and", size=10.5, fill="faint")
-    s.text(px + 14, 254, "confirm.", size=10.5, fill="faint")
-    s.end()
-    return s.render()
-
-
-def spark(s, x, y, w, h, pts, col, cls=""):
-    n = len(pts)
-    d = "M" + " L".join(f"{x + w * i / (n - 1):.1f} {y + h - h * p:.1f}" for i, p in enumerate(pts))
-    s.path(d, stroke=col, sw=1.4, cls=cls, extra=' stroke-linejoin="round"')
-
-
-def resources():
-    H = 560
-    s = Svg("rs", W, H, "Resources on the current server",
-            "CPU, memory, disk throughput and pressure trends, then the processes using them attributed to Workers, Brain, Docker or the user. "
-            "An orphaned Worker shows as Residual with its original status.",
-            states=4,
-            css=".rs .wave{animation:rs-w 6s linear infinite}@keyframes rs-w{from{transform:translateX(0)}to{transform:translateX(-192px)}}"
-                "@media (prefers-reduced-motion:reduce){.rs .wave{animation:none}}")
-    s.text(20, 32, "homelab", size=13, weight=600)
-    dot(s, 92, 28, "done", r=3.5)
-    s.text(100, 32, "Pressure normal", size=11, fill="teal")
-    s.text(W - 20, 32, "sampled 2s ago", size=10.5, fill="faint", anchor="end", mono=True)
-    import math
-    cards = [("CPU", "38%", "sage", 0.0), ("Memory", "61%", "sage", 1.3), ("Disk", "12 MB/s", "sage", 2.1), ("Pressure", "0.4%", "teal", 3.4)]
-    cw = (W - 40 - 10) / 2
-    s.add('<defs><clipPath id="rs-c0"><rect x="0" y="0" width="190" height="40"/></clipPath></defs>')
-    for i, (lab, val, col, ph) in enumerate(cards):
-        x = 20 + (i % 2) * (cw + 10)
-        y = 50 + (i // 2) * 92
-        s.rect(x, y, cw, 82, rx=12, fill="panel2")
-        s.text(x + 14, y + 22, lab, size=11, fill="dim")
-        s.text(x + cw - 14, y + 22, val, size=13, weight=600, anchor="end", mono=True)
-        pts = [0.35 + 0.3 * math.sin(ph + j * 0.55) * (0.6 + 0.4 * math.sin(j * 1.7 + ph)) for j in range(28)]
-        base = [0.25 + 0.2 * p for p in pts] if i == 3 else pts
-        s.add(f'<g transform="translate({x + 14:g} {y + 32:g})" clip-path="url(#rs-c0)"><g class="wave">')
-        spark(s, 0, 0, 192 * 2, 38, base + base, C[col])
-        s.add("</g></g>")
-    fy = 248
-    chips = ["All", "Workers", "Brain", "Docker"]
-    x = 20
-    for i, c in enumerate(chips):
-        w = len(c) * 7 + 26
-        s.rect(x, fy, w, 26, rx=13, fill="panel3")
-        s.rect(x, fy, w, 26, rx=13, fill="sageD", stroke="sage2", cls=f"st s{i + 1}")
-        s.text(x + w / 2, fy + 17, c, size=11.5, fill="ink", anchor="middle")
-        x += w + 8
-    s.text(W - 20, fy + 17, "RSS ↓", size=10.5, fill="faint", anchor="end", mono=True)
-    procs = [
-        ("Android crash on resume", "Worker · claude", "1.2 GB", "84%", "w", "run"),
-        ("Session list filters", "Worker · codex", "860 MB", "41%", "w", "run"),
-        ("chrome", "User", "640 MB", "3%", "u", None),
-        ("Brain", "Brain · codex", "420 MB", "6%", "b", "run"),
-        ("postgres 16", "Docker · 3f9a…", "310 MB", "2%", "d", None),
-        ("Changelog for 0.2", "Residual · done", "140 MB", "0%", "w", "done"),
-        ("redis", "Docker · 81c2…", "48 MB", "1%", "d", None),
-    ]
-    filt = {1: "wubd", 2: "w", 3: "b", 4: "d"}
-    for st, keys in filt.items():
-        s.g(f"st s{st}")
-        rows = [p for p in procs if p[4] in keys]
-        for i, (name, owner, rss, cpu, _, status) in enumerate(rows):
-            y = fy + 40 + i * 38
-            s.rect(20, y, W - 40, 33, rx=9, fill="panel2")
-            if status:
-                dot(s, 34, y + 16.5, status, r=3.2)
-            s.text(46, y + 14, name, size=12, weight=500)
-            s.text(46, y + 27, owner, size=10, fill="faint", mono=True)
-            s.text(W - 96, y + 21, rss, size=11.5, mono=True, anchor="end")
-            s.text(W - 34, y + 21, cpu, size=11.5, fill="dim", mono=True, anchor="end")
-        s.end()
+    s, x, y, w = screen("pl", 530, "Plugins connected to Brain",
+                        "GitHub and Linear are connected and Notion needs to reconnect. Google and Slack can be added, "
+                        "and custom MCP or OpenAPI services can be configured.")
+    screen_header(s, x, y + 6, w, "Plugins")
+    sx, sw = x + 18, w - 36
+    server_line(s, sx, y + 86, sw)
+    caption(s, sx + 4, y + 124, "Connected")
+    rows = [("github", "atlas-notes", "GitHub", "ready", "Connected"),
+            ("notion", "Atlas workspace", "Notion", "warning", "Reconnect"),
+            ("linear", "Atlas team", "Linear", "ready", "Connected")]
+    cy = y + 136
+    card(s, sx, cy, sw, 60 * len(rows))
+    for i, (lg, name, sub, kind, word) in enumerate(rows):
+        ry = cy + i * 60
+        if i:
+            s.line(sx + 56, ry, sx + sw, ry, stroke="line")
+        logo(s, lg, sx + 18, ry + 20, 20)
+        s.text(sx + 56, ry + 27, name, size=15, weight=500)
+        s.text(sx + 56, ry + 46, sub, size=12.5, fill="soft")
+        state(s, kind, sx + sw - 34, ry + 35, size=12.5, word=word)
+        chevron(s, sx + sw - 22, ry + 30, 5)
+    ay = cy + 60 * len(rows) + 34
+    caption(s, sx + 4, ay, "Add a service")
+    card(s, sx, ay + 12, sw, 120)
+    for i, (lg, name, sub) in enumerate((("google", "Google", "Gmail, Drive and Calendar"),
+                                         ("mcp", "Custom services", "MCP server · OpenAPI"))):
+        ry = ay + 12 + i * 60
+        if i:
+            s.line(sx + 56, ry, sx + sw, ry, stroke="line")
+        logo(s, lg, sx + 18, ry + 20, 20)
+        s.text(sx + 56, ry + 27, name, size=15, weight=500)
+        s.text(sx + 56, ry + 46, sub, size=12.5, fill="soft")
+        chevron(s, sx + sw - 22, ry + 30, 5)
     return s.render()
 
 
 def stats():
-    s = Svg("us", W, 300, "Usage and cost per model",
-            "Usage per model on the current server. claude-opus-5-5 is a reported charge, gpt-5 is a reference estimate, "
-            "and gpt-6-astra shows a dash because its price is not in the catalog.",
-            states=2)
-    s.text(20, 34, "≈ $182.20", size=24, weight=600, mono=True)
-    s.text(20, 54, "48.1M tokens · 126 sessions · this month", size=11, fill="faint")
-    rows = [("claude-opus-5-5", "$96.40", 0.53, "18.3M tokens · 41 sessions", "rep"),
-            ("gpt-5", "≈ $61.10", 0.34, "14.9M tokens · 52 sessions", "est"),
-            ("deepseek-v4-flash", "$24.70", 0.14, "6.2M tokens · 27 sessions", "rep"),
-            ("gpt-6-astra", "—", 0.0, "8.7M tokens · 6 sessions", "unk")]
-    s.g("st s1")
-    for i, (m, amt, frac, sub, kind) in enumerate(rows):
-        y = 76 + i * 54
-        s.text(20, y + 14, m, size=12.5, mono=True, weight=500)
-        s.text(W - 20, y + 14, amt, size=12.5, mono=True, anchor="end", fill="faint" if kind == "unk" else "ink")
-        s.rect(20, y + 22, W - 40, 4, rx=2, fill="panel3")
-        if frac:
-            s.rect(20, y + 22, (W - 40) * frac, 4, rx=2, fill="sage" if kind == "rep" else "sage2")
-        s.text(20, y + 42, sub, size=10.5, fill="faint")
-    s.end()
-    s.g("st s2")
-    s.rect(20, 72, W - 40, 210, rx=14, fill="panel2")
-    s.text(36, 98, "gpt-6-astra", size=14, mono=True, weight=600)
-    s.text(W - 36, 98, "—", size=14, mono=True, anchor="end")
-    kv = [("Cost", "Unknown"), ("Reason", "Price not in catalog"), ("Input", "8.1M tokens"), ("Output", "0.6M tokens"),
-          ("Source", "codex history · refreshed 4m ago")]
-    for i, (k_, v) in enumerate(kv):
-        y = 124 + i * 26
-        s.text(36, y, k_, size=11.5, fill="faint")
-        s.text(136, y, v, size=11.5, fill="amber" if k_ == "Reason" else "ink", mono=k_ in ("Input", "Output"))
-    s.line(36, 252, W - 36, 252, stroke="line")
-    s.text(36, 270, "Unknown is not zero. Mewla never borrows another model's price.", size=10.5, fill="dim")
-    s.end()
+    s, x, y, w = screen("st", 560, "Usage per model",
+                        "Stats for all activity: a Codex subscription limit, total cost and tokens, then cost per model. "
+                        "Reported costs are exact, estimated ones carry a ≈ and unknown ones a dash.")
+    sx, sw = x + 18, w - 36
+    for i, hgt in enumerate((7, 13, 10)):
+        s.rect(sx + 2 + i * 5, y + 40 - hgt, 3, hgt, rx=1, fill="ink")
+    s.text(sx + 26, y + 34, "Stats", size=17, weight=600)
+    s.text(sx + 26, y + 52, "All activity", size=12, fill="soft")
+    card(s, sx, y + 70, sw, 136)
+    s.text(sx + 18, y + 100, "Codex subscription", size=16, weight=600)
+    s.text(sx + 18, y + 119, "ChatGPT Plus", size=12.5, fill="soft")
+    for i, (lab, left, v) in enumerate((("5 hours", "66% left", .34), ("1 week", "82% left", .18))):
+        by = y + 146 + i * 30
+        s.text(sx + 18, by, lab, size=13)
+        s.text(sx + sw - 18, by, left, size=12.5, mono=True, anchor="end")
+        s.rect(sx + 18, by + 8, sw - 36, 5, rx=2.5, fill="pressed")
+        s.rect(sx + 18, by + 8, (sw - 36) * v, 5, rx=2.5, fill="ink")
+    card(s, sx, y + 218, sw, 84)
+    s.text(sx + 18, y + 244, "Cost · this month", size=12.5, fill="soft")
+    s.text(sx + 18, y + 282, "≈ $182.20", size=30, weight=800, display=True)
+    s.line(sx + sw / 2 + 20, y + 232, sx + sw / 2 + 20, y + 290, stroke="line")
+    s.text(sx + sw / 2 + 38, y + 244, "Tokens", size=12.5, fill="soft")
+    s.text(sx + sw / 2 + 38, y + 282, "48.1M", size=30, weight=800, display=True)
+    s.text(sx, y + 340, "Models", size=17, weight=600)
+    rows = [("claude-opus-5-5", "$96.40", "18.3M tokens · 41 sessions", .53),
+            ("gpt-5", "≈ $61.10", "14.9M tokens · 52 sessions", .34),
+            ("deepseek-v4-flash", "$24.70", "6.2M tokens · 27 sessions", .14),
+            ("gpt-6-astra", "—", "8.7M tokens · 6 sessions", 0)]
+    ry = y + 372
+    for name, cost, sub, v in rows:
+        s.text(sx, ry, name, size=13.5, mono=True)
+        s.text(sx + sw, ry, cost, size=13.5, mono=True, anchor="end")
+        s.text(sx, ry + 18, sub, size=12, fill="soft")
+        s.rect(sx + sw - 110, ry + 11, 110, 4, rx=2, fill="pressed")
+        if v:
+            s.rect(sx + sw - 110, ry + 11, 110 * v / .53, 4, rx=2, fill="ink")
+        ry += 40
     return s.render()
 
 
 def calendar():
-    s = Svg("ca", W, 300, "Calendar and scheduled actions",
-            "A day in Calendar with an event, a reminder, a deadline and a daily scheduled action. "
-            "When the scheduled action is due it becomes visible Work, runs in its own Session and posts the result to the Brain thread it came from.",
-            states=2)
-    x0, x1 = 30, W - 20
-    hours = list(range(8, 21, 2))
-    ty = 64
-    def X(h):
-        return x0 + (x1 - x0) * (h - 8) / 12
-    s.text(20, 32, "Today", size=14, weight=600)
-    s.text(W - 20, 32, "Europe/Berlin", size=10.5, fill="faint", anchor="end", mono=True)
-    for h in hours:
-        s.line(X(h), ty, X(h), 222, stroke="#1c1d18")
-        s.text(X(h), ty - 8, f"{h:02d}", size=10, fill="faint", anchor="middle", mono=True)
-    # now line
-    s.line(X(13.4), ty, X(13.4), 222, stroke="ember", sw=1.2)
-    s.circle(X(13.4), ty, 3, fill="ember")
-    items = [
-        (9, 9.6, 80, "Triage GitHub issues", "scheduled action · weekdays", "sage"),
-        (10, 11, 120, "Design review", "event", "line2"),
-        (12.5, 12.5, 160, "Renew the cert", "reminder", "amber"),
-        (17, 17, 196, "Beta cut", "deadline", "ember"),
-    ]
-    for a, b, y, title, kind, col in items:
-        if b > a:
-            s.rect(X(a), y, X(b) - X(a), 26, rx=6, fill="sageD" if col == "sage" else "panel3", stroke=col)
-        else:
-            s.path(f"M{X(a)} {y + 4}l6 9-6 9-6-9Z", fill=col)
-        tx = X(b) + 10 if b > a else X(a) + 12
-        s.text(tx, y + 12, title, size=11.5, weight=500)
-        s.text(tx, y + 24, kind, size=10, fill="faint", mono=True)
-    # run chain
-    s.g("st s2")
-    s.rect(20, 236, W - 40, 50, rx=12, fill="panel2", stroke="sage2")
-    steps = [("09:00 due", "faint"), ("Work w_57", "sage"), ("own Session", "sage"), ("result → Brain thread", "teal")]
-    x = 34
-    for i, (t, col) in enumerate(steps):
-        s.text(x, 266, t, size=11, fill=col, mono=True)
-        x += len(t) * 6.9 + 10
-        if i < len(steps) - 1:
-            s.text(x - 2, 266, "›", size=12, fill="faint")
-            x += 12
-    s.end()
-    s.g("st s1")
-    s.text(20, 262, "Add items in the app, or ask Brain in chat.", size=11, fill="faint")
-    s.text(20, 280, "A scheduled action runs as visible Work, never silently.", size=11, fill="faint")
-    s.end()
+    s, x, y, w = screen("ca", 530, "Calendar with a scheduled action",
+                        "Today: a reminder and a scheduled action that is running as Work. Tomorrow: an event. "
+                        "Friday: a deadline that needs you. Monday: a scheduled action, Check 1.4 crash reports.")
+    sx, sw = x + 18, w - 36
+    s.text(x + w / 2, y + 38, "Calendar", size=18, weight=600, anchor="middle")
+    s.path(f"M{x + w - 30} {y + 26}v14M{x + w - 37} {y + 33}h14", stroke="ink", sw=1.6, extra=' stroke-linecap="round"')
+
+    def day(label, sub, yy):
+        s.text(sx, yy, label, size=20, weight=800, display=True)
+        if sub:
+            s.text(sx, yy + 22, sub, size=12.5, fill="soft")
+
+    def item(yy, time, title, kind_word, mk=None, word=None):
+        s.text(sx + 4, yy + 30, time, size=13, fill="soft")
+        s.line(sx + 62, yy + 6, sx + 62, yy + 58, stroke="border", sw=1.5)
+        s.text(sx + 78, yy + 24, title, size=15, weight=500)
+        s.text(sx + 78, yy + 46, kind_word, size=12.5, fill="soft")
+        if mk:
+            state(s, mk, sx + 78 + tw(kind_word, 12.5) + 8, yy + 46, anchor="start", size=12.5, word=word)
+        chevron(s, sx + sw - 8, yy + 30, 5)
+
+    day("Today", "Thursday, October 8", y + 86)
+    item(y + 120, "10:30", "Review the 1.4 launch checklist", "Reminder · Scheduled")
+    item(y + 184, "14:00", "Publish the 1.4 release notes", "Mewla action ·", "running", "Running")
+    day("Friday", None, y + 286)
+    item(y + 300, "17:00", "atlas-notes 1.4 ships", "Deadline ·", "needs", "Due")
+    day("Monday", None, y + 402)
+    item(y + 416, "09:00", "Check 1.4 crash reports", "Mewla action · Scheduled")
     return s.render()
 
 
 def services():
-    s = Svg("sv", W, 300, "Services your agents started",
-            "The Services sheet lists listening ports owned by Sessions or persistent units, grouped by project. "
-            "Port 5173 can be made public with a temporary Quick Tunnel.",
-            states=2)
-    s.text(20, 32, "Services", size=14, weight=600)
-    s.text(W - 20, 32, "3 ports", size=10.5, fill="faint", anchor="end", mono=True)
-    groups = [("~/mewla", [("8081", "metro", "Session · onboarding", "lan")]),
-              ("~/site", [("5173", "vite", "Session · docs-sync", "lan"),
-                          ("5432", "postgres", "Persistent · pg.service", "local")])]
-    y = 50
-    for g, rows in groups:
-        s.text(20, y + 12, g, size=10.5, fill="faint", mono=True)
-        y += 20
-        for port, proc, src, bind in rows:
-            s.rect(20, y, W - 40, 40, rx=10, fill="panel2")
-            s.text(34, y + 25, port, size=14, mono=True, weight=600)
-            s.text(84, y + 18, proc, size=12, weight=500)
-            s.text(84, y + 32, src, size=10, fill="faint", mono=True)
-            if bind == "local":
-                pill(s, W - 34, y + 10, "127.0.0.1", size=10, mono=True, anchor="end")
-            elif port == "5173":
-                pill(s, W - 34, y + 10, "Public", fill="sageD", col="sage", size=10, anchor="end")
-                s.out[-2] = s.out[-2].replace("<rect ", '<rect class="st s2" ', 1)
-                s.out[-1] = s.out[-1].replace("<text ", '<text class="st s2" ', 1)
-            y += 46
-        y += 4
-    s.g("st s2")
-    s.rect(20, y + 2, W - 40, 44, rx=10, fill="panel", stroke="sage2")
-    s.text(34, y + 20, "Quick Tunnel · 5173", size=10.5, fill="faint", mono=True)
-    s.text(34, y + 36, "https://<random>.trycloudflare.com", size=11.5, fill="sage", mono=True)
-    s.end()
-    s.g("st s1")
-    s.text(20, y + 24, "Loopback stays local. Mewla never invents a LAN URL.", size=11, fill="faint")
-    s.end()
+    s, x, y, w = screen("sv", 440, "Services with a Quick Tunnel",
+                        "Ports your Sessions opened, grouped by project: vite on 5173 is shared through a temporary "
+                        "Cloudflare Quick Tunnel, an API on 8080, and a persistent postgres bound to 127.0.0.1.")
+    sx, sw = x + 18, w - 36
+    s.text(sx, y + 40, "Services", size=20, weight=800, display=True)
+    s.text(sx, y + 60, "3 ports", size=12.5, fill="soft")
+    round_button(s, x + w - 30, y + 38, 16)
+    s.path(f"M{x + w - 36} {y + 32}l12 12M{x + w - 24} {y + 32}l-12 12", stroke="ink", sw=1.5, extra=' stroke-linecap="round"')
+
+    def group(yy, label, rows):
+        caption(s, sx + 4, yy, label)
+        card(s, sx, yy + 12, sw, 62 * len(rows))
+        for i, (port, name, sub, tag) in enumerate(rows):
+            ry = yy + 12 + i * 62
+            if i:
+                s.line(sx + 84, ry, sx + sw, ry, stroke="line")
+            s.text(sx + 18, ry + 37, port, size=17, weight=600, mono=True)
+            s.text(sx + 84, ry + 28, name, size=15, weight=500)
+            s.text(sx + 84, ry + 47, sub, size=12.5, fill="soft")
+            if tag:
+                tw_ = tw(tag, 12, weight=500) + 22
+                s.rect(sx + sw - 16 - tw_, ry + 20, tw_, 22, rx=11, stroke="ink")
+                s.text(sx + sw - 16 - tw_ / 2, ry + 35, tag, size=12, weight=500, anchor="middle")
+        return yy + 12 + 62 * len(rows)
+
+    gy = group(y + 98, "Sessions · atlas-notes", [(":5173", "vite", "Sync fix · codex", "Public"),
+                                                  (":8080", "go run ./cmd/api", "Settings copy · claude", None)])
+    gy = group(gy + 32, "Persistent · weather-kit", [(":5432", "postgres", "127.0.0.1 · pg.service", None)])
+    logo(s, "cloudflare", sx + 4, gy + 22, 18)
+    s.text(sx + 30, gy + 36, "https://atlas-notes-sync.trycloudflare.com", size=12, fill="soft", mono=True)
+    return s.render()
+
+
+def spark(s, x, y, w, h, pts, fill=True):
+    n = len(pts)
+    xy = [(x + w * i / (n - 1), y + h - h * v) for i, v in enumerate(pts)]
+    d = "M" + "L".join(f"{a:.1f} {b:.1f}" for a, b in xy)
+    if fill:
+        s.path(d + f"L{x + w} {y + h}L{x} {y + h}Z", stroke=None, fill="tint")
+    s.path(d, stroke="ink", sw=1.4, extra=' stroke-linejoin="round"')
+
+
+def resources():
+    s, x, y, w = screen("rs", 660, "Resources dashboard",
+                        "Studio Mac at normal pressure: CPU 41%, memory 78%, disk I/O 4.8 MB/s and pressure 0.4%, "
+                        "then the processes using them, attributed to Workers, Brain, Docker or you.")
+    screen_header(s, x, y + 6, w, "Resources")
+    sx, sw = x + 18, w - 36
+    s.text(sx, y + 92, "Studio Mac", size=19, weight=600)
+    state(s, "ready", sx + 118, y + 92, anchor="start", size=12.5, word="Normal")
+    s.text(sx, y + 114, "Live · 5 s poll", size=12.5, fill="soft")
+    cards = [("CPU", "41%", "12 cores · peak 61%", [.3, .5, .35, .6, .4, .55, .45, .41]),
+             ("Memory", "78%", "24.8 GB / 32 GB", [.7, .72, .74, .75, .76, .77, .78, .78]),
+             ("Disk I/O", "4.8 MB/s", "R 2.8 · W 2.0 MB/s", [.2, .7, .3, .1, .6, .4, .8, .3]),
+             ("Pressure", "0.4%", "Memory · some 10 s", [.05, .04, .06, .05, .04, .05, .05, .04])]
+    cw = (sw - 12) / 2
+    for i, (lab, val, sub, pts) in enumerate(cards):
+        cx, cy = sx + (i % 2) * (cw + 12), y + 132 + (i // 2) * 150
+        card(s, cx, cy, cw, 138)
+        s.text(cx + 14, cy + 26, lab, size=13.5)
+        s.text(cx + 14, cy + 56, val, size=22, weight=800, display=True)
+        spark(s, cx + 14, cy + 68, cw - 28, 34, pts)
+        s.text(cx + 14, cy + 124, sub, size=12, fill="soft")
+    ty = y + 450
+    s.text(sx, ty, "Consumers", size=17, weight=600)
+    chips = ["All · 4", "Workers · 2", "Brain · 1", "Docker · 1"]
+    cx = sx
+    for i, c in enumerate(chips):
+        cwid = tw(c, 12.5) + 24
+        s.rect(cx, ty + 14, cwid, 28, rx=8, fill="card" if i else "select", stroke="ink" if not i else "border")
+        s.text(cx + cwid / 2, ty + 33, c, size=12.5, anchor="middle")
+        cx += cwid + 8
+    rows = [("Sync fix", "Worker · codex", "1.2 GB"), ("Brain", "Brain · claude", "420 MB"), ("postgres 16", "Docker", "310 MB")]
+    ry = ty + 60
+    for name, sub, rss in rows:
+        s.text(sx, ry + 16, name, size=14.5, weight=500)
+        s.text(sx, ry + 34, sub, size=12, fill="soft")
+        s.text(sx + sw, ry + 24, rss, size=13.5, mono=True, anchor="end")
+        ry += 44
     return s.render()
 
 
 def alerts():
-    s = Svg("al", W, 300, "Alerts and Telegram",
-            "Push alerts arrive only when a Session is blocked, failed or finished. Telegram is another channel to the same Brain.",
-            states=0)
-    s.text(20, 30, "PUSH", size=9.5, fill="faint", mono=True, extra=' letter-spacing="1.2"')
-    notes = [("need", "session-auth needs you", "Approve running the migration?"),
-             ("fail", "flaky-tests failed", "3 of 212 tests still fail on CI"),
-             ("done", "ios-crash finished", "Fixed the resume race; tests pass")]
-    for i, (k_, t, b) in enumerate(notes):
-        y = 42 + i * 56
-        s.rect(20, y, 230, 48, rx=14, fill="panel2")
-        s.rect(30, y + 10, 20, 20, rx=5, fill="#151a18")
-        dot(s, 40, y + 20, k_, r=3.5)
-        s.text(58, y + 20, t, size=11.5, weight=600)
-        s.text(58, y + 36, b, size=10, fill="dim")
-    s.text(20, 230, "Nothing for routine progress.", size=11, fill="faint")
-    s.text(20, 248, "Silent while you watch that Session.", size=11, fill="faint")
-    # Telegram
-    tx = 270
-    s.text(tx, 30, "TELEGRAM", size=9.5, fill="faint", mono=True, extra=' letter-spacing="1.2"')
-    s.rect(tx, 42, W - tx - 20, 216, rx=14, fill="panel2")
-    s.rect(W - 20 - 120, 58, 106, 28, rx=12, fill="sageD")
-    s.text(W - 20 - 67, 76, "where are we?", size=11, fill="ink", anchor="middle")
-    lines = ["2 Workers running.", "session-auth waits on", "your approval. ios-crash", "is done and accepted."]
-    s.rect(tx + 12, 98, 160, 86, rx=12, fill="panel3")
-    for i, ln in enumerate(lines):
-        s.text(tx + 24, 118 + i * 17, ln, size=11, fill="ink")
-    s.text(tx + 14, 204, "Brain · same thread", size=10, fill="faint", mono=True)
-    s.text(tx + 14, 220, "as the app", size=10, fill="faint", mono=True)
+    s, x, y, w = screen("al", 540, "Push alerts and Telegram",
+                        "Push notifications only when a Session needs input, fails or finishes. Below, Telegram as a "
+                        "second channel to the same Brain thread.")
+    sx, sw = x + 18, w - 36
+    s.text(sx, y + 34, "PUSH", size=11, fill="faint", mono=True, extra=' letter-spacing="1.4"')
+    notes = [("Sync fix needs input", "Keep both copies, or the newest edit?"),
+             ("Release notes failed", "Notion said 401: the token expired."),
+             ("Conflict wording finished", "Five apps compared. “Conflicted copy” wins.")]
+    ny = y + 46
+    for t, b in notes:
+        s.rect(sx, ny, sw, 64, rx=18, fill="card", stroke="line")
+        seal(s, sx + 14, ny + 14, 34)
+        s.text(sx + 60, ny + 28, t, size=14.5, weight=600)
+        s.text(sx + 60, ny + 48, b, size=13, fill="soft")
+        s.text(sx + sw - 14, ny + 28, "now" if t.startswith("Sync") else "2m", size=11.5, fill="soft", anchor="end")
+        ny += 74
+    s.text(sx, ny + 20, "Nothing for routine progress.", size=13, fill="soft")
+    ty = ny + 58
+    s.text(sx, ty, "TELEGRAM", size=11, fill="faint", mono=True, extra=' letter-spacing="1.4"')
+    card(s, sx, ty + 12, sw, 164)
+    logo(s, "telegram", sx + 16, ty + 26, 20)
+    s.text(sx + 44, ty + 41, "Mewla Brain", size=14, weight=600)
+    s.line(sx, ty + 56, sx + sw, ty + 56, stroke="line")
+    s.rect(sx + sw - 148, ty + 68, 132, 32, rx=16, fill="me")
+    s.text(sx + sw - 82, ty + 89, "where are we?", size=13.5, anchor="middle")
+    s.rect(sx + 16, ty + 108, sw - 80, 54, rx=14, fill="tint")
+    s.text(sx + 30, ty + 130, "2 of 5 back. Sync fix needs you:", size=13)
+    s.text(sx + 30, ty + 150, "keep both copies, or the newest edit?", size=13)
     return s.render()
 
 

@@ -171,6 +171,56 @@ Work; unrelated historical cleanup conflicts remain visible in reconciliation.
 Executable Given/When/Then contracts, deterministic CI commands and the bounded
 opt-in provider gate are documented in [Behavior Testing](behavior-testing.md).
 
+### In the app
+
+Brain's Work shows as slips in the conversation and in one Work surface (a
+column on wide screens, a summary line and sheet on phones); see
+[Brain and Work](brain-and-work.md#follow-the-work). The app reads
+`current_work` and maps each lifecycle onto six marks in
+`brainWorkLifecycleStatus` (`app/components/brain/brainWorkEventPresentation.ts`).
+
+### User Decisions
+
+The user acts on a Work from its slip. Each action is one typed request
+(`brain_work_action` over the app WebSocket, `Service.ActOnWork`) that changes
+the Work in one replacement and appends one `user.*` or `brain.work_closed`
+Event with `source_name: user`, so Brain reads the decision as a fact.
+
+| Action | Daemon effect | Event |
+| --- | --- | --- |
+| `reply` (a choice or free text) | Submitted to the current Brain host through the same admission as any user message (`SubmitExternalUserInput`, receipt `work-reply:<work>:<request>`), as `Re: <title> (work <id>)`, Brain's question quoted, then the text. Once Brain has it (accepted or uncertain), the question clears and a `user_input` wake is released. A not-submitted reply records nothing. | `user.replied` (non-actionable; details carry the admission) |
+| `close` (Accept) | `CloseWork` as done, actor `user` | `brain.work_closed` |
+| `dismiss` (Not needed anymore) | `CloseWork` as cancelled, actor `user` | `brain.work_closed` |
+| `stop` | `CloseWork` as cancelled, then the delegated Worker Session is torn down; never the Host | `brain.work_closed` |
+| `snooze` | Records `snoozed_until`; no lifecycle change, nothing scheduled | `user.snoozed` |
+
+**Who accepts Work.** Brain accepts Work after review, and the user can
+close it directly. A user close is final: Brain does not re-record or reopen
+it. "Ask Brain about this" sends nothing by itself; it puts the Work's
+reference in Brain's composer for the user to finish. A close that races an
+in-flight Host delivery fails with `brain_work_close_conflict`, and the app
+says to retry.
+
+**Questions.** Brain sets `question` and up to four `choices` with
+`mewla brain work update -id <work> -status waiting -question "<q>" -choice
+"<a>" -choice "<b>"`. They persist on the Work row (no schema change: the
+fields are optional) and project on `current_work`. An empty `-question`
+clears both.
+
+**Nothing stays stuck.** `current_work` lists, past the four-item review
+window, any open Work with a question, a review whose handling ended without
+a disposition, or a reply still awaiting Brain. It adds `attention_since` (the
+open review's birth, the wait's start, or the question's time, which does
+not move while the Work waits; `updated_at` changes on every projection sync)
+and `attention_reason`. The app derives the rest; elapsed time never writes
+daemon state:
+
+- an open `turn_lost`, `lease_expired` or `submission_*` review with no live
+  Attempt is **Outcome unknown**: ask Brain to check, or close;
+- a result back for over a day with no decision is **No decision**: Accept,
+  ask Brain, or dismiss;
+- a snoozed Work shows under Waiting until its time, then needs you again.
+
 ## Worker Upgrade
 
 The Worker release changes CLI/control and mobile wire names together. Use
@@ -227,7 +277,7 @@ starve later Work. This state survives restart and does not depend on watcher
 poll frequency. Successful delivery clears the failure; a new review starts with
 its own retry budget. No automatic resolution, cancellation or discard occurs.
 
-The shared Android/iOS Work card displays the delivery failure and retry/stop
+The shared Android/iOS Work slip displays the delivery failure and retry/stop
 message while retaining the Worker result. `mewla brain context --json` exposes
 `current_work[].review_delivery` with `attempts`, `error`, `retry_at` and
 `exhausted`, including failures beyond the usual four-item attention window.

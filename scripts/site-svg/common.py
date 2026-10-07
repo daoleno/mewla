@@ -1,32 +1,45 @@
-# Shared palette and drawing helpers for the homepage and README drawings.
+# Shared palette and drawing helpers for the README drawings.
 # Every SVG must render on its own (README, GitHub camo): no webfonts, no
-# script, default state in its own <style>. The page inlines the same files
-# and drives data-state, so every rule is scoped to the figure's root class.
+# script, one <style>. Colours and shapes follow app/DESIGN.md (Seal & Slip):
+# paper and ink, vermilion only for the seal, Send and "Needs you", and one
+# glyph per Work state.
+import json
+import os
+import re
+import subprocess
 from html import escape
 
-SANS = 'Archivo,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif'
-MONO = '"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace'
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(HERE, "..", "..")
 
-# Matches the app's dark tokens: warm ink canvas, ivory brand detail, sage
-# accent, teal success. Ember marks the one thing that needs the owner.
+SANS = 'Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif'
+DISPLAY = '"Bricolage Grotesque",Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif'
+MONO = '"Maple Mono","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace'
+
+# AppColors, light scheme (app/theme/primitives.ts via DESIGN.md).
 C = {
-    "bg": "#0c0d0a",
-    "panel": "#131410",
-    "panel2": "#1a1b16",
-    "panel3": "#22231d",
-    "line": "#2a2b24",
-    "line2": "#3b3c34",
-    "ink": "#f2eee5",
-    "dim": "#aaa699",
-    "faint": "#77746a",
-    "sage": "#8fcfa6",
-    "sage2": "#5f9d78",
-    "sageD": "#1f3328",
-    "teal": "#5ec4b6",
-    "ember": "#f0895c",
-    "emberD": "#3a2219",
-    "amber": "#e2b45c",
-    "red": "#ef6b5f",
+    "paper": "#FBFAF7",
+    "card": "#FFFFFF",
+    "tint": "#F5F3EE",
+    "pressed": "#ECE8DF",
+    "select": "#EFEBE3",
+    "me": "#F0ECE4",
+    "ink": "#161412",
+    "soft": "#57514A",
+    "soft2": "#6C665D",
+    "line": "#ECE7DE",
+    "border": "#DDD6C9",
+    "faint": "#857E73",
+    "seal": "#C8372B",
+    "sealText": "#BC3328",
+    "sealSoft": "#FBEBE6",
+    "onSeal": "#FFFFFF",
+    "ready": "#2F6B4F",
+    "running": "#2C55C0",
+    "warning": "#9A6212",
+    "failed": "#7D1F35",
+    "blocked": "#736C61",
+    "desk": "#F1EEE7",
 }
 
 
@@ -34,22 +47,31 @@ def e(s):
     return escape(str(s), quote=True)
 
 
+def tw(s, size, mono=False, weight=400):
+    """Rough text width, good enough to place trailing marks."""
+    if mono:
+        return len(s) * size * 0.6
+    k = 0.53 if weight < 600 else 0.56
+    return sum(size * (0.3 if ch in "il.,:;'|!" else 0.62 if ch.isupper() else k) for ch in s)
+
+
 class Svg:
-    def __init__(self, cls, w, h, title, desc, states=0, css=""):
+    def __init__(self, cls, w, h, title, desc, css=""):
         self.cls, self.w, self.h = cls, w, h
-        self.title, self.desc, self.states, self.css = title, desc, states, css
+        self.title, self.desc, self.css = title, desc, css
         self.out = []
 
     def add(self, s):
         self.out.append(s)
         return self
 
-    def text(self, x, y, s, size=13, fill="ink", weight=400, anchor="start", mono=False, cls="", extra=""):
+    def text(self, x, y, s, size=14, fill="ink", weight=400, anchor="start", mono=False, display=False, cls="", extra=""):
         col = C.get(fill, fill)
-        fam = ' class="m' + (" " + cls if cls else "") + '"' if mono else (f' class="{cls}"' if cls else "")
+        classes = " ".join(c for c in ("m" if mono else "", "d" if display else "", cls) if c)
+        c = f' class="{classes}"' if classes else ""
         w = f' font-weight="{weight}"' if weight != 400 else ""
         a = f' text-anchor="{anchor}"' if anchor != "start" else ""
-        self.out.append(f'<text x="{x:g}" y="{y:g}" font-size="{size:g}" fill="{col}"{w}{a}{fam}{extra}>{e(s)}</text>')
+        self.out.append(f'<text x="{x:g}" y="{y:g}" font-size="{size:g}" fill="{col}"{w}{a}{c}{extra}>{e(s)}</text>')
         return self
 
     def rect(self, x, y, w, h, rx=0, fill="none", stroke=None, sw=1, cls="", extra=""):
@@ -87,56 +109,198 @@ class Svg:
         self.out.append("</g>")
         return self
 
-    def render(self, bg=True, rx=18, live_vb=None):
+    def render(self, bg="desk", rx=20):
         k = self.cls
-        state_css = ""
-        if self.states:
-            state_css += f".{k} .st{{opacity:0;transition:opacity .4s ease}}"
-            on = [f".{k}:not([data-state]) .s1"] + [f'.{k}[data-state="{i}"] .s{i}' for i in range(1, self.states + 1)]
-            state_css += ",".join(on) + "{opacity:1}"
-            state_css += f"@media (prefers-reduced-motion:reduce){{.{k} .st{{transition:none}}}}"
         head = (
             f'<svg xmlns="http://www.w3.org/2000/svg" class="{k}" viewBox="0 0 {self.w} {self.h}" '
             f'width="{self.w}" height="{self.h}" role="img" aria-labelledby="{k}-t {k}-d" fill="none">'
             f'<title id="{k}-t">{e(self.title)}</title><desc id="{k}-d">{e(self.desc)}</desc>'
             f"<style>.{k} text{{font-family:{SANS};white-space:pre}}.{k} .m{{font-family:{MONO}}}"
-            f"{state_css}{self.css}</style>"
+            f".{k} .d{{font-family:{DISPLAY};letter-spacing:-.02em}}"
+            f".{k} .spin{{transform-box:fill-box;transform-origin:center;animation:{k}-spin 1.1s linear infinite}}"
+            f"@keyframes {k}-spin{{to{{transform:rotate(360deg)}}}}"
+            f"@media (prefers-reduced-motion:reduce){{.{k} .spin{{animation:none}}}}{self.css}</style>"
         )
         body = []
         if bg:
-            body.append(f'<rect class="bg" width="{self.w}" height="{self.h}" rx="{rx}" fill="{C["bg"]}"/>')
+            body.append(f'<rect width="{self.w}" height="{self.h}" rx="{rx}" fill="{C[bg]}"/>')
         return head + "".join(body) + "".join(self.out) + "</svg>\n"
 
 
-def ticks(s, x, y, w, h, n=8, col="line"):
-    """Registration corners: the drawing's only ornament."""
-    L = 10
-    for cx, cy, dx, dy in ((x, y, 1, 1), (x + w, y, -1, 1), (x, y + h, 1, -1), (x + w, y + h, -1, -1)):
-        s.path(f"M{cx:g} {cy + dy * L:g}V{cy:g}H{cx + dx * L:g}", stroke=col, sw=1)
+# --- The seal and the cat -------------------------------------------------
+
+def _seal_inner():
+    with open(os.path.join(ROOT, "site", "seal-icon.svg")) as f:
+        src = f.read()
+    return re.sub(r"^.*?<svg[^>]*>|</svg>\s*$", "", src, flags=re.S).strip()
 
 
-def phone(s, x, y, w, h, screen="panel"):
-    """Thin device outline. Returns the screen rect (x, y, w, h)."""
-    s.rect(x, y, w, h, rx=w * 0.15, fill="#0a0b08", stroke="line2", sw=1.2)
-    i = w * 0.032
-    sx, sy, sw_, sh = x + i, y + i, w - 2 * i, h - 2 * i
-    s.rect(sx, sy, sw_, sh, rx=w * 0.125, fill=screen)
-    s.rect(x + w / 2 - w * 0.13, sy + 9, w * 0.26, 18, rx=9, fill="#050504")
-    return sx, sy, sw_, sh
+SEAL_INNER = _seal_inner()
+_CATS = None
 
 
-def pill(s, x, y, label, fill="panel3", col="dim", size=11, pad=8, h=20, mono=False, stroke=None, anchor="start"):
-    w = len(label) * size * (0.62 if mono else 0.56) + pad * 2
-    if anchor == "end":
-        x -= w
-    s.rect(x, y, w, h, rx=h / 2, fill=fill, stroke=stroke)
-    s.text(x + w / 2, y + h / 2 + size * 0.36, label, size=size, fill=col, anchor="middle", mono=mono, weight=500)
+def cats():
+    """Standing cat poses drawn from the app's geometry (cat.ts)."""
+    global _CATS
+    if _CATS is None:
+        out = subprocess.run(["bun", os.path.join(HERE, "cat.ts")], check=True, capture_output=True, text=True, cwd=ROOT)
+        _CATS = json.loads(out.stdout)
+    return _CATS
+
+
+def seal(s, x, y, size):
+    """The brand mark (site/seal-icon.svg), size px square."""
+    s.add(f'<svg x="{x:g}" y="{y:g}" width="{size:g}" height="{size:g}" viewBox="0 0 100 100">{SEAL_INNER}</svg>')
+
+
+def cat(s, name, x, y, width):
+    """A standing cat whose feet rest on y, centred on x. Crop as SealCat.tsx."""
+    h = width * 84 / 110
+    s.add(f'<svg x="{x - width / 2:g}" y="{y - h:g}" width="{width:g}" height="{h:g}" viewBox="-58 -80 110 84">{cats()[name]}</svg>')
+
+
+# --- Status marks (components/ui/StatusMark.tsx) ---------------------------
+
+STATE_WORD = {
+    "ready": "Ready", "running": "Working", "needs": "Needs you", "warning": "Needs review",
+    "failed": "Failed", "blocked": "Blocked", "waiting": "Waiting",
+}
+
+
+def mark(s, kind, cx, cy, r=6.5, spin=True):
+    """One 13 pt glyph per state, centred on (cx, cy)."""
+    if kind == "ready":
+        s.circle(cx, cy, r, fill="ready")
+        s.path(f"M{cx - r * .45:g} {cy + r * .02:g}l{r * .32:g} {r * .32:g}l{r * .6:g} {-r * .62:g}", stroke="#FFFFFF", sw=1.6,
+               extra=' stroke-linecap="round" stroke-linejoin="round"')
+    elif kind == "running":
+        a = 2 * 3.14159 * (r - 1)
+        s.circle(cx, cy, r - 1, stroke="running", sw=1.8, cls="spin" if spin else "",
+                 extra=f' stroke-dasharray="{a * .7:.2f} {a:.2f}" stroke-linecap="round"')
+    elif kind == "warning":
+        s.path(f"M{cx:g} {cy - r:g}L{cx + r:g} {cy + r * .8:g}H{cx - r:g}Z", stroke="warning", sw=1.5, extra=' stroke-linejoin="round"')
+        s.line(cx, cy - r * .25, cx, cy + r * .2, stroke="warning", sw=1.5)
+        s.circle(cx, cy + r * .5, .8, fill="warning")
+    elif kind == "failed":
+        s.rect(cx - r + .8, cy - r + .8, 2 * r - 1.6, 2 * r - 1.6, rx=2, stroke="failed", sw=1.5)
+        s.path(f"M{cx - r * .4:g} {cy - r * .4:g}L{cx + r * .4:g} {cy + r * .4:g}M{cx + r * .4:g} {cy - r * .4:g}L{cx - r * .4:g} {cy + r * .4:g}",
+               stroke="failed", sw=1.5, extra=' stroke-linecap="round"')
+    elif kind in ("blocked", "waiting"):
+        s.circle(cx, cy, r - 1, stroke="blocked", sw=1.5, extra=' stroke-dasharray="2 2.2"')
+
+
+def state(s, kind, x, y, anchor="end", size=13, word=None, spin=True):
+    """A state mark plus its word on baseline y. anchor=end puts it flush right at x."""
+    word = STATE_WORD[kind] if word is None else word
+    if kind == "needs":
+        w = tw(word, size - 1, weight=600) + 18
+        x0 = x - w if anchor == "end" else x
+        s.rect(x0, y - size + 1, w, size + 7, rx=(size + 7) / 2, fill="seal")
+        s.text(x0 + w / 2, y + 1, word, size=size - 1, fill="onSeal", weight=600, anchor="middle")
+        return w
+    col = {"ready": "ready", "running": "running", "warning": "warning", "failed": "failed", "blocked": "soft", "waiting": "soft"}[kind]
+    w = tw(word, size, weight=500) + 19
+    x0 = x - w if anchor == "end" else x
+    mark(s, kind, x0 + 6.5, y - size * .36, spin=spin)
+    s.text(x0 + 19, y, word, size=size, fill=col, weight=500)
     return w
 
 
-def dot(s, x, y, kind, r=3.5, cls=""):
-    col = {"run": "sage", "need": "ember", "done": "teal", "idle": "faint", "fail": "red"}[kind]
-    s.circle(x, y, r, fill=col, cls=cls)
+# --- Pieces of the app -----------------------------------------------------
+
+def slip(s, x, y, w, meta, title, line=None, kind="ready", h=None, perch=False, dot=False):
+    """A Work slip (WorkSlip): meta, state, title, one line."""
+    h = h or (96 if line else 72)
+    if kind == "needs":
+        s.rect(x, y, w, h, rx=14, fill="card", stroke="ink", sw=1.5)
+    elif kind in ("blocked", "waiting"):
+        s.rect(x, y, w, h, rx=14, fill="paper", stroke="border", extra=' stroke-dasharray="4 4"')
+    else:
+        s.rect(x, y, w, h, rx=14, fill="card", stroke="line")
+    s.text(x + 18, y + 27, meta, size=12.5, fill="soft")
+    sw_ = state(s, kind, x + w - 16, y + 28, size=12.5)
+    if dot:
+        s.circle(x + w - 16 - sw_ - 9, y + 23.5, 3, fill="ink")
+    s.text(x + 18, y + 55, title, size=16, weight=600)
+    if line:
+        s.text(x + 18, y + 80, line, size=14, fill="soft")
+    if perch:
+        cat(s, "alert", x + w - 46, y + 1, 60)
+    return h
+
+
+def chevron(s, x, y, size=7, stroke="soft", direction="right"):
+    d = {"right": f"M{x:g} {y - size:g}l{size:g} {size:g}l{-size:g} {size:g}",
+         "left": f"M{x + size:g} {y - size:g}l{-size:g} {size:g}l{size:g} {size:g}",
+         "down": f"M{x - size:g} {y - size / 2:g}l{size:g} {size:g}l{size:g} {-size:g}"}[direction]
+    s.path(d, stroke=stroke, sw=1.6, extra=' stroke-linecap="round" stroke-linejoin="round"')
+
+
+def round_button(s, cx, cy, r=18, fill="card", stroke="line"):
+    s.circle(cx, cy, r, fill=fill, stroke=stroke)
+
+
+def menu_icon(s, cx, cy):
+    s.path(f"M{cx - 7:g} {cy - 3:g}H{cx + 7:g}M{cx - 7:g} {cy + 3:g}H{cx + 7:g}", stroke="ink", sw=1.7, extra=' stroke-linecap="round"')
+
+
+def dots_icon(s, cx, cy, col="ink"):
+    for i in (-6, 0, 6):
+        s.circle(cx + i, cy, 1.7, fill=col)
+
+
+def screen_header(s, x, y, w, title, back=True, trailing=None):
+    """A pushed screen's header: back chevron, centred title."""
+    if back:
+        round_button(s, x + 26, y + 26, 18)
+        chevron(s, x + 23, y + 26, 6, stroke="ink", direction="left")
+    s.text(x + w / 2, y + 32, title, size=18, weight=600, anchor="middle")
+    if trailing == "dots":
+        round_button(s, x + w - 26, y + 26, 18)
+        dots_icon(s, x + w - 26, y + 26)
+
+
+def segmented(s, x, y, w, labels, on=0, h=40):
+    s.rect(x, y, w, h, rx=h / 2, fill="tint")
+    seg = w / len(labels)
+    s.rect(x + on * seg + 4, y + 4, seg - 8, h - 8, rx=(h - 8) / 2, fill="card", stroke="line")
+    for i, lab in enumerate(labels):
+        s.text(x + i * seg + seg / 2, y + h / 2 + 5, lab, size=14, fill="ink" if i == on else "soft", weight=500 if i == on else 400, anchor="middle")
+
+
+def _logos():
+    """Product marks from the homepage sprite (LobeHub Icons, MIT; Simple Icons, CC0)."""
+    with open(os.path.join(ROOT, "site", "index.html")) as f:
+        src = f.read()
+    return {m.group(1): (m.group(2), m.group(3), m.group(4)) for m in
+            re.finditer(r'<symbol id="lg-([a-z]+)" viewBox="([^"]+)"([^>]*)>(.*?)</symbol>', src, re.S)}
+
+
+LOGOS = _logos()
+
+
+def logo(s, name, x, y, size, color="ink"):
+    vb, attrs, inner = LOGOS[name]
+    s.add(f'<svg x="{x:g}" y="{y:g}" width="{size:g}" height="{size:g}" viewBox="{vb}" color="{C.get(color, color)}">'
+          f'<g{attrs if "fill=" in attrs else ' fill="currentColor"' + attrs}>{inner}</g></svg>')
+
+
+def client_badge(s, cx, cy, client, r=15):
+    """Agent client avatar: its product mark on a quiet tile; a shell gets a prompt."""
+    s.rect(cx - r, cy - r, 2 * r, 2 * r, rx=r * .45, fill="card", stroke="line")
+    if client in LOGOS:
+        logo(s, client, cx - r * .62, cy - r * .62, r * 1.24)
+    else:
+        s.text(cx, cy + r * .3, "$", size=r * .9, fill="ink", weight=600, anchor="middle", mono=True)
+
+
+def phone(s, x, y, w, h):
+    """Thin device outline on paper. Returns the screen rect (x, y, w, h)."""
+    s.rect(x, y, w, h, rx=44, fill="card", stroke="border", sw=1.5)
+    i = 8
+    s.rect(x + i, y + i, w - 2 * i, h - 2 * i, rx=36, fill="paper")
+    s.rect(x + w / 2 - 44, y + 18, 88, 22, rx=11, fill="ink")
+    return x + i, y + i, w - 2 * i, h - 2 * i
 
 
 def write(path, data):

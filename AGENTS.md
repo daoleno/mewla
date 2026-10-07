@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Mewla is a mobile-native control plane. Go code is in daemon/ (cmd/mewla, server, auth, work, terminal, watcher); Expo/React Native code is in app/ (app routes, components, services, store, constants, assets). Product documentation is in docs/.
+Mewla is a mobile-native control plane. Go code is in daemon/ (cmd/mewla, server, auth, work, terminal, watcher); Expo/React Native code is in app/ (app routes, components, services, store, constants, assets). Product documentation is in docs/; the Pages homepage and docs site are built from site/ and scripts/site-docs/.
 
 ## Execution
 

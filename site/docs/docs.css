@@ -128,6 +128,7 @@ a:hover { text-decoration-color: var(--ink); }
 .d-doc p, .d-doc ul, .d-doc ol, .d-doc pre, .d-doc .table-wrap, .d-doc .callout { margin: 0 0 18px; }
 .d-doc ul, .d-doc ol { padding-left: 1.3em; }
 .d-doc li { margin: 4px 0; }
+.d-doc img { display: block; max-width: 100%; height: auto; margin: 6px 0; border-radius: 12px; }
 .d-doc li > p { margin: 0 0 8px; }
 .d-doc strong { font-weight: 600; }
 .d-doc h1 + p { font-size: 18px; color: var(--soft); }
