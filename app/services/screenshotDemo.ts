@@ -17,6 +17,7 @@ export const SCREENSHOT_DEMO_STATES = [
   "profile",
   "reading",
   "providers",
+  "plugins",
   "skills",
   "composer",
   "onboarding",

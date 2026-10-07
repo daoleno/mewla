@@ -627,3 +627,36 @@ export const SCREENSHOT_PROVIDERS_EMPTY_FIXTURE: ProvidersSnapshot = {
   presets: SCREENSHOT_PROVIDERS_FIXTURE.presets,
   models: {},
 };
+
+const DEMO_GITHUB_TOOLS = [
+  { name: "search_issues", description: "Search issues and pull requests", allowed: true, group: "read" as const },
+  { name: "get_pull_request", description: "Read a pull request", allowed: true, group: "read" as const },
+  { name: "create_issue", description: "Open an issue", allowed: false, group: "write" as const },
+  { name: "add_comment", description: "Comment on an issue", allowed: false, group: "write" as const },
+];
+
+/** Plugins on the demo server: two connected services, one needing a reconnect. */
+export const SCREENSHOT_PLUGINS = {
+  github: { id: "github", name: "GitHub", available: true, setup_url: "", description: "Repositories, issues and pull requests." },
+  notion: { id: "notion", name: "Notion", available: true, setup_url: "", description: "Pages and databases in your workspace." },
+  linear: { id: "linear", name: "Linear", available: true, setup_url: "", description: "Issues, projects and team activity." },
+  google: { id: "google", name: "Google", available: true, setup_url: "", description: "Gmail, Drive and Calendar." },
+  slack: { id: "slack", name: "Slack", available: false, unavailable_reason: "Sign-in is not set up on this server yet.", setup_url: "", description: "Channels and messages." },
+  mcp: { id: "mcp", name: "MCP server", available: true, setup_url: "", description: "Any Model Context Protocol server." },
+  openapi: { id: "openapi", name: "OpenAPI", available: true, setup_url: "", description: "Any HTTP API with an OpenAPI spec." },
+};
+
+export const SCREENSHOT_PLUGIN_ACCOUNTS = {
+  github: {
+    id: "acct-github", integration: "github", name: "daoleno", identity: "daoleno", enabled: true,
+    status: "connected" as const, tools: DEMO_GITHUB_TOOLS, history: [],
+  },
+  notion: {
+    id: "acct-notion", integration: "notion", name: "Atlas workspace", identity: "atlas", enabled: true,
+    status: "authorization_required" as const, tools: [], history: [],
+  },
+  linear: {
+    id: "acct-linear", integration: "linear", name: "Atlas team", identity: "atlas", enabled: true,
+    status: "connected" as const, tools: [], history: [],
+  },
+};

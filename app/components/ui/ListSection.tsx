@@ -150,7 +150,7 @@ export function ListRow({
           {value}
         </AppText>
       ) : null}
-      {trailing}
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
       {loading ? <ActivityIndicator size="small" color={colors.textTertiary} /> : null}
       {accessory === "chevron" && !loading ? (
         <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />
@@ -256,6 +256,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 1,
+  },
+  trailing: {
+    alignSelf: "center",
+    flexShrink: 0,
   },
   value: {
     maxWidth: "45%",
