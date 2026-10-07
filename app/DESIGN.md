@@ -163,9 +163,31 @@ preference resolves to ink.
 
 Ionicons outline remains the UI glyph set, at a 1.5–1.8 stroke feel matching
 the landing's line icons. Real product marks (Claude, Codex, GitHub and so on)
-keep their own logos, as on the landing. The seal is the brand mark. The
-app icon and notification icon are planned in the rollout below; the
-`zen-*` branding assets are untouched here.
+keep their own logos, as on the landing. The seal is the brand mark.
+
+### Brand assets
+
+Every brand asset is the seal: seal-icon.svg's vermilion block with the
+curled paper cat under a crescent moon. `components/mewla/mewlaBrandArt.ts`
+draws them all from `sealCatGeometry.ts`; `bun scripts/render-mewla-brand.ts`
+writes the SVG sources (`assets/branding/source/`) and the PNGs
+(`assets/branding/mewla-*.png`), and `mewlaBrandArt.test.ts` fails when a
+committed file drifts or the config strays from the theme colours.
+
+| Surface | Drawing |
+| --- | --- |
+| iOS icon | The seal is the icon: vermilion full bleed, cat and moon inside 80% |
+| iOS dark / tinted | The seal stamped at 72% on transparent (iOS adds the dark ground) / white seal, cat cut out, on black |
+| Android adaptive | Vermilion background colour; the paper cat and moon fitted to the 66 dp safe circle |
+| Android themed | The cat and crescent alone, knife lines cut through |
+| Splash | The seal at 128 pt on paper `#FBFAF7` / ink `#141210` (fits Android 12's 192 dp circle mask) |
+| Notification | The white seal with the cat cut out, tinted vermilion |
+| Favicon | The seal, carved for 48 px |
+| Drawer and About | `MewlaMark`, the same seal in react-native-svg |
+
+The mark is the logo, not Brain: it never moves or changes with state. The
+`zen-*` assets stay until the rename removes them; Onboarding's brand row and
+the composer's `ZenLoopSpinner` still use them.
 
 ## Sessions and Worker chat
 
@@ -228,7 +250,7 @@ look, with the landing's bolder carving at small sizes.
 | Offline | Asleep in a greyed seal | Brain status screen |
 | No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Onboarding "Give Brain a home" |
 | Paired | Asleep in the seal (moved in) | Onboarding, connected |
-| Failure, pull to refresh, app icon, splash, notification icon, haptics | — | later |
+| Failure, pull to refresh, haptics | — | later |
 
 State comes from `resolveBrainCatPresence` (`components/mewla/brainCatState.ts`).
 Placement comes from `mergeBrainPresenceIntoTimeline`
@@ -250,8 +272,10 @@ row marks. Still to get a dedicated pass:
    chat above).
 2. ~~**Calendar, Skills, Stats, Resources, Model Providers, Browser,
    Work**~~: done in the tools pass (see below).
-4. **Brand assets (with the rename)**: wordmark, app icon, adaptive and
-   monochrome icons, splash, notification icon, all from `seal-icon.svg`.
+3. **Brand wordmark (with the rename)**: the app icon, adaptive and
+   monochrome icons, splash, favicon, notification icon and the drawer,
+   About and Onboarding marks are done (see Brand assets); the wordmark
+   itself and the display name change with the rename.
 
 **Tools pass.** Calendar rows have a neutral hairline rail and the state's
 mark (`calendarStatusMark`): a due reminder or deadline is Needs you,
