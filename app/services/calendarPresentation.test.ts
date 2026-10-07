@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   agendaSection,
   calendarDateKey,
+  calendarStatusLabel,
+  calendarStatusMark,
   executes,
   groupAgenda,
 } from "./calendarPresentation";
@@ -56,4 +58,22 @@ describe("calendar presentation", () => {
     expect(
       executes(make("a", "2026-07-15T10:00:00Z", "scheduled_action")),
     ).toBe(true));
+});
+
+describe("calendar status marks", () => {
+  test("map onto the Seal & Slip states with Scheduled unmarked", () => {
+    expect(calendarStatusMark).toEqual({
+      scheduled: null,
+      waiting: "needs",
+      running: "running",
+      completed: "ready",
+      failed: "failed",
+      cancelled: "blocked",
+    });
+    // Only a due item that waits for you reads as the seal.
+    expect(
+      Object.entries(calendarStatusMark).filter(([, mark]) => mark === "needs"),
+    ).toEqual([["waiting", "needs"]]);
+    expect(calendarStatusLabel.waiting).toBe("Needs you");
+  });
 });

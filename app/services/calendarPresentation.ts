@@ -1,9 +1,31 @@
 import type { CalendarItem, CalendarKind } from "../store/calendar";
+import type { WorkStatus } from "../components/ui/workStatus";
 export const kindLabel: Record<CalendarKind, string> = {
   event: "Event",
   reminder: "Reminder",
   deadline: "Deadline",
   scheduled_action: "Zen action",
+};
+export const calendarStatusLabel: Record<CalendarItem["status"], string> = {
+  scheduled: "Scheduled",
+  waiting: "Needs you",
+  running: "Running",
+  completed: "Done",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+/**
+ * The Seal & Slip mark for a calendar status. A due reminder or deadline
+ * waits for you, so it takes the seal; Scheduled is the quiet default and has
+ * no mark, like an idle Session.
+ */
+export const calendarStatusMark: Record<CalendarItem["status"], WorkStatus | null> = {
+  scheduled: null,
+  waiting: "needs",
+  running: "running",
+  completed: "ready",
+  failed: "failed",
+  cancelled: "blocked",
 };
 export function itemInstant(item: CalendarItem): string {
   return item.next_at ?? item.start_at ?? item.notify_at ?? item.due_at!;
