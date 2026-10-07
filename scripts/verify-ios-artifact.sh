@@ -5,8 +5,8 @@ set -euo pipefail
 
 MODE="${1:-}"
 ARTIFACT="${2:-}"
-EXPECTED_BUNDLE_ID="${ZEN_IOS_BUNDLE_ID:-com.daoleno.zen}"
-EXPECTED_DISPLAY_NAME="${ZEN_IOS_DISPLAY_NAME:-Zen}"
+EXPECTED_BUNDLE_ID="${ZEN_IOS_BUNDLE_ID:-com.daoleno.mewla}"
+EXPECTED_DISPLAY_NAME="${ZEN_IOS_DISPLAY_NAME:-Mewla}"
 EXPECTED_BUILD_NUMBER="${ZEN_IOS_BUILD_NUMBER:-}"
 EXPECTED_VERSION="${ZEN_IOS_VERSION:-}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +14,7 @@ NOTICE_SRC="${ZEN_IOS_NOTICE_SRC:-$ROOT/app/assets/notices/GHOSTTY-MIT.txt}"
 NOTICE_BUNDLE_REL="${ZEN_IOS_NOTICE_BUNDLE_REL:-GHOSTTY-MIT.txt}"
 
 usage() {
-  echo "usage: $0 simulator path/to/Zen.app | ipa path/to/Zen.ipa" >&2
+  echo "usage: $0 simulator path/to/Mewla.app | ipa path/to/Mewla.ipa" >&2
   exit 2
 }
 

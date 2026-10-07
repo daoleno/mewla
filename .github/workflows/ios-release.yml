@@ -173,7 +173,7 @@ jobs:
           const createConfig = require('./app/app.config.js');
           const { resolveIOSIdentity } = require('./app/iosIdentity');
 
-          const identity = resolveIOSIdentity(process.env.ZEN_IOS_APP_VARIANT);
+          const identity = resolveIOSIdentity(process.env.MEWLA_IOS_APP_VARIANT || process.env.ZEN_IOS_APP_VARIANT);
           const config = createConfig();
           if (
             config.name !== identity.nativeProjectName ||
