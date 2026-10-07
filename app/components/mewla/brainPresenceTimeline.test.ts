@@ -62,9 +62,27 @@ describe("the one cat between turns", () => {
     expect(tail && "detail" in tail ? tail.detail : undefined).toBeUndefined();
   });
 
-  test("a delivered result and delegated Work keep the tail row; asleep adds nothing", () => {
+  test("a delivered result, delegated Work and the sleeping cat each hold the tail row", () => {
     expect(mergeBrainPresenceIntoTimeline([say], { state: "delivered", count: 1 }).at(-1)?.id).toBe(`${BRAIN_PRESENCE_ITEM_PREFIX}delivered`);
-    expect(mergeBrainPresenceIntoTimeline([say], { state: "idle" })).toEqual([say]);
+    // Asleep, the cat stays at the newest edge so a tap can ask it how things are.
+    const idle = mergeBrainPresenceIntoTimeline([say], { state: "idle" });
+    expect(idle.at(-1)).toMatchObject({ id: `${BRAIN_PRESENCE_ITEM_PREFIX}idle`, title: "All quiet" });
+    expect(cats(idle)).toBe(1);
+  });
+
+  test("a cat away in the Work column leaves no tail row", () => {
+    expect(mergeBrainPresenceIntoTimeline([say], { state: "attention", count: 1, workIds: ["w9"], away: true })).toEqual([say]);
+  });
+
+  test("a running turn has no tail row; its Working row says Brain's newest step", () => {
+    const tool = { type: "activity", id: "t1", title: "Read brainWorkSurface.ts", tone: "success", defaultExpanded: false } as ZenTimelineItem;
+    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}a1`, title: "Working", tone: "running", defaultExpanded: false } as ZenTimelineItem;
+    const merged = mergeBrainPresenceIntoTimeline([say, tool, working], { state: "idle" });
+    expect(merged.map((item) => item.id)).toEqual(["say", "t1", working.id]);
+    expect(merged.at(-1)).toMatchObject({ detail: "Read brainWorkSurface.ts" });
+    // A step from before the user's last message is not this turn's.
+    const reply = { type: "message", id: "m", role: "user", body: "go" } as ZenTimelineItem;
+    expect(mergeBrainPresenceIntoTimeline([tool, reply, working], undefined).at(-1)).toBe(working);
   });
 });
 

@@ -100,6 +100,7 @@ function SleepingSeal({
   const offline = state === "offline";
   const block = offline ? colors.borderStrong : SEAL_RED;
   const breathing = moving && (state === "idle" || state === "waking");
+  const twitching = state === "waking";
   const breath = useLoop(breathing, 3600);
   const breathStyle = useAnimatedStyle(() => {
     const wave = Math.sin(breath.value * Math.PI * 2);
@@ -142,7 +143,7 @@ function SleepingSeal({
         >
           <Svg viewBox="0 0 100 100" width={size} height={size}>
             <G transform={CAT_IN_SEAL}>
-              <CurledCat fill={SEAL_PAPER} line={block} detail={detail} bold={bold} />
+              <CurledCat fill={SEAL_PAPER} line={block} detail={detail} bold={bold} hideEarR={twitching} />
               {state === "waking" ? (
                 <G>
                   <Ellipse cx={CURL_PEEK.cx} cy={CURL_PEEK.cy} rx={CURL_PEEK.rx} ry={CURL_PEEK.ry} fill={SEAL_PAPER} />
@@ -151,10 +152,57 @@ function SleepingSeal({
               ) : null}
             </G>
           </Svg>
+          {twitching ? (
+            <TwitchingEar size={size} moving={moving} line={block} detail={detail} bold={bold} />
+          ) : null}
         </Animated.View>
       ) : null}
       {state === "idle" ? <Snores size={size} moving={moving} /> : null}
     </View>
+  );
+}
+
+/** Where the curled cat's right ear meets its head, in the seal's 0–100 box. */
+const EAR_BASE = [SEAL_AT[0] + SEAL_AT[2] * -8.5, SEAL_AT[1] + SEAL_AT[2] * -37] as const;
+
+/**
+ * Half awake: the right ear flicks now and then, listening for the computer.
+ * Two quick flicks every 3.2 s; still under reduced motion.
+ */
+function TwitchingEar({
+  size,
+  moving,
+  line,
+  detail,
+  bold,
+}: {
+  size: number;
+  moving: boolean;
+  line: string;
+  detail: boolean;
+  bold: number;
+}) {
+  const loop = useLoop(moving, 3200);
+  const style = useAnimatedStyle(() => {
+    const t = loop.value;
+    // Two quick flicks in the first 18% of the cycle, then still.
+    const w = 0.18;
+    const flick = t < w ? Math.sin((t / w) * Math.PI * 4) * (1 - t / w) : 0;
+    return { transform: [{ rotate: `${flick * 18}deg` }] };
+  });
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { transformOrigin: `${EAR_BASE[0]}% ${EAR_BASE[1]}%` }, style]}
+    >
+      <Svg viewBox="0 0 100 100" width={size} height={size}>
+        <G transform={CAT_IN_SEAL}>
+          <Path d={CURL.earR} fill={SEAL_PAPER} />
+          {detail ? (
+            <Path d={CURL.fine[3]} fill="none" stroke={line} strokeWidth={0.9 * bold} strokeLinecap="round" />
+          ) : null}
+        </G>
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -163,11 +211,14 @@ export function CurledCat({
   line,
   detail,
   bold,
+  hideEarR = false,
 }: {
   fill: string;
   line: string;
   detail: boolean;
   bold: number;
+  /** The waking seal draws this ear on its own layer so it can flick. */
+  hideEarR?: boolean;
 }) {
   const [cx, cy, rx, ry, rot] = CURL.head;
   const stroke = (d: string, width: number) => (
@@ -186,7 +237,7 @@ export function CurledCat({
       <Path d={CURL.tail} fill="none" stroke={fill} strokeWidth={9} strokeLinecap="round" />
       <Path d={CURL.body} fill={fill} />
       <Path d={CURL.earL} fill={fill} />
-      <Path d={CURL.earR} fill={fill} />
+      {hideEarR ? null : <Path d={CURL.earR} fill={fill} />}
       <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} transform={`rotate(${rot} ${cx} ${cy})`} fill={fill} />
       <Path d={CURL.paw} fill={fill} />
       {CURL.lines.map((d) => stroke(d, 1.55 * bold))}
@@ -287,19 +338,20 @@ function StandingCat({
   );
 }
 
-const WALK_FRAMES = 8;
+const KNEAD_FRAMES = 6;
 
 /** A handful of precomputed frames per state; the UI thread only flips them. */
 function standingFrames(state: BrainCatState): StandingCatFrame[] {
   switch (state) {
     case "working":
-      // Walking in place, the cat on its way somewhere for you.
-      return Array.from({ length: WALK_FRAMES }, (_, index) => {
-        const phase = (index / WALK_FRAMES) * Math.PI * 2;
-        return standingCatFrame(pose("stand"), {
-          step: Math.sin(phase) * 0.55,
-          swish: Math.sin(phase) * 6,
-          breath: 1 + 0.015 * Math.cos(phase),
+      // Sitting up, kneading: the front paws tread in turn on the spot while
+      // the tail swishes. Brain is thinking it through, not going anywhere.
+      return Array.from({ length: KNEAD_FRAMES }, (_, index) => {
+        const phase = (index / KNEAD_FRAMES) * Math.PI * 2;
+        return standingCatFrame(pose("sit"), {
+          step: Math.sin(phase) * 0.2,
+          swish: Math.sin(phase) * 14,
+          breath: 1 + 0.014 * Math.cos(phase),
         });
       });
     case "delegating":
@@ -321,7 +373,7 @@ function swayFrames(P: Pose, count: number, amplitude: number): StandingCatFrame
 }
 
 function framePeriod(state: BrainCatState): number {
-  return state === "working" ? 110 : 420;
+  return state === "working" ? 210 : 420;
 }
 
 function FrameLayer({

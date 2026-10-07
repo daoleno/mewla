@@ -137,6 +137,7 @@ function BrainActivityRow({
       detail={item.detail}
       chrome={chrome}
       onPress={working ? undefined : companion.onOpenWork}
+      turnRunning={working}
     />
   );
 }

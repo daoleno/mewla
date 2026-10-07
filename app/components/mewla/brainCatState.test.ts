@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainCurrentWork } from "../../store/brain";
-import { brainCatTailLabel, resolveBrainCatPresence } from "./brainCatState";
+import { brainCatStatusLine, brainCatTailLabel, brainCatTap, resolveBrainCatPresence } from "./brainCatState";
 
 function work(overrides: Partial<BrainCurrentWork>): BrainCurrentWork {
   return {
@@ -57,8 +57,33 @@ describe("resolveBrainCatPresence", () => {
     expect(brainCatTailLabel({ state: "attention", count: 6 })).toBe("6 need you");
     expect(brainCatTailLabel({ state: "delivered", count: 2 })).toBe("Brought 2 things back");
     expect(brainCatTailLabel({ state: "delegating", count: 3 })).toBe("Waiting on 3 Workers");
-    for (const state of ["idle", "working", "waking", "offline", "homeless"] as const) {
+    expect(brainCatTailLabel({ state: "idle" })).toBe("All quiet");
+    for (const state of ["working", "waking", "offline", "homeless"] as const) {
       expect(brainCatTailLabel({ state })).toBeNull();
     }
+  });
+});
+
+describe("tapping the cat", () => {
+  const quiet = { needs: 0, running: 0, back: 0, waiting: 0 };
+  test("asleep, it says how things stand", () => {
+    expect(brainCatTap({ presence: { state: "idle" }, counts: { ...quiet, running: 2 } })).toEqual({
+      kind: "say",
+      text: "All quiet. 2 running, nothing needs you.",
+    });
+    expect(brainCatStatusLine(quiet)).toBe("All quiet. Nothing out, nothing needs you.");
+    expect(brainCatStatusLine({ needs: 2, running: 1, back: 0, waiting: 0 })).toBe("1 running, 2 need you.");
+  });
+  test("needs you: it jumps to the first Work that needs you", () => {
+    expect(brainCatTap({ presence: { state: "attention", count: 2, workIds: ["a", "b"] }, counts: { ...quiet, needs: 2 } })).toEqual({ kind: "open-work", workId: "a" });
+  });
+  test("working: it says what Brain is doing right now", () => {
+    expect(brainCatTap({ presence: { state: "idle" }, turnRunning: true, turnLabel: "Read routing.md", counts: quiet })).toEqual({ kind: "show-turn", text: "Right now: Read routing.md" });
+    expect(brainCatTap({ presence: { state: "idle" }, turnRunning: true, counts: quiet })).toEqual({ kind: "show-turn", text: "Thinking it through…" });
+  });
+  test("offline retries; with no computer it opens pairing; waking just says so", () => {
+    expect(brainCatTap({ presence: { state: "offline" }, counts: quiet })).toEqual({ kind: "retry" });
+    expect(brainCatTap({ presence: { state: "homeless" }, counts: quiet })).toEqual({ kind: "pair" });
+    expect(brainCatTap({ presence: { state: "waking" }, counts: quiet }).kind).toBe("say");
   });
 });

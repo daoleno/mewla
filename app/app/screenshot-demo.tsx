@@ -104,6 +104,7 @@ import {
 } from "../components/brain/brainWorkSurface";
 import { BrainStatusState } from "../components/mewla/BrainStatusState";
 import { SealCat } from "../components/mewla/SealCat";
+import { TappableCat } from "../components/mewla/TappableCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
 import { CatalogView, LinkedAccountView, ServiceHeader } from "../components/plugins/PluginConnectionViews";
 import { ServerContextRow } from "../components/extensions/ServerContextRow";
@@ -878,8 +879,8 @@ function BrainChatDemo({ empty, running, events, work }: { empty: boolean; runni
 
 const CAT_GALLERY: { state: BrainCatState; title: string; when: string }[] = [
   { state: "idle", title: "Idle", when: "Connected, nothing to do: asleep in the seal" },
-  { state: "waking", title: "Waking", when: "Connecting or loading: one eye open" },
-  { state: "working", title: "Working", when: "Brain's turn is running" },
+  { state: "waking", title: "Waking", when: "Starting, connecting or loading: one eye open, an ear flicks" },
+  { state: "working", title: "Working", when: "Brain's turn is running: kneading, tail swishing" },
   { state: "delegating", title: "Delegating", when: "Workers hold delegated Work" },
   { state: "attention", title: "Needs you", when: "Work is waiting on your input" },
   { state: "delivered", title: "Delivered", when: "An unread result is waiting" },
@@ -887,10 +888,40 @@ const CAT_GALLERY: { state: BrainCatState; title: string; when: string }[] = [
   { state: "homeless", title: "No home", when: "No computer paired yet" },
 ];
 
+const CAT_TAP_DEMO: Partial<Record<BrainCatState, string>> = {
+  idle: "All quiet. 2 running, nothing needs you.",
+  waking: "Still waking up. Connecting to your computer…",
+  working: "Right now: Read routing.md",
+  attention: "Opens the first Work that needs you",
+  offline: "Knocking on your computer…",
+};
+
+/**
+ * One cat, large, for frame captures: `cat=<state>`. Tapping it hops (or
+ * stirs) and shows what the real cat answers in that state.
+ */
+function CatFrameDemo({ state }: { state: BrainCatState }) {
+  const colors = useAppColors();
+  const [said, setSaid] = useState<string | null>(null);
+  return (
+    <View style={[catGalleryStyles.frame, { backgroundColor: colors.bgPrimary }]}>
+      <TappableCat
+        state={state}
+        size={state === "idle" || state === "waking" || state === "offline" ? 160 : 200}
+        onPress={() => setSaid(CAT_TAP_DEMO[state] ?? "")}
+        accessibilityLabel={`Brain cat: ${state}`}
+      />
+      <Text style={[TypeScale.label, { color: colors.textPrimary, minHeight: 24 }]}>{said ?? " "}</Text>
+    </View>
+  );
+}
+
 /** Every cat state at hero and row size, for design review. `still=1` freezes motion. */
 function CatGalleryDemo() {
-  const { still } = useLocalSearchParams<{ still?: string }>();
+  const { still, cat } = useLocalSearchParams<{ still?: string; cat?: string }>();
   const colors = useAppColors();
+  const single = CAT_GALLERY.find((entry) => entry.state === cat);
+  if (single) return <CatFrameDemo state={single.state} />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bgPrimary }} contentContainerStyle={catGalleryStyles.grid}>
       {CAT_GALLERY.map(({ state, title, when }) => (
@@ -908,6 +939,12 @@ function CatGalleryDemo() {
 }
 
 const catGalleryStyles = StyleSheet.create({
+  frame: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
