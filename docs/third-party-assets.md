@@ -11,6 +11,8 @@ Inclusion does not imply endorsement. Prefer verifiable upstream license text ov
 | `MapleMono-CN-Regular.ttf`    | [subframe7536/maple-font](https://github.com/subframe7536/maple-font)         | Name table: Maple Mono Project Authors + SIL OFL 1.1; upstream `OFL.txt`                                                      | SIL OFL 1.1                                    |
 | `MapleMono-CN-SemiBold.ttf`   | same                                                                          | same                                                                                                                          | SIL OFL 1.1                                    |
 | `web/MapleMono-Subset-Regular.ttf`, `web/MapleMono-Subset-SemiBold.ttf` | Subsets of the two Maple Mono files above, for the web UI terminal | Name table kept, including the OFL notice (`nameID` 0/13/14); no Reserved Font Name is declared | SIL OFL 1.1 |
+| `Inter-Regular.ttf`, `Inter-Medium.ttf`, `Inter-SemiBold.ttf` | [rsms/inter](https://github.com/rsms/inter), static instances served by Google Fonts (v20) | Name table: "Copyright 2016 The Inter Project Authors" + OFL URL (`nameID` 0/14) | SIL OFL 1.1 |
+| `BricolageGrotesque-SemiBold.ttf`, `BricolageGrotesque-ExtraBold.ttf` | [ateliertriay/bricolage](https://github.com/ateliertriay/bricolage), static instances served by Google Fonts (v9) | Name table: "Copyright 2022 The Bricolage Grotesque Project Authors" + OFL URL (`nameID` 0/14) | SIL OFL 1.1 |
 
 The web subsets keep only Latin, punctuation, arrows, technical symbols, box
 drawing, shapes, dingbats, braille, and Powerline glyphs, with no layout
