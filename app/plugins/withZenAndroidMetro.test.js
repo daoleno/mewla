@@ -51,6 +51,8 @@ test('connection UI exists only in the debug source set and preserves deep links
     expect(source).toMatch(/^package com\.daoleno\.mewla$/m);
     expect(source).toContain('packager-status:running');
     expect(source).toContain('debug_http_host');
+    expect(source).toContain('R.string.react_native_dev_server_ip');
+    expect(source).toContain('R.integer.react_native_dev_server_port');
     expect(source).toContain('PackagerConnectionSettings');
     expect(source).toContain('PreferenceManager.getDefaultSharedPreferences(applicationContext)');
     expect(source).toContain('.commit()');
