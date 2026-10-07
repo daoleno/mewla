@@ -17,6 +17,8 @@ import {
   type ZenTimelineProjectionCache,
 } from "./projectZenTimeline";
 import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
+import { useBrainCompanion } from "../mewla/BrainCompanion";
+import { mergeBrainPresenceIntoTimeline } from "../mewla/brainPresenceTimeline";
 
 type StableTimelineEntry = {
   item: ZenTimelineItem;
@@ -115,13 +117,18 @@ export function useInterfaceTimelineItems({
       };
     });
   }, [providerTimelineItems, turnFocusAnchorAliases]);
+  // Brain only: the cat's presence row; Sessions have no companion.
+  const brainPresence = useBrainCompanion()?.presence;
   const providerTimelineWithActivity = useMemo(
     () =>
-      mergeRunningActivityIntoTimeline(
-        providerTimelineItemsWithTurnFocus,
-        runningActivity,
+      mergeBrainPresenceIntoTimeline(
+        mergeRunningActivityIntoTimeline(
+          providerTimelineItemsWithTurnFocus,
+          runningActivity,
+        ),
+        brainPresence,
       ),
-    [providerTimelineItemsWithTurnFocus, runningActivity],
+    [brainPresence, providerTimelineItemsWithTurnFocus, runningActivity],
   );
 
   return useMemo(() => {

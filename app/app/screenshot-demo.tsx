@@ -78,6 +78,10 @@ import CalendarScreen from "./calendar";
 import { OnboardingPresentation } from "../components/onboarding/OnboardingPresentation";
 import { EmptyState } from "../components/ui/EmptyState";
 import { sessionEmptyState } from "../services/sessionEmptyState";
+import { BrainCompanionContext, type BrainCompanion } from "../components/mewla/BrainCompanion";
+import type { BrainCatPresence, BrainCatState } from "../components/mewla/brainCatState";
+import { BrainStatusState } from "../components/mewla/BrainStatusState";
+import { SealCat } from "../components/mewla/SealCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
 
@@ -114,6 +118,8 @@ export default function ScreenshotDemoRoute() {
       return <EmptyStatesDemo key={params.fixture} />;
     case "brain":
       return <BrainDemo />;
+    case "cat":
+      return <CatGalleryDemo />;
     case "stats":
       return <StatsDemo />;
     case "calendar":
@@ -516,9 +522,37 @@ function ChatDemo() {
   );
 }
 
+/** Brain fixtures: the cat's state between turns, keyed by `fixture`. */
+const BRAIN_DEMO_PRESENCE: Record<string, BrainCatPresence> = {
+  attention: { state: "attention", workTitle: "Approve the beta release notes" },
+  delivered: { state: "delivered", workTitle: "Weekly dependency report" },
+  delegating: { state: "delegating", workTitle: "Mobile regression sweep" },
+};
+
 function BrainDemo() {
   const { fixture } = useLocalSearchParams<{ fixture?: string }>();
-  const empty = fixture === "empty";
+  if (fixture === "offline" || fixture === "connecting" || fixture === "homeless") {
+    return (
+      <PrimaryDrawerShell activePrimaryRoute="brain" onSelectPrimaryRoute={NOOP}>
+        <BrainStatusState
+          hasServer={fixture !== "homeless"}
+          connected={fixture === "connecting"}
+          onSettings={NOOP}
+          onRetry={NOOP}
+        />
+      </PrimaryDrawerShell>
+    );
+  }
+  const presence = fixture ? BRAIN_DEMO_PRESENCE[fixture] : undefined;
+  const companion: BrainCompanion = { presence: presence ?? { state: "idle" }, animate: true };
+  return (
+    <BrainCompanionContext.Provider value={companion}>
+      <BrainChatDemo empty={fixture === "empty"} running={fixture !== "empty" && !presence} />
+    </BrainCompanionContext.Provider>
+  );
+}
+
+function BrainChatDemo({ empty, running }: { empty: boolean; running: boolean }) {
   const { theme: zenTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { chrome, theme } = useMemo(
@@ -544,7 +578,7 @@ function BrainDemo() {
   const timeline = useInterfaceTimelineItems({
     events: empty ? emptyPending : SCREENSHOT_BRAIN_EVENTS,
     pendingUserMessages: emptyPending,
-    runningActivity: empty ? undefined : runningActivity,
+    runningActivity: running ? runningActivity : undefined,
     onRetryPendingUserMessage: NOOP,
   });
   const hasContent = draft.trim().length > 0;
@@ -570,12 +604,12 @@ function BrainDemo() {
               activeUpload={null}
               sendEnabled={hasContent}
               sending={false}
-              sendLabel={empty ? "Send message" : "Queue message"}
-              showStopButton={!empty && !hasContent}
+              sendLabel={running ? "Queue message" : "Send message"}
+              showStopButton={running && !hasContent}
               stopEnabled
               stopLabel="Stop current turn"
               stopLoading={false}
-              providerActivityStartedAt={empty ? undefined : providerActivityStartedAt}
+              providerActivityStartedAt={running ? providerActivityStartedAt : undefined}
               bottomPadding={Math.max(insets.bottom, 8)}
               showActionMenuButton
               actionMenuIcon="add"
@@ -608,6 +642,11 @@ function BrainDemo() {
               scrollRef={scrollRef}
               items={timeline}
               emptyTitle={empty ? "Ready when you are" : undefined}
+              emptyBody={
+                empty
+                  ? "Brain naps in the seal until you ask, then gets to work and brings back what it finds."
+                  : undefined
+              }
               loading={false}
               emptyStateSuppressed={false}
               unavailable={false}
@@ -637,6 +676,61 @@ function BrainDemo() {
     </PrimaryDrawerShell>
   );
 }
+
+const CAT_GALLERY: { state: BrainCatState; title: string; when: string }[] = [
+  { state: "idle", title: "Idle", when: "Connected, nothing to do: asleep in the seal" },
+  { state: "waking", title: "Waking", when: "Connecting or loading: one eye open" },
+  { state: "working", title: "Working", when: "Brain's turn is running" },
+  { state: "delegating", title: "Delegating", when: "Workers hold delegated Work" },
+  { state: "attention", title: "Needs you", when: "Work is waiting on your input" },
+  { state: "delivered", title: "Delivered", when: "An unread result is waiting" },
+  { state: "offline", title: "Offline", when: "Your computer is unreachable" },
+  { state: "homeless", title: "No home", when: "No computer paired yet" },
+];
+
+/** Every cat state at hero and row size, for design review. `still=1` freezes motion. */
+function CatGalleryDemo() {
+  const { still } = useLocalSearchParams<{ still?: string }>();
+  const colors = useAppColors();
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bgPrimary }} contentContainerStyle={catGalleryStyles.grid}>
+      {CAT_GALLERY.map(({ state, title, when }) => (
+        <View key={state} style={[catGalleryStyles.cell, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
+          <View style={catGalleryStyles.art}>
+            <SealCat state={state} size={112} animate={still !== "1"} />
+            <SealCat state={state} size={46} animate={still !== "1"} />
+          </View>
+          <Text style={[TypeScale.title, { color: colors.textPrimary }]}>{title}</Text>
+          <Text style={[TypeScale.caption, { color: colors.textSecondary }]}>{when}</Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+const catGalleryStyles = StyleSheet.create({
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    padding: 16,
+  },
+  cell: {
+    width: 170,
+    flexGrow: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+    gap: 4,
+  },
+  art: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 12,
+    minHeight: 116,
+    marginBottom: 10,
+  },
+});
 
 /**
  * Composer motion fixture: both capsule states at a representative narrow

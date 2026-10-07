@@ -43,8 +43,16 @@ import {
 import type { BrainWorkResultEvent } from "../../components/brain/brainWorkEvent";
 import { useCurrentServer } from "../../store/currentServer";
 import { ConnectionPathIndicator } from "../../components/connection/ConnectionPathIndicator";
+import {
+  BrainCompanionContext,
+  type BrainCompanion,
+} from "../../components/mewla/BrainCompanion";
+import { resolveBrainCatPresence } from "../../components/mewla/brainCatState";
+import { BrainStatusState } from "../../components/mewla/BrainStatusState";
 
-const BRAIN_EMPTY_TITLE = "No messages yet";
+const BRAIN_EMPTY_TITLE = "Ready when you are";
+const BRAIN_EMPTY_BODY =
+  "Brain naps in the seal until you ask, then gets to work and brings back what it finds.";
 
 export default function BrainScreen() {
   const router = useRouter();
@@ -131,6 +139,18 @@ export default function BrainScreen() {
     : undefined;
 
   const ready = Boolean(activeServer && activeBrain?.hydrated && hostWorker?.id);
+  const brainCompanion = useMemo<BrainCompanion>(
+    () => ({
+      presence: resolveBrainCatPresence({
+        hasServer: Boolean(activeServer),
+        connection: connectionState,
+        hydrated: Boolean(activeBrain?.hydrated),
+        currentWork: activeBrain?.current_work,
+      }),
+      animate: screenFocused,
+    }),
+    [activeBrain?.current_work, activeBrain?.hydrated, activeServer, connectionState, screenFocused],
+  );
   const showBrainLoading = shouldShowBrainLoadingState({
     hydrated: Boolean(activeBrain?.hydrated),
     hasHostWorker: Boolean(hostWorker?.id),
@@ -412,62 +432,66 @@ export default function BrainScreen() {
           issue={connectionIssue?.title}
         />
         <ChatCanvas chrome={chrome}>
-          {canUseStructuredBrainInterface ? (
-            <InterfaceChatSurface
-              key={`brain-chat:${activeServer?.id}:${brainChatScopeKey ?? ""}`}
-              visible
-              serverId={activeServer?.id ?? ""}
-              serverUrl={activeServer?.url ?? ""}
-              daemonId={activeServer?.daemonId ?? ""}
-              workerId={hostWorker?.id ?? ""}
-              conversationScopeKey={brainChatScopeKey}
-              workerInfo={{
-                cwd: hostWorker?.cwd,
-                command: hostWorker?.command,
-                name: hostWorker?.name,
-                processId: hostWorker?.process_id,
-                startedAt: hostWorker?.started_at,
-              }}
-              connectionState={connectionState}
-              connectionIssue={connectionIssue}
-              theme={theme}
-              chrome={chrome}
-              screenFocused={screenFocused}
-              topChromeInset={topChromeInset}
-              onBrainWorkEventActivate={
-                targetedThreadReadOnly ? undefined : activateWorkResult
-              }
-              brainCurrentWork={activeBrain?.current_work}
-              openSessionIds={openSessionIds}
-              readOnly={targetedThreadReadOnly}
-              onSwitchToTerminal={openBrainTerminal}
-              emptyTitle={BRAIN_EMPTY_TITLE}
-              renderComposerAccessory={renderBrainComposerAccessory}
-              composerModelControl={brainModelSheet.composerControl}
-              onComposerModelControlPress={() => brainModelSheet.open()}
-            />
-          ) : showBrainLoading ? (
-            <BrainLoadingState
-              hasServer={Boolean(activeServer)}
-              connected={
-                connectionState === "connected" ||
-                connectionState === "connecting"
-              }
-              onSettings={() => router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } })}
-              onRetry={() => {
-                if (!activeServer || !isCurrentServer(activeServer.id)) return;
-                void setServerAutoConnect(activeServer.id, true).then(() => {
-                  if (isCurrentServer(activeServer.id)) wsClient.connectServer(activeServer);
-                }).catch((error) => setBrainActionError(String(error)));
-              }}
-            />
-          ) : (
-            <BrainInterfaceUnavailableState
-              provider={hostExecutor?.provider}
-              onOpenTerminal={canOpenTerminal ? openBrainTerminal : undefined}
-              onSwitchExecutor={canSwitchAdapter ? openAdapterSheet : undefined}
-            />
-          )}
+          <BrainCompanionContext.Provider value={brainCompanion}>
+            {canUseStructuredBrainInterface ? (
+              <InterfaceChatSurface
+                key={`brain-chat:${activeServer?.id}:${brainChatScopeKey ?? ""}`}
+                visible
+                serverId={activeServer?.id ?? ""}
+                serverUrl={activeServer?.url ?? ""}
+                daemonId={activeServer?.daemonId ?? ""}
+                workerId={hostWorker?.id ?? ""}
+                conversationScopeKey={brainChatScopeKey}
+                workerInfo={{
+                  cwd: hostWorker?.cwd,
+                  command: hostWorker?.command,
+                  name: hostWorker?.name,
+                  processId: hostWorker?.process_id,
+                  startedAt: hostWorker?.started_at,
+                }}
+                connectionState={connectionState}
+                connectionIssue={connectionIssue}
+                theme={theme}
+                chrome={chrome}
+                screenFocused={screenFocused}
+                topChromeInset={topChromeInset}
+                onBrainWorkEventActivate={
+                  targetedThreadReadOnly ? undefined : activateWorkResult
+                }
+                brainCurrentWork={activeBrain?.current_work}
+                openSessionIds={openSessionIds}
+                readOnly={targetedThreadReadOnly}
+                onSwitchToTerminal={openBrainTerminal}
+                emptyTitle={BRAIN_EMPTY_TITLE}
+                emptyBody={BRAIN_EMPTY_BODY}
+                renderComposerAccessory={renderBrainComposerAccessory}
+                composerModelControl={brainModelSheet.composerControl}
+                onComposerModelControlPress={() => brainModelSheet.open()}
+              />
+            ) : showBrainLoading ? (
+              <BrainStatusState
+                hasServer={Boolean(activeServer)}
+                animate={screenFocused}
+                connected={
+                  connectionState === "connected" ||
+                  connectionState === "connecting"
+                }
+                onSettings={() => router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } })}
+                onRetry={() => {
+                  if (!activeServer || !isCurrentServer(activeServer.id)) return;
+                  void setServerAutoConnect(activeServer.id, true).then(() => {
+                    if (isCurrentServer(activeServer.id)) wsClient.connectServer(activeServer);
+                  }).catch((error) => setBrainActionError(String(error)));
+                }}
+              />
+            ) : (
+              <BrainInterfaceUnavailableState
+                provider={hostExecutor?.provider}
+                onOpenTerminal={canOpenTerminal ? openBrainTerminal : undefined}
+                onSwitchExecutor={canSwitchAdapter ? openAdapterSheet : undefined}
+              />
+            )}
+          </BrainCompanionContext.Provider>
         </ChatCanvas>
       </View>
 
@@ -511,30 +535,6 @@ export default function BrainScreen() {
         onClose={closeWorkspaceViewer}
       />
     </SafeAreaView>
-  );
-}
-
-function BrainLoadingState({
-  hasServer,
-  connected,
-  onSettings,
-  onRetry,
-}: {
-  hasServer: boolean;
-  connected: boolean;
-  onSettings(): void;
-  onRetry(): void;
-}) {
-  return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
-      <EmptyState
-        icon={hasServer ? "cloud-offline-outline" : "server-outline"}
-        title={!hasServer ? "Connect your computer" : connected ? "Connecting to Brain" : "Brain is offline"}
-        busy={connected}
-        action={!hasServer ? { label: "Pair a server", icon: "qr-code-outline", onPress: onSettings } : !connected ? { label: "Retry connection", icon: "refresh-outline", onPress: onRetry } : undefined}
-        secondary={hasServer ? { label: "Server settings", icon: "settings-outline", onPress: onSettings } : undefined}
-      />
-    </ScrollView>
   );
 }
 

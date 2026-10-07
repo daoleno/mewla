@@ -33,6 +33,8 @@ interface EmptyStateProps {
   secondary?: EmptyAction;
   /** `inline` sits inside lists and sheets: no halo, smaller type. */
   size?: "hero" | "inline";
+  /** Hero only: an illustration (Brain's seal cat) in place of the halo. */
+  art?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -48,6 +50,7 @@ export function EmptyState({
   action,
   secondary,
   size = "hero",
+  art,
   style,
 }: EmptyStateProps) {
   const { colors } = useAppTheme();
@@ -77,31 +80,12 @@ export function EmptyState({
 
   return (
     <Enter preset="fade" style={[styles.hero, style]}>
-      <View style={styles.halo} accessible={false} importantForAccessibility="no-hide-descendants">
-        <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill}>
-          <Defs>
-            <RadialGradient id="halo" cx="50%" cy="42%" r="58%">
-              <Stop offset="0" stopColor={glyphColor} stopOpacity={0.2} />
-              <Stop offset="0.72" stopColor={glyphColor} stopOpacity={0.06} />
-              <Stop offset="1" stopColor={glyphColor} stopOpacity={0} />
-            </RadialGradient>
-          </Defs>
-          <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2} fill="url(#halo)" />
-          <Circle
-            cx={HALO / 2}
-            cy={HALO / 2}
-            r={HALO / 2 - 14}
-            fill="none"
-            stroke={glyphColor}
-            strokeOpacity={0.18}
-            strokeWidth={1}
-          />
-        </Svg>
-        {busy ? (
-          <ActivityIndicator color={glyphColor} />
-        ) : icon ? (
-          <Ionicons name={icon} size={30} color={glyphColor} />
-        ) : null}
+      <View
+        style={art ? styles.art : styles.halo}
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+      >
+        {art ?? <Halo color={glyphColor} busy={busy} icon={icon} />}
       </View>
       {title ? (
         <AppText
@@ -125,6 +109,37 @@ export function EmptyState({
         </View>
       ) : null}
     </Enter>
+  );
+}
+
+function Halo({ color, busy, icon }: { color: string; busy: boolean; icon?: Icon }) {
+  return (
+    <>
+      <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <RadialGradient id="halo" cx="50%" cy="42%" r="58%">
+            <Stop offset="0" stopColor={color} stopOpacity={0.2} />
+            <Stop offset="0.72" stopColor={color} stopOpacity={0.06} />
+            <Stop offset="1" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2} fill="url(#halo)" />
+        <Circle
+          cx={HALO / 2}
+          cy={HALO / 2}
+          r={HALO / 2 - 14}
+          fill="none"
+          stroke={color}
+          strokeOpacity={0.18}
+          strokeWidth={1}
+        />
+      </Svg>
+      {busy ? (
+        <ActivityIndicator color={color} />
+      ) : icon ? (
+        <Ionicons name={icon} size={30} color={color} />
+      ) : null}
+    </>
   );
 }
 
@@ -153,6 +168,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 18,
+  },
+  art: {
+    marginBottom: 22,
   },
   title: {
     marginBottom: 6,

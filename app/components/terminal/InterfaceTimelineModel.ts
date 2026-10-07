@@ -356,6 +356,8 @@ function insertPendingCurrentAtCausalBoundary(
   insertTimelineItemByTimestamp(timelineItems, item);
 }
 
+export const PROVIDER_ACTIVITY_ITEM_PREFIX = "provider-activity:";
+
 export function mergeRunningActivityIntoTimeline(
   timelineItems: ZenTimelineItem[],
   activity?: ProviderActivity,
@@ -363,7 +365,7 @@ export function mergeRunningActivityIntoTimeline(
   if (activity?.status !== "running") {
     return timelineItems;
   }
-  const id = `provider-activity:${activity.id}`;
+  const id = `${PROVIDER_ACTIVITY_ITEM_PREFIX}${activity.id}`;
   if (timelineItems.some((item) => item.id === id)) {
     return timelineItems;
   }
@@ -392,7 +394,7 @@ function insertTimelineItemByTimestamp(
     return;
   }
   const insertAt = timelineItems.findIndex((candidate) => {
-    if (candidate.id.startsWith("provider-activity:")) {
+    if (candidate.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX)) {
       return true;
     }
     if (!candidate.timestamp) {

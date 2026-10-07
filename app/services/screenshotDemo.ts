@@ -11,6 +11,7 @@ export const SCREENSHOT_DEMO_STATES = [
   "chat",
   "sessions",
   "brain",
+  "cat",
   "stats",
   "calendar",
   "profile",

@@ -34,6 +34,19 @@ The card shows the task, its status (done, failed or stopped), and its
 duration, tool uses and tokens when Claude reports them. Tap it to read the
 full result.
 
+The cat at the bottom of the Brain chat shows what Brain is doing:
+
+- **Asleep in the seal:** Brain is idle.
+- **One eye open:** the app is connecting.
+- **Walking:** Brain is working on your message.
+- **Sitting by moving dots:** Workers hold delegated Work.
+- **Ears up with a red dot:** Work needs your input.
+- **Lying beside a parcel:** a result is waiting for you to read.
+- **Grey seal:** your computer is offline.
+- **Empty seal:** no computer is paired yet.
+
+The cat stays still when your device asks for reduced motion.
+
 Workers run unattended. Read
 [Permission bypass risks](executors.md#permission-bypass-risks) before you let
 Brain work on a machine with secrets.

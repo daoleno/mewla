@@ -6,6 +6,8 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners, TypeScale } from "../../constants/tokens";
 import { chromeTint } from "./composerMaterial";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
+import { useBrainCompanion } from "../mewla/BrainCompanion";
+import { SealCat } from "../mewla/SealCat";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -25,7 +27,8 @@ interface InterfaceTimelineEmptyStateProps {
 /**
  * Chat-canvas counterpart of the app EmptyState: same halo, title, detail
  * and capsule action, drawn from the terminal-theme chrome so it follows the
- * Session's canvas instead of the app theme.
+ * Session's canvas instead of the app theme. In Brain the halo is the seal,
+ * with the cat asleep in it (or peeking while the chat loads).
  */
 export function InterfaceTimelineEmptyState({
   chrome,
@@ -40,25 +43,24 @@ export function InterfaceTimelineEmptyState({
 }: InterfaceTimelineEmptyStateProps) {
   const ink = tone === "error" ? chrome.danger : chrome.accent;
   const inkSoft = tone === "error" ? chrome.dangerSoft : chrome.accentSoft;
+  const companion = useBrainCompanion();
+  const seal = companion && tone !== "error";
   return (
     <View style={styles.emptyState} accessibilityLiveRegion="polite">
-      <View
-        accessible={false}
-        style={[
-          styles.halo,
-          {
-            backgroundColor: chromeTint(ink, 0.1, inkSoft),
-            borderColor: chromeTint(ink, 0.18, "transparent"),
-          },
-        ]}
+      {seal ? (
+        <SealCat
+          state={busy ? "waking" : "idle"}
+          size={SEAL_SIZE}
+          animate={companion.animate}
+          style={styles.seal}
+        />
+      ) : (
+        <EmptyHalo ink={ink} inkSoft={inkSoft} busy={busy} icon={icon} />
+      )}
+      <Text
+        style={[styles.emptyTitle, seal && styles.sealTitle, { color: chrome.text }]}
+        accessibilityRole="header"
       >
-        {busy ? (
-          <ComposerLoadingDots color={ink} size={10} />
-        ) : (
-          <Ionicons name={icon} size={24} color={ink} />
-        )}
-      </View>
-      <Text style={[styles.emptyTitle, { color: chrome.text }]} accessibilityRole="header">
         {title}
       </Text>
       {body ? (
@@ -92,6 +94,39 @@ export function InterfaceTimelineEmptyState({
   );
 }
 
+function EmptyHalo({
+  ink,
+  inkSoft,
+  busy,
+  icon,
+}: {
+  ink: string;
+  inkSoft: string;
+  busy: boolean;
+  icon: IoniconName;
+}) {
+  return (
+    <View
+      accessible={false}
+      style={[
+        styles.halo,
+        {
+          backgroundColor: chromeTint(ink, 0.1, inkSoft),
+          borderColor: chromeTint(ink, 0.18, "transparent"),
+        },
+      ]}
+    >
+      {busy ? (
+        <ComposerLoadingDots color={ink} size={10} />
+      ) : (
+        <Ionicons name={icon} size={24} color={ink} />
+      )}
+    </View>
+  );
+}
+
+const SEAL_SIZE = 112;
+
 const styles = StyleSheet.create({
   // Calm, centered stack: a soft halo, a heading-weight title and one line
   // of guidance. Heading (not title) weight keeps an empty chat quiet.
@@ -112,10 +147,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 14,
   },
+  seal: {
+    marginBottom: 22,
+  },
   emptyTitle: {
     ...TypeScale.heading,
     textAlign: "center",
     maxWidth: 300,
+  },
+  sealTitle: {
+    ...TypeScale.title,
   },
   emptyBody: {
     ...TypeScale.compact,
