@@ -134,6 +134,9 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     fontFamily: Typography.chatFont,
     includeFontPadding: false,
+    // Web: no browser outline inside the pill; the capsule's own border
+    // carries keyboard focus (InterfaceComposerExpandingDock).
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as const } : null),
   },
   inputCentered: {
     paddingTop: Platform.OS === "android" ? 0 : 8,
