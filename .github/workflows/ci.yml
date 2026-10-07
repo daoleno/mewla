@@ -52,13 +52,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test -json -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_' | tee "$RUNNER_TEMP/zen-bdd.jsonl"
+          go test -json -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_' | tee "$RUNNER_TEMP/mewla-bdd.jsonl"
       - name: Preserve behavior results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zen-bdd-${{ github.sha }}
-          path: ${{ runner.temp }}/zen-bdd.jsonl
+          name: mewla-bdd-${{ github.sha }}
+          path: ${{ runner.temp }}/mewla-bdd.jsonl
           if-no-files-found: warn
           retention-days: 7
       - name: Vet
@@ -152,8 +152,8 @@ jobs:
           set -euo pipefail
           set -o pipefail
           xcodebuild \
-            -workspace app/ios/Zen.xcworkspace \
-            -scheme Zen \
+            -workspace app/ios/Mewla.xcworkspace \
+            -scheme Mewla \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -162,13 +162,13 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             build
-          APP="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Zen.app"
+          APP="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Mewla.app"
           ./scripts/verify-ios-artifact.sh simulator "$APP"
           echo "IOS_SIMULATOR_APP=$APP" >> "$GITHUB_ENV"
       - name: Upload unsigned Simulator app
         uses: actions/upload-artifact@v4
         with:
-          name: zen-ios-simulator-${{ github.sha }}
+          name: mewla-ios-simulator-${{ github.sha }}
           path: ${{ env.IOS_SIMULATOR_APP }}
           if-no-files-found: error
           retention-days: 7

@@ -313,7 +313,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             f'EXPECTED_IOS_BUILD_NUMBER="{CURRENT_IOS_BUILD + 1}"', verifier
         )
         self.assertIn(
-            f"ZEN_VERSION={NEXT_TAG}",
+            f"MEWLA_VERSION={NEXT_TAG}",
             (root / "docs/install-daemon.md").read_text(encoding="utf-8"),
         )
         ios_docs = (root / "docs/ios-ci-release.md").read_text(encoding="utf-8")
@@ -330,17 +330,19 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
 
         notes = (root / next_notes_path).read_text(encoding="utf-8")
         self.assertEqual(
-            notes.count("- Bundle: `com.daoleno.zen.preview`"),
+            notes.count("- Bundle: `com.daoleno.mewla.preview`"),
             1,
         )
         self.assertEqual(notes.count("- ABI: `arm64-v8a`"), 1)
         for marker in (
-            f"# Zen {NEXT_TAG}",
+            f"# Mewla {NEXT_TAG}",
             "Add reviewed release change",
             f"- Source tag: `{NEXT_TAG}`",
             f"- TestFlight build: `{CURRENT_IOS_BUILD + 1}`",
             f"- `versionCode`: `{CURRENT_VERSION_CODE + 1}`",
-            "com.daoleno.zen",
+            "com.daoleno.mewla",
+            "mewla-linux-amd64.tar.gz",
+            "install `mewla` on your `PATH`",
             "unknown sources",
             "Play Protect",
             "Obtainium",

@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "zen",
+      "name": "mewla",
     },
     "app": {
       "name": "app",

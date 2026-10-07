@@ -43,7 +43,7 @@ def publisher_flags(document, required):
         if client_id and not config[identity]:
             raise ValueError(f"{service}: publisher identity is required with client_id")
         if service in required and client_id is None:
-            raise ValueError(f"{service}: Zen publisher registration is not configured; cannot publish")
+            raise ValueError(f"{service}: Mewla publisher registration is not configured; cannot publish")
         if client_id:
             flags.extend(["-X", f"github.com/daoleno/mewla/daemon/connections.{symbol}={client_id}"])
     return " ".join(flags)

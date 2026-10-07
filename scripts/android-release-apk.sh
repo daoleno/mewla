@@ -109,7 +109,7 @@ import re, sys
 from pathlib import Path
 gradle, exp_pkg, exp_ver, exp_vc = sys.argv[1:5]
 text = Path(gradle).read_text(encoding="utf-8")
-# namespace "com.daoleno.zen" or applicationId '…'
+# namespace "com.daoleno.mewla" or applicationId '…'
 ns = re.search(r'''namespace\s+['"]([^'"]+)['"]''', text)
 aid = re.search(r'''applicationId\s+['"]([^'"]+)['"]''', text)
 vn = re.search(r'''versionName\s+['"]([^'"]+)['"]''', text)
@@ -155,7 +155,7 @@ mkdir -p "$OUT_DIR"
 APP_VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
 PIN_SHORT="$(python3 -c "import json;print(json.load(open('app/modules/zen-terminal-vt/native.lock.json'))['ghostty']['commit'][:12])")"
 APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
-COPY="$OUT_DIR/zen-android-arm64-v${APP_VERSION}-${PIN_SHORT}-${APK_SHA:0:12}.apk"
+COPY="$OUT_DIR/mewla-android-arm64-v${APP_VERSION}-${PIN_SHORT}-${APK_SHA:0:12}.apk"
 cp -f "$APK" "$COPY"
 echo "$APK_SHA  $(basename "$COPY")" | tee "$COPY.sha256"
 # Adjacent copy for humans who unpack the directory (APK itself already verified)

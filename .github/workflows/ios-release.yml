@@ -1,6 +1,6 @@
 name: iOS signed release
 
-# Annotated Zen release tag pushes automatically ship the closed Preview identity
+# Annotated Mewla release tag pushes automatically ship the closed Preview identity
 # to TestFlight. Manual dispatch remains available for Preview and Production;
 # Production is never selected by an automatic event.
 on:
@@ -53,9 +53,9 @@ jobs:
       ZEN_IOS_BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
       ZEN_IOS_DESTINATION: ${{ github.event_name == 'push' && 'testflight' || inputs.destination }}
       ZEN_IOS_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
-      # App IDs are public identifiers. Preview is fixed; production is an
-      # environment variable because its App Store Connect record is external.
-      ZEN_ASC_APP_ID: ${{ (github.event_name == 'push' || inputs.app_identity == 'preview') && '6790486708' || vars.ZEN_ASC_APP_ID }}
+      # App IDs are public identifiers kept in repository variables because the
+      # App Store Connect records (com.daoleno.mewla[.preview]) are external.
+      ZEN_ASC_APP_ID: ${{ (github.event_name == 'push' || inputs.app_identity == 'preview') && vars.MEWLA_ASC_PREVIEW_APP_ID || vars.ZEN_ASC_APP_ID }}
     steps:
       - name: Checkout explicit ref
         uses: actions/checkout@v4
@@ -332,7 +332,7 @@ jobs:
 
       - name: Archive and export signed IPA
         env:
-          ARCHIVE_PATH: ${{ runner.temp }}/Zen.xcarchive
+          ARCHIVE_PATH: ${{ runner.temp }}/Mewla.xcarchive
           EXPORT_PATH: ${{ runner.temp }}/zen-ios-export
           EXPORT_OPTIONS: ${{ runner.temp }}/ExportOptions.plist
           PROFILE_NAME: ${{ steps.signing.outputs.profile_name }}
@@ -447,7 +447,7 @@ jobs:
           PY
           EXTRA_ARGS=()
           if [[ "$ZEN_IOS_APP_VARIANT" == "preview" ]]; then
-            EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Zen Preview" --submit-beta-review)
+            EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview" --submit-beta-review)
           fi
           ./.zen-release-automation/scripts/app-store-connect-upload.py \
             --ipa "$IOS_IPA" \

@@ -1,5 +1,5 @@
 {
-  "name": "zen",
+  "name": "mewla",
   "private": true,
   "license": "Apache-2.0",
   "packageManager": "bun@1.3.5",
@@ -15,7 +15,7 @@
     "app:doctor": "cd app && bunx expo-doctor",
     "site:dev": "bun site/index.html",
     "android:debug:apk": "cd app && bun run build:apk:debug",
-    "daemon:build": "./scripts/build-zen-local.sh bin/zen",
+    "daemon:build": "./scripts/build-mewla-local.sh bin/mewla",
     "web:build": "./scripts/build-web-ui.sh",
     "daemon:build:linux": "./scripts/build-daemon-linux.sh",
     "daemon:test": "cd daemon && go test ./...",
