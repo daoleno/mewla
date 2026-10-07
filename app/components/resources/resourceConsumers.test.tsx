@@ -19,6 +19,8 @@ if (!process.env.ZEN_CONSUMERS_TEST_CHILD) {
   mock.module("../ui/EmptyState", () => ({ EmptyState: "EmptyState" }));
   mock.module("react-native-svg", () => ({ default: "Svg", Defs: "Defs", Line: "Line", LinearGradient: "LinearGradient", Path: "Path", Rect: "Rect", Stop: "Stop" }));
   mock.module("../ui/AnimatedPressable", () => ({ AnimatedPressable: "Pressable" }));
+  mock.module("../ui/StatusMark", () => ({ StatusMark: "StatusMark" }));
+  mock.module("../ui/StatusPill", () => ({ StatusPill: "StatusPill" }));
   mock.module("../../constants/tokens", () => ({
     useAppTheme: () => ({ colors: {} }), Radii: {}, TypeScale: {}, UiTextMetrics: {},
   }));

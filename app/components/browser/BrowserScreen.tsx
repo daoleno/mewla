@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +32,7 @@ export function BrowserScreen() {
   const router = useRouter();
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
+  const rendererSource = useMemo(() => ({ html: browserRendererHTML(colors.bgElevated) }), [colors.bgElevated]);
   const serverName = currentServer?.name || "this server";
   const [resources, setResources] = useState<BrowserResource[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -374,7 +375,7 @@ export function BrowserScreen() {
           ))}
         </ScrollView>
       ) : null}
-      <WebView ref={web} style={styles.viewport} source={{ html: browserRendererHTML }} originWhitelist={["about:blank"]}
+      <WebView ref={web} style={[styles.viewport, { backgroundColor: colors.bgElevated }]} source={rendererSource} originWhitelist={["about:blank"]}
         accessibilityLabel={`Page view of ${selected.name}`}
         onShouldStartLoadWithRequest={(request) => request.url === "about:blank"}
         javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}
@@ -429,5 +430,5 @@ const styles = StyleSheet.create({
   key: { flex: 1 },
   scroll: { width: TouchTarget, minHeight: TouchTarget, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderRadius: Radii.sm, ...ContinuousCorners },
   input: { minHeight: TouchTarget, flex: 1, paddingHorizontal: Spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: Radii.sm, ...ContinuousCorners },
-  viewport: { flex: 1, backgroundColor: "#171717" },
+  viewport: { flex: 1 },
 });

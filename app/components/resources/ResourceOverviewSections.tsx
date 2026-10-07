@@ -6,6 +6,8 @@ import {
   memoryUsedRatio, pressureSpans, sampledAgoLabel, type ResourceTelemetry,
 } from "../../services/resourceTelemetry";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { StatusMark } from "../ui/StatusMark";
+import { StatusPill, type StatusTone } from "../ui/StatusPill";
 import { AreaChart, CoreBars, PressureStrip, StackBar, pressureInk } from "./ResourceCharts";
 import type { ResourceStyles } from "./resourceStyles";
 
@@ -13,6 +15,31 @@ export interface SectionProps {
   telemetry: ResourceTelemetry;
   styles: ResourceStyles;
   details?: boolean;
+}
+
+// Critical keeps the Failed mark: processes are about to be killed. Elevated
+// warns, and Normal is the Ready check.
+const PRESSURE_TONE: Record<ResourceTelemetry["state"], StatusTone> = {
+  normal: "success",
+  elevated: "warning",
+  critical: "danger",
+};
+
+/** Threshold crossings as quiet lines: the state's mark, then soft words. */
+export function PressureSignals({ telemetry, styles }: SectionProps) {
+  if (telemetry.signals.length === 0) return null;
+  return (
+    <View style={{ gap: 4 }}>
+      {telemetry.signals.map((signal) => (
+        <View key={signal.name} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <StatusMark status={signal.state === "critical" ? "failed" : "warning"} />
+          <Text style={styles.caption}>
+            {signal.name} · {Number(signal.value.toFixed(2))} / threshold {signal.threshold}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 export function PressureHeadline({ telemetry, styles, now, statusLabel, serverName, onRetry, loading, connected }: SectionProps & {
@@ -24,9 +51,10 @@ export function PressureHeadline({ telemetry, styles, now, statusLabel, serverNa
       <View style={{ flex: 1, gap: 4 }}>
         <View style={styles.legendRow}>
           <Text style={styles.sectionTitle} accessibilityRole="header">{serverName ?? "Machine"}</Text>
-          <Text style={[styles.label, { color: pressureInk(telemetry.state, colors) }]}>
-            {telemetry.state === "normal" ? "Normal" : telemetry.state === "elevated" ? "Elevated" : "Critical"}
-          </Text>
+          <StatusPill
+            label={telemetry.state === "normal" ? "Normal" : telemetry.state === "elevated" ? "Elevated" : "Critical"}
+            tone={PRESSURE_TONE[telemetry.state]}
+          />
         </View>
         <Text style={styles.caption}>
           {statusLabel ?? sampledAgoLabel(telemetry.sampledAt, now)} · {new Date(telemetry.sampledAt).toLocaleTimeString()} · 5s poll
@@ -78,7 +106,7 @@ export function MemorySection({ telemetry, styles, details }: SectionProps) {
         <Text style={styles.mono}>Available {formatBytes(availableBytes)}</Text>
         <Text style={styles.caption}>Cache {formatBytes(cacheBytes)} · Shared {formatBytes(sharedBytes)}</Text>
         <Text style={styles.caption}>Swap {formatBytes(swapUsedBytes)} / {formatBytes(swapTotalBytes)}</Text>
-        {swapTotalBytes ? <StackBar height={4} segments={[{ key: "swap", ratio: (swapUsedBytes ?? 0) / swapTotalBytes, color: colors.warning }]} /> : null}
+        {swapTotalBytes ? <StackBar height={4} segments={[{ key: "swap", ratio: (swapUsedBytes ?? 0) / swapTotalBytes, color: (swapUsedBytes ?? 0) / swapTotalBytes >= 0.9 ? colors.warning : colors.accent }]} /> : null}
       </> : null}
     </View>
   );
