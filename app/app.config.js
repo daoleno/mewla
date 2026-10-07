@@ -11,15 +11,9 @@ if (process.env.EXPO_NO_DOTENV !== "1") {
   loadEnvFile(path.join(__dirname, ".env.local"));
 }
 
-// MEWLA_* names win; legacy ZEN_* names are still honoured when unset.
 function readEnv(name) {
-  for (const key of [`MEWLA_${name}`, `ZEN_${name}`]) {
-    const value = process.env[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
+  const value = process.env[`MEWLA_${name}`];
+  return typeof value === "string" ? value.trim() : "";
 }
 
 const projectId = readEnv("EXPO_PROJECT_ID");

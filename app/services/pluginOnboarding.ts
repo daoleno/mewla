@@ -1,9 +1,7 @@
 import type { ConnectionRequest, ConnectionResponse, ConnectFlow } from "./connections";
 
-// The registered OAuth redirect stays on the legacy zen scheme; returns may
-// arrive on either app scheme (the daemon's "Open Plugins" link uses mewla://).
-export const PLUGIN_CALLBACK = "zen://plugins";
-const PLUGIN_RETURN_PROTOCOLS: readonly string[] = ["mewla:", "zen:"];
+export const PLUGIN_CALLBACK = "mewla://plugins";
+const PLUGIN_RETURN_PROTOCOL = "mewla:";
 export type PendingConnection = { serverId: string; flow: ConnectFlow; callback?: string };
 export type ConnectPhase = "idle" | "opening" | "waiting" | "verifying" | "connected" | "cancelled" | "failed";
 export function pendingConnectionKey(serverId: string | null) {
@@ -29,21 +27,21 @@ export async function retainPluginReturn(serverIds: string[], callback: string, 
 }
 // A bare callback without state: the browser closed on the Plugins redirect.
 export function isPluginCallbackUrl(url: string): boolean {
-  return PLUGIN_RETURN_PROTOCOLS.some((protocol) => url === `${protocol}//plugins`);
+  return url === PLUGIN_CALLBACK;
 }
 // Any authorization return addressed to Plugins. The Plugins flow consumes it
 // from Linking; while the app runs it must not also become a navigation.
 export function isPluginReturnUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return PLUGIN_RETURN_PROTOCOLS.includes(parsed.protocol) && parsed.host === "plugins" && parsed.searchParams.has("state");
+    return parsed.protocol === PLUGIN_RETURN_PROTOCOL && parsed.host === "plugins" && parsed.searchParams.has("state");
   } catch { return false; }
 }
 export function matchesPluginReturn(url: string, flow: ConnectFlow): boolean {
   try {
     const parsed = new URL(url);
     const original = new URL(flow.authorization_url ?? "");
-    return PLUGIN_RETURN_PROTOCOLS.includes(parsed.protocol) && parsed.host === "plugins" && !parsed.username && !parsed.password && !parsed.pathname && !parsed.hash
+    return parsed.protocol === PLUGIN_RETURN_PROTOCOL && parsed.host === "plugins" && !parsed.username && !parsed.password && !parsed.pathname && !parsed.hash
       && parsed.searchParams.getAll("state").length === 1 && parsed.searchParams.getAll("code").length <= 1 && parsed.searchParams.getAll("error").length <= 1 && parsed.searchParams.getAll("iss").length <= 1
       && !!parsed.searchParams.get("state") && parsed.searchParams.get("state") === original.searchParams.get("state");
   } catch { return false; }

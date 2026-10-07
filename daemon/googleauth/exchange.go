@@ -286,7 +286,7 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Browser carries no code/token/retrieval capability back to the app.
-		http.Redirect(w, r, "zen://plugins", http.StatusFound)
+		http.Redirect(w, r, "mewla://plugins", http.StatusFound)
 	case "/google/status":
 		if !hmac.Equal([]byte(r.Header.Get("Authorization")), []byte("Bearer "+f.start.Nonce)) {
 			http.Error(w, "Flow binding rejected", 403)

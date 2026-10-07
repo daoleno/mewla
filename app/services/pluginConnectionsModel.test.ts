@@ -69,13 +69,13 @@ describe("account status and capability boundaries", () => {
 describe("authorization progress", () => {
   test("browser step is active while waiting; a native return moves to verification", () => {
     expect(connectSteps("waiting", { serverId: "s", flow }).map((step) => step.state)).toEqual(["active", "pending"]);
-    expect(connectSteps("verifying", { serverId: "s", flow, callback: "zen://plugins?state=x" }).map((step) => step.state)).toEqual(["done", "active"]);
+    expect(connectSteps("verifying", { serverId: "s", flow, callback: "mewla://plugins?state=x" }).map((step) => step.state)).toEqual(["done", "active"]);
     expect(connectSteps("connected", null).map((step) => step.state)).toEqual(["done", "done"]);
   });
 
   test("a failure marks the step that failed, never a later success", () => {
     expect(connectSteps("failed", { serverId: "s", flow }).map((step) => step.state)).toEqual(["failed", "pending"]);
-    expect(connectSteps("failed", { serverId: "s", flow, callback: "zen://plugins?state=x" }).map((step) => step.state)).toEqual(["done", "failed"]);
+    expect(connectSteps("failed", { serverId: "s", flow, callback: "mewla://plugins?state=x" }).map((step) => step.state)).toEqual(["done", "failed"]);
   });
 
   test("device codes name the code step", () => {

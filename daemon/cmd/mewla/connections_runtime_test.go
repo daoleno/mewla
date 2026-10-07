@@ -117,7 +117,7 @@ func TestPluginsOwnedRuntime(t *testing.T) {
 	values := url.Values{}
 	values.Set("v", fmt.Sprint(link.PairingVersion))
 	values.Set("p", base64.RawURLEncoding.EncodeToString(raw))
-	if err = os.WriteFile(filepath.Join(root, "pairing-link"), []byte("zen://settings?"+values.Encode()), 0600); err != nil {
+	if err = os.WriteFile(filepath.Join(root, "pairing-link"), []byte("mewla://settings?"+values.Encode()), 0600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

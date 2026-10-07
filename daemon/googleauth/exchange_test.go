@@ -72,7 +72,7 @@ func TestBoundExchangeRefreshAndBrowserSecrecy(t *testing.T) {
 	req.AddCookie(begin.Result().Cookies()[0])
 	done := httptest.NewRecorder()
 	e.ServeHTTP(done, req)
-	if done.Code != http.StatusFound || done.Header().Get("Location") != "zen://plugins" {
+	if done.Code != http.StatusFound || done.Header().Get("Location") != "mewla://plugins" {
 		t.Fatal(done.Body.String())
 	}
 	for _, secret := range []string{"vendor-code", "vendor-access", "vendor-refresh", "publisher-secret", nonce, flow.proof} {

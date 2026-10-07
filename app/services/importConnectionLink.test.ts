@@ -194,7 +194,7 @@ if (!integrationEnabled) {
     signed.set(domain);
     signed.set(binding, domain.length);
     payload.z = hex(nacl.sign.detached(signed, daemonKeyPair.secretKey));
-    return `zen://settings?v=2&p=${Buffer.from(
+    return `mewla://settings?v=2&p=${Buffer.from(
       JSON.stringify(payload),
     ).toString("base64url")}`;
   }
