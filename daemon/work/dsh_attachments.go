@@ -15,7 +15,7 @@ import (
 
 var dshAttachmentsTag = regexp.MustCompile(`(?s)<zen_attachments>\s*(.*?)\s*</zen_attachments>`)
 
-// Only files already admitted to the canonical Zen upload directory may become
+// Only files already admitted to the canonical Mewla upload directory may become
 // native image bytes. Provider-authored paths never acquire filesystem authority.
 func dshPromptContent(text string) ([]map[string]any, error) {
 	content := []map[string]any{{"type": "text", "text": text}}
@@ -77,7 +77,7 @@ func dshPromptContent(text string) ([]map[string]any, error) {
 }
 
 // Reopened history uses the harness-owned immutable image, while native admission
-// still hashes the exact original text accepted from Zen.
+// still hashes the exact original text accepted from Mewla.
 func dshUserContent(blocks []dshBlock) (display, exact string) {
 	var texts []string
 	for _, block := range blocks {

@@ -70,7 +70,7 @@ func randomTokenBytes() []byte {
 	return b[:]
 }
 
-// isProviderCredentialRef reports whether a ref belongs to Zen's Provider
+// isProviderCredentialRef reports whether a ref belongs to Mewla's Provider
 // credential namespace (safe to sweep/delete).
 func isProviderCredentialRef(ref string) bool {
 	return strings.HasPrefix(normalizeSpace(ref), "provider:")
@@ -119,7 +119,7 @@ type credentialFile struct {
 	Secrets       map[string]string `json:"secrets"`
 }
 
-// FileCredentialStore is the production secret store for the headless Zen
+// FileCredentialStore is the production secret store for the headless Mewla
 // daemon. The parent directory is private and every committed file is 0600, so
 // Provider credentials do not depend on a desktop Secret Service being active.
 type FileCredentialStore struct {
@@ -419,7 +419,7 @@ func (m *MemoryCredentialStore) SnapshotRefs() []string {
 	return out
 }
 
-// resolveProviderSecret returns the secret for a connection: Zen's private
+// resolveProviderSecret returns the secret for a connection: Mewla's private
 // credential file first, then the host-env fallback named by CredentialEnv.
 // It never logs the value.
 func resolveProviderSecret(ref, envName string, store CredentialStore, lookup func(string) (string, bool)) (string, error) {

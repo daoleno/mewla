@@ -1,4 +1,4 @@
-// Package webui serves the browser build of the Zen app from the daemon
+// Package webui serves the browser build of the Mewla app from the daemon
 // binary. scripts/build-web-ui.sh exports the Expo web bundle into dist/ and
 // gzips every file; only the .gz files are embedded.
 package webui

@@ -109,7 +109,7 @@ func (r *ProviderConversationReader) findPiTranscript(worker classifier.Worker, 
 		r.piPinnedSessionPath = ""
 	}
 	// Owned-directory auto-bind: the durable binding can be unavailable even
-	// though the Zen-owned transcript exists and is fresh — sessions created
+	// though the Mewla-owned transcript exists and is fresh — sessions created
 	// before the durable @zen_worker_pi_session option existed, argv-rewritten
 	// node-based Pi, and daemon-restart re-discovery all lose the launch
 	// command. The authoritative owned JSONL is then the only recoverable
@@ -154,8 +154,8 @@ func piTranscriptBelongsToInstance(candidate piTranscriptCandidate, startedAt ti
 	return !candidate.Updated.IsZero() && !candidate.Updated.Before(startedAt)
 }
 
-// findPiOwnedCWDTranscript auto-binds the Zen-owned per-CWD Pi session
-// directory (~/.zen/provider-sessions/pi) for windows whose durable owned
+// findPiOwnedCWDTranscript auto-binds the Mewla-owned per-CWD Pi session
+// directory (~/.mewla/provider-sessions/pi) for windows whose durable owned
 // binding is unavailable. A unique StartedAt window match wins; otherwise the
 // freshest unambiguous transcript binds. Wrong-cwd and stale transcripts
 // never bind; equal-window or equal-updated candidates refuse as ambiguous

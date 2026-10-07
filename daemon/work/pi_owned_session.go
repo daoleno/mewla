@@ -13,7 +13,7 @@ import (
 
 const piOwnedSessionDirName = "provider-sessions/pi"
 
-// NewPiOwnedSessionPath allocates an absolute Zen-owned Pi JSONL path that is
+// NewPiOwnedSessionPath allocates an absolute Mewla-owned Pi JSONL path that is
 // unique a priori. Ownership does not depend on Pi's shared per-CWD directory.
 func NewPiOwnedSessionPath(zenHome string) (string, error) {
 	root, err := piOwnedSessionRoot(zenHome)

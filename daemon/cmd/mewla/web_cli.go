@@ -35,7 +35,7 @@ var openBrowser = func(target string) error {
 	return cmd.Process.Release()
 }
 
-// runWebCommand pairs a browser exactly like `zen pair`: the local CLI asks
+// runWebCommand pairs a browser exactly like `mewla pair`: the local CLI asks
 // the runtime owner for a one-time enrollment token, and the browser enrolls
 // its own device key with it. The token rides in the URL fragment, which
 // browsers never send to the daemon or a proxy.
@@ -57,7 +57,7 @@ func runWebCommand(args []string, stdout, stderr io.Writer) error {
 	}
 
 	fmt.Fprintln(stderr, "Opening this link pairs the browser as a new device with access to sessions, terminal, Brain, Workers, and files.")
-	fmt.Fprintf(stderr, "It works once and expires at %s. Revoke later with zen devices revoke -id DEVICE_ID.\n", pairingInfo.ExpiresAt.Local().Format("15:04"))
+	fmt.Fprintf(stderr, "It works once and expires at %s. Revoke later with mewla devices revoke -id DEVICE_ID.\n", pairingInfo.ExpiresAt.Local().Format("15:04"))
 	fmt.Fprintln(stdout, webURL)
 	if cfg.noOpen {
 		return nil
@@ -69,15 +69,15 @@ func runWebCommand(args []string, stdout, stderr io.Writer) error {
 }
 
 func parseWebConfig(args []string, stderr io.Writer) (webConfig, error) {
-	fs := flag.NewFlagSet("zen web", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla web", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := webConfig{}
 	fs.StringVar(&cfg.origin, "origin", defaultWebOrigin, "web UI origin: a loopback http address of this daemon, or an https -web-origin")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	fs.BoolVar(&cfg.noOpen, "no-open", false, "print the pairing link without opening a browser")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen web [flags]")
-		fmt.Fprintln(stderr, "Open the Zen web UI served by the running daemon and pair this browser.")
+		fmt.Fprintln(stderr, "Usage: mewla web [flags]")
+		fmt.Fprintln(stderr, "Open the Mewla web UI served by the running daemon and pair this browser.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -106,7 +106,7 @@ func normalizeWebOrigin(raw string) (string, error) {
 		return server.ParseWebOrigin(raw)
 	}
 	if parsed.Scheme != "http" || !isLoopbackHost(parsed.Hostname()) {
-		return "", errors.New("web origin must be http on a loopback address (http://127.0.0.1:9876) or an https origin enabled with zen -web-origin")
+		return "", errors.New("web origin must be http on a loopback address (http://127.0.0.1:9876) or an https origin enabled with mewla -web-origin")
 	}
 	if parsed.User != nil || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", fmt.Errorf("web origin %q must not include credentials, a path, a query or a fragment", raw)

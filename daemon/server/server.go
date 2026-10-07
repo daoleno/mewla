@@ -401,7 +401,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 }
 
 // Handler exposes the daemon's complete origin as one transport boundary.
-// LAN, tunnels, reverse proxies, and Zen Link all use this same handler so
+// LAN, tunnels, reverse proxies, and Mewla Link all use this same handler so
 // /ws and the HTTP streaming routes cannot drift between transports.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -1493,7 +1493,7 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 		if backend == "tmux" {
 			presence, probeErr := s.watcher.ProbeSession(targetID)
 			if probeErr != nil || presence != watcher.SessionPresencePresent {
-				message := "tmux target is not an available Zen-owned Session"
+				message := "tmux target is not an available Mewla-owned Session"
 				if probeErr != nil {
 					message = probeErr.Error()
 				}

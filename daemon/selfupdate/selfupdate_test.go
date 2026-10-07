@@ -201,7 +201,7 @@ func TestCacheFreshnessAndNotice(t *testing.T) {
 	if _, fresh := ReadCache(path, now.Add(CacheTTL+time.Second)); fresh {
 		t.Fatal("expired cache reported fresh")
 	}
-	if got := NoticeLine("0.1.0-beta.3", "0.1.0-beta.10"); got != "Zen 0.1.0-beta.10 is available; run: zen update" {
+	if got := NoticeLine("0.1.0-beta.3", "0.1.0-beta.10"); got != "Mewla 0.1.0-beta.10 is available; run: mewla update" {
 		t.Fatalf("notice = %q", got)
 	}
 	if got := NoticeLine("0.1.0", "0.1.0-beta.10"); got != "" {

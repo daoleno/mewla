@@ -138,7 +138,7 @@ func TestCollectOpenCodeStatsAggregatesObservedFacts(t *testing.T) {
 	// Project attribution.
 	zenProject := day2Agg.projects["proj-zen"]
 	if zenProject == nil || zenProject.sessions != 4 {
-		t.Fatalf("proj-zen project = %#v", zenProject)
+		t.Fatalf("proj-mewla project = %#v", zenProject)
 	}
 	if zenProject.cost != 0.003 || zenProject.inputTokens != 3000+300+600 || !zenProject.costUnknown {
 		t.Fatalf("proj-zen cost/input = %#v", zenProject)

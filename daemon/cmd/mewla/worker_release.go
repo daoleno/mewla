@@ -10,7 +10,7 @@ import (
 )
 
 func runWorkerRelease(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker release", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker release", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_release"}
@@ -23,7 +23,7 @@ func runWorkerRelease(args []string, stderr io.Writer) error {
 		return err
 	}
 	if fs.NArg() > 0 || req.WorkerID == "" || req.ProcessID <= 1 || req.ProcessStart == "" {
-		return fmt.Errorf("usage: zen worker release -id SESSION -pid PID -start START")
+		return fmt.Errorf("usage: mewla worker release -id SESSION -pid PID -start START")
 	}
 	resp, err := callControl(cfg, req)
 	if err != nil {
@@ -33,7 +33,7 @@ func runWorkerRelease(args []string, stderr io.Writer) error {
 }
 
 func runResources(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen resources", args, stderr)
+	cfg, err := parseCLIConfig("mewla resources", args, stderr)
 	if err != nil {
 		return err
 	}

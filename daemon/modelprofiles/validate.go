@@ -254,7 +254,7 @@ func ValidateCredentialEnv(name string) error {
 }
 
 // validateCredentialRef accepts an empty ref (legacy canonical provider:<id>)
-// or an opaque Zen provider ref. Refs are internal and secret-free; this is
+// or an opaque Mewla provider ref. Refs are internal and secret-free; this is
 // defense-in-depth against malformed durable rows.
 func validateCredentialRef(ref string) error {
 	ref = normalizeSpace(ref)

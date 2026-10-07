@@ -35,7 +35,7 @@ func validateDelegatedWorkspace(cwd string) error {
 	}
 	switch uint64(stat.Type) {
 	case tmpfsMagic, ramfsMagic, hugetlbfsMagic:
-		return fmt.Errorf("delegated Zen Worker cwd %q is on memory-backed temporary storage; use a durable workspace such as $MEWLA_WORKTREE_ROOT (default ~/.zen/worktrees)", cwd)
+		return fmt.Errorf("delegated Mewla Worker cwd %q is on memory-backed temporary storage; use a durable workspace such as $MEWLA_WORKTREE_ROOT (default ~/.mewla/worktrees)", cwd)
 	default:
 		return nil
 	}

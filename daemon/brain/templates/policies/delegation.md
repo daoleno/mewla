@@ -1,6 +1,6 @@
 # Brain Delegation Policy
 
-Zen Workers are visible execution Sessions started with zen worker spawn; they are not provider-native or Codex-internal subagents.
+Mewla Workers are visible execution Sessions started with mewla worker spawn; they are not provider-native or Codex-internal subagents.
 
 ## Brief
 
@@ -15,10 +15,10 @@ Zen Workers are visible execution Sessions started with zen worker spawn; they a
 
 ## Continuation
 
-Continue a Worker with zen worker send -id <session> -text <follow-up> --work-id <work>; that is the whole step, with no separate resolve. Worker reports and provider errors are evidence for deciding to continue, accept, cancel or wait, not acceptance.
+Continue a Worker with mewla worker send -id <session> -text <follow-up> --work-id <work>; that is the whole step, with no separate resolve. Worker reports and provider errors are evidence for deciding to continue, accept, cancel or wait, not acceptance.
 
 When delivery is uncertain, weigh the cost of a duplicate effect against the evidence before checking or sending again.
 
 ## Machine resources
 
-A resource_pressure event reports sustained machine pressure: crossed signals, headroom, the largest Workers and orphan processes, and queued Work. Run zen resources --json only when you will act on it. Brain decides whether to defer dispatch, ask a Worker to release a tool, or close an owned Worker; the daemon never kills or throttles. Release one tool with zen worker release -id SESSION -pid PID -start START from that snapshot. A newer event or recovery closes unreviewed pressure Work, and recovery itself is not delivered.
+A resource_pressure event reports sustained machine pressure: crossed signals, headroom, the largest Workers and orphan processes, and queued Work. Run mewla resources --json only when you will act on it. Brain decides whether to defer dispatch, ask a Worker to release a tool, or close an owned Worker; the daemon never kills or throttles. Release one tool with mewla worker release -id SESSION -pid PID -start START from that snapshot. A newer event or recovery closes unreviewed pressure Work, and recovery itself is not delivered.

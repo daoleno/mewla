@@ -382,7 +382,7 @@ command = "codex"
 		Addr:          "127.0.0.1:19876",
 		PathEnv:       binDir,
 		Listen: func(network, address string) (io.Closer, error) {
-			t.Fatal("Listen should not be called when Zen health succeeds")
+			t.Fatal("Listen should not be called when Mewla health succeeds")
 			return nil, nil
 		},
 		HTTPGet: func(ctx context.Context, url string) (int, []byte, error) {
@@ -396,7 +396,7 @@ command = "codex"
 		t.Fatalf("listen = %+v", report.Listen)
 	}
 	if !report.Ready {
-		t.Fatalf("expected ready when Zen already running: %+v", report)
+		t.Fatalf("expected ready when Mewla already running: %+v", report)
 	}
 }
 

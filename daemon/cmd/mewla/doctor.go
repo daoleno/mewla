@@ -12,7 +12,7 @@ import (
 )
 
 func runDoctorCommand(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen doctor", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := false
 	stateDir := ""
@@ -58,13 +58,13 @@ func runDoctorCommand(args []string, stderr io.Writer) error {
 }
 
 func printDoctorUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen doctor [flags]")
+	fmt.Fprintln(w, "Usage: mewla doctor [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Diagnose whether this machine can run Zen (tmux, state dir, listen port, executors).")
+	fmt.Fprintln(w, "Diagnose whether this machine can run Mewla (tmux, state dir, listen port, executors).")
 	fmt.Fprintln(w, "Never installs packages or prints credentials. Exit status is nonzero when not ready.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  zen doctor")
-	fmt.Fprintln(w, "  zen doctor --json")
-	fmt.Fprintln(w, "  zen doctor --state-dir /tmp/zen-state --addr 127.0.0.1:9876")
+	fmt.Fprintln(w, "  mewla doctor")
+	fmt.Fprintln(w, "  mewla doctor --json")
+	fmt.Fprintln(w, "  mewla doctor --state-dir /tmp/zen-state --addr 127.0.0.1:9876")
 }

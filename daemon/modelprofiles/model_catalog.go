@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// codexCatalogBaseInstructions supplies Zen's compact coding defaults for
+// codexCatalogBaseInstructions supplies Mewla's compact coding defaults for
 // managed catalogs, whose entries require nonempty base_instructions.
 //
 //go:embed codex_catalog_instructions.md
@@ -37,7 +37,7 @@ type CodexModelMetadata struct {
 }
 
 // Codex Reasoning Effort wire vocabulary — the OpenAI Responses API
-// `reasoning.effort` values (model-dependent) that Zen admits for Session
+// `reasoning.effort` values (model-dependent) that Mewla admits for Session
 // selection. `none` disables reasoning entirely and `ultra` is an
 // undocumented ChatGPT-tier preset; neither is offered as a Session effort.
 var codexReasoningEffortVocabulary = []string{
@@ -491,7 +491,7 @@ func codexEffortPresetDescription(effort string) string {
 // allowlist that prevents the CLI from sending the selected slug.
 // Values mirror the Codex CLI 0.147 reference catalog: supported_in_api=true,
 // tokens-mode truncation at 10k, parallel tool calls for these models, no
-// experimental tools, and no verbosity surface (Zen does not route it).
+// experimental tools, and no verbosity surface (Mewla does not route it).
 func codexWireEntryForModel(model string) (CodexModelCatalogWireEntry, bool) {
 	_, installed, _ := loadInstalledCodexModelCatalog()
 	return codexWireEntryForModelMetadata(model, modelPresentationMetadata{}, installed)

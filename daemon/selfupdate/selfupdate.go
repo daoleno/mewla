@@ -448,7 +448,7 @@ func NoticeLine(current, latest string) string {
 	if err != nil || compareSemVersion(latestVersion, currentVersion) <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("Zen %s is available; run: zen update", latest)
+	return fmt.Sprintf("Mewla %s is available; run: mewla update", latest)
 }
 
 type semVersion struct {

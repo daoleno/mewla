@@ -1,4 +1,4 @@
-// Package codexctl is the Zen daemon's live-control client for a running
+// Package codexctl is the Mewla daemon's live-control client for a running
 // Codex 0.147 app server.
 //
 // Codex exposes exactly one supported external mechanism for mutating the
@@ -476,7 +476,7 @@ func threadRank(t ThreadInfo) int {
 // supported representation of "model default effort" — it is what the TUI
 // itself sends when the user picks the default. A nil effort therefore maps
 // to `"effort": "none"` rather than omitting the field: omission leaves the
-// thread's current effort unchanged, which would acknowledge a state Zen's
+// thread's current effort unchanged, which would acknowledge a state Mewla's
 // projection cannot hold.
 //
 // The applied-settings notification is delivered only to connections attached
@@ -500,7 +500,7 @@ func (c *Client) ApplySettings(ctx context.Context, threadID, model string, effo
 	if effort != nil && strings.TrimSpace(*effort) != "" {
 		params["effort"] = strings.TrimSpace(*effort)
 	} else {
-		// Zen's "model default" is the native ReasoningEffort::None.
+		// Mewla's "model default" is the native ReasoningEffort::None.
 		params["effort"] = "none"
 	}
 	if _, err := c.call(ctx, methodThreadSettingsUpd, params); err != nil {

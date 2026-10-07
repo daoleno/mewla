@@ -45,7 +45,7 @@ func TestClaudeLaunchDefaultsToAutoPermissionMode(t *testing.T) {
 		t.Fatalf("loopback route env missing: %#v", env)
 	}
 	if ClaudeDefaultPermissionMode != "auto" {
-		t.Fatalf("Zen Claude default mode changed without a protocol review: %q", ClaudeDefaultPermissionMode)
+		t.Fatalf("Mewla Claude default mode changed without a protocol review: %q", ClaudeDefaultPermissionMode)
 	}
 	settings := decodeClaudeSettings(t, command)
 	if settings.Permissions.DefaultMode != ClaudeDefaultPermissionMode {

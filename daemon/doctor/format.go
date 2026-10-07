@@ -17,14 +17,14 @@ func WriteHuman(w io.Writer, report Report) error {
 			status = "READY"
 		}
 	}
-	if _, err := fmt.Fprintf(w, "zen doctor: %s\n\n", status); err != nil {
+	if _, err := fmt.Fprintf(w, "mewla doctor: %s\n\n", status); err != nil {
 		return err
 	}
 
 	writeCheck(w, "Platform", report.Platform.Status, report.Platform.Summary)
 	writeCheck(w, "tmux", report.Tmux.Status, report.Tmux.Summary)
 	if report.Tmux.Status == StatusFail && report.Tmux.Remediation == RemediationInstallTmux {
-		fmt.Fprintln(w, "  Install tmux (pick your OS; Zen will not run sudo for you):")
+		fmt.Fprintln(w, "  Install tmux (pick your OS; Mewla will not run sudo for you):")
 		for _, hint := range report.Tmux.InstallHints {
 			fmt.Fprintf(w, "    - %s: %s\n", hint.OS, hint.Command)
 		}
@@ -92,12 +92,12 @@ func WriteHuman(w io.Writer, report Report) error {
 
 	if !report.Ready {
 		fmt.Fprintln(w, "")
-		fmt.Fprintln(w, "Fix the failing checks above, then re-run: zen doctor")
+		fmt.Fprintln(w, "Fix the failing checks above, then re-run: mewla doctor")
 		if report.Tmux.Status == StatusFail && report.Tmux.Remediation == RemediationInstallTmux {
 			fmt.Fprintln(w, "Missing tmux blocks all session runtimes.")
 		}
 		if report.Executors.UsableCount == 0 {
-			fmt.Fprintln(w, "Zen needs at least one runnable executor (binary present and not explicitly unauthenticated).")
+			fmt.Fprintln(w, "Mewla needs at least one runnable executor (binary present and not explicitly unauthenticated).")
 		}
 	}
 	return nil

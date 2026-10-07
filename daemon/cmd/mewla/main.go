@@ -166,7 +166,7 @@ func isSetupUserError(err error) bool {
 // daemonTmuxRuntime returns the user-visible tmux server selected at daemon
 // startup and the daemon-namespaced scratch directory used to contain plain
 // tmux commands launched inside provider panes. An inherited TMUX value binds
-// Zen to that exact caller server; an empty value selects the Unix user's
+// Mewla to that exact caller server; an empty value selects the Unix user's
 // ordinary default server. The durable daemon identity namespaces only the
 // provider scratch, never a private host server.
 func daemonTmuxRuntime(home, daemonID, tmuxEnv string) (socketPath, scratchDir string, err error) {
@@ -188,7 +188,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	lifecycleLock, authManager, err := acquireDaemonAuthOwner(cfg.stateDir)
 	if err != nil {
-		if len(args) == 0 && strings.Contains(err.Error(), "another Zen daemon owns") {
+		if len(args) == 0 && strings.Contains(err.Error(), "another Mewla daemon owns") {
 			devices, listErr := listDevices(cfg.stateDir)
 			if listErr == nil && len(devices) == 0 {
 				return runPairCommand(nil, stderr)
@@ -229,7 +229,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w := watcher.New(500 * time.Millisecond)
 	w.ConfigureDelegatedResources(authManager.DaemonID())
 	w.SetManagedServicesPath(watcher.ManagedServicesPathForStateDir(authManager.StorageDir()))
-	// Bind every Zen-owned Brain and delegated Session to the server visible to
+	// Bind every Mewla-owned Brain and delegated Session to the server visible to
 	// the daemon's caller. When launched inside tmux this is the exact inherited
 	// server socket; otherwise empty socket semantics select the user's ordinary
 	// default server. Provider-internal plain tmux remains contained by the
@@ -377,7 +377,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		CodexConfigPath: modelprofiles.DefaultCodexConfigPath(),
 		// Every Claude on the machine (plain shells, IDEs) reaches the selected
 		// Claude Provider through the same gateway via the env block of the
-		// user's Claude Code settings; Zen-launched Sessions keep their routes.
+		// user's Claude Code settings; Mewla-launched Sessions keep their routes.
 		ClaudeSettingsPath: modelprofiles.DefaultClaudeSettingsPath(),
 	})
 	if err != nil {
@@ -534,13 +534,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 			switch {
 			case state.Phase == "connected":
 				log.Printf(
-					"Zen Link connected via %s (registration RTT %s)",
+					"Mewla Link connected via %s (registration RTT %s)",
 					state.Relay,
 					state.MeasuredRTT.Round(time.Millisecond),
 				)
 			case state.Phase == "offline" && state.LastError != "":
 				log.Printf(
-					"Zen Link offline: %s; check relay reachability, connector credentials, and route ownership",
+					"Mewla Link offline: %s; check relay reachability, connector credentials, and route ownership",
 					state.LastError,
 				)
 			}
@@ -552,15 +552,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 			srv.Handler(),
 		)
 		if connectorErr != nil {
-			return fmt.Errorf("initialize Zen Link connector: %w", connectorErr)
+			return fmt.Errorf("initialize Mewla Link connector: %w", connectorErr)
 		}
 		runtimeOwners = append(runtimeOwners, runtimeOwner{
-			name: "Zen Link connector",
+			name: "Mewla Link connector",
 			run:  connector.Run,
 		})
 		fmt.Fprintf(
 			stderr,
-			"Zen Link configured from %s; connecting outbound.\n",
+			"Mewla Link configured from %s; connecting outbound.\n",
 			linkConfigPath,
 		)
 	}
@@ -605,7 +605,7 @@ func acquireDaemonAuthOwner(
 	}
 	if !acquired {
 		return nil, nil, errors.New(
-			"another Zen daemon owns this state directory",
+			"another Mewla daemon owns this state directory",
 		)
 	}
 	authManager, err := auth.NewManager(resolvedStateDir)
@@ -665,12 +665,12 @@ func runJoinedRuntime(parent context.Context, owners []runtimeOwner) error {
 }
 
 func runUpdateCommand(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen update", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla update", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	checkOnly := false
 	fs.BoolVar(&checkOnly, "check", false, "check for an update without installing it")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen update [--check]")
+		fmt.Fprintln(stderr, "Usage: mewla update [--check]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -691,11 +691,11 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 		return fmt.Errorf("check for update: %w", err)
 	}
 	if candidate == nil {
-		fmt.Fprintf(os.Stdout, "Zen %s is up to date.\n", Version)
+		fmt.Fprintf(os.Stdout, "Mewla %s is up to date.\n", Version)
 		return nil
 	}
 	if checkOnly {
-		fmt.Fprintf(os.Stdout, "Zen %s is available; run: zen update\n", candidate.Version)
+		fmt.Fprintf(os.Stdout, "Mewla %s is available; run: mewla update\n", candidate.Version)
 		return nil
 	}
 	binary, err := client.DownloadBinary(ctx, *candidate)
@@ -704,12 +704,12 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 	}
 	executable, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("locate zen executable: %w", err)
+		return fmt.Errorf("locate mewla executable: %w", err)
 	}
 	if err := selfupdate.ReplaceExecutable(executable, binary); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "Updated Zen %s → %s. Stop and start zen to use it.\n", Version, candidate.Version)
+	fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Stop and start mewla to use it.\n", Version, candidate.Version)
 	return nil
 }
 
@@ -810,7 +810,7 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 
 func runCalendarCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen calendar <list|get|create|update|cancel|run> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla calendar <list|get|create|update|cancel|run> [flags]")
 		return flag.ErrHelp
 	}
 	switch args[0] {
@@ -832,7 +832,7 @@ func runCalendarCommand(args []string, stderr io.Writer) error {
 }
 
 func runCalendarSimple(requestType string, args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen calendar list", args, stderr)
+	cfg, err := parseCLIConfig("mewla calendar list", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -844,7 +844,7 @@ func runCalendarSimple(requestType string, args []string, stderr io.Writer) erro
 }
 
 func runCalendarID(requestType string, args []string, stderr io.Writer, withRevision bool) error {
-	fs := flag.NewFlagSet("zen calendar", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla calendar", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: requestType}
@@ -868,7 +868,7 @@ func runCalendarID(requestType string, args []string, stderr io.Writer, withRevi
 }
 
 func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen calendar create", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla calendar create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, instruction, cwd, sourceThread string
@@ -944,36 +944,36 @@ func isHelpArg(value string) bool {
 }
 
 func printWorkerUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]")
+	fmt.Fprintln(w, "Usage: mewla worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  list       List visible Zen Workers")
-	fmt.Fprintln(w, "  spawn      Create a visible delegated Zen Worker")
-	fmt.Fprintln(w, "  send       Send text to a Zen Worker")
-	fmt.Fprintln(w, "  capture    Capture a Zen Worker transcript")
-	fmt.Fprintln(w, "  status     Print compact status for one Zen Worker")
+	fmt.Fprintln(w, "  list       List visible Mewla Workers")
+	fmt.Fprintln(w, "  spawn      Create a visible delegated Mewla Worker")
+	fmt.Fprintln(w, "  send       Send text to a Mewla Worker")
+	fmt.Fprintln(w, "  capture    Capture a Mewla Worker transcript")
+	fmt.Fprintln(w, "  status     Print compact status for one Mewla Worker")
 	fmt.Fprintln(w, "  receipt    Read exact durable input acceptance without resubmitting")
-	fmt.Fprintln(w, "  progress   Report lifecycle progress for the current or selected Zen Worker")
+	fmt.Fprintln(w, "  progress   Report lifecycle progress for the current or selected Mewla Worker")
 	fmt.Fprintln(w, "  release    Stop one owned tool process tree; preserve the Worker")
-	fmt.Fprintln(w, "  close      Close a Zen Worker")
+	fmt.Fprintln(w, "  close      Close a Mewla Worker")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  zen worker list --json")
-	fmt.Fprintln(w, "  zen worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high -cwd /repo -prompt \"Inspect docs\"")
-	fmt.Fprintln(w, "  zen worker capture -id zen-worker-review-docs:@1 --json")
-	fmt.Fprintln(w, "  zen worker status -id zen-worker-review-docs:@1 --json")
-	fmt.Fprintln(w, "  zen worker progress --status running --phase working --attention none --summary \"Reading files\" --task-class lasting_design --event-kind invariant --lease 300")
-	fmt.Fprintln(w, "  zen worker send -id zen-worker-review-docs:@1 -text \"continue\" --submit=true")
-	fmt.Fprintln(w, "  zen worker close -id zen-worker-review-docs:@1 --force")
+	fmt.Fprintln(w, "  mewla worker list --json")
+	fmt.Fprintln(w, "  mewla worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high -cwd /repo -prompt \"Inspect docs\"")
+	fmt.Fprintln(w, "  mewla worker capture -id zen-worker-review-docs:@1 --json")
+	fmt.Fprintln(w, "  mewla worker status -id zen-worker-review-docs:@1 --json")
+	fmt.Fprintln(w, "  mewla worker progress --status running --phase working --attention none --summary \"Reading files\" --task-class lasting_design --event-kind invariant --lease 300")
+	fmt.Fprintln(w, "  mewla worker send -id zen-worker-review-docs:@1 -text \"continue\" --submit=true")
+	fmt.Fprintln(w, "  mewla worker close -id zen-worker-review-docs:@1 --force")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Retained services:")
 	fmt.Fprintln(w, "  A service kept running outside tmux (for example a user systemd unit)")
-	fmt.Fprintln(w, "  stays invisible until adopted: zen service register -unit NAME.service")
-	fmt.Fprintln(w, "  -name \"Display name\" -port PORT. See zen service --help and docs/services.md.")
+	fmt.Fprintln(w, "  stays invisible until adopted: mewla service register -unit NAME.service")
+	fmt.Fprintln(w, "  -name \"Display name\" -port PORT. See mewla service --help and docs/services.md.")
 }
 
 func printBrainUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen brain <workspace|context|playbooks|gc|work|executors|use> [flags]")
+	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|executors|use> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  workspace      Print the Brain workspace path")
@@ -985,17 +985,17 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  use            Switch the Brain host executor")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  zen brain workspace --json")
-	fmt.Fprintln(w, "  zen brain context --json")
-	fmt.Fprintln(w, "  zen brain playbooks --json")
-	fmt.Fprintln(w, "  zen brain gc --json")
-	fmt.Fprintln(w, "  zen brain work list --json [-all] [-full] [-id <work>]")
-	fmt.Fprintln(w, "  zen brain executors --json")
-	fmt.Fprintln(w, "  zen brain use codex")
+	fmt.Fprintln(w, "  mewla brain workspace --json")
+	fmt.Fprintln(w, "  mewla brain context --json")
+	fmt.Fprintln(w, "  mewla brain playbooks --json")
+	fmt.Fprintln(w, "  mewla brain gc --json")
+	fmt.Fprintln(w, "  mewla brain work list --json [-all] [-full] [-id <work>]")
+	fmt.Fprintln(w, "  mewla brain executors --json")
+	fmt.Fprintln(w, "  mewla brain use codex")
 }
 
 func runWorkerList(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen worker list", args, stderr)
+	cfg, err := parseCLIConfig("mewla worker list", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -1028,11 +1028,11 @@ func runWorkerSpawn(args []string, stderr io.Writer) error {
 // not another lifecycle timer or a license to retry non-replayable input.
 const workerSpawnControlTimeout = 2 * time.Minute
 
-// parseWorkerSpawnArgs binds zen worker spawn flags. -profile is the Work
+// parseWorkerSpawnArgs binds mewla worker spawn flags. -profile is the Work
 // lifecycle profile; -model-profile is the optional Model Profile override
 // (omit to resolve the selected executor default server-side).
 func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.Request, error) {
-	fs := flag.NewFlagSet("zen worker spawn", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker spawn", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_spawn"}
@@ -1058,7 +1058,7 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.StringVar(&contextRef, "context", "", "optional Brain Worklog/context reference (relative to the configured Brain workspace)")
 	fs.BoolVar(&req.Hidden, "hidden", false, "create a hidden session")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen worker spawn -name Franklin -executor codex -cwd /repo -prompt-file task.md [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla worker spawn -name Franklin -executor codex -cwd /repo -prompt-file task.md [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1133,7 +1133,7 @@ func currentWorkerID() string {
 }
 
 func runWorkerSend(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker send", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker send", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_send", Submit: true}
@@ -1147,7 +1147,7 @@ func runWorkerSend(args []string, stderr io.Writer) error {
 	fs.BoolVar(&req.Submit, "submit", true, "submit after sending text")
 	fs.BoolVar(&req.Force, "force", false, "force send to a non-delegated external session")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen worker send -id main:@42 -text 'continue' [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla worker send -id main:@42 -text 'continue' [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1172,7 +1172,7 @@ func runWorkerSend(args []string, stderr io.Writer) error {
 }
 
 func runWorkerCapture(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker capture", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker capture", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_capture"}
@@ -1180,7 +1180,7 @@ func runWorkerCapture(args []string, stderr io.Writer) error {
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.WorkerID, "id", "", "Worker session id")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen worker capture -id main:@42 [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla worker capture -id main:@42 [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1198,7 +1198,7 @@ func runWorkerCapture(args []string, stderr io.Writer) error {
 }
 
 func runWorkerStatus(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker status", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_status"}
@@ -1206,7 +1206,7 @@ func runWorkerStatus(args []string, stderr io.Writer) error {
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.WorkerID, "id", "", "Worker session id")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen worker status -id main:@42 [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla worker status -id main:@42 [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1224,7 +1224,7 @@ func runWorkerStatus(args []string, stderr io.Writer) error {
 }
 
 func runWorkerProgress(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker progress", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker progress", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{
 		stateDir: strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR")),
@@ -1248,7 +1248,7 @@ func runWorkerProgress(args []string, stderr io.Writer) error {
 	fs.IntVar(&req.LeaseSeconds, "lease", 0, "seconds until the next expected progress update")
 	fs.StringVar(&req.ProgressEventID, "progress-event-id", "", "logical progress submission id, minted once per submission and reused on retry; generated per call when empty")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen worker progress --status running --phase working --attention none --summary 'Reading files' --lease 300 [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla worker progress --status running --phase working --attention none --summary 'Reading files' --lease 300 [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1269,16 +1269,16 @@ func runWorkerProgress(args []string, stderr io.Writer) error {
 }
 
 func runWorkerClose(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker close", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker close", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_close"}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.WorkerID, "id", "", "Worker session id")
-	fs.BoolVar(&req.Force, "force", false, "force close even if a delegated Zen Worker is still running")
+	fs.BoolVar(&req.Force, "force", false, "force close even if a delegated Mewla Worker is still running")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen worker close -id main:@42 [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla worker close -id main:@42 [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1296,7 +1296,7 @@ func runWorkerClose(args []string, stderr io.Writer) error {
 }
 
 func runBrainWorkspace(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen brain workspace", args, stderr)
+	cfg, err := parseCLIConfig("mewla brain workspace", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -1308,7 +1308,7 @@ func runBrainWorkspace(args []string, stderr io.Writer) error {
 }
 
 func runBrainContext(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen brain context", args, stderr)
+	cfg, err := parseCLIConfig("mewla brain context", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -1320,7 +1320,7 @@ func runBrainContext(args []string, stderr io.Writer) error {
 }
 
 func runBrainPlaybooks(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen brain playbooks", args, stderr)
+	cfg, err := parseCLIConfig("mewla brain playbooks", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -1332,7 +1332,7 @@ func runBrainPlaybooks(args []string, stderr io.Writer) error {
 }
 
 func runBrainGC(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen brain gc", args, stderr)
+	cfg, err := parseCLIConfig("mewla brain gc", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -1345,7 +1345,7 @@ func runBrainGC(args []string, stderr io.Writer) error {
 
 func runBrainWork(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen brain work <list|get|create|update|close|event|resolve> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla brain work <list|get|create|update|close|event|resolve> [flags]")
 		return flag.ErrHelp
 	}
 	switch args[0] {
@@ -1369,7 +1369,7 @@ func runBrainWork(args []string, stderr io.Writer) error {
 }
 
 func runBrainWorkClose(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work close", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work close", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	var workID string
@@ -1408,7 +1408,7 @@ func runBrainWorkClose(args []string, stderr io.Writer) error {
 }
 
 func runBrainWorkResolve(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work resolve", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work resolve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	request := brain.WorkReviewDispositionRequest{}
@@ -1453,7 +1453,7 @@ func runBrainWorkResolve(args []string, stderr io.Writer) error {
 }
 
 func runBrainWorkList(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work list", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	var workID string
@@ -1497,7 +1497,7 @@ func compactBrainWorkList(items []brain.Work, all, full bool) []brain.Work {
 }
 
 func runBrainWorkCreate(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work create", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	item := brain.Work{Status: brain.WorkOpen, CompletionPolicy: brain.CompletionBounded}
@@ -1526,7 +1526,7 @@ func runBrainWorkCreate(args []string, stderr io.Writer) error {
 }
 
 func runBrainWorkUpdate(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work update", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work update", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	item := brain.Work{}
@@ -1573,7 +1573,7 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 }
 
 func runBrainWorkEvent(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work event", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work event", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	event := brain.WorkEvent{}
@@ -1633,7 +1633,7 @@ func (f completionPolicyFlag) Set(value string) error {
 // runBrainWorkEventResolve closes held delivery claims explicitly and
 // actor-recorded (C.2.6): mark_delivered, discard, or user-authorized replay.
 func runBrainWorkEventResolve(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain work event-resolve", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain work event-resolve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	var workID, action, actor, reason string
@@ -1644,7 +1644,7 @@ func runBrainWorkEventResolve(args []string, stderr io.Writer) error {
 	fs.StringVar(&actor, "actor", "", "resolving actor (user or Brain on explicit user approval)")
 	fs.StringVar(&reason, "reason", "", "audited resolution reason")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen brain work event-resolve -id <work_id> -action <mark_delivered|discard|replay> -actor <actor> -reason <reason>")
+		fmt.Fprintln(stderr, "Usage: mewla brain work event-resolve -id <work_id> -action <mark_delivered|discard|replay> -actor <actor> -reason <reason>")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1668,7 +1668,7 @@ func runBrainWorkEventResolve(args []string, stderr io.Writer) error {
 }
 
 func runBrainExecutors(args []string, stderr io.Writer) error {
-	cfg, err := parseCLIConfig("zen brain executors", args, stderr)
+	cfg, err := parseCLIConfig("mewla brain executors", args, stderr)
 	if err != nil {
 		return err
 	}
@@ -1680,13 +1680,13 @@ func runBrainExecutors(args []string, stderr io.Writer) error {
 }
 
 func runBrainUse(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen brain use", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla brain use", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen brain use <executor> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla brain use <executor> [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -1694,7 +1694,7 @@ func runBrainUse(args []string, stderr io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: zen brain use <executor> [flags]")
+		return fmt.Errorf("usage: mewla brain use <executor> [flags]")
 	}
 	resp, err := callControl(cfg, control.Request{
 		Type:       "brain_set_executor",
@@ -1832,7 +1832,7 @@ func controlResponseError(resp control.Response) error {
 }
 
 // requestPairingToken asks the daemon's runtime owner for a one-time
-// enrollment token, the same authority `zen pair` uses.
+// enrollment token, the same authority `mewla pair` uses.
 func requestPairingToken(stateDir string) (*control.PairingInfo, error) {
 	retry := time.NewTicker(25 * time.Millisecond)
 	defer retry.Stop()
@@ -1912,7 +1912,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		}
 		entries, listErr := book.List()
 		if listErr != nil || len(entries) == 0 {
-			return fmt.Errorf("Zen Link is not configured and the daemon has no reachable address; run zen pair <endpoint>")
+			return fmt.Errorf("Mewla Link is not configured and the daemon has no reachable address; run mewla pair <endpoint>")
 		}
 		offers := make([]connectionOffer, 0, len(entries))
 		for _, entry := range entries {
@@ -1932,7 +1932,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		link.RelayDomains(linkConfig),
 	)
 	if err != nil {
-		return fmt.Errorf("initialize Zen Link transport identity: %w", err)
+		return fmt.Errorf("initialize Mewla Link transport identity: %w", err)
 	}
 	pairContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1945,7 +1945,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	)
 	if err != nil {
 		return fmt.Errorf(
-			"request Zen Link pairing admission from %s: %w (make sure zen is running and Link is connected)",
+			"request Mewla Link pairing admission from %s: %w (make sure mewla is running and Link is connected)",
 			linkConfigPath,
 			err,
 		)
@@ -1958,7 +1958,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		admissions,
 	)
 	if err != nil {
-		return fmt.Errorf("build Zen Link pairing payload: %w", err)
+		return fmt.Errorf("build Mewla Link pairing payload: %w", err)
 	}
 	primaryURL := ""
 	for _, candidate := range payload.Candidates {
@@ -1968,7 +1968,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		}
 	}
 	printPairCommandInfo(stderr, pairingInfo.DaemonID, []connectionOffer{{
-		Label:       "Zen Link",
+		Label:       "Mewla Link",
 		URL:         primaryURL,
 		ConnectLink: connectLink,
 	}})
@@ -1983,10 +1983,10 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen address")
 	fs.BoolVar(&cfg.lan, "lan", false, "listen on all IPv4 interfaces for trusted private-network access")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
-	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Zen Link config (default: <state-dir>/link.json when present)")
+	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json when present)")
 	fs.Var(webOriginsFlag{origins: &cfg.webOrigins}, "web-origin", "serve the web UI to browsers on this https origin (repeatable; TLS terminated by a trusted proxy)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla [flags]")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 		fmt.Fprintln(stderr, "")
@@ -1994,13 +1994,14 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "  serve      Start the daemon")
 		fmt.Fprintln(stderr, "  pair       Generate a fresh pairing link")
 		fmt.Fprintln(stderr, "  web        Open the web UI in a browser, paired as a new device")
-		fmt.Fprintln(stderr, "  doctor     Diagnose machine readiness for Zen")
+		fmt.Fprintln(stderr, "  doctor     Diagnose machine readiness for Mewla")
 		fmt.Fprintln(stderr, "  setup      Guided first-run setup (uses doctor)")
-		fmt.Fprintln(stderr, "  update     Verify and install the latest Zen release")
-		fmt.Fprintln(stderr, "  worker     List, spawn, inspect, message, progress, and close Zen Workers")
+		fmt.Fprintln(stderr, "  update     Verify and install the latest Mewla release")
+		fmt.Fprintln(stderr, "  worker     List, spawn, inspect, message, progress, and close Mewla Workers")
 		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
 		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
 		fmt.Fprintln(stderr, "  address    Add, remove, or list daemon entry points")
+		fmt.Fprintln(stderr, "  state      Migrate the legacy ~/.mewla state root to ~/.mewla")
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -2025,15 +2026,15 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 }
 
 func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
-	fs := flag.NewFlagSet("zen pair", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla pair", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	cfg := pairConfig{}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
-	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Zen Link config (default: <state-dir>/link.json)")
+	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zen pair [flags] [endpoint]")
-		fmt.Fprintln(stderr, "Without endpoint, use configured Zen Link. Explicit endpoint keeps Pairing V1.")
+		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [endpoint]")
+		fmt.Fprintln(stderr, "Without endpoint, use configured Mewla Link. Explicit endpoint keeps Pairing V1.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -2067,7 +2068,7 @@ func loadOptionalLinkConfig(
 		return link.ConnectorConfig{}, path, false, nil
 	}
 	return link.ConnectorConfig{}, path, false, fmt.Errorf(
-		"load Zen Link config %s: %w",
+		"load Mewla Link config %s: %w",
 		path,
 		err,
 	)
@@ -2075,12 +2076,12 @@ func loadOptionalLinkConfig(
 
 func runDevicesCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: zen devices <list|pending|approve|deny|revoke> [-state-dir DIR] [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla devices <list|pending|approve|deny|revoke> [-state-dir DIR] [flags]")
 		return flag.ErrHelp
 	}
 	switch args[0] {
 	case "list":
-		fs := flag.NewFlagSet("zen devices list", flag.ContinueOnError)
+		fs := flag.NewFlagSet("mewla devices list", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		var stateDir string
 		var outputJSON bool
@@ -2110,7 +2111,7 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 		}
 		return nil
 	case "revoke":
-		fs := flag.NewFlagSet("zen devices revoke", flag.ContinueOnError)
+		fs := flag.NewFlagSet("mewla devices revoke", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		var stateDir string
 		var deviceID string
@@ -2132,7 +2133,7 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 			result,
 		)
 	case "pending":
-		fs := flag.NewFlagSet("zen devices pending", flag.ContinueOnError)
+		fs := flag.NewFlagSet("mewla devices pending", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		var stateDir string
 		fs.StringVar(&stateDir, "state-dir", "", "state directory for daemon identity and control socket")
@@ -2154,7 +2155,7 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 		}
 		return nil
 	case "approve", "deny":
-		fs := flag.NewFlagSet("zen devices "+args[0], flag.ContinueOnError)
+		fs := flag.NewFlagSet("mewla devices "+args[0], flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		var stateDir, id, number string
 		fs.StringVar(&stateDir, "state-dir", "", "state directory for daemon identity and control socket")

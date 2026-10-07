@@ -406,7 +406,7 @@ func (s *Server) handleSetThreadRuntime(conn *websocket.Conn, raw clientMessage)
 
 // SetThreadRuntime is the single daemon transaction for an acknowledged
 // current-thread runtime. For live-control Codex Sessions (app-server mode)
-// it applies the native thread/settings/update FIRST and commits the Zen
+// it applies the native thread/settings/update FIRST and commits the Mewla
 // route binding only after the native applied-settings acknowledgement; on
 // native failure or timeout the route is untouched, and on route-commit
 // failure the native side is reverted. For embedded Sessions it changes only
@@ -434,7 +434,7 @@ func (s *Server) SetThreadRuntime(sessionID string, choice modelprofiles.ThreadR
 	}
 	// Native-first: apply the exact resolved model+effort to the live Codex
 	// thread and wait for the native acknowledgement before publishing the
-	// Zen route. The prepare/commit split keeps the Owner lock free during
+	// Mewla route. The prepare/commit split keeps the Owner lock free during
 	// the network round-trip; Commit re-validates the generation CAS.
 	if socket := owner.CodexControlSocket(sessionID); socket != "" && s.codexLiveDial != nil {
 		revert, cleanup, liveErr := s.applyLiveNativeThreadRuntime(socket, sessionID, prepared)

@@ -38,7 +38,7 @@ func CallWithTimeoutResult(
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
 	if err != nil {
-		return CallResult{}, fmt.Errorf("connect to Zen control socket: %w", err)
+		return CallResult{}, fmt.Errorf("connect to Mewla control socket: %w", err)
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(timeout))

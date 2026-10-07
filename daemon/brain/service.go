@@ -644,7 +644,7 @@ func (s *Service) Housekeeping() (HousekeepingReport, error) {
 		steps = append(steps, "Delete or relocate unmanaged workspace entries; put scratch in TMPDIR and reports in worklog/.")
 	}
 	if len(delegated) > 0 {
-		steps = append(steps, "Inspect open delegated Zen Workers and close only those whose larger task is complete and reported.")
+		steps = append(steps, "Inspect open delegated Mewla Workers and close only those whose larger task is complete and reported.")
 	}
 	return HousekeepingReport{
 		Workspace:            s.store.WorkspacePath(),
@@ -1823,7 +1823,7 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 				continue
 			}
 			if !item.AttemptDelegated && !hasTurn {
-				// A bare non-delegated relationship is not a Zen-managed Session
+				// A bare non-delegated relationship is not a Mewla-managed Session
 				// authority. It is excluded from CurrentWork projection, but this
 				// inventory pass does not mutate foreign lifecycle state.
 				continue
@@ -3587,8 +3587,8 @@ You are Brain inside zen.
 Brain workspace: %s (private reports in worklog/)
 Managed worktree root: %s
 Host executor: %s.
-Zen CLI: %s
-Recover active work from current.md and zen brain context --json.
+Mewla CLI: %s
+Recover active work from current.md and mewla brain context --json.
 Personality: %s
 `, snapshot.Workspace, worktreeRoot, executor.ID, zenCLICommand(),
 		strings.TrimSpace(snapshot.Personality)))
@@ -3625,7 +3625,7 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string
 		"Brain host executor handoff:",
 		fmt.Sprintf("Host executor changed from %s to %s in thread %s. Continue the same visible Brain chat in the user's language; keep this handoff private.",
 			strings.TrimSpace(previousExecutorID), strings.TrimSpace(nextExecutorID), threadID),
-		"Read AGENTS.md, policies/handoff.md and current.md; zen brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
+		"Read AGENTS.md, policies/handoff.md and current.md; mewla brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
 	}
 	active := []string{}
 	for _, worker := range workers {

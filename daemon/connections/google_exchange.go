@@ -39,7 +39,7 @@ func validExchangeOrigin(origin string) bool {
 }
 func (m *Manager) googleExchangeRequest(ctx context.Context, origin, path, proof string, input, out any) error {
 	if !validExchangeOrigin(origin) {
-		return errors.New("Zen's Google connection is not configured correctly")
+		return errors.New("Mewla's Google connection is not configured correctly")
 	}
 	var body io.Reader
 	method := "GET"
@@ -64,7 +64,7 @@ func (m *Manager) googleExchangeRequest(ctx context.Context, origin, path, proof
 	}
 	response, err := m.oauthHTTP(&record{Account: Account{Endpoint: origin}}).Do(req)
 	if err != nil {
-		return errors.New("Could not reach Zen's Google authorization. Try again.")
+		return errors.New("Could not reach Mewla's Google authorization. Try again.")
 	}
 	defer response.Body.Close()
 	if response.StatusCode == 401 || response.StatusCode == 403 {

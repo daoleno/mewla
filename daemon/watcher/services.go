@@ -223,7 +223,7 @@ type classifierWorkerSnapshot struct {
 	command string
 }
 
-// listServicePanes inventories explicitly Zen-owned panes on the one selected
+// listServicePanes inventories explicitly Mewla-owned panes on the one selected
 // host server. Ambient user panes never enter service attribution. A missing
 // server is an empty inventory; other tmux failures remain hard errors.
 func (w *Watcher) listServicePanes() ([]servicePane, error) {

@@ -101,17 +101,17 @@ func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbo
 }
 
 func printStartupInfo(w io.Writer, listenAddr, stateDir string, addresses []privateNetworkAddress) {
-	fmt.Fprintf(w, "\n  Zen %s\n  Listen  %s\n", Version, listenAddr)
+	fmt.Fprintf(w, "\n  Mewla %s\n  Listen  %s\n", Version, listenAddr)
 	host, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
-		fmt.Fprint(w, "  Pair    zen pair <reachable-endpoint>\n\n")
+		fmt.Fprint(w, "  Pair    mewla pair <reachable-endpoint>\n\n")
 		return
 	}
 	if isLoopbackHost(host) {
 		fmt.Fprintln(w, "  Mode    Local only")
-		fmt.Fprintln(w, "\n  LAN     zen --lan")
+		fmt.Fprintln(w, "\n  LAN     mewla --lan")
 		fmt.Fprintf(w, "  HTTPS   expose http://%s\n", listenAddr)
-		fmt.Fprintf(w, "  Pair    %s\n\n", pairCommand(stateDir, "https://your-zen-host.example"))
+		fmt.Fprintf(w, "  Pair    %s\n\n", pairCommand(stateDir, "https://your-mewla-host.example"))
 		return
 	}
 	usable := startupPairingAddresses(host, addresses)
@@ -128,23 +128,23 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir string, addresses []priv
 	} else if isWildcardHost(host) {
 		fmt.Fprintln(w, "\n  WARN    No LAN or Tailscale address detected.")
 	} else {
-		fmt.Fprintln(w, "\n  Pair    zen pair <reachable-endpoint>")
+		fmt.Fprintln(w, "\n  Pair    mewla pair <reachable-endpoint>")
 	}
 	fmt.Fprintln(w)
 }
 
 func printLinkStartupInfo(w io.Writer, listenAddr, stateDir string) {
-	fmt.Fprintf(w, "\n  Zen %s\n  Listen  %s\n  Link    Connecting outbound\n", Version, listenAddr)
+	fmt.Fprintf(w, "\n  Mewla %s\n  Listen  %s\n  Link    Connecting outbound\n", Version, listenAddr)
 	fmt.Fprintf(w, "\n  Pair    %s\n", pairCommand(stateDir, ""))
-	fmt.Fprint(w, "  Direct  zen pair <endpoint>\n\n")
+	fmt.Fprint(w, "  Direct  mewla pair <endpoint>\n\n")
 }
 
 func printPairingInfo(w io.Writer, offers []connectionOffer) {
 	if len(offers) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "Pairing grants this phone access to sessions, terminal, Brain, Workers, and files on this Zen server.")
-	fmt.Fprintln(w, "Revoke this phone's access with zen devices revoke -id DEVICE_ID.")
+	fmt.Fprintln(w, "Pairing grants this phone access to sessions, terminal, Brain, Workers, and files on this Mewla server.")
+	fmt.Fprintln(w, "Revoke this phone's access with mewla devices revoke -id DEVICE_ID.")
 
 	for _, offer := range offers {
 		fmt.Fprintf(w, "  - %s\n", offer.Label)

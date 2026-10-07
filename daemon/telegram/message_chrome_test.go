@@ -124,7 +124,7 @@ func TestOrdinaryReceiptsStatusesAndErrorsHaveNoMarkup(t *testing.T) {
 	success, failure := 0, 0
 	for _, body := range wire.bodies {
 		text := body["text"].(string)
-		if strings.HasPrefix(text, "Files received by Zen.") {
+		if strings.HasPrefix(text, "Files received by Mewla.") {
 			success++
 		}
 		if strings.Contains(text, "Nothing was forwarded") {
@@ -182,7 +182,7 @@ func TestLegacyPendingOrdinaryChromeIsStrippedOnlyAtDispatch(t *testing.T) {
 	}{
 		{name: "Brain", id: "assistant:old:0", text: "Brain", canonical: "old", feedback: true},
 		{name: "Session", id: "topic:msg:session:old:0", text: "Answer", canonical: "session:old", feedback: true},
-		{name: "receipt", id: "media-ack:old", text: "Files received by Zen."},
+		{name: "receipt", id: "media-ack:old", text: "Files received by Mewla."},
 		{name: "file failure", id: "media-error:old", text: "Nothing was forwarded."},
 		{name: "status", id: "command:4:0", text: "Recipient: Brain. Session conversations are in their own topics."},
 		{name: "callback error", id: "callback:old:0", text: "Session unavailable."},

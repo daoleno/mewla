@@ -1,4 +1,4 @@
-// Package work implements a file-first work log rooted at ~/.zen/work/<workspace>/*.md.
+// Package work implements a file-first work log rooted at ~/.mewla/work/<workspace>/*.md.
 //
 // Items are Markdown files with minimal YAML frontmatter (id, created,
 // started, done). The daemon watches the work root via fsnotify, broadcasts

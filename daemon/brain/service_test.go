@@ -2518,13 +2518,13 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 	prompt := fw.sentCalls[0].text
 	for _, want := range []string{
 		"Host executor: codex.",
-		"Read AGENTS.md before continuing", "Managed worktree root:", "Zen CLI:",
+		"Read AGENTS.md before continuing", "Managed worktree root:", "Mewla CLI:",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("bootstrap missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{"Delegated executor", "agent spawn", "agent capture", "Zen CLI quick reference", "Current memory:", "Current profile notes:", "soul.md", "Brain owns orchestration"} {
+	for _, unwanted := range []string{"Delegated executor", "agent spawn", "agent capture", "Mewla CLI quick reference", "Current memory:", "Current profile notes:", "soul.md", "Brain owns orchestration"} {
 		if strings.Contains(prompt, unwanted) {
 			t.Fatalf("bootstrap retains %q", unwanted)
 		}
@@ -2561,12 +2561,12 @@ func TestServiceBootstrapPromptReferencesPrivateWorkspaceWithoutEmbeddingIt(t *t
 		t.Fatalf("bootstrap sends = %#v", fw.sentCalls)
 	}
 	prompt := fw.sentCalls[0].text
-	for _, want := range []string{"Read AGENTS.md", "zen brain context --json", "current.md"} {
+	for _, want := range []string{"Read AGENTS.md", "mewla brain context --json", "current.md"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("bootstrap prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	for _, want := range []string{"zen brain playbooks --json", "memory.md", "profile.md", "policies/delegation.md", "policies/engine.md", "policies/handoff.md"} {
+	for _, want := range []string{"mewla brain playbooks --json", "memory.md", "profile.md", "policies/delegation.md", "policies/engine.md", "policies/handoff.md"} {
 		if !strings.Contains(productWorkspaceInstructions, want) {
 			t.Fatalf("AGENTS.md missing on-demand reference %q", want)
 		}
@@ -2788,7 +2788,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 		}
 	}
 	if len(report.OpenDelegatedWorkers) != 1 || report.OpenDelegatedWorkers[0].ID != delegatedID {
-		t.Fatalf("delegated Zen Workers = %#v", report.OpenDelegatedWorkers)
+		t.Fatalf("delegated Mewla Workers = %#v", report.OpenDelegatedWorkers)
 	}
 	if len(report.RecommendedNextSteps) == 0 {
 		t.Fatalf("expected recommended next steps: %+v", report)
@@ -2885,7 +2885,7 @@ func TestServiceNewChatReplacesHostAndStartsFreshThread(t *testing.T) {
 	for _, unexpected := range []string{
 		"resource admission is a ceiling",
 		"smallest useful frontier",
-		"do not launch work outside Zen's owned lifecycle",
+		"do not launch work outside Mewla's owned lifecycle",
 	} {
 		if strings.Contains(bootstrap, unexpected) {
 			t.Fatalf("new chat bootstrap should not include %q:\n%s", unexpected, bootstrap)
@@ -3068,13 +3068,13 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 	if !strings.Contains(string(instructions), "Read policies/delegation.md before delegating") {
 		t.Fatalf("workspace instructions do not describe policies:\n%s", instructions)
 	}
-	if !strings.Contains(string(instructions), "zen brain playbooks --json") {
+	if !strings.Contains(string(instructions), "mewla brain playbooks --json") {
 		t.Fatalf("workspace instructions do not describe playbooks:\n%s", instructions)
 	}
 	for _, want := range []string{
 		brainWorkerRoleContract, "Brain decides decomposition", "without acknowledgement",
 		"keep doing independent preparation", "changes scope, risk or user values",
-		"zen worker list/spawn/capture/send/close", "delegated=true",
+		"mewla worker list/spawn/capture/send/close", "delegated=true",
 		"$MEWLA_WORKTREE_ROOT", "TMPDIR", "$MEWLA_BUILD_TMPDIR",
 		"policies/delegation.md",
 	} {
@@ -3166,7 +3166,7 @@ func TestStorePreservesUnmarkedWorkspaceInstructionsBeforeCanonicalBlock(t *test
 
 Custom local note.
 
-- Only create or ask for a visible delegated Zen Worker session when the user explicitly asks you to delegate real work.
+- Only create or ask for a visible delegated Mewla Worker session when the user explicitly asks you to delegate real work.
 `
 	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte(staleInstructions), 0o600); err != nil {
 		t.Fatal(err)
@@ -3237,7 +3237,7 @@ func assertCalendarPromptContract(t *testing.T, value string) {
 		"calendar list/get/create/update/cancel/run only when the user states a time intent",
 		"event, reminder and deadline are passive",
 		"scheduled_action runs work",
-		"current thread_id from zen brain context --json as -source-thread",
+		"current thread_id from mewla brain context --json as -source-thread",
 		"never invent or retarget it",
 		"A recurring series keeps running after one occurrence fails",
 		"local YYYY-MM-DD and HH:MM with an IANA timezone",

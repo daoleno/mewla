@@ -106,7 +106,7 @@ func (o *Owner) connectionReady(profile Profile) bool {
 }
 
 // providerCredentialHint returns the masked hint for the connection's active
-// stored secret, or "" when the secret lives outside Zen's private store (env
+// stored secret, or "" when the secret lives outside Mewla's private store (env
 // fallback) or no secret is stored. The hint is generated daemon-side from the
 // active credential ref; secrets never appear on the wire, in logs, or in
 // telemetry.
@@ -796,7 +796,7 @@ func (o *Owner) CodexRoutedDefault() bool {
 
 // SetProviderConnection selects the future-launch connection for a client.
 // Model selection remains an Agent/session concern and is never persisted here.
-// Zen-launched Claude Sessions reach the Provider through their own route, so
+// Mewla-launched Claude Sessions reach the Provider through their own route, so
 // selecting a Claude connection also retargets every routed Claude Session in
 // the same transaction.
 func (o *Owner) SetProviderConnection(clientOrExecutor, connectionID string, revision int64) (ProviderCatalogProjection, error) {
@@ -913,7 +913,7 @@ func (o *Owner) SetProviderModelSupport(connectionID string, enabledIDs []string
 	return proj, persist, nil
 }
 
-// SetCredentialStore installs Zen's private credential store (or a test fake).
+// SetCredentialStore installs Mewla's private credential store (or a test fake).
 // Serialized with Set/Clear/Delete under Owner.mu so the store pointer cannot
 // race a mid-flight credential mutation.
 func (o *Owner) SetCredentialStore(store CredentialStore) {
@@ -1072,7 +1072,7 @@ func (o *Owner) prepareThreadRuntimeLocked(sessionID string, choice ThreadRuntim
 	modelID := normalizeSpace(choice.ModelID)
 	effortOverride := normalizeID(choice.Effect)
 	// The native wire value "none" is Codex's model-default effort; it is the
-	// same state as Zen's empty override and never a selectable explicit value.
+	// same state as Mewla's empty override and never a selectable explicit value.
 	if effortOverride == ReasoningEffortNone {
 		effortOverride = ""
 	}

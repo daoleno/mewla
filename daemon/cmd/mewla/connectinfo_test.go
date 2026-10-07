@@ -141,9 +141,9 @@ func TestPrintStartupInfoForLoopback(t *testing.T) {
 	rendered := output.String()
 	for _, want := range []string{
 		"Local only",
-		"zen --lan",
+		"mewla --lan",
 		"expose http://127.0.0.1:9876",
-		"zen pair -state-dir /tmp/zen-state https://your-zen-host.example",
+		"mewla pair -state-dir /tmp/zen-state https://your-mewla-host.example",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("startup info missing %q: %q", want, rendered)
@@ -160,15 +160,15 @@ func TestPrintLinkStartupInfoUsesNoEndpointAsPrimaryAndKeepsAdvanced(t *testing.
 	rendered := output.String()
 	for _, expected := range []string{
 		"Connecting outbound",
-		"zen pair -state-dir /tmp/zen-state",
+		"mewla pair -state-dir /tmp/zen-state",
 		"Direct",
-		"zen pair <endpoint>",
+		"mewla pair <endpoint>",
 	} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("Link startup missing %q: %q", expected, rendered)
 		}
 	}
-	if strings.Contains(rendered, "your-zen-host") {
+	if strings.Contains(rendered, "your-mewla-host") {
 		t.Fatalf("Link startup hard-coded a nonexistent endpoint: %q", rendered)
 	}
 }
@@ -182,18 +182,18 @@ func TestPrintStartupInfoForLANUsesDetectedAddresses(t *testing.T) {
 
 	rendered := output.String()
 	for _, want := range []string{
-		"Zen ",
-		"zen pair http://192.168.1.42:9876",
+		"Mewla ",
+		"mewla pair http://192.168.1.42:9876",
 		"http://100.101.102.103:9876",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("startup info missing %q: %q", want, rendered)
 		}
 	}
-	if strings.Contains(rendered, "zen pair http://0.0.0.0") {
+	if strings.Contains(rendered, "mewla pair http://0.0.0.0") {
 		t.Fatalf("startup info offered wildcard pairing address: %q", rendered)
 	}
-	if strings.Count(rendered, "zen pair") != 1 {
+	if strings.Count(rendered, "mewla pair") != 1 {
 		t.Fatalf("startup should offer one primary pairing command: %q", rendered)
 	}
 	if !strings.Contains(rendered, "Tailscale http://") {
@@ -204,7 +204,7 @@ func TestPrintStartupInfoForLANUsesDetectedAddresses(t *testing.T) {
 func TestStartupWithoutPrivateAddressIsActionable(t *testing.T) {
 	var output bytes.Buffer
 	printStartupInfo(&output, "[::]:9876", "", nil)
-	if !strings.Contains(output.String(), "No LAN or Tailscale address detected") || strings.Contains(output.String(), "zen pair http://") {
+	if !strings.Contains(output.String(), "No LAN or Tailscale address detected") || strings.Contains(output.String(), "mewla pair http://") {
 		t.Fatalf("invalid no-address startup: %q", output.String())
 	}
 }
@@ -214,7 +214,7 @@ func TestPrintStartupInfoForSpecificPrivateBind(t *testing.T) {
 	printStartupInfo(&output, "192.168.1.42:9988", "", nil)
 
 	rendered := output.String()
-	if !strings.Contains(rendered, "zen pair http://192.168.1.42:9988") {
+	if !strings.Contains(rendered, "mewla pair http://192.168.1.42:9988") {
 		t.Fatalf("specific private bind missing pairing command: %q", rendered)
 	}
 }
@@ -270,8 +270,8 @@ func TestPairCommandWithoutEndpointOrLinkConfigFailsHonestly(t *testing.T) {
 	var output bytes.Buffer
 	err := runPairCommand([]string{"-state-dir", stateDir}, &output)
 	if err == nil ||
-		!strings.Contains(err.Error(), "Zen Link is not configured") ||
-		!strings.Contains(err.Error(), "zen pair <endpoint>") {
+		!strings.Contains(err.Error(), "Mewla Link is not configured") ||
+		!strings.Contains(err.Error(), "mewla pair <endpoint>") {
 		t.Fatalf("unexpected no-Link pair error: %v", err)
 	}
 	if strings.Contains(output.String(), "mewla://") {
@@ -369,7 +369,7 @@ func TestTopLevelHelpIncludesWorkerAndBrainCommands(t *testing.T) {
 	}
 	rendered := output.String()
 	for _, want := range []string{
-		"worker     List, spawn, inspect, message, progress, and close Zen Workers",
+		"worker     List, spawn, inspect, message, progress, and close Mewla Workers",
 		"brain      Inspect Brain workspace and host executor configuration",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -385,12 +385,12 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	workerHelp := workerOutput.String()
 	for _, want := range []string{
-		"Usage: zen worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]",
-		"zen worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high",
-		"zen worker capture -id",
-		"zen worker status -id",
-		"zen worker progress --status running",
-		"zen worker close -id",
+		"Usage: mewla worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]",
+		"mewla worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high",
+		"mewla worker capture -id",
+		"mewla worker status -id",
+		"mewla worker progress --status running",
+		"mewla worker close -id",
 	} {
 		if !strings.Contains(workerHelp, want) {
 			t.Fatalf("agent help missing %q:\n%s", want, workerHelp)
@@ -403,7 +403,7 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	progressHelp := progressOutput.String()
 	for _, want := range []string{
-		"Usage: zen worker progress --status running --phase working --attention none",
+		"Usage: mewla worker progress --status running --phase working --attention none",
 		"-id",
 		"-lease",
 		"-status",
@@ -422,13 +422,13 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	brainHelp := brainOutput.String()
 	for _, want := range []string{
-		"Usage: zen brain <workspace|context|playbooks|gc|work|executors|use> [flags]",
+		"Usage: mewla brain <workspace|context|playbooks|gc|work|executors|use> [flags]",
 		"Reconcile product-owned Brain workspace blocks while preserving user content",
-		"zen brain workspace --json",
-		"zen brain context --json",
-		"zen brain playbooks --json",
-		"zen brain gc --json",
-		"zen brain executors --json",
+		"mewla brain workspace --json",
+		"mewla brain context --json",
+		"mewla brain playbooks --json",
+		"mewla brain gc --json",
+		"mewla brain executors --json",
 	} {
 		if !strings.Contains(brainHelp, want) {
 			t.Fatalf("brain help missing %q:\n%s", want, brainHelp)

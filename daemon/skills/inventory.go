@@ -391,7 +391,7 @@ func (collector *inventoryCollector) scanRootEntry(root inventoryRoot, entry fs.
 
 func (collector *inventoryCollector) copyEnabled(agents []Agent, rootPath string) bool {
 	// A copy is available when at least one Agent sees this root. Provider
-	// enable/disable registries are intentionally not a lifecycle gate: Zen's
+	// enable/disable registries are intentionally not a lifecycle gate: Mewla's
 	// management action is exact-copy delete only.
 	return len(agents) > 0 || rootPath != ""
 }

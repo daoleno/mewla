@@ -60,10 +60,10 @@ func TestMergeWorkerCommandOwnershipKeepsOnlyOwnedPiLaunch(t *testing.T) {
 			// strip the quotes for ownership detection and re-emit them in the
 			// merged command so work.PiOwnedSessionPath recovers the same path.
 			name:          "quoted spaced owned path survives refresh",
-			previous:      `pi --session '/tmp/My Zen/owned file.jsonl'`,
+			previous:      `pi --session '/tmp/My Mewla/owned file.jsonl'`,
 			detected:      "pi",
-			want:          `pi --session '/tmp/My Zen/owned file.jsonl'`,
-			wantOwnedPath: "/tmp/My Zen/owned file.jsonl",
+			want:          `pi --session '/tmp/My Mewla/owned file.jsonl'`,
+			wantOwnedPath: "/tmp/My Mewla/owned file.jsonl",
 		},
 		{
 			name:          "quoted dollar metachar owned path survives refresh",
@@ -108,10 +108,10 @@ func TestMergeWorkerCommandOwnershipKeepsOnlyOwnedPiLaunch(t *testing.T) {
 		},
 		{
 			name:          "quoted equals-form owned session survives refresh",
-			previous:      `pi --session='/tmp/My Zen/owned file.jsonl'`,
+			previous:      `pi --session='/tmp/My Mewla/owned file.jsonl'`,
 			detected:      "pi",
-			want:          `pi --session '/tmp/My Zen/owned file.jsonl'`,
-			wantOwnedPath: "/tmp/My Zen/owned file.jsonl",
+			want:          `pi --session '/tmp/My Mewla/owned file.jsonl'`,
+			wantOwnedPath: "/tmp/My Mewla/owned file.jsonl",
 		},
 		{
 			name:          "unowned pi keeps detected identity",
@@ -259,12 +259,12 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 }
 
 // TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh reproduces the
-// reviewed P2 parser divergence: a Zen-owned --session path that requires
+// reviewed P2 parser divergence: a Mewla-owned --session path that requires
 // shell quoting (space and metacharacters, exactly as EnsurePiSessionLaunchCommand
 // emits via shellQuoteForLaunch) must keep the owned binding across polls
 // instead of degrading to bare "pi".
 func TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
-	spaced := filepath.Join(t.TempDir(), "My Zen", "owned file.jsonl")
+	spaced := filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl")
 	quoted := shellQuoteForLaunch(spaced)
 	launchCommand := "env PATH=/x pi --session " + quoted
 	w := New(time.Second)
@@ -401,7 +401,7 @@ func TestPollDiscoveredPiWithoutLaunchCommandKeepsDetectedIdentity(t *testing.T)
 // reopen/reconnect subscription binds the exact durable transcript instead of
 // degrading to transcript_not_found.
 func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *testing.T) {
-	owned := filepath.Join(t.TempDir(), "My Zen", "owned file.jsonl")
+	owned := filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl")
 	binding := EncodePiSessionBinding("--session", owned)
 	w := New(time.Second)
 	w.pollNow = fakePollClock([]time.Time{
@@ -449,7 +449,7 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 // command parser fails closed on it (documented shell-quoting contract),
 // never binding a wrong transcript.
 func TestPiSessionBindingRoundTripsHostilePaths(t *testing.T) {
-	path := "/repo/My\tZen\nowne\"d file\\x$y.jsonl"
+	path := "/repo/My\tMewla\nowne\"d file\\x$y.jsonl"
 	binding := EncodePiSessionBinding("--session", path)
 	if binding == "" {
 		t.Fatal("valid owned path must encode")
@@ -678,7 +678,7 @@ func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
 // field so rediscovery can restore owned Pi bindings after a daemon restart.
 func TestListTmuxWindowsParsesPiSessionBinding(t *testing.T) {
 	binDir := t.TempDir()
-	binding := EncodePiSessionBinding("--session", filepath.Join(t.TempDir(), "My Zen", "owned file.jsonl"))
+	binding := EncodePiSessionBinding("--session", filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl"))
 	line := "%1\tpi\t/repo/zen\tpi\t900\t\t\t\t" + binding + "\tfixture"
 	tmuxPath := filepath.Join(binDir, "tmux")
 	script := "#!/bin/sh\n" +

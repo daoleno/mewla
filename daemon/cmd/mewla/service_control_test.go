@@ -122,7 +122,7 @@ func TestServiceCLIUsage(t *testing.T) {
 	if err := run([]string{"service", "--help"}, &output); err != nil && !errors.Is(err, flag.ErrHelp) {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "zen service") {
+	if !strings.Contains(output.String(), "mewla service") {
 		t.Fatalf("service help=%s", output.String())
 	}
 	if err := run([]string{"service", "bogus"}, &output); err == nil || !strings.Contains(err.Error(), "unknown service command") {

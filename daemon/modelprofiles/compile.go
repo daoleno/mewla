@@ -7,7 +7,7 @@ import (
 )
 
 // Compile builds a secret-free launch plan that targets opts.LoopbackRouteURL when
-// the profile uses a Zen route. Upstream base URL/credential stay on Draft for
+// the profile uses a Mewla route. Upstream base URL/credential stay on Draft for
 // RouteTable — never in command/env values beyond the loopback URL and model id.
 //
 // Client/upstream contract requires opts.VerifiedProfileContract or opts.Verifier.
@@ -203,9 +203,9 @@ func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRou
 		command = baseCommand
 	}
 	env = map[string]string{EnvAnthropicBaseURL: loopbackRouteURL}
-	// The CLI --settings payload is Zen's per-Session default: it carries the
+	// The CLI --settings payload is Mewla's per-Session default: it carries the
 	// loopback route env (only when the Provider does not use the user's native
-	// credentials) plus the starting Claude Code permission mode. Zen defaults
+	// credentials) plus the starting Claude Code permission mode. Mewla defaults
 	// routed sessions to Auto. An explicit --permission-mode or
 	// --dangerously-skip-permissions flag on the base command still outranks a
 	// settings file, so explicit authorization choices are preserved. The
@@ -228,14 +228,14 @@ func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRou
 	return command, env, nil
 }
 
-// ClaudeDefaultPermissionMode is the starting Claude Code permission mode Zen
+// ClaudeDefaultPermissionMode is the starting Claude Code permission mode Mewla
 // configures for a routed Session when the launch command does not already
 // choose one. "auto" is the documented value for permissions.defaultMode in a
 // settings file; an explicit --permission-mode/--dangerously-skip-permissions
 // flag still takes precedence.
 const ClaudeDefaultPermissionMode = "auto"
 
-// ClaudeLaunchSettings is the CLI --settings JSON Zen passes to Claude Code for
+// ClaudeLaunchSettings is the CLI --settings JSON Mewla passes to Claude Code for
 // a routed Session. It is secret-free and scoped to that Session.
 type ClaudeLaunchSettings struct {
 	Env         map[string]string       `json:"env,omitempty"`
