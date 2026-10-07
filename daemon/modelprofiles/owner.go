@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/codexctl"
 	"github.com/google/uuid"
 )
 
@@ -50,7 +50,7 @@ type OwnerConfig struct {
 	// ModelsObserved queues downstream metadata work without blocking discovery.
 	ModelsObserved func([]string)
 	Lookup         func(string) (string, bool)
-	Credentials    CredentialStore // Zen private store (or test fake); optional
+	Credentials    CredentialStore // Mewla private store (or test fake); optional
 	Verifier       ProfileContractVerifier
 	// SessionProbe checks restored sessions before new launches begin.
 	SessionProbe func(string) (SessionLiveness, error)
@@ -68,7 +68,7 @@ type OwnerConfig struct {
 	// StartOwner converges inert metadata or restores a sticky listener.
 	ListenerPersistHook func(phase string) error
 	// CodexControlDir, when set, is the daemon-owned root for per-session
-	// Codex app-server control sockets. Managed Codex launches with a Zen
+	// Codex app-server control sockets. Managed Codex launches with a Mewla
 	// route then run in live-control mode (headless app server + `--remote`
 	// TUI), exposing the native thread/settings/update mutation surface to
 	// the daemon. Empty keeps the legacy embedded-TUI launch.
@@ -353,7 +353,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 				}
 			}
 		} else {
-			// Zero live routes after load/sweep: always converge Zen-owned
+			// Zero live routes after load/sweep: always converge Mewla-owned
 			// listener metadata to inert, including retries after a prior
 			// sweep that already removed pending:* but failed RemoveDurable.
 			listenErr = o.convergeInertListenerMetadataLocked()
@@ -419,7 +419,7 @@ func (o *Owner) sweepRestoredRoutesLocked(probe func(string) (SessionLiveness, e
 	return nil
 }
 
-// convergeInertListenerMetadataLocked removes stale Zen-owned listener metadata
+// convergeInertListenerMetadataLocked removes stale Mewla-owned listener metadata
 // when there are zero live routes. Fail closed on not-applied removal; allow
 // applied+ErrPersistDirSync conservatively. Caller must hold o.mu.
 func (o *Owner) convergeInertListenerMetadataLocked() error {
@@ -918,7 +918,7 @@ func combinePersistResults(a, b PersistResult) PersistResult {
 }
 
 // Keep wire strings aligned with control.PersistenceApplied without importing
-// control into this package (avoid cycles with cmd/zen).
+// control into this package (avoid cycles with cmd/mewla).
 const controlPersistenceApplied = "applied"
 
 // mutateAndPersistLocked runs mut under Owner.mu, then persists a clone of the
@@ -982,7 +982,7 @@ func (o *Owner) PrepareLaunchModel(executorID, profileID, modelOverride, baseCom
 	// Machine-level gateway takeover: new managed Codex launches use the
 	// canonical stable gateway through the CLI's native config projection
 	// instead of per-Session loopback injection. Provider routing no longer
-	// depends on Session creation through Zen or app-server control.
+	// depends on Session creation through Mewla or app-server control.
 	if normalizeID(executorID) == ExecutorCodex && o.gatewayBypass != nil && o.gatewayBypass() {
 		return SessionLaunchPlan{Bypass: true, Command: baseCommand}, nil
 	}
@@ -1008,7 +1008,7 @@ func (o *Owner) PrepareLaunchModel(executorID, profileID, modelOverride, baseCom
 			return SessionLaunchPlan{}, err
 		}
 	}
-	// Live native control: managed Codex launches with a Zen route run in
+	// Live native control: managed Codex launches with a Mewla route run in
 	// app-server live-control mode with a daemon-owned control socket. The
 	// socket path is durable on the binding so SetThreadRuntime can reach the
 	// native thread after daemon restarts.
@@ -1196,7 +1196,7 @@ func (o *Owner) closeNativeMonitors() {
 	}
 }
 
-// CommitLaunch rebinds a provisional launch to the real Zen Session id.
+// CommitLaunch rebinds a provisional launch to the real Mewla Session id.
 // When Persist.Applied is true the binding is live even if Durable is false.
 // The returned WireSessionSnapshot is built under the same Owner.mu transaction.
 func (o *Owner) CommitLaunch(provisionalID, sessionID string) (SessionRouteState, WireSessionSnapshot, PersistResult, error) {
@@ -1365,7 +1365,7 @@ func wireSessionSnapshotFromState(state SessionRouteState) WireSessionSnapshot {
 	}
 }
 
-// TransferSession remaps route ownership when a Zen Session id changes.
+// TransferSession remaps route ownership when a Mewla Session id changes.
 func (o *Owner) TransferSession(fromID, toID string) (PersistResult, error) {
 	if o == nil || !o.started {
 		return PersistResult{}, fmt.Errorf("%w: owner not started", ErrInvalid)

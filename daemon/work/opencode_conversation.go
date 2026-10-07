@@ -14,14 +14,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 const (
 	opencodeConversationSource = "opencode_db"
 	maxOpenCodeConversationAge = 72 * time.Hour
 
-	// openCodeStartOriginSlack is how far before the Zen agent's start a
+	// openCodeStartOriginSlack is how far before the Mewla agent's start a
 	// provider session may be created and still belong to it. It matches the
 	// lower bound of the StartedAt admission window: the agent's own thread is
 	// created at or after its process start, and a row created earlier than
@@ -160,7 +160,7 @@ func (r *ProviderConversationReader) findOpenCodeSession(worker classifier.Worke
 		return openCodeSessionCandidate{}, false, err
 	}
 	// Child sessions (session.parent_id set) are Task/sub-agent activity, not
-	// the Zen agent's own transcript thread. Only root sessions can bind.
+	// the Mewla agent's own transcript thread. Only root sessions can bind.
 	roots := rootOpenCodeCandidates(candidates)
 	fresh := freshOpenCodeSessionCandidates(roots, now)
 	if len(openCodeWindowCandidates(fresh, worker.StartedAt)) > 0 {
@@ -205,7 +205,7 @@ func (r *ProviderConversationReader) revalidateOpenCodeOwnedSession(sessionID, w
 	if err != nil || !ok {
 		return openCodeSessionCandidate{}, false
 	}
-	// A child (subtask) session must never anchor a Zen agent transcript even
+	// A child (subtask) session must never anchor a Mewla agent transcript even
 	// when previously pinned by an older reader binding.
 	if strings.TrimSpace(candidate.ParentID) != "" {
 		return openCodeSessionCandidate{}, false
@@ -787,13 +787,13 @@ func rebuildOpenCodeConversation(entry *openCodeCacheEntry, sessionID string) (C
 // openCodeDBPathResolved memoizes the resolved OpenCode SQLite path. The
 // `opencode db path` CLI spawn is expensive (the opencode process startup can
 // take hundreds of milliseconds), so it must never run per poll. The
-// ZEN_OPENCODE_DB override is re-read every call (tests set it dynamically).
+// MEWLA_OPENCODE_DB override is re-read every call (tests set it dynamically).
 // openCodeDBPathResolved memoizes a successful OpenCode SQLite path
 // resolution. The `opencode db path` CLI spawn is expensive (the opencode
 // process startup can take hundreds of milliseconds), so it must never run
 // per poll. A failed resolution is NOT cached: the discovery is retried on
 // later calls so a transient failure (or a late-arriving opencode install)
-// self-corrects. The ZEN_OPENCODE_DB override is re-read every call (tests
+// self-corrects. The MEWLA_OPENCODE_DB override is re-read every call (tests
 // set it dynamically).
 var (
 	openCodeDBPathMu       sync.Mutex
@@ -801,7 +801,7 @@ var (
 )
 
 func openCodeDBPath() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("ZEN_OPENCODE_DB")); override != "" {
+	if override := strings.TrimSpace(os.Getenv("MEWLA_OPENCODE_DB")); override != "" {
 		return override, nil
 	}
 	openCodeDBPathMu.Lock()
@@ -977,7 +977,7 @@ func openCodeWindowCandidates(candidates []openCodeSessionCandidate, startedAt t
 }
 
 // openCodeCandidatePredatesAgentStart reports whether a provider session row
-// was created before the Zen agent started (beyond shared slack). The agent's
+// was created before the Mewla agent started (beyond shared slack). The agent's
 // own thread is always created at or after its process start, so a pre-start
 // row can never be this agent's transcript. Unknown evidence on either side
 // (zero startedAt or zero CreatedAt) never claims precedence.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // HostTranscriptIdentity is the stable provider conversation binding for a

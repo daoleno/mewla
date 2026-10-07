@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // ProviderProbeState distinguishes a successful read (possibly with no new

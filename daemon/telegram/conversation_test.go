@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 func TestCallbackSelectionSurvivesReorderRestartAndDuplicateID(t *testing.T) {

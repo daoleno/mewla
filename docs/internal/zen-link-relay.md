@@ -1,4 +1,4 @@
-# Zen Link Relay operations
+# Mewla Link Relay operations
 
 This runbook describes an optional single-region MVP. All Link source and
 deployment examples are inert until an operator explicitly supplies
@@ -31,17 +31,17 @@ links, or mobile config.
 From the repository root:
 
 ```bash
-docker build -f daemon/Dockerfile.relay -t zen-relay:local .
+docker build -f daemon/Dockerfile.relay -t mewla-relay:local .
 ```
 
 Direct binary:
 
 ```bash
 cd daemon
-go build -o ../bin/zen-relay ./cmd/zen-relay
+go build -o ../bin/mewla-relay ./cmd/mewla-relay
 
-ZEN_LINK_CONNECTOR_TOKEN='from-your-secret-manager' \
-../bin/zen-relay \
+MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' \
+../bin/mewla-relay \
   -client-addr=:443 \
   -control-addr=:8443 \
   -operator-addr=127.0.0.1:8080 \
@@ -56,6 +56,9 @@ cd deploy/zen-link
 ZEN_LINK_CONNECTOR_TOKEN='from-your-secret-manager' docker compose up --build
 ```
 
+The Compose file still reads the legacy `ZEN_LINK_CONNECTOR_TOKEN` name; the relay
+accepts it as an alias of `MEWLA_LINK_CONNECTOR_TOKEN`.
+
 The Compose file maps public TCP `443` to unprivileged container port `9443`;
 the distroless process remains non-root. The direct binary defaults to `:443`,
 so a bare-host operator should either set `-client-addr` behind a load balancer
@@ -67,12 +70,12 @@ from a secret manager instead.
 
 ## Daemon configuration
 
-Create `<state-dir>/link.json` (default `~/.zen/link.json`) with mode `0600`:
+Create `<state-dir>/link.json` (default `~/.mewla/link.json`) with mode `0600`:
 
 ```json
 {
   "version": 1,
-  "connector_token_env": "ZEN_LINK_CONNECTOR_TOKEN",
+  "connector_token_env": "MEWLA_LINK_CONNECTOR_TOKEN",
   "max_streams": 32,
   "relays": [
     {
@@ -101,23 +104,23 @@ exclusive.
 Start the daemon with that environment:
 
 ```bash
-ZEN_LINK_CONNECTOR_TOKEN='from-your-secret-manager' zen
+MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' mewla
 ```
 
-An explicit config elsewhere uses `zen -link-config /path/link.json`. The
+An explicit config elsewhere uses `mewla -link-config /path/link.json`. The
 daemon continues listening on loopback and opens only outbound Link sockets.
 After it connects:
 
 ```bash
-ZEN_LINK_CONNECTOR_TOKEN='from-your-secret-manager' zen pair
+MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' mewla pair
 ```
 
-If Link is not configured, use `zen pair <origin>`; it remains Pairing V1.
+If Link is not configured, use `mewla pair <origin>`; it remains Pairing V1.
 
 ## Health, readiness, and metrics
 
 ```bash
-zen-relay -check=http://127.0.0.1:8080/healthz
+mewla-relay -check=http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8080/readyz
 curl -fsS http://127.0.0.1:8080/metrics
 ```
@@ -164,7 +167,7 @@ go test -run TestOpaqueRelayConnectorHealthAndAdmissionReplay -v ./link
 
 # Also execute the real TS importConnection owner through an on-demand
 # loopback pinned-transport adapter, the same Relay/Connector, and daemon /pair.
-ZEN_LINK_MOBILE_RELAY_E2E=1 \
+MEWLA_LINK_MOBILE_RELAY_E2E=1 \
   go test -run TestOpaqueRelayConnectorHealthAndAdmissionReplay -v ./link
 ```
 

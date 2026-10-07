@@ -1,13 +1,13 @@
-// Zen landing: the seals, the cat and its toys, and the small bits.
+// Mewla landing: the seals, the cat and its toys, and the small bits.
 import { buildSeal, startCat } from './sealcat.js';
 
-// Every URL that depends on where Zen's source and builds are published, in one
+// Every URL that depends on where Mewla's source and builds are published, in one
 // place. An empty value hides every link (and the install command) that uses it.
 const LINKS = {
-  source: 'https://github.com/daoleno/zen',
-  releases: 'https://github.com/daoleno/zen/releases',
-  apk: 'https://github.com/daoleno/zen/releases/latest',
-  installScript: 'https://raw.githubusercontent.com/daoleno/zen/main/install.sh',
+  source: 'https://github.com/daoleno/mewla',
+  releases: 'https://github.com/daoleno/mewla/releases',
+  apk: 'https://github.com/daoleno/mewla/releases/latest',
+  installScript: 'https://raw.githubusercontent.com/daoleno/mewla/main/install.sh',
 };
 for (const node of document.querySelectorAll('[data-link]')) {
   const url = LINKS[node.dataset.link];

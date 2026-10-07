@@ -17,8 +17,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/daoleno/zen/daemon/attachment"
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/gorilla/websocket"
 )
 

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 type scheduledActionWatcher struct {
@@ -848,7 +848,7 @@ func TestSchedulerRestartDuringHandoffFailsClosedWithoutDuplicate(t *testing.T) 
 
 func TestSchedulerWorkerEndedWithoutNotificationFailsOccurrenceOnce(t *testing.T) {
 	// Regression reproduction: the spawned agent ended (process exited) without
-	// ever notifying completion — no done marker, no deliverable — yet Zen must
+	// ever notifying completion — no done marker, no deliverable — yet Mewla must
 	// not keep projecting the occurrence as running forever. The linked agent's
 	// terminal state fails the occurrence exactly once with the recorded
 	// lifetime, and the recurring series continues.

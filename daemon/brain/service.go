@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/calendar"
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/calendar"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 var (
@@ -644,7 +644,7 @@ func (s *Service) Housekeeping() (HousekeepingReport, error) {
 		steps = append(steps, "Delete or relocate unmanaged workspace entries; put scratch in TMPDIR and reports in worklog/.")
 	}
 	if len(delegated) > 0 {
-		steps = append(steps, "Inspect open delegated Zen Workers and close only those whose larger task is complete and reported.")
+		steps = append(steps, "Inspect open delegated Mewla Workers and close only those whose larger task is complete and reported.")
 	}
 	return HousekeepingReport{
 		Workspace:            s.store.WorkspacePath(),
@@ -1823,7 +1823,7 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 				continue
 			}
 			if !item.AttemptDelegated && !hasTurn {
-				// A bare non-delegated relationship is not a Zen-managed Session
+				// A bare non-delegated relationship is not a Mewla-managed Session
 				// authority. It is excluded from CurrentWork projection, but this
 				// inventory pass does not mutate foreign lifecycle state.
 				continue
@@ -2966,7 +2966,7 @@ func (s *Service) markHostActivation(sessionID, receipt string, owned watcher.Ow
 func brainSessionEnvironment() map[string]string {
 	env := map[string]string{}
 	if root, err := work.DefaultWorktreeRoot(); err == nil {
-		env["ZEN_WORKTREE_ROOT"] = root
+		env["MEWLA_WORKTREE_ROOT"] = root
 	}
 	return env
 }
@@ -3361,7 +3361,7 @@ func (s *Service) HostExecutorID() string {
 }
 
 func brainHostExecutorOverride() string {
-	return strings.TrimSpace(os.Getenv("ZEN_BRAIN_HOST_EXECUTOR"))
+	return strings.TrimSpace(os.Getenv("MEWLA_BRAIN_HOST_EXECUTOR"))
 }
 
 func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
@@ -3537,7 +3537,7 @@ func zenExecutableDir() string {
 		return ""
 	}
 	base := strings.ToLower(commandBase(exe))
-	if base != "zen" && base != "zen.exe" {
+	if base != "mewla" && base != "mewla.exe" && base != "zen" && base != "zen.exe" {
 		return ""
 	}
 	return strings.TrimSpace(filepath.Dir(exe))
@@ -3587,8 +3587,8 @@ You are Brain inside zen.
 Brain workspace: %s (private reports in worklog/)
 Managed worktree root: %s
 Host executor: %s.
-Zen CLI: %s
-Recover active work from current.md and zen brain context --json.
+Mewla CLI: %s
+Recover active work from current.md and mewla brain context --json.
 Personality: %s
 `, snapshot.Workspace, worktreeRoot, executor.ID, zenCLICommand(),
 		strings.TrimSpace(snapshot.Personality)))
@@ -3625,7 +3625,7 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string
 		"Brain host executor handoff:",
 		fmt.Sprintf("Host executor changed from %s to %s in thread %s. Continue the same visible Brain chat in the user's language; keep this handoff private.",
 			strings.TrimSpace(previousExecutorID), strings.TrimSpace(nextExecutorID), threadID),
-		"Read AGENTS.md, policies/handoff.md and current.md; zen brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
+		"Read AGENTS.md, policies/handoff.md and current.md; mewla brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
 	}
 	active := []string{}
 	for _, worker := range workers {
@@ -3643,7 +3643,7 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string
 func zenCLICommand() string {
 	exe, err := os.Executable()
 	if err != nil || strings.TrimSpace(exe) == "" {
-		return "zen"
+		return "mewla"
 	}
 	if strings.ContainsAny(exe, " \t'") {
 		return shellQuote(exe)

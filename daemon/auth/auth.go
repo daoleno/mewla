@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const (
@@ -107,7 +109,7 @@ func DefaultStorageDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("locate home dir: %w", err)
 	}
-	return filepath.Join(home, ".zen"), nil
+	return statedir.Default(home), nil
 }
 
 func ResolveStorageDir(storageDir string) (string, error) {
@@ -480,7 +482,7 @@ func (m *Manager) CreateServerAssertion(purpose string) (ServerAssertion, error)
 	}, nil
 }
 
-// CreateLinkSignature signs a domain-separated Zen Link control-plane
+// CreateLinkSignature signs a domain-separated Mewla Link control-plane
 // payload with the daemon identity. The Link transport key is separate; this
 // signature binds route and transport metadata back to the existing daemon
 // trust anchor.

@@ -46,8 +46,9 @@ test('connection UI exists only in the debug source set and preserves deep links
     expect(manifest).toContain('${zenStandaloneLauncher}');
     expect(manifest).toContain('.MetroConnectActivity');
     expect(manifest).not.toContain('android.intent.action.VIEW');
-    const source = fs.readFileSync(path.join(root, 'app/src/debug/java/com/daoleno/zen/MetroConnectActivity.kt'), 'utf8');
+    const source = fs.readFileSync(path.join(root, 'app/src/debug/java/com/daoleno/mewla/MetroConnectActivity.kt'), 'utf8');
     expect(source).toContain('!BuildConfig.DEBUG || BuildConfig.ZEN_STANDALONE');
+    expect(source).toMatch(/^package com\.daoleno\.mewla$/m);
     expect(source).toContain('packager-status:running');
     expect(source).toContain('debug_http_host');
     expect(source).toContain('PackagerConnectionSettings');

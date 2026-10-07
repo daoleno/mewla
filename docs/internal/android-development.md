@@ -2,7 +2,7 @@
 
 ## Install the APK
 
-Open [GitHub Releases](https://github.com/daoleno/zen/releases) and download the newest `zen-android-arm64-v*.apk` together with `SHA256SUMS`.
+Open [GitHub Releases](https://github.com/daoleno/mewla/releases) and download the newest `mewla-android-arm64-v*.apk` together with `SHA256SUMS`.
 
 The APK supports 64-bit ARM Android devices (`arm64-v8a`). It does not support x86 phones or 32-bit ARM devices. iOS uses a separate source build; see [iOS app](ios-development.md).
 
@@ -19,9 +19,9 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD
 ```
 
-Android will ask you to allow installation from the browser or file manager you used. A Play Protect warning is possible because Zen is distributed outside Play Store.
+Android will ask you to allow installation from the browser or file manager you used. A Play Protect warning is possible because Mewla is distributed outside Play Store.
 
-After installation, follow [Connect and pair](../connect-and-pair.md): use `zen --lan` on a trusted private network or keep bare `zen` behind an HTTPS endpoint, then scan or import the generated pairing code in Settings.
+After installation, follow [Connect and pair](../connect-and-pair.md): use `mewla --lan` on a trusted private network or keep bare `mewla` behind an HTTPS endpoint, then scan or import the generated pairing code in Settings.
 
 ## Current scope
 
@@ -31,7 +31,7 @@ After installation, follow [Connect and pair](../connect-and-pair.md): use `zen 
 | Native terminal (Ghostty VT)                   | Requires built `libghostty_vt.so` for **arm64-v8a** (devices) and optionally **x86_64** (emulator)  |
 | Structured agent interfaces                    | Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode share the same React Native Chat/Terminal UI used on iOS |
 | iOS                                            | Separate source-build target; see [ios.md](ios-development.md)                                                  |
-| Expo Go                                        | Can paste/scan pairing links; custom `zen://` deep links need a dev build/APK                       |
+| Expo Go                                        | Can paste/scan pairing links; custom `mewla://` deep links need a dev build/APK                       |
 | Play Store                                     | Not part of this release foundation                                                                 |
 
 ## Architecture / ABI contract
@@ -45,7 +45,7 @@ Canonical machine-readable contract:
 | `arm64-v8a` | `aarch64-linux-android` | Physical devices / release APK    | **Yes**           |
 | `x86_64`    | `x86_64-linux-android`  | Emulator / host-side native debug | No                |
 
-**Unsupported (invalid for zen terminal):** `armeabi-v7a`, `x86`, and any other ABI.
+**Unsupported (invalid for Mewla terminal):** `armeabi-v7a`, `x86`, and any other ABI.
 
 Invariants:
 
@@ -73,7 +73,7 @@ Module wiring (source of truth for packaging):
 ## Day-to-day JS workflow
 
 Build the current arm64 Metro debug APK with one repeatable command from the
-repository root. It runs Expo prebuild first so the `Zen Debug` identity,
+repository root. It runs Expo prebuild first so the `Mewla Debug` identity,
 `MetroConnectActivity`, and native modules stay synchronized, then assembles
 only the debug variant with `zenStandalone=false`:
 
@@ -84,10 +84,10 @@ bun run android:debug:apk
 The command does not start Metro. It prints the deterministic artifact path
 `app/android/app/build/outputs/apk/debug/zen-debug-arm64.apk` and uses the
 existing debug keystore. Start or reuse Metro separately, then enter
-`192.168.110.223:8081` in **Zen Development** on the phone.
+`192.168.110.223:8081` in **Mewla Development** on the phone.
 
 Use a **Metro-connected debug APK** for development, not a standalone APK or
-Expo Go. Zen's custom terminal and pinned Link transport need
+Expo Go. Mewla's custom terminal and pinned Link transport need
 their compiled native modules. The development APK uses the existing React
 Native dev-support runtime; it does not require an additional Expo Dev Client
 dependency. Android and iOS continue to share product JS; the native connection
@@ -103,11 +103,11 @@ cd app
 bunx expo start
 ```
 
-Install the compatible debug APK once, open **Zen Debug**, enter the computer's
-reachable Metro `host:port` in **Zen Development**, and tap **Connect**. An HTTP
+Install the compatible debug APK once, open **Mewla Debug**, enter the computer's
+reachable Metro `host:port` in **Mewla Development**, and tap **Connect**. An HTTP
 origin with a port is also accepted. Use the computer's LAN address, not the
 phone's `localhost`. No USB cable, ADB reverse command or daemon pairing is
-needed to configure Metro. Metro is separate from the canonical Zen server;
+needed to configure Metro. Metro is separate from the canonical Mewla server;
 selecting Metro never selects or changes a paired daemon.
 
 The address is saved in native development preferences across relaunches. The
@@ -159,10 +159,10 @@ npx expo export --platform android
 
 ## Pairing on device
 
-1. Start `zen --lan` for trusted private-network access, or start bare `zen` behind an HTTPS endpoint.
-2. In another terminal, run the complete `zen pair` command Zen or your HTTPS setup provides.
+1. Start `mewla --lan` for trusted private-network access, or start bare `mewla` behind an HTTPS endpoint.
+2. In another terminal, run the complete `mewla pair` command Mewla or your HTTPS setup provides.
 3. Open Settings in the app.
-4. Paste the `zen://...` link, scan the QR, or import a QR photo.
+4. Paste the `mewla://...` link, scan the QR, or import a QR photo.
 
 Release builds explicitly allow cleartext HTTP so dynamic LAN and Tailscale IPs work. Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
 
@@ -268,12 +268,12 @@ Canonical tracked identity is [`app/app.base.json`](../../app/app.base.json) (lo
 | Field                 | Owner                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | `expo.version`        | [`app/app.base.json`](../../app/app.base.json)                                                          |
-| `android.package`     | [`app/app.base.json`](../../app/app.base.json) (`com.daoleno.zen`)                                      |
+| `android.package`     | [`app/app.base.json`](../../app/app.base.json) (`com.daoleno.mewla`)                                      |
 | `android.versionCode` | [`app/app.base.json`](../../app/app.base.json) (read the live integer; do not copy a stale table value) |
 
 Verify with `./scripts/verify-release-identity.sh` (also `bun run release:identity`).
 
-**Sideload note:** changing `android.package` from the old `com.anonymous.zen` means Android treats this as a different app. Uninstall the previous package before installing a `com.daoleno.zen` APK if both were installed on the same device.
+**Sideload note:** changing `android.package` from the old `com.anonymous.zen` means Android treats this as a different app. Uninstall the previous package before installing a `com.daoleno.mewla` APK if both were installed on the same device.
 
 Official release APKs are signed by the release pipeline. Local builds without signing env use the debug keystore and are only suitable for personal testing. Never commit `ZEN_ANDROID_*` secrets or local signing files.
 
@@ -283,7 +283,7 @@ Official release APKs are signed by the release pipeline. Local builds without s
 # Clean stage each run: top-level Linux binaries + legal notices + notes (no APK):
 ./scripts/stage-release.sh
 # → dist-download/vVERSION/
-#    zen-linux-amd64  zen-linux-arm64
+#    mewla-linux-amd64  mewla-linux-arm64
 #    LICENSE  NOTICE  TRADEMARKS.md  GHOSTTY-MIT.txt
 #    RELEASE_NOTES.md  SHA256SUMS  identity.json
 
@@ -318,7 +318,7 @@ use Expo's picker, avoiding an undefined-method error after a JS update. Install
 the updated native APK to receive the provider metadata handling described here;
 the compatibility guard alone does not fix provider errors in older binaries.
 A provider may omit display name or size, return an empty metadata cursor, or
-throw from optional MIME/metadata APIs: Zen checks stream read access before accepting the selection,
+throw from optional MIME/metadata APIs: Mewla checks stream read access before accepting the selection,
 uses `upload` for an absent name, and keeps unknown size unknown. Directories,
 invalid URIs and inaccessible streams fail before an attachment/upload is created;
 canceling returns no attachment. No storage permission or guessed filesystem path
@@ -327,9 +327,9 @@ and the shared upload/cancellation/current-server contract.
 
 The picker launches on the main queue and owns one selection through metadata
 validation. Module destruction cancels pending reads and discards late results.
-The activity's temporary read grant covers the immediate streamed upload; Zen
+The activity's temporary read grant covers the immediate streamed upload; Mewla
 does not persist grants or promise upload resumption after the activity/task ends.
-Zen requests one openable item through this single import flow
+Mewla requests one openable item through this single import flow
 and rejects ambiguous data/ClipData results instead of choosing a different file.
 Unknown size remains chunked even when the transport's advisory size query fails.
 

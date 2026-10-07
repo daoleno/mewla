@@ -85,7 +85,7 @@ func TestClaudeTakeoverPreservesAndRestoresUserSettings(t *testing.T) {
 		t.Fatalf("release did not restore the user's value: %#v", env)
 	}
 	if _, ok := env[EnvAnthropicAuthToken]; ok {
-		t.Fatalf("release left Zen's token behind: %#v", env)
+		t.Fatalf("release left Mewla's token behind: %#v", env)
 	}
 	if takeover.Enabled() {
 		t.Fatal("takeover still enabled after release")
@@ -114,7 +114,7 @@ func TestClaudeTakeoverReleaseKeepsUserEditsAndCreatesMissingFile(t *testing.T) 
 		t.Fatalf("release clobbered a user edit: %#v", env)
 	}
 	if _, ok := env[EnvAnthropicAuthToken]; ok {
-		t.Fatalf("release left Zen's untouched token behind: %#v", env)
+		t.Fatalf("release left Mewla's untouched token behind: %#v", env)
 	}
 }
 

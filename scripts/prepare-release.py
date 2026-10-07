@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a Zen release as one deterministic tracked change."""
+"""Prepare a Mewla release as one deterministic tracked change."""
 
 from __future__ import annotations
 
@@ -245,6 +245,21 @@ def extract_note_facts(previous_notes: str, current_tag: str) -> dict[str, str]:
     }
 
 
+# Notes for releases published before the Mewla rename carry Zen names. Their facts are carried forward under the Mewla names.
+LEGACY_RELEASE_NAMES = (
+    (re.compile(r"\bzen-(linux|darwin)-(amd64|arm64)\b"), r"mewla-\1-\2"),
+    (re.compile(r"`zen( [^`]*)?`"), r"`mewla\1`"),
+    (re.compile(r"\bcom\.daoleno\.zen\b"), "com.daoleno.mewla"),
+    (re.compile(r"\bZen\b"), "Mewla"),
+)
+
+
+def rebrand_legacy_release_text(text: str) -> str:
+    for pattern, replacement in LEGACY_RELEASE_NAMES:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def extract_preview_bundle(ios_identity_source: str) -> str:
     preview_blocks = re.findall(
         r"\bpreview:\s*Object\.freeze\(\{(.+?)\}\),",
@@ -319,7 +334,7 @@ def build_release_notes(
         f"- {markdown_subject(subject)} (`{sha[:7]}`)" for sha, subject in commits
     )
     reviewed_section = f"{reviewed_notes}\n\n" if reviewed_notes else ""
-    return f"""# Zen {next_tag}
+    return f"""# Mewla {next_tag}
 
 {release_description} the reviewed changes on `main` since `{current_tag}`.
 
@@ -347,7 +362,7 @@ The iOS build number is tracked independently from Android because App Store Con
 - ABI: `{android_abi}`
 - Signing certificate SHA-256: `{certificate}`
 
-Android may require permission to install from unknown sources or display a Play Protect warning. Obtainium can follow this repository's GitHub Releases. Zen does not currently provide a Play Store package; iOS Preview distribution uses TestFlight.
+Android may require permission to install from unknown sources or display a Play Protect warning. Obtainium can follow this repository's GitHub Releases. Mewla does not currently provide a Play Store package; iOS Preview distribution uses TestFlight.
 """
 
 
@@ -430,7 +445,7 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
             "app/app.base.json",
             "app/iosIdentity.js",
             "app/ios-build.json",
-            "daemon/cmd/zen/version.go",
+            "daemon/cmd/mewla/version.go",
             "scripts/verify-release-identity.sh",
             "docs/install-daemon.md",
             "docs/ios-ci-release.md",
@@ -442,6 +457,8 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     note_facts = extract_note_facts(
         sources[f"docs/releases/{current_tag}.md"], current_tag
     )
+    for fact in ("install", "ios_bundle"):
+        note_facts[fact] = rebrand_legacy_release_text(note_facts[fact])
     preview_bundle = extract_preview_bundle(sources["app/iosIdentity.js"])
     if note_facts["ios_bundle"] != preview_bundle:
         raise PrepareError(
@@ -475,11 +492,11 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         f'"buildNumber": {next_ios_build}',
         relative="app/ios-build.json",
     )
-    updates["daemon/cmd/zen/version.go"] = replace_literal(
-        sources["daemon/cmd/zen/version.go"],
+    updates["daemon/cmd/mewla/version.go"] = replace_literal(
+        sources["daemon/cmd/mewla/version.go"],
         f'var Version = "{current_version}"',
         f'var Version = "{next_version}"',
-        relative="daemon/cmd/zen/version.go",
+        relative="daemon/cmd/mewla/version.go",
     )
 
     verifier = replace_literal(
@@ -588,7 +605,7 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Prepare a tracked Zen release"
+        description="Prepare a tracked Mewla release"
     )
     parser.add_argument(
         "--repo",

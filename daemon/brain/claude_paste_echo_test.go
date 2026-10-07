@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Real Brain duplicate (thread brain_1790733088397305726): the user sent text
@@ -146,7 +146,7 @@ func TestDurableRowsProjectTaskNotificationsAndUnwrapPastes(t *testing.T) {
 	}
 }
 
-// Large Zen Work Event deliveries to the Brain Host arrive paste-wrapped. The
+// Large Mewla Work Event deliveries to the Brain Host arrive paste-wrapped. The
 // display unwrap must not keep the canonical envelope from binding the turn,
 // and the transport envelope must stay out of the visible conversation.
 func TestPasteWrappedCanonicalWorkEventStillBindsAndStaysHidden(t *testing.T) {

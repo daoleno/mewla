@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 type fakeSessionInputIO struct {
@@ -1716,7 +1716,7 @@ func TestSessionInputCursorInitialPreservesExactUTF8AndAcceptsAfterProviderStart
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	identity := testSessionInputIdentity("cursor-agent --force")
-	payload := "Concrete task prefix 你好\n\nZen lifecycle protocol:\n- preserve the task\n"
+	payload := "Concrete task prefix 你好\n\nMewla lifecycle protocol:\n- preserve the task\n"
 	turn := delegatedTurnDraft{
 		ID:              "cursor-initial",
 		AcceptedAt:      time.Date(2026, 8, 5, 1, 1, 0, 0, time.UTC),

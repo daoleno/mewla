@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 type failAfterReader struct {
@@ -133,7 +133,7 @@ func TestProviderConversationReaderSelectsOnlyExplicitKnownProvider(t *testing.T
 }
 
 func TestParseCodexConversation_PreservesLongCompletedAssistantMarkdown(t *testing.T) {
-	const suffix = "ZEN_CODEX_SUFFIX_VERTICAL_SLICE_4b1c"
+	const suffix = "MEWLA_CODEX_SUFFIX_VERTICAL_SLICE_4b1c"
 	path := filepath.Join(t.TempDir(), "rollout-long.jsonl")
 	writeJSONL(t, path,
 		map[string]any{

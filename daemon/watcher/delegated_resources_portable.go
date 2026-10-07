@@ -10,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/workerproc"
+	"github.com/daoleno/mewla/daemon/statedir"
+	"github.com/daoleno/mewla/daemon/workerproc"
 	"github.com/google/uuid"
 )
 
@@ -37,12 +38,12 @@ func newPortableDelegatedResourceManager(owner string) (*portableDelegatedResour
 	if err != nil {
 		return nil, fmt.Errorf("locate home directory: %w", err)
 	}
-	leaseDir := filepath.Join(home, ".zen", "run", "worker-resources", owner)
+	leaseDir := filepath.Join(statedir.Default(home), "run", "worker-resources", owner)
 	if err := os.MkdirAll(leaseDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create delegated lease directory: %w", err)
 	}
 	// Short shared temp root keeps per-agent TMPDIR paths AF_UNIX-safe.
-	tempRoot := filepath.Join(home, ".zen", "t")
+	tempRoot := filepath.Join(statedir.Default(home), "t")
 	if err := os.MkdirAll(tempRoot, 0o700); err != nil {
 		return nil, fmt.Errorf("create delegated temporary root: %w", err)
 	}

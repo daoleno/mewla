@@ -4,7 +4,7 @@ export const kindLabel: Record<CalendarKind, string> = {
   event: "Event",
   reminder: "Reminder",
   deadline: "Deadline",
-  scheduled_action: "Zen action",
+  scheduled_action: "Mewla action",
 };
 export const calendarStatusLabel: Record<CalendarItem["status"], string> = {
   scheduled: "Scheduled",

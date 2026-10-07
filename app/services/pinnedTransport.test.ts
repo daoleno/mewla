@@ -87,7 +87,7 @@ describe("shared Android/iOS pinned transport owner", () => {
           { name: "b", kind: "link", url: "wss://b.link.test/ws" },
         ],
       }),
-    ).rejects.toThrow("Zen Link is offline");
+    ).rejects.toThrow("Mewla Link is offline");
   });
 
   test("fails closed instead of returning an unpinned Link endpoint", async () => {
@@ -111,7 +111,7 @@ describe("shared Android/iOS pinned transport owner", () => {
     failures = new Set(["offline.link.test"]);
 
     await expect(resolveCanonicalServerURL(linkServer)).rejects.toThrow(
-      "Zen Link is offline",
+      "Mewla Link is offline",
     );
   });
 
@@ -139,7 +139,7 @@ describe("shared Android/iOS pinned transport owner", () => {
         daemonPublicKey: "2".repeat(64),
         transportKind: "link",
       }),
-    ).rejects.toThrow("Zen Link needs setup");
+    ).rejects.toThrow("Mewla Link needs setup");
     expect(starts).toHaveLength(0);
   });
 

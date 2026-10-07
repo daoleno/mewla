@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const piOwnedSessionDirName = "provider-sessions/pi"
 
-// NewPiOwnedSessionPath allocates an absolute Zen-owned Pi JSONL path that is
+// NewPiOwnedSessionPath allocates an absolute Mewla-owned Pi JSONL path that is
 // unique a priori. Ownership does not depend on Pi's shared per-CWD directory.
 func NewPiOwnedSessionPath(zenHome string) (string, error) {
 	root, err := piOwnedSessionRoot(zenHome)
@@ -35,7 +37,7 @@ func piOwnedSessionRoot(zenHome string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		zenHome = filepath.Join(home, ".zen")
+		zenHome = statedir.Default(home)
 	}
 	return filepath.Join(zenHome, piOwnedSessionDirName), nil
 }

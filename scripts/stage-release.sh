@@ -83,11 +83,11 @@ EXPECTED_STAGE="$STAGE_PARENT/v${VERSION}"
 # ZEN_BUILD_TMPDIR as their private lifecycle-owned resource directory.
 default_build_tmpdir() {
   if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
-    printf '%s\n' "$XDG_CACHE_HOME/zen/build-tmp"
+    printf '%s\n' "$XDG_CACHE_HOME/mewla/build-tmp"
   elif [[ "$(uname -s)" == "Darwin" ]]; then
-    printf '%s\n' "$HOME/Library/Caches/zen/build-tmp"
+    printf '%s\n' "$HOME/Library/Caches/mewla/build-tmp"
   else
-    printf '%s\n' "$HOME/.cache/zen/build-tmp"
+    printf '%s\n' "$HOME/.cache/mewla/build-tmp"
   fi
 }
 BUILD_TMP_ROOT="${ZEN_BUILD_TMPDIR:-$(default_build_tmpdir)}"
@@ -97,17 +97,17 @@ if [[ "$BUILD_TMP_ROOT" != /* ]]; then
 fi
 mkdir -p "$BUILD_TMP_ROOT"
 chmod 700 "$BUILD_TMP_ROOT"
-BUILD_TMP="$(mktemp -d "$BUILD_TMP_ROOT/zen-stage-build.XXXXXX")"
+BUILD_TMP="$(mktemp -d "$BUILD_TMP_ROOT/mewla-stage-build.XXXXXX")"
 cleanup() { rm -rf "$BUILD_TMP"; }
 trap cleanup EXIT
 
-export ZEN_VERSION="$VERSION"
+export MEWLA_VERSION="$VERSION"
 
 if [[ $SKIP_BUILD -eq 0 ]]; then
   "$ROOT/scripts/build-daemon-linux.sh" --out-dir "$BUILD_TMP"
 else
   # Prefer existing stage binaries if present; else staging default from build script.
-  for f in zen-linux-amd64 zen-linux-arm64 zen-darwin-arm64; do
+  for f in mewla-linux-amd64 mewla-linux-arm64 mewla-darwin-arm64; do
     if [[ -f "$EXPECTED_STAGE/$f" ]]; then
       cp -f "$EXPECTED_STAGE/$f" "$BUILD_TMP/$f"
     elif [[ -f "$EXPECTED_STAGE/bin/$f" ]]; then
@@ -121,7 +121,7 @@ else
   done
 fi
 
-for f in zen-linux-amd64 zen-linux-arm64 zen-darwin-arm64; do
+for f in mewla-linux-amd64 mewla-linux-arm64 mewla-darwin-arm64; do
   if [[ ! -f "$BUILD_TMP/$f" ]]; then
     echo "error: build output missing $f" >&2
     exit 1
@@ -154,24 +154,29 @@ STAGE_DIR="$EXPECTED_STAGE"
 # Package each daemon with the legal files that apply to the daemon distribution.
 # gzip -n and normalized tar metadata keep archives stable across CI runs.
 ARCHIVE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+# package_daemon BINARY ARCHIVE ENTRY: ENTRY is the executable name inside the
+# archive. mewla-*.tar.gz carry `mewla`; the legacy zen-*.tar.gz copies carry
+# the same binary as `zen` so pre-rename installs can still self-update.
 package_daemon() {
   local binary_name="$1"
   local archive_name="$2"
+  local entry="$3"
   local package_dir="$BUILD_TMP/package"
   rm -rf "$package_dir"
   mkdir -p "$package_dir"
-  cp -f "$BUILD_TMP/$binary_name" "$package_dir/zen"
-  chmod +x "$package_dir/zen"
+  cp -f "$BUILD_TMP/$binary_name" "$package_dir/$entry"
+  chmod +x "$package_dir/$entry"
   cp -f "$ROOT/LICENSE" "$package_dir/LICENSE"
   cp -f "$ROOT/NOTICE" "$package_dir/NOTICE"
   cp -f "$ROOT/TRADEMARKS.md" "$package_dir/TRADEMARKS.md"
   tar --sort=name --mtime="@${ARCHIVE_EPOCH}" --owner=0 --group=0 --numeric-owner \
-    -C "$package_dir" -cf - LICENSE NOTICE TRADEMARKS.md zen | gzip -n > "$STAGE_DIR/$archive_name"
+    -C "$package_dir" -cf - LICENSE NOTICE TRADEMARKS.md "$entry" | gzip -n > "$STAGE_DIR/$archive_name"
 }
 
-package_daemon zen-linux-amd64 zen-linux-amd64.tar.gz
-package_daemon zen-linux-arm64 zen-linux-arm64.tar.gz
-package_daemon zen-darwin-arm64 zen-darwin-arm64.tar.gz
+for platform in linux-amd64 linux-arm64 darwin-arm64; do
+  package_daemon "mewla-$platform" "mewla-$platform.tar.gz" mewla
+  package_daemon "mewla-$platform" "zen-$platform.tar.gz" zen
+done
 
 STAGED_APK=""
 if [[ $WITH_APK -eq 1 ]]; then
@@ -183,12 +188,12 @@ if [[ -n "$APK_PATH" ]]; then
     echo "error: --apk path not found" >&2
     exit 1
   fi
-  STAGED_APK="$STAGE_DIR/zen-android-arm64-v${VERSION}.apk"
+  STAGED_APK="$STAGE_DIR/mewla-android-arm64-v${VERSION}.apk"
   cp -f "$APK_PATH" "$STAGED_APK"
 elif [[ $WITH_APK -eq 1 ]]; then
-  if compgen -G "$ROOT/dist-download/android-native/zen-android-arm64-*.apk" > /dev/null; then
-    newest="$(ls -t "$ROOT"/dist-download/android-native/zen-android-arm64-*.apk | head -1)"
-    STAGED_APK="$STAGE_DIR/zen-android-arm64-v${VERSION}.apk"
+  if compgen -G "$ROOT/dist-download/android-native/mewla-android-arm64-*.apk" > /dev/null; then
+    newest="$(ls -t "$ROOT"/dist-download/android-native/mewla-android-arm64-*.apk | head -1)"
+    STAGED_APK="$STAGE_DIR/mewla-android-arm64-v${VERSION}.apk"
     cp -f "$newest" "$STAGED_APK"
   fi
 fi
@@ -202,6 +207,9 @@ SUMS="$STAGE_DIR/SHA256SUMS"
 (
   cd "$STAGE_DIR"
   files=(
+    mewla-linux-amd64.tar.gz
+    mewla-linux-arm64.tar.gz
+    mewla-darwin-arm64.tar.gz
     zen-linux-amd64.tar.gz
     zen-linux-arm64.tar.gz
     zen-darwin-arm64.tar.gz
@@ -242,7 +250,11 @@ def artifact(rel: str, role: str, **extra):
     entry.update(extra)
     return entry
 
+# Legacy zen-* archives serve self-updaters released before the Mewla rename.
 artifacts = [
+    artifact("mewla-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64"),
+    artifact("mewla-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64"),
+    artifact("mewla-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64"),
     artifact("zen-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64"),
     artifact("zen-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64"),
     artifact("zen-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64"),
@@ -262,6 +274,7 @@ if staged_apk:
 
 identity = {
     "schema_version": 2,
+    # Pre-rename self-updaters only accept product "zen"; Mewla accepts both.
     "product": "zen",
     "version": version,
     "android": {
@@ -275,7 +288,7 @@ identity = {
         ),
     },
     "daemon": {
-        "module": "github.com/daoleno/zen/daemon",
+        "module": "github.com/daoleno/mewla/daemon",
         "targets": ["linux/amd64", "linux/arm64", "darwin/arm64"],
         "cgo": {
             "linux/amd64": False,

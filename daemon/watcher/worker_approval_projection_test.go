@@ -1,7 +1,7 @@
 package watcher
 
 import (
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"testing"
 	"time"
 )

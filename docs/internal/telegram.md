@@ -13,7 +13,7 @@ Open **Settings > Channels > Telegram** on Android or iOS.
 - An unconfigured connection has one masked bot-token field and Verify token.
   BotFather is available for obtaining a bot, not a required topic-mode setup ritual.
 - After verification, Connect Telegram opens a short-lived owner-binding link.
-  Zen trusts the numeric sender and private chat, not a typed username.
+  Mewla trusts the numeric sender and private chat, not a typed username.
 - A bound connection shows its account, status and recipient. Disconnect pauses
   delivery without removing its binding; Reconnect resumes future output.
 - Advanced contains mode, topic/conversation identifiers, unresolved delivery
@@ -21,13 +21,13 @@ Open **Settings > Channels > Telegram** on Android or iOS.
 - Token input is cleared on submission, exit and backgrounding. The editor is
   unavailable while the current server is offline. No terminal is needed for
   supported configuration.
-- Bot conversations are Telegram cloud chats. Removing Zen's configuration does
+- Bot conversations are Telegram cloud chats. Removing Mewla's configuration does
   not delete Telegram cloud history.
 
 The app retains exactly one current server. Responses are request-correlated to
 that server; old-server state and in-flight token work cannot migrate to another one.
 
-Local operators may also use `zen telegram setup`, `status`, `enable` and
+Local operators may also use `mewla telegram setup`, `status`, `enable` and
 `disable`. These use the running daemon's existing private control socket.
 They never start a second bot manager or read a credential from a CLI argument.
 
@@ -53,7 +53,7 @@ Telegram has two different private-topic flags:
   and create a native topic before sending from that composer.
 
 This distinction is documented by Telegram's [bot forums specification](https://core.telegram.org/api/forum#bot-forums).
-A native Telegram topic is not a Brain thread. Zen provisions a Brain topic
+A native Telegram topic is not a Brain thread. Mewla provisions a Brain topic
 once, remembers its exact ID, and places Brain navigation there. An observed
 owner-created topic may also route to the same current Brain conversation.
 Replies remain in that observed native topic; Back to Brain selects the primary
@@ -258,7 +258,7 @@ interpreted" descriptor. Audio, voice, video, animation and video notes remain
 file references with honest no-transcription/no-motion-interpretation labels.
 There is no transcoder, transcription service or extra paid model call.
 
-After a durable accepted admission, Zen replies "Files received by Zen" in the
+After a durable accepted admission, Mewla replies "Files received by Mewla" in the
 source topic. This acknowledges input receipt, not Work completion. Uncertain
 provider outcomes are not replayed. A crash at the admission boundary likewise
 produces uncertainty rather than a duplicate turn.
@@ -289,7 +289,7 @@ ordinary concise receipt feedback and canonical Work/Turn status remain in use.
 
 ## Stable Brain Entry
 
-Zen reuses the persisted primary Brain topic. It creates one navigation message
+Mewla reuses the persisted primary Brain topic. It creates one navigation message
 with the exact primary-topic link and pins that **message** using
 `pinChatMessage`. The send/pin operations use the existing durable, serialized
 outbox. Restart does not create another entry. A failed or ambiguous pin does

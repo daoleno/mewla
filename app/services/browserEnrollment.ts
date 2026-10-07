@@ -19,7 +19,7 @@ export async function requestBrowserEnrollment(origin: string, fetcher: typeof f
   const identity = await getOrCreateLocalDeviceIdentity();
   const base = normalizeOrigin(origin);
   const response = await fetcher(`${base}/enrollment/request`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device_id: identity.deviceId, device_name: identity.deviceName, platform: "web", origin: base, device_public_key: identity.publicKeyHex }) });
-  if (!response.ok) throw new Error("Zen is waiting for approval, but the request could not be created.");
+  if (!response.ok) throw new Error("Mewla is waiting for approval, but the request could not be created.");
   const raw = await response.json();
   if (!raw.request_id || !raw.secret || !/^\d{3}$/.test(raw.verification_number) || !Number.isFinite(Date.parse(raw.expires_at))) throw new Error("Invalid enrollment response.");
   return { requestId: raw.request_id, secret: raw.secret, verificationNumber: raw.verification_number, expiresAt: raw.expires_at };
@@ -36,12 +36,12 @@ export function browserEnrollmentServer(origin: string, status: BrowserEnrollmen
   if (status.status !== "approved" || !status.daemonId || !status.daemonPublicKey) return null;
   const normalized = normalizeServerURL(origin);
   if (!normalized) return null;
-  return { name: "Zen browser", url: normalized, daemonId: status.daemonId, daemonPublicKey: status.daemonPublicKey, transportKind: "manual" };
+  return { name: "Mewla browser", url: normalized, daemonId: status.daemonId, daemonPublicKey: status.daemonPublicKey, transportKind: "manual" };
 }
 
 function normalizeOrigin(value: string): string {
   const parsed = new URL(value.trim());
-  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost"))) throw new Error("Zen enrollment requires HTTPS.");
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost"))) throw new Error("Mewla enrollment requires HTTPS.");
   parsed.pathname = ""; parsed.search = ""; parsed.hash = "";
   return parsed.toString().replace(/\/$/, "");
 }

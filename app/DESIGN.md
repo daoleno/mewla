@@ -4,8 +4,9 @@ The app follows the landing page (`site/index.html`, `site/styles.css`,
 `site/sealcat.js`): warm paper, warm ink and one vermilion seal with a cat
 carved in it. This file maps that language onto the app's theme system
 (`app/theme/`, `app/constants/tokens.ts`). It does not define a second one.
-Product and repository names are still `zen` in code; the rename is a
-separate change.
+The product is Mewla. Internal identifiers (`ZenTheme`, `ZEN_*_COLORS`,
+`ZenLoopSpinner`), the `zen-*` native modules and the `zen-*` asset files keep
+their legacy names.
 
 ## Principles
 
@@ -187,8 +188,7 @@ committed file drifts or the config strays from the theme colours.
 
 The mark is the logo, not Brain: it never moves or changes with state. The
 drawer, the About row and Onboarding's brand row all show `MewlaMark`. The
-`zen-*` assets stay until the rename removes them; the composer's
-`ZenLoopSpinner` still uses them.
+`zen-*` assets stay: the composer's `ZenLoopSpinner` still uses them.
 
 ## Sessions and Worker chat
 

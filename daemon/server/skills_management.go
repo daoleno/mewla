@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	skillmgmt "github.com/daoleno/zen/daemon/skills"
+	skillmgmt "github.com/daoleno/mewla/daemon/skills"
 	"github.com/gorilla/websocket"
 )
 
@@ -228,7 +228,7 @@ func (s *Server) handleSkillsMutation(conn *websocket.Conn, raw clientMessage) {
 				execute = s.skillsMutationExecuteOverride
 			}
 			// Native Skills operations are cancellable and bounded; the timeout
-			// mirrors the old CLI bounds so a hung fetch can never hang Zen.
+			// mirrors the old CLI bounds so a hung fetch can never hang Mewla.
 			execution, execErr = execute(ctx, command, skillmgmt.MutationExecutionOptions{
 				CWD:              request.CWD,
 				InventoryOptions: buildOptions,

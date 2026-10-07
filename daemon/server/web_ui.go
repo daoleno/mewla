@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/addressbook"
-	"github.com/daoleno/zen/daemon/enrollment"
-	"github.com/daoleno/zen/daemon/webui"
+	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/webui"
 )
 
 // ParseWebOrigin validates a remote browser origin for -web-origin. Remote

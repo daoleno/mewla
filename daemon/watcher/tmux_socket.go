@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/envcompat"
 )
 
 // tmux server layout:
 //
-// Zen-owned Brain and delegated Sessions live on the ONE caller-visible tmux
+// Mewla-owned Brain and delegated Sessions live on the ONE caller-visible tmux
 // server selected at daemon startup: the exact inherited socket when the
 // daemon starts inside tmux, or the user's default server otherwise. Provider
 // panes lose that host capability after deriving their target identity: TMUX
@@ -49,7 +51,7 @@ func tmuxHostEnvironment() []string {
 	env := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "ZEN_WORKER_") || strings.HasPrefix(key, "ZEN_BRAIN_") || key == "ZEN_BUILD_TMPDIR" || key == "ZEN_WORKTREE_ROOT" || key == "ZEN_STATE_DIR" {
+		if envcompat.HasPrefix(key, "WORKER_") || envcompat.HasPrefix(key, "BRAIN_") || envcompat.Is(key, "MEWLA_BUILD_TMPDIR") || envcompat.Is(key, "MEWLA_WORKTREE_ROOT") || envcompat.Is(key, "MEWLA_STATE_DIR") {
 			continue
 		}
 		env = append(env, entry)

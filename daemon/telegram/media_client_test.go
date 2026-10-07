@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/attachment"
 )
 
 func TestFileDownloadRejectsTraversalRedirectOversizeAndSecrets(t *testing.T) {

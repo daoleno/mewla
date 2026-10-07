@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
 
@@ -406,7 +406,7 @@ func (s *Server) handleSetThreadRuntime(conn *websocket.Conn, raw clientMessage)
 
 // SetThreadRuntime is the single daemon transaction for an acknowledged
 // current-thread runtime. For live-control Codex Sessions (app-server mode)
-// it applies the native thread/settings/update FIRST and commits the Zen
+// it applies the native thread/settings/update FIRST and commits the Mewla
 // route binding only after the native applied-settings acknowledgement; on
 // native failure or timeout the route is untouched, and on route-commit
 // failure the native side is reverted. For embedded Sessions it changes only
@@ -434,7 +434,7 @@ func (s *Server) SetThreadRuntime(sessionID string, choice modelprofiles.ThreadR
 	}
 	// Native-first: apply the exact resolved model+effort to the live Codex
 	// thread and wait for the native acknowledgement before publishing the
-	// Zen route. The prepare/commit split keeps the Owner lock free during
+	// Mewla route. The prepare/commit split keeps the Owner lock free during
 	// the network round-trip; Commit re-validates the generation CAS.
 	if socket := owner.CodexControlSocket(sessionID); socket != "" && s.codexLiveDial != nil {
 		revert, cleanup, liveErr := s.applyLiveNativeThreadRuntime(socket, sessionID, prepared)
@@ -655,7 +655,7 @@ func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.
 			return "", nil, modelprofiles.PersistResult{}, err
 		}
 		opts.ProgressEnv = true
-		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"ZEN_STATE_DIR": s.auth.StorageDir(), "ZEN_WORKER_ID": ""})
+		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"MEWLA_STATE_DIR": s.auth.StorageDir(), "MEWLA_WORKER_ID": ""})
 		id := opts.BrowserID
 		opts.PrepareLaunch = func(command string) (string, error) {
 			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), s.auth.StorageDir(), id)

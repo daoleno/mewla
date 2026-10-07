@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 // markAbsent makes a fixture Session invisible. confirmed=false models an

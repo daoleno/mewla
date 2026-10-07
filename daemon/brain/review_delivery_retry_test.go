@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func stalledReviewFixture(t *testing.T) (*Store, *Service, *fakeWatcher, Work) {

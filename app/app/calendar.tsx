@@ -746,7 +746,7 @@ function DetailModal({
             <Info label="Recurrence" value={item.recurrence} />
             {item.notes ? <Info label="Notes" value={item.notes} /> : null}
             {item.action_instruction ? (
-              <Info label="Zen action" value={item.action_instruction} />
+              <Info label="Mewla action" value={item.action_instruction} />
             ) : null}
             {item.source_thread_id ? (
               <Info label="Source Brain thread" value={item.source_thread_id} />
@@ -1124,7 +1124,7 @@ function EditorModal({
                 value={instruction}
                 onChangeText={setInstruction}
                 multiline
-                placeholder="What should Zen do when the time comes?"
+                placeholder="What should Mewla do when the time comes?"
               />
             ) : null}
             <View style={styles.resolvedCard}>

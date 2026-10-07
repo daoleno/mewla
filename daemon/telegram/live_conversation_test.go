@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // A bounded outbound transport, never a poller. Input/callback envelopes and
@@ -52,7 +52,7 @@ func (a *boundedConversationAPI) SendChatAction(context.Context, string, ChatAct
 	return nil
 }
 func (a *boundedConversationAPI) CreateForumTopic(ctx context.Context, token string, req CreateForumTopicRequest) (ForumTopic, error) {
-	if !strings.HasPrefix(req.Name, "Zen QA ") || a.created >= 2 {
+	if !strings.HasPrefix(req.Name, "Mewla QA ") || a.created >= 2 {
 		a.t.Fatal("live QA may create only two clearly labeled fixture topics")
 	}
 	a.mutation(req.ChatID, 0)
@@ -116,8 +116,8 @@ func (a *boundedConversationAPI) DeleteForumTopic(ctx context.Context, token str
 }
 
 func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
-	root := os.Getenv("ZEN_TELEGRAM_LIVE_STATE")
-	if root == "" || os.Getenv("ZEN_TELEGRAM_LIVE_CONVERSATION") != "1" {
+	root := os.Getenv("MEWLA_TELEGRAM_LIVE_STATE")
+	if root == "" || os.Getenv("MEWLA_TELEGRAM_LIVE_CONVERSATION") != "1" {
 		t.Skip("requires explicit authorization for two bound private QA topics")
 	}
 	readState := func() durableState {
@@ -158,7 +158,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	transcript := filepath.Join(fixtureRoot, "qa-provider.jsonl")
 	provider.mu.Lock()
 	delete(provider.workers, "session-b")
-	provider.workers["session-a"].Name = "Zen QA Session " + stamp
+	provider.workers["session-a"].Name = "Mewla QA Session " + stamp
 	provider.workers["session-a"].Cwd = fixtureRoot
 	provider.workers["session-a"].Command = "pi --session " + transcript
 	provider.mu.Unlock()
@@ -175,7 +175,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	if err := m.ensureBrainTopic(); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.store.mutate(func(s *durableState) error { s.TopicOps[0].Label = "Zen QA Brain " + stamp; return nil }); err != nil {
+	if err := m.store.mutate(func(s *durableState) error { s.TopicOps[0].Label = "Mewla QA Brain " + stamp; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.projectSessionTopics(t.Context(), token); err != nil {
@@ -219,9 +219,9 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	input(2, primary, "Zen QA only: fixture Brain message")
-	input(3, primary, "Zen QA only: same-conversation follow-up")
-	answer("qa-first", "**Zen QA only**: two fixture inputs admitted to the same Brain conversation. No model call.")
+	input(2, primary, "Mewla QA only: fixture Brain message")
+	input(3, primary, "Mewla QA only: same-conversation follow-up")
+	answer("qa-first", "**Mewla QA only**: two fixture inputs admitted to the same Brain conversation. No model call.")
 	input(4, primary, "/sessions")
 	flush()
 	callback := navigationCallback(5, primary, "session:"+digestText("session-a"))
@@ -230,7 +230,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	if err := m.handleUpdate(t.Context(), token, callback); err != nil {
 		t.Fatal(err)
 	}
-	item, err := store.CreateWork(brain.Work{Title: "Zen QA only", Objective: "Isolated exact Session fixture", CompletionPolicy: brain.CompletionBounded})
+	item, err := store.CreateWork(brain.Work{Title: "Mewla QA only", Objective: "Isolated exact Session fixture", CompletionPolicy: brain.CompletionBounded})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,8 +241,8 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	if _, err := store.ResolveInputAdmission(watcher.InputAdmissionResolution{SessionID: "session-a", ProposedTurnID: admission.ProposedTurnID, Receipt: admission.Receipt, PayloadSHA256: admission.PayloadSHA256, ActivityID: "qa-activity", ResolvedAt: time.Now().UTC(), Admission: watcher.TurnAdmission{Stream: "fixture", ID: "qa-input", Cursor: 1, SHA256: admission.PayloadSHA256, At: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
-	input(6, sessionTopic, "Zen QA only: exact Session input")
-	input(7, sessionTopic, "Zen QA only: busy Session follow-up")
+	input(6, sessionTopic, "Mewla QA only: exact Session input")
+	input(7, sessionTopic, "Mewla QA only: busy Session follow-up")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	file, err := os.Create(transcript)
 	if err != nil {
@@ -251,7 +251,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	encoder := json.NewEncoder(file)
 	for _, record := range []any{
 		map[string]any{"type": "session", "version": 3, "id": "qa-session", "timestamp": now, "cwd": fixtureRoot},
-		map[string]any{"type": "message", "id": "qa-answer", "timestamp": now, "message": map[string]any{"role": "assistant", "content": []map[string]string{{"type": "text", "text": "Zen QA only: exact Session input and busy follow-up received by inert provider fixture."}}, "stopReason": "stop"}},
+		map[string]any{"type": "message", "id": "qa-answer", "timestamp": now, "message": map[string]any{"role": "assistant", "content": []map[string]string{{"type": "text", "text": "Mewla QA only: exact Session input and busy follow-up received by inert provider fixture."}}, "stopReason": "stop"}},
 	} {
 		if err := encoder.Encode(record); err != nil {
 			t.Fatal(err)
@@ -269,8 +269,8 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	}
 	input(8, sessionTopic, "/status")
 	input(9, sessionTopic, "/brain")
-	input(10, primary, "Zen QA only: back to same Brain")
-	answer("qa-back", "Zen QA only: back to the same isolated Brain conversation; no new chat or Work created.")
+	input(10, primary, "Mewla QA only: back to same Brain")
+	answer("qa-back", "Mewla QA only: back to the same isolated Brain conversation; no new chat or Work created.")
 	flush()
 	for id, expected := range map[int64]string{2: "host:@1", 3: "host:@1", 6: "session-a", 7: "session-a", 10: "host:@1"} {
 		if got := provider.receipts()[fmt.Sprintf("telegram:update:%d:%d", bot.ID, id)].SessionID; got != expected {
@@ -287,7 +287,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	if err := m.projectSessionTopics(t.Context(), token); err != nil {
 		t.Fatal(err)
 	}
-	input(11, sessionTopic, "Zen QA only: stale destination must reject")
+	input(11, sessionTopic, "Mewla QA only: stale destination must reject")
 	flush()
 	if _, found := topicMappingByThread(m.store.snapshot(), sessionTopic); found {
 		t.Fatal("removed Session QA topic mapping retained")
@@ -298,7 +298,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	if m.store.snapshot().Processed["11"].Disposition != "topic_stale" {
 		t.Fatal("stale route disposition changed")
 	}
-	if err := api.EditForumTopic(t.Context(), token, EditForumTopicRequest{ChatID: before.ChatID, MessageThreadID: primary, Name: "Closed - Zen QA Brain " + stamp}); err != nil {
+	if err := api.EditForumTopic(t.Context(), token, EditForumTopicRequest{ChatID: before.ChatID, MessageThreadID: primary, Name: "Closed - Mewla QA Brain " + stamp}); err != nil {
 		t.Fatal(err)
 	}
 	after := readState()

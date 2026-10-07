@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"github.com/daoleno/zen/daemon/connections"
+	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/gorilla/websocket"
 )
 

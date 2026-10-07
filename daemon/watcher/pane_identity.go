@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/envcompat"
 )
 
 // isPaneID admits only tmux's immutable, server-local pane lifetime identifier.
@@ -140,7 +142,7 @@ func (w *Watcher) MigrateLegacyWorkerPanes(aliases map[string]string, generation
 				if !ok {
 					continue
 				}
-				if strings.HasPrefix(key, "ZEN_") || key == "TMUX_TMPDIR" || key == "TMPDIR" || key == "TMP" || key == "TEMP" || key == "CODEX_HOME" || key == "CLAUDE_CONFIG_DIR" || key == "PI_CODING_AGENT_DIR" {
+				if strings.HasPrefix(key, envcompat.Prefix) || strings.HasPrefix(key, envcompat.LegacyPrefix) || key == "TMUX_TMPDIR" || key == "TMPDIR" || key == "TMP" || key == "TEMP" || key == "CODEX_HOME" || key == "CLAUDE_CONFIG_DIR" || key == "PI_CODING_AGENT_DIR" {
 					if out, err := tmuxCommand(socket, "set-environment", "-u", "-t", "="+session, key).CombinedOutput(); err != nil {
 						return fmt.Errorf("remove legacy session environment: %w: %s", err, out)
 					}

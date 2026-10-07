@@ -202,7 +202,7 @@ export function buildLightAppColors({ light: a }: ZenAccent): AppColors {
     accentSoft: a.active,
     accentStrong: a.accentStrong,
     ...ZEN_LIGHT_SEAL,
-    // The Zen mark keeps its sage-ink ribbon until the rename replaces it.
+    // The legacy Zen mark keeps its sage-ink ribbon.
     logoDetail: ZEN_SAGE[900],
     statusFailed: st.failed,
     statusBlocked: st.blocked,

@@ -104,7 +104,7 @@ export function mergeStoredServer(
   const linkRouteId =
     transportKind === "link" ? normalizeHex(input.linkRouteId, 32) : undefined;
   if (transportKind === "link" && (!transportPin || !linkRouteId)) {
-    throw new Error("Missing Zen Link transport identity.");
+    throw new Error("Missing Mewla Link transport identity.");
   }
 
   const existingMatch = input.id?.trim()
@@ -200,7 +200,7 @@ function normalizeTransportCandidates(
   }
   if (!normalized.some((candidate) => candidate.url === fallbackURL)) {
     normalized.unshift({
-      name: fallbackKind === "link" ? "Zen Link" : "Manual",
+      name: fallbackKind === "link" ? "Mewla Link" : "Manual",
       kind: fallbackKind,
       url: fallbackURL,
     });

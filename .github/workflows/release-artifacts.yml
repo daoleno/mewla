@@ -109,14 +109,14 @@ jobs:
       - name: Verify daemon formats and architectures
         run: |
           set -euo pipefail
-          file dist-download/staging/bin/zen-linux-amd64 | grep -Eq 'ELF 64-bit.*(x86-64|x86_64)'
-          file dist-download/staging/bin/zen-linux-arm64 | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64)'
-          file dist-download/staging/bin/zen-darwin-arm64 | grep -Eq 'Mach-O 64-bit.*arm64'
+          file dist-download/staging/bin/mewla-linux-amd64 | grep -Eq 'ELF 64-bit.*(x86-64|x86_64)'
+          file dist-download/staging/bin/mewla-linux-arm64 | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64)'
+          file dist-download/staging/bin/mewla-darwin-arm64 | grep -Eq 'Mach-O 64-bit.*arm64'
       - name: Upload verified daemon inputs
         uses: actions/upload-artifact@v4
         with:
-          name: zen-daemon-binaries-${{ needs.validate.outputs.tag }}
-          path: dist-download/staging/bin/zen-*
+          name: mewla-daemon-binaries-${{ needs.validate.outputs.tag }}
+          path: dist-download/staging/bin/mewla-*
           if-no-files-found: error
 
   android:
@@ -314,7 +314,7 @@ jobs:
           test -f "${ZEN_ANDROID_KEYSTORE}"
           ./scripts/android-release-apk.sh
           # Locate APK produced under dist-download/android-native
-          APK="$(ls -t dist-download/android-native/zen-android-arm64-*.apk | head -1)"
+          APK="$(ls -t dist-download/android-native/mewla-android-arm64-*.apk | head -1)"
           test -f "$APK"
           echo "APK_PATH=${APK}" >> "$GITHUB_ENV"
 
@@ -337,7 +337,7 @@ jobs:
       - name: Upload verified signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: zen-android-apk-${{ needs.validate.outputs.tag }}
+          name: mewla-android-apk-${{ needs.validate.outputs.tag }}
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
 
@@ -359,12 +359,12 @@ jobs:
       - name: Download daemon binaries
         uses: actions/download-artifact@v4
         with:
-          name: zen-daemon-binaries-${{ needs.validate.outputs.tag }}
+          name: mewla-daemon-binaries-${{ needs.validate.outputs.tag }}
           path: dist-download/staging/bin
       - name: Download signed Android APK
         uses: actions/download-artifact@v4
         with:
-          name: zen-android-apk-${{ needs.validate.outputs.tag }}
+          name: mewla-android-apk-${{ needs.validate.outputs.tag }}
           path: inputs/android
       - name: Deterministically stage, sign, and verify
         env:
@@ -382,7 +382,7 @@ jobs:
       - name: Upload complete verified stage
         uses: actions/upload-artifact@v4
         with:
-          name: zen-release-stage-${{ needs.validate.outputs.tag }}
+          name: mewla-release-stage-${{ needs.validate.outputs.tag }}
           path: dist-download/${{ needs.validate.outputs.tag }}
           if-no-files-found: error
 
@@ -407,7 +407,7 @@ jobs:
       - name: Download stage artifact
         uses: actions/download-artifact@v4
         with:
-          name: zen-release-stage-${{ needs.validate.outputs.tag }}
+          name: mewla-release-stage-${{ needs.validate.outputs.tag }}
           path: stage
 
       - name: Create/reuse safe draft, upload, verify, and publish
@@ -432,7 +432,7 @@ jobs:
             gh release create "$TAG" --verify-tag --draft \
               --prerelease="$RELEASE_IS_PRERELEASE" \
               --latest="$RELEASE_IS_STABLE" \
-              --title "Zen $TAG" --notes-file "$notes"
+              --title "Mewla $TAG" --notes-file "$notes"
             meta="$(gh release view "$TAG" --json isPrerelease,isDraft,url)"
           fi
           is_pre="$(echo "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin)["isPrerelease"])')"
@@ -443,11 +443,15 @@ jobs:
             exit 1
           fi
           cd stage
+          # zen-* archives keep pre-rename self-updaters working.
           assets=(
+            mewla-linux-amd64.tar.gz
+            mewla-linux-arm64.tar.gz
+            mewla-darwin-arm64.tar.gz
             zen-linux-amd64.tar.gz
             zen-linux-arm64.tar.gz
             zen-darwin-arm64.tar.gz
-            "zen-android-arm64-v${VERSION}.apk"
+            "mewla-android-arm64-v${VERSION}.apk"
             SHA256SUMS
             release-manifest.json
             release-manifest.json.sig

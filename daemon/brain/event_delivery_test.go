@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestDirectWorkEventInputIsDeterministicBoundedAndComplete(t *testing.T) {
@@ -46,7 +46,7 @@ func TestDirectWorkEventInputIsDeterministicBoundedAndComplete(t *testing.T) {
 	}
 	if strings.Contains(first, item.Objective) ||
 		strings.Contains(first, "delivery_token") ||
-		strings.Contains(first, "zen brain "+"event") {
+		strings.Contains(first, "mewla brain "+"event") {
 		t.Fatalf("direct input leaked forbidden content: %q", first)
 	}
 	got := decodeDirectWorkEventInput(t, first)

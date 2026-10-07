@@ -42,14 +42,7 @@ func readProcesses(previous map[int]Process) (map[int]Process, error) {
 		} else {
 			if p.UID == os.Getuid() {
 				if env, err := os.ReadFile(root + "/environ"); err == nil {
-					for _, v := range strings.Split(string(env), "\x00") {
-						if val, ok := strings.CutPrefix(v, "ZEN_WORKER_RESOURCE_UNIT="); ok {
-							p.ResourceID = val
-						}
-						if val, ok := strings.CutPrefix(v, "ZEN_WORKER_ID="); ok {
-							p.WorkerID = val
-						}
-					}
+					p.ResourceID, p.WorkerID = workerEnvIdentity(strings.Split(string(env), "\x00"))
 				}
 			}
 			if cg, err := os.ReadFile(root + "/cgroup"); err == nil {

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func TestDeviceAdminAuthorizationBindsOperationAndRevokeTarget(t *testing.T) {

@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/linkproto"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/linkproto"
 )
 
 const (
@@ -358,7 +358,7 @@ func (connector *Connector) pairingAdmissionHandler(
 		if request.Method != http.MethodPost || request.URL.Path != "/pair" {
 			http.Error(
 				writer,
-				"This one-time Zen Link admission only accepts the pairing request. Scan the QR code again.",
+				"This one-time Mewla Link admission only accepts the pairing request. Scan the QR code again.",
 				http.StatusForbidden,
 			)
 			return
@@ -369,7 +369,7 @@ func (connector *Connector) pairingAdmissionHandler(
 		if consumeErr != nil {
 			http.Error(
 				writer,
-				"Zen Link pairing admission is unavailable or was already used. Scan a fresh QR code.",
+				"Mewla Link pairing admission is unavailable or was already used. Scan a fresh QR code.",
 				http.StatusUnauthorized,
 			)
 			return
@@ -594,7 +594,7 @@ func dialControl(
 	}
 	if conn.ConnectionState().NegotiatedProtocol != linkproto.ControlALPN {
 		_ = conn.Close()
-		return nil, errors.New("relay did not negotiate Zen Link control protocol v2")
+		return nil, errors.New("relay did not negotiate Mewla Link control protocol v2")
 	}
 	_ = conn.SetDeadline(time.Now().Add(config.ControlTimeout))
 	return conn, nil

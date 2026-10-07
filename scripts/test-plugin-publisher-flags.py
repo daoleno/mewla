@@ -40,7 +40,7 @@ class PublisherTests(unittest.TestCase):
             root = Path(directory)
             for name in ['scripts', 'release', 'daemon', 'app', 'fake-bin']:
                 (root / name).mkdir()
-            for name in ['plugin-publisher-flags.py', 'build-zen-local.sh', 'build-daemon-linux.sh']:
+            for name in ['plugin-publisher-flags.py', 'build-mewla-local.sh', 'build-daemon-linux.sh']:
                 shutil.copy(ROOT / 'scripts' / name, root / 'scripts' / name)
             # Web assets are outside this linker-identity test.
             web_build = root / 'scripts/build-web-ui.sh'
@@ -58,7 +58,7 @@ pathlib.Path(sys.argv[sys.argv.index('-o')+1]).touch()
             fake_go.chmod(0o755)
             capture = root / 'calls.jsonl'
             env = dict(os.environ, PATH=str(fake_go.parent) + os.pathsep + os.environ['PATH'], BUILD_CAPTURE=str(capture))
-            subprocess.run(['bash', str(root / 'scripts/build-zen-local.sh')], env=env, check=True, capture_output=True)
+            subprocess.run(['bash', str(root / 'scripts/build-mewla-local.sh')], env=env, check=True, capture_output=True)
             subprocess.run(['bash', str(root / 'scripts/build-daemon-linux.sh')], env=env, check=True, capture_output=True)
             calls = [json.loads(line) for line in capture.read_text().splitlines()]
             self.assertEqual(len(calls), 4)

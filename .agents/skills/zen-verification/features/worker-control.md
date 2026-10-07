@@ -10,14 +10,14 @@ Zen exposes visible Worker identities through the canonical control socket. This
 
 ## How to get to it (user POV)
 
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-zen-state` from the repository root.
+- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
 - Read the `worker_list` entry and its `runtime.worker_count` value.
 
 ## Driving it with the Zen CLI
 
 Preconditions:
 
-- `zen doctor --json` passes for the exact daemon state.
+- `mewla doctor --json` passes for the exact daemon state.
 - The control socket is owned by that daemon.
 
 - **List.** Run the lever. The report contains `worker_list: pass` and a numeric Worker count.
@@ -29,7 +29,7 @@ Preconditions:
 - A Worker status is not a completion decision. Brain Work and Event state remain authoritative.
 - A startup proof must include the exact Session's pane capture after at least
   two minutes; transport acceptance alone does not establish provider execution.
-  `daemon/cmd/zen/spawn_recovery_test.go` covers vanished startup panes and
+  `daemon/cmd/mewla/spawn_recovery_test.go` covers vanished startup panes and
   same-Work recovery, and `daemon/brain/absent_preparation_test.go` covers the
   retirement fence. `daemon/work/delegated_trust_test.go` checks native cwd trust.
 - Do not use `pkill`, `killall`, or process-name matching to clean up a verification run.
@@ -53,10 +53,10 @@ native Cloudflare connection confirmation alone is not public reachability proof
 
 ## Machine telemetry and ownership cleanup
 
-`zen resources --json` reads the cached machine snapshot and chart history.
+`mewla resources --json` reads the cached machine snapshot and chart history.
 The authenticated API contract is in `docs/resource-telemetry.md`. Threshold
 transitions use the durable Brain Work Event lane; they do not authorize daemon
-resource intervention. `zen worker release -id SESSION -pid PID -start START`
+resource intervention. `mewla worker release -id SESSION -pid PID -start START`
 releases a selected exact tool tree while retaining its provider.
 
 `resource_cleanup_real_test.go` launches a plain inert tmux Worker, re-observes

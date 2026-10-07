@@ -1,20 +1,20 @@
 const IOS_IDENTITIES = Object.freeze({
   production: Object.freeze({
     variant: "production",
-    displayName: "Zen",
-    bundleIdentifier: "com.daoleno.zen",
-    nativeProjectName: "Zen",
-    artifactName: "zen-ios",
+    displayName: "Mewla",
+    bundleIdentifier: "com.daoleno.mewla",
+    nativeProjectName: "Mewla",
+    artifactName: "mewla-ios",
     // Release identities ship to TestFlight/App Store Connect; remote push needs
     // production APS. Local notifications do not depend on this entitlement.
     notificationMode: "production",
   }),
   preview: Object.freeze({
     variant: "preview",
-    displayName: "Zen",
-    bundleIdentifier: "com.daoleno.zen.preview",
-    nativeProjectName: "Zen",
-    artifactName: "zen-preview-ios",
+    displayName: "Mewla",
+    bundleIdentifier: "com.daoleno.mewla.preview",
+    nativeProjectName: "Mewla",
+    artifactName: "mewla-preview-ios",
     notificationMode: "production",
   }),
 });
@@ -25,7 +25,7 @@ function resolveIOSIdentity(value) {
   const identity = IOS_IDENTITIES[variant];
   if (!identity) {
     throw new Error(
-      `ZEN_IOS_APP_VARIANT must be one of: ${Object.keys(IOS_IDENTITIES).join(", ")}`,
+      `MEWLA_IOS_APP_VARIANT must be one of: ${Object.keys(IOS_IDENTITIES).join(", ")}`,
     );
   }
   return identity;

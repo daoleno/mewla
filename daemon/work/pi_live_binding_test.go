@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // TestPiLiveBindingSurvivesRefreshReconnectAndLateGrowth reproduces the real
@@ -322,14 +322,14 @@ func TestPiLiveInterruptedTurnSettlesRunningTool(t *testing.T) {
 }
 
 // TestPiQuotedOwnedPathBindsAndRoundTrips covers the reviewed P2 parser
-// divergence at the reader boundary: a Zen-owned --session path that requires
+// divergence at the reader boundary: a Mewla-owned --session path that requires
 // shell quoting (space and metacharacters, exactly as EnsurePiSessionLaunchCommand
 // emits via shellQuoteForLaunch) must be recognized as owned by the work
 // parser, must bind the exact transcript, and must round-trip through the
 // watcher's canonical merged command form.
 func TestPiQuotedOwnedPathBindsAndRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	spaced := filepath.Join(dir, "My Zen", "co$t file.jsonl")
+	spaced := filepath.Join(dir, "My Mewla", "co$t file.jsonl")
 	if err := os.MkdirAll(filepath.Dir(spaced), 0o700); err != nil {
 		t.Fatal(err)
 	}

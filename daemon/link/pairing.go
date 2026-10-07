@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
+	"github.com/daoleno/mewla/daemon/auth"
 )
 
 const PairingVersion = 2
@@ -95,7 +95,7 @@ func BuildPairingLink(
 	values := url.Values{}
 	values.Set("v", fmt.Sprintf("%d", PairingVersion))
 	values.Set(connectPayloadParameter, base64.RawURLEncoding.EncodeToString(raw))
-	return "zen://settings?" + values.Encode(), payload, nil
+	return "mewla://settings?" + values.Encode(), payload, nil
 }
 
 const connectPayloadParameter = "p"

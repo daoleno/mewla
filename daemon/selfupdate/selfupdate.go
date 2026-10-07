@@ -25,8 +25,12 @@ import (
 )
 
 const (
-	DefaultAPIURL       = "https://api.github.com/repos/daoleno/zen/releases?per_page=100"
-	ManifestAsset       = "release-manifest.json"
+	DefaultAPIURL = "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
+	ManifestAsset = "release-manifest.json"
+	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz. Legacy
+	// zen-<os>-<arch>.tar.gz copies (entry "zen") exist only for pre-rename
+	// installs that still update by the old names.
+	ArchiveBinary       = "mewla"
 	ManifestSignature   = "release-manifest.json.sig"
 	maxManifestSize     = 1 << 20
 	maxSignatureSize    = 1 << 10
@@ -104,11 +108,11 @@ func NewClient() (*Client, error) {
 func PlatformArtifactName(goos, goarch string) (string, error) {
 	switch goos + "/" + goarch {
 	case "linux/amd64":
-		return "zen-linux-amd64.tar.gz", nil
+		return "mewla-linux-amd64.tar.gz", nil
 	case "linux/arm64":
-		return "zen-linux-arm64.tar.gz", nil
+		return "mewla-linux-arm64.tar.gz", nil
 	case "darwin/arm64":
-		return "zen-darwin-arm64.tar.gz", nil
+		return "mewla-darwin-arm64.tar.gz", nil
 	default:
 		return "", fmt.Errorf("self-update is not supported on %s/%s", goos, goarch)
 	}
@@ -209,7 +213,7 @@ func (c *Client) listReleases(ctx context.Context) ([]release, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "zen-self-update")
+	req.Header.Set("User-Agent", "mewla-self-update")
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("list GitHub releases: %w", err)
@@ -231,7 +235,7 @@ func (c *Client) download(ctx context.Context, url string, limit int64) ([]byte,
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/octet-stream")
-	req.Header.Set("User-Agent", "zen-self-update")
+	req.Header.Set("User-Agent", "mewla-self-update")
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -259,7 +263,7 @@ func ParseManifest(raw []byte) (Manifest, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return manifest, errors.New("signed release manifest has trailing data")
 	}
-	if manifest.SchemaVersion != 2 || manifest.Product != "zen" {
+	if manifest.SchemaVersion != 2 || (manifest.Product != "mewla" && manifest.Product != "zen") {
 		return manifest, errors.New("unsupported signed release manifest")
 	}
 	if _, err := parseSemVersion(manifest.Version); err != nil {
@@ -319,22 +323,22 @@ func extractBinary(archive []byte) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read daemon archive: %w", err)
 		}
-		if strings.TrimPrefix(filepath.Clean(header.Name), "./") != "zen" {
+		if strings.TrimPrefix(filepath.Clean(header.Name), "./") != ArchiveBinary {
 			continue
 		}
 		if header.Typeflag != tar.TypeReg || header.Size <= 0 || header.Size > maxDaemonArchive {
-			return nil, errors.New("daemon archive has invalid zen entry")
+			return nil, errors.New("daemon archive has invalid mewla entry")
 		}
 		if binary != nil {
-			return nil, errors.New("daemon archive has duplicate zen entries")
+			return nil, errors.New("daemon archive has duplicate mewla entries")
 		}
 		binary, err = io.ReadAll(io.LimitReader(tarReader, header.Size+1))
 		if err != nil || int64(len(binary)) != header.Size {
-			return nil, errors.New("read zen binary from archive")
+			return nil, errors.New("read mewla binary from archive")
 		}
 	}
 	if len(binary) == 0 {
-		return nil, errors.New("daemon archive does not contain zen")
+		return nil, errors.New("daemon archive does not contain mewla")
 	}
 	return binary, nil
 }
@@ -350,7 +354,7 @@ func ReplaceExecutable(executable string, binary []byte) error {
 	if err != nil {
 		return fmt.Errorf("stat executable: %w", err)
 	}
-	temp, err := os.CreateTemp(filepath.Dir(target), ".zen-update-*")
+	temp, err := os.CreateTemp(filepath.Dir(target), ".mewla-update-*")
 	if err != nil {
 		return fmt.Errorf("create update beside executable: %w", err)
 	}
@@ -444,7 +448,7 @@ func NoticeLine(current, latest string) string {
 	if err != nil || compareSemVersion(latestVersion, currentVersion) <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("Zen %s is available; run: zen update", latest)
+	return fmt.Sprintf("Mewla %s is available; run: mewla update", latest)
 }
 
 type semVersion struct {

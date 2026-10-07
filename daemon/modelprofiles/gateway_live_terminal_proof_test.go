@@ -1,23 +1,23 @@
 package modelprofiles_test
 
 // Opt-in live proof: an ORDINARY Terminal Codex (started directly, not via
-// `zen worker spawn`) routes through the machine-level gateway, and a Settings
+// `mewla worker spawn`) routes through the machine-level gateway, and a Settings
 // Provider switch retargets the same long-lived CLI process to the new
 // upstream.
 //
 // Run (from daemon module root, with the release daemon NOT owning 127.0.0.1:38777
 // and tmux + codex + the daemon binary available):
 //
-//	ZEN_PROOF_ISOLATED_TERMINAL=1 ZEN_DAEMON_BIN=tmp/zen-dev \
+//	MEWLA_PROOF_ISOLATED_TERMINAL=1 MEWLA_DAEMON_BIN=tmp/zen-dev \
 //	  go test ./modelprofiles -run TestIsolatedDirectTerminalGatewayProof -count=1 -timeout 240s
 //
 // Everything runs inside one isolated scratch root: a temporary HOME (sandbox
-// Zen state), a temporary CODEX_HOME (projected by the real takeover Enable),
+// Mewla state), a temporary CODEX_HOME (projected by the real takeover Enable),
 // a dedicated tmux server socket, two scripted 127.0.0.1 upstream providers
 // (A then B), and a sandbox daemon with -addr 127.0.0.1:0.
 //
 // The proof: takeover enabled → the projected native config points plain
-// `codex` at the gateway → first prompt reaches upstream A through Zen with
+// `codex` at the gateway → first prompt reaches upstream A through Mewla with
 // the exact client model bytes → provider_set_connection(B) flips the gateway's
 // upstream → the SAME pane/PID sends the second prompt → it reaches upstream
 // B, and the rendered replies (A then B) prove the same process/thread
@@ -40,9 +40,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/control"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func gatewayPortFree() bool {
@@ -172,13 +172,13 @@ func waitControl(t *testing.T, socketPath string, timeout time.Duration) {
 }
 
 func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
-	if os.Getenv("ZEN_PROOF_ISOLATED_TERMINAL") == "" {
-		t.Skip("set ZEN_PROOF_ISOLATED_TERMINAL=1 to run the isolated direct-terminal proof")
+	if os.Getenv("MEWLA_PROOF_ISOLATED_TERMINAL") == "" {
+		t.Skip("set MEWLA_PROOF_ISOLATED_TERMINAL=1 to run the isolated direct-terminal proof")
 	}
 	if !gatewayPortFree() {
 		t.Skip("127.0.0.1:38777 is already owned (release daemon running); stop it for the isolated proof")
 	}
-	daemonBin := strings.TrimSpace(os.Getenv("ZEN_DAEMON_BIN"))
+	daemonBin := strings.TrimSpace(os.Getenv("MEWLA_DAEMON_BIN"))
 	if daemonBin == "" {
 		daemonBin = filepath.Join("..", "..", "tmp", "zen-dev")
 	}
@@ -232,11 +232,11 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		"[[profiles]]\n" +
 		"  id = \"conn-proof-a\"\n  name = \"proof A\"\n  scope = \"account\"\n  client = \"codex\"\n" +
 		"  provider_id = \"custom\"\n  provider_label = \"Custom Gateway\"\n" +
-		"  base_url = \"" + upA.server.URL + "\"\n  auth_mode = \"none\"\n  credential_env = \"ZEN_PROVIDER_API_KEY\"\n\n" +
+		"  base_url = \"" + upA.server.URL + "\"\n  auth_mode = \"none\"\n  credential_env = \"MEWLA_PROVIDER_API_KEY\"\n\n" +
 		"[[profiles]]\n" +
 		"  id = \"conn-proof-b\"\n  name = \"proof B\"\n  scope = \"account\"\n  client = \"codex\"\n" +
 		"  provider_id = \"custom\"\n  provider_label = \"Custom Gateway\"\n" +
-		"  base_url = \"" + upB.server.URL + "\"\n  auth_mode = \"none\"\n  credential_env = \"ZEN_PROVIDER_API_KEY\"\n\n" +
+		"  base_url = \"" + upB.server.URL + "\"\n  auth_mode = \"none\"\n  credential_env = \"MEWLA_PROVIDER_API_KEY\"\n\n" +
 		"[defaults]\n  codex = \"conn-proof-a\"\n"
 	zenDir := filepath.Join(zenHome, ".zen")
 	if err := os.MkdirAll(zenDir, 0o700); err != nil {
@@ -325,7 +325,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		t.Fatal("direct codex pane has no pid")
 	}
 
-	// Prompt 1 -> upstream A through Zen. The TUI input pipeline is
+	// Prompt 1 -> upstream A through Mewla. The TUI input pipeline is
 	// event-driven; resend Enter until the upstream observes the turn (bounded
 	// retry, never duplicates the prompt text).
 	submitTurn := func(text string, up *proofUpstream, want string) []byte {
@@ -404,13 +404,13 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 }
 
 func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
-	if os.Getenv("ZEN_PROOF_REAL_WS") == "" {
-		t.Skip("set ZEN_PROOF_REAL_WS=1 with ZEN_PROOF_PROFILE_A/B to run the real-provider WebSocket proof")
+	if os.Getenv("MEWLA_PROOF_REAL_WS") == "" {
+		t.Skip("set MEWLA_PROOF_REAL_WS=1 with MEWLA_PROOF_PROFILE_A/B to run the real-provider WebSocket proof")
 	}
-	profileAID := strings.TrimSpace(os.Getenv("ZEN_PROOF_PROFILE_A"))
-	profileBID := strings.TrimSpace(os.Getenv("ZEN_PROOF_PROFILE_B"))
+	profileAID := strings.TrimSpace(os.Getenv("MEWLA_PROOF_PROFILE_A"))
+	profileBID := strings.TrimSpace(os.Getenv("MEWLA_PROOF_PROFILE_B"))
 	if profileAID == "" || profileBID == "" {
-		t.Fatal("ZEN_PROOF_PROFILE_A and ZEN_PROOF_PROFILE_B are required")
+		t.Fatal("MEWLA_PROOF_PROFILE_A and MEWLA_PROOF_PROFILE_B are required")
 	}
 	profilesPath, err := work.DefaultModelProfilesPath()
 	if err != nil {
@@ -438,7 +438,7 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 	}
 	proofUpstream := func(profile modelprofiles.Profile) modelprofiles.GatewayUpstream {
 		upstream := modelprofiles.GatewayUpstreamFromProfile(profile)
-		if credentialEnv := strings.TrimSpace(os.Getenv("ZEN_PROOF_AUTH_ENV")); credentialEnv != "" {
+		if credentialEnv := strings.TrimSpace(os.Getenv("MEWLA_PROOF_AUTH_ENV")); credentialEnv != "" {
 			upstream.AuthMode = modelprofiles.AuthModeBearerEnv
 			upstream.CredentialEnv = credentialEnv
 			upstream.CredentialRef = ""
@@ -452,9 +452,9 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = gateway.Close() })
 
-	model := strings.TrimSpace(os.Getenv("ZEN_PROOF_MODEL"))
+	model := strings.TrimSpace(os.Getenv("MEWLA_PROOF_MODEL"))
 	if model == "" {
-		t.Fatal("set ZEN_PROOF_MODEL for the live proof")
+		t.Fatal("set MEWLA_PROOF_MODEL for the live proof")
 	}
 
 	scratch := t.TempDir()
@@ -508,7 +508,7 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 
-	markers := []string{"ZEN_WS_A1_OK", "ZEN_WS_B_OK", "ZEN_WS_A2_OK"}
+	markers := []string{"MEWLA_WS_A1_OK", "MEWLA_WS_B_OK", "MEWLA_WS_A2_OK"}
 	submit := func(marker string) {
 		t.Helper()
 		prompt := "Reply with exactly " + marker + " and nothing else. Do not use tools."
@@ -588,7 +588,7 @@ func proofEnv(zenHome, codexHome, scratch, tmuxSocket string) []string {
 		key, _, _ := strings.Cut(e, "=")
 		switch key {
 		case "HOME", "CODEX_HOME", "OPENAI_API_KEY", "OPENAI_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
-			"ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "TMUX", "ZEN_STATE_DIR", "BUN_INSTALL", "GOROOT", "GOPATH":
+			"ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "TMUX", "MEWLA_STATE_DIR", "BUN_INSTALL", "GOROOT", "GOPATH":
 			continue
 		}
 		out = append(out, e)
@@ -597,7 +597,7 @@ func proofEnv(zenHome, codexHome, scratch, tmuxSocket string) []string {
 		"HOME="+zenHome,
 		"CODEX_HOME="+codexHome,
 		"TMUX="+tmuxSocket,
-		"ZEN_STATE_DIR="+filepath.Join(zenHome, ".zen"),
-		fmt.Sprintf("ZEN_PROGRESS_ENV=isolated-proof"),
+		"MEWLA_STATE_DIR="+filepath.Join(zenHome, ".zen"),
+		fmt.Sprintf("MEWLA_PROGRESS_ENV=isolated-proof"),
 	)
 }

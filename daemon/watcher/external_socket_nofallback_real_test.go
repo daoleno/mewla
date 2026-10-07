@@ -29,8 +29,8 @@ func TestExternalSocketNeverForksFallbackServer(t *testing.T) {
 	w := New(10 * time.Millisecond)
 	w.SetTmuxServer(socket, scratch)
 	t.Cleanup(func() {
-		stopHarnessTmuxServer(t, os.Getenv("ZEN_TEST_REAL_TMUX"), socket)
-		stopHarnessTmuxServer(t, os.Getenv("ZEN_TEST_REAL_TMUX"), other)
+		stopHarnessTmuxServer(t, os.Getenv("MEWLA_TEST_REAL_TMUX"), socket)
+		stopHarnessTmuxServer(t, os.Getenv("MEWLA_TEST_REAL_TMUX"), other)
 	})
 
 	create := func() (string, error) {

@@ -55,14 +55,14 @@ func TestRealTmuxWorkerOwnsPaneAcrossSplitAndRemoval(t *testing.T) {
 
 func TestRealTmuxWorkerEnvironmentAndOwnershipStayInPane(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
-	target, err := h.w.CreateSession("", CreateSessionOptions{Name: "env-owner", Command: `printf 'OWN_CONTEXT=%s ID=%s\n' "$ZEN_PANE_TEST_CONTEXT" "$ZEN_WORKER_ID"; exec /bin/sh`, Detached: true, ProgressEnv: true, Env: map[string]string{"ZEN_PANE_TEST_CONTEXT": "private-context"}})
+	target, err := h.w.CreateSession("", CreateSessionOptions{Name: "env-owner", Command: `printf 'OWN_CONTEXT=%s ID=%s\n' "$MEWLA_PANE_TEST_CONTEXT" "$MEWLA_WORKER_ID"; exec /bin/sh`, Detached: true, ProgressEnv: true, Env: map[string]string{"MEWLA_PANE_TEST_CONTEXT": "private-context"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitForHarness(t, "owned context", func() bool {
 		return strings.Contains(captureHarnessPane(t, h.selected, target), "OWN_CONTEXT=private-context ID="+target)
 	})
-	out, err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", target, "-P", "-F", "#{pane_id}", `printf 'USER_CONTEXT=%s ID=%s\n' "$ZEN_PANE_TEST_CONTEXT" "$ZEN_WORKER_ID"; exec /bin/sh`).Output()
+	out, err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", target, "-P", "-F", "#{pane_id}", `printf 'USER_CONTEXT=%s ID=%s\n' "$MEWLA_PANE_TEST_CONTEXT" "$MEWLA_WORKER_ID"; exec /bin/sh`).Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestRealTmuxLegacyMigrationPinsEvidenceAndNeverRebinds(t *testing.T) {
 			t.Fatalf("mark legacy: %v %s", err, out)
 		}
 	}
-	if err := tmuxHarnessCommand(h.selected, "set-environment", "-t", "zen-worker-legacy", "ZEN_WORKER_CONTEXT", "private").Run(); err != nil {
+	if err := tmuxHarnessCommand(h.selected, "set-environment", "-t", "zen-worker-legacy", "MEWLA_WORKER_CONTEXT", "private").Run(); err != nil {
 		t.Fatal(err)
 	}
 	out, err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", owned, "-P", "-F", "#{pane_id}", "exec /bin/sh").Output()
@@ -127,7 +127,7 @@ func TestRealTmuxLegacyMigrationPinsEvidenceAndNeverRebinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(env), "ZEN_WORKER_CONTEXT=") {
+	if strings.Contains(string(env), "MEWLA_WORKER_CONTEXT=") {
 		t.Fatal("legacy session context remains")
 	}
 	if err := h.w.KillSession(owned); err != nil {
@@ -196,8 +196,8 @@ func TestRealTmuxWorkersRemainDistinctInOneWindow(t *testing.T) {
 
 func TestRealTmuxDefaultServerDoesNotInheritWorkerContext(t *testing.T) {
 	h := newSharedTmuxHarness(t, true)
-	t.Setenv("ZEN_WORKER_ID", "parent-worker")
-	t.Setenv("ZEN_BRAIN_CONTEXT", "private-parent-context")
+	t.Setenv("MEWLA_WORKER_ID", "parent-worker")
+	t.Setenv("MEWLA_BRAIN_CONTEXT", "private-parent-context")
 	target, err := h.w.CreateSession("", CreateSessionOptions{Name: "default-env", Command: "exec /bin/sh", Detached: true, ProgressEnv: true})
 	if err != nil {
 		t.Fatal(err)
@@ -206,10 +206,10 @@ func TestRealTmuxDefaultServerDoesNotInheritWorkerContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(global), "ZEN_WORKER_ID=") || strings.Contains(string(global), "ZEN_BRAIN_CONTEXT=") {
+	if strings.Contains(string(global), "MEWLA_WORKER_ID=") || strings.Contains(string(global), "MEWLA_BRAIN_CONTEXT=") {
 		t.Fatal("server inherited launch context")
 	}
-	out, err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", target, "-P", "-F", "#{pane_id}", `printf 'USER_ID=%s CONTEXT=%s\n' "$ZEN_WORKER_ID" "$ZEN_BRAIN_CONTEXT"; exec /bin/sh`).Output()
+	out, err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", target, "-P", "-F", "#{pane_id}", `printf 'USER_ID=%s CONTEXT=%s\n' "$MEWLA_WORKER_ID" "$MEWLA_BRAIN_CONTEXT"; exec /bin/sh`).Output()
 	if err != nil {
 		t.Fatal(err)
 	}

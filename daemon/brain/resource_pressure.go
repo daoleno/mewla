@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // ResourceWorkContext enriches read-only telemetry from canonical Work ownership.
@@ -129,12 +129,12 @@ const (
 	resourcePressureWorkPrefix    = "resource-pressure:"
 	resourcePressureConsumerLimit = 3
 	resourcePressureOrphanLimit   = 2
-	resourceSnapshotCommand       = "zen resources --json"
+	resourceSnapshotCommand       = "mewla resources --json"
 )
 
 // resourcePressureBrief is the Brain-facing event payload: the transition,
 // crossed signals, machine headroom and the largest attributed consumers.
-// Process rows, trend samples and PSI detail stay in zen resources --json,
+// Process rows, trend samples and PSI detail stay in mewla resources --json,
 // which Brain reads only when it acts.
 type resourcePressureBrief struct {
 	State         string                   `json:"state"`

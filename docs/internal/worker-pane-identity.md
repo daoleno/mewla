@@ -8,7 +8,7 @@ another pane, moving the owned pane to another window, or linking a Terminal
 view does not change the Worker. If its pane disappears, the Worker is gone.
 There is no window-name or active-pane fallback.
 
-Zen stores ownership, delegated-resource and Pi transcript markers with
+Mewla stores ownership, delegated-resource and Pi transcript markers with
 `set-option -p`. Receipt ledgers are pane-local too. An unowned sibling cannot
 inherit ownership from window, session or global options. Cleanup uses
 `kill-pane`, so user panes in the same window survive.
@@ -17,14 +17,14 @@ Creation allocates an inert pane, then launches its command with
 `respawn-pane -e` before publishing the Worker. This gives environment values to
 the owned pane without `new-session -e` leaking them into later user windows or
 splits, and keeps environment secrets out of `pane_start_command`. The launch
-prologue derives `ZEN_WORKER_ID` directly from `TMUX_PANE`. Tmux client startup also strips Worker and Brain launch context so a newly
+prologue derives `MEWLA_WORKER_ID` directly from `TMUX_PANE`. Tmux client startup also strips Worker and Brain launch context so a newly
 started default server cannot publish it as global environment. Provider-internal
 tmux isolation and process-generation checks remain in place.
 
 ## Existing Workers
 
 At daemon startup, before the control server, polling or Brain lifecycle engine
-starts, Zen migrates legacy `session:window_id` references. It inventories exact
+starts, Mewla migrates legacy `session:window_id` references. It inventories exact
 window and pane IDs and matches recorded pane-generation evidence. A legacy
 window with no such evidence can migrate only if it has one pane. An ambiguous
 split stops startup with an explicit identity error; focus is never evidence.
@@ -38,12 +38,12 @@ bindings), and Telegram reply/topic routes use the pane ID afterward. Telegram
 delivery checkpoints migrate with the routes to preserve message deduplication.
 Turn tokens, receipts, process/pane generations, provider transcript identities
 and message text are preserved. Existing running shells may continue reporting
-the old `ZEN_WORKER_ID`; the control API accepts that saved alias only when the
+the old `MEWLA_WORKER_ID`; the control API accepts that saved alias only when the
 pinned pane still carries its exact legacy marker.
 
 Migration moves legacy ownership and receipt options off windows and removes
-Zen context, private scratch and provider configuration-root variables from
-legacy Zen-created session environments. It does not send input or relaunch
+Mewla context, private scratch and provider configuration-root variables from
+legacy Mewla-created session environments. It does not send input or relaunch
 running providers.
 
 ## Verification

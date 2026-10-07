@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // P1 regression: deleted SQLite rows must leave the projected conversation.
@@ -36,7 +36,7 @@ func TestOpenCodeMessageAndPartDeletionLeavesConversation(t *testing.T) {
 		{ID: "prt_tool", MessageID: "msg_c", SessionID: "ses_del", CreatedMS: started.Add(21 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"call_del","state":{"status":"completed","input":"{}","output":"out"}}`},
 	}
 	createOpenCodeFixtureDB(t, dbPath, session, messages, parts)
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{Cwd: "/repo/del", Command: "opencode", StartedAt: started}
@@ -126,7 +126,7 @@ func TestOpenCodeDeletionThenReinsertRecovers(t *testing.T) {
 	}, []openCodePartSeed{
 		{ID: "prt_x", MessageID: "msg_x", SessionID: "ses_del2", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"x"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{Cwd: "/repo/del2", Command: "opencode", StartedAt: started}
 	first, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))

@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 // Pi model usage is collected entirely from Pi's durable local session
 // ledgers: Pi's shared per-CWD history
-// (~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl) and Zen's
-// explicitly bound session files (~/.zen/provider-sessions/pi/<uuid>.jsonl).
+// (~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl) and Mewla's
+// explicitly bound session files (~/.mewla/provider-sessions/pi/<uuid>.jsonl).
 // Pi records the authoritative per-turn Usage on assistant messages (input,
 // output, cache-read, cache-write, totalTokens, an optional reasoning
 // subset of output, and the exact observed cost when the provider is
@@ -123,10 +125,10 @@ func (c *Collector) collectPiStats(home string) map[string]*dateAgg {
 		}
 	}
 
-	// Zen launches Pi with an absolute --session path so each Session has one
+	// Mewla launches Pi with an absolute --session path so each Session has one
 	// stable transcript owner. Those files are deliberately outside Pi's
 	// shared per-CWD history and use the same durable JSONL schema.
-	ownedSessionsRoot := filepath.Join(home, ".zen", "provider-sessions", "pi")
+	ownedSessionsRoot := filepath.Join(statedir.Default(home), "provider-sessions", "pi")
 	scanPiSessionDirCached(ownedSessionsRoot, "", byDate, c.usageCacheDir)
 
 	return byDate

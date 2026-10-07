@@ -39,7 +39,7 @@ FIXTURE_PATHS = (
     "app/iosIdentity.js",
     "app/ios-build.json",
     "app/modules/zen-terminal-vt/native.lock.json",
-    "daemon/cmd/zen/version.go",
+    "daemon/cmd/mewla/version.go",
     "scripts/verify-release-identity.sh",
     "docs/install-daemon.md",
     "docs/ios-ci-release.md",
@@ -261,7 +261,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 "CHANGELOG.md",
                 "app/app.base.json",
                 "app/ios-build.json",
-                "daemon/cmd/zen/version.go",
+                "daemon/cmd/mewla/version.go",
                 "docs/install-daemon.md",
                 "docs/ios-ci-release.md",
                 next_notes_path,
@@ -276,7 +276,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                     " M CHANGELOG.md",
                     " M app/app.base.json",
                     " M app/ios-build.json",
-                    " M daemon/cmd/zen/version.go",
+                    " M daemon/cmd/mewla/version.go",
                     " M docs/install-daemon.md",
                     " M docs/ios-ci-release.md",
                     " M scripts/verify-release-identity.sh",
@@ -298,7 +298,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         )
         self.assertIn(
             f'var Version = "{NEXT_VERSION}"',
-            (root / "daemon/cmd/zen/version.go").read_text(encoding="utf-8"),
+            (root / "daemon/cmd/mewla/version.go").read_text(encoding="utf-8"),
         )
 
         verifier = (root / "scripts/verify-release-identity.sh").read_text(
@@ -313,7 +313,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             f'EXPECTED_IOS_BUILD_NUMBER="{CURRENT_IOS_BUILD + 1}"', verifier
         )
         self.assertIn(
-            f"ZEN_VERSION={NEXT_TAG}",
+            f"MEWLA_VERSION={NEXT_TAG}",
             (root / "docs/install-daemon.md").read_text(encoding="utf-8"),
         )
         ios_docs = (root / "docs/ios-ci-release.md").read_text(encoding="utf-8")
@@ -330,17 +330,19 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
 
         notes = (root / next_notes_path).read_text(encoding="utf-8")
         self.assertEqual(
-            notes.count("- Bundle: `com.daoleno.zen.preview`"),
+            notes.count("- Bundle: `com.daoleno.mewla.preview`"),
             1,
         )
         self.assertEqual(notes.count("- ABI: `arm64-v8a`"), 1)
         for marker in (
-            f"# Zen {NEXT_TAG}",
+            f"# Mewla {NEXT_TAG}",
             "Add reviewed release change",
             f"- Source tag: `{NEXT_TAG}`",
             f"- TestFlight build: `{CURRENT_IOS_BUILD + 1}`",
             f"- `versionCode`: `{CURRENT_VERSION_CODE + 1}`",
-            "com.daoleno.zen",
+            "com.daoleno.mewla",
+            "mewla-linux-amd64.tar.gz",
+            "install `mewla` on your `PATH`",
             "unknown sources",
             "Play Protect",
             "Obtainium",
@@ -384,18 +386,18 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
 
     def test_fails_closed_on_malformed_or_mismatched_identity(self):
         root = self.create_repo()
-        version_go = root / "daemon/cmd/zen/version.go"
+        version_go = root / "daemon/cmd/mewla/version.go"
         version_go.write_text(
             version_go.read_text(encoding="utf-8").replace(
                 CURRENT_VERSION, "9.9.9-beta.999"
             ),
             encoding="utf-8",
         )
-        git(root, "add", "daemon/cmd/zen/version.go")
+        git(root, "add", "daemon/cmd/mewla/version.go")
         git(root, "commit", "-m", "Introduce mismatched identity")
         result = self.run_script(root)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("daemon/cmd/zen/version.go", result.stderr)
+        self.assertIn("daemon/cmd/mewla/version.go", result.stderr)
         self.assertFalse((root / f"docs/releases/{NEXT_TAG}.md").exists())
 
     def test_fails_closed_on_missing_identity_source(self):
@@ -515,7 +517,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             'START_SHA="$(git rev-parse refs/remotes/origin/main)"',
             './scripts/prepare-release.py --version "$TARGET_VERSION"',
             "./scripts/verify-release-identity.sh",
-            "go test ./cmd/zen",
+            "go test ./cmd/mewla",
             'git config user.name "github-actions[bot]"',
             'git add --pathspec-from-file="$RUNNER_TEMP/zen-release-paths"',
             'git commit -m "Prepare $NEXT_TAG"',

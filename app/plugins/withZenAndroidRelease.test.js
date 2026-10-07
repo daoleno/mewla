@@ -33,7 +33,10 @@ android {
 describe('withZenAndroidRelease signing injection', () => {
   test('injects release signingConfigs from env and is idempotent', () => {
     const once = injectReleaseSigningGradle(sampleGradle);
-    expect(once).toContain('System.getenv("ZEN_ANDROID_KEYSTORE")');
+    expect(once).toContain('System.getenv("MEWLA_ANDROID_KEYSTORE") ?: System.getenv("ZEN_ANDROID_KEYSTORE")');
+    for (const name of ['KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD']) {
+      expect(once).toContain(`(System.getenv("MEWLA_ANDROID_${name}") ?: System.getenv("ZEN_ANDROID_${name}"))`);
+    }
     expect(once).toContain('signingConfigs.release');
     expect(once).toContain('@generated begin zen-android-release-signing');
     expect(once).toContain('@generated begin zen-android-release-buildtype-signing');
@@ -52,10 +55,10 @@ describe('withZenAndroidRelease signing injection', () => {
 });
 
 describe('withZenAndroidRelease debug identity injection', () => {
-  test('names debug launcher Zen Debug and suffixes package .debug', () => {
+  test('names debug launcher Mewla Debug and suffixes package .debug', () => {
     const once = injectDebugIdentityGradle(sampleGradle);
     expect(once).toContain('applicationIdSuffix ".debug"');
-    expect(once).toContain('resValue "string", "app_name", "Zen Debug"');
+    expect(once).toContain('resValue "string", "app_name", "Mewla Debug"');
     expect(once).toContain('@generated begin zen-android-debug-identity');
 
     // Only buildTypes.debug — not signingConfigs.debug

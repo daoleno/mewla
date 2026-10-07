@@ -48,15 +48,15 @@ describe("resolveBrowserPairingURL", () => {
   test("rejects a link for a different daemon with browser guidance", async () => {
     servePageHealth({ daemon_id: DAEMON_ID, daemon_public_key: OTHER_KEY });
     const result = resolveBrowserPairingURL(link, "https://manjaro.tail7e23.ts.net");
-    await expect(result).rejects.toThrow("zen.daoleno.com, a different Zen daemon");
+    await expect(result).rejects.toThrow("zen.daoleno.com, a different Mewla daemon");
     await expect(result).rejects.toThrow("Open https://zen.daoleno.com/");
-    await expect(result).rejects.toThrow("`zen web`");
+    await expect(result).rejects.toThrow("`mewla web`");
   });
 
   test("rejects a matching key with a different daemon id", async () => {
     servePageHealth({ daemon_id: "d".repeat(64), daemon_public_key: DAEMON_KEY });
     await expect(resolveBrowserPairingURL(link, "https://manjaro.tail7e23.ts.net")).rejects.toThrow(
-      "different Zen daemon",
+      "different Mewla daemon",
     );
   });
 

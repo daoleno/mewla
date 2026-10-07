@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/codexctl"
 )
 
 func TestRouterDistinguishesStaleBodyFromExplicitTerminalModelSwitch(t *testing.T) {

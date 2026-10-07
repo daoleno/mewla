@@ -13,10 +13,10 @@ and [third-party assets](../third-party-assets.md).
 
 ## Contracts behind the user guides
 
-- [Daemon builds and boot service](daemon-builds.md): installer trust, source and release builds, `zen boot`
+- [Daemon builds and boot service](daemon-builds.md): installer trust, source and release builds, `mewla boot`
 - [Executor internals](executor-internals.md): delegated adapters, gateway routing, resource ownership, structured Chat
-- [Security engineering](security-engineering.md): Zen Link trust, relay metadata, mobile bridge, device admin protocol
-- [Zen Link Relay operations](zen-link-relay.md)
+- [Security engineering](security-engineering.md): Mewla Link trust, relay metadata, mobile bridge, device admin protocol
+- [Mewla Link Relay operations](zen-link-relay.md)
 - [Calendar engineering](calendar-engineering.md)
 - [Notification policy](notification-policy.md)
 - [Telegram channel](telegram.md)

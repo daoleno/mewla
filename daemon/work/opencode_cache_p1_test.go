@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // P1 regression: an equal-count delete+insert transaction (one row removed,
@@ -30,7 +30,7 @@ func TestOpenCodeEqualCountDeleteInsertSwap(t *testing.T) {
 		{ID: "prt_a", MessageID: "msg_a", SessionID: "ses_swap", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"alpha"}`},
 		{ID: "prt_b", MessageID: "msg_b", SessionID: "ses_swap", CreatedMS: started.Add(10 * time.Second).UnixMilli(), Data: `{"type":"text","text":"beta"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{Cwd: "/repo/swap", Command: "opencode", StartedAt: started}
 	first, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))

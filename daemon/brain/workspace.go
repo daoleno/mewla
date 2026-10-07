@@ -3,7 +3,7 @@ package brain
 import (
 	"bytes"
 	"fmt"
-	"github.com/daoleno/zen/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/attachment"
 	"net/http"
 	"os"
 	"path/filepath"

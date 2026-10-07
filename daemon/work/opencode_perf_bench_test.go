@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // Deterministic OpenCode conversation fixtures for performance regression.
@@ -278,7 +278,7 @@ func BenchmarkOpenCodeLoadFullConversation(b *testing.B) {
 		textPartBytes: 4000,
 		toolPartBytes: 12000,
 	})
-	b.Setenv("ZEN_OPENCODE_DB", fixture.dbPath)
+	b.Setenv("MEWLA_OPENCODE_DB", fixture.dbPath)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -302,7 +302,7 @@ func BenchmarkOpenCodeIncrementalPoll(b *testing.B) {
 		textPartBytes: 4000,
 		toolPartBytes: 12000,
 	})
-	b.Setenv("ZEN_OPENCODE_DB", fixture.dbPath)
+	b.Setenv("MEWLA_OPENCODE_DB", fixture.dbPath)
 	worker := classifier.Worker{Cwd: fixture.directory, Command: "opencode", StartedAt: fixture.startedAt}
 	reader := NewProviderConversationReader()
 	now := fixture.startedAt.Add(time.Hour)
@@ -329,7 +329,7 @@ func BenchmarkOpenCodeIncrementalBurst(b *testing.B) {
 		textPartBytes: 4000,
 		toolPartBytes: 12000,
 	})
-	b.Setenv("ZEN_OPENCODE_DB", fixture.dbPath)
+	b.Setenv("MEWLA_OPENCODE_DB", fixture.dbPath)
 	worker := classifier.Worker{Cwd: fixture.directory, Command: "opencode", StartedAt: fixture.startedAt}
 	now := fixture.startedAt.Add(time.Hour)
 	b.ReportAllocs()
@@ -422,5 +422,5 @@ func TestOpenCodePerfFixtureSize(t *testing.T) {
 	if len(conversation.Events) < 600 {
 		t.Fatalf("conversation too small: %d events", len(conversation.Events))
 	}
-	_ = os.Getenv("ZEN_OPENCODE_DB")
+	_ = os.Getenv("MEWLA_OPENCODE_DB")
 }

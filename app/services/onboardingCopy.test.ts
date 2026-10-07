@@ -16,10 +16,10 @@ describe("scan-first onboarding", () => {
     expect(presentation.indexOf('accessibilityLabel="Scan pairing code"')).toBeLessThan(presentation.indexOf('accessibilityLabel="Computer setup"'));
   });
   test("uses supported commands without inventing a pairing origin", () => {
-    expect(presentation).toContain('command: "zen doctor"');
-    expect(presentation).toContain('command: "zen --lan"');
-    expect(presentation).toContain("pairing command printed by Zen");
-    expect(presentation).not.toMatch(/192\.168|0\.0\.0\.0|zen pair http/);
+    expect(presentation).toContain('command: "mewla doctor"');
+    expect(presentation).toContain('command: "mewla --lan"');
+    expect(presentation).toContain("pairing command printed by Mewla");
+    expect(presentation).not.toMatch(/192\.168|0\.0\.0\.0|(?:mewla|zen) pair http/);
     expect(presentation).toContain("install-daemon.md");
     expect(presentation).toContain("connect-and-pair.md");
   });

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
+	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/gorilla/websocket"
 )
 

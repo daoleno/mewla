@@ -26,24 +26,24 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/daoleno/zen/daemon/addressbook"
-	"github.com/daoleno/zen/daemon/attachment"
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/browser"
-	"github.com/daoleno/zen/daemon/calendar"
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/codexctl"
-	"github.com/daoleno/zen/daemon/connections"
-	"github.com/daoleno/zen/daemon/enrollment"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/push"
-	skillmgmt "github.com/daoleno/zen/daemon/skills"
-	"github.com/daoleno/zen/daemon/stats"
-	telegramchannel "github.com/daoleno/zen/daemon/telegram"
-	"github.com/daoleno/zen/daemon/terminal"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/browser"
+	"github.com/daoleno/mewla/daemon/calendar"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/connections"
+	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/push"
+	skillmgmt "github.com/daoleno/mewla/daemon/skills"
+	"github.com/daoleno/mewla/daemon/stats"
+	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/terminal"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 	"github.com/oklog/ulid/v2"
 )
@@ -401,7 +401,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 }
 
 // Handler exposes the daemon's complete origin as one transport boundary.
-// LAN, tunnels, reverse proxies, and Zen Link all use this same handler so
+// LAN, tunnels, reverse proxies, and Mewla Link all use this same handler so
 // /ws and the HTTP streaming routes cannot drift between transports.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -1493,7 +1493,7 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 		if backend == "tmux" {
 			presence, probeErr := s.watcher.ProbeSession(targetID)
 			if probeErr != nil || presence != watcher.SessionPresencePresent {
-				message := "tmux target is not an available Zen-owned Session"
+				message := "tmux target is not an available Mewla-owned Session"
 				if probeErr != nil {
 					message = probeErr.Error()
 				}

@@ -32,7 +32,7 @@ function nativeModule(): ZenLinkTransportNativeModule {
   }
   if (!cached) {
     throw new Error(
-      "Zen Link needs a current Android or iOS build. Update/rebuild the app, then scan again.",
+      "Mewla Link needs a current Android or iOS build. Update/rebuild the app, then scan again.",
     );
   }
   return cached;

@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
 
@@ -25,9 +25,9 @@ import (
 // Copies it before timing. No scheduler, tmux poll, provider process, machine
 // gateway, notification or transcript capture runs in this component harness.
 func TestPopulatedStartupMeasurement(t *testing.T) {
-	source := os.Getenv("ZEN_STARTUP_FIXTURE")
+	source := os.Getenv("MEWLA_STARTUP_FIXTURE")
 	if source == "" {
-		t.Skip("set ZEN_STARTUP_FIXTURE to sanitized fixture")
+		t.Skip("set MEWLA_STARTUP_FIXTURE to sanitized fixture")
 	}
 	marker, err := os.ReadFile(filepath.Join(source, "startup-fixture.marker"))
 	if err != nil || strings.TrimSpace(string(marker)) != "sanitized-startup-fixture-v1" {

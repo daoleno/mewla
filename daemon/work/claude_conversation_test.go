@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func TestParseClaudeConversation_PreservesLongCompletedAssistantMarkdown(t *testing.T) {
-	const suffix = "ZEN_CLAUDE_SUFFIX_VERTICAL_SLICE_8d2e"
+	const suffix = "MEWLA_CLAUDE_SUFFIX_VERTICAL_SLICE_8d2e"
 	path := filepath.Join(t.TempDir(), "claude-long.jsonl")
 	writeJSONL(t, path,
 		map[string]any{
@@ -488,7 +488,7 @@ func TestEncodeClaudeProjectDirMatchesClaudeLayout(t *testing.T) {
 		want string
 	}{
 		{
-			name: "zen brain workspace",
+			name: "mewla brain workspace",
 			cwd:  "/home/daoleno/.zen/brain/workspace",
 			want: "-home-daoleno--zen-brain-workspace",
 		},

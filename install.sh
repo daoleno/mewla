@@ -1,17 +1,20 @@
 #!/bin/sh
-# Bootstrap the Zen daemon from official GitHub release assets.
+# Bootstrap the Mewla daemon from official GitHub release assets.
 
 set -eu
 set -f
 
-REPOSITORY="daoleno/zen"
+REPOSITORY="daoleno/mewla"
 GITHUB_WEB="https://github.com/$REPOSITORY"
 GITHUB_API="https://api.github.com/repos/$REPOSITORY"
-PATH_MARKER="# >>> zen installer PATH >>>"
-DRY_RUN=${ZEN_DRY_RUN:-0}
-NO_PATH_UPDATE=${ZEN_NO_PATH_UPDATE:-0}
-VERSION=${ZEN_VERSION:-}
-INSTALL_DIR=${ZEN_INSTALL_DIR:-}
+PATH_MARKER="# >>> mewla installer PATH >>>"
+# Profiles edited by the pre-rename installer already carry this block.
+LEGACY_PATH_MARKER="# >>> zen installer PATH >>>"
+# Legacy ZEN_* settings keep working; MEWLA_* wins.
+DRY_RUN=${MEWLA_DRY_RUN:-${ZEN_DRY_RUN:-0}}
+NO_PATH_UPDATE=${MEWLA_NO_PATH_UPDATE:-${ZEN_NO_PATH_UPDATE:-0}}
+VERSION=${MEWLA_VERSION:-${ZEN_VERSION:-}}
+INSTALL_DIR=${MEWLA_INSTALL_DIR:-${ZEN_INSTALL_DIR:-}}
 WORK_DIR=
 INSTALL_TEMP=
 
@@ -20,12 +23,12 @@ say() {
 }
 
 die() {
-  printf 'zen installer: error: %s\n' "$*" >&2
+  printf 'mewla installer: error: %s\n' "$*" >&2
   exit 1
 }
 
 warn() {
-  printf 'zen installer: warning: %s\n' "$*" >&2
+  printf 'mewla installer: warning: %s\n' "$*" >&2
 }
 
 usage() {
@@ -39,12 +42,12 @@ Options:
   --dry-run                  print the planned action without changing files
   -h, --help                 show this help
 
-The same settings may be supplied as ZEN_VERSION, ZEN_INSTALL_DIR,
-ZEN_NO_PATH_UPDATE=1, and ZEN_DRY_RUN=1.
+The same settings may be supplied as MEWLA_VERSION, MEWLA_INSTALL_DIR,
+MEWLA_NO_PATH_UPDATE=1, and MEWLA_DRY_RUN=1 (legacy ZEN_* names still work).
 
-Without ZEN_VERSION, each fresh bootstrap dynamically selects the SemVer-highest
+Without MEWLA_VERSION, each fresh bootstrap dynamically selects the SemVer-highest
 public nondraft GitHub Release with a supported tag, whether stable or beta.
-ZEN_VERSION is optional exact-version pinning; no release version is embedded.
+MEWLA_VERSION is optional exact-version pinning; no release version is embedded.
 EOF
 }
 
@@ -91,8 +94,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-case $DRY_RUN in 0|1) ;; *) die "ZEN_DRY_RUN must be 0 or 1" ;; esac
-case $NO_PATH_UPDATE in 0|1) ;; *) die "ZEN_NO_PATH_UPDATE must be 0 or 1" ;; esac
+case $DRY_RUN in 0|1) ;; *) die "MEWLA_DRY_RUN must be 0 or 1" ;; esac
+case $NO_PATH_UPDATE in 0|1) ;; *) die "MEWLA_NO_PATH_UPDATE must be 0 or 1" ;; esac
 
 valid_version() {
   printf '%s\n' "$1" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.(0|[1-9][0-9]*))?$'
@@ -152,11 +155,13 @@ platform_archive() {
       die "unsupported platform $os/$arch. Supported hosts: Linux amd64, Linux arm64, and Apple Silicon macOS. See $GITHUB_WEB/blob/main/docs/install-daemon.md#supported-platforms"
       ;;
   esac
-  ARCHIVE="zen-$PLATFORM.tar.gz"
+  ARCHIVE="mewla-$PLATFORM.tar.gz"
 }
 
-safe_existing_zen() {
-  candidate=$(command -v zen 2>/dev/null || true)
+# safe_existing_binary NAME: a user-owned regular executable NAME on PATH in a
+# writable, non-system directory that answers --help.
+safe_existing_binary() {
+  candidate=$(command -v "$1" 2>/dev/null || true)
   case $candidate in
     /*) ;;
     *) return 1 ;;
@@ -168,8 +173,20 @@ safe_existing_zen() {
   is_protected_dir "$candidate_dir" && return 1
   [ "$(stat_uid "$candidate" 2>/dev/null || printf unknown)" = "$(id -u)" ] || return 1
   "$candidate" --help >/dev/null 2>&1 || return 1
-  EXISTING_ZEN=$candidate
+  EXISTING_BINARY=$candidate
   return 0
+}
+
+safe_existing_mewla() {
+  safe_existing_binary mewla || return 1
+  EXISTING_MEWLA=$EXISTING_BINARY
+}
+
+# A pre-rename install ships a regular `zen` executable. It is replaced by a
+# `zen -> mewla` alias next to the new binary.
+safe_existing_legacy_zen() {
+  safe_existing_binary zen || return 1
+  LEGACY_ZEN=$EXISTING_BINARY
 }
 
 latest_release() {
@@ -238,7 +255,7 @@ latest_release() {
       END { if (best != "") print best }
     '
   )
-  [ -n "$found" ] || die "GitHub returned no public nondraft Zen Release with a supported vX.Y.Z or vX.Y.Z-beta.N tag"
+  [ -n "$found" ] || die "GitHub returned no public nondraft Mewla Release with a supported vX.Y.Z or vX.Y.Z-beta.N tag"
   VERSION=$found
 }
 
@@ -247,6 +264,8 @@ curl_https() {
   output=$2
   accept=${3:-application/octet-stream}
   case $url in
+    https://api.github.com/repos/daoleno/mewla/*|https://github.com/daoleno/mewla/releases/download/*) ;;
+    # The pre-rename repository redirects to daoleno/mewla.
     https://api.github.com/repos/daoleno/zen/*|https://github.com/daoleno/zen/releases/download/*) ;;
     *) die "refusing non-official download URL: $url" ;;
   esac
@@ -295,10 +314,10 @@ validate_and_extract() {
     $0 == "LICENSE" { license++ ; next }
     $0 == "NOTICE" { notice++ ; next }
     $0 == "TRADEMARKS.md" { trademarks++ ; next }
-    $0 == "zen" { zen++ ; next }
+    $0 == "mewla" { mewla++ ; next }
     { bad = 1 }
     END {
-      if (bad || NR != 4 || license != 1 || notice != 1 || trademarks != 1 || zen != 1) exit 1
+      if (bad || NR != 4 || license != 1 || notice != 1 || trademarks != 1 || mewla != 1) exit 1
     }
   ' "$names"; then
     die "$ARCHIVE has an unsafe or unexpected archive layout"
@@ -310,9 +329,9 @@ validate_and_extract() {
   ' "$verbose"; then
     die "$ARCHIVE contains a link, device, directory, or other non-regular entry"
   fi
-  tar -xzf "$archive_path" -C "$extract_dir" zen || die "could not extract zen from $ARCHIVE"
-  [ -f "$extract_dir/zen" ] && [ ! -L "$extract_dir/zen" ] || die "extracted zen is not a regular file"
-  EXTRACTED_ZEN=$extract_dir/zen
+  tar -xzf "$archive_path" -C "$extract_dir" mewla || die "could not extract mewla from $ARCHIVE"
+  [ -f "$extract_dir/mewla" ] && [ ! -L "$extract_dir/mewla" ] || die "extracted mewla is not a regular file"
+  EXTRACTED_MEWLA=$extract_dir/mewla
 }
 
 prepare_install_dir() {
@@ -335,8 +354,12 @@ select_install_dir() {
     SELECTED_DIR=$INSTALL_DIR
     return
   fi
-  if safe_existing_zen; then
-    SELECTED_DIR=$(dirname "$EXISTING_ZEN")
+  if safe_existing_mewla; then
+    SELECTED_DIR=$(dirname "$EXISTING_MEWLA")
+    return
+  fi
+  if [ -n "$LEGACY_ZEN" ]; then
+    SELECTED_DIR=$(dirname "$LEGACY_ZEN")
     return
   fi
 
@@ -464,13 +487,13 @@ append_profile_path() {
       return 0
     fi
   fi
-  if [ -f "$profile" ] && grep -Fq "$PATH_MARKER" "$profile"; then
+  if [ -f "$profile" ] && { grep -Fq "$PATH_MARKER" "$profile" || grep -Fq "$LEGACY_PATH_MARKER" "$profile"; }; then
     return 0
   fi
   if ! {
     printf '\n%s\n' "$PATH_MARKER"
     printf '%s\n' "$path_line"
-    printf '%s\n' '# <<< zen installer PATH <<<'
+    printf '%s\n' '# <<< mewla installer PATH <<<'
   } >> "$profile"; then
     warn "could not append PATH entry to shell profile: $profile"
     return 0
@@ -478,23 +501,45 @@ append_profile_path() {
   PROFILE_UPDATED=$profile
 }
 
+# link_zen_alias keeps `zen` working as an alias for the transition period.
+# It only replaces a missing name, an existing symlink, or the pre-rename
+# binary this installer is migrating; any other `zen` is left alone.
+link_zen_alias() {
+  alias_path=$INSTALL_DIR/zen
+  if [ -e "$alias_path" ] && [ ! -L "$alias_path" ] && [ "$LEGACY_ZEN" != "$alias_path" ]; then
+    warn "leaving existing $alias_path in place; the zen alias was not created"
+    return 0
+  fi
+  alias_temp=$INSTALL_DIR/.mewla-alias.$$
+  rm -f "$alias_temp"
+  if ln -s mewla "$alias_temp" && mv -f "$alias_temp" "$alias_path"; then
+    ZEN_ALIAS=$alias_path
+  else
+    rm -f "$alias_temp"
+    warn "could not create the zen alias at $alias_path"
+  fi
+}
+
 platform_archive
 
 current_uid=$(id -u)
-[ "$current_uid" != 0 ] || die "do not run this installer as root; install Zen as the user who will run it"
+[ "$current_uid" != 0 ] || die "do not run this installer as root; install Mewla as the user who will run it"
 [ -n "${HOME:-}" ] && [ -d "$HOME" ] || die "HOME must name the current user's home directory"
 [ "$(stat_uid "$HOME" 2>/dev/null || printf unknown)" = "$current_uid" ] || die "HOME is not owned by the current user"
 HOME_RESOLVED=$(cd -P "$HOME" 2>/dev/null && pwd) || die "could not resolve HOME"
 is_protected_dir "$HOME_RESOLVED" && die "HOME resolves into a root/system directory: $HOME_RESOLVED"
 
-if [ -z "$VERSION" ] && [ -z "$INSTALL_DIR" ] && safe_existing_zen; then
+LEGACY_ZEN=
+safe_existing_mewla || safe_existing_legacy_zen || true
+
+if [ -z "$VERSION" ] && [ -z "$INSTALL_DIR" ] && [ -n "${EXISTING_MEWLA:-}" ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
-    say "Would use the signed built-in updater: $EXISTING_ZEN update"
+    say "Would use the signed built-in updater: $EXISTING_MEWLA update"
     exit 0
   fi
-  say "Using the existing user-owned Zen installation at $EXISTING_ZEN."
+  say "Using the existing user-owned Mewla installation at $EXISTING_MEWLA."
   say "Delegating to its signed release updater..."
-  "$EXISTING_ZEN" update
+  "$EXISTING_MEWLA" update
   exit 0
 fi
 
@@ -507,7 +552,7 @@ fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   requested_version=${VERSION:-latest-public-release}
-  say "Would install $requested_version ($ARCHIVE) from $GITHUB_WEB/releases into $SELECTED_DIR/zen"
+  say "Would install $requested_version ($ARCHIVE) from $GITHUB_WEB/releases into $SELECTED_DIR/mewla"
   say "No files were changed."
   exit 0
 fi
@@ -523,7 +568,7 @@ if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1
   die "SHA-256 verification requires sha256sum (Linux) or shasum (macOS)"
 fi
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/zen-install.XXXXXX") || die "could not create a private temporary directory"
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/mewla-install.XXXXXX") || die "could not create a private temporary directory"
 [ -d "$WORK_DIR" ] || die "temporary directory was not created"
 
 if [ -z "$VERSION" ]; then
@@ -534,16 +579,16 @@ valid_version "$VERSION" || die "invalid release version returned by GitHub: $VE
 release_base="$GITHUB_WEB/releases/download/$VERSION"
 archive_path=$WORK_DIR/$ARCHIVE
 sums_path=$WORK_DIR/SHA256SUMS
-say "Downloading Zen $VERSION for $PLATFORM from $REPOSITORY..."
+say "Downloading Mewla $VERSION for $PLATFORM from $REPOSITORY..."
 curl_https "$release_base/$ARCHIVE" "$archive_path"
 curl_https "$release_base/SHA256SUMS" "$sums_path" "text/plain"
 checksum_archive "$sums_path" "$archive_path" "$ARCHIVE"
 validate_and_extract "$archive_path"
 
 prepare_install_dir "$SELECTED_DIR"
-target=$INSTALL_DIR/zen
-INSTALL_TEMP=$(mktemp "$INSTALL_DIR/.zen-install.XXXXXX") || die "could not create an installation file beside $target"
-cp "$EXTRACTED_ZEN" "$INSTALL_TEMP" || die "could not stage the Zen executable"
+target=$INSTALL_DIR/mewla
+INSTALL_TEMP=$(mktemp "$INSTALL_DIR/.mewla-install.XXXXXX") || die "could not create an installation file beside $target"
+cp "$EXTRACTED_MEWLA" "$INSTALL_TEMP" || die "could not stage the Mewla executable"
 chmod 0755 "$INSTALL_TEMP" || die "could not set executable permissions"
 if ! "$INSTALL_TEMP" --help >"$WORK_DIR/help-check" 2>&1; then
   sed -n '1,4p' "$WORK_DIR/help-check" >&2
@@ -551,18 +596,22 @@ if ! "$INSTALL_TEMP" --help >"$WORK_DIR/help-check" 2>&1; then
 fi
 mv -f "$INSTALL_TEMP" "$target" || die "could not atomically install $target"
 INSTALL_TEMP=
+link_zen_alias
 
 IMMEDIATE_PATH_COMMAND=
 PROFILE_UPDATED=
 append_profile_path
 
-say "Installed Zen $VERSION at $target"
+say "Installed Mewla $VERSION at $target"
+if [ -n "${ZEN_ALIAS:-}" ]; then
+  say "The legacy zen command remains available as an alias: $ZEN_ALIAS -> mewla"
+fi
 if [ -n "$PROFILE_UPDATED" ]; then
   say "Added $HOME/.local/bin to $PROFILE_UPDATED (marker: $PATH_MARKER)."
 fi
 say "Checking host dependencies with: $target doctor"
 if ! "$target" doctor; then
-  say "Zen is installed correctly, but zen doctor found missing or incomplete host dependencies."
+  say "Mewla is installed correctly, but mewla doctor found missing or incomplete host dependencies."
   say "Follow its guidance; this installer does not install tmux, package managers, AI CLIs, or credentials."
 fi
 if [ -n "$IMMEDIATE_PATH_COMMAND" ]; then

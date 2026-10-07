@@ -19,7 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/google/uuid"
 )
 
@@ -62,7 +63,7 @@ var claudeComposerRe = regexp.MustCompile(`(?m)^[\t \x{00A0}]*❯(?:[\t \x{00A0}
 // The footer wraps at narrow worker panes, so the two footer tokens may land
 // on adjacent lines. Keep the span bounded to the current footer and require
 // a mode token plus its keyboard affordance; arbitrary pane text cannot pass.
-// Auto mode is Zen's default Claude launch mode, so its footer must count too.
+// Auto mode is Mewla's default Claude launch mode, so its footer must count too.
 var claudeModeFooterRe = regexp.MustCompile(`(?is)(bypass permissions|manual mode|auto mode)[\s\S]{0,160}(shift\+tab|shortcuts|\?)`)
 var claudeBlockedOverlayRe = regexp.MustCompile(`(?is)(select a model|choose a model|loading|starting claude|trust (?:this|the contents)|press enter to continue|sign[ -]?in|api key|permission required|connection refused|reconnect(?:ing|ed)?|retrying|esc to interrupt|(?:^|\n)\s*(?:working|thinking)\.{0,3})`)
 
@@ -116,7 +117,7 @@ type targetProcessIdentity struct {
 }
 
 // OwnedGeneration is the exact durable-marker, pane, and provider-process
-// generation for a Zen-owned target. Read-only control uses the target proof;
+// generation for a Mewla-owned target. Read-only control uses the target proof;
 // mutation paths additionally compare it with the canonical Turn generation.
 type OwnedGeneration struct {
 	SessionID       string
@@ -426,7 +427,7 @@ func observePanes(
 }
 
 // SetTmuxServer installs the one caller-visible tmux server that hosts every
-// Zen-owned Brain and delegated Session, plus the private TMUX_TMPDIR used by
+// Mewla-owned Brain and delegated Session, plus the private TMUX_TMPDIR used by
 // provider-internal plain tmux commands. Call it once before Run or CreateSession.
 func (w *Watcher) SetTmuxServer(socketPath, scratchDir string) {
 	if w == nil {
@@ -439,7 +440,7 @@ func (w *Watcher) SetTmuxServer(socketPath, scratchDir string) {
 }
 
 // SocketPathFor returns the selected host server only for a currently known
-// Zen-owned target. Unknown targets resolve to "" so user-visible surfaces do
+// Mewla-owned target. Unknown targets resolve to "" so user-visible surfaces do
 // not acquire access to a custom caller server without watcher ownership.
 func (w *Watcher) SocketPathFor(target string) string {
 	if w == nil {
@@ -465,7 +466,7 @@ func (w *Watcher) ownsTarget(target string) bool {
 	return owned
 }
 
-// targetIsDurablyOwned requires both an existing target and Zen's pane-local
+// targetIsDurablyOwned requires both an existing target and Mewla's pane-local
 // ownership marker. A global tmux option with the same name is deliberately
 // insufficient: ambient panes must never inherit ownership from server
 // configuration.
@@ -589,7 +590,7 @@ func (w *Watcher) targetForSessionProbe(sessionID string) (targetProcessIdentity
 	return identity, true, nil
 }
 
-// ResolveOwnedGeneration proves one current Zen-owned target generation and
+// ResolveOwnedGeneration proves one current Mewla-owned target generation and
 // checks it against the canonical Turn or pending submission. This is the
 // mutation/foreground boundary: a mismatch can invalidate the current Turn
 // because sending input to a different lifecycle would be unsafe.
@@ -644,7 +645,7 @@ func (w *Watcher) ResolveOwnedGeneration(sessionID string) (OwnedGeneration, err
 }
 
 // ResolveDelegatedControl proves that a read/control target is still a
-// currently reachable Zen-created pane. It is intentionally read-only: status,
+// currently reachable Mewla-created pane. It is intentionally read-only: status,
 // list, and capture must not reconcile provider Activity or mutate the canonical
 // Turn/Work projection. Provider Activity and Turn admission are write-path
 // concerns owned by sessionInputOwner.submitDelegated, which has the exact
@@ -653,7 +654,7 @@ func (w *Watcher) ResolveDelegatedControl(sessionID string) (OwnedGeneration, er
 	return w.resolveOwnedTarget(sessionID)
 }
 
-// ResolveBrainHostGeneration proves the current Zen-owned Host pane/process
+// ResolveBrainHostGeneration proves the current Mewla-owned Host pane/process
 // generation without treating a historical Turn capability as Session-wide
 // authority. Provider activity and Host-lane serialization are proved at the
 // subsequent Host admission boundary.
@@ -1170,11 +1171,11 @@ var ErrDelegatedResourceRelease = errors.New("delegated resource release failed"
 var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe is temporarily unavailable")
 
 // ErrUnownedTmuxTarget means a target exists on the shared host server but
-// lacks Zen's durable ownership marker. Mutating it would cross the lifecycle
+// lacks Mewla's durable ownership marker. Mutating it would cross the lifecycle
 // boundary into an ambient user session.
-var ErrUnownedTmuxTarget = errors.New("tmux target is not owned by Zen")
+var ErrUnownedTmuxTarget = errors.New("tmux target is not owned by Mewla")
 
-// ErrOwnedGenerationMismatch means the current Zen-owned target is reachable,
+// ErrOwnedGenerationMismatch means the current Mewla-owned target is reachable,
 // but its pane/process generation no longer matches the canonical mutation
 // target. Unlike a transient probe or ledger read failure, this is proof that
 // sending the pending input would address a different lifecycle.
@@ -1189,7 +1190,7 @@ func (w *Watcher) HasSession(target string) bool {
 }
 
 // ProbeSession reports whether the selected host server still has an explicitly
-// Zen-owned target. An ambient target with the same name is absent from Zen's
+// Mewla-owned target. An ambient target with the same name is absent from Mewla's
 // lifecycle, not present. Transport/probe failures return Unknown with an error.
 func (w *Watcher) ProbeSession(target string) (SessionPresence, error) {
 	target = strings.TrimSpace(target)
@@ -1208,7 +1209,7 @@ func (w *Watcher) ProbeSession(target string) (SessionPresence, error) {
 
 // ResolveDelegatedAbsence proves that a previously-owned delegated target is
 // definitively gone on the selected server: the target is absent, or present
-// but no longer Zen-owned (a foreign replacement). It is the restart/reconcile
+// but no longer Mewla-owned (a foreign replacement). It is the restart/reconcile
 // decision boundary, so it is based on one authoritative exact inventory that
 // itself distinguishes transport-unavailable from proven missing. An
 // unreachable or unreadable server returns ErrOwnershipProbeUnavailable;
@@ -1574,7 +1575,7 @@ func (w *Watcher) collectMissingPollEvidence(missing []missingPollWorker, probe 
 		}
 		// A newly-created target can be absent from one successful inventory
 		// while tmux is still publishing the pane. Keep the in-memory owner
-		// when an exact target probe still proves Zen's durable marker; the next
+		// when an exact target probe still proves Mewla's durable marker; the next
 		// poll will observe the pane normally. Removing it here makes the
 		// readiness handoff report a false foreign-target ownership failure.
 		owned, ownershipErr := w.targetIsDurablyOwned(item.id)
@@ -2394,7 +2395,7 @@ type tmuxPane struct {
 	resourceUnit     string
 }
 
-// listTmuxPanes inventories only explicitly Zen-owned panes on the one
+// listTmuxPanes inventories only explicitly Mewla-owned panes on the one
 // caller-visible server selected at startup. Ambient user panes are read only
 // as part of tmux's formatted listing and are discarded by the durable
 // @zen_worker_created marker before they can enter discovery or reconciliation.
@@ -2901,7 +2902,7 @@ func (w *Watcher) InputReceiptResult(sessionID, receipt string) (InputResult, bo
 
 // SendInputWhenReady waits for a newly started agent UI to be ready, then sends
 // text. Unknown executors are treated as ready immediately. Known Codex, Cursor,
-// Claude, Grok, Pi, and OpenCode UIs must reach an input prompt so Zen does not
+// Claude, Grok, Pi, and OpenCode UIs must reach an input prompt so Mewla does not
 // paste a task into a startup screen before the composer can accept Enter-to-send.
 func (w *Watcher) SendInputWhenReady(sessionID, command, text string) error {
 	return w.sendInputWhenReadyAttempt(sessionID, command, text, inputReadyTimeout(command))
@@ -3220,7 +3221,7 @@ func (w *Watcher) SubmitBrainHostInput(
 }
 
 // transcriptBindingForCommand records the provider-native transcript identity
-// known at admission. Only a Zen-owned Pi launch carries an admission-time
+// known at admission. Only a Mewla-owned Pi launch carries an admission-time
 // binding (the owned --session/--session-dir path); other providers discover
 // their transcript identity from live evidence and bind via provider facts.
 func transcriptBindingForCommand(command string) TranscriptBinding {
@@ -3827,7 +3828,7 @@ func looksLikeOpenCodePane(content string) bool {
 }
 
 // commandExecutableBase returns filepath.Base of the launch executable.
-// Direct commands use field 0. Zen Host PATH wrapping uses the shape:
+// Direct commands use field 0. Mewla Host PATH wrapping uses the shape:
 //
 //	env [NAME=value...] [--] executable [args...]
 //
@@ -3860,7 +3861,7 @@ func commandExecutableBase(command string) string {
 	return filepath.Base(fields[index])
 }
 
-// splitZenLaunchFields splits a Zen launch command on whitespace while keeping
+// splitZenLaunchFields splits a Mewla launch command on whitespace while keeping
 // single-quoted spans intact so shellQuote'd PATH values with spaces stay one
 // assignment token. It is not a general shell parser.
 func splitZenLaunchFields(command string) []string {
@@ -4239,8 +4240,8 @@ type CreateSessionOptions struct {
 
 // CreateSession allocates and launches an owned pane and returns its %pane_id.
 // If preferredTarget is set, the new window is created in the same tmux
-// session as that explicitly Zen-owned target. Otherwise the first session
-// containing a Zen-owned pane is used, or a new detached session is created.
+// session as that explicitly Mewla-owned target. Otherwise the first session
+// containing a Mewla-owned pane is used, or a new detached session is created.
 // Ambient user sessions are never joined or adopted.
 func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOptions) (string, error) {
 	createdAt := time.Now().UTC()
@@ -4324,7 +4325,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 				opts.Env["TMPDIR"] = spec.TempDir
 				opts.Env["TMP"] = spec.TempDir
 				opts.Env["TEMP"] = spec.TempDir
-				opts.Env["ZEN_BUILD_TMPDIR"] = spec.TempDir
+				opts.Env["MEWLA_BUILD_TMPDIR"] = spec.TempDir
 			}
 			defer func() {
 				if !resourceCommitted {
@@ -4612,7 +4613,8 @@ func buildWindowCommand(opts CreateSessionOptions) (string, error) {
 func workerLaunchEnvironment(opts CreateSessionOptions) []string {
 	baseEnv := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "ZEN_WORKER_") {
+		key, _, _ := strings.Cut(entry, "=")
+		if !envcompat.HasPrefix(key, "WORKER_") {
 			baseEnv = append(baseEnv, entry)
 		}
 	}
@@ -4630,7 +4632,7 @@ func workerLaunchEnvironment(opts CreateSessionOptions) []string {
 			baseEnv = append(baseEnv, key+"="+opts.Env[key])
 		}
 	}
-	return tmuxPaneEnvironment(baseEnv)
+	return tmuxPaneEnvironment(envcompat.Mirror(baseEnv))
 }
 
 func buildWindowCommandForShell(shellPath, command string) string {
@@ -4654,19 +4656,19 @@ func buildWindowCommandForShellWithOptions(shellPath, command string, progressEn
 }
 
 func workerProgressEnvScript() string {
-	// Derive ZEN_WORKER_ID while tmux still exposes the shared host server, then
+	// Derive MEWLA_WORKER_ID while tmux still exposes the shared host server, then
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
-	// target the host server.
-	return `ZEN_WORKER_ID="$TMUX_PANE"; export ZEN_WORKER_ID; if [ -z "${ZEN_WORKER_PROGRESS_CMD:-}" ]; then ZEN_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; export ZEN_WORKER_PROGRESS_CMD; fi; unset TMUX`
+	// target the host server. Legacy ZEN_* aliases mirror the canonical names.
+	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; fi; ZEN_WORKER_ID="$MEWLA_WORKER_ID"; ZEN_WORKER_PROGRESS_CMD="$MEWLA_WORKER_PROGRESS_CMD"; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD ZEN_WORKER_ID ZEN_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
 // ZenExecutablePath returns the absolute path of the currently running zen
-// daemon executable so delegated Zen Workers invoke the exact same binary (and
+// daemon executable so delegated Mewla Workers invoke the exact same binary (and
 // therefore the same control socket / state dir) without relying on shell
 // word splitting or PATH lookups. It trusts os.Executable() regardless of the
 // binary's base name, so dev daemons launched as "zen-dev" (which rebuilds
-// cmd/zen into tmp/zen-dev) resolve to that dev binary instead of a stale
+// cmd/mewla into tmp/zen-dev) resolve to that dev binary instead of a stale
 // "zen" found elsewhere on PATH. It only falls back to "zen" when the current
 // executable cannot be resolved or is empty (for example, in exotic test
 // runners); the protocol always invokes the value as a quoted single token
@@ -4674,11 +4676,11 @@ func workerProgressEnvScript() string {
 func ZenExecutablePath() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "zen"
+		return "mewla"
 	}
 	exe = strings.TrimSpace(exe)
 	if exe == "" {
-		return "zen"
+		return "mewla"
 	}
 	return exe
 }
@@ -4708,6 +4710,7 @@ func tmuxPaneEnvironment(base []string) []string {
 		"TERM_PROGRAM_VERSION": true,
 		"TMUX":                 true,
 		"TMUX_PANE":            true,
+		"MEWLA_WORKER_ID":      true,
 		"ZEN_WORKER_ID":        true,
 	}
 
@@ -4781,7 +4784,7 @@ func loginShellFromPasswd() string {
 
 // applyProviderTmuxIsolation points provider-internal plain tmux at per-agent
 // resource scratch (or daemon scratch for the hidden Brain host). The launch
-// shell derives its Zen identity against the shared host server and then
+// shell derives its Mewla identity against the shared host server and then
 // unsets TMUX, so later plain tmux commands cannot reach that server.
 func applyProviderTmuxIsolation(opts *CreateSessionOptions, w *Watcher) {
 	if opts == nil || w == nil || !opts.ProgressEnv {
@@ -5273,7 +5276,7 @@ func workerProviderFamily(command string) string {
 	}
 }
 
-// mergeAgentCommandOwnership preserves Zen-owned Pi launch metadata across
+// mergeAgentCommandOwnership preserves Mewla-owned Pi launch metadata across
 // polls. detectAgentProcess reports the provider identity observed in the
 // process table, but node-based Pi rewrites its own argv, so the injected
 // absolute --session path cannot be recovered from the process. The launch
@@ -5305,7 +5308,7 @@ func mergeWorkerCommandOwnership(previous, detected string) string {
 
 // piOwnedLaunchPath returns the absolute --session or --session-dir value
 // declared by a Pi launch command, or "" when the command carries no
-// Zen-owned Pi session path. The env-assignment launch shape Zen emits is
+// Mewla-owned Pi session path. The env-assignment launch shape Mewla emits is
 // understood; quoting is preserved by splitZenLaunchFields.
 func piOwnedLaunchPath(command string) string {
 	flag, path := piOwnedLaunchFlag(command)
@@ -5317,7 +5320,7 @@ func piOwnedLaunchPath(command string) string {
 
 // piOwnedLaunchFlag returns the owned Pi session flag ("--session" or
 // "--session-dir") and its absolute value, or ("", "") when the command
-// carries no Zen-owned Pi session path.
+// carries no Mewla-owned Pi session path.
 func piOwnedLaunchFlag(command string) (string, string) {
 	fields := splitZenLaunchFields(command)
 	if len(fields) == 0 {
@@ -5366,9 +5369,9 @@ func piOwnedLaunchFlag(command string) (string, string) {
 	return "", ""
 }
 
-// unquoteLaunchValue removes one layer of Zen launcher quoting from a launch
+// unquoteLaunchValue removes one layer of Mewla launcher quoting from a launch
 // token so the watcher and the work reader agree on the owned session path
-// value. Zen wraps values containing shell metacharacters in single quotes
+// value. Mewla wraps values containing shell metacharacters in single quotes
 // with backslash-escaped apostrophes (work.shellQuoteForLaunch); a token whose
 // first and last characters are both the wrapping quote is returned without
 // them. Values with an embedded literal apostrophe cannot form one wrapped

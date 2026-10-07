@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func TestZeroViewWorkerSessionNamesStayWatcherOwnedWithoutProviderLookup(t *testing.T) {
@@ -163,10 +163,10 @@ func newZeroViewCodexTitleFixture(t *testing.T) *zeroViewCodexTitleFixture {
 		t.Fatal(err)
 	}
 	lookupCounter := filepath.Join(t.TempDir(), "sqlite-lookups")
-	t.Setenv("ZEN_ZERO_VIEW_SQLITE_RESPONSE", responsePath)
-	t.Setenv("ZEN_ZERO_VIEW_SQLITE_COUNTER", lookupCounter)
+	t.Setenv("MEWLA_ZERO_VIEW_SQLITE_RESPONSE", responsePath)
+	t.Setenv("MEWLA_ZERO_VIEW_SQLITE_COUNTER", lookupCounter)
 	sqlitePath := filepath.Join(binDir, "sqlite3")
-	sqliteScript := "#!/bin/sh\nprintf x >> \"$ZEN_ZERO_VIEW_SQLITE_COUNTER\"\nexec /bin/cat \"$ZEN_ZERO_VIEW_SQLITE_RESPONSE\"\n"
+	sqliteScript := "#!/bin/sh\nprintf x >> \"$MEWLA_ZERO_VIEW_SQLITE_COUNTER\"\nexec /bin/cat \"$MEWLA_ZERO_VIEW_SQLITE_RESPONSE\"\n"
 	if err := os.WriteFile(sqlitePath, []byte(sqliteScript), 0o700); err != nil {
 		t.Fatal(err)
 	}
