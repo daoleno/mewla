@@ -74,7 +74,7 @@ func writePiSession(t *testing.T, home, encodedDir, fileName string, lines ...st
 
 func writePiOwnedSession(t *testing.T, home, fileName string, lines ...string) string {
 	t.Helper()
-	dir := filepath.Join(home, ".zen", "provider-sessions", "pi")
+	dir := filepath.Join(home, ".mewla", "provider-sessions", "pi")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir Mewla-owned Pi session dir: %v", err)
 	}

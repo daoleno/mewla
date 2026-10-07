@@ -20,7 +20,7 @@ import (
 func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	stateDir := filepath.Join(home, ".zen")
+	stateDir := filepath.Join(home, ".mewla")
 
 	report, err := Run(Options{
 		Home:     home,
@@ -94,7 +94,7 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 func TestRunReadyWithTmuxAndAuthenticatedExecutor(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	stateDir := filepath.Join(home, ".zen")
+	stateDir := filepath.Join(home, ".mewla")
 	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeExecutorsTOML(t, home, `delegated_executor = "codex"
@@ -107,7 +107,7 @@ command = "codex"
 	report, err := Run(Options{
 		Home:          home,
 		StateDir:      stateDir,
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:0",
 		PathEnv:       binDir,
 		Now:           func() time.Time { return time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC) },
@@ -160,8 +160,8 @@ command = "grok"
 
 	report, err := Run(Options{
 		Home:          home,
-		StateDir:      filepath.Join(home, ".zen"),
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:      filepath.Join(home, ".mewla"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:0",
 		PathEnv:       binDir,
 		Listen:        func(network, address string) (io.Closer, error) { return nopCloser{}, nil },
@@ -340,8 +340,8 @@ command = "codex"
 
 	report, err := Run(Options{
 		Home:          home,
-		StateDir:      filepath.Join(home, ".zen"),
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:      filepath.Join(home, ".mewla"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:0",
 		PathEnv:       binDir,
 		Listen:        func(network, address string) (io.Closer, error) { return nopCloser{}, nil },
@@ -377,8 +377,8 @@ command = "codex"
 
 	report, err := Run(Options{
 		Home:          home,
-		StateDir:      filepath.Join(home, ".zen"),
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:      filepath.Join(home, ".mewla"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:19876",
 		PathEnv:       binDir,
 		Listen: func(network, address string) (io.Closer, error) {
@@ -419,8 +419,8 @@ command = "codex"
 
 	report, err := Run(Options{
 		Home:          home,
-		StateDir:      filepath.Join(home, ".zen"),
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:      filepath.Join(home, ".mewla"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          ln.Addr().String(),
 		PathEnv:       binDir,
 		HTTPGet:       func(ctx context.Context, url string) (int, []byte, error) { return 0, nil, errors.New("refused") },
@@ -532,8 +532,8 @@ func mustRunDoctor(t *testing.T, home, binDir string) Report {
 	t.Helper()
 	report, err := Run(Options{
 		Home:          home,
-		StateDir:      filepath.Join(home, ".zen"),
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:      filepath.Join(home, ".mewla"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:0",
 		PathEnv:       binDir,
 		Listen:        func(network, address string) (io.Closer, error) { return nopCloser{}, nil },
@@ -547,7 +547,7 @@ func mustRunDoctor(t *testing.T, home, binDir string) Report {
 
 func writeExecutorsTOML(t *testing.T, home, body string) {
 	t.Helper()
-	dir := filepath.Join(home, ".zen")
+	dir := filepath.Join(home, ".mewla")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -646,7 +646,7 @@ func TestParseOpenCodeModelsAndDBPathProbes(t *testing.T) {
 func TestOpenCodeDoctorProbesAreSecretSafeAndNonMutating(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	stateDir := filepath.Join(home, ".zen")
+	stateDir := filepath.Join(home, ".mewla")
 	writeFakeTmux(t, binDir)
 	dbPath := filepath.Join(home, ".local", "share", "opencode", "opencode.db")
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
@@ -666,7 +666,7 @@ command = "opencode"
 	report, err := Run(Options{
 		Home:          home,
 		StateDir:      stateDir,
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:0",
 		PathEnv:       binDir,
 		Now:           func() time.Time { return time.Date(2026, 8, 6, 10, 0, 0, 0, time.UTC) },
@@ -717,7 +717,7 @@ command = "opencode"
 func TestOpenCodeDoctorProbeFailuresStayHonest(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	stateDir := filepath.Join(home, ".zen")
+	stateDir := filepath.Join(home, ".mewla")
 	writeFakeTmux(t, binDir)
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
 		authList:   "",
@@ -732,7 +732,7 @@ command = "opencode"
 	report, err := Run(Options{
 		Home:          home,
 		StateDir:      stateDir,
-		ExecutorsPath: filepath.Join(home, ".zen", "executors.toml"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:          "127.0.0.1:0",
 		PathEnv:       binDir,
 		Now:           func() time.Time { return time.Date(2026, 8, 6, 10, 0, 0, 0, time.UTC) },

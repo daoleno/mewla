@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-
-	"github.com/daoleno/mewla/daemon/envcompat"
 )
 
 const (
@@ -45,7 +43,6 @@ type devRunner struct {
 }
 
 func main() {
-	envcompat.Normalize()
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "mewla-dev: %v\n", err)
 		os.Exit(1)

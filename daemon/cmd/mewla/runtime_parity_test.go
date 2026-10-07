@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// The user-facing runtime contract: `zen` executes the daemon; `zen-dev` builds
+// The user-facing runtime contract: `mewla` executes the daemon; `mewla-dev` builds
 // and restarts the SAME runtime with the SAME arguments, identity and state
 // ownership. These tests run the real reviewed binaries from an owned source
 // snapshot with an isolated state directory and no worker environment, so they
@@ -27,7 +27,7 @@ import (
 // repository build output or Brain resources.
 //
 // Isolation: the snapshot copies the module into the test's own temporary tree;
-// zen-dev's cwd (and therefore its watched sources and tmp/zen-dev output) lives
+// mewla-dev's cwd (and therefore its watched sources and tmp/mewla-dev output) lives
 // only inside that tree. The test records the shared repository build output's
 // hash and mtime before and after and fails if anything outside the owned root
 // changed.
@@ -338,7 +338,7 @@ func parityRequireSameBuildOptions(t *testing.T, direct, dev string) {
 	devOptions := parityBuildOptions(t, dev)
 	for _, key := range []string{"-tags", "CGO_ENABLED", "CGO_CFLAGS"} {
 		if directOptions[key] != devOptions[key] {
-			t.Fatalf("build options differ between zen (%q) and zen-dev child (%q) for %s", directOptions[key], devOptions[key], key)
+			t.Fatalf("build options differ between mewla (%q) and mewla-dev child (%q) for %s", directOptions[key], devOptions[key], key)
 		}
 	}
 }
@@ -352,9 +352,9 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	realModule := parityModuleRoot(t)
 	snapshot := paritySnapshot(t, realModule)
 	work := t.TempDir()
-	zen := filepath.Join(work, "zen")
-	dev := filepath.Join(work, "zen-dev")
-	parityBuild(t, snapshot, "./cmd/mewla", zen, nil, []string{"CGO_ENABLED=0"})
+	mewla := filepath.Join(work, "mewla")
+	dev := filepath.Join(work, "mewla-dev")
+	parityBuild(t, snapshot, "./cmd/mewla", mewla, nil, []string{"CGO_ENABLED=0"})
 	parityBuild(t, snapshot, "./cmd/mewla-dev", dev, nil, nil)
 
 	stateDir := filepath.Join(work, "state")
@@ -377,8 +377,8 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		name string
 		bin  string
 	}{
-		{"zen", zen},
-		{"zen-dev", dev},
+		{"mewla", mewla},
+		{"mewla-dev", dev},
 	}
 	identities := map[string]string{}
 	for _, variant := range variants {
@@ -440,8 +440,8 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		parityCleanupTmux(restarted.tmuxSock)
 	}
 
-	if identities["zen"] == "" || identities["zen"] != identities["zen-dev"] {
-		t.Fatalf("runtime identity differs between zen (%s) and zen-dev (%s)", identities["zen"], identities["zen-dev"])
+	if identities["mewla"] == "" || identities["mewla"] != identities["mewla-dev"] {
+		t.Fatalf("runtime identity differs between mewla (%s) and mewla-dev (%s)", identities["mewla"], identities["mewla-dev"])
 	}
 	// The DEV runner built its own child in the snapshot; its build options must
 	// match the direct binary so parity covers the same build scope.
@@ -449,7 +449,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	if _, err := os.Stat(devChild); err != nil {
 		t.Fatalf("DEV runner child was not built in the owned snapshot: %v", err)
 	}
-	parityRequireSameBuildOptions(t, zen, devChild)
+	parityRequireSameBuildOptions(t, mewla, devChild)
 }
 
 // TestRuntimeParityEarlyExitCleanup covers the early-exit and health-timeout
@@ -459,8 +459,8 @@ func TestRuntimeParityEarlyExitCleanup(t *testing.T) {
 	realModule := parityModuleRoot(t)
 	snapshot := paritySnapshot(t, realModule)
 	work := t.TempDir()
-	zen := filepath.Join(work, "zen")
-	parityBuild(t, snapshot, "./cmd/mewla", zen, nil, []string{"CGO_ENABLED=0"})
+	mewla := filepath.Join(work, "mewla")
+	parityBuild(t, snapshot, "./cmd/mewla", mewla, nil, []string{"CGO_ENABLED=0"})
 	home := filepath.Join(work, "home")
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
@@ -472,7 +472,7 @@ func TestRuntimeParityEarlyExitCleanup(t *testing.T) {
 
 	// Deterministic early exit with no socket and no privilege dependency: an
 	// unknown flag is rejected by flag parsing before any listener is opened.
-	early := parityStartArgs(t, zen, snapshot, home, tmuxDir, parityFreePort(t),
+	early := parityStartArgs(t, mewla, snapshot, home, tmuxDir, parityFreePort(t),
 		"-state-dir", filepath.Join(work, "state-early"), "-addr", "127.0.0.1:0", "-definitely-not-a-flag")
 	if _, err := parityHealth(early, 5*time.Second); err == nil || !strings.Contains(err.Error(), "exited early") {
 		t.Fatalf("expected deterministic early exit, got %v (output %s)", err, early.output.String())

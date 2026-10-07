@@ -307,7 +307,7 @@ func TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript(t *testing.T) {
 	}
 	// The owned transcript lives in the Mewla-owned sessions directory under
 	// this HOME, exactly like a real pre-fix launch would have placed it.
-	ownedDir := filepath.Join(home, ".zen", "provider-sessions", "pi")
+	ownedDir := filepath.Join(home, ".mewla", "provider-sessions", "pi")
 	if err := os.MkdirAll(ownedDir, 0o700); err != nil {
 		t.Fatal(err)
 	}

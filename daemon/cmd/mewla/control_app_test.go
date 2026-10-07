@@ -657,7 +657,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 	if progressBin == "mewla worker progress" {
 		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD must not be the legacy space-separated command, got %q", progressBin)
 	}
-	// The value must be the current executable's path, not a stale "zen"
+	// The value must be the current executable's path, not a stale "mewla"
 	// resolved via PATH (this guards dev daemons launched as zen-dev).
 	if exe, err := os.Executable(); err == nil {
 		if exe = strings.TrimSpace(exe); exe != "" && progressBin != exe {

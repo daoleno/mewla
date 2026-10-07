@@ -176,7 +176,7 @@ func (w *Watcher) ServiceTunnelAction(id, generation, action string) (ServiceTun
 
 func privateService(service SessionService) bool {
 	value := strings.ToLower(service.Command + " " + service.Process)
-	for _, marker := range []string{"mewla-dev", "mewla serve", "mewla-candidate", "zen-dev", "mewla serve", "codex app-server", "dsh-session", "deepseek-harness", "cloudflared", "zen-candidate"} {
+	for _, marker := range []string{"mewla-dev", "mewla serve", "mewla-candidate", "codex app-server", "dsh-session", "deepseek-harness", "cloudflared"} {
 		if strings.Contains(value, marker) {
 			return true
 		}

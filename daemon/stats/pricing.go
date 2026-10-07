@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	pricingCacheRelPath = ".zen/pricing-cache.json"
+	pricingCacheRelPath = ".mewla/pricing-cache.json"
 	pricingSyncEvery    = 24 * time.Hour
 	pricingCacheVersion = 5
 	pricingMaxBytes     = 32 << 20
@@ -250,7 +250,7 @@ func syncPricing(ctx context.Context, home string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "zen/0.1.0 (+https://github.com/daoleno/mewla)")
+	req.Header.Set("User-Agent", "mewla (+https://github.com/daoleno/mewla)")
 
 	resp, err := pricingHTTPClient.Do(req)
 	if err != nil {

@@ -25,7 +25,7 @@ func newFixture(t *testing.T) *fixture {
 	if err := os.MkdirAll(project, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	state := filepath.Join(home, ".zen")
+	state := filepath.Join(home, ".mewla")
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		t.Fatal(err)
 	}

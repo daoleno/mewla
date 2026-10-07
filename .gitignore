@@ -62,8 +62,7 @@ app/bun.lockb
 /app/__screenshots__/
 test-results/
 
-# Local Mewla workspace state (.zen/ is the pre-rename name)
-.zen/
+# Local Mewla workspace state
 .mewla/
 /inbox/
 deploy/zen-link/secrets/

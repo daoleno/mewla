@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
-	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/google/uuid"
 )
 
@@ -4614,7 +4613,7 @@ func workerLaunchEnvironment(opts CreateSessionOptions) []string {
 	baseEnv := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if !envcompat.HasPrefix(key, "WORKER_") {
+		if !strings.HasPrefix(key, "MEWLA_WORKER_") {
 			baseEnv = append(baseEnv, entry)
 		}
 	}
@@ -4632,7 +4631,7 @@ func workerLaunchEnvironment(opts CreateSessionOptions) []string {
 			baseEnv = append(baseEnv, key+"="+opts.Env[key])
 		}
 	}
-	return tmuxPaneEnvironment(envcompat.Mirror(baseEnv))
+	return tmuxPaneEnvironment(baseEnv)
 }
 
 func buildWindowCommandForShell(shellPath, command string) string {
@@ -4659,17 +4658,17 @@ func workerProgressEnvScript() string {
 	// Derive MEWLA_WORKER_ID while tmux still exposes the shared host server, then
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
-	// target the host server. Legacy ZEN_* aliases mirror the canonical names.
-	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; fi; ZEN_WORKER_ID="$MEWLA_WORKER_ID"; ZEN_WORKER_PROGRESS_CMD="$MEWLA_WORKER_PROGRESS_CMD"; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD ZEN_WORKER_ID ZEN_WORKER_PROGRESS_CMD; unset TMUX`
+	// target the host server.
+	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
-// ZenExecutablePath returns the absolute path of the currently running zen
+// ZenExecutablePath returns the absolute path of the currently running mewla
 // daemon executable so delegated Mewla Workers invoke the exact same binary (and
 // therefore the same control socket / state dir) without relying on shell
 // word splitting or PATH lookups. It trusts os.Executable() regardless of the
-// binary's base name, so dev daemons launched as "zen-dev" (which rebuilds
-// cmd/mewla into tmp/zen-dev) resolve to that dev binary instead of a stale
-// "zen" found elsewhere on PATH. It only falls back to "zen" when the current
+// binary's base name, so dev daemons launched as "mewla-dev" (which rebuilds
+// cmd/mewla into tmp/mewla-dev) resolve to that dev binary instead of a stale
+// "mewla" found elsewhere on PATH. It only falls back to "mewla" when the current
 // executable cannot be resolved or is empty (for example, in exotic test
 // runners); the protocol always invokes the value as a quoted single token
 // followed by the "worker progress" subcommand, which is safe under zsh/bash.
@@ -4711,7 +4710,6 @@ func tmuxPaneEnvironment(base []string) []string {
 		"TMUX":                 true,
 		"TMUX_PANE":            true,
 		"MEWLA_WORKER_ID":      true,
-		"ZEN_WORKER_ID":        true,
 	}
 
 	values := make(map[string]string, len(base))

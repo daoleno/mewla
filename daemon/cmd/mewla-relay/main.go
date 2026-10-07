@@ -15,13 +15,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/daoleno/mewla/daemon/linkproto"
 	"github.com/daoleno/mewla/daemon/relay"
 )
 
 func main() {
-	envcompat.Normalize()
 	if err := run(os.Args[1:]); err != nil {
 		log.Fatalf("mewla-relay: %v", err)
 	}
