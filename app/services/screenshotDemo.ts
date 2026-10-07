@@ -19,6 +19,8 @@ export const SCREENSHOT_DEMO_STATES = [
   "providers",
   "plugins",
   "skills",
+  "resources",
+  "work",
   "composer",
   "onboarding",
   "empty",
