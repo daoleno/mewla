@@ -16,6 +16,8 @@ import { ZenPlanUpdate } from "./InterfaceTimelinePlan";
 import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
 import { withAlpha } from "./colorWithAlpha";
+import { TaskNotificationCard } from "./TaskNotificationCard";
+import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 import {
   ZenAssistantMessage,
   ZenUserMessage,
@@ -27,7 +29,8 @@ export type ZenTimelineItem =
   | (ZenMessageTimelineItem & { role: "assistant" })
   | ZenActivityTimelineItem
   | ZenPlanTimelineItem
-  | BrainWorkEventTimelineItem;
+  | BrainWorkEventTimelineItem
+  | TaskNotificationTimelineItem;
 
 interface ZenTimelineItemViewProps {
   item: ZenTimelineItem;
@@ -76,6 +79,17 @@ function ZenTimelineItemViewImpl({
       <BrainWorkEventCard
         item={item}
         chrome={chrome}
+        attentionColor={theme.yellow}
+        attentionBackground={withAlpha(theme.yellow, 0.14)}
+      />
+    );
+  }
+  if (item.type === "task-notification") {
+    return (
+      <TaskNotificationCard
+        item={item}
+        chrome={chrome}
+        theme={theme}
         attentionColor={theme.yellow}
         attentionBackground={withAlpha(theme.yellow, 0.14)}
       />

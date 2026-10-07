@@ -28,6 +28,12 @@ Brain picks the executor, model and reasoning level for each Worker from its
 appear in **Sessions** like any other Session, and you can open one, read it as
 Chat or Terminal, and type into it yourself.
 
+When a Claude Code background task reports back (a subagent, a background
+command or a monitor), Chat shows a task card rather than a message from you.
+The card shows the task, its status (done, failed or stopped), and its
+duration, tool uses and tokens when Claude reports them. Tap it to read the
+full result.
+
 Workers run unattended. Read
 [Permission bypass risks](executors.md#permission-bypass-risks) before you let
 Brain work on a machine with secrets.

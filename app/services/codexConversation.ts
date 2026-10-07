@@ -88,6 +88,11 @@ export interface CodexConversationEvent {
   work_details_json?: string;
   work_next_action?: string;
   work_wait_for?: string;
+  /** Task fields are set only for source "task_notification" status events. */
+  task_id?: string;
+  task_tokens?: number;
+  task_tool_uses?: number;
+  task_duration_ms?: number;
 }
 
 export interface CodexConversation {
@@ -298,6 +303,10 @@ function normalizeCodexConversationEvent(
       typeof event.work_wait_for === "string"
         ? event.work_wait_for
         : undefined,
+    task_id: typeof event.task_id === "string" ? event.task_id : undefined,
+    task_tokens: finiteCount(event.task_tokens),
+    task_tool_uses: finiteCount(event.task_tool_uses),
+    task_duration_ms: finiteCount(event.task_duration_ms),
   };
   if (
     (normalized.kind === "user_message" ||
@@ -307,6 +316,12 @@ function normalizeCodexConversationEvent(
     return null;
   }
   return normalized;
+}
+
+function finiteCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
 }
 
 function normalizeWorkReviewState(value: unknown): WorkReviewState | undefined {

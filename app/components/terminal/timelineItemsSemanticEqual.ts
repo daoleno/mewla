@@ -15,6 +15,7 @@ import type {
 } from "./InterfaceTimelineActivityTypes";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
 import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
+import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 
 /**
  * Returns true only when every field that can affect the rendered row,
@@ -67,7 +68,46 @@ export function timelineItemsSemanticEqual(
       left.onPress === right.onPress
     );
   }
+  if (
+    left.type === "task-notification" &&
+    right.type === "task-notification"
+  ) {
+    return taskNotificationItemsEqual(left, right);
+  }
   return false;
+}
+
+function taskNotificationItemsEqual(
+  left: TaskNotificationTimelineItem,
+  right: TaskNotificationTimelineItem,
+): boolean {
+  return (
+    left.kindLabel === right.kindLabel &&
+    left.title === right.title &&
+    left.detail === right.detail &&
+    left.status === right.status &&
+    left.body === right.body &&
+    stringArraysEqual(left.facts, right.facts) &&
+    taskNotificationDetailsEqual(left.details, right.details)
+  );
+}
+
+function taskNotificationDetailsEqual(
+  left: TaskNotificationTimelineItem["details"],
+  right: TaskNotificationTimelineItem["details"],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (
+      left[index]?.label !== right[index]?.label ||
+      left[index]?.value !== right[index]?.value
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function brainCurrentWorkEqual(

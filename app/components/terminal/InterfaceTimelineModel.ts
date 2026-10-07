@@ -34,6 +34,7 @@ import {
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
 import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
+import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 
 const ATTACHMENT_TAG_RE =
   /<zen_attachments>\s*([\s\S]*?)\s*<\/zen_attachments>/i;
@@ -164,6 +165,11 @@ export function buildZenTimelineFromSortedEvents(
 
     if (event.kind === "status") {
       flushExploration();
+      const taskCard = taskNotificationTimelineItem(event);
+      if (taskCard) {
+        items.push(taskCard);
+        continue;
+      }
       const workCard = brainWorkEventTimelineItemFromConversationEvent(event);
       if (workCard) {
         const existingIndex = workItemIndexById.get(workCard.event.work_id);
