@@ -82,7 +82,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 	devicePublicKey := devicePrivateKey.Public().(ed25519.PublicKey)
 	deviceID := "e2e-phone"
 	deviceName := "E2E Phone"
-	if os.Getenv("ZEN_LINK_MOBILE_RELAY_E2E") == "1" {
+	if os.Getenv("MEWLA_LINK_MOBILE_RELAY_E2E") == "1" {
 		deviceID = "00000000-0000-4000-8000-000000000009"
 		deviceName = "Relay E2E phone"
 	}
@@ -550,7 +550,7 @@ func runMobilePairingImport(
 	offers []link.AdmissionOffer,
 ) bool {
 	t.Helper()
-	if os.Getenv("ZEN_LINK_MOBILE_RELAY_E2E") != "1" {
+	if os.Getenv("MEWLA_LINK_MOBILE_RELAY_E2E") != "1" {
 		return false
 	}
 	if len(offers) != 1 {
@@ -624,13 +624,13 @@ func runMobilePairingImport(
 	command.Dir = appDirectory
 	command.Env = append(
 		os.Environ(),
-		"ZEN_LINK_RELAY_E2E=1",
-		"ZEN_LINK_E2E_PAIRING_LINK="+pairingLink,
+		"MEWLA_LINK_RELAY_E2E=1",
+		"MEWLA_LINK_E2E_PAIRING_LINK="+pairingLink,
 		fmt.Sprintf(
-			"ZEN_LINK_E2E_BRIDGE_PORT=%d",
+			"MEWLA_LINK_E2E_BRIDGE_PORT=%d",
 			portOf(t, bridgeListener.Addr()),
 		),
-		"ZEN_LINK_E2E_STABLE_URL="+offers[0].StableURL,
+		"MEWLA_LINK_E2E_STABLE_URL="+offers[0].StableURL,
 	)
 	output, err := command.CombinedOutput()
 	if err != nil {

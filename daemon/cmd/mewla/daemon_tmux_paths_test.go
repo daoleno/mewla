@@ -24,7 +24,7 @@ func TestDaemonTmuxRuntimeSelectsCallerVisibleServer(t *testing.T) {
 		if socket != inherited {
 			t.Fatalf("socket = %q, want exact inherited %q", socket, inherited)
 		}
-		wantScratch := filepath.Join(home, ".zen", "run", "tmux-scratch", daemonID[:24])
+		wantScratch := filepath.Join(home, ".mewla", "run", "tmux-scratch", daemonID[:24])
 		if scratch != wantScratch {
 			t.Fatalf("scratch = %q, want %q", scratch, wantScratch)
 		}
@@ -38,7 +38,7 @@ func TestDaemonTmuxRuntimeSelectsCallerVisibleServer(t *testing.T) {
 		if socket != "" {
 			t.Fatalf("socket = %q, want empty default-server route", socket)
 		}
-		if scratch != filepath.Join(home, ".zen", "run", "tmux-scratch", "short-id") {
+		if scratch != filepath.Join(home, ".mewla", "run", "tmux-scratch", "short-id") {
 			t.Fatalf("scratch = %q", scratch)
 		}
 	})
@@ -80,7 +80,7 @@ func TestCurrentWorkerIDQueryNeverAutostartsServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("ZEN_WORKER_ID", "")
+	t.Setenv("MEWLA_WORKER_ID", "")
 	t.Setenv("TMUX_PANE", "%7")
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,2519350,0")
 	if got := currentWorkerID(); got != "" {

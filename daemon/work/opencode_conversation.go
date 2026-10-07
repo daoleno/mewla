@@ -787,13 +787,13 @@ func rebuildOpenCodeConversation(entry *openCodeCacheEntry, sessionID string) (C
 // openCodeDBPathResolved memoizes the resolved OpenCode SQLite path. The
 // `opencode db path` CLI spawn is expensive (the opencode process startup can
 // take hundreds of milliseconds), so it must never run per poll. The
-// ZEN_OPENCODE_DB override is re-read every call (tests set it dynamically).
+// MEWLA_OPENCODE_DB override is re-read every call (tests set it dynamically).
 // openCodeDBPathResolved memoizes a successful OpenCode SQLite path
 // resolution. The `opencode db path` CLI spawn is expensive (the opencode
 // process startup can take hundreds of milliseconds), so it must never run
 // per poll. A failed resolution is NOT cached: the discovery is retried on
 // later calls so a transient failure (or a late-arriving opencode install)
-// self-corrects. The ZEN_OPENCODE_DB override is re-read every call (tests
+// self-corrects. The MEWLA_OPENCODE_DB override is re-read every call (tests
 // set it dynamically).
 var (
 	openCodeDBPathMu       sync.Mutex
@@ -801,7 +801,7 @@ var (
 )
 
 func openCodeDBPath() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("ZEN_OPENCODE_DB")); override != "" {
+	if override := strings.TrimSpace(os.Getenv("MEWLA_OPENCODE_DB")); override != "" {
 		return override, nil
 	}
 	openCodeDBPathMu.Lock()

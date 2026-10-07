@@ -20,7 +20,7 @@ func TestOpenCodeBindRejectsAmbiguousSameCWD(t *testing.T) {
 		{ID: "ses_a", Directory: "/repo", CreatedMS: started.Add(1 * time.Second).UnixMilli(), UpdatedMS: started.Add(2 * time.Second).UnixMilli()},
 		{ID: "ses_b", Directory: "/repo", CreatedMS: started.Add(1 * time.Second).UnixMilli(), UpdatedMS: started.Add(3 * time.Second).UnixMilli()},
 	}, nil, nil)
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	_, ok, err := reader.findOpenCodeSession(classifier.Worker{
 		Cwd:       "/repo",
@@ -50,7 +50,7 @@ func TestOpenCodeExactAdmissionAndLifecycle(t *testing.T) {
 		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"text","text":"ack"}`},
 		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"step-finish","reason":"stop"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	got, err := reader.Load(classifier.Worker{
 		Cwd:       "/repo",
@@ -229,7 +229,7 @@ func TestOpenCodeBindsRootNotChildSession(t *testing.T) {
 	}, []openCodePartSeed{
 		{ID: "p1", MessageID: "msg_user", SessionID: "ses_parent", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"parent-user"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 
 	// startedAt aligned with the child leaves the root window empty, but the
 	// parent row was created before the agent started: it provably belongs to
@@ -271,7 +271,7 @@ func TestOpenCodeBindFreshestRootWhenStartWindowMisses(t *testing.T) {
 		{ID: "ses_old", Directory: "/repo", CreatedMS: started.Add(-30 * time.Minute).UnixMilli(), UpdatedMS: started.Add(-29 * time.Minute).UnixMilli()},
 		{ID: "ses_new", Directory: "/repo", CreatedMS: started.Add(20 * time.Minute).UnixMilli(), UpdatedMS: started.Add(21 * time.Minute).UnixMilli()},
 	}, nil, nil)
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	candidate, ok, err := reader.findOpenCodeSession(classifier.Worker{
 		Cwd:       "/repo",
@@ -319,7 +319,7 @@ func TestOpenCodeNewSessionNeverBindsPreStartRows(t *testing.T) {
 	}, []openCodePartSeed{
 		{ID: "p_prev", MessageID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"previous session history"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{Cwd: "/repo", Command: "opencode", StartedAt: started}
 
@@ -371,7 +371,7 @@ func TestOpenCodePinReleasesWhenStartEvidenceArrivesLate(t *testing.T) {
 	}, []openCodePartSeed{
 		{ID: "p_prev", MessageID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"previous session history"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 
 	// No start evidence yet: legacy fallback binds the freshest root.
@@ -438,7 +438,7 @@ func TestOpenCodeLaunchTokenOwnsPreStartRow(t *testing.T) {
 	}, []openCodePartSeed{
 		{ID: "p_resumed", MessageID: "msg_resumed_user", SessionID: "ses_resumed", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"resumed history"}`},
 	})
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{
 		Cwd:       "/repo",
@@ -827,7 +827,7 @@ func TestOpenCodeSettleReportsPartialFlipsAsChanged(t *testing.T) {
 	}
 	dbPath := filepath.Join(t.TempDir(), "opencode.db")
 	createOpenCodeFixtureDB(t, dbPath, session, inFlightMessages, inFlightParts)
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{Cwd: "/repo", Command: "opencode", StartedAt: started}
 	first, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))

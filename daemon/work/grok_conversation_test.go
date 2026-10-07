@@ -311,7 +311,7 @@ func TestParseGrokConversation_StreamsNativeChunksAndFinalizesSameEvent(t *testi
 }
 
 func TestParseGrokConversation_LongAssistantStreamReplacementKeepsSuffix(t *testing.T) {
-	const suffix = "ZEN_GROK_STREAM_SUFFIX_7c2e"
+	const suffix = "MEWLA_GROK_STREAM_SUFFIX_7c2e"
 	dir := t.TempDir()
 	sessionID := "grok-long-stream"
 	writeGrokSummary(t, filepath.Join(dir, grokSummaryFile), map[string]any{
@@ -1717,8 +1717,8 @@ func TestProviderConversationReaderGrokRealSessionFixture(t *testing.T) {
 // Default `go test ./...` must not inspect local Worker session stores.
 func requireGrokRealSessionOptIn(t *testing.T) {
 	t.Helper()
-	if os.Getenv("ZEN_GROK_REAL_SESSION") != "1" {
-		t.Skip("set ZEN_GROK_REAL_SESSION=1 to run opt-in ~/.grok integration tests")
+	if os.Getenv("MEWLA_GROK_REAL_SESSION") != "1" {
+		t.Skip("set MEWLA_GROK_REAL_SESSION=1 to run opt-in ~/.grok integration tests")
 	}
 }
 

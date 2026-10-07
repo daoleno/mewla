@@ -11,7 +11,7 @@ import (
 
 // WithBrowserMCP adds only an invocation-scoped MCP entry. Global provider
 // configuration and other MCP servers are preserved. The managed launch shell
-// supplies ZEN_WORKER_ID after tmux allocates the actual session identity.
+// supplies MEWLA_WORKER_ID after tmux allocates the actual session identity.
 func WithBrowserMCP(command, executable, stateDir, resourceID string) (string, error) {
 	if _, err := uuid.Parse(resourceID); err != nil {
 		return "", fmt.Errorf("invalid Browser resource")

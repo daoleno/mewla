@@ -145,7 +145,7 @@ func TestOpenCodeTerminalDeltaConvergesReasoningPartial(t *testing.T) {
 	liveMessages, parts := openCodeReasoningTurnSeeds(started, `{"role":"assistant","finish":"unknown","time":{"created":1}}`)
 	dbPath := filepath.Join(t.TempDir(), "opencode.db")
 	createOpenCodeFixtureDB(t, dbPath, session, liveMessages, parts)
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{Cwd: "/repo", Command: "opencode", StartedAt: started}
 	first, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))

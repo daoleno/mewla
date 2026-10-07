@@ -25,9 +25,9 @@ import (
 // Copies it before timing. No scheduler, tmux poll, provider process, machine
 // gateway, notification or transcript capture runs in this component harness.
 func TestPopulatedStartupMeasurement(t *testing.T) {
-	source := os.Getenv("ZEN_STARTUP_FIXTURE")
+	source := os.Getenv("MEWLA_STARTUP_FIXTURE")
 	if source == "" {
-		t.Skip("set ZEN_STARTUP_FIXTURE to sanitized fixture")
+		t.Skip("set MEWLA_STARTUP_FIXTURE to sanitized fixture")
 	}
 	marker, err := os.ReadFile(filepath.Join(source, "startup-fixture.marker"))
 	if err != nil || strings.TrimSpace(string(marker)) != "sanitized-startup-fixture-v1" {

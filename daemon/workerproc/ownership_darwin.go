@@ -37,13 +37,8 @@ func readProcesses(_ map[int]Process) (map[int]Process, error) {
 		if err != nil {
 			continue
 		}
-		for _, entry := range parseProcArgsEnvironment(raw) {
-			if value, ok := strings.CutPrefix(entry, "ZEN_WORKER_RESOURCE_UNIT="); ok {
-				p.ResourceID = value
-			}
-			if value, ok := strings.CutPrefix(entry, "ZEN_WORKER_ID="); ok {
-				p.WorkerID = value
-			}
+		if resourceID, workerID := workerEnvIdentity(parseProcArgsEnvironment(raw)); resourceID != "" || workerID != "" {
+			p.ResourceID, p.WorkerID = resourceID, workerID
 		}
 		records[pid] = p
 	}

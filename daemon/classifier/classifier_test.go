@@ -289,7 +289,7 @@ func TestClassify(t *testing.T) {
 			name:      "lifecycle valid values mention failed without failure",
 			paneAlive: true,
 			lines: []string{
-				`"$ZEN_WORKER_PROGRESS_CMD" worker progress --status running --phase working --attention none --summary "Still checking" --lease 300`,
+				`"$MEWLA_WORKER_PROGRESS_CMD" worker progress --status running --phase working --attention none --summary "Still checking" --lease 300`,
 				`- Valid status values: running, done, failed, blocked.`,
 				`- Valid phase values: starting, reading, planning, working, verifying, reporting.`,
 				`- Valid attention values: none, done, blocked, failed, user_input, stale.`,

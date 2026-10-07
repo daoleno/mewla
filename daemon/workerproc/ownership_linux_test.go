@@ -40,7 +40,7 @@ func TestStopOwnershipReclaimsDetachedToolAndPreservesForeignProcess(t *testing.
 	}
 	marker := filepath.Join(dir, "pid")
 	tool := exec.Command("setsid", "sh", "-c", "echo $$ > \"$1\"; exec sleep 90", "sh", marker)
-	tool.Env = append(os.Environ(), "ZEN_WORKER_RESOURCE_UNIT="+token)
+	tool.Env = append(os.Environ(), "MEWLA_WORKER_RESOURCE_UNIT="+token)
 	if err := tool.Start(); err != nil {
 		t.Fatal(err)
 	}

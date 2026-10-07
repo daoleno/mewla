@@ -13,7 +13,7 @@ func TestKillSessionMissingIsIdempotentSuccess(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 echo "can't find window: %1" >&2
 exit 1
 `
@@ -21,7 +21,7 @@ exit 1
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	w := New(0)
 	if err := w.KillSession("%1"); err != nil {
 		t.Fatalf("missing target must be idempotent success: %v", err)
@@ -33,7 +33,7 @@ func TestKillSessionResourceReleaseFailureAfterSuccessfulKill(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 target=
 prev=
 for arg in "$@"; do
@@ -53,7 +53,7 @@ exit 0
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{
 		boundTarget: "%42",
@@ -79,7 +79,7 @@ func TestKillSessionMissingStillReleasesBoundUnit(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 echo "can't find window" >&2
 exit 1
 `
@@ -87,7 +87,7 @@ exit 1
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{boundTarget: "%42", boundUnit: unit}
 	w := New(0)
@@ -105,7 +105,7 @@ func TestKillSessionRetryAfterResourceFailureConverges(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 target=
 prev=
 for arg in "$@"; do
@@ -130,7 +130,7 @@ exit 0
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{
 		boundTarget: "%42",

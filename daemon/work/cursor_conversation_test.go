@@ -124,7 +124,7 @@ func TestExactProviderUserInputPreservesEmbeddedWrapperMarkers(t *testing.T) {
 }
 
 func TestParseCursorConversation_PreservesLongCompletedAssistantMarkdown(t *testing.T) {
-	const suffix = "ZEN_CURSOR_SUFFIX_VERTICAL_SLICE_9f3a"
+	const suffix = "MEWLA_CURSOR_SUFFIX_VERTICAL_SLICE_9f3a"
 	body := longCompletedAssistantMarkdown(suffix)
 	toolPad := strings.Repeat("o", maxCodexConversationBody+200)
 	path := filepath.Join(t.TempDir(), "cursor-long.jsonl")

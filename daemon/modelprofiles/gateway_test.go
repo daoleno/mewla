@@ -184,7 +184,7 @@ func TestGatewayInjectsStoredCredential(t *testing.T) {
 		BaseURL:       up.server.URL,
 		Protocol:      ProtocolOpenAIResponses,
 		AuthMode:      AuthModeBearerEnv,
-		CredentialEnv: "ZEN_PROVIDER_API_KEY",
+		CredentialEnv: "MEWLA_PROVIDER_API_KEY",
 		CredentialRef: CredentialRefFor("conn-keyed"),
 	})
 	req, err := http.NewRequest(http.MethodPost, "http://"+g.ActualAddr()+"/v1/responses", strings.NewReader(`{"model":"gpt-5"}`))
@@ -419,7 +419,7 @@ func TestGatewayUpstreamCompilesAccountConnectionAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !isAccountConnection(raw) || normalizeID(raw.AuthMode) != AuthModeNone || normalizeSpace(raw.CredentialEnv) != "ZEN_PROVIDER_API_KEY" {
+	if !isAccountConnection(raw) || normalizeID(raw.AuthMode) != AuthModeNone || normalizeSpace(raw.CredentialEnv) != "MEWLA_PROVIDER_API_KEY" {
 		t.Fatalf("fixture is not a durable account connection: auth=%q env=%q", raw.AuthMode, raw.CredentialEnv)
 	}
 	if _, err := owner.SetProviderConnection("codex", "conn-gw-a", proj.Revision); err != nil {
@@ -432,7 +432,7 @@ func TestGatewayUpstreamCompilesAccountConnectionAuth(t *testing.T) {
 	if normalizeID(up.AuthMode) != AuthModeBearerEnv {
 		t.Fatalf("gateway upstream auth_mode = %q, want bearer_env (per-client compile)", up.AuthMode)
 	}
-	if normalizeSpace(up.CredentialEnv) != "ZEN_PROVIDER_API_KEY" {
+	if normalizeSpace(up.CredentialEnv) != "MEWLA_PROVIDER_API_KEY" {
 		t.Fatalf("gateway upstream credential_env = %q", up.CredentialEnv)
 	}
 	if normalizeSpace(up.CredentialRef) == "" {

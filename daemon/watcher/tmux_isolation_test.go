@@ -34,12 +34,12 @@ func TestWatcherUsesOneSelectedHostServerForKnownTargets(t *testing.T) {
 func TestWorkerProgressEnvScriptDropsHostTmuxCapabilityAfterIdentity(t *testing.T) {
 	script := workerProgressEnvScript()
 	unset := strings.Index(script, "unset TMUX")
-	derive := strings.Index(script, "ZEN_WORKER_ID=")
+	derive := strings.Index(script, "MEWLA_WORKER_ID=")
 	if unset < 0 {
 		t.Fatalf("script does not unset TMUX: %s", script)
 	}
 	if derive < 0 || derive > unset {
-		t.Fatalf("script must derive ZEN_WORKER_ID before unsetting TMUX: %s", script)
+		t.Fatalf("script must derive MEWLA_WORKER_ID before unsetting TMUX: %s", script)
 	}
 }
 

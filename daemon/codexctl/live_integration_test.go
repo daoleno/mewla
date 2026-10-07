@@ -24,7 +24,7 @@ import (
 // app server + TUI in tmux. This is the acceptance boundary for the native
 // model/effort synchronization work:
 //
-//	ZEN_CODEX_LIVE_CONTROL=1 go test ./codexctl -run TestLiveNativeThreadSettings -count=1 -timeout 420s -v
+//	MEWLA_CODEX_LIVE_CONTROL=1 go test ./codexctl -run TestLiveNativeThreadSettings -count=1 -timeout 420s -v
 //
 // It proves, with one real process tree: same tmux/process identity across the
 // mutation; the native thread setting changed (TUI footer + next request body
@@ -33,8 +33,8 @@ import (
 // mutation leaves the thread untouched. Artifacts land under TMPDIR
 // (Worker-owned). No real credentials / user config / live Sessions.
 func TestLiveNativeThreadSettings(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_LIVE_CONTROL") == "" {
-		t.Skip("set ZEN_CODEX_LIVE_CONTROL=1 for the live Codex app-server proof")
+	if os.Getenv("MEWLA_CODEX_LIVE_CONTROL") == "" {
+		t.Skip("set MEWLA_CODEX_LIVE_CONTROL=1 for the live Codex app-server proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
@@ -410,10 +410,10 @@ func trimTail(s string, n int) string {
 // group, so killing the tmux Session (pty hangup) reaps every process, and
 // the recorded pid file survives for daemon-side artifact cleanup.
 //
-//	ZEN_CODEX_LIVE_CONTROL=1 go test ./codexctl -run TestLiveControlWrapperLifecycle -count=1 -timeout 180s -v
+//	MEWLA_CODEX_LIVE_CONTROL=1 go test ./codexctl -run TestLiveControlWrapperLifecycle -count=1 -timeout 180s -v
 func TestLiveControlWrapperLifecycle(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_LIVE_CONTROL") == "" {
-		t.Skip("set ZEN_CODEX_LIVE_CONTROL=1 for the live Codex app-server proof")
+	if os.Getenv("MEWLA_CODEX_LIVE_CONTROL") == "" {
+		t.Skip("set MEWLA_CODEX_LIVE_CONTROL=1 for the live Codex app-server proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {

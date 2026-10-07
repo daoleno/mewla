@@ -10,7 +10,7 @@ import (
 
 // Demoted: resume/--continue starts a second OS process and is NOT the
 // portable-history acceptance boundary. Use TestPortableHistorySamePID* instead
-// (ZEN_PORTABLE_HISTORY_SAMEPID=1).
+// (MEWLA_PORTABLE_HISTORY_SAMEPID=1).
 func TestPortableHistoryCLIProofCodex(t *testing.T) {
 	t.Skip("rejected acceptance boundary: codex exec resume starts a new process; use TestPortableHistorySamePIDCodex")
 }

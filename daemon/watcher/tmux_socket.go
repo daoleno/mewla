@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/envcompat"
 )
 
 // tmux server layout:
@@ -49,7 +51,7 @@ func tmuxHostEnvironment() []string {
 	env := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "ZEN_WORKER_") || strings.HasPrefix(key, "ZEN_BRAIN_") || key == "ZEN_BUILD_TMPDIR" || key == "ZEN_WORKTREE_ROOT" || key == "ZEN_STATE_DIR" {
+		if envcompat.HasPrefix(key, "WORKER_") || envcompat.HasPrefix(key, "BRAIN_") || envcompat.Is(key, "MEWLA_BUILD_TMPDIR") || envcompat.Is(key, "MEWLA_WORKTREE_ROOT") || envcompat.Is(key, "MEWLA_STATE_DIR") {
 			continue
 		}
 		env = append(env, entry)

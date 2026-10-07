@@ -336,9 +336,9 @@ func TestNewStoreEnsuresWorkspaceCommunicationRules(t *testing.T) {
 		"## Tools",
 		"policies/delegation.md",
 		"policies/engine.md",
-		"$ZEN_WORKTREE_ROOT",
+		"$MEWLA_WORKTREE_ROOT",
 		"TMPDIR",
-		"$ZEN_BUILD_TMPDIR",
+		"$MEWLA_BUILD_TMPDIR",
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("AGENTS.md missing %q:\n%s", marker, content)

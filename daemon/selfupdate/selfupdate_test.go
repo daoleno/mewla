@@ -41,9 +41,9 @@ func TestSemVersionPrecedenceSingleStream(t *testing.T) {
 
 func TestPlatformArtifactName(t *testing.T) {
 	tests := map[string]string{
-		"linux/amd64":  "zen-linux-amd64.tar.gz",
-		"linux/arm64":  "zen-linux-arm64.tar.gz",
-		"darwin/arm64": "zen-darwin-arm64.tar.gz",
+		"linux/amd64":  "mewla-linux-amd64.tar.gz",
+		"linux/arm64":  "mewla-linux-arm64.tar.gz",
+		"darwin/arm64": "mewla-darwin-arm64.tar.gz",
 	}
 	for platform, want := range tests {
 		parts := strings.Split(platform, "/")
@@ -92,7 +92,7 @@ func TestLatestSelectsHighestUpdaterEligiblePrerelease(t *testing.T) {
 			Product:       "zen",
 			Version:       version,
 			Artifacts: []Artifact{{
-				Path: "zen-linux-amd64.tar.gz", Role: "daemon_archive", SHA256: strings.Repeat("a", 64), Size: 42, GOOS: "linux", GOARCH: "amd64",
+				Path: "mewla-linux-amd64.tar.gz", Role: "daemon_archive", SHA256: strings.Repeat("a", 64), Size: 42, GOOS: "linux", GOARCH: "amd64",
 			}},
 		}
 		raw, err := json.Marshal(manifest)
@@ -143,7 +143,7 @@ func TestDownloadBinaryRejectsArtifactChecksumMismatch(t *testing.T) {
 	_, err := client.DownloadBinary(context.Background(), Candidate{
 		ArtifactURL: server.URL,
 		Artifact: Artifact{
-			Path: "zen-linux-amd64.tar.gz", Size: int64(len(archive)), SHA256: strings.Repeat("0", 64),
+			Path: "mewla-linux-amd64.tar.gz", Size: int64(len(archive)), SHA256: strings.Repeat("0", 64),
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
@@ -158,7 +158,7 @@ func testRelease(version string, prerelease bool, base string) release {
 		Assets: []releaseAsset{
 			{Name: ManifestAsset, URL: prefix + "/manifest"},
 			{Name: ManifestSignature, URL: prefix + "/signature"},
-			{Name: "zen-linux-amd64.tar.gz", URL: prefix + "/archive"},
+			{Name: "mewla-linux-amd64.tar.gz", URL: prefix + "/archive"},
 		},
 	}
 }
@@ -182,7 +182,7 @@ func TestReplaceExecutableRenameFailurePreservesOriginal(t *testing.T) {
 	if string(raw) != "old" {
 		t.Fatalf("original executable changed to %q", raw)
 	}
-	matches, err := filepath.Glob(filepath.Join(dir, ".zen-update-*"))
+	matches, err := filepath.Glob(filepath.Join(dir, ".mewla-update-*"))
 	if err != nil || len(matches) != 0 {
 		t.Fatalf("temporary files remain: %v, %v", matches, err)
 	}
@@ -209,14 +209,14 @@ func TestCacheFreshnessAndNotice(t *testing.T) {
 	}
 }
 
-func TestDaemonArchiveRoleIsSingleZenExecutable(t *testing.T) {
+func TestDaemonArchiveRoleIsSingleMewlaExecutable(t *testing.T) {
 	name, err := PlatformArtifactName("linux", "amd64")
-	if err != nil || name != "zen-linux-amd64.tar.gz" {
+	if err != nil || name != "mewla-linux-amd64.tar.gz" {
 		t.Fatalf("artifact=%q err=%v", name, err)
 	}
 	manifest := Manifest{
 		SchemaVersion: 2,
-		Product:       "zen",
+		Product:       "mewla",
 		Version:       "0.1.6",
 		Artifacts: []Artifact{{
 			Path: name, Role: "daemon_archive", SHA256: strings.Repeat("ab", 32), Size: 8, GOOS: "linux", GOARCH: "amd64",
