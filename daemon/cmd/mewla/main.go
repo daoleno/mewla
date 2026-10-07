@@ -2001,7 +2001,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
 		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
 		fmt.Fprintln(stderr, "  address    Add, remove, or list daemon entry points")
-		fmt.Fprintln(stderr, "  state      Migrate the legacy ~/.mewla state root to ~/.mewla")
+		fmt.Fprintln(stderr, "  state      Migrate the legacy ~/.zen state root to ~/.mewla")
 	}
 
 	if err := fs.Parse(args); err != nil {
