@@ -145,9 +145,9 @@ describe("Zen palette WCAG AA contrast", () => {
       });
     }
 
-    test(`${colorScheme}: default accent resolves to sage`, () => {
-      expect(resolveTheme({ colorScheme }).accentId).toBe("sage");
-      expect(resolveTheme({ colorScheme, accentId: "unknown" }).accentId).toBe("sage");
+    test(`${colorScheme}: default accent resolves to vermilion`, () => {
+      expect(resolveTheme({ colorScheme }).accentId).toBe("vermilion");
+      expect(resolveTheme({ colorScheme, accentId: "unknown" }).accentId).toBe("vermilion");
     });
 
     test(`${colorScheme}: elevation levels are tonally distinct`, () => {

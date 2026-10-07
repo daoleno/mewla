@@ -15,7 +15,9 @@ export function buildChatChrome(theme: ResolvedZenTheme): {
   const chrome: TerminalThemeChrome = {
     appBackground: chat.background,
     surface: chat.receivedBubble,
-    surfaceMuted: chat.sentBubble,
+    // A quiet fill (code, tables, wells): the landing's tint, never the
+    // sent bubble, which is ink in the light theme.
+    surfaceMuted: colors.bgElevated,
     surfaceActive:
       chat.composerDock === 'transparent' ? chat.composerBackground : chat.composerDock,
     composerInput: chat.composerBackground,

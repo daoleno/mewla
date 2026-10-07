@@ -44,7 +44,7 @@ import {
   shadow,
   type AppColors,
 } from "../constants/tokens";
-import { useZenTheme, ZEN_ACCENTS, type ResolvedZenTheme } from "../theme";
+import { useZenTheme, type ResolvedZenTheme } from "../theme";
 import { ZEN_DARK_APP_COLORS } from "../theme/primitives";
 import { appVersion } from "../constants/appVersion";
 import { importConnection } from "../services/importConnection";
@@ -131,25 +131,9 @@ export default function SettingsScreen() {
   } = useWorkerServerSummary();
   const agentCounts = useMemo(() => countWorkersByServer(agents), [agents]);
   const colors = useAppColors();
-  const { preference, setPreference, accentId, setAccentId } = useZenTheme();
+  const { preference, setPreference } = useZenTheme();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const accentChoices = useMemo(
-    () =>
-      ZEN_ACCENTS.map((accent) => ({
-        label: accent.name,
-        value: accent.id,
-        leading: (
-          <View
-            style={[
-              styles.accentSwatch,
-              { backgroundColor: theme.isLight ? accent.light.accent : accent.dark.accent },
-            ]}
-          />
-        ),
-      })),
-    [styles, theme.isLight],
-  );
   const params = useLocalSearchParams<{
     addServer?: string;
     refresh?: string;
@@ -682,13 +666,6 @@ export default function SettingsScreen() {
             options={THEME_CHOICES}
             value={preference === "classic-light" || preference === "classic-dark" ? preference : "system"}
             onChange={(value) => void setPreference(value)}
-            style={styles.appearanceTheme}
-          />
-          <SegmentedControl
-            accessibilityLabel="Accent color"
-            options={accentChoices}
-            value={accentId}
-            onChange={(value) => void setAccentId(value)}
             style={styles.appearance}
           />
 
@@ -1449,16 +1426,8 @@ function createStyles(theme: ResolvedZenTheme) {
       paddingHorizontal: 8,
       paddingVertical: 2,
     },
-    appearanceTheme: {
-      marginBottom: 10,
-    },
     appearance: {
       marginBottom: 26,
-    },
-    accentSwatch: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
     },
     // Mirrors the Stack header: Back, centred title, balancing end slot.
     detailHeader: {

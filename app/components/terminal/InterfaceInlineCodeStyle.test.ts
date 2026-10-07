@@ -16,8 +16,10 @@ describe("interfaceInlineCodeStyle", () => {
       expect(style.borderColor).toBe("transparent");
       expect(style.fontFamily).toBe("MapleMono-CN-Regular");
 
-      // Chat surfaceMuted is the sent-bubble token; it must not be the fill.
-      expect(chrome.surfaceMuted).toBe(zenTheme.chat.sentBubble);
+      // surfaceMuted is the quiet tint (never the ink sent bubble), and inline
+      // code must not paint it as a tile either.
+      expect(chrome.surfaceMuted).toBe(zenTheme.colors.bgElevated);
+      expect(chrome.surfaceMuted).not.toBe(zenTheme.chat.sentBubble);
       expect(style.backgroundColor).not.toBe(chrome.surfaceMuted);
     });
 
