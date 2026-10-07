@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 func TestSetupMissingTmuxStopsCleanly(t *testing.T) {

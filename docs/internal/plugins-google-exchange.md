@@ -2,7 +2,7 @@
 
 This component is an unselected candidate prepared for review and fixture verification. Review the [maintained-component comparison](plugins-google-options.md) before choosing it. It is **not deployed**, and no publisher client or HTTPS origin has been registered. It is not part of a user's private daemon. Its only provider is Google; Slack uses its official public PKCE flow instead.
 
-Build `daemon/cmd/zen-google-auth` as a normal Go binary. Host it behind an existing product-owned TLS ingress. Required private environment configuration on that host:
+Build `daemon/cmd/mewla-google-auth` as a normal Go binary. Host it behind an existing product-owned TLS ingress. Required private environment configuration on that host:
 
 | Name | Owner / value |
 | --- | --- |
@@ -30,11 +30,11 @@ Reviewable build/config preparation (run at release engineering, not on end-user
 
 ```sh
 cd daemon
-GOMAXPROCS=2 go build -p 1 -o /private/artifacts/zen-google-auth ./cmd/zen-google-auth
+GOMAXPROCS=2 go build -p 1 -o /private/artifacts/zen-google-auth ./cmd/mewla-google-auth
 # Supply the five host environment variables above through the chosen host's
 # secret/config facility. Keep the listener private behind its TLS ingress.
 # Then build official daemons with public values only:
-GOMAXPROCS=2 go build -p 1 -ldflags '-X github.com/daoleno/zen/daemon/connections.GoogleExchangeOrigin=https://CONFIRMED_OWNED_ORIGIN -X github.com/daoleno/zen/daemon/connections.GitHubPublicClientID=REGISTERED_PUBLIC_ID -X github.com/daoleno/zen/daemon/connections.SlackPublicClientID=REGISTERED_PUBLIC_ID' ./cmd/zen
+GOMAXPROCS=2 go build -p 1 -ldflags '-X github.com/daoleno/mewla/daemon/connections.GoogleExchangeOrigin=https://CONFIRMED_OWNED_ORIGIN -X github.com/daoleno/mewla/daemon/connections.GitHubPublicClientID=REGISTERED_PUBLIC_ID -X github.com/daoleno/mewla/daemon/connections.SlackPublicClientID=REGISTERED_PUBLIC_ID' ./cmd/mewla
 ```
 
 The capitalized values are required owner decisions, not working registrations. The code intentionally has no built-in fabricated defaults. Deployment must use the chosen product ingress and publisher account; this artifact does not authorize creating either.

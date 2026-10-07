@@ -44,12 +44,12 @@ Stable IDs are retained when contracts change.
 From `daemon/`:
 
 ```sh
-go test -count=1 -timeout 120s ./brain ./cmd/zen ./watcher -run '^TestBDD_'
-go test -json -count=1 -timeout 120s ./brain ./cmd/zen ./watcher -run '^TestBDD_'
+go test -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_'
+go test -json -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_'
 go test ./...
 go test -race -p 1 ./...
 go vet ./...
-go build ./cmd/zen
+go build ./cmd/mewla
 ```
 
 Use `GOMAXPROCS=2`, `-p 1`, and `GOTMPDIR="$ZEN_BUILD_TMPDIR"` in shared,

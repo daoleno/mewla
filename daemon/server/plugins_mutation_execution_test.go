@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	skillmgmt "github.com/daoleno/zen/daemon/skills"
+	skillmgmt "github.com/daoleno/mewla/daemon/skills"
 )
 
 type serverPluginEntry struct {

@@ -82,10 +82,10 @@ while [ "$#" -gt 0 ]; do
 done
 printf '%s\n' "$url" >> "$FAKE_CURL_LOG"
 case $url in
-  https://api.github.com/repos/daoleno/zen/releases\?per_page=100)
+  https://api.github.com/repos/daoleno/mewla/releases\?per_page=100)
     /bin/cp "$FAKE_RELEASES_JSON" "$output"
     ;;
-  https://github.com/daoleno/zen/releases/download/*)
+  https://github.com/daoleno/mewla/releases/download/*)
     /bin/cp "$FAKE_ASSETS/${url##*/}" "$output"
     ;;
   *)
@@ -211,8 +211,8 @@ EOF
   run_installer ZEN_INSTALL_DIR="$HOME_DIR/install"
   [[ -x "$HOME_DIR/install/zen" ]] || fail "latest release was not installed"
   assert_contains "$CASE_DIR/output" "Installed Zen v4.0.0-beta.1"
-  assert_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/zen/releases?per_page=100"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/zen/releases/download/v4.0.0-beta.1/zen-linux-amd64.tar.gz"
+  assert_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
+  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v4.0.0-beta.1/zen-linux-amd64.tar.gz"
   assert_not_contains "$CASE_DIR/curl.log" "/download/v9.0.0/"
 
   new_case dynamic-version-later-run
@@ -225,8 +225,8 @@ EOF
 EOF
   run_installer ZEN_INSTALL_DIR="$HOME_DIR/install"
   assert_contains "$CASE_DIR/output" "Installed Zen v5.0.0"
-  assert_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/zen/releases?per_page=100"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/zen/releases/download/v5.0.0/zen-linux-amd64.tar.gz"
+  assert_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
+  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v5.0.0/zen-linux-amd64.tar.gz"
   assert_not_contains "$CASE_DIR/curl.log" "/download/v4.0.0-beta.1/"
   pass "ignores drafts and invalid tags, then dynamically selects the SemVer-highest public release on every unpinned fresh run"
 }
@@ -242,8 +242,8 @@ test_stable_release_precedence() {
 EOF
   run_installer ZEN_INSTALL_DIR="$HOME_DIR/install"
   assert_contains "$CASE_DIR/output" "Installed Zen v3.4.5"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/zen/releases/download/v3.4.5/zen-linux-amd64.tar.gz"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/zen/releases/download/v3.4.5/SHA256SUMS"
+  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v3.4.5/zen-linux-amd64.tar.gz"
+  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v3.4.5/SHA256SUMS"
   pass "includes stable public releases and ranks stable above beta at the same core"
 }
 
@@ -257,7 +257,7 @@ test_fixed_version_and_atomic_replacement() {
   [[ $(stat -c '%a' "$HOME_DIR/install/zen") == 755 ]] || fail "installed mode is not 0755"
   [[ -z $(find "$HOME_DIR/install" -name '.zen-install.*' -print -quit) ]] || fail "atomic temp file remained"
   assert_contains "$CASE_DIR/curl.log" "/download/v3.4.5/zen-linux-amd64.tar.gz"
-  assert_not_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/zen/releases?per_page=100"
+  assert_not_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
   pass "pins exact release URLs and atomically replaces the target with mode 0755"
 }
 

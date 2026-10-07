@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // providerContractSemantics is the provider-neutral normalized projection used

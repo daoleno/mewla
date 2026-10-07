@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
 
 // Local captured-contract proof: running Codex Session activates DeepSeek

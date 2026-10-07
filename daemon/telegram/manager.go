@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/attachment"
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 const (

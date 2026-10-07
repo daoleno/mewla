@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/google/uuid"
 )
 
@@ -4666,7 +4666,7 @@ func workerProgressEnvScript() string {
 // therefore the same control socket / state dir) without relying on shell
 // word splitting or PATH lookups. It trusts os.Executable() regardless of the
 // binary's base name, so dev daemons launched as "zen-dev" (which rebuilds
-// cmd/zen into tmp/zen-dev) resolve to that dev binary instead of a stale
+// cmd/mewla into tmp/zen-dev) resolve to that dev binary instead of a stale
 // "zen" found elsewhere on PATH. It only falls back to "zen" when the current
 // executable cannot be resolved or is empty (for example, in exotic test
 // runners); the protocol always invokes the value as a quoted single token

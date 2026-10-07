@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 func navigationRow(t *testing.T, m *Manager, id string) outboxRecord {

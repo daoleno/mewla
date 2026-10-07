@@ -155,10 +155,10 @@ else:
     if not isinstance(ios_build, int) or isinstance(ios_build, bool) or ios_build != exp_ios_build:
         errors.append(f"ios-build.json buildNumber: got {ios_build!r} want {exp_ios_build}")
 
-version_go = (root / "daemon/cmd/zen/version.go").read_text(encoding="utf-8")
+version_go = (root / "daemon/cmd/mewla/version.go").read_text(encoding="utf-8")
 m = re.search(r'var Version = "([^"]+)"', version_go)
 if not m:
-    errors.append("daemon/cmd/zen/version.go: Version default not found")
+    errors.append("daemon/cmd/mewla/version.go: Version default not found")
 elif m.group(1) != exp_version:
     errors.append(f"version.go default: got {m.group(1)!r} want {exp_version!r}")
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestHandoffReferencesContextAndOnlyOwnedWorkers(t *testing.T) {

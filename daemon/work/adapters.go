@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // ProfileLaunchOwner is the optional Model Profiles surface used by Calendar

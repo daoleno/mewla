@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // CodexTranscriptIdentity is the stable provider transcript binding for a Host

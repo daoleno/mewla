@@ -2,7 +2,7 @@
 
 ## Install the APK
 
-Open [GitHub Releases](https://github.com/daoleno/zen/releases) and download the newest `zen-android-arm64-v*.apk` together with `SHA256SUMS`.
+Open [GitHub Releases](https://github.com/daoleno/mewla/releases) and download the newest `zen-android-arm64-v*.apk` together with `SHA256SUMS`.
 
 The APK supports 64-bit ARM Android devices (`arm64-v8a`). It does not support x86 phones or 32-bit ARM devices. iOS uses a separate source build; see [iOS app](ios-development.md).
 

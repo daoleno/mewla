@@ -38,7 +38,7 @@ Direct binary:
 
 ```bash
 cd daemon
-go build -o ../bin/zen-relay ./cmd/zen-relay
+go build -o ../bin/zen-relay ./cmd/mewla-relay
 
 ZEN_LINK_CONNECTOR_TOKEN='from-your-secret-manager' \
 ../bin/zen-relay \

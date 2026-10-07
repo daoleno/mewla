@@ -3,7 +3,7 @@ package brain
 import (
 	"time"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // ExternalInputDisposition is the channel-neutral result of one exact Brain

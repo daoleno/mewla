@@ -9,7 +9,7 @@ var GitHubPublicClientID string
 var SlackPublicClientID string
 
 // GoogleExchangeOrigin is a product-owned HTTPS origin shipped in releases.
-// It points to cmd/zen-google-auth, never a caller-supplied callback or daemon.
+// It points to cmd/mewla-google-auth, never a caller-supplied callback or daemon.
 var GoogleExchangeOrigin string
 
 func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {

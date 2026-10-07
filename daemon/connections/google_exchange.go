@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/googleauth"
+	"github.com/daoleno/mewla/daemon/googleauth"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/oauth2"

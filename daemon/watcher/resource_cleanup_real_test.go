@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/daoleno/zen/daemon/workerproc"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 func TestRealWorkerCloseCleansDetachedDescendantsWithoutSupervisor(t *testing.T) {

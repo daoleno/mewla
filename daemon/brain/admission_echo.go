@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // IsBrainInputAdmission reports whether a durable user row was written by a

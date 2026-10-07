@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func TestHostOwnershipLossHistoryDoesNotBlockCanonicalEventDelivery(t *testing.T) {

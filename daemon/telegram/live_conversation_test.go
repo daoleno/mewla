@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // A bounded outbound transport, never a poller. Input/callback envelopes and

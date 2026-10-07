@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.description    = 'Reads current platform keyboard occlusion and native Composer focus for structured-chat lifecycle reconciliation.'
   s.license        = 'Apache-2.0'
   s.author         = 'Zen contributors'
-  s.homepage       = 'https://github.com/daoleno/zen'
+  s.homepage       = 'https://github.com/daoleno/mewla'
   s.platforms      = { :ios => '16.4' }
   s.source         = { :path => '.' }
   s.static_framework = true

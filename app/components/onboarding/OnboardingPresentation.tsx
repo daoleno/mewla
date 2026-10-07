@@ -8,7 +8,7 @@ import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 
-const GUIDE = "https://github.com/daoleno/zen/blob/main/docs/";
+const GUIDE = "https://github.com/daoleno/mewla/blob/main/docs/";
 export const COMPUTER_SETUP_STEPS = [
   { title: "Check your computer", command: "zen doctor" },
   { title: "Start on trusted Wi-Fi", command: "zen --lan" },

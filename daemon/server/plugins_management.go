@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	skillmgmt "github.com/daoleno/zen/daemon/skills"
+	skillmgmt "github.com/daoleno/mewla/daemon/skills"
 	"github.com/gorilla/websocket"
 )
 

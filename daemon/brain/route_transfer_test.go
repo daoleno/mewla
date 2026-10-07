@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 type transferOutcome struct {

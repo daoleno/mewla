@@ -19,7 +19,7 @@ judge decisions and proportionality, not exact wording or playbook names.
 From `daemon/`, run the existing Go test tools with bounded parallelism:
 
 ```sh
-GOMAXPROCS=2 go test -p 1 ./brain ./cmd/zen -run 'Test(Engineering|HostContractDigest|HostActivation|BrainWorkerRole|WorkerPrompt|GeneratedWorkerPrompt|Handoff|Prompt)' -count=1
+GOMAXPROCS=2 go test -p 1 ./brain ./cmd/mewla -run 'Test(Engineering|HostContractDigest|HostActivation|BrainWorkerRole|WorkerPrompt|GeneratedWorkerPrompt|Handoff|Prompt)' -count=1
 GOMAXPROCS=2 go test -p 1 ./...
 ```
 
