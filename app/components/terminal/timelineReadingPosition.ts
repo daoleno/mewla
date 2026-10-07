@@ -33,6 +33,8 @@ export interface TimelineReadingPosition {
   onCellUnmount(id: string): void;
   onInsetChange(inset: number): void;
   userScrolling(): boolean;
+  /** Web only: wheel/touch input that react-native-web reports as no drag. */
+  onUserScrollIntent(): void;
   current(): TimelineReadingBookmark & {
     contentOffset: number;
     viewportHeight: number;

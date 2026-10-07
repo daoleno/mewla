@@ -126,14 +126,14 @@ describe("timeline history viewport stability", () => {
     expect(jumpOwner).toContain("scrollToLatestOffset(");
   });
 
-  test("touch, selection, drag and momentum only suspend automatic follow", async () => {
+  test("touch, selection, drag, momentum and web wheel only suspend automatic follow", async () => {
     const hooksSource = await Bun.file(
       new URL("./InterfaceChatSurfaceHooks.ts", import.meta.url),
     ).text();
 
     expect(hooksSource).toContain("nativeFollowSuspended,");
     expect(hooksSource.match(/syncNativeFollowSuspension\(\);/g)?.length).toBe(
-      8,
+      10,
     );
     expect(hooksSource).toContain(
       "textSelectionActiveRef.current = true;\n    syncNativeFollowSuspension();",
@@ -149,6 +149,9 @@ describe("timeline history viewport stability", () => {
     );
     expect(hooksSource).toContain(
       "userMomentumRef.current = timelineDragContinuesWithMomentum(",
+    );
+    expect(hooksSource).toContain(
+      "webScrollIntentRef.current = true;\n      syncNativeFollowSuspension();",
     );
   });
 
