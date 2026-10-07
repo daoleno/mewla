@@ -10,6 +10,7 @@ import {
   TypeScale,
   useAppTheme,
 } from "../../constants/tokens";
+import { mixHex } from "../../theme/colorUtils";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
 import { MessageBubbleFooter } from "./MessageBubbleFooter";
 import {
@@ -76,12 +77,17 @@ export function ZenUserMessage({
 
   const hasBody = item.body.trim().length > 0;
   const sentBubbleColor = zenTheme.chat.sentBubble;
+  // Code, tables and attachments inside the bubble sit on bubble-derived
+  // wells: the light theme's sent bubble is ink, so canvas fills would glare.
   const sentChrome = {
     ...chrome,
     text: zenTheme.chat.sentText,
     textMuted: zenTheme.chat.sentTimestamp,
     textSubtle: zenTheme.chat.sentTimestamp,
     link: zenTheme.chat.sentText,
+    surface: mixHex(sentBubbleColor, zenTheme.chat.sentText, 0.08),
+    surfaceMuted: mixHex(sentBubbleColor, zenTheme.chat.sentText, 0.12),
+    border: mixHex(sentBubbleColor, zenTheme.chat.sentText, 0.2),
   };
   const spacing = messageRowSpacing(
     presentation.compactTop,

@@ -1,11 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
-import {
-  ZEN_DARK_APP_COLORS,
-  ZEN_DARK_CHAT_PALETTE,
-  ZEN_LIGHT_APP_COLORS,
-  ZEN_LIGHT_CHAT_PALETTE,
-} from "../../theme/primitives";
+import { buildChatChrome } from "../../theme/buildChatChrome";
+import { resolveTheme } from "../../theme/resolve";
 import {
   messageTableRowTone,
   messageTableSemanticColors,
@@ -27,18 +23,10 @@ function rgbDistance(left: string, right: string) {
 }
 
 describe("Interface Markdown table semantics", () => {
-  test.each([
-    ["light", ZEN_LIGHT_APP_COLORS, ZEN_LIGHT_CHAT_PALETTE],
-    ["dark", ZEN_DARK_APP_COLORS, ZEN_DARK_CHAT_PALETTE],
-  ] as const)(
+  test.each(["light", "dark"] as const)(
     "%s theme keeps the true header distinct from quieter section rows",
-    (_colorScheme, appColors, chat) => {
-      const chrome = {
-        surface: chat.receivedBubble,
-        surfaceMuted: chat.sentBubble,
-        accentSoft: appColors.accentSoft,
-        disabledSurface: appColors.disabledSurface,
-      } as never;
+    (colorScheme) => {
+      const { chrome } = buildChatChrome(resolveTheme({ colorScheme }));
       const colors = messageTableSemanticColors(chrome);
 
       expect(colors.header).not.toBe(colors.section);

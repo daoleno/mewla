@@ -1,4 +1,5 @@
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
+import { mixHex } from "../../theme/colorUtils";
 
 export type MessageTableRowTone = "section" | "even" | "odd";
 
@@ -15,7 +16,8 @@ export function messageTableRowTone(
 
 export function messageTableSemanticColors(chrome: TerminalThemeChrome) {
   return {
-    header: chrome.surfaceMuted,
+    // A touch of ink on the quiet fill, so the header outranks zebra rows.
+    header: mixHex(chrome.surfaceMuted, chrome.text, 0.1),
     section: chrome.accentSoft,
     even: chrome.surface,
     odd: chrome.disabledSurface,
