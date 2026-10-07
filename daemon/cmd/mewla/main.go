@@ -94,6 +94,9 @@ func directClaudePID(sessionID string) (int, bool) {
 
 func main() {
 	envcompat.Normalize()
+	if executable, err := os.Executable(); err == nil {
+		ensureMewlaCommand(executable)
+	}
 	migrateLegacyState(os.Args[1:], os.Stderr)
 	if err := run(os.Args[1:], os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
