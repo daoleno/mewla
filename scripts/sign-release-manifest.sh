@@ -13,7 +13,7 @@ if [[ -z "$MANIFEST" || ! -f "$MANIFEST" ]]; then
   exit 2
 fi
 
-PUBLIC_KEY="$ROOT/release/zen-update-public-key.pem"
+PUBLIC_KEY="$ROOT/release/mewla-update-public-key.pem"
 test -f "$PUBLIC_KEY"
 
 TEMP_KEY=""
@@ -30,7 +30,7 @@ if [[ -z "$KEY" ]]; then
     echo "error: set ZEN_UPDATE_SIGNING_KEY or ZEN_UPDATE_SIGNING_KEY_BASE64" >&2
     exit 1
   fi
-  TEMP_KEY="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/zen-update-key.XXXXXX")"
+  TEMP_KEY="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mewla-update-key.XXXXXX")"
   chmod 600 "$TEMP_KEY"
   printf '%s' "$ZEN_UPDATE_SIGNING_KEY_BASE64" | base64 --decode > "$TEMP_KEY"
   KEY="$TEMP_KEY"
@@ -43,7 +43,7 @@ fi
 expected="$(openssl pkey -pubin -in "$PUBLIC_KEY" -outform DER | base64 | tr -d '\n')"
 actual="$(openssl pkey -in "$KEY" -pubout -outform DER 2>/dev/null | base64 | tr -d '\n')"
 if [[ -z "$actual" || "$actual" != "$expected" ]]; then
-  echo "error: update signing key does not match release/zen-update-public-key.pem" >&2
+  echo "error: update signing key does not match release/mewla-update-public-key.pem" >&2
   exit 1
 fi
 

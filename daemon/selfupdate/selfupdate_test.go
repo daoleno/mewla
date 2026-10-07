@@ -62,7 +62,7 @@ func TestVerifyManifestSignatureAndSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw := []byte(`{"schema_version":2,"product":"zen","version":"1.2.3-beta.1","artifacts":[]}`)
+	raw := []byte(`{"schema_version":2,"product":"mewla","version":"1.2.3-beta.1","artifacts":[]}`)
 	signature := ed25519.Sign(privateKey, raw)
 	manifest, err := VerifyManifest(raw, signature, publicKey)
 	if err != nil || manifest.Version != "1.2.3-beta.1" {
@@ -77,6 +77,10 @@ func TestVerifyManifestSignatureAndSchema(t *testing.T) {
 	if _, err := VerifyManifest(raw, signature, publicKey); err == nil {
 		t.Fatal("tampered signature verified")
 	}
+	foreign := []byte(`{"schema_version":2,"product":"zen","version":"1.2.3-beta.1","artifacts":[]}`)
+	if _, err := VerifyManifest(foreign, ed25519.Sign(privateKey, foreign), publicKey); err == nil {
+		t.Fatal("manifest for another product verified")
+	}
 }
 
 func TestLatestSelectsHighestUpdaterEligiblePrerelease(t *testing.T) {
@@ -89,7 +93,7 @@ func TestLatestSelectsHighestUpdaterEligiblePrerelease(t *testing.T) {
 	for _, version := range []string{"0.1.0-beta.4", "0.1.0-beta.10"} {
 		manifest := Manifest{
 			SchemaVersion: 2,
-			Product:       "zen",
+			Product:       "mewla",
 			Version:       version,
 			Artifacts: []Artifact{{
 				Path: "mewla-linux-amd64.tar.gz", Role: "daemon_archive", SHA256: strings.Repeat("a", 64), Size: 42, GOOS: "linux", GOARCH: "amd64",
@@ -165,7 +169,7 @@ func testRelease(version string, prerelease bool, base string) release {
 
 func TestReplaceExecutableRenameFailurePreservesOriginal(t *testing.T) {
 	dir := t.TempDir()
-	target := filepath.Join(dir, "zen")
+	target := filepath.Join(dir, "mewla")
 	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}

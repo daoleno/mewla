@@ -245,21 +245,6 @@ def extract_note_facts(previous_notes: str, current_tag: str) -> dict[str, str]:
     }
 
 
-# Notes for releases published before the Mewla rename carry Zen names. Their facts are carried forward under the Mewla names.
-LEGACY_RELEASE_NAMES = (
-    (re.compile(r"\bzen-(linux|darwin)-(amd64|arm64)\b"), r"mewla-\1-\2"),
-    (re.compile(r"`zen( [^`]*)?`"), r"`mewla\1`"),
-    (re.compile(r"\bcom\.daoleno\.zen\b"), "com.daoleno.mewla"),
-    (re.compile(r"\bZen\b"), "Mewla"),
-)
-
-
-def rebrand_legacy_release_text(text: str) -> str:
-    for pattern, replacement in LEGACY_RELEASE_NAMES:
-        text = pattern.sub(replacement, text)
-    return text
-
-
 def extract_preview_bundle(ios_identity_source: str) -> str:
     preview_blocks = re.findall(
         r"\bpreview:\s*Object\.freeze\(\{(.+?)\}\),",
@@ -457,8 +442,6 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     note_facts = extract_note_facts(
         sources[f"docs/releases/{current_tag}.md"], current_tag
     )
-    for fact in ("install", "ios_bundle"):
-        note_facts[fact] = rebrand_legacy_release_text(note_facts[fact])
     preview_bundle = extract_preview_bundle(sources["app/iosIdentity.js"])
     if note_facts["ios_bundle"] != preview_bundle:
         raise PrepareError(

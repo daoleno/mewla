@@ -57,9 +57,9 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           TMPDIR: ${{ runner.temp }}
-          ZEN_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
         run: |
-          mkdir -p "$ZEN_BUILD_TMPDIR"
+          mkdir -p "$MEWLA_BUILD_TMPDIR"
           python3 -m unittest discover -s scripts/tests -p 'test_prepare_release.py'
 
       - name: Prepare deterministic release identity and notes

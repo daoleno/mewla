@@ -13,7 +13,7 @@
 #   ./scripts/stage-release.sh --skip-build
 #   ./scripts/stage-release.sh --with-apk
 #   ./scripts/stage-release.sh --apk path/to.apk
-#   ZEN_BUILD_TMPDIR=/durable/path ./scripts/stage-release.sh
+#   MEWLA_BUILD_TMPDIR=/durable/path ./scripts/stage-release.sh
 
 set -euo pipefail
 umask 077
@@ -80,7 +80,7 @@ EXPECTED_STAGE="$STAGE_PARENT/v${VERSION}"
 
 # Pre-build into a durable cache so a cross-platform release build never
 # consumes the host's global temporary filesystem. Delegated sessions inject
-# ZEN_BUILD_TMPDIR as their private lifecycle-owned resource directory.
+# MEWLA_BUILD_TMPDIR as their private lifecycle-owned resource directory.
 default_build_tmpdir() {
   if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
     printf '%s\n' "$XDG_CACHE_HOME/mewla/build-tmp"
@@ -90,9 +90,9 @@ default_build_tmpdir() {
     printf '%s\n' "$HOME/.cache/mewla/build-tmp"
   fi
 }
-BUILD_TMP_ROOT="${ZEN_BUILD_TMPDIR:-$(default_build_tmpdir)}"
+BUILD_TMP_ROOT="${MEWLA_BUILD_TMPDIR:-$(default_build_tmpdir)}"
 if [[ "$BUILD_TMP_ROOT" != /* ]]; then
-  echo "error: ZEN_BUILD_TMPDIR must be an absolute path: $BUILD_TMP_ROOT" >&2
+  echo "error: MEWLA_BUILD_TMPDIR must be an absolute path: $BUILD_TMP_ROOT" >&2
   exit 1
 fi
 mkdir -p "$BUILD_TMP_ROOT"
@@ -154,13 +154,11 @@ STAGE_DIR="$EXPECTED_STAGE"
 # Package each daemon with the legal files that apply to the daemon distribution.
 # gzip -n and normalized tar metadata keep archives stable across CI runs.
 ARCHIVE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
-# package_daemon BINARY ARCHIVE ENTRY: ENTRY is the executable name inside the
-# archive. mewla-*.tar.gz carry `mewla`; the legacy zen-*.tar.gz copies carry
-# the same binary as `zen` so pre-rename installs can still self-update.
+# package_daemon BINARY ARCHIVE: the archive carries the binary as `mewla`.
 package_daemon() {
   local binary_name="$1"
   local archive_name="$2"
-  local entry="$3"
+  local entry=mewla
   local package_dir="$BUILD_TMP/package"
   rm -rf "$package_dir"
   mkdir -p "$package_dir"
@@ -174,8 +172,7 @@ package_daemon() {
 }
 
 for platform in linux-amd64 linux-arm64 darwin-arm64; do
-  package_daemon "mewla-$platform" "mewla-$platform.tar.gz" mewla
-  package_daemon "mewla-$platform" "zen-$platform.tar.gz" zen
+  package_daemon "mewla-$platform" "mewla-$platform.tar.gz"
 done
 
 STAGED_APK=""
@@ -210,9 +207,6 @@ SUMS="$STAGE_DIR/SHA256SUMS"
     mewla-linux-amd64.tar.gz
     mewla-linux-arm64.tar.gz
     mewla-darwin-arm64.tar.gz
-    zen-linux-amd64.tar.gz
-    zen-linux-arm64.tar.gz
-    zen-darwin-arm64.tar.gz
   )
   if [[ -n "$STAGED_APK" && -f "$(basename "$STAGED_APK")" ]]; then
     files+=("$(basename "$STAGED_APK")")
@@ -250,14 +244,10 @@ def artifact(rel: str, role: str, **extra):
     entry.update(extra)
     return entry
 
-# Legacy zen-* archives serve self-updaters released before the Mewla rename.
 artifacts = [
     artifact("mewla-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64"),
     artifact("mewla-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64"),
     artifact("mewla-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64"),
-    artifact("zen-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64"),
-    artifact("zen-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64"),
-    artifact("zen-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64"),
 ]
 
 if staged_apk:
@@ -274,8 +264,7 @@ if staged_apk:
 
 identity = {
     "schema_version": 2,
-    # Pre-rename self-updaters only accept product "zen"; Mewla accepts both.
-    "product": "zen",
+    "product": "mewla",
     "version": version,
     "android": {
         "package": package,

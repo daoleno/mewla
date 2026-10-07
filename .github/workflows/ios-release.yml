@@ -49,8 +49,8 @@ jobs:
     timeout-minutes: 180
     environment: ${{ (github.event_name == 'push' || inputs.app_identity == 'preview') && 'app-store-connect-preview' || 'app-store-connect' }}
     env:
-      ZEN_IOS_APP_VARIANT: ${{ github.event_name == 'push' && 'preview' || inputs.app_identity }}
-      ZEN_IOS_BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
+      MEWLA_IOS_APP_VARIANT: ${{ github.event_name == 'push' && 'preview' || inputs.app_identity }}
+      MEWLA_IOS_BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
       ZEN_IOS_DESTINATION: ${{ github.event_name == 'push' && 'testflight' || inputs.destination }}
       ZEN_IOS_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
       # App IDs are public identifiers kept in repository variables because the
@@ -80,7 +80,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             git fetch --no-tags origin main
             ./scripts/verify-release-identity.sh --tag "$ZEN_RELEASE_TAG"
-            ZEN_IOS_BUILD_NUMBER="$(python3 - "$ZEN_RELEASE_TAG" <<'PY'
+            MEWLA_IOS_BUILD_NUMBER="$(python3 - "$ZEN_RELEASE_TAG" <<'PY'
           import json, sys
           base = json.load(open("app/app.base.json", encoding="utf-8"))["expo"]
           ios_release = json.load(open("app/ios-build.json", encoding="utf-8"))
@@ -98,19 +98,19 @@ jobs:
           print(ios_build)
           PY
             )"
-            [[ "$ZEN_IOS_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+            [[ "$MEWLA_IOS_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
               echo "error: could not derive the closed automatic build identity" >&2
               exit 1
             }
-            echo "Automatic Preview TestFlight publication for $ZEN_RELEASE_TAG build $ZEN_IOS_BUILD_NUMBER"
+            echo "Automatic Preview TestFlight publication for $ZEN_RELEASE_TAG build $MEWLA_IOS_BUILD_NUMBER"
           else
-            [[ "$ZEN_IOS_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+            [[ "$MEWLA_IOS_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
               echo "error: build_number must be a positive integer" >&2
               exit 1
             }
           fi
-          echo "ZEN_IOS_BUILD_NUMBER=$ZEN_IOS_BUILD_NUMBER" >> "$GITHUB_ENV"
-          echo "build_number=$ZEN_IOS_BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "MEWLA_IOS_BUILD_NUMBER=$MEWLA_IOS_BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "build_number=$MEWLA_IOS_BUILD_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Validate explicit inputs and required signing secrets
         env:
@@ -140,7 +140,7 @@ jobs:
               fi
             done
           fi
-          if [[ "$ZEN_IOS_APP_VARIANT" == "preview" && "$ZEN_APPLE_TEAM_ID" != "HD84J3DJ2B" ]]; then
+          if [[ "$MEWLA_IOS_APP_VARIANT" == "preview" && "$ZEN_APPLE_TEAM_ID" != "HD84J3DJ2B" ]]; then
             echo "error: Preview signing material must belong to Apple team HD84J3DJ2B" >&2
             exit 1
           fi
@@ -173,7 +173,7 @@ jobs:
           const createConfig = require('./app/app.config.js');
           const { resolveIOSIdentity } = require('./app/iosIdentity');
 
-          const identity = resolveIOSIdentity(process.env.MEWLA_IOS_APP_VARIANT || process.env.ZEN_IOS_APP_VARIANT);
+          const identity = resolveIOSIdentity(process.env.MEWLA_IOS_APP_VARIANT);
           const config = createConfig();
           if (
             config.name !== identity.nativeProjectName ||
@@ -388,7 +388,7 @@ jobs:
           ./scripts/verify-ios-artifact.sh ipa "${IPAS[0]}"
           ARTIFACT_DIR="${{ runner.temp }}/zen-ios-release-artifact"
           mkdir -p "$ARTIFACT_DIR"
-          IPA="$ARTIFACT_DIR/${ZEN_IOS_ARTIFACT_NAME}-v${ZEN_IOS_VERSION}-build${ZEN_IOS_BUILD_NUMBER}.ipa"
+          IPA="$ARTIFACT_DIR/${ZEN_IOS_ARTIFACT_NAME}-v${ZEN_IOS_VERSION}-build${MEWLA_IOS_BUILD_NUMBER}.ipa"
           cp "${IPAS[0]}" "$IPA"
           python3 - "$IPA" "$ARTIFACT_DIR/release-manifest.json" <<'PY'
           import hashlib, json, os, pathlib, subprocess, sys
@@ -401,11 +401,11 @@ jobs:
               "schema_version": 1,
               "platform": "ios",
               "distribution": "app-store-connect",
-              "app_identity": os.environ["ZEN_IOS_APP_VARIANT"],
+              "app_identity": os.environ["MEWLA_IOS_APP_VARIANT"],
               "display_name": os.environ["ZEN_IOS_DISPLAY_NAME"],
               "bundle_identifier": os.environ["ZEN_IOS_BUNDLE_ID"],
               "marketing_version": os.environ["ZEN_IOS_VERSION"],
-              "build_number": os.environ["ZEN_IOS_BUILD_NUMBER"],
+              "build_number": os.environ["MEWLA_IOS_BUILD_NUMBER"],
               "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "ipa": ipa.name,
               "ipa_sha256": ipa_digest.hexdigest(),
@@ -446,14 +446,14 @@ jobs:
           path.chmod(0o600)
           PY
           EXTRA_ARGS=()
-          if [[ "$ZEN_IOS_APP_VARIANT" == "preview" ]]; then
+          if [[ "$MEWLA_IOS_APP_VARIANT" == "preview" ]]; then
             EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview" --submit-beta-review)
           fi
           ./.zen-release-automation/scripts/app-store-connect-upload.py \
             --ipa "$IOS_IPA" \
             --app-id "$ZEN_ASC_APP_ID" \
             --version "$ZEN_IOS_VERSION" \
-            --build-number "$ZEN_IOS_BUILD_NUMBER" \
+            --build-number "$MEWLA_IOS_BUILD_NUMBER" \
             --key-id "$ZEN_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
             "${EXTRA_ARGS[@]}"
