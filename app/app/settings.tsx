@@ -1253,7 +1253,9 @@ function TelegramConnectionRow({
     setToken("");
     setShowToken(false);
   };
+  // The sheet sits outside the section so it is not counted as a row.
   return (
+    <>
     <ListSection style={styles.channelSection}>
       <ListRow
         title="Telegram"
@@ -1279,6 +1281,7 @@ function TelegramConnectionRow({
           setExpanded(true);
         }}
       />
+    </ListSection>
       <RisingSheet visible={expanded} onClose={closeDetails} layout="fullscreen" cardStyle={{ backgroundColor: colors.bgPrimary }}>
         <SafeAreaView style={{ flex: 1 }}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -1309,7 +1312,7 @@ function TelegramConnectionRow({
           </KeyboardAvoidingView>
         </SafeAreaView>
       </RisingSheet>
-    </ListSection>
+    </>
   );
 }
 
