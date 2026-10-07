@@ -7,7 +7,8 @@ import { workStatusTextInk, type WorkStatus } from "./workStatus";
 
 /**
  * success: Ready check · warning: amber triangle · danger: Failed box ·
- * accent: Running arc · needs: the seal pill · neutral: a plain paper tag.
+ * needs: the seal pill · neutral: a plain paper tag · accent: an ink tag, or
+ * the spinning Running arc when `live`.
  */
 export type StatusTone = "success" | "warning" | "danger" | "accent" | "needs" | "neutral";
 
@@ -42,10 +43,16 @@ export function StatusPill({ label, tone = "neutral", live = false, style }: Sta
       </View>
     );
   }
-  if (tone === "neutral" && !live) {
+  // Only live work spins; an informational accent ("Public", "From …") is
+  // an ink tag, never a Running mark.
+  if ((tone === "neutral" || tone === "accent") && !live) {
     return (
       <View style={[styles.tag, { backgroundColor: theme.materials.tint }, style]} accessibilityLabel={label}>
-        <AppText variant="micro" numberOfLines={1} style={{ color: colors.textSecondary }}>
+        <AppText
+          variant="micro"
+          numberOfLines={1}
+          style={{ color: tone === "accent" ? colors.textPrimary : colors.textSecondary }}
+        >
           {label}
         </AppText>
       </View>

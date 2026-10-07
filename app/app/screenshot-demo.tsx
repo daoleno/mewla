@@ -1314,7 +1314,8 @@ function ProvidersDemo() {
     };
   }, [demo.catalog, params]);
   return (
-    <SafeAreaView style={styles.flex} edges={["top"]}>
+    <SafeAreaView style={styles.flex} edges={[]}>
+      <DemoStackHeader title="Model Providers" />
       <ProvidersPresentation
         catalog={demo.catalog}
         loading={false}
@@ -1439,18 +1440,7 @@ function PluginsDemo() {
   const github = fixture === "github";
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: github ? "GitHub" : "Plugins",
-          headerStyle: { backgroundColor: colors.bgPrimary },
-          headerTintColor: colors.textPrimary,
-          headerShadowVisible: false,
-          headerTitleAlign: "center",
-          headerTitleStyle: { fontFamily: TypeScale.label.fontFamily, fontSize: 17, color: colors.textPrimary },
-          headerLeft: () => <HeaderBackButton onPress={NOOP} />,
-        }}
-      />
+      <DemoStackHeader title={github ? "GitHub" : "Plugins"} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: 760, alignSelf: "center" }}>
         {github ? (
           <>
@@ -1498,5 +1488,24 @@ function PluginsDemo() {
         )}
       </ScrollView>
     </View>
+  );
+}
+
+/** The pushed-screen header the real stack gives Plugins and Settings pages. */
+function DemoStackHeader({ title }: { title: string }) {
+  const colors = useAppColors();
+  return (
+    <Stack.Screen
+      options={{
+        headerShown: true,
+        title,
+        headerStyle: { backgroundColor: colors.bgPrimary },
+        headerTintColor: colors.textPrimary,
+        headerShadowVisible: false,
+        headerTitleAlign: "center",
+        headerTitleStyle: { fontFamily: TypeScale.label.fontFamily, fontSize: 17, color: colors.textPrimary },
+        headerLeft: () => <HeaderBackButton onPress={NOOP} />,
+      }}
+    />
   );
 }
