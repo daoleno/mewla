@@ -171,6 +171,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainWorkResolve(req)
 	case "brain_set_executor":
 		return a.handleBrainSetExecutor(req)
+	case "brain_objective", "brain_objective_set", "brain_objective_clear":
+		return a.handleBrainObjective(req)
 	case "brain_workspace":
 		if a == nil || a.brainStore == nil {
 			return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
@@ -1431,6 +1433,33 @@ func (a *controlApp) handleBrainGC() control.Response {
 	return control.Response{
 		OK:           true,
 		Housekeeping: report,
+	}
+}
+
+// handleBrainObjective reads, declares or clears the current chat thread's
+// objective (the App's goal line). Context carries the objective, or null.
+func (a *controlApp) handleBrainObjective(req control.Request) control.Response {
+	if a == nil || a.brainStore == nil {
+		return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
+	}
+	switch req.Type {
+	case "brain_objective_set":
+		objective, err := a.brainStore.SetObjective(req.Text)
+		if err != nil {
+			return control.ErrorResponse("brain_objective_failed", err.Error())
+		}
+		return control.Response{OK: true, Context: objective}
+	case "brain_objective_clear":
+		if err := a.brainStore.ClearObjective(); err != nil {
+			return control.ErrorResponse("brain_objective_failed", err.Error())
+		}
+		return control.Response{OK: true}
+	default:
+		objective, err := a.brainStore.CurrentObjective()
+		if err != nil {
+			return control.ErrorResponse("brain_objective_failed", err.Error())
+		}
+		return control.Response{OK: true, Context: objective}
 	}
 }
 

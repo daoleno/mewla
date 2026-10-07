@@ -265,6 +265,10 @@ type CurrentWork struct {
 	Wake             *WorkWake                        `json:"wake,omitempty"`
 	AttentionState   WorkAttentionState               `json:"attention_state,omitempty"`
 	UnreadResult     bool                             `json:"unread_result"`
+	// Summary is the Worker-reported outcome on the Work's slip, when the
+	// Worker reported one; lifecycle-only results leave it empty.
+	Summary   string    `json:"summary,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
 // WorkBacklog keeps durable history/repair truth explicit without projecting
@@ -3220,9 +3224,13 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 	if err != nil {
 		return WorkInventory{}, fmt.Errorf("read Work timeline projection: %w", err)
 	}
+	slipSummary := map[string]string{}
 	for _, item := range cards {
 		if item.Unread {
 			unread[item.WorkID] = true
+		}
+		if strings.TrimSpace(item.WorkerEventKind) != "" || strings.TrimSpace(item.Phase) != "" {
+			slipSummary[item.WorkID] = strings.TrimSpace(item.Summary)
 		}
 	}
 	reviewing := map[string]bool{}
@@ -3280,6 +3288,8 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			Wake:             cloneWorkWake(item.Wake),
 			AttentionState:   attentionState,
 			UnreadResult:     unread[item.ID],
+			Summary:          slipSummary[item.ID],
+			UpdatedAt:        item.UpdatedAt.UTC(),
 		})
 	}
 	sort.SliceStable(current, func(left, right int) bool {

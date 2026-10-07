@@ -26,22 +26,21 @@ describe("resolveBrainCatPresence", () => {
 
   test("between turns: attention, then a delivered result, then delegated Work", () => {
     const needs = work({ work_id: "a", title: "Approve deploy", status: "needs_input" });
+    const asked = work({ work_id: "d", title: "Apple agreement", status: "waiting", progress_mode: "waiting", wake: { kind: "user_input", ref: "Apple agreement" } });
     const unread = work({ work_id: "b", title: "Weekly report", status: "done", unread_result: true });
     const delegated = work({ work_id: "c", title: "Regression sweep", status: "waiting", attempt_delegated: true });
-    expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated, unread, needs] })).toEqual({
+    expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated, unread, needs, asked] })).toEqual({
       state: "attention",
-      workTitle: "Approve deploy",
-      workId: "a",
+      count: 2,
+      workIds: ["a", "d"],
     });
     expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated, unread] })).toEqual({
       state: "delivered",
-      workTitle: "Weekly report",
-      workId: "b",
+      count: 1,
     });
     expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated] })).toEqual({
       state: "delegating",
-      workTitle: "Regression sweep",
-      workId: "c",
+      count: 1,
     });
   });
 
@@ -54,7 +53,10 @@ describe("resolveBrainCatPresence", () => {
   test("only between-turn states get a tail row", () => {
     expect(brainCatTailLabel({ state: "attention" })).toBe("Needs you");
     expect(brainCatTailLabel({ state: "delivered" })).toBe("Brought something back");
-    expect(brainCatTailLabel({ state: "delegating" })).toBe("Waiting on Workers");
+    expect(brainCatTailLabel({ state: "delegating" })).toBe("Waiting on a Worker");
+    expect(brainCatTailLabel({ state: "attention", count: 6 })).toBe("6 need you");
+    expect(brainCatTailLabel({ state: "delivered", count: 2 })).toBe("Brought 2 things back");
+    expect(brainCatTailLabel({ state: "delegating", count: 3 })).toBe("Waiting on 3 Workers");
     for (const state of ["idle", "working", "waking", "offline", "homeless"] as const) {
       expect(brainCatTailLabel({ state })).toBeNull();
     }
