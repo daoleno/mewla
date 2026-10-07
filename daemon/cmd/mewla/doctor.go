@@ -66,5 +66,5 @@ func printDoctorUsage(w io.Writer) {
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  mewla doctor")
 	fmt.Fprintln(w, "  mewla doctor --json")
-	fmt.Fprintln(w, "  mewla doctor --state-dir /tmp/zen-state --addr 127.0.0.1:9876")
+	fmt.Fprintln(w, "  mewla doctor --state-dir /tmp/mewla-state --addr 127.0.0.1:9876")
 }

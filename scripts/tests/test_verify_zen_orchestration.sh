@@ -57,7 +57,7 @@ if [[ "$1 $2 $3" == "worker list --json" ]]; then
   printf '%s\n' '{"ok":true,"workers":[]}'
   exit 0
 fi
-printf 'unexpected fake zen command\n' >&2
+printf 'unexpected fake mewla command\n' >&2
 exit 11
 EOF
 chmod 700 "$FAKE_ZEN"
@@ -65,7 +65,7 @@ chmod 700 "$FAKE_ZEN"
 run() {
   local output status
   set +e
-  output="$("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --zen-bin "$FAKE_ZEN" "$@" 2>&1)"
+  output="$("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_ZEN" "$@" 2>&1)"
   status=$?
   set -e
   LAST_OUTPUT="$output"
@@ -171,7 +171,7 @@ assert_caller_sentinel
 rm -f "$CHILD_PID_DIR/doctor-hang.pid"
 export FAKE_MODE=doctor-hang
 set +e
-("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --zen-bin "$FAKE_ZEN" --timeout-seconds 30 >"$SANDBOX/early.json" 2>"$SANDBOX/early.err") &
+("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_ZEN" --timeout-seconds 30 >"$SANDBOX/early.json" 2>"$SANDBOX/early.err") &
 early_pid=$!
 kill -TERM "$early_pid"
 wait "$early_pid"
@@ -183,7 +183,7 @@ assert_caller_sentinel
 
 rm -f "$DOCTOR_MARKER"
 set +e
-NO_STATE_OUTPUT="$("$SCRIPT" --json --root "$REPO" --zen-bin "$FAKE_ZEN" 2>&1)"
+NO_STATE_OUTPUT="$("$SCRIPT" --json --root "$REPO" --mewla-bin "$FAKE_ZEN" 2>&1)"
 NO_STATE_STATUS=$?
 set -e
 assert_eq "$NO_STATE_STATUS" 1
@@ -193,7 +193,7 @@ assert_contains "$NO_STATE_OUTPUT" "explicit existing state directory"
 export FAKE_MODE=doctor-hang
 rm -f "$CHILD_PID_DIR/doctor-hang.pid"
 set +e
-("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --zen-bin "$FAKE_ZEN" --timeout-seconds 30 >"$SANDBOX/signal.json" 2>"$SANDBOX/signal.err") &
+("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_ZEN" --timeout-seconds 30 >"$SANDBOX/signal.json" 2>"$SANDBOX/signal.err") &
 signal_pid=$!
 set -e
 for _ in $(seq 1 50); do

@@ -310,7 +310,7 @@ func validateHTTPBaseURL(raw string, allowRemote bool) error {
 	loopback := isLoopbackHost(parsed.Hostname())
 	if !loopback {
 		if !allowRemote {
-			return fmt.Errorf("%w: zen route url must be loopback-only", ErrInvalid)
+			return fmt.Errorf("%w: mewla route url must be loopback-only", ErrInvalid)
 		}
 		if ip, err := netip.ParseAddr(parsed.Hostname()); err == nil {
 			ip = ip.Unmap()

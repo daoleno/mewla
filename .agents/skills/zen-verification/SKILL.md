@@ -1,18 +1,18 @@
 ---
 name: zen-verification
-description: "Verify Zen's provider-neutral Brain and Worker control plane from the real CLI. Use when a change needs a bounded runtime preflight tied to source and tests."
+description: "Verify Mewla's provider-neutral Brain and Worker control plane from the real CLI. Use when a change needs a bounded runtime preflight tied to source and tests."
 disable-model-invocation: false
 ---
 
-# Zen verification
+# Mewla verification
 
-Use this skill for changes to Brain routing, Worker lifecycle, executor selection, or project skill loading. The verification surface is the Zen CLI and the canonical running daemon. It does not call an AI provider, start a desktop client, drive a personal display, or mutate Work, Session, or skill state.
+Use this skill for changes to Brain routing, Worker lifecycle, executor selection, or project skill loading. The verification surface is the Mewla CLI and the canonical running daemon. It does not call an AI provider, start a desktop client, drive a personal display, or mutate Work, Session, or skill state.
 
 Read `features/README.md` before choosing a feature. Each feature file names the user path, runtime command, source anchors, test anchors, and failure cases. Keep the feature map aligned with the current code.
 
 ## Launch
 
-This skill does not start Zen. Every run must pass an explicit, existing, non-symlink state directory. That directory must belong to the daemon being checked. This prevents `mewla doctor` from creating a state directory before its write and tmux probes run.
+This skill does not start Mewla. Every run must pass an explicit, existing, non-symlink state directory. That directory must belong to the daemon being checked. This prevents `mewla doctor` from creating a state directory before its write and tmux probes run.
 
 Run the lever from the repository root:
 

@@ -25,17 +25,17 @@ import (
 )
 
 const (
-	bootIsActive     = "systemctl --user is-active zen.service"
-	bootIsEnabled    = "systemctl --user is-enabled zen.service"
-	bootMainPID      = "systemctl --user show zen.service -p MainPID --value"
-	bootFragment     = "systemctl --user show zen.service -p FragmentPath --value"
-	bootControlGroup = "systemctl --user show zen.service -p ControlGroup --value"
+	bootIsActive     = "systemctl --user is-active mewla.service"
+	bootIsEnabled    = "systemctl --user is-enabled mewla.service"
+	bootMainPID      = "systemctl --user show mewla.service -p MainPID --value"
+	bootFragment     = "systemctl --user show mewla.service -p FragmentPath --value"
+	bootControlGroup = "systemctl --user show mewla.service -p ControlGroup --value"
 	bootReload       = "systemctl --user daemon-reload"
-	bootEnable       = "systemctl --user enable zen.service"
-	bootEnableNow    = "systemctl --user enable --now zen.service"
-	bootRestart      = "systemctl --user restart zen.service"
-	bootStop         = "systemctl --user stop zen.service"
-	bootDisable      = "systemctl --user disable zen.service"
+	bootEnable       = "systemctl --user enable mewla.service"
+	bootEnableNow    = "systemctl --user enable --now mewla.service"
+	bootRestart      = "systemctl --user restart mewla.service"
+	bootStop         = "systemctl --user stop mewla.service"
+	bootDisable      = "systemctl --user disable mewla.service"
 )
 
 type fakeBootRunner struct {
@@ -143,7 +143,7 @@ func newBootTestEnvironment(t *testing.T) (bootConfig, string) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	t.Setenv("HOME", home)
-	binary := filepath.Join(home, "zen")
+	binary := filepath.Join(home, "mewla")
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -393,12 +393,12 @@ func TestResolveBootConfigRelativePathsAndHome(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(work, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(work, "bin", "zen"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(work, "bin", "mewla"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	config, err := parseBootConfig("mewla boot install", []string{
-		"-binary", "./bin/zen",
+		"-binary", "./bin/mewla",
 		"-state-dir", "state",
 		"-work-dir", ".",
 		"-addr", "127.0.0.1:1234",
@@ -407,7 +407,7 @@ func TestResolveBootConfigRelativePathsAndHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Binary != filepath.Join(work, "bin", "zen") {
+	if config.Binary != filepath.Join(work, "bin", "mewla") {
 		t.Fatalf("binary = %s", config.Binary)
 	}
 	if config.StateDir != filepath.Join(work, "state") {
@@ -498,7 +498,7 @@ func TestRenderBootUnitContract(t *testing.T) {
 	config.WorkDir = "/tmp/work %dir"
 	config.StateDir = `/tmp/state %$"\ dir`
 	config.PathEnv = `/opt/go bin:/usr/bin/%s`
-	config.Binary = `/opt/zen bin/zen%$"\ file`
+	config.Binary = `/opt/mewla bin/mewla%$"\ file`
 	unit, err := renderBootUnit(config)
 	if err != nil {
 		t.Fatal(err)
@@ -509,7 +509,7 @@ func TestRenderBootUnitContract(t *testing.T) {
 		"[Service]",
 		"Type=simple",
 		`WorkingDirectory=/tmp/work %%dir`,
-		`ExecStart="/opt/zen bin/zen%%$$\"\\ file" -state-dir "/tmp/state %%$$\"\\ dir" -addr "127.0.0.1:9876"`,
+		`ExecStart="/opt/mewla bin/mewla%%$$\"\\ file" -state-dir "/tmp/state %%$$\"\\ dir" -addr "127.0.0.1:9876"`,
 		`Environment="HOME=` + strings.ReplaceAll(config.Home, `%`, `%%`) + `"`,
 		`Environment="PATH=/opt/go bin:/usr/bin/%%s"`,
 		"Restart=on-failure",
@@ -522,7 +522,7 @@ func TestRenderBootUnitContract(t *testing.T) {
 			t.Fatalf("unit missing %q:\n%s", line, unit)
 		}
 	}
-	if strings.Contains(unit, "tmux") || strings.Contains(unit, "zen-tmux") {
+	if strings.Contains(unit, "tmux") || strings.Contains(unit, "mewla-tmux") {
 		t.Fatalf("boot unit must not manage tmux:\n%s", unit)
 	}
 }
@@ -581,7 +581,7 @@ func TestBootRenderedUnitParsesWithSystemdAnalyze(t *testing.T) {
 		t.Skip("systemd-analyze is not installed")
 	}
 	base := t.TempDir()
-	binary := filepath.Join(base, "zen bin dir", "zen")
+	binary := filepath.Join(base, "mewla bin dir", "mewla")
 	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -845,7 +845,7 @@ func TestBootInstallVerificationFailureStopsOwnUnit(t *testing.T) {
 	config, home := newBootTestEnvironment(t)
 	// The installed binary is a shell script, so the active process (this
 	// test binary) cannot be the installed owner.
-	config.Binary = filepath.Join(home, "zen")
+	config.Binary = filepath.Join(home, "mewla")
 	daemonID := bootWriteIdentity(t, config.StateDir)
 	config.Addr = bootStartHealthServer(t, daemonID)
 	bootHoldStateLock(t, config.StateDir)
@@ -958,7 +958,7 @@ func TestBootInstallRefusesActiveUnitWithManualOwner(t *testing.T) {
 	// this test process must not be attributed to it.
 	runner.set(bootControlGroup, "/user.slice/user-1000.slice/user@1000.service/app.slice/manual-owner.service")
 	err := bootInstall(config, runner, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "outside zen.service") {
+	if err == nil || !strings.Contains(err.Error(), "outside mewla.service") {
 		t.Fatalf("active unit with manual state owner not refused: %v", err)
 	}
 	if runner.called(bootEnableNow) || runner.called(bootRestart) || runner.called(bootStop) {
@@ -1066,7 +1066,7 @@ func TestBootStatusUsesInstalledConfigurationAndOwner(t *testing.T) {
 		"binary sha256: ",
 		"service: active",
 		"main pid: " + strconv.Itoa(os.Getpid()),
-		"ownership: state directory is owned by zen.service (PID " + strconv.Itoa(os.Getpid()) + ")",
+		"ownership: state directory is owned by mewla.service (PID " + strconv.Itoa(os.Getpid()) + ")",
 		"health: ok daemon_id=" + daemonID,
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -1175,7 +1175,7 @@ func TestBootUninstallStopFailureRetainsConfiguration(t *testing.T) {
 	config, _ := newBootTestEnvironment(t)
 	path, metadataPath := bootWriteInstalledUnit(t, config)
 	runner := bootTestRunner()
-	runner.fail(bootStop, "Failed to stop zen.service: access denied")
+	runner.fail(bootStop, "Failed to stop mewla.service: access denied")
 	err := bootUninstall(runner, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "unit and configuration retained") {
 		t.Fatalf("stop failure not reported: %v", err)
@@ -1300,7 +1300,7 @@ func TestBootUninstallOutsideOwnerRemovesWithNote(t *testing.T) {
 	if _, err := os.Stat(metadataPath); !os.IsNotExist(err) {
 		t.Fatal("metadata was not removed")
 	}
-	if !strings.Contains(out.String(), "owned by a process outside zen.service") {
+	if !strings.Contains(out.String(), "owned by a process outside mewla.service") {
 		t.Fatalf("outside owner note missing: %s", out.String())
 	}
 }
@@ -1418,7 +1418,7 @@ func TestBootUninstallRetainsOnUnreadableOwnershipScan(t *testing.T) {
 
 func TestBootStateLockPIDStrictPermissionIsUnknown(t *testing.T) {
 	config, _ := newBootTestEnvironment(t)
-	group := "/user.slice/user-1000.slice/user@1000.service/app.slice/zen.service"
+	group := "/user.slice/user-1000.slice/user@1000.service/app.slice/mewla.service"
 	root := t.TempDir()
 	processDir := filepath.Join(root, "4242")
 	if err := os.MkdirAll(processDir, 0o755); err != nil {
@@ -1511,7 +1511,7 @@ func TestBootUninstallRetainsHeldButUnattributable(t *testing.T) {
 		config, _ := newBootTestEnvironment(t)
 		path, metadataPath := bootWriteInstalledUnit(t, config)
 		bootHoldStateLock(t, config.StateDir)
-		group := "/user.slice/user-1000.slice/user@1000.service/app.slice/zen.service"
+		group := "/user.slice/user-1000.slice/user@1000.service/app.slice/mewla.service"
 		root := t.TempDir()
 		processDir := filepath.Join(root, "4242")
 		if err := os.MkdirAll(processDir, 0o755); err != nil {

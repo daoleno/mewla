@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	fmt.Fprintln(os.Stderr, "zen-spike: tmux session watcher (validation spike)")
+	fmt.Fprintln(os.Stderr, "mewla-spike: tmux session watcher (validation spike)")
 	fmt.Fprintln(os.Stderr, "Polling tmux sessions every 500ms. Press Ctrl+C to stop.")
 	fmt.Fprintln(os.Stderr, "Events are printed as JSON to stdout.")
 	fmt.Fprintln(os.Stderr, "---")

@@ -199,7 +199,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 				admissionCount++
 			}
 			if strings.Contains(item.Body, "Brain host executor handoff:") ||
-				strings.Contains(item.Body, "You are Brain inside zen") {
+				strings.Contains(item.Body, "You are Brain inside ") {
 				t.Fatalf("handoff/bootstrap became a visible user row: %#v", item)
 			}
 		case "assistant_message":
@@ -470,7 +470,7 @@ func TestHostSwitchGrokWorkEventAmbiguousReceiptSettlesWithoutQuarantine(t *test
 	}
 	for _, timelineItem := range items {
 		if strings.Contains(timelineItem.Body, "Brain host executor handoff:") ||
-			strings.Contains(timelineItem.Body, "You are Brain inside zen") ||
+			strings.Contains(timelineItem.Body, "You are Brain inside ") ||
 			strings.Contains(timelineItem.Body, "Treat this bootstrap as a map") ||
 			strings.Contains(timelineItem.Body, "Handoff acknowledged") {
 			t.Fatalf("handoff/bootstrap became a visible Interface row: %#v", timelineItem)

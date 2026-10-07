@@ -458,13 +458,13 @@ func (c *CodexAppServerClient) Call(ctx context.Context, method string, params a
 
 	encoder := json.NewEncoder(stdin)
 	decoder := json.NewDecoder(stdout)
-	initID := "zen-init"
+	initID := "mewla-init"
 	if err := encoder.Encode(jsonRPCRequest{
 		ID:     initID,
 		Method: "initialize",
 		Params: map[string]any{
 			"clientInfo": map[string]any{
-				"name":    "zen",
+				"name":    "mewla",
 				"version": "dev",
 			},
 			"capabilities": map[string]any{
@@ -481,7 +481,7 @@ func (c *CodexAppServerClient) Call(ctx context.Context, method string, params a
 		return fmt.Errorf("write codex app-server initialized notification: %w", err)
 	}
 
-	requestID := fmt.Sprintf("zen-%d", c.nextID.Add(1))
+	requestID := fmt.Sprintf("mewla-%d", c.nextID.Add(1))
 	if params == nil {
 		params = map[string]any{}
 	}

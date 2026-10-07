@@ -100,7 +100,7 @@ var (
 	// ErrDuplicateName means another Provider already uses the same display
 	// name (case-insensitive). Names are the user-facing identity.
 	ErrDuplicateName              = errors.New("provider name already exists")
-	ErrRouteRequired              = errors.New("zen loopback route url is required")
+	ErrRouteRequired              = errors.New("mewla loopback route url is required")
 	ErrBindingNotFound            = errors.New("session route binding not found")
 	ErrBindingConflict            = errors.New("session route binding generation conflict")
 	ErrBindingExecutorMismatch    = errors.New("route binding cannot change executor")

@@ -140,7 +140,7 @@ func (r *Router) CloseWebSocketConnections() {
 	if r == nil || r.ws == nil {
 		return
 	}
-	r.ws.closeAll(websocketCloseGoingAway, "zen daemon shutting down")
+	r.ws.closeAll(websocketCloseGoingAway, "mewla daemon shutting down")
 }
 
 func (r *Router) credentialLookup() func(string) (string, bool) {

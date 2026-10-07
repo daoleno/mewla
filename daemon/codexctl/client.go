@@ -119,7 +119,7 @@ type LiveControl interface {
 // DialOptions configures Open.
 type DialOptions struct {
 	// ClientName is advertised in initialize (must be a valid HTTP header
-	// value; defaults to "zen").
+	// value; defaults to "mewla").
 	ClientName string
 	// AckTimeout bounds the applied-settings acknowledgement wait.
 	AckTimeout time.Duration
@@ -138,7 +138,7 @@ func Open(ctx context.Context, socketPath string, opts DialOptions) (*Client, er
 		return nil, fmt.Errorf("%w: empty socket path", ErrConnect)
 	}
 	if opts.ClientName == "" {
-		opts.ClientName = "zen"
+		opts.ClientName = "mewla"
 	}
 	if opts.AckTimeout <= 0 {
 		opts.AckTimeout = DefaultAckTimeout
@@ -156,7 +156,7 @@ func Open(ctx context.Context, socketPath string, opts DialOptions) (*Client, er
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	conn, _, err := dialer.DialContext(dialCtx, "ws://zen-codex-ctl/", http.Header{
-		"User-Agent": []string{"zen/" + opts.ClientName},
+		"User-Agent": []string{"mewla/" + opts.ClientName},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrConnect, socketPath, err)

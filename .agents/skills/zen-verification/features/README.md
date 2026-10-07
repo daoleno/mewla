@@ -1,10 +1,10 @@
-# Zen verification map
+# Mewla verification map
 
 This map describes the control-plane paths that a Worker can verify without invoking a provider or touching personal desktop state. The doctor preflight can write its explicit state probe and start an ephemeral tmux probe. Read the matching feature file before running the lever.
 
 ## Baseline
 
-- Run from a Zen checkout with `scripts/verify-zen-orchestration.sh` present.
+- Run from a Mewla checkout with `scripts/verify-zen-orchestration.sh` present.
 - Pass the exact existing, non-symlink `--state-dir` for the daemon being checked.
 - Run `mewla doctor --json` before reading Brain or Worker state.
 - Treat raw Brain and Worker payloads as private. Keep only the compact report.

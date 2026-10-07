@@ -1738,7 +1738,7 @@ func TestServiceSnapshotMissingTmuxResumePreservesChatThreadIdentity(t *testing.
 	}
 	if activation := fw.sentCalls[0].text; !strings.Contains(activation, "Brain Host activation contract:") ||
 		strings.Contains(activation, brainWorkerRoleContract) ||
-		strings.Contains(activation, "You are Brain inside zen") {
+		strings.Contains(activation, "You are Brain inside Mewla") {
 		t.Fatalf("native-resume activation = %q", activation)
 	}
 	host, err := store.HostSession()

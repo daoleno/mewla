@@ -44,7 +44,7 @@ type Collector struct {
 func NewCollector() *Collector {
 	loadPricingCache(homeDir())
 	return &Collector{
-		usageCacheDir:      filepath.Join(homeDir(), ".cache", "zen", "usage-v1"),
+		usageCacheDir:      filepath.Join(homeDir(), ".cache", "mewla", "usage-v1"),
 		codexUsageClient:   &http.Client{Timeout: 8 * time.Second},
 		codexUsageEndpoint: codexUsageEndpoint,
 		codexUsageTimeout:  8 * time.Second,

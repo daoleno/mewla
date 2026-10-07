@@ -146,7 +146,7 @@ func renderExecutorsTOML(file executorFile, profile Profile) ([]byte, error) {
 	} else {
 		b.WriteString("# Safe/manual profile: no bypass flags were injected by setup.\n")
 	}
-	b.WriteString("# Restart zen after changing executor definitions or commands.\n")
+	b.WriteString("# Restart mewla after changing executor definitions or commands.\n")
 	b.WriteString("# Brain picks each Worker's executor, model and reasoning from its routing.md.\n\n")
 	for _, executor := range file.Executors {
 		b.WriteString("[[executors]]\n")
