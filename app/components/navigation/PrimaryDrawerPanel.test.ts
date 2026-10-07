@@ -65,7 +65,7 @@ describe("primary drawer panel", () => {
     expect(rendered[0].getText(file)).toContain("onPress={() => openRoute(destination.pathname)}");
     expect(rows(footer)).toHaveLength(0);
     expect(scroll.end).toBeLessThan(footer.pos);
-    expect(footer.getText(file)).toContain("Zen v{appVersion}");
+    expect(footer.getText(file)).toContain("Mewla v{appVersion}");
   });
 
   test("server status is a read-only header without a second Settings entry or always-on dot", () => {

@@ -11,18 +11,26 @@ if (process.env.EXPO_NO_DOTENV !== "1") {
   loadEnvFile(path.join(__dirname, ".env.local"));
 }
 
-const projectId =
-  typeof process.env.ZEN_EXPO_PROJECT_ID === "string"
-    ? process.env.ZEN_EXPO_PROJECT_ID.trim()
-    : "";
+// MEWLA_* names win; legacy ZEN_* names are still honoured when unset.
+function readEnv(name) {
+  for (const key of [`MEWLA_${name}`, `ZEN_${name}`]) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+const projectId = readEnv("EXPO_PROJECT_ID");
 
 module.exports = () => {
   const extra = { ...(baseConfig.extra || {}) };
-  const iosIdentity = resolveIOSIdentity(process.env.ZEN_IOS_APP_VARIANT);
+  const iosIdentity = resolveIOSIdentity(readEnv("IOS_APP_VARIANT"));
   const iosNotificationMode = resolveIOSNotificationMode(iosIdentity);
   const iosMarketingVersion = resolveIOSMarketingVersion(baseConfig.version);
   const iosBuildNumber = resolveIOSBuildNumber(
-    process.env.ZEN_IOS_BUILD_NUMBER,
+    readEnv("IOS_BUILD_NUMBER"),
     trackedIOSBuildNumber,
   );
 
@@ -78,7 +86,7 @@ function resolveIOSBuildNumber(value, fallback) {
   const candidate =
     typeof value === "string" && value.trim() ? value.trim() : String(fallback);
   if (!/^[1-9][0-9]*$/.test(candidate)) {
-    throw new Error("ZEN_IOS_BUILD_NUMBER must be a positive integer");
+    throw new Error("MEWLA_IOS_BUILD_NUMBER must be a positive integer");
   }
   return candidate;
 }

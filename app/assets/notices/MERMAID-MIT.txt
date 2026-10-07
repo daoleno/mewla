@@ -1,7 +1,7 @@
 Mermaid (flowchart renderer) — third-party notice
 =================================================
 
-Zen Markdown flowchart rendering bundles mermaid.min.js from the mermaid
+Mewla Markdown flowchart rendering bundles mermaid.min.js from the mermaid
 package (MIT). The library runs only inside a sandboxed WebView/local document.
 It is not loaded from a CDN and does not execute user JavaScript.
 

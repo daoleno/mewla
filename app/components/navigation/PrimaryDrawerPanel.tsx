@@ -160,7 +160,7 @@ export function PrimaryDrawerPanel({
           ]}
           accessibilityRole="header"
         >
-          Zen
+          Mewla
         </Text>
         <Pressable
           ref={closeButtonRef}
@@ -258,7 +258,7 @@ export function PrimaryDrawerPanel({
             },
           ]}
         >
-          Zen v{appVersion}
+          Mewla v{appVersion}
         </Text>
       </View>
     </SafeAreaView>

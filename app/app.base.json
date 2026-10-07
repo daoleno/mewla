@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "Zen",
-    "slug": "zen",
+    "name": "Mewla",
+    "slug": "mewla",
     "version": "0.1.15",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "zen",
+    "scheme": ["mewla", "zen"],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#12120E"
     },
     "ios": {
-      "bundleIdentifier": "com.daoleno.zen",
+      "bundleIdentifier": "com.daoleno.mewla",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -22,7 +22,7 @@
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
         ],
-        "NSLocalNetworkUsageDescription": "Allow Zen to connect to your self-hosted daemon on the local network.",
+        "NSLocalNetworkUsageDescription": "Allow Mewla to connect to your self-hosted daemon on the local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true,
           "NSAllowsArbitraryLoads": false
@@ -37,7 +37,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.daoleno.zen",
+      "package": "com.daoleno.mewla",
       "versionCode": 39,
       "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "permissions": ["android.permission.CAMERA"]
@@ -48,7 +48,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan Zen pairing QR codes.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan Mewla pairing QR codes.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true

@@ -37,9 +37,9 @@ export async function resolveBrowserPairingURL(
 
   const linkHost = new URL(linkOrigin).host;
   throw new Error(
-    `This link pairs with ${linkHost}, a different Zen daemon from the one serving this page. ` +
+    `This link pairs with ${linkHost}, a different Mewla daemon from the one serving this page. ` +
       `A browser can only pair with the daemon that serves it. Open ${linkOrigin}/ if that daemon serves the web UI, ` +
-      `or run \`zen web\` on that computer.`,
+      `or run \`mewla web\` on that computer.`,
   );
 }
 

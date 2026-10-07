@@ -16,7 +16,7 @@ describe("Settings copy density", () => {
       "Mobile-native agent control plane",
       '"Current daemon"',
       "Scan the QR, or choose an image from this device.",
-      "Advanced / Self-managed: run zen pair",
+      "Advanced / Self-managed: run mewla pair",
       "Bot chats are Telegram cloud chats. The token remains on this daemon.",
       "Create a bot with BotFather, then enter its token once.",
       "Full-origin endpoint from LAN, Tailscale, Cloudflare",
@@ -28,8 +28,8 @@ describe("Settings copy density", () => {
   test("retains requirements, consequences, security boundaries, and accessibility semantics", () => {
     for (const necessaryCopy of [
       "Camera permission required",
-      "Allow camera access to scan a zen pairing QR code.",
-      "Scan the one-time QR from zen pair, or paste its pairing link.",
+      "Allow camera access to scan a mewla pairing QR code.",
+      "Scan the one-time QR from mewla pair, or paste its pairing link.",
       'accessibilityLabel="Server endpoint"',
       "Telegram cloud messages are not deleted.",
       'accessibilityLabel="Appearance theme"',

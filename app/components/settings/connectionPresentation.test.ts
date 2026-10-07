@@ -66,7 +66,7 @@ describe("Settings connection information architecture", () => {
       "function connectionLabel",
     );
     expect(telegram).toContain("Server offline");
-    expect(telegram).not.toContain("zen telegram setup");
+    expect(telegram).not.toContain("mewla telegram setup");
     expect(panelSource).toContain("Reconnect the current server in Settings.");
     expect(telegram).toContain(
       'const activeServerId = setupMode === "direct" && serverId ? serverId : null',
@@ -74,7 +74,7 @@ describe("Settings connection information architecture", () => {
     expect(telegram).toContain("const visibleStatus = activeServerId ? status : null");
   });
 
-  test("Zen Server selection preserves the established pairing path", () => {
+  test("Mewla Server selection preserves the established pairing path", () => {
     const pairing = sourceBlock(
       "const openCreateServer",
       "const openEditServer",
@@ -84,7 +84,7 @@ describe("Settings connection information architecture", () => {
     expect(settingsSource).toContain("await importServer(data || \"\")");
     expect(settingsSource).toContain("await handleImportDraft()");
     expect(settingsSource).not.toContain(
-      "Advanced / Self-managed: run zen pair",
+      "Advanced / Self-managed: run mewla pair",
     );
   });
 

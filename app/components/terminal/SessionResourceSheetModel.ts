@@ -52,7 +52,7 @@ export type SessionResourcePresentation = {
   peakLabel?: string;
   tasksLabel?: string;
   qualifier?: string;
-  /** Compact copy when Zen does not manage this Session's resources. */
+  /** Compact copy when Mewla does not manage this Session's resources. */
   unmanagedNote?: string;
   /** True when Session memory/peak/tasks exist to justify the hero card. */
   showSessionHero: boolean;
@@ -148,7 +148,7 @@ export function buildSessionResourceViewModel(
     .filter(Boolean)
     .join(" · ");
 
-  const unmanagedNote = managed ? undefined : "Not resource-managed by Zen";
+  const unmanagedNote = managed ? undefined : "Not resource-managed by Mewla";
   const peakLabel = peak ? `Peak ${peak}` : undefined;
   const showSessionHero =
     managed && (memoryLabel != null || peakLabel != null || tasks != null);

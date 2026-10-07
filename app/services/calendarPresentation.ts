@@ -3,7 +3,7 @@ export const kindLabel: Record<CalendarKind, string> = {
   event: "Event",
   reminder: "Reminder",
   deadline: "Deadline",
-  scheduled_action: "Zen action",
+  scheduled_action: "Mewla action",
 };
 export function itemInstant(item: CalendarItem): string {
   return item.next_at ?? item.start_at ?? item.notify_at ?? item.due_at!;

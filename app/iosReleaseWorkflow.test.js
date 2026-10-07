@@ -59,7 +59,7 @@ describe('iOS signed release identity contract', () => {
     expect(workflow).toContain('"display_name": os.environ["ZEN_IOS_DISPLAY_NAME"]');
     expect(workflow).toContain('"marketing_version": os.environ["ZEN_IOS_VERSION"]');
     expect(workflow).not.toContain('"marketing_version": base["version"]');
-    expect(workflow).not.toMatch(/expected_bundle\s*=\s*"com\.daoleno\.zen"/);
+    expect(workflow).not.toMatch(/expected_bundle\s*=\s*"com\.daoleno\.(?:zen|mewla)/);
   });
 
   it('uploads Preview with an Individual API key and no altool issuer dependency', () => {
@@ -67,7 +67,7 @@ describe('iOS signed release identity contract', () => {
     expect(workflow).toContain('HD84J3DJ2B');
     expect(workflow).toContain('./.zen-release-automation/scripts/app-store-connect-upload.py');
     expect(workflow).toContain('--app-id "$ZEN_ASC_APP_ID"');
-    expect(workflow).toContain('EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Zen Preview" --submit-beta-review)');
+    expect(workflow).toContain('EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview" --submit-beta-review)');
     expect(workflow).toContain('"${EXTRA_ARGS[@]}"');
     expect(workflow).toContain('zen-asc-individual-key.p8');
     expect(workflow).not.toContain('ZEN_ASC_ISSUER_ID');

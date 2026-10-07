@@ -10,9 +10,9 @@ import { EmptyState } from "../ui/EmptyState";
 
 const GUIDE = "https://github.com/daoleno/mewla/blob/main/docs/";
 export const COMPUTER_SETUP_STEPS = [
-  { title: "Check your computer", command: "zen doctor" },
-  { title: "Start on trusted Wi-Fi", command: "zen --lan" },
-  { title: "Run the pairing command printed by Zen" },
+  { title: "Check your computer", command: "mewla doctor" },
+  { title: "Start on trusted Wi-Fi", command: "mewla --lan" },
+  { title: "Run the pairing command printed by Mewla" },
 ] as const;
 
 export function OnboardingPresentation({ serverName, connection, error, onPair, onRetry, onSettings, onContinue }: {
@@ -34,7 +34,7 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.brand}>
           <ZenLogoMark size={44} accessibilityIgnoresInvertColors />
-          <Text style={[styles.brandName, { color: colors.textPrimary }]}>Zen</Text>
+          <Text style={[styles.brandName, { color: colors.textPrimary }]}>Mewla</Text>
         </View>
         {paired ? (
           <EmptyState
@@ -64,10 +64,10 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
                 <Ionicons name={setup ? "chevron-up" : "chevron-down"} size={18} color={colors.textSecondary} />
               </AnimatedPressable>
               {setup ? <View style={styles.steps}>
-                <AnimatedPressable accessibilityRole="link" accessibilityLabel="Install Zen on your computer"
+                <AnimatedPressable accessibilityRole="link" accessibilityLabel="Install Mewla on your computer"
                   onPress={() => void Linking.openURL(GUIDE + "install-daemon.md")} style={styles.link}>
                   <Ionicons name="download-outline" size={18} color={colors.accent} />
-                  <Text style={[styles.linkText, { color: colors.accent }]}>Install Zen</Text>
+                  <Text style={[styles.linkText, { color: colors.accent }]}>Install Mewla</Text>
                 </AnimatedPressable>
                 {COMPUTER_SETUP_STEPS.map((step, index) => (
                   <View key={step.title} style={styles.step}>

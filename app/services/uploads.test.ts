@@ -269,7 +269,7 @@ describe("native attachment upload", () => {
     };
 
     await expect(uploadDocumentForServer("server-a")).rejects.toThrow(
-      "Zen Link is offline",
+      "Mewla Link is offline",
     );
     expect(nativeTunnelStarts).toBe(1);
     expect(uploadCalls).toHaveLength(0);
