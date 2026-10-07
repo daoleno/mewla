@@ -17,8 +17,6 @@ export interface BrainCompanion {
   onOpenWork?: () => void;
   /** The live slip for a Work, with its inline actions, while it is current. */
   workSlip?: (workId: string) => { slip: BrainWorkSlip; actions: readonly WorkSlipAction[] } | undefined;
-  /** Opens a current Work the way the Work list does. */
-  onOpenSlip?: (slip: BrainWorkSlip) => void;
   /** The Working row reports while it is on screen, so only one cat shows. */
   onTurnRunning?: (running: boolean) => void;
   /**
