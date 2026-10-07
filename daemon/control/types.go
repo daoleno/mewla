@@ -13,6 +13,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
@@ -196,7 +197,7 @@ func DefaultSocketPath(stateDir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		stateDir = filepath.Join(home, ".zen")
+		stateDir = statedir.Default(home)
 	}
 	return filepath.Join(stateDir, "run", SocketName), nil
 }

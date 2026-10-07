@@ -17,6 +17,8 @@ import (
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const (
@@ -162,7 +164,7 @@ func normalizeInventoryOptions(options InventoryOptions) (InventoryOptions, erro
 		zenStateDir = strings.TrimSpace(os.Getenv("ZEN_STATE_DIR"))
 	}
 	if zenStateDir == "" {
-		zenStateDir = filepath.Join(home, ".zen")
+		zenStateDir = statedir.Default(home)
 	}
 	for _, value := range []string{codexHome, claudeHome, zenStateDir} {
 		if !filepath.IsAbs(value) {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const (
@@ -50,7 +51,7 @@ func DefaultRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "brain"), nil
+	return filepath.Join(statedir.Default(home), "brain"), nil
 }
 
 func NewStore(root string) (*Store, error) {

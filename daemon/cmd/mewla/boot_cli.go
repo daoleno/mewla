@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/statedir"
 	"golang.org/x/sys/unix"
 )
 
@@ -204,7 +205,7 @@ func resolveBootConfig(config bootConfig) (bootConfig, error) {
 	}
 
 	if strings.TrimSpace(config.StateDir) == "" {
-		config.StateDir = filepath.Join(home, ".zen")
+		config.StateDir = statedir.Default(home)
 	}
 	if config.StateDir, err = bootAbsolutePath(config.StateDir, cwd, "state directory"); err != nil {
 		return config, err
