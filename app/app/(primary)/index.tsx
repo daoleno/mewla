@@ -427,10 +427,16 @@ export default function BrainScreen() {
       ) : null}
 
       <View style={styles.surface}>
-        <ConnectionPathIndicator
-          connected={connectionState === "connected"}
-          issue={connectionIssue?.title}
-        />
+        {/* Below the overlaid app bar, and only over the chat: the status
+            screen already says when Brain is offline. */}
+        {canUseStructuredBrainInterface ? (
+          <View pointerEvents="none" style={[styles.connectionPath, { top: topChromeInset + 2 }]}>
+            <ConnectionPathIndicator
+              connected={connectionState === "connected"}
+              issue={connectionIssue?.title}
+            />
+          </View>
+        ) : null}
         <ChatCanvas chrome={chrome}>
           <BrainCompanionContext.Provider value={brainCompanion}>
             {canUseStructuredBrainInterface ? (
@@ -596,6 +602,13 @@ function createStyles() {
     },
     surface: {
       flex: 1,
+    },
+    connectionPath: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      alignItems: "center",
+      zIndex: 3,
     },
     notices: {
       gap: 6,
