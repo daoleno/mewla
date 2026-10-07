@@ -1043,7 +1043,7 @@ function StatsRangeScene({
                       <Text style={s.rowMeta} numberOfLines={1}>{sk.projects?.join(' · ')}</Text>
                     </View>
                     <Text style={s.rowCount}>{sk.calls}</Text>
-                    <Bar ratio={sk.calls / maxSkillCalls} color={colors.statusUnknown} trackColor={colors.borderSubtle} />
+                    <Bar ratio={sk.calls / maxSkillCalls} color={colors.accent} trackColor={colors.borderSubtle} />
                   </View>
                 ))}
                 {totalSkills > MAX_LIST_ITEMS && (
@@ -1065,7 +1065,7 @@ function StatsRangeScene({
                       <Text style={s.rowName} numberOfLines={1}>{t.name}</Text>
                     </View>
                     <Text style={s.rowCount}>{t.calls}</Text>
-                    <Bar ratio={t.calls / maxToolCalls} color={colors.statusRunning} trackColor={colors.borderSubtle} />
+                    <Bar ratio={t.calls / maxToolCalls} color={colors.accent} trackColor={colors.borderSubtle} />
                   </View>
                 ))}
                 {(data.tools?.length ?? 0) > MAX_LIST_ITEMS && (

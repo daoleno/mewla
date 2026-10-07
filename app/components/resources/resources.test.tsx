@@ -53,7 +53,7 @@ if (!process.env.ZEN_RESOURCE_TEST_CHILD) {
   mock.module("../ui/AnimatedPressable", () => ({ AnimatedPressable: "Pressable" }));
   mock.module("../ui/EmptyState", () => ({ EmptyState: "EmptyState" }));
   mock.module("../ui/ActionMenu", () => ({ ActionMenu: "ActionMenu" }));
-  mock.module("./ResourceOverviewSections", () => ({ PressureHeadline: "PressureHeadline", CpuSection: "CPU", MemorySection: "Memory" }));
+  mock.module("./ResourceOverviewSections", () => ({ PressureHeadline: "PressureHeadline", PressureSignals: "PressureSignals", CpuSection: "CPU", MemorySection: "Memory" }));
   mock.module("./ResourceDetailSections", () => ({ DiskSection: "Disk", PressureSection: "Pressure" }));
   mock.module("./ResourceConsumersSection", () => ({ ConsumersSection: "Consumers" }));
   const { useResourceTelemetry } = await import("./useResourceTelemetry");

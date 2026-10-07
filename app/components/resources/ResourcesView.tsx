@@ -7,7 +7,7 @@ import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { EmptyState } from "../ui/EmptyState";
 import { ConsumersSection } from "./ResourceConsumersSection";
 import { DiskSection, PressureSection } from "./ResourceDetailSections";
-import { CpuSection, MemorySection, PressureHeadline } from "./ResourceOverviewSections";
+import { CpuSection, MemorySection, PressureHeadline, PressureSignals } from "./ResourceOverviewSections";
 import { RESOURCES_CONTENT_MAX_WIDTH, createResourceStyles } from "./resourceStyles";
 
 export interface ResourcesViewProps {
@@ -78,13 +78,7 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
           statusLabel={!connected || error ? "Last sample" : undefined}
           serverName={serverName} onRetry={onRetry} loading={loading} connected={connected}
         />
-        {telemetry.signals.length > 0 ? <View style={styles.filterRow}>
-          {telemetry.signals.map((signal) => <View key={signal.name} style={[styles.filter, { borderColor: colors.warning, minHeight: 28 }]}>
-            <Text style={[styles.caption, { color: signal.state === "critical" ? colors.dangerText : colors.warning }]}>
-              {signal.name} · {Number(signal.value.toFixed(2))} / threshold {signal.threshold}
-            </Text>
-          </View>)}
-        </View> : null}
+        <PressureSignals telemetry={telemetry} styles={styles} />
         <View style={styles.sectionHeader}>
           <Text style={styles.caption}>{historyWindowLabel(telemetry) ?? "Collecting history"} · CPU / memory 0–100%</Text>
           <AnimatedPressable style={styles.control} accessibilityRole="button" accessibilityState={{ expanded: details }}

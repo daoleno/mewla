@@ -47,7 +47,8 @@ export function browserIssue(error: unknown, server: string): BrowserIssue | nul
     return issue("Lost connection to the browser", `Still open on ${server}.`, "reconnect", "warning");
   }
   if (error instanceof TypeError || /network request failed|failed to fetch/i.test(message)) {
-    return issue(`Can't reach ${server}`, "Check the server and this phone's connection.", "retry");
+    // Offline is a warning, never a failure: nothing broke on the server.
+    return issue(`Can't reach ${server}`, "Check the server and this phone's connection.", "retry", "warning");
   }
   return issue("That didn't finish", "If it keeps failing, check Connection details in the options menu.", "retry");
 }

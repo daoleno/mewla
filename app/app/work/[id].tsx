@@ -433,11 +433,11 @@ function workStatusInfo(item: WorkItem): {
     case "failed":
       return { label: "Failed", tone: "danger" };
     case "blocked":
-      return { label: "Blocked", tone: "warning" };
+      return { label: "Blocked", tone: "blocked" };
     case "done":
       return { label: "Done", tone: "success" };
     case "removed":
-      return { label: "Removed", tone: "neutral" };
+      return { label: "Removed", tone: "blocked" };
     case "running":
       return { label: "Running", tone: "accent" };
     case "unknown":

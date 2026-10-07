@@ -5,7 +5,7 @@ import {
   chartWindow, diskThroughputSeries, formatBytes, formatPressurePercent, formatRate,
   latestDiskThroughput, psiHistorySeries,
 } from "../../services/resourceTelemetry";
-import { AreaChart, StackBar } from "./ResourceCharts";
+import { AreaChart, StackBar, pressureInk } from "./ResourceCharts";
 import { Legend, type SectionProps } from "./ResourceOverviewSections";
 
 export function PressureSection({ telemetry, styles, details }: SectionProps) {
@@ -14,12 +14,14 @@ export function PressureSection({ telemetry, styles, details }: SectionProps) {
   const peak = values.reduce<typeof values[number] | undefined>((best, next) =>
     next.value !== undefined && (best?.value === undefined || next.value > best.value) ? next : best, undefined);
   const labels = { cpu: "CPU", memory: "Mem", io: "I/O" };
+  // Pressure charts are ink until the machine is actually under pressure.
+  const ink = pressureInk(telemetry.state, colors);
   return (
     <View style={styles.surface}>
       <Text style={styles.label}>Pressure · PSI</Text>
       <Text style={styles.sectionValue}>{formatPressurePercent(peak?.value)}</Text>
       <AreaChart points={peak ? psiHistorySeries(telemetry, peak.key) : []} {...chartWindow(telemetry)} height={40}
-        color={colors.warning} accessibilityLabel={`PSI ${peak ? labels[peak.key] : "unavailable"} some history, scale 0–100%`} />
+        color={ink} accessibilityLabel={`PSI ${peak ? labels[peak.key] : "unavailable"} some history, scale 0–100%`} />
       <Text style={styles.caption}>{peak ? `${labels[peak.key]} · max some 10s` : "PSI unavailable"}</Text>
       <Text style={styles.micro}>{values.map(({ key, value }) => `${labels[key]} ${formatPressurePercent(value)}`).join(" · ")}</Text>
       {details ? <>
@@ -31,7 +33,7 @@ export function PressureSection({ telemetry, styles, details }: SectionProps) {
             return <Text key={kind} style={styles.micro}>{kind} {(["avg10", "avg60", "avg300"] as const).map((v) => formatPressurePercent(averages?.[v])).join(" / ")}</Text>;
           })}
           <AreaChart points={psiHistorySeries(telemetry, key)} {...chartWindow(telemetry)} height={24}
-            color={colors.warning} accessibilityLabel={`${labels[key]} PSI some history, scale 0–100%`} />
+            color={ink} accessibilityLabel={`${labels[key]} PSI some history, scale 0–100%`} />
         </View>)}
       </> : null}
     </View>

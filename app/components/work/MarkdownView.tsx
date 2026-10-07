@@ -328,7 +328,8 @@ function createStyles(colors: AppColors) {
       color: colors.textPrimary,
     },
     inlineCode: {
-      color: colors.promptGreen,
+      color: colors.textPrimary,
+      backgroundColor: colors.surfaceSubtle,
       fontFamily: Typography.terminalFont,
       fontSize: 13,
     },
