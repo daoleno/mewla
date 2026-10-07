@@ -60,6 +60,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { StatusPill } from "../ui/StatusPill";
+import { StatusMark } from "../ui/StatusMark";
 import { PluginsPresentation } from "../plugins/PluginsPresentation";
 import { SkillFileBrowser } from "./SkillFileBrowser";
 import { outlinedSurface } from "../ui/outlinedSurface";
@@ -338,22 +339,15 @@ function MutationToast({
         style={[
           styles.toast,
           {
-            backgroundColor: error ? colors.dangerSoft : colors.modalSurface,
-            borderColor: error ? colors.dangerText : colors.borderStrong,
+            backgroundColor: colors.modalSurface,
+            borderColor: colors.border,
           },
         ]}
       >
-        <Ionicons
-          name={error ? "warning-outline" : "checkmark-circle-outline"}
-          size={20}
-          color={error ? colors.dangerText : colors.success}
-        />
+        <StatusMark status={error ? "failed" : "ready"} knockout={colors.modalSurface} />
         <Text
           numberOfLines={3}
-          style={[
-            styles.toastText,
-            { color: error ? colors.dangerText : colors.textPrimary },
-          ]}
+          style={[styles.toastText, { color: colors.textPrimary }]}
         >
           {notice.message}
         </Text>
@@ -612,6 +606,8 @@ function LocalSkillsList(
         onAction={props.onOpenSettings}
       />
     );
+  if (props.connection === "connecting" && !props.inventory)
+    return <State loading title="Connecting to server" />;
   if (state.status === "error" && !props.inventory)
     return (
       <State
@@ -947,7 +943,7 @@ function Inspector(
             />
             <StatusPill
               label={canDelete ? "Can delete" : "Protected"}
-              tone={canDelete ? "neutral" : "warning"}
+              tone="neutral"
             />
           </View>
         </View>
@@ -1077,19 +1073,11 @@ function DetailSection({
   );
 }
 function StatusLabel({ enabled }: { enabled: boolean }) {
-  const colors = useAppColors();
   return (
-    <View style={styles.statusLabel}>
-      <View
-        style={[
-          styles.statusDot,
-          { backgroundColor: enabled ? colors.success : colors.textTertiary },
-        ]}
-      />
-      <Text style={{ color: colors.textSecondary }}>
-        {enabled ? "Enabled" : "Disabled"}
-      </Text>
-    </View>
+    <StatusPill
+      label={enabled ? "Enabled" : "Disabled"}
+      tone={enabled ? "success" : "blocked"}
+    />
   );
 }
 
@@ -1281,7 +1269,6 @@ const styles = StyleSheet.create({
   },
   rowHeading: { flexDirection: "row", alignItems: "center", gap: 7 },
   metadata: { ...TypeScale.compact },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
   iconAction: {
     minWidth: 44,
     minHeight: 44,
@@ -1335,7 +1322,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  statusLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
   badges: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   copyRow: {
     minHeight: 58,

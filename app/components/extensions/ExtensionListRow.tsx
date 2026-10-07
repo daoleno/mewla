@@ -37,9 +37,9 @@ export function ExtensionListRow({
   onOpen,
 }: ExtensionListRowProps) {
   const colors = useAppColors();
-  const actionColor = action.destructive
-    ? colors.dangerText
-    : colors.textTertiary;
+  // Row actions stay soft ink, even Delete: oxblood means failure, and the
+  // confirmation that follows carries the destructive colour.
+  const actionColor = colors.textTertiary;
   return (
     <View style={[styles.row, { borderBottomColor: colors.borderSubtle }]}>
       <Pressable
