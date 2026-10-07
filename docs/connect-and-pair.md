@@ -154,10 +154,10 @@ mewla -web-origin https://mewla.example.com
 mewla web -origin https://mewla.example.com -no-open
 ```
 
-Compared with the phone apps, the browser has no QR scanning, push
-notifications, file upload or in-app browser, and it keeps its device key in
-the browser's local storage, which is weaker than the phone's keychain. Pair
-only browser profiles you control.
+The browser gets the same Brain, Sessions, terminal and attachment uploads as
+the phone. It has no QR scanning, push notifications or in-app browser, and it
+keeps its device key in the browser's local storage, which is weaker than the
+phone's keychain. Pair only browser profiles you control.
 
 ## Manage addresses
 

@@ -41,6 +41,11 @@ LAN, Tailscale, Cloudflare Tunnel, and reverse-proxy origins continue to call
 the exact same daemon HTTP handler without Mewla Link. The daemon opens no new
 public listener for Link.
 
+The same handler also serves the app's web export (`daemon/webui`) to loopback
+and to HTTPS origins allowed with `-web-origin`. A browser pairs as one more
+device and uses the same signed requests; see
+[Pair a browser](connect-and-pair.md#pair-a-browser).
+
 ## Durable invariants
 
 1. Exactly one `StoredServer` is current. Link regions and future direct paths

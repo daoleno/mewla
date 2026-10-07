@@ -16,7 +16,7 @@ Please report security issues privately to the repository maintainers (GitHub Se
 
 Include:
 
-- affected component (daemon, app, pairing, upload, executor launch)
+- affected component (daemon, app, web UI, pairing, upload, executor launch)
 - reproduction steps
 - impact assessment (auth bypass, remote code execution on host, data exposure)
 

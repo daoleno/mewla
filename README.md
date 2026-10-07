@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="app/assets/branding/mewla-icon.png" width="88" alt="Mewla logo">
+  <img src="app/assets/branding/mewla-icon.png" width="88" alt="Mewla seal-cat logo">
 </p>
 
 <h1 align="center">Mewla</h1>
 
 <p align="center">
-  <strong>Every agent you run, in one hand.</strong><br>
-  A phone app and a small daemon on your own computer. Every coding agent and shell there becomes a Session you can read as chat, drive as a live terminal, or hand to a Brain that splits the work.
+  <strong>One person. A whole team.</strong><br>
+  Tell Brain the goal. It leads a team of coding agents on your own computer, and calls you only when it matters.
 </p>
 
 <p align="center">
@@ -16,203 +16,107 @@
 </p>
 
 <p align="center">
-  <img src="site/assets/hero.svg" width="880" alt="Ten Sessions on your computer, agents on six clients plus a shell and Brain, all running into the Sessions list on one phone">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mewla-brain-wide-dark.png">
+    <img src="docs/assets/mewla-brain-wide-light.png" width="880" alt="Brain on a wide screen: the goal 'Ship atlas-notes v1.4 this week, 2 of 5 back', Work slips in the conversation, and the Work column with one slip that needs you">
+  </picture>
+  <br><sub>Demo data.</sub>
 </p>
 
-Mewla is for one person running many coding agents. A Go daemon runs on your
-Linux or macOS machine next to your repositories, `tmux` and agent CLIs. The
-Android and iOS app connects to it. Mewla is in **beta**; see [Status](#status).
+Mewla is a phone app and a small daemon that runs next to your repositories.
+The agents are the CLIs you already use (Claude Code, Codex, Cursor, Grok, Pi,
+OpenCode), each in a real `tmux` session on your machine. Mewla gives them a
+lead and gives you a remote. Open source, self-hosted, in beta.
 
-Visit the [Mewla homepage](https://daoleno.github.io/mewla/) for an interactive overview.
+[Homepage](https://daoleno.github.io/mewla/) · [Docs](https://daoleno.github.io/mewla/docs/) · [Releases](https://github.com/daoleno/mewla/releases)
 
-## Sessions
+## How it works
 
-Start Claude, Codex, Cursor, Grok, Pi, OpenCode, DSH or a plain Shell in any
-directory on the host. Each one is a `tmux` session, so it is also there at the
-desk. On the phone, open a Session as structured **Chat** (messages, tool calls,
-plans, attachments) or as the live **Terminal**, rendered natively with
-libghostty. **Git** shows read-only All, Working and Staged diffs for its
-repository. Chat works with the six agent clients; any other command gets the
-terminal.
+1. **Say it once.** "Ship atlas-notes v1.4 this week: fix the sync bug, tidy
+   the settings copy, write release notes." In the app, or from Telegram.
+2. **Brain splits it into Work** and picks an agent for each part, following
+   `routing.md`, a file you edit.
+3. **Real agents do it**, each in `tmux` on your computer. Read any of them as
+   Chat or as the live Terminal, or take over from your phone.
+4. **You hear about it only when it matters**: a push when an agent needs you,
+   fails or finishes. In the app, its question comes with the answers as buttons.
+5. **Nothing ships unchecked.** Brain reviews every result before it counts as
+   done, and only Brain or you can close Work.
 
 <p align="center">
-  <img src="site/assets/sessions-pair.svg" width="560" alt="The same claude Session as Chat and as the live Terminal">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mewla-phone-dark.png">
+    <img src="docs/assets/mewla-phone-light.png" width="560" alt="The phone app: Brain with the goal line and Work slips, and Sessions grouped by project with state marks and the New session pill">
+  </picture>
+  <br><sub>Brain and Sessions on a phone. Demo data.</sub>
 </p>
 
-## Brain
+Around that loop: Calendar for things Brain should run later, Plugins so Brain
+can read Linear, Notion and GitHub, your own model keys, usage and cost per
+model, and a live view of what agents use on the machine.
 
-Give Brain a goal once. It records each part as durable Work, picks a Worker
-for it, reads the result and decides what happens next. Workers are ordinary
-Sessions; open any of them and take over. Only Brain or you can mark Work done.
+## Get started
 
-Brain's routing guide is `routing.md`, a few lines of Markdown in its
-workspace. It reads the guide before each spawn to choose the executor, model
-and reasoning level, and rewrites a line when you state a preference.
-`mewla brain use <executor>` moves Brain itself to another client and keeps its
-thread.
-
-<p align="center">
-  <img src="site/assets/brain.svg" width="880" alt="A goal becomes three Work items; Brain reads routing.md and gives them to claude, codex and pi Workers">
-</p>
-
-Details: [Architecture](docs/architecture.md), [Brain and Work](docs/brain-and-work.md),
-[Work lifecycle](docs/work-lifecycle.md), [Worker routing](docs/executors.md#worker-routing).
-
-## Around the agents
-
-Everything reads from the one server the app is connected to.
-
-<table>
-  <tr>
-    <td width="50%"><img src="site/assets/models.svg" alt="Model Providers for Codex and Claude"><br><b>Model Providers</b>: official login or your own OpenAI, Anthropic, DeepSeek, OpenRouter or custom gateway keys, stored on the daemon.</td>
-    <td width="50%"><img src="site/assets/skills.svg" alt="Skills and Agent Plugins"><br><b>Skills</b>: the Skills and Agent Plugins your agents load, where each copy came from, and exact-copy removal.</td>
-  </tr>
-  <tr>
-    <td><img src="site/assets/plugins.svg" alt="Plugins connected to Brain"><br><b>Plugins</b> (preview): Linear, Notion, GitHub, Slack, Google Workspace, custom MCP and OpenAPI. Read by default; changes are a separate switch.</td>
-    <td><img src="site/assets/stats.svg" alt="Usage per model"><br><b>Usage</b>: tokens, sessions and cost per model, with reported, estimated and unknown costs kept apart.</td>
-  </tr>
-  <tr>
-    <td><img src="site/assets/calendar.svg" alt="Calendar with a scheduled action"><br><b>Calendar</b>: events, reminders, deadlines and scheduled actions that run as visible Work and post back to their Brain thread.</td>
-    <td><img src="site/assets/services.svg" alt="Services with a Quick Tunnel"><br><b>Services</b>: ports your Sessions opened, by project, with an optional temporary Cloudflare Quick Tunnel.</td>
-  </tr>
-  <tr>
-    <td><img src="site/assets/resources.svg" alt="Resources dashboard"><br><b>Resources</b>: CPU, memory, disk and pressure, with processes attributed to Workers, Brain, Docker or you.</td>
-    <td><img src="site/assets/alerts.svg" alt="Push alerts and Telegram"><br><b>Alerts and Telegram</b>: push only when a Session is blocked, fails or finishes; Telegram as a second channel to the same Brain.</td>
-  </tr>
-</table>
-
-## Quick start
-
-Requirements: Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac, with
-`tmux` and at least one authenticated agent CLI on `PATH`.
+You need Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac, with `tmux`
+and one signed-in agent CLI.
 
 ```sh
-# 1. Install the daemon (checksum-verified, no sudo, no telemetry)
+# 1. Install: checksum-verified, no sudo, no telemetry
 curl -fsSL https://raw.githubusercontent.com/daoleno/mewla/main/install.sh | sh
 
-# 2. Check the host, then start on a trusted private network.
-#    With no device paired yet, mewla prints a pairing QR code and link.
-mewla doctor
+# 2. Start on a network you trust; it prints a pairing QR code
 mewla --lan
 ```
 
 3. Install the app: the Android arm64 APK from
-   [Releases](https://github.com/daoleno/mewla/releases) (see [Install](docs/install-daemon.md#android)),
-   or build iOS from source (see [Install](docs/install-daemon.md#ios)).
-4. Scan the QR code (or paste the link in **Settings > Pair Server**), then open **Brain**.
-5. Later devices: run `mewla pair` for a fresh code, or open Mewla in a browser on an
-   HTTPS address and approve it from a paired device by matching the number it shows.
+   [Releases](https://github.com/daoleno/mewla/releases), or
+   [build iOS from source](docs/install-daemon.md#ios).
+4. Scan the QR code. Open **Sessions** to start an agent, or **Brain** to give
+   it a goal.
 
-Away from your LAN, use Tailscale (`mewla -addr "$(tailscale ip -4):9876"`), or a
-Cloudflare Tunnel or reverse proxy with `mewla pair https://your-origin`. See
-[Connect and pair](docs/connect-and-pair.md).
-
-## One owner
-
-Mewla serves one person. The daemon has an Ed25519 identity; a phone enrolls once
-with a short-lived pairing code, then signs every request. The app follows
-exactly one current server, and switching servers never mixes their data.
-Repositories, credentials and agent state stay on your host. Paired phones see
-what you open; model providers see what agents send them.
-[Security and privacy](docs/security-and-privacy.md).
-
-## Everyday commands
-
-```sh
-mewla doctor                         # diagnose tmux, state, port and executors
-mewla pair [origin]                  # new one-time pairing code
-mewla devices list                   # paired phones
-mewla devices revoke -id <device-id>
-mewla update                         # verify and install the latest release
-
-mewla brain executors --json         # Brain host and available executors
-mewla brain use <executor>           # switch the agent that runs Brain
-mewla brain work list --json         # open Work (-all, -full, -id for history)
-mewla brain work update -id <work> -status done
-
-mewla worker list --json             # visible Workers
-mewla worker capture -id <id> --json # transcript
-mewla worker receipt -id <id> --work-id <work>  # was an input accepted?
-mewla worker send -id <id> --work-id <work> -text "follow-up"
-mewla worker close -id <id>
-```
-
-## Configure executors
-
-No configuration is required: built-in defaults cover `codex`, `claude`,
-`agent` (`cursor-agent`), `grok`, `pi` and `opencode`. One installed,
-authenticated CLI is enough. To customise:
-
-```sh
-cp executors.example.toml ~/.mewla/executors.toml   # then restart mewla
-```
+Away from home, use Tailscale or an HTTPS tunnel instead of `--lan`:
+[Connect and pair](docs/connect-and-pair.md). The full path is in
+[Get started](docs/get-started.md).
 
 > [!WARNING]
-> Several defaults bypass approval prompts so agents can work unattended:
-> `cursor-agent --force --sandbox disabled`, `grok --permission-mode bypassPermissions`,
-> and Brain-delegated Codex adds `--dangerously-bypass-approvals-and-sandbox`.
-> On machines with secrets or production access, use the safe profile in
-> [`executors.example.toml`](executors.example.toml). See
-> [Executors](docs/executors.md#permission-bypass-risks).
-
-Model endpoints and API keys for Codex and Claude are set in the app under
-**Settings > Agents > Model Providers**. They are stored on the daemon, never
-shown back, and are separate from the Brain executor choice.
+> Brain's Workers run without approval prompts, and some built-in agent
+> commands skip them too. On a machine with secrets or production access, read
+> [Permission bypass risks](docs/executors.md#permission-bypass-risks) first.
 
 ## Status
 
-| Area | Status |
+| Part | Status |
 | --- | --- |
-| Daemon on Linux `amd64`/`arm64`, WSL2, Apple Silicon macOS | Beta, released |
-| Android app (arm64 APK on Releases) | Beta, released |
-| iOS app | Source build. A [TestFlight preview](https://testflight.apple.com/join/rTKCDzMt) is awaiting Apple review |
-| Brain, Workers, routing, durable Work lifecycle | Beta |
-| Calendar scheduled actions, Telegram channel | Beta ([Calendar](docs/calendar.md), [Telegram](docs/notifications.md#telegram)) |
-| Plugins (Linear, Notion, GitHub, Slack, Google Workspace) | Preview; first-time connection is not ready for every service ([Plugins](docs/plugins.md)) |
-| Mewla Link relay | Optional source only. No hosted relay is operated. See [Mewla Link Relay](docs/internal/zen-link-relay.md) |
-| Web client | Out of scope |
+| Daemon: Linux `amd64`/`arm64`, WSL2, Apple Silicon macOS | Beta |
+| Android app (arm64 APK) | Beta |
+| iOS app | Build from source; no Mewla TestFlight build yet |
+| Web UI, served by the daemon | Beta; no QR scanning or push |
+| Plugins | Preview; sign-in is not ready for every service |
 
-Known release issues: [docs/release-blockers.md](docs/release-blockers.md).
+Known issues: [Releases](docs/releases/README.md#known-issues).
 
-## Development
+## Documentation
+
+- **Get it running:** [Get started](docs/get-started.md) · [Install and update](docs/install-daemon.md) · [Connect and pair](docs/connect-and-pair.md)
+- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Plugins](docs/plugins.md)
+- **Configure it:** [Agents and models](docs/executors.md) · [Usage and resources](docs/usage-and-resources.md)
+- **Reference:** [Commands](docs/cli.md) · [Security and privacy](docs/security-and-privacy.md) · [Troubleshooting](docs/troubleshooting.md)
+
+## Develop
 
 ```sh
-bun install                              # workspace deps (Bun 1.3)
-
-# Daemon
-bun run daemon:build                     # builds bin/mewla
+bun install                           # workspace dependencies (Bun 1.3)
+bun run daemon:build                  # builds bin/mewla
 cd daemon && go test ./...
-cd daemon && go run ./cmd/mewla-dev        # hot-reloading dev daemon
-
-# App
-bun run app:start                        # Expo dev server
-bun run app:android                      # needs Java 17
-bun run app:ios
 cd app && bun test && bunx tsc --noEmit
-
-# Landing page (static, in site/)
-bun run site:dev                         # prints the local preview URL
 ```
 
-Layout: `daemon/` Go daemon (`cmd/mewla`, `server`, `auth`, `brain`, `work`,
-`lifecycle`, `terminal`, `watcher`); `app/` Expo app (routes in `app/app/`,
-components, services, store); `docs/` product and operator docs; `site/`
-landing page, whose `site/assets/*.svg` drawings this README also uses
-(regenerate with `python3 scripts/site-svg/build.py`);
-`scripts/` build and release tooling.
-
-The native terminal uses libghostty; see [Android](docs/internal/android-development.md#architecture--abi-contract)
-and [iOS](docs/internal/ios-development.md#native-terminal--xcframework-contract) for build contracts.
-All documentation starts at [docs/README.md](docs/README.md).
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Keep
-changes small, run the relevant checks, and never commit pairing links, `~/.mewla`
-state, tunnel URLs or `.env.local`. Report vulnerabilities as described in
+The daemon is Go in `daemon/`, the app is Expo/React Native in `app/`. Start
+with [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) and
+[Architecture](docs/architecture.md). Report vulnerabilities as described in
 [SECURITY.md](SECURITY.md).
 
 ## License
 
 Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The Mewla name
-and logos are covered by [TRADEMARKS.md](TRADEMARKS.md).
+and seal-cat logo are covered by [TRADEMARKS.md](TRADEMARKS.md).

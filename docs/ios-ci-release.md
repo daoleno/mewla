@@ -124,7 +124,7 @@ Both identity resolutions can be checked on Linux without generating native proj
 ```bash
 cd app
 bunx expo config --json | jq '{name, bundleIdentifier: .ios.bundleIdentifier, displayName: .ios.infoPlist.CFBundleDisplayName, marketingVersion: .ios.infoPlist.CFBundleShortVersionString}'
-ZEN_IOS_APP_VARIANT=preview bunx expo config --json | jq '{name, bundleIdentifier: .ios.bundleIdentifier, displayName: .ios.infoPlist.CFBundleDisplayName, marketingVersion: .ios.infoPlist.CFBundleShortVersionString}'
+MEWLA_IOS_APP_VARIANT=preview bunx expo config --json | jq '{name, bundleIdentifier: .ios.bundleIdentifier, displayName: .ios.infoPlist.CFBundleDisplayName, marketingVersion: .ios.infoPlist.CFBundleShortVersionString}'
 ```
 
 On a Mac, reproduce the unsigned portion with:

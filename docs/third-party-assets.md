@@ -32,9 +32,9 @@ OFL redistribution still expects copyright/license notice availability to recipi
 
 | Path                                                                          | Provenance                              | License notes                                                              |
 | ----------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
-| `app/assets/branding/*` (logos, rings, SVGs)                                  | First-party Mewla artwork                 | Product assets; not third-party.                                           |
-| `app/assets/branding/mewla-*.png` and `branding/source/*.svg` | First-party Mewla branding | Product assets.                                                            |
-| Shell sky backdrop                                                            | First-party code                        | `SkyNatureBackdrop` uses only `LinearGradient` colors (no bundled raster). |
+| `app/assets/branding/mewla-*.png` and `branding/source/*.svg`                 | First-party Mewla seal mark, drawn by `scripts/render-mewla-brand.ts` | Product assets; not third-party. See [TRADEMARKS.md](../TRADEMARKS.md). |
+| `site/seal-icon.svg`, `site/sealcat.js`, `docs/assets/*`                      | First-party Mewla artwork and demo app screenshots | Product assets; not third-party.                                     |
+| Product logos in `site/index.html`                                            | [LobeHub Icons](https://github.com/lobehub/lobe-icons) (AI brands), [Simple Icons](https://simpleicons.org) (the rest) | MIT and CC0; the marks stay their owners' trademarks. |
 | `app/assets/theme/`                                                           | No bundled rasters                      | README only; do not add unattributed stock.                                |
 
 Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and `moonlit-meadow-ambient.webp`.

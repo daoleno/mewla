@@ -5,6 +5,8 @@ away. It is not a progress feed.
 
 ## Push notifications
 
+![Three pushes (needs input, failed, finished) and, below, Brain answering in Telegram](assets/alerts.svg)
+
 The daemon sends a push for three agent states:
 
 | State | Title | Priority |

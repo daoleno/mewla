@@ -1,12 +1,13 @@
-# Agents and executors
+# Agents and models
 
-Mewla runs agent CLIs that are already installed and signed in on your computer.
-An **executor** is a named launch command, such as `claude` or
-`cursor-agent --force --sandbox disabled`. You need only one.
+Mewla runs the agent CLIs already installed and signed in on your computer.
+This page covers which ones it runs, how much they may do without asking,
+which model endpoints they use, and which Skills they load.
 
-## Built-in executors
+## Built-in agents
 
-With no configuration file, Mewla uses these defaults:
+An **executor** is a named launch command. With no configuration, Mewla knows
+these; one installed, signed-in CLI is enough:
 
 | Executor | Command | Approval prompts |
 | --- | --- | --- |
@@ -14,34 +15,28 @@ With no configuration file, Mewla uses these defaults:
 | `codex` | `codex` | The CLI's own policy |
 | `agent` (Cursor) | `cursor-agent --force --sandbox disabled` | Bypassed |
 | `grok` | `grok --no-alt-screen --permission-mode bypassPermissions` | Bypassed |
-| `pi` | `pi` | Pi has no approval mode; it is permissive |
+| `pi` | `pi` | None; Pi is always permissive |
 | `opencode` | `opencode` | The CLI's own policy |
-| `dsh` | `dsh` | Opens the DSH web harness instead of a terminal agent |
+| `dsh` | `dsh` | Opens the DSH web harness, not a terminal agent |
 
-Sessions you start from the app use these commands. Brain Workers and Calendar
-scheduled actions add flags so they can run unattended; see
-[Permission bypass risks](#permission-bypass-risks).
+A Session's type follows the program that actually runs: a Cursor Session using
+a Claude model is still a Cursor Session.
 
-A Session's type follows the program that actually runs. A Cursor Session
-started with a Claude model is still a Cursor Session.
+## executors.toml
 
-## Configure executors
-
-The configuration file `~/.mewla/executors.toml` is optional. To write one with
-prompts, run:
+`~/.mewla/executors.toml` is optional. `mewla setup` writes one with prompts:
 
 ```sh
 mewla setup
-# or without prompts:
 mewla setup --non-interactive --host codex --profile safe
 ```
 
-`--host` chooses the executor that runs Brain. `--profile` is `safe` or
-`autonomous`; autonomous asks for confirmation (`--yes` without prompts).
-`mewla setup` never installs packages, runs `sudo` or signs in to providers.
+`--host` is the executor that runs Brain. `--profile` is `safe` or
+`autonomous` (autonomous needs `--yes` without prompts). Setup never installs
+packages, runs `sudo` or signs in to providers.
 
-Or write the file yourself. Each `[[executors]]` entry overrides a built-in
-executor or adds a new one; an unknown command becomes a custom terminal agent:
+To edit it by hand, add one `[[executors]]` entry per command. An entry with a
+built-in name overrides it; any other name adds a custom terminal agent:
 
 ```toml
 [[executors]]
@@ -53,21 +48,20 @@ name = "aider"
 command = "aider"
 ```
 
-Restart `mewla` after changing the file. The file is only a catalog of launch
-commands; nothing in it chooses which executor a Worker uses.
+Restart `mewla` after a change. The file only lists launch commands; Brain
+chooses which one each Worker uses (see
+[Worker routing](brain-and-work.md#worker-routing)).
 
 ## Permission bypass risks
 
-Several commands let an agent run tools and shell commands with little or no
-approval. That is what makes unattended work from a phone possible, and it is
-dangerous on a machine with secrets or production access.
+Unattended work from a phone means agents run tools and shell commands without
+asking. On a machine with secrets or production access, that is dangerous.
 
-**Sessions you start yourself** use the executor command as configured. The
-built-in `agent` (Cursor) and `grok` commands bypass approvals; `pi` is always
-permissive.
+**Sessions you start** use the command as configured. The built-in `agent` and
+`grok` commands bypass approvals, and `pi` is always permissive.
 
-**Brain Workers and Calendar scheduled actions** always run unattended,
-whatever your configuration says. Mewla adds:
+**Brain Workers and Calendar scheduled actions** always run unattended. Mewla
+adds these flags whatever the configuration says:
 
 | Agent | Added for unattended work |
 | --- | --- |
@@ -76,22 +70,21 @@ whatever your configuration says. Mewla adds:
 | Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
 | OpenCode | `--auto` |
-| Pi | Nothing; already permissive. Calendar may add `--no-extensions` |
+| Pi | Nothing. Calendar may add `--no-extensions` |
 
-Recommendations:
+So:
 
-1. On a machine with secrets or production access, use the **safe profile**
-   below for the Sessions you start, and do not hand that machine's work to
-   Brain.
-2. Use Brain and scheduled actions on machines and workspaces you are willing
-   to let an agent change without asking.
-3. Remember that Mewla reads agent transcripts from each agent's own home
-   directory, and that model providers see what agents send them.
+1. On a machine with secrets or production access, use the safe profile for
+   Sessions you start, and do not give that machine's work to Brain.
+2. Use Brain and scheduled actions only where you accept an agent changing
+   things without asking.
+3. Model providers see what agents send them.
 
 ### Safe profile
 
-Put this in `~/.mewla/executors.toml` and restart `mewla` so Sessions you start ask
-for approval in their terminal:
+With this file, Sessions you start ask for approval in their terminal. Delete
+the agents you don't use, then restart `mewla`. `mewla setup --profile safe`
+writes the same thing.
 
 ```toml
 [[executors]]
@@ -122,57 +115,59 @@ command = "opencode"
 kind = "opencode"
 ```
 
-Delete the entries for agents you do not use. `mewla setup --profile safe` writes
-an equivalent file.
+## Model Providers
 
-## Worker routing
+![Model Providers for Codex: Official login, OpenAI, DeepSeek (selected) and OpenRouter, with the Mewla Provider Gateway ready](assets/models.svg)
 
-Brain chooses the executor, model and reasoning level for every Worker. Before
-each launch it reads `routing.md` in its workspace, a few lines of plain
-Markdown such as "use Codex with high reasoning for refactors". Brain rewrites
-a line when you state a preference, when a new model appears, or when a choice
-turned out badly. Mewla itself never parses the file, and upgrades never
-overwrite it.
+**Settings > Agents > Model Providers** decides where Codex and Claude Code
+send model requests. Pick the client, then its connection:
 
-A Worker launch looks like this:
+| Connection | Requests go to |
+| --- | --- |
+| Official login | The provider, using the CLI's own sign-in on the computer |
+| OpenAI, Anthropic, DeepSeek, OpenRouter | That provider, with your API key |
+| Custom Gateway | Your endpoint, with your key |
 
-```sh
-mewla worker spawn -name "Fix flaky test" -executor claude \
-  -model claude-opus-5-5 -reasoning high -cwd /path/to/repo -prompt "..."
-```
+Keys are stored on the daemon and never shown again; leaving the key field
+empty keeps the saved one. For a custom Claude gateway, enter the endpoint
+root, including any proxy path, optionally ending in `/v1`.
 
-Without `-executor`, the Worker uses Brain's own executor. To move Brain itself
-to another agent, keeping its conversation:
+**How requests are routed.** The daemon runs one local gateway
+(`127.0.0.1:3425`, or the next free port). On each start it points Codex (a
+marked block in Codex's `config.toml`, backed up first) and Claude Code
+(`ANTHROPIC_BASE_URL` and a placeholder token in `~/.claude/settings.json`) at
+that gateway. So a CLI you start in a plain terminal or an IDE uses the
+selected connection too. The gateway swaps in the real key and forwards the
+request unchanged. Running Claude Sessions use a new connection from their next
+request.
 
-```sh
-mewla brain executors --json   # Brain's executor and the available ones
-mewla brain use codex
-```
+While the daemon is stopped, the gateway refuses connections. To use a CLI
+without Mewla, restore its backup or remove those two Claude settings.
 
-### Model and reasoning flags
+**Models.** Mewla lists what a connection offers, from the provider's live
+catalog when it can. Choosing a connection sets no default model: each CLI
+keeps its own (for Claude Code, whatever you chose with `/model`). A model
+picked for one Session applies to that Session only.
 
-Mewla maps `-model` and `-reasoning` to each client's own flags:
+The Model Provider and Brain's executor are separate choices; changing one
+never changes the other.
 
-| Executor | `-model` becomes | `-reasoning` becomes |
-| --- | --- | --- |
-| `codex` | `--model` | `-c model_reasoning_effort=...`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
-| `claude` | `--model` | `--effort`: `low`, `medium`, `high`, `xhigh`, `max` |
-| `pi` | `--model provider/id` | `--thinking`: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
-| `grok` | `--model` | Not supported |
-| `agent` (Cursor) | `--model` | Not supported |
-| `opencode` | `--model provider/model` | Not supported |
+## Skills and Agent Plugins
 
-A launch value replaces the same flag in the configured command. An executor
-that cannot take the requested option fails the launch with an explanation
-instead of silently dropping it. Empty values keep the client's default.
-Overrides need a plain command, without shell syntax or a `--` separator.
+![Skills on Studio Mac: release-notes, go-tests, brand-voice and design-audit, with the agent that loads each](assets/skills.svg)
 
-Keep executor names for clients, not for capabilities: do not create
-`codex-high` or `codex-medium`. Model and reasoning are chosen per launch.
+**Skills**, in the menu, lists the Skills your agents load on the current
+server: Codex built-ins, each agent's global and project Skills, shared Skills
+in `~/.agents/skills`, and Skills that come from Agent Plugins. A Skill found in
+several places shows each copy and its location.
 
-Older configuration files may contain `delegated_executor`,
-`delegated_model` or `delegated_reasoning`. These keys are ignored, and
-`mewla doctor` points them out; you can delete them.
+Open a Skill to see its description, files, the agents it is available to and
+every copy. **Delete Skill** removes exactly the copy you opened, after you
+confirm. Built-in copies and copies owned by an Agent Plugin are protected.
+
+The **Agent Plugins** tab lists the plugins installed for Claude Code and
+Codex, with the Skills, MCP servers and apps each one brings. A plugin can be
+uninstalled from there, after you confirm.
 
 ## Check your agents
 
@@ -180,6 +175,5 @@ Older configuration files may contain `delegated_executor`,
 mewla doctor
 ```
 
-`mewla doctor` reports which configured agents are on `PATH` and gives hints when
-one looks signed out. Model endpoints and API keys for Codex and Claude are set
-in the app; see [Providers and usage](providers-and-usage.md).
+It reports which configured agents are on `PATH`, hints when one looks signed
+out, and exits nonzero when the machine is not ready.

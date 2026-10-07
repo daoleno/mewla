@@ -223,11 +223,10 @@ reuses provider readers for unchanged transcript sources.
 
 ## App entry and refresh behavior
 
-Open **Resources** from the primary drawer, or from a terminal's action menu
-or title. All entries push the same `/resources` screen; Back returns to the
-originating screen. The view always uses the canonical current server and
-shows its name above the latest machine snapshot. It does not select a server
-from a terminal's route or merge measurements across servers.
+Open **Resources** from the menu (☰ on a phone, the sidebar on a wide screen).
+That row is its only entry point; no page menu repeats it. The view always uses
+the canonical current server and shows its name above the latest machine
+snapshot. It never merges measurements across servers.
 
 The screen requests `get_resource_telemetry` immediately when focused and
 connected, then five seconds after each completed read. Requests use the
@@ -244,8 +243,6 @@ request errors expose Retry and continue bounded polling. After a successful
 sample, disconnect or refresh failure keeps the last snapshot with a visible
 status notice and a **Last sample** label instead of **Live**. Omitted first
 interval consumer CPU is unavailable (`—`), while measured zero is `0%`.
-The terminal menu retains its session title; the old per-session resource
-sheet is no longer mounted by the terminal screen.
 
 ## Resources dashboard presentation
 

@@ -1,9 +1,12 @@
 # Calendar
 
-Calendar is Mewla's view of time: what happens when. It lives on the daemon and
-syncs to the app, so it belongs to the current server like everything else.
+Calendar is Mewla's view of time: what happens when. Open it from the menu
+(☰, or the sidebar on a wide screen). It lives on the daemon and syncs to the
+app, so it belongs to the current server like everything else.
 
 ## Item kinds
+
+![Calendar: today a reminder and a scheduled action running as Work, Friday a deadline that needs you, Monday a scheduled action](assets/calendar.svg)
 
 | Kind | Has | What happens when it is due |
 | --- | --- | --- |

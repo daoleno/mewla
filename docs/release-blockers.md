@@ -29,7 +29,7 @@ None.
 
 - **Summary:** The iOS source build and Simulator runtime path work. `GhosttyVt.xcframework` remains generated/gitignored. A signed Preview IPA can be uploaded to App Store Connect via the protected release workflow, but that is not the same as public TestFlight/App Store installability.
 - **Acceptance:** Reproducible CI produces and verifies the pinned XCFramework, packages the Ghostty MIT notice into the app bundle, archives/signs the app, and publishes a supported installation path with checksummed artifacts where applicable.
-- **Resolution evidence:** the protected `v0.1.0-beta.22` iOS workflow completed archive, identity, signature, upload, processing, public TestFlight-group attachment, and Beta App Review submission. The supported public Preview URL is <https://testflight.apple.com/join/rTKCDzMt>.
+- **Resolution evidence:** the protected `v0.1.0-beta.22` iOS workflow completed archive, identity, signature, upload, processing, public TestFlight-group attachment, and Beta App Review submission. That public Preview URL, <https://testflight.apple.com/join/rTKCDzMt>, belongs to the pre-rename `Zen — Coding Agents` record (`com.daoleno.zen.preview`); Mewla Preview needs its own record and group (see [iOS CI](ios-ci-release.md)).
 - **User/CI commands:** `bun run native:build:ios`; `bun run native:verify:ios`; Expo prebuild/Pods; the `CI` macOS job; or a protected manual `iOS signed release` dispatch.
 
 ### `theme-image-provenance-unknown` (resolved)

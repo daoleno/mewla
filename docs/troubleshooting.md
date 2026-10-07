@@ -18,14 +18,8 @@ network, and says what to fix.
 - **State directory locked**: another `mewla` already uses the same state
   directory, perhaps as a service from `mewla boot install`. Check with
   `mewla boot status`. Only one daemon can own a state directory.
-- **State is still in `~/.zen`**: Mewla moves `~/.zen` to `~/.mewla` on its
-  first run, but waits while a daemon from before the rename still uses
-  `~/.zen`. Stop that daemon, then run `mewla state migrate`. See
-  [Coming from Zen](install-daemon.md#coming-from-zen).
 - **Permission errors on `~/.mewla`**: the state directory must belong to your
   user. Do not run `mewla` as root.
-- **`-advertise-url` is unknown**: that flag no longer exists. Start `mewla`, then
-  run `mewla pair <origin>` with the address the phone should use.
 
 ## The phone cannot connect
 
@@ -84,7 +78,7 @@ has not shipped yet. See [Plugins](plugins.md#sign-in-availability).
 
 Mewla points both CLIs at its local gateway, which only runs with the daemon.
 Start `mewla`, or remove the gateway settings as described in
-[Providers and usage](providers-and-usage.md#how-routing-works).
+[Model Providers](executors.md#model-providers).
 
 ## macOS blocks the binary
 

@@ -6,8 +6,8 @@ Mewla marks. It is separate from the copyright license in [LICENSE](LICENSE).
 
 ## Marks
 
-“Mewla”, the Mewla name in product titles and packaging, and the official Mewla logo
-and loop mark are trademarks and brand assets of the project maintainer
+“Mewla”, the Mewla name in product titles and packaging, and the official Mewla
+seal mark (the vermilion seal with the cat) are trademarks and brand assets of the project maintainer
 (daoleno / the Mewla project). Other names, logos, and distinctive visual identity
 used to identify the official project are covered by this policy when used as
 marks.
@@ -39,7 +39,7 @@ You may not:
   way that is confusingly similar to “Mewla” as this project’s product identity
   (for example “Official Mewla Cloud”, “Mewla Mobile Pro” as a third-party store
   listing for a fork).
-- Use the official logo or loop mark as the primary brand of a competing or
+- Use the official seal mark as the primary brand of a competing or
   unrelated product.
 - Remove or replace brand marks in a redistribution in order to pass off a
   modified build as the official project release.
