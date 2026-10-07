@@ -1,6 +1,6 @@
 # Calendar
 
-Calendar is Zen's view of time: what happens when. It lives on the daemon and
+Calendar is Mewla's view of time: what happens when. It lives on the daemon and
 syncs to the app, so it belongs to the current server like everything else.
 
 ## Item kinds
@@ -20,7 +20,7 @@ time that occurs twice asks you to choose the first or second occurrence.
 ## Scheduled actions
 
 A scheduled action is a small job for an agent: "At 09:30 on weekdays,
-summarise yesterday's merged pull requests." When it is due, Zen:
+summarise yesterday's merged pull requests." When it is due, Mewla:
 
 1. creates a visible Work item and starts the agent in its own Session, on
    Brain's executor;
@@ -53,20 +53,20 @@ tomorrow at 9"). It does not pull commitments out of every message.
 From the computer:
 
 ```sh
-zen calendar list --json
-zen calendar get -id <item-id> --json
-zen calendar create -title "Review plan" -kind reminder \
+mewla calendar list --json
+mewla calendar get -id <item-id> --json
+mewla calendar create -title "Review plan" -kind reminder \
   -date 2026-07-15 -time 09:30 -timezone Europe/Berlin --json
-zen calendar create -title "Summarise merged PRs" -kind scheduled_action \
+mewla calendar create -title "Summarise merged PRs" -kind scheduled_action \
   -date 2026-07-15 -time 09:30 -timezone Europe/Berlin -recurrence weekdays \
   -instruction "Summarise yesterday's merged pull requests" \
   -source-thread <brain-thread-id> --json
-zen calendar cancel -id <item-id> -revision <revision> --json
-zen calendar run -id <item-id> --json
+mewla calendar cancel -id <item-id> -revision <revision> --json
+mewla calendar run -id <item-id> --json
 ```
 
 A scheduled action needs `-source-thread`, the Brain thread that receives its
-result. Events use `-end-date` and `-end-time`. `zen calendar update` takes the
+result. Events use `-end-date` and `-end-time`. `mewla calendar update` takes the
 complete item as `-item-json` plus its current `-revision`, so two edits cannot
 silently overwrite each other.
 

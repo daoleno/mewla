@@ -1,31 +1,31 @@
-# Verify Zen control-plane changes
+# Verify Mewla control-plane changes
 
-Zen's reusable verification entry point is the project skill at `.agents/skills/zen-verification/SKILL.md`. Zen's native Skill loaders and shared inventory discover this project root for supported local agents, including Pi. Its feature map binds each named user path to source files, tests, and a separately classified source or runtime check.
+Mewla's reusable verification entry point is the project skill at `.agents/skills/zen-verification/SKILL.md`. Mewla's native Skill loaders and shared inventory discover this project root for supported local agents, including Pi. Its feature map binds each named user path to source files, tests, and a separately classified source or runtime check.
 
 ## Run the control-plane check
 
 Run the check from the repository root with the exact existing state directory of the daemon you intend to check:
 
 ```sh
-scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-zen-state
+scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state
 ```
 
 The check validates the feature manifest and then runs these bounded commands against the canonical daemon:
 
-- `zen doctor --json`
-- `zen brain playbooks --json`
-- `zen brain context --json`
-- `zen worker list --json`
+- `mewla doctor --json`
+- `mewla brain playbooks --json`
+- `mewla brain context --json`
+- `mewla worker list --json`
 
 The output is compact JSON with separate source and runtime identities, feature IDs, source and test anchor counts, check IDs, host and delegated executor IDs, and Worker count. Raw Brain, Work, transcript, and provider payloads are held only in an unpredictable private `0700` directory with `0600` files during the bounded run, then removed by exact-file cleanup.
 
 To target a daemon explicitly, pass its exact state directory:
 
 ```sh
-scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/zen-state
+scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/mewla-state
 ```
 
-The check does not start a server, call an AI provider, create a Work item, or touch desktop input. `zen doctor` is not read-only. It may write its state probe and start an ephemeral tmux probe. Executor probes may have their own side effects. The script rejects an absent or symlink state directory before invoking doctor. The script does not claim that those tmux or executor probes are isolated by the state directory. Do not start a second daemon to make the check pass.
+The check does not start a server, call an AI provider, create a Work item, or touch desktop input. `mewla doctor` is not read-only. It may write its state probe and start an ephemeral tmux probe. Executor probes may have their own side effects. The script rejects an absent or symlink state directory before invoking doctor. The script does not claim that those tmux or executor probes are isolated by the state directory. Do not start a second daemon to make the check pass.
 
 ## Keep the map current
 

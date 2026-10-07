@@ -1,43 +1,43 @@
-# Zen trademarks and brand policy
+# Mewla trademarks and brand policy
 
 The Apache License 2.0 grants copyright and patent rights in the software.
 It does **not** grant trademark rights. This document is the brand policy for
-Zen marks. It is separate from the copyright license in [LICENSE](LICENSE).
+Mewla marks. It is separate from the copyright license in [LICENSE](LICENSE).
 
 ## Marks
 
-“Zen”, the Zen name in product titles and packaging, and the official Zen logo
+“Mewla”, the Mewla name in product titles and packaging, and the official Mewla logo
 and loop mark are trademarks and brand assets of the project maintainer
-(daoleno / the Zen project). Other names, logos, and distinctive visual identity
+(daoleno / the Mewla project). Other names, logos, and distinctive visual identity
 used to identify the official project are covered by this policy when used as
 marks.
 
-This policy does not claim rights in ordinary English dictionary use of the word
-“zen” when it does not identify this project or imply affiliation.
+This policy does not claim rights in ordinary use of the word
+“mewla” when it does not identify this project or imply affiliation.
 
 ## Allowed without prior permission
 
 You may:
 
-- State factual origin, for example “based on Zen”, “compatible with Zen”, or
-  “forked from the Zen repository”, when the statement is accurate.
+- State factual origin, for example “based on Mewla”, “compatible with Mewla”, or
+  “forked from the Mewla repository”, when the statement is accurate.
 - Reproduce the product name and NOTICE attributions as required by the Apache
   License 2.0 when redistributing the software.
 - Link to the official repository or documentation.
-- Discuss Zen, review it, or teach with it in ordinary editorial use.
+- Discuss Mewla, review it, or teach with it in ordinary editorial use.
 
 When you redistribute modified software, make clear that your build is modified
-and is not the official Zen release if that could reasonably confuse users.
+and is not the official Mewla release if that could reasonably confuse users.
 
 ## Not allowed without written permission
 
 You may not:
 
-- Use Zen marks in a way that implies official endorsement, partnership, or
-  sponsorship by the Zen project when none exists.
+- Use Mewla marks in a way that implies official endorsement, partnership, or
+  sponsorship by the Mewla project when none exists.
 - Name a product, company, domain, app store listing, or commercial service in a
-  way that is confusingly similar to “Zen” as this project’s product identity
-  (for example “Official Zen Cloud”, “Zen Mobile Pro” as a third-party store
+  way that is confusingly similar to “Mewla” as this project’s product identity
+  (for example “Official Mewla Cloud”, “Mewla Mobile Pro” as a third-party store
   listing for a fork).
 - Use the official logo or loop mark as the primary brand of a competing or
   unrelated product.
@@ -46,14 +46,14 @@ You may not:
 
 Apache License 2.0 section 6 already limits trademark use except as needed for
 reasonable origin statements and NOTICE reproduction. This policy explains how
-those limits apply to Zen specifically.
+those limits apply to Mewla specifically.
 
 ## Forks and derivatives
 
 Forking and modifying the source under Apache-2.0 is welcome. Trademark rules
 still apply: choose a distinct product name and branding for public
 distributions of a fork, keep attribution accurate, and do not present the fork
-as the official Zen project.
+as the official Mewla project.
 
 ## Permission and contact
 

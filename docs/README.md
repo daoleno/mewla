@@ -1,6 +1,6 @@
-# Zen documentation
+# Mewla documentation
 
-Zen is a phone app plus a small daemon on your own computer. Every coding agent
+Mewla is a phone app plus a small daemon on your own computer. Every coding agent
 and shell on that computer becomes a Session you can read as chat, drive as a
 live terminal, or hand to Brain, which splits a goal into Work for other agents.
 
@@ -8,13 +8,13 @@ New here? Read [Get started](get-started.md), then follow the guides in order.
 
 ## Start
 
-1. [Get started](get-started.md): what Zen is and how the pieces fit.
+1. [Get started](get-started.md): what Mewla is and how the pieces fit.
 2. [Install](install-daemon.md): the daemon on your computer and the app on your phone.
 3. [Connect and pair](connect-and-pair.md): reach the daemon from your phone, on the same Wi-Fi or from anywhere.
 
 ## Agents
 
-- [Agents and executors](executors.md): which agent CLIs Zen runs, the safe profile, and how Brain picks a model.
+- [Agents and executors](executors.md): which agent CLIs Mewla runs, the safe profile, and how Brain picks a model.
 - [Brain and Work](brain-and-work.md): give Brain a goal and follow the Work it hands to Workers.
 
 ## Around the agents
@@ -22,7 +22,7 @@ New here? Read [Get started](get-started.md), then follow the guides in order.
 - [Plugins](plugins.md): connect Linear, Notion, GitHub, Slack, Google Workspace or a custom service.
 - [Calendar](calendar.md): events, reminders, deadlines and scheduled actions.
 - [Services](services.md): ports your agents opened, with an optional temporary public URL.
-- [Notifications and Telegram](notifications.md): when Zen interrupts you, and Telegram as a second channel.
+- [Notifications and Telegram](notifications.md): when Mewla interrupts you, and Telegram as a second channel.
 - [Providers and usage](providers-and-usage.md): your own model endpoints and keys, and what each model cost.
 
 ## Reference

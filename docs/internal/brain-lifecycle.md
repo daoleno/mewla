@@ -94,10 +94,10 @@ verifier, registry evidence fails closed; explicit command identity still suppor
 recovery. Activation receipts restore an already activated Host without replaying
 its activation input.
 
-Continue with `zen worker send -id <session> --work-id <work> -text <follow-up>`.
+Continue with `mewla worker send -id <session> --work-id <work> -text <follow-up>`.
 Runtime mints the Turn token and atomically binds accepted input as execution.
 There is no separate accepted-but-non-owning state or typed continue step.
-Accept with `zen brain work update -id <work> -status done`.
+Accept with `mewla brain work update -id <work> -status done`.
 Worker reports and provider termination never implicitly accept Work.
 
 An unknown send may have arrived. Brain decides whether to reconcile or retry;
@@ -118,15 +118,15 @@ Managed-block repair refreshes those product-owned blocks while preserving
 user-authored text and the private `profile.md`, `memory.md`, `current.md`, and
 worklogs. `current.md` is the short active-work handoff, `profile.md` owns user
 background and preferences, and `memory.md` owns durable facts and decisions.
-Brain reads them on demand: `zen brain context --json` and `brain_snapshot`
+Brain reads them on demand: `mewla brain context --json` and `brain_snapshot`
 carry only their paths, sizes and budgets (16, 32 and 8 KiB), never their
-contents, and `zen brain gc` recommends compaction when a note exceeds its
-budget. Communication principles live in the managed `AGENTS.md`; Zen no longer
+contents, and `mewla brain gc` recommends compaction when a note exceeds its
+budget. Communication principles live in the managed `AGENTS.md`; Mewla no longer
 creates or reads `soul.md` and deletes an untouched shipped copy.
 
 Brain Worklog boundary: internal audits, handoffs, and delegated reports belong
 under the configured Brain workspace's `worklog/` directory (normally
-`~/.zen/brain/workspace/worklog`). They must not be written to a project
+`~/.mewla/brain/workspace/worklog`). They must not be written to a project
 repository, a Worker cwd, or `cwd/docs/worklog`. Delegated reports should be
 returned in the Worker result unless persistence is explicitly requested. Product
 documentation is separate and must name its repository path explicitly.
