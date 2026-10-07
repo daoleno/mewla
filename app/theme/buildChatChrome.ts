@@ -34,6 +34,13 @@ export function buildChatChrome(theme: ResolvedZenTheme): {
     link: chat.link,
     danger: colors.dangerText,
     dangerSoft: colors.dangerSoft,
+    seal: colors.seal,
+    sealText: colors.sealText,
+    onSeal: colors.onSeal,
+    statusReady: colors.statusDone,
+    statusRunning: colors.statusRunning,
+    statusWarning: colors.statusWarning,
+    statusBlocked: colors.statusBlocked,
     overlay: colors.modalBackdrop,
     shadowColor: colors.shadowColor,
   };

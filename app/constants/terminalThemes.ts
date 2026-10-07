@@ -43,6 +43,15 @@ export interface TerminalThemeChrome {
   link: string;
   danger: string;
   dangerSoft: string;
+  /** The seal: Send, "Needs you" and the cat. Never a status of failure. */
+  seal: string;
+  sealText: string;
+  onSeal: string;
+  /** Seal & Slip Work states (see StatusMark). */
+  statusReady: string;
+  statusRunning: string;
+  statusWarning: string;
+  statusBlocked: string;
   overlay: string;
   shadowColor: string;
 }
@@ -190,6 +199,14 @@ export function buildTerminalChrome(theme: TerminalThemePalette): TerminalThemeC
     link: theme.blue,
     danger: theme.red,
     dangerSoft: withAlpha(theme.red, 0.14),
+    // Terminal-only chrome has no seal; ANSI stands in for Send and status.
+    seal: theme.red,
+    sealText: theme.red,
+    onSeal: theme.background,
+    statusReady: theme.green,
+    statusRunning: theme.blue,
+    statusWarning: theme.yellow,
+    statusBlocked: mixHex(theme.foreground, theme.background, 0.45),
     overlay: withAlpha(theme.background, 0.94),
     shadowColor: isLightTerminalTheme(theme) ? theme.foreground : '#000000',
   };

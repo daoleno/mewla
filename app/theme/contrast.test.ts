@@ -88,11 +88,21 @@ function pairings(theme: ResolvedZenTheme): Pairing[] {
     ["success / successSoft", c.success, c.successSoft, TEXT],
     ["warning / bgSurface", c.warning, c.bgSurface, TEXT],
     ["success / bgSurface", c.success, c.bgSurface, TEXT],
-    ["statusRunning / bgSurface", c.statusRunning, c.bgSurface, UI],
-    ["statusDone / bgSurface", c.statusDone, c.bgSurface, UI],
-    ["statusFailed / bgSurface", c.statusFailed, c.bgSurface, UI],
-    ["statusBlocked / bgSurface", c.statusBlocked, c.bgSurface, UI],
+    // Status words are text set in the status colour, on slips and the page.
+    ...(["bgSurface", "bgPrimary", "bgElevated"] as const).flatMap((name): Pairing[] => [
+      [`statusRunning / ${name}`, c.statusRunning, c[name], TEXT],
+      [`statusDone / ${name}`, c.statusDone, c[name], TEXT],
+      [`statusWarning / ${name}`, c.statusWarning, c[name], TEXT],
+      [`statusFailed / ${name}`, c.statusFailed, c[name], TEXT],
+      [`statusBlocked / ${name}`, c.statusBlocked, c[name], TEXT],
+      [`sealText / ${name}`, c.sealText, c[name], TEXT],
+      [`seal / ${name}`, c.seal, c[name], UI],
+    ]),
     ["statusUnknown / bgSurface", c.statusUnknown, c.bgSurface, UI],
+    ["onSeal / seal", c.onSeal, c.seal, TEXT],
+    ["statusRunning / runningSoft", c.statusRunning, c.runningSoft, TEXT],
+    ["statusFailed / dangerSoft", c.statusFailed, c.dangerSoft, TEXT],
+    ["sealText / sealSoft", c.sealText, c.sealSoft, TEXT],
     ["textPrimary / selection", c.textPrimary, selection, TEXT],
     ["textPrimary / material.chrome", c.textPrimary, chrome, TEXT],
     ["textSecondary / material.regular", c.textSecondary, regular, TEXT],
@@ -145,9 +155,33 @@ describe("Zen palette WCAG AA contrast", () => {
       });
     }
 
-    test(`${colorScheme}: default accent resolves to vermilion`, () => {
-      expect(resolveTheme({ colorScheme }).accentId).toBe("vermilion");
-      expect(resolveTheme({ colorScheme, accentId: "unknown" }).accentId).toBe("vermilion");
+    test(`${colorScheme}: the chrome accent is ink and legacy accents resolve to it`, () => {
+      expect(resolveTheme({ colorScheme }).accentId).toBe("ink");
+      expect(resolveTheme({ colorScheme, accentId: "vermilion" }).accentId).toBe("ink");
+      expect(resolveTheme({ colorScheme, accentId: "unknown" }).accentId).toBe("ink");
+      const { colors } = resolveTheme({ colorScheme });
+      expect(colors.accent).toBe(colors.textPrimary);
+    });
+
+    test(`${colorScheme}: the seal is the only red and never reads as failure`, () => {
+      const { colors } = resolveTheme({ colorScheme });
+      // Seal & Slip: failure is oxblood (light) or rose (dark), held clearly
+      // apart from the seal; the crossed-box glyph and copy carry it too.
+      expect(oklabDistance(colors.seal, colors.statusFailed)).toBeGreaterThan(0.15);
+      expect(oklabDistance(colors.sealText, colors.statusFailed)).toBeGreaterThan(0.08);
+      expect(oklabDistance(colors.seal, colors.success)).toBeGreaterThan(0.1);
+      // The chrome carries no hue: accent and tint are neutral.
+      expect(oklabDistance(colors.accent, colors.seal)).toBeGreaterThan(0.3);
+    });
+
+    test(`${colorScheme}: the six Work states are pairwise distinct`, () => {
+      const { colors } = resolveTheme({ colorScheme });
+      const states = [colors.statusDone, colors.statusRunning, colors.seal, colors.statusWarning, colors.statusFailed, colors.statusBlocked];
+      for (let i = 0; i < states.length; i += 1) {
+        for (let j = i + 1; j < states.length; j += 1) {
+          expect(oklabDistance(states[i], states[j])).toBeGreaterThan(0.06);
+        }
+      }
     });
 
     test(`${colorScheme}: elevation levels are tonally distinct`, () => {
