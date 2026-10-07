@@ -163,8 +163,9 @@ Worker's reported phase ("Verifying · Running go test"). These are app
 derivations from `attention_since`, `attention_reason` and `snoozed_until`;
 the daemon writes nothing on a timer.
 
-A Work result in the conversation is that Work's slip while the Work is
-current: the same inline actions, and a tap opens the same Work sheet.
+A Work result in the conversation carries that Work's inline actions while
+the Work is current; a tap still opens the result itself, so you read what
+came back before you accept it.
 
 In the conversation, every Work result is a full slip (`WorkSlip`):
 executor · project · time, the state, the title and one line. A Work's slip

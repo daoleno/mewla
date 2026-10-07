@@ -572,7 +572,6 @@ export default function BrainScreen() {
         const slip = workSurface.slips.find((item) => item.workId === workId);
         return slip ? { slip, actions: workActionsFor(slip, "slip") } : undefined;
       },
-      onOpenSlip: openWorkSlip,
       onTurnRunning: setBrainTurnRunning,
       onCatTap: ({ turnRunning, turnLabel }) => {
         const answer = brainCatTap({ presence, turnRunning, turnLabel, counts: workSurface.counts });
@@ -600,7 +599,6 @@ export default function BrainScreen() {
     connectionState,
     openPairing,
     openWorkList,
-    openWorkSlip,
     retryConnection,
     screenFocused,
     sessionLabels,
