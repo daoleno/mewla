@@ -116,8 +116,8 @@ func (a *boundedConversationAPI) DeleteForumTopic(ctx context.Context, token str
 }
 
 func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
-	root := os.Getenv("ZEN_TELEGRAM_LIVE_STATE")
-	if root == "" || os.Getenv("ZEN_TELEGRAM_LIVE_CONVERSATION") != "1" {
+	root := os.Getenv("MEWLA_TELEGRAM_LIVE_STATE")
+	if root == "" || os.Getenv("MEWLA_TELEGRAM_LIVE_CONVERSATION") != "1" {
 		t.Skip("requires explicit authorization for two bound private QA topics")
 	}
 	readState := func() durableState {

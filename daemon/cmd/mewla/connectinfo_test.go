@@ -61,7 +61,7 @@ func TestBuildConnectLinkIncludesDaemonIdentity(t *testing.T) {
 		t.Fatalf("Parse returned error: %v", err)
 	}
 
-	if parsed.Scheme != "zen" {
+	if parsed.Scheme != "mewla" {
 		t.Fatalf("unexpected scheme: %s", parsed.Scheme)
 	}
 	payloadValue := parsed.Query().Get(connectParamPayload)
@@ -224,14 +224,14 @@ func TestPrintPairingInfo(t *testing.T) {
 	printPairingInfo(&output, []connectionOffer{{
 		Label:       "Server endpoint",
 		URL:         "wss://zen.example.com/ws",
-		ConnectLink: "zen://settings?p=compact-payload",
+		ConnectLink: "mewla://settings?p=compact-payload",
 	}})
 
 	rendered := output.String()
 	if !strings.Contains(rendered, "Paste this link into Settings -> Pair Server:") {
 		t.Fatalf("expected pair instruction, got %q", rendered)
 	}
-	if !strings.Contains(rendered, "zen://settings?p=compact-payload") {
+	if !strings.Contains(rendered, "mewla://settings?p=compact-payload") {
 		t.Fatalf("expected connect link, got %q", rendered)
 	}
 }
@@ -274,7 +274,7 @@ func TestPairCommandWithoutEndpointOrLinkConfigFailsHonestly(t *testing.T) {
 		!strings.Contains(err.Error(), "zen pair <endpoint>") {
 		t.Fatalf("unexpected no-Link pair error: %v", err)
 	}
-	if strings.Contains(output.String(), "zen://") {
+	if strings.Contains(output.String(), "mewla://") {
 		t.Fatalf("no-Link command printed an unusable pairing link: %q", output.String())
 	}
 }
@@ -509,8 +509,8 @@ func TestWorkerProgressCommandUsesZenStateDirFallback(t *testing.T) {
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 
-	t.Setenv("ZEN_WORKER_ID", "zen-worker-env:@1")
-	t.Setenv("ZEN_STATE_DIR", stateDir)
+	t.Setenv("MEWLA_WORKER_ID", "zen-worker-env:@1")
+	t.Setenv("MEWLA_STATE_DIR", stateDir)
 	var stderr bytes.Buffer
 	if err := runWorkerProgress([]string{
 		"--status", "running",
@@ -649,7 +649,7 @@ func TestRevokeDeviceUsesRunningDaemonControlOwner(t *testing.T) {
 
 func TestWorkerProgressCommandRequiresIDOrEnv(t *testing.T) {
 	var stderr bytes.Buffer
-	t.Setenv("ZEN_WORKER_ID", "")
+	t.Setenv("MEWLA_WORKER_ID", "")
 	err := runWorkerProgress([]string{
 		"--status", "running",
 		"--phase", "working",
@@ -667,7 +667,7 @@ func runProgressCLIAndCaptureRequest(t *testing.T, envWorkerID string, args []st
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 
-	t.Setenv("ZEN_WORKER_ID", envWorkerID)
+	t.Setenv("MEWLA_WORKER_ID", envWorkerID)
 	commandArgs := append([]string{"--state-dir", stateDir}, args...)
 	var stderr bytes.Buffer
 	if err := runWorkerProgress(commandArgs, &stderr); err != nil {

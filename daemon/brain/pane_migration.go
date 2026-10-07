@@ -24,7 +24,7 @@ type PaneMigrationPaths struct {
 // atomically replaced. The durable alias journal precedes tmux mutation, making
 // interruption at any file or option boundary idempotent on the next startup.
 // Aliases exist solely for already-running launch shells carrying an old
-// ZEN_WORKER_ID; all stored lifecycle identities and new Workers use %pane_id.
+// MEWLA_WORKER_ID; all stored lifecycle identities and new Workers use %pane_id.
 func MigrateWorkerPaneIdentity(root string, w *watcher.Watcher, references PaneMigrationPaths) error {
 	state := filepath.Join(root, "state")
 	journal := filepath.Join(state, "worker_pane_aliases.json")

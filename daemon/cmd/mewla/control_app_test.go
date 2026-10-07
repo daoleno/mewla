@@ -650,21 +650,21 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 	if !created.ProgressEnv {
 		t.Fatalf("progress env was not enabled: %+v", created)
 	}
-	progressBin, ok := created.Env["ZEN_WORKER_PROGRESS_CMD"]
+	progressBin, ok := created.Env["MEWLA_WORKER_PROGRESS_CMD"]
 	if !ok || progressBin == "" {
-		t.Fatalf("ZEN_WORKER_PROGRESS_CMD not set: %#v", created.Env)
+		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD not set: %#v", created.Env)
 	}
 	if progressBin == "zen worker progress" {
-		t.Fatalf("ZEN_WORKER_PROGRESS_CMD must not be the legacy space-separated command, got %q", progressBin)
+		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD must not be the legacy space-separated command, got %q", progressBin)
 	}
 	// The value must be the current executable's path, not a stale "zen"
 	// resolved via PATH (this guards dev daemons launched as zen-dev).
 	if exe, err := os.Executable(); err == nil {
 		if exe = strings.TrimSpace(exe); exe != "" && progressBin != exe {
-			t.Fatalf("ZEN_WORKER_PROGRESS_CMD = %q, want current executable %q", progressBin, exe)
+			t.Fatalf("MEWLA_WORKER_PROGRESS_CMD = %q, want current executable %q", progressBin, exe)
 		}
 	}
-	if created.Env["ZEN_STATE_DIR"] != "/tmp/zen state" {
+	if created.Env["MEWLA_STATE_DIR"] != "/tmp/zen state" {
 		t.Fatalf("progress command env = %#v", created.Env)
 	}
 	if len(fw.sent) != 1 {
@@ -678,13 +678,13 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		"Zen lifecycle protocol:",
 		"You are the delegated Worker: execute the assigned work directly",
 		"Brain workspace role/delegation instructions apply to Brain, not this Worker Session.",
-		"\"$ZEN_WORKER_PROGRESS_CMD\" worker progress",
+		"\"$MEWLA_WORKER_PROGRESS_CMD\" worker progress",
 		"objective and acceptance criteria",
 		"report resource limits rather than bypassing them",
 		"TMPDIR/TMP/TEMP",
-		"$ZEN_BUILD_TMPDIR",
+		"$MEWLA_BUILD_TMPDIR",
 		"needs_judgment",
-		"ZEN_WORKER_ID identifies this Session",
+		"MEWLA_WORKER_ID identifies this Session",
 		"--status running|done|failed|blocked",
 		"Zen delegated turn contract:",
 		"--turn-id turn:",

@@ -14,11 +14,11 @@ import (
 // Explicit opt-in only. Two bounded requests in a previously verified QA
 // topic; no polling, history reads/replay, provider input or state mutation.
 func TestLiveTelegramLocalFileFormatting(t *testing.T) {
-	root := os.Getenv("ZEN_TELEGRAM_LIVE_STATE")
+	root := os.Getenv("MEWLA_TELEGRAM_LIVE_STATE")
 	if root == "" {
 		t.Skip("requires authorized bound private QA topic")
 	}
-	topic, err := strconv.ParseInt(os.Getenv("ZEN_TELEGRAM_LIVE_QA_TOPIC"), 10, 64)
+	topic, err := strconv.ParseInt(os.Getenv("MEWLA_TELEGRAM_LIVE_QA_TOPIC"), 10, 64)
 	if err != nil || topic <= 1 {
 		t.Fatal("exact QA topic required")
 	}

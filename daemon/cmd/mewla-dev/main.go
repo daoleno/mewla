@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/daoleno/mewla/daemon/envcompat"
 )
 
 const (
@@ -43,6 +45,7 @@ type devRunner struct {
 }
 
 func main() {
+	envcompat.Normalize()
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "zen-dev: %v\n", err)
 		os.Exit(1)
@@ -62,7 +65,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 
 	runner := &devRunner{
 		root:       root,
-		binary:     filepath.Join(tmpDir, "zen-dev"),
+		binary:     filepath.Join(tmpDir, "mewla-dev"),
 		daemonArgs: args,
 		stdout:     stdout,
 		stderr:     stderr,

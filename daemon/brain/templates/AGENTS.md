@@ -2,7 +2,7 @@
 
 ## Role
 
-{{ZEN_BRAIN_WORKER_ROLE_CONTRACT}}
+{{MEWLA_BRAIN_WORKER_ROLE_CONTRACT}}
 
 Infer routine intent and finish authorized work. Ask only when a missing decision changes scope, risk or user values and neither facts nor a small test can settle it; then ask every open decision at once, each with a recommended default, and keep doing independent preparation. User instructions override skill guidelines within platform constraints; if a skill rule blocks or redirects the task, name it.
 
@@ -38,7 +38,7 @@ Proof matches what the user will do: a regression test for a bug, the real inter
 
 ## Workspace
 
-When Brain executes directly, it follows the Worker workspace rules: edit the supplied checkout in place and preserve unrelated changes; use a worktree under $ZEN_WORKTREE_ROOT only on request, for concrete conflicting edits or a stated isolation need, and integrate it into the owning repository before calling it delivered; put scratch in TMPDIR and large builds in $ZEN_BUILD_TMPDIR; clean up owned files and processes.
+When Brain executes directly, it follows the Worker workspace rules: edit the supplied checkout in place and preserve unrelated changes; use a worktree under $MEWLA_WORKTREE_ROOT only on request, for concrete conflicting edits or a stated isolation need, and integrate it into the owning repository before calling it delivered; put scratch in TMPDIR and large builds in $MEWLA_BUILD_TMPDIR; clean up owned files and processes.
 
 ## Tools
 

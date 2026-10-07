@@ -25,7 +25,7 @@ var dshSessionIDPattern = regexp.MustCompile(`^session-[a-zA-Z0-9-]{1,100}$`)
 
 func DSHRoot() string {
 	home, _ := os.UserHomeDir()
-	root := os.Getenv("ZEN_STATE_DIR")
+	root := os.Getenv("MEWLA_STATE_DIR")
 	if root == "" {
 		root = statedir.Default(home)
 	}
@@ -34,7 +34,7 @@ func DSHRoot() string {
 
 func DSHSessionID(command string) string {
 	options, ok := inspectLaunchCommandOptions(command)
-	if !ok || len(options.argv) == 0 || options.argv[0] != "dsh-session" || !strings.HasPrefix(filepath.Base(options.executable), "zen") && !strings.HasSuffix(options.executable, ".test") {
+	if !ok || len(options.argv) == 0 || options.argv[0] != "dsh-session" || !isProductExecutable(options.executable) && !strings.HasSuffix(options.executable, ".test") {
 		return ""
 	}
 	_, id := options.optionValue("--dsh-session")
@@ -283,4 +283,11 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	defer server.Close()
 	fmt.Fprintln(os.Stdout, "DSH ready. Native saved model/settings apply.")
 	return runDSHTerminal(ctx, id, exited)
+}
+
+// isProductExecutable accepts the mewla CLI and its legacy zen alias,
+// including dev builds such as mewla-dev.
+func isProductExecutable(executable string) bool {
+	base := filepath.Base(executable)
+	return strings.HasPrefix(base, "mewla") || strings.HasPrefix(base, "zen")
 }

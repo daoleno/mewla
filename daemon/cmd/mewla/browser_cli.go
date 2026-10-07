@@ -88,7 +88,7 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	var id, task string
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "daemon state directory")
 	fs.StringVar(&id, "id", "", "explicit browser resource")
-	fs.StringVar(&task, "task", os.Getenv("ZEN_WORKER_ID"), "active Zen Worker ID (provided by managed launch)")
+	fs.StringVar(&task, "task", os.Getenv("MEWLA_WORKER_ID"), "active Zen Worker ID (provided by managed launch)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}

@@ -32,8 +32,8 @@ func (a *liveRichFiles) DownloadFile(ctx context.Context, _ string, file File) (
 // Explicit opt-in. One QA topic, <=12 pre-counted write requests. The canonical
 // runtime remains the sole poller. This test never edits its state or history.
 func TestLiveTelegramRichInteractions(t *testing.T) {
-	root := os.Getenv("ZEN_TELEGRAM_LIVE_STATE")
-	if root == "" || os.Getenv("ZEN_TELEGRAM_LIVE_RICH") != "1" {
+	root := os.Getenv("MEWLA_TELEGRAM_LIVE_STATE")
+	if root == "" || os.Getenv("MEWLA_TELEGRAM_LIVE_RICH") != "1" {
 		t.Skip("requires authorized bound-private QA with at most 12 writes")
 	}
 	type binding struct {

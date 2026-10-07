@@ -29,7 +29,7 @@ import (
 // dispatch with disposable state. No Brain bootstrap, scheduler, host discovery,
 // current daemon replacement, or writes to external services.
 func TestPluginsOwnedRuntime(t *testing.T) {
-	root := os.Getenv("ZEN_PLUGINS_RUNTIME_DIR")
+	root := os.Getenv("MEWLA_PLUGINS_RUNTIME_DIR")
 	if root == "" {
 		t.Skip("owned runtime only")
 	}
@@ -37,7 +37,7 @@ func TestPluginsOwnedRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	port := 19881
-	if value := os.Getenv("ZEN_PLUGINS_RUNTIME_PORT"); value != "" {
+	if value := os.Getenv("MEWLA_PLUGINS_RUNTIME_PORT"); value != "" {
 		var parseErr error
 		port, parseErr = strconv.Atoi(value)
 		if parseErr != nil || port < 1024 || port > 65535 {

@@ -214,7 +214,7 @@ func TestGatewayWebSocketInjectsStoredCredential(t *testing.T) {
 		BaseURL:       upstream.server.URL,
 		Protocol:      ProtocolOpenAIResponses,
 		AuthMode:      AuthModeBearerEnv,
-		CredentialEnv: "ZEN_PROVIDER_API_KEY",
+		CredentialEnv: "MEWLA_PROVIDER_API_KEY",
 		CredentialRef: CredentialRefFor("conn-ws-keyed"),
 	})
 	client, status := wsClientDial(t, "http://"+g.ActualAddr(), "/v1/responses", nil)

@@ -1525,7 +1525,7 @@ func TestServiceSnapshotReusesGrokHostEvenWhenClassifiedBlocked(t *testing.T) {
 		},
 	})
 	// Prefer the recorded grok host executor for this Snapshot path.
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "grok")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "grok")
 
 	first, err := service.EnsureHostSnapshot()
 	if err != nil {
@@ -1573,7 +1573,7 @@ func TestServiceSnapshotReplacesHostWhenTmuxSessionMissing(t *testing.T) {
 			"grok": {Name: "grok", Command: "grok", Kind: "grok"},
 		},
 	})
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "grok")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "grok")
 
 	snapshot, err := service.EnsureHostSnapshot()
 	if err != nil {
@@ -1797,7 +1797,7 @@ func TestServiceMissingTmuxFailClosedTable(t *testing.T) {
 					"codex":       {Name: "codex", Command: "codex", Kind: "codex"},
 				},
 			})
-			t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", tc.executorID)
+			t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", tc.executorID)
 
 			_, err = service.EnsureHostSnapshot()
 			if err == nil {
@@ -2414,7 +2414,7 @@ func TestServiceSnapshotAuditsProviderMismatchReplacement(t *testing.T) {
 		},
 	})
 	// Explicit env switch to codex while a grok host is still alive.
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "codex")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "codex")
 
 	snapshot, err := service.EnsureHostSnapshot()
 	if err != nil {
@@ -2462,7 +2462,7 @@ func TestServiceSnapshotFallsBackToCodexHost(t *testing.T) {
 }
 
 func TestServiceSnapshotHonorsHostExecutorOverride(t *testing.T) {
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "claude")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "claude")
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -3075,7 +3075,7 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 		brainWorkerRoleContract, "Brain decides decomposition", "without acknowledgement",
 		"keep doing independent preparation", "changes scope, risk or user values",
 		"zen worker list/spawn/capture/send/close", "delegated=true",
-		"$ZEN_WORKTREE_ROOT", "TMPDIR", "$ZEN_BUILD_TMPDIR",
+		"$MEWLA_WORKTREE_ROOT", "TMPDIR", "$MEWLA_BUILD_TMPDIR",
 		"policies/delegation.md",
 	} {
 		if !strings.Contains(string(instructions), want) {

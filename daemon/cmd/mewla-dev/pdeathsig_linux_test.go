@@ -18,13 +18,13 @@ import (
 // single-owner state lock. This is the failure mode a process-scoped systemd
 // KillMode would otherwise expose.
 func TestWatcherAbruptDeathStopsDaemonChild(t *testing.T) {
-	if os.Getenv("ZEN_DEV_PDEATH_HELPER") == "1" {
+	if os.Getenv("MEWLA_DEV_PDEATH_HELPER") == "1" {
 		// Helper mode: this re-executed test binary acts as a watcher whose
 		// only job is to hold one child process.
 		runner := &devRunner{
-			root:       os.Getenv("ZEN_DEV_PDEATH_ROOT"),
+			root:       os.Getenv("MEWLA_DEV_PDEATH_ROOT"),
 			binary:     "/bin/sh",
-			daemonArgs: []string{"-c", "echo $$ > " + os.Getenv("ZEN_DEV_PDEATH_PIDFILE") + "; exec sleep 300"},
+			daemonArgs: []string{"-c", "echo $$ > " + os.Getenv("MEWLA_DEV_PDEATH_PIDFILE") + "; exec sleep 300"},
 			stdout:     os.Stdout,
 			stderr:     os.Stderr,
 		}
@@ -38,9 +38,9 @@ func TestWatcherAbruptDeathStopsDaemonChild(t *testing.T) {
 	pidfile := filepath.Join(t.TempDir(), "child.pid")
 	helper := exec.Command(os.Args[0], "-test.run", "^TestWatcherAbruptDeathStopsDaemonChild$")
 	helper.Env = append(os.Environ(),
-		"ZEN_DEV_PDEATH_HELPER=1",
-		"ZEN_DEV_PDEATH_ROOT="+root,
-		"ZEN_DEV_PDEATH_PIDFILE="+pidfile,
+		"MEWLA_DEV_PDEATH_HELPER=1",
+		"MEWLA_DEV_PDEATH_ROOT="+root,
+		"MEWLA_DEV_PDEATH_PIDFILE="+pidfile,
 	)
 	if err := helper.Start(); err != nil {
 		t.Fatal(err)

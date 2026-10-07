@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	brainWorkerRoleContractPlaceholder = "{{ZEN_BRAIN_WORKER_ROLE_CONTRACT}}"
+	brainWorkerRoleContractPlaceholder = "{{MEWLA_BRAIN_WORKER_ROLE_CONTRACT}}"
 	brainWorkerRoleContract            = "Brain owns conversation, planning, lifecycle, review and acceptance. Delegate substantive execution to a visible Zen Worker unless the user explicitly asks Brain to execute it directly. Inspect context as needed to form or review a brief. Brain answers questions and handles routine configuration directly, then checks the effective result. A delegation failure does not authorize direct execution."
 )
 

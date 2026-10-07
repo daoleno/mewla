@@ -34,23 +34,23 @@ import (
 )
 
 func TestBrowserMCPHelper(t *testing.T) {
-	if os.Getenv("ZEN_BROWSER_MCP_FIXTURE") != "1" {
+	if os.Getenv("MEWLA_BROWSER_MCP_FIXTURE") != "1" {
 		return
 	}
-	err := runBrowserCommand([]string{"mcp", "--id", os.Getenv("ZEN_BROWSER_FIXTURE_ID"), "--task", "fixture-task", "--state-dir", os.Getenv("ZEN_BROWSER_FIXTURE_STATE")}, os.Stderr)
+	err := runBrowserCommand([]string{"mcp", "--id", os.Getenv("MEWLA_BROWSER_FIXTURE_ID"), "--task", "fixture-task", "--state-dir", os.Getenv("MEWLA_BROWSER_FIXTURE_STATE")}, os.Stderr)
 	if err != nil {
 		os.Exit(2)
 	}
 	os.Exit(0)
 }
 func TestBrowserFirstProductFlow(t *testing.T) {
-	if os.Getenv("ZEN_BROWSER_INTEGRATION") != "1" {
+	if os.Getenv("MEWLA_BROWSER_INTEGRATION") != "1" {
 		t.Skip("opt-in isolated graphical browser")
 	}
-	evidence := os.Getenv("ZEN_BROWSER_EVIDENCE")
+	evidence := os.Getenv("MEWLA_BROWSER_EVIDENCE")
 	root := t.TempDir()
 	backend := browser.NewFixtureBackend()
-	if os.Getenv("ZEN_BROWSER_SECURE") == "1" {
+	if os.Getenv("MEWLA_BROWSER_SECURE") == "1" {
 		backend = browser.NewBackend()
 	}
 	m, err := browser.New(filepath.Join(root, "browsers"), backend)
@@ -254,7 +254,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 		data, _ := os.ReadFile(filepath.Join(evidence, "product-viewer-latest.jpg"))
 		os.WriteFile(filepath.Join(evidence, "product-after-prelogin.jpg"), data, 0600)
 	}
-	if os.Getenv("ZEN_BROWSER_PROVIDER") != "" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") != "" {
 		callViewer("release", nil)
 		browserNormalProviderProof(t, m, id, tab, root, a, signature)
 		callViewer("control", nil)
@@ -280,7 +280,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 		t.Helper()
 		exe, _ := os.Executable()
 		cmd := exec.Command(exe, "-test.run=^TestBrowserMCPHelper$")
-		cmd.Env = append(os.Environ(), "ZEN_BROWSER_MCP_FIXTURE=1", "ZEN_BROWSER_FIXTURE_ID="+id, "ZEN_BROWSER_FIXTURE_STATE="+root)
+		cmd.Env = append(os.Environ(), "MEWLA_BROWSER_MCP_FIXTURE=1", "MEWLA_BROWSER_FIXTURE_ID="+id, "MEWLA_BROWSER_FIXTURE_STATE="+root)
 		client := mcp.NewClient(&mcp.Implementation{Name: "fixture-agent", Version: "1"}, nil)
 		session, e := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 		if e != nil {
@@ -394,7 +394,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 	<-v.done
 	v.c.Close()
 	manage(browser.Request{Action: "stop", ID: id})
-	if os.Getenv("ZEN_BROWSER_SECURE") == "1" {
+	if os.Getenv("MEWLA_BROWSER_SECURE") == "1" {
 		// Inspect only this disposable synthetic cookie database. v11 proves use
 		// of a platform key; Linux basic fallback writes v10 instead.
 		check := exec.Command("python3", "-c", "import sqlite3,sys; r=sqlite3.connect(sys.argv[1]).execute(\"select length(value),hex(substr(encrypted_value,1,3)) from cookies where name='persistent'\").fetchone(); assert r==(0,'763131'),r", filepath.Join(root, "browsers", id, "profile", "Default", "Cookies"))
@@ -423,11 +423,11 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 	frameCount := frames
 	frameMu.Unlock()
 	report := map[string]any{"browser_first": true, "product_authenticated_viewer": true, "later_mcp_attach_same_tab": true, "detach_reattach": true, "human_blocks_agent": true, "viewer_reconnect": true, "close_code": 1000, "new_tab_select": true, "window_open_popup": true, "javascript_dialog": true, "persistent_cookie_restart": true, "session_cookie_lost": true, "frames": frameCount, "frame_sequences": frameSequences, "store": "basic fixture only; secure Secret Service restart not tested", "actual_provider_task": false}
-	if os.Getenv("ZEN_BROWSER_SECURE") == "1" {
+	if os.Getenv("MEWLA_BROWSER_SECURE") == "1" {
 		report["store"] = "production libsecret with isolated installed KWallet Secret Service; v11 encrypted cookie verified"
 		report["secure_store_restart"] = true
 	}
-	if os.Getenv("ZEN_BROWSER_PROVIDER") == "1" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") == "1" {
 		report["actual_provider_task"] = true
 	}
 	raw, _ := json.MarshalIndent(report, "", "  ")

@@ -27,7 +27,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const deviceCLIHelperEnv = "ZEN_TEST_DEVICE_CLI_HELPER"
+const deviceCLIHelperEnv = "MEWLA_TEST_DEVICE_CLI_HELPER"
 
 func TestDeviceCLIHelper(t *testing.T) {
 	if os.Getenv(deviceCLIHelperEnv) != "1" {
@@ -183,7 +183,7 @@ func TestPairCLIUsesOnlineControlOwnerWithoutSecondManager(t *testing.T) {
 		t.Fatalf("online pair through live owner: %v", err)
 	}
 	if !strings.Contains(output.String(), manager.DaemonID()) ||
-		!strings.Contains(output.String(), "zen://settings?") {
+		!strings.Contains(output.String(), "mewla://settings?") {
 		t.Fatalf("online pairing output=%q", output.String())
 	}
 
@@ -244,7 +244,7 @@ func TestPairCLILocksOfflineOwnerBeforeManagerConstruction(t *testing.T) {
 		t.Fatalf("offline pair: %v", err)
 	}
 	if !strings.Contains(output.String(), "Generated a fresh pairing link") ||
-		!strings.Contains(output.String(), "zen://settings?") {
+		!strings.Contains(output.String(), "mewla://settings?") {
 		t.Fatalf("offline pairing output=%q", output.String())
 	}
 }

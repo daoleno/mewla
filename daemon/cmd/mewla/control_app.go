@@ -576,7 +576,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 			return control.ErrorResponse("browser_attachment", err.Error())
 		}
 		createOpts.BrowserID = req.BrowserID
-		createOpts.Env["ZEN_WORKER_ID"] = ""
+		createOpts.Env["MEWLA_WORKER_ID"] = ""
 		createOpts.PrepareLaunch = func(command string) (string, error) {
 			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), a.stateDir, req.BrowserID)
 		}
@@ -1172,7 +1172,7 @@ func (a *controlApp) submitWorkerHandoff(workerID, command, payload, workID stri
 func delegatedLifecyclePayload(payload, turnID string) string {
 	contract := fmt.Sprintf(`Zen delegated turn contract:
 Use this turn's identity for every progress command; never reuse an earlier turn's identity:
-  "$ZEN_WORKER_PROGRESS_CMD" worker progress --turn-id %s --status running --phase working --attention none --summary "Current work" --lease 300`, strings.TrimSpace(turnID))
+  "$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id %s --status running --phase working --attention none --summary "Current work" --lease 300`, strings.TrimSpace(turnID))
 	return payload + "\n\n" + contract
 }
 
@@ -1557,7 +1557,7 @@ func (a *controlApp) resolveSpawnCommand(req control.Request) (string, error) {
 }
 
 func brainHostExecutorOverride() string {
-	return strings.TrimSpace(os.Getenv("ZEN_BRAIN_HOST_EXECUTOR"))
+	return strings.TrimSpace(os.Getenv("MEWLA_BRAIN_HOST_EXECUTOR"))
 }
 
 func visibleControlWorkers(workers []*classifier.Worker) []control.Worker {
@@ -1643,13 +1643,13 @@ func spawnPrompt(req control.Request) (string, error) {
 
 func progressEnvForStateDir(stateDir string) map[string]string {
 	env := map[string]string{
-		"ZEN_WORKER_PROGRESS_CMD": watcher.ZenExecutablePath(),
+		"MEWLA_WORKER_PROGRESS_CMD": watcher.ZenExecutablePath(),
 	}
 	if worktreeRoot, err := work.DefaultWorktreeRoot(); err == nil {
-		env["ZEN_WORKTREE_ROOT"] = worktreeRoot
+		env["MEWLA_WORKTREE_ROOT"] = worktreeRoot
 	}
 	if stateDir = strings.TrimSpace(stateDir); stateDir != "" {
-		env["ZEN_STATE_DIR"] = stateDir
+		env["MEWLA_STATE_DIR"] = stateDir
 	}
 	return env
 }
@@ -1688,12 +1688,12 @@ func lifecycleProtocol(profile string) string {
 Profile: %s.
 You are the delegated Worker: execute the assigned work directly. Brain workspace role/delegation instructions apply to Brain, not this Worker Session.
 Complete the objective and acceptance criteria. Ask Brain only for a material decision or missing authority; otherwise keep going.
-Edit the supplied repository and cwd directly; preserve unrelated changes. Use a worktree under $ZEN_WORKTREE_ROOT only for an explicit request, concrete conflicting edits or a necessary isolation reason, and state the reason; concurrent Workers do not necessarily conflict. Worktree work is delivered only once integrated into the owning repository as requested; a branch or passing tests alone are not delivery.
-Scratch goes in TMPDIR/TMP/TEMP, large builds in $ZEN_BUILD_TMPDIR. Keep processes and resources inside this Session, reuse named resources, report resource limits rather than bypassing them, and clean up owned scratch and children before completion.
+Edit the supplied repository and cwd directly; preserve unrelated changes. Use a worktree under $MEWLA_WORKTREE_ROOT only for an explicit request, concrete conflicting edits or a necessary isolation reason, and state the reason; concurrent Workers do not necessarily conflict. Worktree work is delivered only once integrated into the owning repository as requested; a branch or passing tests alone are not delivery.
+Scratch goes in TMPDIR/TMP/TEMP, large builds in $MEWLA_BUILD_TMPDIR. Keep processes and resources inside this Session, reuse named resources, report resource limits rather than bypassing them, and clean up owned scratch and children before completion.
 Return the report in the Worker result. Persist it only where the brief names a path; Brain reports go in the Brain worklog/, never in the project repository.
 Run risk-proportionate checks and the required repository gates; rerun only after edits, failures or open concerns, and report what stays unverified.
 Shared tools: zen connections --help.
-Progress: run "$ZEN_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; ZEN_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
+Progress: run "$MEWLA_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; MEWLA_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
   --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
   optional: --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease <seconds> (running status lapses to unknown after the lease; renew it during long quiet steps)
 Use --attention user_input only for a necessary decision, and --status done --attention done only after acceptance and feasible verification.`, normalizeWorkerProfile(profile)))

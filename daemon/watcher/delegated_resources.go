@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	delegatedMarkerEnv        = "ZEN_WORKER_DELEGATED"
-	delegatedResourceUnitEnv  = "ZEN_WORKER_RESOURCE_UNIT"
-	delegatedResourceOwnerEnv = "ZEN_WORKER_RESOURCE_OWNER"
+	delegatedMarkerEnv        = "MEWLA_WORKER_DELEGATED"
+	delegatedResourceUnitEnv  = "MEWLA_WORKER_RESOURCE_UNIT"
+	delegatedResourceOwnerEnv = "MEWLA_WORKER_RESOURCE_OWNER"
 
 	// Short durable temp dirs keep AF_UNIX paths under sockaddr sun_path limits.
 	delegatedTempMarkerName = ".zen-worker-unit"
@@ -165,7 +165,7 @@ func validateDelegatedWorkspacePath(cwd string) (string, error) {
 			rootResolved = value
 		}
 		if pathWithinRoot(absolute, rootAbsolute) || pathWithinRoot(resolved, rootResolved) {
-			return "", fmt.Errorf("delegated Zen Worker cwd %q is on volatile or memory-backed temporary storage; use a durable workspace such as $ZEN_WORKTREE_ROOT (default ~/.zen/worktrees)", cwd)
+			return "", fmt.Errorf("delegated Zen Worker cwd %q is on volatile or memory-backed temporary storage; use a durable workspace such as $MEWLA_WORKTREE_ROOT (default ~/.zen/worktrees)", cwd)
 		}
 	}
 	return resolved, nil

@@ -21,13 +21,13 @@ import (
 // Opt-in same-tmux / same-OS-PID portable switch proof.
 // This is the acceptance boundary (not codex exec resume / claude --continue).
 //
-//	ZEN_PORTABLE_HISTORY_SAMEPID=1 go test ./modelprofiles -run 'TestPortableHistorySamePID' -count=1 -timeout 300s -v
+//	MEWLA_PORTABLE_HISTORY_SAMEPID=1 go test ./modelprofiles -run 'TestPortableHistorySamePID' -count=1 -timeout 300s -v
 //
 // Artifacts land under TMPDIR (Worker-owned). No real credentials / user config / live Sessions.
 
 func TestPortableHistorySamePIDCodex(t *testing.T) {
-	if os.Getenv("ZEN_PORTABLE_HISTORY_SAMEPID") == "" {
-		t.Skip("set ZEN_PORTABLE_HISTORY_SAMEPID=1 for Codex same-tmux/PID proof")
+	if os.Getenv("MEWLA_PORTABLE_HISTORY_SAMEPID") == "" {
+		t.Skip("set MEWLA_PORTABLE_HISTORY_SAMEPID=1 for Codex same-tmux/PID proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
@@ -188,8 +188,8 @@ func TestPortableHistorySamePIDCodex(t *testing.T) {
 }
 
 func TestPortableHistorySamePIDClaude(t *testing.T) {
-	if os.Getenv("ZEN_PORTABLE_HISTORY_SAMEPID") == "" {
-		t.Skip("set ZEN_PORTABLE_HISTORY_SAMEPID=1 for Claude same-tmux/PID proof")
+	if os.Getenv("MEWLA_PORTABLE_HISTORY_SAMEPID") == "" {
+		t.Skip("set MEWLA_PORTABLE_HISTORY_SAMEPID=1 for Claude same-tmux/PID proof")
 	}
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {

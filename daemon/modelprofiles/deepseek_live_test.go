@@ -13,14 +13,14 @@ import (
 
 // Live official DeepSeek Responses gate. Skips unless both are set:
 //
-//	ZEN_DEEPSEEK_LIVE=1 DEEPSEEK_API_KEY=… go test ./modelprofiles -run TestDeepSeekCodexLiveOfficialAPI -count=1 -timeout 120s -v
+//	MEWLA_DEEPSEEK_LIVE=1 DEEPSEEK_API_KEY=… go test ./modelprofiles -run TestDeepSeekCodexLiveOfficialAPI -count=1 -timeout 120s -v
 func TestDeepSeekCodexLiveOfficialAPI(t *testing.T) {
-	if os.Getenv("ZEN_DEEPSEEK_LIVE") == "" {
-		t.Skip("credential-only live gate: set ZEN_DEEPSEEK_LIVE=1 with DEEPSEEK_API_KEY")
+	if os.Getenv("MEWLA_DEEPSEEK_LIVE") == "" {
+		t.Skip("credential-only live gate: set MEWLA_DEEPSEEK_LIVE=1 with DEEPSEEK_API_KEY")
 	}
 	key := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
 	if key == "" {
-		t.Fatal("ZEN_DEEPSEEK_LIVE=1 requires DEEPSEEK_API_KEY (live acceptance not claimed without it)")
+		t.Fatal("MEWLA_DEEPSEEK_LIVE=1 requires DEEPSEEK_API_KEY (live acceptance not claimed without it)")
 	}
 
 	body := map[string]any{

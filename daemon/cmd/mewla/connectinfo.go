@@ -168,7 +168,7 @@ func printPairCommandInfo(w io.Writer, daemonID string, offers []connectionOffer
 }
 
 func pairCommand(stateDir, endpoint string) string {
-	parts := []string{"zen", "pair"}
+	parts := []string{"mewla", "pair"}
 	if strings.TrimSpace(stateDir) != "" {
 		parts = append(parts, "-state-dir", stateDir)
 	}
@@ -326,11 +326,11 @@ func buildConnectLinkWithPublicKey(
 		pairing.Value,
 	)
 	if err != nil {
-		return "zen://settings"
+		return "mewla://settings"
 	}
 	params := url.Values{}
 	params.Set(connectParamPayload, payload)
-	return "zen://settings?" + params.Encode()
+	return "mewla://settings?" + params.Encode()
 }
 
 func renderPairingQR(w io.Writer, link string) {

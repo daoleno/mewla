@@ -11,7 +11,7 @@ func TestRunRejectsNonPositiveAndOverflowingCapacityFlagsBeforeAllocation(
 	t *testing.T,
 ) {
 	t.Setenv(
-		"ZEN_LINK_CONNECTOR_TOKEN",
+		"MEWLA_LINK_CONNECTOR_TOKEN",
 		"abcdef0123456789abcdef0123456789",
 	)
 	flags := []string{
@@ -47,7 +47,7 @@ func TestRunRejectsNonPositiveAndOverflowingCapacityFlagsBeforeAllocation(
 
 func TestRunRejectsNonPositiveDurationFlags(t *testing.T) {
 	t.Setenv(
-		"ZEN_LINK_CONNECTOR_TOKEN",
+		"MEWLA_LINK_CONNECTOR_TOKEN",
 		"abcdef0123456789abcdef0123456789",
 	)
 	for _, name := range []string{

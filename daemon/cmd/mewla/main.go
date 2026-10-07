@@ -30,6 +30,7 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
@@ -92,6 +93,8 @@ func directClaudePID(sessionID string) (int, bool) {
 }
 
 func main() {
+	envcompat.Normalize()
+	migrateLegacyState(os.Args[1:], os.Stderr)
 	if err := run(os.Args[1:], os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
@@ -145,6 +148,8 @@ func run(args []string, stderr io.Writer) error {
 			return runAddressCommand(args[1:], stderr)
 		case "boot":
 			return runBootCommand(args[1:], stderr)
+		case "state":
+			return runStateCommand(args[1:], os.Stdout, stderr)
 		}
 	}
 	return runDaemon(args, stderr)
@@ -1107,7 +1112,7 @@ func tmuxClientSocket() string {
 }
 
 func currentWorkerID() string {
-	if workerID := strings.TrimSpace(os.Getenv("ZEN_WORKER_ID")); workerID != "" {
+	if workerID := strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID")); workerID != "" {
 		return workerID
 	}
 	pane := strings.TrimSpace(os.Getenv("TMUX_PANE"))
@@ -1222,16 +1227,16 @@ func runWorkerProgress(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("zen worker progress", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{
-		stateDir: strings.TrimSpace(os.Getenv("ZEN_STATE_DIR")),
+		stateDir: strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR")),
 		json:     true,
 	}
 	req := control.Request{
 		Type:     "worker_progress",
-		WorkerID: strings.TrimSpace(os.Getenv("ZEN_WORKER_ID")),
+		WorkerID: strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID")),
 	}
 	fs.StringVar(&cfg.stateDir, "state-dir", cfg.stateDir, "state directory for daemon identity and control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
-	fs.StringVar(&req.WorkerID, "id", req.WorkerID, "Worker session id; defaults to ZEN_WORKER_ID")
+	fs.StringVar(&req.WorkerID, "id", req.WorkerID, "Worker session id; defaults to MEWLA_WORKER_ID")
 	fs.StringVar(&req.TurnID, "turn-id", "", "exact delegated prompt turn identity")
 	fs.StringVar(&req.Status, "status", "", "progress status: running, done, failed, or blocked")
 	fs.StringVar(&req.Phase, "phase", "", "progress phase: starting, reading, planning, working, verifying, or reporting")
@@ -1254,7 +1259,7 @@ func runWorkerProgress(args []string, stderr io.Writer) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 	if strings.TrimSpace(req.WorkerID) == "" {
-		return fmt.Errorf("Worker id is required; pass -id or set ZEN_WORKER_ID")
+		return fmt.Errorf("Worker id is required; pass -id or set MEWLA_WORKER_ID")
 	}
 	resp, err := callControl(cfg, req)
 	if err != nil {
@@ -1971,7 +1976,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 }
 
 func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
-	fs := flag.NewFlagSet("zen", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	cfg := daemonConfig{}

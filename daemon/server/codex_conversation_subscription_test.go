@@ -120,10 +120,10 @@ func TestSubscriptionPreservesProviderUnavailableWithoutCapturingPane(t *testing
 	binDir := t.TempDir()
 	captureCounter := filepath.Join(t.TempDir(), "pane-capture-called")
 	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf capture >> \"$ZEN_PANE_CAPTURE_COUNTER\"\nexit 1\n"), 0o700); err != nil {
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf capture >> \"$MEWLA_PANE_CAPTURE_COUNTER\"\nexit 1\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ZEN_PANE_CAPTURE_COUNTER", captureCounter)
+	t.Setenv("MEWLA_PANE_CAPTURE_COUNTER", captureCounter)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var loads atomic.Int32

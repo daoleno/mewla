@@ -306,7 +306,7 @@ func TestProviderMismatchReplacementReleasesRoute(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "codex")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "codex")
 
 	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)
@@ -344,7 +344,7 @@ func TestProviderMismatchKillFailureStillLivePreservesAndAborts(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "codex")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "codex")
 
 	_, err = service.EnsureHostSnapshot()
 	if err == nil {
@@ -386,7 +386,7 @@ func TestProviderMismatchReleaseFailureSurfaced(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "codex")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "codex")
 
 	_, err = service.EnsureHostSnapshot()
 	if err == nil || !strings.Contains(err.Error(), "injected release failure") {

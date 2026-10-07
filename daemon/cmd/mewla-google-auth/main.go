@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/base64"
+	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/daoleno/mewla/daemon/googleauth"
 	"log"
 	"net/http"
@@ -11,15 +12,16 @@ import (
 )
 
 func main() {
-	key, err := base64.RawURLEncoding.DecodeString(os.Getenv("ZEN_GOOGLE_RECEIPT_KEY"))
+	envcompat.Normalize()
+	key, err := base64.RawURLEncoding.DecodeString(os.Getenv("MEWLA_GOOGLE_RECEIPT_KEY"))
 	if err != nil {
 		log.Fatal("invalid receipt key")
 	}
-	exchange, err := googleauth.New(googleauth.Config{Origin: os.Getenv("ZEN_GOOGLE_AUTH_ORIGIN"), ClientID: os.Getenv("ZEN_GOOGLE_CLIENT_ID"), ClientSecret: os.Getenv("ZEN_GOOGLE_CLIENT_SECRET"), ReceiptKey: key})
+	exchange, err := googleauth.New(googleauth.Config{Origin: os.Getenv("MEWLA_GOOGLE_AUTH_ORIGIN"), ClientID: os.Getenv("MEWLA_GOOGLE_CLIENT_ID"), ClientSecret: os.Getenv("MEWLA_GOOGLE_CLIENT_SECRET"), ReceiptKey: key})
 	if err != nil {
 		log.Fatal(err)
 	}
-	address := os.Getenv("ZEN_GOOGLE_AUTH_LISTEN")
+	address := os.Getenv("MEWLA_GOOGLE_AUTH_LISTEN")
 	if address == "" {
 		address = "127.0.0.1:8098"
 	}

@@ -78,7 +78,7 @@ func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("url.Parse: %v", err)
 	}
-	if parsedURL.Scheme != "zen" || parsedURL.Query().Get("v") != "2" {
+	if parsedURL.Scheme != "mewla" || parsedURL.Query().Get("v") != "2" {
 		t.Fatalf("unexpected pairing link: %s", linkValue)
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parsedURL.Query().Get("p"))

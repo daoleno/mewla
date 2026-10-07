@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/google/uuid"
 )
 
@@ -4324,7 +4325,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 				opts.Env["TMPDIR"] = spec.TempDir
 				opts.Env["TMP"] = spec.TempDir
 				opts.Env["TEMP"] = spec.TempDir
-				opts.Env["ZEN_BUILD_TMPDIR"] = spec.TempDir
+				opts.Env["MEWLA_BUILD_TMPDIR"] = spec.TempDir
 			}
 			defer func() {
 				if !resourceCommitted {
@@ -4612,7 +4613,8 @@ func buildWindowCommand(opts CreateSessionOptions) (string, error) {
 func workerLaunchEnvironment(opts CreateSessionOptions) []string {
 	baseEnv := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "ZEN_WORKER_") {
+		key, _, _ := strings.Cut(entry, "=")
+		if !envcompat.HasPrefix(key, "WORKER_") {
 			baseEnv = append(baseEnv, entry)
 		}
 	}
@@ -4630,7 +4632,7 @@ func workerLaunchEnvironment(opts CreateSessionOptions) []string {
 			baseEnv = append(baseEnv, key+"="+opts.Env[key])
 		}
 	}
-	return tmuxPaneEnvironment(baseEnv)
+	return tmuxPaneEnvironment(envcompat.Mirror(baseEnv))
 }
 
 func buildWindowCommandForShell(shellPath, command string) string {
@@ -4654,11 +4656,11 @@ func buildWindowCommandForShellWithOptions(shellPath, command string, progressEn
 }
 
 func workerProgressEnvScript() string {
-	// Derive ZEN_WORKER_ID while tmux still exposes the shared host server, then
+	// Derive MEWLA_WORKER_ID while tmux still exposes the shared host server, then
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
-	// target the host server.
-	return `ZEN_WORKER_ID="$TMUX_PANE"; export ZEN_WORKER_ID; if [ -z "${ZEN_WORKER_PROGRESS_CMD:-}" ]; then ZEN_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; export ZEN_WORKER_PROGRESS_CMD; fi; unset TMUX`
+	// target the host server. Legacy ZEN_* aliases mirror the canonical names.
+	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; fi; ZEN_WORKER_ID="$MEWLA_WORKER_ID"; ZEN_WORKER_PROGRESS_CMD="$MEWLA_WORKER_PROGRESS_CMD"; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD ZEN_WORKER_ID ZEN_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
 // ZenExecutablePath returns the absolute path of the currently running zen
@@ -4674,11 +4676,11 @@ func workerProgressEnvScript() string {
 func ZenExecutablePath() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "zen"
+		return "mewla"
 	}
 	exe = strings.TrimSpace(exe)
 	if exe == "" {
-		return "zen"
+		return "mewla"
 	}
 	return exe
 }
@@ -4708,6 +4710,7 @@ func tmuxPaneEnvironment(base []string) []string {
 		"TERM_PROGRAM_VERSION": true,
 		"TMUX":                 true,
 		"TMUX_PANE":            true,
+		"MEWLA_WORKER_ID":      true,
 		"ZEN_WORKER_ID":        true,
 	}
 

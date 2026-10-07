@@ -18,7 +18,7 @@ import (
 )
 
 func TestBrowserNativeFixture(t *testing.T) {
-	root := os.Getenv("ZEN_BROWSER_NATIVE_FIXTURE")
+	root := os.Getenv("MEWLA_BROWSER_NATIVE_FIXTURE")
 	if root == "" {
 		t.Skip("owned Android fixture only")
 	}
@@ -27,7 +27,7 @@ func TestBrowserNativeFixture(t *testing.T) {
 		t.Fatal(e)
 	}
 	backend := browser.NewFixtureBackend()
-	if os.Getenv("ZEN_BROWSER_SECURE") == "1" {
+	if os.Getenv("MEWLA_BROWSER_SECURE") == "1" {
 		backend = browser.NewBackend()
 	}
 	m, e := browser.New(filepath.Join(root, "browsers"), backend)

@@ -52,7 +52,7 @@ func TestBuildWebPairingURLCarriesTheConnectLinkInTheFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := fragment.Get("pair")
-	if !strings.HasPrefix(link, "zen://settings?p=") {
+	if !strings.HasPrefix(link, "mewla://settings?p=") {
 		t.Fatalf("pair link = %q", link)
 	}
 }

@@ -161,7 +161,7 @@ func normalizeInventoryOptions(options InventoryOptions) (InventoryOptions, erro
 	}
 	zenStateDir := strings.TrimSpace(options.ZenStateDir)
 	if zenStateDir == "" {
-		zenStateDir = strings.TrimSpace(os.Getenv("ZEN_STATE_DIR"))
+		zenStateDir = strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
 	}
 	if zenStateDir == "" {
 		zenStateDir = statedir.Default(home)

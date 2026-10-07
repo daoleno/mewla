@@ -295,7 +295,7 @@ type paritySharedState struct {
 // paritySharedBuildState snapshots the repository's shared DEV build output so
 // the test can prove it never wrote outside its owned root.
 func paritySharedBuildState(moduleDir string) paritySharedState {
-	path := filepath.Join(moduleDir, "tmp", "zen-dev")
+	path := filepath.Join(moduleDir, "tmp", "mewla-dev")
 	info, err := os.Stat(path)
 	if err != nil {
 		return paritySharedState{}
@@ -424,7 +424,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		// The isolated run must leave the repository's shared DEV build output
 		// untouched (hash and mtime).
 		if !paritySharedBuildState(realModule).equal(sharedBefore) {
-			t.Fatalf("%s: shared tmp/zen-dev changed during the isolated run", variant.name)
+			t.Fatalf("%s: shared tmp/mewla-dev changed during the isolated run", variant.name)
 		}
 
 		// Identity and state ownership survive a restart of the same entry point.
@@ -445,7 +445,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	}
 	// The DEV runner built its own child in the snapshot; its build options must
 	// match the direct binary so parity covers the same build scope.
-	devChild := filepath.Join(snapshot, "tmp", "zen-dev")
+	devChild := filepath.Join(snapshot, "tmp", "mewla-dev")
 	if _, err := os.Stat(devChild); err != nil {
 		t.Fatalf("DEV runner child was not built in the owned snapshot: %v", err)
 	}

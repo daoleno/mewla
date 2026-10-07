@@ -6,7 +6,7 @@ package modelprofiles
 //
 // Run (from daemon module root):
 //
-//	ZEN_CODEX_WS_INTEGRATION=1 go test ./modelprofiles -run TestCodexWSUpstreamProxyLive -count=1 -timeout 120s
+//	MEWLA_CODEX_WS_INTEGRATION=1 go test ./modelprofiles -run TestCodexWSUpstreamProxyLive -count=1 -timeout 120s
 //
 // Uses a temporary CODEX_HOME and a scripted 127.0.0.1 Responses WebSocket
 // upstream that speaks the protocol events (response.created, output_item,
@@ -116,8 +116,8 @@ func newWSLiveUpstream(t *testing.T) *wsLiveUpstream {
 }
 
 func TestCodexWSUpstreamProxyLive(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_WS_INTEGRATION") == "" {
-		t.Skip("set ZEN_CODEX_WS_INTEGRATION=1 to run the Codex WebSocket live proof")
+	if os.Getenv("MEWLA_CODEX_WS_INTEGRATION") == "" {
+		t.Skip("set MEWLA_CODEX_WS_INTEGRATION=1 to run the Codex WebSocket live proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
@@ -260,8 +260,8 @@ func TestCodexWSUpstreamProxyLive(t *testing.T) {
 }
 
 func TestCodexWSImmediateTerminationLive(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_WS_INTEGRATION") == "" {
-		t.Skip("set ZEN_CODEX_WS_INTEGRATION=1 to run the Codex WebSocket live proof")
+	if os.Getenv("MEWLA_CODEX_WS_INTEGRATION") == "" {
+		t.Skip("set MEWLA_CODEX_WS_INTEGRATION=1 to run the Codex WebSocket live proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
@@ -315,8 +315,8 @@ func TestCodexWSImmediateTerminationLive(t *testing.T) {
 }
 
 func TestCodexWSHandshakeRejectionFallsBackSilentlyLive(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_WS_INTEGRATION") == "" {
-		t.Skip("set ZEN_CODEX_WS_INTEGRATION=1 to run the Codex WebSocket live proof")
+	if os.Getenv("MEWLA_CODEX_WS_INTEGRATION") == "" {
+		t.Skip("set MEWLA_CODEX_WS_INTEGRATION=1 to run the Codex WebSocket live proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
