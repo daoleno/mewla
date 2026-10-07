@@ -69,7 +69,7 @@ func runServiceRegister(args []string, stderr io.Writer) error {
 	fs.StringVar(&desc.Project, "project", "", "project label")
 	fs.StringVar(&desc.Cwd, "cwd", "", "service working directory")
 	fs.IntVar(&desc.Port, "port", 0, "expected listening port (0 matches any owned port)")
-	fs.StringVar(&desc.RegisteredBy, "registered-by", "", "owning Worker id (defaults to ZEN_WORKER_ID)")
+	fs.StringVar(&desc.RegisteredBy, "registered-by", "", "owning Worker id (defaults to MEWLA_WORKER_ID)")
 	fs.StringVar(&workID, "work", "", "Brain Work id owning this service")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: zen service register -unit dsh-web.service -name \"DeepSeek Harness\" [-project dsh] [-port 3080] [-cwd ~/workspace/dsh-smoke]")
@@ -83,7 +83,7 @@ func runServiceRegister(args []string, stderr io.Writer) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 	if strings.TrimSpace(desc.RegisteredBy) == "" {
-		desc.RegisteredBy = strings.TrimSpace(os.Getenv("ZEN_WORKER_ID"))
+		desc.RegisteredBy = strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID"))
 	}
 	resp, err := callControl(cfg, control.Request{
 		Type:     "service_register",

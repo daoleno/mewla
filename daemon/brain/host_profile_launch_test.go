@@ -133,7 +133,7 @@ func TestExecutorMismatchReplacementPrepareCommit(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "codex")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "codex")
 
 	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)
@@ -351,7 +351,7 @@ func TestBrainHostAliasPrepareUsesCanonicalClientHint(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "primary")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "primary")
 
 	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)
@@ -379,7 +379,7 @@ func TestBrainHostClaudeAliasPrepareUsesCanonicalClientHint(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "desk-claude")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "desk-claude")
 
 	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func TestBrainHostRawCustomBypassSkipsPrepareBinding(t *testing.T) {
 		ByName: map[string]work.Executor{"custom": {Name: "custom", Command: "my-custom-agent", Kind: "custom"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "custom")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "custom")
 
 	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)
@@ -596,7 +596,7 @@ func TestAliasCommitNondurableFailsClosedNoHostBind(t *testing.T) {
 		},
 	})
 	service.SetSessionRouteLifecycle(routes)
-	t.Setenv("ZEN_BRAIN_HOST_EXECUTOR", "primary")
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "primary")
 
 	_, err = service.EnsureHostSnapshot()
 	if err == nil || !strings.Contains(err.Error(), "not durable") {

@@ -16,7 +16,7 @@ import (
 )
 
 func TestParseClaudeConversation_PreservesLongCompletedAssistantMarkdown(t *testing.T) {
-	const suffix = "ZEN_CLAUDE_SUFFIX_VERTICAL_SLICE_8d2e"
+	const suffix = "MEWLA_CLAUDE_SUFFIX_VERTICAL_SLICE_8d2e"
 	path := filepath.Join(t.TempDir(), "claude-long.jsonl")
 	writeJSONL(t, path,
 		map[string]any{

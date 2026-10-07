@@ -20,7 +20,7 @@ import (
 // Opt-in, loopback-only native UI fixture. Real authentication/WS handlers,
 // disposable state, no provider and no Telegram network access.
 func TestTelegramNativeFixture(t *testing.T) {
-	root := os.Getenv("ZEN_TELEGRAM_UI_FIXTURE_DIR")
+	root := os.Getenv("MEWLA_TELEGRAM_UI_FIXTURE_DIR")
 	if root == "" {
 		t.Skip("owned native UI fixture only")
 	}

@@ -2966,7 +2966,7 @@ func (s *Service) markHostActivation(sessionID, receipt string, owned watcher.Ow
 func brainSessionEnvironment() map[string]string {
 	env := map[string]string{}
 	if root, err := work.DefaultWorktreeRoot(); err == nil {
-		env["ZEN_WORKTREE_ROOT"] = root
+		env["MEWLA_WORKTREE_ROOT"] = root
 	}
 	return env
 }
@@ -3361,7 +3361,7 @@ func (s *Service) HostExecutorID() string {
 }
 
 func brainHostExecutorOverride() string {
-	return strings.TrimSpace(os.Getenv("ZEN_BRAIN_HOST_EXECUTOR"))
+	return strings.TrimSpace(os.Getenv("MEWLA_BRAIN_HOST_EXECUTOR"))
 }
 
 func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
@@ -3537,7 +3537,7 @@ func zenExecutableDir() string {
 		return ""
 	}
 	base := strings.ToLower(commandBase(exe))
-	if base != "zen" && base != "zen.exe" {
+	if base != "mewla" && base != "mewla.exe" && base != "zen" && base != "zen.exe" {
 		return ""
 	}
 	return strings.TrimSpace(filepath.Dir(exe))
@@ -3643,7 +3643,7 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string
 func zenCLICommand() string {
 	exe, err := os.Executable()
 	if err != nil || strings.TrimSpace(exe) == "" {
-		return "zen"
+		return "mewla"
 	}
 	if strings.ContainsAny(exe, " \t'") {
 		return shellQuote(exe)

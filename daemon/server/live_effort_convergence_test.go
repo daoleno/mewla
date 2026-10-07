@@ -36,10 +36,10 @@ import (
 // and the Interface WebSocket projection to the same effort, with the request
 // forwarded unchanged. No process restart.
 //
-//	ZEN_CODEX_LIVE_CONTROL=1 go test ./server -run TestLiveSameModelEffortConvergence -count=1 -timeout 420s -v
+//	MEWLA_CODEX_LIVE_CONTROL=1 go test ./server -run TestLiveSameModelEffortConvergence -count=1 -timeout 420s -v
 func TestLiveSameModelEffortConvergence(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_LIVE_CONTROL") == "" {
-		t.Skip("set ZEN_CODEX_LIVE_CONTROL=1 for the live Codex convergence proof")
+	if os.Getenv("MEWLA_CODEX_LIVE_CONTROL") == "" {
+		t.Skip("set MEWLA_CODEX_LIVE_CONTROL=1 for the live Codex convergence proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {

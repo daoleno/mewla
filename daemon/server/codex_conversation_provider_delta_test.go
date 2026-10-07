@@ -335,7 +335,7 @@ INSERT INTO project(id) VALUES ('proj');
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fixture: %v: %s", err, out)
 	}
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	srv := &Server{watcher: watcher.New(time.Second)}
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
@@ -441,7 +441,7 @@ INSERT INTO project(id) VALUES ('proj');
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fixture: %v: %s", err, out)
 	}
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	srv := &Server{watcher: watcher.New(time.Second)}
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{

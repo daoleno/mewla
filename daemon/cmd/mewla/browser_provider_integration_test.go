@@ -33,14 +33,14 @@ import (
 // The normal launch compiler points at os.Executable. In this opt-in test the
 // executable is the test binary, which dispatches the actual product MCP CLI.
 func TestMain(m *testing.M) {
-	if os.Getenv("ZEN_BROWSER_PROVIDER") != "" && len(os.Args) > 1 && os.Args[1] == "browser" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") != "" && len(os.Args) > 1 && os.Args[1] == "browser" {
 		if err := runBrowserCommand(os.Args[2:], os.Stderr); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		os.Exit(0)
 	}
-	if os.Getenv("ZEN_BROWSER_PROVIDER") == "probe" && len(os.Args) > 1 && os.Args[1] == "browser-test-provider" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") == "probe" && len(os.Args) > 1 && os.Args[1] == "browser-test-provider" {
 		// Deterministic protocol client for debugging the real process/launch
 		// boundary without consuming another model request.
 		var config struct {
@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "browser", Arguments: map[string]any{"action": action}})
 			if err != nil || result.IsError {
 				raw, _ := json.Marshal(result)
-				fmt.Fprintf(os.Stderr, "probe task=%s action=%s error=%v result=%s\n", os.Getenv("ZEN_WORKER_ID"), action, err, raw)
+				fmt.Fprintf(os.Stderr, "probe task=%s action=%s error=%v result=%s\n", os.Getenv("MEWLA_WORKER_ID"), action, err, raw)
 				session.Close()
 				os.Exit(1)
 			}
@@ -108,7 +108,7 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 	if err := os.MkdirAll(scratch, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if os.Getenv("ZEN_BROWSER_PROVIDER") == "probe" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") == "probe" {
 		bin := filepath.Join(root, "probe-bin")
 		if err := os.MkdirAll(bin, 0700); err != nil {
 			t.Fatal(err)
@@ -162,7 +162,7 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 	s.SetBrowser(manager)
 	// Reuse the normal configured Provider selection through an isolated Owner.
 	// Its catalog/credentials are private copies; route/gateway state is fresh.
-	if os.Getenv("ZEN_BROWSER_PROVIDER") != "probe" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") != "probe" {
 		profilesPath, err := work.DefaultModelProfilesPath()
 		if err != nil {
 			t.Fatal(err)
@@ -213,13 +213,13 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 	prompt := "Use ONLY the provided zen_browser MCP browser tool. Call control, then snapshot. Confirm the page says Persistent authenticated true and Session authenticated true. Call release. Reply BROWSER_SHARED_SESSION_OK if both are true. Do not navigate, use shell or other tools, access accounts, or change files."
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	providerExecutable := "claude"
-	if os.Getenv("ZEN_BROWSER_PROVIDER") == "probe" {
+	if os.Getenv("MEWLA_BROWSER_PROVIDER") == "probe" {
 		providerExecutable = quote(filepath.Join(root, "probe-bin", "claude"))
 	}
 	command := providerExecutable + " --print " + quote(prompt) + " --output-format json --max-turns 5 --no-session-persistence --setting-sources user"
 	var ids []string
 	taskCount := 2
-	if count := os.Getenv("ZEN_BROWSER_PROVIDER_TASKS"); count != "" {
+	if count := os.Getenv("MEWLA_BROWSER_PROVIDER_TASKS"); count != "" {
 		n, err := strconv.Atoi(count)
 		if err != nil || n < 1 || n > 2 {
 			t.Fatal("provider task budget must be 1 or 2")
@@ -269,7 +269,7 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 			if strings.TrimSpace(string(dead)) == "1" && strings.Contains(pane, `"is_error":true`) {
 				t.Fatal("provider returned an error before proving Browser attachment (output retained only in private fixture pane)")
 			}
-			if os.Getenv("ZEN_BROWSER_PROVIDER") == "probe" && strings.TrimSpace(string(dead)) == "1" && !strings.Contains(pane, "BROWSER_SHARED_SESSION_OK") {
+			if os.Getenv("MEWLA_BROWSER_PROVIDER") == "probe" && strings.TrimSpace(string(dead)) == "1" && !strings.Contains(pane, "BROWSER_SHARED_SESSION_OK") {
 				t.Fatalf("local probe failed: %s", pane)
 			}
 			if time.Now().After(deadline) {
@@ -285,8 +285,8 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 			t.Fatal("task finish destroyed user browser")
 		}
 	}
-	if evidence := os.Getenv("ZEN_BROWSER_EVIDENCE"); evidence != "" {
-		raw, _ := json.MarshalIndent(map[string]any{"normal_authenticated_create_session": true, "real_provider": os.Getenv("ZEN_BROWSER_PROVIDER") == "1", "provider": "claude", "tasks": len(ids), "real_watcher": true, "same_authenticated_target": true, "task_finish_preserves_browser": true, "global_mcp_configuration_modified": false}, "", "  ")
+	if evidence := os.Getenv("MEWLA_BROWSER_EVIDENCE"); evidence != "" {
+		raw, _ := json.MarshalIndent(map[string]any{"normal_authenticated_create_session": true, "real_provider": os.Getenv("MEWLA_BROWSER_PROVIDER") == "1", "provider": "claude", "tasks": len(ids), "real_watcher": true, "same_authenticated_target": true, "task_finish_preserves_browser": true, "global_mcp_configuration_modified": false}, "", "  ")
 		_ = os.WriteFile(filepath.Join(evidence, "normal-provider-result.json"), raw, 0600)
 	}
 }

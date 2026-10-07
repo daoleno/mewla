@@ -15,11 +15,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/daoleno/mewla/daemon/linkproto"
 	"github.com/daoleno/mewla/daemon/relay"
 )
 
 func main() {
+	envcompat.Normalize()
 	if err := run(os.Args[1:]); err != nil {
 		log.Fatalf("zen-relay: %v", err)
 	}
@@ -54,7 +56,7 @@ func run(args []string) error {
 	flags.StringVar(&operatorAddress, "operator-addr", "127.0.0.1:8080", "health and metrics listen address")
 	flags.StringVar(&certificateFile, "tls-cert", "", "PEM certificate for the connector control listener")
 	flags.StringVar(&keyFile, "tls-key", "", "PEM private key for the connector control listener")
-	flags.StringVar(&tokenEnvironment, "connector-token-env", "ZEN_LINK_CONNECTOR_TOKEN", "environment variable containing the connector token")
+	flags.StringVar(&tokenEnvironment, "connector-token-env", "MEWLA_LINK_CONNECTOR_TOKEN", "environment variable containing the connector token")
 	flags.IntVar(&maxRoutes, "max-routes", defaults.MaxRoutes, "maximum concurrently registered routes")
 	flags.IntVar(&maxClients, "max-clients", defaults.MaxClients, "maximum concurrent client streams")
 	flags.IntVar(&maxClientsPerRoute, "max-clients-per-route", defaults.MaxClientsPerRoute, "maximum concurrent streams for one route")

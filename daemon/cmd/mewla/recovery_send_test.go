@@ -139,7 +139,7 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 	}
 	create := func(name string) string {
 		t.Helper()
-		id, e := w.CreateSession("", watcher.CreateSessionOptions{Name: name, Cwd: durableCwd, Command: "exec " + native + " " + filepath.Join(root, name+".input"), Detached: true, Delegated: true, Env: map[string]string{"ZEN_FIXTURE_INPUT": filepath.Join(root, name+".input"), "ZDOTDIR": root}})
+		id, e := w.CreateSession("", watcher.CreateSessionOptions{Name: name, Cwd: durableCwd, Command: "exec " + native + " " + filepath.Join(root, name+".input"), Detached: true, Delegated: true, Env: map[string]string{"MEWLA_FIXTURE_INPUT": filepath.Join(root, name+".input"), "ZDOTDIR": root}})
 		if e != nil {
 			t.Fatal(e)
 		}

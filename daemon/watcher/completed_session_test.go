@@ -111,7 +111,7 @@ exit 1
 }
 
 func TestBDD_ZEN015_UnownedPresentCompletedCleanupIsProtected(t *testing.T) {
-	dir := writeFakeTmux(t, `log=${ZEN_TEST_TMUX_LOG:?}
+	dir := writeFakeTmux(t, `log=${MEWLA_TEST_TMUX_LOG:?}
 printf '%s\n' "$*" >>"$log"
 target=
 prev=
@@ -138,7 +138,7 @@ exit 0
 `)
 	logPath := filepath.Join(dir, "tmux.log")
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
@@ -229,8 +229,8 @@ func TestCompletedCleanupRaceDoesNotKillAppearingUnownedTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
-state=$(cat "$ZEN_TEST_TMUX_STATE")
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
+state=$(cat "$MEWLA_TEST_TMUX_STATE")
 cmd=
 for arg in "$@"; do
   case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
@@ -247,7 +247,7 @@ if [ "$cmd" = "show-options" ]; then
   exit 0
 fi
 if [ "$cmd" = "kill-pane" ]; then
-  echo killed >> "$ZEN_TEST_TMUX_LOG"
+  echo killed >> "$MEWLA_TEST_TMUX_LOG"
   exit 0
 fi
 exit 0
@@ -256,8 +256,8 @@ exit 0
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
-	t.Setenv("ZEN_TEST_TMUX_STATE", statePath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_STATE", statePath)
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
@@ -326,7 +326,7 @@ func TestBDD_ZEN019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 			dir := writeFakeTmux(t, ownedPresentTmuxScript())
 			logPath := filepath.Join(dir, "tmux.log")
 			t.Setenv("PATH", dir)
-			t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+			t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 			if err := os.WriteFile(logPath, nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -423,7 +423,7 @@ func writeFakeTmux(t *testing.T, body string) string {
 }
 
 func ownedPresentTmuxScript() string {
-	return `log=${ZEN_TEST_TMUX_LOG:-/dev/null}
+	return `log=${MEWLA_TEST_TMUX_LOG:-/dev/null}
 printf '%s\n' "$*" >>"$log"
 target=
 prev=

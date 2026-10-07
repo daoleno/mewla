@@ -29,15 +29,15 @@ import (
 // It runs production CLI/control/admission/input code without daemon startup's
 // scheduler, host bootstrap, gateway takeover, or user-state discovery.
 func TestRealCLIIsolatedCodexSpawn(t *testing.T) {
-	if os.Getenv("ZEN_TEST_FULL_CODEX_SPAWN") != "1" {
-		t.Skip("set ZEN_TEST_FULL_CODEX_SPAWN=1 for one real short Codex spawn")
+	if os.Getenv("MEWLA_TEST_FULL_CODEX_SPAWN") != "1" {
+		t.Skip("set MEWLA_TEST_FULL_CODEX_SPAWN=1 for one real short Codex spawn")
 	}
 	if runtime.GOOS != "linux" {
 		t.Skip("process lifetime evidence uses Linux procfs")
 	}
-	cli := os.Getenv("ZEN_TEST_SPAWN_CLI")
+	cli := os.Getenv("MEWLA_TEST_SPAWN_CLI")
 	if !filepath.IsAbs(cli) {
-		t.Fatal("ZEN_TEST_SPAWN_CLI must name a separately built absolute zen binary")
+		t.Fatal("MEWLA_TEST_SPAWN_CLI must name a separately built absolute zen binary")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -81,13 +81,13 @@ func TestRealCLIIsolatedCodexSpawn(t *testing.T) {
 	}
 	// Suppress the new-user wizard without loading the user's shell startup.
 	write(filepath.Join(root, "home", ".zshrc"), nil, 0600)
-	for _, key := range []string{"ZEN_AGENT_ID", "ZEN_AGENT_PROGRESS_CMD", "ZEN_WORKER_ID", "ZEN_WORKER_PROGRESS_CMD", "ZEN_STATE_DIR", "ZEN_BRAIN_HOST_EXECUTOR", "TMUX", "TMUX_PANE"} {
+	for _, key := range []string{"MEWLA_AGENT_ID", "MEWLA_AGENT_PROGRESS_CMD", "MEWLA_WORKER_ID", "MEWLA_WORKER_PROGRESS_CMD", "MEWLA_STATE_DIR", "MEWLA_BRAIN_HOST_EXECUTOR", "TMUX", "TMUX_PANE"} {
 		t.Setenv(key, "")
 	}
 	t.Setenv("HOME", filepath.Join(root, "home"))
 	t.Setenv("ZDOTDIR", filepath.Join(root, "home"))
 	t.Setenv("CODEX_HOME", filepath.Join(root, "home", ".codex"))
-	t.Setenv("ZEN_WORKTREE_ROOT", filepath.Join(root, "worktrees"))
+	t.Setenv("MEWLA_WORKTREE_ROOT", filepath.Join(root, "worktrees"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	socket := filepath.Join(root, "tmux.sock")
@@ -192,7 +192,7 @@ exit "$rc"
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	prompt := "This is an isolated transport test. Do not use tools, run commands (including progress), edit files, or delegate. Reply only with the concatenation of ZEN_FULL_SPAWN_ and VERIFIED."
+	prompt := "This is an isolated transport test. Do not use tools, run commands (including progress), edit files, or delegate. Reply only with the concatenation of MEWLA_FULL_SPAWN_ and VERIFIED."
 	cmd := exec.CommandContext(ctx, cli, "worker", "spawn", "-state-dir", app.stateDir, "-executor", "codex", "-name", "isolated-cli-proof", "-cwd", cwd, "-prompt", prompt)
 	var cliStderr bytes.Buffer
 	cmd.Stderr = &cliStderr
@@ -242,7 +242,7 @@ exit "$rc"
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, entry := range []string{"HOME=" + filepath.Join(root, "home"), "CODEX_HOME=" + filepath.Join(root, "home", ".codex"), "ZEN_WORKER_ID=" + id, "ZEN_STATE_DIR=" + app.stateDir} {
+			for _, entry := range []string{"HOME=" + filepath.Join(root, "home"), "CODEX_HOME=" + filepath.Join(root, "home", ".codex"), "MEWLA_WORKER_ID=" + id, "MEWLA_STATE_DIR=" + app.stateDir} {
 				if !strings.Contains("\x00"+string(env), "\x00"+entry+"\x00") {
 					t.Fatalf("native process isolation/identity missing %s", strings.SplitN(entry, "=", 2)[0])
 				}
@@ -284,8 +284,8 @@ exit "$rc"
 		if err != nil {
 			t.Fatalf("capture: %v %s", err, pane)
 		}
-		if strings.Contains(string(pane), "ZEN_FULL_SPAWN_VERIFIED") {
-			t.Log("Codex reply: ZEN_FULL_SPAWN_VERIFIED (absent from input)")
+		if strings.Contains(string(pane), "MEWLA_FULL_SPAWN_VERIFIED") {
+			t.Log("Codex reply: MEWLA_FULL_SPAWN_VERIFIED (absent from input)")
 			break
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
@@ -358,7 +358,7 @@ exit "$rc"
 			}
 			if row.Payload.Role == "assistant" {
 				for _, content := range row.Payload.Content {
-					if strings.TrimSpace(content.Text) == "ZEN_FULL_SPAWN_VERIFIED" {
+					if strings.TrimSpace(content.Text) == "MEWLA_FULL_SPAWN_VERIFIED" {
 						assistantMarkers++
 					}
 				}
@@ -406,7 +406,7 @@ func (w *isolatedSpawnWatcher) CreateSession(target string, options watcher.Crea
 	if options.Env == nil {
 		options.Env = map[string]string{}
 	}
-	options.Env["ZEN_WORKER_PROGRESS_CMD"] = w.executable
+	options.Env["MEWLA_WORKER_PROGRESS_CMD"] = w.executable
 	return w.Watcher.CreateSession(target, options)
 }
 

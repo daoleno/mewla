@@ -655,7 +655,7 @@ func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.
 			return "", nil, modelprofiles.PersistResult{}, err
 		}
 		opts.ProgressEnv = true
-		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"ZEN_STATE_DIR": s.auth.StorageDir(), "ZEN_WORKER_ID": ""})
+		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"MEWLA_STATE_DIR": s.auth.StorageDir(), "MEWLA_WORKER_ID": ""})
 		id := opts.BrowserID
 		opts.PrepareLaunch = func(command string) (string, error) {
 			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), s.auth.StorageDir(), id)

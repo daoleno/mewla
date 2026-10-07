@@ -740,11 +740,11 @@ func TestPluginCommandEnvironmentReplacesIdentityRootsExactlyOnce(t *testing.T) 
 		Home:       "/right-home",
 		CodexHome:  "/right-codex",
 		ClaudeHome: "/right-claude",
-		Env:        map[string]string{"ZEN_PLUGIN_TEST": "present"},
+		Env:        map[string]string{"MEWLA_PLUGIN_TEST": "present"},
 	})
 	for key, want := range map[string]string{
 		"HOME": "/right-home", "CODEX_HOME": "/right-codex",
-		"CLAUDE_CONFIG_DIR": "/right-claude", "ZEN_PLUGIN_TEST": "present",
+		"CLAUDE_CONFIG_DIR": "/right-claude", "MEWLA_PLUGIN_TEST": "present",
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
 	} {
 		count := 0

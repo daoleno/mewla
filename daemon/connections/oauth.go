@@ -331,7 +331,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Zen Plugins</title><h1>Account connected</h1><p>You can return to Zen.</p><a href="zen://plugins">Open Plugins</a>`)
+	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Zen Plugins</title><h1>Account connected</h1><p>You can return to Zen.</p><a href="mewla://plugins">Open Plugins</a>`)
 }
 func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	raw, ok, err := m.vault.Get("integration:" + r.Account.ID)

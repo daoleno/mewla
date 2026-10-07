@@ -19,7 +19,7 @@ import (
 // Opt-in, loopback-only native fixture server. The production authenticated WS
 // handler and real Git repositories are used without starting a live daemon.
 func TestGitDiffNativeFixtureServer(t *testing.T) {
-	if os.Getenv("ZEN_GIT_DIFF_NATIVE") != "1" {
+	if os.Getenv("MEWLA_GIT_DIFF_NATIVE") != "1" {
 		t.Skip("native fixture server is opt-in")
 	}
 	fixtures := map[string]string{}

@@ -44,7 +44,7 @@ func newSharedTmuxHarness(t *testing.T, defaultServer bool) *sharedTmuxHarness {
 		selected:      selected,
 		physical:      physical,
 		defaultSocket: defaultSocket,
-		realTmux:      os.Getenv("ZEN_TEST_REAL_TMUX"),
+		realTmux:      os.Getenv("MEWLA_TEST_REAL_TMUX"),
 		scratch:       filepath.Join(root, "provider-tmux"),
 	}
 	if err := os.MkdirAll(h.scratch, 0o700); err != nil {
@@ -168,10 +168,10 @@ func installIsolatedTmuxShim(t *testing.T, root string) {
 	shimPath := filepath.Join(shimDir, "tmux")
 	const shim = `#!/bin/sh
 set -eu
-real=${ZEN_TEST_REAL_TMUX:?}
-allowed=${ZEN_TEST_ALLOWED_TMUX_ROOT:?}
-default_socket=${ZEN_TEST_DEFAULT_TMUX_SOCKET:?}
-audit=${ZEN_TEST_TMUX_AUDIT:?}
+real=${MEWLA_TEST_REAL_TMUX:?}
+allowed=${MEWLA_TEST_ALLOWED_TMUX_ROOT:?}
+default_socket=${MEWLA_TEST_DEFAULT_TMUX_SOCKET:?}
+audit=${MEWLA_TEST_TMUX_AUDIT:?}
 socket=
 expect_socket=0
 scan_global=1
@@ -221,10 +221,10 @@ exec "$real" "$@"
 	if err := os.WriteFile(shimPath, []byte(shim), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ZEN_TEST_REAL_TMUX", realTmux)
-	t.Setenv("ZEN_TEST_ALLOWED_TMUX_ROOT", root)
-	t.Setenv("ZEN_TEST_DEFAULT_TMUX_SOCKET", filepath.Join(root, "user-default.sock"))
-	t.Setenv("ZEN_TEST_TMUX_AUDIT", filepath.Join(root, "tmux-audit.log"))
+	t.Setenv("MEWLA_TEST_REAL_TMUX", realTmux)
+	t.Setenv("MEWLA_TEST_ALLOWED_TMUX_ROOT", root)
+	t.Setenv("MEWLA_TEST_DEFAULT_TMUX_SOCKET", filepath.Join(root, "user-default.sock"))
+	t.Setenv("MEWLA_TEST_TMUX_AUDIT", filepath.Join(root, "tmux-audit.log"))
 	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
@@ -427,7 +427,7 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 
 	// Input and capture use production tmux I/O, with the process-identity seam
 	// limited to classifying the test shell as an interactive provider.
-	if err := h.w.SendInput(target, "echo ZEN_SHARED_INPUT"); err != nil {
+	if err := h.w.SendInput(target, "echo MEWLA_SHARED_INPUT"); err != nil {
 		t.Fatalf("draft input: %v", err)
 	}
 	if err := h.w.SendKey(target, "Enter"); err != nil {
@@ -435,7 +435,7 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	}
 	waitForHarness(t, "shared-server input", func() bool {
 		text, captureErr := h.w.CapturePaneContent(target)
-		return captureErr == nil && strings.Contains(text, "ZEN_SHARED_INPUT")
+		return captureErr == nil && strings.Contains(text, "MEWLA_SHARED_INPUT")
 	})
 
 	// A fresh watcher recovers only the durable local marker from the same
@@ -455,7 +455,7 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", target, "remain-on-exit", "on").CombinedOutput(); err != nil {
 		t.Fatalf("set remain-on-exit: %v: %s", err, out)
 	}
-	if err := h.w.SendInput(target, "echo ZEN_SHARED_COMPLETE; exit 0"); err != nil {
+	if err := h.w.SendInput(target, "echo MEWLA_SHARED_COMPLETE; exit 0"); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.w.SendKey(target, "Enter"); err != nil {

@@ -153,7 +153,7 @@ func newBootTestEnvironment(t *testing.T) (bootConfig, string) {
 	}
 	return bootConfig{
 		Binary:   binary,
-		StateDir: filepath.Join(home, ".zen"),
+		StateDir: filepath.Join(home, ".mewla"),
 		Addr:     bootDefaultAddr,
 		WorkDir:  workDir,
 		PathEnv:  "/usr/local/bin:/usr/bin:/bin",
@@ -355,7 +355,7 @@ func TestResolveBootConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.StateDir != filepath.Join(home, ".zen") {
+	if config.StateDir != filepath.Join(home, ".mewla") {
 		t.Fatalf("state dir = %s", config.StateDir)
 	}
 	if config.Addr != bootDefaultAddr {

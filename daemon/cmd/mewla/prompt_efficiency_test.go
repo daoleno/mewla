@@ -107,7 +107,7 @@ func TestEngineeringScenarioBriefsReachNativeWorkers(t *testing.T) {
 				command := fw.created[0].Command
 				if provider == "pi" {
 					path := work.PiOwnedSessionPath(command)
-					if filepath.Dir(path) != filepath.Join(home, ".zen", "provider-sessions", "pi") || !strings.HasPrefix(command, "pi --session ") {
+					if filepath.Dir(path) != filepath.Join(home, ".mewla", "provider-sessions", "pi") || !strings.HasPrefix(command, "pi --session ") {
 						t.Fatalf("Pi lost native owned session: %s", command)
 					}
 				} else if command != wantCommand {
