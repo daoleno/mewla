@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/assets/branding/zen-logo-mark-transparent.png" width="88" alt="Mewla logo">
+  <img src="app/assets/branding/mewla-icon.png" width="88" alt="Mewla logo">
 </p>
 
 <h1 align="center">Mewla</h1>
