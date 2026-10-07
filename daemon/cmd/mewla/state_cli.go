@@ -9,7 +9,7 @@ import (
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
-// migrateLegacyState moves ~/.mewla to ~/.mewla before any command resolves
+// migrateLegacyState moves ~/.zen to ~/.mewla before any command resolves
 // state paths. An explicit MEWLA_STATE_DIR (or legacy ZEN_STATE_DIR) owns its
 // own root, so only the daemon start or `mewla state migrate` act then.
 // Routine outcomes stay quiet so CLI output that scripts parse is unchanged;
@@ -44,8 +44,8 @@ func migrateLegacyState(args []string, stderr io.Writer) {
 func runStateCommand(args []string, stdout, stderr io.Writer) error {
 	if len(args) != 1 || args[0] != "migrate" {
 		fmt.Fprintln(stderr, "Usage: mewla state migrate")
-		fmt.Fprintln(stderr, "  Move the legacy ~/.mewla state root to ~/.mewla and leave ~/.mewla as a link.")
-		fmt.Fprintln(stderr, "  Refuses while a daemon still holds ~/.mewla; idempotent once migrated.")
+		fmt.Fprintln(stderr, "  Move the legacy ~/.zen state root to ~/.mewla and leave ~/.zen as a link.")
+		fmt.Fprintln(stderr, "  Refuses while a daemon still holds ~/.zen; idempotent once migrated.")
 		return fmt.Errorf("usage: mewla state migrate")
 	}
 	home, err := os.UserHomeDir()
