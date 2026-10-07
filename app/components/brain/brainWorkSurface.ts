@@ -158,5 +158,8 @@ function slipSummary(
       : group === "back"
         ? [work.summary, worker?.summary, waitFor]
         : [waitFor, work.summary];
-  return candidates.map((value) => value?.replace(/\s+/g, " ").trim()).find(Boolean);
+  // A bare reference ("operator:2985…") is plumbing, not something to read.
+  return candidates
+    .map((value) => value?.replace(/\s+/g, " ").trim())
+    .find((value) => Boolean(value && value.includes(" ")));
 }
