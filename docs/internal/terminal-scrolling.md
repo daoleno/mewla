@@ -39,7 +39,7 @@ live grid retain pane focus and terminal mouse/input behavior.
 ## Full-screen apps, resize, and limits
 
 Pane metadata includes each pane's rectangle, alternate-screen state and mouse
-reporting flag. Zen chooses the pane under the touch, independently of tmux's
+reporting flag. Mewla chooses the pane under the touch, independently of tmux's
 outer terminal modes. Plain-screen panes retain native history scrolling;
 alternate-screen panes with mouse reporting use an invisible native scroll
 range to turn browser scroll deltas (including momentum) into wheel ticks at
@@ -88,10 +88,10 @@ and pane-local coordinates. No subprocess is started per wheel tick. Pane
 metadata/history refresh remains a coalesced idle operation, suspended throughout
 the drag and fling. App start/exit and pane focus refresh this metadata after
 output settles. Tmux does not expose DEC 1007 alternate-scroll opt-in; without
-mouse reporting, Zen leaves the gesture alone rather than injecting arrow keys
+mouse reporting, Mewla leaves the gesture alone rather than injecting arrow keys
 that could edit a prompt. Inline TUIs retain plain-screen history scrolling.
 
-On width changes, tmux remains responsible for terminal reflow. Zen fetches the
+On width changes, tmux remains responsible for terminal reflow. Mewla fetches the
 pane history again at its new width and retains the nearest physical reading
 position; it does not promise that the same logical paragraph keeps its exact
 pixel position after reflow. Switching pane, session, or current server replaces
@@ -119,8 +119,8 @@ daemon discovery work.
 
 Never start a verification daemon against the user's home or state. Isolate
 `HOME`, `CODEX_HOME`, tmux socket and temporary paths, and remove inherited
-`ZEN_STATE_DIR` and Worker control variables. Record the real route-listener and
+`MEWLA_STATE_DIR` and Worker control variables. Record the real route-listener and
 model-route state hashes before and after. A source checkout watched by
-`zen-dev` cannot receive production Go edits without restarting that live daemon;
+`mewla-dev` cannot receive production Go edits without restarting that live daemon;
 obtain restart authorization before editing, then verify Brain host binding,
 replacement log, route listeners and Worker observation after each restart.

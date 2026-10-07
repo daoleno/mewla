@@ -1,6 +1,6 @@
 package brain
 
-import "github.com/daoleno/zen/daemon/watcher"
+import "github.com/daoleno/mewla/daemon/watcher"
 
 // CompletedOwnedTurns is a derived cleanup set, not another durable queue.
 // Only the latest exact delegated result of an explicitly closed Work qualifies.

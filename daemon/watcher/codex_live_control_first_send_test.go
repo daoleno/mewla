@@ -38,7 +38,7 @@ func main() {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
-	record := os.Getenv("ZEN_TEST_CODEX_RECORD")
+	record := os.Getenv("MEWLA_TEST_CODEX_RECORD")
 	f, err := os.OpenFile(record, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
@@ -60,7 +60,7 @@ func main() {
 // path, and it spawns the native binary descendant with argv passed through.
 const codexWrapperFixtureSource = `#!/usr/bin/env node
 const { spawn } = require("node:child_process");
-const child = spawn(process.env.ZEN_TEST_CODEX_NATIVE, process.argv.slice(2), {
+const child = spawn(process.env.MEWLA_TEST_CODEX_NATIVE, process.argv.slice(2), {
   stdio: "inherit",
   env: process.env,
 });
@@ -162,8 +162,8 @@ func TestRealTmuxCodexLiveControlNodeWrapperFirstSendOnce(t *testing.T) {
 		Name: "live-control-first-send",
 		Cwd:  h.root,
 		Env: map[string]string{
-			"ZEN_TEST_CODEX_NATIVE": native,
-			"ZEN_TEST_CODEX_RECORD": record,
+			"MEWLA_TEST_CODEX_NATIVE": native,
+			"MEWLA_TEST_CODEX_RECORD": record,
 		},
 		Command: "set +m; " + wrapper + " app-server --listen unix://" + socket +
 			" > " + logPath + " 2>&1 & echo $! > " + pidPath +
@@ -248,8 +248,8 @@ func TestRealTmuxCodexLiveControlImmediateFirstSendWhileTreeForms(t *testing.T) 
 		Name: "live-control-immediate",
 		Cwd:  h.root,
 		Env: map[string]string{
-			"ZEN_TEST_CODEX_NATIVE": native,
-			"ZEN_TEST_CODEX_RECORD": record,
+			"MEWLA_TEST_CODEX_NATIVE": native,
+			"MEWLA_TEST_CODEX_RECORD": record,
 		},
 		Command:  launch,
 		Detached: true,

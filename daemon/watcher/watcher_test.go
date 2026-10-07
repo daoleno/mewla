@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func TestBuildWindowCommandForShellStartsInteractiveLoginShell(t *testing.T) {
@@ -113,9 +113,9 @@ func TestBuildWindowCommandForShellWrapsCommandInInteractiveLoginShell(t *testin
 func TestBuildWindowCommandForShellInjectsWorkerProgressEnv(t *testing.T) {
 	got := buildWindowCommandForShellWithOptions("/bin/zsh", "codex --dangerously-bypass-approvals-and-sandbox", true)
 	for _, want := range []string{
-		"ZEN_WORKER_ID",
-		"ZEN_WORKER_PROGRESS_CMD",
-		`ZEN_WORKER_ID="$TMUX_PANE"`,
+		"MEWLA_WORKER_ID",
+		"MEWLA_WORKER_PROGRESS_CMD",
+		`MEWLA_WORKER_ID="$TMUX_PANE"`,
 		"codex --dangerously-bypass-approvals-and-sandbox",
 	} {
 		if !strings.Contains(got, want) {
@@ -124,9 +124,9 @@ func TestBuildWindowCommandForShellInjectsWorkerProgressEnv(t *testing.T) {
 	}
 	// The injected assignment must not embed a space-separated command string
 	// (that breaks under zsh, which does not word-split unquoted variables).
-	if strings.Contains(got, `ZEN_WORKER_PROGRESS_CMD="zen worker progress"`) ||
-		strings.Contains(got, "ZEN_WORKER_PROGRESS_CMD=zen worker progress") {
-		t.Fatalf("ZEN_WORKER_PROGRESS_CMD must be a single executable token:\n%s", got)
+	if strings.Contains(got, `MEWLA_WORKER_PROGRESS_CMD="mewla worker progress"`) ||
+		strings.Contains(got, "MEWLA_WORKER_PROGRESS_CMD=mewla worker progress") {
+		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD must be a single executable token:\n%s", got)
 	}
 }
 
@@ -228,11 +228,11 @@ func TestZenExecutablePathPrefersCurrentExecutable(t *testing.T) {
 
 func TestWorkerProgressEnvScriptAssignsSingleToken(t *testing.T) {
 	script := workerProgressEnvScript()
-	if !strings.Contains(script, "ZEN_WORKER_PROGRESS_CMD=") {
-		t.Fatalf("script missing ZEN_WORKER_PROGRESS_CMD assignment:\n%s", script)
+	if !strings.Contains(script, "MEWLA_WORKER_PROGRESS_CMD=") {
+		t.Fatalf("script missing MEWLA_WORKER_PROGRESS_CMD assignment:\n%s", script)
 	}
 	// The assignment must not embed a space-separated command string.
-	if strings.Contains(script, "zen worker progress") {
+	if strings.Contains(script, "mewla worker progress") {
 		t.Fatalf("script must not embed space-separated command:\n%s", script)
 	}
 	// The injected value must be the current executable's path (shell-quoted),
@@ -1403,7 +1403,7 @@ func TestProviderCommandDetectionDirectAndEnvWrapped(t *testing.T) {
 	const zenPathWrap = "env PATH='/opt/zen/bin':$PATH"
 	// Exact Host form from withZenCLIOnPath(shellQuote(dir)): quoted dir may
 	// contain spaces, with :$PATH and other PATH entries appended outside quotes.
-	const zenPathWrapSpaced = "env PATH='/Applications/Zen CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
+	const zenPathWrapSpaced = "env PATH='/Applications/Mewla CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
 	tests := []struct {
 		name    string
 		command string

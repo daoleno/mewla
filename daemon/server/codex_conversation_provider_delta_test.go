@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // P0 regression: non-OpenCode providers (Codex, Claude, Cursor, Grok, Pi) and
@@ -335,7 +335,7 @@ INSERT INTO project(id) VALUES ('proj');
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fixture: %v: %s", err, out)
 	}
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	srv := &Server{watcher: watcher.New(time.Second)}
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
@@ -441,7 +441,7 @@ INSERT INTO project(id) VALUES ('proj');
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fixture: %v: %s", err, out)
 	}
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	srv := &Server{watcher: watcher.New(time.Second)}
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{

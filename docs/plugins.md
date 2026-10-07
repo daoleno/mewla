@@ -13,12 +13,12 @@ shows that server's accounts and never moves an account between servers.
 2. Under **Add a service**, pick the service.
 3. Review what Brain may do. **Read and search** is included; **Make changes
    when asked** is a separate switch that is off by default.
-4. Sign in on the service's own page in the browser, then return to Zen, which
+4. Sign in on the service's own page in the browser, then return to Mewla, which
    verifies the account on your server.
 
-For GitHub, Zen shows a device code in large type; tap **Copy code and open
+For GitHub, Mewla shows a device code in large type; tap **Copy code and open
 GitHub** and enter it on GitHub's page. You can also import the account that
-the GitHub CLI (`gh`) is already signed in to on your computer; Zen shows the
+the GitHub CLI (`gh`) is already signed in to on your computer; Mewla shows the
 identity first and copies it only after you confirm.
 
 There are no tokens, client IDs or callback URLs to type for built-in services.
@@ -26,14 +26,14 @@ There are no tokens, client IDs or callback URLs to type for built-in services.
 ## Sign-in availability
 
 First-time sign-in is not yet available for every service, because some need
-Zen's own app registration with the provider:
+Mewla's own app registration with the provider:
 
 | Service | Sign-in |
 | --- | --- |
 | Linear | Official browser sign-in |
 | Notion | Official browser sign-in |
 | GitHub | Device code, or import from `gh` |
-| Slack | Shows **Not yet available** until Zen's Slack app registration ships |
+| Slack | Shows **Not yet available** until Mewla's Slack app registration ships |
 | Google Workspace | Shows **Not yet available** unless your daemon already has Google sign-in configured |
 
 A service that cannot be connected yet shows **Not yet available** with a short
@@ -68,20 +68,20 @@ no automatic permissions.
 
 ## Disconnect
 
-**Connected accounts** lists every account; choose one and disconnect it. Zen
+**Connected accounts** lists every account; choose one and disconnect it. Mewla
 disables the account first, so later calls fail even if revoking it at the
-provider needs a retry. Some providers do not support revocation from Zen; in
-that case also remove Zen's access in the provider's settings.
+provider needs a retry. Some providers do not support revocation from Mewla; in
+that case also remove Mewla's access in the provider's settings.
 
 ## Use plugins from the computer
 
 Brain and Workers use the same accounts through the CLI:
 
 ```sh
-zen connections list --json
-zen connections search --query github --json
-zen connections describe --id ACCOUNT_ID --tool get_me --json
-zen connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
+mewla connections list --json
+mewla connections search --query github --json
+mewla connections describe --id ACCOUNT_ID --tool get_me --json
+mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
 ```
 
 Each call is one bounded request; nothing pages automatically.

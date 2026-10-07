@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/doctor"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/statedir"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Run executes the setup flow and returns a structured Result.
@@ -94,7 +95,7 @@ func Run(opts Options) (Result, error) {
 			configureBrain = true
 		}
 	} else {
-		writeLines(out, "zen setup", "")
+		writeLines(out, "mewla setup", "")
 		writeLines(out, formatCandidates(candidates)...)
 		host, err = promptChoice(opts, out, errOut, "Host executor", hostDefault, candidateIDs(candidates))
 		if err != nil {
@@ -204,31 +205,31 @@ func resolvePaths(opts Options) (resolvedPaths, error) {
 	stateDir := strings.TrimSpace(opts.StateDir)
 	if stateDir == "" {
 		if strings.TrimSpace(opts.Home) != "" {
-			stateDir = filepath.Join(home, ".zen")
+			stateDir = statedir.Default(home)
 		} else if d, err := auth.DefaultStorageDir(); err == nil {
 			stateDir = d
 		} else {
-			stateDir = filepath.Join(home, ".zen")
+			stateDir = statedir.Default(home)
 		}
 	}
 	executorsPath := strings.TrimSpace(opts.ExecutorsPath)
 	if executorsPath == "" {
 		if strings.TrimSpace(opts.Home) != "" {
-			executorsPath = filepath.Join(home, ".zen", "executors.toml")
+			executorsPath = filepath.Join(statedir.Default(home), "executors.toml")
 		} else if p, err := work.DefaultExecutorsPath(); err == nil {
 			executorsPath = p
 		} else {
-			executorsPath = filepath.Join(home, ".zen", "executors.toml")
+			executorsPath = filepath.Join(statedir.Default(home), "executors.toml")
 		}
 	}
 	brainRoot := strings.TrimSpace(opts.BrainRoot)
 	if brainRoot == "" {
 		if strings.TrimSpace(opts.Home) != "" {
-			brainRoot = filepath.Join(home, ".zen", "brain")
+			brainRoot = filepath.Join(statedir.Default(home), "brain")
 		} else if p, err := brain.DefaultRoot(); err == nil {
 			brainRoot = p
 		} else {
-			brainRoot = filepath.Join(home, ".zen", "brain")
+			brainRoot = filepath.Join(statedir.Default(home), "brain")
 		}
 	}
 	return resolvedPaths{
@@ -420,13 +421,13 @@ func writeLines(w io.Writer, lines ...string) {
 }
 
 func nextSteps(stateDir string) []string {
-	pairHint := "zen pair https://your-zen-host.example"
+	pairHint := "mewla pair https://your-mewla-host.example"
 	if strings.TrimSpace(stateDir) != "" {
-		pairHint = "zen pair -state-dir " + stateDir + " https://your-zen-host.example"
+		pairHint = "mewla pair -state-dir " + stateDir + " https://your-mewla-host.example"
 	}
 	return []string{
-		"Same trusted Wi-Fi or direct Tailnet: start Zen with zen --lan, then run a pair command it prints",
-		"HTTPS endpoint: start Zen with zen, expose the full loopback origin, then run " + pairHint,
-		"Optional: re-check with zen doctor",
+		"Same trusted Wi-Fi or direct Tailnet: start Mewla with mewla --lan, then run a pair command it prints",
+		"HTTPS endpoint: start Mewla with zen, expose the full loopback origin, then run " + pairHint,
+		"Optional: re-check with mewla doctor",
 	}
 }

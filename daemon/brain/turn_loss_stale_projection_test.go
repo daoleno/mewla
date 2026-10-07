@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // Live reconciliation 2026-09-11 (Work75ab/Worker194): the coordination steer

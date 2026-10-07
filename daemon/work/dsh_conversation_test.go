@@ -64,7 +64,7 @@ func TestDSHNativeLogStreamingAndReloadIdentity(t *testing.T) {
 }
 
 func TestDSHLaunchAndLockOwnership(t *testing.T) {
-	t.Setenv("ZEN_STATE_DIR", t.TempDir())
+	t.Setenv("MEWLA_STATE_DIR", t.TempDir())
 	command, err := EnsureDSHSessionLaunchCommand("dsh")
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestDSHLaunchAndLockOwnership(t *testing.T) {
 
 func TestDSHNativeImageIntakeRejectsForeignPaths(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("ZEN_STATE_DIR", root)
+	t.Setenv("MEWLA_STATE_DIR", root)
 	if err := os.MkdirAll(filepath.Join(root, "uploads"), 0700); err != nil {
 		t.Fatal(err)
 	}

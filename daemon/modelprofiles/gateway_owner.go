@@ -11,7 +11,7 @@ import (
 // gatewayOwnerFile groups the Owner integration of the machine-level gateway
 // and its client config takeovers. There is one gateway for every client: the
 // daemon projects it into Codex's config.toml and Claude Code's settings env
-// on start, so any process launched outside Zen reaches the currently
+// on start, so any process launched outside Mewla reaches the currently
 // selected Provider. Selecting a Provider is the only control; there is no
 // separate enable step.
 
@@ -279,7 +279,7 @@ func (o *Owner) refreshGatewayUpstream() {
 // syncCodexTakeover projects the gateway into the Codex config while a Codex
 // Provider connection is selected and the gateway listens, with no opt-in.
 // Official login (no selection) gives the config back so Codex uses its own
-// login. A config Zen cannot safely project stays untouched and is logged.
+// login. A config Mewla cannot safely project stays untouched and is logged.
 func (o *Owner) syncCodexTakeover() {
 	state, err := o.takeover.LoadState()
 	if err != nil {

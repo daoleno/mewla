@@ -1,8 +1,8 @@
 # Engineering judgment in Brain
 
-Zen users describe an outcome. Brain selects useful engineering methods without
+Mewla users describe an outcome. Brain selects useful engineering methods without
 requiring a plugin, command, mode or knowledge of a development process. The
-guidance is provider-neutral and applies to any project, not only Zen's own
+guidance is provider-neutral and applies to any project, not only Mewla's own
 repository. It does not select models or change native Harness defaults.
 
 The defaults ask Brain to distinguish a requested result from a proposed
@@ -41,14 +41,14 @@ existing catalog in `daemon/brain/playbooks.go`:
 | `delegate-brief` | A context-bearing brief, workflow-specific proof, and evidence-based acceptance. |
 
 The managed `AGENTS.md` names when each method helps. Brain discovers paths
-with the normal `zen brain playbooks --json` catalog and reads only relevant files. This is a
+with the normal `mewla brain playbooks --json` catalog and reads only relevant files. This is a
 Brain skill expressed through native playbooks, not new user commands. The former
 `align` playbook is now two sentences in the AGENTS.md Role section; an
 unmodified shipped copy is removed on upgrade and an edited one is left in place.
 
 `templates/policies/delegation.md` directs Brain to carry the selected method
 into the actual task brief as concrete work and evidence requirements. Workers
-on arbitrary projects need no access to private Brain memory or a Zen repository
+on arbitrary projects need no access to private Brain memory or a Mewla repository
 helper. The existing control prompt builder preserves the brief and appends the
 existing lifecycle/turn protocol. The runtime does not synthesize a plan or
 choose a method; Brain must still exercise judgment and compose the brief.
@@ -62,7 +62,7 @@ Nonempty profile, memory, current context and worklogs remain user-owned.
 Playbooks are seed files, not managed policy blocks. The retired `brain-flows`
 playbook, `playbooks/README.md` and `soul.md` are deleted only when they are
 byte-identical shipped defaults; an edited `brain-flows` loses only its retired
-product block, and other edited copies are reported by `zen brain gc` as
+product block, and other edited copies are reported by `mewla brain gc` as
 unmanaged entries. The four exact shipped seeds from revision
 `4c72f7b` are recognized by SHA-256 and upgraded. Any byte change, including
 whitespace or an appended note, preserves the entire unmarked file. Unknown
@@ -124,7 +124,7 @@ source is not asserted to match either article's publication snapshot.
 [Diataxis](https://diataxis.fr/) informs task-oriented documentation, as described
 in the reviewed technical-writing skill.
 
-External text is reference data, never executable authority. Zen does not adopt
+External text is reference data, never executable authority. Mewla does not adopt
 forced models, multi-agent reviews, cloud services, fixed step lists, schedules,
 quotas or always-required API calls. It does not infer speed or quality gains
 from prompt size or passing deterministic tests.

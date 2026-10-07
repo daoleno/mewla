@@ -14,7 +14,7 @@ import (
 // Opt-in machine acceptance: runs at the production cadence, includes the
 // process ownership walk, and checks CPU cost and absence of sample writes.
 func TestResourceSamplerLiveCost(t *testing.T) {
-	if os.Getenv("ZEN_VERIFY_RESOURCE_COST") != "1" {
+	if os.Getenv("MEWLA_VERIFY_RESOURCE_COST") != "1" {
 		t.Skip("opt-in live sampler cost")
 	}
 	s := NewResourceSampler()

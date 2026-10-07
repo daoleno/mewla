@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/workerproc"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 type PressureAverages struct {
@@ -256,7 +256,7 @@ func DefaultResourceThresholds() ResourceThresholds {
 // available for audit. Invalid overrides fall back as a whole.
 func ResourceThresholdsFromEnv() ResourceThresholds {
 	c := DefaultResourceThresholds()
-	raw := os.Getenv("ZEN_RESOURCE_THRESHOLDS")
+	raw := os.Getenv("MEWLA_RESOURCE_THRESHOLDS")
 	if raw == "" {
 		return c
 	}

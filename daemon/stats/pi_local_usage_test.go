@@ -76,11 +76,11 @@ func writePiOwnedSession(t *testing.T, home, fileName string, lines ...string) s
 	t.Helper()
 	dir := filepath.Join(home, ".zen", "provider-sessions", "pi")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir Zen-owned Pi session dir: %v", err)
+		t.Fatalf("mkdir Mewla-owned Pi session dir: %v", err)
 	}
 	path := filepath.Join(dir, fileName)
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatalf("write Zen-owned Pi session: %v", err)
+		t.Fatalf("write Mewla-owned Pi session: %v", err)
 	}
 	return path
 }
@@ -133,7 +133,7 @@ func TestPiZenOwnedDeepSeekUsageFlowsIntoEveryCurrentRange(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// Zen binds --session directly to this flat root. Deliberately do not
+	// Mewla binds --session directly to this flat root. Deliberately do not
 	// create ~/.pi/agent/sessions: the owned ledger must be collected even
 	// when Pi's shared per-CWD history does not exist.
 	// A live/partial sibling fails soft and cannot suppress the valid ledger.
@@ -225,10 +225,10 @@ func TestPiDeepSeekUsageFlowsIntoStatsResponse(t *testing.T) {
 	project := piProjectByName(t, all.Projects, "zen")
 	if project.TotalTokens != 10800 || project.InputTokens != 6000 || project.OutputTokens != 3000 ||
 		project.ReasoningTokens != 1500 || project.CacheRead != 1200 || project.CacheCreate != 600 {
-		t.Fatalf("zen project buckets = %+v", project)
+		t.Fatalf("mewla project buckets = %+v", project)
 	}
 	if !piClose(project.Cost, 0.024) || !project.CostKnown || project.Sessions != 1 {
-		t.Fatalf("zen project cost = %v known=%v sessions=%d, want 0.024 known 1", project.Cost, project.CostKnown, project.Sessions)
+		t.Fatalf("mewla project cost = %v known=%v sessions=%d, want 0.024 known 1", project.Cost, project.CostKnown, project.Sessions)
 	}
 
 	if !piClose(all.Cost, 0.024) || !all.CostKnown || all.TotalTokens != 10800 || all.Sessions != 1 {
@@ -484,7 +484,7 @@ func TestPiMultipleSessionsDaysProjectsAndIdempotentRefresh(t *testing.T) {
 	}
 	zen := piProjectByName(t, all.Projects, "zen")
 	if zen.TotalTokens != 600 || zen.Sessions != 2 {
-		t.Fatalf("zen project = %+v, want 600 tokens and 2 session-days", zen)
+		t.Fatalf("mewla project = %+v, want 600 tokens and 2 session-days", zen)
 	}
 	if got := piProjectByName(t, all.Projects, "onlora"); got.TotalTokens != 450 || got.Sessions != 2 {
 		t.Fatalf("onlora project = %+v, want 450 tokens and 2 session-days (one per date the ledger touches)", got)

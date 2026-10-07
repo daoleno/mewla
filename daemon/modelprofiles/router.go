@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/codexctl"
 )
 
-// Router is the Zen-owned same-protocol loopback routing runtime.
+// Router is the Mewla-owned same-protocol loopback routing runtime.
 type Router struct {
 	table   *RouteTable
 	client  *http.Client
@@ -760,7 +760,7 @@ func classifyUpstreamDoError(err error) (int, error) {
 }
 
 // requestBodyDiffersFromBinding reports whether the request's model/effort
-// identity differs from the acknowledged route binding. Effort follows Zen
+// identity differs from the acknowledged route binding. Effort follows Mewla
 // semantics: absent and the native "none" both mean model default ("").
 func requestBodyDiffersFromBinding(binding RouteBinding, requestModel, requestEffort string, requestEffortPresent bool) bool {
 	if requestModel != binding.ClientModel {

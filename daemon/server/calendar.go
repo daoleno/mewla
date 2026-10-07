@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/calendar"
+	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/gorilla/websocket"
 )
 

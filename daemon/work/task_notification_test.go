@@ -359,7 +359,7 @@ func TestClaudeTaskNotificationAcrossAppendedPolls(t *testing.T) {
 	}
 }
 
-// Zen's delegated Worker prompts type a prefix and paste the brief; Claude
+// Mewla's delegated Worker prompts type a prefix and paste the brief; Claude
 // wraps only the pasted part.
 func TestClaudeEmbeddedPasteEnvelopeDisplaysWithoutTags(t *testing.T) {
 	raw := "Execute: \n\n<pasted_content id=\"11c9\">\n# Brief\n\nDo the <thing>.\n</pasted_content id=\"11c9\">\n"

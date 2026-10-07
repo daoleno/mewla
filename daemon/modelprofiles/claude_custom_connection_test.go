@@ -129,7 +129,7 @@ func TestSavedCustomClaudeLaunchRoutesSelectedModelAndKey(t *testing.T) {
 		t.Fatalf("route response=%d path=%q model=%q key_matches=%t", response.StatusCode, messagePath, messageModel, keyMatches)
 	}
 
-	if os.Getenv("ZEN_CLAUDE_NATIVE_FIXTURE") == "" {
+	if os.Getenv("MEWLA_CLAUDE_NATIVE_FIXTURE") == "" {
 		return
 	}
 	if _, err := exec.LookPath("claude"); err != nil {

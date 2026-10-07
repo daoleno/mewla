@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
 
 // Evidence capture for portable post-history hot switching.
 //
-//	ZEN_PORTABLE_HISTORY_CAPTURE=1 go test ./modelprofiles -run 'TestCapture' -count=1 -timeout 180s -v
+//	MEWLA_PORTABLE_HISTORY_CAPTURE=1 go test ./modelprofiles -run 'TestCapture' -count=1 -timeout 180s -v
 //
 // Uses Worker-owned temp dirs and local fake gateways only — no real credentials,
 // user config writes, or live zen Sessions.
@@ -31,8 +31,8 @@ type capturedReq struct {
 }
 
 func TestCaptureCodexMultiTurnResponsesBodies(t *testing.T) {
-	if os.Getenv("ZEN_PORTABLE_HISTORY_CAPTURE") == "" {
-		t.Skip("set ZEN_PORTABLE_HISTORY_CAPTURE=1 to capture Codex multi-turn bodies")
+	if os.Getenv("MEWLA_PORTABLE_HISTORY_CAPTURE") == "" {
+		t.Skip("set MEWLA_PORTABLE_HISTORY_CAPTURE=1 to capture Codex multi-turn bodies")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
@@ -155,8 +155,8 @@ func TestCaptureCodexMultiTurnResponsesBodies(t *testing.T) {
 }
 
 func TestCaptureClaudeMultiTurnMessagesBodies(t *testing.T) {
-	if os.Getenv("ZEN_PORTABLE_HISTORY_CAPTURE") == "" {
-		t.Skip("set ZEN_PORTABLE_HISTORY_CAPTURE=1 to capture Claude multi-turn bodies")
+	if os.Getenv("MEWLA_PORTABLE_HISTORY_CAPTURE") == "" {
+		t.Skip("set MEWLA_PORTABLE_HISTORY_CAPTURE=1 to capture Claude multi-turn bodies")
 	}
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {

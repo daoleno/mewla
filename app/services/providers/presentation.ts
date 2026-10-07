@@ -251,7 +251,7 @@ export function curatedConnectionInput(
 
 /**
  * Advanced/Custom create input. The App sends the selected product client and
- * gateway identity; Zen derives protocol/auth compatibility internally.
+ * gateway identity; Mewla derives protocol/auth compatibility internally.
  */
 export function advancedConnectionInput(input: {
   existingId?: string;

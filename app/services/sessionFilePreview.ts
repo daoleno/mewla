@@ -362,7 +362,7 @@ export async function buildSessionFileBinarySource(
       (await response.json()) as SessionFileCapabilityResponse;
   } catch {
     throw new Error(
-      "The daemon returned an unreadable Session file authorization. Update zen, then refresh.",
+      "The daemon returned an unreadable Session file authorization. Update mewla, then refresh.",
     );
   }
   const capability = normalizeSessionFileCapability(capabilityPayload);
@@ -436,7 +436,7 @@ function sessionFileCapabilityError(status: number): string {
     case 401:
       return "Session file authorization was rejected. Refresh the preview to sign a new request.";
     case 404:
-      return "This zen daemon does not support retry-safe Session file previews. Update zen, then refresh.";
+      return "This mewla daemon does not support retry-safe Session file previews. Update mewla, then refresh.";
     case 409:
       return "The Session or file changed before the preview could be authorized. Refresh and try again.";
     case 413:
@@ -521,7 +521,7 @@ export function sessionFileTooLargeMessage(
   const limit = metadata.previewLimitBytes
     ? formatSessionFileSize(metadata.previewLimitBytes)
     : "the V1 size limit";
-  return `This ${formatSessionFileSize(metadata.size)} file exceeds Zen's ${limit} preview limit. It was not downloaded.`;
+  return `This ${formatSessionFileSize(metadata.size)} file exceeds Mewla's ${limit} preview limit. It was not downloaded.`;
 }
 
 function normalizeSessionFileKind(value: unknown): SessionFileKind {

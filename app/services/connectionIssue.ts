@@ -48,11 +48,11 @@ export async function diagnoseConnectionIssue(input: {
   } catch (error) {
     return createIssue(
       "network_unreachable",
-      "Zen Link is offline",
+      "Mewla Link is offline",
       error instanceof Error
         ? error.message
-        : "The app could not open a pinned Zen Link transport.",
-      "Keep zen running on your computer and check that its Zen Link status is connected. Advanced/Self-managed connections remain independent.",
+        : "The app could not open a pinned Mewla Link transport.",
+      "Keep mewla running on your computer and check that its Mewla Link status is connected. Advanced/Self-managed connections remain independent.",
     );
   }
   const probeURL = buildProbeURL(transportURL);
@@ -64,7 +64,7 @@ export async function diagnoseConnectionIssue(input: {
       "invalid_url",
       "Invalid endpoint URL",
       "The saved server URL could not be parsed.",
-      "Use a full ws:// or wss:// endpoint that points at zen, usually ending in /ws.",
+      "Use a full ws:// or wss:// endpoint that points at mewla, usually ending in /ws.",
     );
   }
   if (!daemonId || !daemonPublicKey) {
@@ -72,7 +72,7 @@ export async function diagnoseConnectionIssue(input: {
       "wrong_daemon",
       "Missing daemon identity",
       "This saved server does not include a trusted daemon identity.",
-      "Re-import the pairing link from zen so Zen can bind this endpoint to a daemon key.",
+      "Re-import the pairing link from mewla so Mewla can bind this endpoint to a daemon key.",
     );
   }
 
@@ -116,7 +116,7 @@ export async function diagnoseConnectionIssue(input: {
           "device_not_paired",
           "Device is not paired",
           "The daemon is reachable and trusted, but it rejected this device identity.",
-          "Import a fresh pairing link from zen on this machine to enroll this phone again.",
+          "Import a fresh pairing link from mewla on this machine to enroll this phone again.",
           authCheckResponse.status,
         );
       default:
@@ -157,7 +157,7 @@ export async function diagnoseConnectionIssue(input: {
           "device_not_paired",
           "Device is not paired",
           "The daemon reached the WebSocket endpoint, but it rejected this device identity at the /ws probe.",
-          "Import a fresh pairing link from zen on this machine to enroll this phone again.",
+          "Import a fresh pairing link from mewla on this machine to enroll this phone again.",
           probeResponse.status,
         );
       default:
@@ -176,7 +176,7 @@ export async function diagnoseConnectionIssue(input: {
         "wrong_daemon",
         "Wrong daemon identity",
         "The WebSocket endpoint responded, but it did not prove the trusted daemon identity for this server.",
-        "Make sure the tunnel forwards to the correct zen instance rather than another service or machine.",
+        "Make sure the tunnel forwards to the correct mewla instance rather than another service or machine.",
         probeResponse.status,
       );
     }
@@ -223,8 +223,8 @@ function mapProbeFailure(
       return createIssue(
         "path_not_found",
         "Daemon routes are not exposed",
-        `The endpoint returned HTTP 404 for zen's ${endpointKind} route.`,
-        "Forward the full zen origin through your tunnel or reverse proxy, including /health, /auth-check, /pair, /upload, and /ws.",
+        `The endpoint returned HTTP 404 for mewla's ${endpointKind} route.`,
+        "Forward the full mewla origin through your tunnel or reverse proxy, including /health, /auth-check, /pair, /upload, and /ws.",
         status,
       );
     case 400:
@@ -233,8 +233,8 @@ function mapProbeFailure(
       return createIssue(
         "websocket_upgrade_failed",
         "WebSocket handshake failed",
-        `The ${endpointKind} request reached the endpoint, but the tunnel or proxy did not behave like zen expects.`,
-        "Check HTTPS/TLS and make sure your reverse proxy preserves WebSocket Upgrade and Connection headers all the way to zen.",
+        `The ${endpointKind} request reached the endpoint, but the tunnel or proxy did not behave like mewla expects.`,
+        "Check HTTPS/TLS and make sure your reverse proxy preserves WebSocket Upgrade and Connection headers all the way to mewla.",
         status,
       );
     case 502:
@@ -243,16 +243,16 @@ function mapProbeFailure(
       return createIssue(
         "proxy_error",
         "Proxy could not reach daemon",
-        `The endpoint returned HTTP ${status}, which usually means your proxy or tunnel could not reach zen on localhost.`,
-        "Check that zen is running on 127.0.0.1:9876 and that your tunnel points at the same local port.",
+        `The endpoint returned HTTP ${status}, which usually means your proxy or tunnel could not reach mewla on localhost.`,
+        "Check that mewla is running on 127.0.0.1:9876 and that your tunnel points at the same local port.",
         status,
       );
     default:
       return createIssue(
         "unexpected_http_response",
         "Unexpected server response",
-        `The endpoint returned HTTP ${status} instead of a valid zen response.`,
-        "Make sure this URL points at zen rather than a website, API gateway, or some other service.",
+        `The endpoint returned HTTP ${status} instead of a valid mewla response.`,
+        "Make sure this URL points at mewla rather than a website, API gateway, or some other service.",
         status,
       );
   }
@@ -365,7 +365,7 @@ function buildNetworkIssue(error: unknown): ConnectionIssue {
       "network_unreachable",
       "Server timed out",
       "The daemon did not respond before the probe timed out.",
-      "Check tunnel latency, firewall rules, and whether zen is sleeping or overloaded.",
+      "Check tunnel latency, firewall rules, and whether mewla is sleeping or overloaded.",
     );
   }
 
@@ -379,7 +379,7 @@ function buildNetworkIssue(error: unknown): ConnectionIssue {
       "network_unreachable",
       "DNS lookup failed",
       rawMessage ||
-        "The hostname could not be resolved before Zen reached the daemon.",
+        "The hostname could not be resolved before Mewla reached the daemon.",
       "Check the hostname spelling, your DNS configuration, or try a different tunnel hostname.",
     );
   }
@@ -392,7 +392,7 @@ function buildNetworkIssue(error: unknown): ConnectionIssue {
       "network_unreachable",
       "Daemon refused connection",
       "The host is reachable, but nothing accepted the connection on the configured port.",
-      "Check that zen is running and that your tunnel or reverse proxy forwards to 127.0.0.1:9876.",
+      "Check that mewla is running and that your tunnel or reverse proxy forwards to 127.0.0.1:9876.",
     );
   }
 
@@ -416,7 +416,7 @@ function buildNetworkIssue(error: unknown): ConnectionIssue {
     rawMessage
       ? `The network request failed before a WebSocket connection could be established: ${rawMessage}`
       : "The network request failed before a WebSocket connection could be established.",
-    "Check the hostname, DNS, tunnel, firewall, and whether zen is running.",
+    "Check the hostname, DNS, tunnel, firewall, and whether mewla is running.",
   );
 }
 

@@ -68,7 +68,7 @@ func TestPrepareLaunchCustomConnectionFailClosedWithoutStoreOrEnv(t *testing.T) 
 	if !errors.Is(err, ErrCredentialNotReady) {
 		t.Fatalf("want ErrCredentialNotReady got %v", err)
 	}
-	if !strings.Contains(err.Error(), "ZEN_PROVIDER_API_KEY") {
+	if !strings.Contains(err.Error(), "MEWLA_PROVIDER_API_KEY") {
 		t.Fatalf("err=%v", err)
 	}
 }

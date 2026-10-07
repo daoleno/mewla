@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check links in the built site or in the repository's Markdown docs.
 
-    python3 scripts/site-docs/check_links.py site /tmp/zen-site [--external]
+    python3 scripts/site-docs/check_links.py site /tmp/mewla-site [--external]
     python3 scripts/site-docs/check_links.py repo
 
 site: every relative href/src in every HTML file must resolve to a file in the
@@ -88,7 +88,7 @@ def check_site(out: Path, external: bool) -> int:
 
 
 def fetch(url: str):
-    headers = {"User-Agent": "zen-docs-linkcheck/1"}
+    headers = {"User-Agent": "mewla-docs-linkcheck/1"}
     for method in ("HEAD", "GET"):
         try:
             req = urllib.request.Request(url, method=method, headers=headers)

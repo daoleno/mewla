@@ -1,12 +1,12 @@
 # Notifications
 
-This document defines the OSS-core notification policy for zen.
+This document defines the OSS-core notification policy for Mewla.
 
 Calendar reminder notifications are covered separately in [calendar.md](calendar-engineering.md). They are explicit user commitments, so they are scheduled locally after sync and are not subject to the agent-state suppression rules below.
 
 ## Goal
 
-zen notifications are not a progress feed.
+Mewla notifications are not a progress feed.
 They should only interrupt the user when one of two things is true:
 
 1. The agent needs attention now.
@@ -16,13 +16,13 @@ That keeps the system simple, predictable, and low-noise.
 
 ## Current Product Policy
 
-zen should notify on these agent states:
+Mewla should notify on these agent states:
 
 - `blocked`
 - `failed`
 - `done`
 
-zen should stay silent for these states and events:
+Mewla should stay silent for these states and events:
 
 - `running`
 - `unknown`
@@ -90,7 +90,7 @@ Examples:
 
 - good: `backend-api`
 - good: `release-cut`
-- bad: `./bin/zen (main:7)`
+- bad: `./bin/mewla (main:7)`
 - bad: `server_mnguamzs_a1sz5a`
 
 ### Body text
@@ -122,7 +122,7 @@ Current OSS-core behavior is intentionally simple:
 - Scheduled actions run in non-delegated sessions and never enter the generic agent-lifecycle alert path. The first successfully persisted Calendar terminal result makes one separate best-effort push attempt for either completion or failure, deep-linking to the frozen Brain thread.
 - Explicit future Calendar reminders remain locally scheduled after sync. They are a separate user commitment, not a runtime lifecycle producer.
 
-Runtime delivery is intentionally at-most-once attempt, not reliable delivery. Missing registration, Expo/HTTP failure, a transient in-process Calendar event drop, or a daemon crash after the terminal commit can produce no OS alert. Zen does not retain an outbox or retry; the durable Calendar result and Brain projection remain available when the user next opens the app.
+Runtime delivery is intentionally at-most-once attempt, not reliable delivery. Missing registration, Expo/HTTP failure, a transient in-process Calendar event drop, or a daemon crash after the terminal commit can produce no OS alert. Mewla does not retain an outbox or retry; the durable Calendar result and Brain projection remain available when the user next opens the app.
 
 ## Future Work
 

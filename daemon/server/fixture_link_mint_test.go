@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/link"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/link"
 )
 
 func fixtureTestCert(t *testing.T) *x509.Certificate {

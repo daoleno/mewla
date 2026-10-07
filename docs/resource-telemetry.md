@@ -1,6 +1,6 @@
 # Resource telemetry contract (v2)
 
-Zen exposes a read-only machine resource snapshot over the authenticated daemon
+Mewla exposes a read-only machine resource snapshot over the authenticated daemon
 WebSocket. Clients send `{ "type": "get_resource_telemetry", "request_id":
 "…" }`; the daemon replies with `resource_telemetry` and the same
 `request_id`. The endpoint is poll-friendly: clients request the latest cached snapshot every
@@ -103,7 +103,7 @@ on the current server's existing authenticated WebSocket every five seconds.
 There is no unconditional telemetry broadcast. `GET /resources` returns the
 same flat response with the existing signed device authentication and purpose
 `zen-resource-telemetry`; responses use `Cache-Control: no-store`. The local
-control socket exposes the same snapshot through `zen resources --json` under
+control socket exposes the same snapshot through `mewla resources --json` under
 `resource_telemetry`. Before the first sample, the WebSocket returns
 `resource_telemetry_unavailable` and HTTP returns 503. Changing the app's current
 server must clear its previous history and polling state.
@@ -112,7 +112,7 @@ Consumers additionally include `id` (stable group key), `process_count`,
 `commands` (bounded executable labels), and up to five largest `processes`:
 `{ "pid": 123, "start": "1234567", "command": "qemu-system-x86", "rss_bytes": 123 }`.
 `start` is an opaque kernel process-generation token. Use it with
-`zen worker release -id SESSION -pid PID -start START` to release a selected
+`mewla worker release -id SESSION -pid PID -start START` to release a selected
 owned tool tree. This command refuses stale/unowned processes and the provider's
 ancestor chain. Worker close/Work acceptance remain the full cleanup commands.
 No command-line arguments or environment variables are exposed by telemetry.
@@ -159,9 +159,9 @@ one event. Continued pressure in the same state produces no repeat events.
 Threshold state, cooldown timestamps and pending events persist under the daemon
 state directory, so hot reload cannot repeatedly notify the same sustained state.
 
-Override defaults with the `ZEN_RESOURCE_THRESHOLDS` JSON environment variable,
+Override defaults with the `MEWLA_RESOURCE_THRESHOLDS` JSON environment variable,
 or an optional `resource-telemetry.json` file in the daemon state directory
-(normally `~/.zen`). The file is checked every sample and overrides the environment
+(normally `~/.mewla`). The file is checked every sample and overrides the environment
 without restarting the daemon. Removing it restores environment/default values.
 Malformed or invalid files retain the last valid configuration. Unknown JSON
 fields must be avoided. Example (partial overrides are supported):
@@ -188,7 +188,7 @@ and an embedded `resource_pressure` object. They use the durable Work review
 channel and exact delivery receipts, not user-input admission. Each transition
 has a deterministic event identity and a separate bounded notification Work;
 Brain can record its disposition with the existing Work commands. The compact
-payload is bounded to top consumers and a few trend points; `zen resources`
+payload is bounded to top consumers and a few trend points; `mewla resources`
 and `get_resource_telemetry` expose the full cached view.
 
 ## Sampling cost acceptance
@@ -207,8 +207,8 @@ without Go's test-log instrumentation when measuring IO:
 
 ```sh
 cd daemon
-GOMAXPROCS=2 go test -c -o "$ZEN_BUILD_TMPDIR/resource-watcher.test" ./watcher
-ZEN_VERIFY_RESOURCE_COST=1 GOMAXPROCS=2 "$ZEN_BUILD_TMPDIR/resource-watcher.test" \
+GOMAXPROCS=2 go test -c -o "$MEWLA_BUILD_TMPDIR/resource-watcher.test" ./watcher
+MEWLA_VERIFY_RESOURCE_COST=1 GOMAXPROCS=2 "$MEWLA_BUILD_TMPDIR/resource-watcher.test" \
   -test.run '^TestResourceSamplerLiveCost$' -test.v
 ```
 

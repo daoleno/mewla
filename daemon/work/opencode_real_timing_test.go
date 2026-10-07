@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 type realSession struct {
@@ -16,7 +16,7 @@ type realSession struct {
 	Directory string
 }
 
-// Real-local-OpenCode verification. Gated behind ZEN_PERF_REAL_OPENCODE=1 so
+// Real-local-OpenCode verification. Gated behind MEWLA_PERF_REAL_OPENCODE=1 so
 // CI never touches a machine's real conversation database.
 //
 // Runs the exact production path (reader binding, cache, incremental polls)
@@ -25,10 +25,10 @@ type realSession struct {
 //
 // Usage:
 //
-//	cd daemon && ZEN_PERF_REAL_OPENCODE=1 go test ./work/ -run TestRealOpenCodeTiming -v
+//	cd daemon && MEWLA_PERF_REAL_OPENCODE=1 go test ./work/ -run TestRealOpenCodeTiming -v
 func TestRealOpenCodeTiming(t *testing.T) {
-	if os.Getenv("ZEN_PERF_REAL_OPENCODE") != "1" {
-		t.Skip("gated behind ZEN_PERF_REAL_OPENCODE=1")
+	if os.Getenv("MEWLA_PERF_REAL_OPENCODE") != "1" {
+		t.Skip("gated behind MEWLA_PERF_REAL_OPENCODE=1")
 	}
 	dbPath, err := openCodeDBPath()
 	if err != nil || dbPath == "" {

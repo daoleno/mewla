@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/klauspost/compress/zstd"
 )
 

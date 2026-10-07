@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/gorilla/websocket"
 )
 

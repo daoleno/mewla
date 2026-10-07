@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Deterministic large-conversation synthetic fixture for server-side poll

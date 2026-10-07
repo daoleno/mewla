@@ -13,9 +13,9 @@ func (s *Store) routingGuidePath() string {
 
 const defaultRoutingGuide = `# Worker Routing
 
-Read before every zen worker spawn and pass -executor, -model and -reasoning. This is judgment guidance, not rules. Brain keeps it current: replace a line when the user states a preference, a new executor or model appears, or a Worker result shows a poor fit.
+Read before every mewla worker spawn and pass -executor, -model and -reasoning. This is judgment guidance, not rules. Brain keeps it current: replace a line when the user states a preference, a new executor or model appears, or a Worker result shows a poor fit.
 
-- Pick the executor and model by the task's nature and the user's preferences; zen brain executors --json lists executors.
+- Pick the executor and model by the task's nature and the user's preferences; mewla brain executors --json lists executors.
 - Set reasoning by difficulty: low for mechanical edits, medium for routine work, high for design, debugging or cross-cutting changes; the top levels only for the hardest problems.
 - Prefer the cheapest route that will succeed; a failed cheap attempt costs more than the right model once.
 - Use each client's own ids: codex and claude take model names, pi takes provider/model. Reasoning levels: codex none-ultra, claude low-max, pi off-max.

@@ -186,9 +186,9 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 			if in.Integration == "mcp" {
 				return Response{}, errors.New("this custom service requires a client registered by its operator")
 			}
-			return Response{}, errors.New("Zen's authorization for this service is not ready. No account was connected.")
+			return Response{}, errors.New("Mewla's authorization for this service is not ready. No account was connected.")
 		}
-		registration := map[string]any{"client_name": "Zen Plugins", "redirect_uris": []string{client.RedirectURL}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}
+		registration := map[string]any{"client_name": "Mewla Plugins", "redirect_uris": []string{client.RedirectURL}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}
 		body, _ := json.Marshal(registration)
 		var registered struct {
 			ClientID     string `json:"client_id"`
@@ -331,7 +331,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Zen Plugins</title><h1>Account connected</h1><p>You can return to Zen.</p><a href="zen://plugins">Open Plugins</a>`)
+	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Mewla Plugins</title><h1>Account connected</h1><p>You can return to Mewla.</p><a href="mewla://plugins">Open Plugins</a>`)
 }
 func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	raw, ok, err := m.vault.Get("integration:" + r.Account.ID)
@@ -524,7 +524,7 @@ func (m *Manager) discoverOAuth(ctx context.Context, r *record) (oauthMetadata, 
 	if err != nil {
 		// RFC9728 resource_metadata from the unauthenticated MCP challenge takes
 		// precedence when a server does not publish conventional well-known URLs.
-		request, _ := http.NewRequestWithContext(ctx, "POST", r.Account.Endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"Zen","version":"1"}}}`))
+		request, _ := http.NewRequestWithContext(ctx, "POST", r.Account.Endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"Mewla","version":"1"}}}`))
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Accept", "application/json, text/event-stream")
 		response, challengeErr := m.oauthHTTP(r).Do(request)

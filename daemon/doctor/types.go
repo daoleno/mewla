@@ -1,18 +1,18 @@
-// Package doctor inspects whether a machine can run Zen without performing
+// Package doctor inspects whether a machine can run Mewla without performing
 // destructive or paid actions. The Report type is the stable contract later
-// consumed by `zen setup` and daemon/app control APIs.
+// consumed by `mewla setup` and daemon/app control APIs.
 package doctor
 
 import (
 	"errors"
 	"time"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // ErrNotReady is returned by the CLI after a successful diagnosis when Ready
 // is false. Callers should treat the printed Report as authoritative.
-var ErrNotReady = errors.New("zen doctor: environment is not ready")
+var ErrNotReady = errors.New("mewla doctor: environment is not ready")
 
 // Status is a machine-readable check outcome.
 type Status string
@@ -134,7 +134,7 @@ type TmuxCheck struct {
 	InstallHints []InstallHint `json:"install_hints,omitempty"`
 }
 
-// StateDirCheck reports Zen state directory readiness.
+// StateDirCheck reports Mewla state directory readiness.
 type StateDirCheck struct {
 	Path        string      `json:"path"`
 	Writable    bool        `json:"writable"`

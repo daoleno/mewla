@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // Delivery bookkeeping is internal to the runtime. Brain receives facts and

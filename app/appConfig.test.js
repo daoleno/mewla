@@ -8,16 +8,42 @@ const {
   resolveIOSMarketingVersion,
 } = createConfig;
 
+const IDENTITY_ENV_KEYS = [
+  "MEWLA_IOS_APP_VARIANT",
+  "ZEN_IOS_APP_VARIANT",
+  "MEWLA_IOS_BUILD_NUMBER",
+  "ZEN_IOS_BUILD_NUMBER",
+];
+
+// Shell or CI identity variables must not leak into these assertions.
+function withIdentityEnv(values, run) {
+  const previous = Object.fromEntries(
+    IDENTITY_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
+  for (const key of IDENTITY_ENV_KEYS) delete process.env[key];
+  Object.assign(process.env, values);
+  try {
+    return run();
+  } finally {
+    for (const key of IDENTITY_ENV_KEYS) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
 describe("native platform config", () => {
-  const config = createConfig();
+  const config = withIdentityEnv({}, () => createConfig());
 
   it("defines a stable iOS application identity", () => {
     expect(Number.isInteger(trackedIOSBuildNumber)).toBe(true);
     expect(trackedIOSBuildNumber).toBeGreaterThan(0);
     const expectedBuildNumber = String(trackedIOSBuildNumber);
-    expect(config.name).toBe("Zen");
-    expect(config.ios.bundleIdentifier).toBe("com.daoleno.zen");
-    expect(config.ios.infoPlist.CFBundleDisplayName).toBe("Zen");
+    expect(config.name).toBe("Mewla");
+    expect(config.slug).toBe("mewla");
+    expect(config.ios.bundleIdentifier).toBe("com.daoleno.mewla");
+    expect(config.android.package).toBe("com.daoleno.mewla");
+    expect(config.ios.infoPlist.CFBundleDisplayName).toBe("Mewla");
     expect(config.ios.infoPlist.CFBundleShortVersionString).toBe(
       baseConfig.version.split("-", 1)[0],
     );
@@ -25,34 +51,61 @@ describe("native platform config", () => {
     expect(config.ios.buildNumber).toBe(expectedBuildNumber);
   });
 
-  it("selects the Preview bundle identity while keeping the installed name Zen", () => {
+  it("registers mewla as the primary scheme and keeps legacy zen deep links", () => {
+    expect(config.scheme).toEqual(["mewla", "zen"]);
+  });
+
+  it("selects the Preview bundle identity while keeping the installed name Mewla", () => {
+    expect(resolveIOSIdentity("production")).toMatchObject({
+      displayName: "Mewla",
+      bundleIdentifier: "com.daoleno.mewla",
+      nativeProjectName: "Mewla",
+      artifactName: "mewla-ios",
+    });
     expect(resolveIOSIdentity("preview")).toEqual({
       variant: "preview",
-      displayName: "Zen",
-      bundleIdentifier: "com.daoleno.zen.preview",
-      nativeProjectName: "Zen",
-      artifactName: "zen-preview-ios",
+      displayName: "Mewla",
+      bundleIdentifier: "com.daoleno.mewla.preview",
+      nativeProjectName: "Mewla",
+      artifactName: "mewla-preview-ios",
       notificationMode: "production",
     });
   });
 
   it("applies the complete Preview identity to Expo without changing Android package identity", () => {
-    const previous = process.env.ZEN_IOS_APP_VARIANT;
-    process.env.ZEN_IOS_APP_VARIANT = "preview";
-    try {
-      const preview = createConfig();
-      expect(preview.name).toBe("Zen");
-      expect(preview.ios.bundleIdentifier).toBe("com.daoleno.zen.preview");
-      expect(preview.ios.infoPlist.CFBundleDisplayName).toBe("Zen");
-      expect(preview.android.package).toBe("com.daoleno.zen");
-      expect(preview.android).toEqual(config.android);
-    } finally {
-      if (previous === undefined) {
-        delete process.env.ZEN_IOS_APP_VARIANT;
-      } else {
-        process.env.ZEN_IOS_APP_VARIANT = previous;
-      }
-    }
+    const preview = withIdentityEnv({ MEWLA_IOS_APP_VARIANT: "preview" }, () =>
+      createConfig(),
+    );
+    expect(preview.name).toBe("Mewla");
+    expect(preview.ios.bundleIdentifier).toBe("com.daoleno.mewla.preview");
+    expect(preview.ios.infoPlist.CFBundleDisplayName).toBe("Mewla");
+    expect(preview.android.package).toBe("com.daoleno.mewla");
+    expect(preview.android).toEqual(config.android);
+  });
+
+  it("prefers MEWLA_* identity variables and still honours legacy ZEN_* names", () => {
+    const legacy = withIdentityEnv(
+      { ZEN_IOS_APP_VARIANT: "preview", ZEN_IOS_BUILD_NUMBER: "77" },
+      () => createConfig(),
+    );
+    expect(legacy.ios.bundleIdentifier).toBe("com.daoleno.mewla.preview");
+    expect(legacy.ios.buildNumber).toBe("77");
+
+    const preferred = withIdentityEnv(
+      {
+        MEWLA_IOS_APP_VARIANT: "production",
+        ZEN_IOS_APP_VARIANT: "preview",
+        MEWLA_IOS_BUILD_NUMBER: "88",
+        ZEN_IOS_BUILD_NUMBER: "77",
+      },
+      () => createConfig(),
+    );
+    expect(preferred.ios.bundleIdentifier).toBe("com.daoleno.mewla");
+    expect(preferred.ios.buildNumber).toBe("88");
+
+    expect(() =>
+      withIdentityEnv({ MEWLA_IOS_BUILD_NUMBER: "beta" }, () => createConfig()),
+    ).toThrow("MEWLA_IOS_BUILD_NUMBER must be a positive integer");
   });
 
   it("keeps production as the default and rejects free-form identities", () => {

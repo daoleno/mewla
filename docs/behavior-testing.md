@@ -1,6 +1,6 @@
 # Executable Behavior Contracts
 
-Zen uses ordinary Go tests with stable `TestBDD_ZENnnn_...` names, comments
+Mewla uses ordinary Go tests with stable `TestBDD_ZENnnn_...` names, comments
 describing Given/When/Then, and assertions against production state and effects.
 There is no Cucumber dependency, custom scenario language, scheduler or test
 agent. A passing provider exit or a model's assertion of PASS is not an oracle.
@@ -27,7 +27,7 @@ agent. A passing provider exit or a model's assertion of PASS is not an oracle.
 | ZEN012 `ProviderPathBudgetAndFailures` | Same provider harness using scripted HTTP | Full loop, 429, truncation, invalid envelope or timeout | Correct side effects or classified failure; no retry and no third call |
 | ZEN013 `DecisionSavedWithCleanupPending` | Cleanup failure on current completed Session | Control accepts Work | `brain_work_cleanup_pending` includes persisted Work; recovery completes only cleanup, not the business action |
 | ZEN014 `QuietMissingSessionCleanupIsAbsentNotUnowned` | Completed ledger identity, tmux 3.6a quiet show-options success for a gone session | Production watcher cleanup runs twice | Proven absence succeeds; not classified as `ErrUnownedTmuxTarget` |
-| ZEN015 `UnownedPresentCompletedCleanupIsProtected` | Completed ledger identity, live tmux target without Zen ownership marker | Cleanup reconciled twice | Target is untouched and `ErrUnownedTmuxTarget` stays visible |
+| ZEN015 `UnownedPresentCompletedCleanupIsProtected` | Completed ledger identity, live tmux target without Mewla ownership marker | Cleanup reconciled twice | Target is untouched and `ErrUnownedTmuxTarget` stays visible |
 | ZEN016 `RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned` | Isolated tmux socket with reclaimed owned window and later unowned identity reuse | Official completed cleanup | Absence is idempotent; reused unowned window is not killed |
 | ZEN017 `RealTmuxWrongSocketAndRebootOwnership` | Completed target on a different socket; leftover owned window after a fresh watcher | Official completed cleanup | Wrong-socket ambient is untouched; reboot leftover owned window is reclaimed; retry is idempotent |
 | ZEN018 `StartupReconciliationAbsentCompletedIsIdempotent` | Mixed absent completed Session and genuine unowned present target | `ReconcileSignalSystemStartup` twice | Absent target is reclaimed; unowned/active/Host survive; unowned error remains visible |
@@ -44,15 +44,15 @@ Stable IDs are retained when contracts change.
 From `daemon/`:
 
 ```sh
-go test -count=1 -timeout 120s ./brain ./cmd/zen ./watcher -run '^TestBDD_'
-go test -json -count=1 -timeout 120s ./brain ./cmd/zen ./watcher -run '^TestBDD_'
+go test -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_'
+go test -json -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_'
 go test ./...
 go test -race -p 1 ./...
 go vet ./...
-go build ./cmd/zen
+go build ./cmd/mewla
 ```
 
-Use `GOMAXPROCS=2`, `-p 1`, and `GOTMPDIR="$ZEN_BUILD_TMPDIR"` in shared,
+Use `GOMAXPROCS=2`, `-p 1`, and `GOTMPDIR="$MEWLA_BUILD_TMPDIR"` in shared,
 resource-constrained sessions. Tests use temporary directories and isolated
 sockets/HTTP listeners with cleanup, not the user's daemon. Do not restart or
 deploy the dev daemon for these gates. Watchers already owned by the user may
@@ -68,21 +68,21 @@ decisions are scripted evidence, not demonstrations of actual AI judgment.
 ## Explicit Real-Provider Gate
 
 Reuse the authorized active connection and inspect its compiled protocol/auth
-binding, not just a provider catalog label. Bind `ZEN_BDD_PROTOCOL`
-(`responses` or `chat_completions`), `ZEN_BDD_BASE_URL`, `ZEN_BDD_MODEL` and
-`ZEN_BDD_API_KEY` from that same connection; do not mix a credential with an
+binding, not just a provider catalog label. Bind `MEWLA_BDD_PROTOCOL`
+(`responses` or `chat_completions`), `MEWLA_BDD_BASE_URL`, `MEWLA_BDD_MODEL` and
+`MEWLA_BDD_API_KEY` from that same connection; do not mix a credential with an
 unrelated endpoint or require a new provider account. The test never changes
-Zen's current provider or reads/modifies live lifecycle state.
+Mewla's current provider or reads/modifies live lifecycle state.
 
 ```sh
-ZEN_BDD_REAL_PROVIDER=1 ZEN_BDD_MAX_CALLS=2 \
+MEWLA_BDD_REAL_PROVIDER=1 MEWLA_BDD_MAX_CALLS=2 \
   go test -json -count=1 -timeout 120s ./brain \
   -run '^TestBDD_ZEN011_RealProviderDecision$'
 ```
 
 The four bound configuration values must already be in the environment;
 never put credentials in command arguments, artifacts or the repository.
-Reuse Zen's provider catalog and private credential-store reference when
+Reuse Mewla's provider catalog and private credential-store reference when
 preparing the child environment, without printing secrets. Check provider
 metadata before spending the two-call budget. A catalog's `openai` label alone
 does not prove Chat Completions permission or the connection's auth mode.
@@ -99,7 +99,7 @@ is read; reasoning content is ignored, refusal/incomplete output cannot pass.
 JSON is prompted and independently parsed/checked without special JSON mode.
 These shapes follow the official [Responses create reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
 and [authentication/request-ID guidance](https://developers.openai.com/api/reference/overview).
-Zen's existing endpoint builder and safe HTTP transport enforce URL validation,
+Mewla's existing endpoint builder and safe HTTP transport enforce URL validation,
 no ambient proxy and no redirects; the real gate requires HTTPS.
 Bounds: at most **two HTTP requests**, **2048 input
 bytes per request**, **128 maximum output tokens per request**, **40 seconds

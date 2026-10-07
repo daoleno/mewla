@@ -99,7 +99,7 @@ func sketchJSONValue(v any) any {
 //   - Narrow Codex compatibility exceptions (exact shape only — never “strip all
 //     unsupported”):
 //       1. include:["reasoning.encrypted_content"] — transport preference for
-//          opaque encrypted reasoning; Zen's full portable-history path supersedes.
+//          opaque encrypted reasoning; Mewla's full portable-history path supersedes.
 //       2. parallel_tool_calls:false — Codex client default; DeepSeek always
 //          enables parallel calls, so false cannot be honored and dropping it
 //          does not change token limits/user text/requested output content.
@@ -285,7 +285,7 @@ func classifyDeepSeekIgnoredSemantics(obj map[string]json.RawMessage) error {
 			delete(obj, "include")
 		} else if isCodexEncryptedReasoningInclude(raw) {
 			// Compat #1: exact Codex opaque-reasoning transport preference.
-			// Zen portable-history already carries plain reasoning content.
+			// Mewla portable-history already carries plain reasoning content.
 			delete(obj, "include")
 		} else {
 			return fmt.Errorf("%w: field %q", ErrResponsesFeatureUnsupported, "include")

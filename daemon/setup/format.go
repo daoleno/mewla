@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/daoleno/zen/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/doctor"
 )
 
 // WriteHuman renders a setup Result for terminals without secrets.
@@ -14,7 +14,7 @@ func WriteHuman(w io.Writer, result Result) error {
 		return nil
 	}
 	if result.Message != "" {
-		fmt.Fprintf(w, "zen setup stopped: %s\n", result.Message)
+		fmt.Fprintf(w, "mewla setup stopped: %s\n", result.Message)
 	}
 	for _, step := range result.NextSteps {
 		fmt.Fprintf(w, "  - %s\n", step)
@@ -25,7 +25,7 @@ func WriteHuman(w io.Writer, result Result) error {
 func successLines(result Result) []string {
 	lines := []string{
 		"",
-		"zen setup complete",
+		"mewla setup complete",
 		fmt.Sprintf("  profile: %s", result.Profile),
 		fmt.Sprintf("  host: %s", result.Host),
 		fmt.Sprintf("  config: %s", result.ConfigPath),
@@ -66,9 +66,9 @@ func formatCandidates(candidates []Candidate) []string {
 
 func machineBlockedLines(report doctor.Report) []string {
 	lines := []string{
-		"zen setup: machine is not ready",
+		"mewla setup: machine is not ready",
 		"",
-		"Fix these blockers, then re-run: zen setup",
+		"Fix these blockers, then re-run: mewla setup",
 	}
 	if report.Platform.Status == doctor.StatusFail {
 		lines = append(lines, "  - platform: "+report.Platform.Summary)
@@ -76,7 +76,7 @@ func machineBlockedLines(report doctor.Report) []string {
 	if report.Tmux.Status == doctor.StatusFail {
 		lines = append(lines, "  - tmux: "+report.Tmux.Summary)
 		if report.Tmux.Remediation == doctor.RemediationInstallTmux {
-			lines = append(lines, "    Install tmux (Zen will not run sudo for you):")
+			lines = append(lines, "    Install tmux (Mewla will not run sudo for you):")
 			for _, hint := range report.Tmux.InstallHints {
 				lines = append(lines, fmt.Sprintf("      - %s: %s", hint.OS, hint.Command))
 			}
@@ -99,21 +99,21 @@ func machineRemediationSteps(report doctor.Report) []string {
 		}
 	}
 	if report.StateDir.Status == doctor.StatusFail {
-		steps = append(steps, "ensure the Zen state directory is writable")
+		steps = append(steps, "ensure the Mewla state directory is writable")
 	}
 	if report.Listen.Status == doctor.StatusFail {
-		steps = append(steps, "free the Zen listen address or stop the conflicting process")
+		steps = append(steps, "free the Mewla listen address or stop the conflicting process")
 	}
-	steps = append(steps, "re-run: zen setup")
+	steps = append(steps, "re-run: mewla setup")
 	return steps
 }
 
 func noExecutorLines(report doctor.Report) []string {
 	lines := []string{
-		"zen setup: no runnable executor found",
+		"mewla setup: no runnable executor found",
 		"",
-		"Install and authenticate at least one provider CLI on this host, then re-run zen setup.",
-		"Official login/status commands (provider docs; Zen does not invent install URLs):",
+		"Install and authenticate at least one provider CLI on this host, then re-run mewla setup.",
+		"Official login/status commands (provider docs; Mewla does not invent install URLs):",
 	}
 	lines = append(lines, executorInstallSteps(report)...)
 	lines = append(lines, "", "Missing configured binaries:")

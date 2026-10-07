@@ -134,7 +134,7 @@ func TestCreateDelegatedSessionPassesOwnedResourceToTmux(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 case "$1" in
   new-session) printf '%%1\n' ;;
 esac
@@ -144,7 +144,7 @@ exit 0
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{spec: &delegatedResourceSpec{
@@ -185,7 +185,7 @@ exit 0
 		delegatedMarkerEnv + "=1",
 		delegatedResourceUnitEnv + "=" + unit,
 		"TMPDIR=" + filepath.Join(dir, "owned-tmp"),
-		"ZEN_BUILD_TMPDIR=" + filepath.Join(dir, "owned-tmp"),
+		"MEWLA_BUILD_TMPDIR=" + filepath.Join(dir, "owned-tmp"),
 		"set-option -p -t " + target + " @zen_worker_delegated 1",
 		"set-option -p -t " + target + " @zen_worker_resource_unit " + unit,
 	} {
@@ -200,7 +200,7 @@ func TestCreateDelegatedSessionRollsBackWhenOwnershipMarkersFail(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 case "$1" in
   new-session) printf '%%7\n' ;;
   set-option)
@@ -215,7 +215,7 @@ exit 0
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{spec: &delegatedResourceSpec{
 		Owner:   "abc123",
@@ -623,7 +623,7 @@ func TestKillDelegatedSessionReleasesExactBoundUnit(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$ZEN_TEST_TMUX_LOG"
+printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 target=
 prev=
 for arg in "$@"; do
@@ -643,7 +643,7 @@ exit 0
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
-	t.Setenv("ZEN_TEST_TMUX_LOG", logPath)
+	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{boundTarget: "%42", boundUnit: unit}
 	w := New(0)

@@ -338,7 +338,7 @@ export default function SettingsScreen() {
       Alert.alert(
         "Invalid endpoint",
         error?.message ||
-          "Use a full ws://, wss://, http://, or https:// URL that points at zen.",
+          "Use a full ws://, wss://, http://, or https:// URL that points at mewla.",
       );
       return;
     }
@@ -363,7 +363,7 @@ export default function SettingsScreen() {
       if (!savedServer) {
         Alert.alert(
           "Invalid import",
-          "Could not parse the pairing link. Import the HTTPS or zen:// pairing link or QR printed by zen.",
+          "Could not parse the pairing link. Import the HTTPS or mewla:// pairing link or QR printed by mewla.",
         );
         return false;
       }
@@ -419,7 +419,7 @@ export default function SettingsScreen() {
     if (!rawValue) {
       Alert.alert(
         "Pairing link required",
-        "Paste the pairing link printed by zen, or scan its QR code.",
+        "Paste the pairing link printed by mewla, or scan its QR code.",
       );
       return;
     }
@@ -547,7 +547,7 @@ export default function SettingsScreen() {
         <View style={styles.contentInner}>
           <SettingsSectionHeader>Servers</SettingsSectionHeader>
           <ListSection
-            footer={servers.length === 0 ? "Pair this phone with a computer running zen." : null}
+            footer={servers.length === 0 ? "Pair this phone with a computer running mewla." : null}
           >
             {servers.map((server) => {
               const current = server.id === currentServerId;
@@ -555,7 +555,7 @@ export default function SettingsScreen() {
               const latencySample = serverLatencyById[server.id];
               const connectionIssue = serverConnectionIssues[server.id] || null;
               const endpoint =
-                server.transportKind === "link" ? "Zen Link" : server.url;
+                server.transportKind === "link" ? "Mewla Link" : server.url;
               const status = [
                 connectionIssue?.title ?? connectionLabel(connectionState),
                 connectionState === "connected" && latencySample
@@ -604,7 +604,7 @@ export default function SettingsScreen() {
                     connectionState === "connected" && latencySample
                       ? `, ${formatLatency(latencySample.latencyMs)} latency`
                       : ""
-                  }, ${server.transportKind === "link" ? "Zen Link" : server.url}`}
+                  }, ${server.transportKind === "link" ? "Mewla Link" : server.url}`}
                   accessibilityHint="Shows actions for this server"
                   onPress={() => setServerMenuId(server.id)}
                 />
@@ -672,7 +672,7 @@ export default function SettingsScreen() {
           <SettingsSectionHeader>About</SettingsSectionHeader>
           <ListSection>
             <ListRow
-              title="Zen"
+              title="Mewla"
               value={`Version ${appVersion}`}
               leading={<MewlaMark size={28} />}
             />
@@ -757,7 +757,7 @@ export default function SettingsScreen() {
                   Camera permission required
                 </Text>
                 <Text style={styles.scannerNoticeText}>
-                  Allow camera access to scan a zen pairing QR code.
+                  Allow camera access to scan a mewla pairing QR code.
                 </Text>
                 <AnimatedPressable
                   style={[
@@ -897,7 +897,7 @@ export default function SettingsScreen() {
                 {editingServer.transportKind === "link" ? (
                   <View style={styles.identityCard}>
                     <Text style={styles.identityLabel}>Connection path</Text>
-                    <Text style={styles.fieldHint}>Zen Link</Text>
+                    <Text style={styles.fieldHint}>Mewla Link</Text>
                   </View>
                 ) : (
                   <>
@@ -909,7 +909,7 @@ export default function SettingsScreen() {
                       value={draftEndpoint}
                       onChangeText={setDraftEndpoint}
                       accessibilityLabel="Server endpoint"
-                      placeholder="wss://zen.example.com/ws"
+                      placeholder="wss://mewla.example.com/ws"
                       placeholderTextColor={colors.textSecondary}
                   selectionColor={colors.selectionBackground}
                   cursorColor={colors.accentStrong}
@@ -941,7 +941,7 @@ export default function SettingsScreen() {
             ) : (
               <>
                 <Text style={styles.importLead}>
-                  Scan the one-time QR from zen pair, or paste its pairing link.
+                  Scan the one-time QR from mewla pair, or paste its pairing link.
                 </Text>
 
                 <Text style={styles.fieldLabel}>Pairing Link</Text>
@@ -950,7 +950,7 @@ export default function SettingsScreen() {
                   value={draftImportValue}
                   onChangeText={setDraftImportValue}
                   accessibilityLabel="Pairing link"
-                  placeholder="https://your-zen-address/#pair=…"
+                  placeholder="https://your-mewla-address/#pair=…"
                   placeholderTextColor={colors.textSecondary}
                   selectionColor={colors.selectionBackground}
                   cursorColor={colors.accentStrong}

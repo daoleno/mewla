@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/envcompat"
 )
 
 // Process identity includes the kernel start time to fence PID reuse. Args is
@@ -253,4 +256,22 @@ func signalExact(records map[int]Process, signal syscall.Signal) {
 			_ = syscall.Kill(pid, signal)
 		}
 	}
+}
+
+// workerEnvIdentity reads the delegated Worker identity from a process
+// environment. MEWLA_* wins over the legacy ZEN_* alias.
+func workerEnvIdentity(entries []string) (resourceID, workerID string) {
+	values := map[string]string{}
+	for _, entry := range entries {
+		if key, value, ok := strings.Cut(entry, "="); ok {
+			values[key] = value
+		}
+	}
+	pick := func(name string) string {
+		if value, ok := values[envcompat.Prefix+name]; ok {
+			return value
+		}
+		return values[envcompat.LegacyPrefix+name]
+	}
+	return pick("WORKER_RESOURCE_UNIT"), pick("WORKER_ID")
 }

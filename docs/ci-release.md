@@ -56,7 +56,7 @@ Runtime mapping (CI materializes the file, mode `0600`, then shreds it):
 | `ZEN_ANDROID_KEY_ALIAS` | secret of same name |
 | `ZEN_ANDROID_KEY_PASSWORD` | secret of same name |
 
-Local maintainer builds continue to use a filesystem path via `ZEN_ANDROID_KEYSTORE` (see [android.md](internal/android-development.md)); agents must not read `~/.zen/release-keys`.
+Local maintainer builds continue to use a filesystem path via `ZEN_ANDROID_KEYSTORE` (see [android.md](internal/android-development.md)); agents must not read `~/.mewla/release-keys`.
 
 ## Public certificate identity
 
@@ -85,7 +85,7 @@ Prerequisites:
 2. All existing release notes are indexed in root `CHANGELOG.md`; future preparation prepends one link without copying full notes.
 3. The four `ZEN_ANDROID_*` secrets above are configured on the repository.
 4. `ZEN_UPDATE_SIGNING_KEY_BASE64` is configured with the updater manifest key.
-5. `release/plugin-publishers.json` contains the public Client ID of the approved `daoleno`-owned Zen GitHub OAuth app with Device Flow enabled. Run `python3 scripts/plugin-publisher-flags.py --require github` before preparation; the artifact workflow enforces the same requirement before building. Registration handoff is documented in [Publisher setup](internal/plugins-publisher-setup.md). A null ID is a missing publisher configuration, not a request for publication approval. Never supply a client secret or another application's identity to satisfy this gate.
+5. `release/plugin-publishers.json` contains the public Client ID of the approved `daoleno`-owned Mewla GitHub OAuth app with Device Flow enabled. Run `python3 scripts/plugin-publisher-flags.py --require github` before preparation; the artifact workflow enforces the same requirement before building. Registration handoff is documented in [Publisher setup](internal/plugins-publisher-setup.md). A null ID is a missing publisher configuration, not a request for publication approval. Never supply a client secret or another application's identity to satisfy this gate.
 
 The normal maintainer action is to dispatch **Release reviewed version** from the Actions UI or CLI:
 
@@ -106,7 +106,7 @@ Preparation, normal app CI and the Android release job run `app/androidAssetName
 If the preparation workflow is unavailable, a maintainer may perform the same tracked identity and canonical-notes updates manually, run `./scripts/verify-release-identity.sh` and the release tests, commit and push that exact change to `main`, then use the existing annotated-tag path:
 
 ```bash
-git tag -a vX.Y.Z -m "Zen vX.Y.Z"
+git tag -a vX.Y.Z -m "Mewla vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
@@ -159,15 +159,15 @@ gh run watch
 
 Under `dist-download/v<version>/` (and the workflow artifact):
 
-- `zen-linux-amd64.tar.gz`
-- `zen-linux-arm64.tar.gz`
-- `zen-darwin-arm64.tar.gz`
-- `zen-android-arm64-v<version>.apk`
+- `mewla-linux-amd64.tar.gz`
+- `mewla-linux-arm64.tar.gz`
+- `mewla-darwin-arm64.tar.gz`
+- `mewla-android-arm64-v<version>.apk`
 - `SHA256SUMS`
 - `release-manifest.json`
 - `release-manifest.json.sig`
 
-Daemon archives contain `zen`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Release notes stay in the GitHub Release body; Android third-party notices remain embedded in the APK. This keeps the download list focused without dropping required attribution.
+Daemon archives contain `mewla`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Release notes stay in the GitHub Release body; Android third-party notices remain embedded in the APK. This keeps the download list focused without dropping required attribution.
 
 ## Local helper scripts
 
@@ -186,7 +186,7 @@ Daemon archives contain `zen`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Release
 - Secrets never appear in docs, commits, or intentional log lines.
 - The updater accepts one public release stream, including prereleases by semantic-version precedence; it has no channel setting.
 - The detached Ed25519 signature authenticates manifest version, platform mapping, archive size, and SHA-256 before download installation.
-- CI does not read developer home directories (including `~/.zen/release-keys`).
+- CI does not read developer home directories (including `~/.mewla/release-keys`).
 - `Release reviewed version` can change `main` and create a tag only in one atomic push after all preparation gates pass and only while `origin/main` still equals its starting SHA.
 - Public assets remain build-gated in `release-artifacts.yml`; the preparation workflow dispatches it and the existing Preview TestFlight workflow with the same exact reviewed annotated tag.
 - Manual artifact dispatch publishes only with the reviewed boolean; the strict annotated stable/beta tag path remains available for maintainer recovery.

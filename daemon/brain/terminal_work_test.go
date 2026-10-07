@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // TestTurnFactsNeverRegressTerminalWork is the red-green guard for the

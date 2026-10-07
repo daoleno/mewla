@@ -20,7 +20,7 @@ export function browserIssue(error: unknown, server: string): BrowserIssue | nul
   const issue = (title: string, detail: string, recovery: BrowserRecovery, tone: BrowserIssue["tone"] = "danger"): BrowserIssue =>
     ({ title, detail, recovery, tone, diagnostic });
   if (status === 404 || status === 405) {
-    return issue("Browser isn't on this server yet", `Update Zen on ${server} to use Browser.`, "retry", "warning");
+    return issue("Browser isn't on this server yet", `Update Mewla on ${server} to use Browser.`, "retry", "warning");
   }
   if (status === 401 || status === 403) {
     return issue("This phone needs to pair again", `${server} didn't accept this phone. Pair again in Settings.`, "settings");

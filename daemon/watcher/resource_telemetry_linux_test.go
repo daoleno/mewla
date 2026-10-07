@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/workerproc"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 func TestResourceParsers(t *testing.T) {

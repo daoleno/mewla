@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
 
 // Local captured-contract proof: running Codex Session activates DeepSeek
@@ -22,15 +22,15 @@ import (
 // executes it, DeepSeek receives correlated function_call_output, then returns
 // the final answer — same pane/client PID, native conversation, Session, Route.
 //
-//	ZEN_DEEPSEEK_SAMEPID=1 go test ./modelprofiles -run TestDeepSeekCodexSamePIDResponses -count=1 -timeout 300s -v
+//	MEWLA_DEEPSEEK_SAMEPID=1 go test ./modelprofiles -run TestDeepSeekCodexSamePIDResponses -count=1 -timeout 300s -v
 //
 // Live official API gate (never claim live acceptance without this):
 //
-//	ZEN_DEEPSEEK_LIVE=1 DEEPSEEK_API_KEY=… go test ./modelprofiles -run TestDeepSeekCodexLiveOfficialAPI -count=1 -timeout 300s -v
+//	MEWLA_DEEPSEEK_LIVE=1 DEEPSEEK_API_KEY=… go test ./modelprofiles -run TestDeepSeekCodexLiveOfficialAPI -count=1 -timeout 300s -v
 
 func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
-	if os.Getenv("ZEN_DEEPSEEK_SAMEPID") == "" {
-		t.Skip("set ZEN_DEEPSEEK_SAMEPID=1 for DeepSeek Codex same-PID Responses proof")
+	if os.Getenv("MEWLA_DEEPSEEK_SAMEPID") == "" {
+		t.Skip("set MEWLA_DEEPSEEK_SAMEPID=1 for DeepSeek Codex same-PID Responses proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {

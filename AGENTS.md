@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Zen is a mobile-native control plane. Go code is in daemon/ (cmd/zen, server, auth, work, terminal, watcher); Expo/React Native code is in app/ (app routes, components, services, store, constants, assets). Product documentation is in docs/.
+Mewla is a mobile-native control plane. Go code is in daemon/ (cmd/mewla, server, auth, work, terminal, watcher); Expo/React Native code is in app/ (app routes, components, services, store, constants, assets). Product documentation is in docs/.
 
 ## Execution
 
@@ -19,7 +19,7 @@ Read the relevant code and directory instructions before editing. Complete autho
 - App: bun run app:start; bun run app:android (Java 17); bun run app:doctor.
 - Typecheck: cd app && bunx tsc --noEmit after TS/TSX edits.
 - Daemon: bun run daemon:build; cd daemon && go test ./... before daemon/protocol/auth/terminal/work/session changes.
-- cd daemon && go run ./cmd/zen-dev starts a hot-reloading daemon. Editing watched Go files can restart it; check live watchers before changes.
+- cd daemon && go run ./cmd/mewla-dev starts a hot-reloading daemon. Editing watched Go files can restart it; check live watchers before changes.
 - For route additions/moves, check rg --files app/app | rg '\.(test|spec)\.' and rg -n 'bun:test' app/app. Verify Android and iOS bundles with bunx expo export --platform android and bunx expo export --platform ios.
 - Test changed behavior and required repository gates. Broaden or repeat only after edits, failures or unresolved concerns. Use device/UI evidence for visible changes; report platform limitations.
 

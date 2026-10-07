@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/linkproto"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/linkproto"
 )
 
 func TestRelayStateCapacityLimitsRejectAndRecover(t *testing.T) {

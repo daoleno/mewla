@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // Deterministic concurrent multi-reader plus writer exercise for the shared
@@ -43,7 +43,7 @@ func TestOpenCodeCacheConcurrentReadersWithWriter(t *testing.T) {
 	if out, err := exec.Command("sqlite3", dbPath, "PRAGMA journal_mode=WAL;").CombinedOutput(); err != nil {
 		t.Fatalf("enable WAL: %v: %s", err, out)
 	}
-	t.Setenv("ZEN_OPENCODE_DB", dbPath)
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 
 	const writerBursts = 10
 	const readHammerLoops = 20000

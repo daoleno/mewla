@@ -19,6 +19,8 @@ import (
 // This fixed return target is shipped by both native clients. No caller can
 // redirect a code/token to a supplied origin. PKCE and the paired channel bind
 // native completion to this daemon's original flow.
+// NativeCallback stays on the legacy zen scheme: it is the redirect URI
+// registered with OAuth providers, and the Mewla app keeps handling zen://.
 const NativeCallback = "zen://plugins"
 
 type ConnectFlow struct {
@@ -216,7 +218,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("This connection is no longer waiting for authorization")
 		}
 		callback, err := url.Parse(q.Callback)
-		if err != nil || len(q.Callback) > 16384 || callback.Scheme != "zen" || callback.Host != "plugins" || callback.Path != "" || callback.Fragment != "" || callback.User != nil || callback.Query().Get("state") != f.state || len(callback.Query()["state"]) != 1 || len(callback.Query()["code"]) > 1 || len(callback.Query()["error"]) > 1 || len(callback.Query()["iss"]) > 1 {
+		if err != nil || len(q.Callback) > 16384 || (callback.Scheme != "zen" && callback.Scheme != "mewla") || callback.Host != "plugins" || callback.Path != "" || callback.Fragment != "" || callback.User != nil || callback.Query().Get("state") != f.state || len(callback.Query()["state"]) != 1 || len(callback.Query()["code"]) > 1 || len(callback.Query()["error"]) > 1 || len(callback.Query()["iss"]) > 1 {
 			return Response{}, errors.New("Authorization return does not match this connection")
 		}
 		req := httptest.NewRequest(http.MethodGet, "https://native.invalid/?"+callback.RawQuery, nil)
@@ -307,7 +309,7 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 func (m *Manager) startGitHubDevice(ctx context.Context, in *Input) (Response, error) {
 	client, ok, err := m.clientConfig("github")
 	if err != nil || !ok || client.ClientID == "" {
-		return Response{}, errors.New("Zen’s GitHub browser authorization is not ready yet. You can use the account already signed in on this server.")
+		return Response{}, errors.New("Mewla’s GitHub browser authorization is not ready yet. You can use the account already signed in on this server.")
 	}
 	config := oauth2.Config{ClientID: client.ClientID, Scopes: []string{"read:user", "repo"}, Endpoint: oauth2.Endpoint{DeviceAuthURL: "https://github.com/login/device/code"}}
 	r := &record{Account: Account{Endpoint: "https://api.github.com"}}

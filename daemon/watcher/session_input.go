@@ -16,7 +16,7 @@ import (
 	"unicode/utf8"
 )
 
-// InputOutcome describes what Zen knows at the provider-mutation boundary.
+// InputOutcome describes what Mewla knows at the provider-mutation boundary.
 // Accepted means a delegated provider turn was observed (or, for direct
 // receipt input, that the existing provider transaction completed). Ambiguous
 // means the target-bound tmux queue started and may have submitted; callers
@@ -113,7 +113,7 @@ const (
 	inputReuseBrainHost
 )
 
-// ErrDelegatedInputAdmissionUnavailable means the Zen-owned tmux target was
+// ErrDelegatedInputAdmissionUnavailable means the Mewla-owned tmux target was
 // still proven, but the provider currently cannot be safely correlated with
 // the canonical Turn. This is a retryable input-admission conflict, not proof
 // that tmux control ownership was lost.

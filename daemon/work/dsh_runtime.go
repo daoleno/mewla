@@ -17,22 +17,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 var dshSessionIDPattern = regexp.MustCompile(`^session-[a-zA-Z0-9-]{1,100}$`)
 
 func DSHRoot() string {
 	home, _ := os.UserHomeDir()
-	root := os.Getenv("ZEN_STATE_DIR")
+	root := os.Getenv("MEWLA_STATE_DIR")
 	if root == "" {
-		root = filepath.Join(home, ".zen")
+		root = statedir.Default(home)
 	}
 	return filepath.Join(root, "provider-sessions", "dsh")
 }
 
 func DSHSessionID(command string) string {
 	options, ok := inspectLaunchCommandOptions(command)
-	if !ok || len(options.argv) == 0 || options.argv[0] != "dsh-session" || !strings.HasPrefix(filepath.Base(options.executable), "zen") && !strings.HasSuffix(options.executable, ".test") {
+	if !ok || len(options.argv) == 0 || options.argv[0] != "dsh-session" || !isProductExecutable(options.executable) && !strings.HasSuffix(options.executable, ".test") {
 		return ""
 	}
 	_, id := options.optionValue("--dsh-session")
@@ -177,7 +179,7 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	}
 	port := reserve.Addr().(*net.TCPAddr).Port
 	reserve.Close()
-	// Keep native persistence under Zen's provider-session owner; do not edit DSH
+	// Keep native persistence under Mewla's provider-session owner; do not edit DSH
 	// user profiles, credentials, defaults, or existing Sessions.
 	patchPath := filepath.Join(DSHRoot(), id+".patch.yml")
 	patch := fmt.Sprintf("- id: session-persistence-jsonl\n  config:\n    root: %q\n", filepath.Join(DSHRoot(), "logs"))
@@ -281,4 +283,11 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	defer server.Close()
 	fmt.Fprintln(os.Stdout, "DSH ready. Native saved model/settings apply.")
 	return runDSHTerminal(ctx, id, exited)
+}
+
+// isProductExecutable accepts the mewla CLI and its legacy zen alias,
+// including dev builds such as mewla-dev.
+func isProductExecutable(executable string) bool {
+	base := filepath.Base(executable)
+	return strings.HasPrefix(base, "mewla") || strings.HasPrefix(base, "zen")
 }

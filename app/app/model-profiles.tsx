@@ -466,7 +466,7 @@ export default function ProvidersScreen() {
       } else {
         Alert.alert(
           "Models unavailable",
-          "The upstream model list is unavailable. Zen is using its local model catalog; Sync can refresh it.",
+          "The upstream model list is unavailable. Mewla is using its local model catalog; Sync can refresh it.",
         );
       }
     } catch (discoverError) {

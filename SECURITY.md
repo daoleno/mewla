@@ -2,9 +2,9 @@
 
 ## Supported versions
 
-Security fixes target the latest stable release and the default branch (`main`). Zen does not maintain parallel long-term support release trains yet.
+Security fixes target the latest stable release and the default branch (`main`). Mewla does not maintain parallel long-term support release trains yet.
 
-## What Zen trusts
+## What Mewla trusts
 
 - You operate the daemon host and any tunnel/proxy in front of it.
 - Device pairing and signed requests protect the control plane once enrolled.
@@ -22,6 +22,6 @@ Include:
 
 Do **not** open a public issue for unpatched remotely exploitable flaws.
 
-## Out of scope for “Zen cloud” language
+## Out of scope for “Mewla cloud” language
 
-Zen does not operate a hosted relay or store your agent transcripts in a Zen-operated cloud. Host compromise, misconfigured public tunnels, and bypass-permission executors are operator risks documented in `docs/security-and-privacy.md`.
+Mewla does not operate a hosted relay or store your agent transcripts in a Mewla-operated cloud. Host compromise, misconfigured public tunnels, and bypass-permission executors are operator risks documented in `docs/security-and-privacy.md`.

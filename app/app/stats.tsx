@@ -735,7 +735,7 @@ function StatsRangeScene({
                         ? 'Codex usage is temporarily unavailable. Existing activity stats are unaffected.'
                         : subscription.authKind === 'absent'
                           ? 'Sign in to the Codex CLI with ChatGPT to see subscription limits.'
-                          : 'Zen could not confidently identify official Codex subscription authentication.'}
+                          : 'Mewla could not confidently identify official Codex subscription authentication.'}
                   </Text>
                 )}
               </View>

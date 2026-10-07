@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the public Zen docs site.
+"""Build the public Mewla docs site.
 
 Copies site/ to --out, then renders the pages listed in nav.json (plus every
 docs/releases/v*.md) to <out>/docs/<slug>/index.html. Styling lives in
@@ -9,7 +9,7 @@ The build fails when a published page links to an unpublished file or contains
 anything the public-safety scan rejects, and when any file copied from site/
 uses the anonymised repository slug.
 
-    python3 scripts/site-docs/build.py --out /tmp/zen-site
+    python3 scripts/site-docs/build.py --out /tmp/mewla-site
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ UNSAFE = [
     (re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"), "Telegram bot token"),
     (re.compile(PRIVATE_IP), "private IP address"),
     (re.compile(r"\b[a-z0-9-]+\.trycloudflare\.com"), "tunnel URL"),
-    (re.compile(r"#pair=[A-Za-z0-9_-]{16,}|zen://[A-Za-z0-9_-]{16,}"), "pairing link"),
+    (re.compile(r"#pair=[A-Za-z0-9_-]{16,}|(?:mewla|zen)://[A-Za-z0-9_-]{16,}"), "pairing link"),
     (re.compile(r"\bw[0-9a-f]{32}\b"), "internal Work id"),
     (re.compile(r"\bturn:[0-9a-f]{8}-[0-9a-f]{4}-"), "internal turn id"),
 ]
@@ -134,7 +134,7 @@ def load_pages(config: dict) -> list[Page]:
     )
     for tag in tags:
         pages.append(
-            Page(DOCS / "releases" / f"{tag}.md", f"releases/{tag}", f"Zen {tag}", "Reference", in_nav=False)
+            Page(DOCS / "releases" / f"{tag}.md", f"releases/{tag}", f"Mewla {tag}", "Reference", in_nav=False)
         )
     for page in pages:
         if not page.source.is_file():
@@ -311,7 +311,7 @@ TEMPLATE = """<!doctype html>
 <body data-docs-root="{docs_root}">
 <a class="skip" href="#content">Skip to content</a>
 <header class="d-top">
-  <a class="d-word" href="{site_root}" aria-label="Zen home">zen</a>
+  <a class="d-word" href="{site_root}" aria-label="Mewla home">mewla</a>
   <a class="d-section" href="{docs_root}">docs</a>
   <button class="d-menu" type="button" aria-expanded="false" aria-controls="d-side">Menu</button>
 </header>
@@ -331,7 +331,7 @@ TEMPLATE = """<!doctype html>
 {body}
     </article>
 {pager}
-    <footer class="d-foot">Zen documentation · Apache-2.0 · <a href="{site_root}">Zen home</a></footer>
+    <footer class="d-foot">Mewla documentation · Apache-2.0 · <a href="{site_root}">Mewla home</a></footer>
   </main>
 {toc}
 </div>
@@ -341,7 +341,7 @@ TEMPLATE = """<!doctype html>
 
 
 def write_page(out: Path, page: Page, pages: list[Page], nav_pages: list[Page], icon: str) -> None:
-    title = "Zen documentation" if not page.slug else f"{page.title} · Zen docs"
+    title = "Mewla documentation" if not page.slug else f"{page.title} · Mewla docs"
     icon_tag = f'<link rel="icon" href="{page.site_root}{icon}" type="image/svg+xml">\n' if icon else ""
     doc = TEMPLATE.format(
         title=html.escape(title),

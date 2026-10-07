@@ -19,7 +19,7 @@ func (m *Manager) mcpSession(ctx context.Context, r *record, secret string) (*mc
 		base = http.DefaultTransport
 	}
 	client.Transport = bearerTransport{base: base, secret: secret, origin: u.Scheme + "://" + u.Host}
-	c := mcp.NewClient(&mcp.Implementation{Name: "Zen", Version: "1"}, nil)
+	c := mcp.NewClient(&mcp.Implementation{Name: "Mewla", Version: "1"}, nil)
 	session, err := c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: r.Account.Endpoint, HTTPClient: &client, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
 		if errors.Is(err, errAuth) {

@@ -20,26 +20,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/codexctl"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/gorilla/websocket"
 )
 
 // TestLiveSameModelEffortConvergence is the end-to-end acceptance proof for
 // the same-model effort-only Terminal change: with the real Codex 0.147 app
-// server + TUI routed through the Zen loopback router, a native
+// server + TUI routed through the Mewla loopback router, a native
 // thread/settings/update (the exact mutation /model performs) on the SAME
 // model changes the TUI footer and native settings, and the next request —
-// which carries no model-switch fragment — converges the Zen route binding
+// which carries no model-switch fragment — converges the Mewla route binding
 // and the Interface WebSocket projection to the same effort, with the request
 // forwarded unchanged. No process restart.
 //
-//	ZEN_CODEX_LIVE_CONTROL=1 go test ./server -run TestLiveSameModelEffortConvergence -count=1 -timeout 420s -v
+//	MEWLA_CODEX_LIVE_CONTROL=1 go test ./server -run TestLiveSameModelEffortConvergence -count=1 -timeout 420s -v
 func TestLiveSameModelEffortConvergence(t *testing.T) {
-	if os.Getenv("ZEN_CODEX_LIVE_CONTROL") == "" {
-		t.Skip("set ZEN_CODEX_LIVE_CONTROL=1 for the live Codex convergence proof")
+	if os.Getenv("MEWLA_CODEX_LIVE_CONTROL") == "" {
+		t.Skip("set MEWLA_CODEX_LIVE_CONTROL=1 for the live Codex convergence proof")
 	}
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sign the exact release manifest bytes with the offline Zen updater key.
+# Sign the exact release manifest bytes with the offline Mewla updater key.
 #
 # The private key comes from either ZEN_UPDATE_SIGNING_KEY (a PEM path) or
 # ZEN_UPDATE_SIGNING_KEY_BASE64 (a base64-encoded PEM, intended for CI).

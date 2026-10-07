@@ -12,7 +12,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Store is the process-local owner of ~/.zen/model-profiles.toml.
+// Store is the process-local owner of ~/.mewla/model-profiles.toml.
 type Store struct {
 	mu       sync.RWMutex
 	path     string

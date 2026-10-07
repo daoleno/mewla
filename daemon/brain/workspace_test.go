@@ -336,9 +336,9 @@ func TestNewStoreEnsuresWorkspaceCommunicationRules(t *testing.T) {
 		"## Tools",
 		"policies/delegation.md",
 		"policies/engine.md",
-		"$ZEN_WORKTREE_ROOT",
+		"$MEWLA_WORKTREE_ROOT",
 		"TMPDIR",
-		"$ZEN_BUILD_TMPDIR",
+		"$MEWLA_BUILD_TMPDIR",
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("AGENTS.md missing %q:\n%s", marker, content)
@@ -579,7 +579,7 @@ func TestNewStorePreservesCurrentAndUpgradesExistingPolicyDocs(t *testing.T) {
 			t.Fatalf("engine policy missing %q:\n%s", want, engineContent)
 		}
 	}
-	for _, retired := range []string{"the kind of task alone is not a reason to switch", "Keep the configured executor", "zen worker defaults"} {
+	for _, retired := range []string{"the kind of task alone is not a reason to switch", "Keep the configured executor", "mewla worker defaults"} {
 		if strings.Contains(engineContent, retired) {
 			t.Fatalf("engine policy keeps retired %q:\n%s", retired, engineContent)
 		}

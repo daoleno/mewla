@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // fixedStateProbe replays one constant provider observation, used to drive

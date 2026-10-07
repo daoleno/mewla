@@ -39,7 +39,7 @@ func tunnelFixture(t *testing.T) (*Watcher, SessionService, *httptest.Server, *a
 			return
 		}
 		writer.Header().Set("Content-Type", "text/plain")
-		fmt.Fprint(writer, "ZEN_TUNNEL_FIXTURE")
+		fmt.Fprint(writer, "MEWLA_TUNNEL_FIXTURE")
 	}))
 	t.Cleanup(origin.Close)
 	port := origin.Listener.Addr().(*net.TCPAddr).Port
@@ -95,7 +95,7 @@ func TestQuickTunnelOriginLifetimeAndStopDoNotKillOrigin(t *testing.T) {
 	binary := filepath.Join(directory, "cloudflared")
 	if err := os.WriteFile(binary, []byte(`#!/bin/sh
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = --url ]; then printf '%s' "$2" > "$ZEN_TUNNEL_TEST_PROXY"; fi
+  if [ "$1" = --url ]; then printf '%s' "$2" > "$MEWLA_TUNNEL_TEST_PROXY"; fi
   shift
 done
 printf '%s\n' '{"message":"https://fixture-test.trycloudflare.com"}' '{"message":"Registered tunnel connection"}'
@@ -105,7 +105,7 @@ exec sleep 60
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	proxyFile := filepath.Join(directory, "proxy-url")
-	t.Setenv("ZEN_TUNNEL_TEST_PROXY", proxyFile)
+	t.Setenv("MEWLA_TUNNEL_TEST_PROXY", proxyFile)
 	w, service, origin, live := tunnelFixture(t)
 	w.tunnelResolveHost = func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
@@ -125,7 +125,7 @@ exec sleep 60
 	}
 	body, _ := io.ReadAll(proxyResponse.Body)
 	proxyResponse.Body.Close()
-	if string(body) != "ZEN_TUNNEL_FIXTURE" {
+	if string(body) != "MEWLA_TUNNEL_FIXTURE" {
 		t.Fatalf("proxy HTTP body=%q", body)
 	}
 	connection, _, err := (&websocket.Dialer{HandshakeTimeout: 3 * time.Second}).Dial("ws"+strings.TrimPrefix(proxyURL, "http")+"/ws", nil)
@@ -169,13 +169,13 @@ func TestQuickTunnelLogOnlyAcceptsStructuredCloudflareURLs(t *testing.T) {
 			t.Fatal("accepted unrelated output")
 		}
 	}
-	if !privateService(SessionService{Process: "zen serve"}) || !privateService(SessionService{Command: "zen dsh-session"}) {
+	if !privateService(SessionService{Process: "mewla serve"}) || !privateService(SessionService{Command: "mewla dsh-session"}) {
 		t.Fatal("control service publishable")
 	}
 }
 
 func TestQuickTunnelLiveHTTPAndWebSocket(t *testing.T) {
-	if os.Getenv("ZEN_QUICK_TUNNEL_SMOKE") != "1" {
+	if os.Getenv("MEWLA_QUICK_TUNNEL_SMOKE") != "1" {
 		t.Skip("explicit public-fixture smoke only")
 	}
 	w, service, origin, _ := tunnelFixture(t)
@@ -186,7 +186,7 @@ func TestQuickTunnelLiveHTTPAndWebSocket(t *testing.T) {
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	dialer := (&net.Dialer{Timeout: 5 * time.Second}).DialContext
-	if os.Getenv("ZEN_TUNNEL_SMOKE_DOH") == "1" {
+	if os.Getenv("MEWLA_TUNNEL_SMOKE_DOH") == "1" {
 		// Test-only DNS isolation: preserve the public hostname for TLS and HTTP.
 		publicHost, _ := url.Parse(state.URL)
 		address := ""
@@ -244,13 +244,13 @@ func TestQuickTunnelLiveHTTPAndWebSocket(t *testing.T) {
 		if err == nil {
 			body, _ = io.ReadAll(io.LimitReader(response.Body, 1024))
 			response.Body.Close()
-			if string(body) == "ZEN_TUNNEL_FIXTURE" {
+			if string(body) == "MEWLA_TUNNEL_FIXTURE" {
 				break
 			}
 		}
 		time.Sleep(time.Second)
 	}
-	if string(body) != "ZEN_TUNNEL_FIXTURE" {
+	if string(body) != "MEWLA_TUNNEL_FIXTURE" {
 		t.Fatalf("public HTTP failed: %v body=%q", lastErr, body)
 	}
 	connection, _, err := (&websocket.Dialer{HandshakeTimeout: 10 * time.Second, NetDialContext: dialer}).Dial("wss"+strings.TrimPrefix(state.URL, "https")+"/ws", nil)
@@ -259,11 +259,11 @@ func TestQuickTunnelLiveHTTPAndWebSocket(t *testing.T) {
 	}
 	defer connection.Close()
 	connection.SetReadDeadline(time.Now().Add(5 * time.Second))
-	if err := connection.WriteMessage(websocket.TextMessage, []byte("ZEN_WS")); err != nil {
+	if err := connection.WriteMessage(websocket.TextMessage, []byte("MEWLA_WS")); err != nil {
 		t.Fatal(err)
 	}
 	_, echo, err := connection.ReadMessage()
-	if err != nil || string(echo) != "ZEN_WS" {
+	if err != nil || string(echo) != "MEWLA_WS" {
 		t.Fatalf("WebSocket echo=%q err=%v", echo, err)
 	}
 	tunnel.cancel()
@@ -308,7 +308,7 @@ func TestQuickTunnelParentDeath(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux parent-death lifecycle")
 	}
-	if os.Getenv("ZEN_TUNNEL_PARENT_TEST") == "1" {
+	if os.Getenv("MEWLA_TUNNEL_PARENT_TEST") == "1" {
 		child := exec.Command("/bin/sleep", "60")
 		if err := bindTunnelToDaemon(child); err != nil {
 			t.Fatal(err)
@@ -324,7 +324,7 @@ func TestQuickTunnelParentDeath(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent := exec.Command(executable, "-test.run=^TestQuickTunnelParentDeath$", "-test.timeout=15s")
-	parent.Env = append(os.Environ(), "ZEN_TUNNEL_PARENT_TEST=1")
+	parent.Env = append(os.Environ(), "MEWLA_TUNNEL_PARENT_TEST=1")
 	output, err := parent.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

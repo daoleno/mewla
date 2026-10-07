@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	skillmgmt "github.com/daoleno/zen/daemon/skills"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/auth"
+	skillmgmt "github.com/daoleno/mewla/daemon/skills"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/gorilla/websocket"
 )
 
@@ -48,7 +48,7 @@ func configureSkillsTestHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("ZEN_STATE_DIR", filepath.Join(home, ".zen"))
+	t.Setenv("MEWLA_STATE_DIR", filepath.Join(home, ".zen"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))

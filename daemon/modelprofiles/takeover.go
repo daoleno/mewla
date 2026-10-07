@@ -13,9 +13,11 @@ import (
 )
 
 // Takeover projection markers. Everything between the two markers is
-// Zen-owned and is replaced/removed atomically; unrelated user config bytes
+// Mewla-owned and is replaced/removed atomically; unrelated user config bytes
 // (comments, formatting, other keys, projects, trust) are preserved exactly.
 const (
+	// The marker text is persisted in user config files; it keeps the
+	// pre-rename wording so existing blocks stay recognised.
 	takeoverMarkerOpen  = "# >>> zen-gateway: managed by Zen. Do not edit. >>>"
 	takeoverMarkerClose = "# <<< zen-gateway <<<"
 )
@@ -56,7 +58,7 @@ const (
 // native config (~/.codex/config.toml by default, CODEX_HOME-aware). It never
 // touches the user's model, effort, or unrelated config; it preserves the
 // exact pre-takeover bytes in a durable backup and only ever writes the
-// marked Zen-owned projection.
+// marked Mewla-owned projection.
 type Takeover struct {
 	statePath  string
 	backupDir  string
@@ -120,7 +122,7 @@ func (t *Takeover) persistState(state TakeoverState) error {
 	return writeAtomicFile(t.statePath, raw, 0o600)
 }
 
-// Projection returns the exact Zen-owned config block for the gateway.
+// Projection returns the exact Mewla-owned config block for the gateway.
 func (t *Takeover) Projection(listenAddr string) string {
 	listenAddr = strings.TrimSpace(listenAddr)
 	if listenAddr == "" {
@@ -236,7 +238,7 @@ func (t *Takeover) Enable(listenAddr string) (TakeoverStatus, error) {
 	return t.Status(), nil
 }
 
-// Disable removes only the Zen-owned projection: the marked block and the
+// Disable removes only the Mewla-owned projection: the marked block and the
 // projected model_provider line (restoring the pre-takeover value when it was
 // recorded). Unrelated user changes are preserved. A user-edited projected
 // line is a conflict and is left in place, reported as drifted.
@@ -290,7 +292,7 @@ func (t *Takeover) Disable() (TakeoverStatus, error) {
 	return status, nil
 }
 
-// Repair re-applies the Zen-owned projection over the current config while
+// Repair re-applies the Mewla-owned projection over the current config while
 // preserving unrelated user changes. It is used at daemon restart when the
 // durable state claims takeover but the live config drifted (or the daemon
 // crashed mid-write). Never creates a second backup.
@@ -389,19 +391,19 @@ func (t *Takeover) Status() TakeoverStatus {
 	expected := t.Projection(state.ListenAddr)
 	if !bytes.Contains(current, []byte(expected)) {
 		status.State = TakeoverStateDrifted
-		status.Detail = "Zen projection block is missing or edited"
+		status.Detail = "Mewla projection block is missing or edited"
 		return status
 	}
 	if !hasExactProviderLine(current, projectedProviderLine()) {
 		status.State = TakeoverStateDrifted
-		status.Detail = "model_provider line was changed outside Zen"
+		status.Detail = "model_provider line was changed outside Mewla"
 		return status
 	}
 	status.State = TakeoverStateActive
 	return status
 }
 
-// projectConfig returns current with the Zen projection block and the
+// projectConfig returns current with the Mewla projection block and the
 // top-level model_provider line installed, preserving every other byte exactly
 // (no blank lines are invented, so disable can restore byte-for-byte).
 // conflict reports a fail-safe condition (multiple uncommented model_provider
@@ -479,7 +481,7 @@ func projectConfig(current []byte, projection, providerLine string) ([]byte, str
 	return []byte(strings.TrimRight(strings.Join(merged, "\n"), "\n") + "\n"), "", nil
 }
 
-// removeProjectionBlock strips the marked Zen-owned block (by marker lines),
+// removeProjectionBlock strips the marked Mewla-owned block (by marker lines),
 // preserving everything else byte-for-byte.
 func removeProjectionBlock(content string) string {
 	lines := strings.Split(content, "\n")
@@ -503,7 +505,7 @@ func removeProjectionBlock(content string) string {
 }
 
 // restoreProviderLine replaces the projected model_provider line with the
-// original value (or removes it), unless the line was edited outside Zen.
+// original value (or removes it), unless the line was edited outside Mewla.
 func restoreProviderLine(content, projectedLine, originalValue string) (string, string) {
 	lines := strings.Split(content, "\n")
 	providerIndex := -1
@@ -526,7 +528,7 @@ func restoreProviderLine(content, projectedLine, originalValue string) (string, 
 		}
 	}
 	if uncommented > 1 {
-		return content, "model_provider was changed outside Zen; refusing to clobber"
+		return content, "model_provider was changed outside Mewla; refusing to clobber"
 	}
 	if providerIndex < 0 {
 		return content, ""

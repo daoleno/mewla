@@ -92,7 +92,7 @@ var curatedPresets = []presetSpec{
 		DefaultBaseURL: "",
 		Protocol:       "",
 		AuthMode:       AuthModeBearerEnv,
-		CredentialEnv:  "ZEN_PROVIDER_API_KEY",
+		CredentialEnv:  "MEWLA_PROVIDER_API_KEY",
 		ClientModel: map[string]string{
 			ExecutorCodex:  "gpt-5",
 			ExecutorClaude: "claude-sonnet-4-6",

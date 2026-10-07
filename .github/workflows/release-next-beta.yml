@@ -105,7 +105,7 @@ jobs:
 
       - name: Test daemon release identity
         working-directory: daemon
-        run: go test ./cmd/zen
+        run: go test ./cmd/mewla
 
       - name: Test App release contracts
         working-directory: app
@@ -138,7 +138,7 @@ jobs:
           }
 
           git commit -m "Prepare $NEXT_TAG"
-          git tag -a "$NEXT_TAG" HEAD -m "Zen $NEXT_TAG"
+          git tag -a "$NEXT_TAG" HEAD -m "Mewla $NEXT_TAG"
 
       - name: Atomically push reviewed main and annotated tag
         env:

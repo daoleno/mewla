@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Receipt preparation can precede discovery of the Host's native transcript.

@@ -12,7 +12,7 @@ import { ServerContextRow, type ServerConnection } from "../extensions/ServerCon
 import { pluginCatalogSections, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import { finishPluginReturn, matchesPluginReturn, pendingConnectionKey, PLUGIN_CALLBACK, pluginJobs, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
+import { finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 
 /** Route of one service page; its sub-pages live below it. */
 export function pluginServicePath(serviceId: string) {
@@ -204,7 +204,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (pending.current?.flow.id !== active.flow.id) return;
       if (result.type === "success") {
         if (matchesPluginReturn(result.url, active.flow)) await finish(result.url);
-        else if (result.url === PLUGIN_CALLBACK) await check();
+        else if (isPluginCallbackUrl(result.url)) await check();
       }
       else if (!completion.current) await cancel();
     } catch { if (valid()) { setPhase("failed"); setError("The browser could not open. Try again."); } }
@@ -226,7 +226,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       const active = { serverId: serverId!, flow: result.flow };
       await remember(active);
       // Device authorization asks for a code on GitHub. Let people see and
-      // copy it before leaving Zen, instead of opening a page with no code.
+      // copy it before leaving Mewla, instead of opening a page with no code.
       if (active.flow.user_code) setPhase("waiting");
       else await openBrowser(active);
     } catch (failure) {
@@ -278,7 +278,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     if (allowed && group === "write") Alert.alert("Allow changes when asked?", pluginJobs[account.integration]?.write + ". Brain still needs your instruction before taking action.", [{ text: "Cancel", style: "cancel" }, { text: "Allow changes", onPress: commit }]);
     else commit();
   };
-  const disconnect = (target: PluginAccount, after?: () => void) => Alert.alert("Disconnect this account?", "Future calls stop immediately. Zen removes its saved credential and revokes access where supported.", [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => { if (valid()) void send({ action: "disconnect", id: target.id }).then((response) => { if (response && valid()) { setAccount(null); after?.(); } }); } }]);
+  const disconnect = (target: PluginAccount, after?: () => void) => Alert.alert("Disconnect this account?", "Future calls stop immediately. Mewla removes its saved credential and revokes access where supported.", [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => { if (valid()) void send({ action: "disconnect", id: target.id }).then((response) => { if (response && valid()) { setAccount(null); after?.(); } }); } }]);
   const toggleTool = (target: PluginAccount, tool: NonNullable<PluginAccount["tools"]>[number], allowed: boolean) => {
     const commit = () => { if (valid()) void send({ action: "policy", id: target.id, tool: tool.name, allowed }); };
     if (!allowed) commit(); else Alert.alert("Allow this tool?", `${tool.description}\n\nAvailable to Brain and Workers for this account.`, [{ text: "Cancel", style: "cancel" }, { text: "Allow", onPress: commit }]);

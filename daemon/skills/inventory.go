@@ -17,6 +17,8 @@ import (
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const (
@@ -159,10 +161,10 @@ func normalizeInventoryOptions(options InventoryOptions) (InventoryOptions, erro
 	}
 	zenStateDir := strings.TrimSpace(options.ZenStateDir)
 	if zenStateDir == "" {
-		zenStateDir = strings.TrimSpace(os.Getenv("ZEN_STATE_DIR"))
+		zenStateDir = strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
 	}
 	if zenStateDir == "" {
-		zenStateDir = filepath.Join(home, ".zen")
+		zenStateDir = statedir.Default(home)
 	}
 	for _, value := range []string{codexHome, claudeHome, zenStateDir} {
 		if !filepath.IsAbs(value) {
@@ -389,7 +391,7 @@ func (collector *inventoryCollector) scanRootEntry(root inventoryRoot, entry fs.
 
 func (collector *inventoryCollector) copyEnabled(agents []Agent, rootPath string) bool {
 	// A copy is available when at least one Agent sees this root. Provider
-	// enable/disable registries are intentionally not a lifecycle gate: Zen's
+	// enable/disable registries are intentionally not a lifecycle gate: Mewla's
 	// management action is exact-copy delete only.
 	return len(agents) > 0 || rootPath != ""
 }

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // TestPiLiveSubscriptionBindsOwnedTranscriptSnapshotAndDelta reproduces the
@@ -209,7 +209,7 @@ func TestPiLiveSubscriptionAmbiguityFailsClosed(t *testing.T) {
 }
 
 // TestPiLiveSubscriptionQuotedOwnedPathBinds covers the reviewed P2 at the
-// full launch-to-watcher-to-reader chain: a Zen-owned --session path that
+// full launch-to-watcher-to-reader chain: a Mewla-owned --session path that
 // requires shell quoting (space and metacharacters, matching
 // EnsurePiSessionLaunchCommand output) must bind the exact transcript through
 // watcher metadata and the server subscription.
@@ -220,7 +220,7 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	spaced := filepath.Join(t.TempDir(), "My Zen", "co$t file.jsonl")
+	spaced := filepath.Join(t.TempDir(), "My Mewla", "co$t file.jsonl")
 	if err := os.MkdirAll(filepath.Dir(spaced), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 // created before the @zen_worker_pi_session option existed (or the option was
 // lost), the node-based Pi rewrites its argv to bare "pi", and a daemon
 // restart re-discovers the window with no recoverable launch binding. The
-// subscription must auto-bind the exact Zen-owned transcript for the cwd via
+// subscription must auto-bind the exact Mewla-owned transcript for the cwd via
 // the startedAt window and snapshot messages plus reasoning and tool calls
 // with stable event IDs — never an empty transcript_not_found Interface
 // while the authoritative JSONL exists and is fresh.
@@ -305,7 +305,7 @@ func TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The owned transcript lives in the Zen-owned sessions directory under
+	// The owned transcript lives in the Mewla-owned sessions directory under
 	// this HOME, exactly like a real pre-fix launch would have placed it.
 	ownedDir := filepath.Join(home, ".zen", "provider-sessions", "pi")
 	if err := os.MkdirAll(ownedDir, 0o700); err != nil {

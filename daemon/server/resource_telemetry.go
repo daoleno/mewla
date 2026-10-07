@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/gorilla/websocket"
 )
 

@@ -32,8 +32,8 @@ func (a *liveRichFiles) DownloadFile(ctx context.Context, _ string, file File) (
 // Explicit opt-in. One QA topic, <=12 pre-counted write requests. The canonical
 // runtime remains the sole poller. This test never edits its state or history.
 func TestLiveTelegramRichInteractions(t *testing.T) {
-	root := os.Getenv("ZEN_TELEGRAM_LIVE_STATE")
-	if root == "" || os.Getenv("ZEN_TELEGRAM_LIVE_RICH") != "1" {
+	root := os.Getenv("MEWLA_TELEGRAM_LIVE_STATE")
+	if root == "" || os.Getenv("MEWLA_TELEGRAM_LIVE_RICH") != "1" {
 		t.Skip("requires authorized bound-private QA with at most 12 writes")
 	}
 	type binding struct {
@@ -91,7 +91,7 @@ func TestLiveTelegramRichInteractions(t *testing.T) {
 		t.Logf("pre-network write %d/12: %s", writes, method)
 	}
 	count("createForumTopic")
-	qa, err := c.CreateForumTopic(t.Context(), token, CreateForumTopicRequest{ChatID: before.ChatID, Name: "Zen QA Rich Interactions " + time.Now().UTC().Format("150405")})
+	qa, err := c.CreateForumTopic(t.Context(), token, CreateForumTopicRequest{ChatID: before.ChatID, Name: "Mewla QA Rich Interactions " + time.Now().UTC().Format("150405")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestLiveTelegramRichInteractions(t *testing.T) {
 		count("editForumTopic Closed")
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		if err := c.EditForumTopic(ctx, token, EditForumTopicRequest{ChatID: before.ChatID, MessageThreadID: qa.MessageThreadID, Name: "Closed - Zen QA Rich Interactions"}); err != nil {
+		if err := c.EditForumTopic(ctx, token, EditForumTopicRequest{ChatID: before.ChatID, MessageThreadID: qa.MessageThreadID, Name: "Closed - Mewla QA Rich Interactions"}); err != nil {
 			t.Errorf("QA rename: %v", err)
 		}
 		if after := readBinding(); after != before {
@@ -110,7 +110,7 @@ func TestLiveTelegramRichInteractions(t *testing.T) {
 	}()
 	state := durableState{TopicsAvailable: true, BotUsername: bot.Username, BrainTopicID: before.BrainTopicID}
 	count("sendMessage Brain navigation")
-	nav, err := c.SendMessage(t.Context(), token, SendRequest{ChatID: before.ChatID, MessageThreadID: qa.MessageThreadID, Text: "Zen QA: Brain entry", ReplyMarkup: navigationKeyboard(state, qa.MessageThreadID)})
+	nav, err := c.SendMessage(t.Context(), token, SendRequest{ChatID: before.ChatID, MessageThreadID: qa.MessageThreadID, Text: "Mewla QA: Brain entry", ReplyMarkup: navigationKeyboard(state, qa.MessageThreadID)})
 	if err != nil {
 		t.Fatal(err)
 	}

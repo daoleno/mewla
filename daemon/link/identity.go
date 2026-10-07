@@ -38,7 +38,7 @@ type persistedTransportIdentity struct {
 	TLSPrivateKeyHex string `json:"tls_private_key_hex,omitempty"`
 }
 
-// TransportIdentity is a daemon-local TLS identity used only by Zen Link.
+// TransportIdentity is a daemon-local TLS identity used only by Mewla Link.
 // Its SPKI pin remains stable while self-signed certificates are reissued for
 // changed relay domains.
 type TransportIdentity struct {

@@ -5,7 +5,7 @@ type ExpoNavigationTheme = typeof import("expo-router").DefaultTheme;
 export type NavigationThemeFonts = ExpoNavigationTheme["fonts"];
 
 /**
- * Gives every React Navigation-owned surface the already-resolved Zen theme.
+ * Gives every React Navigation-owned surface the already-resolved Mewla theme.
  * Fonts are supplied separately because they are scheme-neutral; no navigation
  * color is inherited from React Navigation's default theme.
  */

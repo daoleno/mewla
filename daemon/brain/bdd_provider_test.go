@@ -18,17 +18,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // This is a hybrid gate: real provider reasoning, real Store/Service persistence
 // and event admission, but scripted Session transport. It is not a native CLI
 // provider/watcher end-to-end proof. No tools, subprocess agents or live state.
 func TestBDD_ZEN011_RealProviderDecision(t *testing.T) {
-	if os.Getenv("ZEN_BDD_REAL_PROVIDER") != "1" {
+	if os.Getenv("MEWLA_BDD_REAL_PROVIDER") != "1" {
 		t.Skip("opt-in real provider: see docs/behavior-testing.md; not real-AI evidence when skipped")
 	}
 	endpoint, key, model, err := bddConfiguredProvider()
@@ -37,28 +37,28 @@ func TestBDD_ZEN011_RealProviderDecision(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	call := bddProviderCaller(ctx, endpoint, key, model, os.Getenv("ZEN_BDD_PROTOCOL"))
+	call := bddProviderCaller(ctx, endpoint, key, model, os.Getenv("MEWLA_BDD_PROTOCOL"))
 	runBDDProviderDecision(t, call, "real-provider-hybrid")
 }
 
 func bddConfiguredProvider() (endpoint, key, model string, err error) {
-	key, model = os.Getenv("ZEN_BDD_API_KEY"), os.Getenv("ZEN_BDD_MODEL")
-	base := os.Getenv("ZEN_BDD_BASE_URL")
-	if key == "" || model == "" || base == "" || os.Getenv("ZEN_BDD_MAX_CALLS") != "2" {
-		return "", "", "", fmt.Errorf("environment_failure: require bound ZEN_BDD_BASE_URL, ZEN_BDD_API_KEY, ZEN_BDD_MODEL and ZEN_BDD_MAX_CALLS=2")
+	key, model = os.Getenv("MEWLA_BDD_API_KEY"), os.Getenv("MEWLA_BDD_MODEL")
+	base := os.Getenv("MEWLA_BDD_BASE_URL")
+	if key == "" || model == "" || base == "" || os.Getenv("MEWLA_BDD_MAX_CALLS") != "2" {
+		return "", "", "", fmt.Errorf("environment_failure: require bound MEWLA_BDD_BASE_URL, MEWLA_BDD_API_KEY, MEWLA_BDD_MODEL and MEWLA_BDD_MAX_CALLS=2")
 	}
 	u, parseErr := url.Parse(base)
 	if parseErr != nil || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return "", "", "", fmt.Errorf("environment_failure: require credential-free HTTPS provider base URL")
 	}
 	path := ""
-	switch os.Getenv("ZEN_BDD_PROTOCOL") {
+	switch os.Getenv("MEWLA_BDD_PROTOCOL") {
 	case "chat_completions":
 		path = "/v1/chat/completions"
 	case "responses":
 		path = "/v1/responses"
 	default:
-		return "", "", "", fmt.Errorf("environment_failure: require explicit ZEN_BDD_PROTOCOL=chat_completions or responses")
+		return "", "", "", fmt.Errorf("environment_failure: require explicit MEWLA_BDD_PROTOCOL=chat_completions or responses")
 	}
 	endpoint, err = modelprofiles.UpstreamRequestURL(base, path)
 	if err != nil {
@@ -356,29 +356,29 @@ func TestBDD_ZEN012_ProviderPathBudgetAndFailures(t *testing.T) {
 		}
 	})
 	t.Run("bound-configuration", func(t *testing.T) {
-		t.Setenv("ZEN_BDD_API_KEY", "test-key")
-		t.Setenv("ZEN_BDD_MODEL", "configured-chat-model")
-		t.Setenv("ZEN_BDD_MAX_CALLS", "2")
-		t.Setenv("ZEN_BDD_PROTOCOL", "chat_completions")
+		t.Setenv("MEWLA_BDD_API_KEY", "test-key")
+		t.Setenv("MEWLA_BDD_MODEL", "configured-chat-model")
+		t.Setenv("MEWLA_BDD_MAX_CALLS", "2")
+		t.Setenv("MEWLA_BDD_PROTOCOL", "chat_completions")
 		for _, base := range []string{"https://provider.example", "https://provider.example/v1"} {
-			t.Setenv("ZEN_BDD_BASE_URL", base)
+			t.Setenv("MEWLA_BDD_BASE_URL", base)
 			endpoint, key, model, err := bddConfiguredProvider()
 			if err != nil || endpoint != "https://provider.example/v1/chat/completions" || key != "test-key" || model != "configured-chat-model" {
 				t.Fatal("configured endpoint/model/credential binding failed")
 			}
 		}
 		for _, base := range []string{"", "http://provider.example", "https://key@provider.example", "https://provider.example?key=secret"} {
-			t.Setenv("ZEN_BDD_BASE_URL", base)
+			t.Setenv("MEWLA_BDD_BASE_URL", base)
 			if _, _, _, err := bddConfiguredProvider(); err == nil {
 				t.Fatal("unsafe or missing binding accepted")
 			}
 		}
-		t.Setenv("ZEN_BDD_BASE_URL", "https://provider.example/v1")
-		t.Setenv("ZEN_BDD_PROTOCOL", "responses")
+		t.Setenv("MEWLA_BDD_BASE_URL", "https://provider.example/v1")
+		t.Setenv("MEWLA_BDD_PROTOCOL", "responses")
 		if endpoint, _, _, err := bddConfiguredProvider(); err != nil || endpoint != "https://provider.example/v1/responses" {
 			t.Fatal("Responses binding failed")
 		}
-		t.Setenv("ZEN_BDD_PROTOCOL", "unknown")
+		t.Setenv("MEWLA_BDD_PROTOCOL", "unknown")
 		if _, _, _, err := bddConfiguredProvider(); err == nil {
 			t.Fatal("unknown protocol accepted")
 		}

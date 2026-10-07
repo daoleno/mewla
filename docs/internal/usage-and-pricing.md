@@ -1,10 +1,10 @@
 # Usage And Pricing
 
 Stats reads supported agent history from the current server. Switching servers
-rebinds the data; Zen does not aggregate unrelated servers into one bill.
+rebinds the data; Mewla does not aggregate unrelated servers into one bill.
 
 Reported charges remain reported charges. When a transcript supplies usage but
-not a charge, Zen can estimate from a reference catalog. The screen distinguishes
+not a charge, Mewla can estimate from a reference catalog. The screen distinguishes
 reported, estimated, mixed, and unknown costs, and preserves exact model/provider
 identities. A gateway's actual billing may differ from a public reference tariff.
 
@@ -37,7 +37,7 @@ Unknown does not mean zero:
 - **Some token rates unavailable**: the catalog does not price every reported token type.
 
 Discovery proving that a model exists does not prove its price. In particular,
-Zen does not guess a rate for `gpt-6-astra` or substitute another model's price.
+Mewla does not guess a rate for `gpt-6-astra` or substitute another model's price.
 Failed catalog requests retry automatically with backoff. Refresh Stats to read
 the latest collected result; it does not bypass that backoff. Missing catalog
 entries remain unknown until authoritative pricing becomes available.
@@ -46,7 +46,7 @@ entries remain unknown until authoritative pricing becomes available.
 
 Claude Code usage is already collected from the current daemon host's standard
 `~/.claude/projects/**/*.jsonl` history. This also works when Claude Code was
-launched with a Zen Custom Provider: the client still writes its normal native
+launched with a Mewla Custom Provider: the client still writes its normal native
 history. No proxy management API, remote helper, extra login or quota bridge is
 required. Background collection runs at startup and every five minutes; reopening
 Stats reads the current cached result, rather than forcing an inference request.
@@ -61,7 +61,7 @@ tokens. Sessions are counted by transcript/model per active day; multi-day range
 sum those daily counts rather than reporting unique lifetime conversations.
 
 These are local usage observations, not account-wide subscription utilization.
-The historical JSONL records do not reliably identify a Zen Provider connection.
+The historical JSONL records do not reliably identify a Mewla Provider connection.
 Consequently, model rows can include earlier connections using the same model;
 changing a Provider does not reassign or erase local history. The `anthropic`
 model/reference provider identifies the pricing family, not proof of a direct

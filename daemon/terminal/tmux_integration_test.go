@@ -542,7 +542,7 @@ func drainTmuxEvents(events <-chan Event, quiet time.Duration) {
 }
 
 // TestTmuxBackendViewSessionLivesOnTargetSocket covers Slice 3: the linked
-// view session for a Zen-owned Session is created on the target's own server
+// view session for a Mewla-owned Session is created on the target's own server
 // (link-window is server-local), so the user's default tmux server is never
 // involved and an unscoped default-server kill cannot affect the view or the
 // source Session.

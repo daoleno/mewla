@@ -16,10 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/addressbook"
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/control"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/statedir"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 const defaultListenAddr = "127.0.0.1:9876"
@@ -291,7 +292,7 @@ func (e env) checkPlatform() PlatformCheck {
 		check.Supported = false
 		check.Status = StatusFail
 		check.Remediation = RemediationUnsupportedPlatform
-		check.Summary = fmt.Sprintf("%s/%s is not supported; Zen requires Linux or macOS", check.OS, check.Arch)
+		check.Summary = fmt.Sprintf("%s/%s is not supported; Mewla requires Linux or macOS", check.OS, check.Arch)
 	}
 	return check
 }
@@ -373,7 +374,7 @@ func (e env) resolveStateDir() (string, bool, error) {
 	dir := strings.TrimSpace(e.opts.StateDir)
 	if dir == "" {
 		if home := strings.TrimSpace(e.opts.Home); home != "" {
-			dir = filepath.Join(home, ".zen")
+			dir = statedir.Default(home)
 		} else {
 			var err error
 			dir, err = auth.DefaultStorageDir()
@@ -397,7 +398,7 @@ func (e env) checkListen(stateDir string) ListenCheck {
 		check.DaemonID = daemonID
 		check.Available = false
 		check.Status = StatusOK
-		check.Summary = "Zen daemon already running"
+		check.Summary = "Mewla daemon already running"
 		return check
 	}
 
@@ -413,7 +414,7 @@ func (e env) checkListen(stateDir string) ListenCheck {
 	check.Available = false
 	check.Status = StatusFail
 	check.Remediation = RemediationPortInUse
-	check.Summary = fmt.Sprintf("listen address %s is in use by a non-Zen process", e.opts.Addr)
+	check.Summary = fmt.Sprintf("listen address %s is in use by a non-Mewla process", e.opts.Addr)
 	return check
 }
 
@@ -459,7 +460,7 @@ func (e env) checkExecutors() ExecutorsCheck {
 			}
 		}
 		if home != "" {
-			path = filepath.Join(home, ".zen", "executors.toml")
+			path = filepath.Join(statedir.Default(home), "executors.toml")
 		} else if p, err := work.DefaultExecutorsPath(); err == nil {
 			path = p
 		}
@@ -520,7 +521,7 @@ func (e env) checkExecutors() ExecutorsCheck {
 	case check.UsableCount > 0:
 		check.Status = StatusWarn
 		check.Summary = fmt.Sprintf("%d runnable executor(s) with unverified auth; host=%s", check.UsableCount, check.RecommendedHost)
-		check.Warnings = append(check.Warnings, "auth state is unknown for recommended executors; Zen did not pretend they are authenticated")
+		check.Warnings = append(check.Warnings, "auth state is unknown for recommended executors; Mewla did not pretend they are authenticated")
 		if check.RecommendationConfidence == ConfidenceUnverified {
 			check.Warnings = append(check.Warnings, "recommendations selected auth-unknown candidates because no verified authenticated executor exists")
 		}

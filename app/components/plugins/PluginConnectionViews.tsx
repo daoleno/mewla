@@ -380,7 +380,7 @@ export function ConnectOfferView({
         />
       </ListSection>
       {confirmIdentity !== null ? (
-        <ListSection title="Use the account signed in on this server?" footer="Zen keeps its own copy. Later sign-ins on the server don't change it.">
+        <ListSection title="Use the account signed in on this server?" footer="Mewla keeps its own copy. Later sign-ins on the server don't change it.">
           <ListRow icon="person-circle-outline" title={confirmIdentity || `${plugin.name} account`} subtitle={`${plugin.name} · identity verified`} />
           <View style={styles.cardActions}>
             <Button label={`Connect ${confirmIdentity || "this account"}`} variant="filled" block loading={busy} onPress={onImport} />
