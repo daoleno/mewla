@@ -12,6 +12,7 @@ const BINARY_UPLOAD_TYPE = 0;
 import { buildAuthorizationHeader } from "./auth";
 import { getServerById, type StoredServer } from "./storage";
 import { resolveCanonicalServerURL } from "./pinnedTransport";
+import { createWebUploadTask } from "./webUploadTask";
 
 export type UploadedAttachment = {
   name: string;
@@ -23,7 +24,7 @@ export type UploadedAttachment = {
 
 export type UploadDocumentAsset = Pick<
   DocumentPicker.DocumentPickerAsset,
-  "uri" | "name" | "mimeType" | "size"
+  "uri" | "name" | "mimeType" | "size" | "file"
 > & { selectionError?: string; selectionRetryable?: boolean };
 
 export type UploadProgressSnapshot = {
@@ -114,9 +115,12 @@ export function createAttachmentUploadOperation(
     throw new Error("File exceeds the 2 GiB upload limit.");
   }
 
-  const file = new File(asset.uri);
-  const originalName = asset.name || file.name || "upload";
-  const contentType = asset.mimeType || file.type || "application/octet-stream";
+  // A browser pick carries its DOM File; expo-file-system has no web File.
+  const nativeFile = asset.file ? null : new File(asset.uri);
+  const file = asset.file ?? nativeFile;
+  const originalName = asset.name || file?.name || "upload";
+  const contentType =
+    asset.mimeType || file?.type || "application/octet-stream";
   const encodedName = encodeUploadName(originalName);
   let task: UploadTask | null = null;
   let cancelRequested = false;
@@ -167,7 +171,13 @@ export function createAttachmentUploadOperation(
           headers: uploadHeaders,
           onProgress: onNativeProgress,
         })) ??
-        file.createUploadTask(uploadUrl, {
+        createWebUploadTask({
+          file: asset.file,
+          uploadUrl,
+          headers: uploadHeaders,
+          onProgress: onNativeProgress,
+        }) ??
+        nativeFile!.createUploadTask(uploadUrl, {
           httpMethod: "POST",
           uploadType: BINARY_UPLOAD_TYPE,
           headers: uploadHeaders,
