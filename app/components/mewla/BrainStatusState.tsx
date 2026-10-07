@@ -1,7 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 import { EmptyState } from "../ui";
-import { SealCat } from "./SealCat";
+import { TappableCat } from "./TappableCat";
 
 /**
  * Brain before it can chat: no computer paired (the seal is an empty bed),
@@ -24,7 +24,16 @@ export function BrainStatusState({
   return (
     <ScrollView contentContainerStyle={styles.center}>
       <EmptyState
-        art={<SealCat state={state} size={120} animate={animate} />}
+        art={
+          // The cat answers the way the button does: pair, or knock again.
+          <TappableCat
+            state={state}
+            size={120}
+            animate={animate}
+            onPress={state === "homeless" ? onSettings : state === "offline" ? onRetry : () => undefined}
+            accessibilityLabel={state === "homeless" ? "Brain's cat, pair a computer" : state === "offline" ? "Brain's cat, retry connection" : "Brain's cat, waking up"}
+          />
+        }
         title={
           state === "homeless"
             ? "Give Brain a home"

@@ -4,6 +4,8 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import type { BrainCatPresence } from "./brainCatState";
 import { TappableCat } from "./TappableCat";
+import type { BrainWorkSlip } from "../brain/brainWorkSurface";
+import type { WorkSlipAction } from "../brain/WorkSlip";
 
 export interface BrainCompanion {
   presence: BrainCatPresence;
@@ -13,6 +15,12 @@ export interface BrainCompanion {
   sessionLabels?: ReadonlyMap<string, string>;
   /** Opens the Work list; the tail row hands off to it. */
   onOpenWork?: () => void;
+  /** The live slip for a Work, with its inline actions, while it is current. */
+  workSlip?: (workId: string) => { slip: BrainWorkSlip; actions: readonly WorkSlipAction[] } | undefined;
+  /** Opens a current Work the way the Work list does. */
+  onOpenSlip?: (slip: BrainWorkSlip) => void;
+  /** The Working row reports while it is on screen, so only one cat shows. */
+  onTurnRunning?: (running: boolean) => void;
   /**
    * Tapping the cat. It returns the line the cat says back, if any (the
    * screen may also act: open a slip, retry the connection).
@@ -58,6 +66,12 @@ export function BrainCatRow({
 }) {
   const state = companion.presence.state;
   const { said, tap } = useCatSays(companion, turnRunning, detail || label);
+  const onTurnRunning = companion.onTurnRunning;
+  useEffect(() => {
+    if (!turnRunning || !onTurnRunning) return;
+    onTurnRunning(true);
+    return () => onTurnRunning(false);
+  }, [onTurnRunning, turnRunning]);
   return (
     <View style={styles.row}>
       <TappableCat

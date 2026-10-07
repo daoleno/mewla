@@ -128,7 +128,14 @@ export function brainWorkSurface(
     }
     if (!terminal && !work.attempt_session_id && OUTCOME_UNKNOWN_REASONS.has(work.attention_reason ?? "")) {
       stuck = "outcome_unknown";
-    } else if (!terminal && !replied && !work.question && group === "back" && status !== "failed" && waited > BRAIN_WORK_STUCK_AFTER_MS) {
+    } else if (
+      !terminal &&
+      !work.question &&
+      status !== "failed" &&
+      waited > BRAIN_WORK_STUCK_AFTER_MS &&
+      (group === "back" || replied)
+    ) {
+      // Back, or answered, for over a day and Brain has not moved it.
       stuck = "no_decision";
     }
     if (work.question) {
@@ -139,7 +146,7 @@ export function brainWorkSurface(
       group = "needs";
       status = "warning";
       statusLabel = stuck === "outcome_unknown" ? "Outcome unknown" : "No decision";
-    } else if (replied) {
+    } else if (replied && !stuck) {
       group = "running";
       status = "running";
       statusLabel = "With Brain";
@@ -160,11 +167,12 @@ export function brainWorkSurface(
       summary: work.question
         ? work.question
         : stuck
-          ? stuckSummary(stuck, waited)
+          ? stuckSummary(stuck, waited, Boolean(replied))
           : replied
             ? `You said “${replied.text ?? ""}”${replied.uncertain ? ". It may not have reached Brain." : ""}`
-            : slipSummary(work, group, worker),
-      updatedAt: work.updated_at,
+            : withAge(slipSummary(work, group, worker), group, waited),
+      // updated_at moves on every daemon sync; a waiting Work dates from when it began waiting.
+      updatedAt: work.attention_since ?? work.updated_at,
       sessionId: worker?.id,
       unread: work.unread_result,
       question: work.question,
@@ -237,11 +245,26 @@ export function brainWorkAge(ms: number): string {
   return days === 1 ? "a day" : `${days} days`;
 }
 
-function stuckSummary(stuck: NonNullable<BrainWorkSlip["stuck"]>, waited: number): string {
+function stuckSummary(stuck: NonNullable<BrainWorkSlip["stuck"]>, waited: number, replied: boolean): string {
   if (stuck === "outcome_unknown") {
     return "The Worker's Session ended without a result. Ask Brain to check, or close it.";
   }
+  if (replied) {
+    return `You answered ${brainWorkAge(waited)} ago and nothing came back. Close it, or ask Brain.`;
+  }
   return `Back for ${brainWorkAge(waited)} with no decision. Close it, or ask Brain.`;
+}
+
+/** A Needs-you slip waiting over a day says how long: "Waiting 6 days · …". */
+function withAge(summary: string | undefined, group: BrainWorkGroup, waited: number): string | undefined {
+  if (group !== "needs" || waited <= BRAIN_WORK_STUCK_AFTER_MS) return summary;
+  const age = `Waiting ${brainWorkAge(waited)}`;
+  return summary ? `${age} · ${summary}` : age;
+}
+
+/** A Needs-you slip that has waited over a day on you. */
+export function brainWorkSlipStale(slip: Pick<BrainWorkSlip, "group" | "waitedMs" | "stuck">): boolean {
+  return slip.group === "needs" && !slip.stuck && (slip.waitedMs ?? 0) > BRAIN_WORK_STUCK_AFTER_MS;
 }
 
 function slipSummary(

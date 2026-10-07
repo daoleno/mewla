@@ -46,6 +46,12 @@ export function BrainWorkEventCard({
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   const companion = useBrainCompanion();
+  // While the Work is current, the slip in the conversation is the live one:
+  // its next step inline, and a tap opens the same Work sheet.
+  const live = companion?.workSlip?.(item.event.work_id);
+  const onPress = live && companion?.onOpenSlip
+    ? () => companion.onOpenSlip?.(live.slip)
+    : item.onPress;
   const presentation = item.currentWork
     ? brainCurrentWorkLifecycle(item.currentWork, item.event)
     : brainWorkEventLifecycle(item.event);
@@ -76,7 +82,8 @@ export function BrainWorkEventCard({
       unread={item.event.unread}
       perched={Boolean(item.catPerched && companion)}
       animate={companion?.animate}
-      onPress={item.onPress}
+      actions={live?.actions}
+      onPress={onPress}
       accessibilityLabel={accessibilityLabel}
     >
       {card.facts.length > 0 ? (

@@ -32,7 +32,7 @@ Proof matches what the user will do: a regression test for a bug, the real inter
 - Brain decides decomposition, sequence, retries and acceptance. Work and append-only Events record commitments and facts; the runtime never drives it.
 - After delegating, wait for the result event; don't poll capture or repeat status.
 - Only Brain's review (work update -status done) or a user close (final) accepts Work, never a Worker or provider exit.
-- Ask about one Work on it: work update -status waiting -question "<q>" -choice "<a>"; replies say "Re: … (work <id>)".
+- Ask about one Work on it: work update -question "<q>" -choice "<a>" (add -status waiting if idle); replies say "Re: … (work <id>)".
 - Dispatched, delivery unknown and awaiting approval aren't progress; say which. Unknown delivery may have arrived, so check first: a resend is a second attempt.
 - Result events arrive once; act on them without acknowledgement. Report failures as failures.
 - Manage only delegated=true Sessions. Closing Work reclaims its completed Sessions; close one yourself only to free resources or hand off.

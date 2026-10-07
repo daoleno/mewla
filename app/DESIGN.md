@@ -111,7 +111,8 @@ Brain has one Work surface, built from the daemon's `current_work`
 - **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
   (`BrainWorkColumn`): "Work", a count line, then slips grouped Needs you ·
   Running · Back · Waiting. The cat sits on the first Needs-you slip there,
-  and the conversation drops its between-turn tail row.
+  and the conversation drops its between-turn tail row. While Brain's turn
+  runs, the cat is in the Working row and the column has none.
 - **Phone.** Under the app bar, one line ("● 6 need you · 2 running · 2 back ›")
   opens the same grouped list as a sheet. The seal dot shows only when
   something needs you.
@@ -137,12 +138,12 @@ the vermilion Send. Destructive actions confirm first.
 | Slip | Actions |
 | --- | --- |
 | Needs you, with Brain's question | each choice · Something else… · Snooze · Not needed anymore |
-| Needs you | Reply · Snooze · Not needed anymore |
+| Needs you | Reply · Snooze · Not needed anymore; waiting over a day, the line starts "Waiting 6 days" and the slip offers Not needed anymore beside Reply |
 | Outcome unknown (Session ended without a result) | Ask Brain to check · Close it · Not needed anymore |
 | Back, or No decision (back over a day) | Accept · Ask Brain about this · Not needed anymore |
 | Failed | Retry with Brain · Dismiss |
 | Running | Open Worker · Ask Brain about this · Stop (confirm) |
-| With Brain (you replied) | the Worker, or Ask Brain about this |
+| With Brain (you replied) | the Worker, or Ask Brain about this; nothing back after a day, it is No decision again |
 | Closed, unread | Mark reviewed · Ask Brain about this |
 
 **Decision: the user may close Work directly.** Accept closes the Work as
@@ -161,6 +162,9 @@ admission is uncertain.
 Worker's reported phase ("Verifying · Running go test"). These are app
 derivations from `attention_since`, `attention_reason` and `snoozed_until`;
 the daemon writes nothing on a timer.
+
+A Work result in the conversation is that Work's slip while the Work is
+current: the same inline actions, and a tap opens the same Work sheet.
 
 In the conversation, every Work result is a full slip (`WorkSlip`):
 executor · project · time, the state, the title and one line. A Work's slip
@@ -322,12 +326,12 @@ look, with the landing's bolder carving at small sizes.
 | Product state | Cat | Where | Tap |
 | --- | --- | --- | --- |
 | Brain idle | Curled in the seal, breathing, three z's | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
-| App start, connecting, loading history | In the seal, one eye open, the right ear flicks twice every 3.2 s | App start (`CatSplash`), Brain status screen, chat loading, Sessions loading/connecting | "Still waking up…" |
+| App start, connecting, loading history | In the seal, one eye open, the right ear flicks twice every 3.2 s | App start (`CatSplash`), Brain status screen, chat loading, Sessions loading/connecting; tail row "Waking up" | "Still waking up…" |
 | Brain's turn running | Out of the seal, sitting up and kneading, tail swishing | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
 | Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
 | Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" | The status line |
 | Unread result | Loafing with a parcel | Tail row, "Brought 2 things back" | The status line |
-| Offline | Asleep in a greyed seal | Brain status screen, Sessions offline | Retries the connection: "Knocking on your computer…" |
+| Offline | Asleep in a greyed seal | Brain status screen, Sessions offline; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
 | No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Sessions, Onboarding | Opens pairing |
 | Paired | Asleep in the seal (moved in) | Onboarding, connected; an empty Work sheet | — |
 

@@ -69,6 +69,18 @@ test("failed: retry through Brain, or dismiss", () => {
 });
 
 describe("nothing stays stuck", () => {
+  test("a Needs-you Work waiting for days says how long", () => {
+    const slip = slipOf(work({ status: "waiting", wake: { kind: "user_input", ref: "operator:1" }, wait_for: "Apple account holder resolves the agreement", attention_since: hoursAgo(24 * 6) }));
+    expect(slip.summary).toBe("Waiting 6 days · Apple account holder resolves the agreement");
+    expect(slip.group).toBe("needs");
+  });
+
+  test("an answer nothing came back from for a day is a decision again", () => {
+    const slip = slipOf(work({ status: "open", progress_mode: "ready", user_action: { kind: "reply", text: "Keep both", at: hoursAgo(30), admission: "accepted" }, attention_since: hoursAgo(30) }));
+    expect(slip).toMatchObject({ group: "needs", stuck: "no_decision" });
+    expect(slip.summary).toContain("You answered a day ago");
+  });
+
   test("a Worker that vanished without a result is a decision, not a dead card", () => {
     const slip = slipOf(work({ status: "needs_input", progress_mode: "ready", attention_reason: "turn_lost", attention_since: hoursAgo(3) }));
     expect(slip).toMatchObject({ group: "needs", stuck: "outcome_unknown", status: "warning", statusLabel: "Outcome unknown" });
