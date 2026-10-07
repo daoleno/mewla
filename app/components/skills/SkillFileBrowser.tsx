@@ -283,7 +283,7 @@ function TreeNode({
           }
           size={17}
           color={
-            node.kind === "directory" ? colors.warning : colors.textTertiary
+            node.kind === "directory" ? colors.textSecondary : colors.textTertiary
           }
         />
         <Text
