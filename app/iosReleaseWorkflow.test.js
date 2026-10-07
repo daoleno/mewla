@@ -31,7 +31,7 @@ describe('iOS signed release identity contract', () => {
     expect(workflow).toContain('tracked iOS buildNumber must be a positive integer');
     expect(workflow).not.toContain('tracked iOS buildNumber must equal Android versionCode');
     expect(workflow).not.toContain('version_code = base.get("android", {}).get("versionCode")');
-    expect(workflow).toContain('ZEN_IOS_BUILD_NUMBER="$(python3 - "$ZEN_RELEASE_TAG"');
+    expect(workflow).toContain('MEWLA_IOS_BUILD_NUMBER="$(python3 - "$ZEN_RELEASE_TAG"');
     expect(workflow).not.toContain('github.run_number');
   });
 
@@ -44,7 +44,7 @@ describe('iOS signed release identity contract', () => {
     expect(workflow).toContain("github.event_name == 'push' || inputs.app_identity == 'preview'");
     expect(workflow).toContain("'app-store-connect-preview'");
     expect(workflow).toContain("'app-store-connect'");
-    expect(workflow).toContain("ZEN_IOS_APP_VARIANT: ${{ github.event_name == 'push' && 'preview' || inputs.app_identity }}");
+    expect(workflow).toContain("MEWLA_IOS_APP_VARIANT: ${{ github.event_name == 'push' && 'preview' || inputs.app_identity }}");
   });
 
   it('derives signing, native project, artifact, and verification values from the closed identity', () => {

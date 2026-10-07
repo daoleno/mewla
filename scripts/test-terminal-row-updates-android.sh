@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERIAL="${1:?usage: test-terminal-row-updates-android.sh DEVICE_SERIAL}"
 SDK="${ANDROID_HOME:?ANDROID_HOME is required}"
-BUILD_TMP="${ZEN_BUILD_TMPDIR:-${TMPDIR:-/tmp}}/terminal-row-updates-test"
+BUILD_TMP="${MEWLA_BUILD_TMPDIR:-${TMPDIR:-/tmp}}/terminal-row-updates-test"
 MODULE="$ROOT/app/modules/zen-terminal-vt"
 ABI="$(adb -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
 case "$ABI" in

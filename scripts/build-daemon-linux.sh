@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build release-shaped mewla binaries for Linux amd64/arm64 and macOS arm64.
 #
-# Reads product version from app/app.base.json (expo.version) unless MEWLA_VERSION (or legacy ZEN_VERSION) is set.
+# Reads product version from app/app.base.json (expo.version) unless MEWLA_VERSION is set.
 # Embeds the web UI via scripts/build-web-ui.sh (needs `bun install`).
 # Does not publish, tag, sign Android APKs, or read release keystores.
 #
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-VERSION="${MEWLA_VERSION:-${ZEN_VERSION:-}}"
+VERSION="${MEWLA_VERSION:-}"
 if [[ -z "$VERSION" ]]; then
   VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
 fi

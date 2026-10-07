@@ -122,16 +122,16 @@ class ExplicitReleaseVersionTests(unittest.TestCase):
 
 class ChangelogValidationTests(unittest.TestCase):
     def test_accepts_older_semver_core_history(self):
-        scratch = os.environ.get("ZEN_BUILD_TMPDIR") or os.environ.get("TMPDIR")
+        scratch = os.environ.get("MEWLA_BUILD_TMPDIR") or os.environ.get("TMPDIR")
         with tempfile.TemporaryDirectory(
-            prefix="zen-changelog-", dir=Path(scratch) if scratch else None
+            prefix="mewla-changelog-", dir=Path(scratch) if scratch else None
         ) as temporary:
             root = Path(temporary)
             notes = root / "docs/releases"
             notes.mkdir(parents=True)
             for tag in ("v0.1.1-beta.1", "v0.1.0-beta.8"):
                 (notes / f"{tag}.md").write_text(
-                    f"# Zen {tag}\n", encoding="utf-8"
+                    f"# Mewla {tag}\n", encoding="utf-8"
                 )
             changelog = (
                 prepare_release.CHANGELOG_PREFIX
@@ -148,12 +148,12 @@ class ChangelogValidationTests(unittest.TestCase):
 
 class PrepareReleaseIntegrationTests(unittest.TestCase):
     def setUp(self):
-        scratch = os.environ.get("ZEN_BUILD_TMPDIR") or os.environ.get("TMPDIR")
+        scratch = os.environ.get("MEWLA_BUILD_TMPDIR") or os.environ.get("TMPDIR")
         scratch_path = Path(scratch) if scratch else None
         if scratch_path is not None:
             scratch_path.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(
-            prefix="zen-prepare-release-", dir=scratch_path
+            prefix="mewla-prepare-release-", dir=scratch_path
         )
         self.addCleanup(self.temp.cleanup)
         self.fixture = Path(self.temp.name)
@@ -169,8 +169,8 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             shutil.copy2(source, target)
 
         git(root, "init", "-b", "main")
-        git(root, "config", "user.name", "Zen Test")
-        git(root, "config", "user.email", "zen-test@example.invalid")
+        git(root, "config", "user.name", "Mewla Test")
+        git(root, "config", "user.email", "mewla-test@example.invalid")
         git(root, "add", "--all")
         git(root, "commit", "-m", f"Release {CURRENT_TAG}")
         git(
@@ -179,7 +179,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             "-a",
             CURRENT_TAG,
             "-m",
-            f"Zen {CURRENT_TAG}",
+            f"Mewla {CURRENT_TAG}",
         )
         if with_commit:
             (root / "feature.txt").write_text(
@@ -235,7 +235,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         previous_notes = (root / f"docs/releases/{CURRENT_TAG}.md").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(previous_notes.splitlines()[0], f"# Zen {CURRENT_TAG}")
+        self.assertEqual(previous_notes.splitlines()[0], f"# Mewla {CURRENT_TAG}")
         self.assertEqual(
             [
                 line
@@ -436,7 +436,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         mismatches = (
             (
                 "ios-preview-bundle",
-                "- Bundle: `com.daoleno.zen.preview`",
+                "- Bundle: `com.daoleno.mewla.preview`",
                 "- Bundle: `com.example.wrong.preview`",
                 "iOS Preview bundle does not match app/iosIdentity.js",
             ),
@@ -491,7 +491,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         release_job_header = workflow.split("steps:", 1)[0]
         self.assertNotIn("runner.temp", release_job_header)
         self.assertEqual(
-            workflow.count("ZEN_BUILD_TMPDIR: ${{ runner.temp }}/zen-build"),
+            workflow.count("MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/zen-build"),
             1,
         )
         test_step = workflow.split(
@@ -499,7 +499,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             1,
         )[1].split("- name: Prepare deterministic release identity and notes", 1)[0]
         self.assertLess(
-            test_step.index('mkdir -p "$ZEN_BUILD_TMPDIR"'),
+            test_step.index('mkdir -p "$MEWLA_BUILD_TMPDIR"'),
             test_step.index("python3 -m unittest discover"),
         )
         permissions = workflow.split("permissions:", 1)[1].split("jobs:", 1)[0]

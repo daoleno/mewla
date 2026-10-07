@@ -62,7 +62,7 @@ verify_ios_identity() {
   local variant="$1"
   local expected_name="$2"
   local expected_bundle="$3"
-  ZEN_IOS_APP_VARIANT="$variant" \
+  MEWLA_IOS_APP_VARIANT="$variant" \
     node - "$expected_name" "$expected_bundle" "$EXPECTED_PACKAGE" "$EXPECTED_IOS_BUILD_NUMBER" "$EXPECTED_VERSION" <<'JS'
 const createConfig = require('./app/app.config.js');
 const expectedDisplayName = process.argv[2];
@@ -128,27 +128,16 @@ stage = sys.argv[7] if len(sys.argv) > 7 else ""
 
 errors = []
 
-# Daemon archives and the executable each contains. The zen-* copies keep
-# self-updaters released before the Mewla rename working.
+# Daemon archives and the executable each contains.
 DAEMON_ARCHIVE_ENTRIES = {
     "mewla-linux-amd64.tar.gz": "mewla",
     "mewla-linux-arm64.tar.gz": "mewla",
     "mewla-darwin-arm64.tar.gz": "mewla",
-    "zen-linux-amd64.tar.gz": "zen",
-    "zen-linux-arm64.tar.gz": "zen",
-    "zen-darwin-arm64.tar.gz": "zen",
 }
 DAEMON_ARCHIVES = tuple(DAEMON_ARCHIVE_ENTRIES)
 
-# The last release published as Zen keeps the names it actually shipped in its
-# tracked notes. (A tuple, so release preparation never rewrites it.)
-LAST_ZEN_RELEASE = (0, 1, 15)
-if tuple(int(part) for part in exp_version.split("-", 1)[0].split(".")) == LAST_ZEN_RELEASE and "-" not in exp_version:
-    notes_package = "com.daoleno.zen"
-    notes_daemons = ("zen-linux-amd64", "zen-linux-arm64")
-else:
-    notes_package = exp_package
-    notes_daemons = ("mewla-linux-amd64", "mewla-linux-arm64")
+notes_package = exp_package
+notes_daemons = ("mewla-linux-amd64", "mewla-linux-arm64")
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -275,7 +264,7 @@ for rel in (
     "scripts/verify-apk-release.sh",
     "scripts/materialize-android-keystore.sh",
     "scripts/sign-release-manifest.sh",
-    "release/zen-update-public-key.pem",
+    "release/mewla-update-public-key.pem",
     "docs/ci-release.md",
     ".github/workflows/release-artifacts.yml",
 ):
@@ -359,7 +348,7 @@ for rel in ("LICENSE", "NOTICE", "TRADEMARKS.md", "app/assets/notices/GHOSTTY-MI
     if not (root / rel).is_file():
         errors.append(f"missing repo legal/notice file: {rel}")
 
-public_key_pem = root / "release/zen-update-public-key.pem"
+public_key_pem = root / "release/mewla-update-public-key.pem"
 updater_go = root / "daemon/selfupdate/selfupdate.go"
 if public_key_pem.is_file() and updater_go.is_file():
     public_der_b64 = "".join(
@@ -436,7 +425,7 @@ if stage:
                 errors.append(f"release manifest daemon targets: got {daemon.get('targets')!r}")
 
             signature_path = stage_p / "release-manifest.json.sig"
-            public_key = root / "release/zen-update-public-key.pem"
+            public_key = root / "release/mewla-update-public-key.pem"
             if signature_path.is_file() and public_key.is_file():
                 import subprocess
                 verified = subprocess.run(

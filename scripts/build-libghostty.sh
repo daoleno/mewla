@@ -7,7 +7,7 @@
 #   ./scripts/build-libghostty.sh --abis arm64-v8a
 #   ALLOW_DIRTY_GHOSTTY=1 ./scripts/build-libghostty.sh   # developer only; non-release
 #   ALLOW_UNPROVEN_GHOSTTY=1 ./scripts/build-libghostty.sh  # no .git; non-release
-#   ZEN_BUILD_TMPDIR=/durable/path ./scripts/build-libghostty.sh
+#   MEWLA_BUILD_TMPDIR=/durable/path ./scripts/build-libghostty.sh
 #
 # Requires: zig (version from native.lock.json), git, python3
 # Ghostty source: GHOSTTY_SRC, or a clone under ${ZEN_GHOSTTY_CACHE:-$HOME/.cache/zen/ghostty}
@@ -44,13 +44,13 @@ default_build_tmpdir() {
 }
 
 # Large native build worktrees must not fall back to the host's global
-# temporary filesystem. Delegated sessions set ZEN_BUILD_TMPDIR to their
+# temporary filesystem. Delegated sessions set MEWLA_BUILD_TMPDIR to their
 # private Mewla-owned resource directory, so lifecycle teardown reclaims it.
 # Direct developer builds use a durable platform cache and retain the normal
 # EXIT/INT/TERM cleanup below.
-BUILD_TMP_ROOT="${ZEN_BUILD_TMPDIR:-$(default_build_tmpdir)}"
+BUILD_TMP_ROOT="${MEWLA_BUILD_TMPDIR:-$(default_build_tmpdir)}"
 if [[ "$BUILD_TMP_ROOT" != /* ]]; then
-  echo "error: ZEN_BUILD_TMPDIR must be an absolute path: $BUILD_TMP_ROOT" >&2
+  echo "error: MEWLA_BUILD_TMPDIR must be an absolute path: $BUILD_TMP_ROOT" >&2
   exit 1
 fi
 mkdir -p "$BUILD_TMP_ROOT"

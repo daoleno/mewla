@@ -27,9 +27,7 @@ import (
 const (
 	DefaultAPIURL = "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
 	ManifestAsset = "release-manifest.json"
-	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz. Legacy
-	// zen-<os>-<arch>.tar.gz copies (entry "zen") exist only for pre-rename
-	// installs that still update by the old names.
+	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz.
 	ArchiveBinary       = "mewla"
 	ManifestSignature   = "release-manifest.json.sig"
 	maxManifestSize     = 1 << 20
@@ -263,7 +261,7 @@ func ParseManifest(raw []byte) (Manifest, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return manifest, errors.New("signed release manifest has trailing data")
 	}
-	if manifest.SchemaVersion != 2 || (manifest.Product != "mewla" && manifest.Product != "zen") {
+	if manifest.SchemaVersion != 2 || manifest.Product != "mewla" {
 		return manifest, errors.New("unsupported signed release manifest")
 	}
 	if _, err := parseSemVersion(manifest.Version); err != nil {
