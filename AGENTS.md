@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Zen is a mobile-native control plane. Go code is in daemon/ (cmd/mewla, server, auth, work, terminal, watcher); Expo/React Native code is in app/ (app routes, components, services, store, constants, assets). Product documentation is in docs/.
+Mewla is a mobile-native control plane. Go code is in daemon/ (cmd/mewla, server, auth, work, terminal, watcher); Expo/React Native code is in app/ (app routes, components, services, store, constants, assets). Product documentation is in docs/.
 
 ## Execution
 
