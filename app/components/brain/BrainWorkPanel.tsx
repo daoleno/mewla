@@ -114,11 +114,14 @@ export function BrainWorkColumn({
   onOpenSlip,
   actionsFor,
   onCatPress,
+  perch = true,
 }: {
   surface: BrainWorkSurface;
   chrome: TerminalThemeChrome;
   topInset: number;
   animate: boolean;
+  /** False while Brain's turn runs: the cat is in the conversation, working. */
+  perch?: boolean;
   onOpenSlip(slip: BrainWorkSlip): void;
   actionsFor?: BrainWorkActionsFor;
   onCatPress?: () => void;
@@ -140,7 +143,7 @@ export function BrainWorkColumn({
         <BrainWorkList
           surface={surface}
           chrome={chrome}
-          perch
+          perch={perch}
           animate={animate}
           onOpenSlip={onOpenSlip}
           actionsFor={actionsFor}

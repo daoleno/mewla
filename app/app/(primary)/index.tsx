@@ -34,6 +34,7 @@ import {
   BrainWorkSheet,
 } from "../../components/brain/BrainWorkPanel";
 import {
+  brainWorkSlipStale,
   brainWorkSurface,
   workerWho,
   type BrainWorkSlip,
@@ -173,6 +174,7 @@ export default function BrainScreen() {
   );
   const [workSheetVisible, setWorkSheetVisible] = useState(false);
   const [selectedWorkSlip, setSelectedWorkSlip] = useState<BrainWorkSlip | null>(null);
+  const [brainTurnRunning, setBrainTurnRunning] = useState(false);
   useEffect(() => {
     setWorkSheetVisible(false);
     setSelectedWorkSlip(null);
@@ -201,52 +203,6 @@ export default function BrainScreen() {
   const openPairing = useCallback(() => {
     router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } });
   }, [activeServer, router]);
-  const brainCompanion = useMemo<BrainCompanion>(() => {
-    const presence = resolveBrainCatPresence({
-      hasServer: Boolean(activeServer),
-      connection: connectionState,
-      hydrated: Boolean(activeBrain?.hydrated),
-      currentWork: activeBrain?.current_work,
-    });
-    return {
-      // The Work column perches the cat on its first Needs-you slip; the
-      // conversation then has no tail row, so there is one cat on screen.
-      presence: workColumn && presence.state === "attention" ? { ...presence, away: true } : presence,
-      animate: screenFocused,
-      sessionLabels,
-      onOpenWork: workColumn ? undefined : openWorkList,
-      onCatTap: ({ turnRunning, turnLabel }) => {
-        const answer = brainCatTap({ presence, turnRunning, turnLabel, counts: workSurface.counts });
-        switch (answer.kind) {
-          case "retry":
-            retryConnection();
-            return "Knocking on your computer…";
-          case "pair":
-            openPairing();
-            return null;
-          case "open-work": {
-            const slip = workSurface.slips.find((item) => item.workId === answer.workId);
-            if (slip) setSelectedWorkSlip(slip);
-            return null;
-          }
-          default:
-            return answer.text;
-        }
-      },
-    };
-  }, [
-    activeBrain?.current_work,
-    activeBrain?.hydrated,
-    activeServer,
-    connectionState,
-    openPairing,
-    openWorkList,
-    retryConnection,
-    screenFocused,
-    sessionLabels,
-    workColumn,
-    workSurface,
-  ]);
   const showBrainLoading = shouldShowBrainLoadingState({
     hydrated: Boolean(activeBrain?.hydrated),
     hasHostWorker: Boolean(hostWorker?.id),
@@ -581,7 +537,10 @@ export default function BrainScreen() {
         ? all.filter((action) => !(action.kind === "reply" && slip.closed))
         : slip.question
           ? all.filter((action) => action.kind === "answer" || action.kind === "reply").slice(0, 3)
-          : all.filter((action) => action.primary).slice(0, 1);
+          : brainWorkSlipStale(slip)
+            // Waiting for days: offer the way out beside the reply.
+            ? all.filter((action) => action.primary || action.kind === "dismiss").slice(0, 2)
+            : all.filter((action) => action.primary).slice(0, 1);
       return shown.map((action) => ({
         key: `${action.kind}:${action.text ?? action.label}`,
         label: action.label,
@@ -593,6 +552,62 @@ export default function BrainScreen() {
     },
     [runWorkAction, workActionBusy],
   );
+  const brainCompanion = useMemo<BrainCompanion>(() => {
+    const presence = resolveBrainCatPresence({
+      hasServer: Boolean(activeServer),
+      connection: connectionState,
+      hydrated: Boolean(activeBrain?.hydrated),
+      currentWork: activeBrain?.current_work,
+    });
+    return {
+      // The Work column perches the cat on its first Needs-you slip; the
+      // conversation then has no tail row, so there is one cat on screen.
+      presence: workColumn && presence.state === "attention" ? { ...presence, away: true } : presence,
+      animate: screenFocused,
+      sessionLabels,
+      onOpenWork: workColumn ? undefined : openWorkList,
+      // A Work result in the conversation is that Work's slip: same actions,
+      // same sheet.
+      workSlip: (workId) => {
+        const slip = workSurface.slips.find((item) => item.workId === workId);
+        return slip ? { slip, actions: workActionsFor(slip, "slip") } : undefined;
+      },
+      onOpenSlip: openWorkSlip,
+      onTurnRunning: setBrainTurnRunning,
+      onCatTap: ({ turnRunning, turnLabel }) => {
+        const answer = brainCatTap({ presence, turnRunning, turnLabel, counts: workSurface.counts });
+        switch (answer.kind) {
+          case "retry":
+            retryConnection();
+            return "Knocking on your computer…";
+          case "pair":
+            openPairing();
+            return null;
+          case "open-work": {
+            const slip = workSurface.slips.find((item) => item.workId === answer.workId);
+            if (slip) setSelectedWorkSlip(slip);
+            return null;
+          }
+          default:
+            return answer.text;
+        }
+      },
+    };
+  }, [
+    activeBrain?.current_work,
+    activeBrain?.hydrated,
+    activeServer,
+    connectionState,
+    openPairing,
+    openWorkList,
+    openWorkSlip,
+    retryConnection,
+    screenFocused,
+    sessionLabels,
+    workActionsFor,
+    workColumn,
+    workSurface,
+  ]);
   // The open sheet follows the Work as the daemon updates it.
   const liveSelectedSlip = selectedWorkSlip
     ? workSurface.slips.find((slip) => slip.workId === selectedWorkSlip.workId) ?? selectedWorkSlip
@@ -729,6 +744,7 @@ export default function BrainScreen() {
           chrome={chrome}
           topInset={topChromeInset}
           animate={screenFocused}
+          perch={!brainTurnRunning}
           onOpenSlip={openWorkSlip}
           actionsFor={workActionsFor}
           onCatPress={() => {

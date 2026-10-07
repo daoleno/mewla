@@ -86,6 +86,11 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
       return count > 1 ? `Waiting on ${count} Workers` : "Waiting on a Worker";
     case "idle":
       return "All quiet";
+    // The chat stays readable while the link is down; the cat says so.
+    case "offline":
+      return "Can't reach your computer";
+    case "waking":
+      return "Waking up";
     default:
       return null;
   }

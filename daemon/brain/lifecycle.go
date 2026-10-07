@@ -1544,7 +1544,12 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 		database.BrainWork[index] = updated
 	}
 	if update.Question != nil || update.Choices != nil {
-		updated = applyWorkQuestion(updated, update.Question, update.Choices, now)
+		choices := update.Choices
+		if update.Question != nil && choices == nil {
+			// A new question never inherits the last one's answers.
+			choices = &[]string{}
+		}
+		updated = applyWorkQuestion(updated, update.Question, choices, now)
 		database.BrainWork[index] = updated
 	}
 	return updated, nil

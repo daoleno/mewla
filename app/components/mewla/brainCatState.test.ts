@@ -50,7 +50,7 @@ describe("resolveBrainCatPresence", () => {
     expect(resolveBrainCatPresence(connected).state).toBe("idle");
   });
 
-  test("only between-turn states get a tail row", () => {
+  test("between turns, and while the link is down, the cat holds a tail row", () => {
     expect(brainCatTailLabel({ state: "attention" })).toBe("Needs you");
     expect(brainCatTailLabel({ state: "delivered" })).toBe("Brought something back");
     expect(brainCatTailLabel({ state: "delegating" })).toBe("Waiting on a Worker");
@@ -58,7 +58,9 @@ describe("resolveBrainCatPresence", () => {
     expect(brainCatTailLabel({ state: "delivered", count: 2 })).toBe("Brought 2 things back");
     expect(brainCatTailLabel({ state: "delegating", count: 3 })).toBe("Waiting on 3 Workers");
     expect(brainCatTailLabel({ state: "idle" })).toBe("All quiet");
-    for (const state of ["working", "waking", "offline", "homeless"] as const) {
+    expect(brainCatTailLabel({ state: "offline" })).toBe("Can't reach your computer");
+    expect(brainCatTailLabel({ state: "waking" })).toBe("Waking up");
+    for (const state of ["working", "homeless"] as const) {
       expect(brainCatTailLabel({ state })).toBeNull();
     }
   });

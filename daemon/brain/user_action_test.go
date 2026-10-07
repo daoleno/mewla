@@ -204,3 +204,39 @@ func TestStopRequiresARunningDelegatedWorker(t *testing.T) {
 		t.Fatal("a refused stop closed the Work")
 	}
 }
+
+func TestQuestionOnOwnedWorkNeedsNoWaitAndANewQuestionDropsOldChoices(t *testing.T) {
+	store, _, _, _ := newUserActionService(t)
+	item := askUser(t, store, "first", "A", "B")
+	question := "Which branch?"
+	updated, err := store.UpdateWork(item.ID, WorkUpdate{Question: &question})
+	if err != nil || updated.Question != question || updated.Choices != nil {
+		t.Fatalf("a new question must not inherit choices: %+v err=%v", updated, err)
+	}
+	owned := admittedOwnedWork(t, store, "owned question")
+	q := "Ship it now?"
+	choices := []string{"Ship", "Wait"}
+	after, err := store.UpdateWork(owned.ID, WorkUpdate{Question: &q, Choices: &choices})
+	if err != nil || after.Question != q || len(after.Choices) != 2 || after.Status != WorkRunning {
+		t.Fatalf("question on owned Work: %+v err=%v", after, err)
+	}
+}
+
+func admittedOwnedWork(t *testing.T, store *Store, title string) Work {
+	t.Helper()
+	item, err := store.CreateWork(Work{Title: title, Objective: "owned by a Worker", CompletionPolicy: CompletionBounded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.fsmAdmitTurn(item.ID, "%77", "turn-owned-question", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SyncWorkProjection(item.ID); err != nil {
+		t.Fatal(err)
+	}
+	item, err = store.Work(item.ID)
+	if err != nil || item.AttemptSessionID != "%77" {
+		t.Fatalf("setup must own the Work: %+v err=%v", item, err)
+	}
+	return item
+}
