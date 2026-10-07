@@ -422,7 +422,8 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	brainHelp := brainOutput.String()
 	for _, want := range []string{
-		"Usage: mewla brain <workspace|context|playbooks|gc|work|executors|use> [flags]",
+		"Usage: mewla brain <workspace|context|playbooks|gc|work|objective|executors|use> [flags]",
+		"mewla brain objective set",
 		"Reconcile product-owned Brain workspace blocks while preserving user content",
 		"mewla brain workspace --json",
 		"mewla brain context --json",
@@ -745,5 +746,45 @@ func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
 	text := output.String()
 	if !strings.Contains(text, "https://zen.example/#pair=") || !strings.Contains(text, "Scan on your phone") || !strings.Contains(text, "█") {
 		t.Fatal("fresh startup must print HTTPS link and QR")
+	}
+}
+
+func TestBrainObjectiveCLISendsControlRequests(t *testing.T) {
+	for _, tc := range []struct {
+		args     []string
+		wantType string
+		wantText string
+	}{
+		{args: []string{"set", "Ship", "atlas-notes v1.4"}, wantType: "brain_objective_set", wantText: "Ship atlas-notes v1.4"},
+		{args: []string{"clear"}, wantType: "brain_objective_clear"},
+		{args: nil, wantType: "brain_objective"},
+	} {
+		stateDir := t.TempDir()
+		handler, done, cancel := startCLIControlServer(t, stateDir)
+		args := append([]string(nil), tc.args...)
+		if len(args) > 0 {
+			args = append([]string{args[0], "--state-dir", stateDir, "--json=false"}, args[1:]...)
+		} else {
+			args = []string{"--state-dir", stateDir, "--json=false"}
+		}
+		var stderr bytes.Buffer
+		if err := runBrainObjective(args, &stderr); err != nil {
+			t.Fatalf("runBrainObjective(%v) error = %v stderr=%s", tc.args, err, stderr.String())
+		}
+		var req control.Request
+		select {
+		case req = <-handler.requests:
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for control request")
+		}
+		cancel()
+		waitForCLIControlServerShutdown(t, done)
+		if req.Type != tc.wantType || req.Text != tc.wantText {
+			t.Fatalf("%v sent %q %q, want %q %q", tc.args, req.Type, req.Text, tc.wantType, tc.wantText)
+		}
+	}
+	var stderr bytes.Buffer
+	if err := runBrainObjective([]string{"set"}, &stderr); err == nil {
+		t.Fatal("objective set without a title was accepted")
 	}
 }

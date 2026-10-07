@@ -36,6 +36,7 @@ type Snapshot struct {
 	Personality  string                `json:"personality"`
 	CurrentWork  []CurrentWork         `json:"current_work"`
 	WorkBacklog  WorkBacklog           `json:"work_backlog"`
+	Objective    *Objective            `json:"objective,omitempty"`
 	Workers      []WorkerRef           `json:"workers"`
 	HostWorker   *WorkerRef            `json:"host_worker,omitempty"`
 	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`
@@ -54,6 +55,7 @@ type BrainContext struct {
 	Personality  string                `json:"personality,omitempty"`
 	CurrentWork  []CurrentWork         `json:"current_work"`
 	WorkBacklog  WorkBacklog           `json:"work_backlog"`
+	Objective    *Objective            `json:"objective,omitempty"`
 	Playbooks    []PlaybookEntry       `json:"playbooks,omitempty"`
 	HostWorker   *WorkerRef            `json:"host_worker,omitempty"`
 	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`

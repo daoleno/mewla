@@ -100,7 +100,7 @@ func TestMaterializeProviderConversationSuppressesQueuedHostActivationTurn(t *te
 	}
 }
 
-func TestWorkCardProjectionReplacesInPlace(t *testing.T) {
+func TestWorkCardProjectionKeepsOneSlipAtNewestResult(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +142,19 @@ func TestWorkCardProjectionReplacesInPlace(t *testing.T) {
 		t.Fatalf("exact-once failed: again=%#v materialized=%v err=%v", card1Again, materialized, err)
 	}
 
+	reply, err := store.AppendTimelineItem(TimelineItem{
+		ID:        "reply-after-first-result",
+		ThreadID:  threadID,
+		SessionID: "provider",
+		Role:      "assistant",
+		Kind:      timelineKindAssistantMessage,
+		Body:      "Brain answered after the first result",
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	second, created, err := store.AppendWorkEvent(WorkEvent{
 		WorkID:     item.ID,
 		Kind:       "session.done",
@@ -163,8 +176,13 @@ func TestWorkCardProjectionReplacesInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	visible := TimelineItemsToConversationEvents(items)
-	if len(visible) != 1 || visible[0].ID != second.ID || visible[0].Status != "session.done" {
+	// One slip for the Work, moved to when the newest result came back: after
+	// the reply that followed the first result, not in the first result's slot.
+	if len(visible) != 2 || visible[0].ID != reply.ID || visible[1].ID != second.ID || visible[1].Status != "session.done" {
 		t.Fatalf("single Work card projection = %#v", visible)
+	}
+	if !card2.CreatedAt.Equal(second.CreatedAt) {
+		t.Fatalf("slip time = %s want newest result %s", card2.CreatedAt, second.CreatedAt)
 	}
 }
 
