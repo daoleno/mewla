@@ -53,6 +53,9 @@ import {
 } from "./turnFocusState";
 const TEXT_SELECTION_ANCHOR_SETTLE_MS = 30000;
 const TEXT_SELECTION_ANCHOR_MAX_MS = 60000;
+// react-native-web emits no drag or momentum callbacks. Wheel and touch input
+// opens a user-scroll window that the scroll events it causes keep open.
+const WEB_SCROLL_INTENT_SETTLE_MS = 180;
 
 type UseInterfaceComposerPresentationInput = Omit<
   InterfaceComposerPresentationInput,
@@ -137,6 +140,10 @@ export function usePinnedTimeline(
   });
   const userDraggingRef = useRef(false);
   const userMomentumRef = useRef(false);
+  const webScrollIntentRef = useRef(false);
+  const webScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const timelineTouchActiveRef = useRef(false);
   const automaticReturnsInFlightRef = useRef(0);
   const turnFocusIntentSeqRef = useRef(0);
@@ -185,6 +192,7 @@ export function usePinnedTimeline(
       textSelectionActiveRef.current ||
       userDraggingRef.current ||
       userMomentumRef.current ||
+      webScrollIntentRef.current ||
       timelineTouchActiveRef.current,
     [],
   );
@@ -358,6 +366,7 @@ export function usePinnedTimeline(
       }
     });
   }, [implicitAnchorSuspended, topChromeInset]);
+  const handleWebScrollIntentRef = useRef<() => void>(() => {});
   const readingPosition = useMemo<TimelineReadingPosition>(
     () => ({
       scope: resetKey,
@@ -403,7 +412,11 @@ export function usePinnedTimeline(
         if (id) sampleContentOrigin(id);
         reconcileReadingLayout();
       },
-      userScrolling: () => userDraggingRef.current || userMomentumRef.current,
+      userScrolling: () =>
+        userDraggingRef.current ||
+        userMomentumRef.current ||
+        webScrollIntentRef.current,
+      onUserScrollIntent: () => handleWebScrollIntentRef.current(),
       current: () => {
         const anchor = readingAnchorRef.current;
         const frame = anchor ? cellFramesRef.current.get(anchor.id) : undefined;
@@ -800,16 +813,45 @@ export function usePinnedTimeline(
     ],
   );
 
+  const settleWebScrollIntent = useCallback(() => {
+    if (webScrollIntentTimerRef.current)
+      clearTimeout(webScrollIntentTimerRef.current);
+    webScrollIntentTimerRef.current = setTimeout(() => {
+      webScrollIntentTimerRef.current = null;
+      webScrollIntentRef.current = false;
+      syncNativeFollowSuspension();
+    }, WEB_SCROLL_INTENT_SETTLE_MS);
+  }, [syncNativeFollowSuspension]);
+
+  const handleWebScrollIntent = useCallback(() => {
+    if (!webScrollIntentRef.current) {
+      webScrollIntentRef.current = true;
+      syncNativeFollowSuspension();
+      cancelTurnFocus("drag");
+    }
+    settleWebScrollIntent();
+  }, [cancelTurnFocus, settleWebScrollIntent, syncNativeFollowSuspension]);
+  handleWebScrollIntentRef.current = handleWebScrollIntent;
+
+  useEffect(
+    () => () => {
+      if (webScrollIntentTimerRef.current)
+        clearTimeout(webScrollIntentTimerRef.current);
+    },
+    [],
+  );
+
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      updateScrollPosition(
-        event,
-        userDraggingRef.current || userMomentumRef.current,
-      );
-      if (!userDraggingRef.current && !userMomentumRef.current)
-        reconcileReadingLayout();
+      if (webScrollIntentRef.current) settleWebScrollIntent();
+      const userScrolling =
+        userDraggingRef.current ||
+        userMomentumRef.current ||
+        webScrollIntentRef.current;
+      updateScrollPosition(event, userScrolling);
+      if (!userScrolling) reconcileReadingLayout();
     },
-    [reconcileReadingLayout, updateScrollPosition],
+    [reconcileReadingLayout, settleWebScrollIntent, updateScrollPosition],
   );
 
   const handleScrollBeginDrag = useCallback(() => {

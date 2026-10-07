@@ -180,6 +180,28 @@ if (!process.env.ZEN_READING_HOOK_CHILD) {
       h.close();
     });
 
+    test("web wheel scroll without drag callbacks detaches instead of snapping back to latest", () => {
+      const h = harness("hook-web-wheel");
+      h.layout();
+      h.calls.length = 0;
+      // react-native-web: wheel input, then plain scroll events, no drag/momentum.
+      act(() => {
+        h.hook.readingPosition.onUserScrollIntent();
+        h.hook.handleScroll(scroll(150));
+        flush();
+      });
+      expect(h.calls).toHaveLength(0);
+      expect(h.hook.readingPosition.current().mode).toBe("detached");
+      expect(h.hook.readingPosition.userScrolling()).toBe(true);
+      act(() => {
+        h.hook.handleScroll(scroll(300));
+        flush();
+      });
+      expect(h.calls).toHaveLength(0);
+      expect(h.hook.readingPosition.current().contentOffset).toBe(300);
+      h.close();
+    });
+
     test("same-conversation remount restores measured message and intra-offset; another server does not inherit it", () => {
       const h = harness("server-a:conversation-restore");
       h.layout();

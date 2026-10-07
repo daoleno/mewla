@@ -303,6 +303,21 @@ export function InterfaceTimelineView({
     turnFocusAnchorItemId,
     turnFocusPendingMessageId,
   ]);
+  React.useEffect(() => {
+    if (Platform.OS !== "web") return;
+    // react-native-web has no drag callbacks. Wheel, touch and scroll keys
+    // inside the stage are the reader's own movement, not a layout shift.
+    const stage = viewportRef.current as unknown as HTMLElement | null;
+    if (!stage?.addEventListener) return;
+    const markIntent = () => readingPositionRef.current?.onUserScrollIntent();
+    const options = { capture: true, passive: true } as const;
+    const events = ["wheel", "touchmove", "keydown"] as const;
+    events.forEach((name) => stage.addEventListener(name, markIntent, options));
+    return () =>
+      events.forEach((name) =>
+        stage.removeEventListener(name, markIntent, options),
+      );
+  }, []);
   const textSelectionContext = React.useMemo(
     () => ({
       selectable: textSelectable,
