@@ -1,5 +1,6 @@
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { BrainCurrentWork } from "../../store/brain";
+import type { WorkStatus } from "../ui/workStatus";
 
 export type BrainWorkLifecycle =
   | "working"
@@ -360,4 +361,30 @@ export function brainWorkEventAccessibilityLabel({
     .replace(CANONICAL_SESSION_ID_GLOBAL, "the session")
     .replace(PROVIDER_TURN_ID_GLOBAL, "the provider turn")
     .replace(/\bdelegated session\b/gi, "the session");
+}
+
+/**
+ * Seal & Slip state for a lifecycle. Reviewing is Brain still working on it;
+ * Waiting and Cancelled are inert (stone); Needs review is a warning; Done
+ * and Ready share the check, and only Ready is a full slip.
+ */
+export function brainWorkLifecycleStatus(lifecycle: BrainWorkLifecycle): WorkStatus {
+  switch (lifecycle) {
+    case "ready":
+    case "done":
+      return "ready";
+    case "working":
+    case "reviewing":
+      return "running";
+    case "needs_you":
+      return "needs";
+    case "uncertain":
+      return "warning";
+    case "failed":
+      return "failed";
+    case "blocked":
+    case "waiting":
+    case "cancelled":
+      return "blocked";
+  }
 }

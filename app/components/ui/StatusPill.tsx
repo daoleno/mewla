@@ -1,52 +1,70 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, {
-  cancelAnimation,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
+import { StatusMark } from "./StatusMark";
+import { workStatusTextInk, type WorkStatus } from "./workStatus";
 
-export type StatusTone = "success" | "warning" | "danger" | "accent" | "neutral";
+/**
+ * success: Ready check · warning: amber triangle · danger: Failed box ·
+ * accent: Running arc · needs: the seal pill · neutral: a plain paper tag.
+ */
+export type StatusTone = "success" | "warning" | "danger" | "accent" | "needs" | "neutral";
 
 interface StatusPillProps {
   label: string;
   tone?: StatusTone;
-  /** Breathing dot for live states such as Connecting. */
+  /** Live states such as Connecting spin the Running arc. */
   live?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
+const TONE_STATUS: Record<Exclude<StatusTone, "neutral">, WorkStatus> = {
+  success: "ready",
+  warning: "warning",
+  danger: "failed",
+  accent: "running",
+  needs: "needs",
+};
+
+/**
+ * Seal & Slip status: a small glyph and a word in soft type. Only "Needs you"
+ * is a filled pill, in the seal; everything else stays quiet on the paper.
+ */
 export function StatusPill({ label, tone = "neutral", live = false, style }: StatusPillProps) {
   const { colors, theme } = useAppTheme();
-  const palette = {
-    success: { fill: colors.successSoft, ink: colors.success },
-    warning: { fill: colors.warningSoft, ink: colors.warning },
-    danger: { fill: colors.dangerSoft, ink: colors.dangerText },
-    accent: { fill: theme.materials.tint, ink: colors.accentStrong },
-    neutral: { fill: colors.surfaceSubtle, ink: colors.textSecondary },
-  }[tone];
-  const reducedMotion = useReducedMotion();
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    if (!live || reducedMotion) {
-      cancelAnimation(pulse);
-      pulse.value = 1;
-      return;
-    }
-    pulse.value = withRepeat(withTiming(0.35, { duration: 900 }), -1, true);
-    return () => cancelAnimation(pulse);
-  }, [live, pulse, reducedMotion]);
-  const dotStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
-
+  if (tone === "needs") {
+    return (
+      <View style={[styles.sealPill, { backgroundColor: colors.seal }, style]} accessibilityLabel={label}>
+        <AppText variant="micro" numberOfLines={1} style={{ color: colors.onSeal }}>
+          {label}
+        </AppText>
+      </View>
+    );
+  }
+  if (tone === "neutral" && !live) {
+    return (
+      <View style={[styles.tag, { backgroundColor: theme.materials.tint }, style]} accessibilityLabel={label}>
+        <AppText variant="micro" numberOfLines={1} style={{ color: colors.textSecondary }}>
+          {label}
+        </AppText>
+      </View>
+    );
+  }
+  const status = live ? "running" : TONE_STATUS[tone as Exclude<StatusTone, "neutral">];
+  const ink = workStatusTextInk(status, {
+    statusReady: colors.statusDone,
+    statusRunning: colors.statusRunning,
+    seal: colors.seal,
+    sealText: colors.sealText,
+    statusWarning: colors.statusWarning,
+    statusFailed: colors.statusFailed,
+    statusBlocked: colors.statusBlocked,
+  });
   return (
-    <View style={[styles.pill, { backgroundColor: palette.fill }, style]} accessibilityLabel={label}>
-      <Animated.View style={[styles.dot, { backgroundColor: palette.ink }, dotStyle]} />
-      <AppText variant="micro" numberOfLines={1} style={{ color: palette.ink }}>
+    <View style={[styles.mark, style]} accessibilityLabel={label}>
+      <StatusMark status={status} />
+      <AppText variant="micro" numberOfLines={1} style={{ color: ink }}>
         {label}
       </AppText>
     </View>
@@ -54,18 +72,25 @@ export function StatusPill({ label, tone = "neutral", live = false, style }: Sta
 }
 
 const styles = StyleSheet.create({
-  pill: {
+  mark: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    minHeight: 24,
-    paddingHorizontal: 10,
-    borderRadius: 999,
+    gap: 5,
+    minHeight: 22,
     alignSelf: "flex-start",
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  tag: {
+    minHeight: 22,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+    justifyContent: "center",
+  },
+  sealPill: {
+    minHeight: 22,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+    justifyContent: "center",
   },
 });

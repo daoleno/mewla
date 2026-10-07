@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -19,12 +18,13 @@ import type { AgentKind } from '../../services/workerPresentation';
 import type { TerminalFlavor } from '../../services/terminalFlavor';
 import type { SessionPreviewTone } from '../../services/sessionPreview';
 import {
-  workerStatusIndicatorIcon,
   buildWorkerSessionAccessibilityLabel,
   isWorkerActivelyRunning,
 } from '../../services/workerStatusPresentation';
 import { AnimatedPressable } from '../ui/AnimatedPressable';
 import { AgentKindIcon } from '../terminal/AgentKindIcon';
+import { StatusMark } from '../ui/StatusMark';
+import type { WorkStatus } from '../ui/workStatus';
 
 interface WorkerSessionRowProps {
   title: string;
@@ -72,9 +72,8 @@ export function WorkerSessionRow({
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const previewColor = previewToneColor(previewTone, colors);
-  const statusColor = workerStatusColor(status, colors);
   const activelyRunning = isWorkerActivelyRunning(status);
-  const statusIcon = workerStatusIndicatorIcon(status);
+  const statusMark = WORKER_STATUS_MARK[status];
   const inSelectionMode = selectionMode;
   const rowDisabled = inSelectionMode && selectionDisabled;
 
@@ -162,15 +161,7 @@ export function WorkerSessionRow({
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         >
-          {activelyRunning ? (
-            <ActivityIndicator
-              size="small"
-              color={statusColor}
-              style={styles.spinner}
-            />
-          ) : statusIcon ? (
-            <Ionicons name={statusIcon} size={15} color={statusColor} />
-          ) : null}
+          {statusMark ? <StatusMark status={statusMark} size={14} /> : null}
         </View>
       </View>
       {separator ? <View pointerEvents="none" style={styles.separator} /> : null}
@@ -193,20 +184,14 @@ function previewToneColor(tone: SessionPreviewTone, colors: AppColors): string {
   }
 }
 
-function workerStatusColor(status: WorkerStatus, colors: AppColors): string {
-  switch (status) {
-    case 'failed':
-      return colors.statusFailed;
-    case 'blocked':
-      return colors.statusBlocked;
-    case 'running':
-      return colors.statusRunning;
-    case 'done':
-      return colors.statusDone;
-    default:
-      return colors.statusUnknown;
-  }
-}
+// Seal & Slip glyphs; an idle session carries no mark.
+const WORKER_STATUS_MARK: Record<WorkerStatus, WorkStatus | null> = {
+  running: 'running',
+  done: 'ready',
+  failed: 'failed',
+  blocked: 'blocked',
+  unknown: null,
+};
 
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
@@ -300,11 +285,6 @@ function createStyles(colors: AppColors) {
       height: 16,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    spinner: {
-      transform: [{ scale: 0.45 }],
-      width: 12,
-      height: 12,
     },
   });
 }

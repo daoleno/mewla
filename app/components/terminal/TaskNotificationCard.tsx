@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
@@ -7,7 +6,9 @@ import type {
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
-import { outlinedSurface } from "../ui/outlinedSurface";
+import { chromeStatusInks } from "../brain/BrainWorkEventCard";
+import { StatusMark } from "../ui/StatusMark";
+import { workStatusInk, workStatusTextInk, type WorkStatus } from "../ui/workStatus";
 import { InterfaceTimelineActivityExpandIcon } from "./InterfaceTimelineActivityExpandIcon";
 import { useTimelineActivityExpansion } from "./InterfaceTimelineActivityExpansionState";
 import { MessageBody } from "./InterfaceMessageBody";
@@ -24,19 +25,16 @@ export function TaskNotificationCard({
   item,
   chrome,
   theme,
-  attentionColor,
-  attentionBackground,
 }: {
   item: TaskNotificationTimelineItem;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
-  attentionColor: string;
-  attentionBackground: string;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   const expandable = Boolean(item.body) || item.details.length > 0;
   const { expanded, toggle } = useTimelineActivityExpansion(item.id, false);
-  const colors = toneColors(item.tone, chrome, attentionColor, attentionBackground);
+  const status = TONE_STATUS[item.tone];
+  const inks = chromeStatusInks(chrome);
   const time = item.timestamp ? formatChatBubbleTime(item.timestamp) : "";
   const accessibilityLabel = [
     `${item.kindLabel} ${item.statusLabel}`,
@@ -58,12 +56,21 @@ export function TaskNotificationCard({
       style={({ pressed }) => [styles.wrap, pressed ? styles.wrapPressed : null]}
     >
       <View style={styles.header}>
-        <View style={[styles.iconWrap, { backgroundColor: colors.background }]}>
-          <Ionicons name={item.icon} size={15} color={colors.color} />
-        </View>
-        <Text numberOfLines={1} style={[styles.kind, { color: colors.color }]}>
-          {item.kindLabel} · {item.statusLabel}
+        <Text numberOfLines={1} style={styles.kind}>
+          {item.kindLabel}
+          {time ? ` · ${time}` : ""}
         </Text>
+        <View style={styles.status}>
+          {status ? (
+            <StatusMark status={status} color={workStatusInk(status, inks)} knockout={chrome.surface} />
+          ) : null}
+          <Text
+            numberOfLines={1}
+            style={[styles.statusLabel, { color: status ? workStatusTextInk(status, inks) : chrome.textMuted }]}
+          >
+            {item.statusLabel}
+          </Text>
+        </View>
       </View>
 
       <Text numberOfLines={2} style={styles.title}>
@@ -117,41 +124,31 @@ export function TaskNotificationCard({
             </Text>
           </>
         ) : null}
-        {time ? <Text style={styles.time}>{time}</Text> : null}
       </View>
     </Pressable>
   );
 }
 
-function toneColors(
-  tone: TaskNotificationTone,
-  chrome: TerminalThemeChrome,
-  attentionColor: string,
-  attentionBackground: string,
-) {
-  switch (tone) {
-    case "danger":
-      return { color: chrome.danger, background: chrome.dangerSoft };
-    case "attention":
-      return { color: attentionColor, background: attentionBackground };
-    case "accent":
-      return { color: chrome.accent, background: chrome.accentSoft };
-    default:
-      return { color: chrome.textMuted, background: chrome.surfaceActive };
-  }
-}
+// Seal & Slip states: Done is the Ready check, Failed the crossed box,
+// Stopped the inert dashed ring; a plain update carries no mark.
+const TONE_STATUS: Record<TaskNotificationTone, WorkStatus | null> = {
+  accent: "ready",
+  danger: "failed",
+  attention: "blocked",
+  neutral: null,
+};
 
 function createStyles(chrome: TerminalThemeChrome) {
   return StyleSheet.create({
+    // The same slip as Brain's Work cards: a plain card on the paper.
     wrap: {
       marginHorizontal: 1,
-      marginBottom: 8,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      ...outlinedSurface(8),
+      marginBottom: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: 14,
+      borderWidth: 1,
       borderColor: chrome.border,
-      // Chat chrome maps surfaceMuted to the user's sent bubble; a system card
-      // must never read as the user's own message.
       backgroundColor: chrome.surface,
     },
     wrapPressed: {
@@ -160,31 +157,34 @@ function createStyles(chrome: TerminalThemeChrome) {
     header: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 8,
-    },
-    iconWrap: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: 8,
+      gap: 7,
+      marginBottom: 6,
     },
     kind: {
       ...TypeScale.caption,
-      fontWeight: "700",
-      letterSpacing: 0,
-      flexShrink: 1,
+      color: chrome.textMuted,
+      flex: 1,
+      minWidth: 0,
+    },
+    status: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      flexShrink: 0,
+    },
+    statusLabel: {
+      ...TypeScale.caption,
+      fontFamily: Typography.uiFontMedium,
     },
     title: {
       ...TypeScale.body,
+      fontFamily: Typography.uiFontSemibold,
       color: chrome.text,
-      fontWeight: "700",
     },
     detail: {
       ...TypeScale.compact,
       color: chrome.textMuted,
-      marginTop: 2,
+      marginTop: 3,
     },
     facts: {
       flexDirection: "row",
@@ -235,11 +235,6 @@ function createStyles(chrome: TerminalThemeChrome) {
     toggleLabel: {
       ...TypeScale.caption,
       color: chrome.textSubtle,
-    },
-    time: {
-      ...TypeScale.caption,
-      color: chrome.textSubtle,
-      marginLeft: "auto",
     },
   });
 }

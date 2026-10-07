@@ -1,12 +1,14 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { TypeScale } from "../../constants/tokens";
+import { Typography, TypeScale } from "../../constants/tokens";
+import { useBrainCompanion } from "../mewla/BrainCompanion";
+import { SealCat } from "../mewla/SealCat";
+import { StatusMark } from "../ui/StatusMark";
+import { workStatusInk, workStatusTextInk, type WorkStatus } from "../ui/workStatus";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import { brainWorkEventCardModel } from "./brainWorkEventCardModel";
-import { outlinedSurface } from "../ui/outlinedSurface";
 import {
   BRAIN_WORK_CARD_FACT_LINES,
   BRAIN_WORK_CARD_GAP,
@@ -19,6 +21,7 @@ import {
   brainWorkEventAccessibilityLabel,
   brainCurrentWorkLifecycle,
   brainWorkEventLifecycle,
+  brainWorkLifecycleStatus,
   brainWorkEventWorkTitle,
 } from "./brainWorkEventPresentation";
 
@@ -31,28 +34,34 @@ export type BrainWorkEventTimelineItem = {
   sourceCount?: number;
   currentWork?: import("../../store/brain").BrainCurrentWork;
   onPress?: () => void;
+  /** Brain only: the cat sits on this slip because its Work needs you. */
+  catPerched?: boolean;
 };
 
+/** Room above a slip for the perched cat (the cat is ~44 pt tall). */
+const PERCH_ROOM = 46;
+const PERCH_CAT = 58;
+
+/**
+ * One Work slip in the Brain conversation: a plain card on the paper, the
+ * state as a small glyph and word, the title first. Needs you is the one loud
+ * slip: ink outline, the seal pill, and (when Brain is waiting on it) the cat
+ * sitting on top. Blocked Work is a dashed, unfilled slip.
+ */
 export function BrainWorkEventCard({
   item,
   chrome,
-  attentionColor,
-  attentionBackground,
 }: {
   item: BrainWorkEventTimelineItem;
   chrome: TerminalThemeChrome;
-  attentionColor: string;
-  attentionBackground: string;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
-  const presentation = resolvePresentationColors(
-    item.currentWork
-      ? brainCurrentWorkLifecycle(item.currentWork, item.event)
-      : brainWorkEventLifecycle(item.event),
-    chrome,
-    attentionColor,
-    attentionBackground,
-  );
+  const companion = useBrainCompanion();
+  const presentation = item.currentWork
+    ? brainCurrentWorkLifecycle(item.currentWork, item.event)
+    : brainWorkEventLifecycle(item.event);
+  const status = brainWorkLifecycleStatus(presentation.lifecycle);
+  const needs = status === "needs";
   const workTitle = brainWorkEventWorkTitle(item.event);
   const card = brainWorkEventCardModel(item.event);
   const time = formatChatBubbleTime(item.event.occurred_at);
@@ -65,275 +74,238 @@ export function BrainWorkEventCard({
       (value): value is string => Boolean(value),
     ),
   });
+  const perched = Boolean(item.catPerched && companion);
+  const slipStyle = ({ pressed }: { pressed: boolean }) => [
+    styles.slip,
+    needs ? styles.slipNeeds : null,
+    status === "blocked" ? styles.slipBlocked : null,
+    pressed ? styles.slipPressed : null,
+  ];
+  const statusMark = (
+    <StatusWord status={status} label={presentation.label} chrome={chrome} styles={styles} />
+  );
 
-  if (card.density === "minimal") {
-    return (
+  const slip =
+    card.density === "minimal" ? (
       <Pressable
         accessibilityRole={item.onPress ? "button" : undefined}
         accessibilityLabel={accessibilityLabel}
         disabled={!item.onPress}
         onPress={item.onPress}
-        style={({ pressed }) => [
-          styles.wrap,
-          styles.wrapCompact,
-          item.event.unread ? styles.wrapUnread : null,
-          pressed ? styles.wrapPressed : null,
-        ]}
+        style={(state) => [...slipStyle(state), styles.slipCompact]}
       >
-        <Ionicons
-          name={presentation.icon}
-          size={17}
-          color={presentation.color}
-        />
-        <Text
-          numberOfLines={1}
-          style={[styles.compactStatus, { color: presentation.color }]}
-        >
-          {presentation.label}
-        </Text>
         <Text
           numberOfLines={BRAIN_WORK_CARD_TITLE_LINES}
           style={styles.compactTitle}
         >
           {workTitle}
         </Text>
-        <Text style={styles.compactMeta}>{time}</Text>
-        {item.onPress ? (
-          <Ionicons
-            name="chevron-forward"
-            size={14}
-            color={chrome.textSubtle}
-          />
+        {statusMark}
+        <Text style={styles.time}>{time}</Text>
+      </Pressable>
+    ) : (
+      <Pressable
+        accessibilityRole={item.onPress ? "button" : undefined}
+        accessibilityLabel={accessibilityLabel}
+        disabled={!item.onPress}
+        onPress={item.onPress}
+        style={slipStyle}
+      >
+        <View style={styles.meta}>
+          <Text numberOfLines={1} style={styles.who}>
+            {item.event.session_name || "Work"} · {time}
+          </Text>
+          {item.event.unread ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
+          {statusMark}
+        </View>
+        <Text
+          numberOfLines={BRAIN_WORK_CARD_TITLE_LINES}
+          style={styles.title}
+        >
+          {workTitle}
+        </Text>
+        {card.summary ? (
+          <Text numberOfLines={BRAIN_WORK_CARD_SUMMARY_LINES} style={styles.summary}>
+            {card.summary}
+          </Text>
+        ) : null}
+        {card.facts.length > 0 ? (
+          <View style={styles.facts}>
+            {card.facts.map((fact) => (
+              <Text key={fact} numberOfLines={BRAIN_WORK_CARD_FACT_LINES} style={styles.fact}>
+                {fact}
+              </Text>
+            ))}
+          </View>
         ) : null}
       </Pressable>
     );
-  }
 
+  if (!perched || !companion) return <View style={styles.wrap}>{slip}</View>;
   return (
-    <Pressable
-      accessibilityRole={item.onPress ? "button" : undefined}
-      accessibilityLabel={accessibilityLabel}
-      disabled={!item.onPress}
-      onPress={item.onPress}
-      style={({ pressed }) => [
-        styles.wrap,
-        item.event.unread ? styles.wrapUnread : null,
-        pressed ? styles.wrapPressed : null,
-      ]}
-    >
-      <View style={[styles.header, styles.headerActive]}>
-        <View
-          style={[
-            styles.iconWrap,
-            { backgroundColor: presentation.background },
-          ]}
-        >
-          <Ionicons
-            name={presentation.icon}
-            size={15}
-            color={presentation.color}
-          />
-        </View>
-        <Text style={[styles.kind, { color: presentation.color }]}>
-          {presentation.label}
-        </Text>
-        {item.event.unread ? (
-          <View accessibilityElementsHidden style={styles.unreadDot} />
-        ) : null}
-      </View>
-
-      <View style={styles.titleRow}>
-        <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
-          {workTitle}
-        </Text>
-      </View>
-      {card.summary ? (
-        <Text
-          numberOfLines={BRAIN_WORK_CARD_SUMMARY_LINES}
-          style={styles.summary}
-        >
-          {card.summary}
-        </Text>
-      ) : null}
-      {card.facts.length > 0 ? (
-        <View style={styles.facts}>
-          {card.facts.map((fact) => (
-            <View key={fact} style={styles.factRow}>
-              <View accessibilityElementsHidden style={styles.factDot} />
-              <Text
-                numberOfLines={BRAIN_WORK_CARD_FACT_LINES}
-                style={styles.fact}
-              >
-                {fact}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      <View style={styles.footer}>
-        <Text style={styles.time}>{time}</Text>
-        {item.onPress ? (
-          <Ionicons
-            name="chevron-forward"
-            size={14}
-            color={chrome.textSubtle}
-          />
-        ) : null}
-      </View>
-    </Pressable>
+    <View style={[styles.wrap, styles.wrapPerched]}>
+      <SealCat
+        state="attention"
+        size={PERCH_CAT}
+        animate={companion.animate}
+        style={styles.perch}
+      />
+      {slip}
+    </View>
   );
+}
+
+function StatusWord({
+  status,
+  label,
+  chrome,
+  styles,
+}: {
+  status: WorkStatus;
+  label: string;
+  chrome: TerminalThemeChrome;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  if (status === "needs") {
+    return (
+      <View style={styles.needsPill}>
+        <Text style={styles.needsPillText}>{label}</Text>
+      </View>
+    );
+  }
+  const inks = chromeStatusInks(chrome);
+  return (
+    <View style={styles.status}>
+      <StatusMark status={status} color={workStatusInk(status, inks)} knockout={chrome.surface} />
+      <Text numberOfLines={1} style={[styles.statusLabel, { color: workStatusTextInk(status, inks) }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+export function chromeStatusInks(chrome: TerminalThemeChrome) {
+  return {
+    statusReady: chrome.statusReady,
+    statusRunning: chrome.statusRunning,
+    seal: chrome.seal,
+    sealText: chrome.sealText,
+    statusWarning: chrome.statusWarning,
+    statusFailed: chrome.danger,
+    statusBlocked: chrome.statusBlocked,
+  };
 }
 
 function createStyles(chrome: TerminalThemeChrome) {
   return StyleSheet.create({
     wrap: {
       marginHorizontal: 1,
-      marginBottom: 8,
-      paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING,
-      paddingVertical: 12,
-      ...outlinedSurface(8),
+      marginBottom: 10,
+    },
+    wrapPerched: {
+      paddingTop: PERCH_ROOM,
+    },
+    perch: {
+      position: "absolute",
+      right: 18,
+      top: 2,
+    },
+    slip: {
+      paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING + 2,
+      paddingVertical: 14,
+      borderRadius: 14,
+      borderWidth: 1,
       borderColor: chrome.border,
-      backgroundColor: chrome.surfaceMuted,
+      backgroundColor: chrome.surface,
     },
-    wrapUnread: {
-      borderColor: chrome.accent,
-      backgroundColor: chrome.accentSoft,
+    slipNeeds: {
+      borderWidth: 1.5,
+      borderColor: chrome.text,
     },
-    wrapPressed: {
+    slipBlocked: {
+      borderStyle: "dashed",
+      backgroundColor: "transparent",
+    },
+    slipPressed: {
       opacity: 0.72,
     },
-    wrapCompact: {
-      minHeight: 44,
-      paddingVertical: 9,
+    slipCompact: {
+      minHeight: 48,
+      paddingVertical: 11,
       flexDirection: "row",
       alignItems: "center",
-      gap: BRAIN_WORK_CARD_GAP,
+      gap: BRAIN_WORK_CARD_GAP + 3,
     },
     compactTitle: {
       ...TypeScale.compact,
+      fontFamily: Typography.uiFontMedium,
       color: chrome.text,
       flex: 1,
       minWidth: BRAIN_WORK_CARD_MIN_TITLE_WIDTH,
-      fontWeight: "600",
     },
-    compactStatus: {
-      ...TypeScale.caption,
-      fontWeight: "700",
-      flexShrink: 0,
-    },
-    compactMeta: {
-      ...TypeScale.caption,
-      color: chrome.textSubtle,
-    },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginBottom: 5,
-    },
-    headerActive: {
-      marginBottom: 8,
-    },
-    iconWrap: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: 8,
-    },
-    kind: {
-      ...TypeScale.caption,
-      fontWeight: "700",
-      letterSpacing: 0,
-      flexShrink: 1,
-    },
-    unreadDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 4,
-      marginLeft: "auto",
-      backgroundColor: chrome.accent,
-    },
-    title: {
-      ...TypeScale.body,
-      color: chrome.text,
-      fontWeight: "700",
-      flex: 1,
-      minWidth: 0,
-    },
-    titleRow: {
+    meta: {
       flexDirection: "row",
       alignItems: "center",
       gap: BRAIN_WORK_CARD_GAP,
+      marginBottom: 6,
     },
-    summary: {
-      ...TypeScale.compact,
-      color: chrome.text,
-      marginTop: 4,
-      lineHeight: 20,
-    },
-    facts: {
-      gap: 4,
-      marginTop: 8,
-    },
-    factRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: BRAIN_WORK_CARD_GAP,
-    },
-    factDot: {
-      width: 4,
-      height: 4,
-      borderRadius: 2,
-      marginTop: 7,
-      backgroundColor: chrome.textSubtle,
-    },
-    fact: {
+    who: {
       ...TypeScale.caption,
       color: chrome.textMuted,
       flex: 1,
       minWidth: 0,
     },
-    footer: {
+    status: {
       flexDirection: "row",
       alignItems: "center",
       gap: 5,
-      marginTop: 11,
-      minHeight: 18,
+      flexShrink: 0,
+    },
+    statusLabel: {
+      ...TypeScale.caption,
+      fontFamily: Typography.uiFontMedium,
+    },
+    needsPill: {
+      minHeight: 22,
+      paddingHorizontal: 9,
+      borderRadius: 11,
+      justifyContent: "center",
+      backgroundColor: chrome.seal,
+      flexShrink: 0,
+    },
+    needsPillText: {
+      ...TypeScale.caption,
+      fontFamily: Typography.uiFontSemibold,
+      color: chrome.onSeal,
+    },
+    title: {
+      ...TypeScale.body,
+      fontFamily: Typography.uiFontSemibold,
+      color: chrome.text,
+    },
+    unreadDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: chrome.text,
+    },
+    summary: {
+      ...TypeScale.compact,
+      color: chrome.textMuted,
+      marginTop: 3,
+      lineHeight: 20,
+    },
+    facts: {
+      gap: 3,
+      marginTop: 8,
+    },
+    fact: {
+      ...TypeScale.caption,
+      color: chrome.textMuted,
     },
     time: {
       ...TypeScale.caption,
       color: chrome.textSubtle,
-      marginLeft: "auto",
     },
   });
-}
-
-function resolvePresentationColors(
-  presentation: ReturnType<typeof brainWorkEventLifecycle>,
-  chrome: TerminalThemeChrome,
-  attentionColor: string,
-  attentionBackground: string,
-) {
-  const color =
-    presentation.tone === "danger"
-      ? chrome.danger
-      : presentation.tone === "attention"
-        ? attentionColor
-        : presentation.tone === "accent"
-          ? chrome.accent
-          : chrome.textMuted;
-  return {
-    ...presentation,
-    color,
-    background:
-      presentation.tone === "danger"
-        ? chrome.dangerSoft
-        : presentation.tone === "attention"
-          ? attentionBackground
-          : presentation.tone === "accent"
-            ? chrome.accentSoft
-            : chrome.surfaceActive,
-  };
 }

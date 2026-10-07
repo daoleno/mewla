@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { ContinuousCorners, Radii, useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
+import { StatusMark } from "./StatusMark";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 export type InlineNoticeTone = "neutral" | "accent" | "warning" | "danger";
@@ -54,6 +55,9 @@ export function InlineNotice({
     >
       {busy ? (
         <ActivityIndicator size="small" color={palette.ink} style={styles.glyph} />
+      ) : !icon && (tone === "danger" || tone === "warning") ? (
+        // The Work-state glyphs: a crossed box fails, a triangle warns.
+        <StatusMark status={tone === "danger" ? "failed" : "warning"} size={16} style={styles.glyph} />
       ) : (
         <Ionicons name={icon ?? palette.glyph} size={17} color={palette.ink} style={styles.glyph} />
       )}

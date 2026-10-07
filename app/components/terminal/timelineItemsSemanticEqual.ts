@@ -64,6 +64,7 @@ export function timelineItemsSemanticEqual(
       brainWorkResultEventsEqual(left.event, right.event) &&
       brainCurrentWorkEqual(left.currentWork, right.currentWork) &&
       left.sourceCount === right.sourceCount &&
+      left.catPerched === right.catPerched &&
       brainWorkResultEventArraysEqual(left.events, right.events) &&
       left.onPress === right.onPress
     );
