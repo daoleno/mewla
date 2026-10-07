@@ -590,8 +590,13 @@ func (s *Store) syncWorkCardLocked(workID string, trigger *WorkEvent) (TimelineI
 	if err != nil {
 		return TimelineItem{}, false, err
 	}
+	// One slip per Work lineage. Re-syncing the same result keeps its slot;
+	// a newer result moves the slip to when that result came back, so the
+	// conversation shows Work at the moment it happened instead of updating a
+	// slip buried at the Work's first result.
 	out := make([]TimelineItem, 0, len(items)+1)
 	found := false
+	moved := false
 	for _, current := range items {
 		if current.Kind != timelineKindWorkCard || current.WorkID != item.ID {
 			out = append(out, current)
@@ -601,13 +606,17 @@ func (s *Store) syncWorkCardLocked(workID string, trigger *WorkEvent) (TimelineI
 			continue
 		}
 		found = true
+		if current.ID != projected.ID {
+			moved = true
+			continue
+		}
 		if !current.CreatedAt.IsZero() {
 			projected.CreatedAt = current.CreatedAt
 		}
 		projected.Unread = current.Unread || projected.Unread
 		out = append(out, projected)
 	}
-	if !found {
+	if !found || moved {
 		out = append(out, projected)
 	}
 	if err := s.rewriteTimelineLocked(out); err != nil {

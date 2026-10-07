@@ -806,6 +806,8 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 		return runBrainExecutors(args[1:], stderr)
 	case "use":
 		return runBrainUse(args[1:], stderr)
+	case "objective":
+		return runBrainObjective(args[1:], stderr)
 	default:
 		return fmt.Errorf("unknown brain command: %s", args[0])
 	}
@@ -976,7 +978,7 @@ func printWorkerUsage(w io.Writer) {
 }
 
 func printBrainUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|executors|use> [flags]")
+	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|objective|executors|use> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  workspace      Print the Brain workspace path")
@@ -984,6 +986,7 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  playbooks      Print the Brain playbook catalog")
 	fmt.Fprintln(w, "  gc             Reconcile product-owned Brain workspace blocks while preserving user content")
 	fmt.Fprintln(w, "  work           List, create, update, or append an event to durable Active work")
+	fmt.Fprintln(w, "  objective      Show, set, or clear the current chat's objective (the App's goal line)")
 	fmt.Fprintln(w, "  executors      List configured executors and the Brain host")
 	fmt.Fprintln(w, "  use            Switch the Brain host executor")
 	fmt.Fprintln(w, "")
@@ -993,6 +996,7 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  mewla brain playbooks --json")
 	fmt.Fprintln(w, "  mewla brain gc --json")
 	fmt.Fprintln(w, "  mewla brain work list --json [-all] [-full] [-id <work>]")
+	fmt.Fprintln(w, "  mewla brain objective set \"Ship atlas-notes v1.4 this week\"")
 	fmt.Fprintln(w, "  mewla brain executors --json")
 	fmt.Fprintln(w, "  mewla brain use codex")
 }
@@ -1676,6 +1680,55 @@ func runBrainExecutors(args []string, stderr io.Writer) error {
 		return err
 	}
 	resp, err := callControl(cfg, control.Request{Type: "brain_executors"})
+	if err != nil {
+		return err
+	}
+	return writeControlResponse(os.Stdout, resp, cfg.json)
+}
+
+func runBrainObjective(args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla brain objective", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: mewla brain objective [show | set <title> | clear] [flags]")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "The current chat thread's objective. The App shows it under the Brain title")
+		fmt.Fprintln(stderr, "with how much Work created for it since has come back (\"… · 2 of 5 back\").")
+		fmt.Fprintln(stderr, "")
+		fs.PrintDefaults()
+	}
+	action := "show"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		action, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	req := control.Request{Type: "brain_objective"}
+	switch action {
+	case "show":
+		if fs.NArg() != 0 {
+			return fmt.Errorf("usage: mewla brain objective show")
+		}
+	case "set":
+		req.Type = "brain_objective_set"
+		req.Text = strings.Join(fs.Args(), " ")
+		if strings.TrimSpace(req.Text) == "" {
+			return fmt.Errorf("usage: mewla brain objective set <title>")
+		}
+	case "clear":
+		if fs.NArg() != 0 {
+			return fmt.Errorf("usage: mewla brain objective clear")
+		}
+		req.Type = "brain_objective_clear"
+	default:
+		fs.Usage()
+		return fmt.Errorf("unknown objective action: %s", action)
+	}
+	resp, err := callControl(cfg, req)
 	if err != nil {
 		return err
 	}
