@@ -4,6 +4,7 @@ import { buildChatChrome } from "../theme/buildChatChrome";
 import { resolveTheme } from "../theme/resolve";
 import type { ThemeColorScheme } from "../theme/types";
 import {
+  buildTerminalChrome,
   TerminalThemes,
   type TerminalThemePalette,
 } from "./terminalThemes";
@@ -97,6 +98,18 @@ describe("terminal palette on paper and ink", () => {
           expect(contrastRatio(theme[key], surface)).toBeGreaterThanOrEqual(TEXT);
         }
       }
+    });
+
+    test(`${scheme}: terminal chrome keeps the app's seal and Work states`, () => {
+      const chrome = buildTerminalChrome(palette);
+      expect(chrome.seal).toBe(app.colors.seal);
+      expect(chrome.sealText).toBe(app.colors.sealText);
+      expect(chrome.onSeal).toBe(app.colors.onSeal);
+      expect(chrome.danger).toBe(app.colors.statusFailed);
+      expect(chrome.statusReady).toBe(app.colors.statusDone);
+      expect(chrome.statusRunning).toBe(app.colors.statusRunning);
+      expect(chrome.statusWarning).toBe(app.colors.statusWarning);
+      expect(chrome.statusBlocked).toBe(app.colors.statusBlocked);
     });
 
     test(`${scheme}: ANSI red is never the seal`, () => {

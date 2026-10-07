@@ -1,8 +1,10 @@
 import {
   ZEN_BRAND_COLORS,
   ZEN_DARK_NEUTRALS,
+  ZEN_DARK_SEAL,
   ZEN_DARK_STATUS,
   ZEN_LIGHT_NEUTRALS,
+  ZEN_LIGHT_SEAL,
   ZEN_LIGHT_STATUS,
 } from '../theme/primitives';
 
@@ -197,6 +199,11 @@ export function buildTerminalPalette(theme: TerminalThemePalette): string[] {
 export function buildTerminalChrome(theme: TerminalThemePalette): TerminalThemeChrome {
   const surface = mixHex(theme.background, theme.foreground, 0.06);
   const surfaceMuted = mixHex(theme.background, theme.foreground, 0.035);
+  // The seal and the Work states are the app's, never an ANSI stand-in:
+  // ANSI red is deliberately not the seal.
+  const light = isLightTerminalTheme(theme);
+  const seal = light ? ZEN_LIGHT_SEAL : ZEN_DARK_SEAL;
+  const status = light ? ZEN_LIGHT_STATUS : ZEN_DARK_STATUS;
 
   return {
     appBackground: surface,
@@ -215,16 +222,15 @@ export function buildTerminalChrome(theme: TerminalThemePalette): TerminalThemeC
     disabledSurface: surfaceMuted,
     focus: theme.cursor,
     link: theme.blue,
-    danger: theme.red,
-    dangerSoft: withAlpha(theme.red, 0.14),
-    // Terminal-only chrome has no seal; ANSI stands in for Send and status.
-    seal: theme.red,
-    sealText: theme.red,
-    onSeal: theme.background,
-    statusReady: theme.green,
-    statusRunning: theme.blue,
-    statusWarning: theme.yellow,
-    statusBlocked: mixHex(theme.foreground, theme.background, 0.45),
+    danger: status.failed,
+    dangerSoft: status.dangerSoft,
+    seal: seal.seal,
+    sealText: seal.sealText,
+    onSeal: seal.onSeal,
+    statusReady: status.ready,
+    statusRunning: status.running,
+    statusWarning: status.warning,
+    statusBlocked: status.blocked,
     overlay: withAlpha(theme.background, 0.94),
     shadowColor: isLightTerminalTheme(theme) ? theme.foreground : '#000000',
   };
