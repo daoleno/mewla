@@ -4,16 +4,16 @@
     "slug": "zen",
     "version": "0.1.15",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/branding/mewla-icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "zen",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#12120E"
-    },
     "ios": {
       "bundleIdentifier": "com.daoleno.zen",
+      "icon": {
+        "light": "./assets/branding/mewla-icon.png",
+        "dark": "./assets/branding/mewla-icon-dark.png",
+        "tinted": "./assets/branding/mewla-icon-tinted.png"
+      },
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -32,18 +32,32 @@
     "android": {
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#0F0F14",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#C8372B",
+        "foregroundImage": "./assets/branding/mewla-adaptive-foreground.png",
+        "monochromeImage": "./assets/branding/mewla-adaptive-monochrome.png"
       },
       "package": "com.daoleno.zen",
       "versionCode": 39,
       "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "permissions": ["android.permission.CAMERA"]
     },
+    "web": {
+      "favicon": "./assets/branding/mewla-favicon.png"
+    },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/branding/mewla-splash.png",
+          "imageWidth": 128,
+          "backgroundColor": "#FBFAF7",
+          "dark": {
+            "image": "./assets/branding/mewla-splash.png",
+            "backgroundColor": "#141210"
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-camera",

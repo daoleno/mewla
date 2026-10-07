@@ -49,10 +49,14 @@ module.exports = () => {
       "expo-status-bar",
       // Own APS environment from the release identity so TestFlight/App Store
       // remote push is production-entitled; local notifications are unaffected.
+      // Android draws the status-bar glyph from the icon's alpha, tinted by
+      // color: the white seal, in seal vermilion.
       [
         "expo-notifications",
         {
           mode: iosNotificationMode,
+          icon: "./assets/branding/mewla-notification.png",
+          color: "#C8372B",
         },
       ],
       // Keep Expo Swift modules on one source-built ABI so patch upgrades
