@@ -1,3 +1,4 @@
+import type { GitDiffPage, GitDiffPageRequest, GitDiffRow, GitDiffStatusSnapshot } from "./gitDiff";
 import type { CodexConversationEvent } from "./codexConversation";
 import type { Worker } from "../store/workers";
 import type { PendingUserMessage } from "../components/terminal/InterfaceChatSession";
@@ -112,6 +113,86 @@ export const SCREENSHOT_CHAT_EVENTS: CodexConversationEvent[] = [
     kind: "assistant_message",
     timestamp: DEMO_TIMESTAMP,
     body: "The handoff is ready. The agent is still running on your computer, and the focused checks pass. Open **Terminal** anytime for the live process.",
+  },
+];
+
+/**
+ * A Worker turn with every tool row state: read, search, passed test, patch,
+ * a failed command with its output, and a command still running.
+ */
+export const SCREENSHOT_CHAT_ACTIVITY_EVENTS: CodexConversationEvent[] = [
+  {
+    id: "activity-user",
+    seq: 1,
+    kind: "user_message",
+    timestamp: DEMO_TIMESTAMP,
+    body: "Tidy the settings copy. Keep the word “sync”, then post the notes to Notion.",
+  },
+  {
+    id: "activity-read",
+    seq: 2,
+    kind: "tool",
+    timestamp: DEMO_TIMESTAMP,
+    tool_name: "Read",
+    input: '{"file_path":"app/settings/strings.ts"}',
+    status: "completed",
+  },
+  {
+    id: "activity-grep",
+    seq: 3,
+    kind: "command",
+    timestamp: DEMO_TIMESTAMP,
+    command: 'rg -n "sync" app/settings',
+    output: "app/settings/strings.ts:12: syncPaused\napp/settings/strings.ts:31: syncConflict",
+    status: "completed",
+    exit_code: 0,
+  },
+  {
+    id: "activity-patch",
+    seq: 4,
+    kind: "patch",
+    timestamp: DEMO_TIMESTAMP,
+    status: "completed",
+    file_changes: [
+      { path: "app/settings/strings.ts", operation: "update", additions: 7, deletions: 7 },
+    ],
+  },
+  {
+    id: "activity-test",
+    seq: 5,
+    kind: "command",
+    timestamp: DEMO_TIMESTAMP,
+    command: "bun test settings",
+    output: "12 pass\n0 fail",
+    status: "completed",
+    exit_code: 0,
+  },
+  {
+    id: "activity-failed",
+    seq: 6,
+    kind: "command",
+    timestamp: DEMO_TIMESTAMP,
+    command: "bun run notes:publish",
+    output: "Error: Notion API returned 401 Unauthorized\n    at publish (scripts/notion.ts:42:11)",
+    body: "Error: Notion API returned 401 Unauthorized\n    at publish (scripts/notion.ts:42:11)",
+    status: "failed",
+    exit_code: 1,
+  },
+  {
+    id: "activity-assistant",
+    seq: 7,
+    kind: "assistant_message",
+    timestamp: DEMO_TIMESTAMP,
+    body: "The copy is tidy and the tests pass; `syncPaused` now reads:\n\n```ts\nexport const strings = {\n  syncPaused: \"Sync paused\", // was 33 chars\n  retries: 3,\n};\n```\n\nPublishing failed: Notion rejected the token, so nothing was posted. I’m running the typecheck while you look.",
+  },
+  {
+    id: "activity-running",
+    seq: 8,
+    kind: "command",
+    timestamp: DEMO_TIMESTAMP,
+    command: "bunx tsc --noEmit",
+    output: "",
+    status: "running",
   },
 ];
 
@@ -364,6 +445,37 @@ export const SCREENSHOT_SESSION_AGENTS: Worker[] = [
     status: "running",
     last_output_lines: ["Reviewing the compact onboarding layout"],
     updated_at: Date.parse(DEMO_TIMESTAMP),
+  },
+  {
+    key: "demo-server:atlas-sync",
+    id: "atlas-sync",
+    serverId: SCREENSHOT_DEMO_SERVER_ID,
+    serverName: SCREENSHOT_DEMO_SERVER_NAME,
+    serverUrl: SCREENSHOT_DEMO_SERVER_URL,
+    name: "Sync conflict",
+    project: "atlas-notes",
+    cwd: "/Users/demo/Projects/atlas-notes",
+    command: "claude",
+    summary: "Keep both copies, or the newest edit?",
+    status: "blocked",
+    needs_attention: true,
+    last_output_lines: ["Keep both copies, or the newest edit?"],
+    updated_at: Date.parse(DEMO_TIMESTAMP) - 2 * 60_000,
+  },
+  {
+    key: "demo-server:atlas-notion",
+    id: "atlas-notion",
+    serverId: SCREENSHOT_DEMO_SERVER_ID,
+    serverName: SCREENSHOT_DEMO_SERVER_NAME,
+    serverUrl: SCREENSHOT_DEMO_SERVER_URL,
+    name: "Release notes",
+    project: "atlas-notes",
+    cwd: "/Users/demo/Projects/atlas-notes",
+    command: "codex",
+    summary: "Notion 401. Nothing posted.",
+    status: "failed",
+    last_output_lines: ["Notion 401. Nothing posted."],
+    updated_at: Date.parse(DEMO_TIMESTAMP) - 9 * 60_000,
   },
   {
     key: "demo-server:release-brain",
@@ -660,3 +772,53 @@ export const SCREENSHOT_PLUGIN_ACCOUNTS = {
     status: "connected" as const, tools: [], history: [],
   },
 };
+
+/** The Worker's git sheet: three changed files and one diff page. */
+export const SCREENSHOT_GIT_SNAPSHOT: GitDiffStatusSnapshot = {
+  available: true,
+  repo_root: "/Users/demo/Projects/atlas-notes",
+  repo_name: "atlas-notes",
+  branch: "sync-copy",
+  clean: false,
+  file_count: 3,
+  staged_file_count: 0,
+  unstaged_file_count: 2,
+  untracked_file_count: 1,
+  additions: 19,
+  deletions: 9,
+  files: [
+    { path: "app/settings/strings.ts", status: "modified", staged: false, unstaged: true, untracked: false, additions: 7, deletions: 7, working_additions: 7, working_deletions: 7 },
+    { path: "app/settings/SyncRow.tsx", status: "modified", staged: false, unstaged: true, untracked: false, additions: 4, deletions: 2, working_additions: 4, working_deletions: 2 },
+    { path: "docs/release-notes.md", status: "untracked", staged: false, unstaged: false, untracked: true, additions: 8, deletions: 0, working_additions: 8, working_deletions: 0 },
+  ],
+};
+
+const GIT_DEMO_ROWS: GitDiffRow[] = [
+  { kind: "hunk", text: "@@ -10,7 +10,7 @@ export const strings = {" },
+  { kind: "context", text: "  title: \"Settings\",", old: 10, new: 10 },
+  { kind: "context", text: "  syncNow: \"Sync now\",", old: 11, new: 11 },
+  { kind: "delete", text: "  syncPaused: \"Synchronisation is currently paused!\",", old: 12 },
+  { kind: "add", text: "  syncPaused: \"Sync paused\",", new: 12 },
+  { kind: "delete", text: "  syncConflict: \"Resolve conflicting versions of this note!\",", old: 13 },
+  { kind: "add", text: "  syncConflict: \"Keep both copies\",", new: 13 },
+  { kind: "context", text: "  retries: 3,", old: 14, new: 14 },
+  { kind: "context", text: "};", old: 15, new: 15 },
+];
+
+export function screenshotGitDiffPage(request: GitDiffPageRequest): GitDiffPage {
+  return {
+    path: request.path,
+    scope: request.scope,
+    version: "demo",
+    stale: false,
+    start: 0,
+    total: GIT_DEMO_ROWS.length,
+    rows: GIT_DEMO_ROWS,
+    hunks: 1,
+    previous_hunk: -1,
+    next_hunk: -1,
+    matches: 0,
+    previous_match: -1,
+    next_match: -1,
+  };
+}

@@ -128,14 +128,13 @@ function buildGitDiffPresentation({
     };
   }
 
+  // Uncommitted work is an agent's normal state: ink, not a warning.
   const toneColor =
-    summary.tone === "clean"
-      ? chrome.textMuted
-      : summary.tone === "dirty"
-        ? terminalTheme.yellow
-        : summary.tone === "error"
-          ? terminalTheme.red
-          : chrome.textMuted;
+    summary.tone === "dirty"
+      ? chrome.text
+      : summary.tone === "error"
+        ? chrome.danger
+        : chrome.textMuted;
   const statsLabel = summary.showStats
     ? `+${formatGitDelta(summary.additions)} -${formatGitDelta(summary.deletions)}`
     : "";

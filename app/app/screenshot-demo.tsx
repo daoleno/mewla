@@ -20,7 +20,11 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { WorkerListRowContainer } from "../components/workers/WorkerListRowContainer";
+import { NewSessionButton, SessionsListView } from "../components/workers/SessionsListView";
+import { SessionsOverview } from "../components/workers/SessionsOverview";
+import { WorkerSessionSelectionBar } from "../components/workers/WorkerSessionSelectionBar";
+import { usePrimarySelectionBar } from "../components/navigation/PrimarySelectionBar";
+import { groupWorkersByDirectory } from "../services/workerDirectory";
 import {
   PrimaryDrawerShell,
   resolvePrimaryAppBarGeometry,
@@ -36,6 +40,9 @@ import {
 } from "../components/terminal/InterfaceTimelineModel";
 import { useInterfaceTimelineItems } from "../components/terminal/useInterfaceTimelineItems";
 import { TerminalTopBar } from "../components/terminal/TerminalTopBar";
+import { GitDiffSheet } from "../components/terminal/GitDiffSheet";
+import { TerminalPaletteFixture } from "../components/terminal/TerminalPaletteFixture";
+import { useTerminalThemeChrome } from "../components/terminal/screen/useTerminalThemeChrome";
 import {
   CHAT_HEADER_HEIGHT,
   CHAT_HEADER_OUTER_GAP,
@@ -51,7 +58,10 @@ import {
   SCREENSHOT_BRAIN_EVENTS,
   SCREENSHOT_BRAIN_NEEDS,
   SCREENSHOT_BRAIN_WORK_DESK,
+  SCREENSHOT_CHAT_ACTIVITY_EVENTS,
   SCREENSHOT_CHAT_EVENTS,
+  SCREENSHOT_GIT_SNAPSHOT,
+  screenshotGitDiffPage,
   SCREENSHOT_PLUGIN_ACCOUNTS,
   SCREENSHOT_PLUGINS,
   SCREENSHOT_SESSION_AGENTS,
@@ -146,7 +156,13 @@ export default function ScreenshotDemoRoute() {
       return <ComposerStatesDemo />;
     case "chat":
     default:
-      return <ChatDemo />;
+      return params.fixture === "terminal" ? (
+        <TerminalPaletteDemo />
+      ) : params.fixture === "git" ? (
+        <GitDiffDemo />
+      ) : (
+        <ChatDemo />
+      );
   }
 }
 
@@ -329,7 +345,9 @@ function ChatDemo() {
     long?: string | string[];
     pending?: string | string[];
     working?: string | string[];
+    fixture?: string;
   }>();
+  const activityFixture = params.fixture === "activity";
   const { theme: zenTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
     () => buildChatChrome(zenTheme),
@@ -364,6 +382,9 @@ function ChatDemo() {
       : params.attachment) === "1";
   const pendingFixture = resolveScreenshotChatPendingFixture(params.pending);
   const timelineEvents = useMemo(() => {
+    if (activityFixture) {
+      return SCREENSHOT_CHAT_ACTIVITY_EVENTS;
+    }
     const transcriptEvents = SCREENSHOT_CHAT_EVENTS.filter(
       (event) =>
         event.kind === "user_message" ||
@@ -380,7 +401,7 @@ function ChatDemo() {
         seq: batch * 1000 + event.seq,
       })),
     ).flat();
-  }, [longTimeline]);
+  }, [activityFixture, longTimeline]);
   const pendingUserMessages = useMemo(
     () => screenshotChatPendingUserMessages(pendingFixture),
     [pendingFixture],
@@ -420,12 +441,13 @@ function ChatDemo() {
       style={[styles.flex, { backgroundColor: chrome.appBackground }]}
       edges={["top", "bottom"]}
     >
-      <View style={styles.flex}>
+      <ChatCanvas chrome={chrome}>
         <View pointerEvents="box-none" style={styles.demoHeaderOverlay}>
           <TerminalTopBar
             title="Mobile handoff"
             subtitle="atlas-notes · Chat"
             kind="codex"
+            status={activityFixture ? "running" : undefined}
             backgroundColor={chrome.appBackground}
             chrome={chrome}
             menuAnchorRef={menuAnchorRef}
@@ -527,7 +549,80 @@ function ChatDemo() {
             />
           )}
         />
-      </View>
+      </ChatCanvas>
+    </SafeAreaView>
+  );
+}
+
+/** The Worker's git sheet on fixture changes; tap a file for its diff. */
+function GitDiffDemo() {
+  // The route hands the sheet the terminal palette, not the chat one.
+  const { terminalTheme: theme } = useTerminalThemeChrome();
+  const loadPage = useCallback(
+    async (request: Parameters<typeof screenshotGitDiffPage>[0]) => screenshotGitDiffPage(request),
+    [],
+  );
+  return (
+    <GitDiffSheet
+      visible
+      theme={theme}
+      snapshot={SCREENSHOT_GIT_SNAPSHOT}
+      loading={false}
+      error={null}
+      loadPage={loadPage}
+      refreshKey={0}
+      ownerKey="demo-git"
+      repoBrowserPath=""
+      repoBrowserEntries={[]}
+      repoBrowserLoading={false}
+      repoBrowserError={null}
+      repoFilePath={null}
+      repoFileLoadingPath={null}
+      repoFileError={null}
+      repoFileByPath={{}}
+      onClose={NOOP}
+      onRefresh={NOOP}
+      onOpenRepoPath={NOOP}
+      onOpenRepoFile={NOOP}
+      onCloseRepoFile={NOOP}
+      onBackRepoPath={NOOP}
+    />
+  );
+}
+
+/** The Worker's terminal mode on the real web renderer, fed fixed ANSI. */
+function TerminalPaletteDemo() {
+  const { theme: zenTheme } = useAppTheme();
+  const { chromeColors, terminalTheme } = useTerminalThemeChrome();
+  const menuAnchorRef = useRef<View>(null);
+  return (
+    <SafeAreaView
+      style={[styles.flex, { backgroundColor: chromeColors.appBackground }]}
+      edges={["top", "bottom"]}
+    >
+      <TerminalTopBar
+        title="Mobile handoff"
+        subtitle="atlas-notes · Terminal"
+        kind="codex"
+        backgroundColor={terminalTheme.background}
+        chrome={chromeColors}
+        menuAnchorRef={menuAnchorRef}
+        interfaceRenderMode="terminal"
+        gitDiffDisabled={false}
+        gitDiffPresentation={{
+          accessibilityLabel: "Open changes",
+          backgroundColor: "transparent",
+          iconColor: chromeColors.text,
+        }}
+        isStructuredChatWorker={false}
+        status="running"
+        onBack={NOOP}
+        onOpenSessionDetails={NOOP}
+        onOpenGitDiff={NOOP}
+        onOpenMenu={NOOP}
+        onToggleInterfaceRenderMode={NOOP}
+      />
+      <TerminalPaletteFixture key={zenTheme.colorScheme} theme={terminalTheme} />
     </SafeAreaView>
   );
 }
@@ -1184,64 +1279,80 @@ function ComposerStatesDemo() {
 }
 
 function SessionsDemo() {
-  const colors = useAppColors();
-  const insets = useSafeAreaInsets();
-  const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
   return (
     <PrimaryDrawerShell activePrimaryRoute="list" onSelectPrimaryRoute={NOOP}>
-      <View
-        style={[
-          styles.flex,
-          { backgroundColor: colors.bgPrimary, marginTop: topChromeInset },
-        ]}
-      >
-        <View style={styles.sessionsHeader}>
-          <View>
-            <Text
-              style={[styles.sectionEyebrow, { color: colors.textTertiary }]}
-            >
-              STUDIO MAC
-            </Text>
-            <Text
-              style={[styles.sectionHeading, { color: colors.textPrimary }]}
-            >
-              Running on your computer
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.connectedBadge,
-              { backgroundColor: colors.successSoft },
-            ]}
-          >
-            <View
-              style={[styles.connectedDot, { backgroundColor: colors.success }]}
-            />
-            <Text style={[styles.connectedText, { color: colors.success }]}>
-              Connected
-            </Text>
-          </View>
-        </View>
-        <ScrollView
-          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
-          showsVerticalScrollIndicator={false}
-        >
-          {SCREENSHOT_SESSION_AGENTS.map((agent) => (
-            <WorkerListRowContainer
-              key={agent.key}
-              agent={agent}
-              showServerName={false}
-              selectionMode={false}
-              selected={false}
-              selectionDisabled={false}
-              onOpenWorker={NOOP}
-              onEnterSelection={NOOP}
-              onToggleSelection={NOOP}
-            />
-          ))}
-        </ScrollView>
-      </View>
+      <SessionsDemoBody />
     </PrimaryDrawerShell>
+  );
+}
+
+/**
+ * The real Sessions list view on fixture rows. `fixture=offline` shows the
+ * unreachable-server notice, `fixture=selection` the selection bar.
+ */
+function SessionsDemoBody() {
+  const colors = useAppColors();
+  const insets = useSafeAreaInsets();
+  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
+  const sections = useMemo(
+    () => groupWorkersByDirectory(SCREENSHOT_SESSION_AGENTS),
+    [],
+  );
+  const selectionMode = fixture === "selection";
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set(selectionMode ? [SCREENSHOT_SESSION_AGENTS[0].key, SCREENSHOT_SESSION_AGENTS[2].key] : []),
+  );
+  const toggle = useCallback((agent: { key: string }) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(agent.key)) next.add(agent.key);
+      return next;
+    });
+  }, []);
+  const rowState = useCallback(
+    (agent: { key: string }) => ({ selected: selected.has(agent.key), selectionDisabled: false }),
+    [selected],
+  );
+  const selectionBar = useMemo(
+    () =>
+      selectionMode ? (
+        <WorkerSessionSelectionBar count={selected.size} terminating={false} onCancel={NOOP} onTerminate={NOOP} />
+      ) : null,
+    [selected.size, selectionMode],
+  );
+  usePrimarySelectionBar(selectionBar);
+  const offline = fixture === "offline";
+  const bottomInset = Math.max(insets.bottom, 16);
+  return (
+    <View
+      style={[
+        styles.flex,
+        { backgroundColor: colors.bgPrimary, marginTop: topChromeInset },
+      ]}
+    >
+      <SessionsListView
+        sections={sections}
+        header={
+          <SessionsOverview
+            serverName="Studio computer"
+            connection={offline ? "offline" : "connected"}
+            issue={null}
+            onRetry={NOOP}
+          />
+        }
+        rowState={rowState}
+        selectionMode={selectionMode}
+        showServerName={false}
+        bottomInset={bottomInset}
+        onOpenWorker={NOOP}
+        onEnterSelection={NOOP}
+        onToggleSelection={toggle}
+      />
+      {selectionMode ? null : (
+        <NewSessionButton bottomInset={bottomInset} disabled={offline} busy={false} onPress={NOOP} />
+      )}
+    </View>
   );
 }
 
@@ -1363,35 +1474,6 @@ const styles = StyleSheet.create({
     left: 0,
     zIndex: 20,
   },
-  sessionsHeader: {
-    minHeight: 74,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  sectionEyebrow: {
-    ...UiTextMetrics,
-    ...TypeScale.micro,
-    letterSpacing: 0.8,
-  },
-  sectionHeading: {
-    ...UiTextMetrics,
-    ...TypeScale.body,
-    marginTop: 2,
-  },
-  connectedBadge: {
-    minHeight: 28,
-    paddingHorizontal: 9,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  connectedDot: { width: 6, height: 6, borderRadius: 3 },
-  connectedText: { ...UiTextMetrics, ...TypeScale.micro },
   statsHeader: {
     minHeight: 58,
     paddingHorizontal: 16,

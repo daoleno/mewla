@@ -2,15 +2,12 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { ContinuousCorners } from "../../constants/tokens";
 import {
   ACTIVITY_HEADER_ICON_SLOT,
   ACTIVITY_HEADER_ROW_MIN_HEIGHT,
   ACTIVITY_HEADER_TITLE_FONT,
   activityHeaderSharedTextStyle,
 } from "./activityHeaderTextMetrics";
-import { ACTIVITY_TONE_ICON_RADIUS } from "./InterfaceTimelineActivityToneIcon";
-import { chromeTint } from "./composerMaterial";
 
 /**
  * Plan annotation header. Shares the tool row's tone-mark slot, caption line
@@ -25,13 +22,8 @@ export function ZenPlanHeader({
 }) {
   return (
     <View style={styles.row}>
-      <View
-        style={[
-          styles.mark,
-          { backgroundColor: chromeTint(accentColor, 0.14, "transparent") },
-        ]}
-      >
-        <Ionicons name="checkbox-outline" size={11} color={accentColor} />
+      <View style={styles.mark}>
+        <Ionicons name="checkbox-outline" size={13} color={accentColor} />
       </View>
       <Text
         style={[styles.title, { color: chrome.textMuted }]}
@@ -55,8 +47,6 @@ const styles = StyleSheet.create({
   mark: {
     width: ACTIVITY_HEADER_ICON_SLOT,
     height: ACTIVITY_HEADER_ICON_SLOT,
-    borderRadius: ACTIVITY_TONE_ICON_RADIUS,
-    ...ContinuousCorners,
     alignItems: "center",
     justifyContent: "center",
   },

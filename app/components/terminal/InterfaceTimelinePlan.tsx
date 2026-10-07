@@ -21,7 +21,7 @@ export function ZenPlanUpdate({
 }) {
   return (
     <View style={styles.wrap}>
-      <ZenPlanHeader accentColor={theme.cyan} chrome={chrome} />
+      <ZenPlanHeader accentColor={chrome.textSubtle} chrome={chrome} />
       <InterfaceTimelineExpandedBlock chrome={chrome} style={styles.planBlock}>
         <InterfaceTimelinePlanExplanation
           chrome={chrome}

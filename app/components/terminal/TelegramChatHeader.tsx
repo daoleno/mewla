@@ -26,6 +26,8 @@ import {
 import { SessionAvatar } from '../ui/SessionAvatar';
 import { HeaderBackButton } from '../navigation/HeaderBackButton';
 import { relativeLuminance } from '../../theme/colorUtils';
+import { StatusMark } from '../ui/StatusMark';
+import type { WorkStatus } from '../ui/workStatus';
 
 interface TelegramChatHeaderAction {
   key: string;
@@ -52,7 +54,7 @@ interface TelegramChatHeaderProps {
   rightActions?: TelegramChatHeaderAction[];
   menuAnchorRef?: React.RefObject<View | null>;
   flat?: boolean;
-  /** Live Session state shown as a dot on the avatar. */
+  /** Live Session state, shown as its StatusMark on the avatar. */
   status?: WorkerStatus;
 }
 
@@ -79,7 +81,7 @@ export function TelegramChatHeader({
   );
   const avatarText = avatarLabel ?? title;
   const avatarKey = avatarSeed ?? title;
-  const statusColor = status ? headerStatusColor(status, colors) : null;
+  const statusMark = status ? HEADER_STATUS_MARK[status] : null;
   const glass = flat ? null : styles.glass;
   // Capsules keep the chat canvas' own contrast logic; GlassSurface only
   // supplies the material, hairline and lit edge.
@@ -155,19 +157,22 @@ export function TelegramChatHeader({
             ) : (
               <SessionAvatar label={avatarText} seed={avatarKey} size={30} />
             )}
-            {statusColor ? (
+            {statusMark ? (
               <View
                 pointerEvents="none"
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
                 style={[
                   styles.statusBadge,
-                  {
-                    backgroundColor: statusColor,
-                    borderColor: styles.glass.backgroundColor,
-                  },
+                  { backgroundColor: styles.glass.backgroundColor },
                 ]}
-              />
+              >
+                <StatusMark
+                  status={statusMark}
+                  size={11}
+                  knockout={styles.glass.backgroundColor}
+                />
+              </View>
             ) : null}
           </View>
           <View style={styles.copy}>
@@ -237,18 +242,15 @@ export function TelegramChatHeader({
   );
 }
 
-function headerStatusColor(status: WorkerStatus, colors: AppColors): string | null {
-  switch (status) {
-    case 'running':
-      return colors.statusRunning;
-    case 'blocked':
-      return colors.statusBlocked;
-    case 'failed':
-      return colors.statusFailed;
-    default:
-      return null;
-  }
-}
+// Only states that ask for a glance get a mark; a finished or idle Session
+// keeps a clean avatar.
+const HEADER_STATUS_MARK: Record<WorkerStatus, WorkStatus | null> = {
+  running: 'running',
+  blocked: 'blocked',
+  failed: 'failed',
+  done: null,
+  unknown: null,
+};
 
 function resolveChipSurface(
   colors: AppColors,
@@ -323,12 +325,13 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
     },
     statusBadge: {
       position: 'absolute',
-      right: -1,
-      bottom: -1,
-      width: 12,
-      height: 12,
-      borderRadius: 6,
-      borderWidth: 2,
+      right: -3,
+      bottom: -3,
+      width: 15,
+      height: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     circleChip: {
       width: CHAT_HEADER_HEIGHT,

@@ -257,7 +257,7 @@ export function StatusTile({
   chrome: TerminalThemeChrome;
   size?: number;
 }) {
-  const ink = gitDiffToneColor(presentation.tone, theme, chrome.textMuted);
+  const ink = gitDiffToneColor(presentation.tone, theme, chrome.textMuted, chrome.text);
   return (
     <View
       accessible={false}

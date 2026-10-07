@@ -78,7 +78,6 @@ export function GitDiffRepoBrowser({
         first={index === 0}
         last={index === count - 1}
         changed={changedPathSet.has(item.path)}
-        theme={theme}
         chrome={chrome}
         onPress={() => {
           if (item.kind === "directory") {
@@ -90,7 +89,7 @@ export function GitDiffRepoBrowser({
         onLongPress={onLongPressEntry ? () => onLongPressEntry(item) : undefined}
       />
     ),
-    [changedPathSet, chrome, count, onLongPressEntry, onOpenRepoFile, onOpenRepoPath, theme],
+    [changedPathSet, chrome, count, onLongPressEntry, onOpenRepoFile, onOpenRepoPath],
   );
 
   if (repoFilePath) {
@@ -163,7 +162,6 @@ function RepoEntryRow({
   first,
   last,
   changed,
-  theme,
   chrome,
   onPress,
   onLongPress,
@@ -172,7 +170,6 @@ function RepoEntryRow({
   first: boolean;
   last: boolean;
   changed: boolean;
-  theme: TerminalThemePalette;
   chrome: TerminalThemeChrome;
   onPress(): void;
   onLongPress?(): void;
@@ -218,7 +215,7 @@ function RepoEntryRow({
         </Text>
         {changed ? (
           <View
-            style={[styles.changedDot, { backgroundColor: theme.yellow }]}
+            style={[styles.changedDot, { backgroundColor: chrome.text }]}
             accessible={false}
           />
         ) : null}

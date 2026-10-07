@@ -613,7 +613,9 @@ const styles = StyleSheet.create({
   rootWide: { flexDirection: "row" },
   listPane: { flex: 1, minWidth: 0 },
   listPaneStack: { flex: 1 },
-  listPaneWide: { flex: 0, width: 340, borderRightWidth: StyleSheet.hairlineWidth },
+  // An explicit basis: on web `flex: 0` alone resolves to a 0% basis and
+  // collapses the master pane.
+  listPaneWide: { flex: 0, flexBasis: 340, width: 340, borderRightWidth: StyleSheet.hairlineWidth },
   detailPane: { flex: 1, minWidth: 0 },
   overlay: {
     position: "absolute",
