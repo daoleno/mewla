@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,7 +32,6 @@ export function BrowserScreen() {
   const router = useRouter();
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
-  const rendererSource = useMemo(() => ({ html: browserRendererHTML(colors.bgElevated) }), [colors.bgElevated]);
   const serverName = currentServer?.name || "this server";
   const [resources, setResources] = useState<BrowserResource[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -376,7 +375,7 @@ export function BrowserScreen() {
           ))}
         </ScrollView>
       ) : null}
-      <WebView ref={web} style={[styles.viewport, { backgroundColor: colors.bgElevated }]} source={rendererSource} originWhitelist={["about:blank"]}
+      <WebView ref={web} style={[styles.viewport, { backgroundColor: colors.bgElevated }]} source={RENDERER_SOURCE} originWhitelist={["about:blank"]}
         accessibilityLabel={`Page view of ${selected.name}`}
         onShouldStartLoadWithRequest={(request) => request.url === "about:blank"}
         javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}
@@ -418,6 +417,8 @@ export function BrowserScreen() {
     </View>
   );
 }
+
+const RENDERER_SOURCE = { html: browserRendererHTML };
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
