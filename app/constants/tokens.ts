@@ -74,7 +74,7 @@ export const ContinuousCorners: Pick<ViewStyle, 'borderCurve'> = {
   borderCurve: 'continuous',
 };
 
-/** Prevents Latin descenders (g, y, p) from clipping with Source Han Sans. */
+/** Prevents Latin descenders (g, y, p) clipping and CJK fallback ascenders jumping. */
 export const UiTextMetrics: Pick<
   TextStyle,
   'includeFontPadding' | 'textAlignVertical'
@@ -96,6 +96,10 @@ export function uiLineHeight(fontSize: number): number {
 export const Typography = {
   uiFont: FontFamilies.ui,
   uiFontMedium: FontFamilies.uiMedium,
+  uiFontSemibold: FontFamilies.uiSemibold,
+  /** Bricolage Grotesque: titles, hero numbers and the wordmark only. */
+  displayFont: FontFamilies.display,
+  displayFontSemibold: FontFamilies.displaySemibold,
   terminalFont: FontFamilies.mono,
   terminalFontBold: FontFamilies.monoBold,
   chatFont: FontFamilies.ui,
@@ -116,35 +120,40 @@ type TypeScaleStyle = Pick<
   'fontFamily' | 'fontSize' | 'fontWeight' | 'letterSpacing' | 'lineHeight'
 >;
 
-/** Authoritative product type roles with explicit mixed Latin/CJK metrics. */
+/**
+ * Authoritative product type roles with explicit mixed Latin/CJK metrics.
+ * Display roles are Bricolage Grotesque with the landing's tight tracking
+ * (-0.025em); everything a user reads at length is Inter. Line heights are
+ * fixed so CJK fallback glyphs never change a row's height.
+ */
 export const TypeScale = {
   largeTitle: {
-    fontFamily: Typography.uiFontMedium,
+    fontFamily: Typography.displayFont,
     fontSize: 30,
-    fontWeight: '500',
-    lineHeight: 38,
-    letterSpacing: 0,
+    fontWeight: '800',
+    lineHeight: 36,
+    letterSpacing: -0.75,
   },
   display: {
-    fontFamily: Typography.uiFontMedium,
+    fontFamily: Typography.displayFont,
     fontSize: 34,
-    fontWeight: '500',
-    lineHeight: 42,
-    letterSpacing: 0,
+    fontWeight: '800',
+    lineHeight: 40,
+    letterSpacing: -0.85,
   },
   title: {
-    fontFamily: Typography.uiFontMedium,
+    fontFamily: Typography.displayFontSemibold,
     fontSize: 20,
-    fontWeight: '500',
-    lineHeight: 28,
-    letterSpacing: 0,
+    fontWeight: '600',
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
   heading: {
-    fontFamily: Typography.uiFontMedium,
+    fontFamily: Typography.uiFontSemibold,
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: '600',
     lineHeight: 24,
-    letterSpacing: 0,
+    letterSpacing: -0.1,
   },
   body: {
     fontFamily: Typography.uiFont,

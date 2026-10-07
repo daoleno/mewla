@@ -5,7 +5,7 @@ import { join } from "node:path";
 const tokenFixture = {
   TypeScale: {
     caption: {
-      fontFamily: "SourceHanSansSC-Regular",
+      fontFamily: "Inter-Regular",
       fontSize: 12,
       fontWeight: "400",
       lineHeight: 17,
@@ -13,7 +13,7 @@ const tokenFixture = {
     },
   },
   Typography: {
-    uiFontMedium: "SourceHanSansSC-Medium",
+    uiFontMedium: "Inter-Medium",
     terminalFont: "MapleMono-CN-Regular",
   },
   UiTextMetrics: {
@@ -74,14 +74,14 @@ describe("activity header text metrics", () => {
     expect(activityHeaderCopyLineBoxHeight()).toBe(ACTIVITY_HEADER_LINE_HEIGHT);
   });
 
-  test("preserves Source Han Sans title and Maple Mono detail fonts", () => {
+  test("preserves Inter title and Maple Mono detail fonts", () => {
     expect(ACTIVITY_HEADER_TITLE_FONT).toBe(
       tokenFixture.Typography.uiFontMedium,
     );
     expect(ACTIVITY_HEADER_DETAIL_FONT).toBe(
       tokenFixture.Typography.terminalFont,
     );
-    expect(ACTIVITY_HEADER_TITLE_FONT).toBe("SourceHanSansSC-Medium");
+    expect(ACTIVITY_HEADER_TITLE_FONT).toBe("Inter-Medium");
     expect(ACTIVITY_HEADER_DETAIL_FONT).toBe("MapleMono-CN-Regular");
   });
 
