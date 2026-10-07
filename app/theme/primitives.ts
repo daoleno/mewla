@@ -43,47 +43,40 @@ export const ZEN_VERMILION: AccentRamp = {
 };
 
 /**
- * Scheme accents sit between ramp stops: light needs 4.5:1 for white label
- * text on it, dark needs chroma without glowing on the ink canvas. `status`
- * paints running/in-progress marks and is never the accent.
+ * The chrome accent. Seal & Slip keeps the chrome neutral: controls, links,
+ * selection and the primary button are ink on paper (paper on ink in dark).
+ * `active` is the quiet selected-row fill.
  */
 export interface AccentScheme {
   accent: string;
   accentStrong: string;
-  /** Dark only: selected-row fill on the ink canvas. */
   active: string;
-  status: string;
 }
 
 export interface ZenAccent {
   id: ZenAccentId;
   name: string;
-  ramp: AccentRamp;
   light: AccentScheme;
   dark: AccentScheme;
 }
 
 /**
- * Vermilion is the one accent. The earlier sage/ink/clay/stone picker is gone;
- * a stored legacy preference resolves to the default.
+ * Ink is the one chrome accent. Vermilion is not an accent: it is the seal
+ * (the cat, the logo), Send and "Needs you", and lives in the `seal` tokens.
+ * A stored legacy preference (vermilion, sage, ...) resolves to ink.
  */
-export type ZenAccentId = 'vermilion';
+export type ZenAccentId = 'ink';
 
 export const ZEN_ACCENTS: readonly ZenAccent[] = [
   {
-    id: 'vermilion',
-    name: 'Vermilion',
-    ramp: ZEN_VERMILION,
-    // Text-on-paper accent is a hair deeper than the seal (#C8372B) so it
-    // holds 4.5:1 on pressed paper; the difference is below a JND (ΔE 0.026).
-    // Running work borrows the landing's "run" blue: vermilion is the one
-    // accent and must never be mistaken for a status.
-    light: { accent: '#BC3328', accentStrong: '#A92B21', active: ZEN_VERMILION[100], status: '#2C55C0' },
-    dark: { accent: '#FF8F80', accentStrong: '#FFB3A8', active: '#3A1F1B', status: '#8FB0FF' },
+    id: 'ink',
+    name: 'Ink',
+    light: { accent: '#161412', accentStrong: '#161412', active: '#EFEBE3' },
+    dark: { accent: '#F4F0EA', accentStrong: '#F4F0EA', active: '#322D28' },
   },
 ];
 
-export const DEFAULT_ACCENT_ID: ZenAccentId = 'vermilion';
+export const DEFAULT_ACCENT_ID: ZenAccentId = 'ink';
 
 export function getAccentById(id: string | null | undefined): ZenAccent | undefined {
   return ZEN_ACCENTS.find((accent) => accent.id === id);
@@ -108,6 +101,25 @@ export const ZEN_BRAND_COLORS = {
   sealPaper: '#FBF6EC',
 } as const;
 
+/**
+ * The seal's three jobs: the cat and logo, Send, and "Needs you". `seal` is
+ * the fill (white glyphs on it), `sealText` is vermilion set as words on the
+ * paper, `sealSoft` the faint wash behind a perched cat.
+ */
+export const ZEN_LIGHT_SEAL = {
+  seal: ZEN_VERMILION[600],
+  sealText: '#BC3328',
+  sealSoft: ZEN_VERMILION[100],
+  onSeal: '#FFFFFF',
+} as const;
+
+export const ZEN_DARK_SEAL = {
+  seal: '#D2412F',
+  sealText: '#FF9466',
+  sealSoft: '#3A1F1B',
+  onSeal: '#FFFFFF',
+} as const;
+
 // Landing paper and ink: warm white canvas, pure white cards, the landing's
 // tint for raised fills and its hairline for pressed wells.
 export const ZEN_LIGHT_NEUTRALS = {
@@ -118,7 +130,7 @@ export const ZEN_LIGHT_NEUTRALS = {
   textPrimary: '#161412',
   textSecondary: '#57514A',
   textTertiary: '#6C665D',
-  borderSubtle: '#EBE6DC',
+  borderSubtle: '#ECE7DE',
   border: '#DDD6C9',
   borderStrong: '#857E73',
 } as const;
@@ -139,25 +151,34 @@ export const ZEN_DARK_NEUTRALS = {
   modalSurfaceAlt: '#2B2722',
 } as const;
 
-// The landing's status chips: done green, waiting amber. Failure is a rose
-// crimson, held apart from the vermilion accent (OKLab ΔE > 0.1) and always
-// shipped with its glyph and label, so it never relies on hue alone.
+/**
+ * Seal & Slip status semantics. Every state has its own glyph (StatusMark), so
+ * none relies on hue: Ready green check, Running blue arc, Warning amber
+ * triangle, Failed oxblood crossed box, Blocked stone dashed ring. Failure is
+ * never vermilion; "Needs you" is the seal.
+ */
 export const ZEN_LIGHT_STATUS = {
-  danger: '#A3194F',
-  dangerSoft: '#FBE4EC',
-  warning: '#94600A',
-  warningSoft: '#FDF1DC',
-  success: '#22703C',
-  successSoft: '#E3F4E8',
+  ready: '#2F6B4F',
+  running: '#2C55C0',
+  warning: '#9A6212',
+  failed: '#7D1F35',
+  blocked: '#736C61',
+  dangerSoft: '#F7E8EB',
+  warningSoft: '#FBF0DD',
+  successSoft: '#E6F1EA',
+  runningSoft: '#E8EEFB',
 } as const;
 
 export const ZEN_DARK_STATUS = {
-  danger: '#F584C0',
-  dangerSoft: '#3A1A2A',
-  warning: '#F6C16B',
-  warningSoft: '#302412',
-  success: '#7BD394',
-  successSoft: '#12291A',
+  ready: '#74C79B',
+  running: '#9AB6FF',
+  warning: '#EDBA5A',
+  failed: '#F2A0B1',
+  blocked: '#9C9589',
+  dangerSoft: '#3A1F26',
+  warningSoft: '#33270F',
+  successSoft: '#15291E',
+  runningSoft: '#1B2440',
 } as const;
 
 export const ZEN_LIGHT_OVERLAYS = {
@@ -168,7 +189,8 @@ export const ZEN_DARK_OVERLAYS = {
   modalBackdrop: 'rgba(0,0,0,0.6)',
 } as const;
 
-export function buildLightAppColors({ ramp, light: a }: ZenAccent): AppColors {
+export function buildLightAppColors({ light: a }: ZenAccent): AppColors {
+  const st = ZEN_LIGHT_STATUS;
   return {
     bgPrimary: ZEN_LIGHT_NEUTRALS.canvas,
     bgSurface: ZEN_LIGHT_NEUTRALS.surface,
@@ -179,17 +201,19 @@ export function buildLightAppColors({ ramp, light: a }: ZenAccent): AppColors {
     accent: a.accent,
     accentSoft: a.active,
     accentStrong: a.accentStrong,
+    ...ZEN_LIGHT_SEAL,
     // The Zen mark keeps its sage-ink ribbon until the rename replaces it.
     logoDetail: ZEN_SAGE[900],
-    statusFailed: ZEN_LIGHT_STATUS.danger,
-    statusBlocked: ZEN_LIGHT_STATUS.warning,
+    statusFailed: st.failed,
+    statusBlocked: st.blocked,
+    statusWarning: st.warning,
     statusUnknown: ZEN_LIGHT_NEUTRALS.textTertiary,
-    statusRunning: a.status,
-    statusDone: ZEN_LIGHT_STATUS.success,
-    zenGreen: ZEN_LIGHT_STATUS.success,
-    priorityUrgent: ZEN_LIGHT_STATUS.danger,
-    priorityHigh: ZEN_LIGHT_STATUS.warning,
-    priorityMedium: a.status,
+    statusRunning: st.running,
+    statusDone: st.ready,
+    zenGreen: st.ready,
+    priorityUrgent: st.failed,
+    priorityHigh: st.warning,
+    priorityMedium: st.running,
     priorityLow: ZEN_LIGHT_NEUTRALS.textSecondary,
     border: ZEN_LIGHT_NEUTRALS.border,
     borderSubtle: ZEN_LIGHT_NEUTRALS.borderSubtle,
@@ -202,18 +226,19 @@ export function buildLightAppColors({ ramp, light: a }: ZenAccent): AppColors {
     modalBackdrop: ZEN_LIGHT_OVERLAYS.modalBackdrop,
     modalSurface: ZEN_LIGHT_NEUTRALS.surface,
     modalSurfaceAlt: ZEN_LIGHT_NEUTRALS.elevated,
-    textOnAccent: ZEN_LIGHT_NEUTRALS.surface,
-    focusRing: a.accentStrong,
-    selectionBackground: rgba(ramp[600], 0.22),
-    promptGreen: ZEN_LIGHT_STATUS.success,
-    promptYellow: ZEN_LIGHT_STATUS.warning,
-    warning: ZEN_LIGHT_STATUS.warning,
-    dangerText: ZEN_LIGHT_STATUS.danger,
-    success: ZEN_LIGHT_STATUS.success,
+    textOnAccent: ZEN_LIGHT_NEUTRALS.canvas,
+    focusRing: st.running,
+    selectionBackground: rgba(st.running, 0.18),
+    promptGreen: st.ready,
+    promptYellow: st.warning,
+    warning: st.warning,
+    dangerText: st.failed,
+    success: st.ready,
     disabledText: ZEN_LIGHT_NEUTRALS.textTertiary,
-    dangerSoft: ZEN_LIGHT_STATUS.dangerSoft,
-    warningSoft: ZEN_LIGHT_STATUS.warningSoft,
-    successSoft: ZEN_LIGHT_STATUS.successSoft,
+    dangerSoft: st.dangerSoft,
+    warningSoft: st.warningSoft,
+    successSoft: st.successSoft,
+    runningSoft: st.runningSoft,
     shadowColor: ZEN_BRAND_COLORS.environment,
   };
 }
@@ -221,6 +246,7 @@ export function buildLightAppColors({ ramp, light: a }: ZenAccent): AppColors {
 export const ZEN_LIGHT_APP_COLORS: AppColors = buildLightAppColors(DEFAULT_ACCENT);
 
 export function buildDarkAppColors({ dark: a }: ZenAccent): AppColors {
+  const st = ZEN_DARK_STATUS;
   return {
     bgPrimary: ZEN_BRAND_COLORS.environment,
     bgSurface: ZEN_DARK_NEUTRALS.surface,
@@ -231,16 +257,18 @@ export function buildDarkAppColors({ dark: a }: ZenAccent): AppColors {
     accent: a.accent,
     accentSoft: a.active,
     accentStrong: a.accentStrong,
+    ...ZEN_DARK_SEAL,
     logoDetail: ZEN_BRAND_COLORS.ivory,
-    statusFailed: ZEN_DARK_STATUS.danger,
-    statusBlocked: ZEN_DARK_STATUS.warning,
+    statusFailed: st.failed,
+    statusBlocked: st.blocked,
+    statusWarning: st.warning,
     statusUnknown: ZEN_DARK_NEUTRALS.textTertiary,
-    statusRunning: a.status,
-    statusDone: ZEN_DARK_STATUS.success,
-    zenGreen: ZEN_DARK_STATUS.success,
-    priorityUrgent: ZEN_DARK_STATUS.danger,
-    priorityHigh: ZEN_DARK_STATUS.warning,
-    priorityMedium: a.status,
+    statusRunning: st.running,
+    statusDone: st.ready,
+    zenGreen: st.ready,
+    priorityUrgent: st.failed,
+    priorityHigh: st.warning,
+    priorityMedium: st.running,
     priorityLow: ZEN_DARK_NEUTRALS.textSecondary,
     border: ZEN_DARK_NEUTRALS.border,
     borderSubtle: ZEN_DARK_NEUTRALS.borderSubtle,
@@ -254,17 +282,18 @@ export function buildDarkAppColors({ dark: a }: ZenAccent): AppColors {
     modalSurface: ZEN_DARK_NEUTRALS.surface,
     modalSurfaceAlt: ZEN_DARK_NEUTRALS.modalSurfaceAlt,
     textOnAccent: ZEN_BRAND_COLORS.environment,
-    focusRing: a.accentStrong,
-    selectionBackground: rgba(a.accent, 0.3),
-    promptGreen: ZEN_DARK_STATUS.success,
-    promptYellow: ZEN_DARK_STATUS.warning,
-    warning: ZEN_DARK_STATUS.warning,
-    dangerText: ZEN_DARK_STATUS.danger,
-    success: ZEN_DARK_STATUS.success,
+    focusRing: st.running,
+    selectionBackground: rgba(st.running, 0.28),
+    promptGreen: st.ready,
+    promptYellow: st.warning,
+    warning: st.warning,
+    dangerText: st.failed,
+    success: st.ready,
     disabledText: ZEN_DARK_NEUTRALS.textTertiary,
-    dangerSoft: ZEN_DARK_STATUS.dangerSoft,
-    warningSoft: ZEN_DARK_STATUS.warningSoft,
-    successSoft: ZEN_DARK_STATUS.successSoft,
+    dangerSoft: st.dangerSoft,
+    warningSoft: st.warningSoft,
+    successSoft: st.successSoft,
+    runningSoft: st.runningSoft,
     shadowColor: '#000000',
   };
 }
@@ -278,18 +307,19 @@ export function buildLightChatPalette({ light: a }: ZenAccent): ChatPalette {
     showTimestamps: false,
     showDateDividers: true,
     background: ZEN_LIGHT_NEUTRALS.canvas,
-    // The landing's chat: your words in an ink bubble, Brain's on the paper.
-    sentBubble: ZEN_LIGHT_NEUTRALS.textPrimary,
+    // Seal & Slip: your words sit on a quiet paper tint, Brain's on the page.
+    sentBubble: '#F0ECE4',
     receivedBubble: ZEN_LIGHT_NEUTRALS.surface,
-    sentText: '#F6F2EA',
+    sentText: ZEN_LIGHT_NEUTRALS.textPrimary,
     receivedText: ZEN_LIGHT_NEUTRALS.textPrimary,
-    sentTimestamp: '#B8B0A5',
+    sentTimestamp: ZEN_LIGHT_NEUTRALS.textTertiary,
     receivedTimestamp: ZEN_LIGHT_NEUTRALS.textTertiary,
     // Outside the bubble on chat.background: quiet ink, not outline chrome.
     outboundSentClock: ZEN_LIGHT_NEUTRALS.textSecondary,
     composerBackground: ZEN_LIGHT_NEUTRALS.surface,
     composerBorder: ZEN_LIGHT_NEUTRALS.borderSubtle,
     composerDock: TRANSPARENT,
+    // Links are ink and underlined; colour is reserved for status.
     link: a.accentStrong,
     patternIcon: TRANSPARENT,
   };
@@ -304,8 +334,8 @@ export function buildDarkChatPalette({ dark: a }: ZenAccent): ChatPalette {
     showTimestamps: false,
     showDateDividers: true,
     background: ZEN_BRAND_COLORS.environment,
-    // A lit warm panel on the ink canvas, the dark counterpart of the ink bubble.
-    sentBubble: '#35302A',
+    // A lit warm panel on the ink canvas, the dark counterpart of the tint.
+    sentBubble: '#2E2A25',
     receivedBubble: ZEN_DARK_NEUTRALS.surface,
     sentText: ZEN_DARK_NEUTRALS.textPrimary,
     receivedText: ZEN_DARK_NEUTRALS.textPrimary,
@@ -336,7 +366,7 @@ export const ZEN_LIGHT_SURFACE_PALETTE: SurfacePalette = buildSurfacePalette(ZEN
 
 export const ZEN_DARK_SURFACE_PALETTE: SurfacePalette = buildSurfacePalette(ZEN_DARK_APP_COLORS);
 
-export function buildLightMaterials({ ramp }: ZenAccent): MaterialPalette {
+export function buildLightMaterials(_accent: ZenAccent): MaterialPalette {
   return {
     // The landing's sticky bar: paper at 82% over a blur.
     chrome: 'rgba(251,250,247,0.86)',
@@ -345,13 +375,14 @@ export function buildLightMaterials({ ramp }: ZenAccent): MaterialPalette {
     thin: 'rgba(255,255,255,0.68)',
     stroke: 'rgba(22,20,18,0.08)',
     separator: 'rgba(22,20,18,0.10)',
-    tint: rgba(ramp[600], 0.12),
+    // A paper tint, not a colour: selected and tinted controls stay neutral.
+    tint: 'rgba(22,20,18,0.06)',
   };
 }
 
 export const ZEN_LIGHT_MATERIALS: MaterialPalette = buildLightMaterials(DEFAULT_ACCENT);
 
-export function buildDarkMaterials({ dark: a }: ZenAccent): MaterialPalette {
+export function buildDarkMaterials(_accent: ZenAccent): MaterialPalette {
   return {
     chrome: 'rgba(20,18,16,0.86)',
     regular: 'rgba(38,34,30,0.92)',
@@ -360,21 +391,22 @@ export function buildDarkMaterials({ dark: a }: ZenAccent): MaterialPalette {
     // The landing's dark hairline: white at 10%.
     stroke: 'rgba(255,255,255,0.08)',
     separator: 'rgba(255,255,255,0.10)',
-    tint: rgba(a.accent, 0.18),
+    tint: 'rgba(255,255,255,0.08)',
   };
 }
 
 export const ZEN_DARK_MATERIALS: MaterialPalette = buildDarkMaterials(DEFAULT_ACCENT);
 
-export function buildLightDataVisualization({ ramp }: ZenAccent): DataVisualizationPalette {
-  return { activityRamp: [ramp[100], ramp[300], ramp[500], ramp[700]] };
+// Activity is good news, so the heatmap ramps toward the Ready green.
+export function buildLightDataVisualization(_accent: ZenAccent): DataVisualizationPalette {
+  return { activityRamp: ['#E3EFE7', '#A9CDB6', '#5E9A76', '#2F6B4F'] };
 }
 
 export const ZEN_LIGHT_DATA_VISUALIZATION: DataVisualizationPalette =
   buildLightDataVisualization(DEFAULT_ACCENT);
 
-export function buildDarkDataVisualization({ ramp }: ZenAccent): DataVisualizationPalette {
-  return { activityRamp: [ramp[900], ramp[700], ramp[500], ramp[300]] };
+export function buildDarkDataVisualization(_accent: ZenAccent): DataVisualizationPalette {
+  return { activityRamp: ['#1F3528', '#2E6045', '#4E9670', '#7FD0A5'] };
 }
 
 export const ZEN_DARK_DATA_VISUALIZATION: DataVisualizationPalette =

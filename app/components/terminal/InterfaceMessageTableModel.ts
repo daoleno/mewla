@@ -17,7 +17,7 @@ export function messageTableRowTone(
 export function messageTableSemanticColors(chrome: TerminalThemeChrome) {
   return {
     // A touch of ink on the quiet fill, so the header outranks zebra rows.
-    header: mixHex(chrome.surfaceMuted, chrome.text, 0.1),
+    header: mixHex(chrome.surfaceMuted, chrome.text, 0.16),
     section: chrome.accentSoft,
     even: chrome.surface,
     odd: chrome.disabledSurface,
