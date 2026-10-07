@@ -15,7 +15,6 @@ import type { useTerminalNavigationActions } from "./useTerminalNavigationAction
 
 interface UseTerminalScreenOverlayPropsInput {
   menuTitle: string;
-  onOpenResources(): void;
   routeSheetVisible: boolean;
   routeSheetLoading: boolean;
   routeSheetActivating: boolean;
@@ -57,7 +56,6 @@ interface UseTerminalScreenOverlayPropsInput {
 
 export function useTerminalScreenOverlayProps({
   menuTitle,
-  onOpenResources,
   routeSheetVisible,
   routeSheetLoading,
   routeSheetActivating,
@@ -118,7 +116,6 @@ export function useTerminalScreenOverlayProps({
   return useMemo(
     () => ({
       menuTitle,
-      onOpenResources,
       routeSheetVisible,
       routeSheetLoading,
       routeSheetActivating,
@@ -163,7 +160,6 @@ export function useTerminalScreenOverlayProps({
       workerCwd,
       chrome,
       menuTitle,
-      onOpenResources,
       closeMenu,
       connectionConnected,
       creatingSession,

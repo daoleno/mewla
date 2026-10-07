@@ -512,7 +512,6 @@ function ChatDemo() {
             }}
             isStructuredChatWorker
             onBack={NOOP}
-            onOpenSessionDetails={NOOP}
             onOpenGitDiff={NOOP}
             onOpenMenu={NOOP}
             onToggleInterfaceRenderMode={NOOP}
@@ -667,7 +666,6 @@ function TerminalPaletteDemo() {
         isStructuredChatWorker={false}
         status="running"
         onBack={NOOP}
-        onOpenSessionDetails={NOOP}
         onOpenGitDiff={NOOP}
         onOpenMenu={NOOP}
         onToggleInterfaceRenderMode={NOOP}

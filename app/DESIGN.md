@@ -4,9 +4,9 @@ The app follows the landing page (`site/index.html`, `site/styles.css`,
 `site/sealcat.js`): warm paper, warm ink and one vermilion seal with a cat
 carved in it. This file maps that language onto the app's theme system
 (`app/theme/`, `app/constants/tokens.ts`). It does not define a second one.
-The product is Mewla. Internal identifiers (`ZenTheme`, `ZEN_*_COLORS`,
-`ZenLoopSpinner`), the `zen-*` native modules and the `zen-*` asset files keep
-their legacy names.
+The product is Mewla. Internal identifiers (`ZenTheme`, `ZEN_*_COLORS`) and
+the `zen-*` native modules keep their legacy names. No Zen-era art remains:
+every brand asset is `assets/branding/mewla-*`.
 
 ## Principles
 
@@ -93,6 +93,15 @@ preference resolves to ink.
   *App*: Settings. Rows are a soft-ink glyph and a label, no tiles.
 - Settings holds Servers, Channels (Telegram), Agents (Model Providers),
   Appearance and About. Browser stays hidden from the menu.
+- **One home per destination.** Every screen you can go to (Calendar,
+  Plugins, Skills, Stats, Resources, Settings) has exactly one entry point:
+  its menu row. A ⋯ menu, a header title tap or a page button never repeats
+  a menu destination. A ⋯ menu holds only actions on the current screen:
+  Brain's is New chat, Switch executor, Open terminal, Browse workspace; a
+  Session's is New terminal, Rename, Model, Open Web, Open Brain (its linked
+  Work), Terminate. Sessions' ⋯ holds New session and Services. Contextual
+  recovery links ("Open Settings" in a no-server empty state) are fine: they
+  fix the screen you are on rather than navigate elsewhere.
 
 ## Brain and its Work
 
@@ -216,16 +225,18 @@ committed file drifts or the config strays from the theme colours.
 | Drawer and About | `MewlaMark`, the same seal in react-native-svg |
 
 The mark is the logo, not Brain: it never moves or changes with state. The
-drawer, the About row and Onboarding's brand row all show `MewlaMark`. The
-`zen-*` assets stay: the composer's `ZenLoopSpinner` still uses them.
+drawer, the About row and Onboarding's brand row all show `MewlaMark`. Small
+inline waits (composer send, upload chip, sheets) use the platform activity
+indicator in ink, never a brand mark.
 
 ## Sessions and Worker chat
 
 - **Sessions.** Plain rows on the paper, grouped by directory with a quiet
   caption when there is more than one; no cards and no separators. A row's
   only fill is the selection tint, and in selection mode the check takes its
-  own leading column. "New session" is the page's one ink pill, held at the
-  foot of the column (`components/workers/SessionsListView.tsx`). Nothing sits
+  own leading column. "New session" is the page's one ink pill: compact,
+  content-width, floating at the bottom right
+  (`components/workers/SessionsListView.tsx`), never a full-width bar. Nothing sits
   above the list unless the server is unreachable.
 - **Worker chat.** The conversation keeps Brain's 820 pt reading width; the
   terminal grid stays full width. The header avatar carries the Session's

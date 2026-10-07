@@ -79,7 +79,6 @@ interface UseTerminalScreenLayoutPropsInput {
   openGitDiff(): void;
   openNewTerminal(): void;
   openRenameModal(): void;
-  openSessionDetails(): void;
   openModel?: () => void;
   openDSHWeb?: () => void;
   modelActionAvailable?: boolean;
@@ -146,7 +145,6 @@ export function useTerminalScreenLayoutProps({
   openGitDiff,
   openNewTerminal,
   openRenameModal,
-  openSessionDetails,
   openModel,
   openDSHWeb,
   modelActionAvailable = false,
@@ -194,7 +192,6 @@ export function useTerminalScreenLayoutProps({
     isStructuredChatWorker,
     delegated: agent?.delegated,
     status: agent?.status,
-    onOpenSessionDetails: openSessionDetails,
     openGitDiff,
     onToggleInterfaceRenderMode: handleToggleInterfaceRenderMode,
   });
@@ -228,7 +225,6 @@ export function useTerminalScreenLayoutProps({
   });
   const overlayProps = useTerminalScreenOverlayProps({
     menuTitle: headerTitle,
-    onOpenResources: openSessionDetails,
     routeSheetVisible,
     routeSheetLoading,
     routeSheetActivating,

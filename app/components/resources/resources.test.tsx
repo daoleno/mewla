@@ -190,11 +190,11 @@ if (!process.env.ZEN_RESOURCE_TEST_CHILD) {
     expect(empty().detail).toBe("Refresh error");
   });
 
-  test("terminal action menu exposes Resources and preserves session title", () => {
+  test("terminal action menu keeps only Session actions; Resources lives in the drawer", () => {
     const open = mock(() => {});
     const theme = resolveTerminalTheme("dark");
     const props: React.ComponentProps<typeof TerminalActionPopover> = {
-      visible: true, title: "My session", onOpenResources: open,
+      visible: true, title: "My session",
       left: 0, top: 0, creatingSession: false, newTerminalLabel: "New Terminal",
       newTerminalDisabled: false, showLinkedWork: false, theme,
       chrome: buildTerminalChrome(theme), onClose: open, onNewTerminal: open,
@@ -203,8 +203,7 @@ if (!process.env.ZEN_RESOURCE_TEST_CHILD) {
     act(() => { renderer = TestRenderer.create(<TerminalActionPopover {...props} />); });
     const menu = renderer!.root.findByType("ActionMenu" as any).props;
     expect(menu.title).toBe("My session");
-    menu.items.find((item: { key: string }) => item.key === "resources").onPress();
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(menu.items.map((item: { key: string }) => item.key)).not.toContain("resources");
     expect(menu.items.at(-1).key).toBe("terminate");
   });
 }

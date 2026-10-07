@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Linking } from "react-native";
-import { useRouter } from "expo-router";
 import { useWorkers } from "../../../store/workers";
 import { useBrain } from "../../../store/brain";
 import { useWork } from "../../../store/work";
@@ -25,7 +24,6 @@ export default function TerminalScreen() {
   const { state: brainState } = useBrain();
   const { state: workState } = useWork();
   const { setCurrentSession } = useCurrentSession();
-  const router = useRouter();
   const [dshWebURL, setDshWebURL] = useState<string | null>(null);
   const {
     workerId,
@@ -189,11 +187,6 @@ export default function TerminalScreen() {
   });
   const { openNewTerminal } = sessionActions;
 
-  const openSessionDetails = useCallback(() => {
-    closeMenu();
-    router.push("/resources");
-  }, [closeMenu, router]);
-
   const routeSheet = useSessionProviderSheet({
     serverId,
     workerId,
@@ -270,7 +263,6 @@ export default function TerminalScreen() {
       openGitDiff,
       openNewTerminal,
       openRenameModal,
-      openSessionDetails,
       openModel: modelActionAvailable
         ? openModel
         : undefined,

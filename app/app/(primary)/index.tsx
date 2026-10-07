@@ -265,10 +265,6 @@ export default function BrainScreen() {
     });
   }, [activeServer, hostWorker?.id, router]);
 
-  const openCalendar = useCallback(() => {
-    router.push("/calendar");
-  }, [router]);
-
   const startNewBrainChat = useCallback(async () => {
     if (!activeServer || !activeBrain?.hydrated || newChatLoading) {
       return;
@@ -374,12 +370,6 @@ export default function BrainScreen() {
         disabled: !canOpenWorkspace,
         onPress: openWorkspaceViewer,
       },
-      {
-        key: "calendar",
-        label: "Calendar",
-        icon: "calendar-outline" as const,
-        onPress: openCalendar,
-      },
     ],
     [
       canNewChat,
@@ -389,7 +379,6 @@ export default function BrainScreen() {
       hostExecutor,
       newChatLoading,
       openAdapterSheet,
-      openCalendar,
       openBrainTerminal,
       openWorkspaceViewer,
       startNewBrainChat,
