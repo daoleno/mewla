@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 func TestInferWorkerProviderPiAndOpenCode(t *testing.T) {
@@ -46,8 +47,8 @@ func TestEnsurePiSessionLaunchCommandInjectsAbsoluteSession(t *testing.T) {
 	if path == "" || !filepath.IsAbs(path) {
 		t.Fatalf("expected absolute owned session path, got %q from %q", path, got)
 	}
-	if !strings.HasPrefix(path, filepath.Join(mustHome(t), ".zen", "provider-sessions", "pi")) {
-		t.Fatalf("owned path outside zen root: %q", path)
+	if !strings.HasPrefix(path, filepath.Join(statedir.Default(mustHome(t)), "provider-sessions", "pi")) {
+		t.Fatalf("owned path outside the state root: %q", path)
 	}
 	again, err := EnsurePiSessionLaunchCommand(got)
 	if err != nil {
