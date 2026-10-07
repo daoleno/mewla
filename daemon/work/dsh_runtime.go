@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 var dshSessionIDPattern = regexp.MustCompile(`^session-[a-zA-Z0-9-]{1,100}$`)
@@ -25,7 +27,7 @@ func DSHRoot() string {
 	home, _ := os.UserHomeDir()
 	root := os.Getenv("ZEN_STATE_DIR")
 	if root == "" {
-		root = filepath.Join(home, ".zen")
+		root = statedir.Default(home)
 	}
 	return filepath.Join(root, "provider-sessions", "dsh")
 }

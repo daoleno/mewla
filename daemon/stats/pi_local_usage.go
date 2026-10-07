@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 // Pi model usage is collected entirely from Pi's durable local session
@@ -126,7 +128,7 @@ func (c *Collector) collectPiStats(home string) map[string]*dateAgg {
 	// Zen launches Pi with an absolute --session path so each Session has one
 	// stable transcript owner. Those files are deliberately outside Pi's
 	// shared per-CWD history and use the same durable JSONL schema.
-	ownedSessionsRoot := filepath.Join(home, ".zen", "provider-sessions", "pi")
+	ownedSessionsRoot := filepath.Join(statedir.Default(home), "provider-sessions", "pi")
 	scanPiSessionDirCached(ownedSessionsRoot, "", byDate, c.usageCacheDir)
 
 	return byDate

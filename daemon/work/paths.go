@@ -3,6 +3,8 @@ package work
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 // DefaultRoot returns ~/.zen/work.
@@ -11,7 +13,7 @@ func DefaultRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "work"), nil
+	return filepath.Join(statedir.Default(home), "work"), nil
 }
 
 // DefaultWorktreeRoot returns the durable, Zen-managed location agents should
@@ -23,7 +25,7 @@ func DefaultWorktreeRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "worktrees"), nil
+	return filepath.Join(statedir.Default(home), "worktrees"), nil
 }
 
 // DefaultExecutorsPath returns ~/.zen/executors.toml.
@@ -32,7 +34,7 @@ func DefaultExecutorsPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "executors.toml"), nil
+	return filepath.Join(statedir.Default(home), "executors.toml"), nil
 }
 
 // DefaultModelProfilesPath returns ~/.zen/model-profiles.toml.
@@ -41,7 +43,7 @@ func DefaultModelProfilesPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "model-profiles.toml"), nil
+	return filepath.Join(statedir.Default(home), "model-profiles.toml"), nil
 }
 
 // DefaultProviderDiscoveryPath returns ~/.zen/provider-discovery.json.
@@ -51,7 +53,7 @@ func DefaultProviderDiscoveryPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "provider-discovery.json"), nil
+	return filepath.Join(statedir.Default(home), "provider-discovery.json"), nil
 }
 
 // DefaultProviderCredentialsPath returns ~/.zen/provider-credentials.json.
@@ -60,7 +62,7 @@ func DefaultProviderCredentialsPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "provider-credentials.json"), nil
+	return filepath.Join(statedir.Default(home), "provider-credentials.json"), nil
 }
 
 // DefaultRouteBindingsPath returns ~/.zen/route-bindings.json.
@@ -71,7 +73,7 @@ func DefaultRouteBindingsPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "route-bindings.json"), nil
+	return filepath.Join(statedir.Default(home), "route-bindings.json"), nil
 }
 
 // DefaultRouteListenerPath returns ~/.zen/route-listener.json.
@@ -82,7 +84,7 @@ func DefaultRouteListenerPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "route-listener.json"), nil
+	return filepath.Join(statedir.Default(home), "route-listener.json"), nil
 }
 
 // EnsureDir creates dir with mode 0o700 if it does not already exist.

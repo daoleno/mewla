@@ -13,6 +13,7 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -204,31 +205,31 @@ func resolvePaths(opts Options) (resolvedPaths, error) {
 	stateDir := strings.TrimSpace(opts.StateDir)
 	if stateDir == "" {
 		if strings.TrimSpace(opts.Home) != "" {
-			stateDir = filepath.Join(home, ".zen")
+			stateDir = statedir.Default(home)
 		} else if d, err := auth.DefaultStorageDir(); err == nil {
 			stateDir = d
 		} else {
-			stateDir = filepath.Join(home, ".zen")
+			stateDir = statedir.Default(home)
 		}
 	}
 	executorsPath := strings.TrimSpace(opts.ExecutorsPath)
 	if executorsPath == "" {
 		if strings.TrimSpace(opts.Home) != "" {
-			executorsPath = filepath.Join(home, ".zen", "executors.toml")
+			executorsPath = filepath.Join(statedir.Default(home), "executors.toml")
 		} else if p, err := work.DefaultExecutorsPath(); err == nil {
 			executorsPath = p
 		} else {
-			executorsPath = filepath.Join(home, ".zen", "executors.toml")
+			executorsPath = filepath.Join(statedir.Default(home), "executors.toml")
 		}
 	}
 	brainRoot := strings.TrimSpace(opts.BrainRoot)
 	if brainRoot == "" {
 		if strings.TrimSpace(opts.Home) != "" {
-			brainRoot = filepath.Join(home, ".zen", "brain")
+			brainRoot = filepath.Join(statedir.Default(home), "brain")
 		} else if p, err := brain.DefaultRoot(); err == nil {
 			brainRoot = p
 		} else {
-			brainRoot = filepath.Join(home, ".zen", "brain")
+			brainRoot = filepath.Join(statedir.Default(home), "brain")
 		}
 	}
 	return resolvedPaths{

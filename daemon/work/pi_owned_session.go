@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const piOwnedSessionDirName = "provider-sessions/pi"
@@ -35,7 +37,7 @@ func piOwnedSessionRoot(zenHome string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		zenHome = filepath.Join(home, ".zen")
+		zenHome = statedir.Default(home)
 	}
 	return filepath.Join(zenHome, piOwnedSessionDirName), nil
 }

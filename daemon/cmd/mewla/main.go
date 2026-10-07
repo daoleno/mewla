@@ -36,6 +36,7 @@ import (
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
 	"github.com/daoleno/mewla/daemon/setup"
+	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -172,7 +173,7 @@ func daemonTmuxRuntime(home, daemonID, tmuxEnv string) (socketPath, scratchDir s
 		daemonID = daemonID[:24]
 	}
 	return tmuxSocketFromEnvironment(tmuxEnv),
-		filepath.Join(home, ".zen", "run", "tmux-scratch", daemonID), nil
+		filepath.Join(statedir.Default(home), "run", "tmux-scratch", daemonID), nil
 }
 
 func runDaemon(args []string, stderr io.Writer) error {

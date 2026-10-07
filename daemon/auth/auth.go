@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const (
@@ -107,7 +109,7 @@ func DefaultStorageDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("locate home dir: %w", err)
 	}
-	return filepath.Join(home, ".zen"), nil
+	return statedir.Default(home), nil
 }
 
 func ResolveStorageDir(storageDir string) (string, error) {

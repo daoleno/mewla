@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const SchemaVersion = 2
@@ -41,7 +43,7 @@ func DefaultRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "calendar"), nil
+	return filepath.Join(statedir.Default(home), "calendar"), nil
 }
 
 func NewStore(root string) (*Store, error) {

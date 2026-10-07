@@ -9,6 +9,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 func runAddressCommand(args []string, stderr interface{ Write([]byte) (int, error) }) error {
@@ -71,7 +72,7 @@ func resolveCLIStateDir(value string) string {
 	}
 	dir, err := auth.DefaultStorageDir()
 	if err != nil {
-		return ".zen"
+		return statedir.DirName
 	}
 	return dir
 }

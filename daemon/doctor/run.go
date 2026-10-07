@@ -19,6 +19,7 @@ import (
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -373,7 +374,7 @@ func (e env) resolveStateDir() (string, bool, error) {
 	dir := strings.TrimSpace(e.opts.StateDir)
 	if dir == "" {
 		if home := strings.TrimSpace(e.opts.Home); home != "" {
-			dir = filepath.Join(home, ".zen")
+			dir = statedir.Default(home)
 		} else {
 			var err error
 			dir, err = auth.DefaultStorageDir()
@@ -459,7 +460,7 @@ func (e env) checkExecutors() ExecutorsCheck {
 			}
 		}
 		if home != "" {
-			path = filepath.Join(home, ".zen", "executors.toml")
+			path = filepath.Join(statedir.Default(home), "executors.toml")
 		} else if p, err := work.DefaultExecutorsPath(); err == nil {
 			path = p
 		}
