@@ -94,6 +94,35 @@ preference resolves to ink.
 - Settings holds Servers, Channels (Telegram), Agents (Model Providers),
   Appearance and About. Browser stays hidden from the menu.
 
+## Brain and its Work
+
+Brain has one Work surface, built from the daemon's `current_work`
+(`components/brain/brainWorkSurface.ts`, pure and tested):
+
+- **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
+  (`BrainWorkColumn`): "Work", a count line, then slips grouped Needs you ·
+  Running · Back · Waiting. The cat sits on the first Needs-you slip there,
+  and the conversation drops its between-turn tail row.
+- **Phone.** Under the app bar, one line ("● 6 need you · 2 running · 2 back ›")
+  opens the same grouped list as a sheet. The seal dot shows only when
+  something needs you.
+- **Goal line.** When Brain has declared an objective
+  (`mewla brain objective set`), it sits under the title:
+  "Ship atlas-notes v1.4 this week · 2 of 5 back".
+- A slip in the column opens its live Session, or a small detail sheet when
+  the Session is gone. Calendar occurrences that have not run and Brain's
+  resource telemetry are not shown; closed Work leaves as soon as the daemon
+  stops listing it.
+- The state on every slip comes from `brainCurrentWorkLifecycle`, so a Work
+  reads the same in the column and in the conversation. A `user_input` wake
+  (Brain parked the Work on you) is Needs you.
+
+In the conversation, every Work result is a full slip (`WorkSlip`):
+executor · project · time, the state, the title and one line. A Work's slip
+moves to when its newest result came back. A turn's tool rows fold into one
+quiet "Worked · N steps" row that expands to the steps (Brain only; Session
+chats keep every row). The composer says "Tell Brain…".
+
 ## Type
 
 | Role | Face | Size / line | Use |
@@ -245,9 +274,9 @@ look, with the landing's bolder carving at small sizes.
 | Brain idle, empty chat | Curled in the seal, breathing, three z's | Brain empty state |
 | Connecting or loading | In the seal, one eye open | Brain empty state (busy), status screen |
 | Brain's turn running | Out of the seal, walking in place | Working row, newest edge of the Brain timeline |
-| Work needs your input | Alert, ears up, seal ping | **Perched on that Work's newest slip**; the tail row only when the slip is not in this conversation |
-| Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on Workers · title" |
-| Unread result | Loafing with a parcel | Tail row, "Brought something back · title" |
+| Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column |
+| Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" (phone; the Work column on wide screens) |
+| Unread result | Loafing with a parcel | Tail row, "Brought 2 things back" (phone; the Work column on wide screens) |
 | Offline | Asleep in a greyed seal | Brain status screen |
 | No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Onboarding "Give Brain a home" |
 | Paired | Asleep in the seal (moved in) | Onboarding, connected |
@@ -256,8 +285,10 @@ look, with the landing's bolder carving at small sizes.
 State comes from `resolveBrainCatPresence` (`components/mewla/brainCatState.ts`).
 Placement comes from `mergeBrainPresenceIntoTimeline`
 (`brainPresenceTimeline.ts`): a running turn keeps the cat in the Working
-row; otherwise "attention" perches it on the newest slip whose `work_id`
-matches, and the tail row is dropped. Both are pure and tested, and there is
+row; otherwise "attention" perches it on the newest slip of any Work that
+needs you, and the tail row is dropped. The tail row is presence only: a
+count, never one Work's title (a single title went stale for days), and
+tapping it opens the Work list. Both are pure and tested, and there is
 never more than one cat on screen. Session chats never provide
 `BrainCompanionContext`, so they have no cat.
 

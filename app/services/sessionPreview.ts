@@ -25,8 +25,11 @@ export function formatWorkerSessionPreview(
   const serverPrefix = options?.showServerName && options.serverName
     ? `${options.serverName}: `
     : undefined;
-  const lastLine = extractLastOutputLine(agent.last_output_lines);
   const summary = agent.summary?.trim();
+  // A delegated Worker reports what it is doing through `mewla worker
+  // progress`; that structured summary beats whatever its terminal printed
+  // last (often the provider's status bar).
+  const lastLine = (agent.delegated && summary) || extractLastOutputLine(agent.last_output_lines);
 
   if (agent.status === 'running') {
     if (agent.delegated) {

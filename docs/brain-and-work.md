@@ -40,6 +40,25 @@ for a warning, a crossed box with the cause when it failed, and a dashed ring
 when it is blocked or waiting. Work that needs you has a red "Needs you" label
 and a dark outline. Red always means "needs you", never "failed".
 
+A Work's card sits in the chat where its newest result came back, so a Work
+that reports again moves down to the moment it happened.
+
+All of Brain's current Work is in one place. On a phone, the line under the
+title ("6 need you · 2 running · 2 back") opens the list. On a wide screen,
+the Work column to the right of the chat shows it, grouped by what each Work
+asks of you: Needs you, Running, Back and Waiting. Tap a card to open its
+Session, or its details when the Session has closed. Work that is closed
+leaves the list.
+
+When one request turns into several Works, Brain names the goal with
+`mewla brain objective set "<goal>"`. The app shows it under the title with
+how much has come back, for example "Ship atlas-notes v1.4 this week · 2 of 5
+back". `mewla brain objective clear` removes it, and a new chat starts
+without one.
+
+The steps Brain takes in a turn (searches, reads, commands) fold into one
+"Worked · N steps" line. Tap it to see them.
+
 The cat shows what Brain is doing, in one place at a time:
 
 - **Asleep in the seal:** Brain is idle.
