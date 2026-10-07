@@ -1550,6 +1550,8 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	fs.StringVar(&item.NextAction, "next-action", "", "next useful action")
 	fs.StringVar(&item.WaitFor, "wait-for", "", "current wait condition")
 	fs.StringVar(&item.ContextRef, "context", "", "Brain Worklog/context reference (relative to the configured Brain workspace)")
+	fs.StringVar(&item.Question, "question", "", "what you ask the user about this Work; shown on its slip (empty clears it)")
+	fs.Var((*stringListFlag)(&item.Choices), "choice", "a one-tap answer to -question, repeatable (up to 4)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1559,11 +1561,15 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	if strings.TrimSpace(workID) == "" {
 		return fmt.Errorf("Work id is required")
 	}
+	if len(item.Choices) > 0 && strings.TrimSpace(item.Question) == "" {
+		return fmt.Errorf("-choice needs -question")
+	}
 	fields := []string{}
 	fieldNames := map[string]string{
 		"title": "title", "objective": "objective", "status": "status", "attempt-session-id": "attempt_session_id",
 		"completion": "completion_policy", "done-criteria": "done_criteria_ref",
 		"next-action": "next_action", "wait-for": "wait_for", "context": "context_ref",
+		"question": "question", "choice": "choices",
 	}
 	fs.Visit(func(value *flag.Flag) {
 		if field := fieldNames[value.Name]; field != "" {
@@ -2501,4 +2507,14 @@ func withAuthRuntimeOwnerWait(
 				)
 		}
 	}
+}
+
+// stringListFlag collects a repeatable string flag in order.
+type stringListFlag []string
+
+func (values *stringListFlag) String() string { return strings.Join(*values, ", ") }
+
+func (values *stringListFlag) Set(value string) error {
+	*values = append(*values, value)
+	return nil
 }

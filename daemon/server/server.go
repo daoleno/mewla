@@ -336,6 +336,7 @@ type clientMessage struct {
 	Backend              string                                 `json:"backend"`
 	SessionID            string                                 `json:"session_id"`
 	Text                 string                                 `json:"text"`
+	SnoozeUntil          *time.Time                             `json:"snooze_until,omitempty"`
 	Key                  string                                 `json:"key"`
 	Data                 string                                 `json:"data"`
 	Body                 string                                 `json:"body"`
@@ -909,6 +910,9 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainGC(conn, raw)
 	case "brain_work_read":
 		s.handleBrainWorkRead(conn, raw)
+	case "brain_work_action":
+		// A reply waits on the Brain host's input admission; keep reading.
+		go s.handleBrainWorkAction(conn, raw)
 	case "brain_set_executor":
 		s.handleBrainSetExecutor(conn, raw)
 	case "brain_chat_new":
@@ -2787,6 +2791,45 @@ func (s *Server) handleBrainWorkRead(conn *websocket.Conn, raw clientMessage) {
 		"request_id": raw.RequestID,
 		"work_id":    strings.TrimSpace(raw.ID),
 	})
+}
+
+// handleBrainWorkAction applies one user action from a Work slip. The reply
+// carries the Brain admission outcome so the slip never claims Brain heard an
+// answer whose delivery is unknown.
+func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) {
+	if s.brain == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
+		return
+	}
+	result, err := s.brain.ActOnWork(brain.WorkUserActionRequest{
+		WorkID: strings.TrimSpace(raw.ID), Kind: brain.WorkUserActionKind(strings.TrimSpace(raw.Action)),
+		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, RequestID: raw.RequestID,
+	})
+	if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_action_failed", brainWorkActionMessage(err))
+		return
+	}
+	s.sendJSON(conn, map[string]any{
+		"type":       "brain_work_action",
+		"request_id": raw.RequestID,
+		"work_id":    result.Work.ID,
+		"status":     result.Work.Status,
+		"event_id":   result.Event.ID,
+		"admission":  result.Admission,
+	})
+	s.broadcastBrainSnapshot()
+}
+
+func brainWorkActionMessage(err error) string {
+	switch {
+	case errors.Is(err, brain.ErrWorkCloseConflict):
+		return "Brain is reading this Work right now. Try again in a moment."
+	case errors.Is(err, brain.ErrWorkRevisionConflict):
+		return "This Work just changed. Look again and retry."
+	case errors.Is(err, brain.ErrWorkNotFound):
+		return "This Work no longer exists."
+	}
+	return err.Error()
 }
 
 func (s *Server) handleBrainChatNew(conn *websocket.Conn, raw clientMessage) {

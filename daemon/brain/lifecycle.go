@@ -155,8 +155,16 @@ type Work struct {
 	Wake             *WorkWake        `json:"wake,omitempty"`
 	Review           *WorkReview      `json:"review,omitempty"`
 	ContextRef       string           `json:"context_ref,omitempty"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
+	// Question and Choices are what Brain asks the user about this Work; the
+	// slip renders the choices as buttons. A user reply clears them.
+	Question   string     `json:"question,omitempty"`
+	Choices    []string   `json:"choices,omitempty"`
+	QuestionAt *time.Time `json:"question_at,omitempty"`
+	// SnoozedUntil hides the Work from Needs you until then. It is a user
+	// preference only: nothing is scheduled and elapsed time writes nothing.
+	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // WorkEvent is an append-only fact and at most a one-shot wake/delivery
@@ -212,6 +220,10 @@ type WorkUpdate struct {
 	WaitFor          *string
 	Wake             **WorkWake
 	ContextRef       *string
+	// Question with Choices replaces what Brain asks the user; an empty
+	// question clears both.
+	Question *string
+	Choices  *[]string
 }
 
 // WorkCloseRequest is the explicit operator path for terminalizing queued or
@@ -269,6 +281,19 @@ type CurrentWork struct {
 	// Worker reported one; lifecycle-only results leave it empty.
 	Summary   string    `json:"summary,omitempty"`
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// What Brain asks the user, with the buttons to offer.
+	Question string   `json:"question,omitempty"`
+	Choices  []string `json:"choices,omitempty"`
+	// AttentionSince is when the Work started waiting on a decision (the
+	// question, the open review or the wait), immutable while it waits;
+	// UpdatedAt moves on every projection sync and cannot age a Work.
+	AttentionSince *time.Time `json:"attention_since,omitempty"`
+	// AttentionReason is the open review's reason, e.g. turn_lost.
+	AttentionReason string     `json:"attention_reason,omitempty"`
+	SnoozedUntil    *time.Time `json:"snoozed_until,omitempty"`
+	// UserAction is the user's newest decision, while no newer result has
+	// come back since.
+	UserAction *WorkUserAction `json:"user_action,omitempty"`
 }
 
 // WorkBacklog keeps durable history/repair truth explicit without projecting
@@ -351,8 +376,16 @@ type workRecord struct {
 	Wake             *WorkWake        `json:"wake,omitempty"`
 	Review           *WorkReview      `json:"review,omitempty"`
 	ContextRef       string           `json:"context_ref,omitempty"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
+	// Question and Choices are what Brain asks the user about this Work; the
+	// slip renders the choices as buttons. A user reply clears them.
+	Question   string     `json:"question,omitempty"`
+	Choices    []string   `json:"choices,omitempty"`
+	QuestionAt *time.Time `json:"question_at,omitempty"`
+	// SnoozedUntil hides the Work from Needs you until then. It is a user
+	// preference only: nothing is scheduled and elapsed time writes nothing.
+	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 type presentationDatabaseRecord struct {
@@ -458,6 +491,10 @@ func worksFromRecords(records []workRecord) []Work {
 			Wake:             cloneWorkWake(record.Wake),
 			Review:           cloneWorkReview(record.Review),
 			ContextRef:       strings.TrimSpace(record.ContextRef),
+			Question:         strings.TrimSpace(record.Question),
+			Choices:          append([]string(nil), record.Choices...),
+			QuestionAt:       cloneTimePointer(record.QuestionAt),
+			SnoozedUntil:     cloneTimePointer(record.SnoozedUntil),
 			CreatedAt:        record.CreatedAt,
 			UpdatedAt:        record.UpdatedAt,
 		})
@@ -1148,6 +1185,9 @@ func clonePresentationDatabase(database presentationDatabase) presentationDataba
 	for index := range clone.BrainWork {
 		clone.BrainWork[index].Wake = cloneWorkWake(database.BrainWork[index].Wake)
 		clone.BrainWork[index].Review = cloneWorkReview(database.BrainWork[index].Review)
+		clone.BrainWork[index].Choices = append([]string(nil), database.BrainWork[index].Choices...)
+		clone.BrainWork[index].QuestionAt = cloneTimePointer(database.BrainWork[index].QuestionAt)
+		clone.BrainWork[index].SnoozedUntil = cloneTimePointer(database.BrainWork[index].SnoozedUntil)
 	}
 	clone.BrainWorkEvents = append([]WorkEvent(nil), database.BrainWorkEvents...)
 	for index := range clone.BrainWorkEvents {
@@ -1501,6 +1541,10 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 	// ContextRef remains presentation metadata on the read model.
 	if update.ContextRef != nil {
 		updated.ContextRef = *update.ContextRef
+		database.BrainWork[index] = updated
+	}
+	if update.Question != nil || update.Choices != nil {
+		updated = applyWorkQuestion(updated, update.Question, update.Choices, now)
 		database.BrainWork[index] = updated
 	}
 	return updated, nil
@@ -3257,6 +3301,12 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 		}
 		include := attentionState != "" || item.Review != nil && item.Review.DeliveryFailure != nil
 		terminal := item.Status == WorkDone || item.Status == WorkCancelled
+		// A question for the user, or a result Brain read and left without a
+		// decision, is current however old: past the queue window it would
+		// otherwise sit invisible forever.
+		userAction := latestWorkUserAction(database, item.ID)
+		include = include || !terminal && (item.Question != "" || reviewHandlingEnded(item.Review) ||
+			userAction != nil && userAction.Kind == WorkUserReply)
 		if !terminal {
 			switch mode {
 			case WorkProgressOwned:
@@ -3290,7 +3340,12 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			UnreadResult:     unread[item.ID],
 			Summary:          slipSummary[item.ID],
 			UpdatedAt:        item.UpdatedAt.UTC(),
+			Question:         item.Question,
+			Choices:          append([]string(nil), item.Choices...),
+			SnoozedUntil:     cloneTimePointer(item.SnoozedUntil),
+			UserAction:       userAction,
 		})
+		s.projectWorkAttention(&current[len(current)-1], item)
 	}
 	sort.SliceStable(current, func(left, right int) bool {
 		leftReview := current[left].AttentionState == WorkAttentionReviewing
@@ -3328,6 +3383,41 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 		}
 	}
 	return WorkInventory{Current: current, Backlog: backlog}, nil
+}
+
+func reviewHandlingEnded(review *WorkReview) bool {
+	return review != nil && review.Lease != nil && review.Lease.HandlingEndedAt != nil
+}
+
+// projectWorkAttention dates the decision a Work waits on from immutable
+// facts: Brain's question, the open review's birth, or the wait's start.
+func (s *Store) projectWorkAttention(current *CurrentWork, item Work) {
+	if current.Status == WorkDone || current.Status == WorkCancelled {
+		return
+	}
+	var since *time.Time
+	if st, err := s.fsmState(item.ID); err == nil && st != nil {
+		if st.Review != nil {
+			current.AttentionReason = st.Review.Reason
+			at := st.Review.OpenedAt.UTC()
+			since = &at
+		} else if st.Wake != nil && !st.Wake.Since.IsZero() {
+			at := st.Wake.Since.UTC()
+			since = &at
+		}
+	}
+	if since == nil && item.Review != nil && !item.Review.RequiredAt.IsZero() {
+		at := item.Review.RequiredAt.UTC()
+		since = &at
+	}
+	if item.QuestionAt != nil {
+		since = cloneTimePointer(item.QuestionAt)
+	}
+	if since == nil && current.UserAction != nil {
+		at := current.UserAction.At
+		since = &at
+	}
+	current.AttentionSince = since
 }
 
 // projectedAttentionWork returns the bounded queue window of review-required

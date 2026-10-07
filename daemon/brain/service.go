@@ -3707,6 +3707,7 @@ func workerRefFromClassifier(worker *classifier.Worker) WorkerRef {
 		Name:      worker.Name,
 		Status:    string(worker.State),
 		Summary:   worker.Summary,
+		Phase:     worker.Phase,
 		Cwd:       worker.Cwd,
 		Command:   worker.Command,
 		StartedAt: startedAt,
