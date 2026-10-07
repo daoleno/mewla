@@ -285,9 +285,8 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	return runDSHTerminal(ctx, id, exited)
 }
 
-// isProductExecutable accepts the mewla CLI and its legacy zen alias,
-// including dev builds such as mewla-dev.
+// isProductExecutable accepts the mewla CLI, including dev builds such as
+// mewla-dev.
 func isProductExecutable(executable string) bool {
-	base := filepath.Base(executable)
-	return strings.HasPrefix(base, "mewla") || strings.HasPrefix(base, "zen")
+	return strings.HasPrefix(filepath.Base(executable), "mewla")
 }

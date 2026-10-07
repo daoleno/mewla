@@ -47,7 +47,7 @@ func TestRealCodexIsolatedHandoff(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("ZDOTDIR", home)
 	t.Setenv("CODEX_HOME", codexHome)
-	t.Setenv("MEWLA_STATE_DIR", filepath.Join(home, ".zen"))
+	t.Setenv("MEWLA_STATE_DIR", filepath.Join(home, ".mewla"))
 	falseCommand, err := exec.LookPath("false")
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestRealCodexIsolatedHandoff(t *testing.T) {
 	target, err := h.w.CreateSession("", CreateSessionOptions{
 		Name: "isolated-handoff-proof", Cwd: cwd, Command: command,
 		Detached: true, Delegated: true, ProgressEnv: true,
-		Env: map[string]string{"HOME": home, "ZDOTDIR": home, "CODEX_HOME": codexHome, "MEWLA_STATE_DIR": filepath.Join(home, ".zen"), "MEWLA_WORKER_PROGRESS_CMD": falseCommand},
+		Env: map[string]string{"HOME": home, "ZDOTDIR": home, "CODEX_HOME": codexHome, "MEWLA_STATE_DIR": filepath.Join(home, ".mewla"), "MEWLA_WORKER_PROGRESS_CMD": falseCommand},
 	})
 	if err != nil {
 		t.Fatal(err)

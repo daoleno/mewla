@@ -30,7 +30,6 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
-	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
@@ -93,11 +92,6 @@ func directClaudePID(sessionID string) (int, bool) {
 }
 
 func main() {
-	envcompat.Normalize()
-	if executable, err := os.Executable(); err == nil {
-		ensureMewlaCommand(executable)
-	}
-	migrateLegacyState(os.Args[1:], os.Stderr)
 	if err := run(os.Args[1:], os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
@@ -151,8 +145,6 @@ func run(args []string, stderr io.Writer) error {
 			return runAddressCommand(args[1:], stderr)
 		case "boot":
 			return runBootCommand(args[1:], stderr)
-		case "state":
-			return runStateCommand(args[1:], os.Stdout, stderr)
 		}
 	}
 	return runDaemon(args, stderr)
@@ -2063,7 +2055,6 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
 		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
 		fmt.Fprintln(stderr, "  address    Add, remove, or list daemon entry points")
-		fmt.Fprintln(stderr, "  state      Migrate the legacy ~/.zen state root to ~/.mewla")
 	}
 
 	if err := fs.Parse(args); err != nil {

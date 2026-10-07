@@ -8,13 +8,10 @@ REPOSITORY="daoleno/mewla"
 GITHUB_WEB="https://github.com/$REPOSITORY"
 GITHUB_API="https://api.github.com/repos/$REPOSITORY"
 PATH_MARKER="# >>> mewla installer PATH >>>"
-# Profiles edited by the pre-rename installer already carry this block.
-LEGACY_PATH_MARKER="# >>> zen installer PATH >>>"
-# Legacy ZEN_* settings keep working; MEWLA_* wins.
-DRY_RUN=${MEWLA_DRY_RUN:-${ZEN_DRY_RUN:-0}}
-NO_PATH_UPDATE=${MEWLA_NO_PATH_UPDATE:-${ZEN_NO_PATH_UPDATE:-0}}
-VERSION=${MEWLA_VERSION:-${ZEN_VERSION:-}}
-INSTALL_DIR=${MEWLA_INSTALL_DIR:-${ZEN_INSTALL_DIR:-}}
+DRY_RUN=${MEWLA_DRY_RUN:-0}
+NO_PATH_UPDATE=${MEWLA_NO_PATH_UPDATE:-0}
+VERSION=${MEWLA_VERSION:-}
+INSTALL_DIR=${MEWLA_INSTALL_DIR:-}
 WORK_DIR=
 INSTALL_TEMP=
 
@@ -43,7 +40,7 @@ Options:
   -h, --help                 show this help
 
 The same settings may be supplied as MEWLA_VERSION, MEWLA_INSTALL_DIR,
-MEWLA_NO_PATH_UPDATE=1, and MEWLA_DRY_RUN=1 (legacy ZEN_* names still work).
+MEWLA_NO_PATH_UPDATE=1, and MEWLA_DRY_RUN=1.
 
 Without MEWLA_VERSION, each fresh bootstrap dynamically selects the SemVer-highest
 public nondraft GitHub Release with a supported tag, whether stable or beta.
@@ -182,13 +179,6 @@ safe_existing_mewla() {
   EXISTING_MEWLA=$EXISTING_BINARY
 }
 
-# A pre-rename install ships a regular `zen` executable. It is replaced by a
-# `zen -> mewla` alias next to the new binary.
-safe_existing_legacy_zen() {
-  safe_existing_binary zen || return 1
-  LEGACY_ZEN=$EXISTING_BINARY
-}
-
 latest_release() {
   releases_file=$WORK_DIR/releases.json
   compact_file=$WORK_DIR/releases.compact
@@ -265,8 +255,6 @@ curl_https() {
   accept=${3:-application/octet-stream}
   case $url in
     https://api.github.com/repos/daoleno/mewla/*|https://github.com/daoleno/mewla/releases/download/*) ;;
-    # The pre-rename repository redirects to daoleno/mewla.
-    https://api.github.com/repos/daoleno/zen/*|https://github.com/daoleno/zen/releases/download/*) ;;
     *) die "refusing non-official download URL: $url" ;;
   esac
   curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location \
@@ -356,10 +344,6 @@ select_install_dir() {
   fi
   if safe_existing_mewla; then
     SELECTED_DIR=$(dirname "$EXISTING_MEWLA")
-    return
-  fi
-  if [ -n "$LEGACY_ZEN" ]; then
-    SELECTED_DIR=$(dirname "$LEGACY_ZEN")
     return
   fi
 
@@ -487,7 +471,7 @@ append_profile_path() {
       return 0
     fi
   fi
-  if [ -f "$profile" ] && { grep -Fq "$PATH_MARKER" "$profile" || grep -Fq "$LEGACY_PATH_MARKER" "$profile"; }; then
+  if [ -f "$profile" ] && grep -Fq "$PATH_MARKER" "$profile"; then
     return 0
   fi
   if ! {
@@ -501,25 +485,6 @@ append_profile_path() {
   PROFILE_UPDATED=$profile
 }
 
-# link_zen_alias keeps `zen` working as an alias for the transition period.
-# It only replaces a missing name, an existing symlink, or the pre-rename
-# binary this installer is migrating; any other `zen` is left alone.
-link_zen_alias() {
-  alias_path=$INSTALL_DIR/zen
-  if [ -e "$alias_path" ] && [ ! -L "$alias_path" ] && [ "$LEGACY_ZEN" != "$alias_path" ]; then
-    warn "leaving existing $alias_path in place; the zen alias was not created"
-    return 0
-  fi
-  alias_temp=$INSTALL_DIR/.mewla-alias.$$
-  rm -f "$alias_temp"
-  if ln -s mewla "$alias_temp" && mv -f "$alias_temp" "$alias_path"; then
-    ZEN_ALIAS=$alias_path
-  else
-    rm -f "$alias_temp"
-    warn "could not create the zen alias at $alias_path"
-  fi
-}
-
 platform_archive
 
 current_uid=$(id -u)
@@ -529,8 +494,7 @@ current_uid=$(id -u)
 HOME_RESOLVED=$(cd -P "$HOME" 2>/dev/null && pwd) || die "could not resolve HOME"
 is_protected_dir "$HOME_RESOLVED" && die "HOME resolves into a root/system directory: $HOME_RESOLVED"
 
-LEGACY_ZEN=
-safe_existing_mewla || safe_existing_legacy_zen || true
+safe_existing_mewla || true
 
 if [ -z "$VERSION" ] && [ -z "$INSTALL_DIR" ] && [ -n "${EXISTING_MEWLA:-}" ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -596,16 +560,12 @@ if ! "$INSTALL_TEMP" --help >"$WORK_DIR/help-check" 2>&1; then
 fi
 mv -f "$INSTALL_TEMP" "$target" || die "could not atomically install $target"
 INSTALL_TEMP=
-link_zen_alias
 
 IMMEDIATE_PATH_COMMAND=
 PROFILE_UPDATED=
 append_profile_path
 
 say "Installed Mewla $VERSION at $target"
-if [ -n "${ZEN_ALIAS:-}" ]; then
-  say "The legacy zen command remains available as an alias: $ZEN_ALIAS -> mewla"
-fi
 if [ -n "$PROFILE_UPDATED" ]; then
   say "Added $HOME/.local/bin to $PROFILE_UPDATED (marker: $PATH_MARKER)."
 fi

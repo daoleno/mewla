@@ -238,7 +238,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		"  provider_id = \"custom\"\n  provider_label = \"Custom Gateway\"\n" +
 		"  base_url = \"" + upB.server.URL + "\"\n  auth_mode = \"none\"\n  credential_env = \"MEWLA_PROVIDER_API_KEY\"\n\n" +
 		"[defaults]\n  codex = \"conn-proof-a\"\n"
-	zenDir := filepath.Join(zenHome, ".zen")
+	zenDir := filepath.Join(zenHome, ".mewla")
 	if err := os.MkdirAll(zenDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -597,7 +597,7 @@ func proofEnv(zenHome, codexHome, scratch, tmuxSocket string) []string {
 		"HOME="+zenHome,
 		"CODEX_HOME="+codexHome,
 		"TMUX="+tmuxSocket,
-		"MEWLA_STATE_DIR="+filepath.Join(zenHome, ".zen"),
+		"MEWLA_STATE_DIR="+filepath.Join(zenHome, ".mewla"),
 		fmt.Sprintf("MEWLA_PROGRESS_ENV=isolated-proof"),
 	)
 }

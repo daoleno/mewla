@@ -119,7 +119,7 @@ func TestDelegatedWorkspacePathAcceptsDurableHomePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(home, ".zen", "worktrees", "zen", "task")
+	path := filepath.Join(home, ".mewla", "worktrees", "zen", "task")
 	resolved, err := validateDelegatedWorkspacePath(path)
 	if err != nil {
 		t.Fatal(err)

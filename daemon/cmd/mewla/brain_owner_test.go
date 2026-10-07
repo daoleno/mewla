@@ -44,7 +44,7 @@ func TestBrainRootOwnershipIndependentOfDaemonStateDirectory(t *testing.T) {
 func TestDaemonRefusesSharedBrainBeforeOpeningStore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	brainRoot := filepath.Join(home, ".zen", "brain")
+	brainRoot := filepath.Join(home, ".mewla", "brain")
 	owner, ok, err := control.TryAcquireLifecycleLock(brainRoot)
 	if err != nil || !ok {
 		t.Fatalf("owner=%v err=%v", ok, err)

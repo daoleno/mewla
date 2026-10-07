@@ -14,7 +14,7 @@ import (
 // HOME, mirroring piOwnedSessionRoot("") with HOME overridden in tests.
 func ownedPiFixtureDir(t *testing.T, home string) string {
 	t.Helper()
-	dir := filepath.Join(home, ".zen", "provider-sessions", "pi")
+	dir := filepath.Join(home, ".mewla", "provider-sessions", "pi")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

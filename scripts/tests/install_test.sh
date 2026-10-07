@@ -406,71 +406,15 @@ test_executable_failure_keeps_previous_install() {
   pass "executable failure retains the previous binary"
 }
 
-test_zen_alias_and_legacy_settings() {
-  new_case legacy-env-alias
+test_only_mewla_settings_and_command() {
+  new_case mewla-only
   make_archive
-  run_installer ZEN_VERSION=v1.2.3 ZEN_INSTALL_DIR="$HOME_DIR/install"
-  [[ -x "$HOME_DIR/install/mewla" ]] || fail "legacy ZEN_* settings did not install mewla"
-  [[ $(readlink "$HOME_DIR/install/zen") == mewla ]] || fail "zen alias does not point at mewla"
-  "$HOME_DIR/install/zen" --help >/dev/null || fail "zen alias does not run"
-  assert_contains "$CASE_DIR/curl.log" "/download/v1.2.3/mewla-linux-amd64.tar.gz"
-  assert_contains "$CASE_DIR/output" "zen command remains available as an alias"
-
-  new_case canonical-env-wins
-  make_archive
-  run_installer ZEN_VERSION=v9.9.9 MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" ZEN_INSTALL_DIR="$HOME_DIR/elsewhere"
-  [[ -x "$HOME_DIR/install/mewla" ]] || fail "MEWLA_INSTALL_DIR did not win"
+  run_installer ZEN_VERSION=v9.9.9 ZEN_INSTALL_DIR="$HOME_DIR/elsewhere" MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install"
+  [[ -x "$HOME_DIR/install/mewla" ]] || fail "MEWLA_INSTALL_DIR was not used"
   assert_not_exists "$HOME_DIR/elsewhere"
+  assert_not_exists "$HOME_DIR/install/zen"
   assert_contains "$CASE_DIR/curl.log" "/download/v1.2.3/mewla-linux-amd64.tar.gz"
-
-  new_case foreign-zen-kept
-  make_archive
-  mkdir -p "$HOME_DIR/install"
-  printf 'someone else\n' > "$HOME_DIR/install/zen"
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install"
-  assert_contains "$HOME_DIR/install/zen" "someone else"
-  assert_contains "$CASE_DIR/output" "zen alias was not created"
-  pass "accepts legacy ZEN_* settings, MEWLA_* wins, and links zen -> mewla"
-}
-
-test_legacy_zen_install_migrates() {
-  new_case legacy-binary
-  make_archive
-  mkdir -p "$HOME_DIR/bin"
-  cat > "$HOME_DIR/bin/zen" <<EOF
-#!/bin/sh
-case \${1:-} in
-  --help) exit 0 ;;
-  update) printf 'legacy updater\n' >> '$CASE_DIR/update.log'; exit 0 ;;
-  *) exit 2 ;;
-esac
-EOF
-  chmod +x "$HOME_DIR/bin/zen"
-  FAKE_BIN="$FAKE_BIN:$HOME_DIR/bin"
-  run_installer MEWLA_VERSION=v1.2.3
-  assert_not_exists "$CASE_DIR/update.log"
-  [[ -x "$HOME_DIR/bin/mewla" ]] || fail "mewla was not installed beside the legacy zen"
-  [[ $(readlink "$HOME_DIR/bin/zen") == mewla ]] || fail "legacy zen binary was not replaced by the alias"
-
-  # A legacy zen that self-updated in place links mewla -> zen beside itself.
-  new_case legacy-self-updated
-  make_archive
-  mkdir -p "$HOME_DIR/bin"
-  printf '#!/bin/sh\n[ "${1:-}" = --help ] && exit 0\nexit 2\n' > "$HOME_DIR/bin/zen"
-  chmod +x "$HOME_DIR/bin/zen"
-  ln -s zen "$HOME_DIR/bin/mewla"
-  FAKE_BIN="$FAKE_BIN:$HOME_DIR/bin"
-  run_installer MEWLA_VERSION=v1.2.3
-  [[ -f "$HOME_DIR/bin/mewla" && ! -L "$HOME_DIR/bin/mewla" ]] || fail "the mewla -> zen link was not replaced by the binary"
-  [[ $(readlink "$HOME_DIR/bin/zen") == mewla ]] || fail "self-updated legacy zen was not replaced by the alias"
-  "$HOME_DIR/bin/zen" --help >/dev/null || fail "the zen alias does not run mewla"
-
-  new_case legacy-profile-marker
-  make_archive
-  printf '\n# >>> zen installer PATH >>>\nexport PATH="$HOME/.local/bin:$PATH"\n# <<< zen installer PATH <<<\n' > "$HOME_DIR/.zshrc"
-  run_installer MEWLA_VERSION=v1.2.3-beta.1
-  assert_not_contains "$HOME_DIR/.zshrc" "# >>> mewla installer PATH >>>"
-  pass "migrates a pre-rename zen install and honours its PATH block"
+  pass "reads only MEWLA_* settings and installs only the mewla command"
 }
 
 if [[ ${1:-} == --smoke ]]; then
@@ -494,6 +438,5 @@ test_profile_idempotency_and_no_mutation
 test_missing_tools
 test_doctor_failure_is_not_corruption
 test_executable_failure_keeps_previous_install
-test_zen_alias_and_legacy_settings
-test_legacy_zen_install_migrates
+test_only_mewla_settings_and_command
 printf '1..%d\n' "$PASS"

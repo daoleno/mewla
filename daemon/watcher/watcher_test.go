@@ -236,7 +236,7 @@ func TestWorkerProgressEnvScriptAssignsSingleToken(t *testing.T) {
 		t.Fatalf("script must not embed space-separated command:\n%s", script)
 	}
 	// The injected value must be the current executable's path (shell-quoted),
-	// not a stale "zen" resolved via PATH.
+	// not a stale "mewla" resolved via PATH.
 	if exe, err := os.Executable(); err == nil {
 		if exe = strings.TrimSpace(exe); exe != "" {
 			if !strings.Contains(script, shellQuote(exe)) {

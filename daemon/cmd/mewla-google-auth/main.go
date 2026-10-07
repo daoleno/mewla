@@ -1,9 +1,8 @@
-// zen-google-auth is a publisher deployment artifact, never a user-daemon role.
+// mewla-google-auth is a publisher deployment artifact, never a user-daemon role.
 package main
 
 import (
 	"encoding/base64"
-	"github.com/daoleno/mewla/daemon/envcompat"
 	"github.com/daoleno/mewla/daemon/googleauth"
 	"log"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 )
 
 func main() {
-	envcompat.Normalize()
 	key, err := base64.RawURLEncoding.DecodeString(os.Getenv("MEWLA_GOOGLE_RECEIPT_KEY"))
 	if err != nil {
 		log.Fatal("invalid receipt key")
