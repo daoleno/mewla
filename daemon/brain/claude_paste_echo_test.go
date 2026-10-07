@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Real Brain duplicate (thread brain_1790733088397305726): the user sent text

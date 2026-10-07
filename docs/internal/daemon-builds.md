@@ -30,18 +30,18 @@ Startup prints the listening address, available private-network addresses, and o
 Source builds require the Go toolchain declared in `daemon/go.mod`:
 
 ```bash
-git clone https://github.com/daoleno/zen.git
+git clone https://github.com/daoleno/mewla.git
 cd zen
 bun run daemon:build
 ./bin/zen --help
 ./bin/zen doctor
 ```
 
-`bun run daemon:build` and `cd daemon && go run ./cmd/zen-dev` build with
+`bun run daemon:build` and `cd daemon && go run ./cmd/mewla-dev` build with
 `CGO_ENABLED=0`. The development watcher rebuilds Go source changes and restarts
 the daemon with its existing arguments. No display libraries are required.
 
-Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/zen/version.go` and can be overridden at link time (`-X main.Version=…`).
+Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/mewla/version.go` and can be overridden at link time (`-X main.Version=…`).
 
 ## Release binaries (Linux and Apple Silicon macOS)
 

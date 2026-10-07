@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
 

@@ -9,5 +9,5 @@ fi
 mkdir -p "$(dirname "$OUT")"
 PUBLISHER_FLAGS="$(python3 "$ROOT/scripts/plugin-publisher-flags.py")"
 cd "$ROOT/daemon"
-CGO_ENABLED=0 go build -ldflags="$PUBLISHER_FLAGS" -o "$OUT" ./cmd/zen
+CGO_ENABLED=0 go build -ldflags="$PUBLISHER_FLAGS" -o "$OUT" ./cmd/mewla
 chmod +x "$OUT"

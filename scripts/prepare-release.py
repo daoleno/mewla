@@ -430,7 +430,7 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
             "app/app.base.json",
             "app/iosIdentity.js",
             "app/ios-build.json",
-            "daemon/cmd/zen/version.go",
+            "daemon/cmd/mewla/version.go",
             "scripts/verify-release-identity.sh",
             "docs/install-daemon.md",
             "docs/ios-ci-release.md",
@@ -475,11 +475,11 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         f'"buildNumber": {next_ios_build}',
         relative="app/ios-build.json",
     )
-    updates["daemon/cmd/zen/version.go"] = replace_literal(
-        sources["daemon/cmd/zen/version.go"],
+    updates["daemon/cmd/mewla/version.go"] = replace_literal(
+        sources["daemon/cmd/mewla/version.go"],
         f'var Version = "{current_version}"',
         f'var Version = "{next_version}"',
-        relative="daemon/cmd/zen/version.go",
+        relative="daemon/cmd/mewla/version.go",
     )
 
     verifier = replace_literal(

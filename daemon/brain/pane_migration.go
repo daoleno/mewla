@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // PaneMigrationPaths identifies the other durable owners of Worker references.

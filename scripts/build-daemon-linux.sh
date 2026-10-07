@@ -65,7 +65,7 @@ build_one() {
   echo "Building ${goos}/${goarch} CGO=${cgo} $* → ${out_path} (version=${VERSION})"
   (
     cd "$ROOT/daemon"
-    CGO_ENABLED="$cgo" GOOS="$goos" GOARCH="$goarch" go build -buildvcs=false -ldflags="$LDFLAGS" "$@" -o "$out_path" ./cmd/zen/
+    CGO_ENABLED="$cgo" GOOS="$goos" GOARCH="$goarch" go build -buildvcs=false -ldflags="$LDFLAGS" "$@" -o "$out_path" ./cmd/mewla/
   )
   chmod +x "$out_path"
 }

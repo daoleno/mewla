@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	zenattachment "github.com/daoleno/zen/daemon/attachment"
+	zenattachment "github.com/daoleno/mewla/daemon/attachment"
 	"io"
 	"net/http"
 	"os"

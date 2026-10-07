@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/daoleno/zen/daemon/workerproc"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 type cpuCounters struct{ Total, Idle uint64 }

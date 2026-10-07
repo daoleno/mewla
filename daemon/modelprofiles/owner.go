@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/codexctl"
 	"github.com/google/uuid"
 )
 
@@ -918,7 +918,7 @@ func combinePersistResults(a, b PersistResult) PersistResult {
 }
 
 // Keep wire strings aligned with control.PersistenceApplied without importing
-// control into this package (avoid cycles with cmd/zen).
+// control into this package (avoid cycles with cmd/mewla).
 const controlPersistenceApplied = "applied"
 
 // mutateAndPersistLocked runs mut under Owner.mu, then persists a clone of the

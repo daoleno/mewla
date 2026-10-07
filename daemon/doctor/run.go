@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/addressbook"
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/control"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 const defaultListenAddr = "127.0.0.1:9876"

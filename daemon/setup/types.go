@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/daoleno/zen/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/doctor"
 )
 
 var (

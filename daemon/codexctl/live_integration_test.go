@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/codexctl"
 )
 
 // Opt-in live native thread-settings proof against the installed Codex 0.147

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/stats"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/stats"
 	"github.com/gorilla/websocket"
 )
 

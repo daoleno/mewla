@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/workerproc"
+	"github.com/daoleno/mewla/daemon/workerproc"
 	"github.com/google/uuid"
 )
 

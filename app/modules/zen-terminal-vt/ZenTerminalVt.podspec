@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.description    = 'Expo module exposing the same Ghostty VT core used by the Android terminal surface.'
   s.license        = 'Apache-2.0'
   s.author         = 'Zen contributors'
-  s.homepage       = 'https://github.com/daoleno/zen'
+  s.homepage       = 'https://github.com/daoleno/mewla'
   s.platforms      = { :ios => '16.4' }
   s.source         = { :path => '.' }
   s.static_framework = true

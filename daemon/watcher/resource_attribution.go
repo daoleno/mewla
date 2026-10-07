@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func classifyProcess(command string) []string {

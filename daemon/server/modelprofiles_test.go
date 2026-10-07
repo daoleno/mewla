@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func TestProvidersCatalogPayloadIncludesGatewayStatus(t *testing.T) {

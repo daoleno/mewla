@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func TestParseClaudeConversation_PreservesLongCompletedAssistantMarkdown(t *testing.T) {

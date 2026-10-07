@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/daoleno/zen/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/doctor"
 )
 
 // WriteHuman renders a setup Result for terminals without secrets.

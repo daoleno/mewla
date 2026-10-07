@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	skillmgmt "github.com/daoleno/zen/daemon/skills"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/auth"
+	skillmgmt "github.com/daoleno/mewla/daemon/skills"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/gorilla/websocket"
 )
 

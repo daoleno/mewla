@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestThreadTimelineSurvivesEmptyProviderHost(t *testing.T) {

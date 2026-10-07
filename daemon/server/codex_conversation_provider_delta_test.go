@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // P0 regression: non-OpenCode providers (Codex, Claude, Cursor, Grok, Pi) and

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // ownedPiFixtureDir returns the Zen-owned Pi session directory for the given

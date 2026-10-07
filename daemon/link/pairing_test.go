@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
+	"github.com/daoleno/mewla/daemon/auth"
 )
 
 func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {

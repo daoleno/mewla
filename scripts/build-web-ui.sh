@@ -2,7 +2,7 @@
 # Export the Expo web app and stage it for embedding in the zen daemon.
 #
 # Every exported file is stored gzip-only in daemon/webui/dist; the daemon
-# serves the compressed bytes directly. Run before `go build ./cmd/zen`.
+# serves the compressed bytes directly. Run before `go build ./cmd/mewla`.
 # Requires `bun install` at the repository root.
 #
 # Usage:

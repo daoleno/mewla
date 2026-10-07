@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestResourcePressureUsesDurableEventLaneAndKeepsPayload(t *testing.T) {

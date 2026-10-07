@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // openCodeReasoningTurnSeeds builds the real OpenCode v1.18 terminal-turn

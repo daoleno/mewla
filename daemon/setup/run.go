@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/brain"
-	"github.com/daoleno/zen/daemon/doctor"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Run executes the setup flow and returns a structured Result.

@@ -88,5 +88,5 @@ serves a short message instead of the app. To embed it locally:
 ```bash
 bun install
 ./scripts/build-web-ui.sh   # or: bun run web:build
-cd daemon && go build ./cmd/zen
+cd daemon && go build ./cmd/mewla
 ```

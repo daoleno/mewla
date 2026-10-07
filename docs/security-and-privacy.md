@@ -115,7 +115,7 @@ handlers; unsupported or oversized diagrams are shown as source.
 ## Report a vulnerability
 
 Report security issues privately to the Zen maintainers, as described in the
-[security policy](https://github.com/daoleno/zen/security/policy). Please
+[security policy](https://github.com/daoleno/mewla/security/policy). Please
 include:
 
 - the affected part (daemon, app, pairing, upload, executor launch);

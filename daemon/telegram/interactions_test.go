@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 type interactionFixtureAPI struct {

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daoleno/zen/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/lifecycle"
 )
 
 const (

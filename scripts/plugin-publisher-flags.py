@@ -45,7 +45,7 @@ def publisher_flags(document, required):
         if service in required and client_id is None:
             raise ValueError(f"{service}: Zen publisher registration is not configured; cannot publish")
         if client_id:
-            flags.extend(["-X", f"github.com/daoleno/zen/daemon/connections.{symbol}={client_id}"])
+            flags.extend(["-X", f"github.com/daoleno/mewla/daemon/connections.{symbol}={client_id}"])
     return " ".join(flags)
 
 

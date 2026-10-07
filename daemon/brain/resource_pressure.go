@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/lifecycle"
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // ResourceWorkContext enriches read-only telemetry from canonical Work ownership.

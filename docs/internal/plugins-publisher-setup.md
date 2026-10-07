@@ -31,7 +31,7 @@ Approved owner is **daoleno**, not the currently accessible CLI identity `paul-f
 | Field | Truthful value |
 | --- | --- |
 | Application name | Zen |
-| Homepage URL | `https://github.com/daoleno/zen` |
+| Homepage URL | `https://github.com/daoleno/mewla` |
 | Description | Mobile-native control plane for coding agents. Connect GitHub accounts with user authorization. |
 | Authorization callback URL | `http://127.0.0.1/` |
 | Enable Device Flow | Enabled |
@@ -40,7 +40,7 @@ Approved owner is **daoleno**, not the currently accessible CLI identity `paul-f
 
 The form's loopback callback is unused by device flow. GitHub supports literal loopback callbacks; this does not require a daemon listener or hosted callback. Do not invent a Zen domain/privacy policy to fill a new requirement. Return **only the public Client ID**, never a client secret or token.
 
-Product release engineering stores it in `release/plugin-publishers.json`. `scripts/plugin-publisher-flags.py` validates public-only fields and the approved owner, and emits Go linker flags consumed by both `build-zen-local.sh` and all three `build-daemon-linux.sh` targets. `go run ./cmd/zen-dev` runs the same validator on every daemon rebuild; missing/invalid configuration fails the rebuild. Restart the dev runner after updating its own source. Pending IDs may remain null and appear unavailable in the app. The release workflow requires a real configured GitHub ID before building/publishing release artifacts; no public release/tag is created by this preparation. Unknown/secret fields and unsafe linker characters are rejected. End users do not run `oauth-configure`.
+Product release engineering stores it in `release/plugin-publishers.json`. `scripts/plugin-publisher-flags.py` validates public-only fields and the approved owner, and emits Go linker flags consumed by both `build-zen-local.sh` and all three `build-daemon-linux.sh` targets. `go run ./cmd/mewla-dev` runs the same validator on every daemon rebuild; missing/invalid configuration fails the rebuild. Restart the dev runner after updating its own source. Pending IDs may remain null and appear unavailable in the app. The release workflow requires a real configured GitHub ID before building/publishing release artifacts; no public release/tag is created by this preparation. Unknown/secret fields and unsafe linker characters are rejected. End users do not run `oauth-configure`.
 
 GitHub now defaults new OAuth apps to expiring tokens. Device-issued refresh uses the public Client ID without a secret, as documented by GitHub. The daemon must retain expiry and rotating refresh tokens in its vault and show reconnect when the grant expires. GitHub `repo` is a broad vendor scope; daemon read/write capability enforcement remains separate. Existing signed-in import is a secondary flow and does not prove first-time device authorization.
 

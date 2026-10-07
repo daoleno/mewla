@@ -4,9 +4,9 @@ import { buildSeal, startCat } from './sealcat.js';
 // Every URL that depends on where Zen's source and builds are published, in one
 // place. An empty value hides every link (and the install command) that uses it.
 const LINKS = {
-  source: 'https://github.com/daoleno/zen',
-  releases: 'https://github.com/daoleno/zen/releases',
-  apk: 'https://github.com/daoleno/zen/releases/latest',
+  source: 'https://github.com/daoleno/mewla',
+  releases: 'https://github.com/daoleno/mewla/releases',
+  apk: 'https://github.com/daoleno/mewla/releases/latest',
   installScript: 'https://raw.githubusercontent.com/daoleno/zen/main/install.sh',
 };
 for (const node of document.querySelectorAll('[data-link]')) {

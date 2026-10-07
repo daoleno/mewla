@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func main() {

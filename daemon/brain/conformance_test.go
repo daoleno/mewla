@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // conformanceFixture is one executor's provider-neutral adapter contract

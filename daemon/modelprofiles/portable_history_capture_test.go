@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
 
 // Evidence capture for portable post-history hot switching.

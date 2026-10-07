@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/daoleno/zen/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/attachment"
 )
 
 type User struct {

@@ -275,7 +275,7 @@ identity = {
         ),
     },
     "daemon": {
-        "module": "github.com/daoleno/zen/daemon",
+        "module": "github.com/daoleno/mewla/daemon",
         "targets": ["linux/amd64", "linux/arm64", "darwin/arm64"],
         "cgo": {
             "linux/amd64": False,

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 const (

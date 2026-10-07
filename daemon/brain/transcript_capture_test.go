@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/classifier"
-	"github.com/daoleno/zen/daemon/work"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // writePiTranscriptFixture writes the exact provider-native Pi transcript shape

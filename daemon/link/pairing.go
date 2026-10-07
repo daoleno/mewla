@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
+	"github.com/daoleno/mewla/daemon/auth"
 )
 
 const PairingVersion = 2

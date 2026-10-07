@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/auth"
+	"github.com/daoleno/mewla/daemon/auth"
 )
 
 const reportedLargeUploadBytes int64 = 1_532_564_736

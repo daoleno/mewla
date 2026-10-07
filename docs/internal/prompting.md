@@ -30,7 +30,7 @@ Async tool calling, mid-turn steering and cached reasoning updates require harne
 | Host bootstrap in `daemon/brain/service.go` | Paths, actual executors and personality; reading rules live in AGENTS.md. |
 | `zen brain context --json` | Live Work, Workers, executors and note sizes/budgets; private note contents are read from files on demand. |
 | Host handoff in `daemon/brain/service.go` | Thread/executor identities and owned Worker IDs/statuses. Read current.md rather than embedding its history or Worker summaries. |
-| Worker builders in `daemon/cmd/zen/control_app.go` | Scoped execution and resource protocol, progress vocabulary and one exact turn argument. Preserve original user bytes. |
+| Worker builders in `daemon/cmd/mewla/control_app.go` | Scoped execution and resource protocol, progress vocabulary and one exact turn argument. Preserve original user bytes. |
 | `daemon/work/dispatch.go` | Short Work-file pointer and terminal frontmatter requirement; retained because its file workflow consumes it. |
 | `daemon/calendar/work_runner.go` | Scheduled action instructions, bounded deliverable markers and metadata; retained because result extraction validates that contract. |
 

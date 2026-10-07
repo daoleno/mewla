@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/zen/daemon/attachment"
-	"github.com/daoleno/zen/daemon/brain"
+	"github.com/daoleno/mewla/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 // generalTopicThreadID is the non-deletable General topic id=1

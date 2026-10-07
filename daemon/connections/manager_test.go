@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/zen/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

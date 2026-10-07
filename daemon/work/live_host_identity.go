@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // Claude's process registry names the native session even for a fresh CLI with

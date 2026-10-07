@@ -18,8 +18,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/daoleno/zen/daemon/auth"
-	"github.com/daoleno/zen/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func TestSessionFilePreviewResolvesAbsoluteRelativeAndSymlinkAliases(t *testing.T) {
