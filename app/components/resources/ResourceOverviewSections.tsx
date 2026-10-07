@@ -8,7 +8,7 @@ import {
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { StatusMark } from "../ui/StatusMark";
 import { StatusPill, type StatusTone } from "../ui/StatusPill";
-import { AreaChart, CoreBars, PressureStrip, StackBar, pressureInk } from "./ResourceCharts";
+import { AreaChart, CoreBars, PressureStrip, StackBar } from "./ResourceCharts";
 import type { ResourceStyles } from "./resourceStyles";
 
 export interface SectionProps {
@@ -45,7 +45,6 @@ export function PressureSignals({ telemetry, styles }: SectionProps) {
 export function PressureHeadline({ telemetry, styles, now, statusLabel, serverName, onRetry, loading, connected }: SectionProps & {
   now: number; statusLabel?: string; serverName?: string; onRetry(): void; loading: boolean; connected: boolean;
 }) {
-  const { colors } = useAppTheme();
   return (
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1, gap: 4 }}>
