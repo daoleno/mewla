@@ -1,6 +1,6 @@
 # Worker control
 
-Zen exposes visible Worker identities through the canonical control socket. This feature verifies the read path that a Brain or Worker uses to inspect lifecycle ownership.
+Mewla exposes visible Worker identities through the canonical control socket. This feature verifies the read path that a Brain or Worker uses to inspect lifecycle ownership.
 
 ## Sub-features
 
@@ -13,7 +13,7 @@ Zen exposes visible Worker identities through the canonical control socket. This
 - Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
 - Read the `worker_list` entry and its `runtime.worker_count` value.
 
-## Driving it with the Zen CLI
+## Driving it with the Mewla CLI
 
 Preconditions:
 

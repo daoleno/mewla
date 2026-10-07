@@ -84,7 +84,7 @@ type notificationPusher interface {
 	NotifyScheduledResult(title, status, threadID, resultID string) error
 }
 
-// Server handles WebSocket connections from the zen mobile app.
+// Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
 	browsers                     *browser.Manager
 	connections                  *connections.Manager
@@ -487,7 +487,7 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	if onReady != nil {
 		onReady()
 	} else {
-		log.Printf("zen listening on %s", listener.Addr())
+		log.Printf("mewla listening on %s", listener.Addr())
 	}
 	serveErr := srv.Serve(listener)
 	cancel()

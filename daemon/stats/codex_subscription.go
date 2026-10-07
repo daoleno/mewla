@@ -102,7 +102,7 @@ func fetchCodexSubscription(ctx context.Context, client codexUsageHTTPClient, en
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+auth.token)
-	req.Header.Set("User-Agent", "zen-stats")
+	req.Header.Set("User-Agent", "mewla-stats")
 	if auth.accountID != "" {
 		req.Header.Set("ChatGPT-Account-Id", auth.accountID)
 	}

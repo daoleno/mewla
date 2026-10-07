@@ -54,7 +54,7 @@ type Monitor struct {
 // the thread exists and the resume response was parsed.
 func OpenMonitor(ctx context.Context, socketPath string, opts DialOptions) (*Monitor, error) {
 	if opts.ClientName == "" {
-		opts.ClientName = "zen-monitor"
+		opts.ClientName = "mewla-monitor"
 	}
 	client, err := Open(ctx, socketPath, opts)
 	if err != nil {

@@ -391,7 +391,7 @@ func IsPrivateHostPrompt(body string) bool {
 	if strings.Contains(trimmed, "Brain Host activation contract:") {
 		return true
 	}
-	if strings.Contains(trimmed, "You are Brain inside zen") {
+	if strings.Contains(trimmed, "You are Brain inside ") {
 		return true
 	}
 	lower := strings.ToLower(trimmed)

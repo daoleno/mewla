@@ -511,7 +511,7 @@ case "$init" in
   *'"method":"initialize"'*) ;;
   *) echo "bad initialize: $init" >&2; exit 11 ;;
 esac
-printf '%s\n' '{"id":"zen-init","result":{"userAgent":"fake","codexHome":"/tmp/codex","platformFamily":"unix","platformOs":"linux"}}'
+printf '%s\n' '{"id":"mewla-init","result":{"userAgent":"fake","codexHome":"/tmp/codex","platformFamily":"unix","platformOs":"linux"}}'
 printf '%s\n' '{"method":"remoteControl/status/changed","params":{"status":"disabled"}}'
 read ready
 case "$ready" in
@@ -523,7 +523,7 @@ case "$req" in
   *'"method":"thread/list"'*) ;;
   *) echo "bad request: $req" >&2; exit 13 ;;
 esac
-printf '%s\n' '{"id":"zen-1","result":{"data":[],"nextCursor":"next","backwardsCursor":"back"}}'
+printf '%s\n' '{"id":"mewla-1","result":{"data":[],"nextCursor":"next","backwardsCursor":"back"}}'
 `
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)

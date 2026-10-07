@@ -883,7 +883,7 @@ func encodeClaudeProjectDir(cwd string) string {
 	clean := filepath.Clean(cwd)
 	// Claude Code replaces both path separators and dots with hyphens. Keep
 	// this in sync with the on-disk ~/.claude/projects layout (for example,
-	// /.zen becomes --zen after the separator and dot are encoded).
+	// /.mewla becomes --mewla after the separator and dot are encoded).
 	return strings.NewReplacer(
 		string(filepath.Separator), "-",
 		".", "-",

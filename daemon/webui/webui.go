@@ -67,7 +67,7 @@ func Handler(files fs.FS) http.Handler {
 		}
 		if err != nil {
 			if name == indexFile {
-				http.Error(w, "This zen build does not include the web UI. Run scripts/build-web-ui.sh, then rebuild zen.", http.StatusNotFound)
+				http.Error(w, "This mewla build does not include the web UI. Run scripts/build-web-ui.sh, then rebuild mewla.", http.StatusNotFound)
 				return
 			}
 			http.NotFound(w, r)

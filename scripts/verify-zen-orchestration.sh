@@ -5,10 +5,10 @@ umask 077
 usage() {
   cat <<'EOF'
 Usage: scripts/verify-zen-orchestration.sh --state-dir PATH [--json] [--root PATH]
-       [--zen-bin PATH] [--timeout-seconds 1-300]
+       [--mewla-bin PATH] [--timeout-seconds 1-300]
 
-Check the project feature map and bounded Zen control paths.
-The command does not start Zen or invoke an AI provider.
+Check the project feature map and bounded Mewla control paths.
+The command does not start Mewla or invoke an AI provider.
 The state directory must already exist and belong to the daemon being checked.
 EOF
 }
@@ -16,19 +16,19 @@ EOF
 json_output=false
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 state_dir=""
-zen_bin="${ZEN_BIN:-zen}"
+mewla_bin="${MEWLA_BIN:-mewla}"
 timeout_seconds=30
 
 while (($# > 0)); do
   case "$1" in
     --help|-h) usage; exit 0 ;;
     --json) json_output=true; shift ;;
-    --root|--state-dir|--zen-bin|--timeout-seconds)
+    --root|--state-dir|--mewla-bin|--timeout-seconds)
       (($# >= 2)) || { echo "$1 requires a value" >&2; exit 2; }
       case "$1" in
         --root) root="$2" ;;
         --state-dir) state_dir="$2" ;;
-        --zen-bin) zen_bin="$2" ;;
+        --mewla-bin) mewla_bin="$2" ;;
         --timeout-seconds) timeout_seconds="$2" ;;
       esac
       shift 2
@@ -136,10 +136,10 @@ elif [[ -L "$state_dir" || ! -d "$state_dir" ]]; then
 fi
 command -v jq >/dev/null 2>&1 || failures+=("tool: jq is required")
 command -v timeout >/dev/null 2>&1 || failures+=("tool: timeout is required")
-if [[ "$zen_bin" != */* ]]; then
-  zen_bin="$(command -v "$zen_bin" 2>/dev/null || true)"
+if [[ "$mewla_bin" != */* ]]; then
+  mewla_bin="$(command -v "$mewla_bin" 2>/dev/null || true)"
 fi
-[[ -n "$zen_bin" && -x "$zen_bin" ]] || failures+=("tool: zen executable is unavailable")
+[[ -n "$mewla_bin" && -x "$mewla_bin" ]] || failures+=("tool: mewla executable is unavailable")
 
 report_dir=""
 private_files=()
@@ -212,8 +212,8 @@ run_json() {
   }
 }
 
-if [[ "$manifest_valid" == true && "$source_check_pass" == true && "$state_dir" == /* && -d "$state_dir" && ! -L "$state_dir" && -x "$zen_bin" && -n "$report_dir" ]]; then
-  run_json doctor "$zen_bin" doctor --json --state-dir "$state_dir" || true
+if [[ "$manifest_valid" == true && "$source_check_pass" == true && "$state_dir" == /* && -d "$state_dir" && ! -L "$state_dir" && -x "$mewla_bin" && -n "$report_dir" ]]; then
+  run_json doctor "$mewla_bin" doctor --json --state-dir "$state_dir" || true
   if [[ -s "${output_files[doctor]:-}" ]] && jq -e '.ready == true' "${output_files[doctor]}" >/dev/null 2>&1; then
     doctor_pass=true
     daemon_id="$(jq -r '.listen.daemon_id // ""' "${output_files[doctor]}")"
@@ -227,9 +227,9 @@ else
 fi
 
 if [[ "$doctor_pass" == true ]]; then
-  run_json brain_playbooks "$zen_bin" brain playbooks --json --state-dir "$state_dir" || true
-  run_json brain_context "$zen_bin" brain context --json --state-dir "$state_dir" || true
-  run_json worker_list "$zen_bin" worker list --json --state-dir "$state_dir" || true
+  run_json brain_playbooks "$mewla_bin" brain playbooks --json --state-dir "$state_dir" || true
+  run_json brain_context "$mewla_bin" brain context --json --state-dir "$state_dir" || true
+  run_json worker_list "$mewla_bin" worker list --json --state-dir "$state_dir" || true
   if [[ -s "${output_files[brain_playbooks]:-}" ]] && jq -e '.playbooks.playbooks | map(.name) | index("delegate-brief") != null' "${output_files[brain_playbooks]}" >/dev/null 2>&1; then brain_playbooks_pass=true; else failures+=("brain_playbooks: delegate-brief is not available"); fi
   if [[ -s "${output_files[brain_context]:-}" ]] && jq -e '.context.host_executor.id != null and (.context.executors | length) > 0' "${output_files[brain_context]}" >/dev/null 2>&1; then brain_context_pass=true; else failures+=("brain_context: executor contract is incomplete"); fi
   if [[ -s "${output_files[worker_list]:-}" ]] && jq -e '.workers | type == "array"' "${output_files[worker_list]}" >/dev/null 2>&1; then
@@ -251,7 +251,7 @@ if [[ "$json_output" == true ]]; then
   failure_json="$(printf '%s\n' "${failures[@]:-}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
   jq -n     --arg status "$status"     --arg root "$root"     --arg source_revision "$source_revision"     --arg daemon_id "$daemon_id"     --arg runtime_addr "$runtime_addr"     --argjson source_dirty "$source_dirty"     --argjson runtime_running "$runtime_running"     --argjson feature_count "$feature_count"     --argjson feature_items "$feature_json"     --argjson source_count "$source_count"     --argjson test_count "$test_count"     --argjson source_check "$source_check_pass"     --argjson skill_source "$skill_source_pass"     --argjson doctor "$doctor_pass"     --argjson brain_playbooks "$brain_playbooks_pass"     --argjson brain_context "$brain_context_pass"     --argjson worker_list "$worker_list_pass"     --argjson worker_count "$worker_count"     --argjson failures "$failure_json"     '{status:$status,source_identity:{root:$root,revision:$source_revision,dirty:$source_dirty},runtime_identity:{daemon_id:$daemon_id,address:$runtime_addr,running:$runtime_running},features:{count:$feature_count,source_paths:$source_count,test_paths:$test_count,items:$feature_items},source_checks:{manifest_and_anchors:$source_check,skill_source:$skill_source},runtime_checks:{doctor:$doctor,brain_playbooks:$brain_playbooks,brain_context:$brain_context,worker_list:$worker_list,worker_count:$worker_count},failures:$failures}'
 else
-  printf 'Zen verification: %s\n' "$status"
+  printf 'Mewla verification: %s\n' "$status"
   printf 'Source: revision=%s dirty=%s. Features=%s source_anchors=%s test_anchors=%s.\n' "$source_revision" "$source_dirty" "$feature_count" "$source_count" "$test_count"
   printf 'Runtime: daemon=%s running=%s doctor=%s brain_playbooks=%s brain_context=%s worker_list=%s workers=%s.\n' "$daemon_id" "$runtime_running" "$doctor_pass" "$brain_playbooks_pass" "$brain_context_pass" "$worker_list_pass" "$worker_count"
   if ((${#failures[@]} > 0)); then

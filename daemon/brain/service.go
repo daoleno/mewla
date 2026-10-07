@@ -3548,7 +3548,7 @@ func zenExecutableDir() string {
 		return ""
 	}
 	base := strings.ToLower(commandBase(exe))
-	if base != "mewla" && base != "mewla.exe" && base != "zen" && base != "zen.exe" {
+	if base != "mewla" && base != "mewla.exe" {
 		return ""
 	}
 	return strings.TrimSpace(filepath.Dir(exe))
@@ -3594,7 +3594,7 @@ func (s *Service) hostBootstrapPrompt(executor work.WorkerExecutor) string {
 	}
 	worktreeRoot, _ := work.DefaultWorktreeRoot()
 	return brainHostActivationPrompt() + "\n\n" + strings.TrimSpace(fmt.Sprintf(`
-You are Brain inside zen.
+You are Brain inside Mewla.
 Brain workspace: %s (private reports in worklog/)
 Managed worktree root: %s
 Host executor: %s.

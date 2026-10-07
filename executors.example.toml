@@ -1,7 +1,7 @@
-# Example executor profiles for ~/.zen/executors.toml
+# Example executor profiles for ~/.mewla/executors.toml
 #
 # Copy:
-#   cp executors.example.toml ~/.zen/executors.toml
+#   cp executors.example.toml ~/.mewla/executors.toml
 #
 # Edit executor definitions/commands and restart zen so the catalog reloads.
 # Brain picks each Worker's executor, model and reasoning from its routing.md.
@@ -69,7 +69,7 @@ kind = "opencode"
 #
 # Pi is already permissive by default. Calendar may append --no-extensions so
 # extension ui.confirm gates cannot stall unattended work. Brain/daemon inject
-# an absolute --session path for Zen-owned Pi sessions.
+# an absolute --session path for Mewla-owned Pi sessions.
 #
 # Brain-delegated Codex sessions may still append
 # --dangerously-bypass-approvals-and-sandbox in current daemon code even when

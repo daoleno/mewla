@@ -27,12 +27,12 @@ import (
 )
 
 // `mewla boot` is the single optional boot-persistence entry for the SAME runtime
-// used by `zen` and the DEV runner: it renders a standard systemd user unit for
+// used by `mewla` and the DEV runner: it renders a standard systemd user unit for
 // the reviewed binary and does not introduce a second identity, state
 // directory or supervisor.
 //
 // Ownership: the state lifecycle lock and the unit's systemd cgroup identify
-// the owner. `mewla boot` requires a process inside zen.service's cgroup to hold
+// the owner. `mewla boot` requires a process inside mewla.service's cgroup to hold
 // the installed state's lifecycle lock and /health to serve that state's
 // identity; a manual daemon using another state cannot satisfy that even when
 // it runs the same binary. The boot CLI never kills a process it did not
@@ -47,7 +47,7 @@ import (
 
 const (
 	bootManagedMarker  = "# Managed by mewla boot install"
-	bootServiceName    = "zen.service"
+	bootServiceName    = "mewla.service"
 	bootDefaultAddr    = "127.0.0.1:9876"
 	bootLANAddr        = "0.0.0.0:9876"
 	bootMetadataSuffix = ".meta.json"
@@ -573,7 +573,7 @@ func bootUnitActive(runner bootRunner) (string, bool, error) {
 	case "inactive", "deactivating", "failed", "unknown", "maintenance":
 		return state, false, nil
 	default:
-		return state, false, fmt.Errorf("unexpected zen.service state %q: %s", state, strings.TrimSpace(string(output)))
+		return state, false, fmt.Errorf("unexpected mewla.service state %q: %s", state, strings.TrimSpace(string(output)))
 	}
 }
 
@@ -632,14 +632,14 @@ func bootSameFilePath(left, right string) bool {
 func bootProcessMatchesBinary(pid int, binary string) error {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 	if err != nil {
-		return fmt.Errorf("read zen.service main process %d: %w", pid, err)
+		return fmt.Errorf("read mewla.service main process %d: %w", pid, err)
 	}
 	parts := strings.Split(string(data), "\x00")
 	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
-		return fmt.Errorf("zen.service main process %d has no command line", pid)
+		return fmt.Errorf("mewla.service main process %d has no command line", pid)
 	}
 	if !bootSameFilePath(parts[0], binary) {
-		return fmt.Errorf("zen.service main process %d runs %s, not the installed binary %s", pid, parts[0], binary)
+		return fmt.Errorf("mewla.service main process %d runs %s, not the installed binary %s", pid, parts[0], binary)
 	}
 	return nil
 }
@@ -1058,15 +1058,15 @@ func (snapshot bootOwnerSnapshot) describe() string {
 		return "unknown (" + snapshot.LockErr.Error() + ")"
 	case snapshot.LockPID > 0 && snapshot.Active:
 		if snapshot.MainPID <= 0 || !snapshot.MainMatches {
-			return fmt.Sprintf("state directory is owned by zen.service (PID %d); unit main process does not match the installed binary", snapshot.LockPID)
+			return fmt.Sprintf("state directory is owned by mewla.service (PID %d); unit main process does not match the installed binary", snapshot.LockPID)
 		}
-		return fmt.Sprintf("state directory is owned by zen.service (PID %d)", snapshot.LockPID)
+		return fmt.Sprintf("state directory is owned by mewla.service (PID %d)", snapshot.LockPID)
 	case snapshot.LockPID > 0:
-		return fmt.Sprintf("state directory is owned by zen.service cgroup process PID %d while the unit is %s", snapshot.LockPID, snapshot.UnitState)
+		return fmt.Sprintf("state directory is owned by mewla.service cgroup process PID %d while the unit is %s", snapshot.LockPID, snapshot.UnitState)
 	case snapshot.LockHeld && snapshot.ControlGroup == "":
-		return "state lifecycle lock is held, but the zen.service scope is unknown; mewla boot never kills it"
+		return "state lifecycle lock is held, but the mewla.service scope is unknown; mewla boot never kills it"
 	case snapshot.LockHeld:
-		return "state lifecycle lock is held by a process outside zen.service; mewla boot never kills it"
+		return "state lifecycle lock is held by a process outside mewla.service; mewla boot never kills it"
 	case snapshot.Active && (snapshot.MainPID <= 0 || !snapshot.MainMatches):
 		return "unit is active but its main process is not the installed binary"
 	default:
@@ -1236,7 +1236,7 @@ func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 		if restarted {
 			_, _ = runner.run("systemctl", "--user", "stop", bootServiceName)
 		}
-		return fmt.Errorf("zen.service did not become the verified owner (%s, previous state %s): %w; fix the reported cause and run systemctl --user start %s", config.StateDir, activeState, err, bootServiceName)
+		return fmt.Errorf("mewla.service did not become the verified owner (%s, previous state %s): %w; fix the reported cause and run systemctl --user start %s", config.StateDir, activeState, err, bootServiceName)
 	}
 
 	fmt.Fprintf(out, "%s %s\n", action, path)
@@ -1391,12 +1391,12 @@ func bootUninstall(runner bootRunner, out io.Writer) error {
 		if controlGroup != "" {
 			pid, err := bootStateLockPID(metadata.StateDir, controlGroup)
 			if err != nil {
-				return fmt.Errorf("inspect zen.service state ownership: %w (unit and configuration retained)", err)
+				return fmt.Errorf("inspect mewla.service state ownership: %w (unit and configuration retained)", err)
 			}
 			ownerPID = pid
 		}
 		if ownerPID > 0 {
-			return fmt.Errorf("zen.service cgroup process %d still owns state directory %s after stop; configuration retained; stop that process explicitly before removing the unit", ownerPID, metadata.StateDir)
+			return fmt.Errorf("mewla.service cgroup process %d still owns state directory %s after stop; configuration retained; stop that process explicitly before removing the unit", ownerPID, metadata.StateDir)
 		}
 		anyPID, err := bootStateLockPID(metadata.StateDir, "")
 		if err != nil {
@@ -1406,7 +1406,7 @@ func bootUninstall(runner bootRunner, out io.Writer) error {
 		case anyPID == 0:
 			return fmt.Errorf("state lifecycle lock is still held after stop, but its holder could not be attributed; configuration retained; stop the owning process explicitly")
 		case controlGroup == "":
-			reason := "zen.service ControlGroup is unknown"
+			reason := "mewla.service ControlGroup is unknown"
 			if controlGroupErr != nil {
 				reason = controlGroupErr.Error()
 			}
@@ -1430,7 +1430,7 @@ func bootUninstall(runner bootRunner, out io.Writer) error {
 	}
 	fmt.Fprintf(out, "Removed %s; daemon state and pairing are untouched\n", path)
 	if outsideOwner {
-		fmt.Fprintf(out, "Note: state directory %s is owned by a process outside zen.service; it was not stopped or modified\n", metadata.StateDir)
+		fmt.Fprintf(out, "Note: state directory %s is owned by a process outside mewla.service; it was not stopped or modified\n", metadata.StateDir)
 	}
 	return nil
 }

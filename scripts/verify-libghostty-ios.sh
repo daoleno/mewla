@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify that the pinned iOS libghostty-vt XCFramework contains both the
-# arm64 device and Apple Silicon Simulator slices required by Zen.
+# arm64 device and Apple Silicon Simulator slices required by Mewla.
 
 set -euo pipefail
 

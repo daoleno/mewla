@@ -133,7 +133,7 @@ func TestHostActivationContractDeliveredOncePerProcessGeneration(t *testing.T) {
 	if fw.readyInputCalls != 1 {
 		t.Fatalf("fresh Host activation readiness calls = %d, want one", fw.readyInputCalls)
 	}
-	if !strings.Contains(fw.sentCalls[0].text, "You are Brain inside zen") ||
+	if !strings.Contains(fw.sentCalls[0].text, "You are Brain inside Mewla") ||
 		!strings.Contains(fw.sentCalls[0].text, "Brain Host activation contract:") {
 		t.Fatalf("fresh bootstrap did not serve as activation:\n%s", fw.sentCalls[0].text)
 	}
@@ -173,7 +173,7 @@ func TestHostActivationContractDeliveredOncePerProcessGeneration(t *testing.T) {
 	secondPrompt := fw.sentCalls[1].text
 	if !strings.Contains(secondPrompt, "Brain Host activation contract:") ||
 		strings.Contains(secondPrompt, brainWorkerRoleContract) || len(secondPrompt) > 300 ||
-		strings.Contains(secondPrompt, "You are Brain inside zen") {
+		strings.Contains(secondPrompt, "You are Brain inside Mewla") {
 		t.Fatalf("generation refresh must use compact private activation:\n%s", secondPrompt)
 	}
 	if _, err := service.EnsureHostSnapshot(); err != nil {

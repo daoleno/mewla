@@ -34,12 +34,12 @@ func successLines(result Result) []string {
 		lines = append(lines, "  backup: "+result.BackupPath)
 	}
 	if result.BrainConfigured {
-		lines = append(lines, "  Brain host: configured (restart zen to load)")
+		lines = append(lines, "  Brain host: configured (restart mewla to load)")
 	} else {
 		lines = append(lines, "  Brain host: left unconfigured")
 	}
 	if result.RestartRequired {
-		lines = append(lines, "  Restart zen to load new or changed executor definitions")
+		lines = append(lines, "  Restart mewla to load new or changed executor definitions")
 	}
 	for _, warning := range result.Warnings {
 		lines = append(lines, "  warning: "+warning)

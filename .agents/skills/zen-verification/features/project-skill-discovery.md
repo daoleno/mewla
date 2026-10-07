@@ -1,6 +1,6 @@
 # Project skill loading
 
-Zen's native Skill loaders and shared inventory discover the project Skill from `.agents/skills`. Pi's native `PackageManager.resolve` and `loadSkills` path has already loaded `zen-verification` with `diagnostics: []`. This feature verifies the source contract only. It does not claim that the shell lever re-proves native loader behavior.
+Mewla's native Skill loaders and shared inventory discover the project Skill from `.agents/skills`. Pi's native `PackageManager.resolve` and `loadSkills` path has already loaded `zen-verification` with `diagnostics: []`. This feature verifies the source contract only. It does not claim that the shell lever re-proves native loader behavior.
 
 ## Sub-features
 
@@ -10,10 +10,10 @@ Zen's native Skill loaders and shared inventory discover the project Skill from 
 
 ## How to get to it (user POV)
 
-- Open `.agents/skills/zen-verification/SKILL.md` in a Zen checkout.
+- Open `.agents/skills/zen-verification/SKILL.md` in a Mewla checkout.
 - Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` to validate the map against the checkout.
 
-## Driving it with the Zen CLI
+## Driving it with the Mewla CLI
 
 Preconditions:
 
@@ -28,7 +28,7 @@ Preconditions:
 
 - A global copy of the skill does not satisfy the project-root source check.
 - A markdown-only feature list is not machine-verifiable. Keep `manifest.json` in sync.
-- Do not copy provider-specific pstack commands into this skill. Zen keeps executor choice provider-neutral.
+- Do not copy provider-specific pstack commands into this skill. Mewla keeps executor choice provider-neutral.
 
 The exact-copy inspector also owns bounded raster previews used by Skills and
 Plugin file browsers. Its image read remains confined to the advertised package

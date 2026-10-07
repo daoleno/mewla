@@ -256,7 +256,7 @@ func TestOpenPerformsInitializeWithExperimentalAPI(t *testing.T) {
 		t.Fatalf("initialize count = %d", f.requestCount(methodInitialize))
 	}
 	clientInfo, _ := init["clientInfo"].(map[string]any)
-	if clientInfo == nil || clientInfo["name"] != "zen" {
+	if clientInfo == nil || clientInfo["name"] != "mewla" {
 		t.Fatalf("clientInfo = %#v", clientInfo)
 	}
 	caps, _ := init["capabilities"].(map[string]any)

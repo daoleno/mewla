@@ -24,8 +24,8 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 		Host:           "codex",
 		Profile:        ProfileSafe,
 		Home:           home,
-		StateDir:       filepath.Join(home, ".zen"),
-		ExecutorsPath:  filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:       filepath.Join(home, ".mewla"),
+		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:           "127.0.0.1:0",
 		PathEnv:        binDir,
 		Stdout:         &out,
@@ -46,7 +46,7 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(home, ".zen", "executors.toml")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".mewla", "executors.toml")); !os.IsNotExist(err) {
 		t.Fatalf("config should not be written on blocked machine: %v", err)
 	}
 }
@@ -61,8 +61,8 @@ func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 		Host:           "codex",
 		Profile:        ProfileSafe,
 		Home:           home,
-		StateDir:       filepath.Join(home, ".zen"),
-		ExecutorsPath:  filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:       filepath.Join(home, ".mewla"),
+		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
 		PathEnv:        binDir,
 		Addr:           "127.0.0.1:0",
 		Stdout:         &out,
@@ -113,9 +113,9 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 		Host:           "codex",
 		Profile:        ProfileSafe,
 		Home:           home,
-		StateDir:       filepath.Join(home, ".zen"),
-		ExecutorsPath:  filepath.Join(home, ".zen", "executors.toml"),
-		BrainRoot:      filepath.Join(home, ".zen", "brain"),
+		StateDir:       filepath.Join(home, ".mewla"),
+		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
+		BrainRoot:      filepath.Join(home, ".mewla", "brain"),
 		PathEnv:        binDir,
 		Addr:           "127.0.0.1:0",
 		Stdout:         &out,
@@ -168,8 +168,8 @@ func TestSetupAutonomousRequiresExplicitConsent(t *testing.T) {
 		Profile:        ProfileAutonomous,
 		Yes:            false,
 		Home:           home,
-		StateDir:       filepath.Join(home, ".zen"),
-		ExecutorsPath:  filepath.Join(home, ".zen", "executors.toml"),
+		StateDir:       filepath.Join(home, ".mewla"),
+		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
 		PathEnv:        binDir,
 		Addr:           "127.0.0.1:0",
 		Stdout:         io.Discard,
@@ -196,9 +196,9 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 		Profile:        ProfileAutonomous,
 		Yes:            true,
 		Home:           home,
-		StateDir:       filepath.Join(home, ".zen"),
-		ExecutorsPath:  filepath.Join(home, ".zen", "executors.toml"),
-		BrainRoot:      filepath.Join(home, ".zen", "brain"),
+		StateDir:       filepath.Join(home, ".mewla"),
+		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
+		BrainRoot:      filepath.Join(home, ".mewla", "brain"),
 		PathEnv:        binDir,
 		Addr:           "127.0.0.1:0",
 		Stdout:         io.Discard,
@@ -217,7 +217,7 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 	if !strings.Contains(string(raw), "cursor-agent --force --sandbox disabled") {
 		t.Fatalf("autonomous cursor command missing:\n%s", raw)
 	}
-	store, err := brain.NewStore(filepath.Join(home, ".zen", "brain"))
+	store, err := brain.NewStore(filepath.Join(home, ".mewla", "brain"))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 func TestSetupPreservesBackupAndIdempotentRerun(t *testing.T) {
 	home := t.TempDir()
 	binDir := readyBinDir(t)
-	path := filepath.Join(home, ".zen", "executors.toml")
+	path := filepath.Join(home, ".mewla", "executors.toml")
 	writeExecutorsSeed(t, home, `
 delegated_executor = "codex"
 [[executors]]
@@ -331,12 +331,12 @@ func TestSetupDoesNotEmitSecrets(t *testing.T) {
 }
 
 func TestNextStepsKeepPrivateAndHTTPSRoutesDistinct(t *testing.T) {
-	steps := strings.Join(nextSteps("/tmp/zen-state"), "\n")
+	steps := strings.Join(nextSteps("/tmp/mewla-state"), "\n")
 	for _, want := range []string{
 		"mewla --lan",
 		"direct Tailnet",
-		"start Mewla with zen, expose the full loopback origin",
-		"mewla pair -state-dir /tmp/zen-state https://your-mewla-host.example",
+		"start Mewla with mewla serve, expose the full loopback origin",
+		"mewla pair -state-dir /tmp/mewla-state https://your-mewla-host.example",
 	} {
 		if !strings.Contains(steps, want) {
 			t.Fatalf("next steps missing %q:\n%s", want, steps)
@@ -373,9 +373,9 @@ func baseOpts(home, binDir string, profile Profile, host string) Options {
 		Profile:        profile,
 		Yes:            profile == ProfileAutonomous,
 		Home:           home,
-		StateDir:       filepath.Join(home, ".zen"),
-		ExecutorsPath:  filepath.Join(home, ".zen", "executors.toml"),
-		BrainRoot:      filepath.Join(home, ".zen", "brain"),
+		StateDir:       filepath.Join(home, ".mewla"),
+		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
+		BrainRoot:      filepath.Join(home, ".mewla", "brain"),
 		PathEnv:        binDir,
 		Addr:           "127.0.0.1:0",
 		Stdout:         io.Discard,
@@ -396,7 +396,7 @@ func readyBinDir(t *testing.T) string {
 
 func writeExecutorsSeed(t *testing.T, home, body string) {
 	t.Helper()
-	dir := filepath.Join(home, ".zen")
+	dir := filepath.Join(home, ".mewla")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

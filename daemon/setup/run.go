@@ -427,7 +427,7 @@ func nextSteps(stateDir string) []string {
 	}
 	return []string{
 		"Same trusted Wi-Fi or direct Tailnet: start Mewla with mewla --lan, then run a pair command it prints",
-		"HTTPS endpoint: start Mewla with zen, expose the full loopback origin, then run " + pairHint,
+		"HTTPS endpoint: start Mewla with mewla serve, expose the full loopback origin, then run " + pairHint,
 		"Optional: re-check with mewla doctor",
 	}
 }
