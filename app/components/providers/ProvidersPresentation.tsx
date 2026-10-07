@@ -326,7 +326,7 @@ function GatewayStatusRow({
       footer={`${status.protocols.join(" / ") || "No protocols"} · ${status.model_count} exposed models`}
     >
       <ListRow
-        title="Zen Provider Gateway"
+        title="Mewla Provider Gateway"
         subtitle={copied ? "Endpoint copied" : endpoint}
         icon="radio-outline"
         trailing={
@@ -335,7 +335,7 @@ function GatewayStatusRow({
             tone={status.running ? "success" : "neutral"}
           />
         }
-        accessibilityLabel={status.endpoint ? "Copy gateway endpoint" : "Zen Provider Gateway"}
+        accessibilityLabel={status.endpoint ? "Copy gateway endpoint" : "Mewla Provider Gateway"}
         onPress={
           status.endpoint
             ? () => {

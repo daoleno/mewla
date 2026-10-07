@@ -12,7 +12,7 @@ describe("mobile chrome copy", () => {
       ["components/skills/SkillsPresentation.tsx", "Reading supported Agent locations"],
       ["components/plugins/PluginsPresentation.tsx", "Expand a Skill to read its"],
       ["app/stats.tsx", "history to start collecting data"],
-      ["components/terminal/GitDiffSheet.tsx", "Zen is checking the current working tree."],
+      ["components/terminal/GitDiffSheet.tsx", "Mewla is checking the current working tree."],
       ["components/terminal/SessionFilePreviewSheet.tsx", "send it through JSON"],
     ];
     for (const [path, text] of checks) expect(source(path)).not.toContain(text);

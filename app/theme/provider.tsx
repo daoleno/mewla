@@ -94,7 +94,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (!hydrated) {
       return;
     }
-    // Expo system root follows resolved Zen canvas on Android and iOS.
+    // Expo system root follows resolved Mewla canvas on Android and iOS.
     // Best-effort; ThemeProvider remains the sole theme state owner.
     void syncSystemRootBackground(theme.colors.bgPrimary, {
       setBackgroundColorAsync: (color) =>

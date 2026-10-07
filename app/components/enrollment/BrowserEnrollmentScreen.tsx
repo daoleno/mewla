@@ -78,13 +78,13 @@ export function BrowserEnrollmentScreen() {
   return (
     <View style={[styles.page, { backgroundColor: colors.bgPrimary }]}>
       <View style={styles.content}>
-        <AppText variant="caption" tone="secondary">CONNECT TO ZEN</AppText>
+        <AppText variant="caption" tone="secondary">CONNECT TO MEWLA</AppText>
         <AppText variant="display" accessibilityRole="header">{waiting ? "Waiting for approval" : state === "denied" ? "Request denied" : state === "expired" ? "Request expired" : "Could not connect"}</AppText>
-        <AppText tone="secondary">{waiting ? "Open Zen on an already-paired device and choose this number to approve this browser." : state === "denied" ? "This browser was not approved. You can try again when you’re ready." : state === "expired" ? "For your security, requests expire after five minutes. Request a new number to try again." : error}</AppText>
+        <AppText tone="secondary">{waiting ? "Open Mewla on an already-paired device and choose this number to approve this browser." : state === "denied" ? "This browser was not approved. You can try again when you’re ready." : state === "expired" ? "For your security, requests expire after five minutes. Request a new number to try again." : error}</AppText>
         {waiting && prompt ? <AppText variant="display" accessibilityLabel={`Verification number ${prompt.verificationNumber}`} style={styles.number}>{prompt.verificationNumber}</AppText> : null}
         {waiting ? <ActivityIndicator color={colors.accent} /> : <Button label="Try again" variant="filled" onPress={() => { try { sessionStorage.removeItem("zen:enrollment:v1"); } catch {} setAttempt((value) => value + 1); }} />}
         {waiting && error ? <AppText tone="secondary" accessibilityLiveRegion="polite">{error}</AppText> : null}
-        <AppText variant="caption" tone="secondary">First device? Run zen on your computer, then use its pairing QR or link.</AppText>
+        <AppText variant="caption" tone="secondary">First device? Run mewla on your computer, then use its pairing QR or link.</AppText>
         <Button label="Use pairing link or QR" variant="plain" onPress={() => router.push({ pathname: "/settings", params: { addServer: Date.now().toString(), pairingRequired: "1", pairMode: "import" } })} />
       </View>
     </View>

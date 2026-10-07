@@ -69,9 +69,11 @@ describe("Pairing V2", () => {
     signed.set(binding, domain.length);
     payload.z = bytesToHex(nacl.sign.detached(signed, keyPair.secretKey));
 
-    const link = `zen://settings?v=2&p=${Buffer.from(
-      JSON.stringify(payload),
-    ).toString("base64url")}`;
+    const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const link = `mewla://settings?v=2&p=${encoded}`;
+    const legacyLink = `zen://settings?v=2&p=${encoded}`;
+    expect(parseConnectLink(legacyLink)).toEqual(parseConnectLink(link));
+    expect(parseConnectLink(`other://settings?v=2&p=${encoded}`)).toBeNull();
     expect(parseConnectLink(link)).toEqual({
       url: payload.c[0].a!,
       daemonId: payload.d,
@@ -97,22 +99,29 @@ describe("Pairing V2", () => {
     });
 
     payload.p = "6".repeat(64);
-    const tampered = `zen://settings?v=2&p=${Buffer.from(
+    const tampered = `mewla://settings?v=2&p=${Buffer.from(
       JSON.stringify(payload),
     ).toString("base64url")}`;
     expect(parseConnectLink(tampered)).toBeNull();
 
-    const oversized = `zen://settings?v=2&p=${"A".repeat((64 << 10) + 1)}`;
+    const oversized = `mewla://settings?v=2&p=${"A".repeat((64 << 10) + 1)}`;
     expect(parseConnectLink(oversized)).toBeNull();
   });
 });
 
-test("QR and paste accept HTTPS fragment links as well as legacy zen links", () => {
-  const legacy = `zen://settings?u=${encodeURIComponent("wss://zen.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
-  const expected = parseConnectLink(legacy);
+test("QR and paste accept HTTPS fragment links as well as mewla and legacy zen links", () => {
+  const query = `u=${encodeURIComponent("wss://zen.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
+  const current = `mewla://settings?${query}`;
+  const legacy = `zen://settings?${query}`;
+  const expected = parseConnectLink(current);
   expect(expected).not.toBeNull();
-  expect(parseConnectLink(`https://zen.example/#pair=${encodeURIComponent(legacy)}`)).toEqual(expected);
+  expect(parseConnectLink(legacy)).toEqual(expected);
+  for (const link of [current, legacy]) {
+    expect(parseConnectLink(`https://zen.example/#pair=${encodeURIComponent(link)}`)).toEqual(expected);
+    expect(parseConnectLink(`http://untrusted.example/#pair=${encodeURIComponent(link)}`)).toBeNull();
+  }
+  expect(parseConnectLink(`other://settings?${query}`)).toBeNull();
+  expect(parseConnectLink(`https://zen.example/#pair=${encodeURIComponent(`other://settings?${query}`)}`)).toBeNull();
   expect(parseConnectLink("https://zen.example/")).toBeNull();
   expect(parseConnectLink("https://zen.example/#pair=https%3A%2F%2Fevil.example")).toBeNull();
-  expect(parseConnectLink(`http://untrusted.example/#pair=${encodeURIComponent(legacy)}`)).toBeNull();
 });

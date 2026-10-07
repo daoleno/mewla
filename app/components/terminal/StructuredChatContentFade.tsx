@@ -42,7 +42,7 @@ interface StructuredChatContentFadeProps {
  * geometry. Android deliberately uses a sibling overlay instead of wrapping
  * the live FlatList in a software MaskedView: software masking rasterizes the
  * complete timeline after every streaming descendant update and can expose a
- * cleared black backing surface. Zen's chat canvas is a single flat color, so
+ * cleared black backing surface. Mewla's chat canvas is a single flat color, so
  * covering the same pixels is visually equivalent and keeps the list on its
  * ordinary native composition layer. iOS retains its native alpha mask and
  * Web retains the CSS mask.

@@ -111,7 +111,7 @@ export async function buildAuthorizationHeader(input: {
 function defaultDeviceName(): string {
   if (Platform.OS === "web") {
     const os = Device.osName?.trim();
-    return os ? `Zen Web (${os})` : "Zen Web";
+    return os ? `Mewla Web (${os})` : "Mewla Web";
   }
-  return Device.deviceName?.trim() || Device.modelName?.trim() || "Zen mobile";
+  return Device.deviceName?.trim() || Device.modelName?.trim() || "Mewla mobile";
 }

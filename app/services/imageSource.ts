@@ -44,7 +44,7 @@ export async function resolveImageSource(source: ZenImageSource, owner: ZenImage
   if (source.kind === "external") {
     const url = new URL(source.uri);
     if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error("Unsupported image URL.");
-    // Native requests and redirects carry no Zen credentials.
+    // Native requests and redirects carry no Mewla credentials.
     return { uri: url.href, headers: {} };
   }
   if (!/^(content:|file:)/i.test(source.uri)) throw new Error("The local image grant is unavailable.");

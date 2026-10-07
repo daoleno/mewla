@@ -20,7 +20,7 @@ function load(env, forbidRead) {
         readFileSync: () => {
           reads++;
           if (forbidRead) throw new Error("Personal dotenv must not be read");
-          return "ZEN_EXPO_PROJECT_ID=fixture-project\nPRIVATE_FIXTURE_VALUE=local-only\n";
+          return "MEWLA_EXPO_PROJECT_ID=fixture-project\nPRIVATE_FIXTURE_VALUE=local-only\n";
         },
       };
     },
@@ -36,8 +36,18 @@ test("EXPO_NO_DOTENV prevents custom config from reading personal dotenv", () =>
 });
 
 test("default config retains local dotenv behavior without overwriting explicit values", () => {
-  const result = load({ ZEN_EXPO_PROJECT_ID: "explicit-project" }, false);
+  const result = load({ MEWLA_EXPO_PROJECT_ID: "explicit-project" }, false);
   assert.equal(result.reads, 1);
   assert.equal(result.env.PRIVATE_FIXTURE_VALUE, "local-only");
   assert.equal(result.config.extra.eas.projectId, "explicit-project");
+});
+
+test("MEWLA_EXPO_PROJECT_ID wins over the legacy ZEN_EXPO_PROJECT_ID", () => {
+  const result = load({ EXPO_NO_DOTENV: "1", MEWLA_EXPO_PROJECT_ID: "mewla-project", ZEN_EXPO_PROJECT_ID: "zen-project" }, true);
+  assert.equal(result.config.extra.eas.projectId, "mewla-project");
+});
+
+test("legacy ZEN_EXPO_PROJECT_ID is still honoured when MEWLA_EXPO_PROJECT_ID is unset", () => {
+  const result = load({ EXPO_NO_DOTENV: "1", ZEN_EXPO_PROJECT_ID: "zen-project" }, true);
+  assert.equal(result.config.extra.eas.projectId, "zen-project");
 });

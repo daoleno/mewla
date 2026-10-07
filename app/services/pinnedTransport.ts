@@ -22,7 +22,7 @@ export async function resolveStoredServerURL(
     !/^[0-9a-f]{32}$/i.test(server.linkRouteId || "")
   ) {
     throw new Error(
-      "Zen Link needs setup. Scan a fresh Zen Link QR code; the saved route or transport pin is missing.",
+      "Mewla Link needs setup. Scan a fresh Mewla Link QR code; the saved route or transport pin is missing.",
     );
   }
   const candidates = linkCandidates(server);
@@ -77,7 +77,7 @@ export async function resolveStoredServerURL(
     );
   if (available.length === 0) {
     throw new Error(
-      "Zen Link is offline. Keep zen running and check its Link connection.",
+      "Mewla Link is offline. Keep mewla running and check its Link connection.",
     );
   }
   const selected = available[0];
@@ -137,7 +137,7 @@ export async function resolvePairingLinkURL(input: {
     );
   } catch {
     throw new Error(
-      "Zen Link could not reach this computer. Keep zen running, wait for Link to show connected, then scan a fresh QR.",
+      "Mewla Link could not reach this computer. Keep mewla running, wait for Link to show connected, then scan a fresh QR.",
     );
   }
   return rewriteURL(input.url, `ws://127.0.0.1:${result.port}`);
@@ -176,13 +176,13 @@ function linkCandidates(server: StoredServer): StoredTransportCandidate[] {
   if (configured.length > 0) {
     return configured;
   }
-  return [{ name: "Zen Link", kind: "link", url: server.url }];
+  return [{ name: "Mewla Link", kind: "link", url: server.url }];
 }
 
 function requireTLSServerURL(value: string): URL {
   const parsed = new URL(value);
   if (parsed.protocol !== "wss:") {
-    throw new Error("Zen Link requires a wss:// candidate.");
+    throw new Error("Mewla Link requires a wss:// candidate.");
   }
   return parsed;
 }

@@ -89,7 +89,7 @@ export interface AccountRecovery {
  */
 export function accountRecovery(account: PluginAccount, serviceName: string): AccountRecovery | null {
   if (account.credential_removal_pending) {
-    return { title: "Credential removal pending", detail: "Calls are stopped. Zen still needs to remove the saved credential.", action: "disconnect", actionLabel: "Retry", tone: "danger" };
+    return { title: "Credential removal pending", detail: "Calls are stopped. Mewla still needs to remove the saved credential.", action: "disconnect", actionLabel: "Retry", tone: "danger" };
   }
   if (!account.enabled) {
     return { title: "Paused", detail: "Brain and Agents can't use this account.", action: "enable", actionLabel: "Resume", tone: "neutral" };
