@@ -28,6 +28,8 @@ import { ActionMenu } from "../ui/ActionMenu";
 import { ListRow, ListSection } from "../ui/ListSection";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { StatusPill } from "../ui/StatusPill";
+import { StatusMark } from "../ui/StatusMark";
+import type { WorkStatus } from "../ui/workStatus";
 import type {
   ProviderClient,
   ProviderConnection,
@@ -311,7 +313,8 @@ function GatewayStatusRow({
   status: NonNullable<ProvidersSnapshot["gateway"]>;
 }) {
   const [copied, setCopied] = useState(false);
-  const endpoint = status.endpoint ?? status.address ?? "Unavailable";
+  // The pill carries the state; the subtitle is only ever the endpoint.
+  const endpoint = status.endpoint ?? status.address;
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 1600);
@@ -328,7 +331,7 @@ function GatewayStatusRow({
         icon="radio-outline"
         trailing={
           <StatusPill
-            label={status.running ? "Running" : "Unavailable"}
+            label={status.running ? "Ready" : "Unavailable"}
             tone={status.running ? "success" : "neutral"}
           />
         }
@@ -487,10 +490,9 @@ function SelectionMark({ selected }: { selected: boolean }) {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
+    // An ink ring and dot: a radio, never the filled Ready check.
     <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-      {selected ? (
-        <Ionicons name="checkmark" size={14} color={colors.textOnAccent} />
-      ) : null}
+      {selected ? <View style={styles.radioDot} /> : null}
     </View>
   );
 }
@@ -550,20 +552,20 @@ function ProviderConnectionRow({
       });
     }
   };
-  const status =
+  const status: { text: string; mark?: WorkStatus } | null =
     testState.kind === "testing"
-      ? { text: "Testing connection…", color: colors.textTertiary }
+      ? { text: "Testing connection…" }
       : testState.kind === "success"
         ? {
             text: `Connected · ${testState.latencyMs} ms${
               testState.modelCount > 0 ? ` · ${testState.modelCount} models found` : ""
             }`,
-            color: colors.success,
+            mark: "ready",
           }
         : testState.kind === "error"
-          ? { text: testState.message, color: colors.dangerText }
+          ? { text: testState.message, mark: "failed" }
           : switchState?.kind === "error"
-            ? { text: switchState.message ?? "Could not switch Provider.", color: colors.dangerText }
+            ? { text: switchState.message ?? "Could not switch Provider.", mark: "failed" }
             : null;
   return (
     <View>
@@ -587,9 +589,12 @@ function ProviderConnectionRow({
               {catalogAgeLabel(connection)}
             </Text>
             {status ? (
-              <Text style={[styles.rowSubtitle, { color: status.color }]} numberOfLines={2}>
-                {status.text}
-              </Text>
+              <View style={[styles.testResult, styles.rowStatus]}>
+                {status.mark ? <StatusMark status={status.mark} knockout={colors.bgSurface} /> : null}
+                <Text style={[styles.rowSubtitle, styles.flexText]} numberOfLines={2}>
+                  {status.text}
+                </Text>
+              </View>
             ) : null}
           </View>
           {switchState?.kind === "pending" ? (
@@ -931,12 +936,8 @@ function ProviderEditorSheet({
 
         {testState.kind === "success" ? (
           <View style={styles.testResult}>
-            <Ionicons
-              name="checkmark-circle"
-              size={17}
-              color={colors.success}
-            />
-            <Text style={[styles.testResultText, { color: colors.success }]}>
+            <StatusMark status="ready" knockout={colors.modalSurface} />
+            <Text style={styles.testResultText}>
               Connected · {testState.latencyMs} ms
               {testState.modelCount > 0
                 ? ` · ${testState.modelCount} models found`
@@ -946,8 +947,8 @@ function ProviderEditorSheet({
         ) : null}
         {testState.kind === "error" ? (
           <View style={styles.testResult}>
-            <Ionicons name="alert-circle" size={17} color={colors.dangerText} />
-            <Text style={[styles.testResultText, { color: colors.dangerText }]}>
+            <StatusMark status="failed" />
+            <Text style={styles.testResultText}>
               {testState.message}
             </Text>
           </View>
@@ -1108,8 +1109,8 @@ function ModelSyncSheet({
               }
             >
               <Ionicons
-                name={selected ? "checkmark-circle" : "ellipse-outline"}
-                size={15}
+                name={selected ? "checkbox" : "square-outline"}
+                size={16}
                 color={selected ? colors.accentStrong : colors.textTertiary}
               />
               <View style={styles.modelRowCopy}>
@@ -1220,6 +1221,11 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
     },
     radioOuterSelected: {
       borderColor: colors.accent,
+    },
+    radioDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
       backgroundColor: colors.accent,
     },
     rowTitle: {
@@ -1324,7 +1330,7 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
     },
     modelRowCopy: { flex: 1, minWidth: 0, gap: 2 },
     modelChipSelected: {
-      borderColor: colors.accent,
+      borderColor: colors.border,
       backgroundColor: colors.accentSoft,
     },
     modelChipDisabled: { opacity: 0.45 },
@@ -1411,6 +1417,7 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       color: colors.textPrimary,
       fontWeight: "600",
     },
+    rowStatus: { paddingHorizontal: 0, paddingTop: 3, alignItems: "center", gap: 5 },
     testResult: {
       flexDirection: "row",
       alignItems: "flex-start",
@@ -1418,7 +1425,8 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       paddingHorizontal: 2,
       paddingTop: 2,
     },
-    testResultText: { ...UiTextMetrics, ...TypeScale.caption, flex: 1 },
+    testResultText: { ...UiTextMetrics, ...TypeScale.caption, flex: 1, color: colors.textSecondary },
+    flexText: { flex: 1, marginTop: 0 },
     saveButton: {
       minHeight: 50,
       marginTop: 8,
