@@ -158,7 +158,7 @@ function SleepingSeal({
   );
 }
 
-function CurledCat({
+export function CurledCat({
   fill,
   line,
   detail,

@@ -89,7 +89,7 @@ import {
   confirmDestructive,
 } from "../components/ui";
 import type { ActionMenuItem } from "../components/ui/ActionMenu";
-import { ZenLogoMark } from "../components/ui/ZenLogoMark";
+import { MewlaMark } from "../components/mewla/MewlaMark";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
 import { RisingSheet } from "../components/ui/RisingSheet";
@@ -674,7 +674,7 @@ export default function SettingsScreen() {
             <ListRow
               title="Zen"
               value={`Version ${appVersion}`}
-              leading={<ZenLogoMark size={30} accessible={false} />}
+              leading={<MewlaMark size={28} />}
             />
           </ListSection>
         </View>

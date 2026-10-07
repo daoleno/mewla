@@ -15,7 +15,7 @@ import { appVersion } from "../../constants/appVersion";
 import { useWorkerServerSummary, useWorkers } from "../../store/workers";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
-import { ZenLogoMark } from "../ui/ZenLogoMark";
+import { MewlaMark } from "../mewla/MewlaMark";
 import {
   NavCloseIcon,
   NavPluginsIcon,
@@ -202,7 +202,7 @@ export function PrimaryDrawerPanel({
   return (
     <SafeAreaView style={styles.drawerContent} edges={["top", "bottom"]}>
       <View style={styles.drawerIdentity}>
-        <ZenLogoMark size={30} accessible={false} />
+        <MewlaMark size={26} />
         <Text
           style={[
             styles.drawerTitle,
