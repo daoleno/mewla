@@ -200,7 +200,7 @@ func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, meth
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Zen-Integrations")
+	req.Header.Set("User-Agent", "Mewla-Integrations")
 	if u.Hostname() == "api.notion.com" {
 		req.Header.Set("Notion-Version", "2022-06-28")
 	}
