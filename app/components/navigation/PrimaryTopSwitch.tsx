@@ -8,8 +8,10 @@ import {
   View,
   type PressableProps,
 } from "react-native";
-import { Typography, shadow, useAppColors } from "../../constants/tokens";
-import { GlassSurface } from "../ui/GlassSurface";
+import { Typography, useAppColors } from "../../constants/tokens";
+import { useCurrentServer } from "../../store/currentServer";
+import { useWorkers } from "../../store/workers";
+import { sessionsNeedYou } from "./primarySessionsAttention";
 import {
   beginInteraction,
   type PrimaryRouteName,
@@ -24,6 +26,8 @@ import {
 } from "./primarySwitchSelection";
 
 const SWITCH_OPTION_WIDTH = 92;
+/** The selected tab's ink underline. */
+const SWITCH_UNDERLINE_WIDTH = 28;
 const SWITCH_TRACK_PADDING = 3;
 const SWITCH_TRACK_HEIGHT = 38;
 // Extends the 32pt segment to a 48pt vertical touch target.
@@ -38,6 +42,9 @@ interface PendingSwitchTrace {
 
 interface PrimarySwitchOptionProps {
   activeOpacity: Animated.AnimatedInterpolation<number>;
+  /** The seal dot: something here needs you. */
+  attention?: boolean;
+  attentionColor?: string;
   href?: string;
   inactiveColor: string;
   isSelected: boolean;
@@ -50,6 +57,8 @@ interface PrimarySwitchOptionProps {
 
 function PrimarySwitchOption({
   activeOpacity,
+  attention = false,
+  attentionColor,
   href,
   inactiveColor,
   isSelected,
@@ -67,7 +76,7 @@ function PrimarySwitchOption({
       onPress={onPress}
       onPressIn={onPressIn}
       accessibilityRole="tab"
-      accessibilityLabel={label}
+      accessibilityLabel={attention ? `${label}, needs you` : label}
       accessibilityState={{ selected: isSelected }}
       aria-selected={isSelected}
       hitSlop={SWITCH_HIT_SLOP}
@@ -97,13 +106,16 @@ function PrimarySwitchOption({
           styles.switchLabelActive,
           {
             color: primaryColor,
-            fontFamily: Typography.uiFontMedium,
+            fontFamily: Typography.uiFontSemibold,
             opacity: activeOpacity,
           },
         ]}
       >
         {label}
       </Animated.Text>
+      {attention ? (
+        <View style={[styles.attentionDot, { backgroundColor: attentionColor }]} />
+      ) : null}
     </Pressable>
   );
 }
@@ -116,6 +128,9 @@ export function PrimaryTopSwitch({
   onSelectRoute(route: PrimaryRouteName): void;
 }) {
   const colors = useAppColors();
+  const { currentServerId } = useCurrentServer();
+  const { state: workersState } = useWorkers();
+  const sessionsAttention = sessionsNeedYou(workersState.workers, currentServerId);
   const pagerPosition = usePrimaryPagerPosition();
   const fallbackPosition = useRef(
     new Animated.Value(primaryRoutePagerIndex(activeRoute)),
@@ -274,19 +289,13 @@ export function PrimaryTopSwitch({
 
   return (
     <View accessibilityRole="tablist" style={styles.switchRoot}>
-      <GlassSurface
-        material="chrome"
-        radius={SWITCH_TRACK_HEIGHT / 2}
-        elevation="card"
-        style={styles.switchTrack}
-      >
+      <View style={styles.switchTrack}>
         <Animated.View
           pointerEvents="none"
           style={[
             styles.switchThumb,
             {
-              backgroundColor: colors.bgElevated,
-              ...shadow("card", colors.shadowColor),
+              backgroundColor: colors.textPrimary,
               transform: [{ translateX: indicatorTranslateX }],
             },
           ]}
@@ -311,6 +320,8 @@ export function PrimaryTopSwitch({
           href="/list"
           isSelected={listSelected}
           label="Sessions"
+          attention={sessionsAttention}
+          attentionColor={colors.seal}
           activeOpacity={listActiveOpacity}
           inactiveColor={colors.textTertiary}
           primaryColor={colors.textPrimary}
@@ -323,7 +334,7 @@ export function PrimaryTopSwitch({
             selectRoute("list");
           }}
         />
-      </GlassSurface>
+      </View>
     </View>
   );
 }
@@ -348,7 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   switchLabel: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
   },
   switchLabelBase: {
@@ -360,10 +371,18 @@ const styles = StyleSheet.create({
   },
   switchThumb: {
     position: "absolute",
-    left: SWITCH_TRACK_PADDING,
-    top: SWITCH_TRACK_PADDING,
-    width: SWITCH_OPTION_WIDTH,
-    height: SWITCH_TRACK_HEIGHT - SWITCH_TRACK_PADDING * 2,
-    borderRadius: (SWITCH_TRACK_HEIGHT - SWITCH_TRACK_PADDING * 2) / 2,
+    left: SWITCH_TRACK_PADDING + (SWITCH_OPTION_WIDTH - SWITCH_UNDERLINE_WIDTH) / 2,
+    bottom: 2,
+    width: SWITCH_UNDERLINE_WIDTH,
+    height: 2,
+    borderRadius: 1,
+  },
+  attentionDot: {
+    position: "absolute",
+    top: 10,
+    right: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import ts from "typescript";
-import { PRIMARY_DRAWER_GROUPS } from "./primaryDrawerDestinations";
+import { PRIMARY_DRAWER_GROUP_CAPTIONS, PRIMARY_DRAWER_GROUPS } from "./primaryDrawerDestinations";
 
 const source = readFileSync(new URL("./PrimaryDrawerPanel.tsx", import.meta.url), "utf8");
 const settingsSource = readFileSync(new URL("../../app/settings.tsx", import.meta.url), "utf8");
@@ -31,9 +31,10 @@ function rows(node: ts.Node) {
 describe("primary drawer destinations", () => {
   test("lists each destination exactly once, current-server tools before Settings", () => {
     expect(PRIMARY_DRAWER_GROUPS.map((group) => group.map((item) => item.label))).toEqual([
-      ["Plugins", "Skills", "Stats", "Resources"],
+      ["Calendar", "Plugins", "Skills", "Stats", "Resources"],
       ["Settings"],
     ]);
+    expect(PRIMARY_DRAWER_GROUP_CAPTIONS).toHaveLength(PRIMARY_DRAWER_GROUPS.length);
     for (const key of ["key", "label", "pathname", "icon"] as const) {
       expect(new Set(destinations.map((item) => item[key])).size).toBe(destinations.length);
     }

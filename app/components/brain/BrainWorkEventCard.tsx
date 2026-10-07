@@ -115,7 +115,7 @@ export function BrainWorkEventCard({
           <Text numberOfLines={1} style={styles.who}>
             {item.event.session_name || "Work"} · {time}
           </Text>
-          {item.event.unread ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
+          {item.event.unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
           {statusMark}
         </View>
         <Text

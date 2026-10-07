@@ -278,10 +278,10 @@ function StandingCat({
         </FrameLayer>
       ))}
       {state === "attention" ? (
-        <AttentionPing width={width} height={height} color={colors.accent} moving={moving} />
+        <AttentionPing width={width} height={height} color={colors.seal} moving={moving} />
       ) : null}
       {state === "delegating" ? (
-        <Dispatch width={width} height={height} color={colors.accent} moving={moving} />
+        <Dispatch width={width} height={height} color={colors.seal} moving={moving} />
       ) : null}
     </View>
   );

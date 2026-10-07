@@ -11,13 +11,14 @@ import {
   Keyboard,
   Platform,
   StyleSheet,
+  Text,
   View,
   useWindowDimensions,
   type View as ViewInstance,
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppColors } from "../../constants/tokens";
+import { Typography, useAppColors } from "../../constants/tokens";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkerServerSummary } from "../../store/workers";
@@ -55,6 +56,8 @@ interface PrimaryDrawerShellProps {
 
 interface PrimaryAppBarProps {
   activePrimaryRoute: PrimaryRouteName;
+  /** The sidebar holds the menu and the Brain · Sessions switch. */
+  docked: boolean;
   drawerVisible: boolean;
   menuButtonRef: RefObject<ViewInstance | null>;
   onOpenDrawer(): void;
@@ -64,9 +67,13 @@ interface PrimaryAppBarProps {
 }
 
 const PRIMARY_DRAWER_SWIPE_EDGE_WIDTH = 40;
+/** From this width the drawer docks as a permanent sidebar (tablet, desktop). */
+export const PRIMARY_SIDEBAR_BREAKPOINT = 1024;
+const PRIMARY_SIDEBAR_WIDTH = 264;
 
 function PrimaryAppBar({
   activePrimaryRoute,
+  docked,
   drawerVisible,
   menuButtonRef,
   onOpenDrawer,
@@ -86,14 +93,14 @@ function PrimaryAppBar({
     ? serverConnectionIssues[currentServer.id] ?? null
     : null;
   // The menu glyph stays clean while the current server is healthy. A dot
-  // appears only when the user can act on it: red for a connection issue,
+  // appears only when the user can act on it: oxblood for a connection issue,
   // amber while the server is offline. Connecting is transient and silent.
   const connectionBadge = !currentServer
     ? null
     : connectionIssue
       ? colors.statusFailed
       : connection === "offline"
-        ? colors.statusBlocked
+        ? colors.warning
         : null;
   const menuLabel = !currentServer
     ? "Open navigation drawer, no server"
@@ -134,6 +141,16 @@ function PrimaryAppBar({
         },
       ]}
     >
+      {docked ? (
+        <Text
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={[styles.dockedTitle, { color: colors.textPrimary }]}
+        >
+          {activePrimaryRoute === "brain" ? "Brain" : "Sessions"}
+        </Text>
+      ) : (
+      <>
       <PrimaryChromeButton
         ref={menuButtonRef}
         onPress={onOpenDrawer}
@@ -149,6 +166,8 @@ function PrimaryAppBar({
         activeRoute={activePrimaryRoute}
         onSelectRoute={onSelectPrimaryRoute}
       />
+      </>
+      )}
       <PrimaryAppBarPageAction drawerVisible={drawerVisible} />
     </View>
   );
@@ -164,6 +183,7 @@ export function PrimaryDrawerShell({
   const insets = useSafeAreaInsets();
   const routeFocused = useIsFocused();
   const drawerWidth = Math.min(320, Math.max(240, windowWidth - 52));
+  const docked = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
   const [restoreMenuFocus, setRestoreMenuFocus] = useState(false);
   const navigatingAwayRef = useRef(false);
   const primaryRef = useRef<ViewInstance>(null);
@@ -282,6 +302,46 @@ export function PrimaryDrawerShell({
     </View>
   );
 
+  if (docked) {
+    return (
+      <PrimaryPageActionProvider>
+        <PrimarySelectionBarProvider>
+          <PrimarySurfaceInteractionProvider drawerPhase="closed" routeFocused={routeFocused}>
+            <View style={[styles.root, styles.dockedRoot, { backgroundColor: colors.bgPrimary }]}>
+              <View
+                role="navigation"
+                accessibilityLabel="Navigation"
+                style={[styles.sidebar, { borderRightColor: colors.borderSubtle }]}
+              >
+                <PrimaryDrawerPanel
+                  closeButtonRef={closeButtonRef}
+                  drawerVisible
+                  onClose={closeDrawer}
+                  onClosePressIn={() => undefined}
+                  onNavigateAway={() => undefined}
+                  docked={{ activePrimaryRoute, onSelectPrimaryRoute }}
+                />
+              </View>
+              <View ref={primaryRef} collapsable={false} style={styles.primary}>
+                <PrimaryAppBar
+                  activePrimaryRoute={activePrimaryRoute}
+                  docked
+                  drawerVisible={false}
+                  menuButtonRef={menuButtonRef}
+                  onOpenDrawer={openDrawer}
+                  onOpenPressIn={beginOpenInteraction}
+                  onSelectPrimaryRoute={onSelectPrimaryRoute}
+                  topInset={insets.top}
+                />
+                <View style={styles.content}>{children}</View>
+              </View>
+            </View>
+          </PrimarySurfaceInteractionProvider>
+        </PrimarySelectionBarProvider>
+      </PrimaryPageActionProvider>
+    );
+  }
+
   return (
     <PrimaryPageActionProvider>
       <PrimarySelectionBarProvider>
@@ -293,7 +353,7 @@ export function PrimaryDrawerShell({
           controller={drawer}
           drawer={drawerContent}
           drawerStyle={{
-            backgroundColor: colors.bgSurface,
+            backgroundColor: colors.bgPrimary,
             borderRightColor: colors.borderSubtle,
             borderRightWidth: StyleSheet.hairlineWidth,
           }}
@@ -326,6 +386,7 @@ export function PrimaryDrawerShell({
           >
             <PrimaryAppBar
               activePrimaryRoute={activePrimaryRoute}
+              docked={false}
               drawerVisible={drawerOpen}
               menuButtonRef={menuButtonRef}
               onOpenDrawer={openDrawer}
@@ -377,5 +438,21 @@ const styles = StyleSheet.create({
   },
   drawerContent: {
     flex: 1,
+  },
+  dockedRoot: {
+    flexDirection: "row",
+  },
+  sidebar: {
+    width: PRIMARY_SIDEBAR_WIDTH,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  dockedTitle: {
+    flex: 1,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    fontFamily: Typography.displayFont,
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.6,
   },
 });

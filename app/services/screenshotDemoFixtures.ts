@@ -250,6 +250,105 @@ export const SCREENSHOT_BRAIN_EVENTS: CodexConversationEvent[] = [
   },
 ];
 
+function demoWork(
+  id: string,
+  seq: number,
+  minute: number,
+  title: string,
+  body: string,
+  status: string,
+  extra: Partial<CodexConversationEvent> = {},
+): CodexConversationEvent {
+  return {
+    id: `desk-${id}`,
+    seq,
+    kind: "status",
+    timestamp: `2026-10-07T09:${String(minute).padStart(2, "0")}:00.000Z`,
+    title,
+    body,
+    status,
+    source: "work_result",
+    work_id: `desk-${id}`,
+    work_session_id: `desk-${id}-session`,
+    unread: false,
+    work_review_state: "queued",
+    work_session_state: "open",
+    work_result_current: true,
+    work_phase: "working",
+    work_attention: "none",
+    work_event_kind: "progress",
+    ...extra,
+  };
+}
+
+const DESK_ASK: CodexConversationEvent = {
+  id: "desk-user",
+  seq: 1,
+  kind: "user_message",
+  timestamp: "2026-10-07T09:00:00.000Z",
+  body: "Ship atlas-notes v1.4 this week: fix the sync bug, tidy the settings copy, write release notes, post them to Notion.",
+};
+
+const DESK_REPLY: CodexConversationEvent = {
+  id: "desk-reply",
+  seq: 2,
+  kind: "assistant_message",
+  timestamp: "2026-10-07T09:01:00.000Z",
+  body: "On it. Five parts, each tracked as Work. I’ll only call you when it matters.",
+};
+
+const DESK_NEEDS = demoWork("sync", 20, 22, "Sync fix needs your call", "Keep both copies, or the newest edit?", "session.needs_input", {
+  session_name: "Codex · atlas-notes",
+  work_attention: "user_input",
+  work_event_kind: "question",
+  unread: true,
+});
+
+const DESK_READY = demoWork("wording", 10, 12, "Conflict wording", "Five apps compared. “Conflicted copy” wins 3 of 5.", "session.done", {
+  session_name: "Grok · research",
+  work_event_kind: "artifact",
+  unread: true,
+});
+
+/** The atlas-notes goal from the landing: one slip for each Work state. */
+export const SCREENSHOT_BRAIN_WORK_DESK: CodexConversationEvent[] = [
+  DESK_ASK,
+  DESK_REPLY,
+  DESK_READY,
+  demoWork("tests", 11, 16, "Sync tests", "41 pass, but 2 were flaky and needed a retry.", "session.uncertain", {
+    session_name: "Codex · atlas-notes",
+    work_event_kind: "verification",
+  }),
+  demoWork("notion", 12, 20, "Post notes to Notion", "Notion said 401: the token expired. Nothing was posted.", "session.failed", {
+    session_name: "Pi · release-notes",
+    work_event_kind: "failed",
+  }),
+  demoWork("notes", 13, 21, "Draft the release notes", "Waiting on the sync fix.", "session.stale", {
+    session_name: "Claude Code · release-notes",
+    work_attention: "blocked",
+    work_event_kind: "blocked",
+  }),
+  demoWork("copy", 14, 21, "Tidy the settings copy", "Rewriting strings · 7 of 12", "session.stale", {
+    session_name: "Claude Code · settings",
+  }),
+  DESK_NEEDS,
+];
+
+/** Brain waiting on you: the result that came back, then the question. */
+export const SCREENSHOT_BRAIN_NEEDS: CodexConversationEvent[] = [
+  DESK_ASK,
+  DESK_REPLY,
+  DESK_READY,
+  {
+    id: "desk-reply-2",
+    seq: 15,
+    kind: "assistant_message",
+    timestamp: "2026-10-07T09:13:00.000Z",
+    body: "Conflict wording came back first. “Conflicted copy” is what 3 of 5 apps say, so I’ve handed that to the sync fix.",
+  },
+  DESK_NEEDS,
+];
+
 export const SCREENSHOT_SESSION_AGENTS: Worker[] = [
   {
     key: "demo-server:atlas-mobile",
