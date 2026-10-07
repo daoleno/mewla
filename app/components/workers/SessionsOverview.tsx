@@ -14,7 +14,7 @@ interface SessionsOverviewProps {
  * The only chrome above the Sessions list. It renders nothing in the normal
  * case and speaks only when the current server is unreachable, so the list
  * starts directly under the app bar. New session and Services live in the page
- * action menu; the floating button creates a Session.
+ * action menu; the ink button at the foot of the list creates a Session.
  */
 function SessionsOverviewComponent({
   serverName,

@@ -166,13 +166,43 @@ keep their own logos, as on the landing. The seal is the brand mark. The
 app icon and notification icon are planned in the rollout below; the
 `zen-*` branding assets are untouched here.
 
+## Sessions and Worker chat
+
+- **Sessions.** Plain rows on the paper, grouped by directory with a quiet
+  caption when there is more than one; no cards and no separators. A row's
+  only fill is the selection tint, and in selection mode the check takes its
+  own leading column. "New session" is the page's one ink pill, held at the
+  foot of the column (`components/workers/SessionsListView.tsx`). Nothing sits
+  above the list unless the server is unreachable.
+- **Worker chat.** The conversation keeps Brain's 820 pt reading width; the
+  terminal grid stays full width. The header avatar carries the Session's
+  StatusMark (Running, Blocked, Failed only).
+- **Tool rows.** A bare soft-ink tool glyph, the title, then the StatusMark
+  in place of the old mono status word: Running and Waiting spin the arc,
+  Succeeded and Passed are the Ready check, Failed is the crossed box with its
+  cause ("exit 1"), Blocked is the dashed ring. "Done" and "Finished" only
+  say the call returned, so they show nothing. A failed call's output sits in
+  the same neutral well as any other, in full ink
+  (`splitActivityStatusDetail` in `InterfaceTimelineActivityModel.ts`).
+- **Git.** Added is green and deleted is the terminal's crimson; modified and
+  renamed are ink, because amber means Warning and blue means Running.
+
 ## Terminal
 
-The terminal grid keeps its own ANSI palette (`constants/terminalThemes.ts`).
-Chat chrome takes the new tokens (cursor = accent). Retuning the terminal
-canvas to the landing's `#141210` / `#E9E4DB` is a separate, risky slice
-(see the rollout below): TUIs depend on the 16 ANSI colours, and both the
-xterm.js and ghostty renderers read them.
+The grid sits on the app canvas: paper `#FBFAF7` with ink text in light, the
+landing's `#141210` with `#E9E4DB` in dark. The cursor is ink (the accent)
+and selection is the Running blue (`constants/terminalThemes.ts`). The 16
+ANSI colours are warm-tuned for TUIs and tested in `terminalThemes.test.ts`:
+
+- every normal colour reads at 4.5:1 on its canvas and every bright one at
+  3:1 (dark "black" is a background by convention);
+- light "white" is a stone grey, as in most light terminal themes, so text a
+  program prints in white stays legible on paper;
+- red is a crimson at OKLab ΔE > 0.075 from the seal and its text, so a
+  deleted line never reads as "Needs you".
+
+Both renderers (xterm.js on web, ghostty on native) read the same palette, and
+chat code, inline code and git diffs inherit it.
 
 ## The cat
 
@@ -215,8 +245,8 @@ navigation shell (menu, switch, sidebar), the Brain slips and the cat's
 perch, TaskNotificationCard, Settings, Plugins, Onboarding and the Session
 row marks. Still to get a dedicated pass:
 
-1. **Sessions list and Worker chat chrome**: the server header pill, the FAB,
-   the activity rows' mono status words, the chat header.
+1. ~~Sessions list and Worker chat chrome~~: done (see Sessions and Worker
+   chat above).
 2. **Calendar**: the coloured event-type bars and its status words.
 3. **Skills, Stats, Resources, Model Providers, Browser, Work**: they take the
    tokens; check hard-coded colours (`rg '#[0-9A-Fa-f]{6}' app/components`).
@@ -225,8 +255,9 @@ row marks. Still to get a dedicated pass:
 
 Risky areas to watch:
 
-- **Terminal.** The ANSI palette and two renderers. Keep it in its own slice
-  with screenshots of real TUIs (vim, htop, git diff).
+- **Terminal.** The palette is checked on web (xterm.js) with a git diff,
+  ls, htop and vim sample (`screenshot-demo?state=chat&fixture=terminal`).
+  The native ghostty grid still needs a device check.
 - **Markdown.** Native enriched-markdown styles and the mermaid theme read
   `surfaceMuted` and the accent (ink). Check tables and code in sent messages.
 - **Native modules and fonts.** Font registration differs per platform. Check
