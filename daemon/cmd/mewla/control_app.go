@@ -931,6 +931,10 @@ func (a *controlApp) handleBrainWorkUpdate(req control.Request) control.Response
 			update.WaitFor = &source.WaitFor
 		case "context_ref":
 			update.ContextRef = &source.ContextRef
+		case "question":
+			update.Question = &source.Question
+		case "choices":
+			update.Choices = &source.Choices
 		default:
 			return control.ErrorResponse("invalid_brain_work", "Unknown Brain Work field: "+field)
 		}

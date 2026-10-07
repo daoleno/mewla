@@ -154,7 +154,9 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 	// lifecycle field below is a pure projection of engine state. Review and
 	// next Attempt projections always run: Events are canonical regardless of
 	// execution history.
-	engineOwnsExecution := st.Fence > 0 || st.TerminalAt != nil || st.Wake != nil || st.Review != nil
+	// A row still holding a wake the engine has released (a never-run Work
+	// whose wait was answered) is engine-owned too, so the release projects.
+	engineOwnsExecution := st.Fence > 0 || st.TerminalAt != nil || st.Wake != nil || st.Review != nil || item.Wake != nil
 	if engineOwnsExecution {
 		item.Revision = st.Revision
 		item.Status, item.NextAction, item.WaitFor = fsmProjectLifecycle(st, database, item)

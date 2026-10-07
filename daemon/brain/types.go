@@ -23,6 +23,7 @@ type WorkerRef struct {
 	Name      string     `json:"name"`
 	Status    string     `json:"status"`
 	Summary   string     `json:"summary,omitempty"`
+	Phase     string     `json:"phase,omitempty"`
 	Cwd       string     `json:"cwd,omitempty"`
 	Command   string     `json:"command,omitempty"`
 	StartedAt *time.Time `json:"started_at,omitempty"`
