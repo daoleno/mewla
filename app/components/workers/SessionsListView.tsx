@@ -12,6 +12,7 @@ import {
   Radii,
   TypeScale,
   UiTextMetrics,
+  shadow,
   useAppTheme,
 } from "../../constants/tokens";
 import type { ResolvedZenTheme } from "../../theme";
@@ -23,7 +24,7 @@ import { WorkerListRowContainer } from "./WorkerListRowContainer";
 
 /** The Sessions column, shared by the list, its empty states and the button. */
 export const SESSIONS_COLUMN_MAX_WIDTH = 760;
-const NEW_SESSION_BUTTON_HEIGHT = 48;
+const NEW_SESSION_BUTTON_HEIGHT = 40;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
 
@@ -158,8 +159,8 @@ interface NewSessionButtonProps {
 }
 
 /**
- * The page's one ink button, held at the foot of the Sessions column (the
- * mock's "New session" bar) instead of a floating disc.
+ * The page's one ink pill: compact, content-width, resting at the bottom
+ * right of the Sessions column so it never competes with the rows.
  */
 export function NewSessionButton({
   bottomInset,
@@ -187,7 +188,7 @@ export function NewSessionButton({
         accessibilityRole="button"
         accessibilityState={{ disabled: inactive, busy }}
       >
-        <Ionicons name="add" size={20} color={ink} />
+        <Ionicons name="add" size={18} color={ink} />
         <Text style={[styles.buttonLabel, { color: ink }]} numberOfLines={1}>
           {busy ? "Starting…" : "New session"}
         </Text>
@@ -227,20 +228,21 @@ function createStyles(theme: ResolvedZenTheme) {
       position: "absolute",
       left: 0,
       right: 0,
-      alignItems: "center",
+      alignItems: "flex-end",
       paddingHorizontal: 16,
       zIndex: 4,
     },
     button: {
-      width: "100%",
-      maxWidth: 420,
       height: NEW_SESSION_BUTTON_HEIGHT,
       borderRadius: Radii.pill,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 6,
+      gap: 4,
+      paddingLeft: 12,
+      paddingRight: 16,
       backgroundColor: colors.accent,
+      ...shadow("float"),
     },
     buttonDisabled: {
       backgroundColor: colors.disabledSurface,
@@ -250,7 +252,6 @@ function createStyles(theme: ResolvedZenTheme) {
     buttonLabel: {
       ...UiTextMetrics,
       ...TypeScale.label,
-      fontSize: 15,
     },
   });
 }
