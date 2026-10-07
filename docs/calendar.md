@@ -12,6 +12,10 @@ syncs to the app, so it belongs to the current server like everything else.
 | Deadline | A due time | The item waits for you |
 | Scheduled action | A due time and an instruction | An agent runs the instruction as Work and reports back to Brain |
 
+In the app, an item that waits for you shows the red **Needs you** mark;
+running, done, failed and cancelled items use the same marks as Work, and a
+failed item explains why.
+
 You enter a local date, a local time and a timezone. Items can repeat daily,
 weekly or on weekdays, and keep their local time across daylight-saving
 changes. A time that does not exist on a daylight-saving day is rejected; a

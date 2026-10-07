@@ -71,7 +71,8 @@ underlined. The conversation is capped at a reading width of 820 pt
 | Blocked | `#736C61` | `#9C9589` | dashed ring | dashed, unfilled |
 
 `StatusPill` renders these marks: `success` Ready, `accent` Running, `warning`,
-`danger` Failed, `needs` the seal pill, and `neutral` a plain paper tag.
+`danger` Failed, `blocked` the dashed ring, `needs` the seal pill, and
+`neutral` a plain paper tag.
 Brain lifecycles map onto the six states in `brainWorkLifecycleStatus`
 (Reviewing runs, Waiting and Cancelled are inert, Needs review warns, Done
 and Ready share the check).
@@ -247,11 +248,19 @@ row marks. Still to get a dedicated pass:
 
 1. ~~Sessions list and Worker chat chrome~~: done (see Sessions and Worker
    chat above).
-2. **Calendar**: the coloured event-type bars and its status words.
-3. **Skills, Stats, Resources, Model Providers, Browser, Work**: they take the
-   tokens; check hard-coded colours (`rg '#[0-9A-Fa-f]{6}' app/components`).
+2. ~~**Calendar, Skills, Stats, Resources, Model Providers, Browser,
+   Work**~~: done in the tools pass (see below).
 4. **Brand assets (with the rename)**: wordmark, app icon, adaptive and
    monochrome icons, splash, notification icon, all from `seal-icon.svg`.
+
+**Tools pass.** Calendar rows have a neutral hairline rail and the state's
+mark (`calendarStatusMark`): a due reminder or deadline is Needs you,
+Scheduled has no mark. The Providers radio is an ink ring and dot, never the
+Ready check; the gateway reads Ready. Status colours are never decoration:
+Stats bars, folder icons, inline code and PSI charts are ink until a state
+calls for colour. Row Delete actions are soft ink; only the confirmation is
+oxblood. Offline is a Warning, not a failure. Resources keeps Critical on the
+Failed mark because processes are about to be killed.
 
 Risky areas to watch:
 
