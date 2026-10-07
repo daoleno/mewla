@@ -218,6 +218,12 @@ type CodexConversationEvent struct {
 	WorkDetailsJSON   string `json:"work_details_json,omitempty"`
 	WorkNextAction    string `json:"work_next_action,omitempty"`
 	WorkWaitFor       string `json:"work_wait_for,omitempty"`
+	// Task fields are only set for Source=task_notification status items.
+	// CallID carries the provider tool call that launched the task.
+	TaskID         string `json:"task_id,omitempty"`
+	TaskTokens     *int   `json:"task_tokens,omitempty"`
+	TaskToolUses   *int   `json:"task_tool_uses,omitempty"`
+	TaskDurationMS *int   `json:"task_duration_ms,omitempty"`
 	// AdmissionSHA256 is the exact provider-native user input digest when the
 	// source preserves those bytes separately from its display projection.
 	AdmissionSHA256 string `json:"-"`

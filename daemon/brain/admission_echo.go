@@ -30,6 +30,7 @@ func providerEchoMatchesAdmission(
 	providerSessionID string,
 	body string,
 	createdAt time.Time,
+	nativeDigests ...string,
 ) bool {
 	if admission.State != BrainInputAdmissionAccepted || admission.AcceptedAt == nil || createdAt.IsZero() {
 		return false
@@ -38,7 +39,8 @@ func providerEchoMatchesAdmission(
 		strings.TrimSpace(providerSessionID) != admission.SessionID {
 		return false
 	}
-	if AdmissionDigest(strings.TrimSpace(body)) != admission.BodySHA256 {
+	if AdmissionDigest(strings.TrimSpace(body)) != admission.BodySHA256 &&
+		!nativeDigestMatchesAdmission(admission, nativeDigests) {
 		return false
 	}
 	// No upper timestamp bound: the provider stamps its user_message row when
@@ -48,6 +50,19 @@ func providerEchoMatchesAdmission(
 	// admissions, stream-ordered events) is the only ordering authority.
 	createdAt = createdAt.UTC()
 	return !createdAt.Before(admission.CreatedAt.UTC())
+}
+
+// nativeDigestMatchesAdmission accepts the provider's exact native input
+// digests (raw bytes, or the payload inside a recognized transport envelope
+// such as Claude's paste wrapper). Display cleaning may change body bytes, so
+// the body digest alone cannot prove such an echo.
+func nativeDigestMatchesAdmission(admission BrainInputAdmission, digests []string) bool {
+	for _, digest := range digests {
+		if digest = strings.TrimSpace(digest); digest != "" && digest == admission.BodySHA256 {
+			return true
+		}
+	}
+	return false
 }
 
 func exactProviderEventTimestamp(event work.CodexConversationEvent) (time.Time, bool) {
@@ -201,6 +216,8 @@ func claimProviderUserEchoes(
 				providerSessionID,
 				event.Body,
 				createdAt,
+				event.AdmissionSHA256,
+				event.AdmissionUnwrappedSHA256,
 			) {
 				continue
 			}
