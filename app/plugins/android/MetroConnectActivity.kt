@@ -38,7 +38,9 @@ class MetroConnectActivity : Activity() {
       contentDescription = "Metro host and port"
       inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
       setSingleLine(true)
-      setText(preferences.getString("debug_http_host", ""))
+      // Until a host is saved, offer the build machine's address (-PreactNativeDevServerIp).
+      setText(preferences.getString("debug_http_host", null).takeUnless { it.isNullOrEmpty() }
+        ?: "${getString(R.string.react_native_dev_server_ip)}:${resources.getInteger(R.integer.react_native_dev_server_port)}")
       id = View.generateViewId()
     }
     layout.addView(address)

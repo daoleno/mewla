@@ -82,9 +82,17 @@ bun run android:debug:apk
 ```
 
 The command does not start Metro. It prints the deterministic artifact path
-`app/android/app/build/outputs/apk/debug/zen-debug-arm64.apk` and uses the
-existing debug keystore. Start or reuse Metro separately, then enter
-`192.168.110.223:8081` in **Mewla Development** on the phone.
+`app/android/app/build/outputs/apk/debug/mewla-debug-arm64.apk` and uses the
+existing debug keystore. Start or reuse Metro separately, then connect from
+**Mewla Development** on the phone.
+
+Until a host is saved, **Mewla Development** prefills the build machine's
+address from React Native's `react_native_dev_server_ip` and
+`react_native_dev_server_port` resources. Gradle detects that address at build
+time. To bake a different reachable address, such as a VPN address, pass
+`-PreactNativeDevServerIp=<host>` (and `-PreactNativeDevServerPort=<port>`) to
+`assembleDebug`. Check the result with
+`aapt2 dump resources <apk> | grep -A1 react_native_dev_server`.
 
 Use a **Metro-connected debug APK** for development, not a standalone APK or
 Expo Go. Mewla's custom terminal and pinned Link transport need
@@ -103,8 +111,8 @@ cd app
 bunx expo start
 ```
 
-Install the compatible debug APK once, open **Mewla Debug**, enter the computer's
-reachable Metro `host:port` in **Mewla Development**, and tap **Connect**. An HTTP
+Install the compatible debug APK once, open **Mewla Debug**, check or enter the
+computer's reachable Metro `host:port` in **Mewla Development**, and tap **Connect**. An HTTP
 origin with a port is also accepted. Use the computer's LAN address, not the
 phone's `localhost`. No USB cable, ADB reverse command or daemon pairing is
 needed to configure Metro. Metro is separate from the canonical Mewla server;
