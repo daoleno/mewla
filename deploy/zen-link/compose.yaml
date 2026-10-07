@@ -25,7 +25,7 @@ services:
       test:
         [
           "CMD",
-          "/usr/local/bin/zen-relay",
+          "/usr/local/bin/mewla-relay",
           "-check=http://127.0.0.1:8080/healthz",
         ]
       interval: 30s

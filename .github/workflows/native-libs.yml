@@ -149,8 +149,8 @@ jobs:
           cd app/ios
           set -o pipefail
           xcodebuild \
-            -workspace Zen.xcworkspace \
-            -scheme Zen \
+            -workspace Mewla.xcworkspace \
+            -scheme Mewla \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -164,8 +164,8 @@ jobs:
           cd app/ios
           set -o pipefail
           xcodebuild \
-            -workspace Zen.xcworkspace \
-            -scheme Zen \
+            -workspace Mewla.xcworkspace \
+            -scheme Mewla \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \

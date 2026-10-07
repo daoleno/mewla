@@ -23,7 +23,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 EXPECTED_VERSION="0.1.15"
-EXPECTED_PACKAGE="com.daoleno.zen"
+EXPECTED_PACKAGE="com.daoleno.mewla"
 EXPECTED_VERSION_CODE="39"
 EXPECTED_IOS_BUILD_NUMBER="37"
 EXPECTED_CERT_FP="C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD"
@@ -73,8 +73,8 @@ const expectedVersion = process.argv[6];
 const expectedMarketingVersion = expectedVersion.split('-', 1)[0];
 const config = createConfig();
 
-if (config.name !== 'Zen') {
-  throw new Error(`top-level Expo name must remain Zen; got ${config.name}`);
+if (config.name !== 'Mewla') {
+  throw new Error(`top-level Expo name must remain Mewla; got ${config.name}`);
 }
 if (config.version !== expectedVersion) {
   throw new Error(`general/Android version must remain ${expectedVersion}; got ${config.version}`);
@@ -107,8 +107,8 @@ JS
 
 # Validate both closed iOS branches regardless of the caller's active variant.
 # This keeps the canonical release verifier meaningful inside Preview CI.
-verify_ios_identity production "Zen" "com.daoleno.zen"
-verify_ios_identity preview "Zen" "com.daoleno.zen.preview"
+verify_ios_identity production "Mewla" "com.daoleno.mewla"
+verify_ios_identity preview "Mewla" "com.daoleno.mewla.preview"
 
 python3 - "$ROOT" "$EXPECTED_VERSION" "$EXPECTED_PACKAGE" "$EXPECTED_VERSION_CODE" "$EXPECTED_IOS_BUILD_NUMBER" "$EXPECTED_CERT_FP" "$STAGE" <<'PY'
 import hashlib
@@ -127,6 +127,28 @@ exp_cert = sys.argv[6]
 stage = sys.argv[7] if len(sys.argv) > 7 else ""
 
 errors = []
+
+# Daemon archives and the executable each contains. The zen-* copies keep
+# self-updaters released before the Mewla rename working.
+DAEMON_ARCHIVE_ENTRIES = {
+    "mewla-linux-amd64.tar.gz": "mewla",
+    "mewla-linux-arm64.tar.gz": "mewla",
+    "mewla-darwin-arm64.tar.gz": "mewla",
+    "zen-linux-amd64.tar.gz": "zen",
+    "zen-linux-arm64.tar.gz": "zen",
+    "zen-darwin-arm64.tar.gz": "zen",
+}
+DAEMON_ARCHIVES = tuple(DAEMON_ARCHIVE_ENTRIES)
+
+# The last release published as Zen keeps the names it actually shipped in its
+# tracked notes. (A tuple, so release preparation never rewrites it.)
+LAST_ZEN_RELEASE = (0, 1, 15)
+if tuple(int(part) for part in exp_version.split("-", 1)[0].split(".")) == LAST_ZEN_RELEASE and "-" not in exp_version:
+    notes_package = "com.daoleno.zen"
+    notes_daemons = ("zen-linux-amd64", "zen-linux-arm64")
+else:
+    notes_package = exp_package
+    notes_daemons = ("mewla-linux-amd64", "mewla-linux-arm64")
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -292,9 +314,7 @@ for required in (
 if "ZEN_UPDATE_SIGNING_KEY_BASE64" not in wf:
     errors.append("release-artifacts.yml must use the updater manifest signing secret")
 for asset in (
-    "zen-linux-amd64.tar.gz",
-    "zen-linux-arm64.tar.gz",
-    "zen-darwin-arm64.tar.gz",
+    *DAEMON_ARCHIVES,
     "release-manifest.json",
     "release-manifest.json.sig",
 ):
@@ -319,7 +339,7 @@ else:
     notes = notes_path.read_text(encoding="utf-8")
     if exp_version not in notes:
         errors.append("release notes missing version string")
-    if exp_package not in notes:
+    if notes_package not in notes:
         errors.append("release notes missing android package")
     if exp_cert not in notes:
         errors.append("release notes missing official certificate SHA-256 fingerprint")
@@ -329,8 +349,7 @@ else:
         "Obtainium",
         "iOS",
         "Play Store",
-        "zen-linux-amd64",
-        "zen-linux-arm64",
+        *notes_daemons,
         "versionCode",
     ):
         if needle not in notes:
@@ -360,9 +379,7 @@ if stage:
         errors.append(f"stage dir missing: {stage}")
     else:
         required = [
-            "zen-linux-amd64.tar.gz",
-            "zen-linux-arm64.tar.gz",
-            "zen-darwin-arm64.tar.gz",
+            *DAEMON_ARCHIVES,
             "SHA256SUMS",
             "release-manifest.json",
             "release-manifest.json.sig",
@@ -374,11 +391,7 @@ if stage:
         sums_path = stage_p / "SHA256SUMS"
         if sums_path.is_file():
             sums_text = sums_path.read_text(encoding="utf-8")
-            for name in (
-                "zen-linux-amd64.tar.gz",
-                "zen-linux-arm64.tar.gz",
-                "zen-darwin-arm64.tar.gz",
-            ):
+            for name in DAEMON_ARCHIVES:
                 if name not in sums_text:
                     errors.append(f"SHA256SUMS missing {name}")
             # Verify checksums match files
@@ -414,11 +427,7 @@ if stage:
             if and_id.get("certificate_sha256_fingerprint") != exp_cert:
                 errors.append("stage identity missing/wrong certificate fingerprint")
             roles = {a.get("path"): a.get("role") for a in ident.get("artifacts") or []}
-            expected_roles = {
-                "zen-linux-amd64.tar.gz": "daemon_archive",
-                "zen-linux-arm64.tar.gz": "daemon_archive",
-                "zen-darwin-arm64.tar.gz": "daemon_archive",
-            }
+            expected_roles = {name: "daemon_archive" for name in DAEMON_ARCHIVES}
             for path, role in expected_roles.items():
                 if roles.get(path) != role:
                     errors.append(f"release-manifest.json role for {path}: got {roles.get(path)!r} want {role!r}")
@@ -443,17 +452,13 @@ if stage:
                     errors.append("release manifest Ed25519 signature verification failed")
 
         import tarfile
-        for archive in (
-            "zen-linux-amd64.tar.gz",
-            "zen-linux-arm64.tar.gz",
-            "zen-darwin-arm64.tar.gz",
-        ):
+        for archive, entry in DAEMON_ARCHIVE_ENTRIES.items():
             archive_path = stage_p / archive
             if not archive_path.is_file():
                 continue
             with tarfile.open(archive_path, "r:gz") as tf:
                 names = sorted(member.name.lstrip("./") for member in tf.getmembers() if member.isfile())
-                expected = ["LICENSE", "NOTICE", "TRADEMARKS.md", "zen"]
+                expected = sorted(["LICENSE", "NOTICE", "TRADEMARKS.md", entry])
                 if names != expected:
                     errors.append(f"{archive} contents: got {names!r} want {expected!r}")
 

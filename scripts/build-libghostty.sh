@@ -35,17 +35,17 @@ fi
 
 default_build_tmpdir() {
   if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
-    printf '%s\n' "$XDG_CACHE_HOME/zen/build-tmp"
+    printf '%s\n' "$XDG_CACHE_HOME/mewla/build-tmp"
   elif [[ "$(uname -s)" == "Darwin" ]]; then
-    printf '%s\n' "$HOME/Library/Caches/zen/build-tmp"
+    printf '%s\n' "$HOME/Library/Caches/mewla/build-tmp"
   else
-    printf '%s\n' "$HOME/.cache/zen/build-tmp"
+    printf '%s\n' "$HOME/.cache/mewla/build-tmp"
   fi
 }
 
 # Large native build worktrees must not fall back to the host's global
 # temporary filesystem. Delegated sessions set ZEN_BUILD_TMPDIR to their
-# private Zen-owned resource directory, so lifecycle teardown reclaims it.
+# private Mewla-owned resource directory, so lifecycle teardown reclaims it.
 # Direct developer builds use a durable platform cache and retain the normal
 # EXIT/INT/TERM cleanup below.
 BUILD_TMP_ROOT="${ZEN_BUILD_TMPDIR:-$(default_build_tmpdir)}"

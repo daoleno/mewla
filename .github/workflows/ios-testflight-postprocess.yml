@@ -57,7 +57,7 @@ jobs:
             --build-number "${{ inputs.build_number }}" \
             --key-id "$ZEN_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
-            --beta-group-name "Zen Preview" \
+            --beta-group-name "Mewla Preview" \
             --submit-beta-review
 
       - name: Remove temporary Individual API key
