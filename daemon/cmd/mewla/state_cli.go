@@ -19,8 +19,14 @@ func migrateLegacyState(args []string, stderr io.Writer) {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		command = args[0]
 	}
-	if command == "state" || command == "dsh-session" {
+	if command == "state" || command == "dsh-session" || command == "help" {
 		return
+	}
+	for _, arg := range args {
+		// A help probe (the installer's --help check) must not move state.
+		if arg == "-h" || arg == "-help" || arg == "--help" {
+			return
+		}
 	}
 	daemonStart := command == "" || command == "serve"
 	if strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR")) != "" && !daemonStart {
