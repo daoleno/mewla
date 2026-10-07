@@ -13,7 +13,7 @@ import (
 
 // generalTopicThreadID is the non-deletable General topic id=1
 // (core.telegram.org/api/forum). General messages arrive without a thread id,
-// but Zen also routes thread id 1 to the Brain route defensively.
+// but Mewla also routes thread id 1 to the Brain route defensively.
 const generalTopicThreadID = 1
 
 // isGeneralThread reports whether a message belongs to the Brain route.
@@ -610,7 +610,7 @@ func (m *Manager) handleSessionTopicMessage(ctx context.Context, token string, m
 	}
 	projection, err := m.brain.SessionProjection(mapping.SessionID)
 	if err != nil {
-		m.enqueueTopicText(fmt.Sprintf("topic-ack:%d:unavailable", updateID), "Zen could not resolve this Session right now. Try again shortly.", message.MessageThreadID, message.MessageID)
+		m.enqueueTopicText(fmt.Sprintf("topic-ack:%d:unavailable", updateID), "Mewla could not resolve this Session right now. Try again shortly.", message.MessageThreadID, message.MessageID)
 		return "topic_unavailable"
 	}
 	if !projection.Present {
@@ -669,17 +669,17 @@ func (m *Manager) handleSessionTopicMessage(ctx context.Context, token string, m
 }
 
 const (
-	unknownTopicText       = "This topic is not mapped to Zen. Open Brain or choose /sessions. This message was not forwarded."
+	unknownTopicText       = "This topic is not mapped to Mewla. Open Brain or choose /sessions. This message was not forwarded."
 	sessionHelpText        = "Session conversation. /status shows its state. /brain returns to Brain; /sessions opens the Session list."
 	sessionNewResponseText = "New Chat belongs to Brain. Open /brain first; this Session was not changed."
 )
 
 func sessionUncertainText(label string) string {
-	return "Zen could not prove whether " + sessionDisplayLabelText(label) + " received this message. It was not replayed."
+	return "Mewla could not prove whether " + sessionDisplayLabelText(label) + " received this message. It was not replayed."
 }
 
 func sessionNotSubmittedText(label string) string {
-	return "Zen did not submit this message to " + sessionDisplayLabelText(label) + ". Send it again when the Session is available."
+	return "Mewla did not submit this message to " + sessionDisplayLabelText(label) + ". Send it again when the Session is available."
 }
 
 func sessionDisplayLabelText(label string) string {

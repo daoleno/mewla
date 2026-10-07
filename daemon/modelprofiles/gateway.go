@@ -40,7 +40,7 @@ const MaxGatewayRequestBodyBytes = 128 << 20
 const GatewayProviderName = "zen-gateway"
 
 // GatewayUpstream is the atomic upstream connection state of the machine-level
-// gateway. It is derived from one Zen Provider connection (profile) and never
+// gateway. It is derived from one Mewla Provider connection (profile) and never
 // carries secrets.
 type GatewayUpstream struct {
 	ProfileID     string
@@ -56,7 +56,7 @@ type GatewayUpstream struct {
 // privately at dispatch time.
 type GatewayRequestResolver func(protocol, modelID string) (GatewayUpstream, error)
 
-// Gateway is Zen's stable loopback Codex endpoint. It proxies requests to the
+// Gateway is Mewla's stable loopback Codex endpoint. It proxies requests to the
 // currently selected upstream connection, preserving the request bytes and
 // client model exactly. Provider switching swaps the upstream atomically; the
 // next request from every routed Codex process uses the new connection without
@@ -304,7 +304,7 @@ func normalizeGatewayUpstream(up GatewayUpstream) GatewayUpstream {
 }
 
 // GatewayUpstreamFromProfile derives the gateway upstream connection from a
-// Zen Provider profile. Secret-free.
+// Mewla Provider profile. Secret-free.
 func GatewayUpstreamFromProfile(profile Profile) GatewayUpstream {
 	profile = normalizeProfile(profile)
 	ref := normalizeSpace(profile.CredentialRef)

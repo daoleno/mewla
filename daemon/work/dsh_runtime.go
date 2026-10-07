@@ -179,7 +179,7 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	}
 	port := reserve.Addr().(*net.TCPAddr).Port
 	reserve.Close()
-	// Keep native persistence under Zen's provider-session owner; do not edit DSH
+	// Keep native persistence under Mewla's provider-session owner; do not edit DSH
 	// user profiles, credentials, defaults, or existing Sessions.
 	patchPath := filepath.Join(DSHRoot(), id+".patch.yml")
 	patch := fmt.Sprintf("- id: session-persistence-jsonl\n  config:\n    root: %q\n", filepath.Join(DSHRoot(), "logs"))

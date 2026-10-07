@@ -15,8 +15,8 @@ import (
 // ClaudeTakeover projects the machine-level gateway into Claude Code's user
 // settings (the env block of ~/.claude/settings.json, CLAUDE_CONFIG_DIR-aware).
 // Claude Code reads that env at start-up, so a Claude process launched outside
-// Zen (a plain shell, an IDE) reaches the selected Claude Provider through the
-// gateway. Zen-managed launches pass their own --settings route and are
+// Mewla (a plain shell, an IDE) reaches the selected Claude Provider through the
+// gateway. Mewla-managed launches pass their own --settings route and are
 // unaffected. Only the projected env keys are touched; the user's prior values
 // are kept in daemon state and put back on release.
 type ClaudeTakeover struct {
@@ -30,10 +30,10 @@ type claudeTakeoverState struct {
 	Enabled      bool   `json:"enabled"`
 	SettingsPath string `json:"settings_path"`
 	BaseURL      string `json:"base_url"`
-	// Written holds the exact JSON value Zen wrote per env key, so release
+	// Written holds the exact JSON value Mewla wrote per env key, so release
 	// never clobbers a value the user changed afterwards.
 	Written map[string]json.RawMessage `json:"written,omitempty"`
-	// Prior holds the user's own value per env key Zen overwrote; a key absent
+	// Prior holds the user's own value per env key Mewla overwrote; a key absent
 	// here was absent before the takeover.
 	Prior map[string]json.RawMessage `json:"prior,omitempty"`
 	// BackupPath is the exact pre-takeover copy of the settings file.
@@ -65,7 +65,7 @@ func DefaultClaudeSettingsPath() string {
 	return filepath.Join(home, ".claude", "settings.json")
 }
 
-// Enabled reports whether the projection is currently owned by Zen.
+// Enabled reports whether the projection is currently owned by Mewla.
 func (t *ClaudeTakeover) Enabled() bool {
 	if t == nil {
 		return false
@@ -143,7 +143,7 @@ func (t *ClaudeTakeover) Project(baseURL string, withToken bool) error {
 	return t.persistState(state)
 }
 
-// Release puts back the user's prior values for every key Zen still owns. A
+// Release puts back the user's prior values for every key Mewla still owns. A
 // key the user changed after the takeover is left as the user set it.
 func (t *ClaudeTakeover) Release() error {
 	if t == nil || t.settingsPath == "" {
@@ -205,7 +205,7 @@ func resolveSettingsPath(path string) string {
 }
 
 // restoreField puts back the prior value of key when the current value is
-// still exactly what Zen wrote.
+// still exactly what Mewla wrote.
 func restoreField(env []jsonField, key string, state claudeTakeoverState) []jsonField {
 	current, has := fieldValue(env, key)
 	if !has || !bytes.Equal(compactJSON(current), compactJSON(state.Written[key])) {

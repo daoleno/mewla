@@ -66,7 +66,7 @@ func TestMonitorTracksAppliedSettingsNotifications(t *testing.T) {
 	})
 	waitMonitorSettings(t, m, "gpt-5.5", "low")
 
-	// Native default arrives as "none" and normalizes to Zen's "".
+	// Native default arrives as "none" and normalizes to Mewla's "".
 	f.broadcast(notifThreadSettingsUpd, map[string]any{
 		"threadId": "t-main",
 		"threadSettings": map[string]any{

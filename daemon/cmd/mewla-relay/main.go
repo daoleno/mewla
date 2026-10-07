@@ -23,7 +23,7 @@ import (
 func main() {
 	envcompat.Normalize()
 	if err := run(os.Args[1:]); err != nil {
-		log.Fatalf("zen-relay: %v", err)
+		log.Fatalf("mewla-relay: %v", err)
 	}
 }
 
@@ -50,7 +50,7 @@ func run(args []string) error {
 	var sweepInterval time.Duration
 	var checkURL string
 
-	flags := flag.NewFlagSet("zen-relay", flag.ContinueOnError)
+	flags := flag.NewFlagSet("mewla-relay", flag.ContinueOnError)
 	flags.StringVar(&clientAddress, "client-addr", ":443", "raw L4 client listen address")
 	flags.StringVar(&controlAddress, "control-addr", ":8443", "TLS connector control listen address")
 	flags.StringVar(&operatorAddress, "operator-addr", "127.0.0.1:8080", "health and metrics listen address")
@@ -161,7 +161,7 @@ func run(args []string) error {
 	}()
 
 	log.Printf(
-		"zen-relay ready: client=%s control=%s operator=%s protocol=%d",
+		"mewla-relay ready: client=%s control=%s operator=%s protocol=%d",
 		clientListener.Addr(),
 		controlTCP.Addr(),
 		operatorListener.Addr(),

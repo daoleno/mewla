@@ -21,7 +21,7 @@ const (
 	ProtocolAnthropicMessages = "anthropic_messages"
 )
 
-// Route protocols spoken by the Zen-owned loopback (same-protocol pass-through).
+// Route protocols spoken by the Mewla-owned loopback (same-protocol pass-through).
 const (
 	RouteProtocolResponses         = "responses"
 	RouteProtocolAnthropicMessages = "anthropic_messages"
@@ -170,15 +170,15 @@ const (
 
 // Codex Reasoning Effort values (OpenAI Responses API `reasoning.effort`,
 // mirrored by Codex `model_reasoning_effort`). `none`/`max`/`ultra` are
-// ChatGPT-tier presets and are never Zen-admitted Session efforts.
+// ChatGPT-tier presets and are never Mewla-admitted Session efforts.
 const (
 	// ReasoningEffortNone is the native Codex wire value for "no explicit
 	// effort" (the model's documented default applies). Codex 0.147 models the
 	// default as ReasoningEffort::None ("none" on the wire, "default" in the
 	// TUI footer) and it is the ONLY native value that resets an explicit
-	// thread effort. Zen's empty-effort (model default) semantic maps to this
+	// thread effort. Mewla's empty-effort (model default) semantic maps to this
 	// value at every native boundary and is normalized back to "" at every
-	// Zen boundary.
+	// Mewla boundary.
 	ReasoningEffortNone    = "none"
 	ReasoningEffortMinimal = "minimal"
 	ReasoningEffortLow     = "low"
@@ -432,7 +432,7 @@ func SupportedProtocols(executorID string) []string {
 	}
 }
 
-// RouteProtocolFor returns the Zen loopback protocol for a profile protocol.
+// RouteProtocolFor returns the Mewla loopback protocol for a profile protocol.
 func RouteProtocolFor(profileProtocol string) (routeProtocol string, ok bool) {
 	switch normalizeID(profileProtocol) {
 	case ProtocolOpenAIResponses:

@@ -562,7 +562,7 @@ func managerPluginCopy(options InventoryOptions, entry managerInstalledPlugin) (
 	reason := localPluginUninstallReason(copy)
 	copy.Capability = PluginCapability{CanUninstall: reason == "", Reason: reason}
 	if reason != "" {
-		return copy, pluginHostLabel(entry.host) + " reports " + entry.pluginID + " installed, but Zen cannot safely uninstall this copy."
+		return copy, pluginHostLabel(entry.host) + " reports " + entry.pluginID + " installed, but Mewla cannot safely uninstall this copy."
 	}
 	return copy, ""
 }

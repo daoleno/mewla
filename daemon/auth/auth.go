@@ -482,7 +482,7 @@ func (m *Manager) CreateServerAssertion(purpose string) (ServerAssertion, error)
 	}, nil
 }
 
-// CreateLinkSignature signs a domain-separated Zen Link control-plane
+// CreateLinkSignature signs a domain-separated Mewla Link control-plane
 // payload with the daemon identity. The Link transport key is separate; this
 // signature binds route and transport metadata back to the existing daemon
 // trust anchor.

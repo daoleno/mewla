@@ -3,7 +3,7 @@ package work
 import "strings"
 
 // SanitizeConversationProjection is the final user-facing API boundary. It
-// drops typed provider Goal context and Zen's reserved direct Work Event input,
+// drops typed provider Goal context and Mewla's reserved direct Work Event input,
 // then cleans every displayable text field even when a provider adds a new
 // structured envelope around legacy context.
 func SanitizeConversationProjection(conversation CodexConversation) CodexConversation {
@@ -39,7 +39,7 @@ func isCanonicalDirectWorkEventInput(value string) bool {
 	return canonical
 }
 
-// IsCanonicalDirectWorkEventInput reports whether value is Zen's reserved
+// IsCanonicalDirectWorkEventInput reports whether value is Mewla's reserved
 // direct Work Event Session Input envelope. Visible timeline projection must
 // omit these rows; work_card / work_result owns card presentation.
 func IsCanonicalDirectWorkEventInput(value string) bool {

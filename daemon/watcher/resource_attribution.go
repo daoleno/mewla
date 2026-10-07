@@ -82,7 +82,7 @@ func attributeConsumers(consumers []ProcessConsumer, w *Watcher) []ProcessConsum
 		}
 		return scoreA > scoreB
 	})
-	// Keep every attributed Zen owner; bound only unowned user process groups.
+	// Keep every attributed Mewla owner; bound only unowned user process groups.
 	out := []ProcessConsumer{}
 	others := 0
 	for _, c := range consumers {

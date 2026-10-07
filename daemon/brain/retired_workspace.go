@@ -110,7 +110,7 @@ func (s *Store) retireBrainFlowsPlaybook() error {
 	return writeAtomic(path, append(bytes.TrimRight(outside, "\n"), '\n'), 0o600)
 }
 
-// productWorkspaceRoot lists the top-level entries Zen owns in the Brain
+// productWorkspaceRoot lists the top-level entries Mewla owns in the Brain
 // workspace. Anything else visible at the root is user or tool clutter.
 var productWorkspaceRoot = []string{"AGENTS.md", "current.md", "memory.md", "profile.md", routingGuideName, "policies", "playbooks", "worklog"}
 

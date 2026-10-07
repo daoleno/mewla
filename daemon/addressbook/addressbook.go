@@ -1,7 +1,7 @@
 // Package addressbook stores the daemon's reachable HTTPS entry points.
 //
 // The file is intentionally daemon owned.  Readers reload it before each
-// admission check, so `zen address add/remove` takes effect without a daemon
+// admission check, so `mewla address add/remove` takes effect without a daemon
 // restart and a second process never needs to select a server for a request.
 package addressbook
 

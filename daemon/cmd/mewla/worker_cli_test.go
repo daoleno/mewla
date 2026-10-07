@@ -13,7 +13,7 @@ func TestWorkerCLIHasNoWorkerCompatibilityCommand(t *testing.T) {
 	if err := run([]string{"worker", "--help"}, &output); err != nil && !errors.Is(err, flag.ErrHelp) {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "zen worker") || strings.Contains(output.String(), "zen agent") {
+	if !strings.Contains(output.String(), "mewla worker") || strings.Contains(output.String(), "zen agent") {
 		t.Fatalf("Worker help=%s", output.String())
 	}
 	output.Reset()

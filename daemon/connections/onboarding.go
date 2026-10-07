@@ -309,7 +309,7 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 func (m *Manager) startGitHubDevice(ctx context.Context, in *Input) (Response, error) {
 	client, ok, err := m.clientConfig("github")
 	if err != nil || !ok || client.ClientID == "" {
-		return Response{}, errors.New("Zen’s GitHub browser authorization is not ready yet. You can use the account already signed in on this server.")
+		return Response{}, errors.New("Mewla’s GitHub browser authorization is not ready yet. You can use the account already signed in on this server.")
 	}
 	config := oauth2.Config{ClientID: client.ClientID, Scopes: []string{"read:user", "repo"}, Endpoint: oauth2.Endpoint{DeviceAuthURL: "https://github.com/login/device/code"}}
 	r := &record{Account: Account{Endpoint: "https://api.github.com"}}

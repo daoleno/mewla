@@ -578,7 +578,7 @@ func (m *Manager) saveMedia(input mediaInput) error {
 
 func (m *Manager) finishMedia(input mediaInput, result brain.ExternalInputDisposition) error {
 	input.State = string(result)
-	text := "Files received by Zen."
+	text := "Files received by Mewla."
 	switch result {
 	case brain.ExternalInputAccepted:
 		for _, part := range input.Parts {
@@ -588,7 +588,7 @@ func (m *Manager) finishMedia(input mediaInput, result brain.ExternalInputDispos
 		}
 	case brain.ExternalInputPending, brain.ExternalInputUncertain:
 		input.State = "uncertain"
-		text = "Zen could not prove whether the recipient received these files. They were not replayed."
+		text = "Mewla could not prove whether the recipient received these files. They were not replayed."
 	default:
 		input.State = "not_submitted"
 		text = "These files were not submitted. Resend the whole batch when the recipient is available."
@@ -598,7 +598,7 @@ func (m *Manager) finishMedia(input mediaInput, result brain.ExternalInputDispos
 		case "accepted":
 			text = ""
 		case "uncertain":
-			text = "Zen could not prove whether the recipient received this follow-up. It was not replayed."
+			text = "Mewla could not prove whether the recipient received this follow-up. It was not replayed."
 		default:
 			text = "This follow-up was not submitted. Resend the file and prompt together when the recipient is available."
 		}

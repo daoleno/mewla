@@ -13,7 +13,7 @@ import (
 )
 
 func runSetupCommand(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen setup", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	var (
@@ -75,7 +75,7 @@ func runSetupCommand(args []string, stderr io.Writer) error {
 	} else if runErr != nil && !errors.Is(runErr, setup.ErrBlocked) && !errors.Is(runErr, setup.ErrNoExecutor) && !errors.Is(runErr, setup.ErrConsentRequired) {
 		// Blocked/no-executor/consent already printed actionable output from setup.Run.
 		// Unexpected errors get a clean message (no stack).
-		fmt.Fprintf(stderr, "zen setup: %v\n", runErr)
+		fmt.Fprintf(stderr, "mewla setup: %v\n", runErr)
 	}
 
 	if runErr == nil {
@@ -105,13 +105,13 @@ func normalizeSetupProfileFlag(value string) (setup.Profile, error) {
 }
 
 func printSetupUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: zen setup [flags]")
+	fmt.Fprintln(w, "Usage: mewla setup [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Guided first-run setup on top of zen doctor.")
+	fmt.Fprintln(w, "Guided first-run setup on top of mewla doctor.")
 	fmt.Fprintln(w, "Never installs packages, runs sudo, logs into providers, or weakens permissions without consent.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  zen setup")
-	fmt.Fprintln(w, "  zen setup --non-interactive --host codex --profile safe")
-	fmt.Fprintln(w, "  zen setup --non-interactive --host codex --profile autonomous --yes")
+	fmt.Fprintln(w, "  mewla setup")
+	fmt.Fprintln(w, "  mewla setup --non-interactive --host codex --profile safe")
+	fmt.Fprintln(w, "  mewla setup --non-interactive --host codex --profile autonomous --yes")
 }

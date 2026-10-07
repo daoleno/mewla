@@ -412,7 +412,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 			<-secondDone
 			t.Fatalf("%s: second owner did not exit; output=%q", variant.name, secondOutput.String())
 		}
-		if !strings.Contains(secondOutput.String(), "another Zen daemon owns this state directory") {
+		if !strings.Contains(secondOutput.String(), "another Mewla daemon owns this state directory") {
 			t.Fatalf("%s: second owner failed for the wrong cause: %q", variant.name, secondOutput.String())
 		}
 		if _, err := parityHealth(daemon, 5*time.Second); err != nil {

@@ -88,7 +88,7 @@ func seedModelCatalogs(t *testing.T, owner *Owner, models map[string][]string) {
 	}
 }
 
-// postLoopback routes one request through the Zen loopback and asserts the
+// postLoopback routes one request through the Mewla loopback and asserts the
 // response is 200.
 func postLoopback(t *testing.T, routerAddr, routeID, model string) {
 	t.Helper()
@@ -194,7 +194,7 @@ func TestThreadRuntimeSwitchE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// One live Session launched on A. The launch env points at the stable Zen
+	// One live Session launched on A. The launch env points at the stable Mewla
 	// gateway (loopback), never at the upstream URL or key.
 	plan, err := owner.PrepareLaunch(ExecutorCodex, connA.ID, "codex")
 	if err != nil {

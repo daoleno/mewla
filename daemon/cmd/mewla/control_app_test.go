@@ -57,7 +57,7 @@ type fakeControlProgress struct {
 
 func assertDelegatedLifecyclePayload(t *testing.T, payload, original string) string {
 	t.Helper()
-	prefix := original + "\n\nZen delegated turn contract:\n"
+	prefix := original + "\n\nMewla delegated turn contract:\n"
 	if !strings.HasPrefix(payload, prefix) {
 		t.Fatalf("original bytes or turn boundary changed: %q", payload)
 	}
@@ -600,7 +600,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		execs: work.NewExecutorConfig(map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex --no-alt-screen"},
 		}),
-		stateDir: "/tmp/zen state",
+		stateDir: "/tmp/mewla state",
 	}
 	promptPath := filepath.Join(t.TempDir(), "prompt.md")
 	if err := os.WriteFile(promptPath, []byte("implement this"), 0o600); err != nil {
@@ -629,7 +629,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		t.Fatalf("agent name = %q", resp.Worker.Name)
 	}
 	if resp.Worker.Hidden {
-		t.Fatal("delegated Zen Worker should be visible by default")
+		t.Fatal("delegated Mewla Worker should be visible by default")
 	}
 	if !resp.Worker.Delegated {
 		t.Fatal("brain-spawned visible agent should be marked delegated")
@@ -654,7 +654,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 	if !ok || progressBin == "" {
 		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD not set: %#v", created.Env)
 	}
-	if progressBin == "zen worker progress" {
+	if progressBin == "mewla worker progress" {
 		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD must not be the legacy space-separated command, got %q", progressBin)
 	}
 	// The value must be the current executable's path, not a stale "zen"
@@ -664,7 +664,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 			t.Fatalf("MEWLA_WORKER_PROGRESS_CMD = %q, want current executable %q", progressBin, exe)
 		}
 	}
-	if created.Env["MEWLA_STATE_DIR"] != "/tmp/zen state" {
+	if created.Env["MEWLA_STATE_DIR"] != "/tmp/mewla state" {
 		t.Fatalf("progress command env = %#v", created.Env)
 	}
 	if len(fw.sent) != 1 {
@@ -675,7 +675,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 	}
 	for _, want := range []string{
 		"delegated by Brain\n\nimplement this",
-		"Zen lifecycle protocol:",
+		"Mewla lifecycle protocol:",
 		"You are the delegated Worker: execute the assigned work directly",
 		"Brain workspace role/delegation instructions apply to Brain, not this Worker Session.",
 		"\"$MEWLA_WORKER_PROGRESS_CMD\" worker progress",
@@ -686,7 +686,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		"needs_judgment",
 		"MEWLA_WORKER_ID identifies this Session",
 		"--status running|done|failed|blocked",
-		"Zen delegated turn contract:",
+		"Mewla delegated turn contract:",
 		"--turn-id turn:",
 	} {
 		if !strings.Contains(fw.sent[0].text, want) {
@@ -1385,7 +1385,7 @@ func TestControlAppSpawnSubmissionFailureReconcilesExactlyOnceAcrossRestart(t *t
 	if len(events) != 0 {
 		t.Fatalf("non-submission created legacy lifecycle Events=%+v", events)
 	}
-	original, _, hasContract := strings.Cut(fw.submitted[0].text, "\n\nZen delegated turn contract:\n")
+	original, _, hasContract := strings.Cut(fw.submitted[0].text, "\n\nMewla delegated turn contract:\n")
 	if !hasContract {
 		t.Fatalf("submission payload lacks turn contract: %q", fw.submitted[0].text)
 	}

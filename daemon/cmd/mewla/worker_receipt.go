@@ -12,7 +12,7 @@ import (
 )
 
 func runWorkerReceipt(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("zen worker receipt", flag.ContinueOnError)
+	fs := flag.NewFlagSet("mewla worker receipt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	req := control.Request{Type: "worker_receipt"}

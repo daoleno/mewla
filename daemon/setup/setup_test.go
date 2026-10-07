@@ -41,7 +41,7 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 	text := out.String()
-	for _, want := range []string{"not ready", "tmux", "sudo apt install tmux", "zen setup"} {
+	for _, want := range []string{"not ready", "tmux", "sudo apt install tmux", "mewla setup"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
@@ -333,16 +333,16 @@ func TestSetupDoesNotEmitSecrets(t *testing.T) {
 func TestNextStepsKeepPrivateAndHTTPSRoutesDistinct(t *testing.T) {
 	steps := strings.Join(nextSteps("/tmp/zen-state"), "\n")
 	for _, want := range []string{
-		"zen --lan",
+		"mewla --lan",
 		"direct Tailnet",
-		"start Zen with zen, expose the full loopback origin",
-		"zen pair -state-dir /tmp/zen-state https://your-zen-host.example",
+		"start Mewla with zen, expose the full loopback origin",
+		"mewla pair -state-dir /tmp/zen-state https://your-mewla-host.example",
 	} {
 		if !strings.Contains(steps, want) {
 			t.Fatalf("next steps missing %q:\n%s", want, steps)
 		}
 	}
-	if strings.Contains(steps, "zen pair http://0.0.0.0") {
+	if strings.Contains(steps, "mewla pair http://0.0.0.0") {
 		t.Fatalf("next steps contain wildcard pair command:\n%s", steps)
 	}
 }

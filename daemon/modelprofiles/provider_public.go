@@ -135,7 +135,7 @@ type ThreadRuntimeSelection struct {
 }
 
 // ThreadRuntimeChoice is the complete atomic runtime requested for one
-// existing Zen thread lane. Connection, model, and optional effect are
+// existing Mewla thread lane. Connection, model, and optional effect are
 // validated together; callers cannot mutate any component independently.
 type ThreadRuntimeChoice struct {
 	ConnectionID     string `json:"connection_id"`

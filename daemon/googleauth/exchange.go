@@ -246,7 +246,7 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f := e.flows[id]
 	if f == nil {
-		http.Error(w, "Connection expired. Return to Zen and connect again.", 410)
+		http.Error(w, "Connection expired. Return to Mewla and connect again.", 410)
 		return
 	}
 	switch r.URL.Path {

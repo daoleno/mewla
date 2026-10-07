@@ -820,7 +820,7 @@ func (m *Manager) handleOwnerMessage(ctx context.Context, token string, message 
 			return "not_submitted"
 		}
 		if _, err := m.brain.NewChat(); err != nil {
-			reply(fmt.Sprintf("command:%d", updateID), "Zen could not start a fresh Brain chat.")
+			reply(fmt.Sprintf("command:%d", updateID), "Mewla could not start a fresh Brain chat.")
 			return "not_submitted"
 		}
 		m.clearFallbackRecipient()
@@ -885,12 +885,12 @@ func (m *Manager) handleOwnerMessage(ctx context.Context, token string, message 
 		m.startTyping(ctx, token)
 		return "accepted"
 	case brain.ExternalInputUncertain:
-		reply(fmt.Sprintf("ack:%d", updateID), "Zen could not prove whether Brain received this message. It was not replayed.")
+		reply(fmt.Sprintf("ack:%d", updateID), "Mewla could not prove whether Brain received this message. It was not replayed.")
 		return "uncertain"
 	case brain.ExternalInputPending:
 		return "pending"
 	default:
-		reply(fmt.Sprintf("ack:%d", updateID), "Zen did not submit this message. Send it again when Brain is available.")
+		reply(fmt.Sprintf("ack:%d", updateID), "Mewla did not submit this message. Send it again when Brain is available.")
 		return "not_submitted"
 	}
 }
@@ -916,7 +916,7 @@ func (m *Manager) ownerStatusText() string {
 		return "Recipient: Session " + state.FallbackSessionID + " (unavailable). Choose /brain or /sessions."
 	}
 	if !state.TopicsAvailable {
-		return "Telegram is connected to Zen Brain. Threaded mode is unavailable; use /sessions to choose a Session."
+		return "Telegram is connected to Mewla Brain. Threaded mode is unavailable; use /sessions to choose a Session."
 	}
 	return "Recipient: Brain. Session conversations are in their own topics."
 }
@@ -1211,12 +1211,12 @@ func (m *Manager) handleFallbackSessionMessage(ctx context.Context, token, sessi
 		m.startSessionTyping(ctx, token, sessionID, threadID)
 		return "session_accepted"
 	case brain.ExternalInputUncertain:
-		m.enqueueTopicText(fmt.Sprintf("ack:%d", updateID), "Zen could not prove whether the selected Session received this message. It was not replayed.", threadID, replyID)
+		m.enqueueTopicText(fmt.Sprintf("ack:%d", updateID), "Mewla could not prove whether the selected Session received this message. It was not replayed.", threadID, replyID)
 		return "session_uncertain"
 	case brain.ExternalInputPending:
 		return "session_pending"
 	default:
-		m.enqueueTopicText(fmt.Sprintf("ack:%d", updateID), "Zen did not submit this message to the selected Session. Send it again when the Session is available.", threadID, replyID)
+		m.enqueueTopicText(fmt.Sprintf("ack:%d", updateID), "Mewla did not submit this message to the selected Session. Send it again when the Session is available.", threadID, replyID)
 		return "session_not_submitted"
 	}
 }

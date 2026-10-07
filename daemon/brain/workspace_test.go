@@ -579,7 +579,7 @@ func TestNewStorePreservesCurrentAndUpgradesExistingPolicyDocs(t *testing.T) {
 			t.Fatalf("engine policy missing %q:\n%s", want, engineContent)
 		}
 	}
-	for _, retired := range []string{"the kind of task alone is not a reason to switch", "Keep the configured executor", "zen worker defaults"} {
+	for _, retired := range []string{"the kind of task alone is not a reason to switch", "Keep the configured executor", "mewla worker defaults"} {
 		if strings.Contains(engineContent, retired) {
 			t.Fatalf("engine policy keeps retired %q:\n%s", retired, engineContent)
 		}

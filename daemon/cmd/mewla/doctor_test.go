@@ -18,7 +18,7 @@ func TestDoctorHelp(t *testing.T) {
 		t.Fatalf("err = %v, want ErrHelp", err)
 	}
 	out := stderr.String()
-	for _, want := range []string{"Usage: zen doctor", "--json", "Diagnose whether this machine can run Zen"} {
+	for _, want := range []string{"Usage: mewla doctor", "--json", "Diagnose whether this machine can run Mewla"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help missing %q:\n%s", want, out)
 		}
