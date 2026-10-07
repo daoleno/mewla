@@ -76,10 +76,10 @@ describe("Session list information hierarchy", () => {
 });
 
 describe("Interface Session title ownership", () => {
-  test("preserves the resolved session title in the menu while Resources opens globally", () => {
+  test("preserves the resolved session title in the menu; Resources has no menu entry", () => {
     expect(layoutPropsSource).toContain("title: headerTitle");
     expect(layoutPropsSource).toContain("menuTitle: headerTitle");
-    expect(layoutPropsSource).toContain("onOpenResources: openSessionDetails");
+    expect(layoutPropsSource).not.toContain("onOpenResources");
     expect(overlayPropsSource).toContain("menuTitle,");
     expect(overlaysSource).toContain("title={menuTitle}");
     expect(overlaysSource).not.toContain("<SessionResourceSheet");

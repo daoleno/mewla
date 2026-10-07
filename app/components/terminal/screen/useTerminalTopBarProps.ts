@@ -33,7 +33,6 @@ interface UseTerminalTopBarPropsInput {
   isStructuredChatWorker: boolean;
   delegated?: boolean;
   status?: WorkerStatus;
-  onOpenSessionDetails(): void;
   openGitDiff(): void;
   onToggleInterfaceRenderMode(): void;
 }
@@ -53,7 +52,6 @@ export function useTerminalTopBarProps({
   isStructuredChatWorker,
   delegated,
   status,
-  onOpenSessionDetails,
   openGitDiff,
   onToggleInterfaceRenderMode,
 }: UseTerminalTopBarPropsInput): TerminalTopBarProps {
@@ -78,7 +76,6 @@ export function useTerminalTopBarProps({
       delegated,
       status,
       onBack: navigationActions.goBack,
-      onOpenSessionDetails,
       onOpenGitDiff: openGitDiff,
       onOpenMenu: chromeLayout.openMenu,
       onToggleInterfaceRenderMode,
@@ -97,7 +94,6 @@ export function useTerminalTopBarProps({
       isStructuredChatWorker,
       delegated,
       status,
-      onOpenSessionDetails,
       openGitDiff,
       onToggleInterfaceRenderMode,
       navigationActions.goBack,

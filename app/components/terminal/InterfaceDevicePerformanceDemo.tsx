@@ -240,7 +240,6 @@ export function InterfaceDevicePerformanceDemo({
             }}
             isStructuredChatWorker
             onBack={NOOP}
-            onOpenSessionDetails={NOOP}
             onOpenGitDiff={NOOP}
             onOpenMenu={NOOP}
             onToggleInterfaceRenderMode={NOOP}

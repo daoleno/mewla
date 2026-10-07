@@ -23,7 +23,6 @@ type NewTerminalSubmitInput = Parameters<
 
 export interface TerminalScreenOverlaysProps {
   menuTitle: string;
-  onOpenResources(): void;
   routeSheetVisible: boolean;
   routeSheetLoading: boolean;
   routeSheetActivating: boolean;
@@ -67,7 +66,6 @@ export interface TerminalScreenOverlaysProps {
 
 export function TerminalScreenOverlays({
   menuTitle,
-  onOpenResources,
   routeSheetVisible,
   routeSheetLoading,
   routeSheetActivating,
@@ -152,7 +150,6 @@ export function TerminalScreenOverlays({
         left={menuPosition.left}
         top={menuPosition.top}
         title={menuTitle}
-        onOpenResources={onOpenResources}
         creatingSession={creatingSession}
         newTerminalLabel={creatingSession ? "Starting Terminal…" : "New Terminal"}
         newTerminalDisabled={newTerminalDisabled}

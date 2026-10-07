@@ -26,7 +26,6 @@ interface TerminalActionPopoverProps {
   onNewTerminal(): void;
   onRename(): void;
   onOpenLinkedWork(): void;
-  onOpenResources(): void;
   onOpenModel?(): void;
   onOpenDSHWeb?(): void;
   onToggleRenderMode?(): void;
@@ -50,7 +49,6 @@ export function TerminalActionPopover({
   onNewTerminal,
   onRename,
   onOpenLinkedWork,
-  onOpenResources,
   onOpenModel,
   onOpenDSHWeb,
   onToggleRenderMode,
@@ -85,13 +83,6 @@ export function TerminalActionPopover({
       onPress: onRename,
     },
   );
-
-  actions.push({
-    key: "resources",
-    icon: "pulse-outline",
-    label: "Resources",
-    onPress: onOpenResources,
-  });
 
   if (onOpenModel) {
     actions.push({

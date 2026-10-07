@@ -31,7 +31,6 @@ export interface TerminalTopBarProps {
   delegated?: boolean;
   status?: WorkerStatus;
   onBack(): void;
-  onOpenSessionDetails(): void;
   onOpenGitDiff(): void;
   onOpenMenu(): void;
   onToggleInterfaceRenderMode(): void;
@@ -49,7 +48,6 @@ export function TerminalTopBar({
   delegated,
   status,
   onBack,
-  onOpenSessionDetails,
   onOpenGitDiff,
   onOpenMenu,
 }: TerminalTopBarProps) {
@@ -90,7 +88,6 @@ export function TerminalTopBar({
       avatarSeed={title}
       status={status}
       onBack={onBack}
-      onPressTitle={onOpenSessionDetails}
       rightActions={rightActions}
       menuAnchorRef={menuAnchorRef}
     />
