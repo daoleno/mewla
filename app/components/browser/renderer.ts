@@ -1,10 +1,11 @@
 // Pixel-only document. It cannot navigate to or fetch the remote website.
 // Rendering ACK is sent after image decode and a paint opportunity.
-/** `backdrop` letterboxes the remote page; pass a theme token, never user text. */
-export const browserRendererHTML = (backdrop: string) => `<!doctype html><html><head>
+// Transparent, so the WebView's themed backdrop letterboxes the page and a
+// theme change never reloads the renderer mid-session.
+export const browserRendererHTML = `<!doctype html><html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
-<style>html,body{margin:0;width:100%;height:100%;background:${backdrop};overflow:hidden}img{width:100%;height:100%;object-fit:contain;touch-action:none;user-select:none}</style></head>
+<style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}img{width:100%;height:100%;object-fit:contain;touch-action:none;user-select:none}</style></head>
 <body><img id="screen" alt="Remote host browser"><script>
 const screen=document.getElementById('screen');let width=1280,height=800,seq=0,ready=true,start=null,scroll=false,lastMove=0;
 const post=v=>window.ReactNativeWebView.postMessage(JSON.stringify(v));
