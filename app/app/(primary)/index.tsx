@@ -409,8 +409,6 @@ export default function BrainScreen() {
       <View style={styles.surface}>
         <ConnectionPathIndicator
           connected={connectionState === "connected"}
-          latencyMs={activeServer ? workerState.serverLatencyById[activeServer.id]?.latencyMs : undefined}
-          transportKind={activeServer?.transportKind}
           issue={connectionIssue?.title}
         />
         <ChatCanvas chrome={chrome}>
