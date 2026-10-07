@@ -22,7 +22,8 @@ import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAct
 import { resolvePrimaryAppBarGeometry } from "../../components/navigation/PrimaryDrawerShell";
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
 import { SessionsOverview } from "../../components/workers/SessionsOverview";
-import { sessionEmptyState } from "../../services/sessionEmptyState";
+import { sessionEmptyCat, sessionEmptyState } from "../../services/sessionEmptyState";
+import { SealCat } from "../../components/mewla/SealCat";
 import {
   NewSessionButton,
   SESSIONS_COLUMN_MAX_WIDTH,
@@ -632,6 +633,7 @@ export default function InboxScreen() {
   };
 
   const empty = sessionEmptyState(hasConfiguredServers, connectionState);
+  const emptyCat = sessionEmptyCat(empty.action, empty.busy);
   const retryCurrentServer = async () => {
     if (!currentServer || !isCurrentServer(currentServer.id)) return;
     try {
@@ -773,7 +775,7 @@ export default function InboxScreen() {
             alwaysBounceVertical
             showsVerticalScrollIndicator={false}
           >
-            <EmptyState title="Loading sessions" busy size="inline" />
+            <EmptyState title="Loading sessions" art={<SealCat state="waking" size={88} />} />
           </ScrollView>
         ) : sortedWorkers.length === 0 ? (
           <ScrollView
@@ -784,6 +786,7 @@ export default function InboxScreen() {
           >
             <View style={styles.emptyFill}>
             <EmptyState title={empty.title} icon={empty.icon} busy={empty.busy}
+              art={emptyCat ? <SealCat state={emptyCat} size={104} /> : undefined}
               detail={primaryIssue?.detail}
               action={empty.action ? {
                 label: creatingServerId ? "Starting..." : empty.label,

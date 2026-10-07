@@ -20,13 +20,18 @@ export function mergeBrainPresenceIntoTimeline(
   items: ZenTimelineItem[],
   presence: BrainCatPresence | undefined,
 ): ZenTimelineItem[] {
+  const working = items.findIndex((item) => item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX));
+  if (working >= 0) {
+    // The walking cat says what Brain is doing: its newest step this turn.
+    const step = latestStep(items, working);
+    const row = items[working];
+    if (!step || row.type !== "activity" || row.detail === step) return items;
+    const next = items.slice();
+    next[working] = { ...row, detail: step };
+    return next;
+  }
   const label = presence ? brainCatTailLabel(presence) : null;
-  if (
-    !presence ||
-    !label ||
-    items.length === 0 ||
-    items.some((item) => item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX))
-  ) {
+  if (!presence || !label || presence.away || items.length === 0) {
     return items;
   }
   const perch = presence.state === "attention" ? perchIndex(items, presence.workIds) : -1;
@@ -48,6 +53,19 @@ export function mergeBrainPresenceIntoTimeline(
       defaultExpanded: false,
     },
   ];
+}
+
+/** The newest tool row's title before the Working row, within this turn. */
+function latestStep(items: ZenTimelineItem[], working: number): string | undefined {
+  for (let index = working - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.type === "message") return undefined;
+    if (item.type !== "activity" || item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX)) continue;
+    const last = item.id.startsWith(BRAIN_STEPS_ITEM_PREFIX) ? item.children?.[item.children.length - 1] : undefined;
+    const title = (last?.title ?? item.title)?.trim();
+    if (title) return title;
+  }
+  return undefined;
 }
 
 /** The newest slip of any Work that needs you, or -1. */

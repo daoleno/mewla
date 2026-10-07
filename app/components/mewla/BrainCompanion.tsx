@@ -1,9 +1,9 @@
-import React, { createContext, useContext } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import type { BrainCatPresence } from "./brainCatState";
-import { SealCat } from "./SealCat";
+import { TappableCat } from "./TappableCat";
 
 export interface BrainCompanion {
   presence: BrainCatPresence;
@@ -13,6 +13,11 @@ export interface BrainCompanion {
   sessionLabels?: ReadonlyMap<string, string>;
   /** Opens the Work list; the tail row hands off to it. */
   onOpenWork?: () => void;
+  /**
+   * Tapping the cat. It returns the line the cat says back, if any (the
+   * screen may also act: open a slip, retry the connection).
+   */
+  onCatTap?: (context: { turnRunning: boolean; turnLabel?: string }) => string | null | undefined;
 }
 
 /**
@@ -40,38 +45,71 @@ export function BrainCatRow({
   detail,
   chrome,
   onPress,
+  turnRunning = false,
 }: {
   companion: BrainCompanion;
   label: string;
   detail?: string;
   chrome: TerminalThemeChrome;
-  /** Between turns the row opens the Work list. */
+  /** Between turns the row's text opens the Work list. */
   onPress?: () => void;
+  /** This is the Working row of a running turn. */
+  turnRunning?: boolean;
 }) {
+  const state = companion.presence.state;
+  const { said, tap } = useCatSays(companion, turnRunning, detail || label);
   return (
-    <Pressable
-      disabled={!onPress}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
-      accessible
-      accessibilityRole={onPress ? "button" : "text"}
-      accessibilityLabel={detail ? `Brain: ${label}, ${detail}` : `Brain: ${label}`}
-      accessibilityHint={onPress ? "Opens the Work list" : undefined}
-      accessibilityLiveRegion="polite"
-    >
-      <SealCat state={companion.presence.state} size={ROW_CAT} animate={companion.animate} />
-      <View style={styles.copy}>
+    <View style={styles.row}>
+      <TappableCat
+        state={state}
+        size={ROW_CAT}
+        animate={companion.animate}
+        onPress={companion.onCatTap ? tap : undefined}
+        accessibilityLabel={`Brain: ${label}`}
+        accessibilityHint={turnRunning ? "Says what Brain is doing" : "Brain answers"}
+      />
+      <Pressable
+        disabled={!onPress}
+        onPress={onPress}
+        style={({ pressed }) => [styles.copy, pressed ? styles.pressed : null]}
+        accessible
+        accessibilityRole={onPress ? "button" : "text"}
+        accessibilityLabel={detail ? `Brain: ${label}, ${detail}` : `Brain: ${label}`}
+        accessibilityHint={onPress ? "Opens the Work list" : undefined}
+        accessibilityLiveRegion="polite"
+      >
         <Text style={[styles.label, { color: chrome.text }]} numberOfLines={1}>
-          {label}
+          {said ?? label}
         </Text>
-        {detail ? (
+        {detail && !said ? (
           <Text style={[styles.detail, { color: chrome.textMuted }]} numberOfLines={1}>
             {detail}
           </Text>
         ) : null}
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
+}
+
+/** How long the cat's answer stays before the row reads as before. */
+const CAT_SAYS_MS = 4500;
+
+/** The cat's answer to a tap, shown in place of the row's text for a moment. */
+export function useCatSays(companion: BrainCompanion | null, turnRunning: boolean, turnLabel?: string) {
+  const [said, setSaid] = useState<string | null>(null);
+  useEffect(() => {
+    if (!said) return;
+    const timer = setTimeout(() => setSaid(null), CAT_SAYS_MS);
+    return () => clearTimeout(timer);
+  }, [said]);
+  const tap = useCallback(() => {
+    const line = companion?.onCatTap?.({ turnRunning, turnLabel });
+    if (line) {
+      setSaid(line);
+      AccessibilityInfo.announceForAccessibility(line);
+    }
+  }, [companion, turnLabel, turnRunning]);
+  return { said, tap };
 }
 
 const styles = StyleSheet.create({

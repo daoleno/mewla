@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
@@ -9,14 +9,26 @@ import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import {
   BRAIN_WORK_GROUP_LABELS,
   BRAIN_WORK_GROUP_ORDER,
+  brainWorkAge,
   brainWorkSummaryLine,
   type BrainWorkSlip,
   type BrainWorkSurface,
 } from "./brainWorkSurface";
-import { WorkSlip, WorkStatusWord } from "./WorkSlip";
+import { SealCat } from "../mewla/SealCat";
+import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
+
+/** The slip's actions, built by the screen that can run them. */
+export type BrainWorkActionsFor = (slip: BrainWorkSlip, placement: "slip" | "sheet") => WorkSlipAction[];
 
 /** Width of the Work column beside the conversation on wide screens. */
 export const BRAIN_WORK_COLUMN_WIDTH = 360;
+
+/** The summary, with a running Worker's phase in front ("Verifying · …"). */
+function slipLine(slip: BrainWorkSlip): string | undefined {
+  if (!slip.phase) return slip.summary;
+  const phase = slip.phase[0].toUpperCase() + slip.phase.slice(1);
+  return slip.summary ? `${phase} · ${slip.summary}` : phase;
+}
 
 function slipMeta(slip: BrainWorkSlip): string | undefined {
   return [slip.who, formatChatBubbleTime(slip.updatedAt)].filter(Boolean).join(" · ") || undefined;
@@ -32,19 +44,29 @@ export function BrainWorkList({
   perch,
   animate,
   onOpenSlip,
+  actionsFor,
+  onCatPress,
+  emptyCat,
 }: {
   surface: BrainWorkSurface;
   chrome: TerminalThemeChrome;
   perch?: boolean;
   animate?: boolean;
   onOpenSlip(slip: BrainWorkSlip): void;
+  actionsFor?: BrainWorkActionsFor;
+  onCatPress?: () => void;
+  /** The sheet covers the chat, so its empty list can hold the cat. */
+  emptyCat?: boolean;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   if (surface.slips.length === 0) {
     return (
-      <Text style={styles.empty}>
-        Nothing out right now. Work Brain hands off shows up here.
-      </Text>
+      <View style={emptyCat ? styles.emptyWithCat : undefined}>
+        {emptyCat ? <SealCat state="idle" size={72} animate={animate} /> : null}
+        <Text style={[styles.empty, emptyCat ? styles.emptyCentered : null]}>
+          Nothing out right now. Work Brain hands off shows up here.
+        </Text>
+      </View>
     );
   }
   const firstNeeds = surface.slips.find((slip) => slip.group === "needs")?.workId;
@@ -66,11 +88,13 @@ export function BrainWorkList({
                 statusLabel={slip.statusLabel}
                 title={slip.title}
                 meta={slipMeta(slip)}
-                summary={slip.summary}
+                summary={slipLine(slip)}
                 unread={slip.unread}
                 perched={Boolean(perch && slip.workId === firstNeeds)}
                 animate={animate}
                 onPress={() => onOpenSlip(slip)}
+                actions={actionsFor?.(slip, "slip")}
+                onCatPress={onCatPress}
                 accessibilityLabel={[slip.statusLabel, slip.title, slip.summary].filter(Boolean).join(", ")}
               />
             ))}
@@ -88,12 +112,16 @@ export function BrainWorkColumn({
   topInset,
   animate,
   onOpenSlip,
+  actionsFor,
+  onCatPress,
 }: {
   surface: BrainWorkSurface;
   chrome: TerminalThemeChrome;
   topInset: number;
   animate: boolean;
   onOpenSlip(slip: BrainWorkSlip): void;
+  actionsFor?: BrainWorkActionsFor;
+  onCatPress?: () => void;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   return (
@@ -115,6 +143,8 @@ export function BrainWorkColumn({
           perch
           animate={animate}
           onOpenSlip={onOpenSlip}
+          actionsFor={actionsFor}
+          onCatPress={onCatPress}
         />
       </ScrollView>
     </View>
@@ -197,12 +227,14 @@ export function BrainWorkSheet({
   chrome,
   onClose,
   onOpenSlip,
+  actionsFor,
 }: {
   visible: boolean;
   surface: BrainWorkSurface;
   chrome: TerminalThemeChrome;
   onClose(): void;
   onOpenSlip(slip: BrainWorkSlip): void;
+  actionsFor?: BrainWorkActionsFor;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   return (
@@ -214,28 +246,51 @@ export function BrainWorkSheet({
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
-        <BrainWorkList surface={surface} chrome={chrome} onOpenSlip={onOpenSlip} />
+        <BrainWorkList surface={surface} chrome={chrome} onOpenSlip={onOpenSlip} actionsFor={actionsFor} emptyCat />
       </ScrollView>
     </BottomSheetFrame>
   );
 }
 
-/** A Work with no live Session: what it is, where it stands, what it waits on. */
+/**
+ * One Work, and everything you can do with it: Brain's question with its
+ * answers, a reply box, and the state's actions (BRAIN_WORK_ACTIONS).
+ */
 export function BrainWorkDetailSheet({
   slip,
   waitFor,
   chrome,
+  actions,
+  replyOpen,
+  replyBusy,
+  onReply,
   onClose,
 }: {
   slip: BrainWorkSlip | null;
   waitFor?: string;
   chrome: TerminalThemeChrome;
+  actions?: readonly WorkSlipAction[];
+  /** Open with the reply box focused ("Reply", "Something else…"). */
+  replyOpen?: boolean;
+  replyBusy?: boolean;
+  onReply?(text: string): void;
   onClose(): void;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   const meta = slip ? slipMeta(slip) : undefined;
+  const [draft, setDraft] = useState("");
+  const workId = slip?.workId;
+  useEffect(() => setDraft(""), [workId]);
+  const canReply = Boolean(onReply && slip && !slip.closed);
+  const send = () => {
+    const text = draft.trim();
+    if (!text || !onReply) return;
+    onReply(text);
+    setDraft("");
+  };
+  const age = slip?.waitedMs && slip.group === "needs" ? `Waiting ${brainWorkAge(slip.waitedMs)}` : undefined;
   return (
-    <BottomSheetFrame visible={Boolean(slip)} onClose={onClose} cardStyle={{ backgroundColor: chrome.surface }}>
+    <BottomSheetFrame visible={Boolean(slip)} onClose={onClose} keyboardAvoiding cardStyle={{ backgroundColor: chrome.surface }}>
       {slip ? (
         <>
           <View style={styles.sheetHeader}>
@@ -244,14 +299,46 @@ export function BrainWorkDetailSheet({
               <Ionicons name="close" size={22} color={chrome.textMuted} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.detailContent}>
+          <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
             <View style={styles.detailMeta}>
               <WorkStatusWord status={slip.status} label={slip.statusLabel} chrome={chrome} />
-              {meta ? <Text style={styles.columnSummary}>{meta}</Text> : null}
+              {[meta, age].filter(Boolean).length ? (
+                <Text style={styles.columnSummary}>{[meta, age].filter(Boolean).join(" · ")}</Text>
+              ) : null}
             </View>
-            {slip.summary ? <Text selectable style={styles.detailBody}>{slip.summary}</Text> : null}
-            {waitFor && waitFor !== slip.summary ? (
+            {slip.question ? (
+              <Text selectable style={styles.question}>{slip.question}</Text>
+            ) : slipLine(slip) ? (
+              <Text selectable style={styles.detailBody}>{slipLine(slip)}</Text>
+            ) : null}
+            {waitFor && waitFor !== slip.summary && !slip.question && waitFor.includes(" ") ? (
               <Text selectable style={styles.columnSummary}>Waiting for: {waitFor}</Text>
+            ) : null}
+            {actions?.length ? <WorkSlipActions actions={actions} chrome={chrome} /> : null}
+            {canReply ? (
+              <View style={styles.replyRow}>
+                <TextInput
+                  accessibilityLabel={`Reply to Brain about ${slip.title}`}
+                  value={draft}
+                  onChangeText={setDraft}
+                  placeholder={slip.question ? "Answer Brain…" : "Tell Brain about this…"}
+                  placeholderTextColor={chrome.textSubtle}
+                  autoFocus={replyOpen}
+                  multiline
+                  editable={!replyBusy}
+                  onSubmitEditing={send}
+                  style={styles.replyInput}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Send reply"
+                  disabled={!draft.trim() || replyBusy}
+                  onPress={send}
+                  style={[styles.replySend, !draft.trim() || replyBusy ? styles.replySendIdle : null]}
+                >
+                  <Ionicons name="arrow-up" size={18} color={chrome.onSeal} />
+                </Pressable>
+              </View>
             ) : null}
           </ScrollView>
         </>
@@ -276,6 +363,13 @@ function createStyles(chrome: TerminalThemeChrome) {
       ...TypeScale.compact,
       color: chrome.textMuted,
       paddingVertical: 12,
+    },
+    emptyWithCat: {
+      alignItems: "center",
+      paddingTop: 16,
+    },
+    emptyCentered: {
+      textAlign: "center",
     },
     column: {
       width: BRAIN_WORK_COLUMN_WIDTH,
@@ -373,6 +467,40 @@ function createStyles(chrome: TerminalThemeChrome) {
       ...TypeScale.compact,
       color: chrome.text,
       lineHeight: 20,
+    },
+    question: {
+      ...TypeScale.body,
+      color: chrome.text,
+    },
+    replyRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 8,
+      marginTop: 4,
+    },
+    replyInput: {
+      ...TypeScale.compact,
+      flex: 1,
+      minHeight: 40,
+      maxHeight: 120,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: chrome.border,
+      color: chrome.text,
+      backgroundColor: chrome.appBackground,
+    },
+    replySend: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: chrome.seal,
+    },
+    replySendIdle: {
+      opacity: 0.35,
     },
   });
 }

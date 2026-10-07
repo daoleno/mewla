@@ -36,6 +36,7 @@ import {
   type SessionFileTextPreview,
 } from "./sessionFilePreview";
 import type { CalendarItem } from "../store/calendar";
+import type { BrainWorkUserActionKind } from "../store/brain";
 import {
   normalizeSkillsInspectDetail,
   normalizeSkillsInventory,
@@ -3444,6 +3445,55 @@ export class MultiServerWebSocketClient {
     this.send(serverId, {
       type: "brain_work_read",
       id: workId,
+    });
+  }
+
+  /**
+   * One user action on a Work slip. Resolves with Brain's admission for a
+   * reply ("accepted" or "uncertain"); rejects with the daemon's reason.
+   */
+  actOnBrainWork(
+    serverId: string,
+    workId: string,
+    action: BrainWorkUserActionKind,
+    options: { text?: string; snoozeUntil?: string } = {},
+  ): Promise<{ status?: string; admission?: string }> {
+    const requestId = `work_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off("brain_work_action", handleResult);
+        this.off("error", handleError);
+      };
+      const handleResult = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
+        cleanup();
+        resolve({ status: payload.status, admission: payload.admission || undefined });
+      };
+      const handleError = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
+        cleanup();
+        reject(new Error(payload.message || "Brain could not take that action."));
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Timed out. The action may still have reached Brain."));
+      }, 30000);
+      this.on("brain_work_action", handleResult);
+      this.on("error", handleError);
+      this.sendRequestNow(
+        serverId,
+        {
+          type: "brain_work_action",
+          request_id: requestId,
+          id: workId,
+          action,
+          ...(options.text ? { text: options.text } : {}),
+          ...(options.snoozeUntil ? { snooze_until: options.snoozeUntil } : {}),
+        },
+        cleanup,
+        reject,
+      );
     });
   }
 

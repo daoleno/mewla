@@ -31,6 +31,8 @@ export interface BrainCatPresence {
   count?: number;
   /** Work that needs you, newest-first by the daemon's order; the cat perches on one of its slips. */
   workIds?: readonly string[];
+  /** The cat is elsewhere on screen (the Work column's perch): no tail row. */
+  away?: boolean;
 }
 
 /**
@@ -43,16 +45,18 @@ export function resolveBrainCatPresence({
   connection,
   hydrated,
   currentWork,
+  now = Date.now(),
 }: {
   hasServer: boolean;
   connection: ConnectionState;
   hydrated: boolean;
   currentWork?: readonly BrainCurrentWork[];
+  now?: number;
 }): BrainCatPresence {
   if (!hasServer) return { state: "homeless" };
   if (connection === "offline") return { state: "offline" };
   if (connection !== "connected" || !hydrated) return { state: "waking" };
-  const { slips, counts } = brainWorkSurface(currentWork, undefined);
+  const { slips, counts } = brainWorkSurface(currentWork, undefined, now);
   if (counts.needs) {
     return {
       state: "attention",
@@ -80,7 +84,61 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
       return count > 1 ? `Brought ${count} things back` : "Brought something back";
     case "delegating":
       return count > 1 ? `Waiting on ${count} Workers` : "Waiting on a Worker";
+    case "idle":
+      return "All quiet";
     default:
       return null;
   }
+}
+
+/** What tapping the cat does: it answers for Brain, in its current state. */
+export type BrainCatTap =
+  | { kind: "say"; text: string }
+  | { kind: "open-work"; workId: string }
+  | { kind: "show-turn"; text: string }
+  | { kind: "retry" }
+  | { kind: "pair" };
+
+/**
+ * The cat's answer to a tap. Offline retries the connection; needs-you
+ * jumps to the first slip that needs you; a running turn says what Brain is
+ * doing; otherwise a one-line status of Brain's Work.
+ */
+export function brainCatTap({
+  presence,
+  turnRunning,
+  turnLabel,
+  counts,
+}: {
+  presence: BrainCatPresence;
+  turnRunning?: boolean;
+  /** The Working row's text, e.g. "Running a command". */
+  turnLabel?: string;
+  counts: { needs: number; running: number; back: number; waiting: number };
+}): BrainCatTap {
+  if (presence.state === "homeless") return { kind: "pair" };
+  if (presence.state === "offline") return { kind: "retry" };
+  if (presence.state === "waking") return { kind: "say", text: "Still waking up. Connecting to your computer…" };
+  if (turnRunning || presence.state === "working") {
+    return {
+      kind: "show-turn",
+      text: turnLabel && turnLabel !== "Working" ? `Right now: ${turnLabel}` : "Thinking it through…",
+    };
+  }
+  const first = presence.workIds?.[0];
+  if (presence.state === "attention" && first) return { kind: "open-work", workId: first };
+  return { kind: "say", text: brainCatStatusLine(counts) };
+}
+
+/** "All quiet. 2 running, nothing needs you." */
+export function brainCatStatusLine(counts: { needs: number; running: number; back: number; waiting: number }): string {
+  const parts: string[] = [];
+  if (counts.running) parts.push(`${counts.running} running`);
+  if (counts.back) parts.push(`${counts.back} back`);
+  if (counts.waiting) parts.push(`${counts.waiting} waiting`);
+  const needs = counts.needs
+    ? `${counts.needs} ${counts.needs === 1 ? "needs" : "need"} you`
+    : "nothing needs you";
+  if (!parts.length && !counts.needs) return "All quiet. Nothing out, nothing needs you.";
+  return `${counts.needs ? "" : "All quiet. "}${[...parts, needs].join(", ")}.`.replace(/^(\w)/, (c) => c.toUpperCase());
 }

@@ -44,6 +44,20 @@ export type BrainWorkSlip = {
   /** The live Session that owns the Work, when it is still open. */
   sessionId?: string;
   unread: boolean;
+  /** What Brain asks, with one-tap answers. */
+  question?: string;
+  choices?: readonly string[];
+  /** A running Worker's reported phase ("verifying"). */
+  phase?: string;
+  /** Waiting on a decision since then (immutable while it waits). */
+  attentionSince?: string;
+  waitedMs?: number;
+  /** Nothing moves without a decision: outcome unknown, or a result left days without one. */
+  stuck?: "outcome_unknown" | "no_decision";
+  /** You answered; Brain has it and nothing new has come back yet. */
+  replied?: { text?: string; at: string; uncertain: boolean };
+  /** The Work has a terminal status but the result is unread. */
+  closed?: boolean;
 };
 
 export type BrainWorkSurface = {
@@ -59,9 +73,24 @@ const RESOURCE_PRESSURE_WORK_PREFIX = "resource-pressure:";
  * that have not run yet (Calendar owns those) and Brain's resource telemetry
  * are left out.
  */
+/**
+ * A result stays under Back this long. After that, if Brain still has not
+ * decided, it is no longer news but a decision nobody took, and it moves to
+ * Needs you with Accept / Ask Brain on it.
+ */
+export const BRAIN_WORK_STUCK_AFTER_MS = 24 * 60 * 60 * 1000;
+
+const OUTCOME_UNKNOWN_REASONS = new Set([
+  "turn_lost",
+  "lease_expired",
+  "submission_ambiguous",
+  "submission_failed",
+]);
+
 export function brainWorkSurface(
   currentWork: readonly BrainCurrentWork[] | undefined,
   workers: readonly BrainWorkerRef[] | undefined,
+  now: number = Date.now(),
 ): BrainWorkSurface {
   const workerById = new Map((workers ?? []).map((worker) => [worker.id, worker] as const));
   const counts: Record<BrainWorkGroup, number> = {
@@ -74,23 +103,78 @@ export function brainWorkSurface(
   for (const work of currentWork ?? []) {
     if (!isSurfacedWork(work)) continue;
     const lifecycle = brainCurrentWorkLifecycle(work);
-    const status = brainWorkLifecycleStatus(lifecycle.lifecycle);
-    const group = brainWorkGroup(work, status);
+    let status = brainWorkLifecycleStatus(lifecycle.lifecycle);
+    let statusLabel: string = lifecycle.label;
+    let group = brainWorkGroup(work, status);
     const worker = work.attempt_session_id
       ? workerById.get(work.attempt_session_id)
       : undefined;
+    const since = work.attention_since ? Date.parse(work.attention_since) : NaN;
+    const waited = Number.isFinite(since) ? now - since : 0;
+    const terminal = work.status === "done" || work.status === "cancelled";
+    const replied =
+      work.user_action?.kind === "reply" && !work.question && !terminal
+        ? {
+            text: work.user_action.text,
+            at: work.user_action.at,
+            uncertain: work.user_action.admission === "uncertain",
+          }
+        : undefined;
+    let stuck: BrainWorkSlip["stuck"];
+    if (!terminal && !work.attempt_session_id && work.attention_reason === "turn_failed") {
+      // The Worker failed and nobody has retried: a Failed slip, not "Back".
+      status = "failed";
+      statusLabel = "Failed";
+    }
+    if (!terminal && !work.attempt_session_id && OUTCOME_UNKNOWN_REASONS.has(work.attention_reason ?? "")) {
+      stuck = "outcome_unknown";
+    } else if (!terminal && !replied && !work.question && group === "back" && status !== "failed" && waited > BRAIN_WORK_STUCK_AFTER_MS) {
+      stuck = "no_decision";
+    }
+    if (work.question) {
+      group = "needs";
+      status = "needs";
+      statusLabel = "Needs you";
+    } else if (stuck) {
+      group = "needs";
+      status = "warning";
+      statusLabel = stuck === "outcome_unknown" ? "Outcome unknown" : "No decision";
+    } else if (replied) {
+      group = "running";
+      status = "running";
+      statusLabel = "With Brain";
+    }
+    const snoozed = work.snoozed_until ? Date.parse(work.snoozed_until) > now : false;
+    if (snoozed && group === "needs") {
+      group = "waiting";
+      statusLabel = "Snoozed";
+    }
     counts[group] += 1;
     slips.push({
       workId: work.work_id,
       group,
       status,
-      statusLabel: lifecycle.label,
+      statusLabel,
       title: brainWorkTitle(work.title),
       who: worker ? workerWho(worker) : undefined,
-      summary: slipSummary(work, group, worker),
+      summary: work.question
+        ? work.question
+        : stuck
+          ? stuckSummary(stuck, waited)
+          : replied
+            ? `You said “${replied.text ?? ""}”${replied.uncertain ? ". It may not have reached Brain." : ""}`
+            : slipSummary(work, group, worker),
       updatedAt: work.updated_at,
       sessionId: worker?.id,
       unread: work.unread_result,
+      question: work.question,
+      choices: work.choices,
+      phase: group === "running" && worker?.phase && worker.phase !== "working" ? worker.phase : undefined,
+      attentionSince: work.attention_since,
+      waitedMs: waited > 0 ? waited : undefined,
+      stuck,
+      replied,
+      closed: terminal || undefined,
     });
   }
   const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);
@@ -143,6 +227,21 @@ export function workerWho(worker: BrainWorkerRef): string | undefined {
 function projectName(cwd: string | undefined): string {
   const parts = (cwd ?? "").split("/").filter(Boolean);
   return parts[parts.length - 1] ?? "";
+}
+
+/** "3 days" from a span in milliseconds; whole hours below a day. */
+export function brainWorkAge(ms: number): string {
+  const hours = Math.max(1, Math.round(ms / 3_600_000));
+  if (hours < 24) return hours === 1 ? "an hour" : `${hours} hours`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "a day" : `${days} days`;
+}
+
+function stuckSummary(stuck: NonNullable<BrainWorkSlip["stuck"]>, waited: number): string {
+  if (stuck === "outcome_unknown") {
+    return "The Worker's Session ended without a result. Ask Brain to check, or close it.";
+  }
+  return `Back for ${brainWorkAge(waited)} with no decision. Close it, or ask Brain.`;
 }
 
 function slipSummary(

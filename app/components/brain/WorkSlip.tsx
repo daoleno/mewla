@@ -2,7 +2,7 @@ import React, { useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
-import { SealCat } from "../mewla/SealCat";
+import { TappableCat } from "../mewla/TappableCat";
 import { StatusMark } from "../ui/StatusMark";
 import { workStatusInk, workStatusTextInk, type WorkStatus } from "../ui/workStatus";
 import {
@@ -36,6 +36,8 @@ export function WorkSlip({
   onPress,
   accessibilityLabel,
   children,
+  actions,
+  onCatPress,
 }: {
   chrome: TerminalThemeChrome;
   status: WorkStatus;
@@ -50,6 +52,10 @@ export function WorkSlip({
   onPress?: () => void;
   accessibilityLabel: string;
   children?: ReactNode;
+  /** Inline actions under the summary: the slip's next step, one tap away. */
+  actions?: readonly WorkSlipAction[];
+  /** Tapping the perched cat (it answers for Brain). */
+  onCatPress?: () => void;
 }) {
   const styles = useMemo(() => createWorkSlipStyles(chrome), [chrome]);
   const needs = status === "needs";
@@ -91,13 +97,69 @@ export function WorkSlip({
         </Text>
       ) : null}
       {children}
+      {actions?.length ? <WorkSlipActions actions={actions} chrome={chrome} /> : null}
     </Pressable>
   );
   if (!perched) return <View style={styles.wrap}>{slip}</View>;
   return (
     <View style={[styles.wrap, styles.wrapPerched]}>
-      <SealCat state="attention" size={PERCH_CAT} animate={animate} style={styles.perch} />
       {slip}
+      <TappableCat
+        state="attention"
+        size={PERCH_CAT}
+        animate={animate}
+        style={styles.perch}
+        onPress={onCatPress}
+        accessibilityLabel="Brain is waiting on this Work"
+      />
+    </View>
+  );
+}
+
+export type WorkSlipAction = {
+  key: string;
+  label: string;
+  primary?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  onPress(): void;
+};
+
+/** The mock's slip buttons: one ink primary, the rest outlined, compact. */
+export function WorkSlipActions({
+  actions,
+  chrome,
+}: {
+  actions: readonly WorkSlipAction[];
+  chrome: TerminalThemeChrome;
+}) {
+  const styles = useMemo(() => createWorkSlipStyles(chrome), [chrome]);
+  return (
+    <View style={styles.actions}>
+      {actions.map((action) => (
+        <Pressable
+          key={action.key}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          accessibilityState={{ busy: action.busy, disabled: action.disabled || action.busy }}
+          disabled={action.disabled || action.busy}
+          onPress={action.onPress}
+          hitSlop={4}
+          style={({ pressed }) => [
+            styles.action,
+            action.primary ? styles.actionPrimary : null,
+            action.disabled ? styles.actionDisabled : null,
+            pressed ? styles.slipPressed : null,
+          ]}
+        >
+          <Text
+            numberOfLines={1}
+            style={[styles.actionLabel, action.primary ? styles.actionLabelPrimary : null]}
+          >
+            {action.busy ? "…" : action.label}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -236,6 +298,37 @@ function createWorkSlipStyles(chrome: TerminalThemeChrome) {
       color: chrome.textMuted,
       marginTop: 3,
       lineHeight: 20,
+    },
+    actions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 12,
+    },
+    action: {
+      minHeight: 32,
+      paddingHorizontal: 13,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: chrome.border,
+      backgroundColor: chrome.surface,
+      justifyContent: "center",
+      maxWidth: "100%",
+    },
+    actionPrimary: {
+      borderColor: chrome.text,
+      backgroundColor: chrome.text,
+    },
+    actionDisabled: {
+      opacity: 0.5,
+    },
+    actionLabel: {
+      ...TypeScale.compact,
+      fontFamily: Typography.uiFontMedium,
+      color: chrome.text,
+    },
+    actionLabelPrimary: {
+      color: chrome.surface,
     },
   });
 }

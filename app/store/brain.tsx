@@ -63,6 +63,27 @@ export type BrainCurrentWork = {
   /** One line about the newest outcome; daemons before 0.2.1 omit it. */
   summary?: string;
   updated_at?: string;
+  /** What Brain asks you about this Work, with one-tap answers. */
+  question?: string;
+  choices?: string[];
+  /** When the Work started waiting on a decision; never moves while it waits. */
+  attention_since?: string;
+  /** The open review's reason, e.g. "turn_lost" for an unknown outcome. */
+  attention_reason?: string;
+  /** Hidden from Needs you until then; the app compares the time. */
+  snoozed_until?: string;
+  /** Your newest decision on it, until a newer result comes back. */
+  user_action?: BrainWorkUserAction;
+};
+
+export type BrainWorkUserActionKind = "reply" | "close" | "dismiss" | "stop" | "snooze";
+
+export type BrainWorkUserAction = {
+  kind: "reply" | "close" | "snooze";
+  text?: string;
+  at: string;
+  /** For a reply: Brain's admission ("accepted", "uncertain"). */
+  admission?: string;
 };
 
 /** Brain's declared current objective and how much of its Work is back. */
@@ -83,6 +104,8 @@ export type BrainWorkerRef = {
   name: string;
   status: string;
   summary?: string;
+  /** The Worker's reported phase: reading, planning, working, verifying… */
+  phase?: string;
   cwd?: string;
   command?: string;
   started_at?: number;
@@ -260,9 +283,31 @@ function normalizeCurrentWork(raw: unknown[]): BrainCurrentWork[] {
         typeof item.updated_at === "string" && item.updated_at.trim()
           ? item.updated_at.trim()
           : undefined,
+      question: optionalText(item.question),
+      choices: Array.isArray(item.choices)
+        ? item.choices.map(optionalText).filter((choice): choice is string => Boolean(choice)).slice(0, 4)
+        : undefined,
+      attention_since: optionalText(item.attention_since),
+      attention_reason: optionalText(item.attention_reason),
+      snoozed_until: optionalText(item.snoozed_until),
+      user_action: normalizeWorkUserAction(item.user_action),
     });
   });
   return Array.from(byId.values());
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeWorkUserAction(raw: unknown): BrainWorkUserAction | undefined {
+  const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  const at = optionalText(value?.at);
+  const kind = value?.kind;
+  if (!at || (kind !== "reply" && kind !== "close" && kind !== "snooze")) {
+    return undefined;
+  }
+  return { kind, at, text: optionalText(value?.text), admission: optionalText(value?.admission) };
 }
 
 function normalizeObjective(raw: unknown): BrainObjective | undefined {
@@ -481,6 +526,7 @@ function normalizeWorkerRef(raw: any): BrainWorkerRef {
     name: typeof raw?.name === "string" ? raw.name : "",
     status: typeof raw?.status === "string" ? raw.status : "unknown",
     summary: typeof raw?.summary === "string" ? raw.summary : undefined,
+    phase: typeof raw?.phase === "string" && raw.phase ? raw.phase : undefined,
     cwd: typeof raw?.cwd === "string" ? raw.cwd : undefined,
     command: typeof raw?.command === "string" ? raw.command : undefined,
     started_at: Number.isFinite(parsedStartedAt) ? parsedStartedAt : undefined,

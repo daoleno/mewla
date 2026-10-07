@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import {
   useIsFocused,
@@ -62,7 +62,17 @@ import {
   BrainCompanionContext,
   type BrainCompanion,
 } from "../../components/mewla/BrainCompanion";
-import { resolveBrainCatPresence } from "../../components/mewla/brainCatState";
+import { brainCatTap, resolveBrainCatPresence } from "../../components/mewla/brainCatState";
+import {
+  brainWorkActions,
+  brainWorkAskDraft,
+  brainWorkSnoozeUntil,
+  brainWorkUserAction,
+  type BrainWorkAction,
+} from "../../components/brain/brainWorkActions";
+import type { WorkSlipAction } from "../../components/brain/WorkSlip";
+import { confirmDestructive } from "../../components/ui/confirmDestructive";
+import { useToast } from "../../components/ui/Toast";
 import { BrainStatusState } from "../../components/mewla/BrainStatusState";
 
 const BRAIN_EMPTY_TITLE = "Ready when you are";
@@ -176,6 +186,21 @@ export default function BrainScreen() {
     }
     return labels;
   }, [activeBrain?.workers]);
+  const toast = useToast();
+  const [workActionBusy, setWorkActionBusy] = useState<string | null>(null);
+  const [replyOpenFor, setReplyOpenFor] = useState<string | null>(null);
+  // "Ask Brain about this": the composer's draft setter, seeded once.
+  const composerDraftRef = useRef<((value: string) => void) | null>(null);
+  const [pendingAskDraft, setPendingAskDraft] = useState<string | null>(null);
+  const retryConnection = useCallback(() => {
+    if (!activeServer || !isCurrentServer(activeServer.id)) return;
+    void setServerAutoConnect(activeServer.id, true).then(() => {
+      if (isCurrentServer(activeServer.id)) wsClient.connectServer(activeServer);
+    }).catch((error) => setBrainActionError(String(error)));
+  }, [activeServer, isCurrentServer]);
+  const openPairing = useCallback(() => {
+    router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } });
+  }, [activeServer, router]);
   const brainCompanion = useMemo<BrainCompanion>(() => {
     const presence = resolveBrainCatPresence({
       hasServer: Boolean(activeServer),
@@ -183,26 +208,44 @@ export default function BrainScreen() {
       hydrated: Boolean(activeBrain?.hydrated),
       currentWork: activeBrain?.current_work,
     });
-    const betweenTurns =
-      presence.state === "attention" ||
-      presence.state === "delivered" ||
-      presence.state === "delegating";
     return {
-      // The Work column already shows what is waiting, with the cat on it.
-      presence: workColumn && betweenTurns ? { state: "idle" } : presence,
+      // The Work column perches the cat on its first Needs-you slip; the
+      // conversation then has no tail row, so there is one cat on screen.
+      presence: workColumn && presence.state === "attention" ? { ...presence, away: true } : presence,
       animate: screenFocused,
       sessionLabels,
       onOpenWork: workColumn ? undefined : openWorkList,
+      onCatTap: ({ turnRunning, turnLabel }) => {
+        const answer = brainCatTap({ presence, turnRunning, turnLabel, counts: workSurface.counts });
+        switch (answer.kind) {
+          case "retry":
+            retryConnection();
+            return "Knocking on your computer…";
+          case "pair":
+            openPairing();
+            return null;
+          case "open-work": {
+            const slip = workSurface.slips.find((item) => item.workId === answer.workId);
+            if (slip) setSelectedWorkSlip(slip);
+            return null;
+          }
+          default:
+            return answer.text;
+        }
+      },
     };
   }, [
     activeBrain?.current_work,
     activeBrain?.hydrated,
     activeServer,
     connectionState,
+    openPairing,
     openWorkList,
+    retryConnection,
     screenFocused,
     sessionLabels,
     workColumn,
+    workSurface,
   ]);
   const showBrainLoading = shouldShowBrainLoadingState({
     hydrated: Boolean(activeBrain?.hydrated),
@@ -393,6 +436,7 @@ export default function BrainScreen() {
       draft: string;
       setDraft: (value: string) => void;
     }) => {
+      composerDraftRef.current = setDraft;
       const activeMention = activeExecutorMentionAtEnd(draft);
       if (!activeMention || availableExecutors.length === 0) {
         return null;
@@ -433,17 +477,126 @@ export default function BrainScreen() {
     [activeBrain?.workers],
   );
   const detailEvent = selectedWorkResult?.serverId === activeServer?.id ? selectedWorkResult?.event ?? null : null;
-  const openWorkSlip = useCallback(
-    (slip: BrainWorkSlip) => {
+  const openWorkerSession = useCallback(
+    (sessionId: string) => {
+      if (!activeServer) return;
       setWorkSheetVisible(false);
-      if (slip.sessionId && activeServer) {
-        router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(slip.sessionId, activeServer.id) });
-        return;
-      }
-      setSelectedWorkSlip(slip);
+      setSelectedWorkSlip(null);
+      router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(sessionId, activeServer.id) });
     },
     [activeServer, router],
   );
+  const openWorkSlip = useCallback(
+    (slip: BrainWorkSlip) => {
+      setWorkSheetVisible(false);
+      if (slip.unread && activeServer) {
+        wsClient.markBrainWorkRead(activeServer.id, slip.workId);
+      }
+      // A running Worker opens its Session; everything else opens the Work.
+      if (slip.sessionId && slip.group === "running" && !slip.replied) {
+        openWorkerSession(slip.sessionId);
+        return;
+      }
+      setReplyOpenFor(null);
+      setSelectedWorkSlip(slip);
+    },
+    [activeServer, openWorkerSession],
+  );
+  useEffect(() => {
+    if (pendingAskDraft === null || !composerDraftRef.current) return;
+    composerDraftRef.current(pendingAskDraft);
+    setPendingAskDraft(null);
+  }, [pendingAskDraft]);
+  const sendWorkAction = useCallback(
+    async (slip: BrainWorkSlip, action: BrainWorkAction, text?: string) => {
+      const kind = brainWorkUserAction(action.kind);
+      if (!activeServer || !kind) return;
+      const busyKey = `${slip.workId}:${action.kind}:${action.text ?? ""}`;
+      setWorkActionBusy(busyKey);
+      try {
+        const result = await wsClient.actOnBrainWork(activeServer.id, slip.workId, kind, {
+          text: text ?? action.text,
+          snoozeUntil: kind === "snooze" ? brainWorkSnoozeUntil().toISOString() : undefined,
+        });
+        setSelectedWorkSlip(null);
+        setReplyOpenFor(null);
+        if (kind === "reply") {
+          toast.show(
+            result.admission === "uncertain"
+              ? { title: "Sent, but Brain may not have it", detail: "Check Brain's chat before sending again.", tone: "info" }
+              : { title: "Brain has your answer", tone: "success" },
+          );
+        } else if (kind === "snooze") {
+          toast.show({ title: "Snoozed until tomorrow morning", tone: "info" });
+        } else {
+          toast.show({ title: kind === "close" ? "Closed" : kind === "stop" ? "Stopped" : "Dismissed", tone: "success" });
+        }
+      } catch (error) {
+        toast.show({ title: "That didn't go through", detail: error instanceof Error ? error.message : String(error), tone: "error" });
+      } finally {
+        setWorkActionBusy(null);
+      }
+    },
+    [activeServer, toast],
+  );
+  const runWorkAction = useCallback(
+    (slip: BrainWorkSlip, action: BrainWorkAction) => {
+      switch (action.kind) {
+        case "open":
+          if (slip.sessionId) openWorkerSession(slip.sessionId);
+          return;
+        case "reply":
+          setWorkSheetVisible(false);
+          setReplyOpenFor(slip.workId);
+          setSelectedWorkSlip(slip);
+          return;
+        case "ask":
+          setWorkSheetVisible(false);
+          setSelectedWorkSlip(null);
+          setPendingAskDraft(brainWorkAskDraft(slip));
+          return;
+        case "read":
+          if (activeServer) wsClient.markBrainWorkRead(activeServer.id, slip.workId);
+          setSelectedWorkSlip(null);
+          return;
+      }
+      if (action.confirm) {
+        confirmDestructive({
+          title: action.kind === "stop" ? `Stop “${slip.title}”?` : `${action.label}?`,
+          message: action.confirm,
+          confirmLabel: action.label,
+          onConfirm: () => sendWorkAction(slip, action),
+        });
+        return;
+      }
+      void sendWorkAction(slip, action);
+    },
+    [activeServer, openWorkerSession, sendWorkAction],
+  );
+  const workActionsFor = useCallback(
+    (slip: BrainWorkSlip, placement: "slip" | "sheet"): WorkSlipAction[] => {
+      const all = brainWorkActions(slip);
+      // On the slip: the answers (or the primary step) and nothing destructive.
+      const shown = placement === "sheet"
+        ? all.filter((action) => !(action.kind === "reply" && slip.closed))
+        : slip.question
+          ? all.filter((action) => action.kind === "answer" || action.kind === "reply").slice(0, 3)
+          : all.filter((action) => action.primary).slice(0, 1);
+      return shown.map((action) => ({
+        key: `${action.kind}:${action.text ?? action.label}`,
+        label: action.label,
+        primary: action.primary,
+        busy: workActionBusy === `${slip.workId}:${action.kind}:${action.text ?? ""}`,
+        disabled: Boolean(workActionBusy && workActionBusy.startsWith(`${slip.workId}:`)),
+        onPress: () => runWorkAction(slip, action),
+      }));
+    },
+    [runWorkAction, workActionBusy],
+  );
+  // The open sheet follows the Work as the daemon updates it.
+  const liveSelectedSlip = selectedWorkSlip
+    ? workSurface.slips.find((slip) => slip.workId === selectedWorkSlip.workId) ?? selectedWorkSlip
+    : null;
   const [workHeaderHeight, setWorkHeaderHeight] = useState(0);
   const workHeader = canUseStructuredBrainInterface ? (
     <BrainWorkHeader
@@ -558,12 +711,7 @@ export default function BrainScreen() {
                   connectionState === "connecting"
                 }
                 onSettings={() => router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } })}
-                onRetry={() => {
-                  if (!activeServer || !isCurrentServer(activeServer.id)) return;
-                  void setServerAutoConnect(activeServer.id, true).then(() => {
-                    if (isCurrentServer(activeServer.id)) wsClient.connectServer(activeServer);
-                  }).catch((error) => setBrainActionError(String(error)));
-                }}
+                onRetry={retryConnection}
               />
             ) : (
               <BrainInterfaceUnavailableState
@@ -582,6 +730,11 @@ export default function BrainScreen() {
           topInset={topChromeInset}
           animate={screenFocused}
           onOpenSlip={openWorkSlip}
+          actionsFor={workActionsFor}
+          onCatPress={() => {
+            const first = workSurface.slips.find((slip) => slip.group === "needs");
+            if (first) openWorkSlip(first);
+          }}
         />
       ) : null}
       </View>
@@ -592,12 +745,22 @@ export default function BrainScreen() {
         chrome={chrome}
         onClose={() => setWorkSheetVisible(false)}
         onOpenSlip={openWorkSlip}
+        actionsFor={workActionsFor}
       />
       <BrainWorkDetailSheet
-        slip={selectedWorkSlip}
+        slip={liveSelectedSlip}
         waitFor={activeBrain?.current_work?.find((work) => work.work_id === selectedWorkSlip?.workId)?.wait_for}
         chrome={chrome}
-        onClose={() => setSelectedWorkSlip(null)}
+        actions={liveSelectedSlip ? workActionsFor(liveSelectedSlip, "sheet") : undefined}
+        replyOpen={replyOpenFor === liveSelectedSlip?.workId}
+        replyBusy={Boolean(liveSelectedSlip && workActionBusy?.startsWith(`${liveSelectedSlip.workId}:reply`))}
+        onReply={(text) => {
+          if (liveSelectedSlip) void sendWorkAction(liveSelectedSlip, { kind: "reply", label: "Reply" }, text);
+        }}
+        onClose={() => {
+          setSelectedWorkSlip(null);
+          setReplyOpenFor(null);
+        }}
       />
 
       <BrainExecutorSheet

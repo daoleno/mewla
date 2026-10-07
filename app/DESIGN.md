@@ -126,6 +126,42 @@ Brain has one Work surface, built from the daemon's `current_work`
   reads the same in the column and in the conversation. A `user_input` wake
   (Brain parked the Work on you) is Needs you.
 
+### Moving Work forward
+
+Every slip carries its next step (`components/brain/brainWorkActions.ts`,
+one table for the slip and its sheet; pure and tested). On the slip:
+Brain's choices as compact buttons (ink primary, outlined rest), or the one
+primary action. In the detail sheet: every action, plus a reply box with
+the vermilion Send. Destructive actions confirm first.
+
+| Slip | Actions |
+| --- | --- |
+| Needs you, with Brain's question | each choice · Something else… · Snooze · Not needed anymore |
+| Needs you | Reply · Snooze · Not needed anymore |
+| Outcome unknown (Session ended without a result) | Ask Brain to check · Close it · Not needed anymore |
+| Back, or No decision (back over a day) | Accept · Ask Brain about this · Not needed anymore |
+| Failed | Retry with Brain · Dismiss |
+| Running | Open Worker · Ask Brain about this · Stop (confirm) |
+| With Brain (you replied) | the Worker, or Ask Brain about this |
+| Closed, unread | Mark reviewed · Ask Brain about this |
+
+**Decision: the user may close Work directly.** Accept closes the Work as
+done and Not needed anymore closes it as cancelled, both through the daemon's
+audited close with the user as actor. Brain treats a user close as final. The
+alternative, Accept as a message for Brain to record, would leave the slip open
+until Brain's next turn, which is the dead end this replaces. "Ask Brain"
+never sends by itself: it puts `Re: <title> (work <id>)` and the slip's line in
+the composer. A reply is a real Brain message bound to the Work. The toast
+says "Brain has your answer", or that it may not have arrived when the
+admission is uncertain.
+
+**Stuck and stale.** Outcome unknown and No decision are the Warning state
+(triangle) under Needs you; a snoozed slip waits under Waiting with
+"Snoozed" until tomorrow 09:00. A running slip leads its line with the
+Worker's reported phase ("Verifying · Running go test"). These are app
+derivations from `attention_since`, `attention_reason` and `snoozed_until`;
+the daemon writes nothing on a timer.
+
 In the conversation, every Work result is a full slip (`WorkSlip`):
 executor · project · time, the state, the title and one line. A Work's slip
 moves to when its newest result came back. A turn's tool rows fold into one
@@ -191,9 +227,12 @@ chats keep every row). The composer says "Tell Brain…".
 - **Easing.** The landing's `cubic-bezier(.2,.8,.2,1)` for UI transitions. The
   springs in `constants/motion.ts` still apply to presses and sheets.
 - **The cat.** The cat is driven on the UI thread (Reanimated). Each standing
-  state is two to eight precomputed SVG frames, flipped by opacity, so there
+  state is one to six precomputed SVG frames, flipped by opacity, so there
   are no per-frame React renders. The sleeping seal breathes (a 3.6 s scale)
-  and lets out three z's.
+  and lets out three z's. Kneading is six frames at 210 ms (the `sit` pose,
+  front paws treading ±0.2 rad in turn, a 14° tail swish). The waking
+  ear is one extra layer: two flicks of up to 18° in the first 0.6 s of
+  every 3.2 s.
 - **Stopping.** All cat motion stops when the screen loses focus or the app
   is backgrounded. Under reduced motion it stops completely: the seal is
   still and the z's are fixed, as on the landing.
@@ -280,18 +319,24 @@ look, with the landing's bolder carving at small sizes.
 
 ### State map
 
-| Product state | Cat | Where |
-| --- | --- | --- |
-| Brain idle, empty chat | Curled in the seal, breathing, three z's | Brain empty state |
-| Connecting or loading | In the seal, one eye open | Brain empty state (busy), status screen |
-| Brain's turn running | Out of the seal, walking in place | Working row, newest edge of the Brain timeline |
-| Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column |
-| Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" (phone; the Work column on wide screens) |
-| Unread result | Loafing with a parcel | Tail row, "Brought 2 things back" (phone; the Work column on wide screens) |
-| Offline | Asleep in a greyed seal | Brain status screen |
-| No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Onboarding "Give Brain a home" |
-| Paired | Asleep in the seal (moved in) | Onboarding, connected |
-| Failure, pull to refresh, haptics | — | later |
+| Product state | Cat | Where | Tap |
+| --- | --- | --- | --- |
+| Brain idle | Curled in the seal, breathing, three z's | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
+| App start, connecting, loading history | In the seal, one eye open, the right ear flicks twice every 3.2 s | App start (`CatSplash`), Brain status screen, chat loading, Sessions loading/connecting | "Still waking up…" |
+| Brain's turn running | Out of the seal, sitting up and kneading, tail swishing | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
+| Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
+| Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" | The status line |
+| Unread result | Loafing with a parcel | Tail row, "Brought 2 things back" | The status line |
+| Offline | Asleep in a greyed seal | Brain status screen, Sessions offline | Retries the connection: "Knocking on your computer…" |
+| No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Sessions, Onboarding | Opens pairing |
+| Paired | Asleep in the seal (moved in) | Onboarding, connected; an empty Work sheet | — |
+
+**Tap feedback.** Every tap has a body response (`TappableCat`): a standing
+cat hops 12% of its size and lands on the landing's curve (130 + 220 ms); a
+cat in the seal stirs (a 5% squash). A selection haptic goes with it. The
+answer replaces the row's text for 4.5 s and is announced to screen readers.
+Under reduced motion only the haptic and the words remain. The cat's poses
+still mean only Brain states; a tap never changes the state.
 
 State comes from `resolveBrainCatPresence` (`components/mewla/brainCatState.ts`).
 Placement comes from `mergeBrainPresenceIntoTimeline`

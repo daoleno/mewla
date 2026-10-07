@@ -58,6 +58,7 @@ import {
   clearNativeTerminalCrashBreadcrumb,
   getNativeTerminalCrashBreadcrumb,
 } from "../services/nativeTerminalDiagnostics";
+import { CatSplash } from "../components/mewla/CatSplash";
 import { consumeUnfinishedNativeTerminalBreadcrumb } from "../services/nativeTerminalDiagnosticsObserver";
 import { measureServerLatency } from "../services/serverLatency";
 import {
@@ -651,7 +652,7 @@ const AppNavigator = memo(function AppNavigator({
   const screenOptions = useStackScreenOptions();
 
   if (!bootstrapResolved) {
-    return null;
+    return <CatSplash />;
   }
 
   return (
