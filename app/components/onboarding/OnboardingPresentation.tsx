@@ -3,7 +3,7 @@ import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
-import { ZenLogoMark } from "../ui/ZenLogoMark";
+import { MewlaMark } from "../mewla/MewlaMark";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { SealCat } from "../mewla/SealCat";
 import { Button } from "../ui/Button";
@@ -34,7 +34,7 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.bgPrimary }]} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.brand}>
-          <ZenLogoMark size={44} accessibilityIgnoresInvertColors />
+          <MewlaMark size={44} />
           <Text style={[styles.brandName, { color: colors.textPrimary }]}>Zen</Text>
         </View>
         {paired ? (

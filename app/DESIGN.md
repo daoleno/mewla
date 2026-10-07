@@ -186,8 +186,9 @@ committed file drifts or the config strays from the theme colours.
 | Drawer and About | `MewlaMark`, the same seal in react-native-svg |
 
 The mark is the logo, not Brain: it never moves or changes with state. The
-`zen-*` assets stay until the rename removes them; Onboarding's brand row and
-the composer's `ZenLoopSpinner` still use them.
+drawer, the About row and Onboarding's brand row all show `MewlaMark`. The
+`zen-*` assets stay until the rename removes them; the composer's
+`ZenLoopSpinner` still uses them.
 
 ## Sessions and Worker chat
 
