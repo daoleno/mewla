@@ -114,7 +114,6 @@ export function InterfaceTimelineActivityDetails({
                 key={child.id}
                 child={child}
                 chrome={chrome}
-                theme={theme}
               />
             ))}
           </View>
@@ -169,20 +168,18 @@ function DetailBlock({
 function StepRow({
   child,
   chrome,
-  theme,
 }: {
   child: ZenActivityChild;
   chrome: TerminalThemeChrome;
-  theme: TerminalThemePalette;
 }) {
   const tone = child.tone ?? "neutral";
   const markerColor =
     tone === "failed"
-      ? theme.red
+      ? chrome.danger
       : tone === "running"
-        ? chrome.accent
+        ? chrome.statusRunning
         : tone === "success"
-          ? theme.green
+          ? chrome.statusReady
           : chrome.textSubtle;
 
   return (

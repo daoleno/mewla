@@ -31,7 +31,9 @@ export function InterfaceTimelineActivityOutput({
     return null;
   }
 
-  const lineColor = emphasizeError ? chrome.danger : chrome.textMuted;
+  // A failed call's output is the cause: full ink on the same quiet well,
+  // never a tinted alarm (the row's crossed box already says it failed).
+  const lineColor = emphasizeError ? chrome.text : chrome.textMuted;
   const content = (
     <View style={styles.output}>
       {lines.map((line, index) => (
@@ -53,9 +55,7 @@ export function InterfaceTimelineActivityOutput({
       style={[
         styles.frame,
         {
-          backgroundColor: emphasizeError
-            ? chrome.dangerSoft
-            : chrome.composerInput,
+          backgroundColor: chrome.composerInput,
           borderColor: chrome.border,
         },
       ]}

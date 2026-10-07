@@ -41,7 +41,6 @@ export function ZenActivityEvent({
   const activityPresentation = buildInterfaceTimelineActivityPresentation(
     item,
     chrome,
-    theme,
   );
 
 
@@ -53,6 +52,8 @@ export function ZenActivityEvent({
         icon={item.icon}
         activityKind={item.activityKind}
         detail={item.detail}
+        detailText={activityPresentation.detailText}
+        statusMark={activityPresentation.statusMark}
         canExpand={activityPresentation.canExpand}
         expanded={expanded}
         toneColor={activityPresentation.toneColor}

@@ -1,3 +1,11 @@
+import {
+  ZEN_BRAND_COLORS,
+  ZEN_DARK_NEUTRALS,
+  ZEN_DARK_STATUS,
+  ZEN_LIGHT_NEUTRALS,
+  ZEN_LIGHT_STATUS,
+} from '../theme/primitives';
+
 export interface TerminalThemePalette {
   background: string;
   foreground: string;
@@ -88,54 +96,64 @@ export type TerminalSystemColorScheme =
   | null
   | undefined;
 
+/**
+ * The terminal sits on the app's paper (light) and the landing's warm ink
+ * (dark), with an ink cursor and the Running blue as selection. The 16 ANSI
+ * colours are warm-tuned for TUIs: every normal colour reads at 4.5:1 on its
+ * canvas, every bright one at 3:1, and red is a crimson that stays clear of
+ * the seal vermilion so a deleted line never reads as "Needs you"
+ * (terminalThemes.test.ts). Light "white" is a stone grey, as in most light
+ * terminal themes, so programs that print white stay legible on paper.
+ */
 export const TerminalThemes: Record<TerminalThemeName, TerminalThemePalette> = {
   dark: {
-    background: '#0F0F14',
-    foreground: '#F2F3EF',
-    cursor: '#89A28D',
-    cursorAccent: '#0F0F14',
-    selectionBackground: 'rgba(137, 162, 141, 0.28)',
-    selectionInactiveBackground: 'rgba(137, 162, 141, 0.14)',
-    black: '#1B1F2A',
-    red: '#F87171',
-    green: '#6EE7A8',
-    yellow: '#FBBF5A',
-    blue: '#60A5FA',
-    magenta: '#C084FC',
-    cyan: '#5EEAD4',
-    white: '#D1D5DB',
-    brightBlack: '#6B7280',
-    brightRed: '#FCA5A5',
-    brightGreen: '#A7F3D0',
-    brightYellow: '#FDE68A',
-    brightBlue: '#93C5FD',
-    brightMagenta: '#DDD6FE',
-    brightCyan: '#99F6E4',
-    brightWhite: '#F8FAFC',
+    background: ZEN_BRAND_COLORS.environment,
+    // The landing's terminal ink: a step softer than text for a dense grid.
+    foreground: '#E9E4DB',
+    cursor: ZEN_DARK_NEUTRALS.textPrimary,
+    cursorAccent: ZEN_BRAND_COLORS.environment,
+    selectionBackground: withAlpha(ZEN_DARK_STATUS.running, 0.28),
+    selectionInactiveBackground: withAlpha(ZEN_DARK_STATUS.running, 0.14),
+    black: ZEN_DARK_NEUTRALS.elevated,
+    red: '#F08592',
+    green: ZEN_DARK_STATUS.ready,
+    yellow: ZEN_DARK_STATUS.warning,
+    blue: ZEN_DARK_STATUS.running,
+    magenta: '#D49BE6',
+    cyan: '#6FC6C4',
+    white: '#D6D0C5',
+    brightBlack: ZEN_DARK_NEUTRALS.borderStrong,
+    brightRed: '#F7A8B2',
+    brightGreen: '#9ADDB7',
+    brightYellow: '#F5D08A',
+    brightBlue: '#BCCEFF',
+    brightMagenta: '#E4BDF0',
+    brightCyan: '#97DCDA',
+    brightWhite: ZEN_DARK_NEUTRALS.textPrimary,
   },
   light: {
-    background: '#F7F8F6',
-    foreground: '#171A18',
-    cursor: '#56705C',
-    cursorAccent: '#FFFFFF',
-    selectionBackground: 'rgba(86, 112, 92, 0.18)',
-    selectionInactiveBackground: 'rgba(86, 112, 92, 0.10)',
-    black: '#1F2937',
-    red: '#DC2626',
-    green: '#15803D',
-    yellow: '#B45309',
-    blue: '#2563EB',
-    magenta: '#9333EA',
-    cyan: '#0F766E',
-    white: '#E5E7EB',
-    brightBlack: '#6B7280',
-    brightRed: '#EF4444',
-    brightGreen: '#16A34A',
-    brightYellow: '#D97706',
-    brightBlue: '#3B82F6',
-    brightMagenta: '#A855F7',
-    brightCyan: '#0D9488',
-    brightWhite: '#FFFFFF',
+    background: ZEN_LIGHT_NEUTRALS.canvas,
+    foreground: ZEN_LIGHT_NEUTRALS.textPrimary,
+    cursor: ZEN_LIGHT_NEUTRALS.textPrimary,
+    cursorAccent: ZEN_LIGHT_NEUTRALS.canvas,
+    selectionBackground: withAlpha(ZEN_LIGHT_STATUS.running, 0.18),
+    selectionInactiveBackground: withAlpha(ZEN_LIGHT_STATUS.running, 0.1),
+    black: '#2A2622',
+    red: '#A01F3A',
+    green: '#2E7550',
+    yellow: '#8F5D10',
+    blue: ZEN_LIGHT_STATUS.running,
+    magenta: '#8A3D9E',
+    cyan: '#1E6B73',
+    white: '#6F685E',
+    brightBlack: '#7A7368',
+    brightRed: '#C23A6A',
+    brightGreen: '#3B8A60',
+    brightYellow: '#A86F18',
+    brightBlue: '#4A6FD6',
+    brightMagenta: '#A052B4',
+    brightCyan: '#2A8189',
+    brightWhite: '#8F887C',
   },
 };
 

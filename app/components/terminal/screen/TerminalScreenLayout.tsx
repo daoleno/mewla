@@ -8,6 +8,7 @@ import { TerminalViewport } from "../TerminalViewport";
 import type { TerminalViewportProps } from "../TerminalViewport";
 import type { TerminalThemeChrome } from "../../../constants/terminalThemes";
 import { TerminalScreenOverlays } from "./TerminalScreenOverlays";
+import { CHAT_READING_WIDTH } from "../ChatCanvas";
 import type { TerminalScreenOverlaysProps } from "./TerminalScreenOverlays";
 
 interface TerminalScreenLayoutProps {
@@ -32,7 +33,9 @@ export function TerminalScreenLayout({
       edges={["top"]}
     >
       <StatusBar style={statusBarStyle} />
-      <View style={styles.stage}>
+      {/* The chat keeps Brain's reading width; the terminal grid stays full
+          width. One wrapper either way, so switching never remounts it. */}
+      <View style={[styles.stage, floatingChatChrome && styles.readingColumn]}>
         {floatingChatChrome ? (
           <View pointerEvents="box-none" style={styles.headerOverlay}>
             <TerminalTopBar {...topBarProps} />
@@ -56,6 +59,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     position: "relative",
+  },
+  readingColumn: {
+    width: "100%",
+    maxWidth: CHAT_READING_WIDTH,
+    alignSelf: "center",
   },
   headerOverlay: {
     position: "absolute",

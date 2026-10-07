@@ -111,20 +111,20 @@ export function WorkerSessionRow({
         disabled: rowDisabled,
       }}
     >
+      {inSelectionMode ? (
+        <View
+          style={styles.selectionSlot}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          <Ionicons
+            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+            size={24}
+            color={selected ? colors.accent : colors.borderStrong}
+          />
+        </View>
+      ) : null}
       <View style={styles.iconSlot}>
-        {inSelectionMode ? (
-          <View
-            style={styles.selectionBadge}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <Ionicons
-              name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-              size={22}
-              color={selected ? colors.accent : colors.textTertiary}
-            />
-          </View>
-        ) : null}
         <AgentKindIcon kind={kind} flavor={terminalFlavor} size={36} />
         {brainDelegated ? (
           <View
@@ -206,19 +206,14 @@ function createStyles(colors: AppColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    selectionBadge: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
+    // Selection takes its own leading column so the check never covers the
+    // agent's mark.
+    selectionSlot: {
       width: 24,
       height: 24,
-      borderRadius: 12,
+      marginRight: -2,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.bgSurface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderSubtle,
-      zIndex: 2,
     },
     brainOriginMarker: {
       position: 'absolute',

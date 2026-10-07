@@ -75,7 +75,6 @@ describe("Codex edit activity summaries", () => {
           border: "#333",
           appBackground: "#111",
         } as any,
-        { red: "#f00", yellow: "#ff0", green: "#0f0" } as any,
       ).canExpand,
     ).toBe(true);
   });

@@ -19,6 +19,8 @@ import {
 } from "./activityHeaderTextMetrics";
 import type { TimelineActivityIconName } from "./InterfaceTimelineActivityTypes";
 import type { ZenActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
+import { StatusMark } from "../ui/StatusMark";
+import { workStatusInk, type WorkStatus } from "../ui/workStatus";
 import { InterfaceTimelineActivityExpandIcon } from "./InterfaceTimelineActivityExpandIcon";
 import { InterfaceTimelineActivityToneIcon } from "./InterfaceTimelineActivityToneIcon";
 import {
@@ -32,6 +34,9 @@ interface InterfaceTimelineActivityHeaderProps {
   icon: TimelineActivityIconName;
   activityKind?: ZenActivityTimelineItem["activityKind"];
   detail?: string;
+  /** Detail shown after the mark; `detail` stays the accessible text. */
+  detailText?: string;
+  statusMark?: WorkStatus | null;
   canExpand: boolean;
   expanded: boolean;
   toneColor: string;
@@ -60,6 +65,8 @@ export function InterfaceTimelineActivityHeader({
   icon,
   activityKind,
   detail,
+  detailText,
+  statusMark,
   canExpand,
   expanded,
   toneColor,
@@ -193,10 +200,10 @@ export function InterfaceTimelineActivityHeader({
       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
     >
       <InterfaceTimelineActivityToneIcon
-        tone={tone}
         icon={icon}
         activityKind={activityKind}
-        color={toneColor}
+        // A failure already shows its crossed box and oxblood title.
+        color={tone === "failed" ? chrome.textSubtle : toneColor}
       />
       <View style={styles.copy} pointerEvents="none">
         <Text
@@ -209,14 +216,33 @@ export function InterfaceTimelineActivityHeader({
         >
           {title}
         </Text>
-        {detail ? (
-          <Text
-            style={[styles.detail, { color: chrome.textSubtle }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {detail}
-          </Text>
+        {statusMark || detailText ? (
+          <View style={styles.detailGroup}>
+            {statusMark ? (
+              <StatusMark
+                status={statusMark}
+                color={workStatusInk(statusMark, {
+                  statusReady: chrome.statusReady,
+                  statusRunning: chrome.statusRunning,
+                  seal: chrome.seal,
+                  sealText: chrome.sealText,
+                  statusWarning: chrome.statusWarning,
+                  statusFailed: chrome.danger,
+                  statusBlocked: chrome.statusBlocked,
+                })}
+                knockout={chrome.appBackground}
+              />
+            ) : null}
+            {detailText ? (
+              <Text
+                style={[styles.detail, { color: chrome.textSubtle }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {detailText}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </View>
       {canExpand ? (
@@ -262,12 +288,20 @@ const styles = StyleSheet.create({
     fontFamily: ACTIVITY_HEADER_TITLE_FONT,
     fontWeight: "500",
   },
-  detail: {
-    ...activityHeaderSharedTextStyle,
+  // The state glyph, then what is left of the detail (cause, totals).
+  detailGroup: {
     maxWidth: "46%",
     flexShrink: 0,
     minWidth: 0,
     marginLeft: ACTIVITY_HEADER_DETAIL_GAP,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  detail: {
+    ...activityHeaderSharedTextStyle,
+    flexShrink: 1,
+    minWidth: 0,
     fontFamily: ACTIVITY_HEADER_DETAIL_FONT,
     fontWeight: "400",
   },

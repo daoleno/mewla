@@ -3,15 +3,10 @@ import {
   Alert,
   Linking,
   ScrollView,
-  type ListRenderItem,
-  SectionList,
   StyleSheet,
-  Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import {
   SafeAreaView,
@@ -21,24 +16,19 @@ import { Worker, useWorkers } from "../../store/workers";
 import { useCurrentServer } from "../../store/currentServer";
 import { selectCurrentServerItems } from "../../services/currentServerSelection";
 import { useWork, type WorkItem } from "../../store/work";
-import {
-  ContinuousCorners,
-  Radii,
-  TypeScale,
-  UiTextMetrics,
-  useAppColors,
-  useAppTheme,
-  shadow,
-} from "../../constants/tokens";
+import { useAppTheme } from "../../constants/tokens";
 import type { ResolvedZenTheme } from "../../theme";
-import { surfacesFromTheme } from "../../constants/themedSurfaces";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
 import { resolvePrimaryAppBarGeometry } from "../../components/navigation/PrimaryDrawerShell";
-import { AnimatedPressable } from "../../components/ui/AnimatedPressable";
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
 import { SessionsOverview } from "../../components/workers/SessionsOverview";
 import { sessionEmptyState } from "../../services/sessionEmptyState";
-import { WorkerListRowContainer } from "../../components/workers/WorkerListRowContainer";
+import {
+  NewSessionButton,
+  SESSIONS_COLUMN_MAX_WIDTH,
+  SessionsListView,
+  type SessionsListRowState,
+} from "../../components/workers/SessionsListView";
 import { WorkerSessionSelectionBar } from "../../components/workers/WorkerSessionSelectionBar";
 import { NewTerminalSheet } from "../../components/terminal/NewTerminalSheet";
 import { SessionServicesSheet } from "../../components/SessionServicesSheet";
@@ -82,16 +72,11 @@ import {
   sessionTerminationSummaryMessage,
   type SessionTerminationSummary,
 } from "../../services/sessionBulkTerminate";
-import {
-  groupWorkersByDirectory,
-  type WorkerDirectorySection,
-} from "../../services/workerDirectory";
+import { groupWorkersByDirectory } from "../../services/workerDirectory";
 import {
   serviceProjectLabel,
   type DiscoveredSessionService,
 } from "../../services/sessionServicesPresentation";
-
-const workerKeyExtractor = (agent: Worker) => agent.key;
 
 export default function InboxScreen() {
   const { state } = useWorkers();
@@ -106,8 +91,6 @@ export default function InboxScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
-  const { width: viewportWidth } = useWindowDimensions();
-  const colors = useAppColors();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -208,7 +191,6 @@ export default function InboxScreen() {
       sortedWorkers.length === 0 &&
       hasConfiguredServers &&
       waitingForInitialWorkerSnapshot);
-  const useSectionHeaders = listSections.length > 1;
   const primaryIssue = currentServerId ? state.serverConnectionIssues[currentServerId] ?? null : null;
 
   const openWorker = useCallback(
@@ -660,87 +642,16 @@ export default function InboxScreen() {
     }
   };
 
-  const renderListWorker = useCallback<ListRenderItem<Worker>>(
-    ({ item, index, section }: { item: Worker; index: number; section?: WorkerDirectorySection }) => {
-      const first = index === 0;
-      const last = !section || index === section.data.length - 1;
-      return (
-      <View
-        style={[
-          styles.groupedRow,
-          first && styles.groupedRowFirst,
-          last && styles.groupedRowLast,
-        ]}
-      >
-      <WorkerListRowContainer
-        agent={item}
-        alias={workerAliases[item.key]}
-        linkedWorkTitle={workerWorkMap[`${item.serverId}:${item.id}`]?.title}
-        showServerName={showServerNames}
-        selectionMode={selectionMode}
-        selected={selectedKeys.has(item.key)}
-        selectionDisabled={
-          !isSessionTerminable(item, state.serverConnections)
-        }
-        onOpenWorker={openWorker}
-        onEnterSelection={enterSelectionMode}
-        onToggleSelection={toggleSelection}
-        separator={!last}
-        cornerStyle={
-          first && last
-            ? styles.groupedCornersAll
-            : first
-              ? styles.groupedCornersTop
-              : last
-                ? styles.groupedCornersBottom
-                : undefined
-        }
-      />
-      </View>
-      );
-    },
-    [
-      styles,
-      workerAliases,
-      workerWorkMap,
-      enterSelectionMode,
-      openWorker,
-      selectedKeys,
-      selectionMode,
-      showServerNames,
-      state.serverConnections,
-      toggleSelection,
-    ],
+  const listRowState = useCallback(
+    (item: Worker): SessionsListRowState => ({
+      alias: workerAliases[item.key],
+      linkedWorkTitle: workerWorkMap[`${item.serverId}:${item.id}`]?.title,
+      selected: selectedKeys.has(item.key),
+      selectionDisabled: !isSessionTerminable(item, state.serverConnections),
+    }),
+    [selectedKeys, state.serverConnections, workerAliases, workerWorkMap],
   );
 
-  const renderListSectionHeader = useCallback(
-    ({ section }: { section: WorkerDirectorySection }) => {
-      if (!useSectionHeaders) {
-        return null;
-      }
-      return (
-        <View style={styles.sectionHeader}>
-          <Text
-            style={styles.sectionTitle}
-            numberOfLines={1}
-            ellipsizeMode="middle"
-          >
-            {section.title}
-          </Text>
-        </View>
-      );
-    },
-    [styles, useSectionHeaders],
-  );
-
-  const renderRowSeparator = useCallback(
-    () => <View style={styles.rowGap} />,
-    [styles],
-  );
-  const renderSectionSeparator = useCallback(
-    () => <View style={styles.sectionGap} />,
-    [styles],
-  );
   const openHeaderMenu = useCallback(() => {
     setHeaderMenuVisible(true);
   }, []);
@@ -849,13 +760,7 @@ export default function InboxScreen() {
       onRetry={() => void retryCurrentServer()}
     />
   );
-  const listContentContainerStyle = useMemo(
-    () => [
-      styles.promptContent,
-      { paddingBottom: Math.max(insets.bottom, 16) + 76 },
-    ],
-    [insets.bottom, styles],
-  );
+  const bottomInset = Math.max(insets.bottom, 16);
   return (
       <SafeAreaView
         style={[styles.container, { marginTop: topChromeInset }]}
@@ -893,21 +798,16 @@ export default function InboxScreen() {
             </View>
           </ScrollView>
         ) : (
-          <SectionList
+          <SessionsListView
             sections={listSections}
-            ListHeaderComponent={overviewHeader}
-            key="list"
-            keyExtractor={workerKeyExtractor}
-            renderItem={renderListWorker}
-            renderSectionHeader={renderListSectionHeader}
-            stickySectionHeadersEnabled={false}
-            contentContainerStyle={listContentContainerStyle}
-            alwaysBounceVertical
-            removeClippedSubviews={false}
-            windowSize={15}
-            showsVerticalScrollIndicator={false}
-            ItemSeparatorComponent={renderRowSeparator}
-            SectionSeparatorComponent={renderSectionSeparator}
+            header={overviewHeader}
+            rowState={listRowState}
+            selectionMode={selectionMode}
+            showServerName={showServerNames}
+            bottomInset={bottomInset}
+            onOpenWorker={openWorker}
+            onEnterSelection={enterSelectionMode}
+            onToggleSelection={toggleSelection}
           />
         )}
 
@@ -948,35 +848,12 @@ export default function InboxScreen() {
         />
 
         {sortedWorkers.length > 0 && !selectionMode ? (
-          <AnimatedPressable
-            style={[
-              styles.listFab,
-              {
-                bottom: Math.max(insets.bottom, 16) + 8,
-                right: Math.max(16, (viewportWidth - 760) / 2 + 16),
-              },
-              (!anyConnected || !!creatingServerId) && styles.listFabDisabled,
-            ]}
-            preset="press"
-            scale={0.92}
+          <NewSessionButton
+            bottomInset={bottomInset}
+            disabled={!anyConnected}
+            busy={Boolean(creatingServerId)}
             onPress={openCreateTerminal}
-            disabled={!!creatingServerId || !anyConnected}
-            accessibilityLabel="New session"
-            accessibilityRole="button"
-            accessibilityState={{
-              disabled: !!creatingServerId || !anyConnected,
-            }}
-          >
-            <Ionicons
-              name={creatingServerId ? "hourglass-outline" : "add"}
-              size={28}
-              color={
-                !anyConnected || !!creatingServerId
-                  ? colors.disabledText
-                  : colors.textOnAccent
-              }
-            />
-          </AnimatedPressable>
+          />
         ) : null}
 
         <ActionMenu
@@ -1008,7 +885,6 @@ export default function InboxScreen() {
 
 function createStyles(theme: ResolvedZenTheme) {
   const colors = theme.colors;
-  const { sectionLabel } = surfacesFromTheme(theme);
 
   return StyleSheet.create({
     container: {
@@ -1019,83 +895,9 @@ function createStyles(theme: ResolvedZenTheme) {
       flex: 1,
     },
 
-    groupedRow: {
-      marginHorizontal: 16,
-      backgroundColor: colors.bgSurface,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderRightWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.isLight ? "transparent" : theme.materials.stroke,
-    },
-    groupedRowFirst: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopLeftRadius: Radii.card,
-      borderTopRightRadius: Radii.card,
-      ...ContinuousCorners,
-    },
-    groupedRowLast: {
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomLeftRadius: Radii.card,
-      borderBottomRightRadius: Radii.card,
-      ...ContinuousCorners,
-    },
-    // The row carries its card's corner radii itself instead of being
-    // clipped by overflow:hidden on the rounded wrapper; that ancestor clip
-    // could leave a restyled row unpainted inside its full-height card.
-    groupedCornersTop: {
-      borderTopLeftRadius: Radii.card,
-      borderTopRightRadius: Radii.card,
-      ...ContinuousCorners,
-    },
-    groupedCornersBottom: {
-      borderBottomLeftRadius: Radii.card,
-      borderBottomRightRadius: Radii.card,
-      ...ContinuousCorners,
-    },
-    groupedCornersAll: {
-      borderRadius: Radii.card,
-      ...ContinuousCorners,
-    },
-
-    listFab: {
-      position: "absolute",
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.accent,
-      ...shadow("float", colors.shadowColor),
-      zIndex: 4,
-    },
-    listFabDisabled: {
-      backgroundColor: colors.disabledSurface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    promptContent: {
-      width: "100%",
-      maxWidth: 760,
-      alignSelf: "center",
-    },
-    sectionHeader: {
-      paddingTop: 20,
-      paddingBottom: 7,
-      paddingHorizontal: 32,
-    },
-    sectionTitle: {
-      ...UiTextMetrics,
-      ...TypeScale.label,
-      color: sectionLabel,
-    },
-    sectionGap: {
-      height: 8,
-    },
-    rowGap: {
-      height: 0,
-    },
     loadingContainer: {
       width: "100%",
-      maxWidth: 760,
+      maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
       alignSelf: "center",
       flexGrow: 1,
       minHeight: 420,
@@ -1104,7 +906,7 @@ function createStyles(theme: ResolvedZenTheme) {
     },
     emptyScrollContent: {
       width: "100%",
-      maxWidth: 760,
+      maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
       alignSelf: "center",
       flexGrow: 1,
       paddingBottom: 44,

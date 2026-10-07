@@ -135,11 +135,16 @@ export function summarizeGitDiffFiles(
   };
 }
 
-/** Semantic ink for a status tone: terminal palette for change colors. */
+/**
+ * Semantic ink for a status tone. Added and deleted keep the terminal's change
+ * colours; a modified or renamed file is ink, since amber reads as Warning and
+ * blue as Running in Seal & Slip.
+ */
 export function gitDiffToneColor(
   tone: GitDiffStatusTone,
-  palette: { green: string; red: string; blue: string; yellow: string },
+  palette: { green: string; red: string },
   muted: string,
+  ink: string,
 ): string {
   switch (tone) {
     case "added":
@@ -148,9 +153,8 @@ export function gitDiffToneColor(
     case "conflict":
       return palette.red;
     case "renamed":
-      return palette.blue;
     case "modified":
-      return palette.yellow;
+      return ink;
     case "untracked":
     case "binary":
       return muted;

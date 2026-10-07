@@ -382,7 +382,6 @@ describe("actionable collapsed tool-call projection", () => {
       buildInterfaceTimelineActivityPresentation(
         duplicate,
         {} as Parameters<typeof buildInterfaceTimelineActivityPresentation>[1],
-        {} as Parameters<typeof buildInterfaceTimelineActivityPresentation>[2],
       ).canExpand,
     ).toBe(false);
   });
