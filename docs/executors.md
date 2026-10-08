@@ -141,6 +141,15 @@ selected connection too. The gateway swaps in the real key and forwards the
 request unchanged. Running Claude Sessions use a new connection from their next
 request.
 
+**Images and web search in Codex.** Codex's built-in `image_gen` and `web.run`
+tools call their own endpoints (`/v1/images/generations`, `/v1/images/edits`,
+`/v1/alpha/search`). The gateway sends these to the selected Codex connection,
+once and without retry, so that connection must serve them (for example
+`gpt-image-2`). Codex also hides `image_gen` while it is signed in to a free
+ChatGPT plan, even when requests go through the gateway. To offer it anyway, add
+`-c cli_auth_credentials_store="ephemeral"` to the Codex executor command. That
+launch then ignores the stored sign-in and leaves the file in place.
+
 While the daemon is stopped, the gateway refuses connections. To use a CLI
 without Mewla, restore its backup or remove those two Claude settings.
 

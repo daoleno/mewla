@@ -122,6 +122,12 @@ func (t *Takeover) persistState(state TakeoverState) error {
 	return writeAtomicFile(t.statePath, raw, 0o600)
 }
 
+// CodexActorMarkerHeader is the provider header that makes Codex offer its
+// built-in image_gen (and standalone web.run) tools for a non-OpenAI provider.
+// The value is a marker, not a credential: the gateway strips it and injects
+// the selected connection's own credential.
+const CodexActorMarkerHeader = "x-openai-actor-authorization"
+
 // Projection returns the exact Mewla-owned config block for the gateway.
 func (t *Takeover) Projection(listenAddr string) string {
 	listenAddr = strings.TrimSpace(listenAddr)
@@ -135,6 +141,7 @@ func (t *Takeover) Projection(listenAddr string) string {
 	b.WriteString("base_url = \"http://" + listenAddr + "/v1\"\n")
 	b.WriteString("wire_api = \"responses\"\n")
 	b.WriteString("requires_openai_auth = false\n")
+	b.WriteString("http_headers = { \"" + CodexActorMarkerHeader + "\" = \"" + GatewayProviderName + "\" }\n")
 	b.WriteString(takeoverMarkerClose + "\n")
 	return b.String()
 }
