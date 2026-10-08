@@ -406,8 +406,9 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 // /ws and the HTTP streaming routes cannot drift between transports.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	webUI := s.webUIHandler()
 	mux.HandleFunc("/ws", s.handleWS)
-	mux.HandleFunc("/browser", s.handleBrowser)
+	mux.Handle("/browser", s.appRoute(webUI, http.HandlerFunc(s.handleBrowser)))
 	mux.HandleFunc("/browser/viewer", s.handleBrowserViewer)
 	mux.HandleFunc("/plugins/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		if s.connections == nil {
@@ -416,7 +417,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		s.connections.BrowserOAuthCallback(w, r, s.webUIAdmitted(r))
 	})
-	mux.HandleFunc("/resources", s.handleResourceTelemetryHTTP)
+	mux.Handle("/resources", s.appRoute(webUI, http.HandlerFunc(s.handleResourceTelemetryHTTP)))
 	mux.HandleFunc("/pair", s.handlePair)
 	mux.HandleFunc("/enrollment/request", s.handleEnrollmentRequest)
 	mux.HandleFunc("/enrollment/status", s.handleEnrollmentStatus)
@@ -441,7 +442,7 @@ func (s *Server) Handler() http.Handler {
 			"daemon_public_key": s.auth.PublicKeyHex(),
 		})
 	})
-	mux.Handle("/", s.webUIHandler())
+	mux.Handle("/", webUI)
 	return withCORS(mux)
 }
 
