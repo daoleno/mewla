@@ -38,7 +38,7 @@ After installation, follow [Connect and pair](../connect-and-pair.md): use `mewl
 
 Canonical machine-readable contract:
 
-[`app/modules/zen-terminal-vt/native.lock.json`](../../app/modules/zen-terminal-vt/native.lock.json)
+[`app/modules/terminal-vt/native.lock.json`](../../app/modules/terminal-vt/native.lock.json)
 
 | Android ABI | Zig target              | Role                              | Sideload required |
 | ----------- | ----------------------- | --------------------------------- | ----------------- |
@@ -49,19 +49,19 @@ Canonical machine-readable contract:
 
 Invariants:
 
-1. Only the ABIs listed above may appear under `app/modules/zen-terminal-vt/libs/android/`.
+1. Only the ABIs listed above may appear under `app/modules/terminal-vt/libs/android/`.
 2. Release sideload APKs are **arm64-v8a only** (`-PreactNativeArchitectures=arm64-v8a`).
 3. `libghostty_vt.so` and Ghostty C headers are **gitignored**. Strangers do not get terminal binaries from a bare clone until they build or consume release artifacts.
 4. Toolchain and Android source-derivation pins live in `native.lock.json` (Zig version, Ghostty git commit, and checksummed upstream patches). Dirty Ghostty trees are refused by default.
-5. Redistributed APKs must embed Ghostty MIT at `assets/notices/GHOSTTY-MIT.txt` (source: `app/assets/notices/GHOSTTY-MIT.txt`), packaged by Expo plugin `app/plugins/withZenAndroidRelease.js` during prebuild. Verify with `./scripts/verify-apk-notice.sh <apk>`.
+5. Redistributed APKs must embed Ghostty MIT at `assets/notices/GHOSTTY-MIT.txt` (source: `app/assets/notices/GHOSTTY-MIT.txt`), packaged by Expo plugin `app/plugins/withAndroidRelease.js` during prebuild. Verify with `./scripts/verify-apk-notice.sh <apk>`.
 6. Release-grade native builds require a **proven** Ghostty git commit equal to the pin plus every exact declared Android patch (`release_grade: true` in `build-manifest.json`). Patches are applied only in a disposable worktree; the shared Ghostty cache must remain clean. Dirty or no-git trees may build only with explicit developer overrides and **fail** `./scripts/verify-libghostty.sh --release`.
 7. Raw and APK-packaged `libghostty_vt.so` artifacts must not import symbols listed in `android.forbidden_undefined_symbols`. `verify-libghostty.sh` and the APK verifiers enforce this before distribution.
 
 Module wiring (source of truth for packaging):
 
-- `app/modules/zen-terminal-vt/android/build.gradle` — `abiFilters` from `-PreactNativeArchitectures` (release: `arm64-v8a` only; unset: both supported ABIs); fails if the matching `libghostty_vt.so` is missing
-- `app/modules/zen-terminal-vt/android/CMakeLists.txt` — imports `libs/android/${ANDROID_ABI}/libghostty_vt.so`
-- `app/plugins/withZenAndroidRelease.js` — copies MIT notice into `android/app/src/main/assets/notices/` and wires optional env-based release signing
+- `app/modules/terminal-vt/android/build.gradle` — `abiFilters` from `-PreactNativeArchitectures` (release: `arm64-v8a` only; unset: both supported ABIs); fails if the matching `libghostty_vt.so` is missing
+- `app/modules/terminal-vt/android/CMakeLists.txt` — imports `libs/android/${ANDROID_ABI}/libghostty_vt.so`
+- `app/plugins/withAndroidRelease.js` — copies MIT notice into `android/app/src/main/assets/notices/` and wires optional env-based release signing
 
 ## Prerequisites
 
@@ -75,7 +75,7 @@ Module wiring (source of truth for packaging):
 Build the current arm64 Metro debug APK with one repeatable command from the
 repository root. It runs Expo prebuild first so the `Mewla Debug` identity,
 `MetroConnectActivity`, and native modules stay synchronized, then assembles
-only the debug variant with `zenStandalone=false`:
+only the debug variant with `mewlaStandalone=false`:
 
 ```bash
 bun run android:debug:apk
@@ -143,9 +143,9 @@ and phone on a trusted network that allows the Metro port.
   Release builds never expose the connection activity or enable dev support.
 
 After applying native config with Expo prebuild, ordinary `assembleDebug` uses
-Metro (`zenStandalone=false`, the default, and React's default
+Metro (`mewlaStandalone=false`, the default, and React's default
 `debuggableVariants=['debug']`). Do not use a standalone packaging init script
-that empties `debuggableVariants` or sets `zenStandalone=true`. Explicit
+that empties `debuggableVariants` or sets `mewlaStandalone=true`. Explicit
 standalone debug builds retain their embedded-bundle workflow and disable the
 Metro launcher; release builds keep their normal launcher. The config plugin
 writes the connection activity and launcher overlay only to `src/debug`.
@@ -174,19 +174,19 @@ npx expo export --platform android
 
 Release builds explicitly allow cleartext HTTP so dynamic LAN and Tailscale IPs work. Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
 
-Remote Expo push is optional. To test it with your own EAS project, set `ZEN_EXPO_PROJECT_ID` (see `app/.env.example`). OSS builds work without push.
+Remote Expo push is optional. To test it with your own EAS project, set `MEWLA_EXPO_PROJECT_ID` (see `app/.env.example`). OSS builds work without push.
 
 ## Native terminal library
 
 Android and iOS share the [terminal row-update pipeline](terminal-rendering.md),
 including the native formatter, renderer lifecycle, and DOM reuse rules.
 
-`app/modules/zen-terminal-vt/libs/android/*/libghostty_vt.so` is **gitignored**. Without those binaries, the terminal surface is unavailable even if Chat works.
+`app/modules/terminal-vt/libs/android/*/libghostty_vt.so` is **gitignored**. Without those binaries, the terminal surface is unavailable even if Chat works.
 
 ### Build (reproducible path)
 
 ```bash
-# Optional: set Ghostty source; otherwise clones pin into ~/.cache/zen/ghostty
+# Optional: set Ghostty source; otherwise clones pin into ~/.cache/mewla/ghostty
 # GHOSTTY_SRC=/path/to/ghostty
 ./scripts/build-libghostty.sh
 
@@ -257,13 +257,13 @@ bun run build:apk
 
 - **Never** commit keystores, passwords, or `.jks` files.
 - Default local builds use the Expo/RN **debug** keystore for release variants (fine for personal sideload only).
-- Optional release signing is wired by `withZenAndroidRelease` via **Gradle `System.getenv`** (not `-P` secrets on the command line):
+- Optional release signing is wired by `withAndroidRelease` via **Gradle `System.getenv`** (not `-P` secrets on the command line):
 
 ```bash
-export ZEN_ANDROID_KEYSTORE=/absolute/path/to/release.keystore
-export ZEN_ANDROID_KEYSTORE_PASSWORD='…'   # do not commit; do not echo
-export ZEN_ANDROID_KEY_ALIAS='…'
-export ZEN_ANDROID_KEY_PASSWORD='…'
+export MEWLA_ANDROID_KEYSTORE=/absolute/path/to/release.keystore
+export MEWLA_ANDROID_KEYSTORE_PASSWORD='…'   # do not commit; do not echo
+export MEWLA_ANDROID_KEY_ALIAS='…'
+export MEWLA_ANDROID_KEY_PASSWORD='…'
 ./scripts/android-release-apk.sh   # runs prebuild, refuses if plugin wiring missing
 ```
 
@@ -281,9 +281,9 @@ Canonical tracked identity is [`app/app.base.json`](../../app/app.base.json) (lo
 
 Verify with `./scripts/verify-release-identity.sh` (also `bun run release:identity`).
 
-**Sideload note:** changing `android.package` from the old `com.anonymous.zen` means Android treats this as a different app. Uninstall the previous package before installing a `com.daoleno.mewla` APK if both were installed on the same device.
+**Sideload note:** changing `android.package` from the old `com.anonymous.mewla` means Android treats this as a different app. Uninstall the previous package before installing a `com.daoleno.mewla` APK if both were installed on the same device.
 
-Official release APKs are signed by the release pipeline. Local builds without signing env use the debug keystore and are only suitable for personal testing. Never commit `ZEN_ANDROID_*` secrets or local signing files.
+Official release APKs are signed by the release pipeline. Local builds without signing env use the debug keystore and are only suitable for personal testing. Never commit `MEWLA_ANDROID_*` secrets or local signing files.
 
 ### Staging (local, not a GitHub Release)
 
@@ -345,7 +345,7 @@ Picker errors include `PICK-RESULT` (missing/ambiguous selection), `PICK-URI`
 (invalid URI shape), `PICK-DIRECTORY`, `PICK-OPEN` (descriptor access), or
 `PICK-READ` (stream creation/read). `-PERMISSION` identifies access denial.
 Debug builds log bounded structural result facts, read-grant presence, metadata
-stage/exception class and stream stage/exception class under `ZenDocumentPicker`
+stage/exception class and stream stage/exception class under `UploadDocumentPicker`
 in Android logcat. Debug stream failures also include the provider authority and
 up to four exception/cause class names (plus numeric errno when available) in the
 alert, since Expo does not pass native causes to JavaScript. A null descriptor is
@@ -366,7 +366,7 @@ Android documents `GET_CONTENT` for attachment import and `OPEN_DOCUMENT` for
 document access: see the [Intent contract](https://developer.android.com/reference/android/content/Intent#ACTION_GET_CONTENT)
 and [AndroidX GetContent](https://developer.android.com/reference/androidx/activity/result/contract/ActivityResultContracts.GetContent).
 
-The native provider regression fixture lives in `zen-file-upload/android/src/androidTest`.
-Run `:zen-file-upload:connectedDebugAndroidTest` from `app/android` with an emulator.
+The native provider regression fixture lives in `file-upload/android/src/androidTest`.
+Run `:file-upload:connectedDebugAndroidTest` from `app/android` with an emulator.
 Its optional `PickerFixtureActivity` exercises the real system picker and test-only
 DocumentsProvider; fixture components are excluded from release APKs.

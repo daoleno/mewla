@@ -2,7 +2,7 @@
 
 Transport, relay, mobile-bridge and device-administration details behind
 [Security and privacy](../security-and-privacy.md). Mewla Link is optional and
-no hosted relay is operated; see [Mewla Link Relay operations](zen-link-relay.md).
+no hosted relay is operated; see [Mewla Link Relay operations](mewla-link-relay.md).
 
 ## Trust model with Mewla Link
 
@@ -15,7 +15,7 @@ identity. Across all configured paths, the boundaries are:
 3. **Link transport identity** — separate Ed25519 TLS key and X.509 certificate,
    whose SPKI pin is signed by the daemon identity in Pairing V2.
 4. **Device authorization** — enrolled phone Ed25519 keys and purpose-bound
-   `ZenDevice` request signatures.
+   `Device` request signatures.
 
 The relay is not an application trust anchor. In hosted mode the phone opens
 TLS 1.3 through the relay and verifies the Pairing V2 SPKI pin; only the daemon
@@ -108,7 +108,7 @@ Mewla Link setup/offline error. Manual V1/self-managed servers continue to retur
 their original endpoint.
 
 Native image/PDF loaders may issue HEAD, Range, and automatic retries. Mewla does
-not place a replay-protected ordinary `ZenDevice` nonce in that reusable
+not place a replay-protected ordinary `Device` nonce in that reusable
 resource URL. A fresh signed POST to `/session-file-capability` instead returns
 separate two-minute GET and HEAD daemon signatures. Each signature is bound to
 daemon, enrolled device, live Session/process/start, exact path, inspected file

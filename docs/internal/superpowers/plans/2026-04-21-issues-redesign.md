@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the current Linear-style task tracker with a file-first, Markdown-per-issue system rooted at `~/.zen/issues/<project>/*.md`. Spec: `docs/internal/issues-redesign.md`.
+**Goal:** Replace the current Linear-style task tracker with a file-first, Markdown-per-issue system rooted at `~/.mewla/issues/<project>/*.md`. Spec: `docs/internal/issues-redesign.md`.
 
-**Architecture:** Daemon owns `~/.zen/issues/` via fsnotify; an `issue/` package parses, stores, and dispatches. Server exposes new WebSocket messages (`list_issues`, `write_issue`, `send_issue`, `redispatch_issue`, `delete_issue`, `list_executors`) and broadcasts `issue_changed` / `issue_deleted` / `issues_snapshot`. App uses a new `store/issues.tsx` Context+reducer, rewrites the list and detail screens, and adds a Markdown editor with `@role` mention picker. Old `daemon/task/` package, old WebSocket handlers, `app/store/tasks.tsx`, and all current `app/components/issue/*` files are removed at the end.
+**Architecture:** Daemon owns `~/.mewla/issues/` via fsnotify; an `issue/` package parses, stores, and dispatches. Server exposes new WebSocket messages (`list_issues`, `write_issue`, `send_issue`, `redispatch_issue`, `delete_issue`, `list_executors`) and broadcasts `issue_changed` / `issue_deleted` / `issues_snapshot`. App uses a new `store/issues.tsx` Context+reducer, rewrites the list and detail screens, and adds a Markdown editor with `@role` mention picker. Old `daemon/task/` package, old WebSocket handlers, `app/store/tasks.tsx`, and all current `app/components/issue/*` files are removed at the end.
 
 **Tech Stack:** Go 1.22+, `github.com/fsnotify/fsnotify` (already in go.mod), `github.com/BurntSushi/toml` (new), `gopkg.in/yaml.v3` (new), ULID via `github.com/oklog/ulid/v2` (new). React Native + Expo + TypeScript, React Context + `useReducer`.
 
@@ -19,13 +19,13 @@
 - `daemon/issue/parser_test.go`
 - `daemon/issue/project.go` — `project.toml` loader.
 - `daemon/issue/project_test.go`
-- `daemon/issue/executors.go` — `~/.zen/executors.toml` loader with built-in defaults.
+- `daemon/issue/executors.go` — `~/.mewla/executors.toml` loader with built-in defaults.
 - `daemon/issue/executors_test.go`
 - `daemon/issue/store.go` — directory scan, fsnotify watcher with 200ms debounce, atomic writes, mtime conflict, event channel.
 - `daemon/issue/store_test.go`
 - `daemon/issue/dispatch.go` — pick idle session / spawn new, write initial prompt, stamp `dispatched` + `agent_session`.
 - `daemon/issue/dispatch_test.go`
-- `daemon/issue/paths.go` — resolve `~/.zen/issues` and helpers.
+- `daemon/issue/paths.go` — resolve `~/.mewla/issues` and helpers.
 
 ### Daemon — modified files
 
@@ -92,7 +92,7 @@
 
 Run:
 ```bash
-cd /home/daoleno/workspace/zen/daemon
+cd /home/daoleno/workspace/mewla/daemon
 go get github.com/BurntSushi/toml@latest
 go get gopkg.in/yaml.v3@latest
 go get github.com/oklog/ulid/v2@latest
@@ -106,7 +106,7 @@ Expected: `go.mod` updated with three new require lines. `go.sum` populated.
 Create `daemon/issue/doc.go`:
 
 ```go
-// Package issue implements a file-first issue system rooted at ~/.zen/issues/<project>/*.md.
+// Package issue implements a file-first issue system rooted at ~/.mewla/issues/<project>/*.md.
 //
 // Issues are Markdown files with minimal YAML frontmatter (id, created, done).
 // The daemon watches the issues root via fsnotify, broadcasts changes over
@@ -118,7 +118,7 @@ package issue
 
 Run:
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./...
 ```
 
 Expected: success, no output.
@@ -126,7 +126,7 @@ Expected: success, no output.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon
+cd /home/daoleno/workspace/mewla/daemon
 git add go.mod go.sum issue/doc.go
 git commit -m "Scaffold daemon/issue package and add deps"
 ```
@@ -149,7 +149,7 @@ import "time"
 type Issue struct {
 	ID          string    `json:"id"`
 	Path        string    `json:"path"`        // absolute path on disk
-	Project     string    `json:"project"`     // directory name under ~/.zen/issues
+	Project     string    `json:"project"`     // directory name under ~/.mewla/issues
 	Title       string    `json:"title"`       // first "# heading" or first non-empty line
 	Body        string    `json:"body"`        // raw Markdown body (after frontmatter)
 	Frontmatter Frontmatter `json:"frontmatter"`
@@ -192,7 +192,7 @@ type Project struct {
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./issue/...
+cd /home/daoleno/workspace/mewla/daemon && go build ./issue/...
 ```
 
 Expected: success.
@@ -316,7 +316,7 @@ func TestParseFile_ExtraFields_Preserved(t *testing.T) {
 id: a
 created: 2026-04-21T00:00:00Z
 dispatched: 2026-04-21T01:00:00Z
-agent_session: zen-claude-3
+agent_session: mewla-claude-3
 labels: [keep, me]
 ---
 Body
@@ -328,7 +328,7 @@ Body
 	if iss.Frontmatter.Dispatched == nil {
 		t.Fatal("dispatched should be set")
 	}
-	if iss.Frontmatter.AgentSession != "zen-claude-3" {
+	if iss.Frontmatter.AgentSession != "mewla-claude-3" {
 		t.Errorf("agent_session: got %q", iss.Frontmatter.AgentSession)
 	}
 	if _, ok := iss.Frontmatter.Extra["labels"]; !ok {
@@ -340,7 +340,7 @@ Body
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestParseFile -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestParseFile -v
 ```
 
 Expected: FAIL — `ParseFile` not defined.
@@ -449,7 +449,7 @@ func decodeFrontmatter(fm string) (Frontmatter, map[string]interface{}, error) {
 }
 
 func projectFromPath(p string) string {
-	// ~/.zen/issues/<project>/<file>.md → <project>
+	// ~/.mewla/issues/<project>/<file>.md → <project>
 	dir := filepath.Dir(p)
 	return filepath.Base(dir)
 }
@@ -482,7 +482,7 @@ Place the stub at the bottom of `parser.go` so the package compiles. Task 4 repl
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestParseFile -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestParseFile -v
 ```
 
 Expected: all 6 subtests PASS.
@@ -519,12 +519,12 @@ func TestExtractMentions_RoleOnly(t *testing.T) {
 }
 
 func TestExtractMentions_RoleAndSession(t *testing.T) {
-	body := "Try @claude#zen-claude-3 for this one"
+	body := "Try @claude#mewla-claude-3 for this one"
 	got := ExtractMentions(body)
 	if len(got) != 1 {
 		t.Fatalf("want 1, got %d", len(got))
 	}
-	if got[0].Role != "claude" || got[0].Session != "zen-claude-3" {
+	if got[0].Role != "claude" || got[0].Session != "mewla-claude-3" {
 		t.Errorf("unexpected: %+v", got[0])
 	}
 }
@@ -569,7 +569,7 @@ func TestExtractMentions_StartOfLine(t *testing.T) {
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestExtractMentions -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestExtractMentions -v
 ```
 
 Expected: FAIL (stub returns nil).
@@ -613,7 +613,7 @@ Add `"regexp"` to the imports block if not already present.
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -v
 ```
 
 Expected: all tests (parse + extract) pass.
@@ -644,7 +644,7 @@ id: 01HZ5K8J9X
 created: 2026-04-21T14:32:15Z
 done: 2026-04-22T00:00:00Z
 dispatched: 2026-04-21T15:00:00Z
-agent_session: zen-claude-3
+agent_session: mewla-claude-3
 ---
 # Hello
 
@@ -704,7 +704,7 @@ func TestSerializeIssue_EmitsEmptyDoneField(t *testing.T) {
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestSerializeIssue -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestSerializeIssue -v
 ```
 
 Expected: FAIL — `SerializeIssue` not defined.
@@ -759,7 +759,7 @@ func SerializeIssue(iss *Issue) ([]byte, error) {
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -v
 ```
 
 Expected: all tests pass.
@@ -793,8 +793,8 @@ import (
 func TestLoadProject_Explicit(t *testing.T) {
 	dir := t.TempDir()
 	err := os.WriteFile(filepath.Join(dir, "project.toml"), []byte(`
-name = "zen"
-cwd = "/home/x/code/zen"
+name = "mewla"
+cwd = "/home/x/code/mewla"
 executor = "codex"
 `), 0o600)
 	if err != nil {
@@ -804,7 +804,7 @@ executor = "codex"
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if p.Name != "zen" || p.Cwd != "/home/x/code/zen" || p.Executor != "codex" {
+	if p.Name != "mewla" || p.Cwd != "/home/x/code/mewla" || p.Executor != "codex" {
 		t.Errorf("got %+v", p)
 	}
 }
@@ -837,7 +837,7 @@ func TestLoadProject_MalformedTOML_Error(t *testing.T) {
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestLoadProject -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestLoadProject -v
 ```
 
 Expected: FAIL — `LoadProject` not defined.
@@ -880,7 +880,7 @@ func LoadProject(projectDir string) (Project, error) {
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestLoadProject -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestLoadProject -v
 ```
 
 Expected: 3 tests PASS.
@@ -972,7 +972,7 @@ func TestLoadExecutors_Roles(t *testing.T) {
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestLoadExecutors -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestLoadExecutors -v
 ```
 
 Expected: FAIL — undefined.
@@ -990,7 +990,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// ExecutorConfig holds the result of parsing ~/.zen/executors.toml.
+// ExecutorConfig holds the result of parsing ~/.mewla/executors.toml.
 type ExecutorConfig struct {
 	Default string
 	ByName  map[string]Executor
@@ -1048,7 +1048,7 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestLoadExecutors -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestLoadExecutors -v
 ```
 
 Expected: 3 tests PASS.
@@ -1077,22 +1077,22 @@ import (
 	"path/filepath"
 )
 
-// DefaultRoot returns ~/.zen/issues.
+// DefaultRoot returns ~/.mewla/issues.
 func DefaultRoot() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "issues"), nil
+	return filepath.Join(home, ".mewla", "issues"), nil
 }
 
-// DefaultExecutorsPath returns ~/.zen/executors.toml.
+// DefaultExecutorsPath returns ~/.mewla/executors.toml.
 func DefaultExecutorsPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zen", "executors.toml"), nil
+	return filepath.Join(home, ".mewla", "executors.toml"), nil
 }
 
 // EnsureDir creates dir with mode 0o700 if it doesn't exist.
@@ -1104,7 +1104,7 @@ func EnsureDir(dir string) error {
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./issue/...
+cd /home/daoleno/workspace/mewla/daemon && go build ./issue/...
 ```
 
 Expected: success.
@@ -1156,8 +1156,8 @@ Body.
 
 func TestStore_Scan(t *testing.T) {
 	root := t.TempDir()
-	writeIssue(t, filepath.Join(root, "zen", "a.md"), "A")
-	writeIssue(t, filepath.Join(root, "zen", "b.md"), "B")
+	writeIssue(t, filepath.Join(root, "mewla", "a.md"), "A")
+	writeIssue(t, filepath.Join(root, "mewla", "b.md"), "B")
 	writeIssue(t, filepath.Join(root, "inbox", "c.md"), "C")
 
 	s, err := NewStore(root)
@@ -1174,7 +1174,7 @@ func TestStore_Scan(t *testing.T) {
 
 func TestStore_GetByID(t *testing.T) {
 	root := t.TempDir()
-	writeIssue(t, filepath.Join(root, "zen", "a.md"), "A")
+	writeIssue(t, filepath.Join(root, "mewla", "a.md"), "A")
 
 	s, _ := NewStore(root)
 	defer s.Close()
@@ -1183,21 +1183,21 @@ func TestStore_GetByID(t *testing.T) {
 	if !ok {
 		t.Fatal("A not found")
 	}
-	if iss.Project != "zen" {
+	if iss.Project != "mewla" {
 		t.Errorf("project: %q", iss.Project)
 	}
 }
 
 func TestStore_WriteAndRead(t *testing.T) {
 	root := t.TempDir()
-	os.Mkdir(filepath.Join(root, "zen"), 0o700)
+	os.Mkdir(filepath.Join(root, "mewla"), 0o700)
 	s, _ := NewStore(root)
 	defer s.Close()
 
 	now := time.Now().UTC()
 	iss := &Issue{
-		Path:    filepath.Join(root, "zen", "new.md"),
-		Project: "zen",
+		Path:    filepath.Join(root, "mewla", "new.md"),
+		Project: "mewla",
 		Body:    "# New\n\nBody.\n",
 		Frontmatter: Frontmatter{
 			ID:      "NEW",
@@ -1220,7 +1220,7 @@ func TestStore_WriteAndRead(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestStore -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestStore -v
 ```
 
 Expected: FAIL — undefined.
@@ -1464,7 +1464,7 @@ func (s *Store) reloadPath(path string) error {
 
 // writeAtomic is the issue package's local atomic write.
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".zen-issue-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".mewla-issue-*")
 	if err != nil {
 		return err
 	}
@@ -1489,7 +1489,7 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestStore -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestStore -v
 ```
 
 Expected: 3 tests PASS.
@@ -1516,7 +1516,7 @@ Append to `store_test.go`:
 ```go
 func TestStore_Watch_NotifiesOnChange(t *testing.T) {
 	root := t.TempDir()
-	os.Mkdir(filepath.Join(root, "zen"), 0o700)
+	os.Mkdir(filepath.Join(root, "mewla"), 0o700)
 	s, _ := NewStore(root)
 	defer s.Close()
 
@@ -1526,7 +1526,7 @@ func TestStore_Watch_NotifiesOnChange(t *testing.T) {
 	_, ch := s.Subscribe()
 
 	// write a new file
-	go writeIssue(t, filepath.Join(root, "zen", "live.md"), "LIVE")
+	go writeIssue(t, filepath.Join(root, "mewla", "live.md"), "LIVE")
 
 	select {
 	case ev := <-ch:
@@ -1543,14 +1543,14 @@ func TestStore_Watch_NotifiesOnChange(t *testing.T) {
 
 func TestStore_Watch_DebouncesMultipleWrites(t *testing.T) {
 	root := t.TempDir()
-	os.Mkdir(filepath.Join(root, "zen"), 0o700)
+	os.Mkdir(filepath.Join(root, "mewla"), 0o700)
 	s, _ := NewStore(root)
 	defer s.Close()
 
 	s.StartWatcher()
 	_, ch := s.Subscribe()
 
-	p := filepath.Join(root, "zen", "hot.md")
+	p := filepath.Join(root, "mewla", "hot.md")
 	writeIssue(t, p, "HOT")
 	// immediately rewrite a few times within the debounce window
 	for i := 0; i < 3; i++ {
@@ -1581,7 +1581,7 @@ loop:
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestStore_Watch -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestStore_Watch -v
 ```
 
 Expected: FAIL — `StartWatcher` not defined.
@@ -1692,7 +1692,7 @@ func addRecursive(w *fsnotify.Watcher, root string) error {
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestStore -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestStore -v
 ```
 
 Expected: all Store tests pass.
@@ -1887,7 +1887,7 @@ func TestDispatch_Redispatch_ClearsFields(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestDispatch -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestDispatch -v
 ```
 
 Expected: FAIL — undefined.
@@ -2030,7 +2030,7 @@ When finished, set `+"`done: <ISO8601 timestamp>`"+` in the frontmatter.
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./issue/ -run TestDispatch -v
+cd /home/daoleno/workspace/mewla/daemon && go test ./issue/ -run TestDispatch -v
 ```
 
 Expected: 6 tests PASS.
@@ -2057,11 +2057,11 @@ Verified facts (from reading the code):
 - `watcher.Watcher.Agents() []*classifier.Agent` (watcher/watcher.go:55).
 - `classifier.Agent` fields include `ID`, `Cwd`, `State`, `Command`, `Project` — access via pointer (the slice is `[]*classifier.Agent`).
 - `classifier.StateRunning` is the "idle and accepting input" state.
-- The watcher polls via `tmux list-sessions` every 500ms and strips sessions whose name starts with `zen-` (watcher/watcher.go:486). Spawned agent sessions must NOT use the `zen-` prefix.
+- The watcher polls via `tmux list-sessions` every 500ms and strips sessions whose name starts with `mewla-` (watcher/watcher.go:486). Spawned agent sessions must NOT use the `mewla-` prefix.
 
 - [ ] **Step 2: Implement adapters**
 
-**Critical constraint (verified in source):** `daemon/watcher/watcher.go:486` explicitly excludes tmux sessions whose name starts with `zen-` because those are terminal-streaming proxies, not user agents. Therefore the dispatcher must NOT use the `zen-` prefix, or the watcher will never track the spawned session and `agent_session` in the frontmatter won't resolve to anything in the app.
+**Critical constraint (verified in source):** `daemon/watcher/watcher.go:486` explicitly excludes tmux sessions whose name starts with `mewla-` because those are terminal-streaming proxies, not user agents. Therefore the dispatcher must NOT use the `mewla-` prefix, or the watcher will never track the spawned session and `agent_session` in the frontmatter won't resolve to anything in the app.
 
 Also important: the watcher's agent ID is `<session_name>:<window_id>` (comment at `watcher.go:471`), not the bare session name. After spawning, we look up the window id and return the full target so later `Send` calls and the app's agent lookup line up with the watcher's view.
 
@@ -2135,7 +2135,7 @@ var tmuxCounter atomic.Uint64
 var tmuxRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // sessionName builds a tmux session name that:
-//   - Does NOT start with "zen-" (the watcher excludes those).
+//   - Does NOT start with "mewla-" (the watcher excludes those).
 //   - Is short, readable, unique enough for practical use.
 // Format: "<role>-<date>-<4 hex chars>", e.g. "claude-260421-3a1f".
 func sessionName(role string) string {
@@ -2190,7 +2190,7 @@ No changes required in the `terminal` package.
 - [ ] **Step 3: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./...
 ```
 
 If `watcher.Agent`, `classifier.StateRunning`, or `terminal.GenerateSessionName` don't match the real API exactly, fix the imports and field names now. All such references in adapters.go must resolve before continuing.
@@ -2216,9 +2216,9 @@ Goal: add new issue message types to the existing dispatch switch and a new cons
 - [ ] **Step 1: Read existing handler pattern**
 
 ```bash
-grep -n "case \"" /home/daoleno/workspace/zen/daemon/server/server.go | head -30
-grep -n "func (s \*Server)" /home/daoleno/workspace/zen/daemon/server/server.go | head -10
-grep -n "func New" /home/daoleno/workspace/zen/daemon/server/server.go
+grep -n "case \"" /home/daoleno/workspace/mewla/daemon/server/server.go | head -30
+grep -n "func (s \*Server)" /home/daoleno/workspace/mewla/daemon/server/server.go | head -10
+grep -n "func New" /home/daoleno/workspace/mewla/daemon/server/server.go
 ```
 
 Expected: confirm `server.New(...)` signature and the existing `switch raw.Type` location.
@@ -2371,7 +2371,7 @@ srv := server.New(
 - [ ] **Step 5: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./...
 ```
 
 Expected: success. If signatures differ slightly, adjust minor naming to compile.
@@ -2619,7 +2619,7 @@ func (s *Server) handleDeleteIssue(conn *websocket.Conn, raw rawMessage) {
 - [ ] **Step 5: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./...
 ```
 
 Expected: success.
@@ -2684,7 +2684,7 @@ s.sendJSON(conn, map[string]any{
 - [ ] **Step 3: Verify build + quick smoke test**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./... && go test ./issue/... -v
+cd /home/daoleno/workspace/mewla/daemon && go build ./... && go test ./issue/... -v
 ```
 
 Expected: success, all issue package tests pass.
@@ -2714,8 +2714,8 @@ import { issuesReducer, initialIssuesState, Issue } from "../issues";
 
 const mkIssue = (overrides: Partial<Issue> = {}): Issue => ({
   id: "A",
-  path: "/root/zen/a.md",
-  project: "zen",
+  path: "/root/mewla/a.md",
+  project: "mewla",
   title: "A",
   body: "# A",
   frontmatter: { id: "A", created: "2026-04-21T00:00:00Z" },
@@ -2728,11 +2728,11 @@ describe("issuesReducer", () => {
   it("applies ISSUES_SNAPSHOT", () => {
     const next = issuesReducer(initialIssuesState, {
       type: "ISSUES_SNAPSHOT",
-      issues: [mkIssue(), mkIssue({ id: "B", project: "zen" })],
+      issues: [mkIssue(), mkIssue({ id: "B", project: "mewla" })],
       executors: ["claude", "codex"],
     });
     expect(Object.keys(next.byId)).toEqual(["A", "B"]);
-    expect(next.byProject["zen"]).toEqual(["A", "B"]);
+    expect(next.byProject["mewla"]).toEqual(["A", "B"]);
     expect(next.executors).toEqual(["claude", "codex"]);
   });
 
@@ -2753,7 +2753,7 @@ describe("issuesReducer", () => {
     });
     const next = issuesReducer(state, { type: "ISSUE_DELETED", id: "A" });
     expect(next.byId["A"]).toBeUndefined();
-    expect(next.byProject["zen"]).toEqual(["B"]);
+    expect(next.byProject["mewla"]).toEqual(["B"]);
   });
 });
 ```
@@ -2761,7 +2761,7 @@ describe("issuesReducer", () => {
 - [ ] **Step 2: Run tests to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest store/__tests__/issues.test.ts
+cd /home/daoleno/workspace/mewla/app && npx jest store/__tests__/issues.test.ts
 ```
 
 Expected: FAIL — module not found.
@@ -2872,7 +2872,7 @@ export function useIssues(): Ctx {
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest store/__tests__/issues.test.ts
+cd /home/daoleno/workspace/mewla/app && npx jest store/__tests__/issues.test.ts
 ```
 
 Expected: 3 tests PASS.
@@ -2912,7 +2912,7 @@ If `wsClient.off` isn't present, use whatever deregistration call the existing c
 - [ ] **Step 6: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx tsc --noEmit
+cd /home/daoleno/workspace/mewla/app && npx tsc --noEmit
 ```
 
 Expected: success (or the same pre-existing errors as before — no new issues).
@@ -2988,7 +2988,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx tsc --noEmit
+cd /home/daoleno/workspace/mewla/app && npx tsc --noEmit
 ```
 
 Expected: success.
@@ -3077,7 +3077,7 @@ export default function IssuesScreen() {
             <TextInput
               value={newProject}
               onChangeText={setNewProject}
-              placeholder="Project (e.g., inbox, zen)"
+              placeholder="Project (e.g., inbox, mewla)"
               placeholderTextColor="#666"
               style={styles.input}
             />
@@ -3118,7 +3118,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx tsc --noEmit
+cd /home/daoleno/workspace/mewla/app && npx tsc --noEmit
 ```
 
 Expected: success. (If the old `components/issue/IssueRow.tsx` is still being imported somewhere, rename the import or mark it for cleanup in Task 22.)
@@ -3149,7 +3149,7 @@ import { MentionPicker } from "../MentionPicker";
 const candidates = [
   { kind: "role" as const, name: "claude" },
   { kind: "role" as const, name: "codex" },
-  { kind: "session" as const, role: "claude", sessionId: "zen-claude-3", project: "zen" },
+  { kind: "session" as const, role: "claude", sessionId: "mewla-claude-3", project: "mewla" },
 ];
 
 it("filters by prefix", () => {
@@ -3174,7 +3174,7 @@ it("calls onSelect with chosen candidate", () => {
 - [ ] **Step 2: Run test to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest components/issue/__tests__/MentionPicker.test.tsx
+cd /home/daoleno/workspace/mewla/app && npx jest components/issue/__tests__/MentionPicker.test.tsx
 ```
 
 Expected: FAIL (module not found).
@@ -3239,7 +3239,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest components/issue/__tests__/MentionPicker.test.tsx
+cd /home/daoleno/workspace/mewla/app && npx jest components/issue/__tests__/MentionPicker.test.tsx
 ```
 
 Expected: 2 tests PASS.
@@ -3281,7 +3281,7 @@ describe("activeMention", () => {
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest components/issue/__tests__/MarkdownEditor.test.tsx
+cd /home/daoleno/workspace/mewla/app && npx jest components/issue/__tests__/MarkdownEditor.test.tsx
 ```
 
 Expected: FAIL.
@@ -3383,7 +3383,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 4: Run tests to verify pass**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest components/issue/__tests__/MarkdownEditor.test.tsx
+cd /home/daoleno/workspace/mewla/app && npx jest components/issue/__tests__/MarkdownEditor.test.tsx
 ```
 
 Expected: 3 tests PASS.
@@ -3566,7 +3566,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx tsc --noEmit
+cd /home/daoleno/workspace/mewla/app && npx tsc --noEmit
 ```
 
 Expected: success. If the `useAgents` hook has a different shape than assumed, adjust the `candidates` construction to match the actual agents store.
@@ -3591,7 +3591,7 @@ git commit -m "Rewrite issue detail screen: markdown editor, Send, Mark done"
 - [ ] **Step 1: Delete old component files**
 
 ```bash
-cd /home/daoleno/workspace/zen/app
+cd /home/daoleno/workspace/mewla/app
 rm components/issue/AssignIssueSheet.tsx
 rm components/issue/AttachmentStack.tsx
 rm components/issue/CreateIssueSheet.tsx
@@ -3626,7 +3626,7 @@ Remove every `wsClient.on("task_list", ...)`, `wsClient.on("task_created", ...)`
 - [ ] **Step 5: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx tsc --noEmit
+cd /home/daoleno/workspace/mewla/app && npx tsc --noEmit
 ```
 
 If there are lingering imports of deleted files, the compiler surfaces them — remove them one at a time until clean.
@@ -3634,7 +3634,7 @@ If there are lingering imports of deleted files, the compiler surfaces them — 
 - [ ] **Step 6: Run app tests**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx jest
+cd /home/daoleno/workspace/mewla/app && npx jest
 ```
 
 Expected: all tests pass (old tests for deleted components will also be gone if they lived next to the components; if any snapshot tests remain, delete them).
@@ -3642,7 +3642,7 @@ Expected: all tests pass (old tests for deleted components will also be gone if 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/daoleno/workspace/zen/app
+cd /home/daoleno/workspace/mewla/app
 git add -A components/issue store app/\(tabs\)/issues.tsx app/_layout.tsx
 git commit -m "Delete old task components and store"
 ```
@@ -3693,7 +3693,7 @@ func New(
 - [ ] **Step 4: Verify daemon still builds**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./...
 ```
 
 Will fail because `cmd/mewla/main.go` still passes old stores. Next task.
@@ -3737,14 +3737,14 @@ srv := server.New(
 - [ ] **Step 2: Delete the task package**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon
+cd /home/daoleno/workspace/mewla/daemon
 rm -rf task/
 ```
 
 - [ ] **Step 3: Verify build + tests**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./... && go test ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./... && go test ./...
 ```
 
 Expected: success, all remaining tests pass (issue package tests plus any untouched server tests that no longer reference task types).
@@ -3754,7 +3754,7 @@ If server tests still reference task types, delete the failing test file or rewr
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /home/daoleno/workspace/zen
+cd /home/daoleno/workspace/mewla
 git add daemon/
 git commit -m "Remove daemon/task package and old WebSocket handlers"
 ```
@@ -3789,7 +3789,7 @@ import (
 - [ ] **Step 2: Verify build**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go build ./...
+cd /home/daoleno/workspace/mewla/daemon && go build ./...
 ```
 
 Expected: success.
@@ -3810,7 +3810,7 @@ git commit -m "Clean up legacy task state files on daemon startup"
 - [ ] **Step 1: Daemon test suite**
 
 ```bash
-cd /home/daoleno/workspace/zen/daemon && go test ./... -count=1
+cd /home/daoleno/workspace/mewla/daemon && go test ./... -count=1
 ```
 
 Expected: all tests pass, no skipped-or-broken test files referencing `task`.
@@ -3818,7 +3818,7 @@ Expected: all tests pass, no skipped-or-broken test files referencing `task`.
 - [ ] **Step 2: App type check + test suite**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx tsc --noEmit && npx jest
+cd /home/daoleno/workspace/mewla/app && npx tsc --noEmit && npx jest
 ```
 
 Expected: both succeed.
@@ -3826,7 +3826,7 @@ Expected: both succeed.
 - [ ] **Step 3: App Android export build**
 
 ```bash
-cd /home/daoleno/workspace/zen/app && npx expo export --platform android
+cd /home/daoleno/workspace/mewla/app && npx expo export --platform android
 ```
 
 Expected: build completes without errors referencing tasks, old components, or missing types.
@@ -3837,18 +3837,18 @@ From a shell on the daemon host:
 
 1. Start the daemon:
    ```bash
-   cd /home/daoleno/workspace/zen/daemon && go run ./cmd/mewla -addr 127.0.0.1:9876
+   cd /home/daoleno/workspace/mewla/daemon && go run ./cmd/mewla -addr 127.0.0.1:9876
    ```
 2. Point the app at `ws://127.0.0.1:9876` (or whatever the existing connection flow uses).
-3. In the app, tap `＋`, enter project `zen`, create the issue. The file should appear at `~/.zen/issues/zen/<slug>.md`.
+3. In the app, tap `＋`, enter project `mewla`, create the issue. The file should appear at `~/.mewla/issues/mewla/<slug>.md`.
 4. Open the issue; type:
    ```
    # Smoke test
 
-   @claude please print "hello from zen" and set done.
+   @claude please print "hello from mewla" and set done.
    ```
 5. Tap **Send**. The issue row should show `▶` status glyph.
-6. Verify `~/.zen/issues/zen/<slug>.md` now contains `dispatched:` and `agent_session:` in the frontmatter, and that a `tmux ls` shows a new session starting with `zen-claude-`.
+6. Verify `~/.mewla/issues/mewla/<slug>.md` now contains `dispatched:` and `agent_session:` in the frontmatter, and that a `tmux ls` shows a new session starting with `mewla-claude-`.
 7. The agent (claude) should open the file, read the task, respond in-file, then add `done: <ts>`.
 8. Back in the app, the issue moves from Active to Done.
 9. Manually clear the `done` line in the file — the issue returns to Active.

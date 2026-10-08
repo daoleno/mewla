@@ -71,7 +71,7 @@ The repaired behavior is bounded by five invariants:
   archive, and tracked Python tests created unignored bytecode caches.
 - Evidence: repository references and package manifests do not consume the
   archive; native Terminal artifacts are owned under
-  `app/modules/zen-terminal-vt`.
+  `app/modules/terminal-vt`.
 - Fix: delete the archive and ignore `__pycache__/` and `*.py[cod]`.
 - Proof: reference search is empty outside this record, ignore checks match
   nested cache paths, and the final worktree contains no generated caches.

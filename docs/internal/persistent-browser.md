@@ -125,8 +125,8 @@ same-UID Agent with unrestricted shell access.
 ## Viewer transport
 
 Management is signed POST /browser using the paired-device purpose
-zen-browser. A separate authenticated /browser/viewer?id=<UUID> WebSocket is
-signed with purpose zen-browser-view:<UUID>. Raw stream/CDP remain private
+mewla-browser. A separate authenticated /browser/viewer?id=<UUID> WebSocket is
+signed with purpose mewla-browser-view:<UUID>. Raw stream/CDP remain private
 loopback endpoints. One viewer per resource is supported initially. Revoked
 devices cannot reconnect. A frame has at most 2.8 MB encoded image data, and the
 proxy sends only one outstanding frame until the renderer's ACK. The

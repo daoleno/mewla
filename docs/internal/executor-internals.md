@@ -19,7 +19,7 @@ Older `~/.mewla/executors.toml` files may still contain `delegated_executor`,
 `delegated_model` or `delegated_reasoning`. They load normally, but these keys
 are ignored, and `mewla doctor` prints a one-line note that they are retired.
 Delete them at any time. The `mewla worker defaults` and `mewla brain set-delegated`
-commands and the `ZEN_DELEGATED_EXECUTOR` lock no longer exist.
+commands and the `MEWLA_DELEGATED_EXECUTOR` lock no longer exist.
 
 Claude, Cursor and Grok delegated launches reuse the existing unattended client
 adapters. Claude `--permission-mode auto`, `dontAsk`, and `acceptEdits` are not
@@ -149,7 +149,7 @@ Delegated working directories on volatile/memory-backed storage are still reject
 
 See [resource telemetry](../resource-telemetry.md) for the machine snapshot, pressure thresholds and Brain events. `mewla resources --json` reads the cached snapshot. Brain can ask a Worker to release tools, close it with `mewla worker close`, or stop one selected owned tool tree with `mewla worker release -id SESSION -pid PID -start START` using the exact identity in `consumers[].processes`. Release refuses the live provider and its ancestors and does not close the Session.
 
-The Ghostty native build uses a disposable worktree because it must apply verified patches to an exact pinned source revision without mutating the shared checkout. Inside a delegated session that worktree lives under `MEWLA_WORKTREE_ROOT` (default `~/.mewla/worktrees`), not the owned temporary directory. Build temp may use the short owned `TMPDIR`/`MEWLA_BUILD_TMPDIR`. A direct developer build uses `~/.cache/zen/build-tmp` on Linux or `~/Library/Caches/zen/build-tmp` on macOS; set `MEWLA_BUILD_TMPDIR` to another durable absolute path when needed. This build-specific isolation does not imply one worktree per agent task.
+The Ghostty native build uses a disposable worktree because it must apply verified patches to an exact pinned source revision without mutating the shared checkout. Inside a delegated session that worktree lives under `MEWLA_WORKTREE_ROOT` (default `~/.mewla/worktrees`), not the owned temporary directory. Build temp may use the short owned `TMPDIR`/`MEWLA_BUILD_TMPDIR`. A direct developer build uses `~/.cache/mewla/build-tmp` on Linux or `~/Library/Caches/mewla/build-tmp` on macOS; set `MEWLA_BUILD_TMPDIR` to another durable absolute path when needed. This build-specific isolation does not imply one worktree per agent task.
 
 ## Structured chat update contract
 
