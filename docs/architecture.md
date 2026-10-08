@@ -144,6 +144,12 @@ have it:
   spends a fresh ordinary nonce once on `/session-file-capability`, then native
   GET/HEAD/Range and retry use a two-minute daemon-signed capability bound to
   device, live Session/process/start, path, generation, and HTTP method.
+  Video and audio stream through the same route: the daemon names them
+  `video`/`audio` only when the extension and the container signature agree,
+  serves `http.ServeContent` Range responses straight from the open file (never
+  reading it whole) under a 2 GiB media bound (images and PDFs keep 50 MiB),
+  and the player signs a fresh capability for the same generation when a seek
+  after the two minutes is refused, resuming where it was.
 - Upload retry restarts the request; the server does not claim resumable upload.
 - Terminal latency comes from an independent stream, not priority scheduling in
   a custom multiplexor.

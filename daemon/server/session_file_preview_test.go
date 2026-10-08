@@ -166,6 +166,140 @@ func TestSessionFilePreviewClassifiesSupportedAndUnsupportedRenderers(t *testing
 	}
 }
 
+func TestSessionFilePreviewClassifiesMediaBySignatureAndExtension(t *testing.T) {
+	ftyp := func(brand string) []byte {
+		return append([]byte{0, 0, 0, 0x20, 'f', 't', 'y', 'p'}, append([]byte(brand), 0, 0, 0, 0)...)
+	}
+	tests := []struct {
+		name        string
+		data        []byte
+		kind        string
+		contentType string
+	}{
+		{"promo.mp4", ftyp("isom"), "video", "video/mp4"},
+		{"clip.m4v", ftyp("M4V "), "video", "video/mp4"},
+		{"take.mov", ftyp("qt  "), "video", "video/quicktime"},
+		{"legacy.mov", []byte{0, 0, 0, 8, 'w', 'i', 'd', 'e'}, "video", "video/quicktime"},
+		{"clip.webm", []byte{0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81}, "video", "video/webm"},
+		{"voice.m4a", ftyp("M4A "), "audio", "audio/mp4"},
+		{"song.mp3", []byte("ID3\x04\x00\x00\x00\x00\x00\x00"), "audio", "audio/mpeg"},
+		{"raw.mp3", []byte{0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0}, "audio", "audio/mpeg"},
+		{"memo.wav", []byte("RIFF\x24\x08\x00\x00WAVEfmt "), "audio", "audio/wav"},
+		{"memo.ogg", []byte("OggS\x00\x02\x00\x00"), "audio", "audio/ogg"},
+		{"memo.opus", []byte("OggS\x00\x02\x00\x00"), "audio", "audio/ogg"},
+		{"memo.flac", []byte("fLaC\x00\x00\x00\x22"), "audio", "audio/flac"},
+		// The extension alone never makes a file playable.
+		{"fake.mp4", []byte("plain text pretending"), "text", "text/plain; charset=utf-8"},
+		{"fake.wav", []byte{'R', 'I', 'F', 'F', 0, 0, 0, 0, 'A', 'V', 'I', ' '}, "unsupported", "video/avi"},
+		// The signature alone never makes a file playable either.
+		{"movie.bin", ftyp("isom"), "unsupported", "application/octet-stream"},
+	}
+	for _, tt := range tests {
+		kind, contentType := classifySessionFile(tt.name, tt.data, true)
+		if kind != tt.kind || contentType != tt.contentType {
+			t.Fatalf("classify %s = %q %q, want %q %q", tt.name, kind, contentType, tt.kind, tt.contentType)
+		}
+	}
+}
+
+func TestSessionFileMediaStreamsRangesBeyondTheImageBound(t *testing.T) {
+	workspace := t.TempDir()
+	manager, privateKey, deviceID := sessionFileAuthFixture(t)
+	started := time.Date(2026, 10, 8, 4, 0, 0, 0, time.UTC)
+	worker := &classifier.Worker{ID: "main:@media", Cwd: workspace, ProcessID: 77, StartedAt: started}
+	server := New(manager, nil, nil, nil, nil, nil, nil)
+	server.sessionFileWorkerLoader = func(id string) *classifier.Worker {
+		if id != worker.ID {
+			return nil
+		}
+		copy := *worker
+		return &copy
+	}
+
+	tests := []struct {
+		name        string
+		size        int64
+		kind        string
+		contentType string
+		tooLarge    bool
+	}{
+		// A ~60 MB master is past the 50 MiB image/PDF bound but still plays.
+		{name: "master.mp4", size: 60 << 20, kind: "video", contentType: "video/mp4"},
+		{name: "at.m4a", size: maxSessionFileMediaBytes, kind: "audio", contentType: "audio/mp4"},
+		{name: "above.mp4", size: maxSessionFileMediaBytes + 1, kind: "video", contentType: "video/mp4", tooLarge: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(workspace, tt.name)
+			file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o600)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := file.Write([]byte{0, 0, 0, 0x20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'}); err != nil {
+				_ = file.Close()
+				t.Fatal(err)
+			}
+			// Sparse: the size bound is exercised without writing gigabytes.
+			if err := file.Truncate(tt.size); err != nil {
+				_ = file.Close()
+				t.Fatal(err)
+			}
+			if _, err := file.WriteAt([]byte("tail"), tt.size-4); err != nil {
+				_ = file.Close()
+				t.Fatal(err)
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			resolved, err := openSessionFile(workspace, tt.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			metadata := resolved.metadata()
+			_ = resolved.file.Close()
+			if metadata.Kind != tt.kind || metadata.ContentType != tt.contentType {
+				t.Fatalf("metadata kind=%q type=%q, want %q %q", metadata.Kind, metadata.ContentType, tt.kind, tt.contentType)
+			}
+			if metadata.TooLarge != tt.tooLarge || metadata.PreviewLimit != maxSessionFileMediaBytes {
+				t.Fatalf("too_large=%v limit=%d, want %v %d", metadata.TooLarge, metadata.PreviewLimit, tt.tooLarge, int64(maxSessionFileMediaBytes))
+			}
+
+			request := httptest.NewRequest(http.MethodGet, "/session-file", nil)
+			query := request.URL.Query()
+			query.Set("worker_id", worker.ID)
+			query.Set("process_id", strconv.Itoa(worker.ProcessID))
+			query.Set("started_at", string(startedAtRaw(started)))
+			query.Set("path", tt.name)
+			query.Set("generation", metadata.Generation)
+			request.URL.RawQuery = query.Encode()
+			request.Header.Set("Range", fmt.Sprintf("bytes=%d-", tt.size-4))
+			request.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+			response := httptest.NewRecorder()
+			server.handleSessionFileBinary(response, request)
+			if tt.tooLarge {
+				if response.Code != http.StatusRequestEntityTooLarge {
+					t.Fatalf("status=%d body=%s, want 413", response.Code, response.Body.String())
+				}
+				return
+			}
+			if response.Code != http.StatusPartialContent {
+				t.Fatalf("status=%d body=%s, want 206", response.Code, response.Body.String())
+			}
+			wantRange := fmt.Sprintf("bytes %d-%d/%d", tt.size-4, tt.size-1, tt.size)
+			if got := response.Header().Get("Content-Range"); got != wantRange {
+				t.Fatalf("Content-Range=%q, want %q", got, wantRange)
+			}
+			if got := response.Header().Get("Content-Type"); got != tt.contentType {
+				t.Fatalf("Content-Type=%q, want %q", got, tt.contentType)
+			}
+			if response.Header().Get("Accept-Ranges") != "bytes" || response.Body.String() != "tail" {
+				t.Fatalf("headers=%#v body=%q", response.Header(), response.Body.String())
+			}
+		})
+	}
+}
+
 func TestSessionFilePreviewUTF8SniffBoundary(t *testing.T) {
 	// Exact Free Ride shape: 512-byte sniff ends at lead byte e6 of 明 (e6 98 8e).
 	const sniffSize = 512
