@@ -133,6 +133,11 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if callback != "" && (in.Integration == "notion" || in.Integration == "linear") {
 		client = OAuthClientConfig{RedirectURL: callback}
 	}
+	// A registered app that returns only to the Mewla app (Slack's publisher
+	// app) can't bring a web UI sign-in back; say so before the browser leaves.
+	if callback != "" && callback != NativeCallback && client.RedirectURL == NativeCallback {
+		return Response{}, errors.New(serviceName(in.Integration) + " sign-in returns to the Mewla app. Connect " + serviceName(in.Integration) + " from the Mewla app on your phone.")
+	}
 
 	endpoint := in.Endpoint
 	switch in.Integration {

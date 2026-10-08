@@ -162,3 +162,21 @@ func TestWebCallbackLeavesNativeFlow(t *testing.T) {
 		t.Fatalf("web callback answered %d %q for a native flow", w.Code, w.Header().Get("Location"))
 	}
 }
+
+// Slack's publisher app returns only to the Mewla app, so the web UI says so
+// instead of sending the browser to a sign-in that can't come back.
+func TestWebConnectRefusesAppOnlyReturn(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = "public-slack"
+	defer func() { SlackPublicClientID = previous }()
+	m, _ := New(t.TempDir())
+	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
+	_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: "https://mewla.example"}})
+	if err == nil || !strings.Contains(err.Error(), "from the Mewla app") || len(m.pending) != 0 {
+		t.Fatalf("web Slack connect: %v", err)
+	}
+	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
+	if native == nil || !strings.Contains(native.AuthorizationURL, url.QueryEscape(NativeCallback)) {
+		t.Fatal("the app's Slack sign-in changed")
+	}
+}
