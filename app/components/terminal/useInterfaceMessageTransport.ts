@@ -26,6 +26,9 @@ import {
   releaseComposerStopLatch,
 } from "./composerStopLatch";
 
+export const OFFLINE_SEND_ERROR =
+  "Not sent: Mewla can't reach your computer. Your message is still here.";
+
 interface UseInterfaceMessageTransportInput {
   serverId: string;
   workerId: string;
@@ -109,6 +112,16 @@ export function useInterfaceMessageTransport({
   useEffect(() => {
     setOperationalError(undefined);
   }, [workerId, conversationScopeKey, serverId]);
+
+  // Send pressed while offline: say so where the user pressed it. The draft
+  // stays in the composer, and the note clears once the server is back.
+  const reportOfflineSend = useCallback(() => {
+    setOperationalError(OFFLINE_SEND_ERROR);
+  }, []);
+  useEffect(() => {
+    if (connectionState !== "connected") return;
+    setOperationalError((current) => (current === OFFLINE_SEND_ERROR ? undefined : current));
+  }, [connectionState]);
 
   const dispatchPendingUserMessageRef = useRef<
     (
@@ -405,6 +418,7 @@ export function useInterfaceMessageTransport({
     sending,
     interrupting,
     operationalError,
+    reportOfflineSend,
     submitTextToInterface,
     startNewInterfaceChat,
     sendSlashCommandToInterface,

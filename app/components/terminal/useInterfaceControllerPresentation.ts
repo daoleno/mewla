@@ -41,8 +41,9 @@ export function useInterfaceControllerPresentation({
     [connectionIssue, connectionState, conversation, runningActivity, sending],
   );
 
+  // Send stays live while offline: pressing it says why the message can't
+  // go, at the composer, and keeps the draft.
   const canSend =
-    connectionState === "connected" &&
     (draft.trim().length > 0 || attachments.length > 0) &&
     !sending &&
     !uploading;
