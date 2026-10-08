@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import {
+  ActivityIndicator,
   type ListRenderItem,
   SectionList,
   StyleSheet,
@@ -21,10 +22,12 @@ import type { WorkerDirectorySection } from "../../services/workerDirectory";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { WorkerListRowContainer } from "./WorkerListRowContainer";
 import { Icon } from "../icons/Icon";
+import { useWebTooltip } from "../ui/useWebTooltip";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
 /** The Sessions column, shared by the list, its empty states and the button. */
 export const SESSIONS_COLUMN_MAX_WIDTH = 760;
-const NEW_SESSION_BUTTON_HEIGHT = 40;
+const NEW_SESSION_BUTTON_HEIGHT = 48;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
 
@@ -159,8 +162,9 @@ interface NewSessionButtonProps {
 }
 
 /**
- * The page's one ink pill: compact, content-width, resting at the bottom
- * right of the Sessions column so it never competes with the rows.
+ * The page's one ink action: a round plus resting at the bottom right of the
+ * Sessions column so it never competes with the rows. Its name is in the
+ * label and the tooltip (with the N shortcut on desktop web), not on it.
  */
 export function NewSessionButton({
   bottomInset,
@@ -173,12 +177,15 @@ export function NewSessionButton({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const inactive = disabled || busy;
   const ink = inactive ? colors.disabledText : colors.textOnAccent;
+  const buttonRef = useRef<View>(null);
+  useWebTooltip(buttonRef, useDesktopWeb() ? "New session (N)" : "New session");
   return (
     <View
       pointerEvents="box-none"
       style={[styles.buttonDock, { bottom: bottomInset + NEW_SESSION_BUTTON_GAP }]}
     >
       <AnimatedPressable
+        ref={buttonRef}
         style={[styles.button, inactive && styles.buttonDisabled]}
         preset="press"
         scale={0.97}
@@ -188,10 +195,11 @@ export function NewSessionButton({
         accessibilityRole="button"
         accessibilityState={{ disabled: inactive, busy }}
       >
-        <Icon name="add" size={18} color={ink} />
-        <Text style={[styles.buttonLabel, { color: ink }]} numberOfLines={1}>
-          {busy ? "Starting…" : "New session"}
-        </Text>
+        {busy ? (
+          <ActivityIndicator size="small" color={ink} />
+        ) : (
+          <Icon name="add" size={22} color={ink} />
+        )}
       </AnimatedPressable>
     </View>
   );
@@ -233,14 +241,11 @@ function createStyles(theme: ResolvedTheme) {
       zIndex: 4,
     },
     button: {
+      width: NEW_SESSION_BUTTON_HEIGHT,
       height: NEW_SESSION_BUTTON_HEIGHT,
       borderRadius: Radii.pill,
-      flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 4,
-      paddingLeft: 12,
-      paddingRight: 16,
       backgroundColor: colors.accent,
       ...shadow("float"),
     },
@@ -248,10 +253,6 @@ function createStyles(theme: ResolvedTheme) {
       backgroundColor: colors.disabledSurface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-    },
-    buttonLabel: {
-      ...UiTextMetrics,
-      ...TypeScale.label,
     },
   });
 }
