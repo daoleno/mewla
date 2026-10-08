@@ -169,8 +169,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     const { connected, plugin_error: returnedError, service: returnedService } = returnParams;
     if (connected || returnedError) {
       // Drop the outcome from the address, so a reload or Back doesn't replay it.
-      if (Platform.OS === "web") globalThis.history?.replaceState(globalThis.history.state, "", globalThis.location.pathname);
-      else router.setParams({ plugin_error: undefined, connected: undefined, service: undefined });
+      router.replace("/plugins");
       setService(returnedService ?? null);
       if (connected) { setConnectedId(connected); setPhase("connected"); }
       else fail(pluginReturnError(returnedError) ?? "", returnedError === "cancelled" ? "cancelled" : "failed");
@@ -341,19 +340,19 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
       {catalog && flow.serverId ? <ServerOfflineNotice name={flow.serverName} connection={flow.connection} /> : null}
       {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {flow.error && !catalogFailed ? <InlineNotice tone="danger" title="That didn't go through" detail={flow.error} /> : null}
-      {flow.serverId && flow.service ? <ConnectStatusCard
-        serviceName={flow.plugin(flow.service)?.name ?? "the service"}
+      {flow.serverId && (flow.service || flow.connectError) ? <ConnectStatusCard
+        serviceName={flow.plugin(flow.service)?.name ?? null}
         phase={flow.phase}
         flow={flow.flow}
         error={flow.connectError}
         connected={flow.connected}
-        job={pluginJobs[flow.service]}
+        job={flow.service ? pluginJobs[flow.service] : undefined}
         starting={flow.running === `connect:${flow.service}`}
         allowing={!!flow.connected && flow.running === `write:${flow.connected.id}`}
         onOpen={() => { if (flow.flow) void flow.openBrowser(flow.flow); }}
         onCancel={() => void flow.cancel()}
         onRetry={() => {
-          if (!flow.service) return;
+          if (!flow.service) { flow.dismiss(); return; }
           // A custom service starts again from its form.
           if (flow.service === "mcp" || flow.service === "openapi") { flow.dismiss(); router.push(pluginServicePath(flow.service)); }
           else void flow.connect(flow.service);

@@ -69,7 +69,7 @@ export function pluginReturnError(code: string | undefined): string | null {
   switch (code) {
     case undefined: case "": return null;
     case "denied": return "Access was not granted. You can connect again whenever you’re ready.";
-    case "expired": return "This sign-in already finished or expired. Check the service below, and start again if it isn’t connected.";
+    case "expired": return "This sign-in already finished or expired. If the service below isn’t Connected, tap its Connect to start again.";
     case "cancelled": return "This connection was cancelled. Start again to connect.";
     default: return "The service couldn’t be verified. Start again.";
   }
