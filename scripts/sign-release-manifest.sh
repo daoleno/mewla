@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Sign the exact release manifest bytes with the offline Mewla updater key.
 #
-# The private key comes from either ZEN_UPDATE_SIGNING_KEY (a PEM path) or
-# ZEN_UPDATE_SIGNING_KEY_BASE64 (a base64-encoded PEM, intended for CI).
+# The private key comes from either MEWLA_UPDATE_SIGNING_KEY (a PEM path) or
+# MEWLA_UPDATE_SIGNING_KEY_BASE64 (a base64-encoded PEM, intended for CI).
 
 set -euo pipefail
 
@@ -24,15 +24,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-KEY="${ZEN_UPDATE_SIGNING_KEY:-}"
+KEY="${MEWLA_UPDATE_SIGNING_KEY:-}"
 if [[ -z "$KEY" ]]; then
-  if [[ -z "${ZEN_UPDATE_SIGNING_KEY_BASE64:-}" ]]; then
-    echo "error: set ZEN_UPDATE_SIGNING_KEY or ZEN_UPDATE_SIGNING_KEY_BASE64" >&2
+  if [[ -z "${MEWLA_UPDATE_SIGNING_KEY_BASE64:-}" ]]; then
+    echo "error: set MEWLA_UPDATE_SIGNING_KEY or MEWLA_UPDATE_SIGNING_KEY_BASE64" >&2
     exit 1
   fi
   TEMP_KEY="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mewla-update-key.XXXXXX")"
   chmod 600 "$TEMP_KEY"
-  printf '%s' "$ZEN_UPDATE_SIGNING_KEY_BASE64" | base64 --decode > "$TEMP_KEY"
+  printf '%s' "$MEWLA_UPDATE_SIGNING_KEY_BASE64" | base64 --decode > "$TEMP_KEY"
   KEY="$TEMP_KEY"
 fi
 if [[ ! -f "$KEY" ]]; then

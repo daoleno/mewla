@@ -29,7 +29,7 @@ jobs:
           # Extract under RUNNER_TEMP (writable); never sudo or /usr/local.
           python3 <<'PY'
           import hashlib, json, os, platform, subprocess, tarfile, pathlib, sys, urllib.request
-          lock = json.load(open("app/modules/zen-terminal-vt/native.lock.json"))
+          lock = json.load(open("app/modules/terminal-vt/native.lock.json"))
           ver = lock["zig"]["version"]
           machine = platform.machine()
           if machine in ("x86_64", "amd64"):
@@ -71,7 +71,7 @@ jobs:
 
       - name: Build libraries
         env:
-          ZEN_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
+          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
         run: ./scripts/build-libghostty.sh
 
       - name: Verify libraries (release grade)
@@ -82,10 +82,10 @@ jobs:
         with:
           name: libghostty-vt-android
           path: |
-            app/modules/zen-terminal-vt/libs/android/**/libghostty_vt.so
-            app/modules/zen-terminal-vt/libs/android/SHA256SUMS
-            app/modules/zen-terminal-vt/libs/android/build-manifest.json
-            app/modules/zen-terminal-vt/libs/android/GHOSTTY-MIT.txt
+            app/modules/terminal-vt/libs/android/**/libghostty_vt.so
+            app/modules/terminal-vt/libs/android/SHA256SUMS
+            app/modules/terminal-vt/libs/android/build-manifest.json
+            app/modules/terminal-vt/libs/android/GHOSTTY-MIT.txt
             app/assets/notices/GHOSTTY-MIT.txt
           if-no-files-found: error
 
@@ -104,7 +104,7 @@ jobs:
           set -euo pipefail
           python3 <<'PY'
           import hashlib, json, os, platform, tarfile, pathlib, sys, urllib.request
-          lock = json.load(open("app/modules/zen-terminal-vt/native.lock.json"))
+          lock = json.load(open("app/modules/terminal-vt/native.lock.json"))
           machine = platform.machine().lower()
           if machine not in ("arm64", "aarch64"):
               sys.exit(f"iOS XCFramework build requires an Apple Silicon runner, got {machine}")
@@ -125,8 +125,8 @@ jobs:
 
       - name: Build and verify XCFramework
         env:
-          ZEN_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
-          ZEN_TOOL_CACHE: ${{ runner.temp }}/zen-tools
+          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
+          MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
         run: ./scripts/build-libghostty-ios.sh
 
       - uses: oven-sh/setup-bun@v2
@@ -178,8 +178,8 @@ jobs:
         with:
           name: libghostty-vt-ios
           path: |
-            app/modules/zen-terminal-vt/libs/ios/GhosttyVt.xcframework/**
-            app/modules/zen-terminal-vt/libs/ios/GHOSTTY-MIT.txt
-            app/modules/zen-terminal-vt/libs/ios/SHA256SUMS
-            app/modules/zen-terminal-vt/libs/ios/build-manifest.json
+            app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework/**
+            app/modules/terminal-vt/libs/ios/GHOSTTY-MIT.txt
+            app/modules/terminal-vt/libs/ios/SHA256SUMS
+            app/modules/terminal-vt/libs/ios/build-manifest.json
           if-no-files-found: error

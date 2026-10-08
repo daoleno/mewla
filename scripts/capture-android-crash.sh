@@ -51,7 +51,7 @@ cleanup() {
   adb shell dumpsys dropbox --print data_app_native_crash > "${OUT_DIR}/dropbox-data-app-native-crash.txt" 2>&1 || true
 
   rg -n \
-    'FATAL EXCEPTION|AndroidRuntime|Fatal signal|SIGSEGV|SIGABRT|Abort message|backtrace|tombstone|crash_dump|Process .* has died|Native crash|libghostty|ghostty_vt|zen_terminal_vt|com\.anonymous\.zen' \
+    'FATAL EXCEPTION|AndroidRuntime|Fatal signal|SIGSEGV|SIGABRT|Abort message|backtrace|tombstone|crash_dump|Process .* has died|Native crash|libghostty|ghostty_vt|terminal_vt|com\.anonymous\.mewla' \
     "${OUT_DIR}/logcat-live.txt" \
     "${OUT_DIR}/logcat-dump.txt" \
     "${OUT_DIR}/logcat-crash.txt" \

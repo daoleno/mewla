@@ -10,11 +10,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/zen-terminal-vt/native.lock.json"
+LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
 NOTICE="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
-MODULE_NOTICE="$ROOT/app/modules/zen-terminal-vt/NOTICE.Ghostty"
-PLUGIN="$ROOT/app/plugins/withZenAndroidRelease.js"
-IOS_PLUGIN="$ROOT/app/plugins/withZenIOSBuild.js"
+MODULE_NOTICE="$ROOT/app/modules/terminal-vt/NOTICE.Ghostty"
+PLUGIN="$ROOT/app/plugins/withAndroidRelease.js"
+IOS_PLUGIN="$ROOT/app/plugins/withIOSBuild.js"
 
 MODE="full"
 ONLY_ABIS=()
@@ -46,8 +46,8 @@ bad() { echo "FAIL: $*" >&2; fail=1; }
 [[ -f "$LOCK" ]] && pass "lockfile present" || bad "missing $LOCK"
 [[ -f "$NOTICE" ]] && pass "Ghostty MIT notice source present" || bad "missing $NOTICE"
 [[ -f "$MODULE_NOTICE" ]] && pass "module NOTICE.Ghostty present" || bad "missing $MODULE_NOTICE"
-[[ -f "$PLUGIN" ]] && pass "withZenAndroidRelease plugin present" || bad "missing plugin"
-[[ -f "$IOS_PLUGIN" ]] && pass "withZenIOSBuild plugin present" || bad "missing iOS plugin"
+[[ -f "$PLUGIN" ]] && pass "withAndroidRelease plugin present" || bad "missing plugin"
+[[ -f "$IOS_PLUGIN" ]] && pass "withIOSBuild plugin present" || bad "missing iOS plugin"
 [[ -x "$ROOT/scripts/build-libghostty.sh" ]] && pass "build-libghostty.sh executable" || bad "build script not executable"
 [[ -x "$ROOT/scripts/verify-libghostty.sh" ]] && pass "verify-libghostty.sh executable" || bad "verify script not executable"
 [[ -x "$ROOT/scripts/verify-android-native-symbols.py" ]] && pass "Android native symbol verifier executable" || bad "Android native symbol verifier not executable"
@@ -191,11 +191,11 @@ print("ok: lockfile schema, zig pins, ABI contract")
 PY
 
 # Plugin registered?
-if grep -q "withZenAndroidRelease" "$ROOT/app/app.config.js" \
-  || grep -q "withZenAndroidRelease" "$ROOT/app/app.base.json"; then
-  pass "withZenAndroidRelease registered in Expo config"
+if grep -q "withAndroidRelease" "$ROOT/app/app.config.js" \
+  || grep -q "withAndroidRelease" "$ROOT/app/app.base.json"; then
+  pass "withAndroidRelease registered in Expo config"
 else
-  bad "withZenAndroidRelease not registered in app.config.js / app.base.json"
+  bad "withAndroidRelease not registered in app.config.js / app.base.json"
 fi
 
 if [[ "$MODE" == "contract" ]]; then

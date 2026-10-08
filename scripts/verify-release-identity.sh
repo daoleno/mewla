@@ -221,9 +221,9 @@ else:
         if s and ("/usr/lib/jvm/" in s or re.search(r"JAVA_HOME=", s)):
             errors.append(f"app/package.json {sibling} must not hardcode JAVA_HOME")
 
-vt_gradle = root / "app/modules/zen-terminal-vt/android/build.gradle"
+vt_gradle = root / "app/modules/terminal-vt/android/build.gradle"
 if not vt_gradle.is_file():
-    errors.append("missing zen-terminal-vt android/build.gradle")
+    errors.append("missing terminal-vt android/build.gradle")
 else:
     gtxt = vt_gradle.read_text(encoding="utf-8")
     # Hardcoded dual abiFilters override -PreactNativeArchitectures and break arm64-only release.
@@ -231,31 +231,31 @@ else:
         r'abiFilters\s+"arm64-v8a"\s*,\s*"x86_64"', gtxt
     ):
         errors.append(
-            "zen-terminal-vt build.gradle must not hardcode abiFilters arm64-v8a,x86_64; "
+            "terminal-vt build.gradle must not hardcode abiFilters arm64-v8a,x86_64; "
             "derive ABIs from reactNativeArchitectures"
         )
     if "reactNativeArchitectures" not in gtxt:
         errors.append(
-            "zen-terminal-vt build.gradle must honor project property reactNativeArchitectures"
+            "terminal-vt build.gradle must honor project property reactNativeArchitectures"
         )
-    if "zenTerminalAbis" not in gtxt:
-        errors.append("zen-terminal-vt build.gradle must define zenTerminalAbis()")
+    if "terminalAbis" not in gtxt:
+        errors.append("terminal-vt build.gradle must define terminalAbis()")
     if "libghostty_vt.so" not in gtxt:
         errors.append(
-            "zen-terminal-vt build.gradle should fail configuration when libghostty_vt.so is missing for a selected ABI"
+            "terminal-vt build.gradle should fail configuration when libghostty_vt.so is missing for a selected ABI"
         )
-    # Script-level `def ZEN_TERMINAL_*` is invisible inside methods (Gradle Script capture).
-    if re.search(r"(?m)^def\s+ZEN_TERMINAL_SUPPORTED_ABIS\b", gtxt):
+    # Script-level `def MEWLA_TERMINAL_*` is invisible inside methods (Gradle Script capture).
+    if re.search(r"(?m)^def\s+MEWLA_TERMINAL_SUPPORTED_ABIS\b", gtxt):
         errors.append(
-            "zen-terminal-vt build.gradle must not use script-level def ZEN_TERMINAL_SUPPORTED_ABIS "
-            "(methods cannot capture it; keep supported ABIs local to zenTerminalAbis())"
+            "terminal-vt build.gradle must not use script-level def MEWLA_TERMINAL_SUPPORTED_ABIS "
+            "(methods cannot capture it; keep supported ABIs local to terminalAbis())"
         )
 
-abi_gradle_check = root / "scripts/verify-zen-terminal-abi-gradle.sh"
+abi_gradle_check = root / "scripts/verify-terminal-abi-gradle.sh"
 if not abi_gradle_check.is_file():
-    errors.append("missing scripts/verify-zen-terminal-abi-gradle.sh")
+    errors.append("missing scripts/verify-terminal-abi-gradle.sh")
 elif not os.access(abi_gradle_check, os.X_OK):
-    errors.append("scripts/verify-zen-terminal-abi-gradle.sh must be executable")
+    errors.append("scripts/verify-terminal-abi-gradle.sh must be executable")
 
 for rel in (
     "scripts/stage-release.sh",
@@ -272,8 +272,8 @@ for rel in (
         errors.append(f"missing required release file: {rel}")
 
 wf = (root / ".github/workflows/release-artifacts.yml").read_text(encoding="utf-8")
-if "ZEN_ANDROID_KEYSTORE_BASE64" not in wf:
-    errors.append("release-artifacts.yml must reference ZEN_ANDROID_KEYSTORE_BASE64")
+if "MEWLA_ANDROID_KEYSTORE_BASE64" not in wf:
+    errors.append("release-artifacts.yml must reference MEWLA_ANDROID_KEYSTORE_BASE64")
 if "workflow_dispatch" not in wf:
     errors.append("release-artifacts.yml must support workflow_dispatch")
 if (
@@ -295,12 +295,12 @@ if "materialize-android-keystore" not in wf:
 if "-Dorg.gradle.jvmargs=-Xmx6g" not in wf:
     errors.append("release-artifacts.yml must provide enough Gradle heap for release dex merging")
 for required in (
-    "zen-android-ghostty-output-v2-arm64-",
-    "app/modules/zen-terminal-vt/android/src/main/cpp/ghostty",
+    "android-ghostty-output-v2-arm64-",
+    "app/modules/terminal-vt/android/src/main/cpp/ghostty",
 ):
     if required not in wf:
         errors.append(f"release-artifacts.yml missing complete native cache contract: {required}")
-if "ZEN_UPDATE_SIGNING_KEY_BASE64" not in wf:
+if "MEWLA_UPDATE_SIGNING_KEY_BASE64" not in wf:
     errors.append("release-artifacts.yml must use the updater manifest signing secret")
 for asset in (
     *DAEMON_ARCHIVES,

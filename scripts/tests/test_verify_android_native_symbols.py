@@ -26,7 +26,7 @@ Symbol table '.dynsym' contains 5 entries:
         )
 
     def test_lock_declares_both_unsupported_posix_shm_imports(self):
-        lock = SCRIPT.parents[1] / "app/modules/zen-terminal-vt/native.lock.json"
+        lock = SCRIPT.parents[1] / "app/modules/terminal-vt/native.lock.json"
 
         self.assertEqual(
             verify_symbols.load_forbidden_symbols(lock),

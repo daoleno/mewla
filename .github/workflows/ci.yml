@@ -134,8 +134,8 @@ jobs:
         run: ./scripts/verify-libghostty.sh --contract
       - name: Build and verify iOS Ghostty XCFramework
         env:
-          ZEN_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
-          ZEN_TOOL_CACHE: ${{ runner.temp }}/zen-tools
+          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
+          MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
         run: ./scripts/build-libghostty-ios.sh
       - name: Generate iOS project and install pods
         run: |
@@ -147,7 +147,7 @@ jobs:
           ../../scripts/assert-ios-camera-barcode-pod.sh Podfile.lock
       - name: Build unsigned Simulator app
         env:
-          DERIVED_DATA: ${{ runner.temp }}/zen-ios-derived
+          DERIVED_DATA: ${{ runner.temp }}/ios-derived
         run: |
           set -euo pipefail
           set -o pipefail
@@ -194,8 +194,8 @@ jobs:
             bun.lock
             app/package.json
             app/app.base.json
-            app/plugins/withZenAndroidRelease.js
-            app/modules/zen-terminal-vt/android/build.gradle
+            app/plugins/withAndroidRelease.js
+            app/modules/terminal-vt/android/build.gradle
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -218,26 +218,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ runner.temp }}/zen-tools
+            ${{ runner.temp }}/tools
             ${{ runner.temp }}/ghostty
-          key: zen-android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/zen-terminal-vt/native.lock.json', 'app/modules/zen-terminal-vt/patches/android/**', 'scripts/build-libghostty.sh') }}
+          key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh') }}
       - name: Restore verified Android Ghostty output
         id: ghostty-output-cache
         uses: actions/cache@v4
         with:
           path: |
-            app/modules/zen-terminal-vt/libs/android
-            app/modules/zen-terminal-vt/android/src/main/cpp/ghostty
-          key: zen-android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/zen-terminal-vt/native.lock.json', 'app/modules/zen-terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+            app/modules/terminal-vt/libs/android
+            app/modules/terminal-vt/android/src/main/cpp/ghostty
+          key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
       - name: Install Zig when Android Ghostty cache misses
         if: steps.ghostty-output-cache.outputs.cache-hit != 'true'
         env:
-          ZEN_TOOL_CACHE: ${{ runner.temp }}/zen-tools
+          MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
         run: |
           set -euo pipefail
           python3 <<'PY'
           import hashlib, json, os, platform, subprocess, tarfile, pathlib, sys, urllib.request
-          lock = json.load(open("app/modules/zen-terminal-vt/native.lock.json"))
+          lock = json.load(open("app/modules/terminal-vt/native.lock.json"))
           ver = lock["zig"]["version"]
           machine = platform.machine()
           if machine in ("x86_64", "amd64"):
@@ -253,7 +253,7 @@ jobs:
           runner_temp = os.environ.get("RUNNER_TEMP")
           if not runner_temp:
               sys.exit("RUNNER_TEMP is required for android-native Zig bootstrap")
-          install_root = pathlib.Path(runner_temp) / "zen-tools"
+          install_root = pathlib.Path(runner_temp) / "mewla-tools"
           install_root.mkdir(parents=True, exist_ok=True)
           dest = install_root / "zig.tar.xz"
           if not dest.is_file():
@@ -282,7 +282,7 @@ jobs:
       - name: Build arm64 Ghostty when cache misses
         if: steps.ghostty-output-cache.outputs.cache-hit != 'true'
         env:
-          ZEN_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
+          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
         run: |
           set -euo pipefail
           command -v zig
@@ -303,10 +303,10 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
         run: |
           set -euo pipefail
-          ./scripts/verify-zen-terminal-abi-gradle.sh
+          ./scripts/verify-terminal-abi-gradle.sh
           cd app/android
           ./gradlew \
-            :zen-terminal-vt:assembleDebug \
+            :terminal-vt:assembleDebug \
             :app:assembleDebug \
             :app:assembleRelease \
             -PreactNativeArchitectures=arm64-v8a \
@@ -321,7 +321,7 @@ jobs:
           APK="app/android/app/build/outputs/apk/release/app-release.apk"
           ./scripts/verify-apk-notice.sh "$APK"
           ./scripts/verify-android-native-symbols.py \
-            --lock app/modules/zen-terminal-vt/native.lock.json --apk "$APK"
+            --lock app/modules/terminal-vt/native.lock.json --apk "$APK"
 
   native-contract:
     name: Native terminal contract

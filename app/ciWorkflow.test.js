@@ -71,9 +71,9 @@ describe("ordinary CI contract", () => {
     expect(workflow).toMatch(
       /android-native:\s*[\s\S]*?name: Android native \(bounded link\)/,
     );
-    expect(workflow).toContain("zen-android-ghostty-output-v2-arm64-");
+    expect(workflow).toContain("android-ghostty-output-v2-arm64-");
     expect(workflow).toContain(
-      "app/modules/zen-terminal-vt/android/src/main/cpp/ghostty",
+      "app/modules/terminal-vt/android/src/main/cpp/ghostty",
     );
     expect(workflow).toContain(
       "./scripts/build-libghostty.sh --abis arm64-v8a",
@@ -86,8 +86,8 @@ describe("ordinary CI contract", () => {
     );
     expect(installZigStep).toBeGreaterThan(-1);
     expect(buildGhosttyStep).toBeGreaterThan(installZigStep);
-    expect(workflow).toContain("./scripts/verify-zen-terminal-abi-gradle.sh");
-    expect(workflow).toContain(":zen-terminal-vt:assembleDebug");
+    expect(workflow).toContain("./scripts/verify-terminal-abi-gradle.sh");
+    expect(workflow).toContain(":terminal-vt:assembleDebug");
     expect(workflow).toContain(":app:assembleDebug");
     expect(workflow).not.toMatch(
       /android-native:[\s\S]*?android-release-apk\.sh/,

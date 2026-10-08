@@ -57,7 +57,7 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           TMPDIR: ${{ runner.temp }}
-          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
         run: |
           mkdir -p "$MEWLA_BUILD_TMPDIR"
           python3 -m unittest discover -s scripts/tests -p 'test_prepare_release.py'
@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           RESULT="$(./scripts/prepare-release.py --version "$TARGET_VERSION")"
           printf '%s\n' "$RESULT"
-          python3 - "$RESULT" "$RUNNER_TEMP/zen-release-paths" >> "$GITHUB_OUTPUT" <<'PY'
+          python3 - "$RESULT" "$RUNNER_TEMP/mewla-release-paths" >> "$GITHUB_OUTPUT" <<'PY'
           import json
           import pathlib
           import sys
@@ -118,10 +118,10 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --pathspec-from-file="$RUNNER_TEMP/zen-release-paths"
+          git add --pathspec-from-file="$RUNNER_TEMP/mewla-release-paths"
           git diff --cached --check
 
-          EXPECTED="$(sort "$RUNNER_TEMP/zen-release-paths")"
+          EXPECTED="$(sort "$RUNNER_TEMP/mewla-release-paths")"
           STAGED="$(git diff --cached --name-only | sort)"
           [[ "$STAGED" == "$EXPECTED" ]] || {
             echo "error: staged release paths differ from generated paths" >&2

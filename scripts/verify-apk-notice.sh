@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/zen-terminal-vt/native.lock.json"
+LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
 NOTICE_SRC="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
 
 EXPECT_MISSING=0

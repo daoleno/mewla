@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Build the pinned libghostty-vt XCFramework for arm64 iOS devices and
-# Apple Silicon iOS Simulator. The output is consumed by ZenTerminalVt.podspec.
+# Apple Silicon iOS Simulator. The output is consumed by TerminalVt.podspec.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/zen-terminal-vt/native.lock.json"
-OUT_DIR="$ROOT/app/modules/zen-terminal-vt/libs/ios"
+LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
+OUT_DIR="$ROOT/app/modules/terminal-vt/libs/ios"
 NOTICE_SRC="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
-TOOL_CACHE="${ZEN_TOOL_CACHE:-$ROOT/.cache/zen-tools}"
-GHOSTTY_CACHE="${ZEN_GHOSTTY_CACHE:-$ROOT/.cache/zen/ghostty}"
+TOOL_CACHE="${MEWLA_TOOL_CACHE:-$ROOT/.cache/mewla-tools}"
+GHOSTTY_CACHE="${MEWLA_GHOSTTY_CACHE:-$ROOT/.cache/mewla/ghostty}"
 
 eval "$(python3 - "$LOCK" <<'PY'
 import json, shlex, sys
@@ -88,7 +88,7 @@ prepare_macos_sdk_for_zig() {
   local xcode_build
   xcode_build="$(xcodebuild -version | awk '/Build version/ {print $3}')"
   local compat_sdk="$TOOL_CACHE/macos-sdk-$xcode_build-arm64"
-  local marker="$compat_sdk/.zen-zig-arm64-libsystem"
+  local marker="$compat_sdk/.zig-arm64-libsystem"
   if [[ ! -f "$marker" ]]; then
     echo "Preparing Zig-compatible macOS SDK clone for Xcode $xcode_build..." >&2
     rm -rf "$compat_sdk"
@@ -134,7 +134,7 @@ echo "  zig:     $($ZIG_BIN version)"
 (
   cd "$GHOSTTY_SRC"
   PATH="$ROOT/scripts/zig-xcode-compat:$PATH" \
-    ZEN_MACOS_SDKROOT="$MACOS_SDKROOT" \
+    MEWLA_MACOS_SDKROOT="$MACOS_SDKROOT" \
     "$ZIG_BIN" build -Demit-lib-vt=true -Doptimize=ReleaseFast
 )
 

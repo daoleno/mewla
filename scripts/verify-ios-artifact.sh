@@ -5,13 +5,13 @@ set -euo pipefail
 
 MODE="${1:-}"
 ARTIFACT="${2:-}"
-EXPECTED_BUNDLE_ID="${ZEN_IOS_BUNDLE_ID:-com.daoleno.mewla}"
-EXPECTED_DISPLAY_NAME="${ZEN_IOS_DISPLAY_NAME:-Mewla}"
+EXPECTED_BUNDLE_ID="${MEWLA_IOS_BUNDLE_ID:-com.daoleno.mewla}"
+EXPECTED_DISPLAY_NAME="${MEWLA_IOS_DISPLAY_NAME:-Mewla}"
 EXPECTED_BUILD_NUMBER="${MEWLA_IOS_BUILD_NUMBER:-}"
-EXPECTED_VERSION="${ZEN_IOS_VERSION:-}"
+EXPECTED_VERSION="${MEWLA_IOS_VERSION:-}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NOTICE_SRC="${ZEN_IOS_NOTICE_SRC:-$ROOT/app/assets/notices/GHOSTTY-MIT.txt}"
-NOTICE_BUNDLE_REL="${ZEN_IOS_NOTICE_BUNDLE_REL:-GHOSTTY-MIT.txt}"
+NOTICE_SRC="${MEWLA_IOS_NOTICE_SRC:-$ROOT/app/assets/notices/GHOSTTY-MIT.txt}"
+NOTICE_BUNDLE_REL="${MEWLA_IOS_NOTICE_BUNDLE_REL:-GHOSTTY-MIT.txt}"
 
 usage() {
   echo "usage: $0 simulator path/to/Mewla.app | ipa path/to/Mewla.ipa" >&2

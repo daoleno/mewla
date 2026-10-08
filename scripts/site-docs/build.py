@@ -62,7 +62,7 @@ UNSAFE = [
     (re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"), "Telegram bot token"),
     (re.compile(PRIVATE_IP), "private IP address"),
     (re.compile(r"\b[a-z0-9-]+\.trycloudflare\.com"), "tunnel URL"),
-    (re.compile(r"#pair=[A-Za-z0-9_-]{16,}|(?:mewla|zen)://[A-Za-z0-9_-]{16,}"), "pairing link"),
+    (re.compile(r"#pair=[A-Za-z0-9_-]{16,}|(?:mewla|mewla)://[A-Za-z0-9_-]{16,}"), "pairing link"),
     (re.compile(r"\bw[0-9a-f]{32}\b"), "internal Work id"),
     (re.compile(r"\bturn:[0-9a-f]{8}-[0-9a-f]{4}-"), "internal turn id"),
 ]

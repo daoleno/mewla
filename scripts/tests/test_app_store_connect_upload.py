@@ -56,7 +56,7 @@ class BuildUploadTests(unittest.TestCase):
             check=True,
             capture_output=True,
         )
-        self.ipa = self.root / "Zen.ipa"
+        self.ipa = self.root / "Mewla.ipa"
         self.ipa_bytes = b"synthetic ipa bytes"
         self.ipa.write_bytes(self.ipa_bytes)
         self.requests = []
@@ -168,7 +168,7 @@ class BuildUploadTests(unittest.TestCase):
                 return Response(b'{"data":{"type":"builds","id":"build-5"}}')
             if "/apps/6790486708/betaGroups?" in url:
                 return Response(
-                    b'{"data":[{"type":"betaGroups","id":"group-preview","attributes":{"name":"Zen Preview","publicLinkEnabled":true,"publicLink":"https://testflight.apple.com/join/rTKCDzMt"}}]}'
+                    b'{"data":[{"type":"betaGroups","id":"group-preview","attributes":{"name":"Mewla Preview","publicLinkEnabled":true,"publicLink":"https://testflight.apple.com/join/rTKCDzMt"}}]}'
                 )
             if url.endswith("/betaGroups/group-preview/relationships/builds"):
                 return Response()
@@ -182,7 +182,7 @@ class BuildUploadTests(unittest.TestCase):
             "6790486708",
             "0.1.0",
             "5",
-            "Zen Preview",
+            "Mewla Preview",
             submit_beta_review=True,
             poll_seconds=0,
             max_wait_seconds=1,
@@ -221,7 +221,7 @@ class BuildUploadTests(unittest.TestCase):
                 )
             if "/apps/6790486708/betaGroups?" in url:
                 return Response(
-                    b'{"data":[{"type":"betaGroups","id":"group-preview","attributes":{"name":"Zen Preview","publicLinkEnabled":true}}]}'
+                    b'{"data":[{"type":"betaGroups","id":"group-preview","attributes":{"name":"Mewla Preview","publicLinkEnabled":true}}]}'
                 )
             if "/betaGroups/group-preview/builds?" in url:
                 return Response(b'{"data":[{"type":"builds","id":"build-5"}]}')
@@ -236,7 +236,7 @@ class BuildUploadTests(unittest.TestCase):
             "6790486708",
             "0.1.0",
             "5",
-            "Zen Preview",
+            "Mewla Preview",
             submit_beta_review=True,
             poll_seconds=0,
             max_wait_seconds=1,
@@ -271,7 +271,7 @@ class BuildUploadTests(unittest.TestCase):
                 raise urllib.error.HTTPError(url, 409, "conflict", {}, io.BytesIO(b'already set'))
             if "/apps/6790486708/betaGroups?" in url:
                 return Response(
-                    b'{"data":[{"id":"group-preview","attributes":{"name":"Zen Preview","publicLinkEnabled":true}}]}'
+                    b'{"data":[{"id":"group-preview","attributes":{"name":"Mewla Preview","publicLinkEnabled":true}}]}'
                 )
             if "/betaGroups/group-preview/builds?" in url:
                 return Response(b'{"data":[{"id":"build-6"}]}')
@@ -282,7 +282,7 @@ class BuildUploadTests(unittest.TestCase):
             "6790486708",
             "0.1.0",
             "6",
-            "Zen Preview",
+            "Mewla Preview",
             poll_seconds=0,
             max_wait_seconds=1,
         )
@@ -310,7 +310,7 @@ class BuildUploadTests(unittest.TestCase):
                 "6790486708",
                 "0.1.0",
                 "6",
-                "Zen Preview",
+                "Mewla Preview",
                 poll_seconds=0,
                 max_wait_seconds=1,
             )
@@ -325,7 +325,7 @@ class BuildUploadTests(unittest.TestCase):
                 )
             if "/apps/6790486708/betaGroups?" in url:
                 return Response(
-                    b'{"data":[{"type":"betaGroups","id":"group-preview","attributes":{"name":"Zen Preview","publicLinkEnabled":true}}]}'
+                    b'{"data":[{"type":"betaGroups","id":"group-preview","attributes":{"name":"Mewla Preview","publicLinkEnabled":true}}]}'
                 )
             if "/betaGroups/group-preview/builds?" in url:
                 return Response(b'{"data":[{"type":"builds","id":"build-5"}]}')
@@ -341,7 +341,7 @@ class BuildUploadTests(unittest.TestCase):
                 "6790486708",
                 "0.1.0",
                 "5",
-                "Zen Preview",
+                "Mewla Preview",
                 submit_beta_review=True,
                 poll_seconds=0,
                 max_wait_seconds=1,

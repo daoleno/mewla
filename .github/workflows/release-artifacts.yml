@@ -5,12 +5,13 @@ name: Release artifacts
 # An annotated vX.Y.Z or vX.Y.Z-beta.N tag push is the normal release action. Manual
 # dispatch can rebuild, and can recover publication only with explicit review.
 #
-# Secrets (GitHub Actions repository secrets only; never commit values):
-#   ZEN_ANDROID_KEYSTORE_BASE64
-#   ZEN_ANDROID_KEYSTORE_PASSWORD
-#   ZEN_ANDROID_KEY_ALIAS
-#   ZEN_ANDROID_KEY_PASSWORD
-#   ZEN_UPDATE_SIGNING_KEY_BASE64
+# Secrets (GitHub Actions repository secrets only; never commit values). Each
+# step maps them once into the MEWLA_* name that scripts read:
+#   ZEN_ANDROID_KEYSTORE_BASE64      -> MEWLA_ANDROID_KEYSTORE_BASE64
+#   ZEN_ANDROID_KEYSTORE_PASSWORD    -> MEWLA_ANDROID_KEYSTORE_PASSWORD
+#   ZEN_ANDROID_KEY_ALIAS            -> MEWLA_ANDROID_KEY_ALIAS
+#   ZEN_ANDROID_KEY_PASSWORD         -> MEWLA_ANDROID_KEY_PASSWORD
+#   ZEN_UPDATE_SIGNING_KEY_BASE64    -> MEWLA_UPDATE_SIGNING_KEY_BASE64
 #
 # Docs: docs/ci-release.md
 
@@ -40,7 +41,7 @@ permissions:
 
 env:
   # Stable non-secret product constants used in logs
-  ZEN_JAVA_VERSION: "17"
+  MEWLA_JAVA_VERSION: "17"
 
 jobs:
   validate:
@@ -154,8 +155,8 @@ jobs:
             bun.lock
             app/package.json
             app/app.base.json
-            app/plugins/withZenAndroidRelease.js
-            app/modules/zen-terminal-vt/android/build.gradle
+            app/plugins/withAndroidRelease.js
+            app/modules/terminal-vt/android/build.gradle
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -185,18 +186,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ runner.temp }}/zen-tools
+            ${{ runner.temp }}/tools
             ${{ runner.temp }}/ghostty
-          key: zen-android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/zen-terminal-vt/native.lock.json', 'app/modules/zen-terminal-vt/patches/android/**', 'scripts/build-libghostty.sh') }}
+          key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh') }}
 
       - name: Restore verified Android Ghostty output
         id: ghostty-output-cache
         uses: actions/cache@v4
         with:
           path: |
-            app/modules/zen-terminal-vt/libs/android
-            app/modules/zen-terminal-vt/android/src/main/cpp/ghostty
-          key: zen-android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/zen-terminal-vt/native.lock.json', 'app/modules/zen-terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+            app/modules/terminal-vt/libs/android
+            app/modules/terminal-vt/android/src/main/cpp/ghostty
+          key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
 
       - name: Install Zig (checksum-pinned from native.lock.json)
         run: |
@@ -204,7 +205,7 @@ jobs:
           # Extract under RUNNER_TEMP (writable); never sudo or /usr/local.
           python3 <<'PY'
           import hashlib, json, os, platform, subprocess, tarfile, pathlib, sys, urllib.request
-          lock = json.load(open("app/modules/zen-terminal-vt/native.lock.json"))
+          lock = json.load(open("app/modules/terminal-vt/native.lock.json"))
           ver = lock["zig"]["version"]
           machine = platform.machine()
           if machine in ("x86_64", "amd64"):
@@ -218,7 +219,7 @@ jobs:
           expect = d["sha256"]
           archive_root = d["archive_root"]
           runner_temp = pathlib.Path(os.environ.get("RUNNER_TEMP") or os.environ.get("TMPDIR") or "/tmp")
-          install_root = runner_temp / "zen-tools"
+          install_root = runner_temp / "mewla-tools"
           install_root.mkdir(parents=True, exist_ok=True)
           dest = install_root / "zig.tar.xz"
           if not dest.is_file():
@@ -259,7 +260,7 @@ jobs:
       - name: Build release-grade libghostty (arm64-v8a)
         if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' }}
         env:
-          ZEN_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
+          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
         run: |
           set -euo pipefail
           command -v zig
@@ -274,15 +275,15 @@ jobs:
       - name: Materialize signing keystore (temp, mode 0600)
         id: keystore
         env:
-          ZEN_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
+          MEWLA_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          if [[ -z "${ZEN_ANDROID_KEYSTORE_BASE64:-}" ]]; then
+          if [[ -z "${MEWLA_ANDROID_KEYSTORE_BASE64:-}" ]]; then
             echo "error: repository secret ZEN_ANDROID_KEYSTORE_BASE64 is not set" >&2
             exit 1
           fi
-          KS_PATH="${{ runner.temp }}/zen-release.p12"
-          export ZEN_ANDROID_KEYSTORE="$KS_PATH"
+          KS_PATH="${{ runner.temp }}/mewla-release.p12"
+          export MEWLA_ANDROID_KEYSTORE="$KS_PATH"
           # Script prints only the path; never logs secret material
           OUT="$(./scripts/materialize-android-keystore.sh)"
           # Do not echo path if it could be sensitive; it is a runner temp path (ok).
@@ -293,25 +294,25 @@ jobs:
 
       - name: Build signed Android arm64 release APK
         env:
-          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/zen-build
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
-          ZEN_ANDROID_KEYSTORE: ${{ steps.keystore.outputs.keystore_path }}
-          ZEN_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ZEN_ANDROID_KEYSTORE_PASSWORD }}
-          ZEN_ANDROID_KEY_ALIAS: ${{ secrets.ZEN_ANDROID_KEY_ALIAS }}
-          ZEN_ANDROID_KEY_PASSWORD: ${{ secrets.ZEN_ANDROID_KEY_PASSWORD }}
+          MEWLA_ANDROID_KEYSTORE: ${{ steps.keystore.outputs.keystore_path }}
+          MEWLA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ZEN_ANDROID_KEYSTORE_PASSWORD }}
+          MEWLA_ANDROID_KEY_ALIAS: ${{ secrets.ZEN_ANDROID_KEY_ALIAS }}
+          MEWLA_ANDROID_KEY_PASSWORD: ${{ secrets.ZEN_ANDROID_KEY_PASSWORD }}
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
         run: |
           set -euo pipefail
-          for v in ZEN_ANDROID_KEYSTORE_PASSWORD ZEN_ANDROID_KEY_ALIAS ZEN_ANDROID_KEY_PASSWORD; do
+          for v in MEWLA_ANDROID_KEYSTORE_PASSWORD MEWLA_ANDROID_KEY_ALIAS MEWLA_ANDROID_KEY_PASSWORD; do
             if [[ -z "${!v:-}" ]]; then
               echo "error: repository secret $v is not set" >&2
               exit 1
             fi
           done
-          test -f "${ZEN_ANDROID_KEYSTORE}"
+          test -f "${MEWLA_ANDROID_KEYSTORE}"
           ./scripts/android-release-apk.sh
           # Locate APK produced under dist-download/android-native
           APK="$(ls -t dist-download/android-native/mewla-android-arm64-*.apk | head -1)"
@@ -332,7 +333,7 @@ jobs:
             shred -u "${KS}" 2>/dev/null || rm -f "${KS}"
           fi
           # Ensure env materialization helpers leave no base64 on disk from this step
-          rm -f "${{ runner.temp }}/zen-release.p12" || true
+          rm -f "${{ runner.temp }}/mewla-release.p12" || true
 
       - name: Upload verified signed APK
         uses: actions/upload-artifact@v4
@@ -368,7 +369,7 @@ jobs:
           path: inputs/android
       - name: Deterministically stage, sign, and verify
         env:
-          ZEN_UPDATE_SIGNING_KEY_BASE64: ${{ secrets.ZEN_UPDATE_SIGNING_KEY_BASE64 }}
+          MEWLA_UPDATE_SIGNING_KEY_BASE64: ${{ secrets.ZEN_UPDATE_SIGNING_KEY_BASE64 }}
         run: |
           set -euo pipefail
           APK="$(find inputs/android -maxdepth 1 -type f -name '*.apk' -print -quit)"

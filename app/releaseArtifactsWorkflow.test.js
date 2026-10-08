@@ -74,10 +74,10 @@ describe('release asset workflow contract', () => {
     expect(workflow).toContain('cache: gradle');
     expect(appPackage).toContain('--build-cache');
     expect(workflow).toContain('-Dorg.gradle.jvmargs=-Xmx6g');
-    expect(workflow).toContain('zen-android-native-inputs-');
-    expect(workflow).toContain('zen-android-ghostty-output-v2-arm64-');
-    expect(workflow).toContain('app/modules/zen-terminal-vt/android/src/main/cpp/ghostty');
-    expect(workflow).toContain('app/modules/zen-terminal-vt/patches/android/**');
+    expect(workflow).toContain('android-native-inputs-');
+    expect(workflow).toContain('android-ghostty-output-v2-arm64-');
+    expect(workflow).toContain('app/modules/terminal-vt/android/src/main/cpp/ghostty');
+    expect(workflow).toContain('app/modules/terminal-vt/patches/android/**');
     expect(workflow).toContain('scripts/verify-android-native-symbols.py');
     expect(workflow).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
     expect(workflow).toContain('run: ./scripts/verify-libghostty.sh --release');

@@ -36,7 +36,7 @@ class PublisherTests(unittest.TestCase):
                     publisher.publisher_flags(config, [])
 
     def test_every_official_daemon_build_embeds_same_public_ids(self):
-        with tempfile.TemporaryDirectory(prefix='zen-publisher-build-') as directory:
+        with tempfile.TemporaryDirectory(prefix='mewla-publisher-build-') as directory:
             root = Path(directory)
             for name in ['scripts', 'release', 'daemon', 'app', 'fake-bin']:
                 (root / name).mkdir()

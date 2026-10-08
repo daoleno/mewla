@@ -43,8 +43,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "${ZEN_ANDROID_KEYSTORE:-}" && "$WITH_APK" -eq 0 && -z "$APK_PATH" ]]; then
-  echo "note: ZEN_ANDROID_KEYSTORE is set but this run is not building an APK; env ignored."
+if [[ -n "${MEWLA_ANDROID_KEYSTORE:-}" && "$WITH_APK" -eq 0 && -z "$APK_PATH" ]]; then
+  echo "note: MEWLA_ANDROID_KEYSTORE is set but this run is not building an APK; env ignored."
 fi
 
 IDENTITY_JSON="$ROOT/app/app.base.json"
