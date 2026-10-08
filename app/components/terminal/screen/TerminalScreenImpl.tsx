@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Linking } from "react-native";
-import { useWorkers } from "../../../store/workers";
+import { isWorkerSessionListFreshForConnection, useWorkers } from "../../../store/workers";
 import { useBrain } from "../../../store/brain";
 import { useWork } from "../../../store/work";
 import { useCurrentSession } from "../../../store/currentSession";
@@ -16,6 +16,7 @@ import { useTerminalScreenStorage } from "./useTerminalScreenStorage";
 import { useTerminalSessionActions } from "./useTerminalSessionActions";
 import { useTerminalNavigationActions } from "./useTerminalNavigationActions";
 import { useSessionProviderSheet } from "./useSessionProviderSheet";
+import { useMissingSessionExit } from "./useMissingSessionExit";
 import { dshWebServiceURL } from "../../../services/sessionServicesPresentation";
 import { wsClient } from "../../../services/websocket";
 import { useDesktopPageTitle } from "../../navigation/useDesktopWeb";
@@ -111,6 +112,12 @@ export default function TerminalScreen() {
     showInterfaceChat,
   } = route;
   useDesktopPageTitle(displayName, screenFocused);
+  useMissingSessionExit({
+    focused: screenFocused,
+    resolved: Boolean(agent),
+    sessionListFresh: Boolean(serverId) && isWorkerSessionListFreshForConnection(state, serverId),
+    brainHostKnown: brainForServer !== undefined,
+  });
   const {
     keyboardVisible,
     ctrlArmed,

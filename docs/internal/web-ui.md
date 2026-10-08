@@ -12,9 +12,15 @@ mewla web
 ```
 
 This asks the running daemon for a one-time pairing token. It then opens
-`http://127.0.0.1:9876/#pair=...` in your default browser. Confirm **Pair and
-grant access** and the browser lands in Settings, connected. Later visits to
-`http://127.0.0.1:9876/` reuse that pairing.
+`http://127.0.0.1:9876/#pair=...` in your default browser. The page asks **Pair
+this browser?**; confirm **Pair and grant access** and the browser lands in
+Settings, connected. Later visits to `http://127.0.0.1:9876/` reuse that
+pairing.
+
+A Session's address, `/terminal/<id>`, opens that Session when you reload it or
+paste it into a new tab. Without `?serverId=` it means the current server. A
+link to a closed or unknown Session, or to another server, opens the Session
+list.
 
 - `mewla web -no-open` prints the link instead of opening it. The link works once
   and expires after 15 minutes. Do not share or paste it anywhere else.

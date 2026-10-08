@@ -51,12 +51,17 @@ test("Sessions, services and Stats have no feature-local server enumeration or p
 });
 
 test("stale routed pages are hidden and only focused pages redirect", () => {
-  for (const path of ["../app/terminal/[id].tsx", "../app/work/[id].tsx"]) {
-    const source = readFileSync(new URL(path, import.meta.url), "utf8");
-    expect(source).toContain("focused && hydrated && !isCurrentServer");
-    expect(source).toContain("if (!hydrated || !isCurrentServer");
-    expect(source).not.toContain("<Redirect");
-  }
+  const work = readFileSync(new URL("../app/work/[id].tsx", import.meta.url), "utf8");
+  expect(work).toContain("focused && hydrated && !isCurrentServer");
+  expect(work).toContain("if (!hydrated || !isCurrentServer");
+  expect(work).not.toContain("<Redirect");
+  // Terminal links resolve against the current server; anything else renders
+  // nothing, and only a focused page rewrites or leaves the route.
+  const terminal = readFileSync(new URL("../app/terminal/[id].tsx", import.meta.url), "utf8");
+  expect(terminal).toContain("resolveTerminalLink(routeId, serverId, currentServerId)");
+  expect(terminal).toContain("if (!focused || !hydrated || canonical) return");
+  expect(terminal).toContain("if (!canonical) return null");
+  expect(terminal).not.toContain("<Redirect");
   const sheet = readFileSync(new URL("../components/terminal/NewTerminalSheet.tsx", import.meta.url), "utf8");
   expect(sheet).toContain("if (!serverId || !isCurrentServer(serverId)) return");
   expect(sheet).not.toContain("serverOptions");

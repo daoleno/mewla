@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decodeWorkerRouteId, encodeWorkerRouteId, terminalRouteParams } from "./workerRouteId";
+import { decodeWorkerRouteId, encodeWorkerRouteId, resolveTerminalLink, terminalRouteParams } from "./workerRouteId";
 import { resolveTerminalRouteWorker } from "../components/terminal/screen/useTerminalRouteModel";
 
 describe("worker route IDs", () => {
@@ -37,5 +37,18 @@ describe("worker route IDs", () => {
 
     expect(route.id).toBe("w25313532");
     expect(worker).toMatchObject({ id: "%152", serverId: "server-live", command: "zsh" });
+  });
+
+  test("a Terminal link without a server opens on the current server", () => {
+    expect(resolveTerminalLink("w25313532", undefined, "server-live")).toEqual({ id: "w25313532", serverId: "server-live" });
+    expect(resolveTerminalLink("w25313532", "server-live", "server-live")).toEqual({ id: "w25313532", serverId: "server-live" });
+  });
+
+  test("a Terminal link for another server or no Worker route resolves to nothing", () => {
+    expect(resolveTerminalLink("w25313532", "server-old", "server-live")).toBeNull();
+    expect(resolveTerminalLink("w25313532", undefined, null)).toBeNull();
+    expect(resolveTerminalLink("", undefined, "server-live")).toBeNull();
+    expect(resolveTerminalLink("%152", undefined, "server-live")).toBeNull();
+    expect(resolveTerminalLink("zzz", undefined, "server-live")).toBeNull();
   });
 });
