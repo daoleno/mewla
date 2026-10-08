@@ -256,21 +256,35 @@ chats keep every row). The composer says "Tell Brain…".
 ## Iconography
 
 One vocabulary, one component: `components/icons/Icon.tsx` with named
-glyphs (`IconName`). The set is soft and rounded: Phosphor's bold geometry
-(round caps and joins, about a 1.9 pt stroke at 20 pt), vendored as path data
-by `bun scripts/vendor-phosphor-icons.ts` (MIT notice in the generated
-`phosphorGlyphs.ts`), plus hand-drawn Mewla glyphs on the same 256 grid and
-weight (`mewlaGlyphs.ts`): Brain is a round chat bubble with two soft cat
-ears, and the menu is two lines. Add a glyph by naming it in the vendoring
-script (or drawing it there), never by importing an icon font.
+glyphs (`IconName`). Every glyph is an original Mewla drawing in
+`components/icons/mewlaGlyphs.ts`, in the spirit of Hugeicons' Stroke
+Rounded set but never copied or traced from it. The grammar:
+
+- **Grid.** A 24 px artboard. Live shapes sit inside 2–22 (circles r 9.25,
+  boxes about 18), and nothing, stroke included, crosses 0.75 from the edge.
+- **Stroke.** 1.5 on the grid, so about 1.25 pt at 20 pt. Caps and joins
+  are round, and the stroke is `currentColor` (the `color` prop).
+- **Corners.** Soft and generous. Boxes take radius 3–5 at full size (about
+  a quarter of the side), and every bend in a line is eased (`soft()`), so
+  even chevrons and arrowheads have no hard point.
+- **Geometry.** Open and friendly: outline only, few strokes, dots for
+  detail (r 1), and no hairline inner detail that vanishes at 16 px.
+- **Mewla touches.** Brain is a round chat bubble with two soft cat ears,
+  and the menu is two lines.
+
+Add a glyph by drawing it in `mewlaGlyphs.ts` with the same helpers
+(`box`, `circle`, `soft`, `dot`), never by importing an icon font or
+pasting another set's paths. `iconVocabulary.test.ts` checks the number
+format, that every glyph stays inside the grid, and the cat ears.
 
 - Glyphs are ink (`textSecondary` at rest, `textPrimary` when selected),
   never vermilion; Send and the seal keep their own colours. The Brain
   glyph's ears are the cat's name in the icon set, not a second cat: the
   one-cat rule counts the vermilion seal and its poses.
 - `*-fill` variants exist only where a filled shape carries state (notices,
-  toasts, selection checks, an expanded calendar). Everything else is bold
-  outline.
+  toasts, selection checks, an expanded calendar, the selected radio, the
+  active step dot). Their marks are cut out with the even-odd rule, so they
+  work on any ground. Everything else is outline.
 - Glyphs are decorative; the control around them carries the label. Sizes
   and hit targets are the control's, unchanged by the set.
 - Real product marks (Claude, Codex, GitHub, Slack, Google and the agent
