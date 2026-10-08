@@ -39,22 +39,27 @@ export function InterfaceTimelineLoadingState({
     [companion],
   );
   return (
-    <View
-      style={styles.root}
-      accessible
-      accessibilityLabel="Loading conversation"
-      accessibilityLiveRegion="polite"
-    >
-      {SKELETON.map((group, index) => (
-        <View key={index} style={group.side === "you" ? styles.you : styles.brain}>
-          {group.widths.map((width, line) => (
-            <View
-              key={line}
-              style={[group.side === "you" ? styles.bubble : styles.line, { width }]}
-            />
-          ))}
-        </View>
-      ))}
+    <View style={styles.root}>
+      {/* One element for the outline; the cat stays its own, so a screen
+          reader can still tap it. */}
+      <View
+        style={styles.outline}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Loading conversation"
+        accessibilityLiveRegion="polite"
+      >
+        {SKELETON.map((group, index) => (
+          <View key={index} style={group.side === "you" ? styles.you : styles.brain}>
+            {group.widths.map((width, line) => (
+              <View
+                key={line}
+                style={[group.side === "you" ? styles.bubble : styles.line, { width }]}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
       {waking ? <BrainCatRow companion={waking} label="Waking up" chrome={chrome} /> : null}
     </View>
   );
@@ -68,6 +73,9 @@ function createStyles(chrome: TerminalThemeChrome) {
       justifyContent: "center",
       gap: 22,
       paddingVertical: 24,
+    },
+    outline: {
+      gap: 22,
     },
     you: {
       alignItems: "flex-end",
