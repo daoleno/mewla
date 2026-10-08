@@ -25,25 +25,25 @@ jobs:
 
       - name: Validate input and Individual API key secrets
         env:
-          ZEN_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
-          ZEN_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
         run: |
           set -euo pipefail
           [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "${{ inputs.build_number }}" =~ ^[1-9][0-9]*$ ]]
-          test -n "$ZEN_ASC_KEY_ID"
-          test -n "$ZEN_ASC_API_KEY_BASE64"
+          test -n "$MEWLA_ASC_KEY_ID"
+          test -n "$MEWLA_ASC_API_KEY_BASE64"
 
       - name: Process, attach public group, and submit Beta App Review
         env:
-          ASC_KEY_PATH: ${{ runner.temp }}/zen-asc-individual-key.p8
-          ZEN_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
-          ZEN_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
         run: |
           set -euo pipefail
           python3 - "$ASC_KEY_PATH" <<'PY'
           import base64, os, pathlib, sys
-          data = base64.b64decode(os.environ["ZEN_ASC_API_KEY_BASE64"], validate=True)
+          data = base64.b64decode(os.environ["MEWLA_ASC_API_KEY_BASE64"], validate=True)
           if not data:
               raise SystemExit("error: Individual API key decoded to an empty file")
           path = pathlib.Path(sys.argv[1])
@@ -55,11 +55,11 @@ jobs:
             --app-id 6790486708 \
             --version "${{ inputs.version }}" \
             --build-number "${{ inputs.build_number }}" \
-            --key-id "$ZEN_ASC_KEY_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
             --beta-group-name "Mewla Preview" \
             --submit-beta-review
 
       - name: Remove temporary Individual API key
         if: always()
-        run: rm -f "${{ runner.temp }}/zen-asc-individual-key.p8"
+        run: rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"

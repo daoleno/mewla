@@ -5,16 +5,16 @@
 #   - JDK 17, Android SDK (ANDROID_HOME), bun install
 #   - release_grade libghostty arm64 (./scripts/build-libghostty.sh --abis arm64-v8a)
 #   - pinned NDK 27.1.12297006
-#   - Expo prebuild so withZenAndroidRelease has wired assets + signing
+#   - Expo prebuild so withAndroidRelease has wired assets + signing
 #
 # Signing (secret-safe):
 #   Default: debug keystore (local/dev sideload only).
 #   Optional release keystore via environment only (never commit; never printed):
-#     ZEN_ANDROID_KEYSTORE=/absolute/path/to/release.keystore
-#     ZEN_ANDROID_KEYSTORE_PASSWORD=...
-#     ZEN_ANDROID_KEY_ALIAS=...
-#     ZEN_ANDROID_KEY_PASSWORD=...
-#   Gradle reads these via System.getenv (withZenAndroidRelease plugin).
+#     MEWLA_ANDROID_KEYSTORE=/absolute/path/to/release.keystore
+#     MEWLA_ANDROID_KEYSTORE_PASSWORD=...
+#     MEWLA_ANDROID_KEY_ALIAS=...
+#     MEWLA_ANDROID_KEY_PASSWORD=...
+#   Gradle reads these via System.getenv (withAndroidRelease plugin).
 #   This script does not pass secrets as -P flags.
 #
 # Usage:
@@ -60,20 +60,20 @@ if [[ ! -f "$ROOT/app/assets/notices/GHOSTTY-MIT.txt" ]]; then
 fi
 
 # Signing env completeness (do not print values)
-if [[ -n "${ZEN_ANDROID_KEYSTORE:-}" ]]; then
-  for v in ZEN_ANDROID_KEYSTORE_PASSWORD ZEN_ANDROID_KEY_ALIAS ZEN_ANDROID_KEY_PASSWORD; do
+if [[ -n "${MEWLA_ANDROID_KEYSTORE:-}" ]]; then
+  for v in MEWLA_ANDROID_KEYSTORE_PASSWORD MEWLA_ANDROID_KEY_ALIAS MEWLA_ANDROID_KEY_PASSWORD; do
     if [[ -z "${!v:-}" ]]; then
-      echo "error: $v is required when ZEN_ANDROID_KEYSTORE is set" >&2
+      echo "error: $v is required when MEWLA_ANDROID_KEYSTORE is set" >&2
       exit 1
     fi
   done
-  if [[ ! -f "$ZEN_ANDROID_KEYSTORE" ]]; then
+  if [[ ! -f "$MEWLA_ANDROID_KEYSTORE" ]]; then
     echo "error: keystore file not found (path redacted)" >&2
     exit 1
   fi
-  echo "note: ZEN_ANDROID_KEYSTORE is set; release signing will use env-based config if plugin wired."
+  echo "note: MEWLA_ANDROID_KEYSTORE is set; release signing will use env-based config if plugin wired."
 else
-  echo "note: no ZEN_ANDROID_KEYSTORE set — APK uses debug keystore (local/dev sideload only)."
+  echo "note: no MEWLA_ANDROID_KEYSTORE set — APK uses debug keystore (local/dev sideload only)."
 fi
 
 if [[ $SKIP_PREBUILD -eq 0 ]]; then
@@ -89,9 +89,9 @@ if [[ ! -x "$ROOT/app/android/gradlew" ]]; then
 fi
 
 GRADLE_APP="$ROOT/app/android/app/build.gradle"
-if ! grep -q 'System.getenv("ZEN_ANDROID_KEYSTORE")' "$GRADLE_APP"; then
-  echo "error: generated app/build.gradle lacks ZEN_ANDROID_KEYSTORE wiring" >&2
-  echo "       withZenAndroidRelease plugin did not apply; refuse false-confidence signing" >&2
+if ! grep -q 'System.getenv("MEWLA_ANDROID_KEYSTORE")' "$GRADLE_APP"; then
+  echo "error: generated app/build.gradle lacks MEWLA_ANDROID_KEYSTORE wiring" >&2
+  echo "       withAndroidRelease plugin did not apply; refuse false-confidence signing" >&2
   exit 1
 fi
 pass_notice_asset="$ROOT/app/android/app/src/main/assets/notices/GHOSTTY-MIT.txt"
@@ -146,25 +146,25 @@ if [[ ! -f "$APK" ]]; then
 fi
 
 "$ROOT/scripts/verify-android-native-symbols.py" --lock \
-  "$ROOT/app/modules/zen-terminal-vt/native.lock.json" --apk "$APK"
+  "$ROOT/app/modules/terminal-vt/native.lock.json" --apk "$APK"
 "$ROOT/scripts/verify-apk-notice.sh" "$APK"
 
 OUT_DIR="$ROOT/dist-download/android-native"
 mkdir -p "$OUT_DIR"
 # Name from canonical app identity + pin short + content hash (not a formal release).
 APP_VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
-PIN_SHORT="$(python3 -c "import json;print(json.load(open('app/modules/zen-terminal-vt/native.lock.json'))['ghostty']['commit'][:12])")"
+PIN_SHORT="$(python3 -c "import json;print(json.load(open('app/modules/terminal-vt/native.lock.json'))['ghostty']['commit'][:12])")"
 APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
 COPY="$OUT_DIR/mewla-android-arm64-v${APP_VERSION}-${PIN_SHORT}-${APK_SHA:0:12}.apk"
 cp -f "$APK" "$COPY"
 echo "$APK_SHA  $(basename "$COPY")" | tee "$COPY.sha256"
 # Adjacent copy for humans who unpack the directory (APK itself already verified)
 cp -f "$ROOT/app/assets/notices/GHOSTTY-MIT.txt" "$OUT_DIR/GHOSTTY-MIT.txt"
-if [[ -f "$ROOT/app/modules/zen-terminal-vt/libs/android/SHA256SUMS" ]]; then
-  cp -f "$ROOT/app/modules/zen-terminal-vt/libs/android/SHA256SUMS" "$OUT_DIR/libghostty-SHA256SUMS"
+if [[ -f "$ROOT/app/modules/terminal-vt/libs/android/SHA256SUMS" ]]; then
+  cp -f "$ROOT/app/modules/terminal-vt/libs/android/SHA256SUMS" "$OUT_DIR/libghostty-SHA256SUMS"
 fi
-if [[ -f "$ROOT/app/modules/zen-terminal-vt/libs/android/build-manifest.json" ]]; then
-  cp -f "$ROOT/app/modules/zen-terminal-vt/libs/android/build-manifest.json" "$OUT_DIR/libghostty-build-manifest.json"
+if [[ -f "$ROOT/app/modules/terminal-vt/libs/android/build-manifest.json" ]]; then
+  cp -f "$ROOT/app/modules/terminal-vt/libs/android/build-manifest.json" "$OUT_DIR/libghostty-build-manifest.json"
 fi
 
 echo ""

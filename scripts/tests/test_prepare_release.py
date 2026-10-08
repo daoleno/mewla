@@ -38,7 +38,7 @@ FIXTURE_PATHS = (
     "app/app.base.json",
     "app/iosIdentity.js",
     "app/ios-build.json",
-    "app/modules/zen-terminal-vt/native.lock.json",
+    "app/modules/terminal-vt/native.lock.json",
     "daemon/cmd/mewla/version.go",
     "scripts/verify-release-identity.sh",
     "docs/install-daemon.md",
@@ -445,7 +445,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 "- ABI: `arm64-v8a`",
                 "- ABI: `x86_64`",
                 "Android ABI does not match "
-                "app/modules/zen-terminal-vt/native.lock.json",
+                "app/modules/terminal-vt/native.lock.json",
             ),
         )
         for name, old, new, error in mismatches:
@@ -491,7 +491,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         release_job_header = workflow.split("steps:", 1)[0]
         self.assertNotIn("runner.temp", release_job_header)
         self.assertEqual(
-            workflow.count("MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/zen-build"),
+            workflow.count("MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build"),
             1,
         )
         test_step = workflow.split(
@@ -519,7 +519,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             "./scripts/verify-release-identity.sh",
             "go test ./cmd/mewla",
             'git config user.name "github-actions[bot]"',
-            'git add --pathspec-from-file="$RUNNER_TEMP/zen-release-paths"',
+            'git add --pathspec-from-file="$RUNNER_TEMP/mewla-release-paths"',
             'git commit -m "Prepare $NEXT_TAG"',
             'git tag -a "$NEXT_TAG" HEAD',
             'git rev-parse refs/remotes/origin/main)" == "$START_SHA"',

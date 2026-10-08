@@ -12,7 +12,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/daemon/webui/dist"
-STAGE="$(mktemp -d "${TMPDIR:-/tmp}/zen-web-ui.XXXXXX")"
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/web-ui.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
 (

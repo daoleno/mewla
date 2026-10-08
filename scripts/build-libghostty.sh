@@ -10,13 +10,13 @@
 #   MEWLA_BUILD_TMPDIR=/durable/path ./scripts/build-libghostty.sh
 #
 # Requires: zig (version from native.lock.json), git, python3
-# Ghostty source: GHOSTTY_SRC, or a clone under ${ZEN_GHOSTTY_CACHE:-$HOME/.cache/zen/ghostty}
+# Ghostty source: GHOSTTY_SRC, or a clone under ${MEWLA_GHOSTTY_CACHE:-$HOME/.cache/mewla/ghostty}
 
 set -euo pipefail
 umask 077
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/zen-terminal-vt/native.lock.json"
+LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
 NOTICE_SRC="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
 
 if [[ ! -f "$LOCK" ]]; then
@@ -56,7 +56,7 @@ fi
 mkdir -p "$BUILD_TMP_ROOT"
 chmod 700 "$BUILD_TMP_ROOT"
 
-LOCK_ENV="$(mktemp "$BUILD_TMP_ROOT/zen-libghostty-lock.XXXXXX")"
+LOCK_ENV="$(mktemp "$BUILD_TMP_ROOT/libghostty-lock.XXXXXX")"
 BUILD_WORKTREE_PARENT=""
 BUILD_GHOSTTY_SRC=""
 BUILD_WORKTREE_KIND=""
@@ -218,7 +218,7 @@ resolve_ghostty_src() {
     echo "$GHOSTTY_SRC"
     return
   fi
-  local cache="${ZEN_GHOSTTY_CACHE:-$HOME/.cache/zen/ghostty}"
+  local cache="${MEWLA_GHOSTTY_CACHE:-$HOME/.cache/mewla/ghostty}"
   if [[ -f "$cache/build.zig" ]]; then
     echo "$cache"
     return
@@ -306,7 +306,7 @@ for ((i = 0; i < LOCK_PATCH_COUNT; i++)); do
   PATCH_PATHS+=("$patch_abs")
 done
 
-BUILD_WORKTREE_PARENT="$(mktemp -d "$BUILD_TMP_ROOT/zen-libghostty-worktree.XXXXXX")"
+BUILD_WORKTREE_PARENT="$(mktemp -d "$BUILD_TMP_ROOT/libghostty-worktree.XXXXXX")"
 BUILD_GHOSTTY_SRC="$BUILD_WORKTREE_PARENT/ghostty"
 if [[ $SOURCE_IS_GIT -eq 1 ]]; then
   BUILD_WORKTREE_KIND="git"

@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERIAL="${1:?usage: test-terminal-row-updates-android.sh DEVICE_SERIAL}"
 SDK="${ANDROID_HOME:?ANDROID_HOME is required}"
 BUILD_TMP="${MEWLA_BUILD_TMPDIR:-${TMPDIR:-/tmp}}/terminal-row-updates-test"
-MODULE="$ROOT/app/modules/zen-terminal-vt"
+MODULE="$ROOT/app/modules/terminal-vt"
 ABI="$(adb -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
 case "$ABI" in
   x86_64) TARGET=x86_64-linux-android29 ;;
@@ -19,7 +19,7 @@ mkdir -p "$BUILD_TMP"
   -std=c++17 -UNDEBUG -static-libstdc++ \
   -I "$MODULE/android/src/main/cpp" -L "$MODULE/libs/android/$ABI" \
   "$MODULE/tests/render_row_updates.cpp" -lghostty_vt -o "$BUILD_TMP/check"
-DEVICE_DIR="/data/local/tmp/zen-row-updates-$$"
+DEVICE_DIR="/data/local/tmp/mewla-row-updates-$$"
 trap 'adb -s "$SERIAL" shell rm -rf "$DEVICE_DIR" >/dev/null 2>&1 || true; rm -f "$BUILD_TMP/check"; rmdir "$BUILD_TMP" 2>/dev/null || true' EXIT
 adb -s "$SERIAL" shell mkdir -p "$DEVICE_DIR"
 adb -s "$SERIAL" push "$BUILD_TMP/check" "$DEVICE_DIR/" >/dev/null

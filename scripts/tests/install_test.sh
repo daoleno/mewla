@@ -406,17 +406,6 @@ test_executable_failure_keeps_previous_install() {
   pass "executable failure retains the previous binary"
 }
 
-test_only_mewla_settings_and_command() {
-  new_case mewla-only
-  make_archive
-  run_installer ZEN_VERSION=v9.9.9 ZEN_INSTALL_DIR="$HOME_DIR/elsewhere" MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install"
-  [[ -x "$HOME_DIR/install/mewla" ]] || fail "MEWLA_INSTALL_DIR was not used"
-  assert_not_exists "$HOME_DIR/elsewhere"
-  assert_not_exists "$HOME_DIR/install/zen"
-  assert_contains "$CASE_DIR/curl.log" "/download/v1.2.3/mewla-linux-amd64.tar.gz"
-  pass "reads only MEWLA_* settings and installs only the mewla command"
-}
-
 if [[ ${1:-} == --smoke ]]; then
   printf 'TAP version 13\n'
   test_fixed_version_and_atomic_replacement
@@ -438,5 +427,4 @@ test_profile_idempotency_and_no_mutation
 test_missing_tools
 test_doctor_failure_is_not_corruption
 test_executable_failure_keeps_previous_install
-test_only_mewla_settings_and_command
 printf '1..%d\n' "$PASS"

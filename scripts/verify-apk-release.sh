@@ -56,7 +56,7 @@ APKSIGNER="$(find_tool apksigner 2>/dev/null || true)"
 
 "$ROOT/scripts/verify-apk-notice.sh" "$APK"
 "$ROOT/scripts/verify-android-native-symbols.py" --lock \
-  "$ROOT/app/modules/zen-terminal-vt/native.lock.json" --apk "$APK"
+  "$ROOT/app/modules/terminal-vt/native.lock.json" --apk "$APK"
 
 python3 - "$APK" "$ROOT/app/app.base.json" "$EXPECTED_CERT" "$AAPT" "$APKSIGNER" <<'PY'
 import re

@@ -272,12 +272,12 @@ def extract_release_android_abi(native_lock: dict) -> str:
         release_abi = native_lock["release_apk"]["react_native_architectures"]
     except (KeyError, TypeError) as exc:
         raise PrepareError(
-            "app/modules/zen-terminal-vt/native.lock.json is missing "
+            "app/modules/terminal-vt/native.lock.json is missing "
             f"release_apk.react_native_architectures: {exc}"
         ) from exc
     if not isinstance(release_abi, str) or not release_abi.strip():
         raise PrepareError(
-            "app/modules/zen-terminal-vt/native.lock.json "
+            "app/modules/terminal-vt/native.lock.json "
             "release_apk.react_native_architectures must be a non-empty string"
         )
     return release_abi
@@ -422,7 +422,7 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     )
     next_version_code = android_version_code + 1
     next_ios_build = ios_build + 1
-    native_lock = read_json(root, "app/modules/zen-terminal-vt/native.lock.json")
+    native_lock = read_json(root, "app/modules/terminal-vt/native.lock.json")
 
     sources = {
         relative: read_text(root, relative)
@@ -452,7 +452,7 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     if note_facts["android_abi"] != release_android_abi:
         raise PrepareError(
             "current release notes Android ABI does not match "
-            "app/modules/zen-terminal-vt/native.lock.json: "
+            "app/modules/terminal-vt/native.lock.json: "
             f"{note_facts['android_abi']!r} != {release_android_abi!r}"
         )
 

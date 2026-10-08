@@ -218,7 +218,7 @@ if [[ "$manifest_valid" == true && "$source_check_pass" == true && "$state_dir" 
     doctor_pass=true
     daemon_id="$(jq -r '.listen.daemon_id // ""' "${output_files[doctor]}")"
     runtime_addr="$(jq -r '.listen.addr // ""' "${output_files[doctor]}")"
-    runtime_running="$(jq -r '.listen.zen_running == true' "${output_files[doctor]}")"
+    runtime_running="$(jq -r '.listen.daemon_running == true' "${output_files[doctor]}")"
   else
     failures+=("doctor: readiness is false")
   fi

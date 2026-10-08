@@ -33,7 +33,7 @@ if [[ "$1 $2" == "doctor --json" ]]; then
   [[ "$mode" != "doctor-nonzero" ]] || exit 7
   [[ "$mode" != "doctor-hang" ]] || spawn_child
   [[ -z "${DOCTOR_MARKER:-}" ]] || printf 'called\n' >"$DOCTOR_MARKER"
-  printf '%s\n' '{"ready":true,"listen":{"addr":"127.0.0.1:9876","daemon_id":"fixture-daemon","zen_running":true}}'
+  printf '%s\n' '{"ready":true,"listen":{"addr":"127.0.0.1:9876","daemon_id":"fixture-daemon","daemon_running":true}}'
   exit 0
 fi
 if [[ "$1 $2 $3" == "brain playbooks --json" ]]; then

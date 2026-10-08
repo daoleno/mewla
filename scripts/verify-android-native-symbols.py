@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_LOCK = ROOT / "app/modules/zen-terminal-vt/native.lock.json"
+DEFAULT_LOCK = ROOT / "app/modules/terminal-vt/native.lock.json"
 APK_LIBRARY_RE = re.compile(r"^lib/([^/]+)/libghostty_vt\.so$")
 
 
@@ -117,7 +117,7 @@ def inspect_apk(
 ) -> list[str]:
     errors: list[str] = []
     with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory(
-        prefix="zen-apk-native-symbols."
+        prefix="apk-native-symbols."
     ) as temp:
         entries = [name for name in archive.namelist() if APK_LIBRARY_RE.fullmatch(name)]
         if not entries:
