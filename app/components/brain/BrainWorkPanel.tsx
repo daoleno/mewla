@@ -35,8 +35,10 @@ function slipMeta(slip: BrainWorkSlip): string | undefined {
 }
 
 /**
- * Current Work as slips, one caption per state. The first needs-you slip
- * carries the cat when `perch` is set (the wide column is where it sits).
+ * Current Work as slips, one caption per state. The captions carry no count:
+ * the summary line above the list ("6 running · 2 back") is the one count.
+ * The first needs-you slip carries the cat when `perch` is set (the wide
+ * column is where it sits).
  */
 export function BrainWorkList({
   surface,
@@ -78,7 +80,7 @@ export function BrainWorkList({
         return (
           <View key={group} style={styles.group}>
             <Text accessibilityRole="header" style={styles.groupLabel}>
-              {BRAIN_WORK_GROUP_LABELS[group]} · {slips.length}
+              {BRAIN_WORK_GROUP_LABELS[group]}
             </Text>
             {slips.map((slip) => (
               <WorkSlip
@@ -240,10 +242,16 @@ export function BrainWorkSheet({
   actionsFor?: BrainWorkActionsFor;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
+  const summary = brainWorkSummaryLine(surface.counts);
   return (
     <BottomSheetFrame visible={visible} onClose={onClose} maxHeight="85%" cardStyle={{ backgroundColor: chrome.appBackground }}>
       <View style={styles.sheetHeader}>
-        <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
+        <View style={styles.sheetHeading}>
+          <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
+          {summary ? (
+            <Text numberOfLines={1} style={styles.columnSummary}>{summary}</Text>
+          ) : null}
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Work" onPress={onClose} style={styles.close}>
           <Icon name="close" size={22} color={chrome.textMuted} />
         </Pressable>
@@ -438,6 +446,10 @@ function createStyles(chrome: TerminalThemeChrome) {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
+    },
+    sheetHeading: {
+      flexShrink: 1,
+      gap: 2,
     },
     close: {
       width: 44,
