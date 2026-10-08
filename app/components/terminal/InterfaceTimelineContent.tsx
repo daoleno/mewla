@@ -2,6 +2,8 @@ import React from "react";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { InterfaceSessionIdleView } from "./InterfaceSessionIdleView";
 import { InterfaceTimelineEmptyState } from "./InterfaceTimelineEmptyState";
+import { InterfaceTimelineLoadingState } from "./InterfaceTimelineLoadingState";
+import { interfaceTimelinePhase } from "./interfaceTimelinePhase";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 
 interface InterfaceTimelineEmptyContentProps {
@@ -35,78 +37,57 @@ export function InterfaceTimelineEmptyContent({
   emptyTitle,
   emptyBody,
 }: InterfaceTimelineEmptyContentProps) {
-  if (suppressed && items.length === 0) {
-    return null;
-  }
-
-  if (loading && items.length === 0) {
-    if (emptyTitle) {
+  switch (
+    interfaceTimelinePhase({
+      itemCount: items.length,
+      loading,
+      error,
+      suppressed,
+      unavailable,
+      syncing,
+    })
+  ) {
+    case "content":
+    case "hidden":
+      return null;
+    case "loading":
+      // History may still arrive, so Brain shows its outline, not "empty".
+      return emptyTitle ? (
+        <InterfaceTimelineLoadingState chrome={chrome} />
+      ) : (
+        <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} busy />
+      );
+    case "error":
       return (
+        <InterfaceTimelineEmptyState
+          chrome={chrome}
+          title="Could not load this chat"
+          body={error ?? undefined}
+          tone="error"
+          icon="alert-circle"
+        />
+      );
+    case "unavailable":
+      return (
+        <InterfaceTimelineEmptyState
+          chrome={chrome}
+          title="Chat view is not available here"
+          body={unavailableReason}
+          icon="layers"
+          actionLabel={showUnavailableAction ? "Open Terminal" : undefined}
+          onAction={showUnavailableAction ? onUnavailableAction : undefined}
+        />
+      );
+    case "empty":
+      return emptyTitle ? (
         <InterfaceTimelineEmptyState
           chrome={chrome}
           title={emptyTitle}
           body={emptyBody}
-          busy
           conversationEmpty
         />
+      ) : (
+        <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} />
       );
-    }
-    return <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} busy />;
   }
-
-  if (error && items.length === 0) {
-    return (
-      <InterfaceTimelineEmptyState
-        chrome={chrome}
-        title="Could not load this chat"
-        body={error}
-        tone="error"
-        icon="alert-circle"
-      />
-    );
-  }
-
-  if (syncing && items.length === 0) {
-    if (emptyTitle) {
-      return (
-        <InterfaceTimelineEmptyState
-          chrome={chrome}
-          title={emptyTitle}
-          body={emptyBody}
-          busy
-          conversationEmpty
-        />
-      );
-    }
-    return <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} busy />;
-  }
-
-  if (unavailable) {
-    return (
-      <InterfaceTimelineEmptyState
-        chrome={chrome}
-        title="Chat view is not available here"
-        body={unavailableReason}
-        icon="layers"
-        actionLabel={showUnavailableAction ? "Open Terminal" : undefined}
-        onAction={showUnavailableAction ? onUnavailableAction : undefined}
-      />
-    );
-  }
-
-  if (items.length === 0) {
-    if (!emptyTitle) {
-      return <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} />;
-    }
-    return (
-      <InterfaceTimelineEmptyState
-        chrome={chrome}
-        title={emptyTitle}
-        body={emptyBody}
-        conversationEmpty
-      />
-    );
-  }
-
-  return null;
 }

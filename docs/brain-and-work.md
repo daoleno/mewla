@@ -110,7 +110,7 @@ The cat is Brain. It is on screen once, and its pose is Brain's real state:
 | Cat | Brain |
 | --- | --- |
 | Asleep in the seal | Idle |
-| One eye open, an ear flicking | The app is starting or connecting |
+| One eye open, an ear flicking | The app is starting, connecting or loading the conversation |
 | Sitting up, kneading, tail swishing | Working on your message |
 | Ears up, sitting on a slip | That Work needs you |
 | Sitting by moving dots | Workers hold delegated Work |

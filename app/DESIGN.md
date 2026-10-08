@@ -125,6 +125,14 @@ Brain has one Work surface, built from the daemon's `current_work`
 - **Phone.** Under the app bar, one line ("● 6 need you · 2 running · 2 back ›")
   opens the same grouped list as a sheet. The seal dot shows only when
   something needs you.
+- **Loading is not empty.** "Ready when you are" appears only once the
+  conversation has loaded and has nothing in it. Until then (connecting,
+  waiting for Brain's first snapshot, loading or syncing history) the chat
+  shows a still outline of the exchange, grey bubbles and lines with no
+  shimmer, and the cat waking in the tail row ("Waking up"). The composer
+  is there from the start; it says "Connecting…" until Brain can take a
+  message. `interfaceTimelinePhase` and `brainScreenSurface` decide this,
+  and both are pure and tested.
 - **Goal line.** When Brain has declared an objective
   (`mewla brain objective set`), it sits under the title:
   "Ship atlas-notes v1.4 this week · 2 of 5 back".
@@ -405,7 +413,7 @@ look, with the landing's bolder carving at small sizes.
 | Product state | Cat | Where | Tap |
 | --- | --- | --- | --- |
 | Brain idle | Curled in the seal, breathing, three z's | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
-| App start, connecting, loading history | In the seal, one eye open, the right ear flicks twice every 3.2 s | App start (`CatSplash`), Brain status screen, chat loading, Sessions loading/connecting; tail row "Waking up" | "Still waking up…" |
+| App start, connecting, loading history | In the seal, one eye open, the right ear flicks twice every 3.2 s | App start (`CatSplash`), the Brain chat while it connects or loads history (tail row "Waking up" under the still outline), Sessions loading/connecting | "Still waking up…" |
 | Brain's turn running | Out of the seal, sitting up and kneading, tail swishing | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
 | Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
 | Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" | The status line |

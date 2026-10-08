@@ -121,3 +121,29 @@ export function shouldShowBrainLoadingState({
 }): boolean {
   return !(hydrated && hasHostWorker);
 }
+
+/**
+ * What the Brain screen shows. While Brain is still waking (connecting, or
+ * connected before its first snapshot) the chat is already there, loading,
+ * with the composer saying "Connecting…"; only no computer or an offline
+ * one gets the status card.
+ */
+export function brainScreenSurface({
+  hasServer,
+  connection,
+  hydrated,
+  hasHostWorker,
+  structuredEvents,
+}: {
+  hasServer: boolean;
+  connection: ConnectionState;
+  hydrated: boolean;
+  hasHostWorker: boolean;
+  structuredEvents: boolean;
+}): "chat" | "waking" | "status" | "unavailable" {
+  if (!hasServer) return "status";
+  if (!shouldShowBrainLoadingState({ hydrated, hasHostWorker })) {
+    return structuredEvents ? "chat" : "unavailable";
+  }
+  return connection === "offline" ? "status" : "waking";
+}
