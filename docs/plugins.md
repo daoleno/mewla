@@ -9,7 +9,7 @@ shows that server's accounts and never moves an account between servers.
 
 ## Connect a service
 
-![Plugins: GitHub and Linear connected, Notion asking to reconnect, Google and custom services to add](assets/plugins.svg)
+![Plugins: one row per service. GitHub and Linear connected, Notion with Reconnect on its row, Google with Connect, and Remote MCP to add](assets/plugins.svg)
 
 1. Open the menu and choose **Plugins**. Each service has one row.
 2. Tap **Connect** on the service's row.

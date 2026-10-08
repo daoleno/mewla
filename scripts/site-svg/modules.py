@@ -97,39 +97,41 @@ def skills():
 
 
 def plugins():
-    s, x, y, w = screen("pl", 530, "Plugins connected to Brain",
-                        "GitHub and Linear are connected and Notion needs to reconnect. Google and Slack can be added, "
-                        "and custom MCP or OpenAPI services can be configured.")
+    s, x, y, w = screen("pl", 500, "Plugins: one row per service",
+                        "GitHub and Linear are connected, Notion needs a reconnect with a Reconnect button on its row, "
+                        "and Google has a Connect button. MCP and OpenAPI services are added under Your own services.")
     screen_header(s, x, y + 6, w, "Plugins")
     sx, sw = x + 18, w - 36
-    server_line(s, sx, y + 86, sw)
-    caption(s, sx + 4, y + 124, "Connected")
-    rows = [("github", "atlas-notes", "GitHub", "ready", "Connected"),
-            ("notion", "Atlas workspace", "Notion", "warning", "Reconnect"),
-            ("linear", "Atlas team", "Linear", "ready", "Connected")]
-    cy = y + 136
-    card(s, sx, cy, sw, 60 * len(rows))
-    for i, (lg, name, sub, kind, word) in enumerate(rows):
-        ry = cy + i * 60
-        if i:
-            s.line(sx + 56, ry, sx + sw, ry, stroke="line")
-        logo(s, lg, sx + 18, ry + 20, 20)
-        s.text(sx + 56, ry + 27, name, size=15, weight=500)
-        s.text(sx + 56, ry + 46, sub, size=12.5, fill="soft")
-        state(s, kind, sx + sw - 34, ry + 35, size=12.5, word=word)
-        chevron(s, sx + sw - 22, ry + 30, 5)
-    ay = cy + 60 * len(rows) + 34
-    caption(s, sx + 4, ay, "Add a service")
-    card(s, sx, ay + 12, sw, 120)
-    for i, (lg, name, sub) in enumerate((("google", "Google", "Gmail, Drive and Calendar"),
-                                         ("mcp", "Custom services", "MCP server · OpenAPI"))):
-        ry = ay + 12 + i * 60
-        if i:
-            s.line(sx + 56, ry, sx + sw, ry, stroke="line")
-        logo(s, lg, sx + 18, ry + 20, 20)
-        s.text(sx + 56, ry + 27, name, size=15, weight=500)
-        s.text(sx + 56, ry + 46, sub, size=12.5, fill="soft")
-        chevron(s, sx + sw - 22, ry + 30, 5)
+
+    def row_button(right, cy, word):
+        bw = tw(word, 13, weight=600) + 28
+        s.rect(right - bw, cy - 16, bw, 32, rx=16, fill="pressed")
+        s.text(right - bw / 2, cy + 5, word, size=13, weight=600, anchor="middle")
+
+    def rows(top, items):
+        card(s, sx, top, sw, 60 * len(items))
+        for i, (lg, name, sub, kind, word) in enumerate(items):
+            ry = top + i * 60
+            if i:
+                s.line(sx + 56, ry, sx + sw, ry, stroke="line")
+            logo(s, lg, sx + 18, ry + 20, 20)
+            s.text(sx + 56, ry + 27, name, size=15, weight=500)
+            s.text(sx + 56, ry + 46, sub, size=12.5, fill="soft")
+            if kind == "button":
+                row_button(sx + sw - 34, ry + 30, word)
+            else:
+                state(s, kind, sx + sw - 34, ry + 35, size=12.5, word=word)
+            chevron(s, sx + sw - 22, ry + 30, 5)
+
+    caption(s, sx + 4, y + 96, "Services")
+    services = [("github", "GitHub", "atlas-notes", "ready", "Connected"),
+                ("notion", "Notion", "Atlas workspace", "button", "Reconnect"),
+                ("linear", "Linear", "Atlas team", "ready", "Connected"),
+                ("google", "Google", "Gmail, Drive and Calendar", "button", "Connect")]
+    rows(y + 108, services)
+    ay = y + 108 + 60 * len(services) + 34
+    caption(s, sx + 4, ay, "Your own services")
+    rows(ay + 12, [("mcp", "Remote MCP", "Any MCP server, by its address", "button", "Add")])
     return s.render()
 
 
