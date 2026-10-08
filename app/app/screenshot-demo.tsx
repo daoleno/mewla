@@ -106,7 +106,6 @@ import { SealCat } from "../components/mewla/SealCat";
 import { TappableCat } from "../components/mewla/TappableCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
 import { CatalogView, LinkedAccountView, ServiceHeader } from "../components/plugins/PluginConnectionViews";
-import { ServerContextRow } from "../components/extensions/ServerContextRow";
 import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
 import { pluginJobs } from "../services/pluginOnboarding";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
@@ -1668,7 +1667,6 @@ function PluginsDemo() {
           </>
         ) : (
           <>
-            <ServerContextRow name="Studio computer" connection="connected" />
             <CatalogView
               sections={{
                 connected: [

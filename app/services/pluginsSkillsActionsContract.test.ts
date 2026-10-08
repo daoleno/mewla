@@ -225,9 +225,10 @@ describe("local-only Skills surface contract", () => {
     expect(screen).toContain("if (!reconciliation.removed)");
     expect(screen).toContain("mutationError ||");
   });
-  test("Skills names its server/project context and where Plugin-owned Skills live", () => {
-    expect(presentation).toContain("<ServerContextRow");
-    expect(presentation).toContain("project={props.projectCwd}");
+  test("Skills names its project, not its server, and where Plugin-owned Skills live", () => {
+    expect(presentation).not.toContain("ServerContextRow");
+    expect(presentation).toContain("<ProjectScope cwd={props.projectCwd} />");
+    expect(presentation).toContain("<ServerOfflineNotice");
     expect(presentation).toContain("function OwnershipNotice");
     expect(presentation).toContain("Plugin ownership unavailable");
     expect(presentation).toContain('action="Try again"');

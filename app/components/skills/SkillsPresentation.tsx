@@ -51,9 +51,9 @@ import { PLUGINS_SKILLS_SCREEN_PADDING } from "../../services/pluginsSkillsSurfa
 import { AgentLogoSet } from "../agents/AgentLogoSet";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
 import {
-  ServerContextRow,
+  ServerOfflineNotice,
   type ServerConnection,
-} from "../extensions/ServerContextRow";
+} from "../extensions/ServerOfflineNotice";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
@@ -149,12 +149,15 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
       edges={[]}
     >
       <View style={styles.header}>
-        {props.currentServerAvailable ? (
-          <ServerContextRow
+        {props.currentServerAvailable && inventory ? (
+          <ServerOfflineNotice
             name={props.serverName}
             connection={props.connection}
-            project={props.projectCwd}
+            detail="These Skills may be out of date."
           />
+        ) : null}
+        {props.currentServerAvailable && props.projectCwd ? (
+          <ProjectScope cwd={props.projectCwd} />
         ) : null}
         <SegmentedControl
           accessibilityLabel="Skills sections"
@@ -694,6 +697,27 @@ function LocalSkillsList(
  * States where Plugin-provided Skills are: inside their Plugin, or, while
  * Plugin ownership is unknown, possibly in this list and still protected.
  */
+/** Which project's Skills are listed: the one fact about context this page needs. */
+function ProjectScope({ cwd }: { cwd: string }) {
+  const colors = useAppColors();
+  const name = cwd.replace(/\/+$/, "").split("/").pop() || cwd;
+  return (
+    <View
+      style={styles.projectScope}
+      accessible
+      accessibilityLabel={`Project ${name}`}
+    >
+      <Icon name="folder" size={14} color={colors.textTertiary} />
+      <Text
+        numberOfLines={1}
+        style={[styles.projectScopeText, { color: colors.textSecondary }]}
+      >
+        {name}
+      </Text>
+    </View>
+  );
+}
+
 function OwnershipNotice(props: SkillsPresentationProps) {
   const failed = props.pluginsState.status === "error";
   if (failed)
@@ -1176,6 +1200,16 @@ function titleCase(value: string) {
 }
 
 const styles = StyleSheet.create({
+  projectScope: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 20,
+  },
+  projectScopeText: {
+    ...TypeScale.caption,
+    flexShrink: 1,
+  },
   root: { flex: 1, flexDirection: "row" },
   safe: { flex: 1 },
   flex: { flex: 1 },
