@@ -161,13 +161,23 @@ func TestTelegramBrainReplyArrivesWithoutAppSubscription(t *testing.T) {
 	// can claim it.
 	writeTelegramPiFixture(t, transcript, "fixture-host-session", prompt, reply)
 
+	// Both loops write under the fixture's TempDir; wait for them to stop
+	// before its cleanup removes the directory.
 	captureCtx, cancelCapture := context.WithCancel(t.Context())
-	defer cancelCapture()
-	go service.RunHostTranscriptCapture(captureCtx)
+	captureDone := make(chan struct{})
+	go func() {
+		defer close(captureDone)
+		service.RunHostTranscriptCapture(captureCtx)
+	}()
+	defer func() { cancelCapture(); <-captureDone }()
 
 	runCtx, cancelRun := context.WithCancel(t.Context())
-	defer cancelRun()
-	go func() { _ = m.Run(runCtx) }()
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = m.Run(runCtx)
+	}()
+	defer func() { cancelRun(); <-runDone }()
 
 	request := waitForFakeSent(t, api, reply, 20*time.Second)
 	if request.ChatID != 10 || request.MessageThreadID != primary {
