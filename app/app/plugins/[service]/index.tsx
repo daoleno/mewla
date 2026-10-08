@@ -1,61 +1,53 @@
-import React from "react";
+import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Clipboard from "expo-clipboard";
 import { CustomServiceForm } from "../../../components/plugins/CustomServiceForm";
-import { ConnectOfferView, ConnectProgressCard, LinkedAccountView, ServiceHeader } from "../../../components/plugins/PluginConnectionViews";
-import { pluginServicePath, PluginsPage, usePluginService, usePluginsFlow } from "../../../components/plugins/PluginsFlow";
-import { InlineNotice } from "../../../components/ui";
+import { AccountCard, ConnectOffer, ServiceHeader } from "../../../components/plugins/PluginConnectionViews";
+import { pluginServicePath, PluginsPage, usePluginsFlow } from "../../../components/plugins/PluginsFlow";
+import { Button, InlineNotice } from "../../../components/ui";
 import { isConnecting } from "../../../services/pluginConnectionsModel";
 import { pluginJobs } from "../../../services/pluginOnboarding";
 
 export default function PluginServiceScreen() {
-  const { service, account: accountId } = useLocalSearchParams<{ service: string; account?: string }>();
+  const { service } = useLocalSearchParams<{ service: string }>();
   const router = useRouter();
   const flow = usePluginsFlow();
-  usePluginService(service, { accountId, owner: true });
-  const selected = flow.selected?.id === service ? flow.selected : null;
-  if (!selected) {
+  const [adding, setAdding] = useState(false);
+  const row = [...flow.rows.services, ...flow.rows.custom].find((entry) => entry.plugin.id === service);
+  if (!row) {
     return <PluginsPage title="Plugins">
       {flow.loaded && flow.catalog.length ? <InlineNotice title="Service unavailable" detail={`${flow.serverName} does not offer this service.`} /> : null}
     </PluginsPage>;
   }
-  const { account, phase } = flow;
-  const job = pluginJobs[selected.id];
-  const custom = selected.id === "mcp" || selected.id === "openapi";
-  const linked = account && !flow.another && account.status !== "disconnected" ? account : null;
-  const accountCount = flow.accounts.filter((a) => a.status !== "disconnected" && a.integration === selected.id).length;
-  const path = pluginServicePath(selected.id);
-  return <PluginsPage title={selected.name}>
-    <ServiceHeader plugin={selected} account={linked} />
-    {isConnecting(phase) ? <ConnectProgressCard serviceName={selected.name} phase={phase} flow={flow.flow} onCancel={() => void flow.cancel()} onOpen={() => void (async () => {
-      if (!flow.flow) return;
-      if (flow.flow.flow.user_code) await Clipboard.setStringAsync(flow.flow.flow.user_code);
-      await flow.openBrowser(flow.flow);
-    })()} /> : linked ? <LinkedAccountView
-      plugin={selected}
-      account={linked}
+  const { plugin, accounts, state } = row;
+  const job = pluginJobs[plugin.id];
+  const custom = plugin.id === "mcp" || plugin.id === "openapi";
+  const connecting = flow.running === `connect:${plugin.id}` || isConnecting(flow.phase) && flow.service === plugin.id;
+  const otherConnecting = !connecting && (flow.running?.startsWith("connect:") || isConnecting(flow.phase));
+  const connect = () => void flow.connect(plugin.id);
+  const github = plugin.id === "github" ? () => void flow.useServerGitHub() : undefined;
+  const form = <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={(input, signIn) => flow.connect(plugin.id, { input, signIn })} />;
+  return <PluginsPage title={plugin.name}>
+    <ServiceHeader plugin={plugin} state={state.kind === "status" ? state : null} />
+    {accounts.map((account) => <AccountCard
+      key={account.id}
+      plugin={plugin}
+      account={account}
       job={job}
-      custom={custom}
-      busy={flow.busy}
-      accountCount={accountCount}
-      onRecover={flow.recover}
-      onOpenPermissions={() => router.push(`${path}/${custom ? "tools" : "permissions"}`)}
-      onOpenAccounts={() => router.push(`${path}/accounts`)}
-      onOpenTools={() => router.push(`${path}/tools`)}
-    /> : custom ? <CustomServiceForm key={selected.id} plugin={selected} busy={flow.busy} serverName={flow.serverName} send={flow.send} authorize={flow.authorize} /> : <ConnectOfferView
-      plugin={selected}
+      running={flow.running}
+      onAccess={(group, allowed) => flow.setAccess(account, group, allowed)}
+      onRecover={(action) => flow.recover(account, action)}
+      onDisconnect={() => flow.disconnect(account)}
+      onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
+    />)}
+    {!accounts.length ? custom ? form : <ConnectOffer
+      plugin={plugin}
       job={job}
-      writes={flow.writes}
-      busy={flow.busy}
       serverName={flow.serverName}
-      retry={phase === "failed" || phase === "cancelled"}
-      confirmIdentity={flow.flow?.flow.status === "confirm" ? flow.flow.flow.identity ?? "" : null}
-      onWritesChange={flow.setWrites}
-      onConnect={() => void flow.authorize({ integration: selected.id, allow_writes: flow.writes })}
-      onUseServerAccount={selected.id === "github" ? () => void flow.previewGitHub() : undefined}
-      onImport={() => void flow.importGitHub()}
-      onChooseAnother={() => void flow.cancel()}
-      onRetryVerification={phase === "failed" && flow.flow?.callback ? () => void flow.check() : undefined}
-    />}
+      connecting={connecting}
+      disabled={!!otherConnecting}
+      onConnect={connect}
+      onUseServerAccount={github}
+    /> : custom ? adding ? form : <Button label={plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service"} icon="add" variant="tinted" block onPress={() => setAdding(true)} />
+      : plugin.available ? <Button label={`Add another ${plugin.name} account`} icon="add" variant="tinted" block loading={connecting} disabled={!!otherConnecting} onPress={connect} /> : null}
   </PluginsPage>;
 }

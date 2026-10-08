@@ -1,50 +1,55 @@
 import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
-import { accountStatus, type PluginAccount, type PluginIntegration } from "./connections";
+import { accountStatus, type AccessState, type PluginAccount, type PluginIntegration } from "./connections";
 
 export type ConnectionTone = "success" | "warning" | "danger" | "neutral" | "accent";
 
-export interface ConnectedAccountEntry {
-  account: PluginAccount;
-  plugin: PluginIntegration;
-}
-
-export interface ServiceEntry {
+/** One service on the Plugins list, with the accounts connected to it. */
+export interface ServiceRow {
   plugin: PluginIntegration;
   /** Accounts on this server that are not disconnected. */
-  accountCount: number;
-}
-
-export interface PluginCatalogSections {
-  connected: ConnectedAccountEntry[];
-  services: ServiceEntry[];
-  custom: ServiceEntry[];
+  accounts: PluginAccount[];
+  state: ServiceState;
 }
 
 /**
- * Splits the current server's catalog into accounts already connected,
- * reviewed built-in services and custom services. A built-in service is one
- * with a reviewed capability description; everything else is custom.
+ * What the list row offers: Connect when nothing is connected, Reconnect on
+ * the account that needs it, otherwise the services' combined status.
  */
-export function pluginCatalogSections(
+export type ServiceState =
+  | { kind: "unavailable"; label: string }
+  | { kind: "connect" }
+  | { kind: "reconnect"; account: PluginAccount }
+  | { kind: "status"; label: string; tone: ConnectionTone };
+
+export interface PluginCatalogRows {
+  services: ServiceRow[];
+  custom: ServiceRow[];
+}
+
+/**
+ * One row per service on the current server. A built-in service is one with
+ * a reviewed capability description; everything else is a custom service.
+ */
+export function pluginCatalogRows(
   catalog: readonly PluginIntegration[],
   accounts: readonly PluginAccount[],
   reviewed: Readonly<Record<string, unknown>>,
-): PluginCatalogSections {
+): PluginCatalogRows {
   const active = accounts.filter((account) => account.status !== "disconnected");
-  const byId = new Map(catalog.map((plugin) => [plugin.id, plugin]));
-  const count = (id: string) => active.filter((account) => account.integration === id).length;
-  const connected = active
-    .flatMap((account) => {
-      const plugin = byId.get(account.integration);
-      return plugin ? [{ account, plugin }] : [];
-    })
-    .sort((a, b) => a.plugin.name.localeCompare(b.plugin.name) || a.account.name.localeCompare(b.account.name));
-  const entries = catalog.map((plugin) => ({ plugin, accountCount: count(plugin.id) }));
-  return {
-    connected,
-    services: entries.filter((entry) => Boolean(reviewed[entry.plugin.id])),
-    custom: entries.filter((entry) => !reviewed[entry.plugin.id]),
-  };
+  const rows = catalog.map((plugin) => {
+    const own = active.filter((account) => account.integration === plugin.id).sort((a, b) => a.name.localeCompare(b.name));
+    return { plugin, accounts: own, state: serviceState(plugin, own) };
+  });
+  return { services: rows.filter((row) => Boolean(reviewed[row.plugin.id])), custom: rows.filter((row) => !reviewed[row.plugin.id]) };
+}
+
+export function serviceState(plugin: PluginIntegration, accounts: readonly PluginAccount[]): ServiceState {
+  if (!accounts.length) return plugin.available ? { kind: "connect" } : { kind: "unavailable", label: "Not yet available" };
+  const expired = accounts.find((account) => account.enabled && account.status === "authorization_required");
+  if (expired && plugin.available) return { kind: "reconnect", account: expired };
+  const rank = (account: PluginAccount) => ({ danger: 0, warning: 1, neutral: 2, accent: 3, success: 4 })[accountTone(account)];
+  const worst = [...accounts].sort((a, b) => rank(a) - rank(b))[0]!;
+  return { kind: "status", label: accountStatus(worst), tone: accountTone(worst) };
 }
 
 export function accountTone(account: PluginAccount): ConnectionTone {
@@ -55,20 +60,28 @@ export function accountTone(account: PluginAccount): ConnectionTone {
   return "danger";
 }
 
-export type CapabilityState = "allowed" | "off" | "unavailable";
+/** How one permission group is shown: a switch, a sign-in that asks again, or nothing. */
+export type AccessControl =
+  | { kind: "switch"; on: boolean; note?: string }
+  | { kind: "consent" }
+  | { kind: "none" };
 
-/** Group-level access for one account, derived only from its reported tools. */
-export function capabilityState(account: PluginAccount, group: "read" | "write"): CapabilityState {
-  const tools = account.tools?.filter((tool) => tool.group === group) ?? [];
-  if (!tools.length) return "unavailable";
-  return tools.every((tool) => tool.allowed) ? "allowed" : "off";
-}
-
-export function capabilityLabel(state: CapabilityState): string {
-  return state === "allowed" ? "Allowed" : state === "off" ? "Off" : "Not granted";
+/**
+ * The control for Read and search or Make changes. A partly allowed group
+ * reads as on, and says how many newer tools still wait for review; turning
+ * it off and on again allows them.
+ */
+export function accessControl(account: PluginAccount, group: "read" | "write"): AccessControl {
+  const access = account.access;
+  if (!access) return { kind: "none" };
+  if (group === "write" && access.write_consent) return { kind: "consent" };
+  const state: AccessState = access[group];
+  if (state === "none") return { kind: "none" };
+  return { kind: "switch", on: state !== "off", note: state === "partial" ? "Some newer tools aren't allowed yet. Turn off and on to allow them." : undefined };
 }
 
 export function allowedToolCount(account: PluginAccount): { allowed: number; total: number } {
+  if (account.access) return { allowed: account.access.allowed, total: account.access.tools };
   const tools = account.tools ?? [];
   return { allowed: tools.filter((tool) => tool.allowed).length, total: tools.length };
 }
@@ -89,16 +102,16 @@ export interface AccountRecovery {
  */
 export function accountRecovery(account: PluginAccount, serviceName: string): AccountRecovery | null {
   if (account.credential_removal_pending) {
-    return { title: "Credential removal pending", detail: "Calls are stopped. Mewla still needs to remove the saved credential.", action: "disconnect", actionLabel: "Retry", tone: "danger" };
+    return { title: "Removal didn't finish", detail: "Brain can't use this account. Mewla still has to remove its saved sign-in.", action: "disconnect", actionLabel: "Retry", tone: "danger" };
   }
   if (!account.enabled) {
-    return { title: "Paused", detail: "Brain and Agents can't use this account.", action: "enable", actionLabel: "Resume", tone: "neutral" };
+    return { title: "Off", detail: "Brain and Workers can't use this account until you turn it on.", action: "enable", actionLabel: "Turn on", tone: "neutral" };
   }
   if (account.status === "authorization_required") {
-    return { title: "Reconnect required", detail: `${serviceName} no longer accepts the saved authorization.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
+    return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
   if (account.status === "error") {
-    return { title: accountStatus(account), detail: "Check the service and its tools on this server.", action: "refresh", actionLabel: "Check", tone: "danger" };
+    return { title: "Last call failed", detail: `Check that ${serviceName} and its tools still answer.`, action: "refresh", actionLabel: "Check again", tone: "danger" };
   }
   return null;
 }

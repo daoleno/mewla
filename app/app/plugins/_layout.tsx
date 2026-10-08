@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Linking } from "react-native";
 import { Stack } from "expo-router";
 import { useCurrentServer } from "../../store/currentServer";
@@ -17,9 +17,6 @@ export default function PluginsLayout() {
   const { state } = useWorkers();
   const screenOptions = useStackScreenOptions();
   const connection: ServerConnection = currentServerId ? state.serverConnections[currentServerId] ?? "offline" : "offline";
-  const currentServerRef = useRef(currentServerId);
-  // Updated before the keyed-away provider's pages clean up after a switch.
-  useLayoutEffect(() => { currentServerRef.current = currentServerId; }, [currentServerId]);
   const [deferredServerId, setDeferredServerId] = useState<string | null>(null);
   useEffect(() => { if (deferredServerId === currentServerId) setDeferredServerId(null); }, [currentServerId, deferredServerId]);
   const deferReturn = useCallback(async (url: string) => {
@@ -40,7 +37,6 @@ export default function PluginsLayout() {
     connection={connection}
     deferredName={deferredName}
     deferReturn={deferReturn}
-    currentServerRef={currentServerRef}
   >
     <Stack screenOptions={screenOptions} />
   </PluginsFlowProvider>;

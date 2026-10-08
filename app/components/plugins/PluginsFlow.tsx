@@ -1,20 +1,21 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, AppState, Linking, Platform, StyleSheet, View } from "react-native";
-import { Stack, useGlobalSearchParams, usePathname, useRouter } from "expo-router";
+import { Stack, useGlobalSearchParams, useRouter } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import * as Clipboard from "expo-clipboard";
 import { openPluginAuthorization } from "../../services/pluginBrowser";
 import { secureStorage } from "../../services/secureStorage";
 import { useCurrentServer } from "../../store/currentServer";
 import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
-import { NoServerState } from "./PluginConnectionViews";
+import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import { ServerOfflineNotice, type ServerConnection } from "../extensions/ServerOfflineNotice";
-import { pluginCatalogSections, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { pluginCatalogRows, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 
-/** Route of one service page; its sub-pages live below it. */
+/** Route of one service page; its Tools page lives below it. */
 export function pluginServicePath(serviceId: string) {
   return `/plugins/${encodeURIComponent(serviceId)}`;
 }
@@ -34,13 +35,11 @@ interface PluginsFlowProps {
   connection: ServerConnection;
   deferredName?: string;
   deferReturn: (url: string) => Promise<void>;
-  /** The current server, read when a service page leaves (after a switch, it is the new one). */
-  currentServerRef: MutableRefObject<string | null>;
 }
 
 /**
  * One connection flow for every Plugins route. The routes are only views:
- * the catalog, pending authorization and the selected account live here so a
+ * the catalog, the one sign-in in progress and its outcome live here, so a
  * push or pop between pages never loses them. Keyed by server in the layout.
  */
 export function PluginsFlowProvider({ children, ...props }: PluginsFlowProps & { children: ReactNode }) {
@@ -48,26 +47,34 @@ export function PluginsFlowProvider({ children, ...props }: PluginsFlowProps & {
   return <PluginsFlowContext.Provider value={value}>{children}</PluginsFlowContext.Provider>;
 }
 
-function usePluginsFlowState({ serverId, serverName, connection, deferredName, deferReturn, currentServerRef }: PluginsFlowProps) {
+/** Options of the one connect action: ask for changes too, or a custom service's details. */
+export type ConnectOptions = {
+  writes?: boolean;
+  input?: NonNullable<ConnectionRequest["input"]>;
+  /** False for a custom service reached with a token or none: it connects without a sign-in. */
+  signIn?: boolean;
+};
+
+function usePluginsFlowState({ serverId, serverName, connection, deferredName, deferReturn }: PluginsFlowProps) {
   const PENDING_KEY = pendingConnectionKey(serverId);
   const router = useRouter();
-  const pathname = usePathname();
-  const pathnameRef = useRef(pathname);
-  // A web sign-in comes back as /plugins…?connected= or ?plugin_error=.
-  const returnParams = useRef(useGlobalSearchParams<{ plugin_error?: string; connected?: string }>()).current;
-  useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
+  // A web sign-in comes back as /plugins?connected=… or ?plugin_error=…, with service=.
+  const returnParams = useRef(useGlobalSearchParams<{ plugin_error?: string; connected?: string; service?: string }>()).current;
   const { isCurrentServer } = useCurrentServer();
   const [catalog, setCatalog] = useState<PluginIntegration[]>([]);
   const [accounts, setAccounts] = useState<PluginAccount[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [account, setAccount] = useState<PluginAccount | null>(null);
-  const [busy, setBusy] = useState(false);
+  /** Key of the request in flight, so only the control that started it spins. */
+  const [running, setRunning] = useState<string | null>(null);
+  /** A request that failed outside a sign-in (a permission, disconnect or list). */
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<ConnectPhase>("idle");
+  /** The service the sign-in is (or was last) for, and what went wrong. */
+  const [service, setService] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState("");
+  const [connectedId, setConnectedId] = useState<string | null>(null);
   const [flow, setFlow] = useState<PendingConnection | null>(null);
-  const [writes, setWrites] = useState(false);
-  const [another, setAnother] = useState(false);
+  const [details, setDetails] = useState<Record<string, PluginAccount>>({});
   const alive = useRef(true);
   const mutation = useRef(false);
   const completion = useRef(false);
@@ -75,9 +82,6 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const starting = useRef(false);
   const attempt = useRef(0);
   const pending = useRef<PendingConnection | null>(null);
-  const selectedRef = useRef<string | null>(null);
-  const openedAccountRef = useRef<string | undefined>(undefined);
-  const accountsRef = useRef<PluginAccount[]>([]);
   const valid = useCallback(() => alive.current && !!serverId && isCurrentServer(serverId), [serverId, isCurrentServer]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const remember = useCallback(async (value: PendingConnection | null) => {
@@ -88,95 +92,105 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const apply = useCallback((response: ConnectionResponse) => {
     if (!valid()) return;
     if (response.catalog) { setCatalog(response.catalog); setLoaded(true); }
-    if (response.accounts) { accountsRef.current = response.accounts; setAccounts(response.accounts); }
+    if (response.accounts) setAccounts(response.accounts);
     if (response.account) {
       const next = response.account;
-      setAccount(next);
-      setAccounts((old) => {
-        const merged = [...old.filter((item) => item.id !== next.id), next];
-        accountsRef.current = merged;
-        return merged;
-      });
-      setAnother(false);
+      setAccounts((old) => [...old.filter((item) => item.id !== next.id), { ...next, tools: undefined }]);
+      if (next.tools) setDetails((old) => ({ ...old, [next.id]: next }));
     }
   }, [valid]);
-  const applyRef = useRef(apply);
-  useEffect(() => { applyRef.current = apply; }, [apply]);
-  const send = useCallback(async (request: ConnectionRequest): Promise<ConnectionResponse | undefined> => {
+  const send = useCallback(async (request: ConnectionRequest, key?: string): Promise<ConnectionResponse | undefined> => {
     if (!serverId || !valid() || mutation.current) return;
-    mutation.current = true; setBusy(true); setError("");
+    mutation.current = true; setRunning(key ?? request.action); setError("");
     try { const result = await wsClient.requestConnections(serverId, request); if (valid()) { apply(result); return result; } }
     catch (failure) {
       if (valid()) setError(failure instanceof Error ? failure.message : "Could not reach this server. Try again.");
-      // A failed first list still ends loading; the catalog shows the error.
+      // A failed first list still ends loading; the list shows the error.
       if (request.action === "list" && valid()) setLoaded(true);
     }
-    finally { mutation.current = false; if (valid()) setBusy(false); }
+    finally { mutation.current = false; if (valid()) setRunning(null); }
   }, [apply, serverId, valid]);
+  const fail = useCallback((message: string, status: "failed" | "cancelled" = "failed") => {
+    if (!valid()) return;
+    setPhase(status); setConnectError(message);
+  }, [valid]);
   const settle = useCallback(async (result: ConnectionResponse) => {
     if (!valid()) return;
     apply(result);
     if (result.flow?.status === "connected" && result.account) {
-      setPhase("connected"); await remember(null);
+      setService(result.flow.integration); setConnectedId(result.account.id); setPhase("connected"); setConnectError("");
+      await remember(null);
     } else if (result.flow?.status === "failed" || result.flow?.status === "cancelled") {
-      setPhase(result.flow.status); setError(result.flow.message ?? "Connection cancelled. No new account was connected."); await remember(null);
+      fail(result.flow.message ?? "Connection cancelled. No new account was connected.", result.flow.status);
+      await remember(null);
     }
-  }, [apply, remember, valid]);
+  }, [apply, fail, remember, valid]);
   const finish = useCallback(async (url: string) => {
     const active = pending.current;
     if (!active || !valid() || !matchesPluginReturn(url, active.flow)) return;
     if (completion.current) { await remember({ ...active, callback: url }); return; }
-    completion.current = true; setPhase("verifying"); setError("");
+    completion.current = true; setPhase("verifying"); setConnectError("");
     try {
       await remember({ ...active, callback: url });
       const response = await finishPluginReturn(active, serverId, url, (id, request) => wsClient.requestConnections(id, request));
       await settle(response);
     } catch (failure) {
-      if (valid()) { setPhase("failed"); setError(failure instanceof Error ? failure.message : "Could not verify authorization. Try again."); }
+      fail(failure instanceof Error ? failure.message : "Could not verify authorization. Try again.");
     } finally { completion.current = false; }
-  }, [remember, serverId, settle, valid]);
+  }, [fail, remember, serverId, settle, valid]);
   const check = useCallback(async () => {
     const active = pending.current;
     if (!active || !valid() || completion.current) return;
     if (Date.parse(active.flow.expires) <= Date.now()) {
-      setPhase("failed"); setError("This connection expired. Connect again."); await remember(null); return;
+      fail("This sign-in expired. Start again."); await remember(null); return;
     }
     if (active.callback) { await finish(active.callback); return; }
     completion.current = true;
     try { await settle(await wsClient.requestConnections(active.serverId, { action: "connect_status", flow_id: active.flow.id })); }
-    catch (failure) { if (valid()) { setPhase("failed"); setError(failure instanceof Error ? failure.message : "Connection interrupted. Try again."); } }
+    catch (failure) { fail(failure instanceof Error ? failure.message : "Connection interrupted. Try again."); }
     finally {
       completion.current = false;
       if (pending.current?.callback && valid()) void finish(pending.current.callback);
     }
-  }, [finish, remember, settle, valid]);
+  }, [fail, finish, remember, settle, valid]);
   useEffect(() => {
     void send({ action: "list" });
-    const returned = pluginReturnError(returnParams.plugin_error);
-    if (returnParams.plugin_error || returnParams.connected) router.setParams({ plugin_error: undefined, connected: undefined });
-    const showReturn = () => { if (returned && valid()) { setPhase("failed"); setError(returned); } };
+    // A web sign-in returned through the daemon's callback. The outcome is
+    // already settled there; the stored flow, if any, only confirms it.
+    const { connected, plugin_error: returnedError, service: returnedService } = returnParams;
+    if (connected || returnedError) {
+      router.setParams({ plugin_error: undefined, connected: undefined, service: undefined });
+      setService(returnedService ?? null);
+      if (connected) { setConnectedId(connected); setPhase("connected"); }
+      else fail(pluginReturnError(returnedError) ?? "", returnedError === "cancelled" ? "cancelled" : "failed");
+    }
     void secureStorage.getItemAsync(PENDING_KEY).then(async (raw) => {
-      if (!raw || !valid()) { showReturn(); return; }
+      if (!raw || !valid()) return;
       try {
         const stored = JSON.parse(raw) as PendingConnection;
-        if (stored.serverId !== serverId || Date.parse(stored.flow.expires) <= Date.now()) { showReturn(); return; }
-        pending.current = stored; setFlow(stored); setPhase(stored.flow.status === "confirm" ? "idle" : "waiting");
-        const list = await wsClient.requestConnections(serverId!, { action: "list" });
-        if (!valid()) return;
-        apply(list);
-        const service = stored.flow.integration;
-        selectedRef.current = service; openedAccountRef.current = undefined; setSelectedId(service);
-        if (!pathnameRef.current.startsWith(pluginServicePath(service))) router.push(pluginServicePath(service));
+        if (stored.serverId !== serverId || Date.parse(stored.flow.expires) <= Date.now()) { await remember(null); return; }
+        if (connected || returnedError) {
+          // The return settled this flow; a different one keeps waiting.
+          if (!returnedService || stored.flow.integration === returnedService) { await remember(null); return; }
+        }
+        pending.current = stored; setFlow(stored); setService(stored.flow.integration);
+        setPhase(stored.flow.status === "confirm" ? "idle" : "waiting");
         const initial = await Linking.getInitialURL();
         if (initial && matchesPluginReturn(initial, stored.flow)) await finish(initial); else await check();
-      } catch { if (valid()) { setError("The previous connection could not be restored. Connect again."); await remember(null); } }
+      } catch { if (valid()) { fail("The previous sign-in could not be restored. Start again."); await remember(null); } }
     });
-    const connected = (event: { serverId: string }) => { if (event.serverId === serverId) { void send({ action: "list" }); void check(); } };
+    const connectedEvent = (event: { serverId: string }) => { if (event.serverId === serverId) { void send({ action: "list" }); void check(); } };
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void check(); });
     const links = Linking.addEventListener("url", (event) => void finish(event.url));
-    wsClient.on("connected", connected);
-    return () => { subscription.remove(); links.remove(); wsClient.off("connected", connected); };
-  }, [apply, check, finish, remember, router, send, serverId, valid]);
+    // A web tab coming back into view checks the sign-in it left waiting.
+    const visible = () => { if (globalThis.document?.visibilityState === "visible") void check(); };
+    globalThis.document?.addEventListener?.("visibilitychange", visible);
+    wsClient.on("connected", connectedEvent);
+    return () => {
+      subscription.remove(); links.remove(); wsClient.off("connected", connectedEvent);
+      globalThis.document?.removeEventListener?.("visibilitychange", visible);
+    };
+  }, [check, fail, finish, remember, router, send, serverId, valid]);
   useEffect(() => {
     if (phase !== "waiting" || !flow) return;
     const timer = setInterval(() => { if (AppState.currentState === "active") void check(); }, 3000);
@@ -192,14 +206,14 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       }
       catch { /* Pending flows expire on the original server; they cannot execute. */ }
     }
-    if (valid()) { await remember(null); setPhase("cancelled"); setError("Connection cancelled. You can try again."); }
+    if (valid()) { await remember(null); fail("Sign-in cancelled. Nothing was connected.", "cancelled"); }
   };
   const openBrowser = async (active: PendingConnection) => {
     if (!active.flow.authorization_url || !valid() || browserOpen.current) return;
     browserOpen.current = true;
-    setPhase("opening");
     try {
       setPhase("waiting");
+      if (active.flow.user_code) await Clipboard.setStringAsync(active.flow.user_code);
       const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code, Platform.OS === "web" && !!active.flow.web_return);
       if (result.type === "external") { await check(); return; }
       if (!valid()) {
@@ -212,18 +226,31 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
         else if (isPluginCallbackUrl(result.url)) await check();
       }
       else if (!completion.current) await cancel();
-    } catch { if (valid()) { setPhase("failed"); setError("The browser could not open. Try again."); } }
+    } catch { fail("The browser could not open. Try again."); }
     finally { browserOpen.current = false; }
   };
-  const authorize = async (input: NonNullable<ConnectionRequest["input"]>) => {
+  /**
+   * The one connect action, for a new service, another account, Reconnect,
+   * or allowing changes that the service has to approve. Built-in services
+   * open their own sign-in; a custom service brings its form's details.
+   */
+  const connect = async (serviceId: string, options: ConnectOptions = {}) => {
     if (mutation.current || starting.current || !valid()) return;
     starting.current = true;
     try {
       if (pending.current) await cancel();
       const currentAttempt = ++attempt.current;
-      setPhase("opening"); setError("");
-      const result = await send({ action: "connect_start", input: connectInput(input, Platform.OS, globalThis.location?.origin) });
-      if (!result?.flow || !valid()) { if (valid()) setPhase("failed"); return; }
+      setService(serviceId); setConnectedId(null); setPhase("opening"); setConnectError("");
+      const input = options.input ?? { integration: serviceId, allow_writes: !!options.writes };
+      // A custom service with a token connects directly, without a sign-in.
+      if (options.signIn === false) {
+        const added = await send({ action: "add", input }, `connect:${serviceId}`);
+        if (added?.account && valid()) { setConnectedId(added.account.id); setPhase("connected"); }
+        else if (valid()) setPhase("idle");
+        return;
+      }
+      const result = await send({ action: "connect_start", input: connectInput(input, Platform.OS, globalThis.location?.origin) }, `connect:${serviceId}`);
+      if (!result?.flow || !valid()) { if (valid()) { setPhase("idle"); } return; }
       if (currentAttempt !== attempt.current) {
         await wsClient.requestConnections(serverId!, { action: "connect_cancel", flow_id: result.flow.id }).catch(() => undefined);
         return;
@@ -235,107 +262,96 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (active.flow.user_code) setPhase("waiting");
       else await openBrowser(active);
     } catch (failure) {
-      if (valid()) { setPhase("failed"); setError(failure instanceof Error ? failure.message : "Could not start this connection. Try again."); }
+      fail(failure instanceof Error ? failure.message : "Could not start this connection. Try again.");
     } finally { starting.current = false; }
   };
-  const previewGitHub = async () => {
+  /** GitHub only: use the account `gh` is signed in to on the server instead of a code. */
+  const useServerGitHub = async () => {
     if (pending.current) await cancel();
-    const result = await send({ action: "github_preview" });
+    setService("github"); setConnectError("");
+    const result = await send({ action: "github_preview" }, "connect:github");
     if (result?.flow && valid()) { await remember({ serverId: serverId!, flow: result.flow }); setPhase("idle"); }
+    else if (valid()) fail("No GitHub login was found on this server.");
   };
   const importGitHub = async () => {
-    if (!pending.current || busy) return;
+    if (!pending.current || mutation.current) return;
     setPhase("verifying");
-    const result = await send({ action: "github_import", flow_id: pending.current.flow.id, input: { integration: "github", allow_writes: writes } });
-    if (result) await settle(result); else setPhase("failed");
+    const result = await send({ action: "github_import", flow_id: pending.current.flow.id, input: { integration: "github" } }, "connect:github");
+    if (result) await settle(result); else fail("GitHub couldn't be verified. Start again.");
   };
-  /** A service route opened (or its sub-page): select it and load its account once. */
-  const openService = useCallback(async (serviceId: string, accountId?: string) => {
-    // Sub-pages pass no account and keep whatever the service page opened.
-    if (selectedRef.current === serviceId && (!accountId || openedAccountRef.current === accountId)) return;
-    selectedRef.current = serviceId; openedAccountRef.current = accountId;
-    setSelectedId(serviceId); setAccount(null); setAnother(false); setError(""); setWrites(false);
-    if (pending.current?.flow.integration !== serviceId) setPhase("idle");
-    const existing = accountId ?? accountsRef.current.find((item) => item.integration === serviceId && item.status !== "disconnected")?.id;
-    if (existing) await send({ action: "get", id: existing });
-  }, [send]);
+  /** Clears the outcome of the last sign-in once it has been seen. */
+  const dismiss = () => { if (!pending.current) { setPhase("idle"); setConnectError(""); setConnectedId(null); } };
   /**
-   * The service page left the stack (Back, browser Back or swipe): drop its
-   * selection and cancel its unfinished connection. A server switch remounts
-   * this provider instead, and keeps the old server's flow for its return.
+   * Read and search or Make changes. Allowing changes that the service never
+   * granted is the connect action again, which the service approves.
    */
-  const leaveService = useCallback((serviceId: string) => {
-    if (selectedRef.current === serviceId) { selectedRef.current = null; openedAccountRef.current = undefined; }
-    const active = pending.current;
-    if (!active || active.flow.integration !== serviceId || active.serverId !== currentServerRef.current) return;
-    attempt.current++;
-    pending.current = null;
-    void secureStorage.deleteItemAsync(pendingConnectionKey(active.serverId));
-    void wsClient.requestConnections(active.serverId, { action: "connect_cancel", flow_id: active.flow.id })
-      .then((response) => { if (response.account) applyRef.current(response); })
-      .catch(() => undefined);
-    if (alive.current) { setFlow(null); setPhase("idle"); setError(""); }
-  }, [currentServerRef]);
-  const changeGroup = (group: "read" | "write", allowed: boolean) => {
-    if (!account) return;
-    const id = account.id;
-    const commit = () => { if (valid()) void send({ action: "permissions", id, group, allowed }); };
-    if (allowed && group === "write") Alert.alert("Allow changes when asked?", pluginJobs[account.integration]?.write + ". Brain still needs your instruction before taking action.", [{ text: "Cancel", style: "cancel" }, { text: "Allow changes", onPress: commit }]);
-    else commit();
+  const setAccess = (account: PluginAccount, group: "read" | "write", allowed: boolean) => {
+    if (group === "write" && allowed && account.access?.write_consent) { void connect(account.integration, { writes: true }); return; }
+    void send({ action: "permissions", id: account.id, group, allowed }, `${group}:${account.id}`);
   };
-  const disconnect = (target: PluginAccount, after?: () => void) => Alert.alert("Disconnect this account?", "Future calls stop immediately. Mewla removes its saved credential and revokes access where supported.", [{ text: "Cancel", style: "cancel" }, { text: "Disconnect", style: "destructive", onPress: () => { if (valid()) void send({ action: "disconnect", id: target.id }).then((response) => { if (response && valid()) { setAccount(null); after?.(); } }); } }]);
+  const disconnect = async (account: PluginAccount) => {
+    const response = await send({ action: "disconnect", id: account.id }, `disconnect:${account.id}`);
+    if (response && valid() && connectedId === account.id) dismiss();
+    return !!response;
+  };
+  const recover = (account: PluginAccount, action: AccountRecoveryAction) => {
+    if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
+    else if (action === "enable") void send({ action: "enable", id: account.id }, `recover:${account.id}`);
+    else if (action === "disconnect") void disconnect(account);
+    else void connect(account.integration);
+  };
+  /** Loads one account's tools and history, for its Tools page. */
+  const load = useCallback((id: string) => send({ action: "get", id }, `load:${id}`), [send]);
+  /** One tool by name. A tool outside the reviewed groups shows what it does before it is allowed. */
   const toggleTool = (target: PluginAccount, tool: NonNullable<PluginAccount["tools"]>[number], allowed: boolean) => {
-    const commit = () => { if (valid()) void send({ action: "policy", id: target.id, tool: tool.name, allowed }); };
+    const commit = () => { if (valid()) void send({ action: "policy", id: target.id, tool: tool.name, allowed }, `tool:${target.id}:${tool.name}`); };
     if (!allowed) commit(); else Alert.alert("Allow this tool?", `${tool.description}\n\nAvailable to Brain and Workers for this account.`, [{ text: "Cancel", style: "cancel" }, { text: "Allow", onPress: commit }]);
   };
-  const reconnect = () => { setAnother(true); setPhase("idle"); setError(""); };
-  const recover = (action: AccountRecoveryAction) => {
-    if (!account) return;
-    if (action === "refresh") void send({ action: "refresh", id: account.id });
-    else if (action === "enable") void send({ action: "enable", id: account.id });
-    else if (action === "disconnect") disconnect(account);
-    else reconnect();
-  };
+  const plugin = (id: string | null) => catalog.find((item) => item.id === id) ?? null;
   return {
     serverId, serverName, connection, deferredName,
-    catalog, accounts, loaded, account, busy, error, phase, flow, writes, another,
-    selected: catalog.find((plugin) => plugin.id === selectedId) ?? null,
-    sections: pluginCatalogSections(catalog, accounts, pluginJobs),
-    send, cancel, check, openBrowser, authorize, previewGitHub, importGitHub, setWrites,
-    openService, leaveService, changeGroup, disconnect, toggleTool, reconnect, recover,
+    catalog, accounts, details, loaded, running, busy: running !== null, error, phase, flow, service, connectError,
+    connected: accounts.find((account) => account.id === connectedId) ?? null,
+    rows: pluginCatalogRows(catalog, accounts, pluginJobs),
+    plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
+    setAccess, disconnect, recover, load, toggleTool,
   };
 }
 
-/**
- * Binds a Plugins service route to the flow. The service page itself owns
- * leaving; its sub-pages only make sure the service is selected.
- */
-export function usePluginService(serviceId: string, options: { accountId?: string; owner?: boolean } = {}) {
-  const { loaded, openService, leaveService } = usePluginsFlow();
-  const { accountId, owner = false } = options;
-  useEffect(() => {
-    if (loaded && serviceId) void openService(serviceId, accountId);
-  }, [accountId, loaded, openService, serviceId]);
-  useEffect(() => {
-    if (!owner) return;
-    return () => leaveService(serviceId);
-  }, [leaveService, owner, serviceId]);
-}
-
-/** Shared frame for every Plugins route: title, notices and one keyboard-aware scroll view. */
+/** Shared frame for every Plugins route: title, notices, the sign-in in progress and one keyboard-aware scroll view. */
 export function PluginsPage({ title, catalog = false, children }: { title: string; catalog?: boolean; children?: ReactNode }) {
   const colors = useAppColors();
   const router = useRouter();
   const flow = usePluginsFlow();
   const catalogFailed = catalog && !flow.catalog.length;
-  const showError = Boolean(flow.error) && !catalogFailed;
   return <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
     <Stack.Screen options={{ title }} />
     <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
       {catalog && flow.serverId ? <ServerOfflineNotice name={flow.serverName} connection={flow.connection} /> : null}
       {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
-      {showError ? <InlineNotice tone={flow.phase === "cancelled" ? "neutral" : "danger"} title={flow.phase === "cancelled" ? "Connection cancelled" : flow.phase === "failed" ? "Connection didn't finish" : "Request failed"} detail={flow.error} action={catalog ? { label: "Try again", onPress: () => void flow.send({ action: "list" }), disabled: flow.busy } : undefined} /> : null}
-      {!flow.error && flow.phase === "cancelled" ? <InlineNotice title="Connection cancelled" detail="You can try again." /> : null}
+      {flow.error && !catalogFailed ? <InlineNotice tone="danger" title="That didn't go through" detail={flow.error} /> : null}
+      {flow.serverId && flow.service ? <ConnectStatusCard
+        serviceName={flow.plugin(flow.service)?.name ?? "the service"}
+        phase={flow.phase}
+        flow={flow.flow}
+        error={flow.connectError}
+        connected={flow.connected}
+        job={pluginJobs[flow.service]}
+        starting={flow.running === `connect:${flow.service}`}
+        allowing={!!flow.connected && flow.running === `write:${flow.connected.id}`}
+        onOpen={() => { if (flow.flow) void flow.openBrowser(flow.flow); }}
+        onCancel={() => void flow.cancel()}
+        onRetry={() => {
+          if (!flow.service) return;
+          // A custom service starts again from its form.
+          if (flow.service === "mcp" || flow.service === "openapi") { flow.dismiss(); router.push(pluginServicePath(flow.service)); }
+          else void flow.connect(flow.service);
+        }}
+        onDismiss={flow.dismiss}
+        onAllowChanges={(account) => flow.setAccess(account, "write", true)}
+        onUseServerAccount={flow.service === "github" ? () => void flow.useServerGitHub() : undefined}
+        onImport={() => void flow.importGitHub()}
+      /> : null}
       {!flow.serverId ? <NoServerState onOpenSettings={() => router.push("/settings")} /> : children}
     </KeyboardAwareScrollView>
   </View>;
