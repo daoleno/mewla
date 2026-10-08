@@ -1,5 +1,5 @@
 import React from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import { Platform, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { MEWLA_GLYPHS, type MewlaGlyph } from "./mewlaGlyphs";
 
@@ -13,6 +13,16 @@ export interface IconProps {
 }
 
 const STROKE = 1.5;
+
+// Hidden from assistive tech. react-native-svg hands web props straight to
+// the DOM <svg>, where the native-only names are unknown, so web uses ARIA.
+const DECORATIVE_PROPS: object =
+  Platform.OS === "web"
+    ? { "aria-hidden": true }
+    : {
+        accessibilityElementsHidden: true,
+        importantForAccessibility: "no-hide-descendants",
+      };
 
 /**
  * The app's one icon vocabulary: Mewla's own drawings on a 24 grid, stroked
@@ -28,8 +38,7 @@ export function Icon({ name, color, size = 24, style }: IconProps) {
       viewBox="0 0 24 24"
       style={style}
       pointerEvents="none"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
+      {...DECORATIVE_PROPS}
     >
       {glyph.strokes.map((d, index) => (
         <Path
