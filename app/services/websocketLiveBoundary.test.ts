@@ -61,6 +61,12 @@ class FakeWebSocket {
     this.readyState = FakeWebSocket.CLOSED;
     this.onclose?.();
   }
+
+  /** A refused handshake that reports error and never a close event. */
+  failWithoutClose() {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.onerror?.();
+  }
 }
 
 const originalWebSocket = globalThis.WebSocket;
@@ -357,6 +363,33 @@ describe("generic WebSocket live boundary", () => {
     socket.receive({ type: "input_sent", request_id: second.requestId });
     expect(await first.outcome).toEqual({ kind: "sent" });
     expect(await second.outcome).toEqual({ kind: "sent" });
+    client.disconnectAll();
+  });
+
+  test("a reconnect that errors without a close event still ends, reports and retries", async () => {
+    const client = new MultiServerWebSocketClient();
+    const disconnects: unknown[] = [];
+    const issues: unknown[] = [];
+    client.on("disconnected", (payload) => disconnects.push(payload));
+    client.on("connection_issue", (payload) => issues.push(payload));
+    const socket = await connectClient(client);
+    socket.open();
+    socket.close();
+    expect(disconnects).toHaveLength(1);
+
+    const retryIndex = FakeWebSocket.instances.length;
+    client.resumeReconnects();
+    const refused = await waitForSocket(retryIndex);
+    const issuesBefore = issues.length;
+    refused.failWithoutClose();
+    expect(disconnects).toHaveLength(2);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(issues.length).toBeGreaterThan(issuesBefore);
+
+    // The backoff retries on its own (1 s after a refused attempt).
+    const nextIndex = FakeWebSocket.instances.length;
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(nextIndex);
     client.disconnectAll();
   });
 
