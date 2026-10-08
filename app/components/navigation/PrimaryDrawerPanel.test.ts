@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import ts from "typescript";
-import { PRIMARY_DRAWER_GROUP_CAPTIONS, PRIMARY_DRAWER_GROUPS } from "./primaryDrawerDestinations";
+import {
+  PRIMARY_DRAWER_DESTINATIONS,
+  PRIMARY_DRAWER_PLACES,
+  PRIMARY_DRAWER_SETTINGS,
+} from "./primaryDrawerDestinations";
 
 const source = readFileSync(new URL("./PrimaryDrawerPanel.tsx", import.meta.url), "utf8");
 const settingsSource = readFileSync(new URL("../../app/settings.tsx", import.meta.url), "utf8");
@@ -20,7 +24,7 @@ const scroll = nodes.find((node): node is ts.JsxElement =>
 const footer = nodes.find((node): node is ts.JsxElement =>
   ts.isJsxElement(node) && node.openingElement.attributes.getText(file).includes("styles.drawerFooter"),
 )!;
-const destinations = PRIMARY_DRAWER_GROUPS.flat();
+const destinations = [...PRIMARY_DRAWER_DESTINATIONS, PRIMARY_DRAWER_SETTINGS];
 
 function rows(node: ts.Node) {
   return descendants(node).filter((child): child is ts.JsxSelfClosingElement =>
@@ -29,12 +33,14 @@ function rows(node: ts.Node) {
 }
 
 describe("primary drawer destinations", () => {
-  test("lists each destination exactly once, current-server tools before Settings", () => {
-    expect(PRIMARY_DRAWER_GROUPS.map((group) => group.map((item) => item.label))).toEqual([
-      ["Calendar", "Plugins", "Skills", "Stats", "Resources"],
-      ["Settings"],
+  test("one ordered menu: Brain and Sessions, the tools, then Settings apart", () => {
+    expect(PRIMARY_DRAWER_PLACES.map((item) => [item.label, item.route])).toEqual([
+      ["Brain", "brain"],
+      ["Sessions", "list"],
     ]);
-    expect(PRIMARY_DRAWER_GROUP_CAPTIONS).toHaveLength(PRIMARY_DRAWER_GROUPS.length);
+    expect(destinations.map((item) => item.label)).toEqual([
+      "Calendar", "Plugins", "Skills", "Stats", "Resources", "Settings",
+    ]);
     for (const key of ["key", "label", "pathname", "icon"] as const) {
       expect(new Set(destinations.map((item) => item[key])).size).toBe(destinations.length);
     }
@@ -56,21 +62,33 @@ describe("primary drawer destinations", () => {
 });
 
 describe("primary drawer panel", () => {
-  test("renders one row per destination inside the scroll, with only the version in the footer", () => {
+  test("renders one uncaptioned list in the scroll, with Settings and the server status in the footer", () => {
     expect(scroll).toBeDefined();
     expect(footer).toBeDefined();
-    const rendered = rows(file);
-    expect(rendered).toHaveLength(1);
-    expect(descendants(scroll)).toContain(rendered[0]);
-    expect(source).toContain("PRIMARY_DRAWER_GROUPS.map(");
-    expect(rendered[0].getText(file)).toContain("onPress={() => openRoute(destination.pathname)}");
-    expect(rows(footer)).toHaveLength(0);
+    const scrolled = rows(scroll);
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0].getText(file)).toContain("onPress={() => openRoute(destination.pathname)}");
+    expect(scroll.getText(file)).toContain("PRIMARY_DRAWER_PLACES.map(");
+    expect(scroll.getText(file)).toContain("PRIMARY_DRAWER_DESTINATIONS.map(");
+    expect(source).not.toContain("Caption");
+    expect(source).not.toContain("On this computer");
+    const footerRows = rows(footer);
+    expect(footerRows).toHaveLength(1);
+    expect(footerRows[0].getText(file)).toContain("openRoute(PRIMARY_DRAWER_SETTINGS.pathname)");
     expect(scroll.end).toBeLessThan(footer.pos);
-    expect(footer.getText(file)).toContain("Mewla v{appVersion}");
   });
 
-  test("server status is a read-only header without a second Settings entry or always-on dot", () => {
-    expect(source).toContain('accessibilityLabel={`Current server, ${connectionSummary}, ${connectionDetail}`}');
+  test("Brain and Sessions lead on every layout and select the page in place", () => {
+    expect(source).not.toContain("{docked ? (");
+    expect(source).toContain("selected={activePrimaryRoute === place.route}");
+    expect(source).toContain("if (!docked) onClose();\n      onSelectPrimaryRoute(route);");
+  });
+
+  test("server status is a read-only footer row after Settings, without an always-on dot", () => {
+    const status = footer.getText(file);
+    expect(status).toContain('accessibilityLabel={`Current server, ${connectionSummary}, ${connectionDetail}`}');
+    expect(status.indexOf("PRIMARY_DRAWER_SETTINGS.label")).toBeLessThan(status.indexOf("Current server"));
+    expect(scroll.getText(file)).not.toContain("Current server");
     expect(source).not.toContain("StatusPill");
     expect(source).not.toContain('openRoute("/settings")');
   });
@@ -80,7 +98,7 @@ describe("primary drawer panel", () => {
     expect(source).toContain('accessibilityRole="button"');
     expect(source).toContain("accessibilityLabel={label}");
     expect(source).toContain("tabIndex={drawerVisible ? 0 : -1}");
-    expect(source).toContain("satisfies Record<PrimaryDrawerIcon,");
+    expect(source).toContain("<Icon name={icon}");
   });
 
   test("reserves footer space within safe area instead of overlaying scroll content", () => {

@@ -8,26 +8,17 @@ import {
   type View as ViewInstance,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Typography, useAppTheme } from "../../constants/tokens";
-import { appVersion } from "../../constants/appVersion";
 import { useWorkerServerSummary, useWorkers } from "../../store/workers";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
+import { Icon, type IconName } from "../icons/Icon";
 import { MewlaMark } from "../mewla/MewlaMark";
 import {
-  NavCloseIcon,
-  NavPluginsIcon,
-  NavResourcesIcon,
-  NavSettingsIcon,
-  NavSkillsIcon,
-  NavStatsIcon,
-} from "./PrimaryNavIcons";
-import {
-  PRIMARY_DRAWER_GROUP_CAPTIONS,
-  PRIMARY_DRAWER_GROUPS,
-  type PrimaryDrawerIcon,
+  PRIMARY_DRAWER_DESTINATIONS,
+  PRIMARY_DRAWER_PLACES,
+  PRIMARY_DRAWER_SETTINGS,
   type PrimaryDrawerPathname,
 } from "./primaryDrawerDestinations";
 import { sessionsNeedYou } from "./primarySessionsAttention";
@@ -35,39 +26,21 @@ import { sessionsNeedYou } from "./primarySessionsAttention";
 interface PrimaryDrawerPanelProps {
   closeButtonRef: RefObject<ViewInstance | null>;
   drawerVisible: boolean;
+  activePrimaryRoute: PrimaryRouteName;
+  onSelectPrimaryRoute(route: PrimaryRouteName): void;
   onClose(): void;
   onClosePressIn(): void;
   onNavigateAway(): void;
-  /**
-   * Wide layouts dock the panel as a permanent sidebar: no close button, and
-   * Brain and Sessions lead as its first rows.
-   */
-  docked?: {
-    activePrimaryRoute: PrimaryRouteName;
-    onSelectPrimaryRoute(route: PrimaryRouteName): void;
-  };
+  /** Wide layouts dock the panel as a permanent sidebar without a close button. */
+  docked?: boolean;
 }
 
 interface DrawerRowProps {
   drawerVisible: boolean;
-  icon: PrimaryDrawerIcon;
+  icon: IconName;
   label: string;
   onPress(): void;
 }
-
-const DRAWER_ROW_ICONS = {
-  calendar: ({ color, size }: { color: string; size: number }) => (
-    <Ionicons name="calendar-outline" color={color} size={size} />
-  ),
-  plugins: NavPluginsIcon,
-  skills: NavSkillsIcon,
-  stats: NavStatsIcon,
-  browser: ({ color, size }: { color: string; size: number }) => (
-    <Ionicons name="globe-outline" color={color} size={size} />
-  ),
-  resources: NavResourcesIcon,
-  settings: NavSettingsIcon,
-} satisfies Record<PrimaryDrawerIcon, unknown>;
 
 /**
  * One navigation destination. Every row pushes a screen, so there is no
@@ -75,7 +48,6 @@ const DRAWER_ROW_ICONS = {
  */
 function DrawerRow({ drawerVisible, icon, label, onPress }: DrawerRowProps) {
   const { colors } = useAppTheme();
-  const Icon = DRAWER_ROW_ICONS[icon];
   return (
     <Pressable
       onPress={onPress}
@@ -91,7 +63,7 @@ function DrawerRow({ drawerVisible, icon, label, onPress }: DrawerRowProps) {
       ]}
     >
       <View style={styles.drawerRowIcon}>
-        <Icon color={colors.textSecondary} size={20} />
+        <Icon name={icon} color={colors.textSecondary} size={DRAWER_ICON_SIZE} />
       </View>
       <Text
         numberOfLines={1}
@@ -109,16 +81,18 @@ function DrawerRow({ drawerVisible, icon, label, onPress }: DrawerRowProps) {
   );
 }
 
-/** Docked sidebar only: Brain and Sessions, the two primary places. */
+/** Brain and Sessions: the two primary pages, selected in place. */
 function PrimaryPlaceRow({
+  drawerVisible,
   label,
   icon,
   selected,
   attention,
   onPress,
 }: {
+  drawerVisible: boolean;
   label: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: IconName;
   selected: boolean;
   attention?: boolean;
   onPress(): void;
@@ -130,6 +104,8 @@ function PrimaryPlaceRow({
       accessibilityRole="tab"
       accessibilityLabel={attention ? `${label}, needs you` : label}
       accessibilityState={{ selected }}
+      tabIndex={drawerVisible ? 0 : -1}
+      android_ripple={{ color: colors.surfacePressed }}
       style={({ pressed }) => [
         styles.drawerRow,
         {
@@ -142,7 +118,11 @@ function PrimaryPlaceRow({
       ]}
     >
       <View style={styles.drawerRowIcon}>
-        <Ionicons name={icon} size={20} color={selected ? colors.textPrimary : colors.textSecondary} />
+        <Icon
+          name={icon}
+          size={DRAWER_ICON_SIZE}
+          color={selected ? colors.textPrimary : colors.textSecondary}
+        />
       </View>
       <Text
         numberOfLines={1}
@@ -158,10 +138,12 @@ function PrimaryPlaceRow({
 export function PrimaryDrawerPanel({
   closeButtonRef,
   drawerVisible,
+  activePrimaryRoute,
+  onSelectPrimaryRoute,
   onClose,
   onClosePressIn,
   onNavigateAway,
-  docked,
+  docked = false,
 }: PrimaryDrawerPanelProps) {
   const router = useRouter();
   const { colors } = useAppTheme();
@@ -198,6 +180,13 @@ export function PrimaryDrawerPanel({
     },
     [onNavigateAway, router],
   );
+  const selectPlace = useCallback(
+    (route: PrimaryRouteName) => {
+      if (!docked) onClose();
+      onSelectPrimaryRoute(route);
+    },
+    [docked, onClose, onSelectPrimaryRoute],
+  );
 
   return (
     <SafeAreaView style={styles.drawerContent} edges={["top", "bottom"]}>
@@ -232,95 +221,75 @@ export function PrimaryDrawerPanel({
             },
           ]}
         >
-          <NavCloseIcon color={colors.textSecondary} size={18} />
+          <Icon name="close" color={colors.textSecondary} size={18} />
         </Pressable>}
       </View>
 
       <ScrollView
         style={styles.drawerScroll}
+        contentContainerStyle={styles.drawerList}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {docked ? (
-          <View accessibilityRole="tablist" style={styles.places}>
+        <View accessibilityRole="tablist" style={styles.drawerList}>
+          {PRIMARY_DRAWER_PLACES.map((place) => (
             <PrimaryPlaceRow
-              label="Brain"
-              icon="chatbubble-ellipses-outline"
-              selected={docked.activePrimaryRoute === "brain"}
-              onPress={() => docked.onSelectPrimaryRoute("brain")}
+              key={place.key}
+              drawerVisible={drawerVisible}
+              label={place.label}
+              icon={place.icon}
+              selected={activePrimaryRoute === place.route}
+              attention={place.route === "list" && sessionsAttention}
+              onPress={() => selectPlace(place.route)}
             />
-            <PrimaryPlaceRow
-              label="Sessions"
-              icon="terminal-outline"
-              selected={docked.activePrimaryRoute === "list"}
-              attention={sessionsAttention}
-              onPress={() => docked.onSelectPrimaryRoute("list")}
-            />
-          </View>
-        ) : null}
-        {/* Where you are. Read-only: switching servers lives in Settings. */}
-        <View
-          accessible
-          accessibilityLabel={`Current server, ${connectionSummary}, ${connectionDetail}`}
-          style={[styles.serverHeader, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}
-        >
-          <View style={styles.serverGlyph}>
-            <Ionicons name="desktop-outline" size={20} color={colors.textSecondary} />
-          </View>
-          <View style={styles.serverCopy}>
-            <Text
-              numberOfLines={1}
-              style={[styles.serverTitle, { color: colors.textPrimary }]}
-            >
-              {connectionSummary}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={[styles.serverDetail, { color: connectionInk }]}
-            >
-              {connectionDetail}
-            </Text>
-          </View>
+          ))}
         </View>
-
-        {PRIMARY_DRAWER_GROUPS.map((group, groupIndex) => (
-          <View key={group[0]?.key ?? groupIndex} style={styles.drawerGroup}>
-            <Text
-              accessibilityRole="header"
-              style={[styles.groupCaption, { color: colors.textTertiary }]}
-            >
-              {PRIMARY_DRAWER_GROUP_CAPTIONS[groupIndex]}
-            </Text>
-            {group.map((destination) => (
-              <DrawerRow
-                key={destination.key}
-                drawerVisible={drawerVisible}
-                icon={destination.icon}
-                label={destination.label}
-                onPress={() => openRoute(destination.pathname)}
-              />
-            ))}
-          </View>
+        {PRIMARY_DRAWER_DESTINATIONS.map((destination) => (
+          <DrawerRow
+            key={destination.key}
+            drawerVisible={drawerVisible}
+            icon={destination.icon}
+            label={destination.label}
+            onPress={() => openRoute(destination.pathname)}
+          />
         ))}
       </ScrollView>
 
       <View style={styles.drawerFooter}>
-        <Text
-          style={[
-            styles.drawerVersion,
-            {
-              color: colors.textTertiary,
-              fontFamily: Typography.terminalFont,
-            },
-          ]}
+        <DrawerRow
+          drawerVisible={drawerVisible}
+          icon={PRIMARY_DRAWER_SETTINGS.icon}
+          label={PRIMARY_DRAWER_SETTINGS.label}
+          onPress={() => openRoute(PRIMARY_DRAWER_SETTINGS.pathname)}
+        />
+        {/* Where you are. Read-only: switching servers lives in Settings. */}
+        <View
+          accessible
+          accessibilityLabel={`Current server, ${connectionSummary}, ${connectionDetail}`}
+          style={[styles.serverStatus, { borderTopColor: colors.borderSubtle }]}
         >
-          Mewla v{appVersion}
-        </Text>
+          <View style={styles.drawerRowIcon}>
+            <Icon name="desktop" size={16} color={colors.textTertiary} />
+          </View>
+          <Text
+            numberOfLines={1}
+            style={[styles.serverTitle, { color: colors.textSecondary }]}
+          >
+            {connectionSummary}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[styles.serverDetail, { color: connectionInk }]}
+          >
+            {connectionDetail}
+          </Text>
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
+const DRAWER_ICON_SIZE = 20;
 const DRAWER_ICON_SLOT = 24;
 
 const styles = StyleSheet.create({
@@ -340,6 +309,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  drawerList: {
+    gap: 2,
+  },
   drawerFooter: {
     flexShrink: 0,
     paddingTop: 8,
@@ -356,50 +328,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-  },
-  places: {
-    marginTop: 4,
-    gap: 2,
-  },
-  serverHeader: {
-    marginTop: 12,
-    minHeight: 56,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  serverGlyph: {
-    width: DRAWER_ICON_SLOT,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  serverCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 1,
-  },
-  serverTitle: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontFamily: Typography.uiFontMedium,
-  },
-  serverDetail: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: Typography.uiFont,
-  },
-  drawerGroup: {
-    marginTop: 14,
-  },
-  groupCaption: {
-    paddingHorizontal: 12,
-    paddingBottom: 4,
-    fontSize: 12.5,
-    lineHeight: 18,
-    fontFamily: Typography.uiFontMedium,
   },
   drawerRow: {
     minHeight: 52,
@@ -424,10 +352,27 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
   },
-  drawerVersion: {
-    paddingVertical: 8,
-    textAlign: "center",
-    fontSize: 11,
-    lineHeight: 15,
+  serverStatus: {
+    marginTop: 6,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  serverTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Typography.uiFontMedium,
+  },
+  serverDetail: {
+    flexShrink: 1,
+    maxWidth: "50%",
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontFamily: Typography.uiFont,
   },
 });

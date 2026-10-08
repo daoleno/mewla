@@ -1,11 +1,5 @@
-export type PrimaryDrawerIcon =
-  | "calendar"
-  | "plugins"
-  | "skills"
-  | "stats"
-  | "browser"
-  | "resources"
-  | "settings";
+import type { IconName } from "../icons/Icon";
+import type { PrimaryRouteName } from "../../services/interactionTrace";
 
 export type PrimaryDrawerPathname =
   | "/calendar"
@@ -16,45 +10,44 @@ export type PrimaryDrawerPathname =
   | "/resources"
   | "/settings";
 
+export interface PrimaryDrawerPlace {
+  key: string;
+  label: string;
+  route: PrimaryRouteName;
+  icon: IconName;
+}
+
 export interface PrimaryDrawerDestination {
   key: string;
   label: string;
   pathname: PrimaryDrawerPathname;
-  icon: PrimaryDrawerIcon;
+  icon: IconName;
 }
 
-/**
- * Drawer destinations, grouped by owner. The first group acts on the current
- * server; the second is the app itself. Each destination appears exactly
- * once, and every row pushes a screen. Calendar also stays in Brain's menu
- * and its notifications. Browser is temporarily hidden from the drawer; its
- * route and server resources remain.
- */
-export const PRIMARY_DRAWER_GROUPS: readonly (readonly PrimaryDrawerDestination[])[] = [
-  [
-    { key: "calendar", label: "Calendar", pathname: "/calendar", icon: "calendar" },
-    { key: "plugins", label: "Plugins", pathname: "/plugins", icon: "plugins" },
-    { key: "skills", label: "Skills", pathname: "/skills", icon: "skills" },
-    { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
-    {
-      key: "resources",
-      label: "Resources",
-      pathname: "/resources",
-      icon: "resources",
-    },
-  ],
-  [
-    {
-      key: "settings",
-      label: "Settings",
-      pathname: "/settings",
-      icon: "settings",
-    },
-  ],
+/** Brain and Sessions, the two primary pages, lead the menu on every layout. */
+export const PRIMARY_DRAWER_PLACES: readonly PrimaryDrawerPlace[] = [
+  { key: "brain", label: "Brain", route: "brain", icon: "brain" },
+  { key: "sessions", label: "Sessions", route: "list", icon: "sessions" },
 ];
 
-/** One quiet caption per group, in PRIMARY_DRAWER_GROUPS order. */
-export const PRIMARY_DRAWER_GROUP_CAPTIONS: readonly string[] = [
-  "On this computer",
-  "App",
+/**
+ * The tools that follow them, in one ordered list without captions. Each
+ * destination appears exactly once, and every row pushes a screen. Calendar
+ * also stays in Brain's menu and its notifications. Browser is temporarily
+ * hidden from the drawer; its route and server resources remain.
+ */
+export const PRIMARY_DRAWER_DESTINATIONS: readonly PrimaryDrawerDestination[] = [
+  { key: "calendar", label: "Calendar", pathname: "/calendar", icon: "calendar" },
+  { key: "plugins", label: "Plugins", pathname: "/plugins", icon: "plugins" },
+  { key: "skills", label: "Skills", pathname: "/skills", icon: "skills" },
+  { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
+  { key: "resources", label: "Resources", pathname: "/resources", icon: "resources" },
 ];
+
+/** Settings sits apart at the bottom of the menu, above the server status. */
+export const PRIMARY_DRAWER_SETTINGS: PrimaryDrawerDestination = {
+  key: "settings",
+  label: "Settings",
+  pathname: "/settings",
+  icon: "settings",
+};

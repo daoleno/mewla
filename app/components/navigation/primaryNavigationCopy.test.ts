@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PRIMARY_DRAWER_GROUPS } from "./primaryDrawerDestinations";
+import {
+  PRIMARY_DRAWER_DESTINATIONS,
+  PRIMARY_DRAWER_PLACES,
+  PRIMARY_DRAWER_SETTINGS,
+} from "./primaryDrawerDestinations";
 
 const drawerSource = readFileSync(
   join(import.meta.dir, "PrimaryDrawerPanel.tsx"),
@@ -38,7 +42,7 @@ describe("navigation and Skills copy density", () => {
     expect(contract).not.toMatch(/\bdetail\b/);
   });
   test("drawer rows and connection strip remain concise", () => {
-    for (const destination of PRIMARY_DRAWER_GROUPS.flat())
+    for (const destination of [...PRIMARY_DRAWER_PLACES, ...PRIMARY_DRAWER_DESTINATIONS, PRIMARY_DRAWER_SETTINGS])
       expect(destination.label).toMatch(/^[A-Z][a-z]+$/);
     expect(drawerSource).toContain('"Connected"');
     expect(drawerSource).toContain('"Offline"');
