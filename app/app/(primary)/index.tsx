@@ -153,6 +153,20 @@ export default function BrainScreen() {
     ? (workerState.serverConnectionIssues[activeServer.id] ?? null)
     : null;
   const hostWorker = activeBrain?.host_worker ?? null;
+  const hostWorkerId = hostWorker?.id;
+  const hostWorkerProcessId = hostWorker?.process_id;
+  const hostWorkerStartedAt = hostWorker?.started_at;
+  const brainHostFileSession = useMemo(
+    () =>
+      hostWorkerId && hostWorkerProcessId && hostWorkerStartedAt
+        ? {
+            workerId: hostWorkerId,
+            processId: hostWorkerProcessId,
+            startedAt: hostWorkerStartedAt,
+          }
+        : null,
+    [hostWorkerId, hostWorkerProcessId, hostWorkerStartedAt],
+  );
   const hostExecutor = activeBrain?.host_executor ?? null;
   const routedThreadId = routeServerMatches ? params.brainThreadId : undefined;
   const displayedThreadId = routedThreadId || activeBrain?.chat_thread_id;
@@ -815,7 +829,9 @@ export default function BrainScreen() {
       <BrainWorkspaceViewer
         visible={workspaceViewerVisible}
         serverId={activeServer?.id}
+        daemonId={activeServer?.daemonId}
         workspace={activeBrain?.workspace}
+        hostSession={brainHostFileSession}
         chrome={chrome}
         theme={theme}
         onClose={closeWorkspaceViewer}

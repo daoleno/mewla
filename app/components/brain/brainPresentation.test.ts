@@ -53,6 +53,14 @@ describe("brainWorkspaceEntryIconName", () => {
       "document",
     );
   });
+
+  test("marks audio and video as playable", () => {
+    expect(brainWorkspaceEntryIconName("file", "promo/web.mp4")).toBe("play");
+    expect(brainWorkspaceEntryIconName("file", "notes/memo.m4a")).toBe("play");
+    expect(brainWorkspaceEntryIconName("file", "notes/memo.mp4.md")).toBe(
+      "document-text",
+    );
+  });
 });
 
 describe("switchExecutorAccessibilityLabel", () => {

@@ -190,6 +190,9 @@ prints the path. **Browse workspace** in Brain's ⋯ menu opens them in the app.
 | `AGENTS.md` | Brain's standing instructions, partly managed by Mewla |
 | `worklog/` | Brain's reports and handoffs |
 
+Video and audio files in the workspace play in place, through the same stream
+as a file in a reply; that needs Brain's agent to be running.
+
 Edit them freely. Mewla refreshes only its own marked blocks in `AGENTS.md`.
 `mewla brain gc` reports when a note has outgrown its size budget.
 

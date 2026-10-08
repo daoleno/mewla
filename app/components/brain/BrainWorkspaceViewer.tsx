@@ -37,11 +37,17 @@ import {
   brainWorkspaceMarkdownPath,
 } from "./brainPresentation";
 import { Icon } from "../icons/Icon";
+import { sessionFileMediaKindForPath } from "../../services/sessionFileMedia";
+import type { SessionFileIdentity } from "../../services/sessionFilePreview";
+import { SessionFileMediaLoader } from "../terminal/SessionFileMediaLoader";
 
 interface BrainWorkspaceViewerProps {
   visible: boolean;
   serverId?: string;
+  daemonId?: string;
   workspace?: string;
+  /** Brain's live host Session; media plays through its file stream. */
+  hostSession?: SessionFileIdentity | null;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   onClose(): void;
@@ -56,7 +62,9 @@ type BrainWorkspaceCache = {
 export function BrainWorkspaceViewer({
   visible,
   serverId,
+  daemonId,
   workspace,
+  hostSession,
   chrome,
   theme,
   onClose,
@@ -181,6 +189,15 @@ export function BrainWorkspaceViewer({
       if (!serverId || entry.kind === "directory") {
         return;
       }
+      if (sessionFileMediaKindForPath(entry.path)) {
+        // Workspace reads are whole-file and text-sized; media streams instead.
+        fileRequestRef.current += 1;
+        setSelectedPath(entry.path);
+        setSelectedFile(null);
+        setFileError(null);
+        setFileLoading(false);
+        return;
+      }
       const cache =
         cacheRef.current.cacheKey === workspaceCacheKey
           ? cacheRef.current
@@ -287,8 +304,13 @@ export function BrainWorkspaceViewer({
     [loadDirectory, loadFile],
   );
 
+  const selectedMediaPath =
+    selectedPath && sessionFileMediaKindForPath(selectedPath)
+      ? selectedPath
+      : null;
+  const workspaceRoot = currentTree?.workspace || workspace || "";
   const goBack = useCallback(() => {
-    if (currentSelectedFile || fileLoading || fileError) {
+    if (currentSelectedFile || fileLoading || fileError || selectedMediaPath) {
       fileRequestRef.current += 1;
       setSelectedPath(null);
       setSelectedFile(null);
@@ -313,6 +335,7 @@ export function BrainWorkspaceViewer({
     directoryStack,
     fileError,
     fileLoading,
+    selectedMediaPath,
     workspaceCacheKey,
   ]);
   const showingFile = Boolean(
@@ -413,6 +436,14 @@ export function BrainWorkspaceViewer({
               {fileError}
             </AppText>
           </View>
+        ) : selectedMediaPath && serverId && workspaceRoot ? (
+          <SessionFileMediaLoader
+            serverId={serverId}
+            daemonId={daemonId ?? ""}
+            identity={hostSession ?? null}
+            path={`${workspaceRoot.replace(/\/+$/, "")}/${selectedMediaPath}`}
+            chrome={chrome}
+          />
         ) : currentSelectedFile ? (
           <BrainWorkspaceFilePreview
             file={currentSelectedFile}
