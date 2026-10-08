@@ -26,6 +26,9 @@ const (
 	maxSessionFileReferenceBytes = 4096
 	maxSessionFileTextBytes      = 512 << 10
 	maxSessionFileBinaryBytes    = 50 << 20
+	// Media streams from disk in Range requests and is never read whole, so its
+	// bound caps a recording's size rather than a preview's memory.
+	maxSessionFileMediaBytes     = 2 << 30
 	sessionFileAuthPurpose       = "mewla-session-file"
 	sessionFileCapabilityTTL     = 2 * time.Minute
 	maxSessionFileCapabilityBody = 16 << 10
@@ -298,6 +301,10 @@ func classifySessionFile(path string, sniff []byte, sampleTruncated bool) (kind,
 	if isSupportedSessionImageType(detected) {
 		return "image", detected
 	}
+	// Containers carry NULs, so media must be recognised before the text checks.
+	if kind, contentType, ok := classifySessionMedia(extension, sniff); ok {
+		return kind, contentType
+	}
 	if containsBinaryMarker(sniff) || !sessionFileSniffUTF8OK(sniff, sampleTruncated) {
 		return "unsupported", detected
 	}
@@ -347,6 +354,56 @@ func isSupportedSessionImageType(contentType string) bool {
 	default:
 		return false
 	}
+}
+
+// classifySessionMedia accepts a playable file only when its extension and its
+// container signature agree, and names the type browsers and native players
+// expect for that container.
+func classifySessionMedia(extension string, sniff []byte) (kind, contentType string, ok bool) {
+	box := ""
+	if len(sniff) >= 8 {
+		box = string(sniff[4:8])
+	}
+	switch extension {
+	case ".mp4", ".m4v":
+		if box == "ftyp" {
+			return "video", "video/mp4", true
+		}
+	case ".mov":
+		switch box {
+		case "ftyp", "moov", "mdat", "wide", "free", "skip":
+			return "video", "video/quicktime", true
+		}
+	case ".m4a":
+		if box == "ftyp" {
+			return "audio", "audio/mp4", true
+		}
+	case ".webm":
+		if bytesStartWith(sniff, "\x1a\x45\xdf\xa3") {
+			return "video", "video/webm", true
+		}
+	case ".ogv":
+		if bytesStartWith(sniff, "OggS") {
+			return "video", "video/ogg", true
+		}
+	case ".ogg", ".oga", ".opus":
+		if bytesStartWith(sniff, "OggS") {
+			return "audio", "audio/ogg", true
+		}
+	case ".mp3":
+		if bytesStartWith(sniff, "ID3") || (len(sniff) >= 2 && sniff[0] == 0xff && sniff[1]&0xe0 == 0xe0) {
+			return "audio", "audio/mpeg", true
+		}
+	case ".wav":
+		if bytesStartWith(sniff, "RIFF") && len(sniff) >= 12 && string(sniff[8:12]) == "WAVE" {
+			return "audio", "audio/wav", true
+		}
+	case ".flac":
+		if bytesStartWith(sniff, "fLaC") {
+			return "audio", "audio/flac", true
+		}
+	}
+	return "", "", false
 }
 
 func containsBinaryMarker(value []byte) bool {
@@ -418,7 +475,7 @@ func stableFileIdentity(sys any) string {
 }
 
 func (file *resolvedSessionFile) metadata() sessionFileMetadata {
-	binaryPreview := file.kind == "image" || file.kind == "pdf"
+	limit := previewLimitForKind(file.kind)
 	return sessionFileMetadata{
 		Name:         filepath.Base(file.canonicalPath),
 		Path:         file.canonicalPath,
@@ -428,28 +485,38 @@ func (file *resolvedSessionFile) metadata() sessionFileMetadata {
 		Size:         file.info.Size(),
 		ModifiedAt:   file.info.ModTime().UTC().Format(time.RFC3339Nano),
 		Generation:   file.generation,
-		TooLarge:     binaryPreview && file.info.Size() > maxSessionFileBinaryBytes,
-		PreviewLimit: previewLimitForKind(file.kind),
+		TooLarge:     limit > 0 && file.info.Size() > limit,
+		PreviewLimit: limit,
 	}
 }
 
 func previewLimitForKind(kind string) int64 {
-	if kind == "image" || kind == "pdf" {
+	switch kind {
+	case "image", "pdf":
 		return maxSessionFileBinaryBytes
+	case "video", "audio":
+		return maxSessionFileMediaBytes
+	default:
+		return 0
 	}
-	return 0
 }
 
 func validateSessionFileBinarySize(resolved *resolvedSessionFile) error {
 	if resolved == nil || resolved.info == nil {
 		return fmt.Errorf("Session file is unavailable")
 	}
-	if resolved.info.Size() > maxSessionFileBinaryBytes {
+	limit := previewLimitForKind(resolved.kind)
+	if limit == 0 {
+		// Text and unsupported files stream only as downloads, under the
+		// binary preview bound.
+		limit = maxSessionFileBinaryBytes
+	}
+	if resolved.info.Size() > limit {
 		return fmt.Errorf(
 			"%w: %d bytes; limit is %d bytes",
 			errSessionFileTooLarge,
 			resolved.info.Size(),
-			maxSessionFileBinaryBytes,
+			limit,
 		)
 	}
 	return nil
