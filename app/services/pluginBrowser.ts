@@ -8,7 +8,13 @@ export type PluginBrowserResult = WebBrowserAuthSessionResult | { type: "externa
 // Existing development clients may predate ExpoWebBrowser. Do not evaluate
 // that package's requireNativeModule at route import: Linking can open the
 // same official authorization page, and the existing flow owns return/status.
-export async function openPluginAuthorization(url: string, deviceFlow: boolean): Promise<PluginBrowserResult> {
+export async function openPluginAuthorization(url: string, deviceFlow: boolean, sameTab = false): Promise<PluginBrowserResult> {
+  // A web UI sign-in returns this tab to Plugins through the daemon callback,
+  // which restores the pending connection. A popup would outlive its opener.
+  if (sameTab) {
+    globalThis.location.assign(url);
+    return { type: "external" };
+  }
   if (!requireOptionalNativeModule("ExpoWebBrowser")) {
     await Linking.openURL(url);
     // External browsers cannot report dismissal. Keep the expiring flow and

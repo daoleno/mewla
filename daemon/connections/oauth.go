@@ -48,6 +48,7 @@ type oauthFlow struct {
 	ClientSecret string
 	Expires      time.Time
 	Mobile       bool
+	Web          bool // returns to the web UI's Plugins page
 	AllowWrites  bool
 }
 type oauthMetadata struct {
@@ -119,13 +120,18 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if err != nil {
 		return Response{}, errors.New("authorization configuration unavailable")
 	}
-	if !ok && in.Mobile && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "mcp") {
-		client.RedirectURL = NativeCallback
+	// connect_start returns to the native app or to the web UI it came from.
+	callback := in.callback
+	if callback == "" && in.Mobile {
+		callback = NativeCallback
+	}
+	if !ok && callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "mcp") {
+		client.RedirectURL = callback
 	} else if !ok {
 		return Response{}, errors.New("Sign-in is not set up for this service yet.")
 	}
-	if in.Mobile && (in.Integration == "notion" || in.Integration == "linear") {
-		client = OAuthClientConfig{RedirectURL: NativeCallback}
+	if callback != "" && (in.Integration == "notion" || in.Integration == "linear") {
+		client = OAuthClientConfig{RedirectURL: callback}
 	}
 
 	endpoint := in.Endpoint
@@ -226,7 +232,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: in.Mobile && client.RedirectURL == NativeCallback, AllowWrites: in.Mobile && in.AllowWrites}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: callback != "" && client.RedirectURL == NativeCallback, Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -246,6 +252,12 @@ func contains(list []string, s string) bool {
 // state and PKCE bind it to setup authorized via the paired/control boundary.
 // Neither tokens nor authorization codes appear in the browser response.
 func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
+	m.BrowserOAuthCallback(w, req, false)
+}
+
+// BrowserOAuthCallback is OAuthCallback for a request on a host that serves
+// the web UI (webUI), where a stale or replayed return lands on Plugins.
+func (m *Manager) BrowserOAuthCallback(w http.ResponseWriter, req *http.Request, webUI bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
@@ -257,19 +269,37 @@ func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.finishOAuth(w, req, ctx, false)
+	m.finishOAuth(w, req, ctx, false, webUI)
 }
 
-func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile bool) {
+// pluginsReturn sends a web sign-in back to the Plugins page. The target is a
+// path, so the browser stays on the origin the provider returned it to.
+func pluginsReturn(w http.ResponseWriter, req *http.Request, integration string, query url.Values) {
+	target := "/plugins"
+	if integration != "" {
+		target += "/" + url.PathEscape(integration)
+	}
+	http.Redirect(w, req, target+"?"+query.Encode(), http.StatusSeeOther)
+}
+
+func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) {
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
 	if !ok || flow.Mobile != mobile || time.Now().After(flow.Expires) {
+		if webUI && !mobile {
+			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
+			return
+		}
 		http.Error(w, "Authorization expired. Return to Plugins and connect again.", 400)
 		return
 	}
 	delete(m.pending, state)
 	r, ok := m.records[flow.ID]
 	if !ok || !r.Account.Enabled || r.Account.Status == "disconnected" {
+		if flow.Web {
+			pluginsReturn(w, req, "", url.Values{"plugin_error": {"cancelled"}})
+			return
+		}
 		http.Error(w, "Account authorization cancelled", 400)
 		return
 	}
@@ -281,6 +311,14 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 			_ = m.vault.Delete("integration:" + pendingID)
 		}
 		_ = m.save()
+		if flow.Web {
+			outcome := "failed"
+			if req.URL.Query().Get("error") == "access_denied" {
+				outcome = "denied"
+			}
+			pluginsReturn(w, req, r.Account.Integration, url.Values{"plugin_error": {outcome}})
+			return
+		}
 		http.Error(w, "Authorization failed. Return to Plugins and connect again.", 400)
 	}
 	if req.URL.Query().Get("error") != "" || req.URL.Query().Get("code") == "" {
@@ -328,6 +366,10 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	m.event(r, "authorize", nil)
 	if err = m.save(); err != nil {
 		fail()
+		return
+	}
+	if flow.Web {
+		pluginsReturn(w, req, r.Account.Integration, url.Values{"connected": {r.Account.ID}})
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

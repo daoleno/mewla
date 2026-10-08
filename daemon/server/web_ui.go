@@ -105,6 +105,31 @@ func (s *Server) webUIAdmitted(r *http.Request) bool {
 	return false
 }
 
+// servesWebOrigin reports whether a browser on origin is served the web UI:
+// a loopback http address, or an https -web-origin or address book entry.
+func (s *Server) servesWebOrigin(origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Hostname() == "" {
+		return false
+	}
+	if parsed.Scheme == "http" {
+		ip := net.ParseIP(parsed.Hostname())
+		return ip != nil && ip.IsLoopback()
+	}
+	if canonical, err := ParseWebOrigin(origin); err != nil || canonical != origin {
+		return false
+	}
+	if s.addresses != nil && s.addresses.Contains(origin) {
+		return true
+	}
+	for _, configured := range s.webOrigins {
+		if configured == origin {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) isConfiguredWebHost(rawHost string) bool {
 	requested := "https://" + strings.TrimSuffix(strings.ToLower(rawHost), ":443")
 	for _, origin := range s.webOrigins {

@@ -35,7 +35,12 @@ type Manager struct {
 	pending      map[string]*oauthFlow
 	connectFlows map[string]*connectFlow
 	githubToken  func(context.Context) (string, error)
+	webOrigin    func(origin string) bool
 }
+
+// SetWebOrigins admits web UI origins for browser sign-in returns. Without it,
+// connect_start accepts no web origin.
+func (m *Manager) SetWebOrigins(serves func(origin string) bool) { m.webOrigin = serves }
 
 func New(dir string) (*Manager, error) {
 	vault, err := modelprofiles.NewFileCredentialStore(filepath.Join(dir, "integration-credentials.json"))

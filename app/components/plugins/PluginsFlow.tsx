@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
-import { Alert, AppState, Linking, StyleSheet, View } from "react-native";
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Alert, AppState, Linking, Platform, StyleSheet, View } from "react-native";
+import { Stack, useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { openPluginAuthorization } from "../../services/pluginBrowser";
 import { secureStorage } from "../../services/secureStorage";
@@ -12,7 +12,7 @@ import { ServerOfflineNotice, type ServerConnection } from "../extensions/Server
 import { pluginCatalogSections, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import { finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
+import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 
 /** Route of one service page; its sub-pages live below it. */
 export function pluginServicePath(serviceId: string) {
@@ -53,6 +53,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const router = useRouter();
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
+  // A web sign-in comes back as /plugins…?connected= or ?plugin_error=.
+  const returnParams = useRef(useGlobalSearchParams<{ plugin_error?: string; connected?: string }>()).current;
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
   const { isCurrentServer } = useCurrentServer();
   const [catalog, setCatalog] = useState<PluginIntegration[]>([]);
@@ -150,11 +152,14 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   }, [finish, remember, settle, valid]);
   useEffect(() => {
     void send({ action: "list" });
+    const returned = pluginReturnError(returnParams.plugin_error);
+    if (returnParams.plugin_error || returnParams.connected) router.setParams({ plugin_error: undefined, connected: undefined });
+    const showReturn = () => { if (returned && valid()) { setPhase("failed"); setError(returned); } };
     void secureStorage.getItemAsync(PENDING_KEY).then(async (raw) => {
-      if (!raw || !valid()) return;
+      if (!raw || !valid()) { showReturn(); return; }
       try {
         const stored = JSON.parse(raw) as PendingConnection;
-        if (stored.serverId !== serverId || Date.parse(stored.flow.expires) <= Date.now()) return;
+        if (stored.serverId !== serverId || Date.parse(stored.flow.expires) <= Date.now()) { showReturn(); return; }
         pending.current = stored; setFlow(stored); setPhase(stored.flow.status === "confirm" ? "idle" : "waiting");
         const list = await wsClient.requestConnections(serverId!, { action: "list" });
         if (!valid()) return;
@@ -195,7 +200,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     setPhase("opening");
     try {
       setPhase("waiting");
-      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code);
+      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code, Platform.OS === "web" && !!active.flow.web_return);
       if (result.type === "external") { await check(); return; }
       if (!valid()) {
         if (result.type === "success") await deferReturn(result.url);
@@ -217,7 +222,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (pending.current) await cancel();
       const currentAttempt = ++attempt.current;
       setPhase("opening"); setError("");
-      const result = await send({ action: "connect_start", input });
+      const result = await send({ action: "connect_start", input: connectInput(input, Platform.OS, globalThis.location?.origin) });
       if (!result?.flow || !valid()) { if (valid()) setPhase("failed"); return; }
       if (currentAttempt !== attempt.current) {
         await wsClient.requestConnections(serverId!, { action: "connect_cancel", flow_id: result.flow.id }).catch(() => undefined);

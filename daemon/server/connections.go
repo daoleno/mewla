@@ -6,7 +6,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func (s *Server) SetConnections(manager *connections.Manager) { s.connections = manager }
+func (s *Server) SetConnections(manager *connections.Manager) {
+	s.connections = manager
+	if manager != nil {
+		manager.SetWebOrigins(s.servesWebOrigin)
+	}
+}
 func (s *Server) handleConnections(conn *websocket.Conn, raw clientMessage) {
 	if raw.ConnectionRequest == nil {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "invalid_request", "Plugin request is required")
