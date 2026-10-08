@@ -164,3 +164,37 @@ func TestTakeoverProjectsCodexActorMarker(t *testing.T) {
 		t.Fatalf("repaired config:\n%s", got)
 	}
 }
+
+// TestGatewayForwardsFinalUpstreamErrorBody: the last 5xx is the client's
+// answer, so its body must arrive intact whether or not a retry preceded it.
+func TestGatewayForwardsFinalUpstreamErrorBody(t *testing.T) {
+	const body = `{"error":{"type":"api_error","message":"No available compatible accounts"}}`
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, body)
+	}))
+	defer upstream.Close()
+	g := NewGateway("127.0.0.1:0", NewMemoryCredentialStore(), WithGatewayRequestResolver(func(string, string) (GatewayUpstream, error) {
+		return GatewayUpstream{ProfileID: "p", BaseURL: upstream.URL, Protocol: ProtocolOpenAIResponses}, nil
+	}))
+	if err := g.Listen(); err != nil {
+		t.Fatal(err)
+	}
+	defer g.Close()
+	for _, path := range []string{"/v1/images/generations", "/v1/responses"} {
+		req, err := http.NewRequest(http.MethodPost, "http://"+g.ActualAddr()+path, strings.NewReader(`{"model":"gpt-image-2","prompt":"cat"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		got, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil || resp.StatusCode != http.StatusServiceUnavailable || string(got) != body {
+			t.Fatalf("%s: status=%d body=%q err=%v", path, resp.StatusCode, got, readErr)
+		}
+	}
+}
