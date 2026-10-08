@@ -503,6 +503,10 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		if err == nil && resp.StatusCode < 500 {
 			break
 		}
+		// The final attempt's response is the client's answer; keep its body.
+		if attempt == attempts-1 {
+			break
+		}
 		if resp != nil {
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
