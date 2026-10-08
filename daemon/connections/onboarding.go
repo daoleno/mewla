@@ -31,6 +31,8 @@ type ConnectFlow struct {
 	Message          string    `json:"message,omitempty"`
 	Expires          time.Time `json:"expires"`
 	AccountID        string    `json:"account_id,omitempty"`
+	// WebReturn: the provider returns the browser to the web UI's Plugins page.
+	WebReturn bool `json:"web_return,omitempty"`
 }
 type connectFlow struct {
 	ConnectFlow
@@ -111,6 +113,17 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		}
 		in := *q.Input
 		in.Mobile = true
+		in.callback = NativeCallback
+		if in.WebOrigin != "" {
+			// Only an origin this daemon serves the web UI on, so no caller can
+			// send an authorization code to an address it chooses.
+			callback := in.WebOrigin + "/plugins/oauth/callback"
+			if m.webOrigin == nil || !m.webOrigin(in.WebOrigin) || !validCallback(callback) {
+				return Response{}, errors.New("Sign-in can't return to this address. Open Mewla at its configured web address and try again.")
+			}
+			in.Mobile = false
+			in.callback = callback
+		}
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
 		}
@@ -130,7 +143,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 				state = key
 			}
 		}
-		f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: response.AuthorizationURL, Expires: m.pending[state].Expires, AccountID: response.Account.ID}, state: state}
+		f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: response.AuthorizationURL, Expires: m.pending[state].Expires, AccountID: response.Account.ID, WebReturn: m.pending[state].Web}, state: state}
 		m.connectFlows[f.ID] = f
 		return flowResult(f), nil
 	}
@@ -209,7 +222,8 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		return m.connectedFlow(f)
 	}
 	if q.Action == "connect_finish" {
-		if f.Status == "connected" {
+		if f.Status == "connected" || f.WebReturn {
+			// A web sign-in finishes at the daemon's own callback.
 			return m.connectedFlow(f)
 		}
 		if f.Status != "waiting" || f.state == "" {
@@ -221,7 +235,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		}
 		req := httptest.NewRequest(http.MethodGet, "https://native.invalid/?"+callback.RawQuery, nil)
 		w := httptest.NewRecorder()
-		m.finishOAuth(w, req, ctx, true)
+		m.finishOAuth(w, req, ctx, true, false)
 		if w.Code != http.StatusOK {
 			f.Status = "failed"
 			f.Message = "Authorization was declined or could not be verified. Connect again."

@@ -414,7 +414,7 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "Plugins unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		s.connections.OAuthCallback(w, r)
+		s.connections.BrowserOAuthCallback(w, r, s.webUIAdmitted(r))
 	})
 	mux.HandleFunc("/resources", s.handleResourceTelemetryHTTP)
 	mux.HandleFunc("/pair", s.handlePair)

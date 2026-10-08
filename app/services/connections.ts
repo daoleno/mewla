@@ -37,7 +37,7 @@ export type ConnectionRequest = {
   id?: string;
   tool?: string;
   allowed?: boolean;
-  input?: { integration: string; name?: string; endpoint?: string; credential?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; name?: string; endpoint?: string; credential?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
   id: string;
@@ -49,6 +49,8 @@ export type ConnectFlow = {
   message?: string;
   expires: string;
   account_id?: string;
+  /** The provider returns this browser tab to the web UI's Plugins page. */
+  web_return?: boolean;
 };
 export type ConnectionResponse = {
   flow?: ConnectFlow;

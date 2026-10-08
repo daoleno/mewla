@@ -77,6 +77,10 @@ type Input struct {
 	OAuthClient     *OAuthClientConfig `json:"oauth_client,omitempty"`
 	Mobile          bool               `json:"mobile,omitempty"`
 	AllowWrites     bool               `json:"allow_writes,omitempty"`
+	// WebOrigin is the web UI's own origin. connect_start returns its browser
+	// there instead of to the native app, if the daemon serves the web UI on it.
+	WebOrigin string `json:"web_origin,omitempty"`
+	callback  string // connect_start's return target; never decoded
 }
 
 type Request struct {

@@ -58,6 +58,22 @@ export async function finishPluginReturn(
   if (Date.parse(pending.flow.expires) <= Date.now()) throw new Error("This connection expired. Connect again.");
   return send(pending.serverId, { action: "connect_finish", flow_id: pending.flow.id, callback });
 }
+type ConnectInput = NonNullable<ConnectionRequest["input"]>;
+// The web UI asks the daemon to return sign-in to its own origin; native apps
+// return to PLUGIN_CALLBACK. The daemon accepts only origins it serves.
+export function connectInput(input: ConnectInput, platform: string, origin?: string): ConnectInput {
+  return platform === "web" && origin ? { ...input, web_origin: origin } : input;
+}
+// The daemon's web callback sends the browser back to Plugins with an outcome.
+export function pluginReturnError(code: string | undefined): string | null {
+  switch (code) {
+    case undefined: case "": return null;
+    case "denied": return "Access was not granted. You can connect again whenever you’re ready.";
+    case "expired": return "This sign-in already finished or expired. Check the service below, and start again if it isn’t connected.";
+    case "cancelled": return "This connection was cancelled. Start again to connect.";
+    default: return "The service couldn’t be verified. Start again.";
+  }
+}
 export const pluginJobs: Record<string, { read: string; write: string; example: string }> = {
   github: { read: "Read repositories, issues and pull requests", write: "Create issues and add comments", example: "Ask Brain to summarize the open issues in a repository." },
   notion: { read: "Find and read workspace pages", write: "Create and update pages and comments", example: "Ask Brain to find and summarize a page in your workspace." },
