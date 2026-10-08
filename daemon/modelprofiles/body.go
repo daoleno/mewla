@@ -441,6 +441,7 @@ func stripInboundAuthAndHopByHop(h http.Header) {
 	h.Del("Proxy-Authorization")
 	h.Del("X-Api-Key")
 	h.Del("Api-Key")
+	h.Del(CodexActorMarkerHeader)
 }
 
 func copySafeResponseHeaders(dst, src http.Header) {

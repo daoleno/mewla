@@ -133,7 +133,7 @@ func buildWebSocketUpstreamHeaders(inbound http.Header) http.Header {
 			continue
 		}
 		switch canon {
-		case "Authorization", "Proxy-Authorization", "X-Api-Key", "Api-Key", "Content-Length", "Host", "Origin":
+		case "Authorization", "Proxy-Authorization", "X-Api-Key", "Api-Key", "Content-Length", "Host", "Origin", http.CanonicalHeaderKey(CodexActorMarkerHeader):
 			continue
 		}
 		for _, value := range values {

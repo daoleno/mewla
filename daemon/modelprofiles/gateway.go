@@ -25,8 +25,13 @@ const DefaultGatewayListenAddr = "127.0.0.1:3425"
 const (
 	GatewayProtocolResponses = RouteProtocolResponses
 	GatewayProtocolAnthropic = RouteProtocolAnthropicMessages
-	GatewayRetryAttempts     = 2
-	GatewayRetryBackoff      = 100 * time.Millisecond
+	// GatewayProtocolCodexTools covers the standalone endpoints behind Codex's
+	// built-in image_gen and web.run tools. Their bodies name a tool model
+	// (gpt-image-2) or none, so they go to the selected Codex connection
+	// instead of being resolved by model.
+	GatewayProtocolCodexTools = "codex_tools"
+	GatewayRetryAttempts      = 2
+	GatewayRetryBackoff       = 100 * time.Millisecond
 )
 
 // MaxGatewayRequestBodyBytes is the loopback DoS ceiling for Codex request
@@ -414,7 +419,13 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			return
 		}
 	}
-	if g.resolve != nil && req.Method == http.MethodPost {
+	if g.resolve != nil && protocol == GatewayProtocolCodexTools {
+		upstream, err = g.resolve(protocol, "")
+		if err != nil {
+			writeGatewayResolutionError(w, err)
+			return
+		}
+	} else if g.resolve != nil && req.Method == http.MethodPost {
 		modelID, parseErr := gatewayModelID(bodyBytes)
 		if parseErr != nil {
 			writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
@@ -471,8 +482,14 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	// Body bytes and Content-Encoding are forwarded as-is. The rewriting
 	// router decodes at the edge; the gateway must not.
 
+	// Image generation is billed per call: a 5xx may still have produced an
+	// image upstream, so tool endpoints are never replayed.
+	attempts := GatewayRetryAttempts
+	if protocol == GatewayProtocolCodexTools {
+		attempts = 1
+	}
 	var resp *http.Response
-	for attempt := 0; attempt < GatewayRetryAttempts; attempt++ {
+	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-req.Context().Done():
@@ -530,6 +547,8 @@ func gatewayProtocolForPath(path string) (string, bool) {
 		return GatewayProtocolResponses, true
 	case "/v1/messages", "/v1/messages/count_tokens":
 		return GatewayProtocolAnthropic, true
+	case "/v1/images/generations", "/v1/images/edits", "/v1/alpha/search":
+		return GatewayProtocolCodexTools, true
 	default:
 		return "", false
 	}

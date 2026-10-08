@@ -128,6 +128,9 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 	if o == nil || o.store == nil {
 		return GatewayUpstream{}, ErrNotFound
 	}
+	if protocol == GatewayProtocolCodexTools {
+		return o.selectedCodexGatewayUpstream()
+	}
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return GatewayUpstream{}, ErrModelUnsupported
@@ -210,6 +213,32 @@ func (o *Owner) selectedClaudeGatewayUpstream() (GatewayUpstream, error) {
 	}
 	if routeProtocolFor(target.Protocol) != GatewayProtocolAnthropic {
 		return GatewayUpstream{}, fmt.Errorf("%w: Claude connection %s does not speak Anthropic Messages", ErrUpstreamInvalid, selected)
+	}
+	return GatewayUpstreamFromProfile(target), nil
+}
+
+// selectedCodexGatewayUpstream is the target of Codex's standalone tool
+// endpoints (image_gen, web.run): the currently selected Codex connection, which
+// must speak Responses. Like the Claude passthrough, the tool model is left to
+// the Provider.
+func (o *Owner) selectedCodexGatewayUpstream() (GatewayUpstream, error) {
+	selected := normalizeID(o.store.DefaultProfileID(ExecutorCodex))
+	if selected == "" {
+		return GatewayUpstream{}, fmt.Errorf("%w: no Codex connection selected", ErrNotFound)
+	}
+	profile, err := o.store.Get(selected)
+	if err != nil {
+		return GatewayUpstream{}, err
+	}
+	if !o.connectionReady(profile) {
+		return GatewayUpstream{}, fmt.Errorf("%w: %s", ErrCredentialNotReady, selected)
+	}
+	target, err := CompileConnectionTarget(profile, ClientCodex, "", "")
+	if err != nil {
+		return GatewayUpstream{}, err
+	}
+	if routeProtocolFor(target.Protocol) != GatewayProtocolResponses {
+		return GatewayUpstream{}, fmt.Errorf("%w: Codex connection %s does not speak Responses", ErrUpstreamInvalid, selected)
 	}
 	return GatewayUpstreamFromProfile(target), nil
 }
