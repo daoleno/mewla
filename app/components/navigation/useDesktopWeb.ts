@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 import { isDesktopWeb } from "./desktopWeb";
 
@@ -6,6 +6,35 @@ import { isDesktopWeb } from "./desktopWeb";
 export function useDesktopWeb(): boolean {
   const { width } = useWindowDimensions();
   return isDesktopWeb(Platform.OS, width);
+}
+
+const TOUCH_POINTER_QUERY = "(any-pointer: coarse)";
+
+function touchPointerQuery(): MediaQueryList | null {
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  if (typeof window.matchMedia !== "function") return null;
+  return window.matchMedia(TOUCH_POINTER_QUERY);
+}
+
+function subscribeTouchPointer(onChange: () => void): () => void {
+  const query = touchPointerQuery();
+  if (!query) return () => {};
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function readKeyboardOnlyWeb(): boolean {
+  const query = touchPointerQuery();
+  return query != null && !query.matches;
+}
+
+/**
+ * Web with no touch pointer at all, so typing comes from a physical keyboard
+ * and phone keyboard aids (the terminal key bar) stay out. Phones, tablets
+ * and touch laptops report a coarse pointer and keep them.
+ */
+export function useKeyboardOnlyWeb(): boolean {
+  return useSyncExternalStore(subscribeTouchPointer, readKeyboardOnlyWeb, () => false);
 }
 
 /**
