@@ -1,3 +1,4 @@
+import { sessionFileMediaKindForPath } from "../../services/sessionFileMedia";
 import type { BrainExecutorRef } from "../../store/brain";
 
 export function brainProviderLabel(value?: string): string {
@@ -77,9 +78,12 @@ export function brainWorkspaceEntryAccessibilityLabel(
 export function brainWorkspaceEntryIconName(
   kind: string,
   path: string,
-): "folder" | "document-text" | "document" {
+): "folder" | "document-text" | "document" | "play" {
   if (kind === "directory") {
     return "folder";
+  }
+  if (sessionFileMediaKindForPath(path)) {
+    return "play";
   }
   return brainWorkspaceMarkdownPath(path)
     ? "document-text"

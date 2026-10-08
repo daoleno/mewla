@@ -151,6 +151,19 @@ function rays(cx: number, cy: number, from: number, to: number): string[] {
 
 const HOLE = 0.8;
 const RING = circle(12, 12, 9.25);
+/** A speaker: a short box opening into a cone, every corner eased. */
+const SPEAKER = soft(
+  [
+    [3.25, 9],
+    [7, 9],
+    [11.75, 5],
+    [11.75, 19],
+    [7, 15],
+    [3.25, 15],
+  ],
+  1.5,
+  true,
+);
 const CLOUD = "M7,18.5A4.5,4.5 0 0 1 6.37,9.54A6,6 0 0 1 17.63,9.54A4.5,4.5 0 0 1 17,18.5Z";
 const CLOUD_OPEN = "M8,18.5H7A4.5,4.5 0 0 1 6.37,9.54A6,6 0 0 1 17.63,9.54A4.5,4.5 0 0 1 17,18.5H16";
 const CHECK: Point[] = [
@@ -893,6 +906,19 @@ export const MEWLA_GLYPHS = {
     strokes: [circle(9.5, 7.5, 4), "M2.75,20.75c.55,-3.75 3.3,-6.25 6.75,-6.25s6.2,2.5 6.75,6.25", "M16.25,10.5H21.25"],
   },
   phone: { strokes: [box(6, 2.75, 12, 18.5, 3.5), "M10.5,18H13.5"] },
+  play: {
+    strokes: [
+      soft(
+        [
+          [7, 4.5],
+          [19.75, 12],
+          [7, 19.5],
+        ],
+        2.2,
+        true,
+      ),
+    ],
+  },
   "play-forward": {
     strokes: [
       soft(
@@ -1188,6 +1214,8 @@ export const MEWLA_GLYPHS = {
       "M3.75,9H15a5.5,5.5 0 0 1 0,11H11",
     ],
   },
+  volume: { strokes: [SPEAKER, "M15.25,9.25a4,4 0 0 1 0,5.5", "M17.75,6.5a7.5,7.5 0 0 1 0,11"] },
+  "volume-off": { strokes: [SPEAKER, "M15.75,9.5L20.75,14.5", "M20.75,9.5L15.75,14.5"] },
   warning: {
     strokes: ["M10.27,4.2a2,2 0 0 1 3.46,0l7.6,13.25a2,2 0 0 1 -1.73,3H4.4a2,2 0 0 1 -1.73,-3Z", "M12,9.5V13.5"],
     fills: [dot(12, 16.9)],

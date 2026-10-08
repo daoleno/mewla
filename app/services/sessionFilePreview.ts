@@ -3,6 +3,8 @@ export type SessionFileKind =
   | "text"
   | "image"
   | "pdf"
+  | "video"
+  | "audio"
   | "unsupported";
 
 export type SessionFileRenderer =
@@ -10,6 +12,8 @@ export type SessionFileRenderer =
   | "text"
   | "image"
   | "pdf"
+  | "video"
+  | "audio"
   | "unsupported";
 
 export interface SessionFileIdentity {
@@ -114,7 +118,7 @@ const KNOWN_FILE_BASENAMES = new Set([
 ]);
 
 const FILE_EXTENSION_RE =
-  /\.(?:c|cc|conf|cpp|css|csv|env|gif|go|graphql|h|hpp|html?|ini|java|jpe?g|js|json|jsx|kt|kts|log|lua|m|markdown|md|mdx|mm|pdf|php|plist|png|properties|py|rb|rs|sh|sql|svg|swift|toml|ts|tsx|txt|webp|xml|ya?ml|zsh)$/i;
+  /\.(?:c|cc|conf|cpp|css|csv|env|flac|gif|go|graphql|h|hpp|html?|ini|java|jpe?g|js|json|jsx|kt|kts|log|lua|m|m4a|m4v|markdown|md|mdx|mm|mov|mp3|mp4|oga|ogg|ogv|opus|pdf|php|plist|png|properties|py|rb|rs|sh|sql|svg|swift|toml|ts|tsx|txt|wav|webm|webp|xml|ya?ml|zsh)$/i;
 
 export const initialSessionFilePreviewState: SessionFilePreviewState = {
   reference: null,
@@ -187,7 +191,9 @@ export function classifySessionFileRenderer(
     case "image":
       return kind;
     case "pdf":
-      return "pdf";
+    case "video":
+    case "audio":
+      return kind;
     default:
       return "unsupported";
   }
@@ -530,6 +536,8 @@ function normalizeSessionFileKind(value: unknown): SessionFileKind {
     case "text":
     case "image":
     case "pdf":
+    case "video":
+    case "audio":
       return value;
     default:
       return "unsupported";

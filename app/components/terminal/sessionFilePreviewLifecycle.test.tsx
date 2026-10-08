@@ -48,6 +48,9 @@ if (!process.env.MEWLA_PREVIEW_HOOK_CHILD) {
   mock.module("./SessionFilePdfPreview", () => ({
     SessionFilePdfPreview: host("pdf"),
   }));
+  mock.module("./SessionFileMediaPreview", () => ({
+    SessionFileMediaPreview: host("media"),
+  }));
   const gesture = () => ({
     minDistance() {
       return this;
@@ -154,6 +157,61 @@ if (!process.env.MEWLA_PREVIEW_HOOK_CHILD) {
       "fixture:tall.png",
     );
     expect(binary).not.toContain("slow.png");
+    await act(async () => renderer.unmount());
+  });
+
+  test("a video opens in the media player, which can sign the same generation again", async () => {
+    const binary: Array<{ path: string; generation: string }> = [];
+    const loader = {
+      metadata: async (_server: string, request: { path: string }) => ({
+        ...metadata("/promo/web.mp4"),
+        kind: "video" as const,
+        contentType: "video/mp4",
+        generation: "generation-video",
+        relativePath: request.path,
+      }),
+      binary: async (
+        _server: string,
+        _daemon: string,
+        request: { path: string; generation: string },
+      ) => {
+        binary.push({ path: request.path, generation: request.generation });
+        return { uri: `fixture:${request.path}#${binary.length}`, headers: {} };
+      },
+      text: async () => {
+        throw Error("Not text");
+      },
+    };
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <SessionFilePreviewSheet
+          serverId="fixture"
+          serverUrl="http://fixture.invalid"
+          daemonId="fixture"
+          workerId="fixture"
+          processId={1}
+          startedAt={1}
+          chrome={{} as any}
+          theme={{} as any}
+          onClose={() => {}}
+          loader={loader}
+          reference="web.mp4"
+        />,
+      );
+    });
+    const player = renderer.root.findByType("media" as any);
+    expect(player.props.kind).toBe("video");
+    expect(player.props.source.uri).toBe("fixture:/promo/web.mp4#1");
+    let resigned: { uri: string } | undefined;
+    await act(async () => {
+      resigned = await player.props.resolveSource();
+    });
+    expect(resigned?.uri).toBe("fixture:/promo/web.mp4#2");
+    expect(binary).toEqual([
+      { path: "/promo/web.mp4", generation: "generation-video" },
+      { path: "/promo/web.mp4", generation: "generation-video" },
+    ]);
     await act(async () => renderer.unmount());
   });
 

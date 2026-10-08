@@ -60,6 +60,7 @@ import { MessageBody } from "./InterfaceMessageBody";
 import { TimelineTextSelectableContext } from "./TimelineTextSelectableContext";
 import { SessionFilePreviewContext } from "./SessionFilePreviewContext";
 import { SessionFilePdfPreview } from "./SessionFilePdfPreview";
+import { SessionFileMediaPreview } from "./SessionFileMediaPreview";
 import { Icon, type IconName } from "../icons/Icon";
 
 export interface SessionFilePreviewLoader {
@@ -209,7 +210,12 @@ export function SessionFilePreviewSheet({
         if (!cancelled) dispatch({ type: "text_loaded", text });
         return;
       }
-      if (renderer === "image" || renderer === "pdf") {
+      if (
+        renderer === "image" ||
+        renderer === "pdf" ||
+        renderer === "video" ||
+        renderer === "audio"
+      ) {
         const source = await loader.binary(
           serverId,
           daemonId,
@@ -262,6 +268,24 @@ export function SessionFilePreviewSheet({
   const markPdfFailure = useCallback((message: string, stale: boolean) => {
     dispatch({ type: "failed", message, stale });
   }, []);
+  const metadata = state.metadata;
+  // A media stream outlives one read capability; the player signs a fresh
+  // one for the same file generation when the old one lapses.
+  const resolveMediaSource = useCallback(async () => {
+    if (!metadata || !processId || !startedAt) {
+      throw new Error(
+        "This Session has no live generation identity. Refresh the Session list and try again.",
+      );
+    }
+    return loader.binary(
+      serverId,
+      daemonId,
+      bindSessionFileRequestToGeneration(
+        { workerId, processId, startedAt, path: metadata.path },
+        metadata,
+      ),
+    );
+  }, [daemonId, loader, metadata, processId, serverId, startedAt, workerId]);
   const [pathCopied, setPathCopied] = useState(false);
   const [downloadFeedback, setDownloadFeedback] =
     useState<SessionFileDownloadFeedback>("idle");
@@ -381,6 +405,7 @@ export function SessionFilePreviewSheet({
           onRetry={retry}
           onBinaryError={markBinaryFailure}
           onPdfError={markPdfFailure}
+          resolveMediaSource={resolveMediaSource}
         />
       </View>
     </BottomSheetFrame>
@@ -547,6 +572,7 @@ function SessionFilePreviewBody({
   onRetry,
   onBinaryError,
   onPdfError,
+  resolveMediaSource,
 }: {
   state: SessionFilePreviewState;
   chrome: TerminalThemeChrome;
@@ -554,6 +580,7 @@ function SessionFilePreviewBody({
   onRetry(): void;
   onBinaryError(): void;
   onPdfError(message: string, stale: boolean): void;
+  resolveMediaSource(): Promise<SessionFileBinarySource>;
 }) {
   if (state.status === "loading") {
     return (
@@ -640,6 +667,19 @@ function SessionFilePreviewBody({
           source={state.binarySource}
           generation={state.metadata.generation}
           expectedBytes={state.metadata.size}
+          chrome={chrome}
+          onError={onPdfError}
+        />
+      ) : null;
+    case "video":
+    case "audio":
+      return state.binarySource ? (
+        <SessionFileMediaPreview
+          key={state.requestEpoch}
+          kind={state.metadata.kind === "audio" ? "audio" : "video"}
+          name={state.metadata.name}
+          source={state.binarySource}
+          resolveSource={resolveMediaSource}
           chrome={chrome}
           onError={onPdfError}
         />
@@ -733,6 +773,10 @@ function sessionFileKindLabel(metadata: SessionFileMetadata): string {
       return "Image";
     case "pdf":
       return "PDF";
+    case "video":
+      return "Video";
+    case "audio":
+      return "Audio";
     default:
       return "Binary";
   }
