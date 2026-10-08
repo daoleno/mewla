@@ -22,6 +22,8 @@ interface UseInterfaceDraftSubmissionInput {
     previousDraft: string,
     previousAttachments: ComposerAttachment[],
   ): void;
+  /** Send was pressed while the server is unreachable. */
+  reportOfflineSend(): void;
 }
 
 export function useInterfaceDraftSubmission({
@@ -32,10 +34,15 @@ export function useInterfaceDraftSubmission({
   uploading,
   routeDraftSubmission,
   submitTextToInterface,
+  reportOfflineSend,
 }: UseInterfaceDraftSubmissionInput) {
   return useCallback(() => {
     const text = buildInterfaceComposerMessage(draft, attachments);
-    if (!text || connectionState !== "connected" || sending || uploading) {
+    if (!text || sending || uploading) {
+      return;
+    }
+    if (connectionState !== "connected") {
+      reportOfflineSend();
       return;
     }
     const previousDraft = draft;
@@ -55,6 +62,7 @@ export function useInterfaceDraftSubmission({
     attachments,
     connectionState,
     draft,
+    reportOfflineSend,
     routeDraftSubmission,
     sending,
     submitTextToInterface,

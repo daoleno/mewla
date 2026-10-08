@@ -180,7 +180,8 @@ export function useInterfaceChatBodyProps({
         Boolean(onSwitchToTerminal) && (showUnavailableAction ?? true),
       inputRef: composerInput.inputRef,
       draft,
-      editable: connectionState === "connected",
+      // Typing never waits for the connection; Send says if it can't go.
+      editable: true,
       composerFocused: composerInput.focused,
       canAttach: controller.canAttach,
       uploading: controller.uploading,

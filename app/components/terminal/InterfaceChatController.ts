@@ -109,6 +109,7 @@ export function useInterfaceChatController({
     interruptInterface,
     interrupting,
     operationalError,
+    reportOfflineSend,
     retryPendingUserMessage,
     sending,
     startNewInterfaceChat,
@@ -186,6 +187,7 @@ export function useInterfaceChatController({
     uploading,
     routeDraftSubmission,
     submitTextToInterface,
+    reportOfflineSend,
   });
 
   return {
