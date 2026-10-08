@@ -142,7 +142,9 @@ phone web and native, tablets included, keep the model above. Rules:
    always sends); nothing sends during IME composition. ⌘K / Ctrl+K opens the
    command palette, `?` lists every shortcut, Esc closes the top overlay, and
    focus rings are visible. Shortcuts never fire while typing in a field or
-   the terminal, and tooltips name them.
+   the terminal, and tooltips name them. Web with no touch pointer at all
+   drops the terminal key bar (Ctrl, Esc, Tab, ^C, arrows); phones, tablets
+   and touch laptops keep it.
 7. **Desktop affordances.** Rows show hover and a pointer, chats are
    selectable, and each tab has a title ("Calendar · Mewla").
 

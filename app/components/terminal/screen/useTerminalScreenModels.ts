@@ -6,6 +6,7 @@ import type {
   StoredWorkerAliases,
   StoredInterfaceRenderModes,
 } from "../../../services/storage";
+import { useKeyboardOnlyWeb } from "../../navigation/useDesktopWeb";
 import { useTerminalGitDiff } from "../useTerminalGitDiff";
 import { useTerminalRouteModel } from "./useTerminalRouteModel";
 import { useTerminalThemeChrome } from "./useTerminalThemeChrome";
@@ -58,10 +59,12 @@ export function useTerminalScreenModels({
     brainHostWorker,
     brainHostServerId,
   });
+  const keyboardOnly = useKeyboardOnlyWeb();
   const viewport = useTerminalViewportModel({
     hasTerminalRoute: route.hasTerminalRoute,
     showInterfaceChat: route.showInterfaceChat,
     screenFocused,
+    keyboardOnly,
     connectionState: route.connectionState,
     connectionIssue: route.connectionIssue,
     terminalTheme: theme.terminalTheme,
