@@ -543,7 +543,13 @@ class ServerSocket {
         }
       };
 
-      ws.onclose = () => {
+      // A socket ends once, whichever event reports it first.
+      let ended = false;
+      const handleEnd = () => {
+        if (ended) {
+          return;
+        }
+        ended = true;
         if (this.ws === ws) {
           this.ws = null;
         }
@@ -563,12 +569,19 @@ class ServerSocket {
         }
         this.scheduleReconnect();
       };
+      ws.onclose = handleEnd;
 
       ws.onerror = () => {
         try {
           ws.close();
         } catch {
           // Ignore close errors from failed handshake attempts.
+        }
+        // A refused handshake can end in error with no close event (seen in
+        // headless Chrome). Without this the client waits in "connecting"
+        // forever: no retry and no connection issue.
+        if (ws.readyState === WebSocket.CLOSED) {
+          handleEnd();
         }
       };
     } catch {
