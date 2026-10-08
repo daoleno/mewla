@@ -319,6 +319,36 @@ drawer, the About row and Onboarding's brand row all show `MewlaMark`. Small
 inline waits (composer send, upload chip, sheets) use the platform activity
 indicator in ink, never a brand mark.
 
+## Connecting a service
+
+Plugins is one list with one row per service, and connecting is one action
+(`connect` in `components/plugins/PluginsFlow.tsx`). The row's Connect, the
+service page's Connect and Add another account, Reconnect, and allowing
+changes that the service must approve all call it.
+
+- **The target is three steps:** tap Connect on the list, approve on the
+  service's page, and land back on the list with the service Connected. Read
+  and search is on by default. Making changes is a follow-up, offered once on
+  the result card and kept as a switch on the service page, never a gate
+  before connecting.
+- **A row's trailing control is its one action:** a small tinted Connect, or
+  Reconnect when an account needs sign-in again. Otherwise it shows a status
+  pill and a chevron, and the row opens the service page. The service page
+  lists every account as a card: status, Read and search, Make changes when
+  asked, Tools & activity, then Disconnect, which confirms inline on the card.
+- **One card at the top of every Plugins page** follows the sign-in in
+  progress: Waiting for the service (Open again, Cancel), a GitHub device code
+  in large type, Checking, then Connected or Couldn't connect with Start
+  again. Nothing waits silently.
+- **Progress sits on the control that started it.** `running` names the
+  request in flight, so only that button or switch spins; the rest are
+  disabled against double taps.
+- **Status words** are Connected, Needs sign-in again, Off and Last call
+  failed. Recovery copy says what to do: Reconnect, Turn on, Check again.
+- **Web and phone share the model.** The web UI's sign-in returns its tab to
+  `/plugins` through the daemon's callback; the phone returns through
+  `mewla://plugins`. Neither changes the UI.
+
 ## Sessions and Worker chat
 
 - **Sessions.** Plain rows on the paper, grouped by directory with a quiet

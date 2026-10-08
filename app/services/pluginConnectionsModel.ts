@@ -68,8 +68,7 @@ export type AccessControl =
 
 /**
  * The control for Read and search or Make changes. A partly allowed group
- * reads as on, and says how many newer tools still wait for review; turning
- * it off and on again allows them.
+ * reads as on, and points to the newer tools still waiting for review.
  */
 export function accessControl(account: PluginAccount, group: "read" | "write"): AccessControl {
   const access = account.access;
@@ -77,7 +76,7 @@ export function accessControl(account: PluginAccount, group: "read" | "write"): 
   if (group === "write" && access.write_consent) return { kind: "consent" };
   const state: AccessState = access[group];
   if (state === "none") return { kind: "none" };
-  return { kind: "switch", on: state !== "off", note: state === "partial" ? "Some newer tools aren't allowed yet. Turn off and on to allow them." : undefined };
+  return { kind: "switch", on: state !== "off", note: state === "partial" ? "Newer tools wait for your review in Tools & activity" : undefined };
 }
 
 export function allowedToolCount(account: PluginAccount): { allowed: number; total: number } {

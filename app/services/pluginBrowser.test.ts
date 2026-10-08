@@ -61,4 +61,13 @@ if (!process.env.MEWLA_PLUGIN_BROWSER_TEST_CHILD) {
     expect(browserCalls).toEqual(["https://github.com/login/device"]);
     expect(opened).toEqual([]);
   });
+
+  test("a web sign-in that can't return to the web UI opens its own tab and is polled, never an auth popup", async () => {
+    nativeAvailable = true;
+    authCalls = [];
+    const url = "https://accounts.google.com/o/oauth2/v2/auth?state=bound-state";
+    expect(await openPluginAuthorization(url, false, "new-tab")).toEqual({ type: "external" });
+    expect(opened).toEqual([url]);
+    expect(authCalls).toEqual([]);
+  });
 }
