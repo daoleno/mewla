@@ -12,7 +12,9 @@ const TERMINAL_SCREEN_CLUSTER = [
   "TerminalScreenLayout.tsx",
   "TerminalScreenModel.ts",
   "TerminalScreenOverlays.tsx",
+  "missingSession.ts",
   "terminalPresence.ts",
+  "useMissingSessionExit.ts",
   "useSessionResourceSheet.ts",
   "useSessionProviderSheet.ts",
   "useTerminalWorkerIndex.ts",
@@ -59,12 +61,12 @@ describe("Expo Router terminal route boundary", () => {
     expect(readdirSync(terminalRouteDir).sort()).toEqual(["[id].tsx"]);
   });
 
-  test("app/components/terminal/screen holds the exact 27-file support cluster", () => {
+  test("app/components/terminal/screen holds the exact 29-file support cluster", () => {
     expect(statSync(terminalScreenDir).isDirectory()).toBe(true);
     expect(readdirSync(terminalScreenDir).sort()).toEqual(
       [...TERMINAL_SCREEN_CLUSTER].sort(),
     );
-    expect(TERMINAL_SCREEN_CLUSTER).toHaveLength(27);
+    expect(TERMINAL_SCREEN_CLUSTER).toHaveLength(29);
   });
 
   test("route tree forbids test/spec filenames and bun:test imports", () => {

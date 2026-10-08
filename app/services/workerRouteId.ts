@@ -44,3 +44,23 @@ export function terminalRouteParams(
     serverId,
   };
 }
+
+/**
+ * Resolve a Terminal link opened directly (a typed, shared or reloaded URL).
+ * A link without a server names the current server. Returns the canonical
+ * params, or null when the link names another server or no Worker route.
+ */
+export function resolveTerminalLink(
+  routeId: string | undefined,
+  serverId: string | undefined,
+  currentServerId: string | null,
+): TerminalRouteParams | null {
+  if (!routeId || !currentServerId) return null;
+  if (serverId && serverId !== currentServerId) return null;
+  try {
+    return terminalRouteParams(decodeWorkerRouteId(routeId), currentServerId);
+  } catch {
+    // Raw pane IDs are not routes: the URL decodes their % before we see it.
+    return null;
+  }
+}
