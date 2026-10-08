@@ -26,7 +26,6 @@ import type { ResolvedTheme } from "../../theme";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
 import { resolvePrimaryAppBarGeometry } from "../../components/navigation/PrimaryDrawerShell";
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
-import { SessionsOverview } from "../../components/workers/SessionsOverview";
 import { sessionEmptyCat, sessionEmptyState } from "../../services/sessionEmptyState";
 import { SealCat } from "../../components/mewla/SealCat";
 import {
@@ -767,14 +766,6 @@ export default function InboxScreen() {
     ],
   );
   usePrimarySelectionBar(selectionBar);
-  const overviewHeader = (
-    <SessionsOverview
-      serverName={currentServer?.name ?? null}
-      connection={connectionState ?? "offline"}
-      issue={primaryIssue}
-      onRetry={() => void retryCurrentServer()}
-    />
-  );
   const bottomInset = Math.max(insets.bottom, 16);
   return (
       <SafeAreaView
@@ -816,7 +807,6 @@ export default function InboxScreen() {
         ) : (
           <SessionsListView
             sections={listSections}
-            header={overviewHeader}
             rowState={listRowState}
             selectionMode={selectionMode}
             showServerName={showServerNames}

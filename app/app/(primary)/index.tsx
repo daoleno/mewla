@@ -30,16 +30,15 @@ import {
 import {
   BrainWorkColumn,
   BrainWorkDetailSheet,
-  BrainWorkHeader,
   BrainWorkSheet,
 } from "../../components/brain/BrainWorkPanel";
 import {
   brainWorkSlipStale,
+  brainWorkSummaryLine,
   brainWorkSurface,
   workerWho,
   type BrainWorkSlip,
 } from "../../components/brain/brainWorkSurface";
-import { INTERFACE_TIMELINE_HORIZONTAL_INSET } from "../../components/terminal/interfaceTimelineGeometry";
 import { ActionMenu, EmptyState, InlineNotice } from "../../components/ui";
 import { setServerAutoConnect } from "../../services/storage";
 import { ChatCanvas } from "../../components/terminal/ChatCanvas";
@@ -58,7 +57,6 @@ import {
 } from "../../store/brain";
 import type { BrainWorkResultEvent } from "../../components/brain/brainWorkEvent";
 import { useCurrentServer } from "../../store/currentServer";
-import { ConnectionPathIndicator } from "../../components/connection/ConnectionPathIndicator";
 import {
   BrainCompanionContext,
   type BrainCompanion,
@@ -116,7 +114,8 @@ export default function BrainScreen() {
     null,
   );
   const [newChatLoading, setNewChatLoading] = useState(false);
-  const [brainActionError, setBrainActionError] = useState<string | null>(null);
+  // Action failures say so at the action (a toast), never as a banner over the chat.
+  const toast = useToast();
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(false);
 
   const routeServerId = params.serverId?.trim() || "";
@@ -131,19 +130,19 @@ export default function BrainScreen() {
     ) {
       return;
     }
-    setBrainActionError(null);
     void switchCurrentServer(routeServerId).catch((error) => {
-      setBrainActionError(
-        error instanceof Error
-          ? error.message
-          : "Unable to switch to the requested server.",
-      );
+      toast.show({
+        title: "Couldn't switch servers",
+        detail: error instanceof Error ? error.message : "Unable to switch to the requested server.",
+        tone: "error",
+      });
     });
   }, [
     activeServer?.id,
     currentServerHydrated,
     routeServerId,
     switchCurrentServer,
+    toast,
   ]);
 
   const activeBrain = activeServer && routeServerMatches
@@ -205,7 +204,6 @@ export default function BrainScreen() {
     }
     return labels;
   }, [activeBrain?.workers]);
-  const toast = useToast();
   const [workActionBusy, setWorkActionBusy] = useState<string | null>(null);
   const [replyOpenFor, setReplyOpenFor] = useState<string | null>(null);
   // "Ask Brain about this": the composer's draft setter, seeded once.
@@ -215,8 +213,8 @@ export default function BrainScreen() {
     if (!activeServer || !isCurrentServer(activeServer.id)) return;
     void setServerAutoConnect(activeServer.id, true).then(() => {
       if (isCurrentServer(activeServer.id)) wsClient.connectServer(activeServer);
-    }).catch((error) => setBrainActionError(String(error)));
-  }, [activeServer, isCurrentServer]);
+    }).catch((error) => toast.show({ title: "Couldn't reconnect", detail: String(error), tone: "error" }));
+  }, [activeServer, isCurrentServer, toast]);
   const openPairing = useCallback(() => {
     router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } });
   }, [activeServer, router]);
@@ -289,18 +287,19 @@ export default function BrainScreen() {
     if (!activeServer || !activeBrain?.hydrated || newChatLoading) {
       return;
     }
-    setBrainActionError(null);
     setNewChatLoading(true);
     try {
       await wsClient.startNewBrainChat(activeServer.id);
     } catch (error: any) {
-      setBrainActionError(
-        error?.message || "Failed to start a new Brain chat.",
-      );
+      toast.show({
+        title: "Couldn't start a new chat",
+        detail: error?.message || "Failed to start a new Brain chat.",
+        tone: "error",
+      });
     } finally {
       setNewChatLoading(false);
     }
-  }, [activeBrain?.hydrated, activeServer, newChatLoading]);
+  }, [activeBrain?.hydrated, activeServer, newChatLoading, toast]);
 
   const switchExecutor = useCallback(
     async (adapter: BrainExecutorRef) => {
@@ -335,8 +334,9 @@ export default function BrainScreen() {
   const canOpenWorkspace = Boolean(
     activeServer && connectionState === "connected",
   );
+  const canOpenWorkList = !workColumn && canUseStructuredBrainInterface;
   const overflowDisabled =
-    !canNewChat && !canOpenTerminal && !canOpenWorkspace && !canSwitchAdapter;
+    !canOpenWorkList && !canNewChat && !canOpenTerminal && !canOpenWorkspace && !canSwitchAdapter;
 
   const brainPageAction = useMemo(
     () => ({
@@ -350,6 +350,19 @@ export default function BrainScreen() {
 
   const menuActions = useMemo(
     () => [
+      // Phone: the Work list is one tap away here and from the cat's tail
+      // row; it holds no strip above the chat. Wide screens keep the column.
+      ...(canOpenWorkList
+        ? [
+            {
+              key: "work",
+              label: "Work",
+              icon: "layers" as const,
+              detail: brainWorkSummaryLine(workSurface.counts) ?? "Nothing out right now",
+              onPress: openWorkList,
+            },
+          ]
+        : []),
       {
         key: "new-chat",
         label: "New chat",
@@ -396,12 +409,15 @@ export default function BrainScreen() {
       canOpenTerminal,
       canOpenWorkspace,
       canSwitchAdapter,
+      canOpenWorkList,
       hostExecutor,
       newChatLoading,
       openAdapterSheet,
       openBrainTerminal,
+      openWorkList,
       openWorkspaceViewer,
       startNewBrainChat,
+      workSurface.counts,
     ],
   );
 
@@ -644,18 +660,6 @@ export default function BrainScreen() {
   const liveSelectedSlip = selectedWorkSlip
     ? workSurface.slips.find((slip) => slip.workId === selectedWorkSlip.workId) ?? selectedWorkSlip
     : null;
-  const [workHeaderHeight, setWorkHeaderHeight] = useState(0);
-  const workHeader = canUseStructuredBrainInterface ? (
-    <BrainWorkHeader
-      objective={activeBrain?.objective}
-      surface={workSurface}
-      chrome={chrome}
-      showSummary={!workColumn}
-      onOpenWork={openWorkList}
-    />
-  ) : null;
-  const chatTopInset = topChromeInset + (workHeader ? workHeaderHeight : 0);
-
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: chrome.appBackground }]}
@@ -671,46 +675,19 @@ export default function BrainScreen() {
           router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(id, activeServer.id) });
         } : undefined}
       />
-      {brainActionError || targetedThreadReadOnly ? (
+      {targetedThreadReadOnly ? (
         <View style={[styles.notices, { paddingTop: topChromeInset }]}>
-          {brainActionError ? (
-            <InlineNotice
-              tone="danger"
-              title={brainActionError}
-              action={{ label: "Dismiss", onPress: () => setBrainActionError(null) }}
-            />
-          ) : null}
-          {targetedThreadReadOnly ? (
-            <InlineNotice
-              icon="lock"
-              title="Historical Brain thread"
-              detail="Read-only. Start a new chat from the Brain menu."
-            />
-          ) : null}
+          <InlineNotice
+            icon="lock"
+            title="Historical Brain thread"
+            detail="Read-only. Start a new chat from the Brain menu."
+          />
         </View>
       ) : null}
 
       <View style={styles.row}>
       <View style={styles.surface}>
-        {/* Below the overlaid app bar, and only over the chat: the status
-            screen already says when Brain is offline. */}
-        {canUseStructuredBrainInterface ? (
-          <View pointerEvents="none" style={[styles.connectionPath, { top: chatTopInset + 2 }]}>
-            <ConnectionPathIndicator
-              connected={connectionState === "connected"}
-              issue={connectionIssue?.title}
-            />
-          </View>
-        ) : null}
         <ChatCanvas chrome={chrome}>
-          {workHeader ? (
-            <View
-              onLayout={(event) => setWorkHeaderHeight(Math.ceil(event.nativeEvent.layout.height))}
-              style={[styles.workHeader, { top: topChromeInset, backgroundColor: chrome.appBackground }]}
-            >
-              {workHeader}
-            </View>
-          ) : null}
           <BrainCompanionContext.Provider value={brainCompanion}>
             {canUseStructuredBrainInterface || brainWaking ? (
               <InterfaceChatSurface
@@ -733,7 +710,7 @@ export default function BrainScreen() {
                 theme={theme}
                 chrome={chrome}
                 screenFocused={screenFocused}
-                topChromeInset={chatTopInset}
+                topChromeInset={topChromeInset}
                 onBrainWorkEventActivate={
                   targetedThreadReadOnly ? undefined : activateWorkResult
                 }
@@ -773,6 +750,7 @@ export default function BrainScreen() {
       {workColumn && canUseStructuredBrainInterface ? (
         <BrainWorkColumn
           surface={workSurface}
+          objective={activeBrain?.objective}
           chrome={chrome}
           topInset={topChromeInset}
           animate={screenFocused}
@@ -790,6 +768,7 @@ export default function BrainScreen() {
       <BrainWorkSheet
         visible={workSheetVisible && !workColumn}
         surface={workSurface}
+        objective={activeBrain?.objective}
         chrome={chrome}
         onClose={() => setWorkSheetVisible(false)}
         onOpenSlip={openWorkSlip}
@@ -918,20 +897,6 @@ function createStyles() {
     },
     surface: {
       flex: 1,
-    },
-    workHeader: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      zIndex: 2,
-      paddingHorizontal: INTERFACE_TIMELINE_HORIZONTAL_INSET + 2,
-    },
-    connectionPath: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      alignItems: "center",
-      zIndex: 3,
     },
     notices: {
       gap: 6,

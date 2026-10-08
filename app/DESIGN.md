@@ -83,8 +83,10 @@ preference resolves to ink.
 ## Navigation
 
 - **Phone.** The app bar has the menu (☰), the Brain · Sessions switch (text
-  tabs with an ink underline; a seal dot on Sessions when a Session needs
-  you) and one ⋯ page action. The menu slides over the page.
+  tabs with an ink underline; a seal dot on Brain when its Work needs you,
+  on Sessions when a Session needs you) and one ⋯ page action. The menu
+  slides over the page. Nothing else is pinned under the app bar: no status
+  strip, no goal line, no connection banner.
 - **Wide (≥ 1024 pt).** The menu docks as a permanent sidebar and the app bar
   shows the page title. On native tablets it docks beside Brain and Sessions;
   on desktop web it docks beside every page (see Desktop web).
@@ -93,25 +95,35 @@ preference resolves to ink.
   lists them and the app bar shows the page title instead of the switch.
   Never both on one screen.
 - **Menu.** One ordered list without captions or cards: on a docked sidebar
-  Brain and Sessions lead (selected in place, tint on the current one, seal
-  dot when a Session needs you), then Calendar, Plugins, Skills, Stats,
+  Brain and Sessions lead (selected in place, tint on the current one, the
+  same seal dots as the switch), then Calendar, Plugins, Skills, Stats,
   Resources; the phone menu starts at Calendar. Settings sits apart at the
   bottom, and under it one quiet line names the current server and its
   state. Rows are a soft-ink glyph and a label, no tiles.
-- **Connection status has one home**: that footer line. It is read-only
-  (switching lives in Settings), and healthy is quiet: only Offline or a
-  connection issue takes colour. Pages never open with a standing server
-  header. A page names the server only when it is offline and the page can't
-  work, as a compact `ServerOfflineNotice` (Sessions' offline notice is the
-  same idea). Context the page needs stays, such as the project Skills were
+- **Connection status has one home**: the menu. On phone a dot on ☰ (oxblood
+  for a diagnosed issue, amber for Offline or a reconnect that has not landed
+  in 10 s), and in both layouts the footer line, which names the state in
+  the same colour. Both read `connectionAttention`
+  (`components/navigation/connectionAttention.ts`, pure and tested). The
+  footer is read-only (switching lives in Settings); healthy and a short
+  reconnect are quiet. No page, chat or list carries a connection banner or
+  a standing server header (`connectionHome.test.ts`). A page that can't work
+  at all says so in its empty state ("Server disconnected", "Calendar
+  offline"); context the page needs stays, such as the project Skills were
   read for.
+- **Failures show at the action.** Send stays pressable while offline: the
+  composer says "Not sent: Mewla can't reach your computer. Your message is
+  still here." and keeps the draft; the note clears on reconnect. A message
+  that was sent and then failed says "Send failed" with Retry on the message.
+  Other actions (New chat, a Work action) fail with a toast.
 - Settings holds Servers, Channels (Telegram), Agents (Model Providers),
   Appearance and About. Browser stays hidden from the menu.
 - **One home per destination.** Every screen you can go to (Calendar,
   Plugins, Skills, Stats, Resources, Settings) has exactly one entry point:
   its menu row. A ⋯ menu, a header title tap or a page button never repeats
   a menu destination. A ⋯ menu holds only actions on the current screen:
-  Brain's is New chat, Switch executor, Open terminal, Browse workspace; a
+  Brain's is Work (phone only: the Work sheet, with the count line as its
+  detail), New chat, Switch executor, Open terminal, Browse workspace; a
   Session's is New terminal, Rename, Model, Open Web, Open Brain (its linked
   Work), Terminate. Sessions' ⋯ holds New session and Services. Contextual
   recovery links ("Open Settings" in a no-server empty state) are fine: they
@@ -154,16 +166,19 @@ Brain has one Work surface, built from the daemon's `current_work`
 (`components/brain/brainWorkSurface.ts`, pure and tested):
 
 - **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
-  (`BrainWorkColumn`): "Work", a count line, then slips grouped Needs you ·
+  (`BrainWorkColumn`): "Work", the goal line when there is one, a count
+  line, then slips grouped Needs you ·
   Running · Back · Waiting. The count line is the only count: the group
   captions are bare ("Running", never "Running · 6"). The cat sits on the
   first Needs-you slip there,
   and the conversation drops its between-turn tail row. While Brain's turn
   runs, the cat is in the Working row and the column has none.
-- **Phone.** Under the app bar, one line ("● 6 need you · 2 running · 2 back ›")
-  opens the same grouped list as a sheet, which repeats that line under its
-  "Work" title and keeps the captions bare. The seal dot shows only when
-  something needs you.
+- **Phone.** The chat gets the whole screen. The same grouped list is a
+  sheet, opened from the cat's tail row at the end of the conversation
+  ("Waiting on 3 Workers", "Brought 2 things back", "2 need you") or from
+  ⋯ → Work. The sheet shows "Work", the goal line and the count line, and
+  keeps the captions bare. Work that needs you also puts a seal dot on
+  "Brain" and perches the cat on its slip in the conversation.
 - **Loading is not empty.** "Ready when you are" appears only once the
   conversation has loaded and has nothing in it. Until then (connecting,
   waiting for Brain's first snapshot, loading or syncing history) the chat
@@ -173,8 +188,12 @@ Brain has one Work surface, built from the daemon's `current_work`
   message. `interfaceTimelinePhase` and `brainScreenSurface` decide this,
   and both are pure and tested.
 - **Goal line.** When Brain has declared an objective
-  (`mewla brain objective set`), it sits under the title:
-  "Ship atlas-notes v1.4 this week · 2 of 5 back".
+  (`mewla brain objective set`), it heads the Work column and the Work sheet:
+  "Ship atlas-notes v1.4 this week · 2 of 5 back". It never takes header
+  space over the chat. The daemon stops sending it once it is no longer
+  current (`objectiveCurrent`): every child Work is done, everything has
+  been back for 30 minutes, or nothing in it has moved for 12 hours. Brain's
+  own context still has it, so Brain can clear or restate it.
 - A slip in the column opens its live Session, or a small detail sheet when
   the Session is gone. Calendar occurrences that have not run and Brain's
   resource telemetry are not shown; closed Work leaves as soon as the daemon
@@ -459,7 +478,7 @@ look, with the landing's bolder carving at small sizes.
 | Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
 | Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" | The status line |
 | Unread result | Loafing with a parcel | Tail row, "Brought 2 things back" | The status line |
-| Offline | Asleep in a greyed seal | Brain status screen, Sessions offline; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
+| Offline | Asleep in a greyed seal | Brain status screen, Sessions' offline empty state; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
 | No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Sessions, Onboarding | Opens pairing |
 | Paired | Asleep in the seal (moved in) | Onboarding, connected; an empty Work sheet | — |
 

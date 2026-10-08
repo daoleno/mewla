@@ -31,9 +31,12 @@ before you let Brain work on a machine with secrets.
 
 *Demo data.*
 
-**The goal line.** Under the Brain title, with how much has come back:
-"Ship atlas-notes v1.4 this week · 2 of 5 back". Brain sets it; a new chat
-starts without one.
+**The goal line.** At the top of the Work column (wide screens) and the Work
+sheet (phones), with how much has come back: "Ship atlas-notes v1.4 this
+week · 2 of 5 back". Brain sets it; a new chat starts without one. The app
+stops showing it once it is no longer current: all its Work is done,
+everything has been back for 30 minutes, or nothing in it has moved for 12
+hours.
 
 **Slips in the conversation.** Each Work appears as one slip: agent, project
 and time, its state, its title and one line of result. When a Work reports
@@ -50,11 +53,19 @@ again, its slip moves down to that moment instead of piling up copies.
 
 Red always means "needs you", never "failed".
 
-**All current Work in one place.** On a phone, the line under the goal
-("● 1 needs you · 1 running · 1 back") opens the list as a sheet. On a wide
+**All current Work in one place.** On a phone the chat gets the whole screen:
+tap the cat's line at the end of the conversation ("Waiting on 3 Workers",
+"Brought something back") or ⋯ → Work to open the list as a sheet. On a wide
 screen it is the Work column beside the chat. Both group Work by what it asks
-of you: Needs you, Running, Back, Waiting. The counts are in that one line, at
-the top of the column and the sheet. Closed Work leaves the list.
+of you: Needs you, Running, Back, Waiting. The counts are in one line, at the
+top of the column and the sheet. Closed Work leaves the list. When Work needs
+you, "Brain" gets a red dot (like "Sessions" does for a Session), and the cat
+sits on that Work's slip in the conversation.
+
+**Connection.** When the app can't reach your computer, the menu (☰) gets a
+dot and the menu's last line says why. Nothing is pinned over the chat. If
+you press Send while offline, the composer says the message was not sent
+and keeps it for you.
 
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
 into one "Worked · N steps" row. Tap it to see them. Session chats keep every

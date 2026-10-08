@@ -11,6 +11,11 @@ const drawerSource = readFileSync(
   join(import.meta.dir, "PrimaryDrawerPanel.tsx"),
   "utf8",
 );
+// The footer's state words live in the shared connection rule.
+const connectionCopySource = readFileSync(
+  join(import.meta.dir, "connectionAttention.ts"),
+  "utf8",
+);
 const skillsSource = readFileSync(
   join(import.meta.dir, "../skills/SkillsPresentation.tsx"),
   "utf8",
@@ -44,8 +49,9 @@ describe("navigation and Skills copy density", () => {
   test("drawer rows and connection strip remain concise", () => {
     for (const destination of [...PRIMARY_DRAWER_PLACES, ...PRIMARY_DRAWER_DESTINATIONS, PRIMARY_DRAWER_SETTINGS])
       expect(destination.label).toMatch(/^[A-Z][a-z]+$/);
-    expect(drawerSource).toContain('"Connected"');
-    expect(drawerSource).toContain('"Offline"');
+    expect(drawerSource).toContain("attention.detail");
+    expect(connectionCopySource).toContain('"Connected"');
+    expect(connectionCopySource).toContain('"Offline"');
     expect(drawerSource).not.toContain("Installed and discover");
   });
   test("Settings does not duplicate current-server status", () => {

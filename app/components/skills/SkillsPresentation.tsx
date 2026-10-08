@@ -50,10 +50,7 @@ import {
 import { PLUGINS_SKILLS_SCREEN_PADDING } from "../../services/pluginsSkillsSurfaceModel";
 import { AgentLogoSet } from "../agents/AgentLogoSet";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
-import {
-  ServerOfflineNotice,
-  type ServerConnection,
-} from "../extensions/ServerOfflineNotice";
+import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
@@ -149,13 +146,6 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
       edges={[]}
     >
       <View style={styles.header}>
-        {props.currentServerAvailable && inventory ? (
-          <ServerOfflineNotice
-            name={props.serverName}
-            connection={props.connection}
-            detail="These Skills may be out of date."
-          />
-        ) : null}
         {props.currentServerAvailable && props.projectCwd ? (
           <ProjectScope cwd={props.projectCwd} />
         ) : null}

@@ -11,7 +11,8 @@ import {
 import { Typography, useAppColors } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
-import { sessionsNeedYou } from "./primarySessionsAttention";
+import { useBrain } from "../../store/brain";
+import { brainNeedsYou, sessionsNeedYou } from "./primarySessionsAttention";
 import {
   beginInteraction,
   type PrimaryRouteName,
@@ -131,6 +132,10 @@ export function PrimaryTopSwitch({
   const { currentServerId } = useCurrentServer();
   const { state: workersState } = useWorkers();
   const sessionsAttention = sessionsNeedYou(workersState.workers, currentServerId);
+  const { state: brainState } = useBrain();
+  const brainAttention = brainNeedsYou(
+    currentServerId ? brainState.byServer[currentServerId]?.current_work : undefined,
+  );
   const pagerPosition = usePrimaryPagerPosition();
   const fallbackPosition = useRef(
     new Animated.Value(primaryRoutePagerIndex(activeRoute)),
@@ -304,6 +309,8 @@ export function PrimaryTopSwitch({
           href="/"
           isSelected={brainSelected}
           label="Brain"
+          attention={brainAttention}
+          attentionColor={colors.seal}
           activeOpacity={brainActiveOpacity}
           inactiveColor={colors.textTertiary}
           primaryColor={colors.textPrimary}

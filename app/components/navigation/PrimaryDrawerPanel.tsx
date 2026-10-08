@@ -10,7 +10,7 @@ import {
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Typography, useAppTheme } from "../../constants/tokens";
-import { useWorkerServerSummary, useWorkers } from "../../store/workers";
+import { useWorkers } from "../../store/workers";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
 import { Icon, type IconName } from "../icons/Icon";
@@ -21,7 +21,9 @@ import {
   PRIMARY_DRAWER_SETTINGS,
   type PrimaryDrawerPathname,
 } from "./primaryDrawerDestinations";
-import { sessionsNeedYou } from "./primarySessionsAttention";
+import { brainNeedsYou, sessionsNeedYou } from "./primarySessionsAttention";
+import { useBrain } from "../../store/brain";
+import { useConnectionAttention } from "./useConnectionAttention";
 import type { DesktopSidebarKey } from "./desktopWeb";
 import { desktopShortcutTooltip } from "./desktopShortcuts";
 import { useWebTooltip } from "../ui/useWebTooltip";
@@ -181,30 +183,23 @@ export function PrimaryDrawerPanel({
   const router = useRouter();
   const { colors } = useAppTheme();
   const { state: workersState } = useWorkers();
-  const { serverConnections, serverConnectionIssues } = useWorkerServerSummary();
   const { currentServer } = useCurrentServer();
-  const currentConnection = currentServer
-    ? serverConnections[currentServer.id] || "offline"
-    : "offline";
-  const currentIssue = currentServer
-    ? serverConnectionIssues[currentServer.id] || null
-    : null;
+  const attention = useConnectionAttention();
   const connectionSummary = currentServer?.name || "No current server";
-  const connectionDetail = !currentServer
-    ? "Pair a server in Settings"
-    : currentIssue?.title ??
-      (currentConnection === "connected"
-        ? "Connected"
-        : currentConnection === "connecting"
-          ? "Connecting"
-          : "Offline");
+  const connectionDetail = attention.detail;
   const sessionsAttention = sessionsNeedYou(workersState.workers, currentServer?.id);
-  // Healthy is the quiet default; only a state the user can act on is colored.
-  const connectionInk = currentIssue
-    ? colors.dangerText
-    : currentServer && currentConnection === "offline"
-      ? colors.warning
-      : colors.textTertiary;
+  const { state: brainState } = useBrain();
+  const brainAttention = brainNeedsYou(
+    currentServer ? brainState.byServer[currentServer.id]?.current_work : undefined,
+  );
+  // Healthy is the quiet default; only a state the user can act on is colored,
+  // the same states that put a dot on ☰.
+  const connectionInk =
+    attention.badge === "issue"
+      ? colors.dangerText
+      : attention.badge === "offline"
+        ? colors.warning
+        : colors.textTertiary;
 
   // Shortcut tooltips belong to the desktop web sidebar only.
   const shortcutTip = (label: string, key: string) =>
@@ -279,7 +274,7 @@ export function PrimaryDrawerPanel({
                   ? activePrimaryRoute === place.route
                   : selectedKey === place.key
               }
-              attention={place.route === "list" && sessionsAttention}
+              attention={place.route === "list" ? sessionsAttention : brainAttention}
               tooltip={shortcutTip(place.label, place.key)}
               onPress={() => selectPlace(place.route)}
             />

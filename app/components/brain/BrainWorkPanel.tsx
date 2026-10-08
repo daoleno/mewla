@@ -114,6 +114,7 @@ export function BrainWorkList({
 /** Wide screens: the Work column to the right of the conversation. */
 export function BrainWorkColumn({
   surface,
+  objective,
   chrome,
   topInset,
   animate,
@@ -123,6 +124,8 @@ export function BrainWorkColumn({
   perch = true,
 }: {
   surface: BrainWorkSurface;
+  /** What the Work is for, while it is current (see the daemon's objective rule). */
+  objective?: BrainObjective;
   chrome: TerminalThemeChrome;
   topInset: number;
   animate: boolean;
@@ -163,6 +166,7 @@ export function BrainWorkColumn({
       ) : null}
       <View style={styles.columnHeader}>
         <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
+        {objective ? <BrainGoalLine objective={objective} chrome={chrome} /> : null}
         <Text numberOfLines={1} style={styles.columnSummary}>
           {brainWorkSummaryLine(surface.counts) ?? ""}
         </Text>
@@ -178,49 +182,6 @@ export function BrainWorkColumn({
           onCatPress={onCatPress}
         />
       </ScrollView>
-    </View>
-  );
-}
-
-/**
- * Under the title: Brain's objective ("… · 2 of 5 back") and, on the phone,
- * the one Work line ("1 needs you · 3 running") that opens the Work list.
- */
-export function BrainWorkHeader({
-  objective,
-  surface,
-  chrome,
-  showSummary,
-  onOpenWork,
-}: {
-  objective?: BrainObjective;
-  surface: BrainWorkSurface;
-  chrome: TerminalThemeChrome;
-  showSummary: boolean;
-  onOpenWork(): void;
-}) {
-  const styles = useMemo(() => createStyles(chrome), [chrome]);
-  const summary = showSummary ? brainWorkSummaryLine(surface.counts) : null;
-  if (!objective && !summary) return null;
-  return (
-    <View style={styles.header}>
-      {objective ? <BrainGoalLine objective={objective} chrome={chrome} /> : null}
-      {summary ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Work: ${summary}`}
-          accessibilityHint="Opens the Work list"
-          onPress={onOpenWork}
-          hitSlop={6}
-          style={({ pressed }) => [styles.summaryRow, pressed ? styles.pressed : null]}
-        >
-          {surface.counts.needs ? <View style={styles.sealDot} /> : null}
-          <Text numberOfLines={1} style={styles.summaryText}>
-            {summary}
-          </Text>
-          <Icon name="chevron-right" size={14} color={chrome.textSubtle} />
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -255,6 +216,7 @@ export function BrainGoalLine({
 export function BrainWorkSheet({
   visible,
   surface,
+  objective,
   chrome,
   onClose,
   onOpenSlip,
@@ -262,6 +224,7 @@ export function BrainWorkSheet({
 }: {
   visible: boolean;
   surface: BrainWorkSurface;
+  objective?: BrainObjective;
   chrome: TerminalThemeChrome;
   onClose(): void;
   onOpenSlip(slip: BrainWorkSlip): void;
@@ -274,6 +237,7 @@ export function BrainWorkSheet({
       <View style={styles.sheetHeader}>
         <View style={styles.sheetHeading}>
           <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
+          {objective ? <BrainGoalLine objective={objective} chrome={chrome} /> : null}
           {summary ? (
             <Text numberOfLines={1} style={styles.columnSummary}>{summary}</Text>
           ) : null}
@@ -434,10 +398,6 @@ function createStyles(chrome: TerminalThemeChrome) {
       paddingHorizontal: 20,
       paddingBottom: 24,
     },
-    header: {
-      gap: 4,
-      paddingBottom: 8,
-    },
     goal: {
       ...TypeScale.compact,
       fontFamily: Typography.uiFontSemibold,
@@ -446,28 +406,6 @@ function createStyles(chrome: TerminalThemeChrome) {
     goalProgress: {
       fontFamily: Typography.uiFontMedium,
       color: chrome.textMuted,
-    },
-    summaryRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      alignSelf: "flex-start",
-      gap: 6,
-      minHeight: 28,
-    },
-    pressed: {
-      opacity: 0.6,
-    },
-    sealDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 3.5,
-      backgroundColor: chrome.seal,
-    },
-    summaryText: {
-      ...TypeScale.compact,
-      fontFamily: Typography.uiFontMedium,
-      color: chrome.textMuted,
-      flexShrink: 1,
     },
     sheetHeader: {
       flexDirection: "row",

@@ -9,7 +9,7 @@ import { useCurrentServer } from "../../store/currentServer";
 import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
-import { ServerOfflineNotice, type ServerConnection } from "../extensions/ServerOfflineNotice";
+import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { pluginCatalogRows, reconnectsWithWrites, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
@@ -337,7 +337,6 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
   return <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
     <Stack.Screen options={{ title }} />
     <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
-      {catalog && flow.serverId ? <ServerOfflineNotice name={flow.serverName} connection={flow.connection} /> : null}
       {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {flow.error && !catalogFailed ? <InlineNotice tone="danger" title="That didn't go through" detail={flow.error} /> : null}
       {flow.serverId && (flow.service || flow.connectError) ? <ConnectStatusCard
