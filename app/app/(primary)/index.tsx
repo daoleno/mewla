@@ -86,6 +86,9 @@ export default function BrainScreen() {
     brainThreadId?: string;
     brainMessageId?: string;
     serverId?: string;
+    /** Desktop web palette: start a new chat, or open one Work. */
+    newChat?: string;
+    work?: string;
   }>();
   const { theme: appTheme } = useAppTheme();
   const styles = useMemo(() => createStyles(), []);
@@ -476,6 +479,19 @@ export default function BrainScreen() {
     },
     [activeServer, openWorkerSession],
   );
+  // The desktop palette asks through the URL; each request runs once.
+  useEffect(() => {
+    if (!params.newChat || !canNewChat) return;
+    router.setParams({ newChat: undefined });
+    void startNewBrainChat();
+  }, [canNewChat, params.newChat, router, startNewBrainChat]);
+  useEffect(() => {
+    if (!params.work) return;
+    const slip = workSurface.slips.find((candidate) => candidate.workId === params.work);
+    if (!slip) return;
+    router.setParams({ work: undefined });
+    openWorkSlip(slip);
+  }, [openWorkSlip, params.work, router, workSurface.slips]);
   useEffect(() => {
     if (pendingAskDraft === null || !composerDraftRef.current) return;
     composerDraftRef.current(pendingAskDraft);

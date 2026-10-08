@@ -58,9 +58,11 @@ describe("primary app-bar geometry", () => {
       'floating={activePrimaryRoute === "brain"}',
     );
     expect(shellSource).not.toContain("? styles.appBarOverlay");
-    expect(primaryLayoutSource).toContain("animationEnabled: true");
+    // The pager animates and swipes everywhere except desktop web, where
+    // Brain and Sessions are pages and a drag selects chat text.
+    expect(primaryLayoutSource).toContain("animationEnabled: !desktopWeb");
     expect(primaryLayoutSource).toContain("lazy: false");
-    expect(primaryLayoutSource).toContain("swipeEnabled: true");
+    expect(primaryLayoutSource).toContain("swipeEnabled: !desktopWeb");
   });
 
   test("gives direct and swipe transitions identical initial and settled Sessions tops", () => {

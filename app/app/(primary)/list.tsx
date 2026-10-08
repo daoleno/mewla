@@ -6,7 +6,12 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
+import {
+  useFocusEffect,
+  useIsFocused,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   SafeAreaView,
@@ -613,6 +618,14 @@ export default function InboxScreen() {
       Alert.alert("Could not open URL", error?.message || url);
     }
   };
+
+  // The desktop shortcut (N) and palette ask through the URL, once each.
+  const { newSession } = useLocalSearchParams<{ newSession?: string }>();
+  useEffect(() => {
+    if (!newSession) return;
+    router.setParams({ newSession: undefined });
+    if (anyConnected && isCurrentServer(currentServerId)) setCreateSheetVisible(true);
+  }, [anyConnected, currentServerId, isCurrentServer, newSession, router]);
 
   const openCreateTerminal = () => {
     if (!anyConnected || !isCurrentServer(currentServerId)) {

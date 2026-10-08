@@ -1,4 +1,4 @@
-import React, { useCallback, type RefObject } from "react";
+import React, { useCallback, useRef, type RefObject } from "react";
 import {
   Pressable,
   ScrollView,
@@ -22,6 +22,9 @@ import {
   type PrimaryDrawerPathname,
 } from "./primaryDrawerDestinations";
 import { sessionsNeedYou } from "./primarySessionsAttention";
+import type { DesktopSidebarKey } from "./desktopWeb";
+import { desktopShortcutTooltip } from "./desktopShortcuts";
+import { useWebTooltip } from "../ui/useWebTooltip";
 
 interface PrimaryDrawerPanelProps {
   closeButtonRef: RefObject<ViewInstance | null>;
@@ -33,37 +36,58 @@ interface PrimaryDrawerPanelProps {
   onNavigateAway(): void;
   /** Wide layouts dock the panel as a permanent sidebar without a close button. */
   docked?: boolean;
+  /**
+   * Desktop web: the row that owns the current path, Brain and Sessions
+   * included. Without it only Brain and Sessions show selection.
+   */
+  selectedKey?: DesktopSidebarKey | null;
+  /** Desktop web opens rows through the shell; the default pushes. */
+  onOpenPath?(pathname: PrimaryDrawerPathname): void;
 }
 
 interface DrawerRowProps {
   drawerVisible: boolean;
   icon: IconName;
   label: string;
+  selected?: boolean;
+  tooltip?: string;
   onPress(): void;
 }
 
 /**
- * One navigation destination. Every row pushes a screen, so there is no
- * selected state. Seal & Slip: a bare soft-ink glyph and the label, no tile.
+ * One navigation destination. On phone a row pushes a screen, so there is no
+ * selected state; the desktop web sidebar selects the row you are on.
+ * Seal & Slip: a bare soft-ink glyph and the label, no tile.
  */
-function DrawerRow({ drawerVisible, icon, label, onPress }: DrawerRowProps) {
-  const { colors } = useAppTheme();
+function DrawerRow({ drawerVisible, icon, label, selected = false, tooltip, onPress }: DrawerRowProps) {
+  const { colors, theme } = useAppTheme();
+  const rowRef = useRef<ViewInstance>(null);
+  useWebTooltip(rowRef, tooltip);
   return (
     <Pressable
+      ref={rowRef}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={selected ? { selected } : undefined}
+      aria-current={selected ? "page" : undefined}
       tabIndex={drawerVisible ? 0 : -1}
       android_ripple={{ color: colors.surfacePressed }}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.drawerRow,
         {
-          backgroundColor: pressed ? colors.surfacePressed : "transparent",
+          backgroundColor: selected
+            ? theme.materials.tint
+            : state.pressed
+              ? colors.surfacePressed
+              : (state as { hovered?: boolean }).hovered
+                ? colors.surfaceSubtle
+                : "transparent",
         },
       ]}
     >
       <View style={styles.drawerRowIcon}>
-        <Icon name={icon} color={colors.textSecondary} size={DRAWER_ICON_SIZE} />
+        <Icon name={icon} color={selected ? colors.textPrimary : colors.textSecondary} size={DRAWER_ICON_SIZE} />
       </View>
       <Text
         numberOfLines={1}
@@ -88,6 +112,7 @@ function PrimaryPlaceRow({
   icon,
   selected,
   attention,
+  tooltip,
   onPress,
 }: {
   drawerVisible: boolean;
@@ -95,25 +120,31 @@ function PrimaryPlaceRow({
   icon: IconName;
   selected: boolean;
   attention?: boolean;
+  tooltip?: string;
   onPress(): void;
 }) {
   const { colors, theme } = useAppTheme();
+  const rowRef = useRef<ViewInstance>(null);
+  useWebTooltip(rowRef, tooltip);
   return (
     <Pressable
+      ref={rowRef}
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityLabel={attention ? `${label}, needs you` : label}
       accessibilityState={{ selected }}
       tabIndex={drawerVisible ? 0 : -1}
       android_ripple={{ color: colors.surfacePressed }}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.drawerRow,
         {
           backgroundColor: selected
             ? theme.materials.tint
-            : pressed
+            : state.pressed
               ? colors.surfacePressed
-              : "transparent",
+              : (state as { hovered?: boolean }).hovered
+                ? colors.surfaceSubtle
+                : "transparent",
         },
       ]}
     >
@@ -144,6 +175,8 @@ export function PrimaryDrawerPanel({
   onClosePressIn,
   onNavigateAway,
   docked = false,
+  selectedKey,
+  onOpenPath,
 }: PrimaryDrawerPanelProps) {
   const router = useRouter();
   const { colors } = useAppTheme();
@@ -173,12 +206,16 @@ export function PrimaryDrawerPanel({
       ? colors.warning
       : colors.textTertiary;
 
+  // Shortcut tooltips belong to the desktop web sidebar only.
+  const shortcutTip = (label: string, key: string) =>
+    selectedKey === undefined ? undefined : desktopShortcutTooltip(label, key);
   const openRoute = useCallback(
     (pathname: PrimaryDrawerPathname) => {
       onNavigateAway();
-      router.push(pathname);
+      if (onOpenPath) onOpenPath(pathname);
+      else router.push(pathname);
     },
-    [onNavigateAway, router],
+    [onNavigateAway, onOpenPath, router],
   );
   const selectPlace = useCallback(
     (route: PrimaryRouteName) => {
@@ -238,8 +275,13 @@ export function PrimaryDrawerPanel({
               drawerVisible={drawerVisible}
               label={place.label}
               icon={place.icon}
-              selected={activePrimaryRoute === place.route}
+              selected={
+                selectedKey === undefined
+                  ? activePrimaryRoute === place.route
+                  : selectedKey === place.key
+              }
               attention={place.route === "list" && sessionsAttention}
+              tooltip={shortcutTip(place.label, place.key)}
               onPress={() => selectPlace(place.route)}
             />
           ))}
@@ -250,6 +292,8 @@ export function PrimaryDrawerPanel({
             drawerVisible={drawerVisible}
             icon={destination.icon}
             label={destination.label}
+            selected={selectedKey === destination.key}
+            tooltip={shortcutTip(destination.label, destination.key)}
             onPress={() => openRoute(destination.pathname)}
           />
         ))}
@@ -260,6 +304,8 @@ export function PrimaryDrawerPanel({
           drawerVisible={drawerVisible}
           icon={PRIMARY_DRAWER_SETTINGS.icon}
           label={PRIMARY_DRAWER_SETTINGS.label}
+          selected={selectedKey === PRIMARY_DRAWER_SETTINGS.key}
+          tooltip={shortcutTip(PRIMARY_DRAWER_SETTINGS.label, PRIMARY_DRAWER_SETTINGS.key)}
           onPress={() => openRoute(PRIMARY_DRAWER_SETTINGS.pathname)}
         />
         {/* Where you are. Read-only: switching servers lives in Settings. */}

@@ -80,7 +80,10 @@ describe("primary drawer panel", () => {
 
   test("Brain and Sessions lead on every layout and select the page in place", () => {
     expect(source).not.toContain("{docked ? (");
-    expect(source).toContain("selected={activePrimaryRoute === place.route}");
+    // The desktop web sidebar selects by path; elsewhere the primary route.
+    expect(source).toContain(
+      "selectedKey === undefined\n                  ? activePrimaryRoute === place.route\n                  : selectedKey === place.key",
+    );
     expect(source).toContain("if (!docked) onClose();\n      onSelectPrimaryRoute(route);");
   });
 
@@ -94,7 +97,9 @@ describe("primary drawer panel", () => {
   });
 
   test("navigating dismisses the drawer and closed rows leave the focus order", () => {
-    expect(source).toContain("onNavigateAway();\n      router.push(pathname);");
+    expect(source).toContain(
+      "onNavigateAway();\n      if (onOpenPath) onOpenPath(pathname);\n      else router.push(pathname);",
+    );
     expect(source).toContain('accessibilityRole="button"');
     expect(source).toContain("accessibilityLabel={label}");
     expect(source).toContain("tabIndex={drawerVisible ? 0 : -1}");

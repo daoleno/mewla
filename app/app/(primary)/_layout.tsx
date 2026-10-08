@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Animated, StyleSheet } from "react-native";
 import TopTabs from "expo-router/js-top-tabs";
 import { PrimaryDrawerShell } from "../../components/navigation/PrimaryDrawerShell";
+import { useDesktopWeb } from "../../components/navigation/useDesktopWeb";
 import {
   PrimaryPagerPositionBridge,
   PrimaryPagerPositionProvider,
@@ -48,15 +49,18 @@ function renderPrimaryTabBar({ position }: PrimaryTabBarProps) {
 }
 
 export default function PrimaryLayout() {
+  // Desktop web: Brain and Sessions are pages with history, not a pager. No
+  // swipe either, so dragging across a chat selects its text.
+  const desktopWeb = useDesktopWeb();
   return (
     <TopTabs
-      backBehavior="none"
+      backBehavior={desktopWeb ? "history" : "none"}
       layout={renderPrimaryTabsLayout}
       screenOptions={{
-        animationEnabled: true,
+        animationEnabled: !desktopWeb,
         lazy: false,
         sceneStyle: styles.scene,
-        swipeEnabled: true,
+        swipeEnabled: !desktopWeb,
       }}
       tabBar={renderPrimaryTabBar}
     >

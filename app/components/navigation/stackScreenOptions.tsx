@@ -4,6 +4,15 @@ import { Typography, useAppTheme } from "../../constants/tokens";
 import { HeaderBackButton } from "./HeaderBackButton";
 import { screenBackParent, type ScreenBackParent } from "./screenBack";
 import { useScreenBack, type ScreenBackNavigation } from "./useScreenBack";
+import { desktopReadableRoute, isDesktopTopLevelRoute } from "./desktopWeb";
+import { useDesktopWeb } from "./useDesktopWeb";
+
+/** Desktop web pages keep a readable width beside the sidebar. */
+const DESKTOP_PAGE_STYLE = {
+  width: "100%" as const,
+  maxWidth: 1080,
+  alignSelf: "center" as const,
+};
 
 // Native headers inset their leading and trailing items by 16pt. The web
 // Stack header (JS Header) reads these container styles instead; they are not
@@ -22,6 +31,9 @@ const webHeaderInsets: object =
  */
 export function useStackScreenOptions() {
   const { colors } = useAppTheme();
+  // Desktop web: menu destinations sit beside the sidebar, which is their
+  // way out, so they draw no Back and pages switch without a slide.
+  const desktopWeb = useDesktopWeb();
   return useCallback(
     ({
       navigation,
@@ -30,29 +42,44 @@ export function useStackScreenOptions() {
       navigation: ScreenBackNavigation;
       route: { name: string };
     }) => {
-      const backParent = screenBackParent(route.name);
+      const topLevel = desktopWeb && isDesktopTopLevelRoute(route.name);
+      const backParent = topLevel ? null : screenBackParent(route.name);
       return {
         headerStyle: { backgroundColor: colors.bgPrimary },
         headerTintColor: colors.textPrimary,
         headerShadowVisible: false,
-        headerTitleAlign: "center" as const,
-        headerTitleStyle: {
-          fontFamily: Typography.uiFontMedium,
-          fontSize: 17,
-          color: colors.textPrimary,
-        },
+        // Desktop web titles read like Brain's and Sessions' page titles.
+        headerTitleAlign: desktopWeb ? ("left" as const) : ("center" as const),
+        headerTitleStyle: topLevel
+          ? {
+              fontFamily: Typography.displayFont,
+              fontSize: 24,
+              letterSpacing: -0.6,
+              color: colors.textPrimary,
+            }
+          : {
+              fontFamily: Typography.uiFontMedium,
+              fontSize: 17,
+              color: colors.textPrimary,
+            },
         // Headerless routes get none: native-stack renders headerLeft even
         // for a hidden header, which would register a hardware-back listener.
+        // Desktop web menu destinations draw an empty slot, or the web
+        // header's own back arrow would stand in for the missing one.
         headerLeft: backParent
           ? () => <StackBackButton navigation={navigation} parent={backParent} />
-          : undefined,
-        contentStyle: { backgroundColor: colors.bgPrimary },
-        animation: "slide_from_right" as const,
+          : topLevel
+            ? () => null
+            : undefined,
+        contentStyle: desktopWeb && desktopReadableRoute(route.name)
+          ? [{ backgroundColor: colors.bgPrimary }, DESKTOP_PAGE_STYLE]
+          : { backgroundColor: colors.bgPrimary },
+        animation: desktopWeb ? ("none" as const) : ("slide_from_right" as const),
         fullScreenGestureEnabled: true,
         ...webHeaderInsets,
       };
     },
-    [colors],
+    [colors, desktopWeb],
   );
 }
 
