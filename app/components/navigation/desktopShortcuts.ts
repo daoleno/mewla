@@ -27,22 +27,25 @@ function hasMod(event: KeyLike): boolean {
   return Boolean(event.metaKey || event.ctrlKey);
 }
 
-export type ComposerKeyIntent = "send" | "blur" | "recall" | null;
+export type ComposerKeyIntent = "send" | "hold" | "blur" | "recall" | null;
 
 /**
  * What a key does in a chat composer. `desktop` means the primary pointer is
  * not a touchscreen: there Enter sends; elsewhere Enter keeps its newline. Ctrl/⌘+Enter always
  * sends, Shift+Enter is always the browser's newline, and nothing acts while
  * an IME is composing. ↑ in an empty composer recalls the last message.
+ * While a slash-command or @mention list is open, a desktop Enter is held
+ * (no send, no newline) so a half-typed `/co` never goes to the agent.
  */
 export function composerKeyIntent(
   event: KeyLike,
-  context: { desktop: boolean; draftEmpty: boolean },
+  context: { desktop: boolean; draftEmpty: boolean; pickerOpen?: boolean },
 ): ComposerKeyIntent {
   if (isImeComposing(event)) return null;
   switch (event.key) {
     case "Enter":
       if (event.shiftKey || event.altKey) return null;
+      if (context.pickerOpen) return context.desktop || hasMod(event) ? "hold" : null;
       if (hasMod(event)) return "send";
       return context.desktop ? "send" : null;
     case "Escape":

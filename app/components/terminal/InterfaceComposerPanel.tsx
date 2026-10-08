@@ -49,6 +49,7 @@ interface InterfaceComposerPanelProps {
   onInputBlur(): void;
   onSendPress(): void;
   onStopPress(): void;
+  pickerOpen?: boolean;
 }
 
 export function InterfaceComposerPanel({
@@ -81,6 +82,7 @@ export function InterfaceComposerPanel({
   onInputBlur,
   onSendPress,
   onStopPress,
+  pickerOpen = false,
 }: InterfaceComposerPanelProps) {
   // The last message this composer sent, for ↑ in an empty box (desktop web).
   const lastSentRef = useRef("");
@@ -143,6 +145,7 @@ export function InterfaceComposerPanel({
             onInputBlur={onInputBlur}
             onKeyboardSend={keyboardSend}
             lastSentRef={lastSentRef}
+            pickerOpen={pickerOpen}
           />
         </InterfaceComposerPanelFrame>
 
@@ -183,6 +186,7 @@ export function InterfaceComposerPanel({
         onSendPress={send}
         onStopPress={onStopPress}
         lastSentRef={lastSentRef}
+        pickerOpen={pickerOpen}
       />
     );
   }
@@ -227,6 +231,7 @@ export function InterfaceComposerPanel({
         onInputBlur={onInputBlur}
         onKeyboardSend={keyboardSend}
         lastSentRef={lastSentRef}
+        pickerOpen={pickerOpen}
       />
 
       {actionButton}

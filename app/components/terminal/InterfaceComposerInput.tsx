@@ -42,6 +42,8 @@ interface InterfaceComposerInputProps {
   /** Web keyboard send; absent while sending is not possible. */
   onKeyboardSend?(): void;
   lastSentRef?: React.RefObject<string>;
+  /** A command or mention list is open above the box. */
+  pickerOpen?: boolean;
 }
 
 export function InterfaceComposerInput({
@@ -55,6 +57,7 @@ export function InterfaceComposerInput({
   onInputBlur,
   onKeyboardSend,
   lastSentRef,
+  pickerOpen = false,
 }: InterfaceComposerInputProps) {
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const draftEmpty = draft.length === 0;
@@ -87,8 +90,11 @@ export function InterfaceComposerInput({
       const intent = composerKeyIntent(key, {
         desktop: hasDesktopPointer(),
         draftEmpty,
+        pickerOpen,
       });
-      if (intent === "send") {
+      if (intent === "hold") {
+        event.preventDefault();
+      } else if (intent === "send") {
         event.preventDefault();
         onKeyboardSend?.();
       } else if (intent === "blur") {
@@ -98,7 +104,7 @@ export function InterfaceComposerInput({
         onDraftChange(lastSentRef.current);
       }
     },
-    [draftEmpty, inputRef, lastSentRef, onDraftChange, onKeyboardSend],
+    [draftEmpty, inputRef, lastSentRef, onDraftChange, onKeyboardSend, pickerOpen],
   );
 
   return (
