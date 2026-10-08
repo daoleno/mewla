@@ -79,6 +79,14 @@ export function accessControl(account: PluginAccount, group: "read" | "write"): 
   return { kind: "switch", on: state !== "off", note: state === "partial" ? "Newer tools wait for your review in Tools & activity" : undefined };
 }
 
+/**
+ * Reconnecting replaces the account's grant, so it asks for changes again
+ * when the account allowed them; otherwise a one-tap Reconnect would drop them.
+ */
+export function reconnectsWithWrites(account: PluginAccount): boolean {
+  return account.access?.write === "allowed" || account.access?.write === "partial";
+}
+
 export function allowedToolCount(account: PluginAccount): { allowed: number; total: number } {
   if (account.access) return { allowed: account.access.allowed, total: account.access.tools };
   const tools = account.tools ?? [];

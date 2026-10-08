@@ -17,7 +17,7 @@ export default function PluginsCatalogScreen() {
       onRetry={() => void flow.send({ action: "list" })}
       onOpen={(plugin) => router.push(pluginServicePath(plugin.id))}
       onConnect={(plugin) => void flow.connect(plugin.id)}
-      onReconnect={(account) => void flow.connect(account.integration)}
+      onReconnect={(account) => flow.recover(account, "reconnect")}
     />
   </PluginsPage>;
 }

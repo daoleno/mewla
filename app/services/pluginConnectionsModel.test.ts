@@ -7,6 +7,7 @@ import {
   connectSteps,
   isConnecting,
   pluginCatalogRows,
+  reconnectsWithWrites,
 } from "./pluginConnectionsModel";
 
 const plugin = (id: string, name: string): PluginIntegration => ({ id, name, available: true, setup_url: "", description: `${name} service` });
@@ -61,6 +62,14 @@ describe("account status and capability boundaries", () => {
     expect(accessControl(account({ access: { ...access, write_consent: true } }), "write")).toEqual({ kind: "consent" });
     expect(accessControl(account({ access: { ...access, write: "none" } }), "write")).toEqual({ kind: "none" });
     expect(accessControl(account({}), "read")).toEqual({ kind: "none" });
+  });
+
+  test("reconnecting keeps changes an account allowed", () => {
+    const access = { read: "allowed" as const, write: "allowed" as const, allowed: 2, tools: 2 };
+    expect(reconnectsWithWrites(account({ access }))).toBe(true);
+    expect(reconnectsWithWrites(account({ access: { ...access, write: "partial" } }))).toBe(true);
+    expect(reconnectsWithWrites(account({ access: { ...access, write: "off" } }))).toBe(false);
+    expect(reconnectsWithWrites(account({}))).toBe(false);
   });
 
   test("recovery names one action, credential removal first", () => {

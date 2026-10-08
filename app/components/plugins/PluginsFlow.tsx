@@ -10,7 +10,7 @@ import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import { ServerOfflineNotice, type ServerConnection } from "../extensions/ServerOfflineNotice";
-import { pluginCatalogRows, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { pluginCatalogRows, reconnectsWithWrites, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -308,7 +308,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
     else if (action === "enable") void send({ action: "enable", id: account.id }, `recover:${account.id}`);
     else if (action === "disconnect") void disconnect(account);
-    else void connect(account.integration);
+    else void connect(account.integration, { writes: reconnectsWithWrites(account) });
   };
   /** Loads one account's tools and history, for its Tools page. */
   const load = useCallback((id: string) => send({ action: "get", id }, `load:${id}`), [send]);
