@@ -384,6 +384,17 @@ func TestRealTmuxOutsideTmuxUsesOrdinaryDefaultServer(t *testing.T) {
 func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
 	ambientTarget := createHarnessPane(t, h.selected, "mewla-worker-name-collision", "exec /bin/sh")
+	// The ambient pane is started via the default shell with "exec /bin/sh",
+	// so tmux automatic-rename can later change bash->sh on its own. Freeze
+	// the name (a daemon rename-window would still change it) and wait for the
+	// exec to settle before recording the name the assertion must preserve.
+	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", ambientTarget, "automatic-rename", "off").CombinedOutput(); err != nil {
+		t.Fatalf("freeze ambient automatic-rename: %v: %s", err, out)
+	}
+	waitForHarness(t, "ambient shell ready", func() bool {
+		out, displayErr := tmuxHarnessCommand(h.selected, "display-message", "-p", "-t", ambientTarget, "#{pane_current_command}").Output()
+		return displayErr == nil && strings.TrimSpace(string(out)) == "sh"
+	})
 	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-wg", "@mewla_worker_created", "1").CombinedOutput(); err != nil {
 		t.Fatalf("set inherited collision marker: %v: %s", err, out)
 	}
