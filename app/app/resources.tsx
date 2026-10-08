@@ -15,7 +15,6 @@ export default function ResourcesScreen() {
       error={error}
       connected={connected}
       hasServer={currentServer !== null}
-      serverName={currentServer?.name}
       onOpenSettings={() => router.push("/settings")}
       onRetry={retry}
     />

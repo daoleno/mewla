@@ -19,7 +19,7 @@ function ResourcesPreview() {
   });
   if (!loaded) return null;
   return <SafeAreaProvider><ThemeProvider><View style={{ flex: 1 }}>
-    <ResourcesView telemetry={telemetry} loading={false} error={null} connected hasServer serverName="Build workstation"
+    <ResourcesView telemetry={telemetry} loading={false} error={null} connected hasServer 
       now={telemetry.sampledAt + 1000} onRetry={() => {}} />
   </View></ThemeProvider></SafeAreaProvider>;
 }

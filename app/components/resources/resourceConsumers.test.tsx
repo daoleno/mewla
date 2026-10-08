@@ -19,6 +19,8 @@ if (!process.env.ZEN_CONSUMERS_TEST_CHILD) {
   mock.module("../ui/EmptyState", () => ({ EmptyState: "EmptyState" }));
   mock.module("react-native-svg", () => ({ default: "Svg", Defs: "Defs", Line: "Line", LinearGradient: "LinearGradient", Path: "Path", Rect: "Rect", Stop: "Stop" }));
   mock.module("../ui/AnimatedPressable", () => ({ AnimatedPressable: "Pressable" }));
+  mock.module("../ui/IconButton", () => ({ IconButton: "Pressable" }));
+  mock.module("../icons/Icon", () => ({ Icon: "Icon" }));
   mock.module("../ui/StatusMark", () => ({ StatusMark: "StatusMark" }));
   mock.module("../ui/StatusPill", () => ({ StatusPill: "StatusPill" }));
   mock.module("../../constants/tokens", () => ({
@@ -34,7 +36,8 @@ if (!process.env.ZEN_CONSUMERS_TEST_CHILD) {
     act(() => { renderer = TestRenderer.create(<ResourcesView telemetry={sample} connected hasServer loading={false} error={null} onRetry={() => {}} />); });
     const content = () => JSON.stringify(renderer.toJSON());
     expect(content()).not.toContain("Cache");
-    const toggle = renderer.root.findAllByType("Pressable" as any).find((b) => b.props.accessibilityLabel === "Toggle machine details")!;
+    const toggle = renderer.root.findAllByType("Pressable" as any).find((b) => b.props.accessibilityLabel === "Machine details")!;
+    expect(toggle.props.accessibilityState.expanded).toBe(false);
     act(() => toggle.props.onPress());
     expect(content()).toContain("Cache");
     expect(content()).toContain("Shared");

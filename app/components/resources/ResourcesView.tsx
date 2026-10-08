@@ -1,9 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
-import { historyWindowLabel, type ResourceTelemetry } from "../../services/resourceTelemetry";
-import { AnimatedPressable } from "../ui/AnimatedPressable";
+import type { ResourceTelemetry } from "../../services/resourceTelemetry";
 import { EmptyState } from "../ui/EmptyState";
 import { ConsumersSection } from "./ResourceConsumersSection";
 import { DiskSection, PressureSection } from "./ResourceDetailSections";
@@ -16,7 +15,6 @@ export interface ResourcesViewProps {
   error: string | null;
   connected: boolean;
   hasServer: boolean;
-  serverName?: string;
   onRetry(): void;
   onOpenSettings?(): void;
   /** Clock for "updated" copy; injected so fixtures render stably. */
@@ -24,7 +22,7 @@ export interface ResourcesViewProps {
 }
 
 /** Shared native dashboard; layout responds to available content width. */
-export function ResourcesView({ telemetry, loading, error, connected, hasServer, serverName, onRetry, onOpenSettings, now }: ResourcesViewProps) {
+export function ResourcesView({ telemetry, loading, error, connected, hasServer, onRetry, onOpenSettings, now }: ResourcesViewProps) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const [width, setWidth] = useState(360);
@@ -76,16 +74,10 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
           styles={styles}
           now={now ?? Date.now()}
           statusLabel={!connected || error ? "Last sample" : undefined}
-          serverName={serverName} onRetry={onRetry} loading={loading} connected={connected}
+          onRetry={onRetry} loading={loading} connected={connected}
+          details={details} onToggleDetails={() => setDetails((value) => !value)}
         />
         <PressureSignals telemetry={telemetry} styles={styles} />
-        <View style={styles.sectionHeader}>
-          <Text style={styles.caption}>{historyWindowLabel(telemetry) ?? "Collecting history"} · CPU / memory 0–100%</Text>
-          <AnimatedPressable style={styles.control} accessibilityRole="button" accessibilityState={{ expanded: details }}
-            accessibilityLabel="Toggle machine details" onPress={() => setDetails((value) => !value)}>
-            <Text style={styles.label}>{details ? "Less −" : "Details +"}</Text>
-          </AnimatedPressable>
-        </View>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {[CpuSection, MemorySection, DiskSection, PressureSection].map((Section, index) => <View key={index}
             style={{ flexGrow: 1, flexBasis: width >= 1040 ? "23%" : width < 340 ? "100%" : "48%" }}>

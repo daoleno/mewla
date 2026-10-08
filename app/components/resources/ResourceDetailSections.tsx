@@ -18,9 +18,11 @@ export function PressureSection({ telemetry, styles, details }: SectionProps) {
   const ink = pressureInk(telemetry.state, colors);
   return (
     <View style={styles.surface}>
-      <Text style={styles.label}>Pressure · PSI</Text>
-      <Text style={styles.sectionValue}>{formatPressurePercent(peak?.value)}</Text>
-      <AreaChart points={peak ? psiHistorySeries(telemetry, peak.key) : []} {...chartWindow(telemetry)} height={40}
+      <View style={styles.tileHead}>
+        <Text style={styles.label}>Pressure</Text>
+        <Text style={styles.sectionValue}>{formatPressurePercent(peak?.value)}</Text>
+      </View>
+      <AreaChart points={peak ? psiHistorySeries(telemetry, peak.key) : []} {...chartWindow(telemetry)} height={36}
         color={ink} accessibilityLabel={`PSI ${peak ? labels[peak.key] : "unavailable"} some history, scale 0–100%`} />
       <Text style={styles.caption}>{peak ? `${labels[peak.key]} · max some 10s` : "PSI unavailable"}</Text>
       <Text style={styles.micro}>{values.map(({ key, value }) => `${labels[key]} ${formatPressurePercent(value)}`).join(" · ")}</Text>
@@ -46,12 +48,14 @@ export function DiskSection({ telemetry, styles, details }: SectionProps) {
   const latest = latestDiskThroughput(telemetry);
   return (
     <View style={styles.surface}>
-      <Text style={styles.label}>Disk I/O</Text>
-      <Text style={styles.sectionValue}>{formatRate(latest.read === undefined && latest.write === undefined ? undefined : (latest.read ?? 0) + (latest.write ?? 0))}</Text>
+      <View style={styles.tileHead}>
+        <Text style={styles.label}>Disk I/O</Text>
+        <Text style={styles.sectionValue}>{formatRate(latest.read === undefined && latest.write === undefined ? undefined : (latest.read ?? 0) + (latest.write ?? 0))}</Text>
+      </View>
       <View>
-        <AreaChart points={throughput.read} {...chartWindow(telemetry)} height={40} color={colors.accent} accessibilityLabel="Disk read throughput history" />
+        <AreaChart points={throughput.read} {...chartWindow(telemetry)} height={36} color={colors.accent} accessibilityLabel="Disk read throughput history" />
         <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0 }}>
-          <AreaChart points={throughput.write} {...chartWindow(telemetry)} height={40} color={colors.statusUnknown} grid={false} accessibilityLabel="Disk write throughput history" />
+          <AreaChart points={throughput.write} {...chartWindow(telemetry)} height={36} color={colors.statusUnknown} grid={false} accessibilityLabel="Disk write throughput history" />
         </View>
       </View>
       <Legend color={colors.accent} label={`R ${formatRate(latest.read)}`} styles={styles} />
