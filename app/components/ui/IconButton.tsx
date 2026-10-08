@@ -1,14 +1,16 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   type PressableProps,
   type StyleProp,
   StyleSheet,
+  type View,
   type ViewStyle,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { Icon, type IconName } from "../icons/Icon";
+import { useWebTooltip } from "./useWebTooltip";
 
 type IconButtonTone = "default" | "input" | "ghost" | "tinted";
 
@@ -20,6 +22,8 @@ interface IconButtonProps extends Omit<PressableProps, "style" | "children"> {
   tone?: IconButtonTone;
   /** Light haptic on press. */
   haptic?: boolean;
+  /** Web hover text; defaults to the accessibility label. */
+  tooltip?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -35,9 +39,12 @@ export function IconButton({
   style,
   onPress,
   hitSlop,
+  tooltip,
   ...props
 }: IconButtonProps) {
   const { colors, theme } = useAppTheme();
+  const ref = useRef<View>(null);
+  useWebTooltip(ref, tooltip ?? props.accessibilityLabel ?? undefined);
   const backgroundColor =
     tone === "input"
       ? colors.inputBackground
@@ -55,6 +62,7 @@ export function IconButton({
   return (
     <AnimatedPressable
       {...props}
+      ref={ref}
       accessibilityRole={props.accessibilityRole ?? "button"}
       hitSlop={slop}
       preset="press"
