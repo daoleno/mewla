@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -304,9 +305,14 @@ type Watcher struct {
 	servicePanesFn  func() ([]servicePane, error)
 	// managedDiscoveryFn replaces persistent resolution wholesale in tests
 	// (see SetManagedDiscoveryFunc). Production leaves it nil.
-	managedDiscoveryFn    func(claimed map[string]bool, interfaces []SessionServiceInterface) []SessionService
-	mu                    sync.RWMutex
-	events                chan SessionEvent
+	managedDiscoveryFn func(claimed map[string]bool, interfaces []SessionServiceInterface) []SessionService
+	mu                 sync.RWMutex
+	events             chan SessionEvent
+	// pending holds events that found events full, in order. A pump drains
+	// it, so publishing never waits on the consumer.
+	pendingMu             sync.Mutex
+	pending               []SessionEvent
+	pendingPumping        bool
 	resources             delegatedResourceManager
 	sessionInput          *sessionInputOwner
 	targetProcessResolver func(string) (targetProcessIdentity, bool)
@@ -828,6 +834,56 @@ func (w *Watcher) Events() <-chan SessionEvent {
 	return w.events
 }
 
+// pendingEventsWarnAt logs a consumer that has fallen this far behind.
+const pendingEventsWarnAt = 1000
+
+// publish delivers events in order without ever blocking. Callers hold eventMu
+// so order matches projection order; a slow consumer must not stall polls,
+// progress writes or session creation queued behind that lock.
+func (w *Watcher) publish(events ...SessionEvent) {
+	w.pendingMu.Lock()
+	defer w.pendingMu.Unlock()
+	for _, event := range events {
+		if len(w.pending) == 0 {
+			select {
+			case w.events <- event:
+				continue
+			default:
+			}
+		}
+		w.pending = append(w.pending, event)
+		if len(w.pending) == pendingEventsWarnAt {
+			log.Printf("watcher: %d events waiting for a slow consumer", len(w.pending))
+		}
+	}
+	if len(w.pending) > 0 && !w.pendingPumping {
+		w.pendingPumping = true
+		go w.pumpPendingEvents()
+	}
+}
+
+// pumpPendingEvents removes an event only after it is sent, so publish keeps
+// queueing behind it and order holds.
+func (w *Watcher) pumpPendingEvents() {
+	for {
+		w.pendingMu.Lock()
+		if len(w.pending) == 0 {
+			w.pendingPumping = false
+			w.pendingMu.Unlock()
+			return
+		}
+		event := w.pending[0]
+		w.pendingMu.Unlock()
+
+		w.events <- event
+
+		w.pendingMu.Lock()
+		w.pending[0] = SessionEvent{}
+		w.pending = w.pending[1:]
+		w.pendingMu.Unlock()
+	}
+}
+
 // Workers returns snapshots of the current execution units.
 func (w *Watcher) Workers() []*classifier.Worker {
 	w.mu.RLock()
@@ -1012,7 +1068,7 @@ func (w *Watcher) UpdateWorkerProgress(id string, progress classifier.WorkerProg
 	}
 	w.mu.Unlock()
 
-	w.events <- event
+	w.publish(event)
 	return snapshot, nil
 }
 
@@ -1145,7 +1201,7 @@ func (w *Watcher) RebindDelegatedTurnProjection(id string) (*classifier.Worker, 
 	}
 	w.mu.Unlock()
 
-	w.events <- event
+	w.publish(event)
 	return snapshot, nil
 }
 
@@ -1296,9 +1352,7 @@ func (w *Watcher) poll() {
 		}
 	}
 	w.mu.Unlock()
-	for _, event := range events {
-		w.events <- event
-	}
+	w.publish(events...)
 }
 
 type missingPollWorker struct {
@@ -4501,11 +4555,11 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 	snapshot := cloneWorker(worker)
 	w.mu.Unlock()
 
-	w.events <- SessionEvent{
+	w.publish(SessionEvent{
 		Type:     "worker_discovered",
 		WorkerID: target,
 		Worker:   snapshot,
-	}
+	})
 }
 
 func markCreatedSession(socket, target string, opts CreateSessionOptions) error {

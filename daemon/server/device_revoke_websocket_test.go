@@ -730,7 +730,7 @@ func TestRunWithReadyCleanupDrainJoinsRacingDetach(t *testing.T) {
 	server.mu.Lock()
 	ownershipRemaining := len(server.clients) +
 		len(server.active) +
-		len(server.writes) +
+		len(server.outboxes) +
 		len(server.codexSubs) +
 		len(server.skillsInventories) +
 		len(server.skillsMutations) +
@@ -921,7 +921,7 @@ func testRunWithReadyJoinsCleanupBeforeFailedSessionDisappears(
 	server.mu.Lock()
 	ownershipRemaining := len(server.clients) +
 		len(server.active) +
-		len(server.writes) +
+		len(server.outboxes) +
 		len(server.codexSubs) +
 		len(server.skillsInventories) +
 		len(server.skillsMutations) +
@@ -1133,7 +1133,7 @@ func TestClientDetachRaceClaimsEveryOwnershipKindExactlyOnce(t *testing.T) {
 	server.mu.Lock()
 	ownershipRemaining := len(server.clients) +
 		len(server.active) +
-		len(server.writes) +
+		len(server.outboxes) +
 		len(server.codexSubs) +
 		len(server.skillsInventories) +
 		len(server.skillsInspects)
@@ -1209,12 +1209,12 @@ func TestServerShutdownClosesAuthenticatedWebSocketsWithoutOwnershipLeak(
 	defer server.mu.Unlock()
 	if !server.runtimeClosing ||
 		len(server.clients) != 0 ||
-		len(server.writes) != 0 ||
+		len(server.outboxes) != 0 ||
 		len(server.active) != 0 {
 		t.Fatalf(
 			"shutdown ownership clients=%d writes=%d active=%d closing=%t",
 			len(server.clients),
-			len(server.writes),
+			len(server.outboxes),
 			len(server.active),
 			server.runtimeClosing,
 		)
@@ -1239,7 +1239,7 @@ func TestRemoveClientLockedIsIdempotentAndClearsAllOwnership(t *testing.T) {
 	inspectContext, cancelInspect := context.WithCancel(context.Background())
 	server.clients[conn] = owner
 	server.active[conn] = "agent"
-	server.writes[conn] = &sync.Mutex{}
+	server.outboxes[conn] = newClientOutbox(conn)
 	server.codexSubs[conn] = map[string]codexConversationSubscription{
 		"thread": {cancel: cancelCodex},
 	}
@@ -1256,7 +1256,7 @@ func TestRemoveClientLockedIsIdempotentAndClearsAllOwnership(t *testing.T) {
 	if !owner.revoked.Load() ||
 		len(server.clients) != 0 ||
 		len(server.active) != 0 ||
-		len(server.writes) != 0 ||
+		len(server.outboxes) != 0 ||
 		len(server.codexSubs) != 0 ||
 		len(server.skillsInventories) != 0 ||
 		len(server.skillsInspects) != 0 {

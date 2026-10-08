@@ -144,7 +144,7 @@ type Server struct {
 
 	clients            map[*websocket.Conn]*authenticatedClient
 	active             map[*websocket.Conn]string
-	writes             map[*websocket.Conn]*sync.Mutex
+	outboxes           map[*websocket.Conn]*clientOutbox
 	codexSubs          map[*websocket.Conn]map[string]codexConversationSubscription
 	skillsInventories  map[*websocket.Conn]skillsInventoryRequest
 	skillsMutations    map[*websocket.Conn]skillsMutationRequest
@@ -290,7 +290,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		uploadStore:        &attachment.Store{Dir: uploadDir},
 		clients:            make(map[*websocket.Conn]*authenticatedClient),
 		active:             make(map[*websocket.Conn]string),
-		writes:             make(map[*websocket.Conn]*sync.Mutex),
+		outboxes:           make(map[*websocket.Conn]*clientOutbox),
 		codexSubs:          make(map[*websocket.Conn]map[string]codexConversationSubscription),
 		skillsInventories:  make(map[*websocket.Conn]skillsInventoryRequest),
 		skillsMutations:    make(map[*websocket.Conn]skillsMutationRequest),
@@ -576,7 +576,7 @@ func (s *Server) bindAuthenticatedClient(
 	}
 	s.clients[conn] = owner
 	s.active[conn] = ""
-	s.writes[conn] = &sync.Mutex{}
+	s.outboxes[conn] = newClientOutbox(conn)
 	s.codexSubs[conn] = map[string]codexConversationSubscription{}
 	return true
 }
@@ -653,7 +653,10 @@ func (s *Server) removeClientLocked(
 	s.terminalCleanup.Submit(terminalCleanup)
 	delete(s.clients, conn)
 	delete(s.active, conn)
-	delete(s.writes, conn)
+	if outbox := s.outboxes[conn]; outbox != nil {
+		outbox.close()
+	}
+	delete(s.outboxes, conn)
 	delete(s.codexSubs, conn)
 	var browserOwner *browser.Owner
 	if owner != nil {
@@ -1506,7 +1509,7 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 				return
 			}
 		}
-		_, err := s.terminal.Open(clientID(conn), backend, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: s.watcher.SocketPathFor(targetID)}, func(v any) { s.sendJSON(conn, v) })
+		_, err := s.terminal.Open(clientID(conn), backend, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: s.watcher.SocketPathFor(targetID)}, func(v any) { s.sendJSONWhenRoom(conn, v) })
 		if err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 		}
@@ -3046,12 +3049,23 @@ func (s *Server) handleDeleteWorkItem(conn *websocket.Conn, raw clientMessage) {
 }
 
 func (s *Server) sendJSON(conn *websocket.Conn, v any) {
+	s.sendJSONQueued(conn, v, false)
+}
+
+// sendJSONWhenRoom is for a stream owned by this one client (terminal output):
+// it waits for the client's queue to drain instead of dropping the client, so
+// the stream slows to the client's pace.
+func (s *Server) sendJSONWhenRoom(conn *websocket.Conn, v any) {
+	s.sendJSONQueued(conn, v, true)
+}
+
+func (s *Server) sendJSONQueued(conn *websocket.Conn, v any, waitForRoom bool) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		log.Printf("sendJSON marshal error: %v", err)
 		return
 	}
-	if err := s.writeMessage(conn, websocket.TextMessage, data); err != nil {
+	if err := s.queueMessage(conn, websocket.TextMessage, data, waitForRoom); err != nil {
 		log.Printf("sendJSON write error: %v", err)
 	}
 }
@@ -3354,7 +3368,7 @@ func (s *Server) broadcast(data []byte) {
 	s.mu.Unlock()
 
 	for _, conn := range conns {
-		if err := s.writeMessage(conn, websocket.TextMessage, data); err != nil {
+		if err := s.queueMessage(conn, websocket.TextMessage, data, false); err != nil {
 			s.mu.Lock()
 			work := s.removeClientLocked(conn)
 			s.mu.Unlock()
@@ -3735,27 +3749,14 @@ func (s *Server) hasActiveViewer(workerID string) bool {
 	return false
 }
 
-// wsWriteTimeout bounds one message to one client. A client that stops
-// reading (a suspended phone, a dead proxy leg) would otherwise hold its write
-// lock forever, and broadcast, the watcher and control writes queue behind it.
-var wsWriteTimeout = 30 * time.Second
-
-func (s *Server) writeMessage(conn *websocket.Conn, messageType int, data []byte) error {
+// queueMessage hands one message to the client's writer. It never writes to
+// the socket, so a client that stops reading cannot stall its caller.
+func (s *Server) queueMessage(conn *websocket.Conn, messageType int, data []byte, waitForRoom bool) error {
 	s.mu.Lock()
-	writeMu, ok := s.writes[conn]
+	outbox, ok := s.outboxes[conn]
 	s.mu.Unlock()
 	if !ok {
-		return fmt.Errorf("connection is closed")
+		return errOutboxClosed
 	}
-
-	writeMu.Lock()
-	defer writeMu.Unlock()
-	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-	if err := conn.WriteMessage(messageType, data); err != nil {
-		// A failed write leaves the connection unusable. Closing it ends the
-		// client's read loop, which detaches it.
-		_ = conn.Close()
-		return err
-	}
-	return nil
+	return outbox.enqueue(messageType, data, waitForRoom)
 }

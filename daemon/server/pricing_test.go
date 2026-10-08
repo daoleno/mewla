@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,10 +27,7 @@ func TestPricingStatusSurvivesStatsWebSocketProjection(t *testing.T) {
 			return
 		}
 		defer conn.Close()
-		s.mu.Lock()
-		s.writes[conn] = &sync.Mutex{}
-		s.mu.Unlock()
-		defer func() { s.mu.Lock(); delete(s.writes, conn); s.mu.Unlock() }()
+		defer attachTestOutbox(s, conn)()
 		s.handleClientMessage(conn, []byte(`{"type":"get_stats","request_id":"pricing-test"}`))
 	}))
 	defer host.Close()

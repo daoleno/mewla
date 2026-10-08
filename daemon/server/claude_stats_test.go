@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -77,10 +76,7 @@ func TestNativeClaudeUsageReachesStatsWithCustomProvider(t *testing.T) {
 			return
 		}
 		defer conn.Close()
-		srv.mu.Lock()
-		srv.writes[conn] = &sync.Mutex{}
-		srv.mu.Unlock()
-		defer func() { srv.mu.Lock(); delete(srv.writes, conn); srv.mu.Unlock() }()
+		defer attachTestOutbox(srv, conn)()
 		_, request, err := conn.ReadMessage()
 		if err == nil {
 			srv.handleClientMessage(conn, request)
