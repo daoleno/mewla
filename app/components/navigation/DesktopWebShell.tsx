@@ -63,7 +63,7 @@ function rootStackRouteNames(state: NavigationStateLike | undefined): string[] {
 
 interface ScreenLayoutProps {
   route: { key: string };
-  navigation: { getState(): { routes: Array<{ key: string }> } };
+  navigation: { getState(): { routes: Array<{ key: string; name: string }> } };
   children: React.ReactElement;
 }
 
@@ -72,7 +72,9 @@ function DesktopRetainedScreen({ route, navigation, children }: ScreenLayoutProp
   if (!desktop) return children;
   const routes = navigation.getState().routes;
   const index = routes.findIndex((candidate) => candidate.key === route.key);
-  return desktopScreenRetained(index, routes.length) ? children : null;
+  return desktopScreenRetained(routes.map((candidate) => candidate.name), index)
+    ? children
+    : null;
 }
 
 /** The root Stack's `screenLayout`: drops pages deep under the newest ones. */
@@ -93,7 +95,12 @@ function keyTarget(target: EventTarget | null): KeyTarget | null {
 /** The visible chat composer, if this page has one. */
 function focusVisibleComposer() {
   const inputs = Array.from(document.querySelectorAll<HTMLElement>("[id='mewla-composer']"));
-  const visible = inputs.find((input) => input.offsetParent !== null);
+  // The pager keeps Brain and Sessions mounted side by side: only a composer
+  // actually on screen counts.
+  const visible = inputs.find((input) => {
+    const rect = input.getBoundingClientRect();
+    return rect.width > 0 && rect.right > 0 && rect.left < window.innerWidth;
+  });
   visible?.focus();
 }
 
@@ -169,8 +176,9 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
     (key: DesktopSidebarKey) => {
       const path = desktopSidebarPath(key) as never;
       const stack = rootStackRouteNames(navigationRef.getRootState());
-      if (desktopSidebarNavigation(stack, key) === "home") router.dismissTo(path);
-      else router.navigate(path);
+      // A switch changes the Brain · Sessions tab; anything else is a new page.
+      if (desktopSidebarNavigation(stack, key) === "switch") router.navigate(path);
+      else router.push(path);
     },
     [navigationRef, router],
   );
