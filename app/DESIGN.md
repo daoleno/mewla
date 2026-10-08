@@ -291,6 +291,10 @@ format, that every glyph stays inside the grid, and the cat ears.
 - Real product marks (Claude, Codex, GitHub, Slack, Google and the agent
   logos) keep their own logos, as on the landing; `iconVocabulary.test.ts`
   keeps icon fonts to those two places. The seal is the brand mark.
+- Service logos in Plugins (GitHub, Slack, Google, Notion, Linear) are all
+  monochrome in the text colour, on the same tint tile. A logo identifies the
+  service; whether it is connected is the status pill's job, so no logo takes
+  its brand colour, on or off.
 
 ### Brand assets
 
