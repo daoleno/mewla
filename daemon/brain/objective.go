@@ -25,6 +25,34 @@ type Objective struct {
 	SetAt time.Time `json:"set_at"`
 	Total int       `json:"total"`
 	Back  int       `json:"back"`
+	// Done counts child Work closed as done; LastActivity is the newest of
+	// SetAt and any child Work's update or result. They decide when the goal
+	// line stops being current (objectiveCurrent) and are not on the wire.
+	Done         int       `json:"-"`
+	LastActivity time.Time `json:"-"`
+}
+
+// The apps show an objective only while it is current, so a goal never
+// lingers over finished or abandoned Work. Brain's own context still sees it
+// (CurrentObjective) and can clear or restate it.
+const (
+	// Everything is back and nothing has moved since: Brain has had time to
+	// read the results and reply.
+	objectiveSettleAfter = 30 * time.Minute
+	// Nothing in the objective has moved for this long.
+	objectiveStaleAfter = 12 * time.Hour
+)
+
+// objectiveCurrent reports whether the apps should still show the objective.
+func objectiveCurrent(objective Objective, now time.Time) bool {
+	quiet := now.Sub(objective.LastActivity)
+	if objective.Total > 0 && objective.Done >= objective.Total {
+		return false
+	}
+	if objective.Total > 0 && objective.Back >= objective.Total && quiet >= objectiveSettleAfter {
+		return false
+	}
+	return quiet < objectiveStaleAfter
 }
 
 const maxObjectiveTitleRunes = 200
@@ -64,7 +92,7 @@ func (s *Store) SetObjective(title string) (Objective, error) {
 	if threadID == "" {
 		return Objective{}, fmt.Errorf("Brain has no current chat thread")
 	}
-	file := objectiveFile{ThreadID: threadID, Title: title, SetAt: time.Now().UTC()}
+	file := objectiveFile{ThreadID: threadID, Title: title, SetAt: s.nowUTC()}
 	if previous, ok, err := s.readObjectiveFileLocked(); err != nil {
 		return Objective{}, err
 	} else if ok && previous.ThreadID == threadID && previous.Title == title {
@@ -87,6 +115,19 @@ func (s *Store) ClearObjective() error {
 	}
 	s.broadcastWorkChange("")
 	return nil
+}
+
+// DisplayedObjective is CurrentObjective while it is still current
+// (objectiveCurrent); the apps' goal line reads this.
+func (s *Store) DisplayedObjective() (*Objective, error) {
+	objective, err := s.CurrentObjective()
+	if err != nil || objective == nil {
+		return nil, err
+	}
+	if !objectiveCurrent(*objective, s.nowUTC()) {
+		return nil, nil
+	}
+	return objective, nil
 }
 
 // CurrentObjective returns the current chat thread's objective with live
@@ -141,12 +182,16 @@ func (s *Store) objectiveProgressLocked(file objectiveFile) (Objective, error) {
 		return Objective{}, err
 	}
 	hasResult := map[string]bool{}
+	lastEvent := map[string]time.Time{}
 	for _, event := range database.BrainWorkEvents {
 		if isProjectedWorkResultEvent(event.Kind) {
 			hasResult[event.WorkID] = true
 		}
+		if event.CreatedAt.After(lastEvent[event.WorkID]) {
+			lastEvent[event.WorkID] = event.CreatedAt
+		}
 	}
-	objective := Objective{Title: file.Title, SetAt: file.SetAt}
+	objective := Objective{Title: file.Title, SetAt: file.SetAt, LastActivity: file.SetAt}
 	for _, item := range database.BrainWork {
 		if strings.TrimSpace(item.SourceThreadID) != file.ThreadID ||
 			item.CreatedAt.Before(file.SetAt) ||
@@ -157,6 +202,14 @@ func (s *Store) objectiveProgressLocked(file objectiveFile) (Objective, error) {
 		objective.Total++
 		if item.Status == WorkDone || hasResult[item.ID] {
 			objective.Back++
+		}
+		if item.Status == WorkDone {
+			objective.Done++
+		}
+		for _, at := range []time.Time{item.UpdatedAt, lastEvent[item.ID]} {
+			if at.After(objective.LastActivity) {
+				objective.LastActivity = at
+			}
 		}
 	}
 	return objective, nil
