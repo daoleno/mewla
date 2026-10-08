@@ -36,7 +36,9 @@ export function browserEnrollmentServer(origin: string, status: BrowserEnrollmen
   if (status.status !== "approved" || !status.daemonId || !status.daemonPublicKey) return null;
   const normalized = normalizeServerURL(origin);
   if (!normalized) return null;
-  return { name: "Mewla browser", url: normalized, daemonId: status.daemonId, daemonPublicKey: status.daemonPublicKey, transportKind: "manual" };
+  // Named after the computer's address, never the browser: an explicit name
+  // also replaces a stale one when this browser enrolls again.
+  return { name: new URL(normalizeOrigin(origin)).hostname, url: normalized, daemonId: status.daemonId, daemonPublicKey: status.daemonPublicKey, transportKind: "manual" };
 }
 
 function normalizeOrigin(value: string): string {

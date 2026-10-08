@@ -21,7 +21,9 @@ if (!process.env.ZEN_ENROLLMENT_API_TEST) {
     expect(prompt.requestId).toBe("r");
     expect(prompt.verificationNumber).toBe("042");
     const status = await readBrowserEnrollmentStatus("https://zen.example", prompt, fetcher);
-    expect(browserEnrollmentServer("https://zen.example", status)?.daemonId).toBe("a".repeat(64));
+    const server = browserEnrollmentServer("https://manjaro.example.ts.net/", status);
+    expect(server?.daemonId).toBe("a".repeat(64));
+    expect(server?.name).toBe("manjaro.example.ts.net");
     expect(browserEnrollmentServer("https://zen.example", { status: "denied" })).toBeNull();
   });
 }
