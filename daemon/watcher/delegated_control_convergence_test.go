@@ -14,7 +14,7 @@ func TestSubmitDelegatedInputReusesCompletedSessionWithDifferentIdleActivity(t *
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	now := time.Date(2026, 8, 11, 3, 20, 0, 0, time.UTC)
-	sessionID := "zen-worker-completed-reuse:@1"
+	sessionID := "mewla-worker-completed-reuse:@1"
 	oldActivityID := "activity-prior-canonical"
 	ledger.seed(sessionID, TurnSnapshot{
 		SessionID: sessionID, TurnID: sessionID + ":turn:1", Status: TurnDone,
@@ -37,7 +37,7 @@ func TestSubmitDelegatedInputReusesCompletedSessionWithDifferentIdleActivity(t *
 	w := lifecycleTestWatcher(io, ledger, probe)
 	w.sessionInput.now = func() time.Time { return now }
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "codex", Cwd: "/repo/zen", PaneAlive: true,
+		ID: sessionID, Command: "codex", Cwd: "/repo/mewla", PaneAlive: true,
 		Delegated: true, State: classifier.StateDone,
 	}
 
@@ -76,7 +76,7 @@ func TestSubmitDelegatedInputActivityMismatchPreservesControlOwner(t *testing.T)
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	now := time.Date(2026, 8, 11, 3, 30, 0, 0, time.UTC)
-	sessionID := "zen-worker-activity-mismatch:@1"
+	sessionID := "mewla-worker-activity-mismatch:@1"
 	identity := testSessionInputIdentity("codex")
 	ledger.seed(sessionID, TurnSnapshot{
 		SessionID: sessionID, TurnID: sessionID + ":turn:1", Status: TurnRunning,
@@ -89,7 +89,7 @@ func TestSubmitDelegatedInputActivityMismatchPreservesControlOwner(t *testing.T)
 	}}}
 	w := New(time.Second)
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "codex", Cwd: "/repo/zen", PaneAlive: true,
+		ID: sessionID, Command: "codex", Cwd: "/repo/mewla", PaneAlive: true,
 		Delegated: true, State: classifier.StateRunning, Attention: "none",
 	}
 	w.workerOrder = append(w.workerOrder, sessionID)
@@ -130,7 +130,7 @@ func TestSignalProtocolProviderCompletionAwaitsControlFinalization(t *testing.T)
 	ledger := newFakeTurnLedger()
 	ledger.providerSignalHints = true
 	now := time.Date(2026, 8, 11, 3, 32, 0, 0, time.UTC)
-	sessionID := "zen-worker-signal-provider-first:@1"
+	sessionID := "mewla-worker-signal-provider-first:@1"
 	identity := testSessionInputIdentity("codex")
 	turnID := sessionID + ":turn:1"
 	ledger.seed(sessionID, TurnSnapshot{
@@ -173,7 +173,7 @@ func TestSubmitDelegatedInputActivityMismatchPreservesCompletedOutcome(t *testin
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	now := time.Date(2026, 8, 11, 3, 35, 0, 0, time.UTC)
-	sessionID := "zen-worker-completed-activity-mismatch:@1"
+	sessionID := "mewla-worker-completed-activity-mismatch:@1"
 	identity := testSessionInputIdentity("codex")
 	settledAt := now.Add(-time.Minute)
 	ledger.seed(sessionID, TurnSnapshot{
@@ -187,7 +187,7 @@ func TestSubmitDelegatedInputActivityMismatchPreservesCompletedOutcome(t *testin
 	}}}
 	w := New(time.Second)
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "codex", Cwd: "/repo/zen", PaneAlive: true,
+		ID: sessionID, Command: "codex", Cwd: "/repo/mewla", PaneAlive: true,
 		Delegated: true, State: classifier.StateDone, Attention: "none",
 	}
 	w.workerOrder = append(w.workerOrder, sessionID)
@@ -221,7 +221,7 @@ func TestResolveDelegatedControlIsReadOnlyAcrossProviderActivityChanges(t *testi
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	now := time.Date(2026, 8, 11, 3, 37, 0, 0, time.UTC)
-	sessionID := "zen-worker-control-surface:@1"
+	sessionID := "mewla-worker-control-surface:@1"
 	identity := testSessionInputIdentity("codex")
 	ledger.seed(sessionID, TurnSnapshot{
 		SessionID: sessionID, TurnID: sessionID + ":turn:1", Status: TurnRunning,
@@ -237,7 +237,7 @@ func TestResolveDelegatedControlIsReadOnlyAcrossProviderActivityChanges(t *testi
 	}}}
 	w := New(time.Second)
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "codex", Cwd: "/repo/zen", PaneAlive: true,
+		ID: sessionID, Command: "codex", Cwd: "/repo/mewla", PaneAlive: true,
 		Delegated: true, State: classifier.StateRunning, Attention: "none",
 	}
 	w.workerOrder = append(w.workerOrder, sessionID)

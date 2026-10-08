@@ -107,7 +107,7 @@ func TestDSHNativeImageIntakeRejectsForeignPaths(t *testing.T) {
 	if err := os.WriteFile(path, image, 0600); err != nil {
 		t.Fatal(err)
 	}
-	body := "<zen_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":" + strconv.Quote(path) + "}]}</zen_attachments>"
+	body := "<mewla_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":" + strconv.Quote(path) + "}]}</mewla_attachments>"
 	blocks, err := dshPromptContent(body)
 	if err != nil || len(blocks) != 2 || blocks[1]["type"] != "image" {
 		t.Fatalf("native intake: %v %d", err, len(blocks))
@@ -129,7 +129,7 @@ func TestDSHNativeImageIntakeRejectsForeignPaths(t *testing.T) {
 }
 
 func TestDSHPersistedImageReplacesPhoneUploadReference(t *testing.T) {
-	text := `photo <zen_attachments>{"files":[{"name":"photo","path":"/uploads/temporary","content_type":"image/png"}]}</zen_attachments>`
+	text := `photo <mewla_attachments>{"files":[{"name":"photo","path":"/uploads/temporary","content_type":"image/png"}]}</mewla_attachments>`
 	var blocks []dshBlock
 	encoded := `[{"type":"text","text":` + strconv.Quote(text) + `},{"type":"image","attachment":{"attachmentId":"durable-image","mediaType":"image/png","name":"photo"}}]`
 	if err := json.Unmarshal([]byte(encoded), &blocks); err != nil {

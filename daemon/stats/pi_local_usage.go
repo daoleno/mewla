@@ -390,7 +390,7 @@ func piProjectName(headerCwd, fallbackProject string) string {
 }
 
 // decodePiProjectDir converts the encoded session directory name
-// "--home-user-workspace-zen--" (cwd with "/" replaced by "-", wrapped in
+// "--home-user-workspace-mewla--" (cwd with "/" replaced by "-", wrapped in
 // "--") back to the last path component, mirroring Pi's documented layout
 // on every platform (the replaced path uses "/" separators).
 func decodePiProjectDir(name string) string {

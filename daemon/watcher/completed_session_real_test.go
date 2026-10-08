@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestBDD_ZEN016_RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned(t *testing.T) {
+func TestBDD_016_RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
 	ambient := createHarnessPane(t, h.selected, "ambient-keep", "exec /bin/sh")
 
@@ -47,7 +47,7 @@ func TestBDD_ZEN016_RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned(t *te
 	}
 }
 
-func TestBDD_ZEN017_RealTmuxWrongSocketAndRebootOwnership(t *testing.T) {
+func TestBDD_017_RealTmuxWrongSocketAndRebootOwnership(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
 	foreign := createHarnessPane(t, h.defaultSocket, "gone-worker", "exec /bin/sh")
 	h.w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{

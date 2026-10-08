@@ -41,7 +41,7 @@ func TestPluginsRequirePairedDeviceAndPreserveRequestIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	headers := http.Header{}
-	headers.Set("Authorization", calendarAuthHeader(key, a.DaemonID(), "plugin-phone", "zen-connect"))
+	headers.Set("Authorization", calendarAuthHeader(key, a.DaemonID(), "plugin-phone", "mewla-connect"))
 	c, _, err := websocket.DefaultDialer.Dial(target, headers)
 	if err != nil {
 		t.Fatal(err)

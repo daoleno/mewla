@@ -27,7 +27,7 @@ import (
 	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
-	zenserver "github.com/daoleno/mewla/daemon/server"
+	mewlaserver "github.com/daoleno/mewla/daemon/server"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -68,7 +68,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := zenserver.New(a, nil, nil, nil, nil, nil, nil)
+	s := mewlaserver.New(a, nil, nil, nil, nil, nil, nil)
 	s.SetBrowser(m)
 	host := httptest.NewServer(s.Handler())
 	defer host.Close()
@@ -84,7 +84,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 		t.Helper()
 		raw, _ := json.Marshal(q)
 		req, _ := http.NewRequest("POST", host.URL+"/browser", bytes.NewReader(raw))
-		req.Header.Set("Authorization", signature("zen-browser"))
+		req.Header.Set("Authorization", signature("mewla-browser"))
 		resp, e := http.DefaultClient.Do(req)
 		if e != nil {
 			t.Fatal(e)
@@ -144,7 +144,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 	var frameMu sync.Mutex
 	dial := func() *viewer {
 		t.Helper()
-		header := http.Header{"Authorization": []string{signature("zen-browser-view:" + id)}}
+		header := http.Header{"Authorization": []string{signature("mewla-browser-view:" + id)}}
 		c, _, e := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(host.URL, "http")+"/browser/viewer?id="+id, header)
 		if e != nil {
 			t.Fatal(e)
@@ -266,7 +266,7 @@ func TestBrowserFirstProductFlow(t *testing.T) {
 	app := &controlApp{browsers: m, watcher: watcher}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cs := &control.Server{Path: filepath.Join(root, "run", "zen.sock"), Handler: app}
+	cs := &control.Server{Path: filepath.Join(root, "run", "control.sock"), Handler: app}
 	controlDone := make(chan error, 1)
 	go func() { controlDone <- cs.Run(ctx) }()
 	defer func() { cancel(); <-controlDone }()

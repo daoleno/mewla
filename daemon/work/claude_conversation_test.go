@@ -21,14 +21,14 @@ func TestParseClaudeConversation_PreservesLongCompletedAssistantMarkdown(t *test
 	writeJSONL(t, path,
 		map[string]any{
 			"type":      "system",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-long",
 			"uuid":      "sys-long",
 			"timestamp": "2026-07-12T02:00:00.000Z",
 		},
 		map[string]any{
 			"type":      "user",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-long",
 			"uuid":      "user-long",
 			"timestamp": "2026-07-12T02:00:01.000Z",
@@ -41,7 +41,7 @@ func TestParseClaudeConversation_PreservesLongCompletedAssistantMarkdown(t *test
 		},
 		map[string]any{
 			"type":      "assistant",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-long",
 			"uuid":      "asst-long",
 			"timestamp": "2026-07-12T02:00:02.000Z",
@@ -66,14 +66,14 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 	writeJSONL(t, path,
 		map[string]any{
 			"type":      "system",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-session",
 			"uuid":      "sys-1",
 			"timestamp": "2026-07-12T01:00:00.000Z",
 		},
 		map[string]any{
 			"type":      "user",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-session",
 			"uuid":      "user-1",
 			"timestamp": "2026-07-12T01:00:01.000Z",
@@ -86,7 +86,7 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 		},
 		map[string]any{
 			"type":      "assistant",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-session",
 			"uuid":      "asst-1",
 			"timestamp": "2026-07-12T01:00:02.000Z",
@@ -100,7 +100,7 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 						"id":   "toolu_read_1",
 						"name": "Read",
 						"input": map[string]any{
-							"file_path": "/repo/zen/daemon/work/codex_conversation.go",
+							"file_path": "/repo/mewla/daemon/work/codex_conversation.go",
 						},
 					},
 					{
@@ -117,7 +117,7 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 		},
 		map[string]any{
 			"type":      "user",
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-session",
 			"uuid":      "user-2",
 			"timestamp": "2026-07-12T01:00:03.000Z",
@@ -140,7 +140,7 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 		map[string]any{
 			"type":      "user",
 			"isMeta":    true,
-			"cwd":       "/repo/zen",
+			"cwd":       "/repo/mewla",
 			"sessionId": "claude-session",
 			"uuid":      "meta-1",
 			"timestamp": "2026-07-12T01:00:04.000Z",
@@ -152,7 +152,7 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 		map[string]any{
 			"type":        "assistant",
 			"isSidechain": true,
-			"cwd":         "/repo/zen",
+			"cwd":         "/repo/mewla",
 			"sessionId":   "claude-session",
 			"uuid":        "side-1",
 			"timestamp":   "2026-07-12T01:00:05.000Z",
@@ -185,7 +185,7 @@ func TestParseClaudeConversation_BuildsMarkdownThinkingAndTools(t *testing.T) {
 	if !got.Available || got.Source != claudeConversationSource || got.SessionID != "claude-session" {
 		t.Fatalf("conversation = %#v", got)
 	}
-	if got.CWD != "/repo/zen" {
+	if got.CWD != "/repo/mewla" {
 		t.Fatalf("cwd = %q", got.CWD)
 	}
 	if len(got.Events) != 5 {
@@ -429,7 +429,7 @@ func TestProviderConversationReaderClaudeFindsResumeSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	cwd := "/repo/zen"
+	cwd := "/repo/mewla"
 	projectDir := filepath.Join(home, ".claude", "projects", encodeClaudeProjectDir(cwd))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -489,8 +489,8 @@ func TestEncodeClaudeProjectDirMatchesClaudeLayout(t *testing.T) {
 	}{
 		{
 			name: "mewla brain workspace",
-			cwd:  "/home/daoleno/.zen/brain/workspace",
-			want: "-home-daoleno--zen-brain-workspace",
+			cwd:  "/home/daoleno/.mewla/brain/workspace",
+			want: "-home-daoleno--mewla-brain-workspace",
 		},
 		{
 			name: "dot free path",
@@ -510,10 +510,10 @@ func TestEncodeClaudeProjectDirMatchesClaudeLayout(t *testing.T) {
 func TestProviderConversationReaderClaudeFindsDotEncodedProjectLayout(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	cwd := "/home/daoleno/.zen/brain/workspace"
+	cwd := "/home/daoleno/.mewla/brain/workspace"
 	// This is Claude Code's observed directory name. Keep it explicit so the
 	// test proves lookup does not construct the old separator-only spelling.
-	projectDir := filepath.Join(home, ".claude", "projects", "-home-daoleno--zen-brain-workspace")
+	projectDir := filepath.Join(home, ".claude", "projects", "-home-daoleno--mewla-brain-workspace")
 	path := filepath.Join(projectDir, "brain-session.jsonl")
 	writeClaudeReaderTranscript(t, path, cwd, "brain-session", "host reply")
 	now := time.Now().UTC()
@@ -708,7 +708,7 @@ func TestProviderConversationReaderClaudeAllMalformedIsUnavailable(t *testing.T)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	cwd := "/repo/zen"
+	cwd := "/repo/mewla"
 	projectDir := filepath.Join(home, ".claude", "projects", encodeClaudeProjectDir(cwd))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -748,7 +748,7 @@ func TestProviderConversationReaderClaudeStartedAtSelectsMatchingSession(t *test
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	cwd := "/repo/zen"
+	cwd := "/repo/mewla"
 	projectDir := filepath.Join(home, ".claude", "projects", encodeClaudeProjectDir(cwd))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -810,7 +810,7 @@ func TestProviderConversationReaderClaudeAmbiguousSessionsYieldNotFound(t *testi
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	cwd := "/repo/zen"
+	cwd := "/repo/mewla"
 	projectDir := filepath.Join(home, ".claude", "projects", encodeClaudeProjectDir(cwd))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)

@@ -367,7 +367,7 @@ func sameMtime(left, right time.Time) bool {
 }
 
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".zen-work-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".mewla-work-*")
 	if err != nil {
 		return err
 	}

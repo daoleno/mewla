@@ -549,7 +549,7 @@ func drainTmuxEvents(events <-chan Event, quiet time.Duration) {
 func TestTmuxBackendViewSessionLivesOnTargetSocket(t *testing.T) {
 	requireTmux(t)
 	tmuxTmpDir := isolateTmuxServer(t)
-	daemonSocket := filepath.Join(tmuxTmpDir, "zen-daemon.sock")
+	daemonSocket := filepath.Join(tmuxTmpDir, "mewla-daemon.sock")
 	if err := exec.Command("tmux", "-S", daemonSocket, "new-session", "-d", "-s", "delegated", "sleep 300").Run(); err != nil {
 		t.Fatalf("create daemon-server source session: %v", err)
 	}

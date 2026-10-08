@@ -54,7 +54,7 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 		t.Logf("codex version=%s", strings.TrimSpace(string(out)))
 	}
 
-	artRoot := filepath.Join(os.Getenv("TMPDIR"), "zen-codex-live-effort-converge")
+	artRoot := filepath.Join(os.Getenv("TMPDIR"), "mewla-codex-live-effort-converge")
 	_ = os.RemoveAll(artRoot)
 	codexHome := filepath.Join(artRoot, "codex-home")
 	cwd := filepath.Join(artRoot, "cwd")
@@ -66,7 +66,7 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 	if err := exec.Command("git", "init", "-q", cwd).Run(); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"zen-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"mewla-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,7 +78,7 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 	root := t.TempDir()
 	// The app-server control socket must fit the unix SUN_LEN limit; the
 	// test tmpdir nests too deeply, so use a short dedicated control dir.
-	controlDir := filepath.Join(os.Getenv("TMPDIR"), "zen-live-ctl")
+	controlDir := filepath.Join(os.Getenv("TMPDIR"), "mewla-live-ctl")
 	_ = os.RemoveAll(controlDir)
 	t.Cleanup(func() { _ = os.RemoveAll(controlDir) })
 	owner, err := modelprofiles.StartOwner(modelprofiles.OwnerConfig{
@@ -140,7 +140,7 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 	wsServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	defer wsServer.Close()
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-live-effort", "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-live-effort", "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(wsServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -192,7 +192,7 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 	env := []string{
 		"CODEX_HOME=" + codexHome,
 		"HOME=" + artRoot,
-		"OPENAI_API_KEY=zen-loopback-placeholder-not-a-secret",
+		"OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
 		"TERM=xterm-256color",
 		"PATH=" + os.Getenv("PATH"),
 	}
@@ -214,12 +214,12 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 		t.Fatalf("app-server socket never appeared: %v\nlog:\n%s", err, trimTailLive(string(raw), 2000))
 	}
 
-	sess := fmt.Sprintf("zen-codex-live-effort-%d", time.Now().UnixNano())
+	sess := fmt.Sprintf("mewla-codex-live-effort-%d", time.Now().UnixNano())
 	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
 		"-e", "HOME="+artRoot,
-		"-e", "OPENAI_API_KEY=zen-loopback-placeholder-not-a-secret",
+		"-e", "OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
 		"-e", "TERM=xterm-256color",
 		"--", codexPath, "--remote", "unix://"+socketPath,
 		"--model", "gpt-5", "--config", `model_provider="openai"`,

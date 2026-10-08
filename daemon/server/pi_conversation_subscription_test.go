@@ -291,7 +291,7 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 
 // TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript reproduces the
 // real pre-durable-binding scenario at the server boundary: the window was
-// created before the @zen_worker_pi_session option existed (or the option was
+// created before the @mewla_worker_pi_session option existed (or the option was
 // lost), the node-based Pi rewrites its argv to bare "pi", and a daemon
 // restart re-discovers the window with no recoverable launch binding. The
 // subscription must auto-bind the exact Mewla-owned transcript for the cwd via
@@ -485,7 +485,7 @@ func waitForWatcherWorker(t *testing.T, w *watcher.Watcher, workerID string) *cl
 // the restart/reopen path end to end: run 1 creates the delegated Pi session
 // with the injected owned --session launch command; the daemon then restarts
 // (a fresh watcher with no in-memory launch record), and the window is
-// re-discovered from tmux where the durable @zen_worker_pi_session ownership
+// re-discovered from tmux where the durable @mewla_worker_pi_session ownership
 // binding survives while the pi process rewrites its argv to bare "pi". The
 // new subscription must snapshot the exact same transcript history with
 // stable event IDs — never a transcript_not_found empty state.

@@ -14,7 +14,7 @@ import (
 func TestClaudePasteWrappedPendingAdmission(t *testing.T) {
 	// Exact outer bytes from host transcript line 5020, Claude Code 2.1.285.
 	// Synthetic inner event avoids committing private daemon state.
-	payload := "<zen_work_event>\n{\"summary\":\"" + strings.Repeat("large event 你好 ", 150) + "\"}\n</zen_work_event>"
+	payload := "<mewla_work_event>\n{\"summary\":\"" + strings.Repeat("large event 你好 ", 150) + "\"}\n</mewla_work_event>"
 	wrapped := "\n\n<pasted_content id=\"4f28\">\n" + payload + "\n</pasted_content id=\"4f28\">\n"
 	at := time.Date(2026, 10, 6, 8, 56, 53, 983000000, time.UTC)
 	path := filepath.Join(t.TempDir(), "session.jsonl")

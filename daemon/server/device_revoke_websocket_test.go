@@ -48,7 +48,7 @@ func TestDeviceRevokeImmediatelyClosesAuthenticatedWebSocket(t *testing.T) {
 			privateKey,
 			manager.DaemonID(),
 			deviceID,
-			"zen-connect",
+			"mewla-connect",
 		),
 	)
 	conn, _, err := websocket.DefaultDialer.Dial(socketURL, header)
@@ -114,7 +114,7 @@ func TestDeviceRevokeImmediatelyClosesAuthenticatedWebSocket(t *testing.T) {
 			privateKey,
 			manager.DaemonID(),
 			deviceID,
-			"zen-connect",
+			"mewla-connect",
 		),
 	)
 	reconnected, response, reconnectErr := websocket.DefaultDialer.Dial(
@@ -242,7 +242,7 @@ func TestConcurrentRevokeCloseAndReconnectConverges(t *testing.T) {
 				privateKey,
 				manager.DaemonID(),
 				deviceID,
-				"zen-connect",
+				"mewla-connect",
 			),
 		)
 		conn, _, _ := websocket.DefaultDialer.Dial(socketURL, header)
@@ -1290,7 +1290,7 @@ func dialDeviceWebSocket(
 			privateKey,
 			daemonID,
 			deviceID,
-			"zen-connect",
+			"mewla-connect",
 		),
 	)
 	conn, _, err := websocket.DefaultDialer.Dial(socketURL, header)

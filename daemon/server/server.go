@@ -53,7 +53,7 @@ const codexConversationSubscriptionInterval = 220 * time.Millisecond
 const defaultScheduledResultLimit = 120
 const maxUploadFileBytes int64 = 2 << 30
 const maxUploadStoreBytes int64 = 8 << 30
-const uploadNameHeader = "X-Zen-Upload-Name"
+const uploadNameHeader = "X-Mewla-Upload-Name"
 const maxUploadNameBytes = 1024
 const maxUploadNameHeaderBytes = maxUploadNameBytes * 3
 const uploadRetention = 7 * 24 * time.Hour
@@ -435,7 +435,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		s.writeJSONWithAssertion(w, http.StatusOK, "zen-health", map[string]any{
+		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-health", map[string]any{
 			"status":            "ok",
 			"daemon_id":         s.auth.DaemonID(),
 			"daemon_public_key": s.auth.PublicKeyHex(),
@@ -499,17 +499,17 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if !websocket.IsWebSocketUpgrade(r) {
-		if _, ok := s.authenticateRequest(w, r, "zen-probe"); !ok {
+		if _, ok := s.authenticateRequest(w, r, "mewla-probe"); !ok {
 			return
 		}
-		s.writeJSONWithAssertion(w, http.StatusOK, "zen-probe", map[string]any{
+		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", map[string]any{
 			"ok":                true,
 			"daemon_id":         s.auth.DaemonID(),
 			"daemon_public_key": s.auth.PublicKeyHex(),
 		})
 		return
 	}
-	device, ok := s.authenticateRequest(w, r, "zen-connect")
+	device, ok := s.authenticateRequest(w, r, "mewla-connect")
 	if !ok {
 		return
 	}
@@ -747,7 +747,7 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSONWithAssertion(w, http.StatusOK, "zen-pair", map[string]any{
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-pair", map[string]any{
 		"ok":                true,
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
@@ -757,11 +757,11 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
-	device, ok := s.authenticateRequest(w, r, "zen-probe")
+	device, ok := s.authenticateRequest(w, r, "mewla-probe")
 	if !ok {
 		return
 	}
-	s.writeJSONWithAssertion(w, http.StatusOK, "zen-probe", map[string]any{
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", map[string]any{
 		"ok":                true,
 		"device_id":         device.ID,
 		"daemon_id":         s.auth.DaemonID(),
@@ -3375,7 +3375,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUploadWithLimits(w http.ResponseWriter, r *http.Request, limits uploadLimits) {
-	if _, ok := s.authenticateRequest(w, r, "zen-upload"); !ok {
+	if _, ok := s.authenticateRequest(w, r, "mewla-upload"); !ok {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -3402,7 +3402,7 @@ func (s *Server) handleUploadWithLimits(w http.ResponseWriter, r *http.Request, 
 	r.Body = http.MaxBytesReader(w, r.Body, limits.fileBytes)
 	started := time.Now()
 	log.Printf("upload start remote=%q content_length=%d transport=%q user_agent=%q name=%q",
-		r.RemoteAddr, r.ContentLength, r.Header.Get("X-Zen-Upload-Transport"), r.UserAgent(), originalName)
+		r.RemoteAddr, r.ContentLength, r.Header.Get("X-Mewla-Upload-Transport"), r.UserAgent(), originalName)
 	file, err := s.uploadStore.Save(r.Context(), r.Body, attachment.File{
 		Name: originalName, ContentType: r.Header.Get("Content-Type"), Size: r.ContentLength,
 	}, attachment.Limits{FileBytes: limits.fileBytes, StoreBytes: limits.storeBytes, Retention: limits.retention})
@@ -3428,7 +3428,7 @@ func (s *Server) handleUploadWithLimits(w http.ResponseWriter, r *http.Request, 
 		rateMiB = float64(file.Size) / (1024 * 1024) / duration.Seconds()
 	}
 	log.Printf("upload complete remote=%q bytes=%d duration_ms=%d rate_mib_s=%.2f transport=%q",
-		r.RemoteAddr, file.Size, duration.Milliseconds(), rateMiB, r.Header.Get("X-Zen-Upload-Transport"))
+		r.RemoteAddr, file.Size, duration.Milliseconds(), rateMiB, r.Header.Get("X-Mewla-Upload-Transport"))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"path": file.Path, "name": originalName})
 }

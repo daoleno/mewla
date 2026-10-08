@@ -431,7 +431,7 @@ func TestTopicRenameLabelAndCapabilityDisabled(t *testing.T) {
 	createTopicFor(t, manager)
 	threadID := manager.store.snapshot().Topics[0].MessageThreadID
 
-	owner.sessions = []brain.WorkerRef{{ID: "sess-a", Name: "Session A renamed (zen-worker-session-a:@2)", Delegated: true, Status: "running"}}
+	owner.sessions = []brain.WorkerRef{{ID: "sess-a", Name: "Session A renamed (mewla-worker-session-a:@2)", Delegated: true, Status: "running"}}
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
@@ -447,7 +447,7 @@ func TestTopicRenameLabelAndCapabilityDisabled(t *testing.T) {
 	}
 
 	// Capability disabled: no create ops are enqueued and status is actionable.
-	api.bot = User{ID: 7001, IsBot: true, Username: "zen_test_bot", Topics: false}
+	api.bot = User{ID: 7001, IsBot: true, Username: "mewla_test_bot", Topics: false}
 	if err := manager.refreshTopicCapability(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +479,7 @@ func TestTopicLabelMatchesSessionListTitle(t *testing.T) {
 	}{
 		{
 			name:    "canonical identity suffix is hidden",
-			session: brain.WorkerRef{ID: "session-1", Name: "telegram-topic-smoke (zen-worker-telegram-topic-smoke-1787669753941544264:@42)"},
+			session: brain.WorkerRef{ID: "session-1", Name: "telegram-topic-smoke (mewla-worker-telegram-topic-smoke-1787669753941544264:@42)"},
 			want:    "telegram-topic-smoke",
 		},
 		{

@@ -53,7 +53,7 @@ func TestValidateProgressRejectsAliasesAndCamelCaseLeaseIsNotAField(t *testing.T
 func TestApplyProgressUpdatesLifecycleFields(t *testing.T) {
 	now := time.Date(2026, 6, 8, 9, 0, 0, 0, time.UTC)
 	worker := &Worker{
-		ID:      "zen-worker-worker:@1",
+		ID:      "mewla-worker-worker:@1",
 		State:   StateRunning,
 		Summary: "previous",
 	}

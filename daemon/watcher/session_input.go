@@ -419,7 +419,7 @@ func (owner *sessionInputOwner) serialized(sessionID string, action func() error
 	return action()
 }
 
-const sessionInputReceiptOption = "zen_session_input_receipts"
+const sessionInputReceiptOption = "mewla_session_input_receipts"
 const sessionInputReceiptLedgerSchema = 1
 const sessionInputReceiptLedgerLimit = 64
 const sessionInputReceiptMaxBytes = 512
@@ -851,7 +851,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 			}
 		}
-		buffer := fmt.Sprintf("zen-session-input-%d-%d", os.Getpid(), sessionInputBufferSequence.Add(1))
+		buffer := fmt.Sprintf("mewla-session-input-%d-%d", os.Getpid(), sessionInputBufferSequence.Add(1))
 		if err := owner.io.loadBuffer(socket, buffer, payload); err != nil {
 			return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 		}

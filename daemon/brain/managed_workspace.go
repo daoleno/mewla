@@ -14,7 +14,7 @@ const (
 	executorManagedID        = "policy-executor"
 	handoffManagedID         = "policy-handoff"
 	calendarManagedID        = "policy-calendar"
-	managedMarkerPrefix      = "<!-- zen:brain-managed:"
+	managedMarkerPrefix      = "<!-- mewla:brain-managed:"
 	managedMarkerStartSuffix = ":start -->"
 	managedMarkerEndSuffix   = ":end -->"
 )

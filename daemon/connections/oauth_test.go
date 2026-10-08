@@ -279,14 +279,14 @@ func TestGoogleOAuthScopeDispatchAndRefreshFailure(t *testing.T) {
 		t.Error("unexpected endpoint")
 		return reply(404, `{}`), nil
 	})
-	mustHandle(t, m, Request{Action: "oauth_configure", Input: &Input{Integration: "google", OAuthClient: &OAuthClientConfig{ClientID: "test-client", ClientSecret: "google-client-secret", RedirectURL: "https://zen.example.com/plugins/oauth/callback"}}})
+	mustHandle(t, m, Request{Action: "oauth_configure", Input: &Input{Integration: "google", OAuthClient: &OAuthClientConfig{ClientID: "test-client", ClientSecret: "google-client-secret", RedirectURL: "https://mewla.example.com/plugins/oauth/callback"}}})
 	begin := mustHandle(t, m, Request{Action: "oauth_start", Input: &Input{Integration: "google", Name: "Google"}})
 	authURL, _ := url.Parse(begin.AuthorizationURL)
 	scopes = authURL.Query().Get("scope")
 	if authURL.Host != "accounts.google.com" || authURL.Query().Get("code_challenge") == "" || authURL.Query().Get("access_type") != "offline" {
 		t.Fatal("Google browser flow not configured")
 	}
-	request := httptest.NewRequest("GET", "https://zen.example.com/plugins/oauth/callback?"+url.Values{"code": {"fixture-code"}, "state": {authURL.Query().Get("state")}}.Encode(), nil)
+	request := httptest.NewRequest("GET", "https://mewla.example.com/plugins/oauth/callback?"+url.Values{"code": {"fixture-code"}, "state": {authURL.Query().Get("state")}}.Encode(), nil)
 	response := httptest.NewRecorder()
 	m.OAuthCallback(response, request)
 	if response.Code != 200 {
@@ -324,7 +324,7 @@ func TestGoogleOAuthScopeDispatchAndRefreshFailure(t *testing.T) {
 	begin = mustHandle(t, m, Request{Action: "oauth_start", Input: &Input{Integration: "google", Name: "Google writes", AllowWrites: true}})
 	authURL, _ = url.Parse(begin.AuthorizationURL)
 	scopes = authURL.Query().Get("scope")
-	request = httptest.NewRequest("GET", "https://zen.example.com/plugins/oauth/callback?"+url.Values{"code": {"fixture-code"}, "state": {authURL.Query().Get("state")}}.Encode(), nil)
+	request = httptest.NewRequest("GET", "https://mewla.example.com/plugins/oauth/callback?"+url.Values{"code": {"fixture-code"}, "state": {authURL.Query().Get("state")}}.Encode(), nil)
 	response = httptest.NewRecorder()
 	m.OAuthCallback(response, request)
 	if response.Code != 200 {
@@ -368,7 +368,7 @@ func TestGoogleOAuthScopeDispatchAndRefreshFailure(t *testing.T) {
 func TestRegisteredMCPClientBoundToResource(t *testing.T) {
 	calls := 0
 	m := testManager(t, func(r *http.Request) (*http.Response, error) { calls++; return reply(500, `{}`), nil })
-	client := &OAuthClientConfig{ClientID: "registered", ClientSecret: "fixture-client-secret", RedirectURL: "https://zen.example/plugins/oauth/callback"}
+	client := &OAuthClientConfig{ClientID: "registered", ClientSecret: "fixture-client-secret", RedirectURL: "https://mewla.example/plugins/oauth/callback"}
 	if _, err := m.Handle(context.Background(), Request{Action: "oauth_configure", Input: &Input{Integration: "mcp", OAuthClient: client}}); err == nil {
 		t.Fatal("unbound private MCP client accepted")
 	}

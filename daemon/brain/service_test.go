@@ -168,11 +168,11 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			name: "state done",
 			event: watcher.SessionEvent{
 				Type:     "worker_state_change",
-				WorkerID: "zen-worker-markerless:@1",
+				WorkerID: "mewla-worker-markerless:@1",
 				OldState: string(classifier.StateRunning),
 				NewState: string(classifier.StateDone),
 				Worker: &classifier.Worker{
-					ID: "zen-worker-markerless:@1", State: classifier.StateDone,
+					ID: "mewla-worker-markerless:@1", State: classifier.StateDone,
 					Summary: "Session starting", Delegated: true, PaneAlive: true,
 				},
 			},
@@ -181,11 +181,11 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			name: "state failed",
 			event: watcher.SessionEvent{
 				Type:     "worker_state_change",
-				WorkerID: "zen-worker-markerless:@1",
+				WorkerID: "mewla-worker-markerless:@1",
 				OldState: string(classifier.StateRunning),
 				NewState: string(classifier.StateFailed),
 				Worker: &classifier.Worker{
-					ID: "zen-worker-markerless:@1", State: classifier.StateFailed,
+					ID: "mewla-worker-markerless:@1", State: classifier.StateFailed,
 					Summary: "Session starting", Delegated: true, PaneAlive: true,
 				},
 			},
@@ -194,11 +194,11 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			name: "state blocked",
 			event: watcher.SessionEvent{
 				Type:     "worker_state_change",
-				WorkerID: "zen-worker-markerless:@1",
+				WorkerID: "mewla-worker-markerless:@1",
 				OldState: string(classifier.StateRunning),
 				NewState: string(classifier.StateBlocked),
 				Worker: &classifier.Worker{
-					ID: "zen-worker-markerless:@1", State: classifier.StateBlocked,
+					ID: "mewla-worker-markerless:@1", State: classifier.StateBlocked,
 					Summary: "Session starting", Delegated: true, PaneAlive: true,
 				},
 			},
@@ -207,9 +207,9 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			name: "metadata attention failed",
 			event: watcher.SessionEvent{
 				Type:     "worker_metadata_change",
-				WorkerID: "zen-worker-markerless:@1",
+				WorkerID: "mewla-worker-markerless:@1",
 				Worker: &classifier.Worker{
-					ID: "zen-worker-markerless:@1", State: classifier.StateRunning,
+					ID: "mewla-worker-markerless:@1", State: classifier.StateRunning,
 					Attention: "failed", NeedsAttention: true,
 					Summary: "Session starting", Delegated: true, PaneAlive: true,
 				},
@@ -219,9 +219,9 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			name: "metadata attention user input",
 			event: watcher.SessionEvent{
 				Type:     "worker_metadata_change",
-				WorkerID: "zen-worker-markerless:@1",
+				WorkerID: "mewla-worker-markerless:@1",
 				Worker: &classifier.Worker{
-					ID: "zen-worker-markerless:@1", State: classifier.StateRunning,
+					ID: "mewla-worker-markerless:@1", State: classifier.StateRunning,
 					Attention: "user_input", NeedsAttention: true,
 					Summary: "Resolve the delegated Session request.", Delegated: true, PaneAlive: true,
 				},
@@ -231,11 +231,11 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			name: "removed",
 			event: watcher.SessionEvent{
 				Type:     "worker_removed",
-				WorkerID: "zen-worker-markerless:@1",
+				WorkerID: "mewla-worker-markerless:@1",
 				OldState: string(classifier.StateRunning),
 				NewState: string(classifier.StateRemoved),
 				Worker: &classifier.Worker{
-					ID: "zen-worker-markerless:@1", State: classifier.StateRemoved,
+					ID: "mewla-worker-markerless:@1", State: classifier.StateRemoved,
 					Summary: "Session starting", Delegated: true,
 				},
 			},
@@ -294,7 +294,7 @@ func TestReconcileDelegatedSessionsWithoutTurnNeverRoutesRawState(t *testing.T) 
 	}
 	now := time.Date(2026, 8, 9, 6, 0, 0, 0, time.UTC)
 	store.now = func() time.Time { return now }
-	sessionID := "zen-worker-markerless:@1"
+	sessionID := "mewla-worker-markerless:@1"
 	item, err := store.CreateWork(Work{
 		Title:            "Markerless delegated session",
 		Objective:        "No lifecycle began without a canonical turn.",
@@ -340,7 +340,7 @@ func TestRouteSessionEventWithCanonicalTurnRedispatchesOnly(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 9, 6, 0, 0, 0, time.UTC)
 	store.now = func() time.Time { return now }
-	sessionID := "zen-worker-canonical:@1"
+	sessionID := "mewla-worker-canonical:@1"
 	item, err := store.CreateWork(Work{
 		Title:            "Canonical delegated session",
 		Objective:        "The ledger owns lifecycle.",
@@ -440,7 +440,7 @@ func (w *fakeWatcher) CreateSession(_ string, opts watcher.CreateSessionOptions)
 	if w.sessions == nil {
 		w.sessions = map[string]*classifier.Worker{}
 	}
-	id := "zen-worker-" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(opts.Name), " ", "-"))
+	id := "mewla-worker-" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(opts.Name), " ", "-"))
 	if opts.Hidden {
 		id += "-hidden"
 	}
@@ -1162,9 +1162,9 @@ func TestHostGenerationReplacementRetiresForegroundAndAllowsNextTurn(t *testing.
 	}
 }
 
-// ZEN003: Given actual foreground execution, when a result arrives, then it is
+// BDD-003: Given actual foreground execution, when a result arrives, then it is
 // deferred without interruption and delivered after the exact terminal edge.
-func TestBDD_ZEN003_BusyBrainDefersUntilProviderTurnEnds(t *testing.T) {
+func TestBDD_003_BusyBrainDefersUntilProviderTurnEnds(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1205,7 +1205,7 @@ func TestBDD_ZEN003_BusyBrainDefersUntilProviderTurnEnds(t *testing.T) {
 		t.Fatalf("running foreground reconcile woke=%v err=%v", woke, err)
 	}
 
-	item := createSignalTestWork(t, store, "Ready behind persistent Host", "zen-worker-worker:@1")
+	item := createSignalTestWork(t, store, "Ready behind persistent Host", "mewla-worker-worker:@1")
 	event := appendSignalTestEvent(t, store, item, "persistent-host-output")
 	if woke, err := service.ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("busy Host admitted pending review: woke=%v err=%v", woke, err)
@@ -1273,7 +1273,7 @@ func TestSameReviewEventRequiresExplicitReplayAfterHandlingEnds(t *testing.T) {
 		turnStore:        store,
 	}
 	service := NewService(store, fw, nil)
-	item := createSignalTestWork(t, store, "Redeliver one canonical review", "zen-worker-worker:@1")
+	item := createSignalTestWork(t, store, "Redeliver one canonical review", "mewla-worker-worker:@1")
 	event := appendSignalTestEvent(t, store, item, "review-redelivery")
 
 	if delivered, err := service.ReconcileHostLane(); err != nil || !delivered {
@@ -1500,7 +1500,7 @@ func TestServiceSnapshotReusesGrokHostEvenWhenClassifiedBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostID := "zen-worker-brain-reuse:@29"
+	hostID := "mewla-worker-brain-reuse:@29"
 	if err := store.SetHostSession(hostID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -1562,7 +1562,7 @@ func TestServiceSnapshotReplacesHostWhenTmuxSessionMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing:@1"
+	oldID := "mewla-worker-brain-missing:@1"
 	if err := store.SetHostSession(oldID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -1612,7 +1612,7 @@ func TestServiceSnapshotResumesProviderSessionWhenTmuxMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -1706,7 +1706,7 @@ func TestServiceSnapshotMissingTmuxResumePreservesChatThreadIdentity(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-1786013209881380707:@7750"
+	oldID := "mewla-worker-brain-1786013209881380707:@7750"
 	providerSessionID := "019fd6ae-d6df-7341-bedc-706f7c4977bf"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
 		t.Fatal(err)
@@ -1779,7 +1779,7 @@ func TestServiceMissingTmuxFailClosedTable(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			oldID := "zen-worker-brain-old:@1"
+			oldID := "mewla-worker-brain-old:@1"
 			if err := store.SetHostSession(oldID, tc.executorID); err != nil {
 				t.Fatal(err)
 			}
@@ -1826,7 +1826,7 @@ func TestServiceSnapshotDoesNotRebindUnrelatedHostAsContinuity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@292"
+	deadID := "mewla-worker-brain-dead:@292"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -1939,7 +1939,7 @@ func TestServiceSnapshotResumeBindFailureKillsNewHostKeepsOld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old:@1"
+	oldID := "mewla-worker-brain-old:@1"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
 		t.Fatal(err)
@@ -1993,7 +1993,7 @@ func TestProjectionSnapshotAbsentHostDoesNotMutate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-proj:@1"
+	oldID := "mewla-worker-brain-proj:@1"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
 		t.Fatal(err)
@@ -2037,7 +2037,7 @@ func TestServiceSnapshotProbeUnknownPreservesBindingCreatesZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-probe-unknown:@1"
+	oldID := "mewla-worker-brain-probe-unknown:@1"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -2090,8 +2090,8 @@ func TestServiceSnapshotRecoverCandidateProbeUnknownCreatesZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -2164,8 +2164,8 @@ func TestServiceSnapshotRecoverLiveMigratesProviderBindingAtomically(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			deadID := "zen-worker-brain-dead:@1"
-			aliveID := "zen-worker-brain-alive:@2"
+			deadID := "mewla-worker-brain-dead:@1"
+			aliveID := "mewla-worker-brain-alive:@2"
 			if err := store.SetHostSession(deadID, "codex"); err != nil {
 				t.Fatal(err)
 			}
@@ -2217,8 +2217,8 @@ func TestServiceSnapshotRecoverLiveBindFailureKeepsOldDoesNotKill(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -2278,7 +2278,7 @@ func TestServiceSnapshotAdoptsLiveHostProviderWhenExecutorIDEmpty(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostID := "zen-worker-brain-live-grok:@42"
+	hostID := "mewla-worker-brain-live-grok:@42"
 	// Record id only — empty executor_id (legacy / partial write).
 	if err := store.SetHostSessionID(hostID); err != nil {
 		t.Fatal(err)
@@ -2335,8 +2335,8 @@ func TestServiceSnapshotRebindsAliveHostWhenRecordedTargetMissing(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@292"
-	aliveID := "zen-worker-brain-alive:@300"
+	deadID := "mewla-worker-brain-dead:@292"
+	aliveID := "mewla-worker-brain-alive:@300"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
 	}
@@ -2390,7 +2390,7 @@ func TestServiceSnapshotAuditsProviderMismatchReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old-grok:@1"
+	oldID := "mewla-worker-brain-old-grok:@1"
 	if err := store.SetHostSession(oldID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -2621,7 +2621,7 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldHostID := "zen-worker-brain-old:@1"
+	oldHostID := "mewla-worker-brain-old:@1"
 	if err := store.SetHostSession(oldHostID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -2722,7 +2722,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 	if err := os.WriteFile(store.policyPath("handoff.md"), []byte("# Old Handoff\n\nKeep handoff notes.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	delegatedID := "zen-worker-worker:@1"
+	delegatedID := "mewla-worker-worker:@1"
 	fw := &fakeWatcher{
 		workers: []*classifier.Worker{
 			{
@@ -2912,7 +2912,7 @@ func TestServiceSnapshotReplacesMismatchedHostSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old:@1"
+	oldID := "mewla-worker-brain-old:@1"
 	if err := store.SetHostSessionID(oldID); err != nil {
 		t.Fatal(err)
 	}

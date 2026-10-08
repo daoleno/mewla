@@ -147,7 +147,7 @@ func TestMissingTmuxTransferPersistFailureKillsAndKeepsOldResumable(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -160,7 +160,7 @@ func TestMissingTmuxTransferPersistFailureKillsAndKeepsOldResumable(t *testing.T
 	routes := &fakeRouteLifecycle{
 		resumeFound:     true,
 		resumeCmd:       "codex resume " + providerSessionID,
-		resumeEnv:       map[string]string{"OPENAI_API_KEY": "zen-loopback-placeholder-not-a-secret"},
+		resumeEnv:       map[string]string{"OPENAI_API_KEY": "mewla-loopback-placeholder-not-a-secret"},
 		transferErr:     errors.New("injected transfer persist failure"),
 		transferApplied: false,
 	}
@@ -200,7 +200,7 @@ func TestMissingTmuxTransferAppliedNondurableFailsClosedNoSuccess(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -288,7 +288,7 @@ func TestProviderMismatchReplacementReleasesRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old-grok:@1"
+	oldID := "mewla-worker-brain-old-grok:@1"
 	if err := store.SetHostSession(oldID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestProviderMismatchKillFailureStillLivePreservesAndAborts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old-grok:@1"
+	oldID := "mewla-worker-brain-old-grok:@1"
 	if err := store.SetHostSession(oldID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -366,7 +366,7 @@ func TestProviderMismatchReleaseFailureSurfaced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old-grok:@1"
+	oldID := "mewla-worker-brain-old-grok:@1"
 	if err := store.SetHostSession(oldID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func TestResumeRouteTransferFailureSurfacesKillError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -439,8 +439,8 @@ func TestRecoverLiveTransfersRouteBeforeHostBind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -494,8 +494,8 @@ func TestRecoverLiveRouteTransferFailurePreservesBindingNoAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -550,8 +550,8 @@ func TestRecoverLiveNoRouteTransferIsNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -602,8 +602,8 @@ func TestRecoverLiveRouteTransferAppliedNondurableCompensatesNoBind(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -671,8 +671,8 @@ func TestRecoverLiveRouteTransferAppliedNondurableCompensationAmbiguityPreserves
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -729,7 +729,7 @@ func TestResumeRouteTransferAppliedNondurableCompensatesKillsSpawn(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -793,7 +793,7 @@ func TestResumeRouteTransferAppliedNondurableCompensationFailurePreservesLive(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -852,8 +852,8 @@ func TestRecoverLiveBindFailureAfterTransferRollsRouteNoAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)
@@ -913,7 +913,7 @@ func TestRouteTransferRollbackFailureRetainsLiveOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -1137,7 +1137,7 @@ func TestResumeNondurableTransferRealOwnerRestoresRestartVisibleRoute(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-bound:@9"
+	oldID := "mewla-worker-brain-missing-bound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := "/home/daoleno/.codex/sessions/2026/08/06/rollout-" + providerSessionID + ".jsonl"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -1202,8 +1202,8 @@ func TestRecoverNondurableTransferRealOwnerRestoresRestartVisibleRoute(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadID := "zen-worker-brain-dead:@1"
-	aliveID := "zen-worker-brain-alive:@2"
+	deadID := "mewla-worker-brain-dead:@1"
+	aliveID := "mewla-worker-brain-alive:@2"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	if err := store.SetHostSession(deadID, "codex"); err != nil {
 		t.Fatal(err)

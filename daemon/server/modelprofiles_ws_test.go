@@ -81,7 +81,7 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -560,7 +560,7 @@ func TestActivateSessionRouteAppliedNotDurableReturnsOutcome(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -631,7 +631,7 @@ func TestModelProfileCatalogMutationsDirSyncAppliedNotDurable(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -827,7 +827,7 @@ func TestWSActivateLaunchedSurvivesHistoryTrimAndRestart(t *testing.T) {
 	srv.SetModelProfiles(owner)
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -899,7 +899,7 @@ func TestWSActivateLaunchedSurvivesHistoryTrimAndRestart(t *testing.T) {
 	httpServer2 := httptest.NewServer(http.HandlerFunc(srv2.handleWS))
 	t.Cleanup(httpServer2.Close)
 	header2 := http.Header{}
-	header2.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header2.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn2, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer2.URL, "http"), header2)
 	if err != nil {
 		t.Fatal(err)
@@ -1139,7 +1139,7 @@ func TestKillWorkerWebSocketSurfacesTeardownError(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)

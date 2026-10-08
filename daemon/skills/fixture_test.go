@@ -38,7 +38,7 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) options(cwd string) InventoryOptions {
 	return InventoryOptions{
-		Home: f.Home, ZenStateDir: f.StateDir, CWD: cwd, Env: f.Env,
+		Home: f.Home, StateDir: f.StateDir, CWD: cwd, Env: f.Env,
 		Now: func() time.Time { return f.Now },
 	}
 }

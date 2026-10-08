@@ -77,7 +77,7 @@ func TestVerifyManifestSignatureAndSchema(t *testing.T) {
 	if _, err := VerifyManifest(raw, signature, publicKey); err == nil {
 		t.Fatal("tampered signature verified")
 	}
-	foreign := []byte(`{"schema_version":2,"product":"zen","version":"1.2.3-beta.1","artifacts":[]}`)
+	foreign := []byte(`{"schema_version":2,"product":"other","version":"1.2.3-beta.1","artifacts":[]}`)
 	if _, err := VerifyManifest(foreign, ed25519.Sign(privateKey, foreign), publicKey); err == nil {
 		t.Fatal("manifest for another product verified")
 	}

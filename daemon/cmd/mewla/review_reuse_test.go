@@ -20,7 +20,7 @@ func TestWorkSendReusesCompletedSessionWithoutResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sessionID = "zen-worker-reusable:@500"
+	const sessionID = "mewla-worker-reusable:@500"
 	oldTurnID := admitControlWorkOwner(t, store, item.ID, sessionID)
 	oldTurn, found, err := store.Turn(sessionID)
 	if err != nil || !found {

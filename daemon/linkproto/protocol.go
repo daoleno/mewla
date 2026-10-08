@@ -13,7 +13,7 @@ import (
 
 const (
 	CurrentVersion = 2
-	ControlALPN    = "zen-link-control/2"
+	ControlALPN    = "mewla-link-control/2"
 	MaxFrameBytes  = 64 << 10
 
 	TypeRegister          = "register"

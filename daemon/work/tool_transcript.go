@@ -178,7 +178,7 @@ func isBrainCodexWorker(worker classifier.Worker) bool {
 		return true
 	}
 	sessionName, _, _ := strings.Cut(strings.TrimSpace(worker.ID), ":")
-	return strings.HasPrefix(sessionName, "zen-worker-brain-")
+	return strings.HasPrefix(sessionName, "mewla-worker-brain-")
 }
 
 func matchCodexTranscriptToWorkerProcess(candidates []codexTranscriptCandidate, processID int) (codexTranscriptCandidate, bool) {

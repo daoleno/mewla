@@ -39,7 +39,7 @@ func TestPortableHistorySamePIDCodex(t *testing.T) {
 	ver := runVersion(t, codexPath, "CODEX_HOME")
 	t.Logf("codex version=%s", ver)
 
-	artRoot := filepath.Join(tmpdir(t), "zen-portable-samepid-codex")
+	artRoot := filepath.Join(tmpdir(t), "mewla-portable-samepid-codex")
 	_ = os.RemoveAll(artRoot)
 	if err := os.MkdirAll(artRoot, 0o700); err != nil {
 		t.Fatal(err)
@@ -51,7 +51,7 @@ func TestPortableHistorySamePIDCodex(t *testing.T) {
 	if err := exec.Command("git", "init", "-q", cwd).Run(); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"zen-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"mewla-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -93,7 +93,7 @@ func TestPortableHistorySamePIDCodex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sess := fmt.Sprintf("zen-samepid-codex-%d", time.Now().UnixNano())
+	sess := fmt.Sprintf("mewla-samepid-codex-%d", time.Now().UnixNano())
 	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
@@ -201,7 +201,7 @@ func TestPortableHistorySamePIDClaude(t *testing.T) {
 	verOut, _ := exec.Command(claudePath, "--version").CombinedOutput()
 	t.Logf("claude version=%s", strings.TrimSpace(string(verOut)))
 
-	artRoot := filepath.Join(tmpdir(t), "zen-portable-samepid-claude")
+	artRoot := filepath.Join(tmpdir(t), "mewla-portable-samepid-claude")
 	_ = os.RemoveAll(artRoot)
 	claudeCfg := filepath.Join(artRoot, "claude")
 	cwd := filepath.Join(artRoot, "cwd")
@@ -242,7 +242,7 @@ func TestPortableHistorySamePIDClaude(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sess := fmt.Sprintf("zen-samepid-claude-%d", time.Now().UnixNano())
+	sess := fmt.Sprintf("mewla-samepid-claude-%d", time.Now().UnixNano())
 	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "HOME="+artRoot,

@@ -10,6 +10,6 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o mewla ./cmd/mewla/
 FROM alpine:3.21
 RUN apk add --no-cache tmux
 COPY --from=builder /build/mewla /usr/local/bin/mewla
-RUN ln -s mewla /usr/local/bin/zen
+RUN ln -s mewla /usr/local/bin/mewla
 EXPOSE 9876
 ENTRYPOINT ["mewla"]

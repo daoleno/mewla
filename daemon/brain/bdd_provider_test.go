@@ -27,7 +27,7 @@ import (
 // This is a hybrid gate: real provider reasoning, real Store/Service persistence
 // and event admission, but scripted Session transport. It is not a native CLI
 // provider/watcher end-to-end proof. No tools, subprocess agents or live state.
-func TestBDD_ZEN011_RealProviderDecision(t *testing.T) {
+func TestBDD_011_RealProviderDecision(t *testing.T) {
 	if os.Getenv("MEWLA_BDD_REAL_PROVIDER") != "1" {
 		t.Skip("opt-in real provider: see docs/behavior-testing.md; not real-AI evidence when skipped")
 	}
@@ -288,11 +288,11 @@ func runBDDProviderDecision(t *testing.T, call bddProviderCall, evidenceKind str
 	if len(fw.sentCalls) != 2 {
 		t.Fatal("behavior_failure: business input or review replayed")
 	}
-	evidence, _ := json.Marshal(map[string]any{"scenario": "ZEN011", "evidence_kind": evidenceKind, "outcome": "pass", "calls": 2, "oracle_checked": true, "event_delivered": true, "decision_durable": true, "owned_session_removed": true, "unrelated_sessions_preserved": true})
+	evidence, _ := json.Marshal(map[string]any{"scenario": "BDD-011", "evidence_kind": evidenceKind, "outcome": "pass", "calls": 2, "oracle_checked": true, "event_delivered": true, "decision_durable": true, "owned_session_removed": true, "unrelated_sessions_preserved": true})
 	t.Log(string(evidence))
 }
 
-func TestBDD_ZEN012_ProviderPathBudgetAndFailures(t *testing.T) {
+func TestBDD_012_ProviderPathBudgetAndFailures(t *testing.T) {
 	t.Run("responses-loop", func(t *testing.T) {
 		var calls atomic.Int32
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

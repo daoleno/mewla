@@ -144,7 +144,7 @@ func TestParseCursorConversation_PreservesLongCompletedAssistantMarkdown(t *test
 						"type": "tool_use",
 						"name": "Read",
 						"input": map[string]any{
-							"path": "/repo/zen/fixtures/long-tool-pad.txt",
+							"path": "/repo/mewla/fixtures/long-tool-pad.txt",
 							"pad":  toolPad,
 						},
 					},
@@ -258,7 +258,7 @@ func TestProviderConversationReaderCursorFindsProjectTranscript(t *testing.T) {
 
 func TestProviderConversationReaderFreshCursorDoesNotBorrowAnotherCursorSession(t *testing.T) {
 	home := t.TempDir()
-	cwd := "/home/daoleno/workspace/zen"
+	cwd := "/home/daoleno/workspace/mewla"
 	now := time.Date(2026, 7, 17, 10, 50, 11, 0, time.UTC)
 	oldSessionID := "7822da8a-bd40-4022-98f6-701edd2307c8"
 	oldTranscriptPath := filepath.Join(
@@ -420,9 +420,9 @@ func TestParseCursorConversation_AssistantRowsDoNotSettleActivity(t *testing.T) 
 
 func TestProviderConversationReaderCursorResolvesHiddenWorkspaceViaTrustedMarker(t *testing.T) {
 	home := t.TempDir()
-	cwd := "/home/daoleno/.zen/worktrees/zen/terminal-native-scroll-perf"
+	cwd := "/home/daoleno/.mewla/worktrees/mewla/terminal-native-scroll-perf"
 	encodedName := encodeCursorProjectDir(cwd)
-	actualName := "home-daoleno-zen-worktrees-zen-terminal-native-scroll-perf"
+	actualName := "home-daoleno-mewla-worktrees-mewla-terminal-native-scroll-perf"
 	if encodedName == actualName {
 		t.Fatalf("fixture requires Cursor private name to differ from encodeCursorProjectDir: %q", encodedName)
 	}
@@ -436,7 +436,7 @@ func TestProviderConversationReaderCursorResolvesHiddenWorkspaceViaTrustedMarker
 	t.Setenv("HOME", home)
 
 	got, err := NewProviderConversationReader().Load(classifier.Worker{
-		ID:        "zen-worker-terminal-native-scroll-recovery-3:@14",
+		ID:        "mewla-worker-terminal-native-scroll-recovery-3:@14",
 		Command:   "cursor-agent --force --sandbox disabled",
 		Cwd:       cwd,
 		StartedAt: now.Add(-time.Minute),
@@ -455,18 +455,18 @@ func TestProviderConversationReaderCursorResolvesHiddenWorkspaceViaTrustedMarker
 
 func TestProviderConversationReaderCursorMarkerFallbackRejectsUnsafeAndForeignSources(t *testing.T) {
 	home := t.TempDir()
-	cwd := "/home/daoleno/.zen/worktrees/zen/git-diff-performance"
+	cwd := "/home/daoleno/.mewla/worktrees/mewla/git-diff-performance"
 	now := time.Now().UTC()
 	startedAt := now.Add(-time.Minute)
 	t.Setenv("HOME", home)
 
 	ownSession := "6c472972-9e28-4480-9bac-d24573b38ff8"
 	ownPath := writeCursorHiddenWorkspaceTranscript(
-		t, home, cwd, "home-daoleno-zen-worktrees-zen-git-diff-performance", ownSession, "own session", now,
+		t, home, cwd, "home-daoleno-mewla-worktrees-mewla-git-diff-performance", ownSession, "own session", now,
 	)
 
 	writeCursorHiddenWorkspaceTranscript(
-		t, home, "/home/daoleno/.zen/worktrees/zen/other-workspace",
+		t, home, "/home/daoleno/.mewla/worktrees/mewla/other-workspace",
 		"mismatched-marker", "mismatched-session", "foreign workspace", now,
 	)
 
@@ -488,7 +488,7 @@ func TestProviderConversationReaderCursorMarkerFallbackRejectsUnsafeAndForeignSo
 
 	reader := NewProviderConversationReader()
 	worker := classifier.Worker{
-		ID:        "zen-worker-git-diff-performance-recovery-3:@31",
+		ID:        "mewla-worker-git-diff-performance-recovery-3:@31",
 		Command:   "cursor-agent --force --sandbox disabled",
 		Cwd:       cwd,
 		StartedAt: startedAt,
@@ -514,8 +514,8 @@ func TestProviderConversationReaderCursorMarkerFallbackRejectsUnsafeAndForeignSo
 
 func TestProviderConversationReaderCursorProjectRootCacheIsSubscriptionLocal(t *testing.T) {
 	home := t.TempDir()
-	cwd := "/home/daoleno/.zen/worktrees/zen/cache-probe"
-	otherCWD := "/home/daoleno/.zen/worktrees/zen/cache-other"
+	cwd := "/home/daoleno/.mewla/worktrees/mewla/cache-probe"
+	otherCWD := "/home/daoleno/.mewla/worktrees/mewla/cache-other"
 	now := time.Now().UTC()
 	t.Setenv("HOME", home)
 
@@ -586,13 +586,13 @@ func TestProviderConversationReaderCursorProjectRootCacheIsSubscriptionLocal(t *
 
 func TestProviderConversationReaderCursorForeignDirectRootDoesNotHideMarkerOwner(t *testing.T) {
 	home := t.TempDir()
-	cwd := "/home/daoleno/.zen/worktrees/zen/marker-owner"
-	foreignCWD := "/home/daoleno/.zen/worktrees/zen/other-workspace"
+	cwd := "/home/daoleno/.mewla/worktrees/mewla/marker-owner"
+	foreignCWD := "/home/daoleno/.mewla/worktrees/mewla/other-workspace"
 	now := time.Now().UTC()
 	t.Setenv("HOME", home)
 
 	encodedName := encodeCursorProjectDir(cwd)
-	hashedName := "home-daoleno-zen-worktrees-zen-marker-owner"
+	hashedName := "home-daoleno-mewla-worktrees-mewla-marker-owner"
 	if encodedName == hashedName {
 		t.Fatalf("fixture requires hashed private name to differ from encode: %q", encodedName)
 	}
@@ -626,7 +626,7 @@ func TestProviderConversationReaderCursorForeignDirectRootDoesNotHideMarkerOwner
 
 func TestProviderConversationReaderCursorProjectRootCacheRetriesAndDropsDeadRoots(t *testing.T) {
 	home := t.TempDir()
-	cwd := "/home/daoleno/.zen/worktrees/zen/root-replace"
+	cwd := "/home/daoleno/.mewla/worktrees/mewla/root-replace"
 	now := time.Now().UTC()
 	t.Setenv("HOME", home)
 

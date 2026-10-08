@@ -10,9 +10,9 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-// ZEN001: Given a delegated result, when Brain explicitly decides, then only
+// BDD-001: Given a delegated result, when Brain explicitly decides, then only
 // its completed owned Session is reclaimed; restart and duplicates preserve it.
-func TestBDD_ZEN001_DurableDecisionCleanup(t *testing.T) {
+func TestBDD_001_DurableDecisionCleanup(t *testing.T) {
 	for _, scenario := range []string{"done", "failed", "accept-before-cleanup-crash", "cleanup-failure", "reused-session"} {
 		t.Run(scenario, func(t *testing.T) {
 			root := t.TempDir()
@@ -152,9 +152,9 @@ func TestBDD_ZEN001_DurableDecisionCleanup(t *testing.T) {
 
 // Transport is scripted; all result, admission and decision persistence is real.
 // This reproduces the Sep 6 unfinished handler blocking the Sep 7 result.
-// ZEN002: Given an unfinished historical handler, when independent Work ends,
+// BDD-002: Given an unfinished historical handler, when independent Work ends,
 // then its exact result reaches the free Brain lane without deleting history.
-func TestBDD_ZEN002_StaleDeliveredHandlerIncident(t *testing.T) {
+func TestBDD_002_StaleDeliveredHandlerIncident(t *testing.T) {
 	t.Run("missed-terminal-edge", func(t *testing.T) { testCompletionLoopStaleDeliveredHandler(t, false) })
 	t.Run("transcript-replacement-and-restart", func(t *testing.T) { testCompletionLoopStaleDeliveredHandler(t, true) })
 }
@@ -238,7 +238,7 @@ func (w *bddCleanupWatcher) KillCompletedSession(sessionID, turnID string) error
 	return w.fakeWatcher.KillCompletedSession(sessionID, turnID)
 }
 
-func TestBDD_ZEN006_UnrelatedCleanupCannotInvalidateDecision(t *testing.T) {
+func TestBDD_006_UnrelatedCleanupCannotInvalidateDecision(t *testing.T) {
 	// Given historical accepted Work with a genuine cleanup ownership conflict.
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -283,7 +283,7 @@ func TestBDD_ZEN006_UnrelatedCleanupCannotInvalidateDecision(t *testing.T) {
 	}
 }
 
-func TestBDD_ZEN018_StartupReconciliationAbsentCompletedIsIdempotent(t *testing.T) {
+func TestBDD_018_StartupReconciliationAbsentCompletedIsIdempotent(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

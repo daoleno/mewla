@@ -33,7 +33,7 @@ func (w *completionControlWatcher) UpdateWorkerProgress(id string, progress clas
 	return w.fakeControlWatcher.UpdateWorkerProgress(id, progress)
 }
 
-func TestBDD_ZEN013_DecisionSavedWithCleanupPending(t *testing.T) {
+func TestBDD_013_DecisionSavedWithCleanupPending(t *testing.T) {
 	// Given a genuine cleanup failure on this exact completed owned Session.
 	root := t.TempDir()
 	store, err := brain.NewStore(root)
@@ -83,9 +83,9 @@ func TestBDD_ZEN013_DecisionSavedWithCleanupPending(t *testing.T) {
 
 // Real CLI, Unix control server, Store, Service and admission ledger. Provider
 // transport and the explicit model decision are scripted, not a live LLM test.
-// ZEN004: Given an admitted Worker, when its real CLI submits exact progress,
+// BDD-004: Given an admitted Worker, when its real CLI submits exact progress,
 // then durable delivery, explicit decision and exact cleanup complete in order.
-func TestBDD_ZEN004_CLIReportToDecisionAndSessionRemoval(t *testing.T) {
+func TestBDD_004_CLIReportToDecisionAndSessionRemoval(t *testing.T) {
 	root := t.TempDir()
 	store, err := brain.NewStore(root)
 	if err != nil {

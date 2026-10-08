@@ -148,7 +148,7 @@ type StateDirCheck struct {
 type ListenCheck struct {
 	Addr        string      `json:"addr"`
 	Available   bool        `json:"available"`
-	ZenRunning  bool        `json:"zen_running"`
+	DaemonRunning  bool        `json:"daemon_running"`
 	DaemonID    string      `json:"daemon_id,omitempty"`
 	Status      Status      `json:"status"`
 	Remediation Remediation `json:"remediation,omitempty"`

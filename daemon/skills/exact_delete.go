@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-const deleteTrashDir = ".zen-trash"
+const deleteTrashDir = ".mewla-trash"
 
 type exactDirectoryEntry struct {
 	Kind          string

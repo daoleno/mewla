@@ -5,13 +5,13 @@ services:
       dockerfile: daemon/Dockerfile.relay
     restart: unless-stopped
     environment:
-      ZEN_LINK_CONNECTOR_TOKEN: ${ZEN_LINK_CONNECTOR_TOKEN:?set a random connector token}
+      MEWLA_LINK_CONNECTOR_TOKEN: ${MEWLA_LINK_CONNECTOR_TOKEN:?set a random connector token}
     command:
       - -client-addr=:9443
       - -control-addr=:8443
       - -operator-addr=:8080
-      - -tls-cert=/run/zen-link/tls.crt
-      - -tls-key=/run/zen-link/tls.key
+      - -tls-cert=/run/mewla-link/tls.crt
+      - -tls-key=/run/mewla-link/tls.key
       - -max-clients=4096
       - -max-clients-per-route=32
       - -max-client-handshakes=8192
@@ -20,7 +20,7 @@ services:
       - "443:9443"
       - "8443:8443"
     volumes:
-      - ./secrets:/run/zen-link:ro
+      - ./secrets:/run/mewla-link:ro
     healthcheck:
       test:
         [

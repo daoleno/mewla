@@ -34,7 +34,7 @@ const (
 // routed launches. Never stored in Profile/store/wire/history/logs as secrets.
 // Router strips inbound auth and injects real upstream credentials.
 const (
-	LoopbackAuthPlaceholder         = "zen-loopback-placeholder-not-a-secret"
+	LoopbackAuthPlaceholder         = "mewla-loopback-placeholder-not-a-secret"
 	LoopbackClaudeAPIKeyPlaceholder = "sk-ant-" + LoopbackAuthPlaceholder
 	EnvOpenAIAPIKey                 = "OPENAI_API_KEY"
 	EnvAnthropicAuthToken           = "ANTHROPIC_AUTH_TOKEN"

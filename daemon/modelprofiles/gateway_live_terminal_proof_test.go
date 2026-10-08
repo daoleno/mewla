@@ -8,7 +8,7 @@ package modelprofiles_test
 // Run (from daemon module root, with the release daemon NOT owning 127.0.0.1:38777
 // and tmux + codex + the daemon binary available):
 //
-//	MEWLA_PROOF_ISOLATED_TERMINAL=1 MEWLA_DAEMON_BIN=tmp/zen-dev \
+//	MEWLA_PROOF_ISOLATED_TERMINAL=1 MEWLA_DAEMON_BIN=tmp/mewla-dev \
 //	  go test ./modelprofiles -run TestIsolatedDirectTerminalGatewayProof -count=1 -timeout 240s
 //
 // Everything runs inside one isolated scratch root: a temporary HOME (sandbox
@@ -133,7 +133,7 @@ func waitBody(t *testing.T, up *proofUpstream, want string) []byte {
 // dumpProofState writes the isolated pane + daemon log for failure diagnosis.
 func dumpProofState(t *testing.T, tmuxSocket, logPath string) {
 	t.Helper()
-	if out, err := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenproof", "-p").Output(); err == nil {
+	if out, err := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlaproof", "-p").Output(); err == nil {
 		t.Logf("pane capture:\n%s", trimTo(out, 4000))
 	} else {
 		t.Logf("pane capture failed: %v", err)
@@ -180,7 +180,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 	}
 	daemonBin := strings.TrimSpace(os.Getenv("MEWLA_DAEMON_BIN"))
 	if daemonBin == "" {
-		daemonBin = filepath.Join("..", "..", "tmp", "zen-dev")
+		daemonBin = filepath.Join("..", "..", "tmp", "mewla-dev")
 	}
 	absBin, err := filepath.Abs(daemonBin)
 	if err != nil {
@@ -208,9 +208,9 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 			dumpProofState(t, tmuxSocket, daemonLogPath)
 		}
 	})
-	zenHome := filepath.Join(sbx, "home")
+	mewlaHome := filepath.Join(sbx, "home")
 	codexHome := filepath.Join(sbx, "codex-home")
-	for _, dir := range []string{zenHome, codexHome} {
+	for _, dir := range []string{mewlaHome, codexHome} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -218,7 +218,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 	// A fresh HOME triggers the zsh-newuser-install wizard in the pane shell
 	// and blocks the direct codex launch; seed minimal startup files.
 	for _, rc := range []string{".zshenv", ".zshrc", ".zprofile"} {
-		if err := os.WriteFile(filepath.Join(zenHome, rc), []byte("# zen isolated proof shell\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(mewlaHome, rc), []byte("# mewla isolated proof shell\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -238,11 +238,11 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		"  provider_id = \"custom\"\n  provider_label = \"Custom Gateway\"\n" +
 		"  base_url = \"" + upB.server.URL + "\"\n  auth_mode = \"none\"\n  credential_env = \"MEWLA_PROVIDER_API_KEY\"\n\n" +
 		"[defaults]\n  codex = \"conn-proof-a\"\n"
-	zenDir := filepath.Join(zenHome, ".mewla")
-	if err := os.MkdirAll(zenDir, 0o700); err != nil {
+	mewlaDir := filepath.Join(mewlaHome, ".mewla")
+	if err := os.MkdirAll(mewlaDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(zenDir, "model-profiles.toml"), []byte(profiles), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(mewlaDir, "model-profiles.toml"), []byte(profiles), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -256,14 +256,14 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 
 	// Dedicated tmux server so the sandbox daemon's watcher never sees the
 	// user's real sessions.
-	newTmux := exec.Command("tmux", "-S", tmuxSocket, "new-session", "-d", "-s", "zenproof", "-x", "200", "-y", "50")
-	newTmux.Env = proofEnv(zenHome, codexHome, sbx, tmuxSocket)
+	newTmux := exec.Command("tmux", "-S", tmuxSocket, "new-session", "-d", "-s", "mewlaproof", "-x", "200", "-y", "50")
+	newTmux.Env = proofEnv(mewlaHome, codexHome, sbx, tmuxSocket)
 	if out, err := newTmux.CombinedOutput(); err != nil {
 		t.Fatalf("create isolated tmux server: %v: %s", err, out)
 	}
 	// Sandbox daemon.
-	daemonCmd := exec.Command(absBin, "-addr", "127.0.0.1:0", "-state-dir", zenDir)
-	daemonCmd.Env = proofEnv(zenHome, codexHome, sbx, tmuxSocket)
+	daemonCmd := exec.Command(absBin, "-addr", "127.0.0.1:0", "-state-dir", mewlaDir)
+	daemonCmd.Env = proofEnv(mewlaHome, codexHome, sbx, tmuxSocket)
 	daemonLog, err := os.Create(daemonLogPath)
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +282,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		_, _ = daemonCmd.Process.Wait()
 	})
 
-	socketPath, err := control.DefaultSocketPath(zenDir)
+	socketPath, err := control.DefaultSocketPath(mewlaDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,19 +300,19 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		t.Fatalf("user model was clobbered by the projection: %s", projected)
 	}
 
-	// Direct Terminal Codex (NOT a zen launch): plain `codex` TUI in the pane.
-	pane := exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenproof",
+	// Direct Terminal Codex (NOT a mewla launch): plain `codex` TUI in the pane.
+	pane := exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlaproof",
 		"cd "+sbx+" && "+absCodexTUI()+" --dangerously-bypass-approvals-and-sandbox -C "+sbx, "Enter")
-	pane.Env = proofEnv(zenHome, codexHome, sbx, tmuxSocket)
+	pane.Env = proofEnv(mewlaHome, codexHome, sbx, tmuxSocket)
 	if out, err := pane.CombinedOutput(); err != nil {
 		t.Fatalf("launch direct codex: %v: %s", err, out)
 	}
 	// Answer a first-run trust prompt if it appears (option 1 = yes).
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		captured, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenproof", "-p").Output()
+		captured, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlaproof", "-p").Output()
 		if bytes.Contains(captured, []byte("Do you trust")) {
-			_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenproof", "1", "Enter").Output()
+			_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlaproof", "1", "Enter").Output()
 			break
 		}
 		if bytes.Contains(captured, []byte("model:")) || bytes.Contains(captured, []byte("model :")) {
@@ -320,7 +320,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	panePID := tmuxPanePID(t, tmuxSocket, "zenproof")
+	panePID := tmuxPanePID(t, tmuxSocket, "mewlaproof")
 	if panePID <= 0 {
 		t.Fatal("direct codex pane has no pid")
 	}
@@ -330,7 +330,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 	// retry, never duplicates the prompt text).
 	submitTurn := func(text string, up *proofUpstream, want string) []byte {
 		t.Helper()
-		_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenproof", text, "Enter").Output()
+		_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlaproof", text, "Enter").Output()
 		for attempt := 0; attempt < 5; attempt++ {
 			select {
 			case body := <-up.bodyChan:
@@ -340,7 +340,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 				return body
 			case <-time.After(3 * time.Second):
 			}
-			_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenproof", "Enter").Output()
+			_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlaproof", "Enter").Output()
 		}
 		t.Fatalf("upstream %s never observed the turn %q", up.marker, want)
 		return nil
@@ -367,7 +367,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 	if bytes.Contains(bodyB, []byte(modelprofiles.LoopbackAuthPlaceholder)) {
 		t.Fatalf("placeholder leaked upstream: %s", bodyB)
 	}
-	if panePID2 := tmuxPanePID(t, tmuxSocket, "zenproof"); panePID2 != panePID {
+	if panePID2 := tmuxPanePID(t, tmuxSocket, "mewlaproof"); panePID2 != panePID {
 		t.Fatalf("pane pid changed across the switch: %d -> %d (process must be the same)", panePID, panePID2)
 	}
 
@@ -379,7 +379,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 	captured := []byte(nil)
 	deadline = time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		captured, _ = exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenproof", "-p").Output()
+		captured, _ = exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlaproof", "-p").Output()
 		all := true
 		for _, marker := range markers {
 			if !bytes.Contains(captured, []byte(marker)) {
@@ -398,7 +398,7 @@ func TestIsolatedDirectTerminalGatewayProof(t *testing.T) {
 		}
 	}
 
-	_ = exec.Command("tmux", "-S", tmuxSocket, "kill-session", "-t", "zenproof").Run()
+	_ = exec.Command("tmux", "-S", tmuxSocket, "kill-session", "-t", "mewlaproof").Run()
 	stopped = true
 	_ = daemonCmd.Process.Signal(os.Interrupt)
 }
@@ -470,9 +470,9 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	config := "model_provider = \"zen-gateway\"\nmodel = " + strconv.Quote(model) + "\n" +
-		"[model_providers.zen-gateway]\n" +
-		"name = \"zen-gateway\"\n" +
+	config := "model_provider = \"mewla-gateway\"\nmodel = " + strconv.Quote(model) + "\n" +
+		"[model_providers.mewla-gateway]\n" +
+		"name = \"mewla-gateway\"\n" +
 		"base_url = \"http://" + gateway.ActualAddr() + "/v1\"\n" +
 		"wire_api = \"responses\"\n" +
 		"requires_openai_auth = false\n" +
@@ -484,24 +484,24 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 
 	tmuxSocket := filepath.Join(scratch, "tmux.sock")
 	t.Cleanup(func() { _ = exec.Command("tmux", "-S", tmuxSocket, "kill-server").Run() })
-	newTmux := exec.Command("tmux", "-S", tmuxSocket, "new-session", "-d", "-s", "zenrealws", "-x", "220", "-y", "60")
+	newTmux := exec.Command("tmux", "-S", tmuxSocket, "new-session", "-d", "-s", "mewlarealws", "-x", "220", "-y", "60")
 	newTmux.Env = proofEnv(home, codexHome, scratch, tmuxSocket)
 	if out, err := newTmux.CombinedOutput(); err != nil {
 		t.Fatalf("create tmux: %v: %s", err, out)
 	}
-	launch := exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenrealws",
+	launch := exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlarealws",
 		"cd "+scratch+" && "+absCodexTUI()+" --dangerously-bypass-approvals-and-sandbox -C "+scratch, "Enter")
 	launch.Env = proofEnv(home, codexHome, scratch, tmuxSocket)
 	if out, err := launch.CombinedOutput(); err != nil {
 		t.Fatalf("launch codex: %v: %s", err, out)
 	}
-	panePID := tmuxPanePID(t, tmuxSocket, "zenrealws")
+	panePID := tmuxPanePID(t, tmuxSocket, "mewlarealws")
 	if panePID <= 0 {
 		t.Fatal("Codex pane has no pid")
 	}
 	readyDeadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(readyDeadline) {
-		pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenrealws", "-p").Output()
+		pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlarealws", "-p").Output()
 		if bytes.Contains(pane, []byte("›")) && bytes.Contains(pane, []byte(model)) {
 			break
 		}
@@ -512,11 +512,11 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 	submit := func(marker string) {
 		t.Helper()
 		prompt := "Reply with exactly " + marker + " and nothing else. Do not use tools."
-		_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenrealws", prompt, "Enter").Output()
+		_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlarealws", prompt, "Enter").Output()
 		deadline := time.Now().Add(90 * time.Second)
 		nextEnter := time.Now().Add(3 * time.Second)
 		for time.Now().Before(deadline) {
-			pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenrealws", "-p", "-S", "-2000").Output()
+			pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlarealws", "-p", "-S", "-2000").Output()
 			if bytes.Count(pane, []byte(marker)) >= 2 {
 				return
 			}
@@ -524,12 +524,12 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 				t.Fatalf("Codex WebSocket warning while waiting for %s:\n%s", marker, trimTo(pane, 4000))
 			}
 			if time.Now().After(nextEnter) {
-				_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "zenrealws", "Enter").Output()
+				_, _ = exec.Command("tmux", "-S", tmuxSocket, "send-keys", "-t", "mewlarealws", "Enter").Output()
 				nextEnter = time.Now().Add(3 * time.Second)
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
-		pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenrealws", "-p", "-S", "-2000").Output()
+		pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlarealws", "-p", "-S", "-2000").Output()
 		t.Fatalf("timed out waiting for %s:\n%s", marker, trimTo(pane, 4000))
 	}
 
@@ -538,10 +538,10 @@ func TestIsolatedRealProviderWebSocketGatewayProof(t *testing.T) {
 	submit(markers[1])
 	gateway.SetUpstream(proofUpstream(profileA))
 	submit(markers[2])
-	if got := tmuxPanePID(t, tmuxSocket, "zenrealws"); got != panePID {
+	if got := tmuxPanePID(t, tmuxSocket, "mewlarealws"); got != panePID {
 		t.Fatalf("Codex pane pid changed across A-B-A: %d -> %d", panePID, got)
 	}
-	pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "zenrealws", "-p", "-S", "-2000").Output()
+	pane, _ := exec.Command("tmux", "-S", tmuxSocket, "capture-pane", "-t", "mewlarealws", "-p", "-S", "-2000").Output()
 	if bytes.Contains(pane, []byte("Falling back from WebSockets")) || bytes.Contains(pane, []byte("stream disconnected before completion")) {
 		t.Fatalf("Codex emitted WebSocket fallback/disconnect warning:\n%s", trimTo(pane, 4000))
 	}
@@ -582,7 +582,7 @@ func absCodexTUI() string {
 	return path
 }
 
-func proofEnv(zenHome, codexHome, scratch, tmuxSocket string) []string {
+func proofEnv(mewlaHome, codexHome, scratch, tmuxSocket string) []string {
 	out := make([]string, 0, len(os.Environ()))
 	for _, e := range os.Environ() {
 		key, _, _ := strings.Cut(e, "=")
@@ -594,10 +594,10 @@ func proofEnv(zenHome, codexHome, scratch, tmuxSocket string) []string {
 		out = append(out, e)
 	}
 	return append(out,
-		"HOME="+zenHome,
+		"HOME="+mewlaHome,
 		"CODEX_HOME="+codexHome,
 		"TMUX="+tmuxSocket,
-		"MEWLA_STATE_DIR="+filepath.Join(zenHome, ".mewla"),
+		"MEWLA_STATE_DIR="+filepath.Join(mewlaHome, ".mewla"),
 		fmt.Sprintf("MEWLA_PROGRESS_ENV=isolated-proof"),
 	)
 }

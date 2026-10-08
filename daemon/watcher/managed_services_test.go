@@ -43,7 +43,7 @@ func activeUnitStatus(unit string, mainPID int) systemdUnitStatus {
 }
 
 func TestValidateManagedServiceUnit(t *testing.T) {
-	for _, unit := range []string{"dsh-web.service", "zen-worker-abc.scope.service", "a@b.service", "x-y_z:1.service"} {
+	for _, unit := range []string{"dsh-web.service", "mewla-worker-abc.scope.service", "a@b.service", "x-y_z:1.service"} {
 		if err := ValidateManagedServiceUnit(unit); err != nil {
 			t.Fatalf("ValidateManagedServiceUnit(%q) error = %v", unit, err)
 		}

@@ -52,7 +52,7 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 	})
 	t.Cleanup(func() { modelprofiles.SetDeepSeekSanitizeRejectHook(nil) })
 
-	artRoot := filepath.Join(tmpdir(t), "zen-deepseek-samepid")
+	artRoot := filepath.Join(tmpdir(t), "mewla-deepseek-samepid")
 	_ = os.RemoveAll(artRoot)
 	_ = os.MkdirAll(artRoot, 0o700)
 	codexHome := filepath.Join(artRoot, "codex-home")
@@ -62,7 +62,7 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 	if err := exec.Command("git", "init", "-q", cwd).Run(); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	_ = os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"zen-loopback-placeholder-not-a-secret"}`), 0o600)
+	_ = os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"mewla-loopback-placeholder-not-a-secret"}`), 0o600)
 
 	var mu sync.Mutex
 	var hitOpenAI, hitDeepSeek [][]byte
@@ -104,7 +104,7 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 	cfg := fmt.Sprintf("model = \"gpt-5\"\nmodel_provider = \"openai\"\nopenai_base_url = %q\napproval_policy = \"never\"\nsandbox_mode = \"danger-full-access\"\n", base)
 	_ = os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(cfg), 0o600)
 
-	sess := fmt.Sprintf("zen-deepseek-samepid-%d", time.Now().UnixNano())
+	sess := fmt.Sprintf("mewla-deepseek-samepid-%d", time.Now().UnixNano())
 	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
@@ -133,9 +133,9 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 		t.Fatal("native session id missing after turn1")
 	}
 	routeID := state.Binding.RouteID
-	zenSession := "samepid-deepseek"
+	mewlaSession := "samepid-deepseek"
 
-	next, err := table.Activate(zenSession, deepseekProfile, 2, state.Generation, auth)
+	next, err := table.Activate(mewlaSession, deepseekProfile, 2, state.Generation, auth)
 	if err != nil {
 		t.Fatalf("activate deepseek: %v", err)
 	}
@@ -169,8 +169,8 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 	if after.NativeSessionID != afterTurn1.NativeSessionID {
 		t.Fatalf("native session drifted %q -> %q", afterTurn1.NativeSessionID, after.NativeSessionID)
 	}
-	final, ok := table.Get(zenSession)
-	if !ok || final.Binding.RouteID != routeID || final.Binding.SessionID != zenSession {
+	final, ok := table.Get(mewlaSession)
+	if !ok || final.Binding.RouteID != routeID || final.Binding.SessionID != mewlaSession {
 		t.Fatalf("route/session lost: %#v", final)
 	}
 	if final.Binding.UpstreamModel != "deepseek-v4-flash" {
@@ -218,7 +218,7 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 	last := hitDeepSeek[len(hitDeepSeek)-1]
 	assertNoOpaqueResponsesHistory(t, last)
 	t.Logf("proof ok: openai_hits=%d deepseek_hits=%d call_id=%s route=%s session=%s pane=%d native=%s",
-		len(hitOpenAI), len(hitDeepSeek), callID, routeID, zenSession, after.PanePID, after.NativeSessionID)
+		len(hitOpenAI), len(hitDeepSeek), callID, routeID, mewlaSession, after.PanePID, after.NativeSessionID)
 }
 
 // deepSeekResponsesToolFake: turn1 emits function_call; after function_call_output

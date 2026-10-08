@@ -44,7 +44,7 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 		if name != "AGENTS" && (strings.Contains(surface, brainWorkerRoleContract) || !strings.Contains(surface, "Read AGENTS.md before continuing")) {
 			t.Fatalf("%s must reference the role owner without repeating it", name)
 		}
-		if strings.Contains(surface, "zen-brain-worker-role/") || strings.Contains(surface, brainHostContractDigest()) {
+		if strings.Contains(surface, "mewla-brain-worker-role/") || strings.Contains(surface, brainHostContractDigest()) {
 			t.Fatalf("%s exposes internal activation identity", name)
 		}
 	}
@@ -240,7 +240,7 @@ func TestLiveHostActivationQueuesWithUserInputsOutsideSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	const (
-		hostID            = "zen-worker-brain-live:@41"
+		hostID            = "mewla-worker-brain-live:@41"
 		hostGeneration    = "host-generation-live"
 		providerSessionID = "provider-history-must-not-change"
 		transcriptPath    = "/private/provider/transcript.jsonl"
@@ -359,7 +359,7 @@ func TestLiveHostActivationAmbiguousReceiptIsNeverReplayed(t *testing.T) {
 		t.Fatal(err)
 	}
 	const (
-		hostID         = "zen-worker-brain-live:@ambiguous"
+		hostID         = "mewla-worker-brain-live:@ambiguous"
 		hostGeneration = "host-generation-ambiguous"
 	)
 	if err := store.SetHostSession(hostID, "codex"); err != nil {

@@ -99,10 +99,10 @@ func TestRangeAggregatesStayScoped(t *testing.T) {
 			},
 			tools: map[string]int{"Read": 2},
 			skills: map[string]*skillEntry{
-				"review": {calls: 1, projects: map[string]bool{"zen": true}},
+				"review": {calls: 1, projects: map[string]bool{"mewla": true}},
 			},
 			projects: map[string]*projectAggEntry{
-				"zen": {inputTokens: 1000, outputTokens: 500, sessions: 1},
+				"mewla": {inputTokens: 1000, outputTokens: 500, sessions: 1},
 			},
 		},
 		"2026-03-01": {
@@ -128,7 +128,7 @@ func TestRangeAggregatesStayScoped(t *testing.T) {
 	}
 	codexProjectsByDate := map[string]map[string]*projectAggEntry{
 		"2026-04-04": {
-			"zen": {inputTokens: 700, sessions: 1},
+			"mewla": {inputTokens: 700, sessions: 1},
 		},
 		"2026-03-01": {
 			"older": {inputTokens: 5000, sessions: 4},
@@ -161,7 +161,7 @@ func TestRangeAggregatesStayScoped(t *testing.T) {
 	if len(daySkills) != 1 || daySkills[0].Name != "review" || daySkills[0].Calls != 1 {
 		t.Fatalf("day skills should only include scoped skill calls, got %+v", daySkills)
 	}
-	if len(dayProjects) != 1 || dayProjects[0].Name != "zen" || dayProjects[0].Sessions != 2 {
+	if len(dayProjects) != 1 || dayProjects[0].Name != "mewla" || dayProjects[0].Sessions != 2 {
 		t.Fatalf("day projects should merge only same-day project sessions, got %+v", dayProjects)
 	}
 	if len(allModels) != 4 {
@@ -364,8 +364,8 @@ func TestScanSessionJSONLCrossDayBucketsSessionsPerDay(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")
-	content := `{"type":"assistant","timestamp":"2026-04-04T23:59:00.000Z","cwd":"/tmp/zen","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":2,"cache_creation_input_tokens":1}}}
-{"type":"assistant","timestamp":"2026-04-05T00:01:00.000Z","cwd":"/tmp/zen","message":{"id":"m2","model":"claude-sonnet-4-6","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":20,"output_tokens":7,"cache_read_input_tokens":3,"cache_creation_input_tokens":0}}}
+	content := `{"type":"assistant","timestamp":"2026-04-04T23:59:00.000Z","cwd":"/tmp/mewla","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":2,"cache_creation_input_tokens":1}}}
+{"type":"assistant","timestamp":"2026-04-05T00:01:00.000Z","cwd":"/tmp/mewla","message":{"id":"m2","model":"claude-sonnet-4-6","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":20,"output_tokens":7,"cache_read_input_tokens":3,"cache_creation_input_tokens":0}}}
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write session: %v", err)
@@ -373,7 +373,7 @@ func TestScanSessionJSONLCrossDayBucketsSessionsPerDay(t *testing.T) {
 
 	c := NewCollector()
 	byDate := make(map[string]*dateAgg)
-	c.scanSessionJSONL(path, "zen", byDate)
+	c.scanSessionJSONL(path, "mewla", byDate)
 
 	day1 := byDate["2026-04-04"]
 	if day1 == nil {
@@ -390,10 +390,10 @@ func TestScanSessionJSONLCrossDayBucketsSessionsPerDay(t *testing.T) {
 	if got := day2.models["claude-sonnet-4-6"].sessions; got != 1 {
 		t.Fatalf("day2 model sessions = %d, want 1", got)
 	}
-	if got := day1.projects["zen"].sessions; got != 1 {
+	if got := day1.projects["mewla"].sessions; got != 1 {
 		t.Fatalf("day1 project sessions = %d, want 1", got)
 	}
-	if got := day2.projects["zen"].sessions; got != 1 {
+	if got := day2.projects["mewla"].sessions; got != 1 {
 		t.Fatalf("day2 project sessions = %d, want 1", got)
 	}
 }
@@ -407,7 +407,7 @@ func TestScanSessionJSONLUsesLocalDateForShanghai(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")
-	content := `{"type":"assistant","timestamp":"2026-04-05T17:30:00.000Z","cwd":"/tmp/zen","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"text","text":"late"}],"usage":{"input_tokens":20,"output_tokens":7,"cache_read_input_tokens":3,"cache_creation_input_tokens":0}}}
+	content := `{"type":"assistant","timestamp":"2026-04-05T17:30:00.000Z","cwd":"/tmp/mewla","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"text","text":"late"}],"usage":{"input_tokens":20,"output_tokens":7,"cache_read_input_tokens":3,"cache_creation_input_tokens":0}}}
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write session: %v", err)
@@ -415,7 +415,7 @@ func TestScanSessionJSONLUsesLocalDateForShanghai(t *testing.T) {
 
 	c := NewCollector()
 	byDate := make(map[string]*dateAgg)
-	c.scanSessionJSONL(path, "zen", byDate)
+	c.scanSessionJSONL(path, "mewla", byDate)
 
 	if _, ok := byDate["2026-04-05"]; ok {
 		t.Fatal("unexpected UTC date bucket")
@@ -428,7 +428,7 @@ func TestScanSessionJSONLUsesLocalDateForShanghai(t *testing.T) {
 	if got := day.models["claude-sonnet-4-6"].sessions; got != 1 {
 		t.Fatalf("model sessions = %d, want 1", got)
 	}
-	if got := day.projects["zen"].sessions; got != 1 {
+	if got := day.projects["mewla"].sessions; got != 1 {
 		t.Fatalf("project sessions = %d, want 1", got)
 	}
 	if got := day.slots[0].sessions; got != 1 {
@@ -438,12 +438,12 @@ func TestScanSessionJSONLUsesLocalDateForShanghai(t *testing.T) {
 
 func TestCollectClaudeSessionStatsIncludesSubagents(t *testing.T) {
 	home := t.TempDir()
-	subagentDir := filepath.Join(home, ".claude", "projects", "-tmp-zen", "session-a", "subagents")
+	subagentDir := filepath.Join(home, ".claude", "projects", "-tmp-mewla", "session-a", "subagents")
 	if err := os.MkdirAll(subagentDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	path := filepath.Join(subagentDir, "agent-1.jsonl")
-	content := `{"type":"assistant","timestamp":"2026-04-04T10:00:00.000Z","cwd":"/tmp/zen","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"tool_use","name":"Read","input":{"file_path":"x"}}],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+	content := `{"type":"assistant","timestamp":"2026-04-04T10:00:00.000Z","cwd":"/tmp/mewla","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"tool_use","name":"Read","input":{"file_path":"x"}}],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
 `
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write subWorker session: %v", err)
@@ -467,11 +467,11 @@ func TestCollectGrokStatsFromUpdates(t *testing.T) {
 	setTestLocalLocation(t, time.UTC)
 
 	home := t.TempDir()
-	sessionDir := filepath.Join(home, ".grok", "sessions", "%2Ftmp%2Fzen", "session-1")
+	sessionDir := filepath.Join(home, ".grok", "sessions", "%2Ftmp%2Fmewla", "session-1")
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		t.Fatalf("mkdir grok session: %v", err)
 	}
-	summary := `{"info":{"id":"session-1","cwd":"/tmp/zen"},"current_model_id":"grok-4.5","created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}`
+	summary := `{"info":{"id":"session-1","cwd":"/tmp/mewla"},"current_model_id":"grok-4.5","created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}`
 	if err := os.WriteFile(filepath.Join(sessionDir, "summary.json"), []byte(summary), 0o644); err != nil {
 		t.Fatalf("write summary: %v", err)
 	}
@@ -503,10 +503,10 @@ func TestCollectGrokStatsFromUpdates(t *testing.T) {
 	if got := first.models["grok-4.5"].sessions; got != 1 {
 		t.Fatalf("first day grok sessions = %d, want 1", got)
 	}
-	if got := first.projects["zen"].totalTokens; got != 160 {
+	if got := first.projects["mewla"].totalTokens; got != 160 {
 		t.Fatalf("first day project total = %d, want 160", got)
 	}
-	if got := first.projects["zen"].sessions; got != 1 {
+	if got := first.projects["mewla"].sessions; got != 1 {
 		t.Fatalf("first day project sessions = %d, want 1", got)
 	}
 	if got := first.slots[1].totalTokens; got != 160 {
@@ -557,11 +557,11 @@ func TestCollectGrokStatsDoesNotAddUnprovenChildTokens(t *testing.T) {
 	setTestLocalLocation(t, time.UTC)
 
 	home := t.TempDir()
-	sessionDir := filepath.Join(home, ".grok", "sessions", "%2Ftmp%2Fzen", "session-1")
+	sessionDir := filepath.Join(home, ".grok", "sessions", "%2Ftmp%2Fmewla", "session-1")
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		t.Fatalf("mkdir grok session: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sessionDir, "summary.json"), []byte(`{"info":{"cwd":"/tmp/zen"},"current_model_id":"grok-4.5"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessionDir, "summary.json"), []byte(`{"info":{"cwd":"/tmp/mewla"},"current_model_id":"grok-4.5"}`), 0o644); err != nil {
 		t.Fatalf("write summary: %v", err)
 	}
 	timestamp := time.Date(2026, time.April, 4, 9, 0, 0, 0, time.UTC).Unix()
@@ -591,11 +591,11 @@ func TestCollectGrokFallbackUsesSourceLabelWhenModelAndTokensAreUnreported(t *te
 	setTestLocalLocation(t, time.UTC)
 
 	home := t.TempDir()
-	sessionDir := filepath.Join(home, ".grok", "sessions", "%2Ftmp%2Fzen", "session-1")
+	sessionDir := filepath.Join(home, ".grok", "sessions", "%2Ftmp%2Fmewla", "session-1")
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		t.Fatalf("mkdir grok session: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sessionDir, "summary.json"), []byte(`{"info":{"cwd":"/tmp/zen"},"created_at":"2026-04-04T09:00:00Z"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessionDir, "summary.json"), []byte(`{"info":{"cwd":"/tmp/mewla"},"created_at":"2026-04-04T09:00:00Z"}`), 0o644); err != nil {
 		t.Fatalf("write summary: %v", err)
 	}
 
@@ -618,7 +618,7 @@ func TestCollectCursorAgentStatsSessionsOnly(t *testing.T) {
 	setTestLocalLocation(t, time.UTC)
 
 	home := t.TempDir()
-	transcriptDir := filepath.Join(home, ".cursor", "projects", "home-daoleno-workspace-zen", "agent-transcripts", "session-1")
+	transcriptDir := filepath.Join(home, ".cursor", "projects", "home-daoleno-workspace-mewla", "agent-transcripts", "session-1")
 	if err := os.MkdirAll(transcriptDir, 0o755); err != nil {
 		t.Fatalf("mkdir cursor transcript: %v", err)
 	}
@@ -647,17 +647,17 @@ func TestCollectCursorAgentStatsSessionsOnly(t *testing.T) {
 	if !ok || cursorModel.sessions != 1 || !cursorModel.totalTokensUnknown || !cursorModel.tokenBreakdownUnknown || !cursorModel.costUnknown {
 		t.Fatalf("cursor model availability = %+v, want one session with source-unavailable usage", cursorModel)
 	}
-	if got := day.projects["zen"].sessions; got != 1 {
+	if got := day.projects["mewla"].sessions; got != 1 {
 		t.Fatalf("cursor project sessions = %d, want 1", got)
 	}
-	if got := day.projects["zen"].totalTokens; got != 0 {
+	if got := day.projects["mewla"].totalTokens; got != 0 {
 		t.Fatalf("cursor project tokens should remain zero, got %d", got)
 	}
-	if !day.projects["zen"].costUnknown {
+	if !day.projects["mewla"].costUnknown {
 		t.Fatal("cursor project cost should be marked unknown")
 	}
-	if !day.projects["zen"].totalTokensUnknown || !day.projects["zen"].tokenBreakdownUnknown {
-		t.Fatalf("cursor project tokens should be unavailable: %+v", day.projects["zen"])
+	if !day.projects["mewla"].totalTokensUnknown || !day.projects["mewla"].tokenBreakdownUnknown {
+		t.Fatalf("cursor project tokens should be unavailable: %+v", day.projects["mewla"])
 	}
 
 	models := buildModelStats(aggregateModelsByDate(byDate, "0000-00-00", "9999-99-99"))

@@ -139,7 +139,7 @@ func TestUploadRejectsInvalidMetadataWithoutReadingBody(t *testing.T) {
 			body := &countingReadCloser{}
 			request := httptest.NewRequest(http.MethodPost, "/upload", body)
 			request.ContentLength = 1
-			request.Header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-upload"))
+			request.Header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-upload"))
 			for _, value := range testCase.headerValues {
 				request.Header.Add(uploadNameHeader, value)
 			}
@@ -490,7 +490,7 @@ func rawUploadRequest(
 ) *http.Request {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, "/upload", body)
-	request.Header.Set("Authorization", calendarAuthHeader(privateKey, manager.DaemonID(), deviceID, "zen-upload"))
+	request.Header.Set("Authorization", calendarAuthHeader(privateKey, manager.DaemonID(), deviceID, "mewla-upload"))
 	request.Header.Set(uploadNameHeader, url.PathEscape(originalName))
 	request.Header.Set("Content-Type", contentType)
 	return request

@@ -15,7 +15,7 @@ func TestCompileCodexLiveControlWrapper(t *testing.T) {
 		CatalogRevision:         1,
 		Lookup:                  readyLookup("secret"),
 		VerifiedProfileContract: contractFor(profile),
-		CodexControlSocket:      "/tmp/zen/codex-ctl-abc.sock",
+		CodexControlSocket:      "/tmp/mewla/codex-ctl-abc.sock",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -23,11 +23,11 @@ func TestCompileCodexLiveControlWrapper(t *testing.T) {
 	command := resolved.Command
 	t.Logf("command=%s", command)
 	// Headless app server owns the thread and exposes the control socket.
-	if !strings.Contains(command, "codex app-server --listen unix:///tmp/zen/codex-ctl-abc.sock") {
+	if !strings.Contains(command, "codex app-server --listen unix:///tmp/mewla/codex-ctl-abc.sock") {
 		t.Fatalf("app-server half missing: %q", command)
 	}
 	// TUI client attaches to the same socket via --remote and execs the shell.
-	if !strings.Contains(command, "; exec codex --remote unix:///tmp/zen/codex-ctl-abc.sock") {
+	if !strings.Contains(command, "; exec codex --remote unix:///tmp/mewla/codex-ctl-abc.sock") {
 		t.Fatalf("tui --remote half missing: %q", command)
 	}
 	// Lifecycle: job control is disabled so the app server shares the pane's
@@ -36,7 +36,7 @@ func TestCompileCodexLiveControlWrapper(t *testing.T) {
 	if !strings.HasPrefix(command, "set +m; ") {
 		t.Fatalf("wrapper must disable job control: %q", command)
 	}
-	if !strings.Contains(command, "echo $! > /tmp/zen/codex-ctl-abc.sock.pid") {
+	if !strings.Contains(command, "echo $! > /tmp/mewla/codex-ctl-abc.sock.pid") {
 		t.Fatalf("wrapper must record the app-server pid: %q", command)
 	}
 	// Model identity: the TUI carries --model; the app server receives the
@@ -56,10 +56,10 @@ func TestCompileCodexLiveControlWrapper(t *testing.T) {
 	}
 	// App-server output is redirected to a per-session log so the pane stays
 	// TUI-only and the watcher footer regex never sees server logs.
-	if !strings.Contains(command, "> /tmp/zen/codex-ctl-abc.log 2>&1") {
+	if !strings.Contains(command, "> /tmp/mewla/codex-ctl-abc.log 2>&1") {
 		t.Fatalf("app-server log redirect missing: %q", command)
 	}
-	if resolved.CodexControlSocket != "/tmp/zen/codex-ctl-abc.sock" {
+	if resolved.CodexControlSocket != "/tmp/mewla/codex-ctl-abc.sock" {
 		t.Fatalf("resolved control socket=%q", resolved.CodexControlSocket)
 	}
 	if err := assertNoUpstreamLeak(command, resolved.Env, profile); err != nil {
@@ -80,7 +80,7 @@ func TestCompileCodexLiveControlRejectsNativeProtocol(t *testing.T) {
 	_, err := Compile("codex", native, CompileOptions{
 		CatalogRevision:         1,
 		VerifiedProfileContract: contractFor(native),
-		CodexControlSocket:      "/tmp/zen/codex-ctl-x.sock",
+		CodexControlSocket:      "/tmp/mewla/codex-ctl-x.sock",
 	})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err=%v", err)
@@ -96,11 +96,11 @@ func TestRouteBindingCodexControlSocketDurableRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := table.SetCodexControlSocket("live-codex", "/tmp/zen/codex-ctl-live.sock"); err != nil {
+	if err := table.SetCodexControlSocket("live-codex", "/tmp/mewla/codex-ctl-live.sock"); err != nil {
 		t.Fatal(err)
 	}
 	state, _ = table.Get("live-codex")
-	if state.Binding.CodexControlSocket != "/tmp/zen/codex-ctl-live.sock" {
+	if state.Binding.CodexControlSocket != "/tmp/mewla/codex-ctl-live.sock" {
 		t.Fatalf("binding socket=%q", state.Binding.CodexControlSocket)
 	}
 	raw, err := EncodeDurableSnapshot(table.Snapshot())
@@ -114,11 +114,11 @@ func TestRouteBindingCodexControlSocketDurableRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, ok := restored.Get("live-codex")
-	if !ok || got.Binding.CodexControlSocket != "/tmp/zen/codex-ctl-live.sock" {
+	if !ok || got.Binding.CodexControlSocket != "/tmp/mewla/codex-ctl-live.sock" {
 		t.Fatalf("restored socket=%q ok=%v", got.Binding.CodexControlSocket, ok)
 	}
 	// Legacy snapshots without the field decode with an empty socket.
-	legacy := strings.Replace(string(raw), `"codex_control_socket": "/tmp/zen/codex-ctl-live.sock",`, "", 1)
+	legacy := strings.Replace(string(raw), `"codex_control_socket": "/tmp/mewla/codex-ctl-live.sock",`, "", 1)
 	legacyTable := NewRouteTable()
 	legacyTable.SetLookup(readyLookup("secret"))
 	if _, err := legacyTable.Restore(mustDecodeDurable(t, []byte(legacy)), BuiltinEnvelopeVerifier{}); err != nil {

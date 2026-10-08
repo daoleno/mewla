@@ -310,7 +310,7 @@ func TestSessionFilePreviewRejectsStaleSessionIdentity(t *testing.T) {
 	started := time.Date(2026, 7, 20, 4, 0, 0, 123_000_000, time.UTC)
 	worker := &classifier.Worker{
 		ID:        "main:@7",
-		Cwd:       "/repo/zen",
+		Cwd:       "/repo/mewla",
 		ProcessID: 412,
 		StartedAt: started,
 	}

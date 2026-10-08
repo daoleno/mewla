@@ -282,7 +282,7 @@ func parseServicePanes(output string) []servicePane {
 		}
 		target := strings.TrimSpace(parts[0])
 		sessionName := strings.SplitN(target, ":", 2)[0]
-		if target == "" || strings.HasPrefix(sessionName, "zen-view-") || seen[parts[1]] {
+		if target == "" || strings.HasPrefix(sessionName, "mewla-view-") || seen[parts[1]] {
 			continue
 		}
 

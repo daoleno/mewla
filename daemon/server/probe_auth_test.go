@@ -87,7 +87,7 @@ func probeAuthorizationHeader(
 	signature := ed25519.Sign(
 		privateKey,
 		auth.BuildSignaturePayload(
-			"zen-probe",
+			"mewla-probe",
 			daemonID,
 			deviceID,
 			timestamp,

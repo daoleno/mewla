@@ -33,7 +33,7 @@ func TestBrainUnifiedTimelineRestoresHistoryAcrossEmptyHost(t *testing.T) {
 	}
 
 	item, err := store.CreateWork(brain.Work{
-		Title:            "zen-pi-opencode-first-class-acceptance",
+		Title:            "mewla-pi-opencode-first-class-acceptance",
 		Objective:        "acceptance",
 		Status:           brain.WorkRunning,
 		CompletionPolicy: brain.CompletionBounded,

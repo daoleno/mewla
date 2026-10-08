@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	zenattachment "github.com/daoleno/mewla/daemon/attachment"
+	attachmentpkg "github.com/daoleno/mewla/daemon/attachment"
 	"io"
 	"net/http"
 	"os"
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-var dshAttachmentsTag = regexp.MustCompile(`(?s)<zen_attachments>\s*(.*?)\s*</zen_attachments>`)
+var dshAttachmentsTag = regexp.MustCompile(`(?s)<mewla_attachments>\s*(.*?)\s*</mewla_attachments>`)
 
 // Only files already admitted to the canonical Mewla upload directory may become
 // native image bytes. Provider-authored paths never acquire filesystem authority.
@@ -23,7 +23,7 @@ func dshPromptContent(text string) ([]map[string]any, error) {
 	if len(match) != 2 {
 		return content, nil
 	}
-	var envelope zenattachment.Envelope
+	var envelope attachmentpkg.Envelope
 	if err := json.Unmarshal([]byte(match[1]), &envelope); err != nil {
 		return nil, fmt.Errorf("invalid attachment envelope")
 	}
@@ -90,7 +90,7 @@ func dshUserContent(blocks []dshBlock) (display, exact string) {
 	if len(match) != 2 {
 		return dshContentText(blocks), exact
 	}
-	var envelope zenattachment.Envelope
+	var envelope attachmentpkg.Envelope
 	if json.Unmarshal([]byte(match[1]), &envelope) != nil {
 		return dshContentText(blocks), exact
 	}
@@ -107,7 +107,7 @@ func dshUserContent(blocks []dshBlock) (display, exact string) {
 		}
 	}
 	data, _ := json.Marshal(envelope)
-	display = strings.Replace(exact, match[0], "<zen_attachments>"+string(data)+"</zen_attachments>", 1)
+	display = strings.Replace(exact, match[0], "<mewla_attachments>"+string(data)+"</mewla_attachments>", 1)
 	for index, block := range blocks {
 		if block.Type == "image" && !used[index] {
 			display += "\n" + dshContentText([]dshBlock{block})

@@ -14,7 +14,7 @@ func webUITestServer(t *testing.T, origins ...string) *Server {
 	t.Helper()
 	var index bytes.Buffer
 	writer := gzip.NewWriter(&index)
-	_, _ = writer.Write([]byte("<html>zen</html>"))
+	_, _ = writer.Write([]byte("<html>mewla</html>"))
 	_ = writer.Close()
 	s := &Server{webUIFiles: fstest.MapFS{"index.html.gz": {Data: index.Bytes()}}}
 	s.SetWebOrigins(origins)
@@ -34,7 +34,7 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 	s := webUITestServer(t)
 	for _, host := range []string{"127.0.0.1:9876", "localhost:9876", "[::1]:9876"} {
 		response := serveWebUI(s, host, "127.0.0.1:50000")
-		if response.Code != http.StatusOK || response.Body.String() != "<html>zen</html>" {
+		if response.Code != http.StatusOK || response.Body.String() != "<html>mewla</html>" {
 			t.Fatalf("%s: status=%d body=%q", host, response.Code, response.Body.String())
 		}
 		policy := response.Header().Get("Content-Security-Policy")
@@ -62,15 +62,15 @@ func TestWebUIIsNotServedToTheNetworkByDefault(t *testing.T) {
 }
 
 func TestWebUIServesExplicitHTTPSOrigins(t *testing.T) {
-	origin, err := ParseWebOrigin("https://Zen.Example.ts.net:443/")
+	origin, err := ParseWebOrigin("https://Mewla.Example.ts.net:443/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if origin != "https://zen.example.ts.net" {
+	if origin != "https://mewla.example.ts.net" {
 		t.Fatalf("origin = %q", origin)
 	}
 	s := webUITestServer(t, origin)
-	if response := serveWebUI(s, "zen.example.ts.net", "127.0.0.1:50000"); response.Code != http.StatusOK {
+	if response := serveWebUI(s, "mewla.example.ts.net", "127.0.0.1:50000"); response.Code != http.StatusOK {
 		t.Fatalf("status = %d", response.Code)
 	}
 	if response := serveWebUI(s, "other.example.ts.net", "127.0.0.1:50000"); response.Code != http.StatusNotFound {
@@ -80,11 +80,11 @@ func TestWebUIServesExplicitHTTPSOrigins(t *testing.T) {
 
 func TestParseWebOriginRequiresBareHTTPSOrigins(t *testing.T) {
 	for _, raw := range []string{
-		"http://zen.example.ts.net",
+		"http://mewla.example.ts.net",
 		"https://",
-		"https://zen.example.ts.net/app",
-		"https://user@zen.example.ts.net",
-		"https://zen.example.ts.net?x=1",
+		"https://mewla.example.ts.net/app",
+		"https://user@mewla.example.ts.net",
+		"https://mewla.example.ts.net?x=1",
 	} {
 		if _, err := ParseWebOrigin(raw); err == nil {
 			t.Fatalf("accepted %q", raw)

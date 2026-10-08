@@ -566,7 +566,7 @@ func TestDaemonAuthOwnerLoadsOnlyAfterOfflineRevokeReleasesLock(t *testing.T) {
 		privateKey,
 		setup.DaemonID(),
 		"offline-first-phone",
-		"zen-probe",
+		"mewla-probe",
 	)
 
 	offlineLock, acquired, err := control.TryAcquireLifecycleLock(stateDir)
@@ -591,7 +591,7 @@ func TestDaemonAuthOwnerLoadsOnlyAfterOfflineRevokeReleasesLock(t *testing.T) {
 	defer runtimeLock.Close()
 	if _, err := runtimeManager.VerifyAuthorization(
 		header,
-		"zen-probe",
+		"mewla-probe",
 		time.Minute,
 	); !errors.Is(err, auth.ErrUnknownDevice) {
 		t.Fatalf("post-offline-revoke runtime authorization error=%v", err)
@@ -749,7 +749,7 @@ func dialControlSockets(
 				privateKey,
 				daemonID,
 				deviceID,
-				"zen-connect",
+				"mewla-connect",
 			),
 		)
 		conn, _, err := websocket.DefaultDialer.Dial(socketURL, header)
@@ -778,7 +778,7 @@ func assertControlReconnectUnauthorized(
 			privateKey,
 			daemonID,
 			deviceID,
-			"zen-connect",
+			"mewla-connect",
 		),
 	)
 	conn, response, err := websocket.DefaultDialer.Dial(socketURL, header)
@@ -850,7 +850,7 @@ func waitForDeviceControlReady(t *testing.T, socketPath string) {
 
 func shortControlStateDir(t *testing.T) string {
 	t.Helper()
-	stateDir, err := os.MkdirTemp("", "zen-revoke-")
+	stateDir, err := os.MkdirTemp("", "mewla-revoke-")
 	if err != nil {
 		t.Fatal(err)
 	}

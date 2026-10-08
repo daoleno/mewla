@@ -7,7 +7,7 @@ import (
 )
 
 func TestTmuxNewViewSessionCommandCreatesIndependentWindowSelector(t *testing.T) {
-	cmd := tmuxNewViewSessionCommand(context.Background(), "", "zen-view")
+	cmd := tmuxNewViewSessionCommand(context.Background(), "", "mewla-view")
 
 	want := []string{
 		"tmux",
@@ -17,7 +17,7 @@ func TestTmuxNewViewSessionCommandCreatesIndependentWindowSelector(t *testing.T)
 		"-F",
 		"#{window_id}",
 		"-s",
-		"zen-view",
+		"mewla-view",
 		"sleep 86400",
 	}
 	if !reflect.DeepEqual(cmd.Args, want) {
@@ -29,11 +29,11 @@ func TestExplicitSocketPinsClientWithoutServerAutostart(t *testing.T) {
 	if got := tmuxSocketArgs(""); got != nil {
 		t.Fatalf("empty tmux socket args = %#v, want nil (default server)", got)
 	}
-	socket := "/run/user/1000/zen.sock"
+	socket := "/run/user/1000/control.sock"
 	if got := tmuxSocketArgs(socket); !reflect.DeepEqual(got, []string{"-S", socket, "-N"}) {
 		t.Fatalf("explicit tmux socket args = %#v, want [-S socket -N]", got)
 	}
-	cmd := tmuxNewViewSessionCommand(context.Background(), socket, "zen-view")
+	cmd := tmuxNewViewSessionCommand(context.Background(), socket, "mewla-view")
 	want := []string{
 		"tmux",
 		"-S", socket,
@@ -44,7 +44,7 @@ func TestExplicitSocketPinsClientWithoutServerAutostart(t *testing.T) {
 		"-F",
 		"#{window_id}",
 		"-s",
-		"zen-view",
+		"mewla-view",
 		"sleep 86400",
 	}
 	if !reflect.DeepEqual(cmd.Args, want) {
@@ -67,7 +67,7 @@ func TestTmuxLinkViewWindowCommandReplacesOnlyBootstrapWindow(t *testing.T) {
 }
 
 func TestTmuxAttachCommandIsANormalSizingClient(t *testing.T) {
-	cmd := tmuxAttachCommand(context.Background(), "", "zen-demo")
+	cmd := tmuxAttachCommand(context.Background(), "", "mewla-demo")
 
 	want := []string{
 		"tmux",
@@ -75,7 +75,7 @@ func TestTmuxAttachCommandIsANormalSizingClient(t *testing.T) {
 		"RGB,256",
 		"attach-session",
 		"-t",
-		"zen-demo",
+		"mewla-demo",
 	}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Fatalf("tmuxAttachCommand args = %v, want %v", cmd.Args, want)

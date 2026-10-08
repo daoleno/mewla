@@ -35,7 +35,7 @@ func TestControlSendAfterLostOriginalAndClosedRecovery(t *testing.T) {
 }
 
 func testControlRecoverySend(t *testing.T, orphan bool) {
-	root, err := os.MkdirTemp("", "zen-recovery-")
+	root, err := os.MkdirTemp("", "mewla-recovery-")
 	if err != nil {
 		t.Fatal(err)
 	}

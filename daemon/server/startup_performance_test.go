@@ -103,7 +103,7 @@ func TestPopulatedStartupMeasurement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	header := http.Header{"Authorization": []string{calendarAuthHeader(priv, manager.DaemonID(), "fixture-phone", "zen-connect")}}
+	header := http.Header{"Authorization": []string{calendarAuthHeader(priv, manager.DaemonID(), "fixture-phone", "mewla-connect")}}
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(host.URL, "http")+"/ws", header)
 	if err != nil {
 		t.Fatal(err)

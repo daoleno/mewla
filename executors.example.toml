@@ -3,9 +3,9 @@
 # Copy:
 #   cp executors.example.toml ~/.mewla/executors.toml
 #
-# Edit executor definitions/commands and restart zen so the catalog reloads.
+# Edit executor definitions/commands and restart mewla so the catalog reloads.
 # Brain picks each Worker's executor, model and reasoning from its routing.md.
-# If this file is absent, zen keeps its built-in defaults from
+# If this file is absent, mewla keeps its built-in defaults from
 # daemon/work/executors.go — shipping this example does NOT change those
 # runtime defaults.
 #

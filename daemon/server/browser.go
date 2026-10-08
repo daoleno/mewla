@@ -19,7 +19,7 @@ func (s *Server) handleBrowser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := s.authenticateRequest(w, r, "zen-browser"); !ok {
+	if _, ok := s.authenticateRequest(w, r, "mewla-browser"); !ok {
 		return
 	}
 	if s.browsers == nil {
@@ -57,7 +57,7 @@ func (s *Server) handleBrowserViewer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid browser", 400)
 		return
 	}
-	device, ok := s.authenticateRequest(w, r, "zen-browser-view:"+id)
+	device, ok := s.authenticateRequest(w, r, "mewla-browser-view:"+id)
 	if !ok {
 		return
 	}

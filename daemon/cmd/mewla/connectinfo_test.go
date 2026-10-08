@@ -25,17 +25,17 @@ import (
 )
 
 func TestNormalizeEndpoint(t *testing.T) {
-	value, err := normalizeEndpoint("https://zen.example.com")
+	value, err := normalizeEndpoint("https://mewla.example.com")
 	if err != nil {
 		t.Fatalf("normalizeEndpoint returned error: %v", err)
 	}
-	if value != "wss://zen.example.com/ws" {
+	if value != "wss://mewla.example.com/ws" {
 		t.Fatalf("unexpected normalized URL: %s", value)
 	}
 }
 
 func TestNormalizeEndpointRejectsMissingScheme(t *testing.T) {
-	if _, err := normalizeEndpoint("zen.example.com"); err == nil {
+	if _, err := normalizeEndpoint("mewla.example.com"); err == nil {
 		t.Fatal("expected error for missing scheme")
 	}
 }
@@ -52,7 +52,7 @@ func TestBuildConnectLinkIncludesDaemonIdentity(t *testing.T) {
 	}
 
 	rawLink := buildConnectLinkWithPublicKey(
-		"wss://zen.example.com/ws",
+		"wss://mewla.example.com/ws",
 		manager.PublicKeyHex(),
 		pairing,
 	)
@@ -73,7 +73,7 @@ func TestBuildConnectLinkIncludesDaemonIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeString returned error: %v", err)
 	}
-	if len(payload) != 1+2+len("wss://zen.example.com/ws")+connectPublicKeyBytes+connectTokenBytes {
+	if len(payload) != 1+2+len("wss://mewla.example.com/ws")+connectPublicKeyBytes+connectTokenBytes {
 		t.Fatalf("unexpected payload size: %d", len(payload))
 	}
 	if payload[0] != connectPayloadVersion {
@@ -88,7 +88,7 @@ func TestBuildConnectLinkIncludesDaemonIdentity(t *testing.T) {
 	offset += connectPublicKeyBytes
 	gotToken := hex.EncodeToString(payload[offset : offset+connectTokenBytes])
 
-	if gotURL != "wss://zen.example.com/ws" {
+	if gotURL != "wss://mewla.example.com/ws" {
 		t.Fatalf("unexpected url: %s", gotURL)
 	}
 	if gotPublicKey != manager.PublicKeyHex() {
@@ -111,7 +111,7 @@ func TestBuildConnectionOffersUsesEndpoint(t *testing.T) {
 	}
 
 	offers, err := buildConnectionOffersWithPublicKey(
-		"https://zen.example.com/gateway",
+		"https://mewla.example.com/gateway",
 		manager.PublicKeyHex(),
 		pairing,
 	)
@@ -121,7 +121,7 @@ func TestBuildConnectionOffersUsesEndpoint(t *testing.T) {
 	if len(offers) != 1 {
 		t.Fatalf("expected one offer, got %d", len(offers))
 	}
-	if offers[0].URL != "wss://zen.example.com/gateway" {
+	if offers[0].URL != "wss://mewla.example.com/gateway" {
 		t.Fatalf("unexpected offer URL: %s", offers[0].URL)
 	}
 
@@ -136,14 +136,14 @@ func TestBuildConnectionOffersUsesEndpoint(t *testing.T) {
 
 func TestPrintStartupInfoForLoopback(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/zen-state", nil)
+	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", nil)
 
 	rendered := output.String()
 	for _, want := range []string{
 		"Local only",
 		"mewla --lan",
 		"expose http://127.0.0.1:9876",
-		"mewla pair -state-dir /tmp/zen-state https://your-mewla-host.example",
+		"mewla pair -state-dir /tmp/mewla-state https://your-mewla-host.example",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("startup info missing %q: %q", want, rendered)
@@ -156,11 +156,11 @@ func TestPrintStartupInfoForLoopback(t *testing.T) {
 
 func TestPrintLinkStartupInfoUsesNoEndpointAsPrimaryAndKeepsAdvanced(t *testing.T) {
 	var output bytes.Buffer
-	printLinkStartupInfo(&output, "127.0.0.1:9876", "/tmp/zen-state")
+	printLinkStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state")
 	rendered := output.String()
 	for _, expected := range []string{
 		"Connecting outbound",
-		"mewla pair -state-dir /tmp/zen-state",
+		"mewla pair -state-dir /tmp/mewla-state",
 		"Direct",
 		"mewla pair <endpoint>",
 	} {
@@ -223,7 +223,7 @@ func TestPrintPairingInfo(t *testing.T) {
 	var output bytes.Buffer
 	printPairingInfo(&output, []connectionOffer{{
 		Label:       "Server endpoint",
-		URL:         "wss://zen.example.com/ws",
+		URL:         "wss://mewla.example.com/ws",
 		ConnectLink: "mewla://settings?p=compact-payload",
 	}})
 
@@ -238,29 +238,29 @@ func TestPrintPairingInfo(t *testing.T) {
 
 func TestPairConfigUsesOnePositionalEndpoint(t *testing.T) {
 	cfg, err := parsePairConfig([]string{
-		"-state-dir", "/tmp/zen-state",
-		"https://zen.example.com",
+		"-state-dir", "/tmp/mewla-state",
+		"https://mewla.example.com",
 	}, io.Discard)
 	if err != nil {
 		t.Fatalf("parsePairConfig returned error: %v", err)
 	}
-	if cfg.endpoint != "https://zen.example.com" {
+	if cfg.endpoint != "https://mewla.example.com" {
 		t.Fatalf("endpoint = %q", cfg.endpoint)
 	}
-	if cfg.stateDir != "/tmp/zen-state" {
+	if cfg.stateDir != "/tmp/mewla-state" {
 		t.Fatalf("stateDir = %q", cfg.stateDir)
 	}
 }
 
 func TestPairConfigAllowsNoEndpointOnlyForConfiguredLinkPath(t *testing.T) {
 	cfg, err := parsePairConfig([]string{
-		"-state-dir", "/tmp/zen-state",
-		"-link-config", "/tmp/zen-link.json",
+		"-state-dir", "/tmp/mewla-state",
+		"-link-config", "/tmp/mewla-link.json",
 	}, io.Discard)
 	if err != nil {
 		t.Fatalf("parsePairConfig returned error: %v", err)
 	}
-	if cfg.endpoint != "" || cfg.linkConfigPath != "/tmp/zen-link.json" {
+	if cfg.endpoint != "" || cfg.linkConfigPath != "/tmp/mewla-link.json" {
 		t.Fatalf("unexpected no-endpoint config: %#v", cfg)
 	}
 }
@@ -304,10 +304,10 @@ func TestOptionalLinkConfigIsInertUntilExplicitlyConfigured(t *testing.T) {
 }
 
 func TestRemovedAdvertiseURLFlagsAreRejected(t *testing.T) {
-	if _, err := parseDaemonConfig([]string{"-advertise-url", "https://zen.example.com"}, io.Discard); err == nil {
+	if _, err := parseDaemonConfig([]string{"-advertise-url", "https://mewla.example.com"}, io.Discard); err == nil {
 		t.Fatal("daemon accepted removed -advertise-url flag")
 	}
-	if _, err := parsePairConfig([]string{"-url", "https://zen.example.com"}, io.Discard); err == nil {
+	if _, err := parsePairConfig([]string{"-url", "https://mewla.example.com"}, io.Discard); err == nil {
 		t.Fatal("pair accepted removed -url flag")
 	}
 }
@@ -452,9 +452,9 @@ func (h *captureCLIControlHandler) HandleControlRequest(req control.Request) con
 	return response
 }
 
-func TestWorkerProgressCommandUsesZenWorkerIDFallback(t *testing.T) {
+func TestWorkerProgressCommandUsesWorkerIDFallback(t *testing.T) {
 	req := runProgressCLIAndCaptureRequest(t,
-		"zen-worker-env:@1",
+		"mewla-worker-env:@1",
 		[]string{
 			"--turn-id", "turn:cli-current",
 			"--status", "running",
@@ -469,7 +469,7 @@ func TestWorkerProgressCommandUsesZenWorkerIDFallback(t *testing.T) {
 		},
 	)
 
-	if req.Type != "worker_progress" || req.WorkerID != "zen-worker-env:@1" || req.TurnID != "turn:cli-current" {
+	if req.Type != "worker_progress" || req.WorkerID != "mewla-worker-env:@1" || req.TurnID != "turn:cli-current" {
 		t.Fatalf("request identity = %#v", req)
 	}
 	if req.Status != "running" || req.Phase != "working" || req.Attention != "none" {
@@ -485,9 +485,9 @@ func TestWorkerProgressCommandUsesZenWorkerIDFallback(t *testing.T) {
 
 func TestWorkerProgressCommandExplicitIDOverridesEnv(t *testing.T) {
 	req := runProgressCLIAndCaptureRequest(t,
-		"zen-worker-env:@1",
+		"mewla-worker-env:@1",
 		[]string{
-			"-id", "zen-worker-explicit:@2",
+			"-id", "mewla-worker-explicit:@2",
 			"--turn-id", "turn:explicit",
 			"--status", "done",
 			"--phase", "reporting",
@@ -497,7 +497,7 @@ func TestWorkerProgressCommandExplicitIDOverridesEnv(t *testing.T) {
 		},
 	)
 
-	if req.WorkerID != "zen-worker-explicit:@2" || req.TurnID != "turn:explicit" {
+	if req.WorkerID != "mewla-worker-explicit:@2" || req.TurnID != "turn:explicit" {
 		t.Fatalf("request identity = %#v", req)
 	}
 	if req.Status != "done" || req.Phase != "reporting" || req.Attention != "done" {
@@ -505,12 +505,12 @@ func TestWorkerProgressCommandExplicitIDOverridesEnv(t *testing.T) {
 	}
 }
 
-func TestWorkerProgressCommandUsesZenStateDirFallback(t *testing.T) {
+func TestWorkerProgressCommandUsesStateDirFallback(t *testing.T) {
 	stateDir := t.TempDir()
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 
-	t.Setenv("MEWLA_WORKER_ID", "zen-worker-env:@1")
+	t.Setenv("MEWLA_WORKER_ID", "mewla-worker-env:@1")
 	t.Setenv("MEWLA_STATE_DIR", stateDir)
 	var stderr bytes.Buffer
 	if err := runWorkerProgress([]string{
@@ -525,7 +525,7 @@ func TestWorkerProgressCommandUsesZenStateDirFallback(t *testing.T) {
 
 	select {
 	case req := <-handler.requests:
-		if req.WorkerID != "zen-worker-env:@1" || req.Status != "running" {
+		if req.WorkerID != "mewla-worker-env:@1" || req.Status != "running" {
 			t.Fatalf("request = %#v", req)
 		}
 	case <-time.After(2 * time.Second):
@@ -738,13 +738,13 @@ func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = book.Add("http://127.0.0.1:9876", addressbook.SourceDiscovered)
-	_, _ = book.Add("https://zen.example", addressbook.SourceManual)
+	_, _ = book.Add("https://mewla.example", addressbook.SourceManual)
 	var output bytes.Buffer
 	if err := printFirstDevicePairing(&output, manager, book); err != nil {
 		t.Fatal(err)
 	}
 	text := output.String()
-	if !strings.Contains(text, "https://zen.example/#pair=") || !strings.Contains(text, "Scan on your phone") || !strings.Contains(text, "█") {
+	if !strings.Contains(text, "https://mewla.example/#pair=") || !strings.Contains(text, "Scan on your phone") || !strings.Contains(text, "█") {
 		t.Fatal("fresh startup must print HTTPS link and QR")
 	}
 }

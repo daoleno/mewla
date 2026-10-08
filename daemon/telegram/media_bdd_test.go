@@ -164,11 +164,11 @@ func (f *mediaFixture) reopen(t *testing.T) {
 
 func decodeAttachment(t *testing.T, body string) attachment.Envelope {
 	t.Helper()
-	_, raw, ok := strings.Cut(body, "<zen_attachments>")
+	_, raw, ok := strings.Cut(body, "<mewla_attachments>")
 	if !ok {
 		t.Fatalf("missing canonical attachment envelope: %q", body)
 	}
-	raw, _, _ = strings.Cut(raw, "</zen_attachments>")
+	raw, _, _ = strings.Cut(raw, "</mewla_attachments>")
 	var result attachment.Envelope
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatal(err)

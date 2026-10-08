@@ -55,7 +55,7 @@ func newFakeBotAPIServer(t *testing.T) *fakeBotAPIServer {
 		var result any = true
 		switch method {
 		case "getMe":
-			result = map[string]any{"id": 7001, "is_bot": true, "first_name": "Mewla", "username": "zen_fixture_bot"}
+			result = map[string]any{"id": 7001, "is_bot": true, "first_name": "Mewla", "username": "mewla_fixture_bot"}
 		case "getWebhookInfo":
 			result = map[string]any{"url": "", "pending_update_count": 0}
 		case "getUpdates":
@@ -95,7 +95,7 @@ func TestClientAgainstFakeBotAPIServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bot.ID != 7001 || bot.Username != "zen_fixture_bot" {
+	if bot.ID != 7001 || bot.Username != "mewla_fixture_bot" {
 		t.Fatalf("bot=%+v", bot)
 	}
 	webhook, err := client.GetWebhookInfo(t.Context(), "fixture-token")

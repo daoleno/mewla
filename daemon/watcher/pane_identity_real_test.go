@@ -89,18 +89,18 @@ func TestRealTmuxWorkerEnvironmentAndOwnershipStayInPane(t *testing.T) {
 
 func TestRealTmuxLegacyMigrationPinsEvidenceAndNeverRebinds(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
-	owned := createHarnessPane(t, h.selected, "zen-worker-legacy", "exec /bin/sh")
+	owned := createHarnessPane(t, h.selected, "mewla-worker-legacy", "exec /bin/sh")
 	raw, err := tmuxHarnessCommand(h.selected, "display-message", "-p", "-t", owned, "#{session_name}:#{window_id}").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
 	legacy := strings.TrimSpace(string(raw))
-	for _, key := range []string{"zen_worker_created", "zen_worker_delegated"} {
+	for _, key := range []string{"mewla_worker_created", "mewla_worker_delegated"} {
 		if out, err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", owned, "@"+key, "1").CombinedOutput(); err != nil {
 			t.Fatalf("mark legacy: %v %s", err, out)
 		}
 	}
-	if err := tmuxHarnessCommand(h.selected, "set-environment", "-t", "zen-worker-legacy", "MEWLA_WORKER_CONTEXT", "private").Run(); err != nil {
+	if err := tmuxHarnessCommand(h.selected, "set-environment", "-t", "mewla-worker-legacy", "MEWLA_WORKER_CONTEXT", "private").Run(); err != nil {
 		t.Fatal(err)
 	}
 	out, err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", owned, "-P", "-F", "#{pane_id}", "exec /bin/sh").Output()
@@ -123,7 +123,7 @@ func TestRealTmuxLegacyMigrationPinsEvidenceAndNeverRebinds(t *testing.T) {
 	if h.w.CanonicalWorkerID(legacy) != owned || h.w.GetWorker(owned) == nil || h.w.GetWorker(other) != nil {
 		t.Fatal("migration did not retain exactly the owned Worker")
 	}
-	env, err := tmuxHarnessCommand(h.selected, "show-environment", "-t", "zen-worker-legacy").Output()
+	env, err := tmuxHarnessCommand(h.selected, "show-environment", "-t", "mewla-worker-legacy").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestRealTmuxLegacyMigrationPinsEvidenceAndNeverRebinds(t *testing.T) {
 func TestRealTmuxLegacyMigrationRefusesAmbiguousSplit(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
 	owned := createHarnessPane(t, h.selected, "legacy-ambiguous", "exec /bin/sh")
-	if err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", owned, "@zen_worker_created", "1").Run(); err != nil {
+	if err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", owned, "@mewla_worker_created", "1").Run(); err != nil {
 		t.Fatal(err)
 	}
 	if err := tmuxHarnessCommand(h.selected, "split-window", "-h", "-t", owned, "exec /bin/sh").Run(); err != nil {

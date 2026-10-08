@@ -199,19 +199,19 @@ func TestPollRemovedTurnReconciliationAppliesUncertain(t *testing.T) {
 		time.Date(2026, 8, 7, 10, 0, 2, 0, time.UTC),
 	})
 	ledger := newFakeTurnLedger()
-	ledger.seed("zen-worker-worker:@1", TurnSnapshot{
-		SessionID:       "zen-worker-worker:@1",
-		TurnID:          "zen-worker-worker:@1:turn:1",
+	ledger.seed("mewla-worker-worker:@1", TurnSnapshot{
+		SessionID:       "mewla-worker-worker:@1",
+		TurnID:          "mewla-worker-worker:@1:turn:1",
 		Status:          TurnRunning,
 		AcceptedAt:      time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 		ProcessIdentity: "recorded-proc",
 	})
 	w.turnLedger = ledger
 	windows := []tmuxPane{
-		{target: "zen-worker-worker:@1", name: "worker", cwd: "/repo/zen", command: "opencode", panePID: 333, delegated: true},
+		{target: "mewla-worker-worker:@1", name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
-		"zen-worker-worker:@1": "OpenCode\nworking\n",
+		"mewla-worker-worker:@1": "OpenCode\nworking\n",
 	}, map[int]processInfo{
 		333: fakeProcess(333, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC)),
 	})
@@ -219,7 +219,7 @@ func TestPollRemovedTurnReconciliationAppliesUncertain(t *testing.T) {
 
 	w.poll()
 	drainWatcherEvents(w)
-	if worker := workerByID(w.Workers(), "zen-worker-worker:@1"); worker == nil || worker.State != classifier.StateRunning {
+	if worker := workerByID(w.Workers(), "mewla-worker-worker:@1"); worker == nil || worker.State != classifier.StateRunning {
 		t.Fatalf("session before removal = %#v", worker)
 	}
 
@@ -240,7 +240,7 @@ func TestPollRemovedTurnReconciliationAppliesUncertain(t *testing.T) {
 	if kinds["failed"] {
 		t.Fatalf("removal reconciliation produced failed: %#v", ledger.applied)
 	}
-	if worker := workerByID(w.Workers(), "zen-worker-worker:@1"); worker != nil {
+	if worker := workerByID(w.Workers(), "mewla-worker-worker:@1"); worker != nil {
 		t.Fatalf("session survived removal: %#v", worker)
 	}
 }
@@ -257,9 +257,9 @@ func TestPollPiBlockedPaneNeverWakesTurnTrackedSession(t *testing.T) {
 		time.Date(2026, 8, 7, 10, 0, 3, 0, time.UTC),
 	})
 	ledger := newFakeTurnLedger()
-	ledger.seed("zen-worker-pi:@1", TurnSnapshot{
-		SessionID:       "zen-worker-pi:@1",
-		TurnID:          "zen-worker-pi:@1:turn:1",
+	ledger.seed("mewla-worker-pi:@1", TurnSnapshot{
+		SessionID:       "mewla-worker-pi:@1",
+		TurnID:          "mewla-worker-pi:@1:turn:1",
 		Status:          TurnRunning,
 		AcceptedAt:      time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 		ProcessIdentity: "recorded-proc",
@@ -272,10 +272,10 @@ func TestPollPiBlockedPaneNeverWakesTurnTrackedSession(t *testing.T) {
 		t.Fatalf("fixture classification = %s, want blocked (the Pi frame)", classified)
 	}
 	windows := []tmuxPane{
-		{target: "zen-worker-pi:@1", name: "pi", cwd: "/repo/zen", command: "pi", panePID: 444, delegated: true},
+		{target: "mewla-worker-pi:@1", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 444, delegated: true},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
-		"zen-worker-pi:@1": content,
+		"mewla-worker-pi:@1": content,
 	}, map[int]processInfo{
 		444: fakeProcess(444, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC)),
 	})
@@ -283,7 +283,7 @@ func TestPollPiBlockedPaneNeverWakesTurnTrackedSession(t *testing.T) {
 
 	w.poll()
 	drainWatcherEvents(w)
-	worker := workerByID(w.Workers(), "zen-worker-pi:@1")
+	worker := workerByID(w.Workers(), "mewla-worker-pi:@1")
 	if worker == nil || worker.State != classifier.StateRunning {
 		t.Fatalf("Pi session projection = %#v, want running (never blocked)", worker)
 	}
@@ -293,7 +293,7 @@ func TestPollPiBlockedPaneNeverWakesTurnTrackedSession(t *testing.T) {
 	// A repeated poll with the same blocked-looking frame stays running.
 	w.poll()
 	drainWatcherEvents(w)
-	worker = workerByID(w.Workers(), "zen-worker-pi:@1")
+	worker = workerByID(w.Workers(), "mewla-worker-pi:@1")
 	if worker == nil || worker.State != classifier.StateRunning {
 		t.Fatalf("Pi session after repeated poll = %#v, want running", worker)
 	}
@@ -311,9 +311,9 @@ func TestPollLivenessAppliesWithoutProviderProbe(t *testing.T) {
 		time.Date(2026, 8, 7, 10, 0, 2, 0, time.UTC),
 	})
 	ledger := newFakeTurnLedger()
-	ledger.seed("zen-worker-worker:@1", TurnSnapshot{
-		SessionID:       "zen-worker-worker:@1",
-		TurnID:          "zen-worker-worker:@1:turn:1",
+	ledger.seed("mewla-worker-worker:@1", TurnSnapshot{
+		SessionID:       "mewla-worker-worker:@1",
+		TurnID:          "mewla-worker-worker:@1:turn:1",
 		Status:          TurnRunning,
 		AcceptedAt:      time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 		ProcessIdentity: "recorded-proc",
@@ -322,10 +322,10 @@ func TestPollLivenessAppliesWithoutProviderProbe(t *testing.T) {
 	// No Provider probe installed (nil): the mutable turn must still be
 	// applied, with only the Provider observation gated.
 	windows := []tmuxPane{
-		{target: "zen-worker-worker:@1", name: "worker", cwd: "/repo/zen", command: "opencode", panePID: 100, delegated: true},
+		{target: "mewla-worker-worker:@1", name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 100, delegated: true},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
-		"zen-worker-worker:@1": "OpenCode\n",
+		"mewla-worker-worker:@1": "OpenCode\n",
 	}, map[int]processInfo{})
 	defer restore()
 	// The pane dies with a non-zero exit: the liveness fact must reach the
@@ -357,7 +357,7 @@ func TestPollLivenessAppliesWithoutProviderProbe(t *testing.T) {
 	if providerFacts != 0 {
 		t.Fatalf("provider observation applied with nil probe: %#v", ledger.applied)
 	}
-	worker := workerByID(w.Workers(), "zen-worker-worker:@1")
+	worker := workerByID(w.Workers(), "mewla-worker-worker:@1")
 	if worker == nil || worker.State != classifier.StateUnknown {
 		t.Fatalf("projection = %#v, want Unknown from the liveness fact", worker)
 	}

@@ -16,7 +16,7 @@ const (
 	delegatedResourceOwnerEnv = "MEWLA_WORKER_RESOURCE_OWNER"
 
 	// Short durable temp dirs keep AF_UNIX paths under sockaddr sun_path limits.
-	delegatedTempMarkerName = ".zen-worker-unit"
+	delegatedTempMarkerName = ".mewla-worker-unit"
 	delegatedTempDigestLen  = 6
 )
 
@@ -88,7 +88,7 @@ func delegatedResourceUnit(owner, token string) string {
 			return ""
 		}
 	}
-	return "zen-worker-" + owner + "-" + token + ".scope"
+	return "mewla-worker-" + owner + "-" + token + ".scope"
 }
 
 func shortDelegatedTempDigest(unit string) string {
@@ -103,7 +103,7 @@ func shortDelegatedTempDigest(unit string) string {
 func validDelegatedResourceUnit(owner, unit string) bool {
 	owner = normalizeResourceOwner(owner)
 	unit = strings.TrimSpace(unit)
-	prefix := "zen-worker-" + owner + "-"
+	prefix := "mewla-worker-" + owner + "-"
 	if owner == "" || !strings.HasPrefix(unit, prefix) || !strings.HasSuffix(unit, ".scope") {
 		return false
 	}

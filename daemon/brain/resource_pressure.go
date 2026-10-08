@@ -75,7 +75,7 @@ func (s *Service) ResourceWorkContext(consumers []watcher.ProcessConsumer) ([]wa
 }
 
 // RouteResourcePressure records a producer event and uses the durable Host lane
-// used by zen_work_event. It never enters the user-input admission channel.
+// used by mewla_work_event. It never enters the user-input admission channel.
 func (s *Service) RouteResourcePressure(event watcher.ResourcePressureEvent) error {
 	if s == nil || s.store == nil {
 		return nil

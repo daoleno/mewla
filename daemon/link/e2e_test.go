@@ -256,7 +256,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 		authManager.DaemonID(),
 		deviceID,
 		devicePrivateKey,
-		"zen-probe",
+		"mewla-probe",
 	)
 	response, body = requestHTTPThroughLink(
 		t,
@@ -287,7 +287,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 				authManager.DaemonID(),
 				deviceID,
 				devicePrivateKey,
-				"zen-session-file",
+				"mewla-session-file",
 			),
 			"Content-Type": "application/json",
 		},
@@ -314,7 +314,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 				authManager.DaemonID(),
 				deviceID,
 				devicePrivateKey,
-				"zen-session-file",
+				"mewla-session-file",
 			),
 			"Range": "bytes=2-5",
 		},
@@ -339,10 +339,10 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 					authManager.DaemonID(),
 					deviceID,
 					devicePrivateKey,
-					"zen-upload",
+					"mewla-upload",
 				),
 				"Content-Type":      "application/octet-stream",
-				"X-Zen-Upload-Name": "bounded.bin",
+				"X-Mewla-Upload-Name": "bounded.bin",
 			},
 		)
 		if err != nil {
@@ -371,7 +371,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 			authManager.DaemonID(),
 			deviceID,
 			devicePrivateKey,
-			"zen-connect",
+			"mewla-connect",
 		),
 	)
 	close(releaseUpload)

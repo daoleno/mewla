@@ -9,11 +9,11 @@ import (
 
 func TestLoadConnectorConfigUsesExplicitEnvironmentAndRelativeCA(t *testing.T) {
 	directory := t.TempDir()
-	t.Setenv("TEST_ZEN_LINK_TOKEN", "0123456789abcdef0123456789abcdef")
+	t.Setenv("TEST_MEWLA_LINK_TOKEN", "0123456789abcdef0123456789abcdef")
 	path := filepath.Join(directory, "link.json")
 	raw := []byte(`{
   "version": 1,
-  "connector_token_env": "TEST_ZEN_LINK_TOKEN",
+  "connector_token_env": "TEST_MEWLA_LINK_TOKEN",
   "max_streams": 9,
   "relays": [{
     "name": "region-a",
@@ -43,7 +43,7 @@ func TestLoadConnectorConfigDoesNotFallbackWhenTokenSourceIsMissing(t *testing.T
 	path := filepath.Join(t.TempDir(), "link.json")
 	if err := os.WriteFile(path, []byte(`{
   "version": 1,
-  "connector_token_env": "MISSING_ZEN_LINK_TOKEN",
+  "connector_token_env": "MISSING_MEWLA_LINK_TOKEN",
   "relays": [{
     "control_address": "control.test:8443",
     "control_server_name": "control.test",
@@ -52,7 +52,7 @@ func TestLoadConnectorConfigDoesNotFallbackWhenTokenSourceIsMissing(t *testing.T
 }`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("MISSING_ZEN_LINK_TOKEN", "")
+	t.Setenv("MISSING_MEWLA_LINK_TOKEN", "")
 	if _, err := LoadConnectorConfig(path); err == nil {
 		t.Fatal("missing connector token environment was accepted")
 	}

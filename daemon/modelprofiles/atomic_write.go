@@ -13,7 +13,7 @@ func writeAtomicFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".zen-atomic-*.tmp")
+	tmp, err := os.CreateTemp(dir, ".mewla-atomic-*.tmp")
 	if err != nil {
 		return err
 	}

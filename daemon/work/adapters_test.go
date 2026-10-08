@@ -159,7 +159,7 @@ func TestTmuxRunnerSpawnPrepareCommitExecutorDefault(t *testing.T) {
 		},
 		commitOK: true,
 	}
-	runner := TmuxRunner{Watcher: fw, Env: map[string]string{"ZEN": "1"}, Profiles: profiles}
+	runner := TmuxRunner{Watcher: fw, Env: map[string]string{"MEWLA": "1"}, Profiles: profiles}
 	id, err := runner.Spawn("codex", "/repo", "codex")
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestTmuxRunnerSpawnPrepareCommitExecutorDefault(t *testing.T) {
 	if len(fw.created) != 1 || fw.created[0].Command != "codex --compiled-cal" {
 		t.Fatalf("created=%#v", fw.created)
 	}
-	if fw.created[0].Env["OPENAI_BASE_URL"] != "http://127.0.0.1:9/v1" || fw.created[0].Env["ZEN"] != "1" {
+	if fw.created[0].Env["OPENAI_BASE_URL"] != "http://127.0.0.1:9/v1" || fw.created[0].Env["MEWLA"] != "1" {
 		t.Fatalf("env=%#v", fw.created[0].Env)
 	}
 }

@@ -11,7 +11,7 @@ func TestStorePersistsAndReloads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := one.Add("https://Zen.Example:443/", SourceManual); err != nil {
+	if _, err := one.Add("https://Work.Example:443/", SourceManual); err != nil {
 		t.Fatal(err)
 	}
 	if err := one.Learn("verified.example"); err != nil {
@@ -25,7 +25,7 @@ func TestStorePersistsAndReloads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 || entries[0].URL != "https://verified.example" || entries[1].URL != "https://zen.example" {
+	if len(entries) != 2 || entries[0].URL != "https://verified.example" || entries[1].URL != "https://work.example" {
 		t.Fatalf("entries=%#v", entries)
 	}
 }

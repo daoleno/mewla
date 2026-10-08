@@ -350,9 +350,9 @@ func TestReducerFactsMaterializeWorkCards(t *testing.T) {
 		if err := store.SetChatState(ChatState{ThreadID: threadID}); err != nil {
 			t.Fatal(err)
 		}
-		sessionID := "zen-worker-stale-card:@2"
+		sessionID := "mewla-worker-stale-card:@2"
 		item, err := store.CreateWork(Work{
-			Title:            "zen-telegram-performance-publish",
+			Title:            "mewla-telegram-performance-publish",
 			Objective:        "Prove stale materializes a card",
 			Status:           WorkRunning,
 			AttemptSessionID: sessionID,
@@ -402,7 +402,7 @@ func TestMatchingControlDoneProjectsOneExistingWorkResultCard(t *testing.T) {
 	if err := store.SetChatState(ChatState{ThreadID: threadID}); err != nil {
 		t.Fatal(err)
 	}
-	sessionID := "zen-worker-signal-card:@1"
+	sessionID := "mewla-worker-signal-card:@1"
 	item, err := store.CreateWork(Work{
 		Title: "Signal card", Objective: "Project the canonical control result",
 		Status: WorkRunning, AttemptSessionID: sessionID, CompletionPolicy: CompletionBounded,
@@ -487,9 +487,9 @@ func assertReducerMaterializesKind(t *testing.T, kind string, class watcher.Evid
 	if err := store.SetChatState(ChatState{ThreadID: threadID}); err != nil {
 		t.Fatal(err)
 	}
-	sessionID := "zen-worker-route-card:@" + kind
+	sessionID := "mewla-worker-route-card:@" + kind
 	item, err := store.CreateWork(Work{
-		Title:            "zen-telegram-performance-publish",
+		Title:            "mewla-telegram-performance-publish",
 		Objective:        "Prove session lifecycle materializes cards",
 		Status:           WorkRunning,
 		AttemptSessionID: sessionID,
@@ -579,13 +579,13 @@ func TestTimelineOmitsCanonicalDirectWorkEventUserRows(t *testing.T) {
 	envelope := work.FormatDirectWorkEventInput(work.DirectWorkEventInput{
 		EventID: "1aa90ab5-cf46-4643-9985-f6fd26c9526b", WorkID: "ae621005-929b-49b5-9d42-fa476d42d3f3",
 		WorkRevision: 7, HandlingID: "handling-envelope", ProviderTurnID: "provider-turn-envelope",
-		WorkTitle:  "zen-telegram-performance-publish",
+		WorkTitle:  "mewla-telegram-performance-publish",
 		Kind:       "session.failed",
-		Source:     "zen-telegram-performance-publish (zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730)",
+		Source:     "mewla-telegram-performance-publish (mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730)",
 		Summary:    "Delegated provider process or pane is no longer live",
 		NextAction: "Inspect the delegated Session failure.",
-		ContextRef: "worklog/2026-08-06-zen-telegram-performance-publish.md",
-		PayloadRef: "session:zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730",
+		ContextRef: "worklog/2026-08-06-mewla-telegram-performance-publish.md",
+		PayloadRef: "session:mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730",
 	})
 	if err := store.MaterializeProviderConversation(threadID, work.CodexConversation{
 		Available: true,
@@ -633,7 +633,7 @@ func TestTimelineOmitsCanonicalDirectWorkEventUserRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	conversation := TimelineItemsToConversationEvents(items)
-	if len(conversation) != 1 || conversation[0].ID != "user-visible" || strings.Contains(conversation[0].Body, "zen_work_event") {
+	if len(conversation) != 1 || conversation[0].ID != "user-visible" || strings.Contains(conversation[0].Body, "mewla_work_event") {
 		t.Fatalf("conversation leaked envelope: %#v", conversation)
 	}
 }

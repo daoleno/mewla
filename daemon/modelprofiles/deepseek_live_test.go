@@ -28,7 +28,7 @@ func TestDeepSeekCodexLiveOfficialAPI(t *testing.T) {
 		"input": []any{
 			map[string]any{
 				"type": "message", "role": "user",
-				"content": []any{map[string]string{"type": "input_text", "text": "Reply with exactly: zen-live-ok"}},
+				"content": []any{map[string]string{"type": "input_text", "text": "Reply with exactly: mewla-live-ok"}},
 			},
 		},
 		"tools": []any{
@@ -61,7 +61,7 @@ func TestDeepSeekCodexLiveOfficialAPI(t *testing.T) {
 		t.Fatalf("live DeepSeek status=%d body=%s", resp.StatusCode, snippet)
 	}
 	text := string(respBody)
-	if !strings.Contains(text, "zen-live-ok") && !strings.Contains(text, "output_text") && !strings.Contains(text, "function_call") {
+	if !strings.Contains(text, "mewla-live-ok") && !strings.Contains(text, "output_text") && !strings.Contains(text, "function_call") {
 		snippet := text
 		if len(snippet) > 600 {
 			snippet = snippet[:600]

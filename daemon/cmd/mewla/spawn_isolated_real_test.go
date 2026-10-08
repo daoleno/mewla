@@ -37,7 +37,7 @@ func TestRealCLIIsolatedCodexSpawn(t *testing.T) {
 	}
 	cli := os.Getenv("MEWLA_TEST_SPAWN_CLI")
 	if !filepath.IsAbs(cli) {
-		t.Fatal("MEWLA_TEST_SPAWN_CLI must name a separately built absolute zen binary")
+		t.Fatal("MEWLA_TEST_SPAWN_CLI must name a separately built absolute mewla binary")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {

@@ -107,7 +107,7 @@ func TestClassify(t *testing.T) {
 				"  2. Yes, and don't ask again for commands that start with `systemctl` (p)",
 				"  3. No, and tell Codex what to do differently (esc)",
 				"Press enter to confirm or esc to cancel",
-				"[zen-81984.] Action Required 23:31 19-6月-26",
+				"[mewla-81984.] Action Required 23:31 19-6月-26",
 			},
 			wantState: StateBlocked,
 		},
@@ -281,7 +281,7 @@ func TestClassify(t *testing.T) {
 			name:      "heartbeat log with failed in agent name is not failure",
 			paneAlive: true,
 			lines: []string{
-				"2026/06/08 00:20:19 brain heartbeat wake sent for zen-worker-zen-classifier-false-failed-1780",
+				"2026/06/08 00:20:19 brain heartbeat wake sent for mewla-worker-mewla-classifier-false-failed-1780",
 			},
 			wantState: StateUnknown,
 		},

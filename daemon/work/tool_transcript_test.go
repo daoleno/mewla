@@ -86,8 +86,8 @@ func TestSanitizeConversationProjectionDropsDirectWorkEventInput(t *testing.T) {
 		Available: true,
 		Events: []CodexConversationEvent{
 			{ID: "canonical", Kind: "user_message", Body: canonical},
-			{ID: "malformed", Kind: "user_message", Body: "<zen_work_event>\n{not json}\n</zen_work_event>"},
-			{ID: "partial", Kind: "user_message", Body: "<zen_work_event>\n{\"event_id\":\"event-1\",\"work_id\":\"work-1\"}\n</zen_work_event>"},
+			{ID: "malformed", Kind: "user_message", Body: "<mewla_work_event>\n{not json}\n</mewla_work_event>"},
+			{ID: "partial", Kind: "user_message", Body: "<mewla_work_event>\n{\"event_id\":\"event-1\",\"work_id\":\"work-1\"}\n</mewla_work_event>"},
 			{ID: "unknown", Kind: "user_message", Body: strings.Replace(canonical, `"payload_ref":`, `"unknown":"","payload_ref":`, 1)},
 			{ID: "reordered", Kind: "user_message", Body: strings.Replace(canonical, `{"event_id":"event-1","work_id":"work-1"`, `{"work_id":"work-1","event_id":"event-1"`, 1)},
 			{ID: "spaced", Kind: "user_message", Body: strings.Replace(canonical, `{"event_id"`, `{ "event_id"`, 1)},
@@ -256,10 +256,10 @@ CREATE TABLE threads (
   updated_at_ms INTEGER
 );
 INSERT INTO threads (id, rollout_path, created_at, updated_at, cwd, archived, created_at_ms, updated_at_ms)
-VALUES ('thread-1', '/tmp/rollout-1.jsonl', 100, 200, '/repo/zen', 0, 100000, 200000);
+VALUES ('thread-1', '/tmp/rollout-1.jsonl', 100, 200, '/repo/mewla', 0, 100000, 200000);
 `)
 
-	rows, err := queryCodexThreads(sqlite3, dbPath, "/repo/zen")
+	rows, err := queryCodexThreads(sqlite3, dbPath, "/repo/mewla")
 	if err != nil {
 		t.Fatalf("queryCodexThreads: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestBrainCodexTranscriptFallbackUsesLatestUpdated(t *testing.T) {
 	}
 
 	got, ok := fallbackCodexTranscriptForWorker(candidates, classifier.Worker{
-		ID:     "zen-worker-brain-123:@1",
+		ID:     "mewla-worker-brain-123:@1",
 		Name:   "Brain",
 		Hidden: true,
 	})
@@ -319,7 +319,7 @@ func TestBrainCodexTranscriptFallbackDoesNotUseThreadBeforeWorkerStart(t *testin
 	}
 
 	if got, ok := fallbackCodexTranscriptForWorker(candidates, classifier.Worker{
-		ID:        "zen-worker-brain-123:@1",
+		ID:        "mewla-worker-brain-123:@1",
 		Name:      "Brain",
 		Hidden:    true,
 		StartedAt: base,
@@ -348,7 +348,7 @@ func TestBrainCodexTranscriptFallbackPrefersPostStartThread(t *testing.T) {
 	}
 
 	got, ok := fallbackCodexTranscriptForWorker(candidates, classifier.Worker{
-		ID:        "zen-worker-brain-123:@1",
+		ID:        "mewla-worker-brain-123:@1",
 		Name:      "Brain",
 		Hidden:    true,
 		StartedAt: base,
@@ -460,8 +460,8 @@ VALUES ('019eee5e-7dec-71b1-bc2b-adcb2bad1c4c', ` + sqlString(rolloutPath) + `, 
 	defer file.Close()
 
 	got, ok, err := findCodexTranscript(classifier.Worker{
-		ID:        "zen-worker-brain-1781166359611353356:@3747",
-		Name:      "node (zen-worker-brain-1781166359611353356:@3747)",
+		ID:        "mewla-worker-brain-1781166359611353356:@3747",
+		Name:      "node (mewla-worker-brain-1781166359611353356:@3747)",
 		Cwd:       cwd,
 		Command:   "codex",
 		ProcessID: os.Getpid(),

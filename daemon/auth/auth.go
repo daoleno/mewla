@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	AuthorizationHeaderPrefix = "ZenDevice "
+	AuthorizationHeaderPrefix = "Device "
 	DefaultPairingTTL         = 15 * time.Minute
-	DeviceListPurpose         = "zen-device-admin:list:GET:/devices"
+	DeviceListPurpose         = "mewla-device-admin:list:GET:/devices"
 )
 
 var (
@@ -450,7 +450,7 @@ func BuildSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex stri
 
 func DeviceRevokePurpose(deviceID string) string {
 	target := sha256.Sum256([]byte(strings.TrimSpace(deviceID)))
-	return "zen-device-admin:revoke:DELETE:/devices:sha256=" +
+	return "mewla-device-admin:revoke:DELETE:/devices:sha256=" +
 		hex.EncodeToString(target[:])
 }
 
@@ -570,7 +570,7 @@ func (m *Manager) VerifySessionFileCapabilitySignature(
 }
 
 func linkSignaturePayload(payload []byte) []byte {
-	const domain = "zen-link-control-v1\x00"
+	const domain = "mewla-link-control-v1\x00"
 	signed := make([]byte, 0, len(domain)+len(payload))
 	signed = append(signed, domain...)
 	signed = append(signed, payload...)
@@ -578,7 +578,7 @@ func linkSignaturePayload(payload []byte) []byte {
 }
 
 func linkPairingSignaturePayload(payload []byte) []byte {
-	const domain = "zen-link-pairing-v2\x00"
+	const domain = "mewla-link-pairing-v2\x00"
 	signed := make([]byte, 0, len(domain)+len(payload))
 	signed = append(signed, domain...)
 	signed = append(signed, payload...)
@@ -586,7 +586,7 @@ func linkPairingSignaturePayload(payload []byte) []byte {
 }
 
 func sessionFileCapabilitySignaturePayload(payload []byte) []byte {
-	const domain = "zen-session-file-capability-v1\x00"
+	const domain = "mewla-session-file-capability-v1\x00"
 	signed := make([]byte, 0, len(domain)+len(payload))
 	signed = append(signed, domain...)
 	signed = append(signed, payload...)

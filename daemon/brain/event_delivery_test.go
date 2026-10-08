@@ -16,7 +16,7 @@ func TestDirectWorkEventInputIsDeterministicBoundedAndComplete(t *testing.T) {
 		Kind:                  "session.done",
 		SourceName:            "Worker One",
 		Summary:               "Completed the exact requested implementation.",
-		PayloadRef:            "session:zen-worker-worker:@1",
+		PayloadRef:            "session:mewla-worker-worker:@1",
 		HandlingID:            "handling-direct-1",
 		ProviderTurnID:        "provider-turn-direct-1",
 		DeliveryWorkRevision:  7,

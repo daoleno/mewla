@@ -18,7 +18,7 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-const SocketName = "zen.sock"
+const SocketName = "control.sock"
 
 type Request struct {
 	BrowserID            string                                 `json:"browser_id,omitempty"`

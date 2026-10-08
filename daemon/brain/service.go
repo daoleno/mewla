@@ -3465,7 +3465,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 		if workspace != "" && !strings.Contains(command, " -C ") && !strings.Contains(command, " --cd ") {
 			command = strings.TrimSpace(command + " -C " + shellQuote(workspace))
 		}
-		return withZenCLIOnPath(command), nil
+		return withCLIOnPath(command), nil
 	case work.WorkerProviderClaude:
 		command = work.HardenClaudeCommand(command)
 		if resumeSessionID != "" {
@@ -3478,7 +3478,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 		if workspace != "" && !strings.Contains(command, " --add-dir ") {
 			command = strings.TrimSpace(command + " --add-dir " + shellQuote(workspace))
 		}
-		return withZenCLIOnPath(command), nil
+		return withCLIOnPath(command), nil
 	case work.WorkerProviderGrok, work.WorkerProviderCursor:
 		if resumeSessionID != "" {
 			var err error
@@ -3487,7 +3487,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 				return "", err
 			}
 		}
-		return withZenCLIOnPath(command), nil
+		return withCLIOnPath(command), nil
 	case work.WorkerProviderOpenCode:
 		hardened, err := work.HardenOpenCodeDelegatedCommand(command)
 		if err != nil {
@@ -3499,7 +3499,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 				return "", err
 			}
 		}
-		return withZenCLIOnPath(hardened), nil
+		return withCLIOnPath(hardened), nil
 	case work.WorkerProviderDSH:
 		if resumeSessionID != "" {
 			return work.WithProviderResumeToken(provider, command, resumeSessionID)
@@ -3511,34 +3511,34 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 			if err != nil {
 				return "", err
 			}
-			return withZenCLIOnPath(command), nil
+			return withCLIOnPath(command), nil
 		}
 		command, err := work.EnsurePiSessionLaunchCommand(command)
 		if err != nil {
 			return "", err
 		}
-		return withZenCLIOnPath(command), nil
+		return withCLIOnPath(command), nil
 	default:
 		if resumeSessionID != "" {
 			return "", fmt.Errorf("executor %q has no native resume launch shape", firstNonEmpty(executor.ID, provider))
 		}
-		return withZenCLIOnPath(command), nil
+		return withCLIOnPath(command), nil
 	}
 }
 
-func withZenCLIOnPath(command string) string {
+func withCLIOnPath(command string) string {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return command
 	}
-	dir := zenExecutableDir()
+	dir := executableDir()
 	if dir == "" || pathContainsDir(os.Getenv("PATH"), dir) {
 		return command
 	}
 	return "env PATH=" + shellQuote(dir) + ":$PATH " + command
 }
 
-func zenExecutableDir() string {
+func executableDir() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
@@ -3601,7 +3601,7 @@ Host executor: %s.
 Mewla CLI: %s
 Recover active work from current.md and mewla brain context --json.
 Personality: %s
-`, snapshot.Workspace, worktreeRoot, executor.ID, zenCLICommand(),
+`, snapshot.Workspace, worktreeRoot, executor.ID, cliCommand(),
 		strings.TrimSpace(snapshot.Personality)))
 }
 
@@ -3651,7 +3651,7 @@ func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string
 	return strings.Join(lines, "\n")
 }
 
-func zenCLICommand() string {
+func cliCommand() string {
 	exe, err := os.Executable()
 	if err != nil || strings.TrimSpace(exe) == "" {
 		return "mewla"

@@ -38,7 +38,7 @@ func TestOpenCodeBindRejectsAmbiguousSameCWD(t *testing.T) {
 func TestOpenCodeExactAdmissionAndLifecycle(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "opencode.db")
 	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	payload := "opencode-zen-ack"
+	payload := "opencode-mewla-ack"
 	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
 		{ID: "ses_exact", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
 	}, []openCodeMessageSeed{
@@ -210,7 +210,7 @@ func TestOpenCodeNonmatchingUserDoesNotAdmitPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf("%x", sha256.Sum256([]byte("opencode-zen-ack")))
+	want := fmt.Sprintf("%x", sha256.Sum256([]byte("opencode-mewla-ack")))
 	for _, event := range got.Events {
 		if event.Kind == "user_message" && event.AdmissionSHA256 == want {
 			t.Fatalf("nonmatching user admitted exact digest: %#v", event)

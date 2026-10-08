@@ -78,9 +78,9 @@ func TestBrainHostInputCarriesExactClaimCapabilityThroughCanonicalSubmission(t *
 		},
 	}}
 	w := lifecycleTestWatcher(io, ledger, probe)
-	hostID := "zen-worker-brain-hidden:@host-capability"
+	hostID := "mewla-worker-brain-hidden:@host-capability"
 	w.workers[hostID] = &classifier.Worker{
-		ID: hostID, Command: "opencode", Cwd: "/repo/zen",
+		ID: hostID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, State: classifier.StateDone,
 	}
 	claimToken := "claim-exact"
@@ -161,7 +161,7 @@ func TestOpenCodeTransportSubmitThenSignalAndProviderEvidenceSettleTurn(t *testi
 	w := lifecycleTestWatcher(io, ledger, probe)
 	sessionID := "opencode-ambiguous:@1"
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateUnknown,
 	}
 
@@ -248,7 +248,7 @@ func TestOpenCodeFollowUpSignalOwnsNewTurnAndOldResultCannotCompleteIt(t *testin
 	w := lifecycleTestWatcher(io, ledger, probe)
 	sessionID := "opencode-followup:@2"
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateUnknown,
 	}
 
@@ -331,7 +331,7 @@ func TestOpenCodeFollowUpAfterLostSignalTurnWithAdvancedActivity(t *testing.T) {
 	w := lifecycleTestWatcher(io, ledger, probe)
 	sessionID := "opencode-lost:@9"
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateUnknown,
 	}
 	oldTurn := sessionID + ":turn:1"
@@ -404,7 +404,7 @@ func TestOpenCodeAmbiguousAdmissionNoProviderEvidenceStaysPending(t *testing.T) 
 	w := lifecycleTestWatcher(io, ledger, probe)
 	sessionID := "opencode-noevidence:@3"
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateUnknown,
 	}
 	turnID := "opencode-noevidence:@3:turn:1"
@@ -448,7 +448,7 @@ func TestOpenCodeFollowUpWhileSignalTurnRunningWithAdvancedActivity(t *testing.T
 	w := lifecycleTestWatcher(io, ledger, probe)
 	sessionID := "opencode-running:@11"
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateRunning,
 	}
 	oldTurn := sessionID + ":turn:1"
@@ -518,7 +518,7 @@ func TestOpenCodeFollowUpTurnNotTerminalizedByStaleCompletedProviderActivity(t *
 	}
 	w := lifecycleTestWatcher(io, ledger, probe)
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateRunning,
 	}
 	turnID := sessionID + ":turn:2"
@@ -568,7 +568,7 @@ func TestOpenCodeReusedSessionDigestMismatchCannotAdoptPending(t *testing.T) {
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	now := time.Now().UTC()
-	sessionID := "zen-worker-opencode:@8174"
+	sessionID := "mewla-worker-opencode:@8174"
 	firstAt := now.Add(-30 * time.Minute)
 	firstTurn := sessionID + ":turn:1"
 	ledger.seed(sessionID, TurnSnapshot{
@@ -624,7 +624,7 @@ func TestOpenCodeReusedSessionDigestMismatchCannotAdoptPending(t *testing.T) {
 	}
 	w := lifecycleTestWatcher(io, ledger, probe)
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true, State: classifier.StateDone,
 	}
 	followTurn := sessionID + ":turn:2"

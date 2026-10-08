@@ -156,8 +156,8 @@ func TestLiveTelegramRichInteractions(t *testing.T) {
 		}
 		return message
 	}
-	doc := sendFixture("sendDocument", "document", "zen-qa-owned.txt", "QA document \U0001f44d", f.files["doc"])
-	photo := sendFixture("sendPhoto", "photo", "zen-qa-owned.jpg", "QA photo \u2764\ufe0f", f.files["photo"])
+	doc := sendFixture("sendDocument", "document", "mewla-qa-owned.txt", "QA document \U0001f44d", f.files["doc"])
+	photo := sendFixture("sendPhoto", "photo", "mewla-qa-owned.jpg", "QA photo \u2764\ufe0f", f.files["photo"])
 	// Returned bot sends are NOT owner-upload events. Re-envelope only into
 	// isolated real Stores to verify the production download/admission path.
 	for i, message := range []Message{doc, photo} {

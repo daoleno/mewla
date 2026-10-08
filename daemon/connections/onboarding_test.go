@@ -33,7 +33,7 @@ func TestNativeReturnBoundToFlowAndServer(t *testing.T) {
 	if strings.Contains(string(data), "pending") {
 		t.Fatal("unfinished account persisted")
 	}
-	for _, callback := range []string{"https://evil.example/?state=state-a&code=x", "zen://plugins?state=state-a&code=x", "mewla://plugins?state=wrong&code=x", "mewla://plugins/extra?state=state-a&code=x"} {
+	for _, callback := range []string{"https://evil.example/?state=state-a&code=x", "mewla://plugins?state=wrong&code=x", "mewla://plugins/extra?state=state-a&code=x"} {
 		if _, err := m.Handle(context.Background(), Request{Action: "connect_finish", FlowID: f.ID, Callback: callback}); err == nil {
 			t.Fatal("unbound callback accepted")
 		}
@@ -126,12 +126,12 @@ func TestSlackOfficialUserTokenExchange(t *testing.T) {
 	m.networkOwned = false
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		_ = req.ParseForm()
-		if req.PostForm.Get("client_id") != "zen-owned" || req.PostForm.Get("redirect_uri") != "https://owned.example/plugins/oauth/callback" || req.PostForm.Get("client_secret") != "publisher-secret" {
+		if req.PostForm.Get("client_id") != "mewla-owned" || req.PostForm.Get("redirect_uri") != "https://owned.example/plugins/oauth/callback" || req.PostForm.Get("client_secret") != "publisher-secret" {
 			t.Fatal("lost registered client or redirect binding")
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":true,"access_token":"bot-token-not-selected","authed_user":{"access_token":"user-token","scope":"channels:read,search:read"}}`))}, nil
 	})}
-	r := &record{Account: Account{Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "zen-owned", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: "https://owned.example/plugins/oauth/callback"}}
+	r := &record{Account: Account{Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "mewla-owned", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: "https://owned.example/plugins/oauth/callback"}}
 	token, err := m.exchangeSlack(context.Background(), r, "publisher-secret", "code", "verifier")
 	if err != nil || token.AccessToken != "user-token" || token.Extra("scope") != "channels:read search:read" {
 		t.Fatal("Slack user authorization parsed incorrectly", err)
@@ -258,7 +258,7 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 		switch req.URL.String() {
 		case "https://github.com/login/oauth/access_token":
 			_ = req.ParseForm()
-			if req.PostForm.Get("client_id") != "zen-public" || req.PostForm.Has("client_secret") || req.Header.Get("Authorization") != "" {
+			if req.PostForm.Get("client_id") != "mewla-public" || req.PostForm.Has("client_secret") || req.Header.Get("Authorization") != "" {
 				t.Fatal("device flow must use only the registered public client")
 			}
 			if req.PostForm.Get("grant_type") == "refresh_token" {
@@ -286,7 +286,7 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
-	f := &connectFlow{ConnectFlow: ConnectFlow{ID: "device-flow", Integration: "github", Status: "waiting", Expires: time.Now().Add(time.Minute)}, deviceCode: "device-code", clientID: "zen-public", interval: 5 * time.Second}
+	f := &connectFlow{ConnectFlow: ConnectFlow{ID: "device-flow", Integration: "github", Status: "waiting", Expires: time.Now().Add(time.Minute)}, deviceCode: "device-code", clientID: "mewla-public", interval: 5 * time.Second}
 	m.connectFlows[f.ID] = f
 	if err := m.pollGitHubDevice(context.Background(), f); err != nil {
 		t.Fatal(err)
@@ -325,7 +325,7 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 	reopened.networkOwned, reopened.http = false, m.http
 	m = reopened
 	r = m.records[r.Account.ID]
-	if r.OAuth == nil || r.OAuth.ClientID != "zen-public" {
+	if r.OAuth == nil || r.OAuth.ClientID != "mewla-public" {
 		t.Fatal("restart lost client binding")
 	}
 	expire()

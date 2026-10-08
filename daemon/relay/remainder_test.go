@@ -222,13 +222,13 @@ func TestConnectorRejectOutcomesAreExactlyOnceAndAnonymous(t *testing.T) {
 		t.Fatalf("repeated metrics scrape mutated counters:\nfirst=%s\nsecond=%s", first, second)
 	}
 	for _, expected := range []string{
-		"zen_link_rejected_connections_total 10",
-		`zen_link_rejected_connections_total{reason="auth"} 3`,
-		`zen_link_rejected_connections_total{reason="replay"} 1`,
-		`zen_link_rejected_connections_total{reason="protocol"} 2`,
-		`zen_link_rejected_connections_total{reason="capacity"} 1`,
-		`zen_link_rejected_connections_total{reason="ticket"} 3`,
-		`zen_link_rejected_connections_total{reason="shutdown"} 0`,
+		"mewla_link_rejected_connections_total 10",
+		`mewla_link_rejected_connections_total{reason="auth"} 3`,
+		`mewla_link_rejected_connections_total{reason="replay"} 1`,
+		`mewla_link_rejected_connections_total{reason="protocol"} 2`,
+		`mewla_link_rejected_connections_total{reason="capacity"} 1`,
+		`mewla_link_rejected_connections_total{reason="ticket"} 3`,
+		`mewla_link_rejected_connections_total{reason="shutdown"} 0`,
 	} {
 		if !strings.Contains(first, expected) {
 			t.Fatalf("rejection metrics missing %q:\n%s", expected, first)

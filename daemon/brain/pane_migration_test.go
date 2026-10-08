@@ -30,11 +30,11 @@ func TestPaneMigrationPreservesRunningTurnAcrossRestart(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
-	owned := tm("new-session", "-d", "-s", "zen-worker-migration", "-P", "-F", "#{pane_id}", "exec /bin/sh")
+	owned := tm("new-session", "-d", "-s", "mewla-worker-migration", "-P", "-F", "#{pane_id}", "exec /bin/sh")
 	t.Cleanup(func() { _ = exec.Command(binary, "-S", socket, "kill-server").Run() })
 	old := tm("display-message", "-p", "-t", owned, "#{session_name}:#{window_id}")
-	tm("set-option", "-w", "-t", owned, "@zen_worker_created", "1")
-	tm("set-option", "-w", "-t", owned, "@zen_worker_delegated", "1")
+	tm("set-option", "-w", "-t", owned, "@mewla_worker_created", "1")
+	tm("set-option", "-w", "-t", owned, "@mewla_worker_delegated", "1")
 	other := tm("split-window", "-h", "-t", owned, "-P", "-F", "#{pane_id}", "exec /bin/sh")
 	root := t.TempDir()
 	store, err := NewStore(root)

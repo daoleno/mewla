@@ -20,7 +20,7 @@ func TestFormatNotificationWorkerLabel(t *testing.T) {
 		workerID   string
 		want       string
 	}{
-		{name: "clean shell path and session suffix", workerName: "./bin/zen (main:7)", workerID: "main:7", want: "zen"},
+		{name: "clean shell path and session suffix", workerName: "./bin/mewla (main:7)", workerID: "main:7", want: "mewla"},
 		{name: "fallback to agent id", workerName: "", workerID: "main:7", want: "main:7"},
 		{name: "keep simple project name", workerName: "backend-api", workerID: "main:7", want: "backend-api"},
 	}

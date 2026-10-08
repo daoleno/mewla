@@ -52,7 +52,7 @@ func TestListSessionServicesIncludesPersistentRows(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestListSessionServicesForwardsTimedOutRows(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)

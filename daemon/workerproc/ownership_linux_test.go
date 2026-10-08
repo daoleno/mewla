@@ -32,7 +32,7 @@ func TestProcStatHandlesSpacesParenthesesAndZombie(t *testing.T) {
 	}
 }
 func TestStopOwnershipReclaimsDetachedToolAndPreservesForeignProcess(t *testing.T) {
-	token := fmt.Sprintf("zen-test-%d", time.Now().UnixNano())
+	token := fmt.Sprintf("mewla-test-%d", time.Now().UnixNano())
 	dir := t.TempDir()
 	path, _ := LeasePath(dir, token)
 	if err := WriteOwnershipLease(path, token); err != nil {

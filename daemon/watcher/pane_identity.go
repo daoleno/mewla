@@ -29,7 +29,7 @@ func (w *Watcher) CanonicalWorkerID(id string) string {
 	socket := w.tmuxSocketPath
 	w.mu.RUnlock()
 	if pane != "" {
-		legacy, err := tmuxPaneUserOption(socket, pane, "zen_worker_legacy_id")
+		legacy, err := tmuxPaneUserOption(socket, pane, "mewla_worker_legacy_id")
 		if err == nil && legacy == id {
 			return pane
 		}
@@ -68,16 +68,16 @@ func (w *Watcher) MigrateLegacyWorkerPanes(aliases map[string]string, generation
 	windows := map[string][]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		fields := strings.Split(line, "\t")
-		if len(fields) != 2 || !isPaneID(fields[1]) || strings.HasPrefix(fields[0], "zen-view-") {
+		if len(fields) != 2 || !isPaneID(fields[1]) || strings.HasPrefix(fields[0], "mewla-view-") {
 			continue
 		}
 		windows[fields[0]] = append(windows[fields[0]], fields[1])
 	}
-	keys := []string{"zen_worker_hidden", "zen_worker_delegated", "zen_worker_resource_unit", "zen_worker_resource_owner", "zen_worker_pi_session", sessionInputReceiptOption, "zen_worker_created"}
+	keys := []string{"mewla_worker_hidden", "mewla_worker_delegated", "mewla_worker_resource_unit", "mewla_worker_resource_owner", "mewla_worker_pi_session", sessionInputReceiptOption, "mewla_worker_created"}
 	for old, panes := range windows {
 		// Use the exact inventory's immutable window ID, never a session:name target.
 		_, window, _ := strings.Cut(old, ":")
-		raw, err := tmuxCommand(socket, "show-options", "-wqv", "-t", window, "@zen_worker_created").Output()
+		raw, err := tmuxCommand(socket, "show-options", "-wqv", "-t", window, "@mewla_worker_created").Output()
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ func (w *Watcher) MigrateLegacyWorkerPanes(aliases map[string]string, generation
 		// A previously pinned pane that disappeared stays gone. Its sibling cannot
 		// inherit the legacy window's marker even after a partially completed load.
 		if present {
-			if err := setTmuxPaneUserOption(socket, pane, "zen_worker_legacy_id", old); err != nil {
+			if err := setTmuxPaneUserOption(socket, pane, "mewla_worker_legacy_id", old); err != nil {
 				return err
 			}
 			for _, key := range keys {
@@ -130,7 +130,7 @@ func (w *Watcher) MigrateLegacyWorkerPanes(aliases map[string]string, generation
 			}
 		}
 		session, _, _ := strings.Cut(old, ":")
-		if strings.HasPrefix(session, "zen-worker-") {
+		if strings.HasPrefix(session, "mewla-worker-") {
 			env, err := tmuxCommand(socket, "show-environment", "-t", "="+session).Output()
 			if err != nil {
 				return err

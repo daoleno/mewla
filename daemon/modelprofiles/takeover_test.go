@@ -171,7 +171,7 @@ func TestTakeoverDisablePreservesUserChanges(t *testing.T) {
 	}
 }
 
-// TestTakeoverDriftDetection: user edits to the Zen-owned projection or the
+// TestTakeoverDriftDetection: user edits to the Mewla-owned projection or the
 // model_provider line are detected and reported truthfully.
 func TestTakeoverDriftDetection(t *testing.T) {
 	takeover, _, configPath := takeoverFixture(t)

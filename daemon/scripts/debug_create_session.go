@@ -53,7 +53,7 @@ func main() {
 	}
 
 	deviceID := fmt.Sprintf("debug-%d", time.Now().UnixNano())
-	deviceName := "zen-debug-client"
+	deviceName := "mewla-debug-client"
 	publicKeyHex, signer := newSigner()
 
 	if err := pair(*serverURL, pairRequest{
@@ -241,7 +241,7 @@ func buildAuthorizationHeader(daemonID, deviceID string, signer ed25519.PrivateK
 	timestamp := strconvFormatInt(time.Now().UnixMilli())
 	nonceHex := hex.EncodeToString(nonce)
 	payload := strings.Join([]string{
-		"zen-connect",
+		"mewla-connect",
 		daemonID,
 		deviceID,
 		timestamp,
@@ -249,7 +249,7 @@ func buildAuthorizationHeader(daemonID, deviceID string, signer ed25519.PrivateK
 	}, "\n")
 	signature := ed25519.Sign(signer, []byte(payload))
 	return fmt.Sprintf(
-		"ZenDevice v1:%s:%s:%s:%s:%s",
+		"Device v1:%s:%s:%s:%s:%s",
 		deviceID,
 		daemonID,
 		timestamp,

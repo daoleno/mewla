@@ -253,7 +253,7 @@ func updateTrustFileOnce(path string, patch func([]byte) ([]byte, error)) error 
 	if bytes.Equal(raw, out) {
 		return nil
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".zen-trust-*")
+	f, err := os.CreateTemp(filepath.Dir(path), ".mewla-trust-*")
 	if err != nil {
 		return err
 	}

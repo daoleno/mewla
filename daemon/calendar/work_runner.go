@@ -30,8 +30,8 @@ type WorkRunner struct {
 }
 
 const (
-	scheduledDeliverableStart       = "<!-- zen:scheduled-deliverable:start -->"
-	scheduledDeliverableEnd         = "<!-- zen:scheduled-deliverable:end -->"
+	scheduledDeliverableStart       = "<!-- mewla:scheduled-deliverable:start -->"
+	scheduledDeliverableEnd         = "<!-- mewla:scheduled-deliverable:end -->"
 	scheduledDeliverablePlaceholder = "Replace this line with the complete user-facing deliverable."
 	maxScheduledDeliverableBytes    = 256 * 1024
 )

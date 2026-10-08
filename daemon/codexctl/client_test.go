@@ -269,20 +269,20 @@ func TestResolveThreadPrefersLoadedMainActiveThread(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-side", "t-main"}
 	f.threads = []ThreadInfo{
-		{ID: "t-side", Cwd: "/repo/zen", Status: "idle", UpdatedAt: 200},
-		{ID: "t-main", Cwd: "/repo/zen", Status: "active", UpdatedAt: 300},
+		{ID: "t-side", Cwd: "/repo/mewla", Status: "idle", UpdatedAt: 200},
+		{ID: "t-main", Cwd: "/repo/mewla", Status: "active", UpdatedAt: 300},
 	}
 	c := openFake(t, f)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	got, err := c.ResolveThread(ctx, "/repo/zen")
+	got, err := c.ResolveThread(ctx, "/repo/mewla")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "t-main" {
 		t.Fatalf("ResolveThread = %q, want t-main", got)
 	}
-	if p := f.lastParams(methodThreadList); p["cwd"] != "/repo/zen" {
+	if p := f.lastParams(methodThreadList); p["cwd"] != "/repo/mewla" {
 		t.Fatalf("thread/list cwd = %#v", p["cwd"])
 	}
 }
@@ -297,7 +297,7 @@ func TestResolveThreadFallsBackToSingleLoadedThread(t *testing.T) {
 	c := openFake(t, f)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	got, err := c.ResolveThread(ctx, "/repo/zen")
+	got, err := c.ResolveThread(ctx, "/repo/mewla")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestResolveThreadNoCandidates(t *testing.T) {
 	c := openFake(t, f)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := c.ResolveThread(ctx, "/repo/zen")
+	_, err := c.ResolveThread(ctx, "/repo/mewla")
 	if !errors.Is(err, ErrNoThread) {
 		t.Fatalf("err = %v, want ErrNoThread", err)
 	}

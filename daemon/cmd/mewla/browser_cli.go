@@ -115,7 +115,7 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 		return r.Browser, nil
 	}
 	defer func() { _, _ = call(browser.Request{Action: "release"}) }()
-	server := mcp.NewServer(&mcp.Implementation{Name: "zen-browser", Version: "1"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "mewla-browser", Version: "1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use the explicitly selected persistent Mewla Browser. Request control before reading or acting. Human control denies ALL managed reads and actions. Never ask for credentials. release detaches this task without closing the browser."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
 		mu.Lock()
 		defer mu.Unlock()

@@ -178,7 +178,7 @@ func (w *killTrackingWatcher) CreateSession(_ string, opts watcher.CreateSession
 		w.sessions = map[string]*classifier.Worker{}
 	}
 	w.created++
-	id := fmt.Sprintf("zen-worker-host:@%d", w.created)
+	id := fmt.Sprintf("mewla-worker-host:@%d", w.created)
 	w.sessions[id] = &classifier.Worker{
 		ID:      id,
 		Name:    opts.Name,

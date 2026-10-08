@@ -13,7 +13,7 @@ func TestValidateDelegatedWorkspaceRejectsMemoryBackedFilesystem(t *testing.T) {
 	if _, err := os.Stat(root); err != nil {
 		t.Skipf("%s unavailable: %v", root, err)
 	}
-	dir, err := os.MkdirTemp(root, "zen-workspace-test-")
+	dir, err := os.MkdirTemp(root, "mewla-workspace-test-")
 	if err != nil {
 		t.Skipf("cannot create tmpfs fixture: %v", err)
 	}

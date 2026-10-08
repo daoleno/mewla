@@ -71,7 +71,7 @@ func TestBDD_BrainCardUnicodeDeliveryHistoryAndAcceptance(t *testing.T) {
 	// treating corruption in a new message as legitimate user prose.
 	input.Summary = strings.Repeat("中", 60)[:157] + "..."
 	legacyJSON, _ := json.Marshal(input)
-	legacy := "<zen_work_event>\n" + string(legacyJSON) + "\n</zen_work_event>"
+	legacy := "<mewla_work_event>\n" + string(legacyJSON) + "\n</mewla_work_event>"
 	if _, ok := work.ParseCanonicalDirectWorkEventInput(legacy); ok {
 		t.Fatal("strict admission unexpectedly accepted legacy normalization")
 	}

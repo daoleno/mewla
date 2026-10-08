@@ -43,7 +43,7 @@ func TestCodexAppServerThreadProviderMapsListThreads(t *testing.T) {
 				UpdatedAt:     1780333776,
 				Status:        json.RawMessage(`{"type":"notLoaded"}`),
 				Path:          "/home/user/.codex/sessions/rollout.jsonl",
-				Cwd:           "/repo/zen",
+				Cwd:           "/repo/mewla",
 				Source:        "cli",
 				Name:          &name,
 			}},
@@ -56,7 +56,7 @@ func TestCodexAppServerThreadProviderMapsListThreads(t *testing.T) {
 	page, err := provider.ListThreads(context.Background(), NativeThreadListOptions{
 		Cursor:         "cursor",
 		Limit:          12,
-		Cwd:            "/repo/zen",
+		Cwd:            "/repo/mewla",
 		SearchTerm:     "Brain",
 		SortKey:        "updated_at",
 		SortDirection:  "desc",
@@ -76,7 +76,7 @@ func TestCodexAppServerThreadProviderMapsListThreads(t *testing.T) {
 	for key, want := range map[string]any{
 		"cursor":         "cursor",
 		"limit":          12,
-		"cwd":            "/repo/zen",
+		"cwd":            "/repo/mewla",
 		"searchTerm":     "Brain",
 		"sortKey":        "updated_at",
 		"sortDirection":  "desc",
@@ -128,7 +128,7 @@ func TestCodexAppServerThreadProviderSearchesThreads(t *testing.T) {
 					UpdatedAt:     1780333776,
 					Status:        json.RawMessage(`{"type":"notLoaded"}`),
 					Path:          "/home/user/.codex/sessions/rollout.jsonl",
-					Cwd:           "/repo/zen",
+					Cwd:           "/repo/mewla",
 					Source:        "cli",
 					Name:          &name,
 				},
@@ -143,7 +143,7 @@ func TestCodexAppServerThreadProviderSearchesThreads(t *testing.T) {
 	page, err := provider.SearchThreads(context.Background(), NativeThreadSearchOptions{
 		Cursor:     "cursor",
 		Limit:      4,
-		Cwd:        "/repo/zen",
+		Cwd:        "/repo/mewla",
 		SearchTerm: "Brain",
 	})
 	if err != nil {
@@ -159,7 +159,7 @@ func TestCodexAppServerThreadProviderSearchesThreads(t *testing.T) {
 	for key, want := range map[string]any{
 		"cursor":     "cursor",
 		"limit":      4,
-		"cwd":        "/repo/zen",
+		"cwd":        "/repo/mewla",
 		"searchTerm": "Brain",
 	} {
 		if got := params[key]; got != want {
@@ -189,7 +189,7 @@ func TestCodexAppServerThreadProviderStartsThread(t *testing.T) {
 				SessionID: "session-new",
 				Preview:   "New Brain thread",
 				Status:    json.RawMessage(`{"type":"idle"}`),
-				Cwd:       "/repo/zen",
+				Cwd:       "/repo/mewla",
 				Source:    "appServer",
 			},
 		},
@@ -197,7 +197,7 @@ func TestCodexAppServerThreadProviderStartsThread(t *testing.T) {
 	provider := &CodexAppServerThreadProvider{client: fake}
 
 	thread, err := provider.StartThread(context.Background(), NativeThreadStartOptions{
-		Cwd:                   "/repo/zen",
+		Cwd:                   "/repo/mewla",
 		Model:                 "gpt-5-codex",
 		ModelProvider:         "openai",
 		DeveloperInstructions: "Keep Brain executor-neutral.",
@@ -211,7 +211,7 @@ func TestCodexAppServerThreadProviderStartsThread(t *testing.T) {
 	}
 	params := fake.params.(map[string]any)
 	for key, want := range map[string]any{
-		"cwd":                   "/repo/zen",
+		"cwd":                   "/repo/mewla",
 		"model":                 "gpt-5-codex",
 		"modelProvider":         "openai",
 		"developerInstructions": "Keep Brain executor-neutral.",
@@ -221,7 +221,7 @@ func TestCodexAppServerThreadProviderStartsThread(t *testing.T) {
 			t.Fatalf("param %s = %#v, want %#v", key, got, want)
 		}
 	}
-	if thread.ID != "codex:thread-new" || thread.Status != "idle" || thread.Cwd != "/repo/zen" {
+	if thread.ID != "codex:thread-new" || thread.Status != "idle" || thread.Cwd != "/repo/mewla" {
 		t.Fatalf("thread = %+v", thread)
 	}
 }
@@ -234,7 +234,7 @@ func TestCodexAppServerThreadProviderResumesThread(t *testing.T) {
 				SessionID: "session-1",
 				Preview:   "Resumed Brain thread",
 				Status:    json.RawMessage(`{"type":"idle"}`),
-				Cwd:       "/repo/zen",
+				Cwd:       "/repo/mewla",
 				Source:    "appServer",
 			},
 		},
@@ -242,7 +242,7 @@ func TestCodexAppServerThreadProviderResumesThread(t *testing.T) {
 	provider := &CodexAppServerThreadProvider{client: fake}
 
 	thread, err := provider.ResumeThread(context.Background(), "codex:thread-1", NativeThreadResumeOptions{
-		Cwd:           "/repo/zen",
+		Cwd:           "/repo/mewla",
 		Model:         "gpt-5-codex",
 		ModelProvider: "openai",
 	})
@@ -255,7 +255,7 @@ func TestCodexAppServerThreadProviderResumesThread(t *testing.T) {
 	params := fake.params.(map[string]any)
 	for key, want := range map[string]any{
 		"threadId":      "thread-1",
-		"cwd":           "/repo/zen",
+		"cwd":           "/repo/mewla",
 		"model":         "gpt-5-codex",
 		"modelProvider": "openai",
 	} {
@@ -263,7 +263,7 @@ func TestCodexAppServerThreadProviderResumesThread(t *testing.T) {
 			t.Fatalf("param %s = %#v, want %#v", key, got, want)
 		}
 	}
-	if thread.ID != "codex:thread-1" || thread.Status != "idle" || thread.Cwd != "/repo/zen" {
+	if thread.ID != "codex:thread-1" || thread.Status != "idle" || thread.Cwd != "/repo/mewla" {
 		t.Fatalf("thread = %+v", thread)
 	}
 }
@@ -277,7 +277,7 @@ func TestNativeThreadRuntimeResumeLaunchBuildsCodexTmuxCommand(t *testing.T) {
 		ID:       "codex:thread-1",
 		NativeID: "thread-1",
 		Provider: WorkerProviderCodex,
-		Cwd:      "/repo/zen",
+		Cwd:      "/repo/mewla",
 	}
 
 	launch, ok := NativeThreadRuntimeResumeLaunch(executor, thread, NativeThreadResumeOptions{
@@ -286,13 +286,13 @@ func TestNativeThreadRuntimeResumeLaunchBuildsCodexTmuxCommand(t *testing.T) {
 	if !ok {
 		t.Fatal("expected codex runtime resume launch")
 	}
-	if launch.Cwd != "/repo/zen" {
+	if launch.Cwd != "/repo/mewla" {
 		t.Fatalf("cwd = %q", launch.Cwd)
 	}
 	if !strings.Contains(launch.Command, "/opt/bin/codex --dangerously-bypass-approvals-and-sandbox resume 'thread-1'") {
 		t.Fatalf("command = %q", launch.Command)
 	}
-	if !strings.Contains(launch.Command, "--no-alt-screen") || !strings.Contains(launch.Command, "-C '/repo/zen'") {
+	if !strings.Contains(launch.Command, "--no-alt-screen") || !strings.Contains(launch.Command, "-C '/repo/mewla'") {
 		t.Fatalf("command = %q", launch.Command)
 	}
 }
@@ -365,8 +365,8 @@ func TestCodexAppServerThreadProviderReadsThread(t *testing.T) {
 				CreatedAt:     1780331643,
 				UpdatedAt:     1780333776,
 				Status:        json.RawMessage(`{"type":"active"}`),
-				Path:          "/repo/zen/.codex/thread.json",
-				Cwd:           "/repo/zen",
+				Path:          "/repo/mewla/.codex/thread.json",
+				Cwd:           "/repo/mewla",
 				Source:        "cli",
 				Name:          &name,
 			},
@@ -388,7 +388,7 @@ func TestCodexAppServerThreadProviderReadsThread(t *testing.T) {
 	if thread.ID != "codex:thread-1" || thread.NativeID != "thread-1" || thread.Title != "Readable Brain thread" {
 		t.Fatalf("thread = %+v", thread)
 	}
-	if thread.Status != "active" || thread.SessionID != "session-1" || thread.Cwd != "/repo/zen" || thread.Path != "/repo/zen/.codex/thread.json" {
+	if thread.Status != "active" || thread.SessionID != "session-1" || thread.Cwd != "/repo/mewla" || thread.Path != "/repo/mewla/.codex/thread.json" {
 		t.Fatalf("thread metadata = %+v", thread)
 	}
 }
@@ -401,7 +401,7 @@ func TestCodexAppServerThreadProviderForksThread(t *testing.T) {
 				SessionID: "forked-session",
 				Preview:   "Forked Brain work",
 				Status:    json.RawMessage(`{"type":"idle"}`),
-				Cwd:       "/repo/zen",
+				Cwd:       "/repo/mewla",
 				Source:    "appServer",
 			},
 		},
@@ -409,7 +409,7 @@ func TestCodexAppServerThreadProviderForksThread(t *testing.T) {
 	provider := &CodexAppServerThreadProvider{client: fake}
 
 	thread, err := provider.ForkThread(context.Background(), "codex:thread-1", NativeThreadForkOptions{
-		Cwd:                   "/repo/zen",
+		Cwd:                   "/repo/mewla",
 		Model:                 "gpt-5-codex",
 		ModelProvider:         "openai",
 		DeveloperInstructions: "Keep Brain executor-neutral.",
@@ -425,7 +425,7 @@ func TestCodexAppServerThreadProviderForksThread(t *testing.T) {
 	params := fake.params.(map[string]any)
 	for key, want := range map[string]any{
 		"threadId":              "thread-1",
-		"cwd":                   "/repo/zen",
+		"cwd":                   "/repo/mewla",
 		"model":                 "gpt-5-codex",
 		"modelProvider":         "openai",
 		"developerInstructions": "Keep Brain executor-neutral.",
@@ -436,7 +436,7 @@ func TestCodexAppServerThreadProviderForksThread(t *testing.T) {
 			t.Fatalf("param %s = %#v, want %#v", key, got, want)
 		}
 	}
-	if thread.ID != "codex:forked-thread" || thread.Status != "idle" || thread.Cwd != "/repo/zen" {
+	if thread.ID != "codex:forked-thread" || thread.Status != "idle" || thread.Cwd != "/repo/mewla" {
 		t.Fatalf("thread = %+v", thread)
 	}
 }
