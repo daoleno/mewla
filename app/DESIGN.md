@@ -88,11 +88,15 @@ preference resolves to ink.
 - **Wide (≥ 1024 pt).** The menu docks as a permanent sidebar and the app bar
   shows the page title. On native tablets it docks beside Brain and Sessions;
   on desktop web it docks beside every page (see Desktop web).
-- **Menu.** One model on every layout, one ordered list without captions or
-  cards: Brain, Sessions (selected in place, tint on the current one, seal dot
-  when a Session needs you), Calendar, Plugins, Skills, Stats, Resources. On
-  phone, choosing Brain or Sessions also closes the menu. Settings sits apart
-  at the bottom, and under it one quiet line names the current server and its
+- **Brain and Sessions have one home per layout.** On phone it is the app
+  bar's switch, so the menu does not list them. Docked (wide), the sidebar
+  lists them and the app bar shows the page title instead of the switch.
+  Never both on one screen.
+- **Menu.** One ordered list without captions or cards: on a docked sidebar
+  Brain and Sessions lead (selected in place, tint on the current one, seal
+  dot when a Session needs you), then Calendar, Plugins, Skills, Stats,
+  Resources; the phone menu starts at Calendar. Settings sits apart at the
+  bottom, and under it one quiet line names the current server and its
   state. Rows are a soft-ink glyph and a label, no tiles.
 - **Connection status has one home**: that footer line. It is read-only
   (switching lives in Settings), and healthy is quiet: only Offline or a
@@ -397,9 +401,11 @@ changes that the service must approve all call it.
 - **Sessions.** Plain rows on the paper, grouped by directory with a quiet
   caption when there is more than one; no cards and no separators. A row's
   only fill is the selection tint, and in selection mode the check takes its
-  own leading column. "New session" is the page's one ink pill: compact,
-  content-width, floating at the bottom right
-  (`components/workers/SessionsListView.tsx`), never a full-width bar. Nothing sits
+  own leading column. New session is the page's one ink action: a round
+  plus with no words on it, floating at the bottom right
+  (`components/workers/SessionsListView.tsx`), never a full-width bar. Its
+  name lives in the accessibility label and the tooltip ("New session (N)" on
+  desktop web). Nothing sits
   above the list unless the server is unreachable.
 - **Worker chat.** The conversation keeps Brain's 820 pt reading width; the
   terminal grid stays full width. The header avatar carries the Session's

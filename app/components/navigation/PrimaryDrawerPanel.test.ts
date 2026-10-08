@@ -78,13 +78,15 @@ describe("primary drawer panel", () => {
     expect(scroll.end).toBeLessThan(footer.pos);
   });
 
-  test("Brain and Sessions lead on every layout and select the page in place", () => {
-    expect(source).not.toContain("{docked ? (");
+  test("Brain and Sessions have one home per layout: the docked sidebar, never the phone drawer", () => {
+    // The phone's app bar switch owns Brain and Sessions; the drawer would repeat it.
+    expect(source).toContain('{docked ? <View accessibilityRole="tablist"');
+    expect(source).toContain("</View> : null}");
     // The desktop web sidebar selects by path; elsewhere the primary route.
     expect(source).toContain(
       "selectedKey === undefined\n                  ? activePrimaryRoute === place.route\n                  : selectedKey === place.key",
     );
-    expect(source).toContain("if (!docked) onClose();\n      onSelectPrimaryRoute(route);");
+    expect(source).toContain("(route: PrimaryRouteName) => onSelectPrimaryRoute(route)");
   });
 
   test("server status is a read-only footer row after Settings, without an always-on dot", () => {
