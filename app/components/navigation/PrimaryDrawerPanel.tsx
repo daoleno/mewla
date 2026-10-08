@@ -218,11 +218,8 @@ export function PrimaryDrawerPanel({
     [onNavigateAway, onOpenPath, router],
   );
   const selectPlace = useCallback(
-    (route: PrimaryRouteName) => {
-      if (!docked) onClose();
-      onSelectPrimaryRoute(route);
-    },
-    [docked, onClose, onSelectPrimaryRoute],
+    (route: PrimaryRouteName) => onSelectPrimaryRoute(route),
+    [onSelectPrimaryRoute],
   );
 
   return (
@@ -268,7 +265,9 @@ export function PrimaryDrawerPanel({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View accessibilityRole="tablist" style={styles.drawerList}>
+        {/* One home per layout: the phone's app bar switches Brain and
+            Sessions, so only the docked sidebar lists them. */}
+        {docked ? <View accessibilityRole="tablist" style={styles.drawerList}>
           {PRIMARY_DRAWER_PLACES.map((place) => (
             <PrimaryPlaceRow
               key={place.key}
@@ -285,7 +284,7 @@ export function PrimaryDrawerPanel({
               onPress={() => selectPlace(place.route)}
             />
           ))}
-        </View>
+        </View> : null}
         {PRIMARY_DRAWER_DESTINATIONS.map((destination) => (
           <DrawerRow
             key={destination.key}
