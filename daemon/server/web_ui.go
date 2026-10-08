@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
@@ -44,6 +45,46 @@ func (s *Server) SetAddressBook(book *addressbook.Store) { s.addresses = book }
 func (s *Server) AddressBook() *addressbook.Store { return s.addresses }
 
 func (s *Server) SetEnrollmentManager(manager *enrollment.Manager) { s.enrollments = manager }
+
+// appRoute shares a path between a daemon API and a web app route, such as
+// /resources and /browser. A browser loading the page (a GET that prefers
+// HTML) on a web UI origin gets the app, so reload and deep links reopen it.
+// The app's own requests never ask for HTML and keep the API.
+func (s *Server) appRoute(webUI, api http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Vary", "Accept")
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && prefersHTML(r.Header.Get("Accept")) && s.webUIAdmitted(r) {
+			webUI.ServeHTTP(w, r)
+			return
+		}
+		api.ServeHTTP(w, r)
+	})
+}
+
+// prefersHTML reports whether an Accept header names text/html explicitly,
+// at a quality no lower than JSON. Wildcards alone ("*/*") are API clients.
+func prefersHTML(accept string) bool {
+	html, json := -1.0, -1.0
+	for _, part := range strings.Split(accept, ",") {
+		mediaType, params, _ := strings.Cut(part, ";")
+		quality := 1.0
+		for _, param := range strings.Split(params, ";") {
+			name, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if ok && strings.EqualFold(strings.TrimSpace(name), "q") {
+				if parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+					quality = parsed
+				}
+			}
+		}
+		switch strings.ToLower(strings.TrimSpace(mediaType)) {
+		case "text/html", "application/xhtml+xml":
+			html = max(html, quality)
+		case "application/json":
+			json = max(json, quality)
+		}
+	}
+	return html > 0 && html >= json
+}
 
 // webUIHandler serves the browser app only where the operator expects it:
 // loopback clients addressing a loopback host, or an explicit web origin.

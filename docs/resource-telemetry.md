@@ -105,7 +105,10 @@ same flat response with the existing signed device authentication and purpose
 `mewla-resource-telemetry`; responses use `Cache-Control: no-store`. The local
 control socket exposes the same snapshot through `mewla resources --json` under
 `resource_telemetry`. Before the first sample, the WebSocket returns
-`resource_telemetry_unavailable` and HTTP returns 503. Changing the app's current
+`resource_telemetry_unavailable` and HTTP returns 503. On a web UI origin, a page
+load of `/resources` (a GET that prefers `text/html`) gets the web app instead, so
+reloading the Resources page works; `/browser` shares the path the same way.
+Changing the app's current
 server must clear its previous history and polling state.
 
 Consumers additionally include `id` (stable group key), `process_count`,
