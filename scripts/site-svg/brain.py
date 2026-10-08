@@ -1,64 +1,57 @@
 # Brain on a wide screen: the docked menu, the conversation with its goal
 # line, folded steps and Work slips, and the Work column with the cat perched
 # on the slip that needs you. The atlas-notes story matches the homepage.
+import json
+import os
+import re
+
 from common import C, Svg, chevron, mark, seal, slip
 
 GOAL = "Ship atlas-notes v1.4 this week"
 
 
-def icon(s, name, x, y):
-    """Soft-ink menu glyphs, 18 px, top-left at (x, y)."""
-    st = ' stroke-linecap="round" stroke-linejoin="round"'
+HERE = os.path.dirname(os.path.abspath(__file__))
+ICONS = os.path.join(HERE, "..", "..", "app", "components", "icons")
+GLYPHS = {
+    name: json.loads(paths)
+    for name, paths in re.findall(r'^  "([a-z-]+)": (\[.*\]),$', open(os.path.join(ICONS, "phosphorGlyphs.ts")).read(), re.M)
+}
+BRAIN_GLYPH = re.search(r'brain: \{\s*strokes: \[\s*"([^"]+)"', open(os.path.join(ICONS, "mewlaGlyphs.ts")).read()).group(1)
+MENU = (("brain", "Brain"), ("sessions", "Sessions"), ("calendar", "Calendar"), ("plugins", "Plugins"),
+        ("skills", "Skills"), ("stats", "Stats"), ("resources", "Resources"))
+
+
+def icon(s, name, x, y, size=18, ink="soft"):
+    """The app's own glyphs (components/icons), top-left at (x, y)."""
+    g = f'<g transform="translate({x:g} {y:g}) scale({size / 256:g})">'
     if name == "brain":
-        s.path(f"M{x + 2} {y + 9}a7 7 0 1 1 3 5.7L{x + 2} {y + 16}l1-3.6A7 7 0 0 1 {x + 2} {y + 9}Z", stroke="soft", sw=1.4, extra=st)
-    elif name == "sessions":
-        s.rect(x + 1, y + 2, 16, 14, rx=2.5, stroke="soft", sw=1.4)
-        s.path(f"M{x + 5} {y + 7}l2.5 2-2.5 2M{x + 9.5} {y + 12}h3", stroke="soft", sw=1.4, extra=st)
-    elif name == "calendar":
-        s.rect(x + 1, y + 3, 16, 14, rx=2.5, stroke="soft", sw=1.4)
-        s.path(f"M{x + 1} {y + 7.5}h16M{x + 5} {y + 1}v3M{x + 13} {y + 1}v3", stroke="soft", sw=1.4, extra=st)
-    elif name == "plugins":
-        s.path(f"M{x + 6} {y + 1}v4M{x + 12} {y + 1}v4M{x + 4} {y + 5}h10v4a5 5 0 0 1-10 0ZM{x + 9} {y + 14}v4", stroke="soft", sw=1.4, extra=st)
-    elif name == "skills":
-        s.path(f"M{x + 9} {y + 2}l8 4-8 4-8-4ZM{x + 1} {y + 10}l8 4 8-4M{x + 1} {y + 14}l8 4 8-4", stroke="soft", sw=1.3, extra=st)
-    elif name == "stats":
-        s.path(f"M{x + 4} {y + 16}v-5M{x + 9} {y + 16}v-10M{x + 14} {y + 16}v-7", stroke="soft", sw=1.6, extra=st)
-    elif name == "resources":
-        s.rect(x + 1, y + 2, 16, 14, rx=2.5, stroke="soft", sw=1.4)
-        s.path(f"M{x + 3} {y + 10}h3l2-4 2.5 7 2-3h2.5", stroke="soft", sw=1.3, extra=st)
-    elif name == "settings":
-        s.path(f"M{x + 1} {y + 5}h16M{x + 1} {y + 13}h16", stroke="soft", sw=1.4, extra=st)
-        s.circle(x + 6, y + 5, 2.4, fill="paper", stroke="soft", sw=1.4)
-        s.circle(x + 12, y + 13, 2.4, fill="paper", stroke="soft", sw=1.4)
+        g += f'<path d="{BRAIN_GLYPH}" fill="none" stroke="{C[ink]}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>'
+        g += "".join(f'<circle cx="{cx}" cy="142" r="14" fill="{C[ink]}"/>' for cx in (92, 128, 164))
+    else:
+        g += "".join(f'<path d="{d}" fill="{C[ink]}"/>' for d in GLYPHS[name])
+    s.add(g + "</g>")
 
 
 def sidebar(s, x, y, w, h):
+    """One list (Brain, Sessions, the tools), Settings at the bottom, then the server line."""
     s.line(x + w, y, x + w, y + h, stroke="line")
     seal(s, x + 20, y + 22, 26)
     s.text(x + 54, y + 41, "Mewla", size=21, weight=800, display=True)
-    rows = [("brain", "Brain", True), ("sessions", "Sessions", False)]
     ry = y + 70
-    for ic, label, on in rows:
+    for ic, label in MENU:
+        on = ic == "brain"
         if on:
             s.rect(x + 10, ry, w - 20, 38, rx=10, fill="select")
-        icon(s, ic, x + 22, ry + 10)
-        s.text(x + 52, ry + 24, label, size=14.5, weight=500 if on else 400)
+        icon(s, ic, x + 22, ry + 10, ink="ink" if on else "soft")
+        s.text(x + 52, ry + 24, label, size=14.5, weight=500)
         ry += 42
-    s.rect(x + 10, ry + 4, w - 20, 46, rx=10, fill="card", stroke="line")
-    s.text(x + 24, ry + 24, "Studio Mac", size=13.5, weight=500)
-    mark(s, "ready", x + 30, ry + 37, r=4.5)
-    s.text(x + 40, ry + 41, "Connected", size=11.5, fill="soft")
-    ry += 72
-    s.text(x + 22, ry, "On this computer", size=11.5, fill="soft2")
-    ry += 14
-    for ic, label in (("calendar", "Calendar"), ("plugins", "Plugins"), ("skills", "Skills"), ("stats", "Stats"), ("resources", "Resources")):
-        icon(s, ic, x + 22, ry + 8)
-        s.text(x + 52, ry + 22, label, size=14.5)
-        ry += 36
-    ry += 22
-    s.text(x + 22, ry, "App", size=11.5, fill="soft2")
-    icon(s, "settings", x + 22, ry + 22)
-    s.text(x + 52, ry + 36, "Settings", size=14.5)
+    by = y + h - 92
+    icon(s, "settings", x + 22, by + 10)
+    s.text(x + 52, by + 24, "Settings", size=14.5, weight=500)
+    s.line(x + 10, by + 50, x + w - 10, by + 50, stroke="line")
+    icon(s, "desktop", x + 24, by + 63, size=14, ink="soft2")
+    s.text(x + 52, by + 74, "Studio Mac", size=12.5, fill="soft", weight=500)
+    s.text(x + w - 14, by + 74, "Connected", size=12, fill="soft2", anchor="end")
 
 
 def conversation(s, x, y, w, h):
