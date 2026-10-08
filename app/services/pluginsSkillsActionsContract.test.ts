@@ -273,7 +273,8 @@ describe("Plugins connection route contract", () => {
     expect(flow).not.toContain("authorize = ");
     expect(service.match(/flow\.connect\(/g)?.length).toBe(2);
     expect(routes[0]).toContain("flow.connect(plugin.id)");
-    expect(routes[0]).toContain("flow.connect(account.integration)");
+    expect(routes[0]).toContain('flow.recover(account, "reconnect")');
+    expect(flow).toContain("connect(account.integration, { writes: reconnectsWithWrites(account) })");
   });
   test("built-in connection views contain no text input", () => {
     expect(views).not.toContain("TextInput");
