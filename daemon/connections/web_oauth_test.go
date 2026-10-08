@@ -118,7 +118,7 @@ func TestWebConnectReturnsToPlugins(t *testing.T) {
 	if status.Flow.Status != "connected" || status.Account == nil || status.Account.Status != "connected" {
 		t.Fatalf("web flow not connected: %+v", status.Flow)
 	}
-	if location.Path != "/plugins/mcp" || location.Query().Get("connected") != status.Account.ID || location.Host != "" {
+	if location.Path != "/plugins" || location.Query().Get("service") != "mcp" || location.Query().Get("connected") != status.Account.ID || location.Host != "" {
 		t.Fatalf("callback returned to %v", location)
 	}
 	if finish := mustHandle(t, m, Request{Action: "connect_finish", FlowID: start.ID}); finish.Flow.Status != "connected" {
@@ -137,10 +137,14 @@ func TestWebConnectReturnsToPlugins(t *testing.T) {
 		t.Fatal("replay disturbed the connected account")
 	}
 
-	// Declining consent lands on the service page and leaves no account.
+	if a := status.Account.Access; a == nil || a.Tools != 1 || a.WriteConsent {
+		t.Fatalf("web account access summary %+v", a)
+	}
+
+	// Declining consent lands on the list, naming the service, and leaves no account.
 	declined := *input
 	denied := mustHandle(t, m, Request{Action: "connect_start", Input: &declined}).Flow
-	if back := visit(denied.AuthorizationURL + "&deny=1"); back.Path != "/plugins/mcp" || back.Query().Get("plugin_error") != "denied" {
+	if back := visit(denied.AuthorizationURL + "&deny=1"); back.Path != "/plugins" || back.Query().Get("service") != "mcp" || back.Query().Get("plugin_error") != "denied" {
 		t.Fatalf("denial returned to %v", back)
 	}
 	if after := mustHandle(t, m, Request{Action: "connect_status", FlowID: denied.ID}); after.Flow.Status != "failed" {

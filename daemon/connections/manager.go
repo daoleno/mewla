@@ -118,6 +118,12 @@ func (m *Manager) projection(r *record) Account {
 		a.Tools[i].Group = toolGroup(r, a.Tools[i])
 		a.Tools[i].Allowed = r.Grants[a.Tools[i].Name] == fingerprint(a.Tools[i])
 	}
+	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), Tools: len(a.Tools)}
+	for _, t := range a.Tools {
+		if t.Allowed {
+			a.Access.Allowed++
+		}
+	}
 	return a
 }
 
