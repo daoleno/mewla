@@ -17,6 +17,7 @@ import {
   type PluginCatalogSections,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
+import { ServiceMark, hasServiceMark } from "./ServiceMarks";
 
 type Job = { read: string; write: string; example: string } | undefined;
 
@@ -28,8 +29,6 @@ const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"
 };
 
 const SERVICE_ICONS: Record<string, IconName> = {
-  notion: "document-text",
-  linear: "git-branch",
   mcp: "server",
   openapi: "code",
 };
@@ -44,6 +43,8 @@ export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
     >
       {SERVICE_LOGOS[id] ? (
         <Ionicons name={SERVICE_LOGOS[id]} size={Math.round(size * 0.6)} color={colors.textPrimary} />
+      ) : hasServiceMark(id) ? (
+        <ServiceMark id={id} size={Math.round(size * 0.56)} color={colors.textPrimary} />
       ) : (
         <Icon name={SERVICE_ICONS[id] ?? "puzzle"} size={Math.round(size * 0.6)} color={colors.textPrimary} />
       )}
