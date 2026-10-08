@@ -85,8 +85,9 @@ preference resolves to ink.
 - **Phone.** The app bar has the menu (☰), the Brain · Sessions switch (text
   tabs with an ink underline; a seal dot on Sessions when a Session needs
   you) and one ⋯ page action. The menu slides over the page.
-- **Wide (≥ 1024 pt, any platform).** The menu docks as a permanent sidebar;
-  the app bar shows the page title.
+- **Wide (≥ 1024 pt).** The menu docks as a permanent sidebar and the app bar
+  shows the page title. On native tablets it docks beside Brain and Sessions;
+  on desktop web it docks beside every page (see Desktop web).
 - **Menu.** One model on every layout, one ordered list without captions or
   cards: Brain, Sessions (selected in place, tint on the current one, seal dot
   when a Session needs you), Calendar, Plugins, Skills, Stats, Resources. On
@@ -111,6 +112,35 @@ preference resolves to ink.
   Work), Terminate. Sessions' ⋯ holds New session and Services. Contextual
   recovery links ("Open Settings" in a no-server empty state) are fine: they
   fix the screen you are on rather than navigate elsewhere.
+
+## Desktop web
+
+A desktop browser (web, at least 1024 pt wide) gets a web app, not a stretched
+phone. `isDesktopWeb` (`components/navigation/desktopWeb.ts`) is the one gate;
+phone web and native, tablets included, keep the model above. Rules:
+
+1. **The sidebar never disappears.** It wraps the whole app, not only Brain
+   and Sessions. Every row and list item opens in the main pane beside it, and
+   the row for where you are is selected (a Session selects Sessions, a
+   service selects Plugins).
+2. **Every place has a URL.** Back, forward and reload return to it. Brain ↔
+   Sessions is a history step. A Session's URL is `/terminal/<id>?serverId=…`
+   and carries no launch state.
+3. **Nothing takes over the window.** Menu destinations have no Back: the
+   sidebar is the way out. Sub-pages (a service, Model Providers, a Session)
+   keep Back to their parent. Pages switch without a slide.
+4. **One chat layout.** Brain and Session chats sit in the main pane at the
+   820 pt reading width. Brain's Work column is a resizable side panel; the
+   sidebar is resizable too, and both widths persist.
+5. **Sheets become dialogs.** `BottomSheetFrame` renders a centered dialog
+   without a grabber; Esc and the backdrop close it.
+6. **Keyboard first.** Enter sends and Shift+Enter is a new line (Ctrl/⌘+Enter
+   always sends); nothing sends during IME composition. ⌘K / Ctrl+K opens the
+   command palette, `?` lists every shortcut, Esc closes the top overlay, and
+   focus rings are visible. Shortcuts never fire while typing in a field or
+   the terminal, and tooltips name them.
+7. **Desktop affordances.** Rows show hover and a pointer, chats are
+   selectable, and each tab has a title ("Calendar · Mewla").
 
 ## Brain and its Work
 

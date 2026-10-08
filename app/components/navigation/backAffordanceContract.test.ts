@@ -40,7 +40,8 @@ describe("back affordance", () => {
     expect(options.match(/headerLeft:/g)).toHaveLength(1);
     expect(options).toContain("<StackBackButton");
     expect(options).toContain("...webHeaderInsets");
-    expect(options).toContain('headerTitleAlign: "center"');
+    // Phone and native center the title; desktop web aligns it like the sidebar's pages.
+    expect(options).toContain('headerTitleAlign: desktopWeb ? ("left" as const) : ("center" as const)');
     for (const layout of ["app/_layout.tsx", "app/plugins/_layout.tsx"]) {
       const source = read(layout);
       expect(source).toContain("screenOptions={screenOptions}");

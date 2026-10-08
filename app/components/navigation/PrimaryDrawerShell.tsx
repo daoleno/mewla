@@ -41,6 +41,7 @@ import {
 import { resolvePrimaryAppBarGeometry } from "./primaryAppBarGeometry";
 import { useDrawerFocusContainment } from "./useDrawerFocusContainment";
 import { usePrimaryDrawerBack } from "./usePrimaryDrawerBack";
+import { useDesktopWebShellHosted } from "./useDesktopWeb";
 
 export {
   PRIMARY_APP_BAR_HEIGHT,
@@ -184,6 +185,8 @@ export function PrimaryDrawerShell({
   const routeFocused = useIsFocused();
   const drawerWidth = Math.min(320, Math.max(240, windowWidth - 52));
   const docked = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
+  // Desktop web: the root shell already draws the sidebar beside every page.
+  const sidebarHosted = useDesktopWebShellHosted();
   const [restoreMenuFocus, setRestoreMenuFocus] = useState(false);
   const navigatingAwayRef = useRef(false);
   const primaryRef = useRef<ViewInstance>(null);
@@ -310,7 +313,7 @@ export function PrimaryDrawerShell({
         <PrimarySelectionBarProvider>
           <PrimarySurfaceInteractionProvider drawerPhase="closed" routeFocused={routeFocused}>
             <View style={[styles.root, styles.dockedRoot, { backgroundColor: colors.bgPrimary }]}>
-              <View
+              {sidebarHosted ? null : <View
                 role="navigation"
                 accessibilityLabel="Navigation"
                 style={[styles.sidebar, { borderRightColor: colors.borderSubtle }]}
@@ -325,7 +328,7 @@ export function PrimaryDrawerShell({
                   onNavigateAway={() => undefined}
                   docked
                 />
-              </View>
+              </View>}
               <View ref={primaryRef} collapsable={false} style={styles.primary}>
                 <PrimaryAppBar
                   activePrimaryRoute={activePrimaryRoute}
