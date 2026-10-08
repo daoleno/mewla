@@ -3,11 +3,11 @@ import { Text, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import {
   chartWindow, cpuHistorySeries, formatBytes, formatPercent, memoryHistorySeries,
-  memoryUsedRatio, pressureSpans, sampledAgoLabel, type ResourceTelemetry,
+  historyWindowLabel, memoryUsedRatio, pressureSpans, sampledAgoLabel, type ResourceTelemetry,
 } from "../../services/resourceTelemetry";
-import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { IconButton } from "../ui/IconButton";
 import { StatusMark } from "../ui/StatusMark";
-import { StatusPill, type StatusTone } from "../ui/StatusPill";
+import type { WorkStatus } from "../ui/workStatus";
 import { AreaChart, CoreBars, PressureStrip, StackBar } from "./ResourceCharts";
 import type { ResourceStyles } from "./resourceStyles";
 
@@ -19,10 +19,15 @@ export interface SectionProps {
 
 // Critical keeps the Failed mark: processes are about to be killed. Elevated
 // warns, and Normal is the Ready check.
-const PRESSURE_TONE: Record<ResourceTelemetry["state"], StatusTone> = {
-  normal: "success",
+const PRESSURE_MARK: Record<ResourceTelemetry["state"], WorkStatus> = {
+  normal: "ready",
   elevated: "warning",
-  critical: "danger",
+  critical: "failed",
+};
+const PRESSURE_LABEL: Record<ResourceTelemetry["state"], string> = {
+  normal: "Normal",
+  elevated: "Elevated pressure",
+  critical: "Critical pressure",
 };
 
 /** Threshold crossings as quiet lines: the state's mark, then soft words. */
@@ -42,27 +47,28 @@ export function PressureSignals({ telemetry, styles }: SectionProps) {
   );
 }
 
-export function PressureHeadline({ telemetry, styles, now, statusLabel, serverName, onRetry, loading, connected }: SectionProps & {
-  now: number; statusLabel?: string; serverName?: string; onRetry(): void; loading: boolean; connected: boolean;
+/** Is anything wrong: the pressure state first, how fresh it is, and the page's two controls. */
+export function PressureHeadline({ telemetry, styles, now, statusLabel, onRetry, loading, connected, details, onToggleDetails }: SectionProps & {
+  now: number; statusLabel?: string; onRetry(): void; loading: boolean; connected: boolean; onToggleDetails(): void;
 }) {
+  const window = historyWindowLabel(telemetry);
   return (
-    <View style={styles.sectionHeader}>
-      <View style={{ flex: 1, gap: 4 }}>
-        <View style={styles.legendRow}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">{serverName ?? "Machine"}</Text>
-          <StatusPill
-            label={telemetry.state === "normal" ? "Normal" : telemetry.state === "elevated" ? "Elevated" : "Critical"}
-            tone={PRESSURE_TONE[telemetry.state]}
-          />
+    <View style={styles.headline}>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={styles.legendItem}>
+          <StatusMark status={PRESSURE_MARK[telemetry.state]} size={16} />
+          <Text style={styles.sectionTitle} accessibilityRole="header">{PRESSURE_LABEL[telemetry.state]}</Text>
         </View>
-        <Text style={styles.caption}>
-          {statusLabel ?? sampledAgoLabel(telemetry.sampledAt, now)} · {new Date(telemetry.sampledAt).toLocaleTimeString()} · 5s poll
+        <Text style={styles.caption} numberOfLines={1}>
+          {[statusLabel ?? sampledAgoLabel(telemetry.sampledAt, now), window].filter(Boolean).join(" · ")}
         </Text>
       </View>
-      <AnimatedPressable accessibilityRole="button" accessibilityLabel="Refresh resources" disabled={loading || !connected}
-        onPress={onRetry} style={styles.control}>
-        <Text style={styles.label}>{loading ? "Refreshing…" : "Refresh"}</Text>
-      </AnimatedPressable>
+      <IconButton icon="refresh" tone="ghost" size={36} accessibilityLabel="Refresh resources"
+        accessibilityState={{ busy: loading, disabled: loading || !connected }}
+        disabled={loading || !connected} onPress={onRetry} />
+      <IconButton icon={details ? "chevron-up" : "chevron-down"} tone="ghost" size={36}
+        accessibilityLabel="Machine details" tooltip={details ? "Hide machine details" : "Show machine details"}
+        accessibilityState={{ expanded: Boolean(details) }} onPress={onToggleDetails} />
     </View>
   );
 }
@@ -74,9 +80,11 @@ export function CpuSection({ telemetry, styles, details }: SectionProps) {
   const cores = telemetry.cpu.perCorePercent;
   return (
     <View style={styles.surface}>
-      <Text style={styles.label}>CPU</Text>
-      <Text style={styles.sectionValue}>{formatPercent(telemetry.cpu.utilizationPercent)}</Text>
-      <AreaChart points={series} {...window} height={40} color={colors.accent} accessibilityLabel="CPU utilization history, scale 0–100%" />
+      <View style={styles.tileHead}>
+        <Text style={styles.label}>CPU</Text>
+        <Text style={styles.sectionValue}>{formatPercent(telemetry.cpu.utilizationPercent)}</Text>
+      </View>
+      <AreaChart points={series} {...window} height={36} color={colors.accent} accessibilityLabel="CPU utilization history, scale 0–100%" />
       <PressureStrip spans={pressureSpans(telemetry)} {...window} />
       <Text style={styles.caption}>{cores.length ? `${cores.length} cores · peak ${formatPercent(Math.max(...cores))}` : "Core data unavailable"}</Text>
       {details ? <>
@@ -96,9 +104,11 @@ export function MemorySection({ telemetry, styles, details }: SectionProps) {
   const color = (used ?? 0) >= 0.9 ? colors.warning : colors.accent;
   return (
     <View style={styles.surface}>
-      <Text style={styles.label}>Memory</Text>
-      <Text style={styles.sectionValue}>{formatPercent(used === undefined ? undefined : used * 100)}</Text>
-      <AreaChart points={memoryHistorySeries(telemetry)} {...chartWindow(telemetry)} height={40} color={color} accessibilityLabel="Memory utilization history, scale 0–100%" />
+      <View style={styles.tileHead}>
+        <Text style={styles.label}>Memory</Text>
+        <Text style={styles.sectionValue}>{formatPercent(used === undefined ? undefined : used * 100)}</Text>
+      </View>
+      <AreaChart points={memoryHistorySeries(telemetry)} {...chartWindow(telemetry)} height={36} color={color} accessibilityLabel="Memory utilization history, scale 0–100%" />
       <StackBar height={4} segments={[{ key: "used", ratio: used ?? 0, color }]} />
       <Text style={styles.caption}>{formatBytes(usedBytes)} / {formatBytes(totalBytes)}</Text>
       {details ? <>

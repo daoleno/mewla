@@ -122,7 +122,6 @@ export function ResourcesScreenshotDemo({ header }: { header: React.ReactNode })
         error={fixture === "error" ? "Resource telemetry timed out." : null}
         connected={fixture !== "offline"}
         hasServer
-        serverName="Studio Mac"
         onOpenSettings={NOOP}
         onRetry={NOOP}
         now={telemetry.sampledAt}

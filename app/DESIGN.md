@@ -408,6 +408,17 @@ calls for colour. Row Delete actions are soft ink; only the confirmation is
 oxblood. Offline is a Warning, not a failure. Resources keeps Critical on the
 Failed mark because processes are about to be killed.
 
+**Resources** answers "what is using my machine, and is anything wrong". It
+leads with the pressure state (mark and word) and its freshness, never the
+server's name; threshold signals follow, then four compact tiles (label and
+value on one line). Refresh and machine details are icon buttons, the
+consumer sort is two icon toggles (memory, CPU), filters are one-line chips
+with an owner glyph, and a row's owner is a glyph rather than a repeated
+word. Only an orphaned Worker keeps words ("Residual") and warning ink. Rows
+expand on a chevron, and more rows load from a chevron "N more". Icon-only
+controls carry an accessibility label, which `IconButton` also shows as the
+web tooltip.
+
 Risky areas to watch:
 
 - **Terminal.** The palette is checked on web (xterm.js) with a git diff,
