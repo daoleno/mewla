@@ -23,7 +23,8 @@ Work arriving as plain slips, and the red cat in exactly one meaningful place.
    your mark".
 3. **One focal point per screen.** On Brain it is the slip that needs you.
 4. **One cat.** The cat is Brain. It appears only where Brain is, at most once
-   per screen, and every pose reflects a real Brain state.
+   per screen, and every pose reflects a real Brain state. (The Brain icon's
+   ink ears are a name, not a cat; see Iconography.)
 5. **Every state has its own glyph** (`components/ui/StatusMark.tsx`), so the
    six Work states survive greyscale; colour only reinforces them.
 6. **Quiet motion.** Motion eases out on the landing's curve, stops when the
@@ -86,11 +87,21 @@ preference resolves to ink.
 - **Phone.** The app bar has the menu (☰), the Brain · Sessions switch (text
   tabs with an ink underline; a seal dot on Sessions when a Session needs
   you) and one ⋯ page action. The menu slides over the page.
-- **Wide (≥ 1024 pt, any platform).** The menu docks as a permanent sidebar
-  with Brain and Sessions as its first rows; the app bar shows the page title.
-- **Menu.** The current server (read-only; switching lives in Settings), then
-  *On this computer*: Calendar, Plugins, Skills, Stats, Resources; then
-  *App*: Settings. Rows are a soft-ink glyph and a label, no tiles.
+- **Wide (≥ 1024 pt, any platform).** The menu docks as a permanent sidebar;
+  the app bar shows the page title.
+- **Menu.** One model on every layout, one ordered list without captions or
+  cards: Brain, Sessions (selected in place, tint on the current one, seal dot
+  when a Session needs you), Calendar, Plugins, Skills, Stats, Resources. On
+  phone, choosing Brain or Sessions also closes the menu. Settings sits apart
+  at the bottom, and under it one quiet line names the current server and its
+  state. Rows are a soft-ink glyph and a label, no tiles.
+- **Connection status has one home**: that footer line. It is read-only
+  (switching lives in Settings), and healthy is quiet: only Offline or a
+  connection issue takes colour. Pages never open with a standing server
+  header. A page names the server only when it is offline and the page can't
+  work, as a compact `ServerOfflineNotice` (Sessions' offline notice is the
+  same idea). Context the page needs stays, such as the project Skills were
+  read for.
 - Settings holds Servers, Channels (Telegram), Agents (Model Providers),
   Appearance and About. Browser stays hidden from the menu.
 - **One home per destination.** Every screen you can go to (Calendar,
@@ -244,9 +255,27 @@ chats keep every row). The composer says "Tell Brain…".
 
 ## Iconography
 
-Ionicons outline remains the UI glyph set, at a 1.5–1.8 stroke feel matching
-the landing's line icons. Real product marks (Claude, Codex, GitHub and so on)
-keep their own logos, as on the landing. The seal is the brand mark.
+One vocabulary, one component: `components/icons/Icon.tsx` with named
+glyphs (`IconName`). The set is soft and rounded: Phosphor's bold geometry
+(round caps and joins, about a 1.9 pt stroke at 20 pt), vendored as path data
+by `bun scripts/vendor-phosphor-icons.ts` (MIT notice in the generated
+`phosphorGlyphs.ts`), plus hand-drawn Mewla glyphs on the same 256 grid and
+weight (`mewlaGlyphs.ts`): Brain is a round chat bubble with two soft cat
+ears, and the menu is two lines. Add a glyph by naming it in the vendoring
+script (or drawing it there), never by importing an icon font.
+
+- Glyphs are ink (`textSecondary` at rest, `textPrimary` when selected),
+  never vermilion; Send and the seal keep their own colours. The Brain
+  glyph's ears are the cat's name in the icon set, not a second cat: the
+  one-cat rule counts the vermilion seal and its poses.
+- `*-fill` variants exist only where a filled shape carries state (notices,
+  toasts, selection checks, an expanded calendar). Everything else is bold
+  outline.
+- Glyphs are decorative; the control around them carries the label. Sizes
+  and hit targets are the control's, unchanged by the set.
+- Real product marks (Claude, Codex, GitHub, Slack, Google and the agent
+  logos) keep their own logos, as on the landing; `iconVocabulary.test.ts`
+  keeps icon fonts to those two places. The seal is the brand mark.
 
 ### Brand assets
 
