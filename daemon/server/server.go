@@ -3735,6 +3735,11 @@ func (s *Server) hasActiveViewer(workerID string) bool {
 	return false
 }
 
+// wsWriteTimeout bounds one message to one client. A client that stops
+// reading (a suspended phone, a dead proxy leg) would otherwise hold its write
+// lock forever, and broadcast, the watcher and control writes queue behind it.
+var wsWriteTimeout = 30 * time.Second
+
 func (s *Server) writeMessage(conn *websocket.Conn, messageType int, data []byte) error {
 	s.mu.Lock()
 	writeMu, ok := s.writes[conn]
@@ -3745,5 +3750,12 @@ func (s *Server) writeMessage(conn *websocket.Conn, messageType int, data []byte
 
 	writeMu.Lock()
 	defer writeMu.Unlock()
-	return conn.WriteMessage(messageType, data)
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+	if err := conn.WriteMessage(messageType, data); err != nil {
+		// A failed write leaves the connection unusable. Closing it ends the
+		// client's read loop, which detaches it.
+		_ = conn.Close()
+		return err
+	}
+	return nil
 }
