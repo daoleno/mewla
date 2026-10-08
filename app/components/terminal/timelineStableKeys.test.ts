@@ -5,7 +5,7 @@ import {
   buildTimelineRenderItems,
   stabilizeTimelineRenderItems,
 } from "./InterfaceTimelineGrouping";
-import { buildZenTimeline } from "./InterfaceTimelineModel";
+import { buildTimeline } from "./InterfaceTimelineModel";
 
 function assistant(body: string): CodexConversationEvent {
   return {
@@ -35,15 +35,15 @@ function tool(
 
 describe("timeline identity", () => {
   test("streaming content changes retain the daemon event key", () => {
-    const partial = buildZenTimeline([assistant("partial")]);
-    const complete = buildZenTimeline([assistant("complete response")]);
+    const partial = buildTimeline([assistant("partial")]);
+    const complete = buildTimeline([assistant("complete response")]);
 
     expect(partial[0]?.id).toBe("assistant-message-7");
     expect(complete[0]?.id).toBe(partial[0]?.id);
   });
 
   test("render decoration does not replace logical message keys", () => {
-    const items = buildZenTimeline([assistant("complete response")]);
+    const items = buildTimeline([assistant("complete response")]);
     const rendered = buildTimelineRenderItems([...items].reverse(), {
       showDateDividers: false,
     });
@@ -59,7 +59,7 @@ describe("timeline identity", () => {
       role: "user",
       body: "provider canonical body",
     } as CodexConversationEvent;
-    const items = buildZenTimeline(
+    const items = buildTimeline(
       [providerEcho],
       new Map([[providerEcho.id, "pending-current"]]),
     );
@@ -72,8 +72,8 @@ describe("timeline identity", () => {
   });
 
   test("same-logical-Tool streaming upserts retain the mounted row key", () => {
-    const running = buildZenTimeline([tool("first match", "running")]);
-    const done = buildZenTimeline([tool("first match\nsecond match", "done")]);
+    const running = buildTimeline([tool("first match", "running")]);
+    const done = buildTimeline([tool("first match\nsecond match", "done")]);
     const renderedRunning = buildTimelineRenderItems([...running].reverse(), {
       showDateDividers: false,
     });
@@ -88,7 +88,7 @@ describe("timeline identity", () => {
   });
 
   test("pending-only insertion preserves grouping-equivalent history identity", () => {
-    const history = buildZenTimeline([
+    const history = buildTimeline([
       assistant("first Markdown response"),
       {
         ...assistant("second Markdown response"),

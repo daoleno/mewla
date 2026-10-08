@@ -4,24 +4,24 @@ import {
   distinctivePath,
   type ToolCallPresentationInput,
 } from "./toolCallSemantics";
-import { buildZenTimeline } from "../components/terminal/InterfaceTimelineModel";
+import { buildTimeline } from "../components/terminal/InterfaceTimelineModel";
 import type { CodexConversationEvent } from "./codexConversation";
-import type { ZenActivityTimelineItem } from "../components/terminal/InterfaceTimelineActivityTypes";
+import type { ActivityTimelineItem } from "../components/terminal/InterfaceTimelineActivityTypes";
 import {
   buildInterfaceTimelineActivityPresentation,
   expandedActivityStatusLine,
 } from "../components/terminal/InterfaceTimelineActivityModel";
 
-const absoluteWatcher = "/home/daoleno/workspace/zen/daemon/watcher/watcher.go";
-const absoluteTmux = "/home/daoleno/workspace/zen/daemon/terminal/tmux.go";
+const absoluteWatcher = "/home/daoleno/workspace/mewla/daemon/watcher/watcher.go";
+const absoluteTmux = "/home/daoleno/workspace/mewla/daemon/terminal/tmux.go";
 
 function title(input: ToolCallPresentationInput) {
   return collapsedToolLabel(input).title;
 }
 
 function activities(events: CodexConversationEvent[]) {
-  return buildZenTimeline(events).filter(
-    (item): item is ZenActivityTimelineItem => item.type === "activity",
+  return buildTimeline(events).filter(
+    (item): item is ActivityTimelineItem => item.type === "activity",
   );
 }
 
@@ -85,7 +85,7 @@ describe("actionable collapsed tool-call projection", () => {
         toolName: "Edit",
         files: [
           absoluteTmux,
-          "/home/daoleno/workspace/zen/daemon/terminal/io.go",
+          "/home/daoleno/workspace/mewla/daemon/terminal/io.go",
         ],
         status: "done",
       }),

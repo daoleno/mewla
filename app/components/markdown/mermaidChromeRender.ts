@@ -28,7 +28,7 @@ export async function renderMermaidSvgWithChrome(
     dark?: boolean;
   } = {},
 ): Promise<ChromeMermaidRender> {
-  const dir = join(process.env.TMPDIR || "/tmp", `zen-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const dir = join(process.env.TMPDIR || "/tmp", `mewla-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "mermaid.min.js"), readFileSync(mermaidMinPath()));
   const html = `<!DOCTYPE html>
@@ -49,7 +49,7 @@ export async function renderMermaidSvgWithChrome(
         postMessage: function (raw) {
           var payload = JSON.parse(raw);
           if (payload.type === "ready") return;
-          window.__zenResult = payload;
+          window.__mewlaResult = payload;
           if (payload.ok && payload.svg) {
             document.getElementById("diagram").innerHTML = payload.svg;
             document.documentElement.setAttribute("data-done", "ok");
@@ -61,7 +61,7 @@ export async function renderMermaidSvgWithChrome(
         }
       };
 ${MERMAID_ENGINE_BOOTSTRAP}
-      window.__zenMermaidRender({
+      window.__mewlaMermaidRender({
         v: 1,
         type: "render",
         requestId: "chrome",

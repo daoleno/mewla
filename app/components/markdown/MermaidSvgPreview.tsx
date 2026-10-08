@@ -46,7 +46,7 @@ export function MermaidSvgPreview({
     <View style={[styles.frame, { width, height }]} pointerEvents="none">
       {held ? (
         <WebView
-          originWhitelist={["https://zen.local"]}
+          originWhitelist={["https://mewla.local"]}
           source={{ html, baseUrl: `${MERMAID_ENGINE_BASE_URL}-svg` }}
           onShouldStartLoadWithRequest={(request) =>
             isAllowedMermaidEngineUrl(request.url)

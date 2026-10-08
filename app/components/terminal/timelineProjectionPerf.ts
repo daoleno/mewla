@@ -558,7 +558,7 @@ export function formatTimelineProjectionPerfDeviceSummary(input?: {
 }): string {
   const summary = summarizeTimelineProjectionPerf();
   const lines = [
-    "zen-interface-perf",
+    "mewla-interface-perf",
     `scenario=${input?.scenarioId ?? "none"}`,
     `revision=${input?.scenarioRevision ?? 0}`,
     `followSuspended=${input?.nativeFollowSuspended === true ? "1" : "0"}`,

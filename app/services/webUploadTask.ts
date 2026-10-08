@@ -1,5 +1,5 @@
 import type { UploadProgress } from "expo-file-system";
-import type { NativeUploadResult } from "../modules/zen-file-upload/src";
+import type { NativeUploadResult } from "../modules/file-upload/src";
 
 export interface WebUploadTask {
   uploadAsync(): Promise<NativeUploadResult>;

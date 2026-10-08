@@ -33,7 +33,7 @@ describe("Mermaid offline engine document", () => {
     expect(html).not.toContain("<script src=");
     expect(MERMAID_ENGINE_BOOTSTRAP).toContain('securityLevel: "strict"');
     expect(MERMAID_ENGINE_BOOTSTRAP).toContain("htmlLabels: false");
-    expect(MERMAID_ENGINE_BOOTSTRAP).toContain("window.__zenMermaidRender");
+    expect(MERMAID_ENGINE_BOOTSTRAP).toContain("window.__mewlaMermaidRender");
     expect(MERMAID_ENGINE_BOOTSTRAP).not.toContain("eval(");
   });
 });

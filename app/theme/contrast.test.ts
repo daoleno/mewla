@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { parseHex, relativeLuminance, rgbToHex } from "./colorUtils";
-import { ZEN_ACCENTS } from "./primitives";
+import { THEME_ACCENTS } from "./primitives";
 import { resolveTheme } from "./resolve";
-import type { ResolvedZenTheme, ThemeColorScheme } from "./types";
+import type { ResolvedTheme, ThemeColorScheme } from "./types";
 
 // WCAG 2.x AA: body text 4.5:1; large text and meaningful UI affordances
 // (focus ring, strong borders, status glyphs, heatmap cells) 3:1.
@@ -52,7 +52,7 @@ function oklabDistance(a: string, b: string): number {
 
 type Pairing = [label: string, foreground: string, background: string, minimum: number];
 
-function pairings(theme: ResolvedZenTheme): Pairing[] {
+function pairings(theme: ResolvedTheme): Pairing[] {
   const { colors: c, chat, materials } = theme;
   const canvases: [string, string][] = [
     ["bgPrimary", c.bgPrimary],
@@ -123,9 +123,9 @@ function pairings(theme: ResolvedZenTheme): Pairing[] {
 
 const SCHEMES: ThemeColorScheme[] = ["light", "dark"];
 
-describe("Zen palette WCAG AA contrast", () => {
+describe("Mewla palette WCAG AA contrast", () => {
   for (const colorScheme of SCHEMES) {
-    for (const { id: accentId } of ZEN_ACCENTS) {
+    for (const { id: accentId } of THEME_ACCENTS) {
       test(`${colorScheme}/${accentId}: every shipped text and affordance pairing meets AA`, () => {
         const failures = pairings(resolveTheme({ colorScheme, accentId }))
           .map(([label, fg, bg, minimum]) => ({ label, ratio: contrastRatio(fg, bg), minimum }))

@@ -17,9 +17,9 @@ type ThreadState = Parameters<typeof interfaceChatThreadReducer>[0];
 
 const SERVER_ID = "server-1";
 /** Existing OpenCode session the user was viewing before /new. */
-const PREVIOUS_AGENT_ID = "zen-opencode-prev";
+const PREVIOUS_AGENT_ID = "mewla-opencode-prev";
 /** The freshly created OpenCode session Terminal correctly shows. */
-const NEW_AGENT_ID = "zen-opencode-new";
+const NEW_AGENT_ID = "mewla-opencode-new";
 
 function initialThreadState(cacheKey: string): ThreadState {
   return {

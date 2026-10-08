@@ -1,5 +1,5 @@
 import type { UploadProgress } from "expo-file-system";
-import type { NativeUploadResult } from "../modules/zen-file-upload/src";
+import type { NativeUploadResult } from "../modules/file-upload/src";
 import type { WebUploadTask } from "./webUploadTask";
 
 export type { WebUploadTask } from "./webUploadTask";

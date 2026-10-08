@@ -114,7 +114,7 @@ describe("local-only Skills surface contract", () => {
   });
   test("production Skills UI contains no rejected management abstraction", () => {
     for (const removed of [
-      "Manage with Zen",
+      "Manage with Mewla",
       "Adopt",
       "Track local Skills",
       "Agent bindings",

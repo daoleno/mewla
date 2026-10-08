@@ -4,11 +4,11 @@ import TestRenderer, { act } from "react-test-renderer";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 
 // Keep native host mocks out of the shared Bun process; execute real React hooks.
-if (!process.env.ZEN_READING_HOOK_CHILD) {
+if (!process.env.MEWLA_READING_HOOK_CHILD) {
   test("production reading hooks behavioral scenarios", () => {
     const result = Bun.spawnSync(
       [process.execPath, "test", import.meta.filename],
-      { env: { ...process.env, ZEN_READING_HOOK_CHILD: "1" } },
+      { env: { ...process.env, MEWLA_READING_HOOK_CHILD: "1" } },
     );
     if (result.exitCode !== 0)
       throw new Error(

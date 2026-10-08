@@ -40,7 +40,7 @@ type ScreenshotDemoEnvironment = {
 export function screenshotDemoEnabled(
   environment: ScreenshotDemoEnvironment = {
     dev: typeof __DEV__ !== "undefined" && __DEV__,
-    enabled: process.env.EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO,
+    enabled: process.env.EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO,
   },
 ): boolean {
   return environment.dev && environment.enabled === "1";

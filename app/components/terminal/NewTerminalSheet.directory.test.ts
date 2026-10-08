@@ -19,7 +19,7 @@ import {
 describe("NewTerminalSheet panel model", () => {
   test("opens directory browsing inside the same sheet without dropping form fields", () => {
     const started = createNewTerminalSheetFormState({
-      cwd: "/home/zen/project",
+      cwd: "/home/mewla/project",
       command: "codex",
       name: "work",
     });
@@ -27,7 +27,7 @@ describe("NewTerminalSheet panel model", () => {
     const browsing = openDirectoryPanel(advanced);
 
     expect(browsing).toEqual({
-      cwd: "/home/zen/project",
+      cwd: "/home/mewla/project",
       command: "codex",
       name: "work",
       advanced: true,
@@ -41,14 +41,14 @@ describe("NewTerminalSheet panel model", () => {
   test("select and back restore the form while preserving cwd/command/name", () => {
     const browsing = openDirectoryPanel(
       createNewTerminalSheetFormState({
-        cwd: "/home/zen/project",
+        cwd: "/home/mewla/project",
         command: "claude",
         name: "agent",
       }),
     );
 
-    expect(selectDirectoryPath(browsing, "/home/zen/project/app")).toEqual({
-      cwd: "/home/zen/project/app",
+    expect(selectDirectoryPath(browsing, "/home/mewla/project/app")).toEqual({
+      cwd: "/home/mewla/project/app",
       command: "claude",
       name: "agent",
       advanced: false,
@@ -56,7 +56,7 @@ describe("NewTerminalSheet panel model", () => {
     });
 
     expect(returnToFormPanel(browsing)).toEqual({
-      cwd: "/home/zen/project",
+      cwd: "/home/mewla/project",
       command: "claude",
       name: "agent",
       advanced: false,
@@ -73,21 +73,21 @@ describe("remote directory list_dir model", () => {
     expect(state.loading).toBe(true);
 
     state = completeDirectoryLoad(state, {
-      path: "/home/zen/project",
+      path: "/home/mewla/project",
       entries: [
-        { name: "app", path: "/home/zen/project/app" },
-        { name: "daemon", path: "/home/zen/project/daemon" },
+        { name: "app", path: "/home/mewla/project/app" },
+        { name: "daemon", path: "/home/mewla/project/daemon" },
       ],
     });
-    expect(state.currentPath).toBe("/home/zen/project");
+    expect(state.currentPath).toBe("/home/mewla/project");
     expect(state.entries).toHaveLength(2);
-    expect(parentDirectoryPath(state.currentPath)).toBe("/home/zen");
+    expect(parentDirectoryPath(state.currentPath)).toBe("/home/mewla");
     expect(parentDirectoryPath("/")).toBe("/");
 
     state = beginDirectoryLoad(state);
     state = failDirectoryLoad(state, "list_dir failed");
     expect(state.error).toBe("list_dir failed");
-    expect(state.currentPath).toBe("/home/zen/project");
+    expect(state.currentPath).toBe("/home/mewla/project");
   });
 
   test("discards stale listDir responses after a newer request epoch", () => {

@@ -1,13 +1,13 @@
 import { afterAll, expect, mock, test } from "bun:test";
 
-const enabled = process.env.ZEN_LINK_RELAY_E2E === "1";
+const enabled = process.env.MEWLA_LINK_RELAY_E2E === "1";
 
 if (!enabled) {
   test.skip("Pairing V2 import through the real Relay runs in isolation", () => {});
 } else {
-  const pairingLink = process.env.ZEN_LINK_E2E_PAIRING_LINK || "";
-  const bridgePort = Number(process.env.ZEN_LINK_E2E_BRIDGE_PORT || "");
-  const expectedStableURL = process.env.ZEN_LINK_E2E_STABLE_URL || "";
+  const pairingLink = process.env.MEWLA_LINK_E2E_PAIRING_LINK || "";
+  const bridgePort = Number(process.env.MEWLA_LINK_E2E_BRIDGE_PORT || "");
+  const expectedStableURL = process.env.MEWLA_LINK_E2E_STABLE_URL || "";
   if (
     !pairingLink ||
     !Number.isInteger(bridgePort) ||
@@ -50,7 +50,7 @@ if (!enabled) {
     },
     setServerAutoConnect: async () => undefined,
   }));
-  mock.module("../modules/zen-link-transport/src", () => ({
+  mock.module("../modules/link-transport/src", () => ({
     startPinnedTunnel: async (
       _key: string,
       _serverName: string,

@@ -10,7 +10,7 @@ const starts: Array<{
 const stops: string[] = [];
 let failures = new Set<string>();
 
-mock.module("../modules/zen-link-transport/src", () => ({
+mock.module("../modules/link-transport/src", () => ({
   startPinnedTunnel: async (
     key: string,
     host: string,

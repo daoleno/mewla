@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ZEN_BRAND_COLORS, ZEN_DARK_APP_COLORS, ZEN_LIGHT_APP_COLORS } from "../../theme/primitives";
+import { BRAND_COLORS, DARK_APP_COLORS, LIGHT_APP_COLORS } from "../../theme/primitives";
 import { MEWLA_BRAND_ASSETS } from "./mewlaBrandArt";
 
 const app = join(import.meta.dir, "../..");
@@ -45,7 +45,7 @@ describe("Mewla brand assets", () => {
       expect(existsSync(join(app, path))).toBe(true);
     }
     expect(base.splash).toBeUndefined();
-    expect(base.android.adaptiveIcon.backgroundColor).toBe(ZEN_BRAND_COLORS.vermilion);
+    expect(base.android.adaptiveIcon.backgroundColor).toBe(BRAND_COLORS.vermilion);
 
     const plugin = (name: string) =>
       (createConfig().plugins.find((entry) => Array.isArray(entry) && entry[0] === name) as [string, Record<string, any>])[1];
@@ -54,11 +54,11 @@ describe("Mewla brand assets", () => {
     expect(splash.dark.image).toBe(splash.image);
     // Android 12+ masks the splash icon to a 192 dp circle: the square seal must fit inside it.
     expect(splash.imageWidth * Math.SQRT2).toBeLessThanOrEqual(192);
-    expect(splash.backgroundColor).toBe(ZEN_LIGHT_APP_COLORS.bgPrimary);
-    expect(splash.dark.backgroundColor).toBe(ZEN_DARK_APP_COLORS.bgPrimary);
+    expect(splash.backgroundColor).toBe(LIGHT_APP_COLORS.bgPrimary);
+    expect(splash.dark.backgroundColor).toBe(DARK_APP_COLORS.bgPrimary);
 
     const notifications = plugin("expo-notifications");
     expect(notifications.icon).toBe("./assets/branding/mewla-notification.png");
-    expect(notifications.color).toBe(ZEN_BRAND_COLORS.vermilion);
+    expect(notifications.color).toBe(BRAND_COLORS.vermilion);
   });
 });

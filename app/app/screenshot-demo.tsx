@@ -33,7 +33,7 @@ import { ChatCanvas } from "../components/terminal/ChatCanvas";
 import { InterfaceChatComposer } from "../components/terminal/InterfaceChatComposer";
 import { InterfaceChatKeyboardFrame } from "../components/terminal/InterfaceChatKeyboardFrame";
 import { InterfaceTimelineView } from "../components/terminal/InterfaceTimelineView";
-import type { ZenTimelineItem } from "../components/terminal/InterfaceTimelineItemView";
+import type { TimelineItem } from "../components/terminal/InterfaceTimelineItemView";
 import {
   patchDisplayPath,
   truncateRunes,
@@ -124,7 +124,7 @@ export default function ScreenshotDemoRoute() {
     fixture?: string;
   }>();
   const state = resolveScreenshotDemoState(
-    params.state ?? process.env.EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO_STATE,
+    params.state ?? process.env.EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO_STATE,
   );
   const enabled = screenshotDemoEnabled();
   const explicitlyRequested = screenshotDemoRouteOptedIn(params.demo);
@@ -367,10 +367,10 @@ function calendarFixtures(allStates = false): CalendarItem[] {
 }
 
 function MermaidDemo() {
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
-    () => buildChatChrome(zenTheme),
-    [zenTheme],
+    () => buildChatChrome(appTheme),
+    [appTheme],
   );
   return (
     <SafeAreaView
@@ -398,13 +398,13 @@ function ChatDemo() {
     fixture?: string;
   }>();
   const activityFixture = params.fixture === "activity";
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
-    () => buildChatChrome(zenTheme),
-    [zenTheme],
+    () => buildChatChrome(appTheme),
+    [appTheme],
   );
   const menuAnchorRef = useRef<View>(null);
-  const scrollRef = useRef<FlatList<ZenTimelineItem>>(null);
+  const scrollRef = useRef<FlatList<TimelineItem>>(null);
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
   const requestedDraft = Array.isArray(params.draft)
@@ -641,7 +641,7 @@ function GitDiffDemo() {
 
 /** The Worker's terminal mode on the real web renderer, fed fixed ANSI. */
 function TerminalPaletteDemo() {
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const { chromeColors, terminalTheme } = useTerminalThemeChrome();
   const menuAnchorRef = useRef<View>(null);
   return (
@@ -670,7 +670,7 @@ function TerminalPaletteDemo() {
         onOpenMenu={NOOP}
         onToggleInterfaceRenderMode={NOOP}
       />
-      <TerminalPaletteFixture key={zenTheme.colorScheme} theme={terminalTheme} />
+      <TerminalPaletteFixture key={appTheme.colorScheme} theme={terminalTheme} />
     </SafeAreaView>
   );
 }
@@ -732,13 +732,13 @@ function BrainDemo() {
 }
 
 function BrainChatDemo({ empty, running, events, work }: { empty: boolean; running: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS; work?: BrainWorkDemo }) {
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { chrome, theme } = useMemo(
-    () => buildChatChrome(zenTheme),
-    [zenTheme],
+    () => buildChatChrome(appTheme),
+    [appTheme],
   );
-  const scrollRef = useRef<FlatList<ZenTimelineItem>>(null);
+  const scrollRef = useRef<FlatList<TimelineItem>>(null);
   const inputRef = useRef<TextInput>(null);
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
@@ -980,11 +980,11 @@ function ComposerStatesDemo() {
   const autoModel = Array.isArray(params.autoModel)
     ? params.autoModel[0]
     : params.autoModel;
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { chrome, theme } = useMemo(
-    () => buildChatChrome(zenTheme),
-    [zenTheme],
+    () => buildChatChrome(appTheme),
+    [appTheme],
   );
   const compactRef = useRef<TextInput>(null);
   const draftRef = useRef<TextInput>(null);

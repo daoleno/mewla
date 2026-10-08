@@ -4,12 +4,12 @@ import TestRenderer, { act } from "react-test-renderer";
 
 // Isolate native module substitutes from the other Bun suites. The store,
 // subscription transport, React effects and conversation reducer are real.
-if (!process.env.ZEN_BRAIN_SWITCH_TEST_CHILD) {
+if (!process.env.MEWLA_BRAIN_SWITCH_TEST_CHILD) {
   test("Brain executor switch rebinds the mounted Interface", () => {
     const result = Bun.spawnSync(
       [process.execPath, "test", import.meta.filename],
       {
-        env: { ...process.env, ZEN_BRAIN_SWITCH_TEST_CHILD: "1" },
+        env: { ...process.env, MEWLA_BRAIN_SWITCH_TEST_CHILD: "1" },
       },
     );
     if (result.exitCode !== 0) {
@@ -39,7 +39,7 @@ if (!process.env.ZEN_BRAIN_SWITCH_TEST_CHILD) {
   const { useInterfaceChatSession } = await import("./InterfaceChatSession");
   const { useInterfaceMessageTransport } =
     await import("./useInterfaceMessageTransport");
-  const { buildZenTimeline } = await import("./InterfaceTimelineModel");
+  const { buildTimeline } = await import("./InterfaceTimelineModel");
 
   type Wire = Record<string, any>;
   class Socket {
@@ -301,7 +301,7 @@ if (!process.env.ZEN_BRAIN_SWITCH_TEST_CHILD) {
         ]);
         expect(session.conversation?.activity?.status).toBe("completed");
         const timeline = JSON.stringify(
-          buildZenTimeline(session.conversation!.events),
+          buildTimeline(session.conversation!.events),
         );
         expect(timeline).toContain("new-reply");
         expect(timeline).toContain("Working on the new host");

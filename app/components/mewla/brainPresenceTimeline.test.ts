@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainWorkResultEvent } from "../brain/brainWorkEvent";
-import type { ZenTimelineItem } from "../terminal/InterfaceTimelineItemView";
+import type { TimelineItem } from "../terminal/InterfaceTimelineItemView";
 import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "../terminal/InterfaceTimelineModel";
 import {
   BRAIN_PRESENCE_ITEM_PREFIX,
@@ -9,7 +9,7 @@ import {
   mergeBrainPresenceIntoTimeline,
 } from "./brainPresenceTimeline";
 
-function slip(id: string, workId: string): ZenTimelineItem {
+function slip(id: string, workId: string): TimelineItem {
   const event: BrainWorkResultEvent = {
     event_id: id,
     kind: "session.needs_input",
@@ -26,8 +26,8 @@ function slip(id: string, workId: string): ZenTimelineItem {
   return { type: "brain-work-event", id, timestamp: event.occurred_at, event, events: [event] };
 }
 
-const say = { type: "activity", id: "say", title: "Note", tone: "neutral", defaultExpanded: false } as ZenTimelineItem;
-const cats = (items: ZenTimelineItem[]) =>
+const say = { type: "activity", id: "say", title: "Note", tone: "neutral", defaultExpanded: false } as TimelineItem;
+const cats = (items: TimelineItem[]) =>
   items.filter((item) => item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX) || (item.type === "brain-work-event" && item.catPerched)).length;
 
 describe("the one cat between turns", () => {
@@ -45,7 +45,7 @@ describe("the one cat between turns", () => {
   });
 
   test("a running turn keeps the cat in the Working row", () => {
-    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}t1`, title: "Working", tone: "running", defaultExpanded: false } as ZenTimelineItem;
+    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}t1`, title: "Working", tone: "running", defaultExpanded: false } as TimelineItem;
     const items = [slip("new", "w1"), working];
     expect(mergeBrainPresenceIntoTimeline(items, { state: "attention", count: 1, workIds: ["w1"] })).toBe(items);
   });
@@ -75,21 +75,21 @@ describe("the one cat between turns", () => {
   });
 
   test("a running turn has no tail row; its Working row says Brain's newest step", () => {
-    const tool = { type: "activity", id: "t1", title: "Read brainWorkSurface.ts", tone: "success", defaultExpanded: false } as ZenTimelineItem;
-    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}a1`, title: "Working", tone: "running", defaultExpanded: false } as ZenTimelineItem;
+    const tool = { type: "activity", id: "t1", title: "Read brainWorkSurface.ts", tone: "success", defaultExpanded: false } as TimelineItem;
+    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}a1`, title: "Working", tone: "running", defaultExpanded: false } as TimelineItem;
     const merged = mergeBrainPresenceIntoTimeline([say, tool, working], { state: "idle" });
     expect(merged.map((item) => item.id)).toEqual(["say", "t1", working.id]);
     expect(merged.at(-1)).toMatchObject({ detail: "Read brainWorkSurface.ts" });
     // A step from before the user's last message is not this turn's.
-    const reply = { type: "message", id: "m", role: "user", body: "go" } as ZenTimelineItem;
+    const reply = { type: "message", id: "m", role: "user", body: "go" } as TimelineItem;
     expect(mergeBrainPresenceIntoTimeline([tool, reply, working], undefined).at(-1)).toBe(working);
   });
 });
 
 describe("Brain's tool rows", () => {
   const tool = (id: string, tone: "success" | "failed" | "running" = "success") =>
-    ({ type: "activity", id, title: `Search ${id}`, tone, icon: "search", defaultExpanded: false }) as ZenTimelineItem;
-  const reply = { type: "message", id: "reply", role: "assistant", body: "Done." } as ZenTimelineItem;
+    ({ type: "activity", id, title: `Search ${id}`, tone, icon: "search", defaultExpanded: false }) as TimelineItem;
+  const reply = { type: "message", id: "reply", role: "assistant", body: "Done." } as TimelineItem;
 
   test("a turn's run folds into one Worked row that keeps every step", () => {
     const folded = foldBrainToolRows([tool("a"), tool("b"), tool("c", "failed"), reply, slip("s", "w1")]);
@@ -100,7 +100,7 @@ describe("Brain's tool rows", () => {
   });
 
   test("a single row, a running row and the cat's rows stay as they are", () => {
-    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}t1`, title: "Working", tone: "running", defaultExpanded: false } as ZenTimelineItem;
+    const working = { type: "activity", id: `${PROVIDER_ACTIVITY_ITEM_PREFIX}t1`, title: "Working", tone: "running", defaultExpanded: false } as TimelineItem;
     const items = [tool("a"), reply, tool("b"), tool("c", "running"), working];
     expect(foldBrainToolRows(items)).toBe(items);
   });

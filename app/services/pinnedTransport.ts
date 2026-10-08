@@ -157,14 +157,14 @@ async function startNativePinnedTunnel(
   mode: "measure" | "on-demand",
 ) {
   const { startPinnedTunnel } = await import(
-    "../modules/zen-link-transport/src"
+    "../modules/link-transport/src"
   );
   return startPinnedTunnel(key, host, port, pin, mode);
 }
 
 async function stopNativePinnedTunnel(key: string): Promise<void> {
   const { stopPinnedTunnel } = await import(
-    "../modules/zen-link-transport/src"
+    "../modules/link-transport/src"
   );
   return stopPinnedTunnel(key);
 }

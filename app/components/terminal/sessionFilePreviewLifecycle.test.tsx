@@ -3,11 +3,11 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import type { SessionFileMetadata } from "../../services/sessionFilePreview";
 
-if (!process.env.ZEN_PREVIEW_HOOK_CHILD) {
+if (!process.env.MEWLA_PREVIEW_HOOK_CHILD) {
   test("production preview cold-open and request-lifetime behavior", () => {
     const result = Bun.spawnSync(
       [process.execPath, "test", import.meta.filename],
-      { env: { ...process.env, ZEN_PREVIEW_HOOK_CHILD: "1" } },
+      { env: { ...process.env, MEWLA_PREVIEW_HOOK_CHILD: "1" } },
     );
     if (result.exitCode)
       throw new Error(

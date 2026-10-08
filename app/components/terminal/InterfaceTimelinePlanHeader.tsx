@@ -13,7 +13,7 @@ import { Icon } from "../icons/Icon";
  * Plan annotation header. Shares the tool row's tone-mark slot, caption line
  * box and gap so plans and tools hang from one leading rail.
  */
-export function ZenPlanHeader({
+export function PlanHeader({
   accentColor,
   chrome,
 }: {

@@ -3,13 +3,13 @@ import { StyleSheet, View } from "react-native";
 import { ACTIVITY_HEADER_ICON_SLOT } from "./activityHeaderTextMetrics";
 import type {
   TimelineActivityIconName,
-  ZenActivityTimelineItem,
+  ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import { Icon } from "../icons/Icon";
 
 interface InterfaceTimelineActivityToneIconProps {
   icon: TimelineActivityIconName;
-  activityKind?: ZenActivityTimelineItem["activityKind"];
+  activityKind?: ActivityTimelineItem["activityKind"];
   color: string;
 }
 

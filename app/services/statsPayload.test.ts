@@ -140,7 +140,7 @@ describe('Pi owned-session usage contract (daemon payload to App visibility)', (
       sessions: 1,
     });
     // Fictional values only; the shape mirrors the daemon row derived from
-    // Pi's Zen-owned flat JSONL root without carrying any user content.
+    // Pi's Mewla-owned flat JSONL root without carrying any user content.
     const piDeepSeek = model('deepseek-v4-flash', 4_000_000);
     const daemonWeekModels = [
       model('fixture-model-a', 8_000_000),

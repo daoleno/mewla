@@ -61,7 +61,7 @@ describe("Mermaid host messages", () => {
   });
 
   test("allows only the local mermaid document URL", () => {
-    expect(isAllowedMermaidEngineUrl("https://zen.local/mermaid")).toBe(true);
+    expect(isAllowedMermaidEngineUrl("https://mewla.local/mermaid")).toBe(true);
     expect(isAllowedMermaidEngineUrl("https://cdn.jsdelivr.net/npm/mermaid")).toBe(
       false,
     );

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { brainWorkEventCardModel } from "../components/brain/brainWorkEventCardModel";
 import { brainWorkEventFromConversationEvent } from "../components/brain/brainWorkEventProjection";
-import { buildZenTimeline } from "../components/terminal/InterfaceTimelineModel";
+import { buildTimeline } from "../components/terminal/InterfaceTimelineModel";
 import {
   resolveScreenshotChatPendingFixture,
   resolveScreenshotDemoState,
@@ -187,7 +187,7 @@ describe("screenshot demo isolation", () => {
   });
 
   test("activity header fixtures cover actionable targets and results", () => {
-    const projected = buildZenTimeline(SCREENSHOT_ACTIVITY_HEADER_EVENTS)
+    const projected = buildTimeline(SCREENSHOT_ACTIVITY_HEADER_EVENTS)
       .filter((item) => item.type === "activity")
       .map((item) =>
         item.type === "activity"
@@ -202,7 +202,7 @@ describe("screenshot demo isolation", () => {
         detail: "Succeeded",
       },
     ]);
-    const brainTitles = buildZenTimeline(SCREENSHOT_BRAIN_EVENTS)
+    const brainTitles = buildTimeline(SCREENSHOT_BRAIN_EVENTS)
       .filter((item) => item.type === "activity")
       .map((item) => (item.type === "activity" ? item.title : null));
     expect(brainTitles.some((title) => title?.startsWith("Run "))).toBe(true);

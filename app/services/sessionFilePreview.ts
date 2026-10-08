@@ -328,7 +328,7 @@ export async function buildSessionFileBinarySource(
   const { buildAuthorizationHeader } = await import("./auth");
   const authorizationHeader = await buildAuthorizationHeader({
     daemonId,
-    purpose: "zen-session-file",
+    purpose: "mewla-session-file",
   });
   const response = await fetch(capabilityURL, {
     method: "POST",

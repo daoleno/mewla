@@ -22,7 +22,7 @@ function sessionRow(): DiscoveredSessionService {
     local_only: false,
     source: "session",
     serverId: "server-1",
-    serverName: "zen",
+    serverName: "mewla",
   };
 }
 
@@ -48,7 +48,7 @@ function persistentRow(): DiscoveredSessionService {
     unit: "dsh-web.service",
     state: "active",
     serverId: "server-1",
-    serverName: "zen",
+    serverName: "mewla",
   };
 }
 

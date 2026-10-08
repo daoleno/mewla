@@ -28,8 +28,8 @@ function hostRef(
     id: HOST_ID,
     name: "Brain",
     status: "running",
-    cwd: "/zen",
-    command: "zen brain",
+    cwd: "/mewla",
+    command: "mewla brain",
     capabilities,
   };
 }
@@ -39,8 +39,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
     const routed = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         host_worker: hostRef({
           structured_events: true,
@@ -58,8 +58,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
     const nestedIgnored = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         host_worker: {
           id: HOST_ID,
@@ -135,7 +135,7 @@ describe("Brain host_worker Provider Model capabilities", () => {
   test("missing or false capabilities fail closed (hidden menu)", () => {
     const missing = resolveTerminalRouteWorker({
       storedWorker: undefined,
-      routeSessionHint: { name: "Brain", command: "zen brain" },
+      routeSessionHint: { name: "Brain", command: "mewla brain" },
       sessionKey: makeSessionKey(SERVER_ID, HOST_ID),
       serverId: SERVER_ID,
       workerId: HOST_ID,
@@ -202,8 +202,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
     let state = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         host_worker: hostRef({
           structured_events: true,
@@ -220,8 +220,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
     state = brainReducer(state, {
       type: "BRAIN_SNAPSHOT",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         host_worker: hostRef({
           structured_events: true,
@@ -257,8 +257,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
     const brain = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         host_worker: hostRef({
           structured_events: true,
@@ -274,8 +274,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
     const agentsAfter = workerReducer(initialWorkerState, {
       type: "UPSERT_SERVER_WORKERS",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       workers: [
         {
           id: "visible-1",
@@ -310,8 +310,8 @@ describe("Brain host_worker Provider Model capabilities", () => {
       key: makeSessionKey(SERVER_ID, "agent-2"),
       id: "agent-2",
       serverId: SERVER_ID,
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       name: "Codex",
       status: "running",
       summary: "",

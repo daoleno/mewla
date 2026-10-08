@@ -3,7 +3,7 @@ import {
   normalizeCodexConversation,
   type CodexConversationEvent,
 } from "../../services/codexConversation";
-import { buildZenTimeline } from "./InterfaceTimelineModel";
+import { buildTimeline } from "./InterfaceTimelineModel";
 import { reconcilePendingUserMessagesAgainstEvents } from "./pendingUserMessageLifecycle";
 import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 import {
@@ -150,7 +150,7 @@ describe("task notification in conversation surfaces", () => {
   });
 
   test("timeline renders a card between messages, never a user bubble", () => {
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       {
         id: "u1",
         seq: 1,

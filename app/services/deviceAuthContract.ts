@@ -5,7 +5,7 @@ import { bytesToHex, hexToBytes, normalizeFixedHex } from "./protocolCrypto";
 // live with the daemon (daemon/auth); this module mirrors the exact signed
 // payloads so the app and integration fixtures can build and verify them
 // without loading native or secure-store modules.
-export const DEVICE_AUTH_HEADER_PREFIX = "ZenDevice ";
+export const DEVICE_AUTH_HEADER_PREFIX = "Device ";
 
 export interface DaemonAssertionInput {
   purpose: string;

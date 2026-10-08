@@ -2,10 +2,10 @@ import { expect, mock, test } from "bun:test";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
-if (!process.env.ZEN_BOTTOM_SHEET_TEST_CHILD) {
+if (!process.env.MEWLA_BOTTOM_SHEET_TEST_CHILD) {
   test("bottom sheet close behavior in isolation", () => {
     const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], {
-      env: { ...process.env, ZEN_BOTTOM_SHEET_TEST_CHILD: "1" },
+      env: { ...process.env, MEWLA_BOTTOM_SHEET_TEST_CHILD: "1" },
     });
     if (result.exitCode) {
       throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));

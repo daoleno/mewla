@@ -1,5 +1,5 @@
 import { buildTerminalPalette, type TerminalThemePalette } from '../../constants/terminalThemes';
-import { createTerminal, destroyTerminal, writeData, getVisibleHtml, setTheme } from '../../modules/zen-terminal-vt/src';
+import { createTerminal, destroyTerminal, writeData, getVisibleHtml, setTheme } from '../../modules/terminal-vt/src';
 import { TERMINAL_HISTORY_MAX_HTML } from './terminalHistory';
 import { createTerminalHistoryDecodeBudget } from './terminalHistoryDecodeBudget';
 

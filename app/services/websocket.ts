@@ -492,7 +492,7 @@ class ServerSocket {
     try {
       const authHeader = await buildAuthorizationHeader({
         daemonId: this.meta.daemonId,
-        purpose: "zen-connect",
+        purpose: "mewla-connect",
       });
       if (attemptId !== this.attemptSequence || !this.shouldReconnect) {
         return;

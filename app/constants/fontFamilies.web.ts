@@ -4,8 +4,8 @@
 // leads with a Latin/symbol subset of Maple Mono: xterm sizes cells from the
 // first family, and generic `monospace` can resolve to a proportional CJK
 // face on Linux.
-export const WEB_MONO_FAMILY = "Zen Maple Mono";
-export const WEB_MONO_BOLD_FAMILY = "Zen Maple Mono SemiBold";
+export const WEB_MONO_FAMILY = "Mewla Maple Mono";
+export const WEB_MONO_BOLD_FAMILY = "Mewla Maple Mono SemiBold";
 export const WEB_UI_FAMILY = "Inter";
 export const WEB_UI_MEDIUM_FAMILY = "Inter Medium";
 export const WEB_UI_SEMIBOLD_FAMILY = "Inter SemiBold";

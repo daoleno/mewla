@@ -15,7 +15,7 @@ export type PatchFileSummary = {
   removed?: number;
 };
 
-export interface ZenActivityTimelineItem {
+export interface ActivityTimelineItem {
   type: "activity";
   id: string;
   timestamp?: string;
@@ -41,10 +41,10 @@ export interface ZenActivityTimelineItem {
   accessibilityLabel?: string;
   providerToolId?: string;
   developerDetails?: ToolDeveloperDetails;
-  children?: ZenActivityChild[];
+  children?: ActivityChild[];
 }
 
-export type ZenActivityChild = {
+export type ActivityChild = {
   id: string;
   title: string;
   tone?: "neutral" | "running" | "success" | "failed";

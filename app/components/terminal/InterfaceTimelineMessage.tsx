@@ -35,7 +35,7 @@ export type DisplayAttachment = {
   mimeType?: string;
 };
 
-export interface ZenMessageTimelineItem {
+export interface MessageTimelineItem {
   type: "message";
   id: string;
   role: "user" | "assistant";
@@ -60,34 +60,34 @@ const DEFAULT_PRESENTATION: MessagePresentation = {
   compactBottom: false,
 };
 
-export function ZenUserMessage({
+export function UserMessage({
   item,
   presentation = DEFAULT_PRESENTATION,
   chrome,
   theme,
 }: {
-  item: ZenMessageTimelineItem & { role: "user" };
+  item: MessageTimelineItem & { role: "user" };
   presentation?: MessagePresentation;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
 }) {
-  const { theme: zenTheme } = useAppTheme();
-  const chatLayout = zenTheme.chat.layout;
+  const { theme: appTheme } = useAppTheme();
+  const chatLayout = appTheme.chat.layout;
   const isChatGpt = chatLayout === "chatgpt";
 
   const hasBody = item.body.trim().length > 0;
-  const sentBubbleColor = zenTheme.chat.sentBubble;
+  const sentBubbleColor = appTheme.chat.sentBubble;
   // Code, tables and attachments inside the bubble sit on bubble-derived
   // wells: the light theme's sent bubble is ink, so canvas fills would glare.
   const sentChrome = {
     ...chrome,
-    text: zenTheme.chat.sentText,
-    textMuted: zenTheme.chat.sentTimestamp,
-    textSubtle: zenTheme.chat.sentTimestamp,
-    link: zenTheme.chat.sentText,
-    surface: mixHex(sentBubbleColor, zenTheme.chat.sentText, 0.08),
-    surfaceMuted: mixHex(sentBubbleColor, zenTheme.chat.sentText, 0.12),
-    border: mixHex(sentBubbleColor, zenTheme.chat.sentText, 0.2),
+    text: appTheme.chat.sentText,
+    textMuted: appTheme.chat.sentTimestamp,
+    textSubtle: appTheme.chat.sentTimestamp,
+    link: appTheme.chat.sentText,
+    surface: mixHex(sentBubbleColor, appTheme.chat.sentText, 0.08),
+    surfaceMuted: mixHex(sentBubbleColor, appTheme.chat.sentText, 0.12),
+    border: mixHex(sentBubbleColor, appTheme.chat.sentText, 0.2),
   };
   const spacing = messageRowSpacing(
     presentation.compactTop,
@@ -106,7 +106,7 @@ export function ZenUserMessage({
     item.pendingLifecycle === "failed" ||
     Boolean(item.pendingLifecycleLabel) ||
     Boolean(item.onRetryPending) ||
-    zenTheme.chat.showTimestamps;
+    appTheme.chat.showTimestamps;
 
   return (
     <View style={[styles.userRow, spacing]}>
@@ -141,7 +141,7 @@ export function ZenUserMessage({
         ) : null}
         {showPendingSendMark ? (
           <View style={styles.pendingSendMark} pointerEvents="none">
-            <PendingSendStatusMark color={zenTheme.chat.outboundSentClock} />
+            <PendingSendStatusMark color={appTheme.chat.outboundSentClock} />
           </View>
         ) : null}
       </View>
@@ -149,21 +149,21 @@ export function ZenUserMessage({
   );
 }
 
-export function ZenAssistantMessage({
+export function AssistantMessage({
   item,
   presentation = DEFAULT_PRESENTATION,
   chrome,
   theme,
   senderLabel,
 }: {
-  item: ZenMessageTimelineItem & { role: "assistant" };
+  item: MessageTimelineItem & { role: "assistant" };
   presentation?: MessagePresentation;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   senderLabel?: string;
 }) {
-  const { theme: zenTheme } = useAppTheme();
-  const chatLayout = zenTheme.chat.layout;
+  const { theme: appTheme } = useAppTheme();
+  const chatLayout = appTheme.chat.layout;
   const spacing = messageRowSpacing(
     presentation.compactTop,
     presentation.compactBottom,
@@ -172,8 +172,8 @@ export function ZenAssistantMessage({
   );
   const assistantChrome = {
     ...chrome,
-    text: zenTheme.chat.receivedText,
-    link: zenTheme.chat.link,
+    text: appTheme.chat.receivedText,
+    link: appTheme.chat.link,
   };
   const showSender =
     senderLabel &&
@@ -194,7 +194,7 @@ export function ZenAssistantMessage({
           theme={theme}
           streaming={item.streaming}
         />
-        {zenTheme.chat.showTimestamps ? (
+        {appTheme.chat.showTimestamps ? (
           <MessageBubbleFooter timestamp={item.timestamp} tone="received" />
         ) : null}
       </View>

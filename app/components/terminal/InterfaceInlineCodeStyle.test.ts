@@ -7,8 +7,8 @@ import { interfaceInlineCodeStyle } from "./InterfaceInlineCodeStyle";
 describe("interfaceInlineCodeStyle", () => {
   for (const colorScheme of ["dark", "light"] as const) {
     test(`${colorScheme}: long wrapped inline code stays typographic without opaque tiles`, () => {
-      const zenTheme = resolveTheme({ colorScheme });
-      const { chrome, theme } = buildChatChrome(zenTheme);
+      const appTheme = resolveTheme({ colorScheme });
+      const { chrome, theme } = buildChatChrome(appTheme);
       const style = interfaceInlineCodeStyle(theme, false);
 
       expect(style.color).toBe(theme.cyan);
@@ -18,8 +18,8 @@ describe("interfaceInlineCodeStyle", () => {
 
       // surfaceMuted is the quiet tint (never the ink sent bubble), and inline
       // code must not paint it as a tile either.
-      expect(chrome.surfaceMuted).toBe(zenTheme.colors.bgElevated);
-      expect(chrome.surfaceMuted).not.toBe(zenTheme.chat.sentBubble);
+      expect(chrome.surfaceMuted).toBe(appTheme.colors.bgElevated);
+      expect(chrome.surfaceMuted).not.toBe(appTheme.chat.sentBubble);
       expect(style.backgroundColor).not.toBe(chrome.surfaceMuted);
     });
 

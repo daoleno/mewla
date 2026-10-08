@@ -17,9 +17,9 @@ describe("pending send status composition", () => {
     const footerSource = await Bun.file(
       new URL("./MessageBubbleFooter.tsx", import.meta.url),
     ).text();
-    const zenUser = bubbleSource.slice(
-      bubbleSource.indexOf("export function ZenUserMessage"),
-      bubbleSource.indexOf("export function ZenAssistantMessage"),
+    const mewlaUser = bubbleSource.slice(
+      bubbleSource.indexOf("export function UserMessage"),
+      bubbleSource.indexOf("export function AssistantMessage"),
     );
     const stylesAt = bubbleSource.indexOf("const styles = StyleSheet.create({");
     const stylesBlock = bubbleSource.slice(stylesAt);
@@ -34,7 +34,7 @@ describe("pending send status composition", () => {
     const markStyle = stylesBlock.slice(markStyleAt, markStyleAt + 280);
 
     // No host wrapper in tree or styles.
-    expect(zenUser).not.toContain("userBubbleHost");
+    expect(mewlaUser).not.toContain("userBubbleHost");
     expect(stylesBlock).not.toContain("userBubbleHost");
     expect(stylesBlock).not.toContain("userBubbleHostChatGpt");
 
@@ -60,29 +60,29 @@ describe("pending send status composition", () => {
     );
 
     // Only Pending mounts the mark; accessibility stays on the bubble View.
-    expect(zenUser).toContain("styles.pendingSendMark");
-    expect(zenUser).toMatch(/showPendingSendMark \? \(/);
-    expect(zenUser).toMatch(
-      /PendingSendStatusMark color=\{zenTheme\.chat\.outboundSentClock\}/,
+    expect(mewlaUser).toContain("styles.pendingSendMark");
+    expect(mewlaUser).toMatch(/showPendingSendMark \? \(/);
+    expect(mewlaUser).toMatch(
+      /PendingSendStatusMark color=\{appTheme\.chat\.outboundSentClock\}/,
     );
-    expect(zenUser).toContain(
+    expect(mewlaUser).toContain(
       "accessibilityState={item.pending ? { busy: true } : undefined}",
     );
 
     // showTimestamps may open the footer independently; mark never enters footer.
-    expect(zenUser).toContain("zenTheme.chat.showTimestamps");
-    expect(zenUser).toContain("MessageBubbleFooter");
+    expect(mewlaUser).toContain("appTheme.chat.showTimestamps");
+    expect(mewlaUser).toContain("MessageBubbleFooter");
     expect(footerSource).not.toContain("pending?:");
     expect(footerSource).not.toContain("outboundSentClock");
     expect(footerSource).not.toContain("PendingSendStatusMark");
 
     // No Pending/Sending label, no hairline outline model.
-    expect(zenUser).not.toMatch(/["']Pending["']/);
-    expect(zenUser).not.toMatch(/["']Sending["']/);
-    expect(zenUser).not.toContain("StyleSheet.hairlineWidth");
-    expect(zenUser).not.toContain("borderColor:");
-    expect(zenUser).not.toContain("borderWidth:");
-    expect(zenUser).not.toContain("resolvePendingUserBubbleBorderColor");
+    expect(mewlaUser).not.toMatch(/["']Pending["']/);
+    expect(mewlaUser).not.toMatch(/["']Sending["']/);
+    expect(mewlaUser).not.toContain("StyleSheet.hairlineWidth");
+    expect(mewlaUser).not.toContain("borderColor:");
+    expect(mewlaUser).not.toContain("borderWidth:");
+    expect(mewlaUser).not.toContain("resolvePendingUserBubbleBorderColor");
 
     expect(timelineSource).toContain(
       "paddingHorizontal: INTERFACE_TIMELINE_HORIZONTAL_INSET",

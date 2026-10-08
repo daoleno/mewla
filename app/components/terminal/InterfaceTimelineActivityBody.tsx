@@ -6,15 +6,15 @@ import type {
 import { MarkdownWithImages } from "../markdown/MarkdownWithImages";
 import { MessageBody } from "./InterfaceMessageBody";
 import { InterfaceTimelineActivityOutput } from "./InterfaceTimelineActivityOutput";
-import type { ZenActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
+import type { ActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
 
 interface InterfaceTimelineActivityBodyProps {
   body: string;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
-  activityKind?: ZenActivityTimelineItem["activityKind"];
-  bodyKind?: ZenActivityTimelineItem["bodyKind"];
-  tone?: ZenActivityTimelineItem["tone"];
+  activityKind?: ActivityTimelineItem["activityKind"];
+  bodyKind?: ActivityTimelineItem["bodyKind"];
+  tone?: ActivityTimelineItem["tone"];
   streaming?: boolean;
   truncateBody(value: string, limit: number): string;
 }
@@ -57,7 +57,7 @@ export function InterfaceTimelineActivityBody({
 
 export function isMeaningfulActivityBody(
   body: string | undefined,
-  tone: ZenActivityTimelineItem["tone"],
+  tone: ActivityTimelineItem["tone"],
 ): body is string {
   if (!body || !body.trim()) {
     return false;

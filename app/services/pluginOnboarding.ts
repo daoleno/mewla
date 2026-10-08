@@ -5,7 +5,7 @@ const PLUGIN_RETURN_PROTOCOL = "mewla:";
 export type PendingConnection = { serverId: string; flow: ConnectFlow; callback?: string };
 export type ConnectPhase = "idle" | "opening" | "waiting" | "verifying" | "connected" | "cancelled" | "failed";
 export function pendingConnectionKey(serverId: string | null) {
-  return `zen.plugin.authorization.${serverId?.replace(/[^a-zA-Z0-9.-]/g, "_") ?? "none"}`;
+  return `mewla.plugin.authorization.${serverId?.replace(/[^a-zA-Z0-9.-]/g, "_") ?? "none"}`;
 }
 // Preserve a return for its original paired server while another server is
 // current. This only stores the code; it never contacts or switches servers.

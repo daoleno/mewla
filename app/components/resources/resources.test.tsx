@@ -3,10 +3,10 @@ import React, { useEffect } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
 // Native and transport mocks stay isolated from other Bun test suites.
-if (!process.env.ZEN_RESOURCE_TEST_CHILD) {
+if (!process.env.MEWLA_RESOURCE_TEST_CHILD) {
   test("Resources lifecycle, states and terminal menu", () => {
     const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], {
-      env: { ...process.env, ZEN_RESOURCE_TEST_CHILD: "1" },
+      env: { ...process.env, MEWLA_RESOURCE_TEST_CHILD: "1" },
     });
     if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
     expect(result.exitCode).toBe(0);

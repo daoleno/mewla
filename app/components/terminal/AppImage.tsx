@@ -3,15 +3,15 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "rea
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { imageSourceKey, isSvgImage, resolveImageSource, type ZenImageOwner, type ZenImageSource } from "../../services/imageSource";
+import { imageSourceKey, isSvgImage, resolveImageSource, type ImageOwner, type ImageSource } from "../../services/imageSource";
 import type { SessionFileBinarySource } from "../../services/sessionFilePreview";
 import { SessionFileImagePreview } from "./SessionFileImagePreview";
-import { ZenImageContent } from "./ZenImageContent";
+import { ImageContent } from "./ImageContent";
 import { Icon } from "../icons/Icon";
 
-export const ZenImageOwnerContext = createContext<ZenImageOwner | null>(null);
+export const ImageOwnerContext = createContext<ImageOwner | null>(null);
 
-function useImage(source: ZenImageSource, owner: ZenImageOwner | null, attempt: number) {
+function useImage(source: ImageSource, owner: ImageOwner | null, attempt: number) {
   const key = useMemo(() => imageSourceKey(source, owner?.key || "phone"), [source, owner?.key]);
   const [state, setState] = useState<{ key: string; source?: SessionFileBinarySource; error?: string }>({ key });
   useEffect(() => {
@@ -28,10 +28,10 @@ function useImage(source: ZenImageSource, owner: ZenImageOwner | null, attempt: 
   return state.key === key ? state : { key };
 }
 
-export function ZenImage({ source, chrome, gallery, compact = false }: {
-  source: ZenImageSource; chrome: TerminalThemeChrome; gallery?: ZenImageSource[]; compact?: boolean;
+export function AppImage({ source, chrome, gallery, compact = false }: {
+  source: ImageSource; chrome: TerminalThemeChrome; gallery?: ImageSource[]; compact?: boolean;
 }) {
-  const owner = useContext(ZenImageOwnerContext);
+  const owner = useContext(ImageOwnerContext);
   const identity = useMemo(() => imageSourceKey(source, owner?.key || "phone"), [source, owner?.key]);
   const [opened, setOpened] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -50,7 +50,7 @@ export function ZenImage({ source, chrome, gallery, compact = false }: {
       <Pressable accessibilityRole="button" accessibilityLabel={error ? `Retry ${source.name}` : `Open ${source.name}`} disabled={!error && !isLoaded}
         onPress={error ? retry : () => setOpened(identity)}
         style={[styles.preview, { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted, height: compact ? 80 : Math.max(100, Math.min(280, 320 / ratio)) }]}>
-        {resolved.source && !error ? <ZenImageContent key={`${identity}:${attempt}`} source={resolved.source} svg={svg}
+        {resolved.source && !error ? <ImageContent key={`${identity}:${attempt}`} source={resolved.source} svg={svg}
           onLoad={(nextRatio) => { setLoaded(identity); setRatio(nextRatio); }} onError={() => setFailed(identity)} /> : null}
         {error ? <Icon name="refresh" size={22} color={chrome.textMuted} /> : !isLoaded ? <ActivityIndicator color={chrome.textMuted} /> : null}
         {!error && isLoaded && !compact ? <View style={styles.expand}><Icon name="expand" size={17} color={chrome.text} /></View> : null}
@@ -60,8 +60,8 @@ export function ZenImage({ source, chrome, gallery, compact = false }: {
   );
 }
 
-function ImageGallery({ images, initial, chrome, onClose }: { images: ZenImageSource[]; initial: number; chrome: TerminalThemeChrome; onClose(): void }) {
-  const owner = useContext(ZenImageOwnerContext);
+function ImageGallery({ images, initial, chrome, onClose }: { images: ImageSource[]; initial: number; chrome: TerminalThemeChrome; onClose(): void }) {
+  const owner = useContext(ImageOwnerContext);
   const [index, setIndex] = useState(initial);
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState<string | null>(null);

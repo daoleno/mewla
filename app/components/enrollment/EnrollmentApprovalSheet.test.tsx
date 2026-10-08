@@ -2,9 +2,9 @@ import { expect, mock, test } from "bun:test";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
-if (!process.env.ZEN_ENROLLMENT_UI_TEST) {
+if (!process.env.MEWLA_ENROLLMENT_UI_TEST) {
   test("approval UI in isolation", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], { env: { ...process.env, ZEN_ENROLLMENT_UI_TEST: "1" } });
+    const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], { env: { ...process.env, MEWLA_ENROLLMENT_UI_TEST: "1" } });
     if (result.exitCode) throw new Error(new TextDecoder().decode(result.stderr));
     expect(result.exitCode).toBe(0);
   });
@@ -21,7 +21,7 @@ if (!process.env.ZEN_ENROLLMENT_UI_TEST) {
   mock.module("../../services/websocket", () => ({ wsClient: { on: (name: string, handler: (data: any) => void) => handlers.set(name, handler), off: (name: string) => handlers.delete(name) } }));
   mock.module("../../store/currentServer", () => ({ useCurrentServer: () => ({ currentServer, isCurrentServer }) }));
   const { EnrollmentApprovalSheet, EnrollmentApprovalHost } = await import("./EnrollmentApprovalHost");
-  const request = { id: "r", deviceName: "Test browser", platform: "web", origin: "https://zen.example", verificationNumber: "042", expiresAt: new Date(Date.now() + 300000).toISOString() };
+  const request = { id: "r", deviceName: "Test browser", platform: "web", origin: "https://mewla.example", verificationNumber: "042", expiresAt: new Date(Date.now() + 300000).toISOString() };
   test("requires a selection, retains errors for retry, approves and denies", async () => {
     const decisions: Array<[string, boolean]> = [];
     let renderer!: TestRenderer.ReactTestRenderer;

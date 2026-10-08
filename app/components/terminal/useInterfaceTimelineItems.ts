@@ -9,13 +9,13 @@ import {
   mergeRunningActivityIntoTimeline,
   mergePendingUserMessagesIntoTimeline,
 } from "./InterfaceTimelineModel";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { BrainWorkResultEvent } from "../brain/brainWorkEvent";
 import type { BrainCurrentWork } from "../../store/brain";
 import {
-  projectZenTimeline,
-  type ZenTimelineProjectionCache,
-} from "./projectZenTimeline";
+  projectTimeline,
+  type TimelineProjectionCache,
+} from "./projectTimeline";
 import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 import { useBrainCompanion } from "../mewla/BrainCompanion";
 import {
@@ -24,7 +24,7 @@ import {
 } from "../mewla/brainPresenceTimeline";
 
 type StableTimelineEntry = {
-  item: ZenTimelineItem;
+  item: TimelineItem;
 };
 
 /**
@@ -37,7 +37,7 @@ type StableTimelineEntry = {
  */
 const projectionReuseCache = new WeakMap<
   CodexConversationEvent[],
-  { items: ZenTimelineItem[]; cache: ZenTimelineProjectionCache }
+  { items: TimelineItem[]; cache: TimelineProjectionCache }
 >();
 
 export function useInterfaceTimelineItems({
@@ -64,12 +64,12 @@ export function useInterfaceTimelineItems({
 }) {
   const previousRef = useRef<{
     byId: Map<string, StableTimelineEntry>;
-    items: ZenTimelineItem[];
+    items: TimelineItem[];
   }>({
     byId: new Map(),
     items: [],
   });
-  const projectionCacheRef = useRef<ZenTimelineProjectionCache | null>(null);
+  const projectionCacheRef = useRef<TimelineProjectionCache | null>(null);
 
   // Pure event→timeline projection. Callback/set identity must not rescan events.
   const projectedTimelineItems = useMemo(() => {
@@ -78,7 +78,7 @@ export function useInterfaceTimelineItems({
       projectionCacheRef.current = reused.cache;
       return reused.items;
     }
-    const projected = projectZenTimeline(
+    const projected = projectTimeline(
       events,
       projectionCacheRef.current,
     );

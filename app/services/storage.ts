@@ -15,15 +15,15 @@ export type {
 } from "./storedServerContract";
 
 const KEYS = {
-  servers: "zen:v3:servers",
-  currentServer: "zen:v1:current_server_id",
-  disabledServers: "zen:v1:disabled_servers",
-  onboarded: "zen:onboarded",
-  recentWorkerOpens: "zen:recent_agent_opens",
-  workerAliases: "zen:agent_aliases",
-  interfaceRenderModes: "zen:codex_render_modes",
-  themePreference: "zen:theme_preference",
-  accentPreference: "zen:accent_preference",
+  servers: "mewla:v3:servers",
+  currentServer: "mewla:v1:current_server_id",
+  disabledServers: "mewla:v1:disabled_servers",
+  onboarded: "mewla:onboarded",
+  recentWorkerOpens: "mewla:recent_agent_opens",
+  workerAliases: "mewla:agent_aliases",
+  interfaceRenderModes: "mewla:codex_render_modes",
+  themePreference: "mewla:theme_preference",
+  accentPreference: "mewla:accent_preference",
 } as const;
 
 let serverWriteTail: Promise<unknown> = Promise.resolve();

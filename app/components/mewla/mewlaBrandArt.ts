@@ -5,13 +5,13 @@
  * scripts/render-mewla-brand.ts can write the committed SVG sources and PNGs,
  * and mewlaBrandArt.test.ts can fail when a committed file drifts.
  */
-import { ZEN_BRAND_COLORS } from "../../theme/primitives";
+import { BRAND_COLORS } from "../../theme/primitives";
 import { CAT_IN_SEAL, CURL, SEAL, sealCarving } from "./sealCatGeometry";
 
-const RED = ZEN_BRAND_COLORS.vermilion;
-const PAPER = ZEN_BRAND_COLORS.sealPaper;
+const RED = BRAND_COLORS.vermilion;
+const PAPER = BRAND_COLORS.sealPaper;
 /** The warm ink behind the seal in dark mode, as on the landing. */
-const INK = ZEN_BRAND_COLORS.environment;
+const INK = BRAND_COLORS.environment;
 
 type Carving = { bold: number; detail: boolean };
 

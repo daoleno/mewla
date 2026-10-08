@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { normalizeCodexConversation } from "./codexConversation";
-import { projectZenTimeline } from "../components/terminal/projectZenTimeline";
+import { projectTimeline } from "../components/terminal/projectTimeline";
 import {
   reconcileConversationDeltaEvents,
   reconcileConversationSnapshot,
 } from "../components/terminal/interfaceConversationReconciliation";
-import type { ZenTimelineItem } from "../components/terminal/InterfaceTimelineItemView";
+import type { TimelineItem } from "../components/terminal/InterfaceTimelineItemView";
 
 const T = (sec: number) =>
   new Date(Date.parse("2026-08-08T00:00:10Z") + sec * 1000).toISOString();
@@ -107,11 +107,11 @@ function reasoningDaemonConversation(events: OpenCodeReasoningDaemonEvent[]) {
 }
 
 function reasoningItem(
-  items: ReturnType<typeof projectZenTimeline>["items"],
+  items: ReturnType<typeof projectTimeline>["items"],
   id = "prt_reason_final",
 ) {
   return items.find(
-    (item): item is Extract<ZenTimelineItem, { type: "activity" }> =>
+    (item): item is Extract<TimelineItem, { type: "activity" }> =>
       item.id === id && item.type === "activity",
   );
 }
@@ -121,7 +121,7 @@ describe("OpenCode reasoning icon settle contract", () => {
     const conversation = normalizeCodexConversation(
       reasoningDaemonConversation(reasoningTurnDaemonEvents(false)),
     );
-    const { items } = projectZenTimeline(conversation.events, null);
+    const { items } = projectTimeline(conversation.events, null);
     const reason = reasoningItem(items);
     expect(reason).toMatchObject({
       type: "activity",
@@ -141,7 +141,7 @@ describe("OpenCode reasoning icon settle contract", () => {
     const conversation = normalizeCodexConversation(
       reasoningDaemonConversation(reasoningTurnDaemonEvents(true)),
     );
-    const { items } = projectZenTimeline(conversation.events, null);
+    const { items } = projectTimeline(conversation.events, null);
     expect(reasoningItem(items, "prt_reason_step1")).toMatchObject({
       tone: "running",
       streaming: true,
@@ -175,7 +175,7 @@ describe("OpenCode reasoning icon settle contract", () => {
     const byId = new Map(reconciled.map((event) => [event.id, event]));
     expect(byId.size).toBe(reconciled.length);
     expect(byId.size).toBe(5);
-    const { items } = projectZenTimeline(reconciled, null);
+    const { items } = projectTimeline(reconciled, null);
     expect(reasoningItem(items, "prt_reason_step1")).toMatchObject({
       tone: "neutral",
     });
@@ -199,7 +199,7 @@ describe("OpenCode reasoning icon settle contract", () => {
       reasoningDaemonConversation(reasoningTurnDaemonEvents(false)),
     );
     const revisited = reconcileConversationSnapshot(live, settled, true);
-    const { items } = projectZenTimeline(revisited.events, null);
+    const { items } = projectTimeline(revisited.events, null);
     const ids = items.map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(reasoningItem(items)).toMatchObject({
@@ -210,7 +210,7 @@ describe("OpenCode reasoning icon settle contract", () => {
   });
 
   test("tool interleaving stays correct on both live and settled projections", () => {
-    const liveItems = projectZenTimeline(
+    const liveItems = projectTimeline(
       normalizeCodexConversation(
         reasoningDaemonConversation(reasoningTurnDaemonEvents(true)),
       ).events,
@@ -221,7 +221,7 @@ describe("OpenCode reasoning icon settle contract", () => {
     });
     expect(reasoningItem(liveItems, "prt_tool")?.statusKey).toBe("running");
 
-    const settledItems = projectZenTimeline(
+    const settledItems = projectTimeline(
       normalizeCodexConversation(
         reasoningDaemonConversation(reasoningTurnDaemonEvents(false)),
       ).events,
@@ -244,7 +244,7 @@ describe("OpenCode reasoning icon settle contract", () => {
         settled_at: T(6),
       },
     });
-    const interruptedItems = projectZenTimeline(interrupted.events, null).items;
+    const interruptedItems = projectTimeline(interrupted.events, null).items;
     expect(reasoningItem(interruptedItems)).toMatchObject({
       tone: "neutral",
     });
@@ -266,7 +266,7 @@ describe("OpenCode reasoning icon settle contract", () => {
         },
       ]),
     );
-    const unresolvedItems = projectZenTimeline(unresolved.events, null).items;
+    const unresolvedItems = projectTimeline(unresolved.events, null).items;
     expect(reasoningItem(unresolvedItems, "prt_reason_open")).toMatchObject({
       tone: "running",
       streaming: true,

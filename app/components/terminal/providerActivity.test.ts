@@ -6,7 +6,7 @@ import {
   type ProviderActivity,
 } from "../../services/codexConversation";
 import {
-  buildZenTimeline,
+  buildTimeline,
   mergePendingUserMessagesIntoTimeline,
   mergeRunningActivityIntoTimeline,
 } from "./InterfaceTimelineModel";
@@ -57,7 +57,7 @@ describe("provider-native Activity Working", () => {
       ["warning", "Agent warning"],
       [undefined, "Agent status"],
     ].map(([status, expected], index) => {
-      const [item] = buildZenTimeline([
+      const [item] = buildTimeline([
         {
           id: `status-${index}`,
           seq: index,
@@ -157,7 +157,7 @@ describe("provider-native Activity Working", () => {
       },
     ];
     const once = mergeRunningActivityIntoTimeline(
-      buildZenTimeline(events),
+      buildTimeline(events),
       activity(),
     );
     const twice = mergeRunningActivityIntoTimeline(once, activity());
@@ -182,7 +182,7 @@ describe("provider-native Activity Working", () => {
   });
 
   test("same-boundary duplicate text rows keep local creation order", () => {
-    const history = buildZenTimeline([
+    const history = buildTimeline([
       {
         id: "history",
         seq: 1,
@@ -212,7 +212,7 @@ describe("provider-native Activity Working", () => {
   });
 
   test("a local input stays at its causal boundary before later assistant chunks", () => {
-    const providerTimeline = buildZenTimeline([
+    const providerTimeline = buildTimeline([
       {
         id: "history",
         seq: 1,
@@ -255,7 +255,7 @@ describe("provider-native Activity Working", () => {
       body: "Partial answer",
       partial: true,
     };
-    expect(buildZenTimeline([partial])[0]).toMatchObject({ streaming: true });
+    expect(buildTimeline([partial])[0]).toMatchObject({ streaming: true });
     expect(
       isProviderActivityRunning(
         normalizeCodexConversation({

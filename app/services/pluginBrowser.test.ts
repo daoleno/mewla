@@ -1,9 +1,9 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 
-if (!process.env.ZEN_PLUGIN_BROWSER_TEST_CHILD) {
+if (!process.env.MEWLA_PLUGIN_BROWSER_TEST_CHILD) {
   test("plugin browser native compatibility in isolation", () => {
     const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], {
-      env: { ...process.env, ZEN_PLUGIN_BROWSER_TEST_CHILD: "1" },
+      env: { ...process.env, MEWLA_PLUGIN_BROWSER_TEST_CHILD: "1" },
     });
     if (result.exitCode) {
       throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));

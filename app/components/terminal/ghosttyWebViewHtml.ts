@@ -29,12 +29,12 @@ export function buildGhosttyTerminalHtml(
     .replace(/'/g, "\\'") ?? null;
   const fontFace = escapedFontUri ? `
     @font-face {
-      font-family: 'ZenTerm';
+      font-family: 'TerminalFont';
       src: url('${escapedFontUri}') format('truetype');
       font-display: swap;
     }
   ` : '';
-  const terminalFontFamily = escapedFontUri ? "'ZenTerm', monospace" : 'monospace';
+  const terminalFontFamily = escapedFontUri ? "'TerminalFont', monospace" : 'monospace';
 
   return String.raw`<!DOCTYPE html>
 <html>
@@ -171,7 +171,7 @@ export function buildGhosttyTerminalHtml(
       const HAS_BUNDLED_FONT = ${escapedFontUri !== null};
       const FONT_READY_TIMEOUT_MS = 1200;
       const RENDERER_GENERATION = ${safeRendererGeneration};
-      window.__zenRendererGeneration = RENDERER_GENERATION;
+      window.__mewlaRendererGeneration = RENDERER_GENERATION;
 
       ${TERMINAL_GRID_SIZE_SOURCE}
 
@@ -228,7 +228,7 @@ export function buildGhosttyTerminalHtml(
 
         let timeoutId = null;
         const fontAttempt = Promise.resolve()
-          .then(() => document.fonts.load(FONT_SIZE + 'px "ZenTerm"'))
+          .then(() => document.fonts.load(FONT_SIZE + 'px "TerminalFont"'))
           .then(() => document.fonts.ready)
           .then(
             () => ({ status: 'ready' }),
@@ -940,7 +940,7 @@ export function buildGhosttyTerminalHtml(
           scheduleDraw();
         }, 530);
 
-        window.__zenRenderSnapshot = (nextSnapshot) => {
+        window.__mewlaRenderSnapshot = (nextSnapshot) => {
           if (!nextSnapshot || !rowUpdates.apply(nextSnapshot)) return;
           renderSnapshot = nextSnapshot;
           // The response has arrived. Release backpressure now: waiting for a
@@ -950,7 +950,7 @@ export function buildGhosttyTerminalHtml(
           scheduleDraw();
         };
 
-        window.__zenTheme = (nextTheme) => {
+        window.__mewlaTheme = (nextTheme) => {
           if (nextTheme) {
             activeTheme = nextTheme;
             applyTheme();
@@ -958,9 +958,9 @@ export function buildGhosttyTerminalHtml(
           }
         };
 
-        window.__zenHistory = applyHistory;
+        window.__mewlaHistory = applyHistory;
 
-        window.__zenSetScrollContext = (sessionId, token, reason) => {
+        window.__mewlaSetScrollContext = (sessionId, token, reason) => {
           const changed = sessionId !== scrollSessionId;
           stopWheel();
           scrollSessionId = typeof sessionId === 'string' && sessionId ? sessionId : null;
@@ -984,14 +984,14 @@ export function buildGhosttyTerminalHtml(
           }
         };
 
-        window.__zenBlur = () => {
+        window.__mewlaBlur = () => {
           stopWheel();
           touching = false;
           clearSelection();
           settleScroll();
         };
 
-        window.__zenWakeRenderer = () => {
+        window.__mewlaWakeRenderer = () => {
           syncViewport(false);
           scheduleDraw();
           const rootEl = document.documentElement;
@@ -1001,16 +1001,16 @@ export function buildGhosttyTerminalHtml(
           rootEl.style.transform = previousTransform || '';
         };
 
-        window.__zenResumeInput = () => {
+        window.__mewlaResumeInput = () => {
           jumpLive();
           clearSelection();
-          window.__zenWakeRenderer();
+          window.__mewlaWakeRenderer();
         };
 
-        window.__zenScrollToBottom = () => {
+        window.__mewlaScrollToBottom = () => {
           jumpLive();
           clearSelection();
-          window.__zenWakeRenderer();
+          window.__mewlaWakeRenderer();
         };
 
         const handleViewportChange = () => syncViewport(false);

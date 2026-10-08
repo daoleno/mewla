@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import {
   attachBrainWorkEventActions,
-  buildZenTimeline,
+  buildTimeline,
 } from "../terminal/InterfaceTimelineModel";
-import { projectZenTimeline } from "../terminal/projectZenTimeline";
-import type { ZenTimelineItem } from "../terminal/InterfaceTimelineItemView";
+import { projectTimeline } from "../terminal/projectTimeline";
+import type { TimelineItem } from "../terminal/InterfaceTimelineItemView";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -27,15 +27,15 @@ function workResultEvent(
     seq: 1,
     timestamp: "2026-08-06T10:19:08.365Z",
     kind: "status",
-    title: "zen-telegram-performance-publish",
+    title: "mewla-telegram-performance-publish",
     body: "Delegated provider process or pane is no longer live",
     status: kind,
     source: "work_result",
     work_id: "ae621005-929b-49b5-9d42-fa476d42d3f3",
     work_session_id:
-      "zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730",
+      "mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730",
     session_name:
-      "zen-telegram-performance-publish (zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730)",
+      "mewla-telegram-performance-publish (mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730)",
     unread: true,
     work_review_state: "queued",
     work_session_state: "open",
@@ -44,7 +44,7 @@ function workResultEvent(
 }
 
 function assertBrainWorkEventCard(
-  items: ZenTimelineItem[],
+  items: TimelineItem[],
   kind: (typeof PROJECTED_KINDS)[number],
   id: string,
 ) {
@@ -57,13 +57,13 @@ function assertBrainWorkEventCard(
   expect(card.event.event_id).toBe(id);
   expect(card.event.kind).toBe(kind);
   expect(card.event.work_id).toBe("ae621005-929b-49b5-9d42-fa476d42d3f3");
-  expect(JSON.stringify(card)).not.toContain("zen_work_event");
+  expect(JSON.stringify(card)).not.toContain("mewla_work_event");
 }
 
 describe("Brain Work Event dedicated card projection", () => {
   test("same-event lifecycle and diagnostics updates invalidate cached cards", () => {
     const before = workResultEvent("session.done", "same-event");
-    const initial = projectZenTimeline([before], null);
+    const initial = projectTimeline([before], null);
     const changes: Partial<CodexConversationEvent>[] = [
       { work_review_state: "resolved" }, { work_session_state: "not_required" },
       { work_result_current: false }, { work_phase: "verifying" },
@@ -72,15 +72,15 @@ describe("Brain Work Event dedicated card projection", () => {
     ];
     for (const change of changes) {
       const next = { ...before, ...change };
-      const projected = projectZenTimeline([next], initial.cache);
-      expect(projected.items).toEqual(buildZenTimeline([next]));
+      const projected = projectTimeline([next], initial.cache);
+      expect(projected.items).toEqual(buildTimeline([next]));
       expect(projected.items[0]).not.toBe(initial.items[0]);
     }
   });
   test("real-time work_result status kinds become brain-work-event cards", () => {
     for (const kind of PROJECTED_KINDS) {
       const event = workResultEvent(kind, `live-${kind}`);
-      assertBrainWorkEventCard(buildZenTimeline([event]), kind, event.id);
+      assertBrainWorkEventCard(buildTimeline([event]), kind, event.id);
     }
   });
 
@@ -88,7 +88,7 @@ describe("Brain Work Event dedicated card projection", () => {
     const history = PROJECTED_KINDS.map((kind, index) =>
       workResultEvent(kind, `history-${kind}-${index}`),
     );
-    const initial = projectZenTimeline(history, null);
+    const initial = projectTimeline(history, null);
     expect(initial.items.map((item) => item.type)).toEqual([
       "brain-work-event",
     ]);
@@ -114,7 +114,7 @@ describe("Brain Work Event dedicated card projection", () => {
         body: "Inspecting the failure",
       },
     ];
-    const next = projectZenTimeline(withAssistant, initial.cache);
+    const next = projectTimeline(withAssistant, initial.cache);
     expect(next.mode).toBe("incremental");
     for (let index = 0; index < initial.items.length; index += 1) {
       expect(next.items[index]).toBe(initial.items[index]);
@@ -136,7 +136,7 @@ describe("Brain Work Event dedicated card projection", () => {
       work_wait_for: "Preview iOS archive",
       work_result_current: true,
     };
-    const items = buildZenTimeline([providerHint, exactControl]);
+    const items = buildTimeline([providerHint, exactControl]);
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -165,7 +165,7 @@ describe("Brain Work Event dedicated card projection", () => {
       timestamp: "2026-08-06T10:20:00.000Z",
       work_review_state: "reviewing" as const,
     };
-    const initial = projectZenTimeline([latest], null);
+    const initial = projectTimeline([latest], null);
     const older = {
       ...workResultEvent("session.done", "older-result"),
       seq: 1,
@@ -173,7 +173,7 @@ describe("Brain Work Event dedicated card projection", () => {
       work_review_state: "queued" as const,
     };
 
-    const projected = projectZenTimeline([older, latest], initial.cache);
+    const projected = projectTimeline([older, latest], initial.cache);
     expect(projected.mode).toBe("full");
     expect(projected.items).toHaveLength(1);
     const item = projected.items[0];
@@ -186,14 +186,14 @@ describe("Brain Work Event dedicated card projection", () => {
   });
 
   test("attachBrainWorkEventActions never downgrades semantic card kind", () => {
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       workResultEvent("session.failed", "1aa90ab5-cf46-4643-9985-f6fd26c9526b"),
     ]);
     const enriched = attachBrainWorkEventActions(
       items,
       () => {},
       new Set([
-        "zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730",
+        "mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730",
       ]),
     );
     assertBrainWorkEventCard(
@@ -207,7 +207,7 @@ describe("Brain Work Event dedicated card projection", () => {
   });
 
   test("attaches canonical current Work to the grouped chat card", () => {
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       workResultEvent("session.failed", "current-work-event"),
     ]);
     const currentWork = {
@@ -258,31 +258,31 @@ describe("Brain Work Event dedicated card projection", () => {
     );
     expect(source).toContain('item.type === "brain-work-event"');
     expect(source).toContain("<BrainWorkEventCard");
-    expect(source).not.toContain("zen_work_event");
+    expect(source).not.toContain("mewla_work_event");
   });
 
-  test("raw zen_work_event user envelopes do not project as message cards", () => {
+  test("raw mewla_work_event user envelopes do not project as message cards", () => {
     const envelope = [
-      "<zen_work_event>",
+      "<mewla_work_event>",
       JSON.stringify({
         event_id: "1aa90ab5-cf46-4643-9985-f6fd26c9526b",
         work_id: "ae621005-929b-49b5-9d42-fa476d42d3f3",
-        work_title: "zen-telegram-performance-publish",
+        work_title: "mewla-telegram-performance-publish",
         kind: "session.failed",
         source:
-          "zen-telegram-performance-publish (zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730)",
+          "mewla-telegram-performance-publish (mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730)",
         summary: "Delegated provider process or pane is no longer live",
         next_action: "Inspect the delegated Session failure.",
-        context_ref: "worklog/2026-08-06-zen-telegram-performance-publish.md",
+        context_ref: "worklog/2026-08-06-mewla-telegram-performance-publish.md",
         payload_ref:
-          "session:zen-worker-zen-telegram-performance-publish-1786011456826849565:@7730",
+          "session:mewla-worker-mewla-telegram-performance-publish-1786011456826849565:@7730",
       }),
-      "</zen_work_event>",
+      "</mewla_work_event>",
     ].join("\n");
     // If a transport envelope still reaches the App, it must not be mistaken
     // for a work_result card. Daemon sanitization owns omission; this proves
     // the App does not invent a brain-work-event from raw user text.
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       {
         id: "provider-envelope-1",
         seq: 1,
@@ -294,7 +294,7 @@ describe("Brain Work Event dedicated card projection", () => {
     ]);
     expect(items.map((item) => item.type)).toEqual(["message"]);
     expect(items[0]?.type === "message" && items[0].body).toContain(
-      "zen_work_event",
+      "mewla_work_event",
     );
     expect(items.some((item) => item.type === "brain-work-event")).toBe(false);
   });

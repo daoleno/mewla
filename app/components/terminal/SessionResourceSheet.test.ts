@@ -14,7 +14,7 @@ describe("SessionResourceSheet presentation model", () => {
           status: "running",
           phase: "working",
           started_at: "2026-07-18T12:00:00.000Z",
-          cwd: "/home/daoleno/workspace/zen",
+          cwd: "/home/daoleno/workspace/mewla",
           managed: true,
           backend: "cgroup_pool",
           memory_current_bytes: 2.4 * 1024 ** 3,
@@ -175,7 +175,7 @@ describe("SessionResourceSheet presentation model", () => {
       session: {
         status: "running",
         managed: false,
-        cwd: "/home/daoleno/workspace/zen",
+        cwd: "/home/daoleno/workspace/mewla",
       },
       pool: {
         backend: "cgroup_pool",
@@ -204,7 +204,7 @@ describe("SessionResourceSheet presentation model", () => {
     });
     expect(JSON.stringify(model)).not.toContain("Enough memory headroom");
     expect(model?.metaLine).toContain("running");
-    expect(model?.workspace).toBe("/home/daoleno/workspace/zen");
+    expect(model?.workspace).toBe("/home/daoleno/workspace/mewla");
   });
 
   test("confirmed pressure is the only standalone host warning", () => {

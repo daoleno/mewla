@@ -5,15 +5,15 @@ import {
   stabilizeTimelineRenderItems,
   type TimelineRenderItem,
 } from "./InterfaceTimelineGrouping";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
-import { projectZenTimeline } from "./projectZenTimeline";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
+import { projectTimeline } from "./projectTimeline";
 import { makeMixedTimelineEvents } from "./timelineProjectionFixtures";
 import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 
 /**
  * Distinguishes four invalidation layers on a long mixed timeline when a new
  * tool/activity row arrives:
- * 1. raw ZenTimelineItem identity from projectZenTimeline
+ * 1. raw TimelineItem identity from projectTimeline
  * 2. grouped TimelineRenderItem identity after stabilize
  * 3. row memo props (item + presentation references)
  * 4. FlatList data-array identity (new array allowed on length change)
@@ -80,12 +80,12 @@ function memoPropsOf(item: TimelineRenderItem) {
 describe("tool/activity append timeline stability layers", () => {
   test("long mixed timeline: new tool preserves historical raw, grouped, and memo identities", () => {
     const baseEvents = makeMixedTimelineEvents(120);
-    const initial = projectZenTimeline(baseEvents, null);
+    const initial = projectTimeline(baseEvents, null);
     expect(initial.mode).toBe("full");
     expect(initial.items.length).toBeGreaterThanOrEqual(110);
 
     const nextEvents = appendRunningTool(baseEvents);
-    const projected = projectZenTimeline(nextEvents, initial.cache);
+    const projected = projectTimeline(nextEvents, initial.cache);
 
     // Layer 1 — authoritative projection must keep historical raw item refs.
     expect(projected.mode).toBe("incremental");
@@ -106,7 +106,7 @@ describe("tool/activity append timeline stability layers", () => {
 
     // Salvage mirror of useInterfaceTimelineItems (should be identity no-op when
     // projection already preserved refs).
-    const salvaged: ZenTimelineItem[] = projected.items.map((item) => {
+    const salvaged: TimelineItem[] = projected.items.map((item) => {
       const prior = previousRaw.get(item.id);
       return prior && timelineItemsSemanticEqual(prior, item) ? prior : item;
     });
@@ -192,13 +192,13 @@ describe("tool/activity append timeline stability layers", () => {
     if (!toolEvent) {
       throw new Error("fixture requires a tool event");
     }
-    const initial = projectZenTimeline(baseEvents, null);
+    const initial = projectTimeline(baseEvents, null);
     const nextEvents = upsertToolBody(
       baseEvents,
       toolEvent.id,
       `${toolEvent.body}\nsecond match`,
     );
-    const projected = projectZenTimeline(nextEvents, initial.cache);
+    const projected = projectTimeline(nextEvents, initial.cache);
 
     expect(projected.mode).toBe("incremental");
     expect(projected.fallbackReason).toBeUndefined();

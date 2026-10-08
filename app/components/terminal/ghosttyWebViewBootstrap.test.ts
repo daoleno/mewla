@@ -29,7 +29,7 @@ describe("Ghostty WebView bootstrap boundary", () => {
   test("the terminal pins its font density so OS text scaling cannot inflate the grid", () => {
     const html = buildGhosttyTerminalHtml(
       theme,
-      "https://zen.local/font.ttf",
+      "https://mewla.local/font.ttf",
       13,
       0,
     );
@@ -42,7 +42,7 @@ describe("Ghostty WebView bootstrap boundary", () => {
   test("inline bootstrap failures and font timeout are observable and bounded", () => {
     const html = buildGhosttyTerminalHtml(
       theme,
-      "https://zen.local/font.ttf",
+      "https://mewla.local/font.ttf",
       13,
       0,
     );

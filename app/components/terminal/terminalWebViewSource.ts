@@ -1,4 +1,4 @@
-const DEFAULT_TERMINAL_BASE_URL = 'https://zen.local/';
+const DEFAULT_TERMINAL_BASE_URL = 'https://mewla.local/';
 
 export function terminalWebViewBaseUrl(fontUri: string, platform: string): string {
   if (platform !== 'ios' || !fontUri.startsWith('file://')) {

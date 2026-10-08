@@ -13,10 +13,10 @@ import { TypeScale, Typography, useAppColors, useAppTheme } from "../../constant
 import { buildChatChrome } from "../../theme";
 import { openSafeMarkdownUrl } from "../markdown/markdownLinks";
 import { MarkdownWithMermaid } from "../markdown/MarkdownWithMermaid";
-import { ZenImage, ZenImageOwnerContext } from "../terminal/ZenImage";
+import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
 import { useCurrentServer } from "../../store/currentServer";
 import { skillImagePath } from "../../services/skillImagePath";
-import type { ZenImageOwner, ZenImageSource } from "../../services/imageSource";
+import type { ImageOwner, ImageSource } from "../../services/imageSource";
 import type { PackageDetail } from "../../services/skillsManagement";
 import {
   buildSkillFileTree,
@@ -74,7 +74,7 @@ export function SkillFileBrowser({
     if (detail.preview?.path) setSelectedPath(detail.preview.path);
   }, [detail.preview?.path]);
   const preview = detail.preview;
-  const imageOwner = useMemo<ZenImageOwner>(() => ({
+  const imageOwner = useMemo<ImageOwner>(() => ({
     key: JSON.stringify([currentServerId, detail.copyId, detail.contentHash, preview?.path]),
     async resolve(reference, signal) {
       const path = skillImagePath(reference, preview?.path || "SKILL.md", files);
@@ -85,12 +85,12 @@ export function SkillFileBrowser({
       return { uri: next.preview.dataUrl, headers: {} };
     },
   }), [currentServerId, detail.copyId, detail.contentHash, files, preview, readFile]);
-  const gallery: ZenImageSource[] = files.filter((file) => file.mediaType.startsWith("image/")).map((file) => ({ kind: "owned", path: `skill-file:${file.path}`, name: file.path }));
+  const gallery: ImageSource[] = files.filter((file) => file.mediaType.startsWith("image/")).map((file) => ({ kind: "owned", path: `skill-file:${file.path}`, name: file.path }));
   const renderer = preview && !preview.dataUrl
     ? skillRenderer(preview.kind, preview.content)
     : null;
   return (
-    <ZenImageOwnerContext.Provider value={imageOwner}>
+    <ImageOwnerContext.Provider value={imageOwner}>
     <View>
       {tree.length ? (
         tree.map((node) => (
@@ -140,7 +140,7 @@ export function SkillFileBrowser({
             {preview.notice}
           </Text>
         ) : null}
-        {preview?.dataUrl ? <ZenImage source={{ kind: "owned", path: `skill-file:${preview.path}`, name: preview.path }} gallery={gallery} chrome={chrome} /> : null}
+        {preview?.dataUrl ? <AppImage source={{ kind: "owned", path: `skill-file:${preview.path}`, name: preview.path }} gallery={gallery} chrome={chrome} /> : null}
         {preview?.status === "binary" ? (
           <BrowserState
             icon="attach"
@@ -171,7 +171,7 @@ export function SkillFileBrowser({
         {renderer === "text" ? <Code content={preview?.content ?? ""} /> : null}
       </View>
     </View>
-    </ZenImageOwnerContext.Provider>
+    </ImageOwnerContext.Provider>
   );
 }
 

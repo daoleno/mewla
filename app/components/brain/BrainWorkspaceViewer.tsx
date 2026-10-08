@@ -27,8 +27,8 @@ import {
 } from "../../services/websocket";
 import { AppText, BottomSheetFrame, IconButton } from "../ui";
 import { HeaderBackButton } from "../navigation/HeaderBackButton";
-import { ZenImage, ZenImageOwnerContext } from "../terminal/ZenImage";
-import type { ZenImageOwner } from "../../services/imageSource";
+import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
+import type { ImageOwner } from "../../services/imageSource";
 import { InterfaceNativeMarkdownBody } from "../terminal/InterfaceNativeMarkdownBody";
 import { MarkdownFallbackText } from "../markdown/MarkdownFallbackText";
 import {
@@ -75,7 +75,7 @@ export function BrainWorkspaceViewer({
     [],
   );
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const imageOwner = useMemo<ZenImageOwner>(() => ({
+  const imageOwner = useMemo<ImageOwner>(() => ({
     key: `${workspaceCacheKey}:${selectedPath || ""}`,
     async resolve(path, signal) {
       if (!serverId) throw new Error("Select the current server to open this image.");
@@ -326,7 +326,7 @@ export function BrainWorkspaceViewer({
     workspace;
 
   return (
-    <ZenImageOwnerContext.Provider value={imageOwner}>
+    <ImageOwnerContext.Provider value={imageOwner}>
     <BottomSheetFrame
       visible={visible}
       onClose={onClose}
@@ -473,7 +473,7 @@ export function BrainWorkspaceViewer({
         )}
       </View>
     </BottomSheetFrame>
-    </ZenImageOwnerContext.Provider>
+    </ImageOwnerContext.Provider>
   );
 }
 
@@ -489,7 +489,7 @@ function BrainWorkspaceFilePreview({
   styles: ReturnType<typeof createStyles>;
 }) {
   if (file.kind === "image") {
-    return <View style={{ padding: 12 }}><ZenImage source={file.data_url ? { kind: "inline", uri: file.data_url, name: file.name } : { kind: "owned", path: file.path, name: file.name }} chrome={chrome} /></View>;
+    return <View style={{ padding: 12 }}><AppImage source={file.data_url ? { kind: "inline", uri: file.data_url, name: file.name } : { kind: "owned", path: file.path, name: file.name }} chrome={chrome} /></View>;
   }
   const markdown =
     file.language === "markdown" || brainWorkspaceMarkdownPath(file.path);

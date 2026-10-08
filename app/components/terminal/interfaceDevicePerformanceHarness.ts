@@ -145,10 +145,10 @@ export function createInterfaceDevicePerfRunner(input: {
 }
 
 export const INTERFACE_DEVICE_PERF_LAUNCH_HINTS = [
-  "Dev-only. Requires EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1 and demo=1.",
-  "Android: EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1 bun run app:android then open",
+  "Dev-only. Requires EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1 and demo=1.",
+  "Android: EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1 bun run app:android then open",
   "  mewla://screenshot-demo?demo=1&state=profile&scenario=50-short",
-  "iOS: EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1 bun run app:ios then open the same URL.",
+  "iOS: EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1 bun run app:ios then open the same URL.",
   "Long history: 1k-mixed | 5k-mixed | 10k-mixed | stream-10k",
   "Anchoring: detached-append-10k | detached-prepend-10k (legacy small scenarios remain)",
   "Correlate summary with Android Studio FrameTimeline, adb shell dumpsys gfxinfo,",

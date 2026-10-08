@@ -44,7 +44,7 @@ function backendWithDownload(
 function stageInput(generation = "generation-a", epoch = 1) {
   return {
     uri: "https://server.example/session-file",
-    headers: { Authorization: "ZenDevice signed" },
+    headers: { Authorization: "Device signed" },
     generation,
     expectedBytes: 128,
     owner: "sheet-owner",
@@ -66,7 +66,7 @@ describe("Session PDF staging", () => {
     const operation = createSessionPdfStage(stageInput(), backend);
 
     expect(await operation.result).toBe(targets[0].uri);
-    expect(receivedHeaders).toEqual([{ Authorization: "ZenDevice signed" }]);
+    expect(receivedHeaders).toEqual([{ Authorization: "Device signed" }]);
     expect(targets[0].exists).toBe(true);
 
     operation.dispose();
@@ -159,7 +159,7 @@ describe("Session PDF staging", () => {
     expect(error.stale).toBe(true);
     expect(targets[0].exists).toBe(false);
     expect(sessionPdfStageFileName("../bad generation", "sheet:@1", 0)).toBe(
-      "zen-session-pdf-badgeneration-sheet1-1.pdf",
+      "mewla-session-pdf-badgeneration-sheet1-1.pdf",
     );
   });
 });

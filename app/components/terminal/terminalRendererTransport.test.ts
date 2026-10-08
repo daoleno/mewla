@@ -11,10 +11,10 @@ test('dispatches only to the bound renderer and rejects scripts queued before re
   transport.bind(12, 3);
   transport.send('window.painted = true;');
   expect(calls[0].tag).toBe(12);
-  const window = { __zenRendererGeneration: 4, painted: false };
+  const window = { __mewlaRendererGeneration: 4, painted: false };
   new Function('window', calls[0].script)(window);
   expect(window.painted).toBe(false);
-  window.__zenRendererGeneration = 3;
+  window.__mewlaRendererGeneration = 3;
   new Function('window', calls[0].script)(window);
   expect(window.painted).toBe(true);
   transport.clear();

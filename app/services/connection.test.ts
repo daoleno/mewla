@@ -63,7 +63,7 @@ describe("Pairing V2", () => {
         payload.c[1].s,
       ].join("\n"),
     );
-    const domain = new TextEncoder().encode("zen-link-pairing-v2\u0000");
+    const domain = new TextEncoder().encode("mewla-link-pairing-v2\u0000");
     const signed = new Uint8Array(domain.length + binding.length);
     signed.set(domain);
     signed.set(binding, domain.length);
@@ -71,7 +71,6 @@ describe("Pairing V2", () => {
 
     const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
     const link = `mewla://settings?v=2&p=${encoded}`;
-    expect(parseConnectLink(`zen://settings?v=2&p=${encoded}`)).toBeNull();
     expect(parseConnectLink(`other://settings?v=2&p=${encoded}`)).toBeNull();
     expect(parseConnectLink(link)).toEqual({
       url: payload.c[0].a!,
@@ -109,15 +108,14 @@ describe("Pairing V2", () => {
 });
 
 test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
-  const query = `u=${encodeURIComponent("wss://zen.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
+  const query = `u=${encodeURIComponent("wss://mewla.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
   const current = `mewla://settings?${query}`;
   const expected = parseConnectLink(current);
   expect(expected).not.toBeNull();
-  expect(parseConnectLink(`zen://settings?${query}`)).toBeNull();
-  expect(parseConnectLink(`https://zen.example/#pair=${encodeURIComponent(current)}`)).toEqual(expected);
+  expect(parseConnectLink(`https://mewla.example/#pair=${encodeURIComponent(current)}`)).toEqual(expected);
   expect(parseConnectLink(`http://untrusted.example/#pair=${encodeURIComponent(current)}`)).toBeNull();
   expect(parseConnectLink(`other://settings?${query}`)).toBeNull();
-  expect(parseConnectLink(`https://zen.example/#pair=${encodeURIComponent(`other://settings?${query}`)}`)).toBeNull();
-  expect(parseConnectLink("https://zen.example/")).toBeNull();
-  expect(parseConnectLink("https://zen.example/#pair=https%3A%2F%2Fevil.example")).toBeNull();
+  expect(parseConnectLink(`https://mewla.example/#pair=${encodeURIComponent(`other://settings?${query}`)}`)).toBeNull();
+  expect(parseConnectLink("https://mewla.example/")).toBeNull();
+  expect(parseConnectLink("https://mewla.example/#pair=https%3A%2F%2Fevil.example")).toBeNull();
 });

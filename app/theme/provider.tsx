@@ -19,18 +19,18 @@ import {
   setAccentPreference,
   setThemePreference,
 } from "../services/storage";
-import { navigationThemeFromZenTheme } from "./navigation";
-import { DEFAULT_ACCENT_ID, getAccentById, type ZenAccentId } from "./primitives";
+import { navigationThemeFromTheme } from "./navigation";
+import { DEFAULT_ACCENT_ID, getAccentById, type ThemeAccentId } from "./primitives";
 import { resolveTheme } from "./resolve";
 import { syncSystemRootBackground } from "./syncSystemRootBackground";
-import type { ResolvedZenTheme, ThemePreference } from "./types";
+import type { ResolvedTheme, ThemePreference } from "./types";
 
 type ThemeContextValue = {
-  theme: ResolvedZenTheme;
+  theme: ResolvedTheme;
   preference: ThemePreference;
   setPreference: (next: ThemePreference) => Promise<void>;
-  accentId: ZenAccentId;
-  setAccentId: (next: ZenAccentId) => Promise<void>;
+  accentId: ThemeAccentId;
+  setAccentId: (next: ThemeAccentId) => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -38,7 +38,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
-  const [accentId, setAccentIdState] = useState<ZenAccentId>(DEFAULT_ACCENT_ID);
+  const [accentId, setAccentIdState] = useState<ThemeAccentId>(DEFAULT_ACCENT_ID);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [accentId, colorScheme, themeId],
   );
   const navigationTheme = useMemo(
-    () => navigationThemeFromZenTheme(theme, DefaultTheme.fonts),
+    () => navigationThemeFromTheme(theme, DefaultTheme.fonts),
     [theme],
   );
 
@@ -85,7 +85,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     await setThemePreference(next);
   }, []);
 
-  const setAccentId = useCallback(async (next: ZenAccentId) => {
+  const setAccentId = useCallback(async (next: ThemeAccentId) => {
     setAccentIdState(next);
     await setAccentPreference(next);
   }, []);
@@ -126,10 +126,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useZenTheme(): ThemeContextValue {
+export function useThemeContext(): ThemeContextValue {
   const context = useContext(ThemeContext);
   if (!context) {
-    throw new Error("useZenTheme must be used within ThemeProvider");
+    throw new Error("useThemeContext must be used within ThemeProvider");
   }
   return context;
 }

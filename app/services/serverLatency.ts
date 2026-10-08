@@ -21,7 +21,7 @@ export async function measureServerLatency(input: {
   const headers = await buildSignedRequestHeaders({
     serverUrl: transportURL,
     daemonId: input.server.daemonId,
-    purpose: "zen-probe",
+    purpose: "mewla-probe",
   });
 
   const startedAt = monotonicNow();

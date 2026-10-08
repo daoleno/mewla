@@ -18,7 +18,7 @@ import {
   activityHeaderSharedTextStyle,
 } from "./activityHeaderTextMetrics";
 import type { TimelineActivityIconName } from "./InterfaceTimelineActivityTypes";
-import type { ZenActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
+import type { ActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
 import { StatusMark } from "../ui/StatusMark";
 import { workStatusInk, type WorkStatus } from "../ui/workStatus";
 import { InterfaceTimelineActivityExpandIcon } from "./InterfaceTimelineActivityExpandIcon";
@@ -32,7 +32,7 @@ interface InterfaceTimelineActivityHeaderProps {
   title: string;
   tone: "neutral" | "running" | "success" | "failed";
   icon: TimelineActivityIconName;
-  activityKind?: ZenActivityTimelineItem["activityKind"];
+  activityKind?: ActivityTimelineItem["activityKind"];
   detail?: string;
   /** Detail shown after the mark; `detail` stays the accessible text. */
   detailText?: string;

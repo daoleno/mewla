@@ -17,7 +17,7 @@ import { useCurrentServer } from "../../store/currentServer";
 import { selectCurrentServerItems } from "../../services/currentServerSelection";
 import { useWork, type WorkItem } from "../../store/work";
 import { useAppTheme } from "../../constants/tokens";
-import type { ResolvedZenTheme } from "../../theme";
+import type { ResolvedTheme } from "../../theme";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
 import { resolvePrimaryAppBarGeometry } from "../../components/navigation/PrimaryDrawerShell";
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
@@ -886,7 +886,7 @@ export default function InboxScreen() {
   );
 }
 
-function createStyles(theme: ResolvedZenTheme) {
+function createStyles(theme: ResolvedTheme) {
   const colors = theme.colors;
 
   return StyleSheet.create({

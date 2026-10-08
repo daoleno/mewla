@@ -12,7 +12,7 @@ import {
   SIMPLE_FLOWCHART_TD,
 } from "./mermaidFixtures";
 
-const shotDir = join(process.env.TMPDIR || "/tmp", "zen-mermaid-shots");
+const shotDir = join(process.env.TMPDIR || "/tmp", "mewla-mermaid-shots");
 mkdirSync(shotDir, { recursive: true });
 
 describe("Mermaid actual render", () => {

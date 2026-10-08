@@ -27,9 +27,9 @@ const pluginCopy = (
   overrides: Partial<InstalledPluginCopy> = {},
 ): InstalledPluginCopy => ({
   copyId: "c".repeat(24),
-  pluginId: "design@zen-plugins",
+  pluginId: "design@mewla-plugins",
   name: "design",
-  marketplace: "zen-plugins",
+  marketplace: "mewla-plugins",
   scope: "user",
   enabled: true,
   host: "claude" as PluginHost,
@@ -60,7 +60,7 @@ const plugin = (overrides: Partial<LogicalPlugin> = {}): LogicalPlugin => ({
 describe("Skill plugin ownership", () => {
   test("attributes a locked Skill by its daemon-declared plugin name", () => {
     const owner = resolveSkillCopyPluginOwner(
-      skill({ plugin: "design@zen-plugins" }),
+      skill({ plugin: "design@mewla-plugins" }),
       [plugin()],
     );
     expect(owner?.key).toBe("design");
@@ -148,7 +148,7 @@ describe("Skill plugin ownership", () => {
   });
 
   test("Skills list keeps only copies no installed Plugin owns", () => {
-    const owned = skill({ plugin: "design@zen-plugins" });
+    const owned = skill({ plugin: "design@mewla-plugins" });
     const local = skill({
       name: "notes",
       rootPath: "/home/test/.claude/skills/notes",

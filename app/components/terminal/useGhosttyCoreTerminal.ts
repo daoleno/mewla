@@ -13,7 +13,7 @@ import {
   writeData,
   type MouseEventPayload,
   type RenderSnapshot,
-} from '../../modules/zen-terminal-vt/src';
+} from '../../modules/terminal-vt/src';
 
 export interface GhosttyGridSize {
   cols: number;

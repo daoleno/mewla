@@ -5,12 +5,12 @@ import type {
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
-import type { ZenActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
+import type { ActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
 import { useTimelineSelectableTextProps } from "./TimelineTextSelectableContext";
 
 interface InterfaceTimelineActivityOutputProps {
   body: string;
-  bodyKind?: ZenActivityTimelineItem["bodyKind"];
+  bodyKind?: ActivityTimelineItem["bodyKind"];
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   emphasizeError?: boolean;

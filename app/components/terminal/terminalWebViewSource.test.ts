@@ -12,9 +12,9 @@ describe('terminalWebViewBaseUrl', () => {
   it('keeps the isolated synthetic origin on Android and remote dev assets', () => {
     expect(
       terminalWebViewBaseUrl('file:///data/app/MapleMono-CN-Regular.ttf', 'android'),
-    ).toBe('https://zen.local/');
+    ).toBe('https://mewla.local/');
     expect(
       terminalWebViewBaseUrl('http://localhost:8081/assets/font.ttf', 'ios'),
-    ).toBe('https://zen.local/');
+    ).toBe('https://mewla.local/');
   });
 });

@@ -30,7 +30,7 @@ import { InterfaceChatKeyboardFrame } from "./InterfaceChatKeyboardFrame";
 import { InterfaceChatTimelineSection } from "./InterfaceChatTimelineSection";
 import { TerminalActionPromptCard } from "./TerminalActionPromptCard";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import { InterfaceTimelineJumpButton } from "./InterfaceTimelineJumpButton";
 
@@ -57,7 +57,7 @@ export interface InterfaceChatBodyProps {
   brainCurrentWork?: readonly import("../../store/brain").BrainCurrentWork[];
   loading: boolean;
   error?: string | null;
-  scrollRef: React.RefObject<FlatList<ZenTimelineItem> | null>;
+  scrollRef: React.RefObject<FlatList<TimelineItem> | null>;
   readingPosition?: import("./timelineReadingPosition").TimelineReadingPosition;
   timelineTextSelectable: boolean;
   turnFocusClearanceRequest: SharedValue<number>;

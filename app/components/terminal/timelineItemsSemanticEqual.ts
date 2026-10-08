@@ -7,14 +7,14 @@
 import type { BrainWorkResultEvent } from "../brain/brainWorkEvent";
 import type { BrainCurrentWork } from "../../store/brain";
 import type { ToolDeveloperDetails } from "../../services/toolCallDetails";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type {
   PatchFileSummary,
-  ZenActivityChild,
-  ZenActivityTimelineItem,
+  ActivityChild,
+  ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
-import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
+import type { PlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 
 /**
@@ -23,8 +23,8 @@ import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
  * Identity fast path is checked first.
  */
 export function timelineItemsSemanticEqual(
-  left: ZenTimelineItem,
-  right: ZenTimelineItem,
+  left: TimelineItem,
+  right: TimelineItem,
 ): boolean {
   if (left === right) {
     return true;
@@ -181,8 +181,8 @@ function brainWorkResultEventArraysEqual(
 }
 
 function planItemsEqual(
-  left: ZenPlanTimelineItem,
-  right: ZenPlanTimelineItem,
+  left: PlanTimelineItem,
+  right: PlanTimelineItem,
 ): boolean {
   if (left.explanation !== right.explanation) {
     return false;
@@ -204,8 +204,8 @@ function planItemsEqual(
 }
 
 function activityItemsEqual(
-  left: ZenActivityTimelineItem,
-  right: ZenActivityTimelineItem,
+  left: ActivityTimelineItem,
+  right: ActivityTimelineItem,
 ): boolean {
   return (
     left.statusKey === right.statusKey &&
@@ -288,8 +288,8 @@ export function stringRecordsEqual(
 
 /** Owns id, title, tone, providerToolId in array order. */
 export function activityChildrenEqual(
-  left?: ZenActivityChild[],
-  right?: ZenActivityChild[],
+  left?: ActivityChild[],
+  right?: ActivityChild[],
 ): boolean {
   if (left === right) {
     return true;

@@ -138,7 +138,7 @@ export function sessionPdfStageFileName(
   const safeGeneration = safeFileToken(generation, 64) || "file";
   const safeOwner = safeFileToken(owner, 32) || "preview";
   const safeEpoch = Number.isSafeInteger(epoch) && epoch > 0 ? epoch : 1;
-  return `zen-session-pdf-${safeGeneration}-${safeOwner}-${safeEpoch}.pdf`;
+  return `mewla-session-pdf-${safeGeneration}-${safeOwner}-${safeEpoch}.pdf`;
 }
 
 function safeFileToken(value: string, maxLength: number): string {

@@ -85,7 +85,7 @@ export async function diagnoseConnectionIssue(input: {
     const healthPayload = await readJSON<TrustedDaemonPayload>(healthResponse);
     if (
       !isTrustedDaemonPayload(healthPayload, {
-        purpose: "zen-health",
+        purpose: "mewla-health",
         daemonId,
         daemonPublicKey,
       })
@@ -101,7 +101,7 @@ export async function diagnoseConnectionIssue(input: {
 
     const authCheckHeader = await buildAuthorizationHeader({
       daemonId,
-      purpose: "zen-probe",
+      purpose: "mewla-probe",
     });
 
     const authCheckResponse = await fetchWithTimeout(authCheckURL, {
@@ -127,7 +127,7 @@ export async function diagnoseConnectionIssue(input: {
       await readJSON<TrustedDaemonPayload>(authCheckResponse);
     if (
       !isTrustedDaemonPayload(authCheckPayload, {
-        purpose: "zen-probe",
+        purpose: "mewla-probe",
         daemonId,
         daemonPublicKey,
       })
@@ -143,7 +143,7 @@ export async function diagnoseConnectionIssue(input: {
 
     const probeHeader = await buildAuthorizationHeader({
       daemonId,
-      purpose: "zen-probe",
+      purpose: "mewla-probe",
     });
     const probeResponse = await fetchWithTimeout(probeURL, {
       method: "GET",
@@ -167,7 +167,7 @@ export async function diagnoseConnectionIssue(input: {
     const probePayload = await readJSON<TrustedDaemonPayload>(probeResponse);
     if (
       !isTrustedDaemonPayload(probePayload, {
-        purpose: "zen-probe",
+        purpose: "mewla-probe",
         daemonId,
         daemonPublicKey,
       })

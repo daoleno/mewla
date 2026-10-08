@@ -43,8 +43,8 @@ import {
   shadow,
   type AppColors,
 } from "../constants/tokens";
-import { useZenTheme, type ResolvedZenTheme } from "../theme";
-import { ZEN_DARK_APP_COLORS } from "../theme/primitives";
+import { useThemeContext, type ResolvedTheme } from "../theme";
+import { DARK_APP_COLORS } from "../theme/primitives";
 import { appVersion } from "../constants/appVersion";
 import { importConnection } from "../services/importConnection";
 import { PairingCancelledError } from "../services/pairingScope";
@@ -105,7 +105,7 @@ import {
 import { Icon } from "../components/icons/Icon";
 
 const QR_BARCODE_TYPES: BarcodeType[] = ["qr"];
-const SCANNER_COLORS = ZEN_DARK_APP_COLORS;
+const SCANNER_COLORS = DARK_APP_COLORS;
 const TELEGRAM_BOTFATHER_URL = "https://t.me/BotFather";
 const THEME_CHOICES = [
   { label: "Auto", value: "system", icon: "contrast" },
@@ -131,7 +131,7 @@ export default function SettingsScreen() {
   } = useWorkerServerSummary();
   const agentCounts = useMemo(() => countWorkersByServer(agents), [agents]);
   const colors = useAppColors();
-  const { preference, setPreference } = useZenTheme();
+  const { preference, setPreference } = useThemeContext();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const params = useLocalSearchParams<{
@@ -1378,7 +1378,7 @@ function formatLatency(latencyMs: number): string {
   return `${latencyMs} ms`;
 }
 
-function createStyles(theme: ResolvedZenTheme) {
+function createStyles(theme: ResolvedTheme) {
   const colors = theme.colors;
 
   return StyleSheet.create({

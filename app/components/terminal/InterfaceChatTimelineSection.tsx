@@ -23,7 +23,7 @@ import {
 import type { PendingUserMessage } from "./InterfaceChatSession";
 import { InterfaceTimelineView } from "./InterfaceTimelineView";
 import { patchDisplayPath, truncateRunes } from "./InterfaceTimelineModel";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { useInterfaceTimelineItems } from "./useInterfaceTimelineItems";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import type { StructuredChatKeyboardLifecycleGate } from "./chatKeyboardOverlayPolicy";
@@ -33,9 +33,9 @@ import {
   type SessionFilePreviewLoader,
 } from "./SessionFilePreviewSheet";
 import { DSHInteractionPanel } from "./DSHInteractionPanel";
-import { ZenImageOwnerContext } from "./ZenImage";
+import { ImageOwnerContext } from "./AppImage";
 import { bindSessionFileRequestToGeneration, buildSessionFileBinarySource } from "../../services/sessionFilePreview";
-import type { ZenImageOwner } from "../../services/imageSource";
+import type { ImageOwner } from "../../services/imageSource";
 import type { TimelineReadingPosition } from "./timelineReadingPosition";
 
 interface InterfaceChatTimelineSectionProps {
@@ -60,7 +60,7 @@ interface InterfaceChatTimelineSectionProps {
   loading: boolean;
   error?: string | null;
   commandMenuOpen: boolean;
-  scrollRef: React.RefObject<FlatList<ZenTimelineItem> | null>;
+  scrollRef: React.RefObject<FlatList<TimelineItem> | null>;
   readingPosition?: TimelineReadingPosition;
   textSelectable: boolean;
   extraContentPadding: SharedValue<number>;
@@ -154,7 +154,7 @@ export function InterfaceChatTimelineSection({
   onRetryPendingUserMessage,
   filePreviewLoader,
 }: InterfaceChatTimelineSectionProps) {
-  const imageOwner = useMemo<ZenImageOwner>(() => ({
+  const imageOwner = useMemo<ImageOwner>(() => ({
     key: JSON.stringify([serverId, daemonId, workerId, workerProcessId, workerStartedAt]),
     async resolve(path, signal) {
       if (!workerProcessId || !workerStartedAt) throw new Error("Refresh the Session to open this image.");
@@ -216,7 +216,7 @@ export function InterfaceChatTimelineSection({
     syncingConversation && conversation?.reason === "transcript_not_found";
 
   return (
-    <ZenImageOwnerContext.Provider value={imageOwner}>
+    <ImageOwnerContext.Provider value={imageOwner}>
     <SessionFilePreviewContext.Provider value={filePreviewContext}>
       {conversation?.source === "dsh_session_jsonl" && workerProcessId && workerStartedAt ? <DSHInteractionPanel key={imageOwner.key} serverId={serverId} request={{ workerId, processId: workerProcessId, startedAt: workerStartedAt, path: "" }} chrome={chrome} /> : null}
       <InterfaceTimelineView
@@ -283,6 +283,6 @@ export function InterfaceChatTimelineSection({
         onClose={closeFilePreview}
       />
     </SessionFilePreviewContext.Provider>
-    </ZenImageOwnerContext.Provider>
+    </ImageOwnerContext.Provider>
   );
 }

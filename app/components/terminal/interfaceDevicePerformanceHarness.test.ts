@@ -10,7 +10,7 @@ import {
   createFakeInterfaceDevicePerfClock,
   prepareInterfaceDevicePerfScenario,
 } from "./interfaceDevicePerformanceScenarios";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import {
   disableTimelineProjectionPerf,
   enableTimelineProjectionPerf,
@@ -41,14 +41,14 @@ const demoSource = readFileSync(
   "utf8",
 );
 
-function messageItem(id: string): ZenTimelineItem {
+function messageItem(id: string): TimelineItem {
   return {
     id,
     type: "message",
     role: "assistant",
     body: `body-for-${id}-SECRET`,
     timestamp: "2026-08-06T12:00:00.000Z",
-  } as ZenTimelineItem;
+  } as TimelineItem;
 }
 
 describe("interfaceDevicePerformanceHarness collector extensions", () => {
@@ -56,7 +56,7 @@ describe("interfaceDevicePerformanceHarness collector extensions", () => {
     expect(timelineViewSource).toContain("isTimelineProjectionPerfEnabled()");
     expect(timelineViewSource).toContain("recordTimelineListDataIdentityProbe");
     expect(timelineViewSource).toContain(
-      "React.useRef<ZenTimelineItem[] | null>(null)",
+      "React.useRef<TimelineItem[] | null>(null)",
     );
   });
 

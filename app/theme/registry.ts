@@ -1,8 +1,8 @@
 import { classicDarkTheme } from './definitions/classicDark';
 import { classicLightTheme } from './definitions/classicLight';
-import type { ThemeColorScheme, ZenThemeDefinition } from './types';
+import type { ThemeColorScheme, ThemeDefinition } from './types';
 
-export const THEME_REGISTRY: readonly ZenThemeDefinition[] = [
+export const THEME_REGISTRY: readonly ThemeDefinition[] = [
   classicDarkTheme,
   classicLightTheme,
 ] as const;
@@ -12,12 +12,12 @@ export const DEFAULT_THEME_IDS: Record<ThemeColorScheme, string> = {
   light: classicLightTheme.id,
 };
 
-export function getThemeById(id: string): ZenThemeDefinition | undefined {
+export function getThemeById(id: string): ThemeDefinition | undefined {
   return THEME_REGISTRY.find((theme) => theme.id === id);
 }
 
 export function listThemesForScheme(
   scheme: ThemeColorScheme,
-): ZenThemeDefinition[] {
+): ThemeDefinition[] {
   return THEME_REGISTRY.filter((theme) => theme.colorScheme === scheme);
 }

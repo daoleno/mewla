@@ -7,7 +7,7 @@ import {
   isWaitLikeToolName,
   isWaitSessionPoll,
 } from "./toolCallDetails.ts";
-import { buildZenTimeline } from "../components/terminal/InterfaceTimelineModel.ts";
+import { buildTimeline } from "../components/terminal/InterfaceTimelineModel.ts";
 import { buildInterfaceTimelineActivityPresentation } from "../components/terminal/InterfaceTimelineActivityModel.ts";
 
 describe("toolCallDetails", () => {
@@ -170,7 +170,7 @@ describe("timeline wait/read presentation", () => {
       },
     ];
 
-    const activities = buildZenTimeline(events).filter(
+    const activities = buildTimeline(events).filter(
       (item) => item.type === "activity",
     );
     expect(activities.map((item) => item.title)).toEqual([

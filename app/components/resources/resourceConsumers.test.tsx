@@ -4,10 +4,10 @@ import TestRenderer, { act } from "react-test-renderer";
 import fixture from "../../__fixtures__/telemetry/dashboard-v2.json";
 import { normalizeResourceTelemetry } from "../../services/resourceTelemetry";
 
-if (!process.env.ZEN_CONSUMERS_TEST_CHILD) {
+if (!process.env.MEWLA_CONSUMERS_TEST_CHILD) {
   test("Resources consumer interactions on phone and wide layouts", () => {
     const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], {
-      env: { ...process.env, ZEN_CONSUMERS_TEST_CHILD: "1" },
+      env: { ...process.env, MEWLA_CONSUMERS_TEST_CHILD: "1" },
     });
     if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
     expect(result.exitCode).toBe(0);

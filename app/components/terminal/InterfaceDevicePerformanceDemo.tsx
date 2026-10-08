@@ -18,7 +18,7 @@ import {
 import { InterfaceChatComposer } from "./InterfaceChatComposer";
 import { InterfaceChatKeyboardFrame } from "./InterfaceChatKeyboardFrame";
 import { InterfaceTimelineView } from "./InterfaceTimelineView";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import {
   patchDisplayPath,
   truncateRunes,
@@ -100,10 +100,10 @@ export function InterfaceDevicePerformanceDemo({
 }: {
   scenarioId: InterfaceDevicePerfScenarioId;
 }) {
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
-    () => buildChatChrome(zenTheme),
-    [zenTheme],
+    () => buildChatChrome(appTheme),
+    [appTheme],
   );
   const menuAnchorRef = useRef<View>(null);
   const inputRef = useRef<TextInput>(null);

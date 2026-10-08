@@ -17,7 +17,7 @@ import Reanimated, {
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
-import { getZenKeyboardForegroundSnapshot } from "zen-keyboard-lifecycle";
+import { getKeyboardForegroundSnapshot } from "keyboard-lifecycle";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { withAlpha } from "./colorWithAlpha";
 import {
@@ -78,7 +78,7 @@ export function InterfaceChatKeyboardFrame({
     enabled: overlayEnabled,
   });
   const reactId = useId();
-  const composerNativeId = `zen-structured-chat-composer-${reactId}`;
+  const composerNativeId = `mewla-structured-chat-composer-${reactId}`;
   const initialKeyboardLifecycleGate =
     createStructuredChatKeyboardLifecycleGate({
       enabled,
@@ -123,7 +123,7 @@ export function InterfaceChatKeyboardFrame({
         return;
       }
       nativeSnapshotRequestsRef.current.add(requestKey);
-      void getZenKeyboardForegroundSnapshot(composerNativeId, sourceRevision)
+      void getKeyboardForegroundSnapshot(composerNativeId, sourceRevision)
         .catch(() => ({
           revision: sourceRevision,
           imeVisible: false,

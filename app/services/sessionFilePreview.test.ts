@@ -15,8 +15,8 @@ import {
 
 describe("current-Session file reference recognition", () => {
   test("recognizes explicit local Markdown destinations and common inline-code paths", () => {
-    expect(recognizeSessionFileReference("/repo/zen/docs/notes.md#L12")).toBe(
-      "/repo/zen/docs/notes.md",
+    expect(recognizeSessionFileReference("/repo/mewla/docs/notes.md#L12")).toBe(
+      "/repo/mewla/docs/notes.md",
     );
     expect(recognizeSessionFileReference("./app/index.tsx:41:7")).toBe(
       "./app/index.tsx",
@@ -25,8 +25,8 @@ describe("current-Session file reference recognition", () => {
     expect(recognizeSessionFileReference("file:///repo/My%20File.pdf")).toBe(
       "/repo/My File.pdf",
     );
-    expect(recognizeSessionFileReference("C:\\repo\\zen\\main.go:18")).toBe(
-      "C:\\repo\\zen\\main.go",
+    expect(recognizeSessionFileReference("C:\\repo\\mewla\\main.go:18")).toBe(
+      "C:\\repo\\mewla\\main.go",
     );
   });
 

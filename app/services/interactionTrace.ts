@@ -8,7 +8,7 @@ export type DrawerTraceSource =
   | "navigation"
   | "overlay";
 
-export interface ZenInteractionMetadataMap {
+export interface InteractionMetadataMap {
   "primary.switch": {
     from: PrimaryRouteName;
     to: PrimaryRouteName;
@@ -29,14 +29,14 @@ export interface ZenInteractionMetadataMap {
   };
 }
 
-export type ZenInteractionName = keyof ZenInteractionMetadataMap;
-export type ZenInteractionStatus = "cancelled" | "completed";
+export type InteractionName = keyof InteractionMetadataMap;
+export type InteractionStatus = "cancelled" | "completed";
 
-export interface ZenInteractionRecord<Name extends ZenInteractionName = ZenInteractionName> {
+export interface InteractionRecord<Name extends InteractionName = InteractionName> {
   id: number;
   name: Name;
-  metadata: ZenInteractionMetadataMap[Name];
-  status: ZenInteractionStatus;
+  metadata: InteractionMetadataMap[Name];
+  status: InteractionStatus;
   startAt: number;
   activationAt?: number;
   commitAt?: number;
@@ -46,7 +46,7 @@ export interface ZenInteractionRecord<Name extends ZenInteractionName = ZenInter
   durationMs: number;
 }
 
-export interface ZenInteractionToken<Name extends ZenInteractionName> {
+export interface InteractionToken<Name extends InteractionName> {
   readonly id: number;
   readonly name: Name;
   markActivation(at?: number): void;
@@ -57,9 +57,9 @@ export interface ZenInteractionToken<Name extends ZenInteractionName> {
   cancel(at?: number): void;
 }
 
-export interface CompletedInteraction<Name extends ZenInteractionName> {
+export interface CompletedInteraction<Name extends InteractionName> {
   name: Name;
-  metadata: ZenInteractionMetadataMap[Name];
+  metadata: InteractionMetadataMap[Name];
   startAt: number;
   activationAt?: number;
   commitAt?: number;
@@ -71,13 +71,13 @@ export interface CompletedInteraction<Name extends ZenInteractionName> {
 
 const MAX_RECORDS = 200;
 
-export const ZEN_INTERACTION_TRACE_ENABLED =
+export const MEWLA_INTERACTION_TRACE_ENABLED =
   typeof __DEV__ !== "undefined" &&
   __DEV__ &&
-  process.env.EXPO_PUBLIC_ZEN_INTERACTION_TRACE === "1";
+  process.env.EXPO_PUBLIC_MEWLA_INTERACTION_TRACE === "1";
 
 let nextInteractionId = 1;
-const records: ZenInteractionRecord[] = [];
+const records: InteractionRecord[] = [];
 
 function now(): number {
   return typeof performance !== "undefined" &&
@@ -87,7 +87,7 @@ function now(): number {
 }
 
 function markName(id: number, stage: string): string {
-  return `zen-interaction:${id}:${stage}`;
+  return `mewla-interaction:${id}:${stage}`;
 }
 
 function markWeb(id: number, stage: string, at: number): void {
@@ -105,7 +105,7 @@ function markWeb(id: number, stage: string, at: number): void {
   }
 }
 
-function measureWeb(id: number, name: ZenInteractionName): void {
+function measureWeb(id: number, name: InteractionName): void {
   if (
     typeof document === "undefined" ||
     typeof performance === "undefined" ||
@@ -115,7 +115,7 @@ function measureWeb(id: number, name: ZenInteractionName): void {
   }
   try {
     performance.measure(
-      `zen-interaction:${name}:${id}`,
+      `mewla-interaction:${name}:${id}`,
       markName(id, "start"),
       markName(id, "end"),
     );
@@ -124,16 +124,16 @@ function measureWeb(id: number, name: ZenInteractionName): void {
   }
 }
 
-function storeRecord(record: ZenInteractionRecord): void {
+function storeRecord(record: InteractionRecord): void {
   records.push(record);
   if (records.length > MAX_RECORDS) {
     records.splice(0, records.length - MAX_RECORDS);
   }
 }
 
-function createNoopToken<Name extends ZenInteractionName>(
+function createNoopToken<Name extends InteractionName>(
   name: Name,
-): ZenInteractionToken<Name> {
+): InteractionToken<Name> {
   return {
     id: 0,
     name,
@@ -146,11 +146,11 @@ function createNoopToken<Name extends ZenInteractionName>(
   };
 }
 
-export function beginInteraction<Name extends ZenInteractionName>(
+export function beginInteraction<Name extends InteractionName>(
   name: Name,
-  metadata: ZenInteractionMetadataMap[Name],
-): ZenInteractionToken<Name> {
-  if (!ZEN_INTERACTION_TRACE_ENABLED) {
+  metadata: InteractionMetadataMap[Name],
+): InteractionToken<Name> {
+  if (!MEWLA_INTERACTION_TRACE_ENABLED) {
     return createNoopToken(name);
   }
 
@@ -175,7 +175,7 @@ export function beginInteraction<Name extends ZenInteractionName>(
     markWeb(id, stage, at);
   };
 
-  const finish = (status: ZenInteractionStatus, at = now()) => {
+  const finish = (status: InteractionStatus, at = now()) => {
     if (finished) {
       return;
     }
@@ -209,10 +209,10 @@ export function beginInteraction<Name extends ZenInteractionName>(
   };
 }
 
-export function recordCompletedInteraction<Name extends ZenInteractionName>(
+export function recordCompletedInteraction<Name extends InteractionName>(
   interaction: CompletedInteraction<Name>,
 ): void {
-  if (!ZEN_INTERACTION_TRACE_ENABLED) {
+  if (!MEWLA_INTERACTION_TRACE_ENABLED) {
     return;
   }
   const id = nextInteractionId;
@@ -247,15 +247,15 @@ export function recordCompletedInteraction<Name extends ZenInteractionName>(
   measureWeb(id, interaction.name);
 }
 
-export function snapshotInteractionTraces(): readonly ZenInteractionRecord[] {
-  if (!ZEN_INTERACTION_TRACE_ENABLED) {
+export function snapshotInteractionTraces(): readonly InteractionRecord[] {
+  if (!MEWLA_INTERACTION_TRACE_ENABLED) {
     return [];
   }
   return records.map((record) => ({ ...record }));
 }
 
-export function drainInteractionTraces(): readonly ZenInteractionRecord[] {
-  if (!ZEN_INTERACTION_TRACE_ENABLED) {
+export function drainInteractionTraces(): readonly InteractionRecord[] {
+  if (!MEWLA_INTERACTION_TRACE_ENABLED) {
     return [];
   }
   return records.splice(0, records.length);

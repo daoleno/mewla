@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loadedImageRatio } from "./zenImageRatio";
+import { loadedImageRatio } from "./imageRatio";
 
 test("reads the native source size", () => {
   expect(loadedImageRatio({ source: { width: 400, height: 200 } })).toBe(2);

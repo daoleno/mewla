@@ -118,7 +118,7 @@ export function BrowserScreen() {
       frame(frame) {
         if (!active()) return;
         if (!ready.current) { latest.current = frame; return; }
-        web.current?.injectJavaScript(`window.zenFrame(${JSON.stringify(frame)});true;`);
+        web.current?.injectJavaScript(`window.browserFrame(${JSON.stringify(frame)});true;`);
       },
       status() {},
       resource(value) {
@@ -387,7 +387,7 @@ export function BrowserScreen() {
             const message = JSON.parse(event.nativeEvent.data);
             if (message.type === "ready") {
               ready.current = true;
-              if (latest.current) { web.current?.injectJavaScript(`window.zenFrame(${JSON.stringify(latest.current)});true;`); latest.current = null; }
+              if (latest.current) { web.current?.injectJavaScript(`window.browserFrame(${JSON.stringify(latest.current)});true;`); latest.current = null; }
             } else if (message.type === "ack" && Number.isSafeInteger(message.seq)) viewer.current?.ack(message.seq);
             else if (message.type === "input" && message.input && mine) {
               void viewer.current?.command({ kind: "input", input: message.input }).catch(fail);
@@ -407,7 +407,7 @@ export function BrowserScreen() {
                 onPress={() => void run("key", () => command("press", { text: key }))} />
             ))}
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: scroll }} accessibilityLabel="Drag to scroll the page"
-              onPress={() => { setScroll(!scroll); web.current?.injectJavaScript(`window.zenScroll(${!scroll});true;`); }}
+              onPress={() => { setScroll(!scroll); web.current?.injectJavaScript(`window.browserScroll(${!scroll});true;`); }}
               style={[styles.scroll, { backgroundColor: scroll ? colors.surfaceSubtle : "transparent", borderColor: colors.border }]}>
               <Icon name="swap-vertical" size={18} color={colors.textSecondary} />
             </Pressable>

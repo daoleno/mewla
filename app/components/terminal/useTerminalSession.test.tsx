@@ -3,11 +3,11 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
 // Keep the websocket mock out of the shared Bun process.
-if (!process.env.ZEN_TERMINAL_SESSION_HOOK_CHILD) {
+if (!process.env.MEWLA_TERMINAL_SESSION_HOOK_CHILD) {
   test("terminal session hook behavioral scenarios", () => {
     const result = Bun.spawnSync(
       [process.execPath, "test", import.meta.filename],
-      { env: { ...process.env, ZEN_TERMINAL_SESSION_HOOK_CHILD: "1" } },
+      { env: { ...process.env, MEWLA_TERMINAL_SESSION_HOOK_CHILD: "1" } },
     );
     const output =
       new TextDecoder().decode(result.stdout) +

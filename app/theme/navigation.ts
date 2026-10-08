@@ -1,4 +1,4 @@
-import type { ResolvedZenTheme } from "./types";
+import type { ResolvedTheme } from "./types";
 
 type ExpoNavigationTheme = typeof import("expo-router").DefaultTheme;
 
@@ -9,8 +9,8 @@ export type NavigationThemeFonts = ExpoNavigationTheme["fonts"];
  * Fonts are supplied separately because they are scheme-neutral; no navigation
  * color is inherited from React Navigation's default theme.
  */
-export function navigationThemeFromZenTheme(
-  theme: ResolvedZenTheme,
+export function navigationThemeFromTheme(
+  theme: ResolvedTheme,
   fonts: NavigationThemeFonts,
 ): ExpoNavigationTheme {
   const { colors } = theme;

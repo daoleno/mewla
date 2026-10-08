@@ -14,7 +14,7 @@ async function enrollmentFetch(server: StoredServer, path: string, body?: object
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
   url.pathname = `/enrollment/${path}`;
   url.search = "";
-  const authorization = await buildAuthorizationHeader({ daemonId: server.daemonId || "", purpose: "zen-enrollment:decision:POST:/enrollment/decision" });
+  const authorization = await buildAuthorizationHeader({ daemonId: server.daemonId || "", purpose: "mewla-enrollment:decision:POST:/enrollment/decision" });
   return fetch(url.toString(), { method: body ? "POST" : "GET", headers: { Authorization: authorization, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 }
 export async function pendingEnrollments(server: StoredServer): Promise<PendingEnrollment[]> {

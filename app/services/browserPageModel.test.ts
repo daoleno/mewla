@@ -2,10 +2,10 @@ import { expect, mock, test } from "bun:test";
 
 // Bun module mocks are process-wide; keep transport/auth fixtures out of
 // upload and pairing tests regardless of test discovery order.
-if (!process.env.ZEN_BROWSER_PAGE_MODEL_TEST_CHILD) {
+if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
   test("browserPageModel contracts in isolation", () => {
     const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], {
-      env: { ...process.env, ZEN_BROWSER_PAGE_MODEL_TEST_CHILD: "1" },
+      env: { ...process.env, MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD: "1" },
     });
     if (result.exitCode) {
       throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));

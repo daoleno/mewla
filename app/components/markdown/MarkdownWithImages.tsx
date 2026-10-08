@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { imageReference } from "../../services/imageSource";
-import { ZenImage } from "../terminal/ZenImage";
+import { AppImage } from "../terminal/AppImage";
 import { splitMarkdownImages } from "./markdownImages";
 
 export function MarkdownWithImages({ markdown, chrome, renderMarkdown }: {
@@ -13,7 +13,7 @@ export function MarkdownWithImages({ markdown, chrome, renderMarkdown }: {
   if (!gallery.length) return renderMarkdown(markdown);
   return <View style={{ gap: 8 }}>{segments.map((segment, index) => segment.type === "markdown"
     ? <React.Fragment key={index}>{renderMarkdown(segment.text)}</React.Fragment>
-    : <View key={index}><ZenImage source={imageReference(segment.path, segment.alt || "Image")} gallery={gallery} chrome={chrome} />
+    : <View key={index}><AppImage source={imageReference(segment.path, segment.alt || "Image")} gallery={gallery} chrome={chrome} />
       {segment.alt || segment.title ? <Text selectable style={{ color: chrome.textMuted, marginTop: 4 }}>{segment.title || segment.alt}</Text> : null}
     </View>)}</View>;
 }

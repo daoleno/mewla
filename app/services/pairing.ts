@@ -75,7 +75,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   }
   if (
     !verifyDaemonAssertion({
-      purpose: "zen-pair",
+      purpose: "mewla-pair",
       daemonId: pairedDaemonId,
       daemonPublicKey: pairedDaemonPublicKey,
       timestamp: payload.assertion_timestamp,
@@ -95,7 +95,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
 export async function buildSignedRequestHeaders(input: {
   serverUrl: string;
   daemonId: string;
-  purpose: "zen-probe" | "zen-upload";
+  purpose: "mewla-probe" | "mewla-upload";
 }): Promise<Record<string, string>> {
   return {
     Authorization: await buildAuthorizationHeader({

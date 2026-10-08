@@ -1,7 +1,7 @@
 import { MERMAID_MAX_RENDER_MS, MERMAID_MESSAGE_VERSION } from "./mermaidLimits";
 import { MERMAID_RUNTIME_SOURCE } from "./mermaidRuntimeSource";
 
-export const MERMAID_ENGINE_BASE_URL = "https://zen.local/mermaid";
+export const MERMAID_ENGINE_BASE_URL = "https://mewla.local/mermaid";
 
 export const MERMAID_ENGINE_BOOTSTRAP = String.raw`
 (function () {
@@ -67,7 +67,7 @@ export const MERMAID_ENGINE_BOOTSTRAP = String.raw`
     locked = true;
     return true;
   }
-  window.__zenMermaidRender = function (payload) {
+  window.__mewlaMermaidRender = function (payload) {
     if (!payload || payload.v !== VERSION || payload.type !== "render") {
       return;
     }
@@ -113,7 +113,7 @@ export const MERMAID_ENGINE_BOOTSTRAP = String.raw`
       fail(payload.requestId, payload.generation, error && error.message ? error.message : "parse");
       return;
     }
-    var renderId = "zenm" + payload.generation.toString(10);
+    var renderId = "mewla-mermaid-" + payload.generation.toString(10);
     var renderPromise = window.mermaid.render(renderId, payload.source);
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject(new Error("timeout")); }, timeoutMs);

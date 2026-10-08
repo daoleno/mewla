@@ -1,4 +1,4 @@
-import type { RenderSnapshot } from '../../modules/zen-terminal-vt/src';
+import type { RenderSnapshot } from '../../modules/terminal-vt/src';
 
 /** Embedded verbatim so the device renderer and behavioral tests execute the
  * same accumulator. Apply every delta on arrival; paint only the latest grid. */
