@@ -149,15 +149,6 @@ function rays(cx: number, cy: number, from: number, to: number): string[] {
   });
 }
 
-/** A four-point sparkle: each side bows in toward the centre. */
-function sparkle(cx: number, cy: number, r: number): string {
-  const c = `${n(cx)},${n(cy)}`;
-  return (
-    `M${n(cx)},${n(cy - r)}Q${c} ${n(cx + r)},${n(cy)}Q${c} ${n(cx)},${n(cy + r)}` +
-    `Q${c} ${n(cx - r)},${n(cy)}Q${c} ${n(cx)},${n(cy - r)}Z`
-  );
-}
-
 const HOLE = 0.8;
 const RING = circle(12, 12, 9.25);
 const CLOUD = "M7,18.5A4.5,4.5 0 0 1 6.37,9.54A6,6 0 0 1 17.63,9.54A4.5,4.5 0 0 1 17,18.5Z";
@@ -1057,7 +1048,24 @@ export const MEWLA_GLYPHS = {
       ),
     ],
   },
-  skills: { strokes: [sparkle(10, 13.5, 7), sparkle(18.5, 5.5, 2.75)] },
+  // A Skill is a written procedure an agent follows: a recipe card, its
+  // first step ticked off and two to go.
+  skills: {
+    strokes: [
+      box(4, 2.75, 16, 18.5, 4.5),
+      soft(
+        [
+          [7.25, 8.4],
+          [8.85, 10],
+          [11.65, 7],
+        ],
+        0.7,
+      ),
+      "M13.5,8.25H16.75",
+      "M7.75,12.75H16.75",
+      "M7.75,17H13",
+    ],
+  },
   square: { strokes: [box(3.5, 3.5, 17, 17, 4.5)] },
   stats: { strokes: [box(3.25, 12, 4.5, 8.75, 1.75), box(9.75, 3.25, 4.5, 17.5, 1.75), box(16.25, 7.75, 4.5, 13, 1.75)] },
   stop: { strokes: [box(5, 5, 14, 14, 3.75)] },
