@@ -214,7 +214,8 @@ export function ConnectStatusCard({
   onUseServerAccount,
   onImport,
 }: {
-  serviceName: string;
+  /** Null for a return that names no service (a stale or replayed sign-in). */
+  serviceName: string | null;
   phase: ConnectPhase;
   flow: PendingConnection | null;
   error: string;
@@ -234,6 +235,13 @@ export function ConnectStatusCard({
   onImport(): void;
 }) {
   const { colors } = useAppTheme();
+  if (serviceName === null) {
+    return error ? (
+      <StatusCard glyph="info-fill" title="That sign-in already ended" detail={error}>
+        <Button label="OK" variant="plain" block onPress={onDismiss} />
+      </StatusCard>
+    ) : null;
+  }
   const code = flow?.flow.user_code;
   const identity = flow?.flow.status === "confirm" ? flow.flow.identity || `${serviceName} account` : null;
   if (identity !== null) {
