@@ -87,16 +87,16 @@ def work_column(s, x, y, w, h):
     s.text(x, y + 44, "Work", size=15, weight=600)
     s.text(x, y + 64, "1 needs you · 1 running · 1 back · 1 waiting", size=12, fill="soft")
     gy = y + 96
-    s.text(x, gy, "Needs you · 1", size=12, fill="soft")
+    s.text(x, gy, "Needs you", size=12, fill="soft")
     gy += 46
     gy += slip(s, x, gy, w, "00:44", "Sync fix needs your call", "Keep both copies, or the newest edit?", "needs", perch=True) + 26
-    s.text(x, gy, "Running · 1", size=12, fill="soft")
+    s.text(x, gy, "Running", size=12, fill="soft")
     gy += 12
     gy += slip(s, x, gy, w, "Claude Code · 00:47", "Tidy the settings copy", "Rewriting strings · 7 of 12", "running") + 26
-    s.text(x, gy, "Back · 1", size=12, fill="soft")
+    s.text(x, gy, "Back", size=12, fill="soft")
     gy += 12
     gy += slip(s, x, gy, w, "00:30", "Conflict wording", None, "ready", dot=True) + 26
-    s.text(x, gy, "Waiting · 1", size=12, fill="soft")
+    s.text(x, gy, "Waiting", size=12, fill="soft")
     gy += 12
     slip(s, x, gy, w, "00:18", "Draft the release notes", None, "waiting")
 

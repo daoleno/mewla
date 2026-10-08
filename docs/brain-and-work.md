@@ -53,7 +53,8 @@ Red always means "needs you", never "failed".
 **All current Work in one place.** On a phone, the line under the goal
 ("● 1 needs you · 1 running · 1 back") opens the list as a sheet. On a wide
 screen it is the Work column beside the chat. Both group Work by what it asks
-of you: Needs you, Running, Back, Waiting. Closed Work leaves the list.
+of you: Needs you, Running, Back, Waiting. The counts are in that one line, at
+the top of the column and the sheet. Closed Work leaves the list.
 
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
 into one "Worked · N steps" row. Tap it to see them. Session chats keep every

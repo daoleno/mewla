@@ -119,11 +119,14 @@ Brain has one Work surface, built from the daemon's `current_work`
 
 - **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
   (`BrainWorkColumn`): "Work", a count line, then slips grouped Needs you ·
-  Running · Back · Waiting. The cat sits on the first Needs-you slip there,
+  Running · Back · Waiting. The count line is the only count: the group
+  captions are bare ("Running", never "Running · 6"). The cat sits on the
+  first Needs-you slip there,
   and the conversation drops its between-turn tail row. While Brain's turn
   runs, the cat is in the Working row and the column has none.
 - **Phone.** Under the app bar, one line ("● 6 need you · 2 running · 2 back ›")
-  opens the same grouped list as a sheet. The seal dot shows only when
+  opens the same grouped list as a sheet, which repeats that line under its
+  "Work" title and keeps the captions bare. The seal dot shows only when
   something needs you.
 - **Loading is not empty.** "Ready when you are" appears only once the
   conversation has loaded and has nothing in it. Until then (connecting,
