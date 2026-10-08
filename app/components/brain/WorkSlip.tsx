@@ -59,46 +59,60 @@ export function WorkSlip({
 }) {
   const styles = useMemo(() => createWorkSlipStyles(chrome), [chrome]);
   const needs = status === "needs";
+  const hasActions = Boolean(actions?.length);
+  // The actions sit beside the tappable body, never inside it: a button in a
+  // button is invalid on web and reads as one control to screen readers.
   const slip = (
-    <Pressable
-      accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={accessibilityLabel}
-      disabled={!onPress}
-      onPress={onPress}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.slip,
         needs ? styles.slipNeeds : null,
         status === "blocked" ? styles.slipBlocked : null,
-        pressed ? styles.slipPressed : null,
       ]}
     >
-      {/* With no who · when to show, the state sits beside the title. */}
-      <View style={meta ? styles.meta : styles.titleRow}>
+      <Pressable
+        accessibilityRole={onPress ? "button" : undefined}
+        accessibilityLabel={accessibilityLabel}
+        disabled={!onPress}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.slipBody,
+          hasActions ? styles.slipBodyAboveActions : null,
+          pressed ? styles.slipPressed : null,
+        ]}
+      >
+        {/* With no who · when to show, the state sits beside the title. */}
+        <View style={meta ? styles.meta : styles.titleRow}>
+          {meta ? (
+            <Text numberOfLines={1} style={styles.who}>
+              {meta}
+            </Text>
+          ) : (
+            <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={[styles.title, styles.titleInRow]}>
+              {title}
+            </Text>
+          )}
+          {unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
+          <WorkStatusWord status={status} label={statusLabel} chrome={chrome} />
+        </View>
         {meta ? (
-          <Text numberOfLines={1} style={styles.who}>
-            {meta}
-          </Text>
-        ) : (
-          <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={[styles.title, styles.titleInRow]}>
+          <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
             {title}
           </Text>
-        )}
-        {unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
-        <WorkStatusWord status={status} label={statusLabel} chrome={chrome} />
-      </View>
-      {meta ? (
-        <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
-          {title}
-        </Text>
+        ) : null}
+        {summary ? (
+          <Text numberOfLines={BRAIN_WORK_CARD_SUMMARY_LINES} style={styles.summary}>
+            {summary}
+          </Text>
+        ) : null}
+        {children}
+      </Pressable>
+      {actions?.length ? (
+        <View style={styles.slipFoot}>
+          <WorkSlipActions actions={actions} chrome={chrome} />
+        </View>
       ) : null}
-      {summary ? (
-        <Text numberOfLines={BRAIN_WORK_CARD_SUMMARY_LINES} style={styles.summary}>
-          {summary}
-        </Text>
-      ) : null}
-      {children}
-      {actions?.length ? <WorkSlipActions actions={actions} chrome={chrome} /> : null}
-    </Pressable>
+    </View>
   );
   if (!perched) return <View style={styles.wrap}>{slip}</View>;
   return (
@@ -220,12 +234,22 @@ function createWorkSlipStyles(chrome: TerminalThemeChrome) {
       top: 2,
     },
     slip: {
-      paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING + 2,
-      paddingVertical: 14,
       borderRadius: 14,
       borderWidth: 1,
       borderColor: chrome.border,
       backgroundColor: chrome.surface,
+    },
+    slipBody: {
+      paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING + 2,
+      paddingVertical: 14,
+      borderRadius: 14,
+    },
+    slipBodyAboveActions: {
+      paddingBottom: 0,
+    },
+    slipFoot: {
+      paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING + 2,
+      paddingBottom: 14,
     },
     slipNeeds: {
       borderWidth: 1.5,
