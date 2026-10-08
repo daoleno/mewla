@@ -42,7 +42,7 @@ export function ActionMenu({ visible, title, items, onClose }: ActionMenuProps) 
     return () => clearTimeout(timer);
   }, [visible]);
   return (
-    <BottomSheetFrame visible={visible} onClose={onClose} maxHeight="70%">
+    <BottomSheetFrame visible={visible} onClose={onClose} maxHeight="70%" desktopWidth={420}>
       {title ? (
         <AppText variant="label" tone="tertiary" accessibilityRole="header" style={styles.title}>
           {title}

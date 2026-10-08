@@ -31,6 +31,7 @@ if (!process.env.MEWLA_BOTTOM_SHEET_TEST_CHILD) {
       hairlineWidth: 1,
     },
     View: host("view"),
+    useWindowDimensions: () => ({ width: 390, height: 844 }),
   }));
   mock.module("react-native-reanimated", () => ({
     default: {

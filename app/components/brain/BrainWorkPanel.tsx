@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
+import { ResizeHandle, useResizableWidth } from "../navigation/ResizeHandle";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
@@ -22,6 +24,8 @@ export type BrainWorkActionsFor = (slip: BrainWorkSlip, placement: "slip" | "she
 
 /** Width of the Work column beside the conversation on wide screens. */
 export const BRAIN_WORK_COLUMN_WIDTH = 360;
+const BRAIN_WORK_COLUMN_MIN_WIDTH = 280;
+const BRAIN_WORK_COLUMN_MAX_WIDTH = 560;
 
 /** The summary, with a running Worker's phase in front ("Verifying · …"). */
 function slipLine(slip: BrainWorkSlip): string | undefined {
@@ -129,12 +133,34 @@ export function BrainWorkColumn({
   onCatPress?: () => void;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
+  // Desktop web: a side panel you can resize; the width persists.
+  const desktopWeb = useDesktopWeb();
+  const panel = useResizableWidth(
+    "mewla.desktop.workColumnWidth",
+    BRAIN_WORK_COLUMN_WIDTH,
+    BRAIN_WORK_COLUMN_MIN_WIDTH,
+    BRAIN_WORK_COLUMN_MAX_WIDTH,
+  );
   return (
     <View
       role="complementary"
       accessibilityLabel="Work"
-      style={[styles.column, { paddingTop: topInset }]}
+      style={[
+        styles.column,
+        { paddingTop: topInset },
+        desktopWeb ? { width: panel.width } : null,
+      ]}
     >
+      {desktopWeb ? (
+        <ResizeHandle
+          edge="left"
+          width={panel.width}
+          label="Resize Work"
+          onResize={panel.update}
+          onCommit={panel.commit}
+          onReset={panel.reset}
+        />
+      ) : null}
       <View style={styles.columnHeader}>
         <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
         <Text numberOfLines={1} style={styles.columnSummary}>
@@ -384,6 +410,7 @@ function createStyles(chrome: TerminalThemeChrome) {
     },
     column: {
       width: BRAIN_WORK_COLUMN_WIDTH,
+      position: "relative",
       borderLeftWidth: StyleSheet.hairlineWidth,
       borderLeftColor: chrome.border,
       backgroundColor: chrome.appBackground,
