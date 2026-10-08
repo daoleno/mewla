@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useAppColors } from "../../constants/tokens";
-import { NavOverflowIcon } from "./PrimaryNavIcons";
+import { Icon } from "../icons/Icon";
 import { PrimaryChromeButton } from "./PrimaryChromeButton";
 import {
   clearPrimaryPageAction,
@@ -210,7 +210,8 @@ function DescriptorActionButton({
       tabIndex={drawerVisible ? -1 : 0}
     >
       {descriptor.icon ?? (
-        <NavOverflowIcon
+        <Icon
+          name="more-vertical"
           color={
             disabled ? colors.disabledText : colors.textPrimary
           }

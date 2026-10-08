@@ -22,7 +22,7 @@ import { Typography, useAppColors } from "../../constants/tokens";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkerServerSummary } from "../../store/workers";
-import { NavMenuIcon } from "./PrimaryNavIcons";
+import { Icon } from "../icons/Icon";
 import { PrimaryChromeButton } from "./PrimaryChromeButton";
 import {
   PrimaryAppBarPageAction,
@@ -160,7 +160,7 @@ function PrimaryAppBar({
         tabIndex={drawerVisible ? -1 : 0}
         badgeColor={connectionBadge}
       >
-        <NavMenuIcon color={colors.textPrimary} size={20} />
+        <Icon name="menu" color={colors.textPrimary} size={20} />
       </PrimaryChromeButton>
       <PrimaryTopSwitch
         activeRoute={activePrimaryRoute}
@@ -295,6 +295,8 @@ export function PrimaryDrawerShell({
       <PrimaryDrawerPanel
         closeButtonRef={closeButtonRef}
         drawerVisible={drawerOpen}
+        activePrimaryRoute={activePrimaryRoute}
+        onSelectPrimaryRoute={onSelectPrimaryRoute}
         onClose={closeDrawer}
         onClosePressIn={() => undefined}
         onNavigateAway={dismissDrawerForNavigation}
@@ -316,10 +318,12 @@ export function PrimaryDrawerShell({
                 <PrimaryDrawerPanel
                   closeButtonRef={closeButtonRef}
                   drawerVisible
+                  activePrimaryRoute={activePrimaryRoute}
+                  onSelectPrimaryRoute={onSelectPrimaryRoute}
                   onClose={closeDrawer}
                   onClosePressIn={() => undefined}
                   onNavigateAway={() => undefined}
-                  docked={{ activePrimaryRoute, onSelectPrimaryRoute }}
+                  docked
                 />
               </View>
               <View ref={primaryRef} collapsable={false} style={styles.primary}>
