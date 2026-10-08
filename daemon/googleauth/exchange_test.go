@@ -21,7 +21,7 @@ type transport func(*http.Request) (*http.Response, error)
 func (f transport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func fixture(t *testing.T) *Exchange {
 	t.Helper()
-	e, err := New(Config{Origin: "https://zen-owned.example", ClientID: "owned-google-web", ClientSecret: "publisher-secret", ReceiptKey: bytes.Repeat([]byte{1}, 32)})
+	e, err := New(Config{Origin: "https://mewla-owned.example", ClientID: "owned-google-web", ClientSecret: "publisher-secret", ReceiptKey: bytes.Repeat([]byte{1}, 32)})
 	if err != nil {
 		t.Fatal(err)
 	}

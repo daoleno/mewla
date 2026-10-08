@@ -35,7 +35,7 @@ func waitMonitorSettings(t *testing.T, m *Monitor, wantModel, wantEffort string)
 func TestMonitorBootstrapsSnapshotFromResumeResponse(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	// The fake's thread/resume handler replies with a generic thread object;
 	// extend it to carry the current model + reasoning effort like the real
 	// ThreadResumeResponse.
@@ -51,7 +51,7 @@ func TestMonitorBootstrapsSnapshotFromResumeResponse(t *testing.T) {
 func TestMonitorTracksAppliedSettingsNotifications(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	f.resumeModel = "gpt-5.5"
 	f.resumeEffort = ""
 	m := startMonitor(t, f)
@@ -91,7 +91,7 @@ func TestMonitorUnavailableUntilThreadExists(t *testing.T) {
 		t.Fatal("monitor must stay alive while the thread is pending")
 	}
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	f.resumeModel = "gpt-5"
 	f.resumeEffort = ""
 	waitMonitorSettings(t, m, "gpt-5", "")
@@ -100,7 +100,7 @@ func TestMonitorUnavailableUntilThreadExists(t *testing.T) {
 func TestMonitorFailsClosedWhenConnectionDies(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	f.resumeModel = "gpt-5.5"
 	f.resumeEffort = "high"
 	m := startMonitor(t, f)
@@ -133,7 +133,7 @@ func TestNativeSettingsMatchesNormalizesDefault(t *testing.T) {
 func TestMonitorIgnoresOtherThreadSettingsNotifications(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	f.resumeModel = "gpt-5"
 	f.resumeEffort = "high"
 	m := startMonitor(t, f)
@@ -168,7 +168,7 @@ func TestMonitorIgnoresOtherThreadSettingsNotifications(t *testing.T) {
 func TestMonitorIgnoresEmptyThreadIDSettingsNotification(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	f.resumeModel = "gpt-5"
 	f.resumeEffort = "high"
 	m := startMonitor(t, f)
@@ -192,7 +192,7 @@ func TestMonitorIgnoresEmptyThreadIDSettingsNotification(t *testing.T) {
 func TestMonitorNeverRetargetsThreadIDFromPayload(t *testing.T) {
 	f := startFakeAppServer(t)
 	f.loaded = []string{"t-main"}
-	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/zen", Status: "idle"}}
+	f.threads = []ThreadInfo{{ID: "t-main", Cwd: "/repo/mewla", Status: "idle"}}
 	f.resumeModel = "gpt-5"
 	f.resumeEffort = "high"
 	m := startMonitor(t, f)

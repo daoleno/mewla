@@ -89,7 +89,7 @@ func TestTelegramSetupUsesEchoDisabledTerminalReader(t *testing.T) {
 }
 
 func TestTelegramSetupRoundTripsThroughExactLocalControlSocket(t *testing.T) {
-	stateDir, err := os.MkdirTemp(os.Getenv("TMPDIR"), "zen-telegram-control-")
+	stateDir, err := os.MkdirTemp(os.Getenv("TMPDIR"), "mewla-telegram-control-")
 	if err != nil {
 		t.Fatal(err)
 	}

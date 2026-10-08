@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const enrollmentDecisionPurpose = "zen-enrollment:decision:POST:/enrollment/decision"
+const enrollmentDecisionPurpose = "mewla-enrollment:decision:POST:/enrollment/decision"
 
 func (s *Server) allowEnrollmentRequest(r *http.Request) bool {
 	key, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -67,7 +67,7 @@ func (s *Server) handleEnrollmentRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.broadcastEnrollmentRequest(request)
-	s.writeJSONWithAssertion(w, http.StatusCreated, "zen-enrollment-request", map[string]any{"request_id": request.ID, "secret": secret, "verification_number": request.Number, "expires_at": request.ExpiresAt})
+	s.writeJSONWithAssertion(w, http.StatusCreated, "mewla-enrollment-request", map[string]any{"request_id": request.ID, "secret": secret, "verification_number": request.Number, "expires_at": request.ExpiresAt})
 }
 
 func (s *Server) handleEnrollmentStatus(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +86,7 @@ func (s *Server) handleEnrollmentStatus(w http.ResponseWriter, r *http.Request) 
 		response["daemon_id"] = s.auth.DaemonID()
 		response["daemon_public_key"] = s.auth.PublicKeyHex()
 	}
-	s.writeJSONWithAssertion(w, http.StatusOK, "zen-enrollment-status", response)
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-enrollment-status", response)
 }
 
 func (s *Server) handleEnrollmentPending(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +102,7 @@ func (s *Server) handleEnrollmentPending(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "enrollment unavailable", http.StatusInternalServerError)
 		return
 	}
-	s.writeJSONWithAssertion(w, http.StatusOK, "zen-enrollment-pending", map[string]any{"requests": requests})
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-enrollment-pending", map[string]any{"requests": requests})
 }
 
 func (s *Server) handleEnrollmentDecision(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +141,7 @@ func (s *Server) handleEnrollmentDecision(w http.ResponseWriter, r *http.Request
 		}
 	}
 	s.broadcastEnrollmentDecision(request)
-	s.writeJSONWithAssertion(w, http.StatusOK, "zen-enrollment-decision", map[string]any{"status": request.Status, "request_id": request.ID})
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-enrollment-decision", map[string]any{"status": request.Status, "request_id": request.ID})
 }
 
 func (s *Server) broadcastEnrollmentRequest(request enrollment.Request) {

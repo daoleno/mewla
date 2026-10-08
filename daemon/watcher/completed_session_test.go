@@ -11,9 +11,9 @@ import (
 )
 
 // No tmux command is needed: stale ownership must fail before any transport IO.
-// ZEN007: Given old cleanup waiting for the input lock, when a new turn is
+// BDD-007: Given old cleanup waiting for the input lock, when a new turn is
 // admitted first, then cleanup rejects the old identity before transport IO.
-func TestBDD_ZEN007_CompletedCleanupSerializesWithNewInput(t *testing.T) {
+func TestBDD_007_CompletedCleanupSerializesWithNewInput(t *testing.T) {
 	w := New(time.Second)
 	ledger := &fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"worker": {SessionID: "worker", TurnID: "old", Status: TurnDone, SignalProtocol: true},
@@ -39,7 +39,7 @@ func TestBDD_ZEN007_CompletedCleanupSerializesWithNewInput(t *testing.T) {
 	}
 }
 
-func TestBDD_ZEN008_AlreadyReclaimedSessionCleanupIsIdempotent(t *testing.T) {
+func TestBDD_008_AlreadyReclaimedSessionCleanupIsIdempotent(t *testing.T) {
 	// Given exact completed ownership in the ledger but a reclaimed tmux window.
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\necho \"can't find window: %1\" >&2\nexit 1\n"), 0o700); err != nil {
@@ -73,7 +73,7 @@ func TestCompletedSessionCleanupRejectsNonterminalAndUncontractedTurns(t *testin
 	}
 }
 
-func TestBDD_ZEN014_QuietMissingSessionCleanupIsAbsentNotUnowned(t *testing.T) {
+func TestBDD_014_QuietMissingSessionCleanupIsAbsentNotUnowned(t *testing.T) {
 	// Given tmux 3.6a quiet show-options success for a session that list-panes
 	// proves is gone, completed cleanup must be idempotent absence — not Unowned.
 	dir := writeFakeTmux(t, `cmd=
@@ -110,7 +110,7 @@ exit 1
 	}
 }
 
-func TestBDD_ZEN015_UnownedPresentCompletedCleanupIsProtected(t *testing.T) {
+func TestBDD_015_UnownedPresentCompletedCleanupIsProtected(t *testing.T) {
 	dir := writeFakeTmux(t, `log=${MEWLA_TEST_TMUX_LOG:?}
 printf '%s\n' "$*" >>"$log"
 target=
@@ -300,7 +300,7 @@ exit 0
 	}
 }
 
-func TestBDD_ZEN019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
+func TestBDD_019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 	identity := targetProcessIdentity{
 		Command: "cursor-agent", ProcessID: 7, ProcessStart: 7,
 		PanePID: 7, PaneStart: 7, ForegroundID: 7, ForegroundStart: 7,

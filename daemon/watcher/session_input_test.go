@@ -368,7 +368,7 @@ func watcherWithAdmissionProbe(probe ProviderActivityProbe) *Watcher {
 	w.workers["agent:@1"] = &classifier.Worker{
 		ID:        "agent:@1",
 		Command:   "cursor-agent --force",
-		Cwd:       "/repo/zen",
+		Cwd:       "/repo/mewla",
 		PaneAlive: true,
 	}
 	w.providerActivityProbe = probe
@@ -2937,7 +2937,7 @@ func TestWatcherPollResolvesOnlyExactPendingRowAmongCoexistingRows(t *testing.T)
 	w := lifecycleTestWatcher(io, ledger, probe)
 	sessionID := "opencode-coexist:@1"
 	w.workers[sessionID] = &classifier.Worker{
-		ID: sessionID, Command: "opencode", Cwd: "/repo/zen",
+		ID: sessionID, Command: "opencode", Cwd: "/repo/mewla",
 		PaneAlive: true, Delegated: true,
 	}
 	identity, known := w.targetForSession(sessionID)
@@ -2969,7 +2969,7 @@ func TestWatcherPollResolvesOnlyExactPendingRowAmongCoexistingRows(t *testing.T)
 		AdmissionStream: "opencode_db\x00coexist\x00/db", AdmissionID: "msg-b",
 		AdmissionCursor: 2, AdmissionAt: now, InputSHA256: digestB, Structured: true,
 	}
-	windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/zen", command: "opencode", panePID: 333, delegated: true}}
+	windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 	restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, now)})
 	defer restore()
 	w.poll()

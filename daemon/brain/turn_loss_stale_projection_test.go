@@ -32,7 +32,7 @@ func TestResolveContinue_ConvergesLostCoordinationWithLiveProvider(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sessionID = "zen-worker-test:@194"
+	const sessionID = "mewla-worker-test:@194"
 	const substantive = "turn:substantive-1"
 	const coordination = "turn:coordination-2"
 	const followUp = "turn:followup-3"

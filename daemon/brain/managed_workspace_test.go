@@ -395,7 +395,10 @@ func TestRetiredShippedDefaultsAreDeletedAndEditedCopiesReported(t *testing.T) {
 		"worklog/README.md":        "testdata/retired/worklog-README.md",
 	}
 	for target, fixture := range fixtures {
-		if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(target)), mustReadFile(t, fixture), 0o600); err != nil {
+		// Retired fixtures predate the marker rename; rewrite them the way the
+		// host workspace was rewritten.
+		content := strings.ReplaceAll(string(mustReadFile(t, fixture)), "<!-- zen:brain-managed:", managedMarkerPrefix)
+		if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(target)), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

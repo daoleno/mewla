@@ -128,7 +128,7 @@ func piClose(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 // ── Acceptance: DeepSeek usage flows into StatsResponse ────
 
-func TestPiZenOwnedDeepSeekUsageFlowsIntoEveryCurrentRange(t *testing.T) {
+func TestPiOwnedDeepSeekUsageFlowsIntoEveryCurrentRange(t *testing.T) {
 	setTestLocalLocation(t, time.UTC)
 
 	home := t.TempDir()
@@ -146,7 +146,7 @@ func TestPiZenOwnedDeepSeekUsageFlowsIntoEveryCurrentRange(t *testing.T) {
 		utcDate := time.Now().UTC().Format("2006-01-02")
 		ts := time.Now().UTC().Format(time.RFC3339Nano)
 		writePiOwnedSession(t, home, "00000000-0000-4000-8000-000000000001.jsonl",
-			piHeader("/home/user/workspace/zen", ts),
+			piHeader("/home/user/workspace/mewla", ts),
 			piOwnedAssistantMetadataLine("a1", ts, "opencode-go", "deepseek-v4-flash", piUsageJSON(100, 50, 200, 0, piReasoning(25), 0.0004)),
 			piOwnedAssistantMetadataLine("a2", ts, "opencode-go", "deepseek-v4-flash", piUsageJSON(200, 100, 400, 0, piReasoning(50), 0.0008)),
 		)
@@ -187,8 +187,8 @@ func TestPiDeepSeekUsageFlowsIntoStatsResponse(t *testing.T) {
 	// DeepSeek model identity "deepseek-v4-flash" with reasoning and priced
 	// usage. The recorded identity must survive to the App's model list
 	// unchanged: no allowlist, no generic Pi label.
-	writePiSession(t, home, "--home-user-workspace-zen--", "2026-04-04T10-00-00-000Z_abc.jsonl",
-		piHeader("/home/user/workspace/zen", "2026-04-04T10:00:00.000Z"),
+	writePiSession(t, home, "--home-user-workspace-mewla--", "2026-04-04T10-00-00-000Z_abc.jsonl",
+		piHeader("/home/user/workspace/mewla", "2026-04-04T10:00:00.000Z"),
 		piAssistantLine("a1", "2026-04-04T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(1000, 500, 200, 100, piReasoning(250), 0.004)),
 		piAssistantLine("a2", "2026-04-04T11:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(2000, 1000, 400, 200, piReasoning(500), 0.008)),
 		piAssistantLine("a3", "2026-04-04T12:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(3000, 1500, 600, 300, piReasoning(750), 0.012)),
@@ -222,7 +222,7 @@ func TestPiDeepSeekUsageFlowsIntoStatsResponse(t *testing.T) {
 		t.Fatalf("deepseek sessions = %d, want 1 per session file per date", model.Sessions)
 	}
 
-	project := piProjectByName(t, all.Projects, "zen")
+	project := piProjectByName(t, all.Projects, "mewla")
 	if project.TotalTokens != 10800 || project.InputTokens != 6000 || project.OutputTokens != 3000 ||
 		project.ReasoningTokens != 1500 || project.CacheRead != 1200 || project.CacheCreate != 600 {
 		t.Fatalf("mewla project buckets = %+v", project)
@@ -252,8 +252,8 @@ func TestPiWholeLedgerCountsBranchesRetriesAndDuplicatesOnce(t *testing.T) {
 	home := t.TempDir()
 	usageA1 := piUsageJSON(100, 50, 0, 0, nil, 0.0004)
 	usageA2 := piUsageJSON(200, 100, 0, 0, nil, 0.0008)
-	writePiSession(t, home, "--home-user-workspace-zen--", "2026-04-05T10-00-00-000Z_def.jsonl",
-		piHeader("/home/user/workspace/zen", "2026-04-05T10:00:00.000Z"),
+	writePiSession(t, home, "--home-user-workspace-mewla--", "2026-04-05T10-00-00-000Z_def.jsonl",
+		piHeader("/home/user/workspace/mewla", "2026-04-05T10:00:00.000Z"),
 		piUserLine("u1", "2026-04-05T10:00:01.000Z"),
 		// Branch A: the original answer (billed).
 		piAssistantLine("a1", "2026-04-05T10:00:02.000Z", "opencode-go", "deepseek-v4-flash", usageA1),
@@ -296,8 +296,8 @@ func TestPiCompactionAndBranchSummaryUsageFollowsModelInEffect(t *testing.T) {
 	setTestLocalLocation(t, time.UTC)
 
 	home := t.TempDir()
-	writePiSession(t, home, "--home-user-workspace-zen--", "2026-04-06T10-00-00-000Z_ghi.jsonl",
-		piHeader("/home/user/workspace/zen", "2026-04-06T10:00:00.000Z"),
+	writePiSession(t, home, "--home-user-workspace-mewla--", "2026-04-06T10-00-00-000Z_ghi.jsonl",
+		piHeader("/home/user/workspace/mewla", "2026-04-06T10:00:00.000Z"),
 		piAssistantLine("a1", "2026-04-06T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(100, 50, 0, 0, nil, 0.0004)),
 		// Compaction summary generation is billed usage without a recorded
 		// model; it is attributed to the model in effect at that ledger
@@ -326,8 +326,8 @@ func TestPiCompactionAndBranchSummaryUsageFollowsModelInEffect(t *testing.T) {
 	if deepseek.sessions != 1 || gpt.sessions != 1 {
 		t.Fatalf("model sessions = deepseek %d gpt %d, want 1 each", deepseek.sessions, gpt.sessions)
 	}
-	if day.projects["zen"].sessions != 1 {
-		t.Fatalf("project sessions = %d, want 1", day.projects["zen"].sessions)
+	if day.projects["mewla"].sessions != 1 {
+		t.Fatalf("project sessions = %d, want 1", day.projects["mewla"].sessions)
 	}
 
 	stats := buildModelStats(aggregateModelsByDate(byDate, "0000-00-00", "9999-99-99"))
@@ -352,8 +352,8 @@ func TestPiMalformedAndPartialFilesFailSoft(t *testing.T) {
 
 	// File A: valid records plus a truncated final line (live append in
 	// progress) and a malformed middle line; both must be skipped.
-	writePiSession(t, home, "--tmp-zen--", "2026-04-07T10-00-00-000Z_jkl.jsonl",
-		piHeader("/tmp/zen", "2026-04-07T10:00:00.000Z"),
+	writePiSession(t, home, "--tmp-mewla--", "2026-04-07T10-00-00-000Z_jkl.jsonl",
+		piHeader("/tmp/mewla", "2026-04-07T10:00:00.000Z"),
 		"this is not json at all",
 		piAssistantLine("a1", "2026-04-07T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(10, 5, 0, 0, nil, 0.0001)),
 		`{"type":"message","id":"partial","parentId":null,"timestamp":"2026-04-07T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"fixture"`)
@@ -361,43 +361,43 @@ func TestPiMalformedAndPartialFilesFailSoft(t *testing.T) {
 	// File B: no header (cwd fallback decodes the session dir name), plus an
 	// assistant that records no model (skipped) and a zero-token aborted
 	// assistant (skipped).
-	writePiSession(t, home, "--tmp-zen2--", "2026-04-07T11-00-00-000Z_mno.jsonl",
+	writePiSession(t, home, "--tmp-mewla2--", "2026-04-07T11-00-00-000Z_mno.jsonl",
 		piAssistantLine("a1", "2026-04-07T11:00:01.000Z", "openrouter", "x-ai/grok-4.1-fast", piUsageJSON(20, 10, 0, 0, nil, 0.0002)),
 		`{"type":"message","id":"a2","parentId":null,"timestamp":"2026-04-07T11:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"fixture"}],"api":"openai-completions","provider":"opencode-go","model":"","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop"}}`,
 		`{"type":"message","id":"a3","parentId":null,"timestamp":"2026-04-07T11:00:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"fixture"}],"api":"openai-completions","provider":"opencode-go","model":"deepseek-v4-flash","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"aborted"}}`)
 
 	// File C: toolResult usage with no model ever recorded in the ledger:
 	// unattributable, so it contributes nothing (and does not invent a model).
-	writePiSession(t, home, "--tmp-zen3--", "2026-04-07T12-00-00-000Z_pqr.jsonl",
+	writePiSession(t, home, "--tmp-mewla3--", "2026-04-07T12-00-00-000Z_pqr.jsonl",
 		piToolResultLine("t1", "2026-04-07T12:00:01.000Z", piUsageJSON(50, 25, 0, 0, nil, 0)))
 
 	// Non-session files and nested dirs are ignored.
-	writePiSession(t, home, "--tmp-zen--", "notes.txt", "not a session")
+	writePiSession(t, home, "--tmp-mewla--", "notes.txt", "not a session")
 
 	byDate := (&Collector{}).collectPiStats(home)
 
-	zen := byDate["2026-04-07"]
-	if zen == nil {
+	mewla := byDate["2026-04-07"]
+	if mewla == nil {
 		t.Fatal("missing pi day from partially malformed files")
 	}
-	deepseek := zen.models[modelAggKey("opencode-go", "deepseek-v4-flash")]
+	deepseek := mewla.models[modelAggKey("opencode-go", "deepseek-v4-flash")]
 	if deepseek.totalTokens != 15 || deepseek.inputTokens != 10 {
 		t.Fatalf("file A deepseek = %+v, want only the 15-token valid record (10 input + 5 output)", deepseek)
 	}
-	if zen.projects["zen"] == nil || zen.projects["zen"].sessions != 1 {
-		t.Fatalf("file A project = %+v, want header-cwd project zen with 1 session", zen.projects["zen"])
+	if mewla.projects["mewla"] == nil || mewla.projects["mewla"].sessions != 1 {
+		t.Fatalf("file A project = %+v, want header-cwd project mewla with 1 session", mewla.projects["mewla"])
 	}
-	grok := zen.models[modelAggKey("openrouter", "x-ai/grok-4.1-fast")]
+	grok := mewla.models[modelAggKey("openrouter", "x-ai/grok-4.1-fast")]
 	if grok.totalTokens != 30 || grok.sessions != 1 {
 		t.Fatalf("file B grok = %+v, want 30 tokens and 1 session", grok)
 	}
-	if zen.projects["zen2"] == nil || zen.projects["zen2"].sessions != 1 {
-		t.Fatalf("file B project = %+v, want decoded-dir project zen2 with 1 session", zen.projects["zen2"])
+	if mewla.projects["mewla2"] == nil || mewla.projects["mewla2"].sessions != 1 {
+		t.Fatalf("file B project = %+v, want decoded-dir project mewla2 with 1 session", mewla.projects["mewla2"])
 	}
 	// Skipped records: no-model assistant, zero-token aborted assistant,
 	// unattributable toolResult usage, notes.txt.
-	if _, ok := zen.models[""]; ok {
-		t.Fatalf("empty model id must not be aggregated: %+v", zen.models)
+	if _, ok := mewla.models[""]; ok {
+		t.Fatalf("empty model id must not be aggregated: %+v", mewla.models)
 	}
 	if len(byDate) != 1 {
 		t.Fatalf("unexpected date buckets: %v", byDate)
@@ -413,19 +413,19 @@ func TestPiCostUnknownWhenNotPriced(t *testing.T) {
 
 	// Model with a mix of observed and unobserved cost: the observed part is
 	// exact, the model overall stays cost-unknown.
-	writePiSession(t, home, "--tmp-zen-mixed--", "2026-04-08T10-00-00-000Z_aaa.jsonl",
-		piHeader("/tmp/zen-mixed", "2026-04-08T10:00:00.000Z"),
+	writePiSession(t, home, "--tmp-mewla-mixed--", "2026-04-08T10-00-00-000Z_aaa.jsonl",
+		piHeader("/tmp/mewla-mixed", "2026-04-08T10:00:00.000Z"),
 		piAssistantLine("m1", "2026-04-08T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(1000, 500, 0, 0, nil, 0.004)),
 		piAssistantLine("m2", "2026-04-08T10:00:02.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(2000, 1000, 0, 0, nil, 0)),
 	)
 	// Model never priced: all cost fields are zero.
-	writePiSession(t, home, "--tmp-zen-free--", "2026-04-08T11-00-00-000Z_bbb.jsonl",
-		piHeader("/tmp/zen-free", "2026-04-08T11:00:00.000Z"),
+	writePiSession(t, home, "--tmp-mewla-free--", "2026-04-08T11-00-00-000Z_bbb.jsonl",
+		piHeader("/tmp/mewla-free", "2026-04-08T11:00:00.000Z"),
 		piAssistantLine("m1", "2026-04-08T11:00:01.000Z", "openai", "gpt-5.1-codex", piUsageJSON(100, 50, 0, 0, nil, 0)),
 	)
 	// Model fully priced.
-	writePiSession(t, home, "--tmp-zen-paid--", "2026-04-08T12-00-00-000Z_ccc.jsonl",
-		piHeader("/tmp/zen-paid", "2026-04-08T12:00:00.000Z"),
+	writePiSession(t, home, "--tmp-mewla-paid--", "2026-04-08T12-00-00-000Z_ccc.jsonl",
+		piHeader("/tmp/mewla-paid", "2026-04-08T12:00:00.000Z"),
 		piAssistantLine("m1", "2026-04-08T12:00:01.000Z", "anthropic", "claude-opus-4-8", piUsageJSON(1000, 500, 0, 0, nil, 0.005)),
 	)
 
@@ -452,8 +452,8 @@ func TestPiMultipleSessionsDaysProjectsAndIdempotentRefresh(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	file1 := writePiSession(t, home, "--home-user-zen--", "2026-04-04T10-00-00-000Z_ddd.jsonl",
-		piHeader("/home/user/zen", "2026-04-04T10:00:00.000Z"),
+	file1 := writePiSession(t, home, "--home-user-mewla--", "2026-04-04T10-00-00-000Z_ddd.jsonl",
+		piHeader("/home/user/mewla", "2026-04-04T10:00:00.000Z"),
 		piAssistantLine("a1", "2026-04-04T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(100, 0, 0, 0, nil, 0)),
 		piAssistantLine("a2", "2026-04-04T11:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(200, 0, 0, 0, nil, 0)),
 		piAssistantLine("a3", "2026-04-05T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(300, 0, 0, 0, nil, 0)),
@@ -482,9 +482,9 @@ func TestPiMultipleSessionsDaysProjectsAndIdempotentRefresh(t *testing.T) {
 	if got := piModelByName(t, all.Models, displayName("gpt-5.1-codex")); got.TotalTokens != 50 || got.Sessions != 1 {
 		t.Fatalf("gpt after refresh = %+v, want 50 tokens and 1 session", got)
 	}
-	zen := piProjectByName(t, all.Projects, "zen")
-	if zen.TotalTokens != 600 || zen.Sessions != 2 {
-		t.Fatalf("mewla project = %+v, want 600 tokens and 2 session-days", zen)
+	mewla := piProjectByName(t, all.Projects, "mewla")
+	if mewla.TotalTokens != 600 || mewla.Sessions != 2 {
+		t.Fatalf("mewla project = %+v, want 600 tokens and 2 session-days", mewla)
 	}
 	if got := piProjectByName(t, all.Projects, "onlora"); got.TotalTokens != 450 || got.Sessions != 2 {
 		t.Fatalf("onlora project = %+v, want 450 tokens and 2 session-days (one per date the ledger touches)", got)
@@ -522,8 +522,8 @@ func TestPiMultipleSessionsDaysProjectsAndIdempotentRefresh(t *testing.T) {
 	if got := piModelByName(t, all.Models, displayName("gpt-5.1-codex")); got.TotalTokens != 50 {
 		t.Fatalf("gpt after append = %+v, want unchanged 50", got)
 	}
-	if got := piProjectByName(t, all.Projects, "zen"); got.TotalTokens != 1200 {
-		t.Fatalf("zen after append = %+v, want 1200", got)
+	if got := piProjectByName(t, all.Projects, "mewla"); got.TotalTokens != 1200 {
+		t.Fatalf("mewla after append = %+v, want 1200", got)
 	}
 }
 
@@ -534,8 +534,8 @@ func TestPiSameModelMixedSourcesMergeCost(t *testing.T) {
 
 	home := t.TempDir()
 	// Pi records exact observed cost for deepseek-v4-flash.
-	writePiSession(t, home, "--tmp-zen-pi--", "2026-04-09T10-00-00-000Z_fff.jsonl",
-		piHeader("/tmp/zen-pi", "2026-04-09T10:00:00.000Z"),
+	writePiSession(t, home, "--tmp-mewla-pi--", "2026-04-09T10-00-00-000Z_fff.jsonl",
+		piHeader("/tmp/mewla-pi", "2026-04-09T10:00:00.000Z"),
 		piAssistantLine("p1", "2026-04-09T10:00:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(1000, 500, 0, 0, nil, 0.005)),
 	)
 
@@ -580,8 +580,8 @@ func TestPiUsesLocalTimezoneBuckets(t *testing.T) {
 
 	home := t.TempDir()
 	// 2026-04-05T17:30Z is 2026-04-06 01:30 in Shanghai (night slot 0).
-	writePiSession(t, home, "--tmp-zen--", "2026-04-05T17-30-00-000Z_ggg.jsonl",
-		piHeader("/tmp/zen", "2026-04-05T17:30:00.000Z"),
+	writePiSession(t, home, "--tmp-mewla--", "2026-04-05T17-30-00-000Z_ggg.jsonl",
+		piHeader("/tmp/mewla", "2026-04-05T17:30:00.000Z"),
 		piAssistantLine("a1", "2026-04-05T17:30:01.000Z", "opencode-go", "deepseek-v4-flash", piUsageJSON(40, 20, 0, 0, nil, 0)),
 	)
 
@@ -600,8 +600,8 @@ func TestPiUsesLocalTimezoneBuckets(t *testing.T) {
 	if day.slots[0].totalTokens != 60 || day.slots[0].sessions != 1 {
 		t.Fatalf("night slot = %+v, want 60 tokens and 1 session", day.slots[0])
 	}
-	if day.projects["zen"].sessions != 1 {
-		t.Fatalf("project sessions = %d, want 1", day.projects["zen"].sessions)
+	if day.projects["mewla"].sessions != 1 {
+		t.Fatalf("project sessions = %d, want 1", day.projects["mewla"].sessions)
 	}
 }
 

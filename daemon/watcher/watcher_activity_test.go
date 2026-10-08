@@ -381,7 +381,7 @@ func TestHiddenHostProviderTerminalEmitsActivityChangeWithoutPaneOutput(t *testi
 		{ID: "host-activity", Status: "completed", StartedAt: started, SettledAt: settled, Structured: true},
 	}}
 	windows := []tmuxPane{{
-		target: "zen-worker-brain-provider-boundary:@1", name: "Brain", cwd: "/brain",
+		target: "mewla-worker-brain-provider-boundary:@1", name: "Brain", cwd: "/brain",
 		command: "codex", panePID: 111, hidden: true,
 	}}
 	restore := installFakePollSeams(w, windows, map[string]string{
@@ -528,8 +528,8 @@ func TestPollTurnSettlementSeedsActivityAndRepeatsPreserveIt(t *testing.T) {
 	})
 	settledAt := time.Date(2026, 8, 7, 9, 59, 0, 0, time.UTC)
 	ledger := newFakeTurnLedger()
-	ledger.seed("zen-worker-worker:@1", TurnSnapshot{
-		SessionID:  "zen-worker-worker:@1",
+	ledger.seed("mewla-worker-worker:@1", TurnSnapshot{
+		SessionID:  "mewla-worker-worker:@1",
 		TurnID:     "turn-1",
 		Status:     TurnDone,
 		AcceptedAt: time.Date(2026, 8, 7, 9, 58, 0, 0, time.UTC),
@@ -538,10 +538,10 @@ func TestPollTurnSettlementSeedsActivityAndRepeatsPreserveIt(t *testing.T) {
 	})
 	w.turnLedger = ledger
 	windows := []tmuxPane{
-		{target: "zen-worker-worker:@1", name: "worker", cwd: "/repo/zen", command: "claude", panePID: 333},
+		{target: "mewla-worker-worker:@1", name: "worker", cwd: "/repo/mewla", command: "claude", panePID: 333},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
-		"zen-worker-worker:@1": "Claude Code\nFinished verification\n",
+		"mewla-worker-worker:@1": "Claude Code\nFinished verification\n",
 	}, map[int]processInfo{
 		333: fakeProcess(333, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC)),
 	})
@@ -550,7 +550,7 @@ func TestPollTurnSettlementSeedsActivityAndRepeatsPreserveIt(t *testing.T) {
 	w.poll()
 	drainWatcherEvents(w)
 
-	first := workerByID(w.Workers(), "zen-worker-worker:@1")
+	first := workerByID(w.Workers(), "mewla-worker-worker:@1")
 	if first == nil {
 		t.Fatalf("delegated session missing after first poll")
 	}
@@ -565,7 +565,7 @@ func TestPollTurnSettlementSeedsActivityAndRepeatsPreserveIt(t *testing.T) {
 	// A repeated poll with the identical settled turn is a no-op.
 	w.poll()
 
-	second := workerByID(w.Workers(), "zen-worker-worker:@1")
+	second := workerByID(w.Workers(), "mewla-worker-worker:@1")
 	if !second.UpdatedAt.Equal(firstActivity) {
 		t.Fatalf("no-op poll with settled turn mutated activity time: %v -> %v", firstActivity, second.UpdatedAt)
 	}

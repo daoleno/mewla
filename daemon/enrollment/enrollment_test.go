@@ -17,7 +17,7 @@ func TestRequestRequiresMatchingSecretAndNumber(t *testing.T) {
 	}
 	_, key, _ := ed25519.GenerateKey(rand.Reader)
 	pub := key.Public().(ed25519.PublicKey)
-	req, secret, err := m.Create("browser-1", "Firefox", "web", "https://zen.example", fmtHex(pub))
+	req, secret, err := m.Create("browser-1", "Firefox", "web", "https://mewla.example", fmtHex(pub))
 	if err != nil {
 		t.Fatal(err)
 	}

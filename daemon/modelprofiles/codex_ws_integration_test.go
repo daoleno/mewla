@@ -143,9 +143,9 @@ func TestCodexWSUpstreamProxyLive(t *testing.T) {
 		if err := os.MkdirAll(codexHome, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		config := "model_provider = \"zen-gateway\"\nmodel = \"gpt-4o\"\n" +
-			"[model_providers.zen-gateway]\n" +
-			"name = \"zen-gateway\"\n" +
+		config := "model_provider = \"mewla-gateway\"\nmodel = \"gpt-4o\"\n" +
+			"[model_providers.mewla-gateway]\n" +
+			"name = \"mewla-gateway\"\n" +
 			"base_url = \"http://" + g.ActualAddr() + "/v1\"\n" +
 			"wire_api = \"responses\"\n" +
 			"requires_openai_auth = false\n" +
@@ -157,7 +157,7 @@ func TestCodexWSUpstreamProxyLive(t *testing.T) {
 		out := runCodex(t, codexPath,
 			[]string{"exec", "--skip-git-repo-check",
 				"--dangerously-bypass-approvals-and-sandbox",
-				"-c", `model_provider="zen-gateway"`,
+				"-c", `model_provider="mewla-gateway"`,
 				"-c", `model="gpt-4o"`,
 				"reply with the single word ok"},
 			append(scrubEnv(os.Environ(), "CODEX_HOME"), "CODEX_HOME="+codexHome, "HOME="+home),
@@ -282,9 +282,9 @@ func TestCodexWSImmediateTerminationLive(t *testing.T) {
 			if err := os.MkdirAll(codexHome, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			config := "model_provider = \"zen-gateway\"\nmodel = \"gpt-4o\"\n" +
-				"[model_providers.zen-gateway]\n" +
-				"name = \"zen-gateway\"\n" +
+			config := "model_provider = \"mewla-gateway\"\nmodel = \"gpt-4o\"\n" +
+				"[model_providers.mewla-gateway]\n" +
+				"name = \"mewla-gateway\"\n" +
 				"base_url = \"http://" + gateway.ActualAddr() + "/v1\"\n" +
 				"wire_api = \"responses\"\n" +
 				"requires_openai_auth = false\n" +
@@ -298,7 +298,7 @@ func TestCodexWSImmediateTerminationLive(t *testing.T) {
 			out := runCodex(t, codexPath,
 				[]string{"exec", "--skip-git-repo-check",
 					"--dangerously-bypass-approvals-and-sandbox",
-					"-c", `model_provider="zen-gateway"`,
+					"-c", `model_provider="mewla-gateway"`,
 					"-c", `model="gpt-4o"`,
 					"reply with no text"},
 				append(scrubEnv(os.Environ(), "CODEX_HOME"), "CODEX_HOME="+codexHome, "HOME="+home),
@@ -371,9 +371,9 @@ func TestCodexWSHandshakeRejectionFallsBackSilentlyLive(t *testing.T) {
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	config := "model_provider = \"zen-gateway\"\nmodel = \"gpt-4o\"\n" +
-		"[model_providers.zen-gateway]\n" +
-		"name = \"zen-gateway\"\n" +
+	config := "model_provider = \"mewla-gateway\"\nmodel = \"gpt-4o\"\n" +
+		"[model_providers.mewla-gateway]\n" +
+		"name = \"mewla-gateway\"\n" +
 		"base_url = \"http://" + gateway.ActualAddr() + "/v1\"\n" +
 		"wire_api = \"responses\"\n" +
 		"requires_openai_auth = false\n" +

@@ -15,8 +15,8 @@ const piOwnedSessionDirName = "provider-sessions/pi"
 
 // NewPiOwnedSessionPath allocates an absolute Mewla-owned Pi JSONL path that is
 // unique a priori. Ownership does not depend on Pi's shared per-CWD directory.
-func NewPiOwnedSessionPath(zenHome string) (string, error) {
-	root, err := piOwnedSessionRoot(zenHome)
+func NewPiOwnedSessionPath(mewlaHome string) (string, error) {
+	root, err := piOwnedSessionRoot(mewlaHome)
 	if err != nil {
 		return "", err
 	}
@@ -30,16 +30,16 @@ func NewPiOwnedSessionPath(zenHome string) (string, error) {
 	return path, nil
 }
 
-func piOwnedSessionRoot(zenHome string) (string, error) {
-	zenHome = strings.TrimSpace(zenHome)
-	if zenHome == "" {
+func piOwnedSessionRoot(mewlaHome string) (string, error) {
+	mewlaHome = strings.TrimSpace(mewlaHome)
+	if mewlaHome == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		zenHome = statedir.Default(home)
+		mewlaHome = statedir.Default(home)
 	}
-	return filepath.Join(zenHome, piOwnedSessionDirName), nil
+	return filepath.Join(mewlaHome, piOwnedSessionDirName), nil
 }
 
 // EnsurePiSessionLaunchCommand injects an absolute --session path when the

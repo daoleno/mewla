@@ -66,7 +66,7 @@ func TestGitDiffNativeFixtureServer(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", srv.handleWS)
 	mux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"fixtures": fixtures, "authorization": calendarAuthHeader(private, manager.DaemonID(), "diff-fixture", "zen-connect")})
+		json.NewEncoder(w).Encode(map[string]any{"fixtures": fixtures, "authorization": calendarAuthHeader(private, manager.DaemonID(), "diff-fixture", "mewla-connect")})
 	})
 	done := make(chan struct{}, 1)
 	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {

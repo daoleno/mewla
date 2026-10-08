@@ -220,7 +220,7 @@ func (w *fakeControlWatcher) CreateSession(_ string, opts watcher.CreateSessionO
 		return "", w.createErr
 	}
 	id := fmt.Sprintf(
-		"zen-worker-%s:@%d",
+		"mewla-worker-%s:@%d",
 		strings.ToLower(strings.ReplaceAll(opts.Name, " ", "-")),
 		len(w.created)+1,
 	)
@@ -611,7 +611,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		Type:       "worker_spawn",
 		Name:       "Franklin",
 		Executor:   "codex",
-		Cwd:        "/repo/zen",
+		Cwd:        "/repo/mewla",
 		Prompt:     "delegated by Brain",
 		PromptFile: promptPath,
 	})
@@ -625,7 +625,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		resp.BrainWork.CompletionPolicy != brain.CompletionBounded {
 		t.Fatalf("spawn Work = %#v", resp.BrainWork)
 	}
-	if resp.Worker.Name != "Franklin (zen-worker-franklin:@1)" {
+	if resp.Worker.Name != "Franklin (mewla-worker-franklin:@1)" {
 		t.Fatalf("agent name = %q", resp.Worker.Name)
 	}
 	if resp.Worker.Hidden {
@@ -638,7 +638,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		t.Fatalf("created sessions = %#v", fw.created)
 	}
 	created := fw.created[0]
-	if created.Name != "Franklin" || created.Cwd != "/repo/zen" {
+	if created.Name != "Franklin" || created.Cwd != "/repo/mewla" {
 		t.Fatalf("create options = %+v", created)
 	}
 	if got, want := created.Command, "codex --no-alt-screen --dangerously-bypass-approvals-and-sandbox"; got != want {
@@ -658,7 +658,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 		t.Fatalf("MEWLA_WORKER_PROGRESS_CMD must not be the legacy space-separated command, got %q", progressBin)
 	}
 	// The value must be the current executable's path, not a stale "mewla"
-	// resolved via PATH (this guards dev daemons launched as zen-dev).
+	// resolved via PATH (this guards dev daemons launched as mewla-dev).
 	if exe, err := os.Executable(); err == nil {
 		if exe = strings.TrimSpace(exe); exe != "" && progressBin != exe {
 			t.Fatalf("MEWLA_WORKER_PROGRESS_CMD = %q, want current executable %q", progressBin, exe)
@@ -693,7 +693,7 @@ func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
 			t.Fatalf("prompt missing %q:\n%s", want, fw.sent[0].text)
 		}
 	}
-	if strings.Contains(fw.sent[0].text, "[zen:"+"progress]") {
+	if strings.Contains(fw.sent[0].text, "[mewla:"+"progress]") {
 		t.Fatalf("prompt should not contain stdout marker protocol:\n%s", fw.sent[0].text)
 	}
 }
@@ -707,19 +707,19 @@ func TestPrepareSpawnWorkAllowsNamedNextAttemptOnlyDuringDeliveredHandling(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	incumbentTurnID := admitControlWorkOwner(t, store, item.ID, "zen-worker-incumbent:@1")
+	incumbentTurnID := admitControlWorkOwner(t, store, item.ID, "mewla-worker-incumbent:@1")
 	app := &controlApp{brainStore: store}
 	req := control.Request{WorkID: item.ID}
 	if _, err := app.prepareSpawnWork(req, "Correction", "correct it"); !errors.Is(err, brain.ErrWorkAttemptConflict) {
 		t.Fatalf("spawn outside handling err=%v, want owner conflict", err)
 	}
-	incumbentTurn, found, err := store.Turn("zen-worker-incumbent:@1")
+	incumbentTurn, found, err := store.Turn("mewla-worker-incumbent:@1")
 	if err != nil || !found || incumbentTurn.TurnID != incumbentTurnID {
 		t.Fatalf("canonical incumbent Turn=%+v found=%v err=%v", incumbentTurn, found, err)
 	}
 	acceptedAt := incumbentTurn.AcceptedAt
 	if _, changed, err := store.ApplyTurnFact(watcher.TurnFact{
-		SessionID: "zen-worker-incumbent:@1", TurnID: incumbentTurnID,
+		SessionID: "mewla-worker-incumbent:@1", TurnID: incumbentTurnID,
 		Class: watcher.EvidenceProvider, Kind: "done", Bound: true,
 		SourceID: "provider-incumbent-done", Admission: incumbentTurn.Admission,
 		ActivityID: incumbentTurn.ActivityID, StartedAt: acceptedAt.Add(time.Second),
@@ -727,7 +727,7 @@ func TestPrepareSpawnWorkAllowsNamedNextAttemptOnlyDuringDeliveredHandling(t *te
 	}); err != nil || !changed {
 		t.Fatalf("terminalize incumbent changed=%v err=%v", changed, err)
 	}
-	claimed, ok, err := store.ClaimNextReviewAction("zen-worker-brain-hidden:@1")
+	claimed, ok, err := store.ClaimNextReviewAction("mewla-worker-brain-hidden:@1")
 	if err != nil || !ok {
 		t.Fatalf("claim=%+v ok=%v err=%v", claimed, ok, err)
 	}
@@ -766,7 +766,7 @@ func TestControlAppHiddenSpawnCreatesNoWork(t *testing.T) {
 	resp := app.HandleControlRequest(control.Request{
 		Type:   "worker_spawn",
 		Name:   "Hidden host",
-		Cwd:    "/repo/zen",
+		Cwd:    "/repo/mewla",
 		Prompt: "host only",
 		Hidden: true,
 	})
@@ -787,7 +787,7 @@ func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetHostSession("zen-worker-brain-hidden:@1", "claude"); err != nil {
+	if err := store.SetHostSession("mewla-worker-brain-hidden:@1", "claude"); err != nil {
 		t.Fatal(err)
 	}
 	fw := newFakeControlWatcher()
@@ -804,12 +804,12 @@ func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 	// Brain names executor, model and reasoning per launch.
 	routed := app.HandleControlRequest(control.Request{
 		Type:            "worker_spawn",
-		WorkerID:        "zen-worker-brain-hidden:@1",
+		WorkerID:        "mewla-worker-brain-hidden:@1",
 		Executor:        "codex",
 		ModelID:         "gpt-6-astra",
 		ReasoningEffort: "high",
 		Name:            "Patch",
-		Cwd:             "/repo/zen",
+		Cwd:             "/repo/mewla",
 		Prompt:          "make the scoped patch",
 	})
 	if !routed.OK || routed.Worker == nil {
@@ -823,7 +823,7 @@ func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 	fallback := app.HandleControlRequest(control.Request{
 		Type:   "worker_spawn",
 		Name:   "General",
-		Cwd:    "/repo/zen",
+		Cwd:    "/repo/mewla",
 		Prompt: "general spawn",
 	})
 	if !fallback.OK || fallback.Worker == nil {
@@ -838,7 +838,7 @@ func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 		Executor:        "pi",
 		ReasoningEffort: "extreme",
 		Name:            "Bad",
-		Cwd:             "/repo/zen",
+		Cwd:             "/repo/mewla",
 		Prompt:          "x",
 	})
 	if unsupported.OK || unsupported.Error == nil || !strings.Contains(unsupported.Error.Message, "unsupported pi reasoning level") {
@@ -866,7 +866,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 		Type:     "worker_spawn",
 		Executor: "codex",
 		Name:     "Codex Worker",
-		Cwd:      "/repo/zen",
+		Cwd:      "/repo/mewla",
 		Prompt:   "run progress",
 	})
 	if !codexResp.OK || codexResp.Worker == nil {
@@ -883,7 +883,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 		Command: "codex -s read-only -a on-request",
 		Hidden:  true,
 		Name:    "Pinned Codex",
-		Cwd:     "/repo/zen",
+		Cwd:     "/repo/mewla",
 		Prompt:  "stay restricted",
 	})
 	if !overrideResp.OK || overrideResp.Worker == nil {
@@ -899,7 +899,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 		Type:     "worker_spawn",
 		Executor: "claude",
 		Name:     "Claude Worker",
-		Cwd:      "/repo/zen",
+		Cwd:      "/repo/mewla",
 		Prompt:   "use claude",
 	})
 	if !claudeResp.OK || claudeResp.Worker == nil {
@@ -915,7 +915,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 		Command: "claude --permission-mode dontAsk",
 		Hidden:  true,
 		Name:    "Pinned Claude",
-		Cwd:     "/repo/zen",
+		Cwd:     "/repo/mewla",
 		Prompt:  "manual mode",
 	})
 	if !claudeOverrideResp.OK || claudeOverrideResp.Worker == nil {
@@ -951,7 +951,7 @@ func TestControlAppWorkerListFiltersHiddenWorkers(t *testing.T) {
 }
 
 func TestControlAppOwnedSurfacesShareGenerationResolverAndDeprojectBeforeRejecting(t *testing.T) {
-	sessionID := "zen-worker-ownership-loss:@1"
+	sessionID := "mewla-worker-ownership-loss:@1"
 	for _, test := range []struct {
 		name      string
 		request   control.Request
@@ -1089,19 +1089,19 @@ func slicesEqual(left, right []string) bool {
 
 func TestControlAppWorkerSendAndCapture(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		Name:      "Franklin",
 		State:     classifier.StateRunning,
 		Command:   "codex --no-alt-screen",
 		Delegated: true,
 	}
-	fw.captures["zen-worker-worker:@1"] = "current pane\n<codex_internal_context source=\"goal\">hidden objective</codex_internal_context>"
+	fw.captures["mewla-worker-worker:@1"] = "current pane\n<codex_internal_context source=\"goal\">hidden objective</codex_internal_context>"
 	app := &controlApp{watcher: fw}
 
 	sendResp := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-worker:@1",
+		WorkerID: "mewla-worker-worker:@1",
 		Text:     "continue",
 		Submit:   true,
 	})
@@ -1119,7 +1119,7 @@ func TestControlAppWorkerSendAndCapture(t *testing.T) {
 		t.Fatalf("structured submit lost turn identity: %q", fw.submitted[0].text)
 	}
 
-	captureResp := app.HandleControlRequest(control.Request{Type: "worker_capture", WorkerID: "zen-worker-worker:@1"})
+	captureResp := app.HandleControlRequest(control.Request{Type: "worker_capture", WorkerID: "mewla-worker-worker:@1"})
 	if !captureResp.OK || captureResp.Text != "current pane" || captureResp.Worker == nil {
 		t.Fatalf("capture response = %#v", captureResp)
 	}
@@ -1127,8 +1127,8 @@ func TestControlAppWorkerSendAndCapture(t *testing.T) {
 
 func TestControlAppWorkerSendAllowsSubmitOnlyEnter(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		Name:      "Franklin",
 		State:     classifier.StateRunning,
 		Delegated: true,
@@ -1137,7 +1137,7 @@ func TestControlAppWorkerSendAllowsSubmitOnlyEnter(t *testing.T) {
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-worker:@1",
+		WorkerID: "mewla-worker-worker:@1",
 		Submit:   true,
 	})
 
@@ -1153,8 +1153,8 @@ func TestControlAppWorkerSendUsesStructuredSubmitForEveryProvider(t *testing.T) 
 	for _, command := range []string{"cursor-agent --force", "claude", "grok", "custom-agent --interactive"} {
 		t.Run(command, func(t *testing.T) {
 			fw := newFakeControlWatcher()
-			fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-				ID:        "zen-worker-worker:@1",
+			fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+				ID:        "mewla-worker-worker:@1",
 				State:     classifier.StateRunning,
 				Command:   command,
 				Delegated: true,
@@ -1162,7 +1162,7 @@ func TestControlAppWorkerSendUsesStructuredSubmitForEveryProvider(t *testing.T) 
 			app := &controlApp{watcher: fw}
 			resp := app.HandleControlRequest(control.Request{
 				Type:     "worker_send",
-				WorkerID: "zen-worker-worker:@1",
+				WorkerID: "mewla-worker-worker:@1",
 				Text:     "provider follow-up",
 				Submit:   true,
 			})
@@ -1180,8 +1180,8 @@ func TestControlAppWorkerSendUsesStructuredSubmitForEveryProvider(t *testing.T) 
 func TestControlAppWorkerSendFailurePreservesRunningLifecycle(t *testing.T) {
 	fw := newFakeControlWatcher()
 	fw.sendErr = os.ErrDeadlineExceeded
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		Name:      "Franklin",
 		State:     classifier.StateRunning,
 		Command:   "codex --no-alt-screen",
@@ -1191,7 +1191,7 @@ func TestControlAppWorkerSendFailurePreservesRunningLifecycle(t *testing.T) {
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-worker:@1",
+		WorkerID: "mewla-worker-worker:@1",
 		Text:     "continue safely",
 		Submit:   true,
 	})
@@ -1199,7 +1199,7 @@ func TestControlAppWorkerSendFailurePreservesRunningLifecycle(t *testing.T) {
 	if resp.OK || resp.Error == nil || resp.Error.Code != "send_failed" {
 		t.Fatalf("response = %#v", resp)
 	}
-	worker := fw.workers["zen-worker-worker:@1"]
+	worker := fw.workers["mewla-worker-worker:@1"]
 	if worker.State != classifier.StateRunning || worker.Attention != "" || worker.NeedsAttention {
 		t.Fatalf("agent after failed submission = %#v", worker)
 	}
@@ -1210,7 +1210,7 @@ func TestControlAppWorkerSendFailurePreservesRunningLifecycle(t *testing.T) {
 
 func TestAcceptedRunningTurnThenRejectedFollowUpKeepsExecutorLifecycle(t *testing.T) {
 	fw := newFakeControlWatcher()
-	const workerID = "zen-worker-worker:@1"
+	const workerID = "mewla-worker-worker:@1"
 	fw.workers[workerID] = &classifier.Worker{
 		ID: workerID, State: classifier.StateRunning, Command: "codex --no-alt-screen", Delegated: true,
 	}
@@ -1241,8 +1241,8 @@ func TestAcceptedRunningTurnThenRejectedFollowUpKeepsExecutorLifecycle(t *testin
 func TestControlAppConfirmedProviderSendClearsStickyLaunchFailure(t *testing.T) {
 	fw := newFakeControlWatcher()
 	failedAt := time.Date(2026, 6, 8, 8, 59, 0, 0, time.UTC)
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:             "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:             "mewla-worker-worker:@1",
 		Name:           "Franklin",
 		State:          classifier.StateFailed,
 		Summary:        "Initial delegated prompt was not submitted: provider startup did not become ready",
@@ -1257,7 +1257,7 @@ func TestControlAppConfirmedProviderSendClearsStickyLaunchFailure(t *testing.T) 
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-worker:@1",
+		WorkerID: "mewla-worker-worker:@1",
 		Text:     "the exact initial delegated prompt",
 		Submit:   true,
 	})
@@ -1265,7 +1265,7 @@ func TestControlAppConfirmedProviderSendClearsStickyLaunchFailure(t *testing.T) 
 	if !resp.OK || resp.Worker == nil {
 		t.Fatalf("response = %#v", resp)
 	}
-	worker := fw.workers["zen-worker-worker:@1"]
+	worker := fw.workers["mewla-worker-worker:@1"]
 	if worker.State != classifier.StateRunning || worker.Attention != "none" || worker.NeedsAttention {
 		t.Fatalf("agent after confirmed recovery send = %#v", worker)
 	}
@@ -1279,8 +1279,8 @@ func TestControlAppConfirmedProviderSendClearsStickyLaunchFailure(t *testing.T) 
 
 func TestControlAppStructuredSubmitPreservesOriginalBytesBeforeTurnContract(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		State:     classifier.StateRunning,
 		Command:   "codex --no-alt-screen",
 		Delegated: true,
@@ -1289,7 +1289,7 @@ func TestControlAppStructuredSubmitPreservesOriginalBytesBeforeTurnContract(t *t
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-worker:@1",
+		WorkerID: "mewla-worker-worker:@1",
 		Text:     "alpha\r\nβ\n",
 		Submit:   true,
 	})
@@ -1316,7 +1316,7 @@ func TestControlAppWorkerSpawnSubmissionFailureReturnsErrorAndAttention(t *testi
 	resp := app.HandleControlRequest(control.Request{
 		Type:   "worker_spawn",
 		Name:   "Unsubmitted",
-		Cwd:    "/repo/zen",
+		Cwd:    "/repo/mewla",
 		Prompt: "must execute",
 	})
 
@@ -1325,7 +1325,7 @@ func TestControlAppWorkerSpawnSubmissionFailureReturnsErrorAndAttention(t *testi
 	}
 	// A definite zero-Turn non-submission tears down the disposable Session and
 	// cancels the auto-created Work instead of leaving a phantom owner.
-	worker := fw.workers["zen-worker-unsubmitted:@1"]
+	worker := fw.workers["mewla-worker-unsubmitted:@1"]
 	if worker != nil || len(fw.killed) != 1 {
 		t.Fatalf("agent after failed initial prompt = %#v", worker)
 	}
@@ -1359,7 +1359,7 @@ func TestControlAppSpawnSubmissionFailureReconcilesExactlyOnceAcrossRestart(t *t
 		}),
 	}
 	resp := app.HandleControlRequest(control.Request{
-		Type: "worker_spawn", Name: "Failed admission", Cwd: "/repo/zen",
+		Type: "worker_spawn", Name: "Failed admission", Cwd: "/repo/mewla",
 		Prompt: "must execute exactly once",
 	})
 	if resp.OK || resp.Error == nil || resp.Error.Code != "send_prompt_failed" {
@@ -1399,7 +1399,7 @@ func TestControlAppSpawnSubmissionFailureReconcilesExactlyOnceAcrossRestart(t *t
 		t.Fatalf("definite non-submission created Turn=%+v found=%v err=%v", turn, found, err)
 	}
 
-	hostID := "zen-worker-brain-hidden:@spawn-failure"
+	hostID := "mewla-worker-brain-hidden:@spawn-failure"
 	if event, claimed, err := reopened.ClaimNextReviewAction(hostID); err != nil || claimed {
 		t.Fatalf("cancelled auto-spawn audit became actionable: event=%+v claimed=%v err=%v", event, claimed, err)
 	}
@@ -1437,7 +1437,7 @@ func TestControlAppAmbiguousSpawnWithVanishedOwnedSessionStillReturnsFailure(t *
 	}
 
 	resp := app.HandleControlRequest(control.Request{
-		Type: "worker_spawn", Name: "Vanished", Cwd: "/repo/zen", Prompt: "cannot remain live",
+		Type: "worker_spawn", Name: "Vanished", Cwd: "/repo/mewla", Prompt: "cannot remain live",
 	})
 	if resp.OK || resp.Error == nil || resp.Error.Code != "send_prompt_failed" {
 		t.Fatalf("vanished response = %#v", resp)
@@ -1464,7 +1464,7 @@ func TestControlAppPreSubmitLaunchFailureRemainsDefinitive(t *testing.T) {
 	}
 
 	resp := app.HandleControlRequest(control.Request{
-		Type: "worker_spawn", Name: "Never launched", Cwd: "/repo/zen", Prompt: "must not submit",
+		Type: "worker_spawn", Name: "Never launched", Cwd: "/repo/mewla", Prompt: "must not submit",
 	})
 	if resp.OK || resp.Error == nil || resp.Error.Code != "spawn_failed" ||
 		!strings.Contains(resp.Error.Message, fw.createErr.Error()) {
@@ -1496,7 +1496,7 @@ func TestControlAppDefinitelyNotSubmittedSpawnFailureStillProjectsFailure(t *tes
 	resp := app.HandleControlRequest(control.Request{
 		Type:   "worker_spawn",
 		Name:   "NotSubmitted",
-		Cwd:    "/repo/zen",
+		Cwd:    "/repo/mewla",
 		Prompt: "cannot be delivered",
 	})
 	if resp.OK || resp.Error == nil || resp.Error.Code != "send_prompt_failed" {
@@ -1504,7 +1504,7 @@ func TestControlAppDefinitelyNotSubmittedSpawnFailureStillProjectsFailure(t *tes
 	}
 	// The input provably never reached the provider: the zero-Turn Session is
 	// removed and its auto-created Work is cancelled.
-	worker := fw.workers["zen-worker-notsubmitted:@1"]
+	worker := fw.workers["mewla-worker-notsubmitted:@1"]
 	if worker != nil || len(fw.killed) != 1 {
 		t.Fatalf("definitely-not-submitted spawn projected a false failure: %#v", worker)
 	}
@@ -1519,8 +1519,8 @@ func TestControlAppDefinitelyNotSubmittedSpawnFailureStillProjectsFailure(t *tes
 
 func TestControlAppWorkerSendRejectsExternalSessionWithoutForce(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-user-owned:@1"] = &classifier.Worker{
-		ID:        "zen-worker-user-owned:@1",
+	fw.workers["mewla-worker-user-owned:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-user-owned:@1",
 		Name:      "User owned",
 		State:     classifier.StateRunning,
 		Delegated: false,
@@ -1529,7 +1529,7 @@ func TestControlAppWorkerSendRejectsExternalSessionWithoutForce(t *testing.T) {
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-user-owned:@1",
+		WorkerID: "mewla-worker-user-owned:@1",
 		Text:     "continue",
 		Submit:   true,
 	})
@@ -1543,7 +1543,7 @@ func TestControlAppWorkerSendRejectsExternalSessionWithoutForce(t *testing.T) {
 
 	forced := app.HandleControlRequest(control.Request{
 		Type:     "worker_send",
-		WorkerID: "zen-worker-user-owned:@1",
+		WorkerID: "mewla-worker-user-owned:@1",
 		Text:     "continue",
 		Submit:   true,
 		Force:    true,
@@ -1592,8 +1592,8 @@ func TestControlAppWorkerStatusReturnsProgressFields(t *testing.T) {
 
 func TestControlAppWorkerProgressUpdatesWorker(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		Name:      "Worker",
 		State:     classifier.StateRunning,
 		Delegated: true,
@@ -1602,7 +1602,7 @@ func TestControlAppWorkerProgressUpdatesWorker(t *testing.T) {
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:         "worker_progress",
-		WorkerID:     "zen-worker-worker:@1",
+		WorkerID:     "mewla-worker-worker:@1",
 		TurnID:       "turn:control-app",
 		Status:       "blocked",
 		Phase:        "working",
@@ -1629,7 +1629,7 @@ func TestControlAppWorkerProgressUpdatesWorker(t *testing.T) {
 	if resp.Worker.LastProgressAt == nil || resp.Worker.ExpectedNextCheckAt == nil {
 		t.Fatalf("progress timestamps missing: %#v", resp.Worker)
 	}
-	if len(fw.progress) != 1 || fw.progress[0].id != "zen-worker-worker:@1" {
+	if len(fw.progress) != 1 || fw.progress[0].id != "mewla-worker-worker:@1" {
 		t.Fatalf("progress calls = %#v", fw.progress)
 	}
 	if fw.progress[0].progress.TaskClass != "lasting_design" || fw.progress[0].progress.EventKind != "needs_judgment" {
@@ -1642,12 +1642,12 @@ func TestControlAppWorkerProgressUpdatesWorker(t *testing.T) {
 
 func TestControlAppWorkerProgressRejectsInvalidValues(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{ID: "zen-worker-worker:@1", State: classifier.StateRunning}
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{ID: "mewla-worker-worker:@1", State: classifier.StateRunning}
 	app := &controlApp{watcher: fw}
 
 	resp := app.HandleControlRequest(control.Request{
 		Type:      "worker_progress",
-		WorkerID:  "zen-worker-worker:@1",
+		WorkerID:  "mewla-worker-worker:@1",
 		Status:    "completed",
 		Phase:     "working",
 		Attention: "none",
@@ -1663,23 +1663,23 @@ func TestControlAppWorkerProgressRejectsInvalidValues(t *testing.T) {
 
 func TestControlAppWorkerCloseKillsSession(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		Name:      "Worker",
 		State:     classifier.StateDone,
 		Delegated: true,
 	}
 	app := &controlApp{watcher: fw}
 
-	resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "zen-worker-worker:@1"})
+	resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mewla-worker-worker:@1"})
 
 	if !resp.OK || resp.Worker == nil {
 		t.Fatalf("close response = %#v", resp)
 	}
-	if len(fw.killed) != 1 || fw.killed[0] != "zen-worker-worker:@1" {
+	if len(fw.killed) != 1 || fw.killed[0] != "mewla-worker-worker:@1" {
 		t.Fatalf("killed sessions = %#v", fw.killed)
 	}
-	if fw.HasSession("zen-worker-worker:@1") {
+	if fw.HasSession("mewla-worker-worker:@1") {
 		t.Fatal("closed session still exists")
 	}
 	if resp.Worker.Status != string(classifier.StateRemoved) {
@@ -1689,7 +1689,7 @@ func TestControlAppWorkerCloseKillsSession(t *testing.T) {
 
 func TestControlAppWorkerCloseReleasesCanonicalWorkOwner(t *testing.T) {
 	fw := newFakeControlWatcher()
-	const sessionID = "zen-worker-worker:@owner"
+	const sessionID = "mewla-worker-worker:@owner"
 	fw.workers[sessionID] = &classifier.Worker{
 		ID: sessionID, Name: "Worker", State: classifier.StateDone, Delegated: true,
 	}
@@ -1732,15 +1732,15 @@ func TestControlAppWorkerCloseReleasesCanonicalWorkOwner(t *testing.T) {
 
 func TestControlAppWorkerCloseRequiresForceForRunningDelegatedWorker(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-worker:@1"] = &classifier.Worker{
-		ID:        "zen-worker-worker:@1",
+	fw.workers["mewla-worker-worker:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-worker:@1",
 		Name:      "Worker",
 		State:     classifier.StateRunning,
 		Delegated: true,
 	}
 	app := &controlApp{watcher: fw}
 
-	resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "zen-worker-worker:@1"})
+	resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mewla-worker-worker:@1"})
 
 	if resp.OK || resp.Error == nil || resp.Error.Code != "worker_running_requires_force" {
 		t.Fatalf("close response = %#v", resp)
@@ -1749,7 +1749,7 @@ func TestControlAppWorkerCloseRequiresForceForRunningDelegatedWorker(t *testing.
 		t.Fatalf("killed sessions = %#v", fw.killed)
 	}
 
-	forced := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "zen-worker-worker:@1", Force: true})
+	forced := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mewla-worker-worker:@1", Force: true})
 	if !forced.OK || len(fw.killed) != 1 {
 		t.Fatalf("forced close response = %#v killed=%#v", forced, fw.killed)
 	}
@@ -1757,15 +1757,15 @@ func TestControlAppWorkerCloseRequiresForceForRunningDelegatedWorker(t *testing.
 
 func TestControlAppWorkerCloseRejectsExternalSessionWithoutForce(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.workers["zen-worker-user-owned:@1"] = &classifier.Worker{
-		ID:        "zen-worker-user-owned:@1",
+	fw.workers["mewla-worker-user-owned:@1"] = &classifier.Worker{
+		ID:        "mewla-worker-user-owned:@1",
 		Name:      "User owned",
 		State:     classifier.StateDone,
 		Delegated: false,
 	}
 	app := &controlApp{watcher: fw}
 
-	resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "zen-worker-user-owned:@1"})
+	resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mewla-worker-user-owned:@1"})
 
 	if resp.OK || resp.Error == nil || resp.Error.Code != "worker_not_delegated" {
 		t.Fatalf("close response = %#v", resp)
@@ -1774,7 +1774,7 @@ func TestControlAppWorkerCloseRejectsExternalSessionWithoutForce(t *testing.T) {
 		t.Fatalf("killed sessions = %#v", fw.killed)
 	}
 
-	forced := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "zen-worker-user-owned:@1", Force: true})
+	forced := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mewla-worker-user-owned:@1", Force: true})
 	if !forced.OK || len(fw.killed) != 1 {
 		t.Fatalf("forced close response = %#v killed=%#v", forced, fw.killed)
 	}
@@ -1796,7 +1796,7 @@ func TestControlAppMarkDeliveredCanonicalReviewIsIdempotent(t *testing.T) {
 	if err := store.SyncWorkProjection(item.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := store.ClaimNextReviewAction("zen-worker-brain-hidden:@mark-delivered"); err != nil || !ok {
+	if _, ok, err := store.ClaimNextReviewAction("mewla-worker-brain-hidden:@mark-delivered"); err != nil || !ok {
 		t.Fatalf("claim ok=%v err=%v", ok, err)
 	}
 
@@ -1884,7 +1884,7 @@ func TestControlAppBrainWorkCloseRejectsClaimedAttention(t *testing.T) {
 	if err := store.SyncWorkProjection(item.ID); err != nil {
 		t.Fatal(err)
 	}
-	claimed, ok, err := store.ClaimNextReviewAction("zen-worker-brain-hidden:@1")
+	claimed, ok, err := store.ClaimNextReviewAction("mewla-worker-brain-hidden:@1")
 	if err != nil || !ok {
 		t.Fatalf("claim=%+v ok=%v err=%v", claimed, ok, err)
 	}

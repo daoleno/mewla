@@ -29,7 +29,7 @@ type Caption struct {
 	Entities []Entity `json:"entities,omitempty"`
 }
 
-// Envelope extends the existing mobile zen_attachments contract. Providers
+// Envelope extends the existing mobile mewla_attachments contract. Providers
 // receive local file references through their normal receipt-owned input.
 type Envelope struct {
 	Files    []File    `json:"files"`
@@ -41,5 +41,5 @@ func Input(body string, files []File, captions []Caption) string {
 		return body
 	}
 	raw, _ := json.Marshal(Envelope{Files: files, Captions: captions})
-	return strings.TrimSpace(body) + "\n\n<zen_attachments>" + string(raw) + "</zen_attachments>"
+	return strings.TrimSpace(body) + "\n\n<mewla_attachments>" + string(raw) + "</mewla_attachments>"
 }

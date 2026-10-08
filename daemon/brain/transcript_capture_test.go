@@ -67,7 +67,7 @@ func captureFixture(t *testing.T) (*Store, *Service, *fakeWatcher) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const hostID = "zen-worker-brain-capture:@1"
+	const hostID = "mewla-worker-brain-capture:@1"
 	if err := store.SetChatState(ChatState{ThreadID: "brain_thread_capture"}); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestHostTranscriptCaptureMaterializesWithoutSubscriber(t *testing.T) {
 	store, service, watcher := captureFixture(t)
 	const (
 		threadID = "brain_thread_capture"
-		hostID   = "zen-worker-brain-capture:@1"
+		hostID   = "mewla-worker-brain-capture:@1"
 	)
 	transcript := filepath.Join(t.TempDir(), "host-session.jsonl")
 	writePiTranscriptFixture(t, transcript, "capture-session", "public fixture question", "first captured reply")
@@ -218,8 +218,8 @@ func TestHostTranscriptCaptureDiscardsReadAcrossThreadAndHostSwitch(t *testing.T
 	const (
 		oldThread = "brain_thread_before_switch"
 		newThread = "brain_thread_after_switch"
-		oldHost   = "zen-worker-brain-switch-old:@1"
-		newHost   = "zen-worker-brain-switch-new:@1"
+		oldHost   = "mewla-worker-brain-switch-old:@1"
+		newHost   = "mewla-worker-brain-switch-new:@1"
 	)
 	oldTranscript := filepath.Join(t.TempDir(), "old.jsonl")
 	newTranscript := filepath.Join(t.TempDir(), "new.jsonl")
@@ -285,7 +285,7 @@ func TestHostTranscriptCaptureWriteFailureKeepsCheckpoint(t *testing.T) {
 	store, service, watcher := captureFixture(t)
 	const (
 		threadID = "brain_thread_capture"
-		hostID   = "zen-worker-brain-capture:@1"
+		hostID   = "mewla-worker-brain-capture:@1"
 	)
 	transcript := filepath.Join(t.TempDir(), "host-session.jsonl")
 	writePiTranscriptFixture(t, transcript, "capture-session", "public fixture question", "first captured reply")

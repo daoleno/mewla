@@ -24,8 +24,8 @@ import (
 func TestWorkProviderActivityProbeClaudeBurstInOneCWDIsHealthy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	configDir := filepath.Join(t.TempDir(), "claude")
-	cwd := "/home/daoleno/workspace/zen"
-	projectDir := filepath.Join(configDir, "projects", "-home-daoleno-workspace-zen")
+	cwd := "/home/daoleno/workspace/mewla"
+	projectDir := filepath.Join(configDir, "projects", "-home-daoleno-workspace-mewla")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

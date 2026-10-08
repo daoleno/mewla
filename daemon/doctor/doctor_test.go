@@ -364,7 +364,7 @@ command = "codex"
 	}
 }
 
-func TestDetectsAlreadyRunningZen(t *testing.T) {
+func TestDetectsAlreadyRunningDaemon(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeTmux(t, binDir)
@@ -392,7 +392,7 @@ command = "codex"
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !report.Listen.ZenRunning || report.Listen.DaemonID != "abc123" || report.Listen.Status != StatusOK {
+	if !report.Listen.DaemonRunning || report.Listen.DaemonID != "abc123" || report.Listen.Status != StatusOK {
 		t.Fatalf("listen = %+v", report.Listen)
 	}
 	if !report.Ready {

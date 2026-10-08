@@ -208,7 +208,7 @@ func TestRealTmuxCodexLiveControlNodeWrapperFirstSendOnce(t *testing.T) {
 	// First Interface message: the exact product path (SendInputWithReceipt
 	// -> targetForSession -> submit) must accept once without weakening the
 	// fail-closed identity guard.
-	payload := "zen live-control first send proof"
+	payload := "mewla live-control first send proof"
 	result, err := h.w.SendInputWithReceiptResult(target, payload, "receipt-live-control-first")
 	if err != nil {
 		t.Fatalf("first send failed: %v", err)
@@ -265,7 +265,7 @@ func TestRealTmuxCodexLiveControlImmediateFirstSendWhileTreeForms(t *testing.T) 
 	// the launcher/app-server transitions and converge on the native TUI.
 	// The trailing newline makes this a submit (the same shape the delegated
 	// initial handoff submits); a draft without Enter would never be sent.
-	payload := "zen immediate first send proof"
+	payload := "mewla immediate first send proof"
 	if err := h.w.SendInputWhenReadyBudgeted(target, launch, payload+"\n", 20*time.Second); err != nil {
 		t.Fatalf("immediate first send failed: %v", err)
 	}

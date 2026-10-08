@@ -35,7 +35,7 @@ func TestTelegramNativeFixture(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(state, "telegram"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := json.Marshal(map[string]any{"schema": 4, "enabled": true, "bot_id": 7001, "bot_name": "Mewla fixture", "bot_username": "zen_fixture_bot", "owner_id": 10, "chat_id": 10, "owner_hint": "@fixture_owner", "topics_available": true, "brain_topic_id": 42, "delivery_started_at": time.Now(), "fallback_session_id": "fixture-session", "fallback_started_at": time.Now()})
+	data, _ := json.Marshal(map[string]any{"schema": 4, "enabled": true, "bot_id": 7001, "bot_name": "Mewla fixture", "bot_username": "mewla_fixture_bot", "owner_id": 10, "chat_id": 10, "owner_hint": "@fixture_owner", "topics_available": true, "brain_topic_id": 42, "delivery_started_at": time.Now(), "fallback_session_id": "fixture-session", "fallback_started_at": time.Now()})
 	if err := os.WriteFile(filepath.Join(state, "telegram", "state.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestTelegramNativeFixture(t *testing.T) {
 type nativeTelegramAPI struct{ telegram.API }
 
 func (*nativeTelegramAPI) GetMe(context.Context, string) (telegram.User, error) {
-	return telegram.User{ID: 7001, IsBot: true, Username: "zen_fixture_bot", Topics: true}, nil
+	return telegram.User{ID: 7001, IsBot: true, Username: "mewla_fixture_bot", Topics: true}, nil
 }
 func (*nativeTelegramAPI) GetWebhookInfo(context.Context, string) (telegram.WebhookInfo, error) {
 	return telegram.WebhookInfo{}, nil

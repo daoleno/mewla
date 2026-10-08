@@ -4,7 +4,7 @@
 
 daemon/bin/
 daemon/tmp/
-daemon/zen-daemon
+daemon/mewla-daemon
 daemon/.env
 daemon/.env.*
 daemon/**/*.log

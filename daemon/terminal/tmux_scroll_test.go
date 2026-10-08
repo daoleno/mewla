@@ -76,7 +76,7 @@ func (s *manualTmuxScheduler) fireLatest() {
 
 func newRecordedScrollSession(recorder *tmuxCommandRecorder, scheduler *manualTmuxScheduler) *tmuxSession {
 	return &tmuxSession{
-		linkedSession:         "zen-view",
+		linkedSession:         "mewla-view",
 		events:                make(chan Event, 8),
 		runTmuxCommand:        recorder.run,
 		readTmuxCommand:       recorder.read,
@@ -96,8 +96,8 @@ func TestTmuxScrollBatchesCopyModeEntryAndFirstIncrement(t *testing.T) {
 	want := []recordedTmuxCommand{{
 		kind: "run",
 		args: []string{
-			"copy-mode", "-e", "-t", "zen-view", ";",
-			"send-keys", "-t", "zen-view", "-X", "-N", "3", "scroll-up",
+			"copy-mode", "-e", "-t", "mewla-view", ";",
+			"send-keys", "-t", "mewla-view", "-X", "-N", "3", "scroll-up",
 		},
 	}}
 	if !reflect.DeepEqual(recorder.commands, want) {
@@ -160,7 +160,7 @@ func TestTmuxScrollDownUsesExitOnBottomCommand(t *testing.T) {
 	if err := session.Scroll(5); err != nil {
 		t.Fatalf("Scroll(5): %v", err)
 	}
-	want := []string{"send-keys", "-t", "zen-view", "-X", "-N", "5", "scroll-down-and-cancel"}
+	want := []string{"send-keys", "-t", "mewla-view", "-X", "-N", "5", "scroll-down-and-cancel"}
 	if len(recorder.commands) != 1 || !reflect.DeepEqual(recorder.commands[0].args, want) {
 		t.Fatalf("down command = %#v, want %#v", recorder.commands, want)
 	}
@@ -198,8 +198,8 @@ func TestTmuxFastDirectionReversalReentersAfterNativeBottomExit(t *testing.T) {
 		t.Fatalf("fast reversal command count = %d, want failed stale step plus one re-entry", len(recorder.commands))
 	}
 	wantRetry := []string{
-		"copy-mode", "-e", "-t", "zen-view", ";",
-		"send-keys", "-t", "zen-view", "-X", "-N", "2", "scroll-up",
+		"copy-mode", "-e", "-t", "mewla-view", ";",
+		"send-keys", "-t", "mewla-view", "-X", "-N", "2", "scroll-up",
 	}
 	if !reflect.DeepEqual(recorder.commands[1].args, wantRetry) {
 		t.Fatalf("fast reversal retry = %v, want %v", recorder.commands[1].args, wantRetry)
@@ -233,8 +233,8 @@ func TestTmuxCancelStopsDeferredQueryAndExitsCopyModeOnce(t *testing.T) {
 	queryCount := 0
 	for _, command := range recorder.commands {
 		if reflect.DeepEqual(command.args, []string{
-			"if-shell", "-F", "-t", "zen-view", "#{pane_in_mode}",
-			"send-keys -t zen-view -X cancel", "",
+			"if-shell", "-F", "-t", "mewla-view", "#{pane_in_mode}",
+			"send-keys -t mewla-view -X cancel", "",
 		}) {
 			cancelCount++
 		}

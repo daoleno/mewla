@@ -31,10 +31,10 @@ func (r *failAfterReader) Read(buffer []byte) (int, error) {
 
 func TestReadCodexMetaUsesOnlyBoundedFirstRecord(t *testing.T) {
 	t.Run("common session_meta first", func(t *testing.T) {
-		line := `{"type":"session_meta","payload":{"id":"bounded-session","cwd":"/repo/zen"}}` + "\n"
+		line := `{"type":"session_meta","payload":{"id":"bounded-session","cwd":"/repo/mewla"}}` + "\n"
 		source := &failAfterReader{reader: strings.NewReader(line + strings.Repeat("body", 1024)), remaining: len(line)}
 		meta, err := readCodexMetaFromReader(source)
-		if err != nil || meta.ID != "bounded-session" || meta.CWD != "/repo/zen" {
+		if err != nil || meta.ID != "bounded-session" || meta.CWD != "/repo/mewla" {
 			t.Fatalf("bounded first-record meta = (%+v, %v)", meta, err)
 		}
 	})
@@ -411,7 +411,7 @@ func TestParseCodexConversation_PairsProviderUserAdmissionAndRenderingEchoByReco
 
 func TestParseCodexConversation_ResponseItemOnlyUserPreservesAdmissionDigest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "response-item-only-user.jsonl")
-	payload := "<zen_work_event>exact durable payload</zen_work_event>"
+	payload := "<mewla_work_event>exact durable payload</mewla_work_event>"
 	writeJSONL(t, path,
 		map[string]any{
 			"type": "session_meta", "timestamp": "2026-08-11T01:00:00Z",
@@ -1932,7 +1932,7 @@ func TestProviderConversationReaderCodexTailRetainsActivityIdentityAcrossIncreme
 			"timestamp": "2026-08-08T22:22:42Z",
 			"payload": map[string]any{
 				"id":  sessionID,
-				"cwd": "/repo/zen",
+				"cwd": "/repo/mewla",
 			},
 		},
 		map[string]any{
@@ -2047,7 +2047,7 @@ func TestParseCodexConversationTailRecoversRunningActivityFromNativeItem(t *test
 			"timestamp": "2026-08-23T09:00:00Z",
 			"payload": map[string]any{
 				"id":  sessionID,
-				"cwd": "/repo/zen",
+				"cwd": "/repo/mewla",
 			},
 		},
 		map[string]any{

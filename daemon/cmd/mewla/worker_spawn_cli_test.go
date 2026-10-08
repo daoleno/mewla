@@ -101,7 +101,7 @@ func TestWorkerSpawnPendingAdmissionResponseIsSuccessfulCLIJSON(t *testing.T) {
 		OK:           true,
 		Confirmation: spawnAdmissionConfirmation(true),
 		Worker: &control.Worker{
-			ID: "zen-worker-pending:@1", Status: "running", Delegated: true,
+			ID: "mewla-worker-pending:@1", Status: "running", Delegated: true,
 		},
 	}
 	var output bytes.Buffer

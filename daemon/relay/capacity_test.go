@@ -408,8 +408,8 @@ func TestHandshakeCapacityRejectsWithoutConsumingRecoveryState(t *testing.T) {
 			)
 			body := response.Body.String()
 			for _, expected := range []string{
-				`zen_link_capacity_used{resource="` + test.resource + `"} 1`,
-				`zen_link_capacity_rejections_total{reason="` +
+				`mewla_link_capacity_used{resource="` + test.resource + `"} 1`,
+				`mewla_link_capacity_rejections_total{reason="` +
 					test.resource + `"} 1`,
 			} {
 				if !strings.Contains(body, expected) {
@@ -489,9 +489,9 @@ func TestPeriodicSweepAndShutdownClearBoundedState(t *testing.T) {
 	)
 	body := metrics.Body.String()
 	for _, expected := range []string{
-		`zen_link_swept_entries_total{kind="admissions"} 1`,
-		`zen_link_swept_entries_total{kind="nonces"} 1`,
-		`zen_link_swept_entries_total{kind="pending"} 1`,
+		`mewla_link_swept_entries_total{kind="admissions"} 1`,
+		`mewla_link_swept_entries_total{kind="nonces"} 1`,
+		`mewla_link_swept_entries_total{kind="pending"} 1`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("metrics missing %q:\n%s", expected, body)
@@ -620,17 +620,17 @@ func TestCapacityMetricsExposeCountsAndFixedReasonsOnly(t *testing.T) {
 	)
 	body := response.Body.String()
 	for _, expected := range []string{
-		`zen_link_capacity_used{resource="routes"} 1`,
-		`zen_link_capacity_limit{resource="routes"} 1`,
-		`zen_link_capacity_used{resource="admissions"} 1`,
-		`zen_link_capacity_limit{resource="pending"} 1`,
-		`zen_link_capacity_rejections_total{reason="routes"} 1`,
-		`zen_link_capacity_rejections_total{reason="clients"} 1`,
-		`zen_link_capacity_rejections_total{reason="clients_per_route"} 1`,
-		`zen_link_capacity_rejections_total{reason="admissions"} 1`,
-		`zen_link_capacity_rejections_total{reason="admissions_per_route"} 1`,
-		`zen_link_capacity_rejections_total{reason="nonces"} 1`,
-		`zen_link_capacity_rejections_total{reason="pending"} 1`,
+		`mewla_link_capacity_used{resource="routes"} 1`,
+		`mewla_link_capacity_limit{resource="routes"} 1`,
+		`mewla_link_capacity_used{resource="admissions"} 1`,
+		`mewla_link_capacity_limit{resource="pending"} 1`,
+		`mewla_link_capacity_rejections_total{reason="routes"} 1`,
+		`mewla_link_capacity_rejections_total{reason="clients"} 1`,
+		`mewla_link_capacity_rejections_total{reason="clients_per_route"} 1`,
+		`mewla_link_capacity_rejections_total{reason="admissions"} 1`,
+		`mewla_link_capacity_rejections_total{reason="admissions_per_route"} 1`,
+		`mewla_link_capacity_rejections_total{reason="nonces"} 1`,
+		`mewla_link_capacity_rejections_total{reason="pending"} 1`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("capacity metrics missing %q:\n%s", expected, body)

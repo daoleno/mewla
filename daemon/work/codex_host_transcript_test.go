@@ -130,13 +130,13 @@ func TestLoadCodexConversationByIdentityUsesHostDataRootNotDaemonHome(t *testing
 }
 
 func TestOpenRolloutPathBeatsStaleThreadIDWhenResolvingIdentity(t *testing.T) {
-	path := "/home/example/.zen/t/iso/home/.codex/sessions/2026/08/05/rollout-2026-08-05T09-12-05-019fcf7a-485b-7961-ad2f-dbe9f6eab2d2.jsonl"
+	path := "/home/example/.mewla/t/iso/home/.codex/sessions/2026/08/05/rollout-2026-08-05T09-12-05-019fcf7a-485b-7961-ad2f-dbe9f6eab2d2.jsonl"
 	got := sessionIDFromCodexRolloutPath(path)
 	if got != "019fcf7a-485b-7961-ad2f-dbe9f6eab2d2" {
 		t.Fatalf("session from path = %q", got)
 	}
-	root := dataRootForPath(path, []string{"/home/example/.zen/t/iso/home"})
-	if root != "/home/example/.zen/t/iso/home" {
+	root := dataRootForPath(path, []string{"/home/example/.mewla/t/iso/home"})
+	if root != "/home/example/.mewla/t/iso/home" {
 		t.Fatalf("data root = %q", root)
 	}
 }

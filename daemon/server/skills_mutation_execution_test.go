@@ -258,7 +258,7 @@ func newSkillsMutationTestServer(t *testing.T, probe *mutationProbe) (*Server, *
 	}
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-skills", "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-skills", "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)

@@ -9,7 +9,7 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-func TestBDD_ZEN005_PartialResultNeedsScopedFollowup(t *testing.T) {
+func TestBDD_005_PartialResultNeedsScopedFollowup(t *testing.T) {
 	// Given a two-part objective and a Worker result containing only part one.
 	root := t.TempDir()
 	store, err := NewStore(root)

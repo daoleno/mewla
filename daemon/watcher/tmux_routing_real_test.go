@@ -383,8 +383,8 @@ func TestRealTmuxOutsideTmuxUsesOrdinaryDefaultServer(t *testing.T) {
 
 func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
-	ambientTarget := createHarnessPane(t, h.selected, "zen-worker-name-collision", "exec /bin/sh")
-	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-wg", "@zen_worker_created", "1").CombinedOutput(); err != nil {
+	ambientTarget := createHarnessPane(t, h.selected, "mewla-worker-name-collision", "exec /bin/sh")
+	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-wg", "@mewla_worker_created", "1").CombinedOutput(); err != nil {
 		t.Fatalf("set inherited collision marker: %v: %s", err, out)
 	}
 	originalAmbientName, err := tmuxHarnessCommand(h.selected, "display-message", "-p", "-t", ambientTarget, "#{window_name}").Output()

@@ -23,7 +23,7 @@ func TestBuildWindowCommandForShellStartsInteractiveLoginShell(t *testing.T) {
 
 func TestResolveOwnedGenerationDeprojectsOwnershipLossBeforeRejecting(t *testing.T) {
 	w := New(time.Second)
-	sessionID := "zen-worker-ownership-loss:@1"
+	sessionID := "mewla-worker-ownership-loss:@1"
 	identity := testSessionInputIdentity("codex")
 	w.workers[sessionID] = &classifier.Worker{
 		ID: sessionID, Delegated: true, State: classifier.StateRunning,
@@ -69,7 +69,7 @@ func TestResolveOwnedGenerationDeprojectsOwnershipLossBeforeRejecting(t *testing
 
 func TestResolveOwnedGenerationDoesNotDeprojectTransientProbeFailure(t *testing.T) {
 	w := New(time.Second)
-	sessionID := "zen-worker-transient-probe:@1"
+	sessionID := "mewla-worker-transient-probe:@1"
 	w.workers[sessionID] = &classifier.Worker{
 		ID: sessionID, Delegated: true, State: classifier.StateRunning,
 		Command: "grok", Attention: "none",
@@ -208,10 +208,10 @@ func TestResolveTargetIdentityAcceptsStableUnknownWrapperExecutable(t *testing.T
 	}
 }
 
-func TestZenExecutablePathPrefersCurrentExecutable(t *testing.T) {
-	got := ZenExecutablePath()
+func TestExecutablePathPrefersCurrentExecutable(t *testing.T) {
+	got := ExecutablePath()
 	if got == "" {
-		t.Fatal("ZenExecutablePath() returned empty string")
+		t.Fatal("ExecutablePath() returned empty string")
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -222,7 +222,7 @@ func TestZenExecutablePathPrefersCurrentExecutable(t *testing.T) {
 		t.Skip("os.Executable() returned empty path")
 	}
 	if got != exe {
-		t.Fatalf("ZenExecutablePath() = %q, want current executable %q (must not fall back to a PATH lookup)", got, exe)
+		t.Fatalf("ExecutablePath() = %q, want current executable %q (must not fall back to a PATH lookup)", got, exe)
 	}
 }
 
@@ -315,13 +315,13 @@ func TestDetectAgentProcessRecognizesCursorAgent(t *testing.T) {
 
 func TestNewTmuxSessionNameUsesWorkerPrefix(t *testing.T) {
 	got := newTmuxSessionName(CreateSessionOptions{Name: "Brain Codex"})
-	if !strings.HasPrefix(got, "zen-worker-brain-codex-") {
+	if !strings.HasPrefix(got, "mewla-worker-brain-codex-") {
 		t.Fatalf("newTmuxSessionName() = %q", got)
 	}
 }
 
 func TestBuildNewSessionArgsCreatesDetachedSession(t *testing.T) {
-	got := buildNewSessionArgs("zen-worker-codex-123", "/repo/zen", CreateSessionOptions{
+	got := buildNewSessionArgs("mewla-worker-codex-123", "/repo/mewla", CreateSessionOptions{
 		Name: "brain-codex",
 	}, "exec '/bin/zsh' -i -l -c 'codex'")
 	wantPrefix := []string{
@@ -331,7 +331,7 @@ func TestBuildNewSessionArgsCreatesDetachedSession(t *testing.T) {
 		"-F",
 		"#{pane_id}",
 		"-s",
-		"zen-worker-codex-123",
+		"mewla-worker-codex-123",
 	}
 	if len(got) < len(wantPrefix) || !reflect.DeepEqual(got[:len(wantPrefix)], wantPrefix) {
 		t.Fatalf("buildNewSessionArgs() = %v", got)
@@ -345,7 +345,7 @@ func TestRegisterCreatedSessionSeedsWorkerSnapshotAndEvent(t *testing.T) {
 	w := New(time.Second)
 	startedAt := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
 
-	w.registerCreatedSession("main:@42", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("main:@42", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Codex follow-up",
 	}, startedAt)
@@ -357,7 +357,7 @@ func TestRegisterCreatedSessionSeedsWorkerSnapshotAndEvent(t *testing.T) {
 	if worker.Name != "Codex follow-up (main:@42)" {
 		t.Fatalf("agent name = %q", worker.Name)
 	}
-	if worker.Cwd != "/repo/zen" || worker.Project != "zen" || worker.Command != "codex" {
+	if worker.Cwd != "/repo/mewla" || worker.Project != "mewla" || worker.Command != "codex" {
 		t.Fatalf("agent metadata = cwd %q project %q command %q", worker.Cwd, worker.Project, worker.Command)
 	}
 	if worker.State != classifier.StateUnknown || !worker.StartedAt.Equal(startedAt) {
@@ -381,7 +381,7 @@ func TestRegisterCreatedSessionMarksHiddenWorker(t *testing.T) {
 	w := New(time.Second)
 	startedAt := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
 
-	w.registerCreatedSession("main:@43", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("main:@43", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Brain",
 		Hidden:  true,
@@ -403,13 +403,13 @@ func TestRegisterCreatedSessionMarksVisibleBrainSpawnAsDelegated(t *testing.T) {
 	w := New(time.Second)
 	startedAt := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
 
-	w.registerCreatedSession("zen-worker-verify-123:@44", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-verify-123:@44", "/repo/mewla", CreateSessionOptions{
 		Command:   "codex",
 		Name:      "Verify",
 		Delegated: true,
 	}, startedAt)
 
-	worker := w.GetWorker("zen-worker-verify-123:@44")
+	worker := w.GetWorker("mewla-worker-verify-123:@44")
 	if worker == nil {
 		t.Fatal("expected created session to be registered")
 	}
@@ -421,12 +421,12 @@ func TestRegisterCreatedSessionMarksVisibleBrainSpawnAsDelegated(t *testing.T) {
 func TestRegisterCreatedSessionDoesNotInferDelegatedFromName(t *testing.T) {
 	w := New(time.Second)
 
-	w.registerCreatedSession("zen-worker-user-owned:@44", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-user-owned:@44", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "User owned",
 	}, time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC))
 
-	worker := w.GetWorker("zen-worker-user-owned:@44")
+	worker := w.GetWorker("mewla-worker-user-owned:@44")
 	if worker == nil {
 		t.Fatal("expected created session to be registered")
 	}
@@ -449,8 +449,8 @@ func TestAllowedTmuxKeyIncludesCodexPickerShortcuts(t *testing.T) {
 func TestWorkerMetadataChangedDetectsNameChange(t *testing.T) {
 	worker := &classifier.Worker{
 		Name:      "Codex (main:@42)",
-		Project:   "zen",
-		Cwd:       "/repo/zen",
+		Project:   "mewla",
+		Cwd:       "/repo/mewla",
 		Command:   "codex",
 		ProcessID: 123,
 	}
@@ -466,8 +466,8 @@ func TestWorkerMetadataChangedDetectsNameChange(t *testing.T) {
 func TestWorkerMetadataChangedIgnoresStateOnlyChange(t *testing.T) {
 	worker := &classifier.Worker{
 		Name:      "Codex (main:@42)",
-		Project:   "zen",
-		Cwd:       "/repo/zen",
+		Project:   "mewla",
+		Cwd:       "/repo/mewla",
 		Command:   "codex",
 		State:     classifier.StateRunning,
 		Summary:   "running",
@@ -486,7 +486,7 @@ func TestWorkerMetadataChangedIgnoresStateOnlyChange(t *testing.T) {
 
 func TestWorkerMetadataChangedDetectsProgressAttentionChange(t *testing.T) {
 	worker := &classifier.Worker{
-		Name:           "Worker (zen-worker-worker:@1)",
+		Name:           "Worker (mewla-worker-worker:@1)",
 		State:          classifier.StateRunning,
 		Phase:          "working",
 		Attention:      "none",
@@ -530,13 +530,13 @@ func TestControlFactPreservesStructuredProgressContext(t *testing.T) {
 func TestUpdateWorkerProgressUpdatesWorkerAndEmitsStateEvent(t *testing.T) {
 	w := New(time.Second)
 	startedAt := time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC)
-	w.registerCreatedSession("zen-worker-worker:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-worker:@1", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Worker",
 	}, startedAt)
 	<-w.Events()
 
-	worker, err := w.UpdateWorkerProgress("zen-worker-worker:@1", classifier.WorkerProgress{
+	worker, err := w.UpdateWorkerProgress("mewla-worker-worker:@1", classifier.WorkerProgress{
 		Status:       "done",
 		Phase:        "reporting",
 		Attention:    "done",
@@ -585,9 +585,9 @@ func TestUpdateWorkerProgressRejectsUnknownWorker(t *testing.T) {
 
 func TestUpdateWorkerProgressRequiresExactDelegatedSignalIdentity(t *testing.T) {
 	w := New(time.Second)
-	const sessionID = "zen-worker-signal:@1"
+	const sessionID = "mewla-worker-signal:@1"
 	const turnID = "turn:signal-current"
-	w.registerCreatedSession(sessionID, "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession(sessionID, "/repo/mewla", CreateSessionOptions{
 		Command: "codex", Name: "Signal", Delegated: true,
 	}, time.Date(2026, 8, 10, 9, 0, 0, 0, time.UTC))
 	<-w.Events()
@@ -634,9 +634,9 @@ func TestUpdateWorkerProgressRequiresExactDelegatedSignalIdentity(t *testing.T) 
 
 func TestUpdateWorkerProgressMapsMatchingUserInputAttentionToBlockedTurn(t *testing.T) {
 	w := New(time.Second)
-	const sessionID = "zen-worker-user-input:@1"
+	const sessionID = "mewla-worker-user-input:@1"
 	const turnID = "turn:user-input"
-	w.registerCreatedSession(sessionID, "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession(sessionID, "/repo/mewla", CreateSessionOptions{
 		Command: "pi", Name: "User input", Delegated: true,
 	}, time.Date(2026, 8, 10, 9, 0, 0, 0, time.UTC))
 	<-w.Events()
@@ -662,7 +662,7 @@ func TestUpdateWorkerProgressMapsMatchingUserInputAttentionToBlockedTurn(t *test
 
 func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 	w := New(time.Second)
-	w.registerCreatedSession("zen-worker-worker:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-worker:@1", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Worker",
 	}, time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC))
@@ -674,15 +674,15 @@ func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 	ledger := newFakeTurnLedger()
 	acceptedAt := time.Now().UTC()
 	if err := ledger.AdmitTurn(AdmittedTurn{
-		SessionID:  "zen-worker-worker:@1",
-		TurnID:     "zen-worker-worker:@1:turn:1",
+		SessionID:  "mewla-worker-worker:@1",
+		TurnID:     "mewla-worker-worker:@1:turn:1",
 		AcceptedAt: acceptedAt,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	w.turnLedger = ledger
 
-	failed, err := w.UpdateWorkerProgress("zen-worker-worker:@1", classifier.WorkerProgress{
+	failed, err := w.UpdateWorkerProgress("mewla-worker-worker:@1", classifier.WorkerProgress{
 		Status:    "failed",
 		Phase:     "starting",
 		Attention: "failed",
@@ -702,7 +702,7 @@ func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 		t.Fatalf("failed hint polluted the canonical projection: %#v", failed)
 	}
 
-	accepted, err := w.RebindDelegatedTurnProjection("zen-worker-worker:@1")
+	accepted, err := w.RebindDelegatedTurnProjection("mewla-worker-worker:@1")
 	if err != nil {
 		t.Fatalf("RebindDelegatedTurnProjection returned error: %v", err)
 	}
@@ -730,7 +730,7 @@ func TestRebindDelegatedTurnProjectionClearsOlderStickyFailure(t *testing.T) {
 
 func TestRebindDelegatedTurnProjectionBypassesRecentTurnCache(t *testing.T) {
 	w := New(time.Second)
-	w.registerCreatedSession("zen-worker-worker:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-worker:@1", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Worker",
 	}, time.Date(2026, 8, 9, 4, 24, 0, 0, time.UTC))
@@ -738,33 +738,33 @@ func TestRebindDelegatedTurnProjectionBypassesRecentTurnCache(t *testing.T) {
 
 	ledger := newFakeTurnLedger()
 	readAt := time.Now().UTC()
-	ledger.seed("zen-worker-worker:@1", TurnSnapshot{
-		SessionID: "zen-worker-worker:@1", TurnID: "cached-old", Status: TurnDone,
+	ledger.seed("mewla-worker-worker:@1", TurnSnapshot{
+		SessionID: "mewla-worker-worker:@1", TurnID: "cached-old", Status: TurnDone,
 		AcceptedAt: readAt.Add(-time.Minute),
 	})
 	w.turnLedger = ledger
-	if turn, found, err := w.ledgerTurnFor("zen-worker-worker:@1", readAt); err != nil || !found || turn.TurnID != "cached-old" {
+	if turn, found, err := w.ledgerTurnFor("mewla-worker-worker:@1", readAt); err != nil || !found || turn.TurnID != "cached-old" {
 		t.Fatalf("seed cache = (%+v, %v, %v)", turn, found, err)
 	}
-	ledger.seed("zen-worker-worker:@1", TurnSnapshot{
-		SessionID: "zen-worker-worker:@1", TurnID: "authoritative-new", Status: TurnAccepted,
+	ledger.seed("mewla-worker-worker:@1", TurnSnapshot{
+		SessionID: "mewla-worker-worker:@1", TurnID: "authoritative-new", Status: TurnAccepted,
 		AcceptedAt: readAt.Add(time.Second),
 	})
 
-	rebound, err := w.RebindDelegatedTurnProjection("zen-worker-worker:@1")
+	rebound, err := w.RebindDelegatedTurnProjection("mewla-worker-worker:@1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rebound.State != classifier.StateRunning ||
-		w.ledgerTurns["zen-worker-worker:@1"].TurnID != "authoritative-new" {
-		t.Fatalf("rebind reused stale cache: agent=%+v cached=%+v", rebound, w.ledgerTurns["zen-worker-worker:@1"])
+		w.ledgerTurns["mewla-worker-worker:@1"].TurnID != "authoritative-new" {
+		t.Fatalf("rebind reused stale cache: agent=%+v cached=%+v", rebound, w.ledgerTurns["mewla-worker-worker:@1"])
 	}
 }
 
 func TestFirstHeartbeatAfterFreshResolveBypassesSupersededTurnCache(t *testing.T) {
 	w := New(time.Second)
-	const sessionID = "zen-worker-worker:@heartbeat"
-	w.registerCreatedSession(sessionID, "/repo/zen", CreateSessionOptions{
+	const sessionID = "mewla-worker-worker:@heartbeat"
+	w.registerCreatedSession(sessionID, "/repo/mewla", CreateSessionOptions{
 		Command: "codex", Name: "Worker",
 	}, time.Date(2026, 8, 9, 6, 0, 0, 0, time.UTC))
 	<-w.Events()
@@ -804,7 +804,7 @@ func TestFirstHeartbeatAfterFreshResolveBypassesSupersededTurnCache(t *testing.T
 
 func TestPreContractTurnProjectionIgnoresUnscopedControlDoneMetadata(t *testing.T) {
 	w := New(time.Second)
-	w.registerCreatedSession("zen-worker-worker:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-worker:@1", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Worker",
 	}, time.Date(2026, 8, 8, 8, 0, 0, 0, time.UTC))
@@ -813,25 +813,25 @@ func TestPreContractTurnProjectionIgnoresUnscopedControlDoneMetadata(t *testing.
 	ledger := newFakeTurnLedger()
 	acceptedAt := time.Now().UTC()
 	if err := ledger.AdmitTurn(AdmittedTurn{
-		SessionID:  "zen-worker-worker:@1",
-		TurnID:     "zen-worker-worker:@1:turn:1",
+		SessionID:  "mewla-worker-worker:@1",
+		TurnID:     "mewla-worker-worker:@1:turn:1",
 		AcceptedAt: acceptedAt,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := ledger.ApplyTurnFact(TurnFact{
-		SessionID: "zen-worker-worker:@1",
-		TurnID:    "zen-worker-worker:@1:turn:1",
+		SessionID: "mewla-worker-worker:@1",
+		TurnID:    "mewla-worker-worker:@1:turn:1",
 		Class:     EvidenceReceipt,
 		Kind:      "admission",
-		SourceID:  "receipt\x00zen-worker-worker:@1:turn:1\x00accepted\x00payload",
+		SourceID:  "receipt\x00mewla-worker-worker:@1:turn:1\x00accepted\x00payload",
 		Admission: TurnAdmission{Stream: "test", ID: "admission-1", Cursor: 1},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	w.turnLedger = ledger
 
-	worker, err := w.UpdateWorkerProgress("zen-worker-worker:@1", classifier.WorkerProgress{
+	worker, err := w.UpdateWorkerProgress("mewla-worker-worker:@1", classifier.WorkerProgress{
 		Status:       "done",
 		Phase:        "reporting",
 		Attention:    "done",
@@ -869,7 +869,7 @@ func TestControlDoneCarriesExplicitCompletionCriteria(t *testing.T) {
 
 func TestRebindDelegatedTurnProjectionDoesNotOverwriteNewerLifecycleProgress(t *testing.T) {
 	w := New(time.Second)
-	w.registerCreatedSession("zen-worker-worker:@1", "/repo/zen", CreateSessionOptions{
+	w.registerCreatedSession("mewla-worker-worker:@1", "/repo/mewla", CreateSessionOptions{
 		Command: "codex",
 		Name:    "Worker",
 	}, time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC))
@@ -878,26 +878,26 @@ func TestRebindDelegatedTurnProjectionDoesNotOverwriteNewerLifecycleProgress(t *
 
 	ledger := newFakeTurnLedger()
 	if err := ledger.AdmitTurn(AdmittedTurn{
-		SessionID:  "zen-worker-worker:@1",
-		TurnID:     "zen-worker-worker:@1:turn:1",
+		SessionID:  "mewla-worker-worker:@1",
+		TurnID:     "mewla-worker-worker:@1:turn:1",
 		AcceptedAt: handoffStartedAt,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// The turn is accepted (correlated admission) before the progress arrives.
 	if _, _, err := ledger.ApplyTurnFact(TurnFact{
-		SessionID: "zen-worker-worker:@1",
-		TurnID:    "zen-worker-worker:@1:turn:1",
+		SessionID: "mewla-worker-worker:@1",
+		TurnID:    "mewla-worker-worker:@1:turn:1",
 		Class:     EvidenceReceipt,
 		Kind:      "admission",
-		SourceID:  "receipt\x00zen-worker-worker:@1:turn:1\x00accepted\x00payload",
+		SourceID:  "receipt\x00mewla-worker-worker:@1:turn:1\x00accepted\x00payload",
 		Admission: TurnAdmission{Stream: "test", ID: "admission-1", Cursor: 1},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	w.turnLedger = ledger
 
-	progress, err := w.UpdateWorkerProgress("zen-worker-worker:@1", classifier.WorkerProgress{
+	progress, err := w.UpdateWorkerProgress("mewla-worker-worker:@1", classifier.WorkerProgress{
 		Status:       "running",
 		Phase:        "verifying",
 		Attention:    "none",
@@ -920,7 +920,7 @@ func TestRebindDelegatedTurnProjectionDoesNotOverwriteNewerLifecycleProgress(t *
 
 	// Rebind after an accepted dispatch projects canonical status; progress
 	// lease metadata survives and the canonical summary is preserved.
-	accepted, err := w.RebindDelegatedTurnProjection("zen-worker-worker:@1")
+	accepted, err := w.RebindDelegatedTurnProjection("mewla-worker-worker:@1")
 	if err != nil {
 		t.Fatalf("RebindDelegatedTurnProjection returned error: %v", err)
 	}
@@ -982,7 +982,7 @@ func TestCursorAgentInputReadyRequiresComposerPrompt(t *testing.T) {
 		t.Fatal("Cursor Agent startup screen should not be input-ready")
 	}
 
-	ready := starting + "\n\nComposer 2.5 Fast           Run Everything\n~/workspace/zen · main\n"
+	ready := starting + "\n\nComposer 2.5 Fast           Run Everything\n~/workspace/mewla · main\n"
 	if !isWorkerInputReady("cursor-agent --force --sandbox disabled", ready) {
 		t.Fatal("Cursor Agent composer prompt should be input-ready")
 	}
@@ -1063,7 +1063,7 @@ func TestPiProjectTrustPromptAdvancesSessionOnly(t *testing.T) {
 ────────────────────────────────────────────────────────────────────────
 
  Trust project folder?
- /home/daoleno/workspace/zen
+ /home/daoleno/workspace/mewla
 
  This allows pi to load .pi settings and resources, install missing project packages, and execute project extensions.
 
@@ -1162,14 +1162,14 @@ func TestCodexStartupReadyIgnoresConsumedTrustPromptInScrollback(t *testing.T) {
 func TestCodexStartupReadyRecognizesCurrentHeaderlessComposer(t *testing.T) {
 	content := strings.Repeat("older completed output that pushed the banner away\n", 90) +
 		"\n› Ask Codex to work on something\n" +
-		"  gpt-5.6-sol xhigh · 87% left · ~/workspace/zen\n"
+		"  gpt-5.6-sol xhigh · 87% left · ~/workspace/mewla\n"
 	if !isCodexStartupReady(content) {
 		t.Fatal("current visible Codex composer/footer should be ready without a historical banner")
 	}
 }
 
 func TestCodexStartupReadyHeaderlessComposerStillFailsClosedOnBlockingScreens(t *testing.T) {
-	idleFooter := "  gpt-5.6-sol xhigh · 87% left · ~/workspace/zen\n"
+	idleFooter := "  gpt-5.6-sol xhigh · 87% left · ~/workspace/mewla\n"
 	for _, test := range []struct {
 		name    string
 		content string
@@ -1199,7 +1199,7 @@ func TestCodexStartupReadyHeaderlessComposerStillFailsClosedOnBlockingScreens(t 
 
 func TestCursorAgentInputReadyIgnoresStaleStartupInScrollback(t *testing.T) {
 	content := "Cursor Agent\nv2026.07.01\nTip: loading\n\n" +
-		"Cursor Agent\nv2026.07.01\n\nComposer 2.5 Fast           Run Everything\n~/workspace/zen · main\n"
+		"Cursor Agent\nv2026.07.01\n\nComposer 2.5 Fast           Run Everything\n~/workspace/mewla · main\n"
 	if !isWorkerInputReady("cursor-agent --force --sandbox disabled", content) {
 		t.Fatal("current Cursor Agent prompt should be ready even when scrollback contains older startup text")
 	}
@@ -1261,7 +1261,7 @@ func TestClaudeInputReadyRequiresAllThreeIndicators(t *testing.T) {
 	readyLive := "" +
 		" ▐▛███▜▌   Claude Code v2.1.214\n" +
 		"▝▜█████▛▘  Haiku 4.5 · API Usage Billing\n" +
-		"  ▘▘ ▝▝    ~/workspace/zen\n" +
+		"  ▘▘ ▝▝    ~/workspace/mewla\n" +
 		"\n\n" +
 		"────────────────────────────────────────\n" +
 		"❯\u00a0\n" +
@@ -1351,7 +1351,7 @@ func TestClaudeInputReadyAcceptsCommandOverride(t *testing.T) {
 	for _, command := range []string{
 		"claude",
 		"claude --model gpt-6-sol --permission-mode bypassPermissions",
-		"env CLAUDE_CONFIG_DIR=/tmp/zen -- claude --dangerously-skip-permissions",
+		"env CLAUDE_CONFIG_DIR=/tmp/mewla -- claude --dangerously-skip-permissions",
 	} {
 		if !isWorkerInputReady(command, content) {
 			t.Fatalf("Claude command %q should accept the ready pane", command)
@@ -1362,7 +1362,7 @@ func TestClaudeInputReadyAcceptsCommandOverride(t *testing.T) {
 func TestMissingOwnedWorkerIsRetainedAcrossTransientInventoryGap(t *testing.T) {
 	w := New(time.Hour)
 	w.targetOwnershipResolver = func(string) (bool, error) { return true, nil }
-	worker := &classifier.Worker{ID: "zen-worker-claude:@1", Command: "claude", PaneAlive: true}
+	worker := &classifier.Worker{ID: "mewla-worker-claude:@1", Command: "claude", PaneAlive: true}
 	w.workers[worker.ID] = worker
 	w.workerEpoch[worker.ID] = 1
 
@@ -1383,7 +1383,7 @@ func TestMissingWorkerIsRetainedWhenOwnershipProbeIsTemporarilyUnavailable(t *te
 	w.targetOwnershipResolver = func(string) (bool, error) {
 		return false, fmt.Errorf("reload control socket: %w", ErrOwnershipProbeUnavailable)
 	}
-	worker := &classifier.Worker{ID: "zen-worker-claude:@reload", Command: "claude", PaneAlive: true}
+	worker := &classifier.Worker{ID: "mewla-worker-claude:@reload", Command: "claude", PaneAlive: true}
 	w.workers[worker.ID] = worker
 	w.workerEpoch[worker.ID] = 1
 
@@ -1400,10 +1400,10 @@ func TestMissingWorkerIsRetainedWhenOwnershipProbeIsTemporarilyUnavailable(t *te
 }
 
 func TestProviderCommandDetectionDirectAndEnvWrapped(t *testing.T) {
-	const zenPathWrap = "env PATH='/opt/zen/bin':$PATH"
-	// Exact Host form from withZenCLIOnPath(shellQuote(dir)): quoted dir may
+	const mewlaPathWrap = "env PATH='/opt/mewla/bin':$PATH"
+	// Exact Host form from withCLIOnPath(shellQuote(dir)): quoted dir may
 	// contain spaces, with :$PATH and other PATH entries appended outside quotes.
-	const zenPathWrapSpaced = "env PATH='/Applications/Mewla CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
+	const mewlaPathWrapSpaced = "env PATH='/Applications/Mewla CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
 	tests := []struct {
 		name    string
 		command string
@@ -1414,38 +1414,38 @@ func TestProviderCommandDetectionDirectAndEnvWrapped(t *testing.T) {
 	}{
 		{name: "direct codex", command: "codex", codex: true},
 		{name: "direct codex with flags", command: "codex --dangerously-bypass-approvals-and-sandbox", codex: true},
-		{name: "env-wrapped codex", command: zenPathWrap + " codex --dangerously-bypass-approvals-and-sandbox", codex: true},
-		{name: "env-wrapped absolute codex", command: zenPathWrap + " /usr/local/bin/codex", codex: true},
-		{name: "env-wrapped spaced PATH codex", command: zenPathWrapSpaced + " codex --dangerously-bypass-approvals-and-sandbox", codex: true},
+		{name: "env-wrapped codex", command: mewlaPathWrap + " codex --dangerously-bypass-approvals-and-sandbox", codex: true},
+		{name: "env-wrapped absolute codex", command: mewlaPathWrap + " /usr/local/bin/codex", codex: true},
+		{name: "env-wrapped spaced PATH codex", command: mewlaPathWrapSpaced + " codex --dangerously-bypass-approvals-and-sandbox", codex: true},
 
 		{name: "direct cursor-agent", command: "cursor-agent --force --sandbox disabled", cursor: true},
-		{name: "env-wrapped cursor-agent", command: zenPathWrap + " cursor-agent --force --sandbox disabled", cursor: true},
-		{name: "env-wrapped absolute cursor-agent", command: zenPathWrap + " /home/me/bin/cursor-agent --force", cursor: true},
-		{name: "env-wrapped spaced PATH cursor-agent", command: zenPathWrapSpaced + " cursor-agent --force --sandbox disabled", cursor: true},
+		{name: "env-wrapped cursor-agent", command: mewlaPathWrap + " cursor-agent --force --sandbox disabled", cursor: true},
+		{name: "env-wrapped absolute cursor-agent", command: mewlaPathWrap + " /home/me/bin/cursor-agent --force", cursor: true},
+		{name: "env-wrapped spaced PATH cursor-agent", command: mewlaPathWrapSpaced + " cursor-agent --force --sandbox disabled", cursor: true},
 
 		{name: "direct grok", command: "grok --no-alt-screen", grok: true},
 		{name: "direct grok prefix", command: "grok-cli --yolo", grok: true},
-		{name: "env-wrapped grok", command: zenPathWrap + " grok --no-alt-screen", grok: true},
-		{name: "env-wrapped absolute grok", command: zenPathWrap + " /home/me/bin/grok --yolo", grok: true},
-		{name: "env-wrapped spaced PATH grok", command: zenPathWrapSpaced + " grok --no-alt-screen", grok: true},
+		{name: "env-wrapped grok", command: mewlaPathWrap + " grok --no-alt-screen", grok: true},
+		{name: "env-wrapped absolute grok", command: mewlaPathWrap + " /home/me/bin/grok --yolo", grok: true},
+		{name: "env-wrapped spaced PATH grok", command: mewlaPathWrapSpaced + " grok --no-alt-screen", grok: true},
 
 		{name: "direct claude", command: "claude --permission-mode bypassPermissions", claude: true},
 		{name: "direct cc alias", command: "cc --profile test", claude: true},
-		{name: "env-wrapped claude", command: zenPathWrap + " claude --permission-mode bypassPermissions", claude: true},
-		{name: "env-wrapped absolute claude", command: zenPathWrap + " /usr/local/bin/claude --add-dir /tmp", claude: true},
-		{name: "env-wrapped spaced PATH claude", command: zenPathWrapSpaced + " claude --permission-mode bypassPermissions", claude: true},
-		{name: "env with dashdash then claude", command: "env PATH='/opt/zen/bin':$PATH -- claude", claude: true},
-		{name: "env with multiple assignments", command: "env FOO=1 PATH='/opt/zen/bin':$PATH claude", claude: true},
+		{name: "env-wrapped claude", command: mewlaPathWrap + " claude --permission-mode bypassPermissions", claude: true},
+		{name: "env-wrapped absolute claude", command: mewlaPathWrap + " /usr/local/bin/claude --add-dir /tmp", claude: true},
+		{name: "env-wrapped spaced PATH claude", command: mewlaPathWrapSpaced + " claude --permission-mode bypassPermissions", claude: true},
+		{name: "env with dashdash then claude", command: "env PATH='/opt/mewla/bin':$PATH -- claude", claude: true},
+		{name: "env with multiple assignments", command: "env FOO=1 PATH='/opt/mewla/bin':$PATH claude", claude: true},
 
 		{name: "empty", command: ""},
-		{name: "env without executable", command: "env PATH='/opt/zen/bin':$PATH"},
-		{name: "env spaced PATH without executable", command: zenPathWrapSpaced},
+		{name: "env without executable", command: "env PATH='/opt/mewla/bin':$PATH"},
+		{name: "env spaced PATH without executable", command: mewlaPathWrapSpaced},
 		{name: "env only", command: "env"},
 		{name: "custom executor", command: "/usr/local/bin/my-agent --flag"},
 		{name: "custom mentions claude later", command: "my-agent --provider claude"},
 		{name: "custom mentions codex later", command: "runner exec codex"},
-		{name: "env-wrapped custom", command: zenPathWrap + " my-agent --flag"},
-		{name: "env-wrapped spaced PATH custom", command: zenPathWrapSpaced + " my-agent --flag"},
+		{name: "env-wrapped custom", command: mewlaPathWrap + " my-agent --flag"},
+		{name: "env-wrapped spaced PATH custom", command: mewlaPathWrapSpaced + " my-agent --flag"},
 		{name: "shell not provider", command: "zsh -c claude"},
 	}
 
@@ -1759,7 +1759,7 @@ func TestForegroundProviderAuthorityPicksCodexTUIClientOverAppServer(t *testing.
 			tpgid:     20,
 			startedAt: started.Add(time.Second),
 			comm:      "codex",
-			args:      "codex --remote unix:///tmp/zen/codex-ctl-abc.sock --model gpt-5 --config 'model_provider=\"openai\"'",
+			args:      "codex --remote unix:///tmp/mewla/codex-ctl-abc.sock --model gpt-5 --config 'model_provider=\"openai\"'",
 		},
 		21: {
 			pid:       21,
@@ -1768,7 +1768,7 @@ func TestForegroundProviderAuthorityPicksCodexTUIClientOverAppServer(t *testing.
 			tpgid:     20,
 			startedAt: started.Add(2 * time.Second),
 			comm:      "codex",
-			args:      "codex app-server --listen unix:///tmp/zen/codex-ctl-abc.sock --config 'model=\"gpt-5\"' --config 'model_provider=\"openai\"'",
+			args:      "codex app-server --listen unix:///tmp/mewla/codex-ctl-abc.sock --config 'model=\"gpt-5\"' --config 'model_provider=\"openai\"'",
 		},
 	}
 
@@ -1794,7 +1794,7 @@ func TestForegroundProviderAuthorityResolvesLiveControlNodeWrapperSiblingSubtree
 	// contains TWO sibling codex subtrees. The native --remote TUI client
 	// must win the authority deterministically.
 	codexBin := "/home/daoleno/.local/share/mise/installs/node/24.18.0/bin/codex"
-	socket := "unix:///home/daoleno/.zen/codex-ctl/codex-ctl-abc.sock"
+	socket := "unix:///home/daoleno/.mewla/codex-ctl/codex-ctl-abc.sock"
 	processes := map[int]processInfo{
 		10: {pid: 10, ppid: 1, pgid: 10, tpgid: 20, startedAt: started, comm: "zsh", args: "zsh"},
 		20: {
@@ -1851,7 +1851,7 @@ func TestForegroundProviderAuthorityRejectsAppServerOnlyPane(t *testing.T) {
 	// A pane whose only provider processes are headless app-server halves is
 	// not an interactive agent surface and must fail closed even though a
 	// unique best score exists.
-	socket := "unix:///home/daoleno/.zen/codex-ctl/codex-ctl-abc.sock"
+	socket := "unix:///home/daoleno/.mewla/codex-ctl/codex-ctl-abc.sock"
 	processes := map[int]processInfo{
 		10: {pid: 10, ppid: 1, pgid: 10, tpgid: 20, startedAt: started, comm: "zsh", args: "zsh"},
 		20: {
@@ -1874,7 +1874,7 @@ func TestForegroundProviderAuthorityRejectsMultipleAppServerSiblingSubtrees(t *t
 	// Two independent app-server support subtrees (siblings) are ambiguous
 	// even next to one TUI client: the support/client sibling allowance only
 	// covers exactly one support subtree.
-	socket := "unix:///home/daoleno/.zen/codex-ctl/codex-ctl-abc.sock"
+	socket := "unix:///home/daoleno/.mewla/codex-ctl/codex-ctl-abc.sock"
 	processes := map[int]processInfo{
 		10: {pid: 10, ppid: 1, pgid: 10, tpgid: 20, startedAt: started, comm: "zsh", args: "zsh"},
 		20: {
@@ -1921,7 +1921,7 @@ func TestStartupIdentityTransitionConvergesOnNativeCodexTUI(t *testing.T) {
 	// native TUI client, so the frozen identity equals the mutation-boundary
 	// re-proof identity.
 	codexBin := "/home/daoleno/.local/share/mise/installs/node/24.18.0/bin/codex"
-	socket := "unix:///home/daoleno/.zen/codex-ctl/codex-ctl-abc.sock"
+	socket := "unix:///home/daoleno/.mewla/codex-ctl/codex-ctl-abc.sock"
 	const pane = 10
 	mk := func(pid, ppid int, comm, args string, at time.Time) processInfo {
 		return processInfo{
@@ -1996,8 +1996,8 @@ func TestStartupIdentityTransitionConvergesOnNativeCodexTUI(t *testing.T) {
 }
 
 func TestWorkerProcessScoreDistinguishesCodexRoles(t *testing.T) {
-	appServer := processInfo{pid: 21, comm: "codex", args: "codex app-server --listen unix:///tmp/zen/codex-ctl-abc.sock"}
-	tuiClient := processInfo{pid: 20, comm: "codex", args: "codex --remote unix:///tmp/zen/codex-ctl-abc.sock --model gpt-5"}
+	appServer := processInfo{pid: 21, comm: "codex", args: "codex app-server --listen unix:///tmp/mewla/codex-ctl-abc.sock"}
+	tuiClient := processInfo{pid: 20, comm: "codex", args: "codex --remote unix:///tmp/mewla/codex-ctl-abc.sock --model gpt-5"}
 	appScore := workerProcessScore(appServer, "codex")
 	tuiScore := workerProcessScore(tuiClient, "codex")
 	if !(tuiScore > appScore) {
@@ -2326,7 +2326,7 @@ func TestClassifyPaneAndApplyProgressInvalidation(t *testing.T) {
 func TestClaudeInputReadyCurrentTUIAndWrappedFooter(t *testing.T) {
 	ready := `
  ▐▛███▛█   Claude Code v2.1.281
-  ▝▝ ▝▝    ~/workspace/zen
+  ▝▝ ▝▝    ~/workspace/mewla
 ────────────────────────────────────────────────────────────────
 ❯ 
 ────────────────────────────────────────────────────────────────
@@ -2355,9 +2355,9 @@ func TestClaudeInputReadyManagedLoopbackPane(t *testing.T) {
 	ready := "" +
 		" ▐▛███▛█   Claude Code v2.1.281\n" +
 		"▝▜██████▀  Opus 5.5 (1M context) · API Usage Billing\n" +
-		"  ▝▝ ▝▝    ~/workspace/zen\n" +
+		"  ▝▝ ▝▝    ~/workspace/mewla\n" +
 		"\n" +
-		"● agents-md: no CLAUDE.md found; AGENTS.md loaded: /home/daoleno/workspace/zen/AGENTS.md\n" +
+		"● agents-md: no CLAUDE.md found; AGENTS.md loaded: /home/daoleno/workspace/mewla/AGENTS.md\n" +
 		"\n" +
 		"                                                                                ◐ medium · /effort\n" +
 		"────────────────────────────────────────────────────────────────────────────────────────────────────\n" +

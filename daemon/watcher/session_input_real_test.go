@@ -53,7 +53,7 @@ func TestRealTmuxInputQueueSurvivesLinkedViewRemoval(t *testing.T) {
 func TestRealTmuxInputQueuePreservesStderrAndExitError(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
 	createHarnessPane(t, h.selected, "stderr-proof", "exec /bin/sh")
-	started, err := (realSessionInputIO{}).runQueue(h.selected, []string{"zen-test-invalid-command"}, nil)
+	started, err := (realSessionInputIO{}).runQueue(h.selected, []string{"mewla-test-invalid-command"}, nil)
 	var exitErr *exec.ExitError
 	if !started || !errors.As(err, &exitErr) || !strings.Contains(err.Error(), "unknown command") {
 		t.Fatalf("queue lost stderr or exit identity: started=%v err=%v", started, err)

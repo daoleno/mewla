@@ -9,7 +9,7 @@ import (
 
 func TestLeaseRoundTripAndListing(t *testing.T) {
 	dir := t.TempDir()
-	resourceID := "zen-worker-abc123-0123456789abcdef0123456789abcdef.scope"
+	resourceID := "mewla-worker-abc123-0123456789abcdef0123456789abcdef.scope"
 	path, err := LeasePath(dir, resourceID)
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestLeasePathRejectsTraversal(t *testing.T) {
 
 func TestStopLeaseRemovesOldBootMetadataWithoutSignaling(t *testing.T) {
 	dir := t.TempDir()
-	resourceID := "zen-worker-abc123-fedcba9876543210fedcba9876543210.scope"
+	resourceID := "mewla-worker-abc123-fedcba9876543210fedcba9876543210.scope"
 	path, err := LeasePath(dir, resourceID)
 	if err != nil {
 		t.Fatal(err)

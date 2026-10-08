@@ -28,7 +28,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 		t.Fatal(err)
 	}
 
-	oldHostID := "zen-worker-brain-old:@1"
+	oldHostID := "mewla-worker-brain-old:@1"
 	if err := store.SetHostSession(oldHostID, "codex"); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 	}
 
 	item, err := store.CreateWork(Work{
-		Title:            "zen-provider-save-test-model-id",
+		Title:            "mewla-provider-save-test-model-id",
 		Objective:        "Keep the work card after host switch",
 		CompletionPolicy: CompletionBounded,
 	})
@@ -293,7 +293,7 @@ func TestBoundHostConversationSubmissionResolutionRecoversGrokUntimestampedWorkE
 		},
 	}
 	_, _, matched := boundHostConversationSubmissionResolution(conversation, watcher.InputAdmission{
-		SessionID:      "zen-worker-grok:@1",
+		SessionID:      "mewla-worker-grok:@1",
 		ProposedTurnID: "turn-grok-delivery",
 		Receipt:        "event-grok-delivery",
 		PayloadSHA256:  AdmissionDigest(payload),
@@ -320,7 +320,7 @@ func TestHostSwitchGrokWorkEventAmbiguousReceiptSettlesWithoutQuarantine(t *test
 		t.Fatal(err)
 	}
 
-	oldHostID := "zen-worker-brain-old:@event-delivery"
+	oldHostID := "mewla-worker-brain-old:@event-delivery"
 	if err := store.SetHostSession(oldHostID, "codex"); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestHostSwitchGrokWorkEventAmbiguousReceiptSettlesWithoutQuarantine(t *test
 		t.Fatalf("host session after switch = %+v", host)
 	}
 
-	item := createSignalTestWork(t, store, "Grok host event delivery", "zen-worker-worker-grok-delivery:@1")
+	item := createSignalTestWork(t, store, "Grok host event delivery", "mewla-worker-worker-grok-delivery:@1")
 	event := appendSignalTestEvent(t, store, item, "grok-host-delivery")
 	item, err = store.Work(item.ID)
 	if err != nil {
@@ -525,7 +525,7 @@ func writeBrainGrokHostFixture(t *testing.T, home, cwd, sessionID string, starte
 	lines := []any{
 		map[string]any{
 			"type":    "user",
-			"content": "You are Brain inside zen, the user's private second brain and agent orchestrator.\nTreat this bootstrap as a map, not the full context.",
+			"content": "You are Brain inside mewla, the user's private second brain and agent orchestrator.\nTreat this bootstrap as a map, not the full context.",
 		},
 		map[string]any{
 			"type":    "assistant",

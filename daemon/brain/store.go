@@ -790,7 +790,7 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".zen-brain-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".mewla-brain-*")
 	if err != nil {
 		return err
 	}

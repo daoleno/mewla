@@ -62,7 +62,7 @@ func newTestPortableResourceManager(t *testing.T, owner string) *portableDelegat
 
 func TestDelegatedResourceUnitIsStrictlyNamespaced(t *testing.T) {
 	unit := delegatedResourceUnit("Daemon-ID-ABCDEF", "01234567-89ab-cdef-0123-456789abcdef")
-	if unit != "zen-worker-daemonidabcdef-0123456789abcdef0123456789abcdef.scope" {
+	if unit != "mewla-worker-daemonidabcdef-0123456789abcdef0123456789abcdef.scope" {
 		t.Fatalf("unit = %q", unit)
 	}
 	if !validDelegatedResourceUnit("daemon-id-abcdef", unit) {
@@ -70,9 +70,9 @@ func TestDelegatedResourceUnitIsStrictlyNamespaced(t *testing.T) {
 	}
 	for _, candidate := range []string{
 		"tmux-spawn-01234567.scope",
-		"zen-worker-otherdaemon-0123456789abcdef0123456789abcdef.scope",
-		"zen-worker-daemonidabcdef-not-a-uuid.scope",
-		"zen-worker-daemonidabcdef-0123456789abcdef0123456789abcdef.service",
+		"mewla-worker-otherdaemon-0123456789abcdef0123456789abcdef.scope",
+		"mewla-worker-daemonidabcdef-not-a-uuid.scope",
+		"mewla-worker-daemonidabcdef-0123456789abcdef0123456789abcdef.service",
 	} {
 		if validDelegatedResourceUnit("daemon-id-abcdef", candidate) {
 			t.Fatalf("accepted unowned or malformed unit %q", candidate)
@@ -102,11 +102,11 @@ func TestUnavailableResourceManagerFailsClosed(t *testing.T) {
 
 func TestDelegatedWorkspacePathRejectsVolatileRoots(t *testing.T) {
 	for _, path := range []string{
-		"/tmp/zen-worktree",
-		"/private/tmp/zen-worktree",
-		"/var/tmp/zen-worktree",
-		"/dev/shm/zen-worktree",
-		"/run/user/501/zen-worktree",
+		"/tmp/mewla-worktree",
+		"/private/tmp/mewla-worktree",
+		"/var/tmp/mewla-worktree",
+		"/dev/shm/mewla-worktree",
+		"/run/user/501/mewla-worktree",
 	} {
 		if _, err := validateDelegatedWorkspacePath(path); err == nil || !strings.Contains(err.Error(), "volatile or memory-backed temporary storage") {
 			t.Fatalf("validateDelegatedWorkspacePath(%q) error = %v", path, err)
@@ -119,7 +119,7 @@ func TestDelegatedWorkspacePathAcceptsDurableHomePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(home, ".mewla", "worktrees", "zen", "task")
+	path := filepath.Join(home, ".mewla", "worktrees", "mewla", "task")
 	resolved, err := validateDelegatedWorkspacePath(path)
 	if err != nil {
 		t.Fatal(err)
@@ -186,8 +186,8 @@ exit 0
 		delegatedResourceUnitEnv + "=" + unit,
 		"TMPDIR=" + filepath.Join(dir, "owned-tmp"),
 		"MEWLA_BUILD_TMPDIR=" + filepath.Join(dir, "owned-tmp"),
-		"set-option -p -t " + target + " @zen_worker_delegated 1",
-		"set-option -p -t " + target + " @zen_worker_resource_unit " + unit,
+		"set-option -p -t " + target + " @mewla_worker_delegated 1",
+		"set-option -p -t " + target + " @mewla_worker_resource_unit " + unit,
 	} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("tmux calls missing %q:\n%s", want, calls)
@@ -205,7 +205,7 @@ case "$1" in
   new-session) printf '%%7\n' ;;
   set-option)
     case "$*" in
-      *@zen_worker_resource_unit*) exit 1 ;;
+      *@mewla_worker_resource_unit*) exit 1 ;;
     esac
     ;;
 esac

@@ -46,7 +46,7 @@ func TestClaudeHostRecoveryAndConcurrentResumeFence(t *testing.T) {
 			if err := store.ReplaceHostSessionBinding("dead:@2", "claude", token, "/unused/"+token+".jsonl", root); err != nil {
 				t.Fatal(err)
 			}
-			worker := &classifier.Worker{ID: "zen-worker-brain-original:@1649", Name: "Brain", Command: "claude", Cwd: store.WorkspacePath(), Hidden: true, ProcessID: pid}
+			worker := &classifier.Worker{ID: "mewla-worker-brain-original:@1649", Name: "Brain", Command: "claude", Cwd: store.WorkspacePath(), Hidden: true, ProcessID: pid}
 			fw := &fakeWatcher{sessions: map[string]*classifier.Worker{}}
 			if observed {
 				fw.workers = []*classifier.Worker{worker}

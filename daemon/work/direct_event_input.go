@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	directWorkEventInputOpen  = "<zen_work_event>\n"
-	directWorkEventInputClose = "\n</zen_work_event>"
+	directWorkEventInputOpen  = "<mewla_work_event>\n"
+	directWorkEventInputClose = "\n</mewla_work_event>"
 )
 
 // DirectWorkEventInput is the complete provider-neutral internal input shape.

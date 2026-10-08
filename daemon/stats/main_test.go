@@ -7,7 +7,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// Collector construction must never import a developer's live price cache.
-	home, err := os.MkdirTemp("", "zen-stats-test-home-")
+	home, err := os.MkdirTemp("", "mewla-stats-test-home-")
 	if err != nil {
 		panic(err)
 	}

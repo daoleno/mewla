@@ -312,7 +312,7 @@ func (w *Watcher) runServiceTunnel(ctx context.Context, owner *serviceTunnels, t
 	proxyServer := &http.Server{Handler: proxy, ReadHeaderTimeout: 5 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go proxyServer.Serve(listener)
 	defer proxyServer.Close()
-	directory, err := os.MkdirTemp("", "zen-quick-tunnel-")
+	directory, err := os.MkdirTemp("", "mewla-quick-tunnel-")
 	if err != nil {
 		fail(err)
 		return

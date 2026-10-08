@@ -489,7 +489,7 @@ func (w *Watcher) targetIsDurablyOwned(target string) (bool, error) {
 
 // socketPathFor resolves every internal tmux operation to the one immutable
 // host server selected at startup. Ownership is enforced separately through
-// the durable @zen_worker_created marker and the owned discovery projection.
+// the durable @mewla_worker_created marker and the owned discovery projection.
 func (w *Watcher) socketPathFor(target string) string {
 	if w == nil {
 		return ""
@@ -1341,7 +1341,7 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 			w.workers[win.target] = worker
 			w.workerOrder = append(w.workerOrder, win.target)
 			// Rediscovered pane: restore the durable Pi ownership binding
-			// (@zen_worker_pi_session) recorded at session create. After a
+			// (@mewla_worker_pi_session) recorded at session create. After a
 			// daemon restart the provider process may rewrite its argv
 			// (node-based Pi), so the tmux option is the only recoverable
 			// record of an owned --session path; mergeAgentCommandOwnership
@@ -2387,7 +2387,7 @@ type tmuxPane struct {
 	name             string // window name (e.g. "claude", "node")
 	cwd              string // owned pane cwd
 	command          string // owned pane command
-	piSessionBinding string // durable Pi ownership binding (@zen_worker_pi_session)
+	piSessionBinding string // durable Pi ownership binding (@mewla_worker_pi_session)
 	panePID          int
 	hidden           bool
 	delegated        bool
@@ -2397,7 +2397,7 @@ type tmuxPane struct {
 // listTmuxPanes inventories only explicitly Mewla-owned panes on the one
 // caller-visible server selected at startup. Ambient user panes are read only
 // as part of tmux's formatted listing and are discarded by the durable
-// @zen_worker_created marker before they can enter discovery or reconciliation.
+// @mewla_worker_created marker before they can enter discovery or reconciliation.
 // A missing/unreadable server is Unknown, never a successful empty inventory.
 // Only a successful observation may drive removal reconciliation.
 func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
@@ -2425,7 +2425,7 @@ func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
 }
 
 func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
-	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@zen_worker_hidden}\t#{@zen_worker_delegated}\t#{@zen_worker_resource_unit}\t#{@zen_worker_pi_session}\t#{session_name}")
+	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{session_name}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("tmux list-panes: %w: %s", err, strings.TrimSpace(string(out)))
@@ -2444,7 +2444,7 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 		if len(parts) >= 10 {
 			sessionName = parts[9]
 		}
-		if strings.HasPrefix(sessionName, "zen-view-") || seen[target] {
+		if strings.HasPrefix(sessionName, "mewla-view-") || seen[target] {
 			continue
 		}
 		seen[target] = true
@@ -2526,7 +2526,7 @@ func probeTmuxTargetOwnershipOn(socket, target string, requireServer bool) (pres
 		"-qv",
 		"-t",
 		target,
-		"@zen_worker_created",
+		"@mewla_worker_created",
 	).CombinedOutput()
 	outText := strings.TrimSpace(string(out))
 	if requireServer && (isNoTmuxServerError(commandErr) || isNoTmuxServerError(fmt.Errorf("%s", outText))) {
@@ -3475,7 +3475,7 @@ func (w *Watcher) waitForInputReadyGuarded(
 	}
 }
 
-const piProjectTrustSessionKey = "__zen_pi_trust_session__"
+const piProjectTrustSessionKey = "__mewla_pi_trust_session__"
 
 func advanceStartupTrustPromptOnce(
 	alreadyAdvanced bool,
@@ -3832,11 +3832,11 @@ func looksLikeOpenCodePane(content string) bool {
 //	env [NAME=value...] [--] executable [args...]
 //
 // Only that optional env prefix is recognized. Assignment values may be
-// shell-quoted (as withZenCLIOnPath/shellQuote produce) and can contain
+// shell-quoted (as withCLIOnPath/shellQuote produce) and can contain
 // spaces. Later arguments are never scanned for provider names, and env
 // without an executable yields "".
 func commandExecutableBase(command string) string {
-	fields := splitZenLaunchFields(command)
+	fields := splitLaunchFields(command)
 	if len(fields) == 0 {
 		return ""
 	}
@@ -3860,10 +3860,10 @@ func commandExecutableBase(command string) string {
 	return filepath.Base(fields[index])
 }
 
-// splitZenLaunchFields splits a Mewla launch command on whitespace while keeping
+// splitLaunchFields splits a Mewla launch command on whitespace while keeping
 // single-quoted spans intact so shellQuote'd PATH values with spaces stay one
 // assignment token. It is not a general shell parser.
-func splitZenLaunchFields(command string) []string {
+func splitLaunchFields(command string) []string {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return nil
@@ -4445,7 +4445,7 @@ func newTmuxSessionName(opts CreateSessionOptions) string {
 	if base == "" {
 		base = "worker"
 	}
-	return fmt.Sprintf("zen-worker-%s-%d", base, time.Now().UnixNano())
+	return fmt.Sprintf("mewla-worker-%s-%d", base, time.Now().UnixNano())
 }
 
 func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionOptions, createdAt time.Time) {
@@ -4509,7 +4509,7 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 }
 
 func markCreatedSession(socket, target string, opts CreateSessionOptions) error {
-	if err := setTmuxPaneUserOption(socket, target, "zen_worker_created", "1"); err != nil {
+	if err := setTmuxPaneUserOption(socket, target, "mewla_worker_created", "1"); err != nil {
 		return err
 	}
 	// Durable Pi ownership binding only: the raw launch command is never
@@ -4522,25 +4522,25 @@ func markCreatedSession(socket, target string, opts CreateSessionOptions) error 
 	// recover the owned path from the process table.
 	if commandExecutableBase(opts.Command) == "pi" {
 		if flag, path := piOwnedLaunchFlag(opts.Command); flag != "" {
-			if err := setTmuxPaneUserOption(socket, target, "zen_worker_pi_session", EncodePiSessionBinding(flag, path)); err != nil {
+			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_pi_session", EncodePiSessionBinding(flag, path)); err != nil {
 				return err
 			}
 		}
 	}
 	if opts.Hidden {
-		if err := setTmuxPaneUserOption(socket, target, "zen_worker_hidden", "1"); err != nil {
+		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_hidden", "1"); err != nil {
 			return err
 		}
 	}
 	if opts.Delegated && !opts.Hidden {
-		if err := setTmuxPaneUserOption(socket, target, "zen_worker_delegated", "1"); err != nil {
+		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_delegated", "1"); err != nil {
 			return err
 		}
 		if opts.resource != nil {
-			if err := setTmuxPaneUserOption(socket, target, "zen_worker_resource_unit", opts.resource.Unit); err != nil {
+			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_resource_unit", opts.resource.Unit); err != nil {
 				return err
 			}
-			if err := setTmuxPaneUserOption(socket, target, "zen_worker_resource_owner", opts.resource.Owner); err != nil {
+			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_resource_owner", opts.resource.Owner); err != nil {
 				return err
 			}
 		}
@@ -4659,10 +4659,10 @@ func workerProgressEnvScript() string {
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
 	// target the host server.
-	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ZenExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
+	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
-// ZenExecutablePath returns the absolute path of the currently running mewla
+// ExecutablePath returns the absolute path of the currently running mewla
 // daemon executable so delegated Mewla Workers invoke the exact same binary (and
 // therefore the same control socket / state dir) without relying on shell
 // word splitting or PATH lookups. It trusts os.Executable() regardless of the
@@ -4672,7 +4672,7 @@ func workerProgressEnvScript() string {
 // executable cannot be resolved or is empty (for example, in exotic test
 // runners); the protocol always invokes the value as a quoted single token
 // followed by the "worker progress" subcommand, which is safe under zsh/bash.
-func ZenExecutablePath() string {
+func ExecutablePath() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return "mewla"
@@ -4982,7 +4982,7 @@ func tmuxDelegatedResource(socket, target string) (bool, string) {
 		"-p",
 		"-t",
 		target,
-		"#{@zen_worker_delegated}\t#{@zen_worker_resource_unit}",
+		"#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}",
 	).Output()
 	if err != nil {
 		return false, ""
@@ -5307,7 +5307,7 @@ func mergeWorkerCommandOwnership(previous, detected string) string {
 // piOwnedLaunchPath returns the absolute --session or --session-dir value
 // declared by a Pi launch command, or "" when the command carries no
 // Mewla-owned Pi session path. The env-assignment launch shape Mewla emits is
-// understood; quoting is preserved by splitZenLaunchFields.
+// understood; quoting is preserved by splitLaunchFields.
 func piOwnedLaunchPath(command string) string {
 	flag, path := piOwnedLaunchFlag(command)
 	if flag == "" {
@@ -5320,7 +5320,7 @@ func piOwnedLaunchPath(command string) string {
 // "--session-dir") and its absolute value, or ("", "") when the command
 // carries no Mewla-owned Pi session path.
 func piOwnedLaunchFlag(command string) (string, string) {
-	fields := splitZenLaunchFields(command)
+	fields := splitLaunchFields(command)
 	if len(fields) == 0 {
 		return "", ""
 	}
@@ -5373,12 +5373,12 @@ func piOwnedLaunchFlag(command string) (string, string) {
 // with backslash-escaped apostrophes (work.shellQuoteForLaunch); a token whose
 // first and last characters are both the wrapping quote is returned without
 // them. Values with an embedded literal apostrophe cannot form one wrapped
-// token in splitZenLaunchFields (the escape's first quote closes the span), so
+// token in splitLaunchFields (the escape's first quote closes the span), so
 // they fail closed exactly like the work parser, which decodes them
 // differently but never binds a wrong transcript.
 
 // piSessionBindingWire is the versioned durable shape stored under the
-// @zen_worker_pi_session tmux pane option. Only a validated Pi ownership
+// @mewla_worker_pi_session tmux pane option. Only a validated Pi ownership
 // binding (flag + absolute path) is ever written; the raw launch command is
 // never persisted.
 type piSessionBindingWire struct {
@@ -5407,7 +5407,7 @@ func EncodePiSessionBinding(flag, path string) string {
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
-// DecodePiSessionBinding decodes and validates a @zen_worker_pi_session option
+// DecodePiSessionBinding decodes and validates a @mewla_worker_pi_session option
 // value. Any malformed, wrong-version, or non-absolute value fails closed
 // (ok=false), so a corrupted option can never bind a transcript.
 func DecodePiSessionBinding(value string) (flag, path string, ok bool) {
@@ -5547,7 +5547,7 @@ func detectWorkerProcess(baseCommand string, panePID int, processes map[int]proc
 // Preserve only the explicit transcript identity from the proven provider
 // process. Other launch arguments (including settings/credentials) are private.
 func claudeProcessCommand(command, args string) string {
-	fields := splitZenLaunchFields(args)
+	fields := splitLaunchFields(args)
 	for i, field := range fields {
 		flag, value, hasValue := strings.Cut(field, "=")
 		switch flag {

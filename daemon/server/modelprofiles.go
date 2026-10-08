@@ -658,7 +658,7 @@ func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.
 		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"MEWLA_STATE_DIR": s.auth.StorageDir(), "MEWLA_WORKER_ID": ""})
 		id := opts.BrowserID
 		opts.PrepareLaunch = func(command string) (string, error) {
-			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), s.auth.StorageDir(), id)
+			return work.WithBrowserMCP(command, watcher.ExecutablePath(), s.auth.StorageDir(), id)
 		}
 	}
 	owner := s.modelProfiles()

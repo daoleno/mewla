@@ -510,7 +510,7 @@ func TestTerminalModelSwitchConvergesInterfaceProjection(t *testing.T) {
 	}
 
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-converge", "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-converge", "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
@@ -731,7 +731,7 @@ func TestTerminalEffortOnlyChangeConvergesInterfaceProjection(t *testing.T) {
 	}
 
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-effort-converge", "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-effort-converge", "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)

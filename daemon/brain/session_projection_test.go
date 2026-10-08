@@ -135,7 +135,7 @@ func TestSessionProjectionVisibleLifecycleAndSanitizedAssistant(t *testing.T) {
 		return work.CodexConversation{Events: []work.CodexConversationEvent{
 			{ID: "tool-1", Kind: "tool", Title: "exec", Input: "secret tool payload", Output: "raw output"},
 			{ID: "goal-1", Kind: "assistant_message", Body: "hidden goal context", Source: "goal"},
-			{ID: "env-1", Kind: "user_message", Body: "<zen_work_event>\n{}\n</zen_work_event>"},
+			{ID: "env-1", Kind: "user_message", Body: "<mewla_work_event>\n{}\n</mewla_work_event>"},
 			{ID: "empty-1", Kind: "assistant_message", Body: ""},
 			{ID: "visible-1", Kind: "assistant_message", Body: "**User-visible** answer", Timestamp: "2026-08-25T10:00:00Z", Partial: true},
 			{ID: "visible-2", Kind: "assistant_message", Body: "Second answer", Timestamp: "2026-08-25T10:00:01Z", Partial: false},

@@ -34,7 +34,7 @@ func TestAuthenticatedCalendarWebSocketCRUD(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	defer httpServer.Close()
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-calendar", "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-calendar", "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)

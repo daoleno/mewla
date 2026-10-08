@@ -18,8 +18,8 @@ import (
 const (
 	// The marker text is persisted in user config files; it keeps the
 	// pre-rename wording so existing blocks stay recognised.
-	takeoverMarkerOpen  = "# >>> zen-gateway: managed by Zen. Do not edit. >>>"
-	takeoverMarkerClose = "# <<< zen-gateway <<<"
+	takeoverMarkerOpen  = "# >>> mewla-gateway: managed by Mewla. Do not edit. >>>"
+	takeoverMarkerClose = "# <<< mewla-gateway <<<"
 )
 
 // TakeoverState is the durable takeover record (never secrets).

@@ -41,7 +41,7 @@ func (s *Server) handleResourceTelemetryHTTP(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := s.authenticateRequest(w, r, "zen-resource-telemetry"); !ok {
+	if _, ok := s.authenticateRequest(w, r, "mewla-resource-telemetry"); !ok {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -49,7 +49,7 @@ func (s *Server) handleResourceTelemetryHTTP(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "resource telemetry unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	s.writeJSONWithAssertion(w, http.StatusOK, "zen-resource-telemetry", s.resourceTelemetryPayload(""))
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-resource-telemetry", s.resourceTelemetryPayload(""))
 }
 func (s *Server) runResourceTelemetry(ctx context.Context) {
 	if s.resourceSampler == nil {

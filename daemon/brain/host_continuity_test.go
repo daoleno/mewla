@@ -37,7 +37,7 @@ func TestHostNegativeProbeRequiresReachableConfirmation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			id := "zen-worker-brain-original:@1"
+			id := "mewla-worker-brain-original:@1"
 			if err := store.SetHostSession(id, "codex"); err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +66,7 @@ func TestLiveHostWithUnknownIdentityBlocksResume(t *testing.T) {
 	if err := store.ReplaceHostSessionBinding("dead:@2", "claude", "provider-session", "/unused/session.jsonl", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	worker := &classifier.Worker{ID: "zen-worker-brain-alive:@1", Name: "Brain", Command: "claude", Cwd: store.WorkspacePath(), Hidden: true}
+	worker := &classifier.Worker{ID: "mewla-worker-brain-alive:@1", Name: "Brain", Command: "claude", Cwd: store.WorkspacePath(), Hidden: true}
 	fw := &fakeWatcher{workers: []*classifier.Worker{worker}, sessions: map[string]*classifier.Worker{worker.ID: worker}}
 	service := NewService(store, fw, nil)
 	_, err = service.ensureHostWorker(work.WorkerExecutor{ID: "claude", Provider: "claude", Command: "claude"})

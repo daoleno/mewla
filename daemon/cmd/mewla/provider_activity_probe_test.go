@@ -17,7 +17,7 @@ import (
 func TestWorkProviderActivityProbeCursorAdmissionPreservesExactBytesAndCursor(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	cwd := filepath.Join(home, "repo", "zen")
+	cwd := filepath.Join(home, "repo", "mewla")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func cursorAdmissionFixtureRow(payload string) map[string]any {
 func TestProbeStateClassifiesChannelHealth(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	cwd := filepath.Join(home, "repo", "zen")
+	cwd := filepath.Join(home, "repo", "mewla")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}

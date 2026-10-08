@@ -119,7 +119,7 @@ func writeClaudeBurstTranscript(t *testing.T, configDir, cwd string, session cla
 func TestProviderConversationReaderClaudeBurstBindsEachProcessOwnTranscript(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	configDir := filepath.Join(t.TempDir(), "claude")
-	cwd := "/home/daoleno/workspace/zen"
+	cwd := "/home/daoleno/workspace/mewla"
 	now := time.Date(2026, 10, 7, 7, 28, 8, 0, time.UTC)
 
 	type bound struct {
@@ -159,7 +159,7 @@ func TestProviderConversationReaderClaudeBurstBindsEachProcessOwnTranscript(t *t
 func TestProviderConversationReaderClaudeRegistryNeverBindsSiblingBeforeFirstWrite(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	configDir := filepath.Join(t.TempDir(), "claude")
-	cwd := "/home/daoleno/workspace/zen"
+	cwd := "/home/daoleno/workspace/mewla"
 	now := time.Date(2026, 10, 7, 7, 26, 30, 0, time.UTC)
 	sibling, own := claudeBurstSessions[0], claudeBurstSessions[1]
 	writeClaudeBurstTranscript(t, configDir, cwd, sibling, now)
@@ -181,7 +181,7 @@ func TestProviderConversationReaderClaudeRegistryNeverBindsSiblingBeforeFirstWri
 func TestProviderConversationReaderClaudeStaleRegistryDoesNotBind(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	configDir := filepath.Join(t.TempDir(), "claude")
-	cwd := "/home/daoleno/workspace/zen"
+	cwd := "/home/daoleno/workspace/mewla"
 	now := time.Date(2026, 10, 7, 7, 28, 8, 0, time.UTC)
 	tools, brand := claudeBurstSessions[1], claudeBurstSessions[2]
 	for _, session := range claudeBurstSessions {

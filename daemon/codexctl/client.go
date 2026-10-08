@@ -155,7 +155,7 @@ func Open(ctx context.Context, socketPath string, opts DialOptions) (*Client, er
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	conn, _, err := dialer.DialContext(dialCtx, "ws://zen-codex-ctl/", http.Header{
+	conn, _, err := dialer.DialContext(dialCtx, "ws://mewla-codex-ctl/", http.Header{
 		"User-Agent": []string{"mewla/" + opts.ClientName},
 	})
 	if err != nil {

@@ -261,9 +261,9 @@ func TestConcurrencyAndOperatorSurfaceExposeMetadataOnly(t *testing.T) {
 	server.OperatorHandler().ServeHTTP(response, request)
 	body := response.Body.String()
 	for _, expected := range []string{
-		"zen_link_accepted_streams_total 2",
-		"zen_link_rejected_connections_total 3",
-		"zen_link_forwarded_bytes_total 4096",
+		"mewla_link_accepted_streams_total 2",
+		"mewla_link_rejected_connections_total 3",
+		"mewla_link_forwarded_bytes_total 4096",
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("metrics missing %q: %q", expected, body)

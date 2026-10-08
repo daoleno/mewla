@@ -218,13 +218,13 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	}
 	// Chrome retains the daemon user's stable Secret Service bus. KWin gets its
 	// own bus through dbus-run-session and never joins the user's physical seat.
-	env = append(env, "DBUS_SESSION_BUS_ADDRESS="+bus, "XDG_SESSION_TYPE=wayland", "XDG_RUNTIME_DIR="+filepath.Join(dir, "run"), "XDG_CONFIG_HOME="+filepath.Join(dir, "config"), "XDG_DATA_HOME="+filepath.Join(dir, "data"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"), "WAYLAND_DISPLAY=zen-browser", "AGENT_BROWSER_SOCKET_DIR="+filepath.Join(dir, "s"), "AGENT_BROWSER_SESSION="+r.session, "AGENT_BROWSER_IDLE_TIMEOUT_MS=0", "AGENT_BROWSER_STREAM_QUALITY=65", "AGENT_BROWSER_STREAM_MAX_WIDTH=1280", "AGENT_BROWSER_STREAM_MAX_HEIGHT=800", "AGENT_BROWSER_NO_AUTO_DIALOG=1")
+	env = append(env, "DBUS_SESSION_BUS_ADDRESS="+bus, "XDG_SESSION_TYPE=wayland", "XDG_RUNTIME_DIR="+filepath.Join(dir, "run"), "XDG_CONFIG_HOME="+filepath.Join(dir, "config"), "XDG_DATA_HOME="+filepath.Join(dir, "data"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"), "WAYLAND_DISPLAY=mewla-browser", "AGENT_BROWSER_SOCKET_DIR="+filepath.Join(dir, "s"), "AGENT_BROWSER_SESSION="+r.session, "AGENT_BROWSER_IDLE_TIMEOUT_MS=0", "AGENT_BROWSER_STREAM_QUALITY=65", "AGENT_BROWSER_STREAM_MAX_WIDTH=1280", "AGENT_BROWSER_STREAM_MAX_HEIGHT=800", "AGENT_BROWSER_NO_AUTO_DIALOG=1")
 	r.env = env
-	r.display, err = spawn(env, "dbus-run-session", "--", "kwin_wayland", "--virtual", "--width", "1280", "--height", "800", "--socket", "zen-browser", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities")
+	r.display, err = spawn(env, "dbus-run-session", "--", "kwin_wayland", "--virtual", "--width", "1280", "--height", "800", "--socket", "mewla-browser", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities")
 	if err != nil {
 		return nil, err
 	}
-	if err = waitFor(ctx, 10*time.Second, func() bool { _, e := os.Stat(filepath.Join(dir, "run", "zen-browser")); return e == nil }); err != nil {
+	if err = waitFor(ctx, 10*time.Second, func() bool { _, e := os.Stat(filepath.Join(dir, "run", "mewla-browser")); return e == nil }); err != nil {
 		return nil, errors.New("Private graphical session could not start")
 	}
 	// The private profile lock is also enforced by Chrome. Never delete its SingletonLock.

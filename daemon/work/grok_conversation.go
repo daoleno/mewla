@@ -1937,7 +1937,7 @@ func grokVisibleUserText(text string) string {
 	if text == "" {
 		return ""
 	}
-	if idx := strings.Index(text, "<zen_attachments>"); idx >= 0 {
+	if idx := strings.Index(text, "<mewla_attachments>"); idx >= 0 {
 		text = strings.TrimSpace(text[:idx])
 	}
 	const openTag = "<user_query>"

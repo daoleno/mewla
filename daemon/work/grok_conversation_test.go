@@ -85,7 +85,7 @@ func TestMatchGrokSessionToActiveSession_UsesSessionUpdatedAfterStart(t *testing
 func TestFindGrokSession_DoesNotReturnStaleSessionForNewWorker(t *testing.T) {
 	homeRoot := t.TempDir()
 	home := filepath.Join(homeRoot, "home")
-	cwd := "/tmp/zen-grok-fixture"
+	cwd := "/tmp/mewla-grok-fixture"
 	sessionID := "stale-grok-session"
 	sessionDir := filepath.Join(home, ".grok", "sessions", encodeGrokSessionCWD(cwd), sessionID)
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
@@ -155,8 +155,8 @@ func TestFindGrokSession_ResumeCommandMatchesExplicitSessionID(t *testing.T) {
 }
 
 func TestEncodeGrokSessionCWD(t *testing.T) {
-	got := encodeGrokSessionCWD("/home/daoleno/workspace/zen")
-	want := "%2Fhome%2Fdaoleno%2Fworkspace%2Fzen"
+	got := encodeGrokSessionCWD("/home/daoleno/workspace/mewla")
+	want := "%2Fhome%2Fdaoleno%2Fworkspace%2Fmewla"
 	if got != want {
 		t.Fatalf("encodeGrokSessionCWD = %q, want %q", got, want)
 	}
@@ -1565,7 +1565,7 @@ func TestGrokGoalSessionPreservesLatestUserMessages(t *testing.T) {
 		os.Getenv("HOME"),
 		".grok",
 		"sessions",
-		"%2Fhome%2Fdaoleno%2Fworkspace%2Fzen",
+		"%2Fhome%2Fdaoleno%2Fworkspace%2Fmewla",
 		"019f11c1-341e-7483-8b72-3a253c152796",
 	)
 	if _, err := os.Stat(filepath.Join(sessionDir, grokChatHistoryFile)); err != nil {
@@ -1617,7 +1617,7 @@ func TestGrokGoalSessionEventMix(t *testing.T) {
 		os.Getenv("HOME"),
 		".grok",
 		"sessions",
-		"%2Fhome%2Fdaoleno%2Fworkspace%2Fzen",
+		"%2Fhome%2Fdaoleno%2Fworkspace%2Fmewla",
 		"019f11c1-341e-7483-8b72-3a253c152796",
 	)
 	if _, err := os.Stat(filepath.Join(sessionDir, grokChatHistoryFile)); err != nil {
@@ -1651,7 +1651,7 @@ func TestProviderConversationReaderGrokGoalSessionHasUniqueEventIDs(t *testing.T
 		os.Getenv("HOME"),
 		".grok",
 		"sessions",
-		"%2Fhome%2Fdaoleno%2Fworkspace%2Fzen",
+		"%2Fhome%2Fdaoleno%2Fworkspace%2Fmewla",
 		"019f11c1-341e-7483-8b72-3a253c152796",
 	)
 	if _, err := os.Stat(filepath.Join(sessionDir, grokChatHistoryFile)); err != nil {
@@ -1725,7 +1725,7 @@ func requireGrokRealSessionOptIn(t *testing.T) {
 func findLocalGrokSessionDir(t *testing.T) string {
 	t.Helper()
 	requireGrokRealSessionOptIn(t)
-	source := filepath.Join(os.Getenv("HOME"), ".grok", "sessions", "%2Fhome%2Fdaoleno%2Fworkspace%2Fzen")
+	source := filepath.Join(os.Getenv("HOME"), ".grok", "sessions", "%2Fhome%2Fdaoleno%2Fworkspace%2Fmewla")
 	entries, err := os.ReadDir(source)
 	if err != nil {
 		t.Skipf("real grok sessions unavailable: %v", err)
@@ -1755,7 +1755,7 @@ func findLocalGrokSessionDir(t *testing.T) string {
 
 func installGrokSessionFixture(t *testing.T, sourceDir string) (home string, cwd string) {
 	t.Helper()
-	cwd = "/tmp/zen-grok-fixture"
+	cwd = "/tmp/mewla-grok-fixture"
 	homeRoot := t.TempDir()
 	home = filepath.Join(homeRoot, "home")
 	sessionRoot := filepath.Join(home, ".grok", "sessions", encodeGrokSessionCWD(cwd), filepath.Base(sourceDir))

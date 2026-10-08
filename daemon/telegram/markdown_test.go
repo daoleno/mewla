@@ -6,7 +6,7 @@ import (
 )
 
 func TestRenderMarkdownTelegramRichText(t *testing.T) {
-	source := "# Heading\n\n**bold and *nested*** plus ~~gone~~ and [Mewla](https://zen.example).\n\n" +
+	source := "# Heading\n\n**bold and *nested*** plus ~~gone~~ and [Mewla](https://mewla.example).\n\n" +
 		"`inline`\n\n> quoted **strong**\n\n- first\n- [x] done\n- [ ] pending\n\n" +
 		"| Name | State |\n| --- | --- |\n| Mewla | ready |\n\n```go\nfmt.Println(\"hi\")\n```\n\n" +
 		"    indented code\n\n<span>visible &amp; safe</span>\n\nemoji 🧠"
@@ -29,7 +29,7 @@ func TestRenderMarkdownTelegramRichText(t *testing.T) {
 		if entity.Offset < 0 || entity.Length <= 0 || entity.Offset+entity.Length > utf16Len(rendered.Text) {
 			t.Fatalf("invalid entity %+v for %d UTF-16 units", entity, utf16Len(rendered.Text))
 		}
-		if entity.Type == "text_link" && entity.URL != "https://zen.example" {
+		if entity.Type == "text_link" && entity.URL != "https://mewla.example" {
 			t.Fatalf("link=%+v", entity)
 		}
 		if entity.Type == "pre" && strings.Contains(rendered.Text, "fmt.Println") && entity.Language != "" && entity.Language != "go" {
@@ -114,13 +114,13 @@ func TestChunkRichTextUsesUTF16AndClipsEntities(t *testing.T) {
 }
 
 func TestChunkRichTextDuplicatesLinkAcrossReadableBoundary(t *testing.T) {
-	value := richText{Text: "alpha beta gamma", Entities: []MessageEntity{{Type: "text_link", Offset: 0, Length: 16, URL: "https://zen.example"}}}
+	value := richText{Text: "alpha beta gamma", Entities: []MessageEntity{{Type: "text_link", Offset: 0, Length: 16, URL: "https://mewla.example"}}}
 	chunks := chunkRichText(value, 10)
 	if len(chunks) != 2 || chunks[0].Text != "alpha " || chunks[1].Text != "beta gamma" {
 		t.Fatalf("chunks=%+v", chunks)
 	}
 	for _, chunk := range chunks {
-		if len(chunk.Entities) != 1 || chunk.Entities[0].URL != "https://zen.example" || chunk.Entities[0].Length != utf16Len(chunk.Text) {
+		if len(chunk.Entities) != 1 || chunk.Entities[0].URL != "https://mewla.example" || chunk.Entities[0].Length != utf16Len(chunk.Text) {
 			t.Fatalf("link not duplicated/clipped: %+v", chunk)
 		}
 	}

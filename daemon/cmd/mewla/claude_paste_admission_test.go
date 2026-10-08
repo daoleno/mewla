@@ -19,7 +19,7 @@ func TestClaudePasteActivityProbeCarriesBothExactDigests(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Now().UTC()
-	payload := "<zen_work_event>\n{\"summary\":\"你好\"}\n</zen_work_event>"
+	payload := "<mewla_work_event>\n{\"summary\":\"你好\"}\n</mewla_work_event>"
 	raw := "\n\n<pasted_content id=\"4f28\">\n" + payload + "\n</pasted_content id=\"4f28\">\n"
 	row, _ := json.Marshal(map[string]any{"type": "user", "sessionId": "session", "uuid": "input", "cwd": "/fixture", "timestamp": at.Format(time.RFC3339Nano), "message": map[string]any{"role": "user", "content": raw}})
 	if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), append(row, '\n'), 0600); err != nil {

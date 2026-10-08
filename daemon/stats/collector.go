@@ -741,7 +741,7 @@ func (c *Collector) scanSessionJSONL(path, projectName string, byDate map[string
 	}
 }
 
-// decodeProjectDir converts "-home-daoleno-workspace-zen" to "zen" (last path component).
+// decodeProjectDir converts "-home-daoleno-workspace-mewla" to "mewla" (last path component).
 // The Claude Code directory encoding replaces "/" with "-" and prepends "-".
 func decodeProjectDir(name string) string {
 	name = strings.TrimSuffix(name, ".jsonl")

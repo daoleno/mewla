@@ -52,7 +52,7 @@ func scriptedOpenCodeHandoff(t *testing.T, contents []string) (*Watcher, *fakeSe
 	w.workers["opencode-handoff:@1"] = &classifier.Worker{
 		ID:        "opencode-handoff:@1",
 		Command:   "opencode",
-		Cwd:       "/repo/zen",
+		Cwd:       "/repo/mewla",
 		PaneAlive: true,
 		Delegated: true,
 	}

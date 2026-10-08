@@ -49,7 +49,7 @@ func TestLiveNativeThreadSettings(t *testing.T) {
 		t.Logf("codex version=%s", strings.TrimSpace(string(out)))
 	}
 
-	artRoot := filepath.Join(os.Getenv("TMPDIR"), "zen-codex-live-ctl")
+	artRoot := filepath.Join(os.Getenv("TMPDIR"), "mewla-codex-live-ctl")
 	_ = os.RemoveAll(artRoot)
 	if err := os.MkdirAll(artRoot, 0o700); err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestLiveNativeThreadSettings(t *testing.T) {
 	if err := exec.Command("git", "init", "-q", cwd).Run(); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"zen-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"mewla-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +82,7 @@ func TestLiveNativeThreadSettings(t *testing.T) {
 	env := []string{
 		"CODEX_HOME=" + codexHome,
 		"HOME=" + artRoot,
-		"OPENAI_API_KEY=zen-loopback-placeholder-not-a-secret",
+		"OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
 		"TERM=xterm-256color",
 		"PATH=" + os.Getenv("PATH"),
 	}
@@ -104,12 +104,12 @@ func TestLiveNativeThreadSettings(t *testing.T) {
 	})
 	waitSocket(t, socketPath)
 
-	sess := fmt.Sprintf("zen-codex-live-ctl-%d", time.Now().UnixNano())
+	sess := fmt.Sprintf("mewla-codex-live-ctl-%d", time.Now().UnixNano())
 	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
 		"-e", "HOME="+artRoot,
-		"-e", "OPENAI_API_KEY=zen-loopback-placeholder-not-a-secret",
+		"-e", "OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
 		"-e", "TERM=xterm-256color",
 		"--", codexPath, "--remote", "unix://"+socketPath,
 		"--model", "gpt-5", "--config", `model_provider="openai"`,
@@ -422,7 +422,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Fatalf("tmux not on PATH: %v", err)
 	}
-	artRoot := filepath.Join(os.Getenv("TMPDIR"), "zen-codex-live-ctl-lifecycle")
+	artRoot := filepath.Join(os.Getenv("TMPDIR"), "mewla-codex-live-ctl-lifecycle")
 	_ = os.RemoveAll(artRoot)
 	for _, dir := range []string{filepath.Join(artRoot, "codex-home"), filepath.Join(artRoot, "cwd"), filepath.Join(artRoot, "ctl")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -434,7 +434,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 	if err := exec.Command("git", "init", "-q", cwd).Run(); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"zen-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"mewla-loopback-placeholder-not-a-secret"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	socketPath := filepath.Join(artRoot, "ctl", "codex-ctl-lifecycle.sock")
@@ -445,7 +445,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 		" --config 'model=\"gpt-5\"' --config 'model_provider=\"openai\"' > " + shellQuoteWord(logPath) +
 		" 2>&1 & echo $! > " + shellQuoteWord(pidPath) + "; exec " + shellQuoteWord(codexPath) +
 		" --remote unix://" + socketPath + " --model gpt-5 --config 'model_provider=\"openai\"'"
-	sess := fmt.Sprintf("zen-codex-live-lifecycle-%d", time.Now().UnixNano())
+	sess := fmt.Sprintf("mewla-codex-live-lifecycle-%d", time.Now().UnixNano())
 	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
 	// The watcher passes the wrapper as a shell command string; source a script
 	// so the test shell (non-interactive) cannot interfere. The wrapper's own
@@ -458,7 +458,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 		cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
 			"-e", "CODEX_HOME="+codexHome,
 			"-e", "HOME="+artRoot,
-			"-e", "OPENAI_API_KEY=zen-loopback-placeholder-not-a-secret",
+			"-e", "OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
 			"-e", "TERM=xterm-256color",
 			"--", "exec '/bin/sh' -c 'source "+wrapperScript+"'",
 		)
@@ -482,7 +482,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 			}
 		}
 		codexHome = filepath.Join(artRoot, "codex-home")
-		if writeErr := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"zen-loopback-placeholder-not-a-secret"}`), 0o600); writeErr != nil {
+		if writeErr := os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"mewla-loopback-placeholder-not-a-secret"}`), 0o600); writeErr != nil {
 			t.Fatal(writeErr)
 		}
 		if writeErr := os.WriteFile(wrapperScript, []byte(wrapper+"\n"), 0o700); writeErr != nil {

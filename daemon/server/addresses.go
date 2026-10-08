@@ -9,7 +9,7 @@ import (
 	"github.com/daoleno/mewla/daemon/addressbook"
 )
 
-const addressBookPurpose = "zen-address-book"
+const addressBookPurpose = "mewla-address-book"
 
 func (s *Server) handleAddresses(w http.ResponseWriter, r *http.Request) {
 	if s.addresses == nil {

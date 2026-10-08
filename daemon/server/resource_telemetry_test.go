@@ -39,7 +39,7 @@ func TestResourceTelemetryAuthenticatedHTTPAndWebSocketContract(t *testing.T) {
 		t.Fatal("unauthenticated resource snapshot exposed")
 	}
 	request, _ := http.NewRequest(http.MethodGet, server.URL+"/resources", nil)
-	request.Header.Set("Authorization", calendarAuthHeader(priv, manager.DaemonID(), "resource-device", "zen-resource-telemetry"))
+	request.Header.Set("Authorization", calendarAuthHeader(priv, manager.DaemonID(), "resource-device", "mewla-resource-telemetry"))
 	resp, err = http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestResourceTelemetryAuthenticatedHTTPAndWebSocketContract(t *testing.T) {
 		t.Fatal(payload)
 	}
 	header := http.Header{}
-	header.Set("Authorization", calendarAuthHeader(priv, manager.DaemonID(), "resource-device", "zen-connect"))
+	header.Set("Authorization", calendarAuthHeader(priv, manager.DaemonID(), "resource-device", "mewla-connect"))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws", header)
 	if err != nil {
 		t.Fatal(err)

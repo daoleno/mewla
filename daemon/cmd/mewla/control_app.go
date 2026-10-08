@@ -580,7 +580,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		createOpts.BrowserID = req.BrowserID
 		createOpts.Env["MEWLA_WORKER_ID"] = ""
 		createOpts.PrepareLaunch = func(command string) (string, error) {
-			return work.WithBrowserMCP(command, watcher.ZenExecutablePath(), a.stateDir, req.BrowserID)
+			return work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, req.BrowserID)
 		}
 	}
 	var routeSnap *modelprofiles.WireSessionSnapshot
@@ -1676,7 +1676,7 @@ func spawnPrompt(req control.Request) (string, error) {
 
 func progressEnvForStateDir(stateDir string) map[string]string {
 	env := map[string]string{
-		"MEWLA_WORKER_PROGRESS_CMD": watcher.ZenExecutablePath(),
+		"MEWLA_WORKER_PROGRESS_CMD": watcher.ExecutablePath(),
 	}
 	if worktreeRoot, err := work.DefaultWorktreeRoot(); err == nil {
 		env["MEWLA_WORKTREE_ROOT"] = worktreeRoot

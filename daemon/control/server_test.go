@@ -116,7 +116,7 @@ func TestServerShutdownClosesAndJoinsAcceptedConnections(t *testing.T) {
 }
 
 func TestRemoveStaleSocketRejectsRegularFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "zen.sock")
+	path := filepath.Join(t.TempDir(), "control.sock")
 	if err := os.WriteFile(path, []byte("not-a-socket"), 0o600); err != nil {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}

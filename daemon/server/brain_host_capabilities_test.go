@@ -21,7 +21,7 @@ func TestBrainSnapshotHostWorkerCapabilitiesRoutedHidden(t *testing.T) {
 	srv := &Server{}
 	srv.SetModelProfiles(owner)
 
-	hostID := "zen-worker-brain-hidden:@routed"
+	hostID := "mewla-worker-brain-hidden:@routed"
 	bindRoutedCodexHost(t, owner, hostID)
 	hidden := &classifier.Worker{
 		ID: hostID, Name: "Brain", Command: "codex", Hidden: true,
@@ -48,7 +48,7 @@ func TestBrainSnapshotHostWorkerCapabilitiesManagedNativeReadOnly(t *testing.T) 
 	srv := &Server{}
 	srv.SetModelProfiles(owner)
 
-	hostID := "zen-worker-brain-hidden:@native"
+	hostID := "mewla-worker-brain-hidden:@native"
 	profile := modelprofiles.Profile{
 		ID: "codex-native", Name: "Native", ExecutorID: modelprofiles.ExecutorCodex,
 		ProviderID: "openai", ProviderLabel: "OpenAI",
@@ -91,7 +91,7 @@ func TestBrainSnapshotHostWorkerCapabilitiesUnmanaged(t *testing.T) {
 	srv := &Server{}
 	srv.SetModelProfiles(owner)
 
-	hostID := "zen-worker-brain-hidden:@unmanaged"
+	hostID := "mewla-worker-brain-hidden:@unmanaged"
 	hidden := &classifier.Worker{
 		ID: hostID, Name: "Brain", Command: "codex", Hidden: true,
 		State: classifier.StateRunning,
@@ -121,7 +121,7 @@ func TestBrainSnapshotBroadcastDoesNotAdmitHostActivation(t *testing.T) {
 		t.Fatal(err)
 	}
 	const (
-		hostID   = "zen-worker-brain-hidden:@busy-broadcast"
+		hostID   = "mewla-worker-brain-hidden:@busy-broadcast"
 		threadID = "brain-thread-client-data-restored"
 	)
 	if err := store.SetHostSession(hostID, "codex"); err != nil {
@@ -167,7 +167,7 @@ func TestBrainSnapshotBroadcastDoesNotAdmitHostActivation(t *testing.T) {
 }
 
 func TestBrainSnapshotHostWorkerCapabilitiesFailClosedMissingWorkerOrOwner(t *testing.T) {
-	hostID := "zen-worker-brain-hidden:@missing"
+	hostID := "mewla-worker-brain-hidden:@missing"
 
 	// No watcher agent and no profile owner.
 	srv := &Server{}
@@ -192,14 +192,14 @@ func TestBrainSnapshotHostWorkerCapabilitiesFailClosedMissingWorkerOrOwner(t *te
 	srv3 := &Server{}
 	srv3.SetModelProfiles(owner)
 	srv3.getWorkerOverride = func(id string) *classifier.Worker {
-		if id == "zen-worker-brain-hidden:@named" {
+		if id == "mewla-worker-brain-hidden:@named" {
 			return &classifier.Worker{
 				ID: id, Name: "Codex Brain", Command: "codex", Hidden: true,
 			}
 		}
 		return nil
 	}
-	wire3 := mustBrainSnapshotHostWire(t, srv3, "zen-worker-brain-hidden:@named", "codex")
+	wire3 := mustBrainSnapshotHostWire(t, srv3, "mewla-worker-brain-hidden:@named", "codex")
 	caps3 := hostCapabilitiesFromWire(t, wire3)
 	if caps3.ModelProfileManaged || caps3.ModelProfileActiveSwitch {
 		t.Fatalf("name/command must not authorize managed/switch: %#v", caps3)
@@ -212,7 +212,7 @@ func TestBrainSnapshotHostWorkerCapabilitiesSharedWirePath(t *testing.T) {
 	owner := startBrainHostCapabilityOwner(t)
 	srv := &Server{}
 	srv.SetModelProfiles(owner)
-	hostID := "zen-worker-brain-hidden:@shared"
+	hostID := "mewla-worker-brain-hidden:@shared"
 	bindRoutedCodexHost(t, owner, hostID)
 	srv.getWorkerOverride = func(id string) *classifier.Worker {
 		if id == hostID {
@@ -236,7 +236,7 @@ func TestBrainSnapshotHostWorkerCapabilitiesSharedWirePath(t *testing.T) {
 
 func TestHiddenHostDiscoveryRefreshesBrainSnapshotCapabilities(t *testing.T) {
 	owner := startBrainHostCapabilityOwner(t)
-	hostID := "zen-worker-brain-hidden:@lifecycle"
+	hostID := "mewla-worker-brain-hidden:@lifecycle"
 	bindRoutedCodexHost(t, owner, hostID)
 
 	store, err := brain.NewStore(t.TempDir())
@@ -283,7 +283,7 @@ func TestHiddenHostDiscoveryRefreshesBrainSnapshotCapabilities(t *testing.T) {
 	}
 	// Unrelated Hidden agent noise must not churn brain_snapshot.
 	otherHidden := &classifier.Worker{
-		ID: "zen-worker-other-hidden:@9", Name: "Other", Command: "codex", Hidden: true,
+		ID: "mewla-worker-other-hidden:@9", Name: "Other", Command: "codex", Hidden: true,
 	}
 	if bw.sessions == nil {
 		bw.sessions = map[string]*classifier.Worker{}

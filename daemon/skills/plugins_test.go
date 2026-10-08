@@ -198,7 +198,7 @@ func pluginTestOptions(t *testing.T) InventoryOptions {
 		Home:        home,
 		CodexHome:   filepath.Join(home, ".codex"),
 		ClaudeHome:  filepath.Join(home, ".claude"),
-		ZenStateDir: filepath.Join(home, ".mewla"),
+		StateDir: filepath.Join(home, ".mewla"),
 		Now:         func() time.Time { return time.Date(2026, 8, 18, 1, 2, 3, 0, time.UTC) },
 	}
 }

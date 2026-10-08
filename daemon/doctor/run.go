@@ -336,7 +336,7 @@ func (e env) checkTmux() TmuxCheck {
 }
 
 func (e env) probeTmux(tmuxPath string) bool {
-	name := fmt.Sprintf("zen-doctor-%d", e.opts.Now().UnixNano()%1_000_000_000)
+	name := fmt.Sprintf("mewla-doctor-%d", e.opts.Now().UnixNano()%1_000_000_000)
 	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
 	defer cancel()
 
@@ -356,7 +356,7 @@ func (e env) checkStateDir() StateDirCheck {
 		check.Summary = "state directory is not writable"
 		return check
 	}
-	probe := filepath.Join(path, ".zen-doctor-write-probe")
+	probe := filepath.Join(path, ".mewla-doctor-write-probe")
 	if writeErr := os.WriteFile(probe, []byte("ok"), 0o600); writeErr != nil {
 		check.Status = StatusFail
 		check.Remediation = RemediationStateDirUnwritable
@@ -393,8 +393,8 @@ func (e env) resolveStateDir() (string, bool, error) {
 
 func (e env) checkListen(stateDir string) ListenCheck {
 	check := ListenCheck{Addr: e.opts.Addr}
-	if daemonID, ok := e.detectRunningZen(stateDir); ok {
-		check.ZenRunning = true
+	if daemonID, ok := e.detectRunningDaemon(stateDir); ok {
+		check.DaemonRunning = true
 		check.DaemonID = daemonID
 		check.Available = false
 		check.Status = StatusOK
@@ -418,7 +418,7 @@ func (e env) checkListen(stateDir string) ListenCheck {
 	return check
 }
 
-func (e env) detectRunningZen(stateDir string) (string, bool) {
+func (e env) detectRunningDaemon(stateDir string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
 	defer cancel()
 

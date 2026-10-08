@@ -27,7 +27,7 @@ func TestAutomaticHostContinuityCapturesNativeSwitchAndResumesAfterExit(t *testi
 		t.Fatal(err)
 	}
 	chatBefore, _ := os.ReadFile(store.ChatStatePath())
-	const hostID = "zen-worker-brain:@original"
+	const hostID = "mewla-worker-brain:@original"
 	if err := store.SetHostSession(hostID, "codex"); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestAutomaticHostContinuityAmbiguousActivationDoesNotDisableLaterRecovery(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	const hostID = "zen-worker-brain:@ambiguous"
+	const hostID = "mewla-worker-brain:@ambiguous"
 	if err := store.ReplaceHostSessionBinding(hostID, "codex", "saved-thread", "", ""); err != nil {
 		t.Fatal(err)
 	}

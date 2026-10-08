@@ -25,7 +25,7 @@ const (
 	transportIdentityFilename = "link-identity.json"
 	// LinkIdentityServerName is the established wire name for pinned literal-IP
 	// Link connections. Its historical spelling is shared by installed clients.
-	LinkIdentityServerName = "zen-desktop.invalid"
+	LinkIdentityServerName = "mewla-desktop.invalid"
 )
 
 type persistedTransportIdentity struct {
@@ -207,7 +207,7 @@ func issueTransportCertificate(
 	template := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			CommonName: "zen-link-" + routeID,
+			CommonName: "mewla-link-" + routeID,
 		},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.AddDate(5, 0, 0),

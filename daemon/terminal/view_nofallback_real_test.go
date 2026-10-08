@@ -90,7 +90,7 @@ func TestViewBootstrapNeverForksFallbackServer(t *testing.T) {
 	})
 
 	// 1. Absent server: honest failure, nothing forked.
-	if out, err := tmuxNewViewSessionCommand(ctx, socket, "zen-view-absent").Output(); err == nil {
+	if out, err := tmuxNewViewSessionCommand(ctx, socket, "mewla-view-absent").Output(); err == nil {
 		_ = exec.Command(realTmux, "-S", socket, "kill-session", "-t", strings.TrimSpace(string(out))).Run()
 		t.Fatal("view bootstrap on absent server succeeded, want unavailable error")
 	}
@@ -98,14 +98,14 @@ func TestViewBootstrapNeverForksFallbackServer(t *testing.T) {
 
 	// 2. Fixture bootstrap: same production path works.
 	bootstrap()
-	out, err := tmuxNewViewSessionCommand(ctx, socket, "zen-view-live").Output()
+	out, err := tmuxNewViewSessionCommand(ctx, socket, "mewla-view-live").Output()
 	if err != nil {
 		t.Fatalf("view bootstrap on fixture server: %v", err)
 	}
 	if strings.TrimSpace(string(out)) == "" {
 		t.Fatal("view bootstrap returned empty window target")
 	}
-	killTmuxSessionBounded(socket, "zen-view-live")
+	killTmuxSessionBounded(socket, "mewla-view-live")
 
 	// 3. Server dies: next bootstrap fails without fallback.
 	pid := serverPid()
@@ -113,7 +113,7 @@ func TestViewBootstrapNeverForksFallbackServer(t *testing.T) {
 		t.Fatalf("kill fixture server: %v: %s", err, out)
 	}
 	waitServerGone("fixture server exit", pid)
-	if out, err := tmuxNewViewSessionCommand(ctx, socket, "zen-view-dead").Output(); err == nil {
+	if out, err := tmuxNewViewSessionCommand(ctx, socket, "mewla-view-dead").Output(); err == nil {
 		_ = exec.Command(realTmux, "-S", socket, "kill-session", "-t", strings.TrimSpace(string(out))).Run()
 		t.Fatal("view bootstrap on dead server succeeded, want unavailable error")
 	}
@@ -121,12 +121,12 @@ func TestViewBootstrapNeverForksFallbackServer(t *testing.T) {
 
 	// 4. Fixture restart: bootstrap works again.
 	bootstrap()
-	out, err = tmuxNewViewSessionCommand(ctx, socket, "zen-view-again").Output()
+	out, err = tmuxNewViewSessionCommand(ctx, socket, "mewla-view-again").Output()
 	if err != nil {
 		t.Fatalf("view bootstrap after fixture restart: %v", err)
 	}
 	if strings.TrimSpace(string(out)) == "" {
 		t.Fatal("view bootstrap after restart returned empty window target")
 	}
-	killTmuxSessionBounded(socket, "zen-view-again")
+	killTmuxSessionBounded(socket, "mewla-view-again")
 }

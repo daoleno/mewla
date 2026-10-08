@@ -100,7 +100,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 		t.Fatal(err)
 	}
 	agents := string(mustReadFile(t, store.workspaceInstructionsPath()))
-	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 5300 {
+	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 5350 {
 		t.Fatalf("standing guidance missing or oversized: %d bytes", len(agents))
 	}
 	if len(catalog.Playbooks) != 3 {

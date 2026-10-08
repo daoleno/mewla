@@ -434,11 +434,11 @@ func (server *Server) OperatorHandler() http.Handler {
 		snapshot := server.Snapshot()
 		writer.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		_, _ = fmt.Fprintf(writer,
-			"zen_link_active_routes %d\n"+
-				"zen_link_active_streams %d\n"+
-				"zen_link_accepted_streams_total %d\n"+
-				"zen_link_rejected_connections_total %d\n"+
-				"zen_link_forwarded_bytes_total %d\n",
+			"mewla_link_active_routes %d\n"+
+				"mewla_link_active_streams %d\n"+
+				"mewla_link_accepted_streams_total %d\n"+
+				"mewla_link_rejected_connections_total %d\n"+
+				"mewla_link_forwarded_bytes_total %d\n",
 			snapshot.ActiveRoutes,
 			snapshot.ActiveClients,
 			snapshot.AcceptedClients,
@@ -459,8 +459,8 @@ func (server *Server) OperatorHandler() http.Handler {
 		} {
 			_, _ = fmt.Fprintf(
 				writer,
-				"zen_link_capacity_used{resource=%q} %d\n"+
-					"zen_link_capacity_limit{resource=%q} %d\n",
+				"mewla_link_capacity_used{resource=%q} %d\n"+
+					"mewla_link_capacity_limit{resource=%q} %d\n",
 				resource,
 				used[resource],
 				resource,
@@ -470,7 +470,7 @@ func (server *Server) OperatorHandler() http.Handler {
 		for _, reason := range capacityReasons {
 			_, _ = fmt.Fprintf(
 				writer,
-				"zen_link_capacity_rejections_total{reason=%q} %d\n",
+				"mewla_link_capacity_rejections_total{reason=%q} %d\n",
 				reason,
 				server.capacityRejects[reason].Load(),
 			)
@@ -478,7 +478,7 @@ func (server *Server) OperatorHandler() http.Handler {
 		for _, reason := range rejectionReasons {
 			_, _ = fmt.Fprintf(
 				writer,
-				"zen_link_rejected_connections_total{reason=%q} %d\n",
+				"mewla_link_rejected_connections_total{reason=%q} %d\n",
 				reason,
 				server.rejectionCounts[reason].Load(),
 			)
@@ -486,7 +486,7 @@ func (server *Server) OperatorHandler() http.Handler {
 		for _, kind := range sweptKinds {
 			_, _ = fmt.Fprintf(
 				writer,
-				"zen_link_swept_entries_total{kind=%q} %d\n",
+				"mewla_link_swept_entries_total{kind=%q} %d\n",
 				kind,
 				server.sweptEntries[kind].Load(),
 			)

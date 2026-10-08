@@ -82,17 +82,17 @@ func TestCollectOpenCodeStatsAggregatesObservedFacts(t *testing.T) {
 	zeroCost := 0.0
 	writeOpenCodeDBFixture(t, home, []string{
 		// deepseek-v4-flash: two requests on day2, one on day1.
-		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, day2, "/home/user/proj-zen"),
-		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 2000, 300, 0, 800, 0, day2, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, day2, "/home/user/proj-mewla"),
+		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 2000, 300, 0, 800, 0, day2, "/home/user/proj-mewla"),
 		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 400, 100, 20, 300, 5, day1, "/home/user/proj-other"),
 		// kimi-k2.5-free: one request on day2, cost recorded as 0.
-		openCodeMsg("assistant", "kimi-k2.5-free", &zeroCost, 300, 40, 10, 0, 0, day2, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "kimi-k2.5-free", &zeroCost, 300, 40, 10, 0, 0, day2, "/home/user/proj-mewla"),
 		// user message: never a usage row.
-		openCodeMsg("user", "", nil, 0, 0, 0, 0, 0, day2, "/home/user/proj-zen"),
+		openCodeMsg("user", "", nil, 0, 0, 0, 0, 0, day2, "/home/user/proj-mewla"),
 		// assistant message without any token usage: not a usage row.
-		openCodeMsg("assistant", "hy3-preview-free", &zeroCost, 0, 0, 0, 0, 0, day2, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "hy3-preview-free", &zeroCost, 0, 0, 0, 0, 0, day2, "/home/user/proj-mewla"),
 		// assistant message without a cost field: cost stays unknown.
-		openCodeMsg("assistant", "glm-4.7-free", nil, 600, 80, 30, 0, 0, day2, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "glm-4.7-free", nil, 600, 80, 30, 0, 0, day2, "/home/user/proj-mewla"),
 	})
 
 	c := &Collector{now: time.Now}
@@ -136,12 +136,12 @@ func TestCollectOpenCodeStatsAggregatesObservedFacts(t *testing.T) {
 	}
 
 	// Project attribution.
-	zenProject := day2Agg.projects["proj-zen"]
-	if zenProject == nil || zenProject.sessions != 4 {
-		t.Fatalf("proj-mewla project = %#v", zenProject)
+	mewlaProject := day2Agg.projects["proj-mewla"]
+	if mewlaProject == nil || mewlaProject.sessions != 4 {
+		t.Fatalf("proj-mewla project = %#v", mewlaProject)
 	}
-	if zenProject.cost != 0.003 || zenProject.inputTokens != 3000+300+600 || !zenProject.costUnknown {
-		t.Fatalf("proj-zen cost/input = %#v", zenProject)
+	if mewlaProject.cost != 0.003 || mewlaProject.inputTokens != 3000+300+600 || !mewlaProject.costUnknown {
+		t.Fatalf("proj-mewla cost/input = %#v", mewlaProject)
 	}
 	otherProject := day2Agg.projects["proj-other"]
 	if otherProject != nil {
@@ -186,8 +186,8 @@ func TestCollectOpenCodeStatsStableAndReload(t *testing.T) {
 	cost0015 := 0.0015
 
 	writeOpenCodeDBFixture(t, home, []string{
-		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, created, "/home/user/proj-zen"),
-		openCodeMsg("assistant", "kimi-k2.5-free", &cost0015, 300, 40, 0, 0, 0, created, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, created, "/home/user/proj-mewla"),
+		openCodeMsg("assistant", "kimi-k2.5-free", &cost0015, 300, 40, 0, 0, 0, created, "/home/user/proj-mewla"),
 	})
 
 	c := &Collector{now: time.Now}
@@ -201,11 +201,11 @@ func TestCollectOpenCodeStatsStableAndReload(t *testing.T) {
 	// deepseek request on day2, a new day, and a new model. Re-reading the
 	// database must pick them up without stale state.
 	writeOpenCodeDBFixture(t, home, []string{
-		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, created, "/home/user/proj-zen"),
-		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 2500, 400, 100, 900, 0, created, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, created, "/home/user/proj-mewla"),
+		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 2500, 400, 100, 900, 0, created, "/home/user/proj-mewla"),
 		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 400, 100, 20, 300, 5, int64(1785996000000), "/home/user/proj-new"),
-		openCodeMsg("assistant", "kimi-k2.5-free", &cost0015, 300, 40, 0, 0, 0, created, "/home/user/proj-zen"),
-		openCodeMsg("assistant", "qwen3.6-plus-free", &cost0015, 700, 90, 0, 0, 0, created, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "kimi-k2.5-free", &cost0015, 300, 40, 0, 0, 0, created, "/home/user/proj-mewla"),
+		openCodeMsg("assistant", "qwen3.6-plus-free", &cost0015, 700, 90, 0, 0, 0, created, "/home/user/proj-mewla"),
 	})
 
 	third := c.collectOpenCodeStats(home)
@@ -297,8 +297,8 @@ func TestOpenCodeModelsFlowIntoStatsPayload(t *testing.T) {
 	created := int64(1786082400000)
 	cost0015 := 0.0015
 	writeOpenCodeDBFixture(t, home, []string{
-		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, created, "/home/user/proj-zen"),
-		openCodeMsg("assistant", "kimi-k2.5-free", &cost0015, 300, 40, 0, 0, 0, created, "/home/user/proj-zen"),
+		openCodeMsg("assistant", "deepseek-v4-flash", &cost0015, 1000, 200, 50, 500, 10, created, "/home/user/proj-mewla"),
+		openCodeMsg("assistant", "kimi-k2.5-free", &cost0015, 300, 40, 0, 0, 0, created, "/home/user/proj-mewla"),
 	})
 
 	t.Setenv("HOME", home)

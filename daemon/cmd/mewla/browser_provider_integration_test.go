@@ -23,7 +23,7 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
-	zenserver "github.com/daoleno/mewla/daemon/server"
+	mewlaserver "github.com/daoleno/mewla/daemon/server"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
@@ -54,7 +54,7 @@ func TestMain(m *testing.M) {
 				_ = json.Unmarshal([]byte(os.Args[i+1]), &config)
 			}
 		}
-		server := config.Servers["zen_browser"]
+		server := config.Servers["mewla_browser"]
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		client := mcp.NewClient(&mcp.Implementation{Name: "launch-probe", Version: "1"}, nil)
@@ -148,7 +148,7 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 	}()
 	app := &controlApp{browsers: manager, watcher: w, stateDir: a.StorageDir()}
 	observed := &browserObservedBroker{app: app, snapshots: map[string]string{}}
-	cs := &control.Server{Path: filepath.Join(a.StorageDir(), "run", "zen.sock"), Handler: observed}
+	cs := &control.Server{Path: filepath.Join(a.StorageDir(), "run", "control.sock"), Handler: observed}
 	controlDone := make(chan error, 1)
 	go func() { controlDone <- cs.Run(ctx) }()
 	defer func() { cancel(); <-controlDone }()
@@ -158,7 +158,7 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	s := zenserver.New(a, w, nil, nil, nil, nil, nil)
+	s := mewlaserver.New(a, w, nil, nil, nil, nil, nil)
 	s.SetBrowser(manager)
 	// Reuse the normal configured Provider selection through an isolated Owner.
 	// Its catalog/credentials are private copies; route/gateway state is fresh.
@@ -203,14 +203,14 @@ func browserNormalProviderProof(t *testing.T, manager *browser.Manager, id, targ
 	}
 	host := httptest.NewServer(s.Handler())
 	defer host.Close()
-	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(host.URL, "http")+"/ws", http.Header{"Authorization": {signature("zen-connect")}})
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(host.URL, "http")+"/ws", http.Header{"Authorization": {signature("mewla-connect")}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ws.Close()
 	// Print mode is a bounded real task; config/auth use the configured provider.
 	// No cwd/global MCP files are written and no coding delegation is requested.
-	prompt := "Use ONLY the provided zen_browser MCP browser tool. Call control, then snapshot. Confirm the page says Persistent authenticated true and Session authenticated true. Call release. Reply BROWSER_SHARED_SESSION_OK if both are true. Do not navigate, use shell or other tools, access accounts, or change files."
+	prompt := "Use ONLY the provided mewla_browser MCP browser tool. Call control, then snapshot. Confirm the page says Persistent authenticated true and Session authenticated true. Call release. Reply BROWSER_SHARED_SESSION_OK if both are true. Do not navigate, use shell or other tools, access accounts, or change files."
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	providerExecutable := "claude"
 	if os.Getenv("MEWLA_BROWSER_PROVIDER") == "probe" {

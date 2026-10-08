@@ -487,7 +487,7 @@ func (s *Store) persistLocked() error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".zen-calendar-*")
+	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".mewla-calendar-*")
 	if err != nil {
 		return err
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-func TestBDD_ZEN009_LostOriginalResultSurvivesWaitAndRestart(t *testing.T) {
+func TestBDD_009_LostOriginalResultSurvivesWaitAndRestart(t *testing.T) {
 	for _, disposition := range []string{"wait", "cancel", "superseded"} {
 		t.Run(disposition, func(t *testing.T) {
 			// Given an admitted original producer classified lost, without a replay.
@@ -92,7 +92,7 @@ func TestBDD_ZEN009_LostOriginalResultSurvivesWaitAndRestart(t *testing.T) {
 	}
 }
 
-func TestBDD_ZEN010_IncompleteInventoryDoesNotDeclareOriginalLost(t *testing.T) {
+func TestBDD_010_IncompleteInventoryDoesNotDeclareOriginalLost(t *testing.T) {
 	for _, mode := range []string{"present", "probe-error", "absent"} {
 		t.Run(mode, func(t *testing.T) {
 			// Given a restarted inventory missing a still-owned original execution.

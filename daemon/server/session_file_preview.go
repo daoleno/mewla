@@ -26,7 +26,7 @@ const (
 	maxSessionFileReferenceBytes = 4096
 	maxSessionFileTextBytes      = 512 << 10
 	maxSessionFileBinaryBytes    = 50 << 20
-	sessionFileAuthPurpose       = "zen-session-file"
+	sessionFileAuthPurpose       = "mewla-session-file"
 	sessionFileCapabilityTTL     = 2 * time.Minute
 	maxSessionFileCapabilityBody = 16 << 10
 )
@@ -587,7 +587,7 @@ func (s *Server) handleSessionFileCapability(
 	s.writeJSONWithAssertion(
 		w,
 		http.StatusOK,
-		"zen-session-file-capability",
+		"mewla-session-file-capability",
 		map[string]any{
 			"version":        1,
 			"device_id":      device.ID,

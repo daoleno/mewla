@@ -256,18 +256,18 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.cookie = oauth2.GenerateVerifier()
-		http.SetCookie(w, &http.Cookie{Name: "zen_google_" + id, Value: f.cookie, Path: "/google/callback", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
+		http.SetCookie(w, &http.Cookie{Name: "mewla_google_" + id, Value: f.cookie, Path: "/google/callback", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
 		config := e.oauth
 		config.Scopes = Scopes(f.start.Writes)
 		http.Redirect(w, r, config.AuthCodeURL(id, oauth2.S256ChallengeOption(f.verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent")), 302)
 	case CallbackPath:
-		cookie, err := r.Cookie("zen_google_" + id)
+		cookie, err := r.Cookie("mewla_google_" + id)
 		if r.Method != "GET" || len(r.URL.RawQuery) > 16384 || err != nil || f.cookie == "" || !hmac.Equal([]byte(cookie.Value), []byte(f.cookie)) || f.Status != "waiting" {
 			http.Error(w, "Authorization return rejected", 400)
 			return
 		}
 		f.cookie = ""
-		http.SetCookie(w, &http.Cookie{Name: "zen_google_" + id, Path: "/google/callback", Secure: true, HttpOnly: true, MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: "mewla_google_" + id, Path: "/google/callback", Secure: true, HttpOnly: true, MaxAge: -1})
 		f.Status = "failed"
 		if r.URL.Query().Get("error") == "" && r.URL.Query().Get("code") != "" && len(r.URL.Query()["state"]) == 1 && len(r.URL.Query()["code"]) == 1 && (r.URL.Query().Get("iss") == "" || r.URL.Query().Get("iss") == "https://accounts.google.com") {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)

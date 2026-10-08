@@ -37,7 +37,7 @@ const MaxGatewayRequestBodyBytes = 128 << 20
 
 // GatewayProviderName is the Codex model_provider identity projected into the
 // CLI's native config by takeover. It is also the provider table key.
-const GatewayProviderName = "zen-gateway"
+const GatewayProviderName = "mewla-gateway"
 
 // GatewayUpstream is the atomic upstream connection state of the machine-level
 // gateway. It is derived from one Mewla Provider connection (profile) and never

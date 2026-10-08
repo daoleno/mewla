@@ -45,8 +45,8 @@ func TestManagerEnrollAndVerifyAuthorization(t *testing.T) {
 		t.Fatalf("unexpected device id: %s", device.ID)
 	}
 
-	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "zen-probe")
-	verifiedDevice, err := manager.VerifyAuthorization(header, "zen-probe", time.Minute)
+	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "mewla-probe")
+	verifiedDevice, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute)
 	if err != nil {
 		t.Fatalf("VerifyAuthorization returned error: %v", err)
 	}
@@ -82,12 +82,12 @@ func TestManagerVerifyAuthorizationRejectsReplay(t *testing.T) {
 		t.Fatalf("EnrollDevice returned error: %v", err)
 	}
 
-	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "zen-probe")
-	if _, err := manager.VerifyAuthorization(header, "zen-probe", time.Minute); err != nil {
+	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "mewla-probe")
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
 		t.Fatalf("first VerifyAuthorization returned error: %v", err)
 	}
 
-	if _, err := manager.VerifyAuthorization(header, "zen-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
 		t.Fatalf("expected ErrReplayDetected, got %v", err)
 	}
 }
@@ -127,9 +127,9 @@ func TestManagerRevokeDevicePersistsAndImmediatelyRejectsAuthorization(t *testin
 		privateKey,
 		manager.DaemonID(),
 		"device-revoke",
-		"zen-probe",
+		"mewla-probe",
 	)
-	if _, err := manager.VerifyAuthorization(header, "zen-probe", time.Minute); !errors.Is(err, ErrUnknownDevice) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrUnknownDevice) {
 		t.Fatalf("revoked device authorization error=%v, want ErrUnknownDevice", err)
 	}
 	reloaded, err := NewManager(stateDir)
@@ -349,16 +349,16 @@ func TestManagerRevokeReEnrollRetainsConsumedNonce(t *testing.T) {
 		privateKey,
 		manager.DaemonID(),
 		deviceID,
-		"zen-probe",
+		"mewla-probe",
 	)
-	if _, err := manager.VerifyAuthorization(header, "zen-probe", time.Minute); err != nil {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := manager.RevokeDevice(deviceID); err != nil {
 		t.Fatal(err)
 	}
 	enroll()
-	if _, err := manager.VerifyAuthorization(header, "zen-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
 		t.Fatalf("reused authorization error=%v, want ErrReplayDetected", err)
 	}
 }
@@ -408,7 +408,7 @@ func TestManagerCreateServerAssertion(t *testing.T) {
 		t.Fatalf("NewManager returned error: %v", err)
 	}
 
-	assertion, err := manager.CreateServerAssertion("zen-health")
+	assertion, err := manager.CreateServerAssertion("mewla-health")
 	if err != nil {
 		t.Fatalf("CreateServerAssertion returned error: %v", err)
 	}
@@ -418,7 +418,7 @@ func TestManagerCreateServerAssertion(t *testing.T) {
 		t.Fatalf("decodeFixedHex returned error: %v", err)
 	}
 
-	payload := BuildServerAssertionPayload("zen-health", manager.DaemonID(), assertion.Timestamp, assertion.NonceHex)
+	payload := BuildServerAssertionPayload("mewla-health", manager.DaemonID(), assertion.Timestamp, assertion.NonceHex)
 	if !ed25519.Verify(manager.publicKey, payload, signature) {
 		t.Fatal("server assertion signature did not verify")
 	}

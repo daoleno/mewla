@@ -107,7 +107,7 @@ func TestLoadHostConversationByIdentityDoesNotFallThroughUnknownProviderToCodex(
 }
 
 func TestHostDataRootForClaudeTranscript(t *testing.T) {
-	path := "/home/daoleno/.claude/projects/-home-daoleno--zen-brain-workspace/session.jsonl"
+	path := "/home/daoleno/.claude/projects/-home-daoleno--mewla-brain-workspace/session.jsonl"
 	if got, want := hostDataRootForPath(path, WorkerProviderClaude), "/home/daoleno/.claude"; got != want {
 		t.Fatalf("hostDataRootForPath(%q, claude) = %q, want %q", path, got, want)
 	}
@@ -115,7 +115,7 @@ func TestHostDataRootForClaudeTranscript(t *testing.T) {
 
 func TestSuppressPrivateHostTurnsHidesHandoffAndKeepsLaterReplies(t *testing.T) {
 	events := []CodexConversationEvent{
-		{ID: "boot-user", Kind: "user_message", Role: "user", Body: "You are Brain inside zen\nTreat this bootstrap as a map"},
+		{ID: "boot-user", Kind: "user_message", Role: "user", Body: "You are Brain inside mewla\nTreat this bootstrap as a map"},
 		{ID: "boot-asst", Kind: "assistant_message", Role: "assistant", Body: "Bootstrap ready."},
 		{ID: "hand-user", Kind: "user_message", Role: "user", Body: "Brain host executor handoff:\nWait for the next user message."},
 		{ID: "hand-asst", Kind: "assistant_message", Role: "assistant", Body: "Handoff acknowledged, continuing."},
@@ -132,7 +132,7 @@ func TestSuppressPrivateHostTurnsHidesActivationAfterPublicHistory(t *testing.T)
 	events := []CodexConversationEvent{
 		{ID: "old-user", Kind: "user_message", Role: "user", Body: "earlier public question"},
 		{ID: "old-asst", Kind: "assistant_message", Role: "assistant", Body: "earlier public answer"},
-		{ID: "activation-user", Kind: "user_message", Role: "user", Body: "Brain Host activation contract:\nVersion: zen-brain-worker-role/v1\nprivate policy"},
+		{ID: "activation-user", Kind: "user_message", Role: "user", Body: "Brain Host activation contract:\nVersion: mewla-brain-worker-role/v1\nprivate policy"},
 		{ID: "activation-tool", Kind: "tool_message", Role: "tool", Body: "private activation tool output"},
 		{ID: "activation-asst", Kind: "assistant_message", Role: "assistant", Body: "Activation acknowledged."},
 		{ID: "next-user", Kind: "user_message", Role: "user", Body: "continue publicly"},
@@ -166,7 +166,7 @@ func writeGrokHostSessionFixture(t *testing.T, home, cwd, sessionID string, star
 		"updated_at": startedAt.UTC().Add(2 * time.Minute).Format(time.RFC3339Nano),
 	})
 	writeJSONL(t, filepath.Join(sessionDir, grokChatHistoryFile),
-		map[string]any{"type": "user", "content": "You are Brain inside zen, the user's private second brain.\nTreat this bootstrap as a map, not the full context."},
+		map[string]any{"type": "user", "content": "You are Brain inside mewla, the user's private second brain.\nTreat this bootstrap as a map, not the full context."},
 		map[string]any{"type": "assistant", "content": "Bootstrap ready."},
 		map[string]any{"type": "user", "content": "Brain host executor handoff:\nThe user switched Brain host executors."},
 		map[string]any{"type": "assistant", "content": "Handoff acknowledged, continuing."},

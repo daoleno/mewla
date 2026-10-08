@@ -42,7 +42,7 @@ type InventoryOptions struct {
 	Context      context.Context
 	CWD          string
 	Home         string
-	ZenStateDir  string
+	StateDir  string
 	CodexHome    string
 	ClaudeHome   string
 	XDGStateHome string
@@ -159,14 +159,14 @@ func normalizeInventoryOptions(options InventoryOptions) (InventoryOptions, erro
 	if claudeHome == "" {
 		claudeHome = filepath.Join(home, ".claude")
 	}
-	zenStateDir := strings.TrimSpace(options.ZenStateDir)
-	if zenStateDir == "" {
-		zenStateDir = strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
+	stateDir := strings.TrimSpace(options.StateDir)
+	if stateDir == "" {
+		stateDir = strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
 	}
-	if zenStateDir == "" {
-		zenStateDir = statedir.Default(home)
+	if stateDir == "" {
+		stateDir = statedir.Default(home)
 	}
-	for _, value := range []string{codexHome, claudeHome, zenStateDir} {
+	for _, value := range []string{codexHome, claudeHome, stateDir} {
 		if !filepath.IsAbs(value) {
 			return InventoryOptions{}, errors.New("Skills root configuration must be absolute")
 		}
@@ -185,7 +185,7 @@ func normalizeInventoryOptions(options InventoryOptions) (InventoryOptions, erro
 	options.CWD = cwd
 	options.CodexHome = filepath.Clean(codexHome)
 	options.ClaudeHome = filepath.Clean(claudeHome)
-	options.ZenStateDir = filepath.Clean(zenStateDir)
+	options.StateDir = filepath.Clean(stateDir)
 	return options, nil
 }
 
@@ -241,7 +241,7 @@ func (collector *inventoryCollector) scanAllRoots() {
 	}
 	// V4's managed store remains discoverable only as an ordinary local root.
 	collector.scanRoot(inventoryRoot{
-		path:  filepath.Join(collector.options.ZenStateDir, "skills", "store"),
+		path:  filepath.Join(collector.options.StateDir, "skills", "store"),
 		label: "Local Skills storage", scope: ScopeUnknown, deletable: true,
 	})
 	collector.scanPluginCaches()

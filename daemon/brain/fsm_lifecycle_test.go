@@ -1167,7 +1167,7 @@ func TestLifecycleStoreRejectsAdmissionWithoutAttemptedAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	acceptedAt := time.Date(2026, 8, 22, 10, 34, 42, 661032855, time.UTC)
-	sessionID := "zen-worker-zen-lifecycle-live-admission-review:@409"
+	sessionID := "mewla-worker-mewla-lifecycle-live-admission-review:@409"
 	turnID := "turn:87c25477-6589-4b56-b304-6f27728e831a"
 	pending, created, err := store.PrepareInputAdmission(delegatedSubmissionCandidate(
 		item.ID, sessionID, turnID, "historical payload", acceptedAt,

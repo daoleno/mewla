@@ -15,7 +15,7 @@ import (
 
 func TestGooglePublisherHandoffKeepsSecretOffDaemon(t *testing.T) {
 	old := GoogleExchangeOrigin
-	GoogleExchangeOrigin = "https://zen-owned.example"
+	GoogleExchangeOrigin = "https://mewla-owned.example"
 	defer func() { GoogleExchangeOrigin = old }()
 	m, _ := New(t.TempDir())
 	m.networkOwned = false
@@ -25,20 +25,20 @@ func TestGooglePublisherHandoffKeepsSecretOffDaemon(t *testing.T) {
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		var result any
 		switch req.URL.Host + req.URL.Path {
-		case "zen-owned.example/google/start":
+		case "mewla-owned.example/google/start":
 			_ = json.NewDecoder(req.Body).Decode(&start)
 			raw, _ := base64.RawURLEncoding.DecodeString(start.PublicKey)
 			copy(key[:], raw)
 			result = googleauth.Session{ID: "publisher-flow", AuthorizationURL: GoogleExchangeOrigin + "/google/authorize?id=publisher-flow", Expires: time.Now().Add(10 * time.Minute), Status: "waiting"}
-		case "zen-owned.example/google/status":
+		case "mewla-owned.example/google/status":
 			if req.Header.Get("Authorization") != "Bearer "+start.Nonce {
 				t.Fatal("daemon retrieval proof missing")
 			}
 			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "signed-publisher-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: []string{"openid", "email", googleScopeBase + "drive.readonly"}}, start.PublicKey)
 			result = googleauth.Session{ID: "publisher-flow", Status: "connected", Ciphertext: sealed}
-		case "zen-owned.example/google/cancel":
+		case "mewla-owned.example/google/cancel":
 			result = map[string]bool{"cancelled": true}
-		case "zen-owned.example/google/refresh":
+		case "mewla-owned.example/google/refresh":
 			var refresh googleauth.Refresh
 			_ = json.NewDecoder(req.Body).Decode(&refresh)
 			if refresh.RefreshToken != "refresh" || refresh.Receipt != "signed-publisher-binding" || refresh.Proof != "daemon-proof" {

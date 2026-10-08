@@ -28,8 +28,8 @@ Body.
 
 func TestStore_Scan(t *testing.T) {
 	root := t.TempDir()
-	writeWorkItem(t, filepath.Join(root, "zen", "a.md"), "A")
-	writeWorkItem(t, filepath.Join(root, "zen", "b.md"), "B")
+	writeWorkItem(t, filepath.Join(root, "mewla", "a.md"), "A")
+	writeWorkItem(t, filepath.Join(root, "mewla", "b.md"), "B")
 	writeWorkItem(t, filepath.Join(root, "inbox", "c.md"), "C")
 
 	store, err := NewStore(root)
@@ -46,7 +46,7 @@ func TestStore_Scan(t *testing.T) {
 
 func TestStore_GetByID(t *testing.T) {
 	root := t.TempDir()
-	writeWorkItem(t, filepath.Join(root, "zen", "a.md"), "A")
+	writeWorkItem(t, filepath.Join(root, "mewla", "a.md"), "A")
 
 	store, err := NewStore(root)
 	if err != nil {
@@ -58,14 +58,14 @@ func TestStore_GetByID(t *testing.T) {
 	if !ok {
 		t.Fatal("work item A not found")
 	}
-	if iss.Project != "zen" {
+	if iss.Project != "mewla" {
 		t.Fatalf("project = %q", iss.Project)
 	}
 }
 
 func TestStore_WriteAndRead(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "zen"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "mewla"), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
@@ -76,7 +76,7 @@ func TestStore_WriteAndRead(t *testing.T) {
 	defer store.Close()
 
 	iss := &Item{
-		Path: filepath.Join(root, "zen", "new.md"),
+		Path: filepath.Join(root, "mewla", "new.md"),
 		Body: "# New\n\nBody.\n",
 		Frontmatter: Frontmatter{
 			ID:      "NEW",
@@ -102,7 +102,7 @@ func TestStore_WriteAndRead(t *testing.T) {
 
 func TestStore_WatchNotifiesOnChange(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "zen"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "mewla"), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
@@ -117,7 +117,7 @@ func TestStore_WatchNotifiesOnChange(t *testing.T) {
 	}
 	_, ch := store.Subscribe()
 
-	writeWorkItem(t, filepath.Join(root, "zen", "live.md"), "LIVE")
+	writeWorkItem(t, filepath.Join(root, "mewla", "live.md"), "LIVE")
 
 	select {
 	case ev := <-ch:
@@ -134,7 +134,7 @@ func TestStore_WatchNotifiesOnChange(t *testing.T) {
 
 func TestStore_WatchDebouncesMultipleWrites(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "zen"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "mewla"), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
@@ -149,7 +149,7 @@ func TestStore_WatchDebouncesMultipleWrites(t *testing.T) {
 	}
 	_, ch := store.Subscribe()
 
-	path := filepath.Join(root, "zen", "hot.md")
+	path := filepath.Join(root, "mewla", "hot.md")
 	writeWorkItem(t, path, "HOT")
 	for range 3 {
 		time.Sleep(50 * time.Millisecond)

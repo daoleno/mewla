@@ -22,7 +22,7 @@ import (
 //	MEWLA_PORTABLE_HISTORY_CAPTURE=1 go test ./modelprofiles -run 'TestCapture' -count=1 -timeout 180s -v
 //
 // Uses Worker-owned temp dirs and local fake gateways only — no real credentials,
-// user config writes, or live zen Sessions.
+// user config writes, or live mewla Sessions.
 
 type capturedReq struct {
 	Method string
@@ -146,7 +146,7 @@ func TestCaptureCodexMultiTurnResponsesBodies(t *testing.T) {
 	if artDir == "" {
 		artDir = t.TempDir()
 	}
-	art := filepath.Join(artDir, "zen-codex-portable-capture.json")
+	art := filepath.Join(artDir, "mewla-codex-portable-capture.json")
 	raw, _ := json.MarshalIndent(reqs, "", "  ")
 	if err := os.WriteFile(art, raw, 0o600); err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func TestCaptureClaudeMultiTurnMessagesBodies(t *testing.T) {
 	if artDir == "" {
 		artDir = t.TempDir()
 	}
-	art := filepath.Join(artDir, "zen-claude-portable-capture.json")
+	art := filepath.Join(artDir, "mewla-claude-portable-capture.json")
 	raw, _ := json.MarshalIndent(reqs, "", "  ")
 	if err := os.WriteFile(art, raw, 0o600); err != nil {
 		t.Fatal(err)

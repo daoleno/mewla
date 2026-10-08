@@ -104,7 +104,7 @@ func TestScheduledActionCommandPiAndOpenCode(t *testing.T) {
 func TestParsePiConversationActiveBranchAndAdmission(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")
-	payload := "zen-pi-admission-exact"
+	payload := "mewla-pi-admission-exact"
 	content := strings.Join([]string{
 		`{"type":"session","version":3,"id":"sess-1","timestamp":"2026-08-06T00:00:00.000Z","cwd":"/repo"}`,
 		`{"type":"message","id":"u1","parentId":null,"timestamp":"2026-08-06T00:00:01.000Z","message":{"role":"user","content":"` + payload + `"}}`,
@@ -154,7 +154,7 @@ func TestPiNonmatchingUserDoesNotAdmitPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf("%x", sha256.Sum256([]byte("zen-pi-admission-exact")))
+	want := fmt.Sprintf("%x", sha256.Sum256([]byte("mewla-pi-admission-exact")))
 	for _, event := range got.Events {
 		if event.Kind == "user_message" && event.AdmissionSHA256 == want {
 			t.Fatalf("nonmatching user admitted exact digest: %#v", event)

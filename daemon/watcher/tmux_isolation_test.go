@@ -9,15 +9,15 @@ import (
 func TestWatcherUsesOneSelectedHostServerForKnownTargets(t *testing.T) {
 	w := New(time.Second)
 	socket := "/run/user/1000/custom tmux.sock "
-	w.SetTmuxServer(socket, "/home/user/.zen/run/tmux-scratch/daemon-1")
-	w.registerCreatedSession("zen-worker-worker:@3", "/repo", CreateSessionOptions{
+	w.SetTmuxServer(socket, "/home/user/.mewla/run/tmux-scratch/daemon-1")
+	w.registerCreatedSession("mewla-worker-worker:@3", "/repo", CreateSessionOptions{
 		Name: "worker", Delegated: true, ProgressEnv: true,
 	}, time.Now().UTC())
 
-	if got := w.socketPathFor("zen-worker-worker:@3"); got != socket {
+	if got := w.socketPathFor("mewla-worker-worker:@3"); got != socket {
 		t.Fatalf("internal selected socket = %q, want %q", got, socket)
 	}
-	if got := w.SocketPathFor("zen-worker-worker:@3"); got != socket {
+	if got := w.SocketPathFor("mewla-worker-worker:@3"); got != socket {
 		t.Fatalf("known target socket = %q, want %q", got, socket)
 	}
 	if got := w.SocketPathFor("ambient:@9"); got != "" {
@@ -45,7 +45,7 @@ func TestWorkerProgressEnvScriptDropsHostTmuxCapabilityAfterIdentity(t *testing.
 
 func TestProviderWindowEnvironmentGetsPrivateTmuxScratch(t *testing.T) {
 	w := New(time.Second)
-	scratch := "/home/user/.zen/run/tmux-scratch/daemon-1"
+	scratch := "/home/user/.mewla/run/tmux-scratch/daemon-1"
 	w.SetTmuxServer("/run/user/1000/custom-tmux.sock", scratch)
 
 	host := CreateSessionOptions{Name: "Brain", Hidden: true, ProgressEnv: true, Env: map[string]string{}}
@@ -55,9 +55,9 @@ func TestProviderWindowEnvironmentGetsPrivateTmuxScratch(t *testing.T) {
 	}
 
 	delegated := CreateSessionOptions{Name: "worker", Delegated: true, ProgressEnv: true, Env: map[string]string{}}
-	delegated.resource = &delegatedResourceSpec{TempDir: "/home/user/.zen/t/abc123"}
+	delegated.resource = &delegatedResourceSpec{TempDir: "/home/user/.mewla/t/abc123"}
 	applyProviderTmuxIsolation(&delegated, w)
-	if delegated.Env["TMUX_TMPDIR"] != "/home/user/.zen/t/abc123" {
+	if delegated.Env["TMUX_TMPDIR"] != "/home/user/.mewla/t/abc123" {
 		t.Fatalf("delegated TMUX_TMPDIR = %q, want per-agent scratch", delegated.Env["TMUX_TMPDIR"])
 	}
 	if _, present := host.Env["TMUX"]; present {

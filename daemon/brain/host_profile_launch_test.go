@@ -65,7 +65,7 @@ func TestNewChatPrepareCommitFreshHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old:@1"
+	oldID := "mewla-worker-brain-old:@1"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestExecutorMismatchReplacementPrepareCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-grok:@1"
+	oldID := "mewla-worker-brain-grok:@1"
 	if err := store.SetHostSession(oldID, "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestMissingTmuxResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing:@9"
+	oldID := "mewla-worker-brain-missing:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := filepath.Join(t.TempDir(), "rollout-"+providerSessionID+".jsonl")
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -177,7 +177,7 @@ func TestMissingTmuxResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
 	routes := &fakeRouteLifecycle{
 		resumeFound: true,
 		resumeCmd:   "codex resume " + providerSessionID + " --immutable-route",
-		resumeEnv:   map[string]string{"OPENAI_API_KEY": "zen-loopback-placeholder-not-a-secret"},
+		resumeEnv:   map[string]string{"OPENAI_API_KEY": "mewla-loopback-placeholder-not-a-secret"},
 		preparePlan: &modelprofiles.SessionLaunchPlan{
 			Applied:       true,
 			Command:       "codex --later-default",
@@ -208,7 +208,7 @@ func TestMissingTmuxResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
 	if len(fw.created) != 1 || fw.created[0].opts.Command != routes.resumeCmd {
 		t.Fatalf("created=%#v", fw.created)
 	}
-	if fw.created[0].opts.Env["OPENAI_API_KEY"] != "zen-loopback-placeholder-not-a-secret" {
+	if fw.created[0].opts.Env["OPENAI_API_KEY"] != "mewla-loopback-placeholder-not-a-secret" {
 		t.Fatalf("env=%#v", fw.created[0].opts.Env)
 	}
 }
@@ -222,7 +222,7 @@ func TestMissingTmuxResumeWithoutBindingPreparesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-missing-unbound:@9"
+	oldID := "mewla-worker-brain-missing-unbound:@9"
 	providerSessionID := "019fd717-589c-7a11-9966-917f43dc336a"
 	transcriptPath := filepath.Join(t.TempDir(), "rollout-"+providerSessionID+".jsonl")
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
@@ -517,7 +517,7 @@ func TestNewChatCommitNondurableFailsClosedNoHostBind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldID := "zen-worker-brain-old:@1"
+	oldID := "mewla-worker-brain-old:@1"
 	if err := store.SetHostSession(oldID, "codex"); err != nil {
 		t.Fatal(err)
 	}

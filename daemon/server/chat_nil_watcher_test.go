@@ -45,7 +45,7 @@ func TestChatWebSocketNilWatcherStaysConnected(t *testing.T) {
 	defer host.Close()
 	url := "ws" + strings.TrimPrefix(host.URL, "http")
 	headers := http.Header{"Authorization": []string{
-		calendarAuthHeader(private, manager.DaemonID(), "nil-watcher-test", "zen-connect")}}
+		calendarAuthHeader(private, manager.DaemonID(), "nil-watcher-test", "mewla-connect")}}
 	conn, _, err := websocket.DefaultDialer.Dial(url, headers)
 	if err != nil {
 		t.Fatal(err)

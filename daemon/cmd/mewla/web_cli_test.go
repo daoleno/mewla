@@ -14,8 +14,8 @@ func TestNormalizeWebOriginAcceptsLoopbackHTTPAndHTTPS(t *testing.T) {
 	cases := map[string]string{
 		"http://127.0.0.1:9876":          "http://127.0.0.1:9876",
 		"http://localhost:9876/":         "http://localhost:9876",
-		"https://zen.example.ts.net":     "https://zen.example.ts.net",
-		"https://zen.example.ts.net:443": "https://zen.example.ts.net",
+		"https://mewla.example.ts.net":     "https://mewla.example.ts.net",
+		"https://mewla.example.ts.net:443": "https://mewla.example.ts.net",
 	}
 	for raw, want := range cases {
 		got, err := normalizeWebOrigin(raw)

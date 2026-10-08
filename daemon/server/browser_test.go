@@ -91,15 +91,15 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 	if _, status := request(browser.Request{Action: "list"}, ""); status == 200 {
 		t.Fatal("unauthenticated list")
 	}
-	created, status := request(browser.Request{Action: "create", Name: "Fixture"}, "zen-browser")
+	created, status := request(browser.Request{Action: "create", Name: "Fixture"}, "mewla-browser")
 	if status != 200 {
 		t.Fatal(status)
 	}
 	id := created.Resource.ID
-	if _, status = request(browser.Request{Action: "start", ID: id}, "zen-browser"); status != 200 {
+	if _, status = request(browser.Request{Action: "start", ID: id}, "mewla-browser"); status != 200 {
 		t.Fatal(status)
 	}
-	if _, status = request(browser.Request{Action: "control", ID: id}, "zen-browser"); status == 200 {
+	if _, status = request(browser.Request{Action: "control", ID: id}, "mewla-browser"); status == 200 {
 		t.Fatal("HTTP bypassed viewer lease")
 	}
 	dial := func(purpose string) (*websocket.Conn, error) {
@@ -107,12 +107,12 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 		c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/browser/viewer?id="+id, header)
 		return c, err
 	}
-	if c, e := dial("zen-browser-view:00000000-0000-0000-0000-000000000000"); e == nil {
+	if c, e := dial("mewla-browser-view:00000000-0000-0000-0000-000000000000"); e == nil {
 		c.Close()
 		t.Fatal("resource scope bypassed")
 	}
 	for attempt := 0; attempt < 2; attempt++ {
-		c, e := dial("zen-browser-view:" + id)
+		c, e := dial("mewla-browser-view:" + id)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -154,7 +154,7 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 			time.Sleep(time.Millisecond)
 		}
 	}
-	c, e := dial("zen-browser-view:" + id)
+	c, e := dial("mewla-browser-view:" + id)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -172,7 +172,7 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 	if _, _, e = c.ReadMessage(); e == nil {
 		t.Fatal("revocation left viewer open")
 	}
-	if c, e := dial("zen-browser-view:" + id); e == nil {
+	if c, e := dial("mewla-browser-view:" + id); e == nil {
 		c.Close()
 		t.Fatal("revoked reconnect accepted")
 	}

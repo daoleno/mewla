@@ -8,7 +8,7 @@ import (
 )
 
 func TestClaudePasteAdmissionExactEnvelope(t *testing.T) {
-	for _, payload := range []string{"<zen_work_event>\n{\"summary\":\"large\"}\n</zen_work_event>", " \t你好\r\n\n\n", "trailing \t", ""} {
+	for _, payload := range []string{"<mewla_work_event>\n{\"summary\":\"large\"}\n</mewla_work_event>", " \t你好\r\n\n\n", "trailing \t", ""} {
 		wrap := func(id string) string {
 			return "\n\n<pasted_content id=\"" + id + "\">\n" + payload + "\n</pasted_content id=\"" + id + "\">\n"
 		}

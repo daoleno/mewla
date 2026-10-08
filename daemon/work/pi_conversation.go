@@ -110,7 +110,7 @@ func (r *ProviderConversationReader) findPiTranscript(worker classifier.Worker, 
 	}
 	// Owned-directory auto-bind: the durable binding can be unavailable even
 	// though the Mewla-owned transcript exists and is fresh — sessions created
-	// before the durable @zen_worker_pi_session option existed, argv-rewritten
+	// before the durable @mewla_worker_pi_session option existed, argv-rewritten
 	// node-based Pi, and daemon-restart re-discovery all lose the launch
 	// command. The authoritative owned JSONL is then the only recoverable
 	// record; without this scan the Interface projects an empty

@@ -179,14 +179,14 @@ func TestTOMLProvenanceClaimIsNotAuthorization(t *testing.T) {
 		t.Fatalf("command leak/flags: %q", resolved.Command)
 	}
 
-	zen := claimed
-	zen.ClientModel = "zenith-lab/gpt-style"
-	zen.Model = "zenith-lab/gpt-style"
-	zen.AuthMode = AuthModeNone
-	zen.CredentialEnv = ""
-	zen.ClientModelProvenance = ""
-	verifier := registerAllow(nil, zen)
-	state, err := NewRouteTable().BindLaunch("zen", zen, 1, ContractAuth{Verifier: verifier})
+	mewla := claimed
+	mewla.ClientModel = "zenith-lab/gpt-style"
+	mewla.Model = "zenith-lab/gpt-style"
+	mewla.AuthMode = AuthModeNone
+	mewla.CredentialEnv = ""
+	mewla.ClientModelProvenance = ""
+	verifier := registerAllow(nil, mewla)
+	state, err := NewRouteTable().BindLaunch("mewla", mewla, 1, ContractAuth{Verifier: verifier})
 	if err != nil {
 		t.Fatal(err)
 	}

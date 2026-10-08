@@ -41,7 +41,7 @@ func TestGitDiffPageAuthenticatedWebSocket(t *testing.T) {
 		conn.Close()
 		t.Fatal("unauthenticated diff socket accepted")
 	}
-	headers := http.Header{"Authorization": []string{calendarAuthHeader(private, manager.DaemonID(), "diff-test", "zen-connect")}}
+	headers := http.Header{"Authorization": []string{calendarAuthHeader(private, manager.DaemonID(), "diff-test", "mewla-connect")}}
 	conn, _, err := websocket.DefaultDialer.Dial(url, headers)
 	if err != nil {
 		t.Fatal(err)
