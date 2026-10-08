@@ -135,6 +135,16 @@ own outer connector socket, so a large `/upload` body is independent of a live
 Terminal WebSocket. Existing daemon uploads are HTTP, while Terminal remains on
 `/ws`; Link preserves that separation.
 
+Inside the daemon, each `/ws` client has its own ordered send queue and a single
+writer goroutine. Broadcasts, request replies and watcher events only enqueue,
+so a client that stops reading (a suspended phone, a dead proxy leg) never
+stalls broadcast, the watcher, control-socket writes or session creation. That
+client is closed when one write passes the 30 s deadline or its queue passes
+16 MiB, and it reconnects to fresh snapshots. Terminal output for a client waits
+for room in that client's queue instead, so a busy terminal slows to the
+client's pace. The watcher publishes events through an ordered overflow queue
+and never blocks on its consumer.
+
 The MVP does not add application-level resume to protocols that do not already
 have it:
 

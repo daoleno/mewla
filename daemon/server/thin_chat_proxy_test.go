@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -694,13 +693,13 @@ func openThinProxyTestSocket(t *testing.T, srv *Server) *websocket.Conn {
 			return
 		}
 		srv.mu.Lock()
-		if srv.writes == nil {
-			srv.writes = make(map[*websocket.Conn]*sync.Mutex)
+		if srv.outboxes == nil {
+			srv.outboxes = make(map[*websocket.Conn]*clientOutbox)
 		}
 		if srv.codexSubs == nil {
 			srv.codexSubs = make(map[*websocket.Conn]map[string]codexConversationSubscription)
 		}
-		srv.writes[conn] = &sync.Mutex{}
+		srv.outboxes[conn] = newClientOutbox(conn)
 		srv.mu.Unlock()
 		close(registered)
 		defer func() {
@@ -709,7 +708,8 @@ func openThinProxyTestSocket(t *testing.T, srv *Server) *websocket.Conn {
 				subscription.cancel()
 			}
 			delete(srv.codexSubs, conn)
-			delete(srv.writes, conn)
+			srv.outboxes[conn].close()
+			delete(srv.outboxes, conn)
 			srv.mu.Unlock()
 			_ = conn.Close()
 		}()

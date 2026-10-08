@@ -152,7 +152,7 @@ func TestWorkWireKeepsExplicitItemsWithoutDigestControlPlane(t *testing.T) {
 		t.Fatal("explicit Work write did not emit a store event")
 	}
 	server.mu.Lock()
-	for registeredConn := range server.writes {
+	for registeredConn := range server.outboxes {
 		server.clients[registeredConn] = &authenticatedClient{
 			deviceID: "digest-test-device",
 		}
