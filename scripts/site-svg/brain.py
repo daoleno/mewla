@@ -3,32 +3,26 @@
 # on the slip that needs you. The atlas-notes story matches the homepage.
 import json
 import os
-import re
+import subprocess
 
 from common import C, Svg, chevron, mark, seal, slip
 
 GOAL = "Ship atlas-notes v1.4 this week"
 
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ICONS = os.path.join(HERE, "..", "..", "app", "components", "icons")
-GLYPHS = {
-    name: json.loads(paths)
-    for name, paths in re.findall(r'^  "([a-z-]+)": (\[.*\]),$', open(os.path.join(ICONS, "phosphorGlyphs.ts")).read(), re.M)
-}
-BRAIN_GLYPH = re.search(r'brain: \{\s*strokes: \[\s*"([^"]+)"', open(os.path.join(ICONS, "mewlaGlyphs.ts")).read()).group(1)
+GLYPHS = json.loads(subprocess.run(["bun", os.path.join(os.path.dirname(os.path.abspath(__file__)), "glyphs.ts")],
+                                   check=True, capture_output=True, text=True).stdout)
 MENU = (("brain", "Brain"), ("sessions", "Sessions"), ("calendar", "Calendar"), ("plugins", "Plugins"),
         ("skills", "Skills"), ("stats", "Stats"), ("resources", "Resources"))
 
 
 def icon(s, name, x, y, size=18, ink="soft"):
     """The app's own glyphs (components/icons), top-left at (x, y)."""
-    g = f'<g transform="translate({x:g} {y:g}) scale({size / 256:g})">'
-    if name == "brain":
-        g += f'<path d="{BRAIN_GLYPH}" fill="none" stroke="{C[ink]}" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>'
-        g += "".join(f'<circle cx="{cx}" cy="142" r="14" fill="{C[ink]}"/>' for cx in (92, 128, 164))
-    else:
-        g += "".join(f'<path d="{d}" fill="{C[ink]}"/>' for d in GLYPHS[name])
+    glyph = GLYPHS[name]
+    g = f'<g transform="translate({x:g} {y:g}) scale({size / 24:g})">'
+    g += "".join(f'<path d="{d}" fill="none" stroke="{C[ink]}" stroke-width="1.5" stroke-linecap="round" '
+                 f'stroke-linejoin="round"/>' for d in glyph["strokes"])
+    g += "".join(f'<path d="{d}" fill="{C[ink]}" fill-rule="evenodd"/>' for d in glyph.get("fills", []))
     s.add(g + "</g>")
 
 
