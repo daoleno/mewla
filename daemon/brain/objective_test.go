@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newObjectiveStore(t *testing.T, threadID string) *Store {
@@ -165,5 +166,70 @@ func TestSnapshotWireCarriesObjectiveOnlyWhenSet(t *testing.T) {
 	objective, ok := payload["objective"].(map[string]any)
 	if !ok || objective["title"] != "Ship v1.4" || objective["total"] != float64(5) || objective["back"] != float64(2) {
 		t.Fatalf("objective wire = %#v", payload["objective"])
+	}
+}
+
+func TestObjectiveCurrentHidesFinishedAndStaleGoals(t *testing.T) {
+	set := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		objective Objective
+		after     time.Duration
+		want      bool
+	}{
+		{"just declared", Objective{}, time.Minute, true},
+		{"declared, nothing handed off for half a day", Objective{}, 12 * time.Hour, false},
+		{"Work out", Objective{Total: 3, Back: 1}, time.Hour, true},
+		{"everything back, Brain still reading", Objective{Total: 3, Back: 3}, 10 * time.Minute, true},
+		{"everything back and settled", Objective{Total: 3, Back: 3}, 30 * time.Minute, false},
+		{"every child closed done", Objective{Total: 2, Back: 2, Done: 2}, time.Second, false},
+		{"one straggler, nothing moved for half a day", Objective{Total: 27, Back: 26}, 12 * time.Hour, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			objective := tc.objective
+			objective.Title = "Ship v1.4"
+			objective.SetAt = set
+			objective.LastActivity = set
+			if got := objectiveCurrent(objective, set.Add(tc.after)); got != tc.want {
+				t.Fatalf("objectiveCurrent(%+v, +%s) = %v, want %v", tc.objective, tc.after, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDisplayedObjectiveLeavesTheAppsButNotBrain(t *testing.T) {
+	store := newObjectiveStore(t, "thread-a")
+	now := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	if _, err := store.SetObjective("Ship v1.4"); err != nil {
+		t.Fatal(err)
+	}
+	work := createObjectiveWork(t, store, "sync fix")
+	shown, err := store.DisplayedObjective()
+	if err != nil || shown == nil || shown.Total != 1 {
+		t.Fatalf("displayed = %#v, %v; want the objective with 1 child", shown, err)
+	}
+
+	now = now.Add(time.Hour)
+	if _, created, err := store.AppendWorkEvent(WorkEvent{
+		WorkID:     work.ID,
+		Kind:       "session.done",
+		DedupeKey:  "session:sync:turn:one:session.done",
+		Actionable: true,
+		Summary:    "Fixed",
+		PayloadRef: "session:s1",
+	}); err != nil || !created {
+		t.Fatalf("result event created=%v err=%v", created, err)
+	}
+	if shown, err := store.DisplayedObjective(); err != nil || shown == nil || shown.Back != 1 {
+		t.Fatalf("just back: displayed = %#v, %v; want 1 of 1 back", shown, err)
+	}
+
+	now = now.Add(objectiveSettleAfter)
+	if shown, err := store.DisplayedObjective(); err != nil || shown != nil {
+		t.Fatalf("settled: displayed = %#v, %v; want hidden", shown, err)
+	}
+	if current, err := store.CurrentObjective(); err != nil || current == nil {
+		t.Fatalf("Brain still sees its objective: %#v, %v", current, err)
 	}
 }

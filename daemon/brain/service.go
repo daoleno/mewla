@@ -489,7 +489,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	}
 	snapshot.CurrentWork = inventory.Current
 	snapshot.WorkBacklog = inventory.Backlog
-	objective, err := s.store.CurrentObjective()
+	objective, err := s.store.DisplayedObjective()
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -535,7 +535,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	}
 	snapshot.CurrentWork = inventory.Current
 	snapshot.WorkBacklog = inventory.Backlog
-	objective, err := s.store.CurrentObjective()
+	objective, err := s.store.DisplayedObjective()
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -594,6 +594,12 @@ func (s *Service) Context() (BrainContext, error) {
 	if err != nil {
 		return BrainContext{}, err
 	}
+	// Brain sees its objective even after the apps stop showing it, so it
+	// can clear or restate it.
+	objective, err := s.store.CurrentObjective()
+	if err != nil {
+		return BrainContext{}, err
+	}
 	return BrainContext{
 		ThreadID:     snapshot.ChatThreadID,
 		Workspace:    snapshot.Workspace,
@@ -602,7 +608,7 @@ func (s *Service) Context() (BrainContext, error) {
 		Personality:  snapshot.Personality,
 		CurrentWork:  snapshot.CurrentWork,
 		WorkBacklog:  snapshot.WorkBacklog,
-		Objective:    snapshot.Objective,
+		Objective:    objective,
 		Playbooks:    playbooks.Playbooks,
 		HostWorker:   snapshot.HostWorker,
 		HostExecutor: snapshot.HostExecutor,
