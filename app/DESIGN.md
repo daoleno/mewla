@@ -284,7 +284,8 @@ format, that every glyph stays inside the grid, and the cat ears.
 - `*-fill` variants exist only where a filled shape carries state (notices,
   toasts, selection checks, an expanded calendar, the selected radio, the
   active step dot). Their marks are cut out with the even-odd rule, so they
-  work on any ground. Everything else is outline.
+  work on any ground. The one other fill is `contrast`'s half disc, which is
+  what the glyph means. Everything else is outline.
 - Glyphs are decorative; the control around them carries the label. Sizes
   and hit targets are the control's, unchanged by the set.
 - Real product marks (Claude, Codex, GitHub, Slack, Google and the agent

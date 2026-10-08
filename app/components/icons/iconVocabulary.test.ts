@@ -113,10 +113,10 @@ describe("icon vocabulary", () => {
   test("the Mewla touches stay: Brain has cat ears and the menu is two lines", () => {
     expect(MEWLA_GLYPHS.menu.strokes).toHaveLength(2);
     const brain = pathPoints(MEWLA_GLYPHS.brain.strokes[0]);
-    const earTips = brain.filter(([, y]) => y < 5);
+    const earTips = brain.filter(([, y]) => y < 4);
     expect(earTips.some(([x]) => x < 9)).toBe(true);
     expect(earTips.some(([x]) => x > 15)).toBe(true);
-    expect(brain.some(([x, y]) => x > 9 && x < 15 && y < 5)).toBe(false);
+    expect(brain.some(([x, y]) => x > 9 && x < 15 && y < 4)).toBe(false);
   });
 
   test("icon fonts remain only for real product logos", () => {

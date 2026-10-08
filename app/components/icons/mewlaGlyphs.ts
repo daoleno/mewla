@@ -202,8 +202,8 @@ function bubble(withEars: boolean): string {
   if (!withEars) {
     return `M3.86,15.2A8.75,8.75 0 1 1 6.02,18.54${ear([6.02, 18.54], [3.5, 20.75], [3.86, 15.2], 1)}Z`;
   }
-  const c: Point = [12, 13.25];
-  const r = 7.75;
+  const c: Point = [12, 12.75];
+  const r = 8.25;
   const on = (deg: number): Point => {
     const a = (deg * Math.PI) / 180;
     return [c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)];
@@ -212,9 +212,9 @@ function bubble(withEars: boolean): string {
   const [tailA, tailB] = [on(135), on(162)];
   const arc = (to: Point, large: 0 | 1) => `A${n(r)},${n(r)} 0 ${large} 1 ${pt(to)}`;
   return (
-    `M${pt(ear1a)}${arc(ear1b, 0)}${ear(ear1b, [17.5, 3.75], ear2a, 1.1)}L${pt(ear2a)}` +
-    `${arc(tailA, 0)}${ear(tailA, [3.75, 21.25], tailB, 1)}L${pt(tailB)}` +
-    `${arc(ear2b, 0)}${ear(ear2b, [6.5, 3.75], ear1a, 1.1)}Z`
+    `M${pt(ear1a)}${arc(ear1b, 0)}${ear(ear1b, [17.75, 2.9], ear2a, 1.1)}L${pt(ear2a)}` +
+    `${arc(tailA, 0)}${ear(tailA, [3.5, 21.25], tailB, 1)}L${pt(tailB)}` +
+    `${arc(ear2b, 0)}${ear(ear2b, [6.25, 2.9], ear1a, 1.1)}Z`
   );
 }
 
@@ -283,7 +283,7 @@ export const MEWLA_GLYPHS = {
   },
   brain: {
     strokes: [bubble(true)],
-    fills: [dot(8.75, 13.5), dot(12, 13.5), dot(15.25, 13.5)],
+    fills: [dot(8.5, 13), dot(12, 13), dot(15.5, 13)],
   },
   browser: {
     strokes: [RING, "M12,2.75C9.6,5.3 8.4,8.4 8.4,12S9.6,18.7 12,21.25C14.4,18.7 15.6,15.6 15.6,12S14.4,5.3 12,2.75Z", "M2.75,12H21.25"],
