@@ -149,6 +149,15 @@ function rays(cx: number, cy: number, from: number, to: number): string[] {
   });
 }
 
+/** A four-point sparkle: each side bows in toward the centre. */
+function sparkle(cx: number, cy: number, r: number): string {
+  const c = `${n(cx)},${n(cy)}`;
+  return (
+    `M${n(cx)},${n(cy - r)}Q${c} ${n(cx + r)},${n(cy)}Q${c} ${n(cx)},${n(cy + r)}` +
+    `Q${c} ${n(cx - r)},${n(cy)}Q${c} ${n(cx)},${n(cy - r)}Z`
+  );
+}
+
 const HOLE = 0.8;
 const RING = circle(12, 12, 9.25);
 const CLOUD = "M7,18.5A4.5,4.5 0 0 1 6.37,9.54A6,6 0 0 1 17.63,9.54A4.5,4.5 0 0 1 17,18.5Z";
@@ -1048,7 +1057,7 @@ export const MEWLA_GLYPHS = {
       ),
     ],
   },
-  skills: { strokes: STACK },
+  skills: { strokes: [sparkle(10, 13.5, 7), sparkle(18.5, 5.5, 2.75)] },
   square: { strokes: [box(3.5, 3.5, 17, 17, 4.5)] },
   stats: { strokes: [box(3.25, 12, 4.5, 8.75, 1.75), box(9.75, 3.25, 4.5, 17.5, 1.75), box(16.25, 7.75, 4.5, 13, 1.75)] },
   stop: { strokes: [box(5, 5, 14, 14, 3.75)] },
