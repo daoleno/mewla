@@ -26,7 +26,8 @@ type Objective struct {
 	Total int       `json:"total"`
 	Back  int       `json:"back"`
 	// Done counts child Work closed as done; LastActivity is the newest of
-	// SetAt and any child Work's update or result. They decide when the goal
+	// SetAt, a child handed off and a result coming back (not UpdatedAt,
+	// which every lifecycle projection stamps). They decide when the goal
 	// line stops being current (objectiveCurrent) and are not on the wire.
 	Done         int       `json:"-"`
 	LastActivity time.Time `json:"-"`
@@ -53,6 +54,15 @@ func objectiveCurrent(objective Objective, now time.Time) bool {
 		return false
 	}
 	return quiet < objectiveStaleAfter
+}
+
+// objectiveExpiresAt is when a current objective stops being current if
+// nothing else happens.
+func objectiveExpiresAt(objective Objective) time.Time {
+	if objective.Total > 0 && objective.Back >= objective.Total {
+		return objective.LastActivity.Add(objectiveSettleAfter)
+	}
+	return objective.LastActivity.Add(objectiveStaleAfter)
 }
 
 const maxObjectiveTitleRunes = 200
@@ -124,10 +134,23 @@ func (s *Store) DisplayedObjective() (*Objective, error) {
 	if err != nil || objective == nil {
 		return nil, err
 	}
-	if !objectiveCurrent(*objective, s.nowUTC()) {
+	now := s.nowUTC()
+	if !objectiveCurrent(*objective, now) {
 		return nil, nil
 	}
+	// Going quiet changes nothing, so nothing would push a fresh snapshot:
+	// push one when the objective expires.
+	s.armObjectiveExpiry(objectiveExpiresAt(*objective).Sub(now))
 	return objective, nil
+}
+
+func (s *Store) armObjectiveExpiry(after time.Duration) {
+	s.objectiveExpiryMu.Lock()
+	defer s.objectiveExpiryMu.Unlock()
+	if s.objectiveExpiry != nil {
+		s.objectiveExpiry.Stop()
+	}
+	s.objectiveExpiry = time.AfterFunc(after+time.Second, func() { s.broadcastWorkChange("") })
 }
 
 // CurrentObjective returns the current chat thread's objective with live
@@ -182,13 +205,13 @@ func (s *Store) objectiveProgressLocked(file objectiveFile) (Objective, error) {
 		return Objective{}, err
 	}
 	hasResult := map[string]bool{}
-	lastEvent := map[string]time.Time{}
+	lastResult := map[string]time.Time{}
 	for _, event := range database.BrainWorkEvents {
 		if isProjectedWorkResultEvent(event.Kind) {
 			hasResult[event.WorkID] = true
-		}
-		if event.CreatedAt.After(lastEvent[event.WorkID]) {
-			lastEvent[event.WorkID] = event.CreatedAt
+			if event.CreatedAt.After(lastResult[event.WorkID]) {
+				lastResult[event.WorkID] = event.CreatedAt
+			}
 		}
 	}
 	objective := Objective{Title: file.Title, SetAt: file.SetAt, LastActivity: file.SetAt}
@@ -206,7 +229,7 @@ func (s *Store) objectiveProgressLocked(file objectiveFile) (Objective, error) {
 		if item.Status == WorkDone {
 			objective.Done++
 		}
-		for _, at := range []time.Time{item.UpdatedAt, lastEvent[item.ID]} {
+		for _, at := range []time.Time{item.CreatedAt, lastResult[item.ID]} {
 			if at.After(objective.LastActivity) {
 				objective.LastActivity = at
 			}

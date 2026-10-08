@@ -44,6 +44,10 @@ type Store struct {
 	// replaceHostBindingWrite is an optional Store-scoped seam used only by
 	// ReplaceHostSessionBinding. Nil means writeJSONFile (production default).
 	replaceHostBindingWrite func(path string, value any) error
+	// objectiveExpiry re-sends the snapshot when the objective stops being
+	// current (DisplayedObjective).
+	objectiveExpiryMu sync.Mutex
+	objectiveExpiry   *time.Timer
 }
 
 func DefaultRoot() (string, error) {

@@ -233,3 +233,36 @@ func TestDisplayedObjectiveLeavesTheAppsButNotBrain(t *testing.T) {
 		t.Fatalf("Brain still sees its objective: %#v, %v", current, err)
 	}
 }
+
+func TestObjectiveActivityIsHandoffsAndResultsNotRowTouches(t *testing.T) {
+	store := newObjectiveStore(t, "thread-a")
+	now := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	if _, err := store.SetObjective("Ship v1.4"); err != nil {
+		t.Fatal(err)
+	}
+	work := createObjectiveWork(t, store, "straggler")
+
+	// Something that is not a result touches the row late in the window.
+	now = now.Add(11 * time.Hour)
+	if _, _, err := store.AppendWorkEvent(WorkEvent{
+		WorkID:    work.ID,
+		Kind:      "brain.note",
+		DedupeKey: "note:straggler:1",
+		Summary:   "still looking",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.CurrentObjective()
+	if err != nil || current == nil {
+		t.Fatalf("current = %#v, %v", current, err)
+	}
+	if !current.LastActivity.Equal(work.CreatedAt) {
+		t.Fatalf("last activity = %s, want the handoff at %s", current.LastActivity, work.CreatedAt)
+	}
+
+	now = work.CreatedAt.Add(objectiveStaleAfter)
+	if shown, err := store.DisplayedObjective(); err != nil || shown != nil {
+		t.Fatalf("stale: displayed = %#v, %v; want hidden", shown, err)
+	}
+}
