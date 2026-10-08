@@ -5,16 +5,15 @@ import {
   StyleSheet,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Icon, type IconName } from "../icons/Icon";
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 type IconButtonTone = "default" | "input" | "ghost" | "tinted";
 
 interface IconButtonProps extends Omit<PressableProps, "style" | "children"> {
-  icon: IoniconName;
+  icon: IconName;
   size?: number;
   iconSize?: number;
   color?: string;
@@ -79,7 +78,7 @@ export function IconButton({
         style,
       ]}
     >
-      <Ionicons name={icon} size={iconSize} color={iconColor} />
+      <Icon name={icon} size={iconSize} color={iconColor} />
     </AnimatedPressable>
   );
 }

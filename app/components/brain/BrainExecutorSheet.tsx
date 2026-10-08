@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
@@ -18,6 +17,7 @@ import { surfacesFromTheme } from "../../constants/themedSurfaces";
 import type { BrainExecutorRef } from "../../store/brain";
 import { BrainExecutorIcon } from "./BrainExecutorIcon";
 import { brainAdapterLabel, brainProviderLabel } from "./brainPresentation";
+import { Icon } from "../icons/Icon";
 
 interface BrainExecutorSheetProps {
   visible: boolean;
@@ -124,16 +124,16 @@ export function BrainExecutorSheet({
               {rowShowsSpinner ? (
                 <ActivityIndicator size="small" color={colors.accent} />
               ) : active ? (
-                <Ionicons
-                  name="checkmark-circle"
+                <Icon
+                  name="check-circle-fill"
                   size={20}
                   color={
                     interactionLocked ? colors.disabledText : colors.accent
                   }
                 />
               ) : (
-                <Ionicons
-                  name="ellipse-outline"
+                <Icon
+                  name="circle"
                   size={18}
                   color={
                     interactionLocked

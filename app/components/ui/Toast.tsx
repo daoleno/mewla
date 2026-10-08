@@ -9,13 +9,13 @@ import React, {
   type ReactNode,
 } from "react";
 import { AccessibilityInfo, Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppColors } from "../../constants/tokens";
 import { AppText } from "./AppText";
 import { GlassSurface } from "./GlassSurface";
+import { Icon } from "../icons/Icon";
 
 type ToastTone = "success" | "error" | "info";
 
@@ -83,14 +83,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 function ToastView({ toast, onDismiss }: { toast: ToastEntry; onDismiss(): void }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const icon = toast.tone === "error" ? "alert-circle" : toast.tone === "success" ? "checkmark-circle" : "information-circle";
+  const icon = toast.tone === "error" ? "alert-circle-fill" : toast.tone === "success" ? "check-circle-fill" : "info-fill";
   const ink = toast.tone === "error" ? colors.dangerText : toast.tone === "success" ? colors.success : colors.accentStrong;
   return (
     <View pointerEvents="box-none" style={[styles.layer, { top: insets.top + 8 }]}>
       <Animated.View entering={FadeInUp.springify().damping(20)} exiting={FadeOutUp.duration(160)}>
         <Pressable onPress={onDismiss} accessibilityRole="alert" accessibilityLabel={toast.title}>
           <GlassSurface material="thick" radius={24} elevation="float" style={styles.toast}>
-            <Ionicons name={icon} size={20} color={ink} />
+            <Icon name={icon} size={20} color={ink} />
             <View style={styles.copy}>
               <AppText variant="label" numberOfLines={2}>
                 {toast.title}

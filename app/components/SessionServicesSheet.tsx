@@ -141,7 +141,7 @@ export function SessionServicesSheet({
               <EmptyState
                 size="inline"
                 busy={loading}
-                icon="radio-outline"
+                icon="radio"
                 title={loading ? "Loading services" : "No listening services"}
                 detail={loading ? null : "Ports opened by Sessions and persistent services appear here."}
                 style={styles.empty}
@@ -287,13 +287,13 @@ function ServiceDetail({
               <ListRow
                 title="Open Web"
                 subtitle={urls[0]!.address}
-                icon="globe-outline"
+                icon="browser"
                 accessory="chevron"
                 accessibilityLabel={`Open DSH Web for port ${service.port}`}
                 onPress={() => onOpenURL(urls[0]!.url)}
               />
             ) : (
-              <ListRow title="Web unavailable" icon="globe-outline" disabled accessibilityLabel="DSH Web unavailable" />
+              <ListRow title="Web unavailable" icon="browser" disabled accessibilityLabel="DSH Web unavailable" />
             )
           ) : urls.length > 0 ? (
             urls.map((item) => (
@@ -301,19 +301,19 @@ function ServiceDetail({
                 key={item.key}
                 title={item.label}
                 subtitle={item.address}
-                icon="open-outline"
+                icon="open-external"
                 accessory="chevron"
                 accessibilityLabel={`Open ${item.label} URL for port ${service.port}`}
                 onPress={() => onOpenURL(item.url)}
               />
             ))
           ) : (
-            <ListRow title="Bound locally" value={serviceBindLabel(service)} icon="link-outline" />
+            <ListRow title="Bound locally" value={serviceBindLabel(service)} icon="link" />
           )}
           {hasServiceTerminal(service) ? (
             <ListRow
               title="Open Session terminal"
-              icon="terminal-outline"
+              icon="terminal"
               accessory="chevron"
               accessibilityLabel={`Open terminal for port ${service.port}`}
               onPress={() => onOpenTerminal(service)}
@@ -330,7 +330,7 @@ function ServiceDetail({
               <ListRow
                 title="Open public URL"
                 subtitle={tunnel.publicURL}
-                icon="globe-outline"
+                icon="browser"
                 accessory="chevron"
                 accessibilityLabel="Open public URL"
                 onPress={() => onOpenURL(tunnel.publicURL!)}
@@ -339,7 +339,7 @@ function ServiceDetail({
             {tunnel.publicURL ? (
               <ListRow
                 title={copied ? "Copied" : "Copy public URL"}
-                icon={copied ? "checkmark" : "copy-outline"}
+                icon={copied ? "check" : "copy"}
                 accessibilityLabel="Copy public URL"
                 onPress={() => void copyPublicURL(tunnel.publicURL!)}
               />
@@ -347,7 +347,7 @@ function ServiceDetail({
             <ListRow
               title={tunnel.busy ? "Working…" : tunnel.active ? "Stop public tunnel" : "Share with Quick Tunnel"}
               subtitle={tunnel.active && !tunnel.publicURL ? capitalize(tunnel.tunnel?.status) : null}
-              icon={tunnel.active ? "stop-circle-outline" : "share-outline"}
+              icon={tunnel.active ? "stop-circle" : "share"}
               destructive={tunnel.active}
               loading={tunnel.busy}
               accessibilityLabel={tunnel.active ? "Stop public tunnel" : "Start temporary public tunnel"}

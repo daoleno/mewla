@@ -31,15 +31,15 @@ describe("product icon semantics", () => {
   test("Skills, Model, and delegated Brain origin use semantic icons", () => {
     expect(
       source("app/components/plugins/PluginSkillsDirectory.tsx"),
-    ).toContain('name="book-outline"');
+    ).toContain('name="book"');
     expect(source("app/components/plugins/PluginsPresentation.tsx")).toMatch(
-      /case "skill":\s+return "book-outline";/,
+      /case "skill":\s+return "book";/,
     );
     expect(source("app/components/terminal/TerminalActionPopover.tsx")).toMatch(
-      /key: "model",\s+icon: "hardware-chip-outline"/,
+      /key: "model",\s+icon: "chip"/,
     );
     expect(source("app/components/workers/WorkerSessionRow.tsx")).toContain(
-      '<Ionicons name="git-network" size={9} color={colors.accentStrong} />',
+      '<Icon name="git-network" size={9} color={colors.accentStrong} />',
     );
   });
 });

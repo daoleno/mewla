@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import React, {
   useCallback,
@@ -32,6 +31,7 @@ import {
 } from "./InterfaceMessageCodeBlockCopy";
 import { PreformattedCodeWebView } from "./PreformattedCodeWebView";
 import { useTimelineSelectableTextProps } from "./TimelineTextSelectableContext";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceMessageCodeBlockProps {
   text: string;
@@ -197,8 +197,8 @@ export function InterfaceMessageCodeBlock({
           ]}
         >
           <View pointerEvents="none" style={styles.copyButtonContent}>
-            <Ionicons
-              name={copied ? "checkmark" : "copy-outline"}
+            <Icon
+              name={copied ? "check" : "copy"}
               size={14}
               color={copied ? chrome.accent : chrome.textMuted}
             />

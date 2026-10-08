@@ -790,12 +790,12 @@ export default function InboxScreen() {
               detail={primaryIssue?.detail}
               action={empty.action ? {
                 label: creatingServerId ? "Starting..." : empty.label,
-                icon: empty.action === "retry" ? "refresh-outline" : empty.action === "terminal" ? "add" : "qr-code-outline",
+                icon: empty.action === "retry" ? "refresh" : empty.action === "terminal" ? "add" : "qr-code",
                 onPress: empty.action === "retry" ? () => void retryCurrentServer() : empty.action === "terminal" ? openCreateTerminal : () => openServerSettings(true),
                 disabled: Boolean(creatingServerId),
               } : undefined}
               secondary={hasConfiguredServers && !anyConnected ? {
-                label: "Server settings", icon: "settings-outline", onPress: () => openServerSettings(false),
+                label: "Server settings", icon: "settings", onPress: () => openServerSettings(false),
               } : undefined}
             />
             </View>
@@ -867,14 +867,14 @@ export default function InboxScreen() {
             {
               key: "new",
               label: "New session",
-              icon: "add-circle-outline",
+              icon: "add-circle",
               disabled: !anyConnected || Boolean(creatingServerId),
               onPress: openCreateTerminal,
             },
             {
               key: "services",
               label: "Services",
-              icon: "globe-outline",
+              icon: "browser",
               detail: "Listening ports and public tunnels",
               disabled: !anyConnected,
               onPress: openSessionServices,

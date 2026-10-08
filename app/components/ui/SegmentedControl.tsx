@@ -1,16 +1,14 @@
 import React from "react";
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { TouchTarget, shadow, useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
-  icon?: IoniconName;
+  icon?: IconName;
   /** Custom glyph such as a brand mark; replaces `icon`. */
   leading?: React.ReactNode;
 }
@@ -69,7 +67,7 @@ export function SegmentedControl<T extends string>({
               pressed && !selected ? { opacity: 0.6 } : null,
             ]}
           >
-            {option.leading ?? (option.icon ? <Ionicons name={option.icon} size={16} color={ink} /> : null)}
+            {option.leading ?? (option.icon ? <Icon name={option.icon} size={16} color={ink} /> : null)}
             <AppText variant="label" numberOfLines={1} style={{ color: ink }}>
               {option.label}
             </AppText>

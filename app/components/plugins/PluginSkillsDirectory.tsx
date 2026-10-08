@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import type {
   InstalledSkill,
@@ -8,6 +7,7 @@ import type {
 } from "../../services/skillsManagement";
 import type { PluginSkillEntry } from "../../services/pluginSkillsDirectory";
 import { SkillFileBrowser } from "../skills/SkillFileBrowser";
+import { Icon } from "../icons/Icon";
 
 interface DirectoryEntryState {
   status: "loading" | "ready" | "error";
@@ -102,13 +102,13 @@ export function PluginSkillsDirectory({
               onPress={() => toggle(entry)}
               style={[styles.row, open && { paddingBottom: 4 }]}
             >
-              <Ionicons
-                name={open ? "chevron-down" : "chevron-forward"}
+              <Icon
+                name={open ? "chevron-down" : "chevron-right"}
                 size={15}
                 color={colors.textTertiary}
               />
-              <Ionicons
-                name="book-outline"
+              <Icon
+                name="book"
                 size={17}
                 color={colors.warning}
               />
@@ -129,8 +129,8 @@ export function PluginSkillsDirectory({
                 ) : null}
               </View>
               {!entry.copy ? (
-                <Ionicons
-                  name="help-circle-outline"
+                <Icon
+                  name="help"
                   size={16}
                   color={colors.textTertiary}
                 />

@@ -12,7 +12,7 @@ if (!process.env.ZEN_TELEGRAM_PANEL_CHILD) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const host = (name: string) => (props: any) => React.createElement(name, props, props.children);
   mock.module("react-native", () => ({ ActivityIndicator: host("busy"), ScrollView: host("scroll"), Text: host("text"), TextInput: host("input"), View: host("view"), StyleSheet: { create: (x: unknown) => x, hairlineWidth: 1 } }));
-  mock.module("@expo/vector-icons", () => ({ Ionicons: host("icon") }));
+  mock.module("../components/icons/Icon", () => ({ Icon: host("icon") }));
   mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }) }));
   mock.module("../constants/tokens", () => ({ useAppColors: () => ({}), UiTextMetrics: {}, Radii: { card: 20 }, TypeScale: { body: {}, compact: {}, caption: {}, heading: {} } }));
   mock.module("../components/ui/AnimatedPressable", () => ({ AnimatedPressable: host("button") }));

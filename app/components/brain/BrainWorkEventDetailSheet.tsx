@@ -1,10 +1,10 @@
 import React from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import { brainWorkEventSummary, brainWorkEventWorkTitle } from "./brainWorkEventPresentation";
+import { Icon } from "../icons/Icon";
 
 export function BrainWorkEventDetailSheet({ event, chrome, onClose, onOpenSession }: {
   event: BrainWorkResultEvent | null;
@@ -19,7 +19,7 @@ export function BrainWorkEventDetailSheet({ event, chrome, onClose, onOpenSessio
       <View style={styles.header}>
         <Text selectable style={[styles.title, { color: chrome.text }]}>{brainWorkEventWorkTitle(event)}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close work details" onPress={onClose} style={styles.icon}>
-          <Ionicons name="close" size={22} color={chrome.textMuted} />
+          <Icon name="close" size={22} color={chrome.textMuted} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
@@ -29,7 +29,7 @@ export function BrainWorkEventDetailSheet({ event, chrome, onClose, onOpenSessio
         {diagnostics ? <Text selectable style={[styles.diagnostics, { color: chrome.textMuted }]}>{diagnostics}</Text> : null}
       </ScrollView>
       {onOpenSession ? <Pressable accessibilityRole="button" onPress={onOpenSession} style={styles.action}>
-        <Ionicons name="terminal-outline" size={20} color={chrome.accent} />
+        <Icon name="terminal" size={20} color={chrome.accent} />
         <Text style={{ color: chrome.accent }}>Open session</Text>
       </Pressable> : null}
     </> : null}

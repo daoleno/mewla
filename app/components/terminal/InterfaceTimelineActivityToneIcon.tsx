@@ -1,11 +1,11 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { ACTIVITY_HEADER_ICON_SLOT } from "./activityHeaderTextMetrics";
 import type {
   TimelineActivityIconName,
   ZenActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceTimelineActivityToneIconProps {
   icon: TimelineActivityIconName;
@@ -25,7 +25,7 @@ export function InterfaceTimelineActivityToneIcon({
 }: InterfaceTimelineActivityToneIconProps) {
   return (
     <View style={styles.slot}>
-      <Ionicons
+      <Icon
         name={icon}
         size={activityKind === "reasoning" ? 14 : 13}
         color={color}

@@ -88,7 +88,7 @@ describe("the one cat between turns", () => {
 
 describe("Brain's tool rows", () => {
   const tool = (id: string, tone: "success" | "failed" | "running" = "success") =>
-    ({ type: "activity", id, title: `Search ${id}`, tone, icon: "search-outline", defaultExpanded: false }) as ZenTimelineItem;
+    ({ type: "activity", id, title: `Search ${id}`, tone, icon: "search", defaultExpanded: false }) as ZenTimelineItem;
   const reply = { type: "message", id: "reply", role: "assistant", body: "Done." } as ZenTimelineItem;
 
   test("a turn's run folds into one Worked row that keeps every step", () => {

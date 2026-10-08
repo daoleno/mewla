@@ -61,9 +61,7 @@ describe("WorkerSessionRow selection contract", () => {
   });
 
   test("renders a clear selected/unselected check state", () => {
-    expect(rowSource).toContain("'checkmark-circle'");
-    expect(rowSource).toContain("'ellipse-outline'");
-    expect(rowSource).toContain("name={selected ? 'checkmark-circle' : 'ellipse-outline'}");
+    expect(rowSource).toContain("name={selected ? 'check-circle-fill' : 'circle'}");
     expect(rowSource).toContain(
       // Seal & Slip: only selection fills a row; Running is the blue arc.
       "inSelectionMode && selected && styles.rowActive",

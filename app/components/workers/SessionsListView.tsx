@@ -6,7 +6,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import {
   ContinuousCorners,
   Radii,
@@ -21,6 +20,7 @@ import type { Worker } from "../../store/workers";
 import type { WorkerDirectorySection } from "../../services/workerDirectory";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { WorkerListRowContainer } from "./WorkerListRowContainer";
+import { Icon } from "../icons/Icon";
 
 /** The Sessions column, shared by the list, its empty states and the button. */
 export const SESSIONS_COLUMN_MAX_WIDTH = 760;
@@ -188,7 +188,7 @@ export function NewSessionButton({
         accessibilityRole="button"
         accessibilityState={{ disabled: inactive, busy }}
       >
-        <Ionicons name="add" size={18} color={ink} />
+        <Icon name="add" size={18} color={ink} />
         <Text style={[styles.buttonLabel, { color: ink }]} numberOfLines={1}>
           {busy ? "Starting…" : "New session"}
         </Text>

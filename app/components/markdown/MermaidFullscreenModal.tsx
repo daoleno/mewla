@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -10,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import { MermaidSvgPreview } from "./MermaidSvgPreview";
+import { Icon } from "../icons/Icon";
 
 export function MermaidFullscreenModal({
   visible,
@@ -127,7 +127,7 @@ export function MermaidFullscreenModal({
             onPress={onClose}
             style={styles.close}
           >
-            <Ionicons name="close" size={22} color={chrome.text} />
+            <Icon name="close" size={22} color={chrome.text} />
           </Pressable>
         </View>
         <GestureDetector gesture={gesture}>

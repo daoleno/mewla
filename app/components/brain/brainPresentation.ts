@@ -77,11 +77,11 @@ export function brainWorkspaceEntryAccessibilityLabel(
 export function brainWorkspaceEntryIconName(
   kind: string,
   path: string,
-): "folder-outline" | "document-text-outline" | "document-outline" {
+): "folder" | "document-text" | "document" {
   if (kind === "directory") {
-    return "folder-outline";
+    return "folder";
   }
   return brainWorkspaceMarkdownPath(path)
-    ? "document-text-outline"
-    : "document-outline";
+    ? "document-text"
+    : "document";
 }

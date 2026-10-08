@@ -6,10 +6,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TouchTarget } from "../../constants/tokens";
 import { composerNeutralFill } from "./composerMaterial";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceComposerAttachmentRemoveButtonProps {
   attachmentName: string;
@@ -59,7 +59,7 @@ export function InterfaceComposerAttachmentRemoveButton({
           },
         ]}
       >
-        <Ionicons
+        <Icon
           name="close"
           size={13}
           color={overlay ? OVERLAY_GLYPH : chrome.text}

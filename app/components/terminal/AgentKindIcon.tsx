@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import type { ComponentProps } from 'react';
@@ -13,6 +13,7 @@ import type { TerminalFlavor } from '../../services/terminalFlavor';
 import { FlavorLetterBadge } from './FlavorLetterBadge';
 import { CursorMark } from '../icons/CursorMark';
 import { PiMark } from '../icons/PiMark';
+import { Icon } from "../icons/Icon";
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 type FontAwesome5Name = ComponentProps<typeof FontAwesome5>['name'];
@@ -212,8 +213,8 @@ function renderContent({
   }
 
   const shellIcon = (
-    <Ionicons
-      name="terminal-outline"
+    <Icon
+      name="terminal"
       size={iconSize}
       color={theme.colors.textSecondary}
     />

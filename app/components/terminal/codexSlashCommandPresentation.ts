@@ -1,7 +1,4 @@
-import React from "react";
-import { Ionicons } from "@expo/vector-icons";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import type { IconName } from "../icons/Icon";
 
 export function slashCommandTitle(name: string) {
   return name
@@ -17,97 +14,97 @@ export function slashCommandTitle(name: string) {
     .join(" ");
 }
 
-export function slashCommandIcon(name: string): IoniconName {
+export function slashCommandIcon(name: string): IconName {
   switch (name) {
     case "model":
-      return "hardware-chip-outline";
+      return "chip";
     case "fast":
-      return "flash-outline";
+      return "flash";
     case "ide":
-      return "code-slash-outline";
+      return "code";
     case "permissions":
     case "approve":
     case "test-approval":
-      return "shield-checkmark-outline";
+      return "shield-check";
     case "keymap":
-      return "keypad-outline";
+      return "keypad";
     case "setup-default-sandbox":
     case "sandbox-add-read-dir":
-      return "lock-open-outline";
+      return "lock-open";
     case "vim":
-      return "create-outline";
+      return "edit";
     case "experimental":
-      return "flask-outline";
+      return "flask";
     case "memories":
-      return "library-outline";
+      return "library";
     case "skills":
-      return "construct-outline";
+      return "construct";
     case "hooks":
-      return "link-outline";
+      return "link";
     case "review":
-      return "search-outline";
+      return "search";
     case "rename":
     case "title":
-      return "text-outline";
+      return "text";
     case "new":
-      return "add-circle-outline";
+      return "add-circle";
     case "resume":
-      return "play-forward-outline";
+      return "play-forward";
     case "fork":
     case "side":
-      return "git-branch-outline";
+      return "git-branch";
     case "init":
-      return "document-text-outline";
+      return "document-text";
     case "goal":
-      return "flag-outline";
+      return "flag";
     case "copy":
-      return "copy-outline";
+      return "copy";
     case "raw":
-      return "reorder-four-outline";
+      return "reorder";
     case "diff":
-      return "git-compare-outline";
+      return "git-compare";
     case "mention":
-      return "at-outline";
+      return "at";
     case "status":
-      return "pulse-outline";
+      return "pulse";
     case "debug-config":
     case "debug-m-drop":
     case "debug-m-update":
-      return "bug-outline";
+      return "bug";
     case "statusline":
-      return "reader-outline";
+      return "reader";
     case "pets":
-      return "happy-outline";
+      return "happy";
     case "mcp":
-      return "server-outline";
+      return "server";
     case "apps":
     case "plugins":
-      return "extension-puzzle-outline";
+      return "puzzle";
     case "logout":
     case "quit":
     case "exit":
-      return "exit-outline";
+      return "exit";
     case "feedback":
-      return "chatbox-ellipses-outline";
+      return "chatbox-dots";
     case "rollout":
-      return "map-outline";
+      return "map";
     case "ps":
-      return "layers-outline";
+      return "layers";
     case "stop":
-      return "stop-circle-outline";
+      return "stop-circle";
     case "clear":
-      return "trash-outline";
+      return "trash";
     case "personality":
-      return "person-circle-outline";
+      return "person-circle";
     case "realtime":
     case "settings":
-      return "mic-outline";
+      return "mic";
     case "agent":
     case "subagents":
-      return "people-outline";
+      return "people";
     case "btw":
-      return "chatbubble-outline";
+      return "chat";
     default:
-      return "terminal-outline";
+      return "terminal";
   }
 }

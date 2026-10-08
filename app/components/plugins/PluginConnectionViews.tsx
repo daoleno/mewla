@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { StyleSheet, Switch, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, Switch, View } from "react-native";
 import { ContinuousCorners, Radii, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
@@ -16,18 +16,22 @@ import {
   type AccountRecoveryAction,
   type PluginCatalogSections,
 } from "../../services/pluginConnectionsModel";
+import { Icon, type IconName } from "../icons/Icon";
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 type Job = { read: string; write: string; example: string } | undefined;
 
-const SERVICE_ICONS: Record<string, IoniconName> = {
+// Product marks keep their own logos; everything else is the app's icon set.
+const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"]> = {
   github: "logo-github",
   slack: "logo-slack",
   google: "logo-google",
-  notion: "document-text-outline",
-  linear: "git-branch-outline",
-  mcp: "server-outline",
-  openapi: "code-slash-outline",
+};
+
+const SERVICE_ICONS: Record<string, IconName> = {
+  notion: "document-text",
+  linear: "git-branch",
+  mcp: "server",
+  openapi: "code",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
@@ -38,7 +42,11 @@ export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
       importantForAccessibility="no-hide-descendants"
       style={[styles.glyph, { width: size, height: size, borderRadius: size * 0.3, backgroundColor: theme.materials.tint }]}
     >
-      <Ionicons name={SERVICE_ICONS[id] ?? "extension-puzzle-outline"} size={Math.round(size * 0.6)} color={colors.textPrimary} />
+      {SERVICE_LOGOS[id] ? (
+        <Ionicons name={SERVICE_LOGOS[id]} size={Math.round(size * 0.6)} color={colors.textPrimary} />
+      ) : (
+        <Icon name={SERVICE_ICONS[id] ?? "puzzle"} size={Math.round(size * 0.6)} color={colors.textPrimary} />
+      )}
     </View>
   );
 }
@@ -46,7 +54,7 @@ export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
 export function NoServerState({ onOpenSettings }: { onOpenSettings(): void }) {
   return (
     <EmptyState
-      icon="server-outline"
+      icon="server"
       title="No current server"
       detail="Choose one in Settings."
       action={{ label: "Open Settings", onPress: onOpenSettings }}
@@ -73,11 +81,11 @@ export function CatalogView({
 }) {
   if (!sections.services.length && !sections.custom.length) {
     return error ? (
-      <EmptyState icon="cloud-offline-outline" tone="danger" title="Services unavailable" detail={error} action={{ label: "Try again", icon: "refresh-outline", onPress: onRetry, loading }} />
+      <EmptyState icon="cloud-offline" tone="danger" title="Services unavailable" detail={error} action={{ label: "Try again", icon: "refresh", onPress: onRetry, loading }} />
     ) : loading ? (
       <EmptyState busy title="Loading services" />
     ) : (
-      <EmptyState icon="extension-puzzle-outline" title="No services" detail="This server has none to connect." action={{ label: "Try again", icon: "refresh-outline", onPress: onRetry }} />
+      <EmptyState icon="puzzle" title="No services" detail="This server has none to connect." action={{ label: "Try again", icon: "refresh", onPress: onRetry }} />
     );
   }
   return (
@@ -119,7 +127,7 @@ export function CatalogView({
       {sections.custom.length ? (
         <ListSection>
           <ListRow
-            icon="construct-outline"
+            icon="construct"
             title="Custom services"
             subtitle={sections.custom.map((entry) => entry.plugin.name).join(" · ")}
             accessory="chevron"
@@ -214,7 +222,7 @@ export function ConnectProgressCard({
         {phase === "waiting" && flow ? (
           <Button
             label={code ? `Copy code and open ${serviceName}` : "Open authorization"}
-            icon="open-outline"
+            icon="open-external"
             variant="filled"
             block
             onPress={onOpen}
@@ -228,17 +236,17 @@ export function ConnectProgressCard({
 
 function StepGlyph({ state }: { state: "done" | "active" | "pending" | "failed" }) {
   const { colors } = useAppTheme();
-  const glyph: { name: IoniconName; color: string } =
+  const glyph: { name: IconName; color: string } =
     state === "done"
-      ? { name: "checkmark-circle", color: colors.success }
+      ? { name: "check-circle-fill", color: colors.success }
       : state === "active"
-        ? { name: "ellipse", color: colors.accentStrong }
+        ? { name: "dot", color: colors.accentStrong }
         : state === "failed"
-          ? { name: "close-circle", color: colors.dangerText }
-          : { name: "ellipse-outline", color: colors.textTertiary };
+          ? { name: "close-circle-fill", color: colors.dangerText }
+          : { name: "circle", color: colors.textTertiary };
   return (
     <View style={styles.stepGlyph}>
-      <Ionicons name={glyph.name} size={state === "active" ? 12 : 20} color={glyph.color} />
+      <Icon name={glyph.name} size={state === "active" ? 12 : 20} color={glyph.color} />
     </View>
   );
 }
@@ -285,7 +293,7 @@ export function LinkedAccountView({
       ) : null}
       <ListSection title="Account">
         <ListRow
-          icon="person-circle-outline"
+          icon="person-circle"
           title={account.name}
           subtitle={account.identity === account.name ? undefined : account.identity || undefined}
           numberOfLines={2}
@@ -294,7 +302,7 @@ export function LinkedAccountView({
       <ListSection title="What Brain can do">
         {custom ? (
           <ListRow
-            icon="key-outline"
+            icon="key"
             title={`${tools.allowed} of ${tools.total} tools allowed`}
             subtitle={nothingAllowed ? "Choose tools in Tools & activity." : undefined}
             accessory="chevron"
@@ -303,7 +311,7 @@ export function LinkedAccountView({
         ) : (
           <>
             <ListRow
-              icon="eye-outline"
+              icon="eye"
               title="Read and search"
               subtitle={job?.read}
               value={capabilityLabel(read)}
@@ -313,7 +321,7 @@ export function LinkedAccountView({
               onPress={onOpenPermissions}
             />
             <ListRow
-              icon="create-outline"
+              icon="edit"
               title="Make changes when asked"
               subtitle={job?.write}
               value={capabilityLabel(write)}
@@ -326,8 +334,8 @@ export function LinkedAccountView({
         )}
       </ListSection>
       <ListSection>
-        <ListRow icon="people-outline" title="Connected accounts" value={String(accountCount)} accessory="chevron" onPress={onOpenAccounts} />
-        <ListRow icon="list-outline" title="Tools & activity" value={tools.total ? `${tools.allowed}/${tools.total}` : undefined} accessory="chevron" onPress={onOpenTools} />
+        <ListRow icon="people" title="Connected accounts" value={String(accountCount)} accessory="chevron" onPress={onOpenAccounts} />
+        <ListRow icon="list" title="Tools & activity" value={tools.total ? `${tools.allowed}/${tools.total}` : undefined} accessory="chevron" onPress={onOpenTools} />
       </ListSection>
     </>
   );
@@ -370,9 +378,9 @@ export function ConnectOfferView({
   return (
     <>
       <ListSection title="Access you're granting" footer={`Credentials stay on ${serverName}.`}>
-        <ListRow icon="eye-outline" title="Read and search" subtitle={job?.read} numberOfLines={3} value="Included" />
+        <ListRow icon="eye" title="Read and search" subtitle={job?.read} numberOfLines={3} value="Included" />
         <ListRow
-          icon="create-outline"
+          icon="edit"
           title="Make changes when asked"
           subtitle={job?.write}
           numberOfLines={3}
@@ -381,7 +389,7 @@ export function ConnectOfferView({
       </ListSection>
       {confirmIdentity !== null ? (
         <ListSection title="Use the account signed in on this server?" footer="Mewla keeps its own copy. Later sign-ins on the server don't change it.">
-          <ListRow icon="person-circle-outline" title={confirmIdentity || `${plugin.name} account`} subtitle={`${plugin.name} · identity verified`} />
+          <ListRow icon="person-circle" title={confirmIdentity || `${plugin.name} account`} subtitle={`${plugin.name} · identity verified`} />
           <View style={styles.cardActions}>
             <Button label={`Connect ${confirmIdentity || "this account"}`} variant="filled" block loading={busy} onPress={onImport} />
             <Button label="Choose another account" variant="plain" block onPress={onChooseAnother} />
@@ -393,7 +401,7 @@ export function ConnectOfferView({
           {onUseServerAccount ? <Button label="Use account signed in on server" variant="plain" block disabled={busy} onPress={onUseServerAccount} /> : null}
         </View>
       )}
-      {onRetryVerification ? <Button label="Retry verification" icon="refresh-outline" block onPress={onRetryVerification} /> : null}
+      {onRetryVerification ? <Button label="Retry verification" icon="refresh" block onPress={onRetryVerification} /> : null}
     </>
   );
 }
@@ -441,7 +449,7 @@ export function AccountsView({
       {selected ? (
         <ListSection>
           <ListRow
-            icon={selected.credential_removal_pending ? "refresh-outline" : "remove-circle-outline"}
+            icon={selected.credential_removal_pending ? "refresh" : "remove-circle"}
             title={selected.credential_removal_pending ? "Retry credential removal" : `Disconnect ${selected.name}`}
             destructive
             disabled={busy}
@@ -475,7 +483,7 @@ export function PermissionsView({
           return (
             <ListRow
               key={group}
-              icon={group === "read" ? "eye-outline" : "create-outline"}
+              icon={group === "read" ? "eye" : "edit"}
               title={label}
               subtitle={state === "unavailable" ? "Not granted. Reconnect to request it." : group === "read" ? job?.read : job?.write}
               numberOfLines={3}
@@ -506,9 +514,9 @@ export function ToolsView({
   return (
     <>
       <ListSection title="Account controls">
-        <ListRow icon="power-outline" title="Enabled" trailing={<Switch accessibilityLabel="Enable account" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />} />
+        <ListRow icon="power" title="Enabled" trailing={<Switch accessibilityLabel="Enable account" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />} />
         <ListRow
-          icon="pulse-outline"
+          icon="pulse"
           title="Check service and tools"
           subtitle={account.verified_at ? `Last verified ${new Date(account.verified_at).toLocaleString()}` : undefined}
           loading={busy}

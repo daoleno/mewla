@@ -1,6 +1,5 @@
 import React from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TouchTarget, TypeScale } from "../../constants/tokens";
 import type { ActiveAttachmentUpload } from "../../services/uploads";
@@ -10,6 +9,7 @@ import {
 } from "./InterfaceComposerAttachmentChip";
 import { imageReference, isImageAttachment, type ZenImageSource } from "../../services/imageSource";
 import { InterfaceComposerUploadingChip } from "./InterfaceComposerUploadingChip";
+import { Icon } from "../icons/Icon";
 
 export type { InterfaceComposerAttachment } from "./InterfaceComposerAttachmentChip";
 
@@ -62,7 +62,7 @@ export function InterfaceComposerAttachmentRail({
               </Text>
             </View> : null}
             {attachment.uploadStatus === "failed" && attachment.retryUpload ? <Pressable accessibilityRole="button" accessibilityLabel={`Retry upload of ${attachment.name}`} hitSlop={RETRY_HIT_SLOP} onPress={attachment.retryUpload} style={({ pressed }) => [styles.retry, { backgroundColor: chrome.accentSoft, opacity: pressed ? 0.64 : 1 }]}>
-              <Ionicons name="refresh" size={14} color={chrome.accent} />
+              <Icon name="refresh" size={14} color={chrome.accent} />
               <Text style={[styles.statusText, styles.retryText, { color: chrome.accent }]}>Retry</Text>
             </Pressable> : null}
           </View>

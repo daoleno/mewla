@@ -1,9 +1,9 @@
 import React from "react";
 import { StyleSheet, TouchableOpacity, View, Text } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners, TypeScale, shadow } from "../../constants/tokens";
 import { OutlineWidth } from "../ui/outlinedSurface";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceTimelineJumpButtonProps {
   bottom: number;
@@ -43,7 +43,7 @@ export function InterfaceTimelineJumpButton({
       activeOpacity={0.72}
     >
       <View style={styles.content}>
-        <Ionicons name="arrow-down" size={18} color={chrome.text} />
+        <Icon name="arrow-down" size={18} color={chrome.text} />
         {label ? (
           <Text
             numberOfLines={1}

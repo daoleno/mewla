@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
   StyleSheet,
@@ -18,11 +17,10 @@ import {
   COMPOSER_CONTROL_DISC_SIZE,
   composerNeutralFill,
 } from "./composerMaterial";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 interface ComposerSendButtonProps {
-  icon: IoniconName;
+  icon: IconName;
   accessibilityLabel: string;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
@@ -103,7 +101,7 @@ export function ComposerSendButton({
       ) : null}
     </View>
   ) : (
-    <Ionicons name={icon} size={18} color={foreground} />
+    <Icon name={icon} size={18} color={foreground} />
   );
 
   return (

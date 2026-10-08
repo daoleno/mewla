@@ -28,13 +28,13 @@ export type BrainWorkLifecyclePresentation = {
     | "Needs review"
     | "Failed";
   icon:
-    | "ellipsis-horizontal-circle-outline"
-    | "checkmark-circle-outline"
-    | "eye-outline"
-    | "time-outline"
-    | "close-circle-outline"
-    | "help-circle-outline"
-    | "alert-circle-outline";
+    | "more-circle"
+    | "check-circle"
+    | "eye"
+    | "time"
+    | "close-circle"
+    | "help"
+    | "alert-circle";
   tone: "neutral" | "accent" | "attention" | "danger";
   terminal: boolean;
 };
@@ -82,7 +82,7 @@ export function brainWorkEventLifecycle(
     return {
       lifecycle: "failed",
       label: "Failed",
-      icon: "alert-circle-outline",
+      icon: "alert-circle",
       tone: "danger",
       terminal: true,
     };
@@ -91,7 +91,7 @@ export function brainWorkEventLifecycle(
     return {
       lifecycle: "reviewing",
       label: "Reviewing",
-      icon: "eye-outline",
+      icon: "eye",
       tone: "accent",
       terminal: false,
     };
@@ -100,7 +100,7 @@ export function brainWorkEventLifecycle(
     return {
       lifecycle: "done",
       label: "Done",
-      icon: "checkmark-circle-outline",
+      icon: "check-circle",
       tone: "neutral",
       terminal: true,
     };
@@ -109,7 +109,7 @@ export function brainWorkEventLifecycle(
     return {
       lifecycle: "needs_you",
       label: "Needs you",
-      icon: "help-circle-outline",
+      icon: "help",
       tone: "attention",
       terminal: false,
     };
@@ -124,7 +124,7 @@ export function brainWorkEventLifecycle(
     return {
       lifecycle: "ready",
       label: "Ready",
-      icon: "checkmark-circle-outline",
+      icon: "check-circle",
       tone: "accent",
       terminal: false,
     };
@@ -132,7 +132,7 @@ export function brainWorkEventLifecycle(
   return {
     lifecycle: "working",
     label: "Working",
-    icon: "ellipsis-horizontal-circle-outline",
+    icon: "more-circle",
     tone: "neutral",
     terminal: false,
   };
@@ -206,7 +206,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Needs review",
-        icon: "alert-circle-outline",
+        icon: "alert-circle",
         tone: "attention",
         terminal: false,
       };
@@ -214,7 +214,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Needs you",
-        icon: "help-circle-outline",
+        icon: "help",
         tone: "attention",
         terminal: false,
       };
@@ -222,7 +222,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Failed",
-        icon: "alert-circle-outline",
+        icon: "alert-circle",
         tone: "danger",
         terminal: true,
       };
@@ -230,7 +230,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Blocked",
-        icon: "alert-circle-outline",
+        icon: "alert-circle",
         tone: "danger",
         terminal: false,
       };
@@ -238,7 +238,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Done",
-        icon: "checkmark-circle-outline",
+        icon: "check-circle",
         tone: "neutral",
         terminal: true,
       };
@@ -246,7 +246,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Cancelled",
-        icon: "close-circle-outline",
+        icon: "close-circle",
         tone: "neutral",
         terminal: true,
       };
@@ -254,7 +254,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Reviewing",
-        icon: "eye-outline",
+        icon: "eye",
         tone: "accent",
         terminal: false,
       };
@@ -262,7 +262,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Ready",
-        icon: "checkmark-circle-outline",
+        icon: "check-circle",
         tone: "accent",
         terminal: false,
       };
@@ -270,7 +270,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Waiting",
-        icon: "time-outline",
+        icon: "time",
         tone: "neutral",
         terminal: false,
       };
@@ -278,7 +278,7 @@ function lifecyclePresentation(
       return {
         lifecycle,
         label: "Working",
-        icon: "ellipsis-horizontal-circle-outline",
+        icon: "more-circle",
         tone: "neutral",
         terminal: false,
       };

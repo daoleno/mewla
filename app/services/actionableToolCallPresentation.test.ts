@@ -363,7 +363,7 @@ describe("actionable collapsed tool-call projection", () => {
       id: "status-detail",
       title: "Run go test ./...",
       tone: "success" as const,
-      icon: "terminal-outline" as const,
+      icon: "terminal" as const,
     };
     const duplicate = {
       ...base,

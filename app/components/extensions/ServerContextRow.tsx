@@ -1,9 +1,9 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "../ui/AppText";
 import { StatusPill, type StatusTone } from "../ui/StatusPill";
+import { Icon } from "../icons/Icon";
 
 export type ServerConnection = "offline" | "connecting" | "connected";
 
@@ -32,13 +32,13 @@ export function ServerContextRow({
       accessible
       accessibilityLabel={[`Current server ${name}`, label, projectName === undefined ? null : project ? `Project ${projectName}` : "No project, global Skills only"].filter(Boolean).join(", ")}
     >
-      <Ionicons name="server-outline" size={14} color={colors.textTertiary} />
+      <Icon name="server" size={14} color={colors.textTertiary} />
       <AppText variant="label" tone="secondary" numberOfLines={1} style={styles.shrink}>
         {name}
       </AppText>
       {projectName !== undefined ? (
         <>
-          <Ionicons name={project ? "folder-outline" : "globe-outline"} size={14} color={colors.textTertiary} />
+          <Icon name={project ? "folder" : "browser"} size={14} color={colors.textTertiary} />
           <AppText variant="label" tone="tertiary" numberOfLines={1} style={styles.shrink}>
             {projectName}
           </AppText>

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { MewlaMark } from "../mewla/MewlaMark";
@@ -8,6 +7,7 @@ import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { SealCat } from "../mewla/SealCat";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { Icon } from "../icons/Icon";
 
 const GUIDE = "https://github.com/daoleno/mewla/blob/main/docs/";
 export const COMPUTER_SETUP_STEPS = [
@@ -41,12 +41,12 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
           <EmptyState
             title={connected ? "Your computer is connected" : connecting ? "Connecting to your computer" : "Your server is offline"}
             detail={error || serverName}
-            icon={connected ? "checkmark-circle-outline" : "server-outline"}
+            icon={connected ? "check-circle" : "server"}
             busy={connecting}
             // The cat's first moment: it moves into the seal once paired.
             art={<SealCat state={connected ? "idle" : connecting ? "waking" : "offline"} size={120} />}
-            action={connected ? { label: "Open Brain", icon: "arrow-forward", onPress: onContinue } : connecting ? undefined : { label: "Retry connection", icon: "refresh-outline", onPress: onRetry }}
-            secondary={!connected ? { label: "Server settings", icon: "settings-outline", onPress: onSettings } : undefined}
+            action={connected ? { label: "Open Brain", icon: "arrow-forward", onPress: onContinue } : connecting ? undefined : { label: "Retry connection", icon: "refresh", onPress: onRetry }}
+            secondary={!connected ? { label: "Server settings", icon: "settings", onPress: onSettings } : undefined}
           />
         ) : (
           <>
@@ -57,22 +57,22 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
               <Text style={[styles.lede, { color: colors.textSecondary }]}>Brain lives on your computer. Pair this phone with it once.</Text>
             </View>
             <View style={styles.actions}>
-              <Button variant="filled" size="lg" block icon="qr-code-outline" label="Scan pairing code"
+              <Button variant="filled" size="lg" block icon="qr-code" label="Scan pairing code"
                 onPress={() => onPair("scanner")} />
-              <Button variant="outlined" size="lg" block icon="link-outline" label="Import pairing link"
+              <Button variant="outlined" size="lg" block icon="link" label="Import pairing link"
                 onPress={() => onPair("editor")} />
             </View>
             <View style={[styles.setup, { borderColor: colors.borderSubtle }]}>
               <AnimatedPressable accessibilityRole="button" accessibilityLabel="Computer setup"
                 accessibilityState={{ expanded: setup }} onPress={() => setSetup(!setup)} style={styles.setupHeader}>
-                <Ionicons name="desktop-outline" size={20} color={colors.textSecondary} />
+                <Icon name="desktop" size={20} color={colors.textSecondary} />
                 <Text style={[styles.setupTitle, { color: colors.textPrimary }]}>Computer setup</Text>
-                <Ionicons name={setup ? "chevron-up" : "chevron-down"} size={18} color={colors.textSecondary} />
+                <Icon name={setup ? "chevron-up" : "chevron-down"} size={18} color={colors.textSecondary} />
               </AnimatedPressable>
               {setup ? <View style={styles.steps}>
                 <AnimatedPressable accessibilityRole="link" accessibilityLabel="Install Mewla on your computer"
                   onPress={() => void Linking.openURL(GUIDE + "install-daemon.md")} style={styles.link}>
-                  <Ionicons name="download-outline" size={18} color={colors.accent} />
+                  <Icon name="download" size={18} color={colors.accent} />
                   <Text style={[styles.linkText, { color: colors.accent }]}>Install Mewla</Text>
                 </AnimatedPressable>
                 {COMPUTER_SETUP_STEPS.map((step, index) => (
@@ -86,7 +86,7 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
                 ))}
                 <AnimatedPressable accessibilityRole="link" accessibilityLabel="Remote HTTPS connection guide"
                   onPress={() => void Linking.openURL(GUIDE + "connect-and-pair.md")} style={styles.link}>
-                  <Ionicons name="open-outline" size={18} color={colors.accent} />
+                  <Icon name="open-external" size={18} color={colors.accent} />
                   <Text style={[styles.linkText, { color: colors.accent }]}>Remote connection options</Text>
                 </AnimatedPressable>
               </View> : null}

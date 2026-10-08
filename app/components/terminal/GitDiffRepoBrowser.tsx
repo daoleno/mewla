@@ -6,7 +6,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import {
   ContinuousCorners,
@@ -28,6 +27,7 @@ import { InlineNotice } from "../ui/InlineNotice";
 import { GitDiffRepoFileView } from "./GitDiffRepoFileView";
 import { GitDiffStateCard } from "./GitDiffStateCard";
 import { withAlpha } from "./colorWithAlpha";
+import { Icon } from "../icons/Icon";
 
 interface GitDiffRepoBrowserProps {
   repoTitle: string;
@@ -142,7 +142,7 @@ export function GitDiffRepoBrowser({
           <EmptyState size="inline" busy title="Loading folder" />
         ) : repoBrowserError ? null : (
           <GitDiffStateCard
-            icon="folder-open-outline"
+            icon="folder-open"
             title="Empty folder"
             accent={chrome.textSubtle}
             chromeText={chrome.text}
@@ -199,8 +199,8 @@ function RepoEntryRow({
       ]}
     >
       <View style={[styles.tile, { backgroundColor: withAlpha(tint, 0.12) }]}>
-        <Ionicons
-          name={isDirectory ? "folder" : "document-text-outline"}
+        <Icon
+          name={isDirectory ? "folder" : "document-text"}
           size={16}
           color={tint}
         />
@@ -220,7 +220,7 @@ function RepoEntryRow({
           />
         ) : null}
         {isDirectory ? (
-          <Ionicons name="chevron-forward" size={16} color={chrome.textSubtle} />
+          <Icon name="chevron-right" size={16} color={chrome.textSubtle} />
         ) : null}
       </View>
     </Pressable>

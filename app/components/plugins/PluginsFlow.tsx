@@ -328,7 +328,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
     <Stack.Screen options={{ title }} />
     <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
       {catalog && flow.serverId ? <ServerContextRow name={flow.serverName} connection={flow.connection} /> : null}
-      {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal-outline" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
+      {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {showError ? <InlineNotice tone={flow.phase === "cancelled" ? "neutral" : "danger"} title={flow.phase === "cancelled" ? "Connection cancelled" : flow.phase === "failed" ? "Connection didn't finish" : "Request failed"} detail={flow.error} action={catalog ? { label: "Try again", onPress: () => void flow.send({ action: "list" }), disabled: flow.busy } : undefined} /> : null}
       {!flow.error && flow.phase === "cancelled" ? <InlineNotice title="Connection cancelled" detail="You can try again." /> : null}
       {!flow.serverId ? <NoServerState onOpenSettings={() => router.push("/settings")} /> : children}

@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import BottomSheet, { BottomSheetScrollView } from "@expo/ui/community/bottom-sheet";
-import { Ionicons } from "@expo/vector-icons";
 import { HeaderBackButton } from "../navigation/HeaderBackButton";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
@@ -23,6 +22,7 @@ import {
   resolveModelSheetListMaxHeight,
   runtimeRowSurfaceKey,
 } from "./sessionModelSheetModel";
+import { Icon } from "../icons/Icon";
 
 interface SessionModelSheetProps {
   visible: boolean;
@@ -101,7 +101,7 @@ export function SessionModelSheet({
           accessibilityRole="button"
           accessibilityLabel="Close runtime selection"
         >
-          <Ionicons name="close" size={20} color={chrome.textMuted} />
+          <Icon name="close" size={20} color={chrome.textMuted} />
         </Pressable>
       </View>
 
@@ -143,7 +143,7 @@ export function SessionModelSheet({
                       {reasoningEffortLabel(effect)}
                     </Text>
                     {selected ? (
-                      <Ionicons name="checkmark" size={16} color={chrome.accent} />
+                      <Icon name="check" size={16} color={chrome.accent} />
                     ) : null}
                   </Pressable>
                 );
@@ -180,9 +180,9 @@ export function SessionModelSheet({
                   ) : null}
                 </View>
                 {row.effects.length > 0 ? (
-                  <Ionicons name="chevron-forward" size={16} color={chrome.textMuted} />
+                  <Icon name="chevron-right" size={16} color={chrome.textMuted} />
                 ) : row.current ? (
-                  <Ionicons name="checkmark" size={16} color={chrome.accent} />
+                  <Icon name="check" size={16} color={chrome.accent} />
                 ) : null}
               </Pressable>
             ))

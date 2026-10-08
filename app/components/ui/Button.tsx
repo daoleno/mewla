@@ -7,7 +7,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import {
   ContinuousCorners,
@@ -16,16 +15,16 @@ import {
 import { AnimatedPressable } from "./AnimatedPressable";
 import { AppText } from "./AppText";
 import { outlinedSurface } from "./outlinedSurface";
+import { Icon, type IconName } from "../icons/Icon";
 
 export type ButtonVariant = "filled" | "tinted" | "outlined" | "plain" | "destructive";
 export type ButtonSize = "sm" | "md" | "lg";
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
 export interface ButtonProps extends Omit<PressableProps, "style" | "children"> {
   label: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
-  icon?: IoniconName;
+  icon?: IconName;
   loading?: boolean;
   /** Stretch to the container width. */
   block?: boolean;
@@ -95,7 +94,7 @@ export function Button({
         {loading ? (
           <ActivityIndicator size="small" color={palette.text} />
         ) : icon ? (
-          <Ionicons name={icon} size={ICON[size]} color={palette.text} />
+          <Icon name={icon} size={ICON[size]} color={palette.text} />
         ) : null}
         <AppText
           variant={size === "sm" ? "label" : "button"}

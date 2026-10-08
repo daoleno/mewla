@@ -1,12 +1,12 @@
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import type { ActiveAttachmentUpload } from "../../services/uploads";
 import { buildAttachmentUploadPresentation } from "./attachmentUploadPresentation";
 import { TerminalAccessoryIconButton } from "./TerminalAccessoryIconButton";
 import { TerminalAccessoryShortcutList } from "./TerminalAccessoryShortcutList";
+import { Icon } from "../icons/Icon";
 
 interface TerminalAccessoryControlsProps {
   uploadEnabled: boolean;
@@ -57,8 +57,8 @@ export function TerminalAccessoryControls({
           onPress={onUploadPress}
           disabled={!uploadEnabled}
         >
-          <Ionicons
-            name="attach-outline"
+          <Icon
+            name="attach"
             size={16}
             color={uploadEnabled ? chrome.textMuted : chrome.textSubtle}
           />
@@ -70,8 +70,8 @@ export function TerminalAccessoryControls({
         accessibilityState={{ selected: keyboardVisible }}
         onPress={onKeyboardToggle}
       >
-        <MaterialCommunityIcons
-          name="keyboard-outline"
+        <Icon
+          name="keyboard"
           size={18}
           color={keyboardVisible ? chrome.accent : chrome.textMuted}
         />

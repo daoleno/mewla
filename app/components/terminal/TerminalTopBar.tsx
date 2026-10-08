@@ -55,7 +55,7 @@ export function TerminalTopBar({
     () => [
       {
         key: "git-diff",
-        icon: "git-branch-outline" as const,
+        icon: "git-branch" as const,
         accessibilityLabel: gitDiffPresentation.accessibilityLabel,
         disabled: gitDiffDisabled,
         iconColor: gitDiffPresentation.iconColor,
@@ -63,7 +63,7 @@ export function TerminalTopBar({
       },
       {
         key: "menu",
-        icon: "ellipsis-vertical" as const,
+        icon: "more-vertical" as const,
         accessibilityLabel: "Session actions",
         onPress: onOpenMenu,
       },

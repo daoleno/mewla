@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, {
   useEffect,
   useMemo,
@@ -25,6 +24,7 @@ import {
 import { BottomSheetFrame } from "../ui";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
 import { outlinedSurface } from "../ui/outlinedSurface";
+import { Icon } from "../icons/Icon";
 
 interface CodexSkillsSheetProps {
   visible: boolean;
@@ -131,7 +131,7 @@ export function CodexSkillsSheet({
           onPress={onClose}
           activeOpacity={0.78}
         >
-          <Ionicons name="close" size={18} color={chrome.textSubtle} />
+          <Icon name="close" size={18} color={chrome.textSubtle} />
         </TouchableOpacity>
       </View>
 
@@ -141,7 +141,7 @@ export function CodexSkillsSheet({
           { backgroundColor: chrome.surfaceMuted, borderColor: chrome.border },
         ]}
       >
-        <Ionicons name="search-outline" size={15} color={chrome.textSubtle} />
+        <Icon name="search" size={15} color={chrome.textSubtle} />
         <TextInput
           ref={searchInputRef}
           value={query}
@@ -163,7 +163,7 @@ export function CodexSkillsSheet({
             onPress={() => setQuery("")}
             activeOpacity={0.72}
           >
-            <Ionicons name="close-circle" size={16} color={chrome.textSubtle} />
+            <Icon name="close-circle-fill" size={16} color={chrome.textSubtle} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -177,14 +177,14 @@ export function CodexSkillsSheet({
         </View>
       ) : error ? (
         <View style={styles.state}>
-          <Ionicons name="warning-outline" size={18} color={chrome.textSubtle} />
+          <Icon name="warning-fill" size={18} color={chrome.textSubtle} />
           <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
             {error}
           </Text>
         </View>
       ) : visibleSkills.length === 0 ? (
         <View style={styles.state}>
-          <Ionicons name="construct-outline" size={18} color={chrome.textSubtle} />
+          <Icon name="construct" size={18} color={chrome.textSubtle} />
           <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
             No matching skills
           </Text>
@@ -250,7 +250,7 @@ export function CodexSkillsSheet({
                   </Text>
                 ) : null}
               </View>
-              <Ionicons name="add" size={17} color={chrome.textSubtle} />
+              <Icon name="add" size={17} color={chrome.textSubtle} />
             </TouchableOpacity>
           ))}
         </ScrollView>

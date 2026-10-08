@@ -7,20 +7,19 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { ContinuousCorners, Radii, useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
 import { StatusMark } from "./StatusMark";
+import { Icon, type IconName } from "../icons/Icon";
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 export type InlineNoticeTone = "neutral" | "accent" | "warning" | "danger";
 
 interface InlineNoticeProps {
   title: string;
   detail?: string | null;
   tone?: InlineNoticeTone;
-  icon?: IoniconName;
+  icon?: IconName;
   busy?: boolean;
   action?: { label: string; onPress(): void; disabled?: boolean };
   style?: StyleProp<ViewStyle>;
@@ -41,10 +40,10 @@ export function InlineNotice({
 }: InlineNoticeProps) {
   const { colors, theme } = useAppTheme();
   const palette = {
-    neutral: { fill: colors.surfaceSubtle, ink: colors.textSecondary, glyph: "information-circle" as const },
-    accent: { fill: theme.materials.tint, ink: colors.accentStrong, glyph: "information-circle" as const },
+    neutral: { fill: colors.surfaceSubtle, ink: colors.textSecondary, glyph: "info-fill" as const },
+    accent: { fill: theme.materials.tint, ink: colors.accentStrong, glyph: "info-fill" as const },
     warning: { fill: colors.warningSoft, ink: colors.warning, glyph: "cloud-offline" as const },
-    danger: { fill: colors.dangerSoft, ink: colors.dangerText, glyph: "alert-circle" as const },
+    danger: { fill: colors.dangerSoft, ink: colors.dangerText, glyph: "alert-circle-fill" as const },
   }[tone];
 
   return (
@@ -59,7 +58,7 @@ export function InlineNotice({
         // The Work-state glyphs: a crossed box fails, a triangle warns.
         <StatusMark status={tone === "danger" ? "failed" : "warning"} size={16} style={styles.glyph} />
       ) : (
-        <Ionicons name={icon ?? palette.glyph} size={17} color={palette.ink} style={styles.glyph} />
+        <Icon name={icon ?? palette.glyph} size={17} color={palette.ink} style={styles.glyph} />
       )}
       <View style={styles.copy}>
         <AppText variant="label" numberOfLines={1} style={{ color: palette.ink }}>

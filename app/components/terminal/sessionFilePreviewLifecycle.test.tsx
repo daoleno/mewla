@@ -29,7 +29,7 @@ if (!process.env.ZEN_PREVIEW_HOOK_CHILD) {
     View: host("view"),
     StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 },
   }));
-  mock.module("@expo/vector-icons", () => ({ Ionicons: host("icon") }));
+  mock.module("../icons/Icon", () => ({ Icon: host("icon") }));
   mock.module("react-native-svg", () => ({ SvgXml: host("svg") }));
   mock.module("expo-file-system", () => ({ File: class {} }));
   mock.module("expo-clipboard", () => ({ setStringAsync: async () => {} }));

@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { TypeScale, Typography, useAppColors, useAppTheme } from "../../constants/tokens";
 import { buildChatChrome } from "../../theme";
@@ -26,6 +25,7 @@ import {
   type SkillTreeNode,
 } from "../../services/skillsScreenModel";
 import { buildSkillsMarkdownStyle } from "../../services/skillsMarkdownPresentation";
+import { Icon, type IconName } from "../icons/Icon";
 
 /**
  * Shared read-only Skill content browser: expandable file tree plus inline
@@ -130,7 +130,7 @@ export function SkillFileBrowser({
         ) : null}
         {error ? (
           <BrowserState
-            icon="warning-outline"
+            icon="warning-fill"
             title="File unavailable"
             detail={error}
           />
@@ -143,7 +143,7 @@ export function SkillFileBrowser({
         {preview?.dataUrl ? <ZenImage source={{ kind: "owned", path: `skill-file:${preview.path}`, name: preview.path }} gallery={gallery} chrome={chrome} /> : null}
         {preview?.status === "binary" ? (
           <BrowserState
-            icon="document-attach-outline"
+            icon="attach"
             title="Binary file"
             detail={`${preview.mediaType} · ${preview.size} bytes. Content preview is unavailable.`}
           />
@@ -215,14 +215,14 @@ function BrowserState({
   title,
   detail,
 }: {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: IconName;
   title: string;
   detail: string;
 }) {
   const colors = useAppColors();
   return (
     <View style={styles.browserState}>
-      <Ionicons name={icon} size={22} color={colors.textTertiary} />
+      <Icon name={icon} size={22} color={colors.textTertiary} />
       <Text style={[styles.browserStateTitle, { color: colors.textPrimary }]}>
         {title}
       </Text>
@@ -271,15 +271,15 @@ function TreeNode({
           },
         ]}
       >
-        <Ionicons
+        <Icon
           name={
             node.kind === "directory"
               ? open
-                ? "folder-open-outline"
-                : "folder-outline"
+                ? "folder-open"
+                : "folder"
               : node.file?.kind === "binary"
-                ? "document-attach-outline"
-                : "document-text-outline"
+                ? "attach"
+                : "document-text"
           }
           size={17}
           color={

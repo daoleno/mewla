@@ -44,12 +44,12 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
         <EmptyState
           title={state.title}
           detail={state.detail}
-          icon="pulse-outline"
+          icon="pulse"
           busy={state.busy}
           action={!hasServer && onOpenSettings
             ? { label: "Open Settings", onPress: onOpenSettings }
             : !state.busy && connected
-              ? { label: "Try again", icon: "refresh-outline", onPress: onRetry }
+              ? { label: "Try again", icon: "refresh", onPress: onRetry }
               : undefined}
         />
       </View>
@@ -68,7 +68,7 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
             size="inline"
             title={!connected ? "Server offline" : "Refresh failed"}
             detail={!connected ? "Showing the last sample. Updates resume when the server reconnects." : error}
-            action={connected ? { label: "Try again", icon: "refresh-outline", onPress: onRetry } : undefined}
+            action={connected ? { label: "Try again", icon: "refresh", onPress: onRetry } : undefined}
           />
         ) : null}
         <PressureHeadline

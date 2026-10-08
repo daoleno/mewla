@@ -48,7 +48,7 @@ export function mergeBrainPresenceIntoTimeline(
       // Presence only: one Work's title here went stale; the Work list names them.
       title: label,
       tone: "neutral",
-      icon: "paw-outline",
+      icon: "paw",
       statusKey: presence.state,
       defaultExpanded: false,
     },
@@ -128,7 +128,7 @@ function foldedSteps(run: ZenActivityTimelineItem[]): ZenActivityTimelineItem {
     statusKey: failed ? "failed" : "done",
     title,
     tone: failed ? "failed" : "neutral",
-    icon: failed ? "alert-circle-outline" : "layers-outline",
+    icon: failed ? "alert-circle" : "layers",
     defaultExpanded: false,
     accessibilityLabel: title,
     children: run.flatMap((item) =>

@@ -1,6 +1,6 @@
 import React from "react";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceTimelineActivityExpandIconProps {
   expanded: boolean;
@@ -16,8 +16,8 @@ export function InterfaceTimelineActivityExpandIcon({
   chrome,
 }: InterfaceTimelineActivityExpandIconProps) {
   return (
-    <Ionicons
-      name={expanded ? "chevron-down" : "chevron-forward"}
+    <Icon
+      name={expanded ? "chevron-down" : "chevron-right"}
       size={13}
       color={expanded ? chrome.textMuted : chrome.textSubtle}
     />

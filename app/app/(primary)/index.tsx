@@ -333,8 +333,8 @@ export default function BrainScreen() {
         key: "new-chat",
         label: "New chat",
         icon: newChatLoading
-          ? ("hourglass-outline" as const)
-          : ("create-outline" as const),
+          ? ("hourglass" as const)
+          : ("edit" as const),
         disabled: !canNewChat || newChatLoading,
         onPress: () => {
           void startNewBrainChat();
@@ -347,7 +347,7 @@ export default function BrainScreen() {
               label: "Switch executor",
               accessibilityLabel:
                 switchExecutorAccessibilityLabel(hostExecutor),
-              icon: "swap-horizontal-outline" as const,
+              icon: "swap-horizontal" as const,
               trailing: hostExecutor?.id ? (
                 <BrainExecutorIcon adapter={hostExecutor} size={14} />
               ) : undefined,
@@ -358,14 +358,14 @@ export default function BrainScreen() {
       {
         key: "terminal",
         label: "Open terminal",
-        icon: "terminal-outline" as const,
+        icon: "terminal" as const,
         disabled: !canOpenTerminal,
         onPress: openBrainTerminal,
       },
       {
         key: "workspace",
         label: "Browse workspace",
-        icon: "folder-open-outline" as const,
+        icon: "folder-open" as const,
         disabled: !canOpenWorkspace,
         onPress: openWorkspaceViewer,
       },
@@ -648,7 +648,7 @@ export default function BrainScreen() {
           ) : null}
           {targetedThreadReadOnly ? (
             <InlineNotice
-              icon="lock-closed-outline"
+              icon="lock"
               title="Historical Brain thread"
               detail="Read-only. Start a new chat from the Brain menu."
             />
@@ -833,15 +833,15 @@ function BrainInterfaceUnavailableState({
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
       <EmptyState
-        icon="layers-outline"
+        icon="layers"
         title="Chat view unavailable"
         detail={
           label
             ? `${label} is connected, but this executor does not expose structured chat events.`
             : "Switch the Brain host executor to one with structured chat events."
         }
-        action={onSwitchExecutor ? { label: "Switch executor", icon: "swap-horizontal-outline", onPress: onSwitchExecutor } : undefined}
-        secondary={onOpenTerminal ? { label: "Open terminal", icon: "terminal-outline", onPress: onOpenTerminal } : undefined}
+        action={onSwitchExecutor ? { label: "Switch executor", icon: "swap-horizontal", onPress: onSwitchExecutor } : undefined}
+        secondary={onOpenTerminal ? { label: "Open terminal", icon: "terminal", onPress: onOpenTerminal } : undefined}
       />
     </ScrollView>
   );

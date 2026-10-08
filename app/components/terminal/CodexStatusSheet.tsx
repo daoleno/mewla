@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import {
   ScrollView,
@@ -16,6 +15,7 @@ import type { CodexConversationEvent } from "../../services/codexConversation";
 import { BottomSheetFrame } from "../ui";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
 import { OutlineWidth, outlinedSurface } from "../ui/outlinedSurface";
+import { Icon } from "../icons/Icon";
 
 interface CodexStatusSheetProps {
   visible: boolean;
@@ -63,7 +63,7 @@ export function CodexStatusSheet({
             { backgroundColor: chrome.accentSoft },
           ]}
         >
-          <Ionicons name="pulse-outline" size={18} color={chrome.accent} />
+          <Icon name="pulse" size={18} color={chrome.accent} />
         </View>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: chrome.text }]}>Status</Text>
@@ -78,7 +78,7 @@ export function CodexStatusSheet({
           onPress={onClose}
           activeOpacity={0.78}
         >
-          <Ionicons name="close" size={18} color={chrome.textSubtle} />
+          <Icon name="close" size={18} color={chrome.textSubtle} />
         </TouchableOpacity>
       </View>
 
@@ -146,7 +146,7 @@ export function CodexStatusSheet({
         </ScrollView>
       ) : timedOut ? (
         <View style={styles.state}>
-          <Ionicons name="warning-outline" size={20} color={theme.yellow} />
+          <Icon name="warning-fill" size={20} color={theme.yellow} />
           <Text style={[styles.stateTitle, { color: chrome.text }]}>
             No status output received
           </Text>
@@ -161,7 +161,7 @@ export function CodexStatusSheet({
               onPress={onRetry}
               activeOpacity={0.82}
             >
-              <Ionicons name="refresh-outline" size={15} color={theme.cursorAccent} />
+              <Icon name="refresh" size={15} color={theme.cursorAccent} />
               <Text style={[styles.primaryActionText, { color: theme.cursorAccent }]}>
                 Retry
               </Text>
@@ -178,7 +178,7 @@ export function CodexStatusSheet({
                 onPress={onSwitchToTerminal}
                 activeOpacity={0.78}
               >
-                <Ionicons name="terminal-outline" size={15} color={chrome.textSubtle} />
+                <Icon name="terminal" size={15} color={chrome.textSubtle} />
                 <Text style={[styles.secondaryActionText, { color: chrome.text }]}>
                   Terminal
                 </Text>

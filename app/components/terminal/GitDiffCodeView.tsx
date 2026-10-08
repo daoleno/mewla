@@ -34,7 +34,7 @@ export function GitDiffCodeSnapshotPanel({
     return (
       <View style={[styles.contentPad, { paddingBottom: bottomInset + 14 }]}>
         <GitDiffStateCard
-          icon="document-text-outline"
+          icon="document-text"
           title="File snapshot unavailable"
           detail={
             snapshot?.reason ||
@@ -52,7 +52,7 @@ export function GitDiffCodeSnapshotPanel({
     return (
       <View style={[styles.contentPad, { paddingBottom: bottomInset + 14 }]}>
         <GitDiffStateCard
-          icon="cube-outline"
+          icon="cube"
           title="Binary file"
           accent={theme.cursor}
           chromeText={chrome.text}
@@ -77,7 +77,7 @@ export function GitDiffCodeSnapshotPanel({
       {snapshot.truncated ? (
         <InlineNotice
           tone="warning"
-          icon="cut-outline"
+          icon="cut"
           title="Showing part of this file"
           detail={`First ${formatByteCount(snapshot.content.length)} of ${formatByteCount(snapshot.byte_count)}.`}
           style={styles.truncationNotice}

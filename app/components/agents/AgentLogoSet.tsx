@@ -1,11 +1,11 @@
 import React from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { TypeScale, useAppColors } from "../../constants/tokens";
 import type { AgentKind } from "../../services/workerPresentation";
 import type { ManagedSkillAgent } from "../../services/skillsManagement";
 import { skillAgentLabel } from "../../services/skillsManagement";
 import { AgentKindIcon } from "../terminal/AgentKindIcon";
+import { Icon } from "../icons/Icon";
 
 export interface AgentLogoSetProps {
   agents: readonly string[];
@@ -99,8 +99,8 @@ function UnknownAgent({
   const colors = useAppColors();
   return (
     <View accessible={false} style={styles.item}>
-      <Ionicons
-        name="help-circle-outline"
+      <Icon
+        name="help"
         size={size}
         color={colors.textTertiary}
       />

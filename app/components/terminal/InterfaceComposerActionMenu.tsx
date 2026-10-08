@@ -1,11 +1,11 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native-gesture-handler";
 import { ContinuousCorners, Radii, Typography } from "../../constants/tokens";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { CodexSlashCommand } from "../../services/websocket";
 import { CodexQuickCommandRow } from "./CodexQuickCommandRow";
+import { Icon } from "../icons/Icon";
 
 const COMMAND_GROUPS = [
   { key: "session", label: "Session" },
@@ -84,9 +84,9 @@ export function InterfaceComposerActionMenu({
               },
             ]}
           >
-            <Ionicons
+            <Icon
               name={
-                uploading ? "cloud-upload-outline" : "document-attach-outline"
+                uploading ? "cloud-upload" : "attach"
               }
               size={17}
               color={canAttach ? chrome.accent : chrome.textSubtle}
@@ -106,8 +106,8 @@ export function InterfaceComposerActionMenu({
               {uploading ? "Uploading..." : "Add a file to this message"}
             </Text>
           </View>
-          <Ionicons
-            name="chevron-forward"
+          <Icon
+            name="chevron-right"
             size={14}
             color={chrome.textSubtle}
           />
@@ -123,8 +123,8 @@ export function InterfaceComposerActionMenu({
           ]}
         >
           <View style={styles.sectionHeader}>
-            <Ionicons
-              name="code-slash-outline"
+            <Icon
+              name="code"
               size={14}
               color={chrome.textSubtle}
             />
@@ -170,8 +170,8 @@ export function InterfaceComposerActionMenu({
             </ScrollView>
           ) : (
             <View style={styles.empty}>
-              <Ionicons
-                name="search-outline"
+              <Icon
+                name="search"
                 size={15}
                 color={chrome.textSubtle}
               />

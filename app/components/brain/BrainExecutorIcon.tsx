@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, View } from "react-native";
 import { Claude, Codex, Grok } from "@lobehub/icons-rn";
 import { useAppTheme, type AppColors } from "../../constants/tokens";
 import type { BrainExecutorRef } from "../../store/brain";
 import { brainAdapterProviderKey } from "./brainPresentation";
 import { CursorMark } from "../icons/CursorMark";
+import { Icon } from "../icons/Icon";
 
 interface BrainExecutorIconProps {
   adapter: BrainExecutorRef;
@@ -40,8 +40,8 @@ export function BrainExecutorIcon({ adapter, size = 18 }: BrainExecutorIconProps
 
   return (
     <View style={[styles.frame, styles.custom, { width: frameSize, height: frameSize }]}>
-      <Ionicons
-        name={provider === "tmux" ? "terminal-outline" : "hardware-chip-outline"}
+      <Icon
+        name={provider === "tmux" ? "terminal" : "chip"}
         size={size}
         color={colors.textSecondary}
       />

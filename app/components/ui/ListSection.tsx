@@ -7,7 +7,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import {
   ContinuousCorners,
@@ -16,8 +15,7 @@ import {
   useAppTheme,
 } from "../../constants/tokens";
 import { AppText } from "./AppText";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 interface ListSectionProps {
   title?: string;
@@ -79,7 +77,7 @@ type Accessory = "chevron" | "check" | "none";
 export interface ListRowProps {
   title: string;
   subtitle?: string | null;
-  icon?: IoniconName;
+  icon?: IconName;
   /** Leading glyph tint; defaults to the accent. */
   iconColor?: string;
   /** Custom leading element, replaces `icon`. */
@@ -125,7 +123,7 @@ export function ListRow({
   const tint = destructive ? colors.dangerText : iconColor ?? colors.textSecondary;
   const leadingNode = leading ?? (icon ? (
     <View style={styles.iconTile}>
-      <Ionicons name={icon} size={20} color={tint} />
+      <Icon name={icon} size={20} color={tint} />
     </View>
   ) : null);
   const content = (
@@ -153,11 +151,11 @@ export function ListRow({
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
       {loading ? <ActivityIndicator size="small" color={colors.textTertiary} /> : null}
       {accessory === "chevron" && !loading ? (
-        <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />
+        <Icon name="chevron-right" size={17} color={colors.textTertiary} />
       ) : null}
       {accessory === "check" ? (
-        <Ionicons
-          name="checkmark"
+        <Icon
+          name="check"
           size={20}
           color={selected ? colors.textPrimary : "transparent"}
         />

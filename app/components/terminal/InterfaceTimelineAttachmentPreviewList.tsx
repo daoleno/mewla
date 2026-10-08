@@ -1,12 +1,12 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
 
 import { ZenImage } from "./ZenImage";
 import { imageReference, isImageAttachment, type ZenImageSource } from "../../services/imageSource";
+import { Icon } from "../icons/Icon";
 
 function attachmentSource(attachment: DisplayAttachment): ZenImageSource {
   return attachment.localUri ? { kind: "phone", uri: attachment.localUri, name: attachment.name, mimeType: attachment.mimeType } : imageReference(attachment.path, attachment.name, attachment.mimeType);
@@ -63,11 +63,11 @@ function InterfaceTimelineAttachmentPreviewPill({
         },
       ]}
     >
-      <Ionicons
+      <Icon
         name={
           looksLikeImagePath(attachment.name)
-            ? "image-outline"
-            : "document-attach-outline"
+            ? "image"
+            : "attach"
         }
         size={13}
         color={chrome.textSubtle}

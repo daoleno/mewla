@@ -50,7 +50,7 @@ interface InterfaceComposerExpandingDockProps {
   actionMenuExpanded: boolean;
   actionMenuButtonEnabled: boolean;
   showActionMenuButton: boolean;
-  actionMenuIcon: "add" | "happy-outline";
+  actionMenuIcon: "add" | "happy";
   modelControl?: ComposerModelControlPresentation | null;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;

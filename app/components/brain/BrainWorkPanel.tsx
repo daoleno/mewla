@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
@@ -16,6 +15,7 @@ import {
 } from "./brainWorkSurface";
 import { SealCat } from "../mewla/SealCat";
 import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
+import { Icon } from "../icons/Icon";
 
 /** The slip's actions, built by the screen that can run them. */
 export type BrainWorkActionsFor = (slip: BrainWorkSlip, placement: "slip" | "sheet") => WorkSlipAction[];
@@ -190,7 +190,7 @@ export function BrainWorkHeader({
           <Text numberOfLines={1} style={styles.summaryText}>
             {summary}
           </Text>
-          <Ionicons name="chevron-forward" size={14} color={chrome.textSubtle} />
+          <Icon name="chevron-right" size={14} color={chrome.textSubtle} />
         </Pressable>
       ) : null}
     </View>
@@ -245,7 +245,7 @@ export function BrainWorkSheet({
       <View style={styles.sheetHeader}>
         <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Work" onPress={onClose} style={styles.close}>
-          <Ionicons name="close" size={22} color={chrome.textMuted} />
+          <Icon name="close" size={22} color={chrome.textMuted} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
@@ -299,7 +299,7 @@ export function BrainWorkDetailSheet({
           <View style={styles.sheetHeader}>
             <Text selectable style={styles.detailTitle}>{slip.title}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Close Work details" onPress={onClose} style={styles.close}>
-              <Ionicons name="close" size={22} color={chrome.textMuted} />
+              <Icon name="close" size={22} color={chrome.textMuted} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
@@ -339,7 +339,7 @@ export function BrainWorkDetailSheet({
                   onPress={send}
                   style={[styles.replySend, !draft.trim() || replyBusy ? styles.replySendIdle : null]}
                 >
-                  <Ionicons name="arrow-up" size={18} color={chrome.onSeal} />
+                  <Icon name="arrow-up" size={18} color={chrome.onSeal} />
                 </Pressable>
               </View>
             ) : null}

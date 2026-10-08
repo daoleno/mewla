@@ -313,7 +313,7 @@ function GitDiffSheetBody({
           title: repoBrowserPath || repoTitle,
           items: [
             ...(repoBrowserPath
-              ? [{ key: "copy-folder", label: "Copy folder path", icon: "link-outline" as const, onPress: () => void copyPath(repoBrowserPath) }]
+              ? [{ key: "copy-folder", label: "Copy folder path", icon: "link" as const, onPress: () => void copyPath(repoBrowserPath) }]
               : []),
             refreshItem,
           ],
@@ -323,7 +323,7 @@ function GitDiffSheetBody({
           title: repoFilePath ?? undefined,
           items: [
             ...(repoFilePath
-              ? [{ key: "copy-path", label: "Copy path", icon: "link-outline" as const, onPress: () => void copyPath(repoFilePath) }]
+              ? [{ key: "copy-path", label: "Copy path", icon: "link" as const, onPress: () => void copyPath(repoFilePath) }]
               : []),
             refreshItem,
           ],
@@ -342,7 +342,7 @@ function GitDiffSheetBody({
         items.push({
           key: "browse",
           label: "Browse files",
-          icon: "folder-open-outline",
+          icon: "folder-open",
           onPress: handleBrowseFiles,
         });
         if (snapshot.repo_root) {
@@ -350,7 +350,7 @@ function GitDiffSheetBody({
           items.push({
             key: "copy-root",
             label: "Copy repository path",
-            icon: "link-outline",
+            icon: "link",
             onPress: () => void copyText(root, "Path copied", root),
           });
         }
@@ -359,7 +359,7 @@ function GitDiffSheetBody({
           items.push({
             key: "copy-branch",
             label: "Copy branch name",
-            icon: "git-branch-outline",
+            icon: "git-branch",
             onPress: () => void copyText(branch, "Branch copied", branch),
           });
         }
@@ -414,7 +414,7 @@ function GitDiffSheetBody({
         <View style={statePad}>
           <EmptyState
             tone="danger"
-            icon="warning-outline"
+            icon="warning-fill"
             title="Couldn't load Git status"
             detail={error}
             action={{ label: "Retry", icon: "refresh", onPress: handleRefresh, loading }}
@@ -427,7 +427,7 @@ function GitDiffSheetBody({
       ) : !snapshot?.available ? (
         <View style={statePad}>
           <EmptyState
-            icon="git-branch-outline"
+            icon="git-branch"
             title={
               snapshot?.reason === "no_cwd"
                 ? "No working directory yet"
@@ -524,7 +524,7 @@ function GitDiffSheetBody({
                       {
                         key: "open",
                         label: entry.kind === "directory" ? "Open folder" : "Open file",
-                        icon: entry.kind === "directory" ? "folder-open-outline" : "document-text-outline",
+                        icon: entry.kind === "directory" ? "folder-open" : "document-text",
                         onPress: () =>
                           entry.kind === "directory"
                             ? onOpenRepoPath(entry.path)
@@ -533,7 +533,7 @@ function GitDiffSheetBody({
                       {
                         key: "copy-path",
                         label: "Copy path",
-                        icon: "link-outline",
+                        icon: "link",
                         onPress: () => void copyPath(entry.path),
                       },
                     ],

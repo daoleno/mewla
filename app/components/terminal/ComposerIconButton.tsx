@@ -1,7 +1,6 @@
 import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners } from "../../constants/tokens";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
@@ -10,11 +9,10 @@ import {
   COMPOSER_CONTROL_DISC_SIZE,
   composerNeutralFill,
 } from "./composerMaterial";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 interface ComposerIconButtonProps {
-  icon: IoniconName;
+  icon: IconName;
   accessibilityLabel: string;
   chrome: TerminalThemeChrome;
   loading?: boolean;
@@ -50,7 +48,7 @@ export function ComposerIconButton({
   const glyph = loading ? (
     <ComposerLoadingDots color={loadingColor ?? chrome.accent} size={8} />
   ) : (
-    <Ionicons name={icon} size={iconSize} color={iconColor ?? chrome.text} />
+    <Icon name={icon} size={iconSize} color={iconColor ?? chrome.text} />
   );
   return (
     <TouchableOpacity

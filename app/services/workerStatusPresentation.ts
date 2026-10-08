@@ -1,10 +1,10 @@
 import type { WorkerStatus } from '../constants/tokens';
+import type { IconName } from '../components/icons/Icon';
 
-export type WorkerStatusIndicatorIcon =
-  | 'checkmark-circle'
-  | 'close-circle'
-  | 'pause-circle'
-  | 'help-circle-outline';
+export type WorkerStatusIndicatorIcon = Extract<
+  IconName,
+  'check-circle-fill' | 'close-circle-fill' | 'pause-circle' | 'help'
+>;
 
 /** True only for durable active-turn Running from the daemon contract. */
 export function isWorkerActivelyRunning(status: WorkerStatus): boolean {
@@ -36,13 +36,13 @@ export function workerStatusIndicatorIcon(
     case 'running':
       return null;
     case 'done':
-      return 'checkmark-circle';
+      return 'check-circle-fill';
     case 'failed':
-      return 'close-circle';
+      return 'close-circle-fill';
     case 'blocked':
       return 'pause-circle';
     case 'unknown':
-      return 'help-circle-outline';
+      return 'help';
   }
 }
 

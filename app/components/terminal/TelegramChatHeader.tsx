@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { TerminalThemeChrome } from '../../constants/terminalThemes';
 import {
@@ -28,10 +27,11 @@ import { HeaderBackButton } from '../navigation/HeaderBackButton';
 import { relativeLuminance } from '../../theme/colorUtils';
 import { StatusMark } from '../ui/StatusMark';
 import type { WorkStatus } from '../ui/workStatus';
+import { Icon, type IconName } from "../icons/Icon";
 
 interface TelegramChatHeaderAction {
   key: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  icon: IconName;
   accessibilityLabel: string;
   disabled?: boolean;
   /** Optional override; defaults to muted header icon color. */
@@ -223,7 +223,7 @@ export function TelegramChatHeader({
                   action.onPress();
                 }}
               >
-                <Ionicons
+                <Icon
                   name={action.icon}
                   size={20}
                   color={

@@ -15,7 +15,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import type {
   TerminalThemeChrome,
@@ -47,6 +46,7 @@ import {
   summarizeGitDiffFiles,
 } from "./gitDiffPresentation";
 import { withAlpha } from "./colorWithAlpha";
+import { Icon } from "../icons/Icon";
 
 interface GitDiffSheetDiffContentProps {
   files: GitDiffFileInfo[];
@@ -208,7 +208,7 @@ export function GitDiffSheetDiffContent({
     </>
   ) : (
     <EmptyState
-      icon="git-compare-outline"
+      icon="git-compare"
       title="No file selected"
       style={styles.emptyDetail}
     />
@@ -216,10 +216,10 @@ export function GitDiffSheetDiffContent({
 
   const emptyList = noChanges ? (
     <EmptyState
-      icon="checkmark-circle-outline"
+      icon="check-circle"
       title="Working tree clean"
       detail={branch ?? null}
-      action={{ label: "Browse files", icon: "folder-open-outline", onPress: onBrowseFiles }}
+      action={{ label: "Browse files", icon: "folder-open", onPress: onBrowseFiles }}
     />
   ) : deferredQuery ? (
     <EmptyState
@@ -259,7 +259,7 @@ export function GitDiffSheetDiffContent({
             {fileFilterOpen ? (
               <View style={styles.filterRow}>
                 <View style={[styles.filterField, { backgroundColor: chrome.surfaceMuted }]}>
-                  <Ionicons name="search" size={16} color={chrome.textSubtle} />
+                  <Icon name="search" size={16} color={chrome.textSubtle} />
                   <TextInput
                     accessibilityLabel="Filter changed paths"
                     placeholder="Filter paths"
@@ -279,7 +279,7 @@ export function GitDiffSheetDiffContent({
                       onPress={() => setQuery("")}
                       hitSlop={Math.ceil((TouchTarget - 17) / 2)}
                     >
-                      <Ionicons name="close-circle" size={17} color={chrome.textSubtle} />
+                      <Icon name="close-circle-fill" size={17} color={chrome.textSubtle} />
                     </Pressable>
                   ) : null}
                 </View>

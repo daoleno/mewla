@@ -19,7 +19,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -63,6 +62,7 @@ import {
 } from "../store/calendar";
 import { useBrain } from "../store/brain";
 import { useCurrentServer } from "../store/currentServer";
+import { Icon } from "../components/icons/Icon";
 
 type ServerItem = CalendarItem & { serverId: string; serverName: string };
 const CALENDAR_FONT_SCALE_MAX = 1.25;
@@ -142,8 +142,8 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
             }}
             style={styles.calendarHeaderAction}
           >
-            <Ionicons
-              name={monthExpanded ? "calendar" : "calendar-outline"}
+            <Icon
+              name={monthExpanded ? "calendar-fill" : "calendar"}
               size={21}
               color={colors.textPrimary}
             />
@@ -157,7 +157,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
             onPress={() => setEditing("new")}
             style={styles.calendarHeaderAction}
           >
-            <Ionicons
+            <Icon
               name="add"
               size={24}
               color={activeServer ? colors.textPrimary : colors.disabledText}
@@ -264,8 +264,8 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       {notificationState !== "granted" ? (
         <View style={styles.permission}>
-          <Ionicons
-            name="notifications-off-outline"
+          <Icon
+            name="notifications-off"
             size={18}
             color={colors.statusBlocked}
           />
@@ -286,7 +286,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
               style={styles.permissionAction}
             >
               {notificationState === "denied" ? (
-                <Ionicons name="settings-outline" size={20} color={colors.accent} />
+                <Icon name="settings" size={20} color={colors.accent} />
               ) : <Text style={styles.permissionActionText}>Enable</Text>}
             </Pressable>
           ) : null}
@@ -332,7 +332,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
             accessibilityLabel="Loading calendar"
             style={styles.agendaStatus}
           >
-            <Ionicons name="sync-outline" size={20} color={colors.accent} />
+            <Icon name="sync" size={20} color={colors.accent} />
             <Text style={styles.emptyTitle}>Loading calendar…</Text>
           </View>
         ) : sections.length ? (
@@ -491,7 +491,7 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
           <CalendarStatus status={item.status} />
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={17} color={colors.textTertiary} />
+      <Icon name="chevron-right" size={17} color={colors.textTertiary} />
     </Pressable>
   );
 }
@@ -624,7 +624,7 @@ function MonthHeader({
         }
         style={styles.iconButton}
       >
-        <Ionicons name="chevron-back" size={20} color={colors.textPrimary} />
+        <Icon name="chevron-left" size={20} color={colors.textPrimary} />
       </Pressable>
       <Text style={styles.monthTitle}>
         {month.toLocaleDateString(undefined, {
@@ -640,7 +640,7 @@ function MonthHeader({
         }
         style={styles.iconButton}
       >
-        <Ionicons name="chevron-forward" size={20} color={colors.textPrimary} />
+        <Icon name="chevron-right" size={20} color={colors.textPrimary} />
       </Pressable>
     </View>
   );
@@ -656,8 +656,8 @@ function EmptyState({
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.empty}>
-      <Ionicons
-        name="calendar-clear-outline"
+      <Icon
+        name="calendar-blank"
         size={19}
         color={colors.textTertiary}
       />
@@ -718,7 +718,7 @@ function DetailModal({
               onPress={onClose}
               style={styles.iconButton}
             >
-              <Ionicons name="close" size={23} color={colors.textPrimary} />
+              <Icon name="close" size={23} color={colors.textPrimary} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.detailContent}>

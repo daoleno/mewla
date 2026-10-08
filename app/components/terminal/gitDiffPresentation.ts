@@ -1,3 +1,4 @@
+import type { IconName } from "../icons/Icon";
 import {
   describeGitDiffScope,
   gitDiffCounts,
@@ -21,7 +22,7 @@ export interface GitDiffFilePresentation {
   oldDirectory: string | null;
   statusLabel: string;
   scopeLabel: string;
-  icon: string;
+  icon: IconName;
   /** One-letter status mark shown in the row's tinted tile (M, A, D, R...). */
   glyph: string;
   tone: GitDiffStatusTone;
@@ -41,14 +42,14 @@ const STATUS_TONES: Record<string, GitDiffStatusTone> = {
   changed: "modified",
 };
 
-const TONE_ICONS: Record<GitDiffStatusTone, string> = {
-  added: "add-circle-outline",
-  deleted: "remove-circle-outline",
-  renamed: "swap-horizontal-outline",
-  modified: "ellipse-outline",
-  conflict: "warning-outline",
-  untracked: "cloud-upload-outline",
-  binary: "cube-outline",
+const TONE_ICONS: Record<GitDiffStatusTone, IconName> = {
+  added: "add-circle",
+  deleted: "remove-circle",
+  renamed: "swap-horizontal",
+  modified: "circle",
+  conflict: "warning",
+  untracked: "cloud-upload",
+  binary: "cube",
 };
 
 const STATUS_GLYPHS: Record<string, string> = {

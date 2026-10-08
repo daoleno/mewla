@@ -5,7 +5,6 @@ import {
   View,
   type TextInput as TextInputInstance,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { ContinuousCorners, TypeScale } from "../../constants/tokens";
 import type {
   TerminalThemeChrome,
@@ -21,6 +20,7 @@ import {
 import { InterfaceComposerActionMenu } from "./InterfaceComposerActionMenu";
 import { InterfaceChatComposerFrame } from "./InterfaceChatComposerFrame";
 import { InterfaceComposerPanel } from "./InterfaceComposerPanel";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceChatComposerProps {
   inputRef: React.RefObject<TextInputInstance | null>;
@@ -42,7 +42,7 @@ interface InterfaceChatComposerProps {
   providerActivityStartedAt?: string;
   bottomPadding: number;
   showActionMenuButton: boolean;
-  actionMenuIcon: "add" | "happy-outline";
+  actionMenuIcon: "add" | "happy";
   composerLayout: "chatgpt" | "telegram" | "classic";
   showAttachmentRail: boolean;
   showCommandMenu: boolean;
@@ -163,8 +163,8 @@ export function InterfaceChatComposer({
           accessibilityLabel={operationalError}
           style={[styles.operationalError, { backgroundColor: chrome.dangerSoft }]}
         >
-          <Ionicons
-            name="alert-circle"
+          <Icon
+            name="alert-circle-fill"
             size={15}
             color={chrome.danger}
             style={styles.operationalErrorIcon}
