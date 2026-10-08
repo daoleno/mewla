@@ -152,7 +152,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 				if !strings.Contains(prompt, "AGENTS.md") || !work.IsPrivateHostPrompt(prompt) {
 					t.Fatalf("%s lost guidance pointer or privacy", name)
 				}
-				for _, excluded := range []string{"fail-before/pass-after", "licensing", "minimum useful redacted excerpts", "actual session evidence", ".agents/zen-verification", "/private/project/secret", "pstack"} {
+				for _, excluded := range []string{"fail-before/pass-after", "licensing", "minimum useful redacted excerpts", "actual session evidence", ".agents/mewla-verification", "/private/project/secret", "pstack"} {
 					if strings.Contains(prompt, excluded) {
 						t.Fatalf("%s eagerly loaded or leaked %q", name, excluded)
 					}

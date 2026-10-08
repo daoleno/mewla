@@ -10,7 +10,7 @@ Mewla exposes visible Worker identities through the canonical control socket. Th
 
 ## How to get to it (user POV)
 
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
+- Run `scripts/verify-mewla-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
 - Read the `worker_list` entry and its `runtime.worker_count` value.
 
 ## Driving it with the Mewla CLI

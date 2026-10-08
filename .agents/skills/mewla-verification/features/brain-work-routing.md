@@ -10,7 +10,7 @@ Brain is the canonical owner of current work, executor routing, and discoverable
 
 ## How to get to it (user POV)
 
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
+- Run `scripts/verify-mewla-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` from the repository root.
 - Read the `brain_context` and `brain_playbooks` entries in the report.
 
 ## Driving it with the Mewla CLI

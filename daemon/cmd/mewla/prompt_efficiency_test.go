@@ -117,7 +117,7 @@ func TestEngineeringScenarioBriefsReachNativeWorkers(t *testing.T) {
 				if !strings.HasPrefix(payload, scenario.ExampleBrief+"\n\n") || len(payload)-len(scenario.ExampleBrief) > 2500 {
 					t.Fatalf("method-bearing brief was changed or overhead grew: overhead=%d", len(payload)-len(scenario.ExampleBrief))
 				}
-				for _, excluded := range []string{"pstack", ".agents/zen-verification", "# Wayfind", "# Delegate Brief"} {
+				for _, excluded := range []string{"pstack", ".agents/mewla-verification", "# Wayfind", "# Delegate Brief"} {
 					if strings.Contains(payload, excluded) {
 						t.Fatalf("brief acquired unrelated instructions %q", excluded)
 					}
