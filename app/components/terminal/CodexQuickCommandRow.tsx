@@ -1,11 +1,11 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { TouchableOpacity } from "react-native-gesture-handler";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import type { CodexSlashCommand } from "../../services/websocket";
 import { slashCommandIcon } from "./codexSlashCommandPresentation";
+import { Icon } from "../icons/Icon";
 
 interface CodexQuickCommandRowProps {
   command: CodexSlashCommand;
@@ -31,7 +31,7 @@ export function CodexQuickCommandRow({
       activeOpacity={0.78}
     >
       <View style={[styles.icon, { backgroundColor: chrome.surfaceMuted }]}>
-        <Ionicons
+        <Icon
           name={slashCommandIcon(command.name)}
           size={15}
           color={chrome.accent}
@@ -51,7 +51,7 @@ export function CodexQuickCommandRow({
           {command.description}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={14} color={chrome.textSubtle} />
+      <Icon name="chevron-right" size={14} color={chrome.textSubtle} />
     </TouchableOpacity>
   );
 }

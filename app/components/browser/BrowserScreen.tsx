@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
@@ -19,6 +18,7 @@ import {
 import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { browserRendererHTML } from "./renderer";
+import { Icon } from "../icons/Icon";
 
 type ViewerPhase = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
@@ -264,30 +264,30 @@ export function BrowserScreen() {
 
   const menuItems: ActionMenuItem[] = [
     ...resources.filter((r) => r.id !== selected?.id).map((resource): ActionMenuItem => ({
-      key: `switch:${resource.id}`, label: `Switch to ${resource.name}`, icon: "swap-horizontal-outline",
+      key: `switch:${resource.id}`, label: `Switch to ${resource.name}`, icon: "swap-horizontal",
       detail: resource.state === "running" ? "Open" : "Closed",
       // Closed browsers can't start until the server finishes setup.
       disabled: Boolean(reason) && resource.state !== "running",
       onPress: () => void run("open", () => open(resource)),
     })),
     ...(resources.length > 0 && resources.length < 8 ? [{
-      key: "new", label: "New browser", icon: "add-circle-outline", detail: "Separate sign-ins", disabled: Boolean(reason),
+      key: "new", label: "New browser", icon: "add-circle", detail: "Separate sign-ins", disabled: Boolean(reason),
       onPress: () => void run("open", () => open(null, `${DEFAULT_BROWSER_NAME} ${resources.length + 1}`)),
     } satisfies ActionMenuItem] : []),
     ...(selected && mine ? [{
-      key: "release", label: "Stop controlling", icon: "hand-left-outline",
+      key: "release", label: "Stop controlling", icon: "hand",
       onPress: () => void run("control", async () => { await viewer.current?.release(); setMine(false); }),
     } satisfies ActionMenuItem] : []),
-    ...(selected && mine ? [{ key: "dialog", label: "Page dialog", icon: "chatbox-outline", onPress: () => void run("dialog", () => command("dialog_status")) } satisfies ActionMenuItem] : []),
-    ...(selected ? [{ key: "stop", label: "Close browser", icon: "stop-circle-outline", detail: "Sign-ins are kept", onPress: () => void run("stop", () => manage("stop", selected)) } satisfies ActionMenuItem] : []),
-    ...(selected ? [{ key: "delete", label: "Delete browser", icon: "trash-outline", destructive: true, onPress: () => confirmDelete(selected) } satisfies ActionMenuItem] : []),
-    { key: "details", label: "Connection details", icon: "information-circle-outline", onPress: showDetails },
+    ...(selected && mine ? [{ key: "dialog", label: "Page dialog", icon: "chatbox", onPress: () => void run("dialog", () => command("dialog_status")) } satisfies ActionMenuItem] : []),
+    ...(selected ? [{ key: "stop", label: "Close browser", icon: "stop-circle", detail: "Sign-ins are kept", onPress: () => void run("stop", () => manage("stop", selected)) } satisfies ActionMenuItem] : []),
+    ...(selected ? [{ key: "delete", label: "Delete browser", icon: "trash", destructive: true, onPress: () => confirmDelete(selected) } satisfies ActionMenuItem] : []),
+    { key: "details", label: "Connection details", icon: "info", onPress: showDetails },
   ];
   const header = (
     <Stack.Screen options={{
       title: selected?.name ?? "Browser",
       headerRight: () => currentServer ? (
-        <IconButton icon="ellipsis-horizontal" size={40} accessibilityLabel="Browser options" onPress={() => setMenu(true)} />
+        <IconButton icon="more-horizontal" size={40} accessibilityLabel="Browser options" onPress={() => setMenu(true)} />
       ) : null,
     }} />
   );
@@ -301,7 +301,7 @@ export function BrowserScreen() {
   if (!currentServer) {
     return (
       <View style={[styles.root, styles.center, { backgroundColor: colors.bgPrimary }]}>
-        <EmptyState icon="server-outline" title="No current server" detail="Choose one in Settings." action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
+        <EmptyState icon="server" title="No current server" detail="Choose one in Settings." action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
       </View>
     );
   }
@@ -318,13 +318,13 @@ export function BrowserScreen() {
           {!loaded || busy === "open" ? (
             <EmptyState busy title="Opening your browser…" />
           ) : setupNeeded ? (
-            <EmptyState icon="construct-outline" title="Browser needs setup on this server" detail={reason}
+            <EmptyState icon="construct" title="Browser needs setup on this server" detail={reason}
               action={{ label: "Check again", icon: "refresh", onPress: () => void run("enter", enter), loading: busy === "enter" }} />
           ) : (
             // While a notice offers recovery, it is the screen's one action.
-            <EmptyState icon="globe-outline" title="No browser yet"
+            <EmptyState icon="browser" title="No browser yet"
               detail={`Sign-ins are kept on ${serverName}.`}
-              action={issue ? undefined : { label: "Open browser", icon: "open-outline", onPress: () => void run("open", () => open(target)) }} />
+              action={issue ? undefined : { label: "Open browser", icon: "open-external", onPress: () => void run("open", () => open(target)) }} />
           )}
         </View>
       </View>
@@ -341,7 +341,7 @@ export function BrowserScreen() {
     : phase === "reconnecting" ? <InlineNotice busy title="Reconnecting…" />
     : phase === "connecting" ? <InlineNotice busy title="Connecting…" />
     : viewOnly && offer === "takeover" ? (
-      <InlineNotice tone="accent" icon={selected.control === "agent" ? "git-network-outline" : "phone-portrait-outline"}
+      <InlineNotice tone="accent" icon={selected.control === "agent" ? "git-network" : "phone"}
         title={selected.control === "agent" ? "An Agent is using this browser" : "In use on another device"}
         detail={selected.control === "agent" ? "The Agent pauses while you're in control." : undefined}
         action={{ label: "Take over", onPress: () => void run("control", acquire), disabled: busy !== null }} />
@@ -361,8 +361,8 @@ export function BrowserScreen() {
             placeholder="Enter a website" placeholderTextColor={colors.textTertiary} value={address} onChangeText={setAddress}
             selectTextOnFocus style={inputStyle}
             onSubmitEditing={() => { if (address.trim()) void run("nav", () => command("navigate", { url: address.trim() })); }} />
-          <IconButton icon="copy-outline" size={44} accessibilityLabel="Tabs" onPress={() => void run("tab", () => command("tabs"))} />
-          <IconButton icon="keypad-outline" size={44} tone={typing ? "tinted" : "default"} accessibilityLabel={typing ? "Hide typing tools" : "Show typing tools"}
+          <IconButton icon="copy" size={44} accessibilityLabel="Tabs" onPress={() => void run("tab", () => command("tabs"))} />
+          <IconButton icon="keypad" size={44} tone={typing ? "tinted" : "default"} accessibilityLabel={typing ? "Hide typing tools" : "Show typing tools"}
             accessibilityState={{ expanded: typing }} onPress={() => setTyping(!typing)} />
         </View>
       ) : null}
@@ -409,7 +409,7 @@ export function BrowserScreen() {
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: scroll }} accessibilityLabel="Drag to scroll the page"
               onPress={() => { setScroll(!scroll); web.current?.injectJavaScript(`window.zenScroll(${!scroll});true;`); }}
               style={[styles.scroll, { backgroundColor: scroll ? colors.surfaceSubtle : "transparent", borderColor: colors.border }]}>
-              <Ionicons name="swap-vertical" size={18} color={colors.textSecondary} />
+              <Icon name="swap-vertical" size={18} color={colors.textSecondary} />
             </Pressable>
           </View>
         </View>

@@ -1,17 +1,15 @@
 import React, { useEffect, useRef } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { ContinuousCorners, Radii, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
 import { BottomSheetFrame } from "./BottomSheetFrame";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 export interface ActionMenuItem {
   key: string;
   label: string;
-  icon: IoniconName;
+  icon: IconName;
   detail?: string;
   accessibilityLabel?: string;
   /** Small trailing adornment such as provider marks or a value. */
@@ -80,7 +78,7 @@ export function ActionMenu({ visible, title, items, onClose }: ActionMenuProps) 
                 pressed && { backgroundColor: colors.surfacePressed },
               ]}
             >
-              <Ionicons
+              <Icon
                 name={item.icon}
                 size={20}
                 color={item.destructive && !item.disabled ? colors.dangerText : item.disabled ? colors.disabledText : colors.textSecondary}

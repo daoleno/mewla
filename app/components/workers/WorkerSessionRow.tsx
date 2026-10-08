@@ -6,7 +6,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import {
   TypeScale,
   UiTextMetrics,
@@ -25,6 +24,7 @@ import { AnimatedPressable } from '../ui/AnimatedPressable';
 import { AgentKindIcon } from '../terminal/AgentKindIcon';
 import { StatusMark } from '../ui/StatusMark';
 import type { WorkStatus } from '../ui/workStatus';
+import { Icon } from "../icons/Icon";
 
 interface WorkerSessionRowProps {
   title: string;
@@ -117,8 +117,8 @@ export function WorkerSessionRow({
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         >
-          <Ionicons
-            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+          <Icon
+            name={selected ? 'check-circle-fill' : 'circle'}
             size={24}
             color={selected ? colors.accent : colors.borderStrong}
           />
@@ -133,7 +133,7 @@ export function WorkerSessionRow({
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
           >
-            <Ionicons name="git-network" size={9} color={colors.accentStrong} />
+            <Icon name="git-network" size={9} color={colors.accentStrong} />
           </View>
         ) : null}
       </View>

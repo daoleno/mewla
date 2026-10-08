@@ -2,12 +2,12 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { imageSourceKey, isSvgImage, resolveImageSource, type ZenImageOwner, type ZenImageSource } from "../../services/imageSource";
 import type { SessionFileBinarySource } from "../../services/sessionFilePreview";
 import { SessionFileImagePreview } from "./SessionFileImagePreview";
 import { ZenImageContent } from "./ZenImageContent";
+import { Icon } from "../icons/Icon";
 
 export const ZenImageOwnerContext = createContext<ZenImageOwner | null>(null);
 
@@ -52,8 +52,8 @@ export function ZenImage({ source, chrome, gallery, compact = false }: {
         style={[styles.preview, { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted, height: compact ? 80 : Math.max(100, Math.min(280, 320 / ratio)) }]}>
         {resolved.source && !error ? <ZenImageContent key={`${identity}:${attempt}`} source={resolved.source} svg={svg}
           onLoad={(nextRatio) => { setLoaded(identity); setRatio(nextRatio); }} onError={() => setFailed(identity)} /> : null}
-        {error ? <Ionicons name="refresh-outline" size={22} color={chrome.textMuted} /> : !isLoaded ? <ActivityIndicator color={chrome.textMuted} /> : null}
-        {!error && isLoaded && !compact ? <View style={styles.expand}><Ionicons name="expand-outline" size={17} color={chrome.text} /></View> : null}
+        {error ? <Icon name="refresh" size={22} color={chrome.textMuted} /> : !isLoaded ? <ActivityIndicator color={chrome.textMuted} /> : null}
+        {!error && isLoaded && !compact ? <View style={styles.expand}><Icon name="expand" size={17} color={chrome.text} /></View> : null}
       </Pressable>
       {opened === identity ? <ImageGallery key={identity} images={images} initial={initial} chrome={chrome} onClose={() => setOpened(null)} /> : null}
     </View>
@@ -75,15 +75,15 @@ function ImageGallery({ images, initial, chrome, onClose }: { images: ZenImageSo
     <GestureHandlerRootView style={{ flex: 1 }}><SafeAreaProvider><SafeAreaView style={{ flex: 1, backgroundColor: chrome.surfaceMuted }}>
       <View style={styles.toolbar}>
         <Text numberOfLines={1} style={{ flex: 1, color: chrome.text }}>{source.name}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close image" onPress={onClose} style={styles.button}><Ionicons name="close-outline" size={26} color={chrome.text} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close image" onPress={onClose} style={styles.button}><Icon name="close" size={26} color={chrome.text} /></Pressable>
       </View>
-      {error ? <Pressable accessibilityRole="button" accessibilityLabel="Retry image" onPress={() => { setFailed(null); setAttempt((value) => value + 1); }} style={styles.state}><Ionicons name="refresh-outline" size={28} color={chrome.text} /><Text style={{ color: chrome.text }}>{error}</Text></Pressable>
+      {error ? <Pressable accessibilityRole="button" accessibilityLabel="Retry image" onPress={() => { setFailed(null); setAttempt((value) => value + 1); }} style={styles.state}><Icon name="refresh" size={28} color={chrome.text} /><Text style={{ color: chrome.text }}>{error}</Text></Pressable>
         : resolved.source ? <SessionFileImagePreview key={failureKey} source={resolved.source} svg={isSvgImage(source, resolved.source)} chrome={chrome} onError={() => setFailed(failureKey)} />
         : <View style={styles.state}><ActivityIndicator color={chrome.text} /></View>}
       {images.length > 1 ? <View style={styles.toolbar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Previous image" disabled={index === 0} onPress={() => move(index - 1)} style={styles.button}><Ionicons name="chevron-back" size={24} color={index === 0 ? chrome.textSubtle : chrome.text} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Previous image" disabled={index === 0} onPress={() => move(index - 1)} style={styles.button}><Icon name="chevron-left" size={24} color={index === 0 ? chrome.textSubtle : chrome.text} /></Pressable>
         <Text style={{ color: chrome.text }}>{index + 1} / {images.length}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Next image" disabled={index === images.length - 1} onPress={() => move(index + 1)} style={styles.button}><Ionicons name="chevron-forward" size={24} color={chrome.text} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Next image" disabled={index === images.length - 1} onPress={() => move(index + 1)} style={styles.button}><Icon name="chevron-right" size={24} color={chrome.text} /></Pressable>
       </View> : null}
     </SafeAreaView></SafeAreaProvider></GestureHandlerRootView>
   </Modal>;

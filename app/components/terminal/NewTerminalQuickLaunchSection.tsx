@@ -3,7 +3,6 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useAppColors } from '../../constants/tokens';
 import { AppText } from '../ui';
 import { NewTerminalCwdRow } from './NewTerminalCwdRow';
@@ -11,6 +10,7 @@ import {
   NewTerminalLaunchPresetList,
   type NewTerminalLaunchPreset,
 } from './NewTerminalLaunchPresetList';
+import { Icon } from "../icons/Icon";
 export type { NewTerminalLaunchPreset } from './NewTerminalLaunchPresetList';
 
 interface NewTerminalQuickLaunchSectionProps {
@@ -58,8 +58,8 @@ export function NewTerminalQuickLaunchSection({
         onPress={onToggleAdvanced}
         activeOpacity={0.82}
       >
-        <Ionicons
-          name={advanced ? 'chevron-down' : 'chevron-forward'}
+        <Icon
+          name={advanced ? 'chevron-down' : 'chevron-right'}
           size={14}
           color={colors.textSecondary}
         />

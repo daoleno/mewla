@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useAppColors, type AppColors } from "../../constants/tokens";
 import { displayPathSubtitle } from "../../services/pathDisplay";
 import { Button, AppText, IconButton } from "../ui";
 import { EmptyState } from "../ui/EmptyState";
 import type { DirectoryPickerEntry } from "./directoryPickerState";
+import { Icon } from "../icons/Icon";
 
 export type { DirectoryPickerEntry };
 
@@ -74,12 +74,12 @@ export function DirectoryPickerContent({
               accessibilityRole="button"
               accessibilityLabel={`Open directory ${item.name}`}
             >
-              <Ionicons name="folder" size={18} color={colors.promptYellow} />
+              <Icon name="folder" size={18} color={colors.promptYellow} />
               <AppText variant="body" style={styles.dirName} numberOfLines={1}>
                 {item.name}
               </AppText>
-              <Ionicons
-                name="chevron-forward"
+              <Icon
+                name="chevron-right"
                 size={14}
                 color={colors.textSecondary}
               />

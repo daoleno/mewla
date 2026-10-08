@@ -1,6 +1,5 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners, TypeScale } from "../../constants/tokens";
@@ -8,8 +7,7 @@ import { chromeTint } from "./composerMaterial";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
 import { useBrainCompanion } from "../mewla/BrainCompanion";
 import { SealCat } from "../mewla/SealCat";
-
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 interface InterfaceTimelineEmptyStateProps {
   chrome: TerminalThemeChrome;
@@ -18,9 +16,9 @@ interface InterfaceTimelineEmptyStateProps {
   busy?: boolean;
   /** Error states tint the glyph with the chrome's danger ink. */
   tone?: "default" | "error";
-  icon?: IoniconName;
+  icon?: IconName;
   actionLabel?: string;
-  actionIcon?: IoniconName;
+  actionIcon?: IconName;
   onAction?: () => void;
   /** An empty or loading conversation: Brain shows its seal cat here. */
   conversationEmpty?: boolean;
@@ -38,9 +36,9 @@ export function InterfaceTimelineEmptyState({
   body,
   busy = false,
   tone = "default",
-  icon = "chatbubble-ellipses-outline",
+  icon = "chat-dots",
   actionLabel,
-  actionIcon = "terminal-outline",
+  actionIcon = "terminal",
   onAction,
   conversationEmpty = false,
 }: InterfaceTimelineEmptyStateProps) {
@@ -87,7 +85,7 @@ export function InterfaceTimelineEmptyState({
             },
           ]}
         >
-          <Ionicons name={actionIcon} size={16} color={chrome.accent} />
+          <Icon name={actionIcon} size={16} color={chrome.accent} />
           <Text style={[styles.emptyActionText, { color: chrome.accent }]}>
             {actionLabel}
           </Text>
@@ -106,7 +104,7 @@ function EmptyHalo({
   ink: string;
   inkSoft: string;
   busy: boolean;
-  icon: IoniconName;
+  icon: IconName;
 }) {
   return (
     <View
@@ -122,7 +120,7 @@ function EmptyHalo({
       {busy ? (
         <ComposerLoadingDots color={ink} size={10} />
       ) : (
-        <Ionicons name={icon} size={24} color={ink} />
+        <Icon name={icon} size={24} color={ink} />
       )}
     </View>
   );

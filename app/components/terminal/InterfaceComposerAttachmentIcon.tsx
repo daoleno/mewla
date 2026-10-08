@@ -1,6 +1,6 @@
 import React from "react";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceComposerAttachmentIconProps {
   fileName: string;
@@ -16,11 +16,11 @@ export function InterfaceComposerAttachmentIcon({
   size = 17,
 }: InterfaceComposerAttachmentIconProps) {
   return (
-    <Ionicons
+    <Icon
       name={
         looksLikeImagePath(fileName)
-          ? "image-outline"
-          : "document-text-outline"
+          ? "image"
+          : "document-text"
       }
       size={size}
       color={color ?? chrome.textMuted}

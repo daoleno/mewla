@@ -1,11 +1,11 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { Ionicons } from "@expo/vector-icons";
 import { TypeScale, Typography } from "../../constants/tokens";
 import { withAlpha } from "./colorWithAlpha";
 import { compactPathLabel } from "../../services/pathDisplay";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
+import { Icon } from "../icons/Icon";
 
 interface InterfaceSessionIdleViewProps {
   chrome: TerminalThemeChrome;
@@ -38,7 +38,7 @@ export function InterfaceSessionIdleView({
       </Text>
       {workspace ? (
         <View style={[styles.workspaceChip, { backgroundColor: withAlpha(chrome.textMuted, 0.1) }]}>
-          <Ionicons name="folder-outline" size={13} color={chrome.textSubtle} />
+          <Icon name="folder" size={13} color={chrome.textSubtle} />
           <Text
             style={[styles.workspace, { color: chrome.textSubtle }]}
             numberOfLines={1}

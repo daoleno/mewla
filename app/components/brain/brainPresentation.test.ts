@@ -41,16 +41,16 @@ describe("brainWorkspaceEntryAccessibilityLabel", () => {
 describe("brainWorkspaceEntryIconName", () => {
   test("uses folder and document icons without restating type labels", () => {
     expect(brainWorkspaceEntryIconName("directory", "agents")).toBe(
-      "folder-outline",
+      "folder",
     );
     expect(brainWorkspaceEntryIconName("directory", ".hidden")).toBe(
-      "folder-outline",
+      "folder",
     );
     expect(brainWorkspaceEntryIconName("file", "AGENTS.md")).toBe(
-      "document-text-outline",
+      "document-text",
     );
     expect(brainWorkspaceEntryIconName("file", "LICENSE")).toBe(
-      "document-outline",
+      "document",
     );
   });
 });

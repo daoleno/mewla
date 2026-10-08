@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import {
   ScrollView,
@@ -16,6 +15,7 @@ import {
   buildSessionResourceViewModel,
   resolveSessionResourceHostSections,
 } from "./SessionResourceSheetModel";
+import { Icon } from "../icons/Icon";
 
 interface Props {
   visible: boolean;
@@ -54,8 +54,8 @@ export function SessionResourceSheet({
     >
       <View style={styles.header}>
         <View style={[styles.icon, { backgroundColor: chrome.accentSoft }]}>
-          <Ionicons
-            name="hardware-chip-outline"
+          <Icon
+            name="chip"
             size={18}
             color={chrome.accent}
           />
@@ -75,7 +75,7 @@ export function SessionResourceSheet({
           onPress={onClose}
           activeOpacity={0.78}
         >
-          <Ionicons name="close" size={18} color={chrome.textSubtle} />
+          <Icon name="close" size={18} color={chrome.textSubtle} />
         </TouchableOpacity>
       </View>
 
@@ -294,8 +294,8 @@ export function SessionResourceSheet({
                   <View
                     style={[styles.chip, { backgroundColor: chrome.surface }]}
                   >
-                    <Ionicons
-                      name="warning-outline"
+                    <Icon
+                      name="warning-fill"
                       size={16}
                       color={chrome.danger}
                     />
@@ -396,7 +396,7 @@ export function SessionResourceSheet({
               onPress={onRetry}
               activeOpacity={0.82}
             >
-              <Ionicons name="refresh-outline" size={15} color={chrome.text} />
+              <Icon name="refresh" size={15} color={chrome.text} />
               <Text style={[styles.label, { color: chrome.text }]}>Retry</Text>
             </TouchableOpacity>
           </View>

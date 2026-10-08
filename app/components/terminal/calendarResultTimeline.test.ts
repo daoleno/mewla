@@ -36,7 +36,7 @@ describe("Calendar result timeline", () => {
       type: "activity",
       title: "Daily Hacker News failed",
       tone: "failed",
-      icon: "calendar-outline",
+      icon: "calendar",
       detail: "Linked Work is no longer observable.",
       bodyKind: undefined,
     });

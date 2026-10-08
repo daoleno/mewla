@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import {
   TypeScale,
   UiTextMetrics,
@@ -9,6 +8,7 @@ import {
 } from "../../constants/tokens";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { selectionCountLabel } from "../../services/sessionSelection";
+import { Icon } from "../icons/Icon";
 
 export interface WorkerSessionSelectionBarProps {
   count: number;
@@ -52,8 +52,8 @@ export function WorkerSessionSelectionBar({
       </AnimatedPressable>
 
       <View style={styles.countWrap}>
-        <Ionicons
-          name="checkmark-circle"
+        <Icon
+          name="check-circle-fill"
           size={15}
           color={colors.accent}
           style={styles.countIcon}

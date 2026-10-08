@@ -31,7 +31,7 @@ describe("Git diff file presentation", () => {
     expect(describeGitDiffFile(file({ status: "added" }), "all")).toMatchObject({
       statusLabel: "Added",
       scopeLabel: "Unstaged",
-      icon: "add-circle-outline",
+      icon: "add-circle",
       tone: "added",
     });
     expect(
@@ -64,7 +64,7 @@ describe("Git diff file presentation", () => {
       "all",
     );
     expect(presentation.binary).toBe(true);
-    expect(presentation.icon).toBe("cube-outline");
+    expect(presentation.icon).toBe("cube");
     expect(presentation.tone).toBe("binary");
   });
   test("scope counts use the selected comparison rather than a sum", () => {

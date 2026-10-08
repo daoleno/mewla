@@ -61,8 +61,8 @@ export function TerminalActionPopover({
       key: "toggle-render-mode",
       icon:
         toggleRenderModeLabel.toLowerCase().includes("chat")
-          ? "chatbubble-outline"
-          : "terminal-outline",
+          ? "chat"
+          : "terminal",
       label: toggleRenderModeLabel,
       onPress: onToggleRenderMode,
     });
@@ -78,7 +78,7 @@ export function TerminalActionPopover({
     },
     {
       key: "rename",
-      icon: "create-outline",
+      icon: "edit",
       label: "Rename",
       onPress: onRename,
     },
@@ -87,7 +87,7 @@ export function TerminalActionPopover({
   if (onOpenModel) {
     actions.push({
       key: "model",
-      icon: "hardware-chip-outline",
+      icon: "chip",
       label: "Model",
       onPress: onOpenModel,
     });
@@ -96,7 +96,7 @@ export function TerminalActionPopover({
   if (onOpenDSHWeb) {
     actions.push({
       key: "dsh-web",
-      icon: "globe-outline",
+      icon: "browser",
       label: "Open Web",
       onPress: onOpenDSHWeb,
     });
@@ -105,7 +105,7 @@ export function TerminalActionPopover({
   if (showLinkedWork) {
     actions.push({
       key: "linked-work",
-      icon: "reader-outline",
+      icon: "reader",
       label: "Open Brain",
       onPress: onOpenLinkedWork,
     });
@@ -113,7 +113,7 @@ export function TerminalActionPopover({
 
   actions.push({
     key: "terminate",
-    icon: "stop-circle-outline",
+    icon: "stop-circle",
     label: "Terminate",
     onPress: onTerminate,
     destructive: true,

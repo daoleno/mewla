@@ -37,7 +37,7 @@ interface InterfaceComposerPanelProps {
   actionMenuExpanded: boolean;
   actionMenuButtonEnabled: boolean;
   showActionMenuButton: boolean;
-  actionMenuIcon: "add" | "happy-outline";
+  actionMenuIcon: "add" | "happy";
   modelControl?: ComposerModelControlPresentation | null;
   composerLayout: "chatgpt" | "telegram" | "classic";
   chrome: TerminalThemeChrome;

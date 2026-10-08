@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import React, {
   useCallback,
@@ -61,6 +60,7 @@ import { MessageBody } from "./InterfaceMessageBody";
 import { TimelineTextSelectableContext } from "./TimelineTextSelectableContext";
 import { SessionFilePreviewContext } from "./SessionFilePreviewContext";
 import { SessionFilePdfPreview } from "./SessionFilePdfPreview";
+import { Icon, type IconName } from "../icons/Icon";
 
 export interface SessionFilePreviewLoader {
   metadata(
@@ -461,7 +461,7 @@ function SessionFilePreviewHeader({
       {state.stale ? (
         <HeaderAction
           label="Refresh changed file"
-          icon="refresh-outline"
+          icon="refresh"
           chrome={chrome}
           onPress={onRefresh}
         />
@@ -474,7 +474,7 @@ function SessionFilePreviewHeader({
               ? "Download file"
               : "Download unavailable"
         }
-        icon="download-outline"
+        icon="download"
         chrome={chrome}
         onPress={onDownload}
         disabled={!canDownload || downloadBusy}
@@ -482,7 +482,7 @@ function SessionFilePreviewHeader({
       />
       <HeaderAction
         label={pathCopied ? "File path copied" : "Copy file path"}
-        icon={pathCopied ? "checkmark" : "copy-outline"}
+        icon={pathCopied ? "check" : "copy"}
         chrome={chrome}
         onPress={onCopyPath}
         selected={pathCopied}
@@ -509,7 +509,7 @@ function HeaderAction({
   accent = false,
 }: {
   label: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: IconName;
   chrome: TerminalThemeChrome;
   onPress(): void;
   disabled?: boolean;
@@ -534,7 +534,7 @@ function HeaderAction({
       {busy ? (
         <ActivityIndicator size="small" color={chrome.textMuted} />
       ) : (
-        <Ionicons name={icon} size={18} color={iconColor} />
+        <Icon name={icon} size={18} color={iconColor} />
       )}
     </TouchableOpacity>
   );
@@ -569,7 +569,7 @@ function SessionFilePreviewBody({
       <PreviewState
         chrome={chrome}
         icon={
-          <Ionicons name="warning-outline" size={24} color={chrome.danger} />
+          <Icon name="warning-fill" size={24} color={chrome.danger} />
         }
         title={
           state.stale
@@ -649,8 +649,8 @@ function SessionFilePreviewBody({
         <PreviewState
           chrome={chrome}
           icon={
-            <Ionicons
-              name="document-outline"
+            <Icon
+              name="document"
               size={25}
               color={chrome.textMuted}
             />
@@ -660,7 +660,6 @@ function SessionFilePreviewBody({
       );
   }
 }
-
 
 function PreviewState({
   chrome,

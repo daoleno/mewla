@@ -16,7 +16,6 @@ import {
   View,
 } from 'react-native';
 import { Asset } from 'expo-asset';
-import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import {
   buildTerminalChrome,
@@ -36,6 +35,7 @@ import {
   terminalWebViewDensityProps,
 } from './terminalFontDensity';
 import { useGhosttyTerminalController } from './useGhosttyTerminalController';
+import { Icon } from "../icons/Icon";
 
 export const TerminalSurfaceGhosttyWebView = forwardRef<
   TerminalSurfaceHandle,
@@ -255,7 +255,7 @@ export const TerminalSurfaceGhosttyWebView = forwardRef<
           onPress={controller.scrollToBottom}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-down" size={16} color={chrome.text} />
+          <Icon name="arrow-down" size={16} color={chrome.text} />
         </TouchableOpacity>
       )}
 

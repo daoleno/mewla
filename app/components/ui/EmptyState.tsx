@@ -6,18 +6,16 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle } from "react-native-svg";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
 import { Button } from "./Button";
 import { Enter } from "./Enter";
-
-type Icon = React.ComponentProps<typeof Ionicons>["name"];
+import { Icon, type IconName } from "../icons/Icon";
 
 export interface EmptyAction {
   label: string;
-  icon?: Icon;
+  icon?: IconName;
   onPress(): void;
   disabled?: boolean;
   loading?: boolean;
@@ -26,7 +24,7 @@ export interface EmptyAction {
 interface EmptyStateProps {
   title?: string;
   detail?: string | null;
-  icon?: Icon;
+  icon?: IconName;
   busy?: boolean;
   tone?: "default" | "danger";
   action?: EmptyAction;
@@ -113,7 +111,7 @@ export function EmptyState({
 }
 
 /** A quiet paper disc with a soft-ink glyph: no glow, no colour. */
-function Halo({ color, fill, busy, icon }: { color: string; fill: string; busy: boolean; icon?: Icon }) {
+function Halo({ color, fill, busy, icon }: { color: string; fill: string; busy: boolean; icon?: IconName }) {
   return (
     <>
       <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill}>
@@ -122,7 +120,7 @@ function Halo({ color, fill, busy, icon }: { color: string; fill: string; busy: 
       {busy ? (
         <ActivityIndicator color={color} />
       ) : icon ? (
-        <Ionicons name={icon} size={28} color={color} />
+        <Icon name={icon} size={28} color={color} />
       ) : null}
     </>
   );

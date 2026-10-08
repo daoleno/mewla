@@ -283,7 +283,7 @@ describe("timeline presentation", () => {
     expect(shouldAutoExpandActivity(activities[4]!)).toBe(true);
     expect(shouldAutoExpandActivity(activities[5]!)).toBe(false);
     expect(activities[5]?.defaultExpanded).toBe(false);
-    expect(activities[5]?.icon).toBe("time-outline");
+    expect(activities[5]?.icon).toBe("time");
 
     const presentation = buildInterfaceTimelineActivityPresentation(
       activities[1]!,

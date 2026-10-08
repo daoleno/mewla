@@ -51,14 +51,14 @@ export function BrainStatusState({
         busy={state === "waking"}
         action={
           state === "homeless"
-            ? { label: "Pair a computer", icon: "qr-code-outline", onPress: onSettings }
+            ? { label: "Pair a computer", icon: "qr-code", onPress: onSettings }
             : state === "offline"
-              ? { label: "Retry connection", icon: "refresh-outline", onPress: onRetry }
+              ? { label: "Retry connection", icon: "refresh", onPress: onRetry }
               : undefined
         }
         secondary={
           hasServer
-            ? { label: "Server settings", icon: "settings-outline", onPress: onSettings }
+            ? { label: "Server settings", icon: "settings", onPress: onSettings }
             : undefined
         }
       />

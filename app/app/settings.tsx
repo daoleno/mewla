@@ -18,7 +18,6 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import {
   SafeAreaView,
@@ -103,14 +102,15 @@ import { useCurrentServer } from "../store/currentServer";
 import {
   telegramSetupMode,
 } from "../components/settings/connectionPresentation";
+import { Icon } from "../components/icons/Icon";
 
 const QR_BARCODE_TYPES: BarcodeType[] = ["qr"];
 const SCANNER_COLORS = ZEN_DARK_APP_COLORS;
 const TELEGRAM_BOTFATHER_URL = "https://t.me/BotFather";
 const THEME_CHOICES = [
-  { label: "Auto", value: "system", icon: "contrast-outline" },
-  { label: "Light", value: "classic-light", icon: "sunny-outline" },
-  { label: "Dark", value: "classic-dark", icon: "moon-outline" },
+  { label: "Auto", value: "system", icon: "contrast" },
+  { label: "Light", value: "classic-light", icon: "sun" },
+  { label: "Dark", value: "classic-dark", icon: "moon" },
 ] as const;
 
 export default function SettingsScreen() {
@@ -506,10 +506,10 @@ export default function SettingsScreen() {
         accessibilityLabel: `${actionLabel} ${server.name}`,
         detail: primaryDetail,
         icon: !current
-          ? "swap-horizontal-outline"
+          ? "swap-horizontal"
           : connectionState === "connected"
-            ? "power-outline"
-            : "refresh-outline",
+            ? "power"
+            : "refresh",
         onPress: () => {
           void (connectionState === "connected" && current
             ? disconnectServer(server.id)
@@ -520,14 +520,14 @@ export default function SettingsScreen() {
         key: "edit",
         label: "Edit",
         accessibilityLabel: `Edit ${server.name}`,
-        icon: "create-outline",
+        icon: "edit",
         onPress: () => openEditServer(server),
       },
       {
         key: "remove",
         label: "Remove",
         accessibilityLabel: `Remove ${server.name}`,
-        icon: "trash-outline",
+        icon: "trash",
         destructive: true,
         onPress: () => handleDeleteServer(server),
       },
@@ -571,8 +571,8 @@ export default function SettingsScreen() {
                   subtitle={`${status} · ${endpoint}`}
                   leading={
                     <View style={styles.serverGlyph}>
-                      <Ionicons
-                        name="desktop-outline"
+                      <Icon
+                        name="desktop"
                         size={20}
                         color={colors.textSecondary}
                       />
@@ -639,7 +639,7 @@ export default function SettingsScreen() {
             />
           ) : (
             <ListSection>
-              <ListRow title="Telegram" subtitle="No current server" icon="paper-plane-outline" disabled />
+              <ListRow title="Telegram" subtitle="No current server" icon="paper-plane" disabled />
             </ListSection>
           )}
 
@@ -652,7 +652,7 @@ export default function SettingsScreen() {
                   ? "Official login or your own API keys"
                   : "No current server"
               }
-              icon="key-outline"
+              icon="key"
               accessory="chevron"
               accessibilityLabel="Model Providers"
               accessibilityHint="Choose how Codex and Claude connect to models"
@@ -732,7 +732,7 @@ export default function SettingsScreen() {
                   closeScanner();
                 }}
               >
-                <Ionicons
+                <Icon
                   name="close"
                   size={24}
                   color={SCANNER_COLORS.textPrimary}
@@ -973,7 +973,7 @@ export default function SettingsScreen() {
 
                 <Button
                   label="Scan QR Code"
-                  icon="qr-code-outline"
+                  icon="qr-code"
                   variant="tinted"
                   block
                   style={styles.scanQrAction}
@@ -1262,7 +1262,7 @@ function TelegramConnectionRow({
         subtitle={visibleStatus?.bot_username ? `@${visibleStatus.bot_username}` : stateLabel}
         leading={
           <View style={styles.serverGlyph}>
-            <Ionicons name="paper-plane-outline" size={20} color={colors.textSecondary} />
+            <Icon name="paper-plane" size={20} color={colors.textSecondary} />
           </View>
         }
         trailing={

@@ -1,11 +1,11 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { TypeScale, UiTextMetrics } from "../../constants/tokens";
 import { withAlpha } from "./colorWithAlpha";
+import { Icon, type IconName } from "../icons/Icon";
 
 interface GitDiffStateCardProps {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IconName;
   title: string;
   detail?: string;
   accent: string;
@@ -34,7 +34,7 @@ export function GitDiffStateCard({
         {busy ? (
           <ActivityIndicator size="small" color={accent} />
         ) : (
-          <Ionicons name={icon} size={20} color={accent} />
+          <Icon name={icon} size={20} color={accent} />
         )}
       </View>
       <Text style={[styles.stateTitle, { color: chromeText }]}>{title}</Text>

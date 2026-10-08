@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import React, {
   useCallback,
@@ -34,6 +33,7 @@ import {
   mermaidThemeIsDark,
 } from "./mermaidTheme";
 import { MermaidSvgPreview } from "./MermaidSvgPreview";
+import { Icon } from "../icons/Icon";
 
 interface MermaidDiagramProps {
   source: string;
@@ -218,7 +218,7 @@ export function MermaidDiagram({
               onPress={() => setExpanded(true)}
               style={styles.iconButton}
             >
-              <Ionicons name="expand-outline" size={16} color={chrome.textMuted} />
+              <Icon name="expand" size={16} color={chrome.textMuted} />
             </Pressable>
           ) : null}
           <Pressable
@@ -228,8 +228,8 @@ export function MermaidDiagram({
             onPress={copySource}
             style={styles.iconButton}
           >
-            <Ionicons
-              name={copied ? "checkmark" : "copy-outline"}
+            <Icon
+              name={copied ? "check" : "copy"}
               size={16}
               color={copied ? chrome.accent : chrome.textMuted}
             />

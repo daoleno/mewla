@@ -6,13 +6,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { AgentLogoSet } from "../agents/AgentLogoSet";
+import { Icon } from "../icons/Icon";
 
 export interface ExtensionListRowAction {
   accessibilityLabel: string;
-  icon: "trash-outline" | "lock-closed-outline";
+  icon: "trash" | "lock";
   destructive?: boolean;
   busy?: boolean;
   disabled?: boolean;
@@ -82,7 +82,7 @@ export function ExtensionListRow({
         {action.busy ? (
           <ActivityIndicator size="small" color={actionColor} />
         ) : (
-          <Ionicons name={action.icon} size={20} color={actionColor} />
+          <Icon name={action.icon} size={20} color={actionColor} />
         )}
       </Pressable>
     </View>

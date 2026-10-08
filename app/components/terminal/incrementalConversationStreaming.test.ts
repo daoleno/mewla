@@ -362,7 +362,7 @@ describe("incremental structured conversation streaming", () => {
       type: "activity",
       title: "Daily brief complete",
       tone: "success",
-      icon: "calendar-outline",
+      icon: "calendar",
       detail: "Created the morning brief.",
       bodyKind: undefined,
     });

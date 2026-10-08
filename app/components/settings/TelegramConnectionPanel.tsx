@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Radii, useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import type { TelegramConnectionStatus } from "../../services/websocket";
+import { Icon, type IconName } from "../icons/Icon";
 
 export interface TelegramConnectionPanelProps {
   status: TelegramConnectionStatus | null;
@@ -31,8 +31,6 @@ export interface TelegramConnectionPanelProps {
   onCopy: (value: string) => Promise<boolean>;
 }
 
-type Icon = keyof typeof Ionicons.glyphMap;
-
 /**
  * Telegram detail page: identity, one primary next step, grouped secondary
  * actions, then diagnostics and destructive actions behind Advanced.
@@ -56,14 +54,14 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
 
   // A primary action is the one filled call to action; everything else is a
   // row in a grouped card.
-  const action = (name: string, icon: Icon, onPress: () => void, danger = false, primary = false, unavailable = disabled) => {
+  const action = (name: string, icon: IconName, onPress: () => void, danger = false, primary = false, unavailable = disabled) => {
     const ink = primary ? colors.textOnAccent : danger ? colors.dangerText : colors.accentStrong;
     return (
       <AnimatedPressable key={name} onPress={onPress} disabled={unavailable} accessibilityRole="button"
         accessibilityLabel={name} accessibilityState={{ disabled: unavailable, busy }}
         style={[primary ? styles.primary : styles.row, primary ? { backgroundColor: colors.accent } : null, { opacity: unavailable ? 0.45 : 1 }]}>
         <View style={primary ? styles.primaryIcon : styles.rowIcon}>
-          <Ionicons name={icon} size={primary ? 18 : 19} color={ink} />
+          <Icon name={icon} size={primary ? 18 : 19} color={ink} />
         </View>
         <Text numberOfLines={2} style={[primary ? styles.primaryText : styles.rowText, { color: primary ? ink : danger ? colors.dangerText : colors.textPrimary }]}>{name}</Text>
       </AnimatedPressable>
@@ -106,7 +104,7 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
         <Text numberOfLines={1} style={[styles.detailLabel, { color: colors.textPrimary }]}>{name}</Text>
         <View style={styles.detailValueGroup}>
           <Text numberOfLines={1} ellipsizeMode="middle" style={[styles.detailValue, { color: done ? colors.accentStrong : colors.textSecondary }]}>{done ? "Copied" : value}</Text>
-          <Ionicons name={done ? "checkmark" : "copy-outline"} size={16} color={done ? colors.accentStrong : colors.textTertiary} />
+          <Icon name={done ? "check" : "copy"} size={16} color={done ? colors.accentStrong : colors.textTertiary} />
         </View>
       </AnimatedPressable>
     );
@@ -119,7 +117,7 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
     contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}>
     <View style={styles.identity}>
       <View style={[styles.icon, { backgroundColor: colors.accentSoft }]}>
-        <Ionicons name="paper-plane" size={26} color={colors.accentStrong} />
+        <Icon name="paper-plane" size={26} color={colors.accentStrong} />
       </View>
       <Text numberOfLines={1} style={[styles.title, { color: colors.textPrimary }]}>{configured ? `@${status?.bot_username}` : "Telegram"}</Text>
       <View style={styles.statusLine}>
@@ -130,12 +128,12 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
     </View>
 
     {error || status?.last_error ? <View accessibilityLiveRegion="polite" style={[styles.error, { backgroundColor: colors.dangerSoft }]}>
-      <Ionicons name="alert-circle" size={18} color={colors.dangerText} />
+      <Icon name="alert-circle-fill" size={18} color={colors.dangerText} />
       <Text style={[styles.errorText, { color: colors.dangerText }]}>{error || status?.last_error}</Text>
     </View> : null}
 
     {!connected ? <Text style={[styles.notice, { color: colors.textSecondary }]}>Reconnect the current server in Settings.</Text>
-      : loading ? null : error ? action("Retry", "refresh-outline", props.onRetry, false, true)
+      : loading ? null : error ? action("Retry", "refresh", props.onRetry, false, true)
       : !configured || props.editingToken ? <View>
         {sectionTitle("Bot token")}
         <View style={[styles.inputRow, { backgroundColor: colors.bgSurface }]}>
@@ -146,24 +144,24 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
             style={[styles.input, { color: colors.textPrimary }]} />
           <AnimatedPressable onPress={props.onPaste} disabled={disabled} accessibilityRole="button"
             accessibilityLabel="Paste Telegram bot token from clipboard" accessibilityState={{ disabled }} style={styles.paste}>
-            <Ionicons name="clipboard-outline" size={21} color={colors.accentStrong} />
+            <Icon name="clipboard" size={21} color={colors.accentStrong} />
           </AnimatedPressable>
         </View>
         <Text style={[styles.notice, { color: colors.textTertiary }]}>Bot chats are stored by Telegram. Your token stays on the connected server.</Text>
         <View style={styles.stack}>
-          {action(busy ? "Verifying" : "Verify token", "checkmark-outline", props.onConfigure, false, true, disabled || !props.token.trim())}
-          {group([props.editingToken ? action("Cancel", "close-outline", props.onCancelToken) : action("BotFather", "open-outline", props.onBotFather)])}
+          {action(busy ? "Verifying" : "Verify token", "check", props.onConfigure, false, true, disabled || !props.token.trim())}
+          {group([props.editingToken ? action("Cancel", "close", props.onCancelToken) : action("BotFather", "open-external", props.onBotFather)])}
         </View>
       </View> : <View style={styles.stack}>
         {bound ? <>
-          {status?.enabled ? action("Open Telegram", "open-outline", props.onOpen, false, true) : action("Reconnect", "refresh-outline", props.onReconnect, false, true)}
+          {status?.enabled ? action("Open Telegram", "open-external", props.onOpen, false, true) : action("Reconnect", "refresh", props.onReconnect, false, true)}
           {group([
             detail("Status", label),
             detail("Recipient", recipient),
-            status?.enabled ? action("Disconnect", "pause-outline", props.onDisconnect) : action("Open Telegram", "open-outline", props.onOpen),
+            status?.enabled ? action("Disconnect", "pause", props.onDisconnect) : action("Open Telegram", "open-external", props.onOpen),
           ])}
         </> : <>
-          {action(status?.binding_pending ? "Open connection link" : "Connect Telegram", "open-outline", props.onBind, false, true)}
+          {action(status?.binding_pending ? "Open connection link" : "Connect Telegram", "open-external", props.onBind, false, true)}
           {group([detail("Status", label)])}
         </>}
       </View>}
@@ -172,7 +170,7 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
       <AnimatedPressable onPress={() => setAdvanced(value => !value)} accessibilityRole="button" accessibilityLabel="Advanced"
         accessibilityState={{ expanded: advanced }} style={styles.advanced}>
         <Text style={[styles.sectionTitle, styles.advancedLabel, { color: colors.textTertiary }]}>Advanced</Text>
-        <Ionicons name={advanced ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+        <Icon name={advanced ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
       </AnimatedPressable>
       {advanced ? <View style={styles.stack}>
         {group([
@@ -185,12 +183,12 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
           status?.last_send_at ? detail("Last sent", new Date(status.last_send_at).toLocaleString()) : null,
         ])}
         {group([
-          action("Refresh", "refresh-outline", props.onRetry),
-          action("Replace token", "key-outline", props.onEditToken),
+          action("Refresh", "refresh", props.onRetry),
+          action("Replace token", "key", props.onEditToken),
         ])}
         {group([
-          bound ? action("Unlink account", "person-remove-outline", props.onRevoke, true) : null,
-          action("Remove bot", "trash-outline", props.onRemove, true),
+          bound ? action("Unlink account", "person-remove", props.onRevoke, true) : null,
+          action("Remove bot", "trash", props.onRemove, true),
         ])}
       </View> : null}
     </> : null}

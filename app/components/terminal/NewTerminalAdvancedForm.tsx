@@ -56,7 +56,7 @@ export function NewTerminalAdvancedForm({
         />
         {canPickDirectory ? (
           <IconButton
-            icon="folder-open-outline"
+            icon="folder-open"
             size={38}
             iconSize={20}
             tone="input"

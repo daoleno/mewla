@@ -29,7 +29,7 @@ export function HeaderBackButton({
   const colors = useAppColors();
   return (
     <IconButton
-      icon="chevron-back"
+      icon="chevron-left"
       size={surface === "bare" ? 44 : HEADER_BACK_BUTTON_SIZE}
       iconSize={HEADER_BACK_ICON_SIZE}
       tone={surface === "bare" ? "ghost" : "default"}

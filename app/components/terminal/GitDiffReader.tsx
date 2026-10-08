@@ -179,7 +179,7 @@ export function GitDiffReader({ path, scope, loadPage, chrome, theme, position, 
       </View> : null}
       {state.error || state.stale ? <InlineNotice
         tone={state.stale ? "warning" : "danger"}
-        icon={state.stale ? "refresh-circle-outline" : undefined}
+        icon={state.stale ? "refresh" : undefined}
         title={state.stale ? "This diff changed" : "Couldn't load this diff"}
         detail={state.stale ? "Refresh to read the latest version." : state.error}
         action={{ label: state.stale ? "Refresh" : "Retry", onPress: () => void (state.stale ? stream.refresh() : stream.retry()) }}

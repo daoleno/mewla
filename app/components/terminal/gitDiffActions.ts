@@ -98,7 +98,7 @@ export function buildGitDiffFileActions({
 }): ActionMenuItem[] {
   const items: ActionMenuItem[] = [];
   if (!reading && onViewDiff) {
-    items.push({ key: "view", label: "View diff", icon: "git-compare-outline", onPress: onViewDiff });
+    items.push({ key: "view", label: "View diff", icon: "git-compare", onPress: onViewDiff });
   }
   if (reading && onToggleSearch) {
     items.push({
@@ -112,7 +112,7 @@ export function buildGitDiffFileActions({
     items.push({
       key: "display",
       label: optionsOpen ? "Hide display options" : "Display options",
-      icon: "text-outline",
+      icon: "text",
       onPress: onToggleOptions,
     });
   }
@@ -121,12 +121,12 @@ export function buildGitDiffFileActions({
       key: "open",
       label: "Open working file",
       detail: deleted ? "Deleted from the working tree" : undefined,
-      icon: "document-text-outline",
+      icon: "document-text",
       disabled: deleted,
       onPress: () => onOpenFile(path),
     },
-    { key: "copy-path", label: "Copy path", icon: "link-outline", onPress: () => onCopyPath(path) },
-    { key: "copy-diff", label: "Copy diff", icon: "copy-outline", onPress: () => onCopyPatch(path) },
+    { key: "copy-path", label: "Copy path", icon: "link", onPress: () => onCopyPath(path) },
+    { key: "copy-diff", label: "Copy diff", icon: "copy", onPress: () => onCopyPatch(path) },
   );
   return items;
 }

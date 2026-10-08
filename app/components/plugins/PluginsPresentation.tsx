@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import type {
   InstalledPluginCopy,
@@ -42,6 +41,7 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { PluginSkillsDirectory } from "./PluginSkillsDirectory";
+import { Icon, type IconName } from "../icons/Icon";
 
 interface PluginsPresentationProps {
   state: SkillsRequestState<PluginInventory>;
@@ -147,8 +147,8 @@ export function PluginsPresentation(props: PluginsPresentationProps) {
             },
           ]}
         >
-          <Ionicons
-            name="search-outline"
+          <Icon
+            name="search"
             size={19}
             color={colors.textTertiary}
           />
@@ -166,8 +166,8 @@ export function PluginsPresentation(props: PluginsPresentationProps) {
               onPress={() => setQuery("")}
               style={styles.smallIcon}
             >
-              <Ionicons
-                name="close-circle"
+              <Icon
+                name="close-circle-fill"
                 size={19}
                 color={colors.textTertiary}
               />
@@ -189,8 +189,8 @@ export function PluginsPresentation(props: PluginsPresentationProps) {
             },
           ]}
         >
-          <Ionicons
-            name="options-outline"
+          <Icon
+            name="options"
             size={20}
             color={activeFilterCount ? colors.accent : colors.textSecondary}
           />
@@ -234,7 +234,7 @@ export function PluginsPresentation(props: PluginsPresentationProps) {
             />
           ) : (
             <PluginState
-              icon="extension-puzzle-outline"
+              icon="puzzle"
               title="Plugin details"
             />
           )}
@@ -294,7 +294,7 @@ function PluginsList(
   if (!props.currentServerAvailable) {
     return (
       <PluginState
-        icon="server-outline"
+        icon="server"
         title="No current server"
         detail="Choose one in Settings."
         action="Open Settings"
@@ -305,7 +305,7 @@ function PluginsList(
   if (props.state.status === "error" && !props.inventory) {
     return (
       <PluginState
-        icon="warning-outline"
+        icon="warning-fill"
         tone="danger"
         title="Plugins unavailable"
         detail={props.state.error}
@@ -328,7 +328,7 @@ function PluginsList(
   if ((props.inventory?.installed.length ?? 0) === 0) {
     return (
       <PluginState
-        icon="extension-puzzle-outline"
+        icon="puzzle"
         title="No installed Agent Plugins"
         action="Refresh"
         onAction={props.onRefresh}
@@ -349,7 +349,7 @@ function PluginsList(
       contentContainerStyle={props.rows.length ? styles.list : styles.emptyList}
       ListEmptyComponent={
         <PluginState
-          icon="search-outline"
+          icon="search"
           title="No matches"
           action="Clear search"
           onAction={props.onClearFilters}
@@ -398,7 +398,7 @@ function PluginRow({
         accessibilityLabel: canUninstall
           ? `Uninstall ${plugin.displayName}`
           : `Open why ${plugin.displayName} is protected`,
-        icon: canUninstall ? "trash-outline" : "lock-closed-outline",
+        icon: canUninstall ? "trash" : "lock",
         destructive: canUninstall,
         busy: uninstalling,
         disabled: canUninstall && Boolean(preparingMutation),
@@ -466,7 +466,7 @@ function PluginInspector({
           onPress={onClose}
           style={styles.close}
         >
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
+          <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.inspectorScroll}>
@@ -490,7 +490,7 @@ function PluginInspector({
                 key={`${component.kind}:${component.path || component.name}`}
                 style={styles.componentRow}
               >
-                <Ionicons
+                <Icon
                   name={componentIcon(component.kind)}
                   size={18}
                   color={colors.textTertiary}
@@ -549,7 +549,7 @@ function PluginInspector({
                 label="Uninstall Plugin"
                 accessibilityLabel={`Uninstall ${plugin.displayName} from ${copy.location}`}
                 variant="destructive"
-                icon="trash-outline"
+                icon="trash"
                 block
                 loading={uninstalling}
                 disabled={Boolean(preparingMutation)}
@@ -559,8 +559,8 @@ function PluginInspector({
           ) : (
             <>
               <View style={styles.protectedRow}>
-                <Ionicons
-                  name="lock-closed-outline"
+                <Icon
+                  name="lock"
                   size={15}
                   color={colors.textTertiary}
                 />
@@ -634,8 +634,8 @@ function PluginCopyCard({
           {uninstalling ? (
             <ActivityIndicator size="small" color={colors.dangerText} />
           ) : (
-            <Ionicons
-              name="trash-outline"
+            <Icon
+              name="trash"
               size={20}
               color={colors.dangerText}
             />
@@ -703,7 +703,7 @@ function PluginCopySheet({
           onPress={onClose}
           style={styles.close}
         >
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
+          <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.copySheetBody}>
@@ -748,7 +748,7 @@ function PluginActiveFilters({
           style={[styles.chip, { backgroundColor: colors.accentSoft }]}
         >
           <AgentLogoSet agents={[agent]} size={16} />
-          <Ionicons name="close" size={14} color={colors.accent} />
+          <Icon name="close" size={14} color={colors.accent} />
         </Pressable>
       ))}
       {filters.capability !== "all" ? (
@@ -762,7 +762,7 @@ function PluginActiveFilters({
               ? "Uninstallable"
               : "Read-only"}
           </Text>
-          <Ionicons name="close" size={14} color={colors.accent} />
+          <Icon name="close" size={14} color={colors.accent} />
         </Pressable>
       ) : null}
     </ScrollView>
@@ -798,7 +798,7 @@ function PluginFilterSheet({
           onPress={onClose}
           style={styles.close}
         >
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
+          <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.filterBody}>
@@ -926,7 +926,7 @@ function PluginState({
   onAction,
 }: {
   loading?: boolean;
-  icon?: React.ComponentProps<typeof Ionicons>["name"];
+  icon?: IconName;
   tone?: "default" | "danger";
   title: string;
   detail?: string;
@@ -949,22 +949,22 @@ function PluginState({
 
 function componentIcon(
   kind: string,
-): React.ComponentProps<typeof Ionicons>["name"] {
+): IconName {
   switch (kind) {
     case "skill":
-      return "book-outline";
+      return "book";
     case "agent":
-      return "people-outline";
+      return "people";
     case "command":
-      return "terminal-outline";
+      return "terminal";
     case "hook":
-      return "git-branch-outline";
+      return "git-branch";
     case "mcp":
-      return "server-outline";
+      return "server";
     case "app":
-      return "apps-outline";
+      return "apps";
     default:
-      return "document-outline";
+      return "document";
   }
 }
 

@@ -9,12 +9,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { TerminalThemePalette } from "../../constants/terminalThemes";
 import { TypeScale, Typography } from "../../constants/tokens";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
 import { outlinedSurface } from "../ui/outlinedSurface";
+import { Icon } from "../icons/Icon";
 
 interface TerminalActionPromptCardProps {
   prompt: TerminalActionPrompt;
@@ -86,7 +86,7 @@ export function TerminalActionPromptCard({
     >
       <View style={styles.header}>
         <View style={[styles.iconBadge, { backgroundColor: chrome.accentSoft }]}>
-          <Ionicons name="alert-circle" size={15} color={chrome.accent} />
+          <Icon name="alert-circle-fill" size={15} color={chrome.accent} />
         </View>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: chrome.text }]} numberOfLines={2}>
@@ -179,13 +179,13 @@ export function TerminalActionPromptCard({
                   color={option.primary ? chrome.textOnAccent : chrome.accent}
                 />
               ) : sentOptionId === option.id ? (
-                <Ionicons
-                  name="checkmark-circle"
+                <Icon
+                  name="check-circle-fill"
                   size={17}
                   color={option.primary ? chrome.textOnAccent : chrome.accent}
                 />
               ) : failedOptionId === option.id ? (
-                <Ionicons name="alert-circle" size={17} color={chrome.danger} />
+                <Icon name="alert-circle-fill" size={17} color={chrome.danger} />
               ) : null}
             </>
           );

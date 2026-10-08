@@ -35,10 +35,10 @@ describe("workerStatusPresentation", () => {
 
   test("uses a distinct familiar shape for every non-running state", () => {
     expect(workerStatusIndicatorIcon("running")).toBeNull();
-    expect(workerStatusIndicatorIcon("done")).toBe("checkmark-circle");
-    expect(workerStatusIndicatorIcon("failed")).toBe("close-circle");
+    expect(workerStatusIndicatorIcon("done")).toBe("check-circle-fill");
+    expect(workerStatusIndicatorIcon("failed")).toBe("close-circle-fill");
     expect(workerStatusIndicatorIcon("blocked")).toBe("pause-circle");
-    expect(workerStatusIndicatorIcon("unknown")).toBe("help-circle-outline");
+    expect(workerStatusIndicatorIcon("unknown")).toBe("help");
     expect(new Set(NON_RUNNING.map(workerStatusIndicatorIcon)).size).toBe(
       NON_RUNNING.length,
     );

@@ -207,7 +207,7 @@ function CurrentWorkDetail() {
       <View style={styles.emptyScreen}>
         <Stack.Screen options={{ title: "", headerLeft: () => <HeaderBackButton onPress={goBack} /> }} />
         <EmptyState
-          icon="document-text-outline"
+          icon="document-text"
           title="Work item not found"
           detail="It may have been deleted or belongs to another server."
         />
@@ -234,13 +234,13 @@ function CurrentWorkDetail() {
           headerRight: () => (
             <View style={styles.headerActions}>
               <IconButton
-                icon={editing ? "eye-outline" : "create-outline"}
+                icon={editing ? "eye" : "edit"}
                 size={40}
                 accessibilityLabel={editing ? "Preview" : "Edit"}
                 onPress={() => void toggleEditing()}
               />
               <IconButton
-                icon="ellipsis-horizontal"
+                icon="more-horizontal"
                 size={40}
                 accessibilityLabel="Work actions"
                 onPress={() => setMenuOpen(true)}
@@ -274,7 +274,7 @@ function CurrentWorkDetail() {
         {remoteBanner ? (
           <InlineNotice
             tone="accent"
-            icon="cloud-download-outline"
+            icon="cloud-download"
             title="Newer version on the server"
             detail={dirty ? "Loading it discards your unsaved edits." : null}
             style={styles.banner}
@@ -323,7 +323,7 @@ function CurrentWorkDetail() {
           <View style={styles.footerActions}>
             <Button
               label={done ? "Reopen" : "Mark done"}
-              icon={done ? "return-up-back-outline" : "checkmark"}
+              icon={done ? "undo" : "check"}
               variant={done ? "plain" : "tinted"}
               size="sm"
               loading={saving}
@@ -341,13 +341,13 @@ function CurrentWorkDetail() {
           {
             key: "done",
             label: done ? "Reopen" : "Mark done",
-            icon: done ? "refresh-outline" : "checkmark-circle-outline",
+            icon: done ? "refresh" : "check-circle",
             onPress: () => void handleToggleDone(),
           },
           {
             key: "delete",
             label: "Delete",
-            icon: "trash-outline",
+            icon: "trash",
             destructive: true,
             onPress: handleDelete,
           },

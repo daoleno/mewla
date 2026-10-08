@@ -4,11 +4,11 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Typography, useAppColors, type AppColors } from "../../constants/tokens";
 import { compactPathLabel } from "../../services/pathDisplay";
 import { AppText } from "../ui";
 import { outlinedSurface } from "../ui/outlinedSurface";
+import { Icon } from "../icons/Icon";
 
 interface NewTerminalCwdRowProps {
   cwd: string;
@@ -38,7 +38,7 @@ export function NewTerminalCwdRow({
       ]}
     >
       <View style={styles.iconFrame}>
-        <Ionicons name="folder-outline" size={16} color={colors.textSecondary} />
+        <Icon name="folder" size={16} color={colors.textSecondary} />
       </View>
       <AppText
         variant="body"
@@ -50,7 +50,7 @@ export function NewTerminalCwdRow({
         {label}
       </AppText>
       {canPickDirectory ? (
-        <Ionicons name="chevron-forward" size={14} color={colors.disabledText} />
+        <Icon name="chevron-right" size={14} color={colors.disabledText} />
       ) : null}
     </Pressable>
   );

@@ -10,7 +10,6 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
@@ -64,6 +63,7 @@ import { StatusMark } from "../ui/StatusMark";
 import { PluginsPresentation } from "../plugins/PluginsPresentation";
 import { SkillFileBrowser } from "./SkillFileBrowser";
 import { outlinedSurface } from "../ui/outlinedSurface";
+import { Icon, type IconName } from "../icons/Icon";
 
 export interface SurfaceMutationNotice {
   kind: "success" | "error";
@@ -163,7 +163,7 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
           options={(["skills", "plugins"] as const).map((section) => ({
             value: section,
             label: section === "skills" ? "Skills" : "Agent Plugins",
-            icon: section === "skills" ? "book-outline" : "extension-puzzle-outline",
+            icon: section === "skills" ? "book" : "puzzle",
           }))}
         />
       </View>
@@ -179,8 +179,8 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
                 },
               ]}
             >
-              <Ionicons
-                name="search-outline"
+              <Icon
+                name="search"
                 size={19}
                 color={colors.textTertiary}
               />
@@ -198,8 +198,8 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
                   onPress={() => setQuery("")}
                   style={styles.smallIcon}
                 >
-                  <Ionicons
-                    name="close-circle"
+                  <Icon
+                    name="close-circle-fill"
                     size={19}
                     color={colors.textTertiary}
                   />
@@ -221,8 +221,8 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
                 },
               ]}
             >
-              <Ionicons
-                name="options-outline"
+              <Icon
+                name="options"
                 size={20}
                 color={activeFilterCount ? colors.accent : colors.textSecondary}
               />
@@ -351,7 +351,7 @@ function MutationToast({
         >
           {notice.message}
         </Text>
-        <Ionicons name="close" size={18} color={colors.textTertiary} />
+        <Icon name="close" size={18} color={colors.textTertiary} />
       </Pressable>
     </View>
   );
@@ -418,7 +418,7 @@ function ActiveFilters({
           ) : (
             <Text style={{ color: colors.accent }}>{chip.label}</Text>
           )}
-          <Ionicons name="close" size={15} color={colors.accent} />
+          <Icon name="close" size={15} color={colors.accent} />
         </Pressable>
       ))}
     </ScrollView>
@@ -578,7 +578,7 @@ function Choice({
         </Text>
       )}
       {selected ? (
-        <Ionicons name="checkmark" size={16} color={colors.accent} />
+        <Icon name="check" size={16} color={colors.accent} />
       ) : null}
     </Pressable>
   );
@@ -599,7 +599,7 @@ function LocalSkillsList(
   if (!props.currentServerAvailable)
     return (
       <State
-        icon="server-outline"
+        icon="server"
         title="No current server"
         detail="Choose one in Settings."
         action="Open Settings"
@@ -611,7 +611,7 @@ function LocalSkillsList(
   if (state.status === "error" && !props.inventory)
     return (
       <State
-        icon={offline ? "cloud-offline-outline" : "warning-outline"}
+        icon={offline ? "cloud-offline" : "warning"}
         tone={offline ? "default" : "danger"}
         title={offline ? "Server disconnected" : "Skills unavailable"}
         detail={state.error}
@@ -634,7 +634,7 @@ function LocalSkillsList(
   if ((props.inventory?.skills.length ?? 0) === 0)
     return (
       <State
-        icon="folder-open-outline"
+        icon="folder-open"
         title="No local Skills"
         action="Refresh"
         onAction={props.onRefreshSkills}
@@ -647,7 +647,7 @@ function LocalSkillsList(
   )
     return (
       <State
-        icon="extension-puzzle-outline"
+        icon="puzzle"
         title="All Skills come from Agent Plugins"
         action="Show Agent Plugins"
         onAction={() => props.onSelectSection("plugins")}
@@ -668,7 +668,7 @@ function LocalSkillsList(
       ListHeaderComponent={<OwnershipNotice {...props} />}
       ListEmptyComponent={
         <State
-          icon="search-outline"
+          icon="search"
           title="No matches"
           action="Clear filters"
           onAction={props.onClearFilters}
@@ -700,7 +700,7 @@ function OwnershipNotice(props: SkillsPresentationProps) {
     return (
       <InlineNotice
         tone="warning"
-        icon="extension-puzzle-outline"
+        icon="puzzle"
         title="Plugin ownership unavailable"
         detail="Skills from Agent Plugins may appear here. They stay protected."
         action={{ label: "Retry", onPress: props.onRetryPlugins }}
@@ -712,7 +712,7 @@ function OwnershipNotice(props: SkillsPresentationProps) {
   return (
     <InlineNotice
       tone="accent"
-      icon="extension-puzzle-outline"
+      icon="puzzle"
       title={`${count} more ${count === 1 ? "Skill comes" : "Skills come"} from Agent Plugins`}
       action={{ label: "View", onPress: () => props.onSelectSection("plugins") }}
       style={styles.listNotice}
@@ -753,7 +753,7 @@ function SkillRow({
         accessibilityLabel: canDelete
           ? `Delete ${skill.name}`
           : `Open why ${skill.name} is protected`,
-        icon: canDelete ? "trash-outline" : "lock-closed-outline",
+        icon: canDelete ? "trash" : "lock",
         destructive: canDelete,
         busy: deleting,
         disabled: canDelete && Boolean(preparingMutation),
@@ -799,7 +799,7 @@ function DeleteCopySheet({
           onPress={onClose}
           style={styles.close}
         >
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
+          <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.deleteSheetBody}>
@@ -853,8 +853,8 @@ function DeleteCopySheet({
                   {deleting ? (
                     <ActivityIndicator size="small" color={colors.dangerText} />
                   ) : (
-                    <Ionicons
-                      name="trash-outline"
+                    <Icon
+                      name="trash"
                       size={20}
                       color={colors.dangerText}
                     />
@@ -890,7 +890,7 @@ function Inspector(
   if (!detail && props.inspectState.status === "error")
     return (
       <State
-        icon="warning-outline"
+        icon="warning-fill"
         tone="danger"
         title="Skill unavailable"
         detail={props.inspectState.error}
@@ -953,7 +953,7 @@ function Inspector(
           onPress={props.onDismissInspector}
           style={styles.close}
         >
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
+          <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.inspectorScroll}>
@@ -1012,7 +1012,7 @@ function Inspector(
               label={deleting ? "Deleting..." : "Delete Skill"}
               accessibilityLabel={`Delete ${copy.name} from ${location.label}`}
               variant="destructive"
-              icon="trash-outline"
+              icon="trash"
               block
               loading={deleting}
               disabled={Boolean(props.preparingMutation)}
@@ -1022,8 +1022,8 @@ function Inspector(
         ) : (
           <View style={styles.lifecycleSection}>
             <View style={styles.summaryRow}>
-              <Ionicons
-                name="lock-closed-outline"
+              <Icon
+                name="lock"
                 size={15}
                 color={colors.textTertiary}
               />
@@ -1041,7 +1041,7 @@ function Inspector(
               <Button
                 label={`Open ${pluginOwner.displayName}`}
                 accessibilityLabel={`Open the ${pluginOwner.displayName} Plugin that provides this Skill`}
-                icon="extension-puzzle-outline"
+                icon="puzzle"
                 block
                 onPress={() => props.onViewSkillPlugin(pluginOwner.key)}
               />
@@ -1122,8 +1122,8 @@ function CopyRow({
         </Text>
       </View>
       {!selected ? (
-        <Ionicons
-          name="chevron-forward"
+        <Icon
+          name="chevron-right"
           size={17}
           color={colors.textTertiary}
         />
@@ -1144,7 +1144,7 @@ function State({
   onSecondary,
 }: {
   loading?: boolean;
-  icon?: React.ComponentProps<typeof Ionicons>["name"];
+  icon?: IconName;
   tone?: "default" | "danger";
   title: string;
   detail?: string;
@@ -1157,7 +1157,7 @@ function State({
     <View style={styles.state}>
       <EmptyState
         busy={loading}
-        icon={icon ?? "information-circle-outline"}
+        icon={icon ?? "info"}
         tone={tone}
         title={title}
         detail={detail}

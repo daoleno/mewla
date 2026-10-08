@@ -1,10 +1,10 @@
 import React from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners, TouchTarget } from "../../constants/tokens";
 import { withAlpha } from "./colorWithAlpha";
+import { Icon, type IconName } from "../icons/Icon";
 
 const GLYPH_DISC = 36;
 
@@ -24,7 +24,7 @@ export function DiffIconButton({
   filled = false,
   accentColor,
 }: {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: IconName;
   label: string;
   onPress(): void;
   chrome: TerminalThemeChrome;
@@ -61,7 +61,7 @@ export function DiffIconButton({
         {busy ? (
           <ActivityIndicator size="small" color={chrome.textMuted} />
         ) : (
-          <Ionicons
+          <Icon
             name={icon}
             size={20}
             color={selected ? accent : chrome.text}

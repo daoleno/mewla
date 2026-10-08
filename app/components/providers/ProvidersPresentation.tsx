@@ -11,7 +11,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Claude, Codex } from "@lobehub/icons-rn";
 import {
   SafeAreaView,
@@ -83,6 +82,7 @@ import {
   type ProviderSaveOutcome,
   type ProvidersEditorState,
 } from "./providersPresentationModel";
+import { Icon } from "../icons/Icon";
 
 export type {
   ModelSyncPickerState,
@@ -203,10 +203,10 @@ export function ProvidersPresentation({
         {!currentServerAvailable || offline ? (
           <EmptyState
             size="inline"
-            icon="cloud-offline-outline"
+            icon="cloud-offline"
             title={currentServerAvailable ? "Server offline" : "No current server"}
             detail="Providers are managed on the connected computer."
-            action={{ label: "Open Settings", icon: "settings-outline", onPress: onOpenSettings }}
+            action={{ label: "Open Settings", icon: "settings", onPress: onOpenSettings }}
             style={styles.stateBlock}
           />
         ) : null}
@@ -214,7 +214,7 @@ export function ProvidersPresentation({
         {unavailable ? (
           <EmptyState
             size="inline"
-            icon="layers-outline"
+            icon="layers"
             title="Unavailable"
             detail="Model connections are not available on this daemon."
             style={styles.stateBlock}
@@ -234,7 +234,7 @@ export function ProvidersPresentation({
         {durabilityWarning ? (
           <InlineNotice
             tone="warning"
-            icon="alert-circle"
+            icon="alert-circle-fill"
             title="Saved with a warning"
             detail={durabilityWarning}
             style={styles.notice}
@@ -244,7 +244,7 @@ export function ProvidersPresentation({
         {requiresRefreshBeforeMutation ? (
           <InlineNotice
             tone="accent"
-            icon="refresh-circle"
+            icon="refresh"
             title="Changes are paused until this list is refreshed."
             action={{ label: "Refresh", onPress: onRefresh }}
             style={styles.notice}
@@ -328,7 +328,7 @@ function GatewayStatusRow({
       <ListRow
         title="Mewla Provider Gateway"
         subtitle={copied ? "Endpoint copied" : endpoint}
-        icon="radio-outline"
+        icon="radio"
         trailing={
           <StatusPill
             label={status.running ? "Ready" : "Unavailable"}
@@ -438,7 +438,7 @@ function ProviderConnectionList({
             onPress={() => onOpenEditor({ kind: "create", client: selectedClient })}
             style={({ pressed }) => [styles.addButton, { opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
           >
-            <Ionicons name="add" size={16} color={colors.accentStrong} />
+            <Icon name="add" size={16} color={colors.accentStrong} />
             <Text style={styles.addButtonText}>Add</Text>
           </Pressable>
         }
@@ -609,7 +609,7 @@ function ProviderConnectionRow({
           accessibilityLabel={`${connection.name} actions`}
           onPress={() => setMenuVisible(true)}
         >
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+          <Icon name="more-horizontal" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
       <ActionMenu
@@ -620,7 +620,7 @@ function ProviderConnectionRow({
           {
             key: "models",
             label: "Models",
-            icon: "layers-outline",
+            icon: "layers",
             detail: `${exposedCount} exposed`,
             disabled: disabled || !ready,
             onPress: onDiscover,
@@ -628,21 +628,21 @@ function ProviderConnectionRow({
           {
             key: "test",
             label: "Test connection",
-            icon: "pulse-outline",
+            icon: "pulse",
             disabled: disabled || testing,
             onPress: () => void handleTest(),
           },
           {
             key: "edit",
             label: "Edit",
-            icon: "create-outline",
+            icon: "edit",
             disabled,
             onPress: onOpenEditor,
           },
           {
             key: "delete",
             label: "Delete",
-            icon: "trash-outline",
+            icon: "trash",
             destructive: true,
             disabled,
             onPress: onDelete,
@@ -836,7 +836,7 @@ function ProviderEditorSheet({
             style={styles.editorClose}
             onPress={handleClose}
           >
-            <Ionicons name="close" size={22} color={colors.textSecondary} />
+            <Icon name="close" size={22} color={colors.textSecondary} />
           </Pressable>
         </View>
 
@@ -922,8 +922,8 @@ function ProviderEditorSheet({
             {testing ? (
               <ActivityIndicator size="small" color={colors.textPrimary} />
             ) : (
-              <Ionicons
-                name="pulse-outline"
+              <Icon
+                name="pulse"
                 size={18}
                 color={colors.textPrimary}
               />
@@ -1045,7 +1045,7 @@ function ModelSyncSheet({
           style={styles.editorClose}
           onPress={onClose}
         >
-          <Ionicons name="close" size={22} color={colors.textSecondary} />
+          <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
       <Text style={styles.pickerHint}>
@@ -1108,8 +1108,8 @@ function ModelSyncSheet({
                 onSelectModel(picker.client, picker.connection, choice.model.id)
               }
             >
-              <Ionicons
-                name={selected ? "checkbox" : "square-outline"}
+              <Icon
+                name={selected ? "checkbox" : "square"}
                 size={16}
                 color={selected ? colors.accentStrong : colors.textTertiary}
               />

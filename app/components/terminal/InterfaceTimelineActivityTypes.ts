@@ -1,8 +1,7 @@
-import type { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps } from "react";
 import type { ToolDeveloperDetails } from "../../services/toolCallDetails";
+import type { IconName } from "../icons/Icon";
 
-export type TimelineActivityIconName = ComponentProps<typeof Ionicons>["name"];
+export type TimelineActivityIconName = IconName;
 
 export type PatchOperation = "add" | "delete" | "update";
 

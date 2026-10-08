@@ -13,7 +13,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import type {
   TerminalThemeChrome,
   TerminalThemePalette,
@@ -37,6 +36,7 @@ import {
   brainWorkspaceEntryIconName,
   brainWorkspaceMarkdownPath,
 } from "./brainPresentation";
+import { Icon } from "../icons/Icon";
 
 interface BrainWorkspaceViewerProps {
   visible: boolean;
@@ -358,7 +358,7 @@ export function BrainWorkspaceViewer({
           </AppText>
         </View>
         <IconButton
-          icon="close-outline"
+          icon="close"
           size={44}
           iconSize={18}
           tone="ghost"
@@ -378,8 +378,8 @@ export function BrainWorkspaceViewer({
           </View>
         ) : treeError ? (
           <View style={styles.previewState}>
-            <Ionicons
-              name="warning-outline"
+            <Icon
+              name="warning-fill"
               size={18}
               color={colors.dangerText}
             />
@@ -400,8 +400,8 @@ export function BrainWorkspaceViewer({
           </View>
         ) : fileError ? (
           <View style={styles.previewState}>
-            <Ionicons
-              name="warning-outline"
+            <Icon
+              name="warning-fill"
               size={18}
               color={colors.dangerText}
             />
@@ -422,8 +422,8 @@ export function BrainWorkspaceViewer({
           />
         ) : currentEntries.length === 0 ? (
           <View style={styles.previewState}>
-            <Ionicons
-              name="folder-open-outline"
+            <Icon
+              name="folder-open"
               size={20}
               color={colors.textSecondary}
             />
@@ -454,7 +454,7 @@ export function BrainWorkspaceViewer({
                     pressed ? styles.browserRowPressed : null,
                   ]}
                 >
-                  <Ionicons
+                  <Icon
                     name={brainWorkspaceEntryIconName(entry.kind, entry.path)}
                     size={18}
                     color={directory ? colors.accent : colors.textSecondary}

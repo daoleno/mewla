@@ -1,11 +1,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { formatChatBubbleTime } from '../../constants/telegramPresentation';
 import { TouchTarget, Typography, useAppTheme } from '../../constants/tokens';
 import { PendingMessageLifecycleLabel } from './PendingMessageLifecycleLabel';
 import { PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL } from './pendingUserMessageLifecycle';
 import { chromeTint } from './composerMaterial';
+import { Icon } from "../icons/Icon";
 
 /** 26 pt capsule + vertical hitSlop = platform touch target (44 pt / 48 dp). */
 const RETRY_CAPSULE_HEIGHT = 26;
@@ -86,7 +86,7 @@ export function MessageBubbleFooter({
               },
             ]}
           >
-            <Ionicons name="refresh" size={12} color={retryInk} />
+            <Icon name="refresh" size={12} color={retryInk} />
             <Text style={[styles.retry, { color: retryInk }]}>Retry</Text>
           </Pressable>
         ) : null}

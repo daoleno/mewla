@@ -375,7 +375,7 @@ export function mergeRunningActivityIntoTimeline(
     id,
     title: "Working",
     tone: "running",
-    icon: "time-outline",
+    icon: "time",
     statusKey: "running",
     defaultExpanded: false,
   });
@@ -530,9 +530,9 @@ function activityFromEvent(
         title: semantic.title,
         tone: running ? "running" : failed ? "failed" : "success",
         icon: running
-          ? "time-outline"
+          ? "time"
           : failed
-            ? "alert-circle-outline"
+            ? "alert-circle"
             : presentation.icon,
         detail: safeCollapsedDetail(details.statusLine || semantic.detail),
         body: output.text || undefined,
@@ -585,10 +585,10 @@ function activityFromEvent(
         title: summary.title,
         tone: running ? "running" : failed ? "failed" : "success",
         icon: running
-          ? "time-outline"
+          ? "time"
           : failed
-            ? "alert-circle-outline"
-            : "git-compare-outline",
+            ? "alert-circle"
+            : "git-compare",
         detail,
         fileSummaries: summary.files,
         files: summary.files.map((file) => file.path),
@@ -762,7 +762,7 @@ function activityFromEvent(
         statusKey: event.status || "done",
         title: webSearchActivityTitle(action, running, failed),
         tone: running ? "running" : failed ? "failed" : "success",
-        icon: "search-outline",
+        icon: "search",
         detail: webSearchEventDetail(event),
         body,
         bodyKind: body ? "terminal" : undefined,
@@ -781,7 +781,7 @@ function activityFromEvent(
         title: event.title || "Reasoning",
         statusKey: event.status || "done",
         tone: running ? "running" : "neutral",
-        icon: running ? "time-outline" : "bulb",
+        icon: running ? "time" : "bulb",
         activityKind: "reasoning",
         streaming: event.partial,
         body: event.body,
@@ -811,7 +811,7 @@ function activityFromEvent(
             ? "success"
             : statusActivityTone(event.status),
         icon: calendarResult
-          ? "calendar-outline"
+          ? "calendar"
           : statusActivityIcon(running ? "running" : event.status),
         streaming: event.partial,
         detail,
@@ -900,10 +900,10 @@ function explorationActivityFromEntries(
     title,
     tone: running ? "running" : failed ? "failed" : "success",
     icon: failed
-      ? "alert-circle-outline"
+      ? "alert-circle"
       : running
-        ? "time-outline"
-        : "folder-open-outline",
+        ? "time"
+        : "folder-open",
     detail: quietDetail,
     body: body || undefined,
     files,
@@ -1320,7 +1320,7 @@ function commandPresentation(command: string): CommandPresentation {
       kind: "read",
       target,
       detail: target || fallbackDetail,
-      icon: "document-text-outline",
+      icon: "document-text",
       runningTitle: "Reading file",
       doneTitle: "Read file",
       failedTitle: "Read failed",
@@ -1338,7 +1338,7 @@ function commandPresentation(command: string): CommandPresentation {
       kind: "list",
       target,
       detail: target,
-      icon: "folder-open-outline",
+      icon: "folder-open",
       runningTitle: "Listing files",
       doneTitle: "Listed files",
       failedTitle: "List failed",
@@ -1361,7 +1361,7 @@ function commandPresentation(command: string): CommandPresentation {
       query,
       target,
       detail: detail || fallbackDetail,
-      icon: "search-outline",
+      icon: "search",
       runningTitle: "Searching project",
       doneTitle: "Searched project",
       failedTitle: "Search failed",
@@ -1378,7 +1378,7 @@ function commandPresentation(command: string): CommandPresentation {
     return {
       kind: "test",
       detail: fallbackDetail,
-      icon: "checkmark-done-outline",
+      icon: "checks",
       runningTitle: "Running",
       doneTitle: "Ran",
       failedTitle: "Ran",
@@ -1394,7 +1394,7 @@ function commandPresentation(command: string): CommandPresentation {
     return {
       kind: "check",
       detail: fallbackDetail,
-      icon: "construct-outline",
+      icon: "construct",
       runningTitle: "Running",
       doneTitle: "Ran",
       failedTitle: "Ran",
@@ -1406,7 +1406,7 @@ function commandPresentation(command: string): CommandPresentation {
     return {
       kind: "git",
       detail: fallbackDetail,
-      icon: "git-branch-outline",
+      icon: "git-branch",
       runningTitle: "Running",
       doneTitle: "Ran",
       failedTitle: "Ran",
@@ -1418,7 +1418,7 @@ function commandPresentation(command: string): CommandPresentation {
     return {
       kind: "install",
       detail: fallbackDetail,
-      icon: "download-outline",
+      icon: "download",
       runningTitle: "Running",
       doneTitle: "Ran",
       failedTitle: "Ran",
@@ -1429,7 +1429,7 @@ function commandPresentation(command: string): CommandPresentation {
   return {
     kind: "run",
     detail: fallbackDetail,
-    icon: "terminal-outline",
+    icon: "terminal",
     runningTitle: "Running",
     doneTitle: "Ran",
     failedTitle: "Ran",
@@ -1574,13 +1574,13 @@ function statusActivityIcon(status?: string): TimelineIconName {
   switch ((status || "").trim()) {
     case "failed":
     case "error":
-      return "alert-circle-outline";
+      return "alert-circle";
     case "warning":
-      return "warning-outline";
+      return "warning";
     case "running":
-      return "sync-outline";
+      return "sync";
     default:
-      return "information-circle-outline";
+      return "info";
   }
 }
 
@@ -1929,7 +1929,7 @@ function toolPresentation(event: CodexConversationEvent): ToolPresentation {
       }
     } else if (nested.length > 1) {
       return {
-        icon: "git-network-outline",
+        icon: "git-network",
       };
     }
   }
@@ -1943,7 +1943,7 @@ function toolPresentation(event: CodexConversationEvent): ToolPresentation {
       stringField(inputObject, "path") || stringField(inputObject, "image_url");
     const previewUri = previewableImageUri(path);
     return {
-      icon: "image-outline",
+      icon: "image",
       localImagePath: path && !previewUri ? path : undefined,
     };
   }
@@ -1953,10 +1953,10 @@ function toolPresentation(event: CodexConversationEvent): ToolPresentation {
     return {
       icon:
         chars === ""
-          ? "sync-outline"
+          ? "sync"
           : chars === "\u0003"
-            ? "stop-circle-outline"
-            : "return-down-forward-outline",
+            ? "stop-circle"
+            : "return-forward",
     };
   }
 
@@ -1977,19 +1977,19 @@ function toolPresentation(event: CodexConversationEvent): ToolPresentation {
 
   if (name.includes("query_docs") || name.includes("resolve_library_id")) {
     return {
-      icon: "library-outline",
+      icon: "library",
     };
   }
 
   if (name.includes("search_query") || name === "web.run") {
     return {
-      icon: "search-outline",
+      icon: "search",
     };
   }
 
   if (name.includes("multi_tool_use.parallel") || name.startsWith("multi:")) {
     return {
-      icon: "git-network-outline",
+      icon: "git-network",
     };
   }
 
@@ -1999,7 +1999,7 @@ function toolPresentation(event: CodexConversationEvent): ToolPresentation {
     name.includes("wait_agent")
   ) {
     return {
-      icon: "git-network-outline",
+      icon: "git-network",
     };
   }
 
@@ -2053,21 +2053,21 @@ function humanizeToolName(value: string): string {
 
 function browserToolIcon(name: string): TimelineIconName {
   if (name.includes("navigate")) {
-    return "navigate-outline";
+    return "navigate";
   }
   if (name.includes("click")) {
-    return "radio-button-on-outline";
+    return "radio-on";
   }
   if (name.includes("type") || name.includes("fill")) {
-    return "text-outline";
+    return "text";
   }
   if (name.includes("screenshot")) {
-    return "camera-outline";
+    return "camera";
   }
   if (name.includes("snapshot")) {
-    return "scan-outline";
+    return "scan";
   }
-  return "globe-outline";
+  return "browser";
 }
 
 function previewableImageUri(value?: string) {
@@ -2137,38 +2137,38 @@ function semanticActivityIcon(
   failed: boolean,
 ): TimelineIconName {
   if (running) {
-    return "time-outline";
+    return "time";
   }
   if (failed) {
-    return "alert-circle-outline";
+    return "alert-circle";
   }
   const lower = title.toLowerCase();
   if (lower.includes("search")) {
-    return "search-outline";
+    return "search";
   }
   if (lower.includes("read")) {
-    return "document-text-outline";
+    return "document-text";
   }
   if (lower.includes("updated files") || lower.includes("updating files")) {
-    return "git-compare-outline";
+    return "git-compare";
   }
   if (lower.includes("plan")) {
-    return "map-outline";
+    return "map";
   }
   if (lower.includes("image")) {
-    return "image-outline";
+    return "image";
   }
   if (lower.includes("test")) {
-    return "checkmark-done-outline";
+    return "checks";
   }
   if (lower.includes("build")) {
-    return "construct-outline";
+    return "construct";
   }
   if (lower.includes("wait")) {
-    return "time-outline";
+    return "time";
   }
   if (lower.includes("command")) {
-    return "terminal-outline";
+    return "terminal";
   }
   return fallback;
 }
@@ -2176,22 +2176,22 @@ function semanticActivityIcon(
 function semanticKindIcon(kind: SemanticActionKind): TimelineIconName {
   switch (kind) {
     case "read_files":
-      return "document-text-outline";
+      return "document-text";
     case "search_code":
-      return "search-outline";
+      return "search";
     case "run_command":
-      return "terminal-outline";
+      return "terminal";
     case "update_files":
-      return "git-compare-outline";
+      return "git-compare";
     case "update_plan":
-      return "map-outline";
+      return "map";
     case "view_image":
-      return "image-outline";
+      return "image";
     case "test_app":
-      return "checkmark-done-outline";
+      return "checks";
     case "wait":
-      return "time-outline";
+      return "time";
     default:
-      return "cube-outline";
+      return "cube";
   }
 }

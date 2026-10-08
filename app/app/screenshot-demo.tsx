@@ -13,7 +13,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRootNavigationState, useRouter } from "expo-router";
 import { useWindowDimensions } from "react-native";
 import {
@@ -112,6 +111,7 @@ import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
 import { pluginJobs } from "../services/pluginOnboarding";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
 import { ResourcesScreenshotDemo, SkillsScreenshotDemo, WorkScreenshotDemo } from "../components/screenshotDemo/ToolsScreenshotDemos";
+import { Icon } from "../components/icons/Icon";
 
 const NOOP = () => undefined;
 const loadNoDemoAsset = async () => null;
@@ -208,13 +208,13 @@ function EmptyStatesDemo() {
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
       <EmptyState title={state.title} icon={state.icon} busy={state.busy}
-        action={state.action ? { label: state.label, icon: state.action === "retry" ? "refresh-outline" : "add", onPress: () => {
+        action={state.action ? { label: state.label, icon: state.action === "retry" ? "refresh" : "add", onPress: () => {
           if (state.action === "retry") setRetried(true);
           else if (state.action === "clear") setCleared(true);
           else if (state.action === "terminal") setTerminal(true);
           else router.push({ pathname: "/settings", params: { addServer: Date.now().toString() } });
         }} : undefined}
-        secondary={connection !== "connected" ? { label: "Server settings", icon: "settings-outline", onPress: () => router.push("/settings") } : undefined}
+        secondary={connection !== "connected" ? { label: "Server settings", icon: "settings", onPress: () => router.push("/settings") } : undefined}
       />
     </ScrollView>
     <NewTerminalSheet visible={terminal} title="New terminal" initialCwd="/workspace" serverId={null}
@@ -1504,7 +1504,7 @@ function StatsDemo() {
       <View
         style={[styles.statsHeader, { borderBottomColor: colors.borderSubtle }]}
       >
-        <Ionicons name="stats-chart" size={20} color={colors.accent} />
+        <Icon name="stats" size={20} color={colors.accent} />
         <View style={styles.flex}>
           <Text style={[styles.statsTitle, { color: colors.textPrimary }]}>
             Stats

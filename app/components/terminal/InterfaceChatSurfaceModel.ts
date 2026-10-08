@@ -18,7 +18,7 @@ export interface InterfaceComposerPresentation {
   showCommandList: boolean;
   showComposerActions: boolean;
   showActionMenuButton: boolean;
-  actionMenuIcon: "add" | "happy-outline";
+  actionMenuIcon: "add" | "happy";
   showAttachmentRail: boolean;
   composerActionButtonEnabled: boolean;
   showStopButton: boolean;
