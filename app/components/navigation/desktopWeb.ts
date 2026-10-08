@@ -133,30 +133,35 @@ export function desktopRootRouteName(key: DesktopSidebarKey): string {
   return key === "brain" || key === "sessions" ? "(primary)" : key;
 }
 
-export type DesktopNavigation = "switch" | "home" | "open";
+export type DesktopNavigation = "switch" | "open";
 
 /**
- * How a sidebar row navigates on desktop web. Every page opens as a new
- * history entry. Brain and Sessions are home: they switch in place when home
- * is showing, and otherwise the stack unwinds to home (the browser moves
- * back to its entry), so the chats are never mounted twice.
+ * How a sidebar row navigates on desktop web: every click is a new browser
+ * history entry, so Back always returns to the page you came from. Brain and
+ * Sessions switch in place while their page is showing (the tab switch is
+ * itself a history step) and open as a new page otherwise.
  */
 export function desktopSidebarNavigation(
   stackRouteNames: readonly string[],
   key: DesktopSidebarKey,
 ): DesktopNavigation {
   if (desktopRootRouteName(key) !== "(primary)") return "open";
-  return stackRouteNames[stackRouteNames.length - 1] === "(primary)" ? "switch" : "home";
+  return stackRouteNames[stackRouteNames.length - 1] === "(primary)" ? "switch" : "open";
 }
 
-/** Pages kept mounted above home; older ones remount when you come back. */
+/** Pages kept mounted besides Brain/Sessions; older ones remount on Back. */
 export const DESKTOP_RETAINED_PAGES = 3;
 
 /**
- * Whether a root Stack page stays mounted: home always, and the newest few
- * pages above it, so Back keeps their scroll while a long browsing session
- * does not keep every page it visited alive.
+ * Whether a root Stack page stays mounted. Only the newest copy of a page
+ * does (a page opened again leaves its older copy as a history entry), and
+ * of those only Brain/Sessions and the newest few, so Back keeps recent
+ * scroll and state while a long session never keeps every visit alive.
+ * Drafts are cached outside the page, so a remount keeps them.
  */
-export function desktopScreenRetained(index: number, stackLength: number): boolean {
-  return index <= 0 || index >= stackLength - DESKTOP_RETAINED_PAGES;
+export function desktopScreenRetained(stackRouteNames: readonly string[], index: number): boolean {
+  const name = stackRouteNames[index];
+  if (name === undefined) return true;
+  if (stackRouteNames.indexOf(name, index + 1) !== -1) return false;
+  return name === "(primary)" || index >= stackRouteNames.length - DESKTOP_RETAINED_PAGES;
 }

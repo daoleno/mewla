@@ -480,17 +480,17 @@ export default function BrainScreen() {
     [activeServer, openWorkerSession],
   );
   // The desktop palette asks through the URL; each request runs once.
+  // A request that can't run now is dropped, never replayed later.
   useEffect(() => {
-    if (!params.newChat || !canNewChat) return;
+    if (!params.newChat) return;
     router.setParams({ newChat: undefined });
-    void startNewBrainChat();
+    if (canNewChat) void startNewBrainChat();
   }, [canNewChat, params.newChat, router, startNewBrainChat]);
   useEffect(() => {
     if (!params.work) return;
-    const slip = workSurface.slips.find((candidate) => candidate.workId === params.work);
-    if (!slip) return;
     router.setParams({ work: undefined });
-    openWorkSlip(slip);
+    const slip = workSurface.slips.find((candidate) => candidate.workId === params.work);
+    if (slip) openWorkSlip(slip);
   }, [openWorkSlip, params.work, router, workSurface.slips]);
   useEffect(() => {
     if (pendingAskDraft === null || !composerDraftRef.current) return;

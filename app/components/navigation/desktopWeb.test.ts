@@ -79,18 +79,23 @@ describe("sidebar navigation", () => {
     expect(desktopSidebarNavigation(["(primary)"], "skills")).toBe("open");
   });
 
-  test("Brain and Sessions switch in place at home and unwind to it elsewhere", () => {
+  test("Brain and Sessions switch in place when showing, and open as a page elsewhere", () => {
     expect(desktopSidebarNavigation(["(primary)"], "sessions")).toBe("switch");
-    expect(desktopSidebarNavigation(["(primary)", "calendar"], "brain")).toBe("home");
-    expect(desktopSidebarNavigation(["(primary)", "terminal/[id]"], "sessions")).toBe("home");
+    expect(desktopSidebarNavigation(["(primary)", "calendar"], "brain")).toBe("open");
+    expect(desktopSidebarNavigation(["(primary)", "terminal/[id]"], "sessions")).toBe("open");
   });
 
-  test("home and the newest pages stay mounted", () => {
-    const length = 8;
-    expect(desktopScreenRetained(0, length)).toBe(true);
-    expect(desktopScreenRetained(length - 1, length)).toBe(true);
-    expect(desktopScreenRetained(length - DESKTOP_RETAINED_PAGES, length)).toBe(true);
-    expect(desktopScreenRetained(length - DESKTOP_RETAINED_PAGES - 1, length)).toBe(false);
-    expect(desktopScreenRetained(1, 3)).toBe(true);
+  test("only the newest copy of a page, and only recent pages or home, stay mounted", () => {
+    const stack = ["(primary)", "calendar", "skills", "stats", "resources", "settings"];
+    expect(desktopScreenRetained(stack, 0)).toBe(true);
+    expect(desktopScreenRetained(stack, stack.length - 1)).toBe(true);
+    expect(desktopScreenRetained(stack, stack.length - DESKTOP_RETAINED_PAGES)).toBe(true);
+    expect(desktopScreenRetained(stack, stack.length - DESKTOP_RETAINED_PAGES - 1)).toBe(false);
+    // Brain opened again: the older copy is a history entry only.
+    const reopened = ["(primary)", "skills", "(primary)", "calendar", "skills"];
+    expect(desktopScreenRetained(reopened, 0)).toBe(false);
+    expect(desktopScreenRetained(reopened, 1)).toBe(false);
+    expect(desktopScreenRetained(reopened, 2)).toBe(true);
+    expect(desktopScreenRetained(reopened, 4)).toBe(true);
   });
 });

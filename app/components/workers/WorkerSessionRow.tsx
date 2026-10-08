@@ -22,6 +22,7 @@ import {
   isWorkerActivelyRunning,
 } from '../../services/workerStatusPresentation';
 import { AnimatedPressable } from '../ui/AnimatedPressable';
+import { useDesktopWeb } from '../navigation/useDesktopWeb';
 import { AgentKindIcon } from '../terminal/AgentKindIcon';
 import { StatusMark } from '../ui/StatusMark';
 import type { WorkStatus } from '../ui/workStatus';
@@ -82,17 +83,23 @@ export function WorkerSessionRow({
   const rowDisabled = inSelectionMode && selectionDisabled;
   // Web: a mouse shows where a click lands, and a right-click selects the
   // row the way a long press does on the phone.
+  // Desktop only: Android Chrome fires contextmenu on a long press too.
   const [hovered, setHovered] = useState(false);
+  const desktopWeb = useDesktopWeb();
   const webPointerProps =
     Platform.OS === 'web'
       ? {
           onHoverIn: () => setHovered(true),
           onHoverOut: () => setHovered(false),
-          onContextMenu: (event: { preventDefault(): void }) => {
-            if (inSelectionMode) return;
-            event.preventDefault();
-            onLongPress();
-          },
+          ...(desktopWeb
+            ? {
+                onContextMenu: (event: { preventDefault(): void }) => {
+                  if (inSelectionMode) return;
+                  event.preventDefault();
+                  onLongPress();
+                },
+              }
+            : null),
         }
       : {};
 
