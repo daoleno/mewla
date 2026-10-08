@@ -1,0 +1,13 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["LinkTransportModule"],
+    "podspecPath": ["LinkTransport.podspec"]
+  },
+  "android": {
+    "modules": ["expo.modules.linktransport.LinkTransportModule"]
+  },
+  "ios": {
+    "modules": ["LinkTransportModule"]
+  }
+}

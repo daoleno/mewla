@@ -22,7 +22,7 @@ class MetroConnectActivity : Activity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    if (!BuildConfig.DEBUG || BuildConfig.ZEN_STANDALONE) {
+    if (!BuildConfig.DEBUG || BuildConfig.MEWLA_STANDALONE) {
       finish()
       return
     }

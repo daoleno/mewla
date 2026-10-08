@@ -1,0 +1,1453 @@
+#if defined(__ANDROID__)
+#include <jni.h>
+#include <android/log.h>
+#endif
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+#include <ghostty/vt.h>
+
+#if defined(__ANDROID__)
+#define TAG "TerminalVt"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#endif
+
+static constexpr size_t kDefaultScrollbackRows = 10000;
+static constexpr size_t kMouseStackBufferSize = 128;
+
+#if defined(__ANDROID__)
+static jstring newStringFromUtf8Bytes(JNIEnv* env, const uint8_t* bytes, size_t len) {
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (!stringClass) {
+        return env->NewStringUTF("");
+    }
+
+    jmethodID ctor = env->GetMethodID(stringClass, "<init>", "([BLjava/lang/String;)V");
+    if (!ctor) {
+        return env->NewStringUTF("");
+    }
+
+    jbyteArray byteArray = env->NewByteArray((jsize)len);
+    if (!byteArray) {
+        return env->NewStringUTF("");
+    }
+
+    if (len > 0) {
+        env->SetByteArrayRegion(
+            byteArray,
+            0,
+            (jsize)len,
+            reinterpret_cast<const jbyte*>(bytes)
+        );
+    }
+
+    jstring charset = env->NewStringUTF("UTF-8");
+    if (!charset) {
+        env->DeleteLocalRef(byteArray);
+        return env->NewStringUTF("");
+    }
+
+    auto result = static_cast<jstring>(env->NewObject(stringClass, ctor, byteArray, charset));
+    env->DeleteLocalRef(byteArray);
+    env->DeleteLocalRef(charset);
+
+    if (env->ExceptionCheck() || !result) {
+        env->ExceptionClear();
+        return env->NewStringUTF("");
+    }
+
+    return result;
+}
+#endif
+
+/**
+ * Per-terminal state: owns the terminal, render state, and HTML formatter.
+ */
+struct TerminalHandle {
+    GhosttyTerminal terminal = nullptr;
+    GhosttyRenderState render_state = nullptr;
+    GhosttyFormatter html_formatter = nullptr;
+    GhosttyMouseEncoder mouse_encoder = nullptr;
+    uint16_t cols = 0;
+    uint16_t rows = 0;
+    uint32_t cell_width_px = 1;
+    uint32_t cell_height_px = 1;
+    bool force_full_snapshot = true;
+    std::vector<std::string> rendered_rows;
+    uint16_t rendered_cols = 0;
+};
+
+static GhosttyResult createHtmlFormatter(
+    TerminalHandle* h,
+    GhosttyFormatter* out)
+{
+    if (!h || !out) {
+        return GHOSTTY_INVALID_VALUE;
+    }
+
+    GhosttyFormatterTerminalOptions opts = GHOSTTY_INIT_SIZED(GhosttyFormatterTerminalOptions);
+    opts.emit = GHOSTTY_FORMATTER_FORMAT_HTML;
+    opts.trim = false;
+
+    return ghostty_formatter_terminal_new(nullptr, out, h->terminal, opts);
+}
+
+static std::string formatTerminalScreen(TerminalHandle* h)
+{
+    if (!h) return {};
+
+    GhosttyFormatter formatter = h->html_formatter;
+    if (!formatter) {
+        return {};
+    }
+
+    uint8_t* outPtr = nullptr;
+    size_t outLen = 0;
+    GhosttyResult res = ghostty_formatter_format_alloc(formatter, nullptr, &outPtr, &outLen);
+
+    if (res != GHOSTTY_SUCCESS || !outPtr) {
+        return {};
+    }
+
+    std::string result(reinterpret_cast<const char*>(outPtr), outLen);
+    ghostty_free(nullptr, outPtr, outLen);
+    return result;
+}
+
+static TerminalHandle* getHandle(uintptr_t h) {
+    return reinterpret_cast<TerminalHandle*>(h);
+}
+
+static void markFullSnapshot(TerminalHandle* h) {
+    if (!h) {
+        return;
+    }
+    h->force_full_snapshot = true;
+}
+
+static GhosttyResult populateRowIterator(
+    GhosttyRenderState renderState,
+    GhosttyRenderStateRowIterator rowIterator)
+{
+    if (!renderState || !rowIterator) {
+        return GHOSTTY_INVALID_VALUE;
+    }
+
+    return ghostty_render_state_get(
+        renderState,
+        GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR,
+        &rowIterator
+    );
+}
+
+static GhosttyResult populateRowCells(
+    GhosttyRenderStateRowIterator rowIterator,
+    GhosttyRenderStateRowCells rowCells)
+{
+    if (!rowIterator || !rowCells) {
+        return GHOSTTY_INVALID_VALUE;
+    }
+
+    return ghostty_render_state_row_get(
+        rowIterator,
+        GHOSTTY_RENDER_STATE_ROW_DATA_CELLS,
+        &rowCells
+    );
+}
+
+#if defined(__ANDROID__)
+static jstring newStringFromStdString(JNIEnv* env, const std::string& value) {
+    return newStringFromUtf8Bytes(
+        env,
+        reinterpret_cast<const uint8_t*>(value.data()),
+        value.size()
+    );
+}
+#endif
+
+static bool colorsEqual(const GhosttyColorRgb& left, const GhosttyColorRgb& right) {
+    return left.r == right.r && left.g == right.g && left.b == right.b;
+}
+
+static double colorPerceivedLuminance(const GhosttyColorRgb& color) {
+    return (
+        0.299 * static_cast<double>(color.r) +
+        0.587 * static_cast<double>(color.g) +
+        0.114 * static_cast<double>(color.b)
+    ) / 255.0;
+}
+
+static uint8_t mixColorChannel(uint8_t from, uint8_t to, double weight) {
+    const double mixed =
+        static_cast<double>(from) +
+        (static_cast<double>(to) - static_cast<double>(from)) * weight;
+    if (mixed <= 0.0) {
+        return 0;
+    }
+    if (mixed >= 255.0) {
+        return 255;
+    }
+    return static_cast<uint8_t>(std::lround(mixed));
+}
+
+static GhosttyColorRgb mixColors(
+    const GhosttyColorRgb& from,
+    const GhosttyColorRgb& to,
+    double weight)
+{
+    return GhosttyColorRgb{
+        mixColorChannel(from.r, to.r, weight),
+        mixColorChannel(from.g, to.g, weight),
+        mixColorChannel(from.b, to.b, weight),
+    };
+}
+
+static void appendCssHexColor(std::string* out, const GhosttyColorRgb& color) {
+    static constexpr char hex[] = "0123456789abcdef";
+    out->push_back('#');
+    out->push_back(hex[(color.r >> 4) & 0xF]);
+    out->push_back(hex[color.r & 0xF]);
+    out->push_back(hex[(color.g >> 4) & 0xF]);
+    out->push_back(hex[color.g & 0xF]);
+    out->push_back(hex[(color.b >> 4) & 0xF]);
+    out->push_back(hex[color.b & 0xF]);
+}
+
+static void appendUtf8(std::string* out, uint32_t codepoint) {
+    if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+        codepoint = 0xFFFD;
+    }
+
+    if (codepoint <= 0x7F) {
+        out->push_back(static_cast<char>(codepoint));
+        return;
+    }
+
+    if (codepoint <= 0x7FF) {
+        out->push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+        out->push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        return;
+    }
+
+    if (codepoint <= 0xFFFF) {
+        out->push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+        out->push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        out->push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        return;
+    }
+
+    out->push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+    out->push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+    out->push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    out->push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+}
+
+static void appendHtmlEscapedCodepoint(std::string* out, uint32_t codepoint) {
+    switch (codepoint) {
+        case '&':
+            out->append("&amp;");
+            return;
+        case '<':
+            out->append("&lt;");
+            return;
+        case '>':
+            out->append("&gt;");
+            return;
+        default:
+            appendUtf8(out, codepoint);
+            return;
+    }
+}
+
+static bool appendCellText(
+    GhosttyRenderStateRowCells rowCells,
+    GhosttyCell cell,
+    bool preserveBlankCell,
+    std::string* htmlText)
+{
+    if (!htmlText) {
+        return false;
+    }
+
+    bool hasText = false;
+    ghostty_cell_get(cell, GHOSTTY_CELL_DATA_HAS_TEXT, &hasText);
+    if (!hasText) {
+        if (preserveBlankCell) {
+            htmlText->push_back(' ');
+        }
+        return false;
+    }
+
+    uint32_t graphemeLen = 0;
+    if (ghostty_render_state_row_cells_get(
+            rowCells,
+            GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN,
+            &graphemeLen) == GHOSTTY_SUCCESS &&
+        graphemeLen > 0) {
+        std::vector<uint32_t> graphemes(graphemeLen, 0);
+        if (ghostty_render_state_row_cells_get(
+                rowCells,
+                GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF,
+                graphemes.data()) == GHOSTTY_SUCCESS) {
+            bool visible = false;
+            for (uint32_t codepoint : graphemes) {
+                appendHtmlEscapedCodepoint(htmlText, codepoint);
+                if (codepoint != 0 && codepoint != ' ') {
+                    visible = true;
+                }
+            }
+            return visible;
+        }
+    }
+
+    uint32_t codepoint = 0;
+    ghostty_cell_get(cell, GHOSTTY_CELL_DATA_CODEPOINT, &codepoint);
+    if (codepoint == 0) {
+        if (preserveBlankCell) {
+            htmlText->push_back(' ');
+        }
+        return false;
+    }
+
+    appendHtmlEscapedCodepoint(htmlText, codepoint);
+    return codepoint != ' ';
+}
+
+static bool htmlHasVisibleText(const std::string& html) {
+    bool inTag = false;
+    for (size_t index = 0; index < html.size(); index += 1) {
+        const char ch = html[index];
+        if (inTag) {
+            if (ch == '>') {
+                inTag = false;
+            }
+            continue;
+        }
+
+        if (ch == '<') {
+            inTag = true;
+            continue;
+        }
+
+        if (ch == '&') {
+            const size_t entityEnd = html.find(';', index + 1);
+            if (entityEnd == std::string::npos) {
+                return true;
+            }
+
+            const std::string entity = html.substr(index, entityEnd - index + 1);
+            if (entity != "&nbsp;" && entity != "&#32;" && entity != "&#x20;") {
+                return true;
+            }
+            index = entityEnd;
+            continue;
+        }
+
+        if (ch != ' ') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool resolveStyleColor(
+    const GhosttyStyleColor& color,
+    const GhosttyRenderStateColors& renderColors,
+    GhosttyColorRgb* out)
+{
+    if (!out) {
+        return false;
+    }
+
+    switch (color.tag) {
+        case GHOSTTY_STYLE_COLOR_NONE:
+            return false;
+        case GHOSTTY_STYLE_COLOR_PALETTE:
+            *out = renderColors.palette[color.value.palette];
+            return true;
+        case GHOSTTY_STYLE_COLOR_RGB:
+            *out = color.value.rgb;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool styleColorsEqual(const GhosttyStyleColor& left, const GhosttyStyleColor& right) {
+    if (left.tag != right.tag) {
+        return false;
+    }
+
+    switch (left.tag) {
+        case GHOSTTY_STYLE_COLOR_NONE:
+            return true;
+        case GHOSTTY_STYLE_COLOR_PALETTE:
+            return left.value.palette == right.value.palette;
+        case GHOSTTY_STYLE_COLOR_RGB:
+            return colorsEqual(left.value.rgb, right.value.rgb);
+        default:
+            return false;
+    }
+}
+
+static bool stylesEquivalent(const GhosttyStyle& left, const GhosttyStyle& right) {
+    return
+        styleColorsEqual(left.fg_color, right.fg_color) &&
+        styleColorsEqual(left.bg_color, right.bg_color) &&
+        styleColorsEqual(left.underline_color, right.underline_color) &&
+        left.bold == right.bold &&
+        left.italic == right.italic &&
+        left.faint == right.faint &&
+        left.blink == right.blink &&
+        left.inverse == right.inverse &&
+        left.invisible == right.invisible &&
+        left.strikethrough == right.strikethrough &&
+        left.overline == right.overline &&
+        left.underline == right.underline;
+}
+
+static GhosttyColorRgb resolveEffectiveForeground(
+    const GhosttyStyle& style,
+    const GhosttyRenderStateColors& renderColors,
+    bool hasResolvedFg,
+    const GhosttyColorRgb& resolvedFg)
+{
+    if (style.fg_color.tag == GHOSTTY_STYLE_COLOR_PALETTE) {
+        uint8_t paletteIndex = style.fg_color.value.palette;
+        if (style.bold && paletteIndex <= GHOSTTY_COLOR_NAMED_WHITE) {
+            paletteIndex = static_cast<uint8_t>(paletteIndex + 8);
+        }
+        return renderColors.palette[paletteIndex];
+    }
+
+    if (style.fg_color.tag == GHOSTTY_STYLE_COLOR_RGB) {
+        return style.fg_color.value.rgb;
+    }
+
+    return hasResolvedFg ? resolvedFg : renderColors.foreground;
+}
+
+static bool resolveEffectiveBackground(
+    const GhosttyStyle& style,
+    const GhosttyRenderStateColors& renderColors,
+    bool hasResolvedBg,
+    const GhosttyColorRgb& resolvedBg,
+    GhosttyColorRgb* out)
+{
+    if (!out) {
+        return false;
+    }
+
+    if (hasResolvedBg) {
+        *out = resolvedBg;
+        return true;
+    }
+
+    switch (style.bg_color.tag) {
+        case GHOSTTY_STYLE_COLOR_PALETTE:
+            *out = renderColors.palette[style.bg_color.value.palette];
+            return true;
+        case GHOSTTY_STYLE_COLOR_RGB:
+            *out = style.bg_color.value.rgb;
+            return true;
+        case GHOSTTY_STYLE_COLOR_NONE:
+        default:
+            *out = renderColors.background;
+            return false;
+    }
+}
+
+static std::string buildCellCss(
+    const GhosttyStyle& style,
+    const GhosttyRenderStateColors& renderColors,
+    bool hasResolvedFg,
+    const GhosttyColorRgb& resolvedFg,
+    bool hasResolvedBg,
+    const GhosttyColorRgb& resolvedBg)
+{
+    GhosttyColorRgb fg =
+        resolveEffectiveForeground(style, renderColors, hasResolvedFg, resolvedFg);
+    GhosttyColorRgb bg = renderColors.background;
+    bool hasBg = resolveEffectiveBackground(style, renderColors, hasResolvedBg, resolvedBg, &bg);
+
+    if (style.inverse) {
+        const bool hasExplicitFg =
+            hasResolvedFg || style.fg_color.tag != GHOSTTY_STYLE_COLOR_NONE;
+        const bool hasExplicitBg =
+            hasBg || style.bg_color.tag != GHOSTTY_STYLE_COLOR_NONE;
+        const bool isDefaultReverseOnLightTheme =
+            !hasExplicitFg &&
+            !hasExplicitBg &&
+            colorPerceivedLuminance(renderColors.background) > 0.62;
+
+        if (isDefaultReverseOnLightTheme) {
+            const GhosttyColorRgb highlightSource =
+                renderColors.cursor_has_value ? renderColors.cursor : renderColors.foreground;
+            fg = renderColors.foreground;
+            bg = mixColors(renderColors.background, highlightSource, 0.22);
+        } else {
+            const GhosttyColorRgb originalFg = fg;
+            fg = bg;
+            bg = originalFg;
+        }
+        hasBg = true;
+    }
+
+    std::string css;
+    css.reserve(160);
+
+    if (style.invisible) {
+        css.append("color:transparent;");
+    } else if (!colorsEqual(fg, renderColors.foreground)) {
+        css.append("color:");
+        appendCssHexColor(&css, fg);
+        css.push_back(';');
+    }
+
+    if (hasBg && !colorsEqual(bg, renderColors.background)) {
+        css.append("background-color:");
+        appendCssHexColor(&css, bg);
+        css.push_back(';');
+    }
+
+    if (style.bold) {
+        css.append("font-weight:700;");
+    }
+    if (style.italic) {
+        css.append("font-style:italic;");
+    }
+    if (style.faint) {
+        css.append("opacity:0.72;");
+    }
+
+    std::string decorationLine;
+    if (style.underline != GHOSTTY_SGR_UNDERLINE_NONE) {
+        decorationLine.append(" underline");
+    }
+    if (style.strikethrough) {
+        decorationLine.append(" line-through");
+    }
+    if (style.overline) {
+        decorationLine.append(" overline");
+    }
+    if (!decorationLine.empty()) {
+        css.append("text-decoration-line:");
+        css.append(decorationLine.c_str() + 1);
+        css.push_back(';');
+    }
+
+    if (style.underline != GHOSTTY_SGR_UNDERLINE_NONE) {
+        css.append("text-decoration-style:");
+        switch (style.underline) {
+            case GHOSTTY_SGR_UNDERLINE_DOUBLE:
+                css.append("double;");
+                break;
+            case GHOSTTY_SGR_UNDERLINE_CURLY:
+                css.append("wavy;");
+                break;
+            case GHOSTTY_SGR_UNDERLINE_DOTTED:
+                css.append("dotted;");
+                break;
+            case GHOSTTY_SGR_UNDERLINE_DASHED:
+                css.append("dashed;");
+                break;
+            case GHOSTTY_SGR_UNDERLINE_SINGLE:
+            default:
+                css.append("solid;");
+                break;
+        }
+
+        GhosttyColorRgb underlineColor = {};
+        if (resolveStyleColor(style.underline_color, renderColors, &underlineColor)) {
+            css.append("text-decoration-color:");
+            appendCssHexColor(&css, underlineColor);
+            css.push_back(';');
+        }
+    }
+
+    return css;
+}
+
+static void flushStyledSegment(
+    std::string* rowHtml,
+    const std::string& css,
+    std::string* text)
+{
+    if (text->empty()) {
+        return;
+    }
+
+    if (css.empty()) {
+        rowHtml->append(*text);
+        text->clear();
+        return;
+    }
+
+    rowHtml->append("<span style=\"");
+    rowHtml->append(css);
+    rowHtml->append("\">");
+    rowHtml->append(*text);
+    rowHtml->append("</span>");
+    text->clear();
+}
+
+static std::string buildRowHtml(
+    GhosttyRenderStateRowIterator rowIterator,
+    const GhosttyRenderStateColors& renderColors)
+{
+    GhosttyRenderStateRowCells rowCells = nullptr;
+    if (ghostty_render_state_row_cells_new(nullptr, &rowCells) != GHOSTTY_SUCCESS || !rowCells) {
+        return "";
+    }
+
+    const GhosttyResult rowCellsRes = populateRowCells(rowIterator, rowCells);
+    if (rowCellsRes != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_cells_free(rowCells);
+        return "";
+    }
+
+    std::string rowHtml;
+    std::string segmentCss;
+    std::string segmentText;
+    rowHtml.reserve(256);
+    segmentText.reserve(128);
+    bool sawVisibleText = false;
+    bool sawNonDefaultBackground = false;
+    bool hasSegmentStyle = false;
+    bool segmentHasFg = false;
+    bool segmentHasBg = false;
+    bool segmentHasNonDefaultBackground = false;
+    GhosttyStyle segmentStyle = GHOSTTY_INIT_SIZED(GhosttyStyle);
+    GhosttyColorRgb segmentFg = renderColors.foreground;
+    GhosttyColorRgb segmentBg = renderColors.background;
+
+    while (ghostty_render_state_row_cells_next(rowCells)) {
+        GhosttyCell cell = 0;
+        if (ghostty_render_state_row_cells_get(
+                rowCells,
+                GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW,
+                &cell) != GHOSTTY_SUCCESS) {
+            continue;
+        }
+
+        GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+        ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide);
+        if (wide == GHOSTTY_CELL_WIDE_SPACER_TAIL || wide == GHOSTTY_CELL_WIDE_SPACER_HEAD) {
+            continue;
+        }
+
+        GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
+        ghostty_style_default(&style);
+        ghostty_render_state_row_cells_get(
+            rowCells,
+            GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE,
+            &style
+        );
+
+        GhosttyColorRgb fg = renderColors.foreground;
+        const bool hasFg =
+            ghostty_render_state_row_cells_get(
+                rowCells,
+                GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
+                &fg) == GHOSTTY_SUCCESS;
+        if (!hasFg) {
+            fg = renderColors.foreground;
+        }
+
+        GhosttyColorRgb bg = renderColors.background;
+        const bool hasBg =
+            ghostty_render_state_row_cells_get(
+                rowCells,
+                GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR,
+                &bg) == GHOSTTY_SUCCESS;
+
+        const bool sameSegmentStyle =
+            hasSegmentStyle &&
+            segmentHasFg == hasFg &&
+            segmentHasBg == hasBg &&
+            colorsEqual(segmentFg, fg) &&
+            colorsEqual(segmentBg, bg) &&
+            stylesEquivalent(segmentStyle, style);
+
+        if (!sameSegmentStyle && !segmentText.empty()) {
+            flushStyledSegment(&rowHtml, segmentCss, &segmentText);
+        }
+
+        if (!sameSegmentStyle) {
+            segmentCss = buildCellCss(style, renderColors, hasFg, fg, hasBg, bg);
+            segmentStyle = style;
+            segmentHasFg = hasFg;
+            segmentHasBg = hasBg;
+            segmentFg = fg;
+            segmentBg = bg;
+            segmentHasNonDefaultBackground =
+                segmentCss.find("background-color:") != std::string::npos;
+            hasSegmentStyle = true;
+        }
+
+        if (segmentHasNonDefaultBackground) {
+            sawNonDefaultBackground = true;
+        }
+
+        const bool preserveBlankCell = true;
+        if (appendCellText(rowCells, cell, preserveBlankCell, &segmentText)) {
+            sawVisibleText = true;
+        }
+    }
+
+    if (!segmentHasNonDefaultBackground) {
+        while (!segmentText.empty() && segmentText.back() == ' ') {
+            segmentText.pop_back();
+        }
+    }
+    flushStyledSegment(&rowHtml, segmentCss, &segmentText);
+    ghostty_render_state_row_cells_free(rowCells);
+    if (!sawNonDefaultBackground && !sawVisibleText && !htmlHasVisibleText(rowHtml)) {
+        return "";
+    }
+    return rowHtml;
+}
+
+static void readRowWrapFlags(
+    GhosttyRenderStateRowIterator rowIterator,
+    bool* wrap,
+    bool* wrapContinuation)
+{
+    if (wrap) {
+        *wrap = false;
+    }
+    if (wrapContinuation) {
+        *wrapContinuation = false;
+    }
+    if (!rowIterator) {
+        return;
+    }
+
+    GhosttyRow row = 0;
+    if (ghostty_render_state_row_get(
+            rowIterator,
+            GHOSTTY_RENDER_STATE_ROW_DATA_RAW,
+            &row) != GHOSTTY_SUCCESS) {
+        return;
+    }
+
+    if (wrap) {
+        bool value = false;
+        if (ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP, &value) == GHOSTTY_SUCCESS) {
+            *wrap = value;
+        }
+    }
+    if (wrapContinuation) {
+        bool value = false;
+        if (ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &value) == GHOSTTY_SUCCESS) {
+            *wrapContinuation = value;
+        }
+    }
+}
+
+static void appendVisibleHtmlRow(
+    std::string* out,
+    uint16_t rowIndex,
+    bool wrap,
+    bool wrapContinuation,
+    const std::string& rowHtml)
+{
+    out->append("<div class=\"terminal-row\" data-row=\"");
+    out->append(std::to_string(rowIndex));
+    out->append("\" data-wrap=\"");
+    out->append(wrap ? "1" : "0");
+    out->append("\" data-wrap-continuation=\"");
+    out->append(wrapContinuation ? "1" : "0");
+    out->append("\">");
+    out->append(rowHtml);
+    out->append("</div>");
+}
+
+static bool buildVisibleHtml(
+    GhosttyRenderState renderState,
+    uint16_t expectedRows,
+    std::string* out)
+{
+    if (!renderState || !out) {
+        return false;
+    }
+
+    GhosttyRenderStateColors renderColors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+    ghostty_render_state_colors_get(renderState, &renderColors);
+
+    GhosttyRenderStateRowIterator rowIterator = nullptr;
+    if (ghostty_render_state_row_iterator_new(nullptr, &rowIterator) != GHOSTTY_SUCCESS || !rowIterator) {
+        return false;
+    }
+
+    const GhosttyResult rowIteratorRes = populateRowIterator(renderState, rowIterator);
+    if (rowIteratorRes != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_iterator_free(rowIterator);
+        return false;
+    }
+
+    out->clear();
+    out->reserve(static_cast<size_t>(expectedRows) * 96);
+
+    uint16_t rowIndex = 0;
+    while (ghostty_render_state_row_iterator_next(rowIterator)) {
+        bool wrap = false;
+        bool wrapContinuation = false;
+        readRowWrapFlags(rowIterator, &wrap, &wrapContinuation);
+        appendVisibleHtmlRow(
+            out,
+            rowIndex,
+            wrap,
+            wrapContinuation,
+            buildRowHtml(rowIterator, renderColors)
+        );
+        rowIndex += 1;
+    }
+
+    ghostty_render_state_row_iterator_free(rowIterator);
+    return rowIndex == expectedRows;
+}
+
+struct RenderRowUpdates {
+    bool full = false;
+    std::vector<uint16_t> indices;
+    std::vector<std::string> html;
+};
+
+// Shared by Android and iOS. Ghostty's full-dirty flag can also mean a redraw
+// of identical cells; only lifecycle/geometry/theme resets require a new base.
+static bool buildRenderRowUpdates(
+    TerminalHandle* h,
+    uint16_t rows,
+    uint16_t cols,
+    GhosttyRenderStateDirty dirty,
+    RenderRowUpdates* out)
+{
+    out->full = h->force_full_snapshot || h->rendered_rows.size() != rows ||
+        h->rendered_cols != cols;
+    out->indices.clear();
+    out->html.clear();
+    GhosttyRenderStateRowIterator iterator = nullptr;
+    if (ghostty_render_state_row_iterator_new(nullptr, &iterator) != GHOSTTY_SUCCESS || !iterator) {
+        return false;
+    }
+    if (populateRowIterator(h->render_state, iterator) != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_iterator_free(iterator);
+        return false;
+    }
+    GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+    ghostty_render_state_colors_get(h->render_state, &colors);
+    h->rendered_rows.resize(rows);
+    size_t index = 0;
+    while (ghostty_render_state_row_iterator_next(iterator)) {
+        if (index >= rows) break;
+        bool rowDirty = true;
+        ghostty_render_state_row_get(iterator, GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY, &rowDirty);
+        if (out->full || dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL || rowDirty) {
+            bool wrap = false, continuation = false;
+            readRowWrapFlags(iterator, &wrap, &continuation);
+            std::string html;
+            appendVisibleHtmlRow(&html, static_cast<uint16_t>(index), wrap, continuation,
+                buildRowHtml(iterator, colors));
+            if (out->full || html != h->rendered_rows[index]) {
+                out->indices.push_back(static_cast<uint16_t>(index));
+                out->html.push_back(html);
+                h->rendered_rows[index] = std::move(html);
+            }
+        }
+        index++;
+    }
+    ghostty_render_state_row_iterator_free(iterator);
+    if (index != rows) {
+        h->force_full_snapshot = true;
+        return false;
+    }
+    h->rendered_cols = cols;
+    return true;
+}
+
+static void clearRenderStateDirty(GhosttyRenderState renderState) {
+    if (!renderState) {
+        return;
+    }
+
+    GhosttyRenderStateDirty clean = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
+    ghostty_render_state_set(renderState, GHOSTTY_RENDER_STATE_OPTION_DIRTY, &clean);
+
+    GhosttyRenderStateRowIterator rowIterator = nullptr;
+    if (ghostty_render_state_row_iterator_new(nullptr, &rowIterator) != GHOSTTY_SUCCESS || !rowIterator) {
+        return;
+    }
+
+    if (populateRowIterator(renderState, rowIterator) != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_iterator_free(rowIterator);
+        return;
+    }
+
+    const bool cleanRow = false;
+    while (ghostty_render_state_row_iterator_next(rowIterator)) {
+        ghostty_render_state_row_set(
+            rowIterator,
+            GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY,
+            &cleanRow
+        );
+    }
+
+    ghostty_render_state_row_iterator_free(rowIterator);
+}
+
+static uint32_t roundPositivePixels(float value) {
+    if (!std::isfinite(value) || value <= 0) {
+        return 1;
+    }
+
+    const long rounded = std::lround(value);
+    return rounded > 0 ? static_cast<uint32_t>(rounded) : 1;
+}
+
+static uint32_t safeScreenPixels(uint16_t cells, uint32_t cellPixels) {
+    const uint64_t screen = static_cast<uint64_t>(cells) * static_cast<uint64_t>(cellPixels);
+    return screen > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(screen);
+}
+
+static bool parseHexColor(const char* value, GhosttyColorRgb* out) {
+    if (!value || !out) {
+        return false;
+    }
+
+    const char* hex = value[0] == '#' ? value + 1 : value;
+    if (std::strlen(hex) != 6) {
+        return false;
+    }
+
+    char* end = nullptr;
+    const unsigned long rgb = std::strtoul(hex, &end, 16);
+    if (!end || end != hex + 6 || *end != '\0') {
+        return false;
+    }
+
+    out->r = static_cast<uint8_t>((rgb >> 16) & 0xFF);
+    out->g = static_cast<uint8_t>((rgb >> 8) & 0xFF);
+    out->b = static_cast<uint8_t>(rgb & 0xFF);
+    return true;
+}
+
+#if defined(__ANDROID__)
+static bool parseHexColorString(JNIEnv* env, jstring value, GhosttyColorRgb* out) {
+    if (!env || !value || !out) {
+        return false;
+    }
+
+    const char* utf8 = env->GetStringUTFChars(value, nullptr);
+    if (!utf8) {
+        return false;
+    }
+
+    const bool ok = parseHexColor(utf8, out);
+    env->ReleaseStringUTFChars(value, utf8);
+    return ok;
+}
+#endif
+
+static bool setTerminalOption(
+    TerminalHandle* h,
+    GhosttyTerminalOption option,
+    const void* value,
+    const char* label)
+{
+    if (!h || !h->terminal) {
+        return false;
+    }
+
+    const GhosttyResult res = ghostty_terminal_set(h->terminal, option, value);
+    if (res != GHOSTTY_SUCCESS) {
+        LOGE("ghostty_terminal_set %s failed: %d", label, res);
+        return false;
+    }
+
+    return true;
+}
+
+static bool decodeMouseAction(int action, GhosttyMouseAction* out) {
+    if (!out) {
+        return false;
+    }
+
+    switch (action) {
+        case 0:
+            *out = GHOSTTY_MOUSE_ACTION_PRESS;
+            return true;
+        case 1:
+            *out = GHOSTTY_MOUSE_ACTION_RELEASE;
+            return true;
+        case 2:
+            *out = GHOSTTY_MOUSE_ACTION_MOTION;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool decodeMouseButton(int button, GhosttyMouseButton* out, bool* hasButton) {
+    if (!out || !hasButton) {
+        return false;
+    }
+
+    switch (button) {
+        case 0:
+            *hasButton = false;
+            *out = GHOSTTY_MOUSE_BUTTON_UNKNOWN;
+            return true;
+        case 1:
+            *hasButton = true;
+            *out = GHOSTTY_MOUSE_BUTTON_LEFT;
+            return true;
+        case 2:
+            *hasButton = true;
+            *out = GHOSTTY_MOUSE_BUTTON_RIGHT;
+            return true;
+        case 3:
+            *hasButton = true;
+            *out = GHOSTTY_MOUSE_BUTTON_MIDDLE;
+            return true;
+        case 4:
+            *hasButton = true;
+            *out = GHOSTTY_MOUSE_BUTTON_FOUR;
+            return true;
+        case 5:
+            *hasButton = true;
+            *out = GHOSTTY_MOUSE_BUTTON_FIVE;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static std::string encodeMouseSequence(
+    TerminalHandle* h,
+    GhosttyMouseAction action,
+    GhosttyMouseButton button,
+    bool hasButton,
+    float x,
+    float y,
+    GhosttyMods mods,
+    bool anyButtonPressed)
+{
+    if (!h || !h->mouse_encoder) {
+        return {};
+    }
+
+    GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+    size.screen_width = safeScreenPixels(h->cols, h->cell_width_px);
+    size.screen_height = safeScreenPixels(h->rows, h->cell_height_px);
+    size.cell_width = h->cell_width_px;
+    size.cell_height = h->cell_height_px;
+
+    ghostty_mouse_encoder_setopt_from_terminal(h->mouse_encoder, h->terminal);
+    ghostty_mouse_encoder_setopt(h->mouse_encoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    ghostty_mouse_encoder_setopt(
+        h->mouse_encoder,
+        GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED,
+        &anyButtonPressed
+    );
+
+    if (action != GHOSTTY_MOUSE_ACTION_MOTION) {
+        ghostty_mouse_encoder_reset(h->mouse_encoder);
+    }
+
+    GhosttyMouseEvent event = nullptr;
+    GhosttyResult res = ghostty_mouse_event_new(nullptr, &event);
+    if (res != GHOSTTY_SUCCESS || !event) {
+        LOGE("ghostty_mouse_event_new failed: %d", res);
+        return {};
+    }
+
+    ghostty_mouse_event_set_action(event, action);
+    if (hasButton) {
+        ghostty_mouse_event_set_button(event, button);
+    } else {
+        ghostty_mouse_event_clear_button(event);
+    }
+    ghostty_mouse_event_set_mods(event, mods);
+    ghostty_mouse_event_set_position(event, GhosttyMousePosition{ .x = x, .y = y });
+
+    char stackBuffer[kMouseStackBufferSize] = {};
+    size_t outLen = 0;
+    res = ghostty_mouse_encoder_encode(
+        h->mouse_encoder,
+        event,
+        stackBuffer,
+        sizeof(stackBuffer),
+        &outLen
+    );
+
+    if (res == GHOSTTY_OUT_OF_SPACE && outLen > sizeof(stackBuffer)) {
+        std::string dynamicBuffer(outLen, '\0');
+        res = ghostty_mouse_encoder_encode(
+            h->mouse_encoder,
+            event,
+            dynamicBuffer.data(),
+            dynamicBuffer.size(),
+            &outLen
+        );
+        ghostty_mouse_event_free(event);
+        if (res != GHOSTTY_SUCCESS || outLen == 0) {
+            return {};
+        }
+        dynamicBuffer.resize(outLen);
+        return dynamicBuffer;
+    }
+
+    ghostty_mouse_event_free(event);
+    if (res != GHOSTTY_SUCCESS || outLen == 0) {
+        return {};
+    }
+
+    return std::string(stackBuffer, outLen);
+}
+
+#if defined(__ANDROID__)
+extern "C" {
+
+JNIEXPORT jlong JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeCreateTerminal(
+    JNIEnv* env, jobject, jint cols, jint rows)
+{
+    auto* h = new TerminalHandle();
+    h->cols = (uint16_t)cols;
+    h->rows = (uint16_t)rows;
+
+    GhosttyTerminalOptions opts = {};
+    opts.cols = h->cols;
+    opts.rows = h->rows;
+    opts.max_scrollback = kDefaultScrollbackRows;
+
+    GhosttyResult res = ghostty_terminal_new(nullptr, &h->terminal, opts);
+    if (res != GHOSTTY_SUCCESS) {
+        LOGE("ghostty_terminal_new failed: %d", res);
+        delete h;
+        return 0;
+    }
+
+    res = ghostty_render_state_new(nullptr, &h->render_state);
+    if (res != GHOSTTY_SUCCESS) {
+        LOGE("ghostty_render_state_new failed: %d", res);
+        ghostty_terminal_free(h->terminal);
+        delete h;
+        return 0;
+    }
+
+    res = createHtmlFormatter(h, &h->html_formatter);
+    if (res != GHOSTTY_SUCCESS) {
+        LOGE("html formatter init failed: %d", res);
+        ghostty_render_state_free(h->render_state);
+        ghostty_terminal_free(h->terminal);
+        delete h;
+        return 0;
+    }
+
+    res = ghostty_mouse_encoder_new(nullptr, &h->mouse_encoder);
+    if (res != GHOSTTY_SUCCESS) {
+        LOGE("mouse encoder init failed: %d", res);
+        ghostty_formatter_free(h->html_formatter);
+        ghostty_render_state_free(h->render_state);
+        ghostty_terminal_free(h->terminal);
+        delete h;
+        return 0;
+    }
+
+    const bool trackLastCell = true;
+    ghostty_mouse_encoder_setopt(
+        h->mouse_encoder,
+        GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL,
+        &trackLastCell
+    );
+
+    LOGI("Terminal created: %dx%d", cols, rows);
+    return reinterpret_cast<jlong>(h);
+}
+
+JNIEXPORT void JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeDestroyTerminal(
+    JNIEnv*, jobject, jlong handle)
+{
+    auto* h = getHandle(handle);
+    if (!h) return;
+
+    ghostty_mouse_encoder_free(h->mouse_encoder);
+    ghostty_formatter_free(h->html_formatter);
+    ghostty_render_state_free(h->render_state);
+    ghostty_terminal_free(h->terminal);
+    delete h;
+    LOGI("Terminal destroyed");
+}
+
+JNIEXPORT void JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeWriteData(
+    JNIEnv* env, jobject, jlong handle, jstring data)
+{
+    auto* h = getHandle(handle);
+    if (!h) return;
+
+    const char* utf8 = env->GetStringUTFChars(data, nullptr);
+    if (!utf8) return;
+
+    jsize len = env->GetStringUTFLength(data);
+    ghostty_terminal_vt_write(
+        h->terminal,
+        reinterpret_cast<const uint8_t*>(utf8),
+        (size_t)len
+    );
+    env->ReleaseStringUTFChars(data, utf8);
+}
+
+JNIEXPORT void JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeResize(
+    JNIEnv*, jobject, jlong handle,
+    jint cols, jint rows, jfloat cellWidth, jfloat cellHeight)
+{
+    auto* h = getHandle(handle);
+    if (!h) return;
+
+    h->cols = (uint16_t)cols;
+    h->rows = (uint16_t)rows;
+    h->cell_width_px = roundPositivePixels(cellWidth);
+    h->cell_height_px = roundPositivePixels(cellHeight);
+
+    ghostty_terminal_resize(
+        h->terminal,
+        h->cols,
+        h->rows,
+        h->cell_width_px,
+        h->cell_height_px
+    );
+    markFullSnapshot(h);
+}
+JNIEXPORT void JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeSetTheme(
+    JNIEnv* env, jobject, jlong handle,
+    jstring foreground, jstring background, jstring cursor, jobjectArray palette)
+{
+    auto* h = getHandle(handle);
+    if (!h || !palette) return;
+
+    GhosttyColorRgb fg = {};
+    GhosttyColorRgb bg = {};
+    GhosttyColorRgb cursorColor = {};
+    if (!parseHexColorString(env, foreground, &fg) ||
+        !parseHexColorString(env, background, &bg) ||
+        !parseHexColorString(env, cursor, &cursorColor)) {
+        LOGE("nativeSetTheme received an invalid theme color");
+        return;
+    }
+
+    const jsize paletteLen = env->GetArrayLength(palette);
+    if (paletteLen < 256) {
+        LOGE("nativeSetTheme palette too small: %d", static_cast<int>(paletteLen));
+        return;
+    }
+
+    std::array<GhosttyColorRgb, 256> paletteColors = {};
+    for (jsize i = 0; i < 256; i += 1) {
+        auto* entry = static_cast<jstring>(env->GetObjectArrayElement(palette, i));
+        const bool ok = entry && parseHexColorString(env, entry, &paletteColors[static_cast<size_t>(i)]);
+        if (entry) {
+            env->DeleteLocalRef(entry);
+        }
+        if (!ok) {
+            LOGE("nativeSetTheme invalid palette color at index %d", static_cast<int>(i));
+            return;
+        }
+    }
+
+    if (!setTerminalOption(h, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg, "foreground") ||
+        !setTerminalOption(h, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg, "background") ||
+        !setTerminalOption(h, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &cursorColor, "cursor") ||
+        !setTerminalOption(h, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, paletteColors.data(), "palette")) {
+        return;
+    }
+
+    markFullSnapshot(h);
+}
+
+JNIEXPORT jstring JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeEncodeMouseEvent(
+    JNIEnv* env, jobject, jlong handle, jint action, jint button,
+    jfloat x, jfloat y, jint mods, jboolean anyButtonPressed)
+{
+    auto* h = getHandle(handle);
+    if (!h) {
+        return env->NewStringUTF("");
+    }
+
+    GhosttyMouseAction decodedAction = GHOSTTY_MOUSE_ACTION_PRESS;
+    if (!decodeMouseAction(action, &decodedAction)) {
+        return env->NewStringUTF("");
+    }
+
+    GhosttyMouseButton decodedButton = GHOSTTY_MOUSE_BUTTON_UNKNOWN;
+    bool hasButton = false;
+    if (!decodeMouseButton(button, &decodedButton, &hasButton)) {
+        return env->NewStringUTF("");
+    }
+
+    const std::string encoded = encodeMouseSequence(
+        h,
+        decodedAction,
+        decodedButton,
+        hasButton,
+        x,
+        y,
+        static_cast<GhosttyMods>(mods),
+        anyButtonPressed == JNI_TRUE
+    );
+    return newStringFromStdString(env, encoded);
+}
+
+JNIEXPORT jobject JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeGetRenderSnapshot(
+    JNIEnv* env, jobject, jlong handle)
+{
+    auto* h = getHandle(handle);
+
+    // Build result HashMap
+    jclass mapClass = env->FindClass("java/util/HashMap");
+    jmethodID mapInit = env->GetMethodID(mapClass, "<init>", "()V");
+    jmethodID mapPut = env->GetMethodID(mapClass, "put",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject map = env->NewObject(mapClass, mapInit);
+
+    jclass intClass = env->FindClass("java/lang/Integer");
+    jmethodID intOf = env->GetStaticMethodID(intClass, "valueOf", "(I)Ljava/lang/Integer;");
+    jclass boolClass = env->FindClass("java/lang/Boolean");
+    jmethodID boolOf = env->GetStaticMethodID(boolClass, "valueOf", "(Z)Ljava/lang/Boolean;");
+
+    auto putStr = [&](const char* key, const char* val) {
+        env->CallObjectMethod(map, mapPut, env->NewStringUTF(key), env->NewStringUTF(val));
+    };
+    auto putInt = [&](const char* key, jint val) {
+        env->CallObjectMethod(map, mapPut, env->NewStringUTF(key),
+            env->CallStaticObjectMethod(intClass, intOf, val));
+    };
+    auto putBool = [&](const char* key, bool val) {
+        env->CallObjectMethod(map, mapPut, env->NewStringUTF(key),
+            env->CallStaticObjectMethod(boolClass, boolOf, (jboolean)val));
+    };
+
+    if (!h) {
+        putStr("dirty", "none");
+        return map;
+    }
+
+    // Update render state from terminal before formatting the visible viewport.
+    if (ghostty_render_state_update(h->render_state, h->terminal) != GHOSTTY_SUCCESS) {
+        putStr("dirty", "none");
+        return map;
+    }
+
+    uint16_t renderRows = h->rows;
+    uint16_t renderCols = h->cols;
+    ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_ROWS, &renderRows);
+    ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_COLS, &renderCols);
+
+    GhosttyRenderStateDirty dirty = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
+    ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_DIRTY, &dirty);
+    if (h->force_full_snapshot) {
+        dirty = GHOSTTY_RENDER_STATE_DIRTY_FULL;
+    }
+
+    const char* dirtyStr = "none";
+    if (dirty == GHOSTTY_RENDER_STATE_DIRTY_PARTIAL) {
+        dirtyStr = "partial";
+    } else if (dirty == GHOSTTY_RENDER_STATE_DIRTY_FULL) {
+        dirtyStr = "full";
+    }
+
+    putStr("dirty", dirtyStr);
+    putInt("rows", (jint)renderRows);
+    putInt("cols", (jint)renderCols);
+    if (dirty == GHOSTTY_RENDER_STATE_DIRTY_FALSE) {
+        return map;
+    }
+
+    // Cursor
+    bool cursorInViewport = false;
+    ghostty_render_state_get(h->render_state,
+        GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE, &cursorInViewport);
+
+    if (cursorInViewport) {
+        uint16_t cx = 0, cy = 0;
+        ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);
+        ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
+        putInt("cursorCol", (jint)cx);
+        putInt("cursorRow", (jint)cy);
+
+        bool cursorVisible = false;
+        ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE, &cursorVisible);
+        putBool("cursorVisible", cursorVisible);
+    } else {
+        putInt("cursorCol", 0);
+        putInt("cursorRow", 0);
+        putBool("cursorVisible", false);
+    }
+
+    RenderRowUpdates updates;
+    if (!buildRenderRowUpdates(h, renderRows, renderCols, dirty, &updates)) {
+        h->force_full_snapshot = true;
+        putStr("dirty", "none");
+        return map;
+    }
+    putStr("dirty", updates.full ? "full" : "partial");
+    jclass listClass = env->FindClass("java/util/ArrayList");
+    jmethodID listInit = env->GetMethodID(listClass, "<init>", "(I)V");
+    jmethodID listAdd = env->GetMethodID(listClass, "add", "(Ljava/lang/Object;)Z");
+    jobject lines = env->NewObject(listClass, listInit, static_cast<jint>(updates.html.size()));
+    jobject indices = env->NewObject(listClass, listInit, static_cast<jint>(updates.indices.size()));
+    for (size_t i = 0; i < updates.html.size(); i++) {
+        env->PushLocalFrame(16);
+        env->CallBooleanMethod(lines, listAdd, newStringFromStdString(env, updates.html[i]));
+        env->CallBooleanMethod(indices, listAdd,
+            env->CallStaticObjectMethod(intClass, intOf, static_cast<jint>(updates.indices[i])));
+        env->PopLocalFrame(nullptr);
+    }
+    env->CallObjectMethod(map, mapPut, env->NewStringUTF("lineHtml"), lines);
+    env->CallObjectMethod(map, mapPut, env->NewStringUTF("dirtyLines"), indices);
+
+    h->force_full_snapshot = false;
+    clearRenderStateDirty(h->render_state);
+
+    return map;
+}
+
+JNIEXPORT jstring JNICALL
+Java_expo_modules_terminalvt_TerminalVtModule_nativeGetVisibleHtml(
+    JNIEnv* env, jobject, jlong handle)
+{
+    auto* h = getHandle(handle);
+    if (!h) {
+        return env->NewStringUTF("");
+    }
+
+    if (ghostty_render_state_update(h->render_state, h->terminal) != GHOSTTY_SUCCESS) {
+        return newStringFromStdString(env, formatTerminalScreen(h));
+    }
+
+    uint16_t renderRows = h->rows;
+    ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_ROWS, &renderRows);
+
+    std::string visibleHtml;
+    if (buildVisibleHtml(h->render_state, renderRows, &visibleHtml)) {
+        return newStringFromStdString(env, visibleHtml);
+    }
+
+    return newStringFromStdString(env, formatTerminalScreen(h));
+}
+
+} // extern "C"
+#endif // defined(__ANDROID__)

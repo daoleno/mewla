@@ -10,9 +10,7 @@ const {
 
 const IDENTITY_ENV_KEYS = [
   "MEWLA_IOS_APP_VARIANT",
-  "ZEN_IOS_APP_VARIANT",
   "MEWLA_IOS_BUILD_NUMBER",
-  "ZEN_IOS_BUILD_NUMBER",
 ];
 
 // Shell or CI identity variables must not leak into these assertions.
@@ -83,26 +81,7 @@ describe("native platform config", () => {
     expect(preview.android).toEqual(config.android);
   });
 
-  it("reads only MEWLA_* identity variables", () => {
-    const ignored = withIdentityEnv(
-      { ZEN_IOS_APP_VARIANT: "preview", ZEN_IOS_BUILD_NUMBER: "77" },
-      () => createConfig(),
-    );
-    expect(ignored.ios.bundleIdentifier).toBe("com.daoleno.mewla");
-    expect(ignored.ios.buildNumber).toBe(String(trackedIOSBuildNumber));
-
-    const preferred = withIdentityEnv(
-      {
-        MEWLA_IOS_APP_VARIANT: "production",
-        ZEN_IOS_APP_VARIANT: "preview",
-        MEWLA_IOS_BUILD_NUMBER: "88",
-        ZEN_IOS_BUILD_NUMBER: "77",
-      },
-      () => createConfig(),
-    );
-    expect(preferred.ios.bundleIdentifier).toBe("com.daoleno.mewla");
-    expect(preferred.ios.buildNumber).toBe("88");
-
+  it("rejects a non-integer MEWLA_IOS_BUILD_NUMBER", () => {
     expect(() =>
       withIdentityEnv({ MEWLA_IOS_BUILD_NUMBER: "beta" }, () => createConfig()),
     ).toThrow("MEWLA_IOS_BUILD_NUMBER must be a positive integer");
@@ -154,7 +133,7 @@ describe("native platform config", () => {
   });
 
   it("includes the tracked Android plugin that enables private-network HTTP", () => {
-    expect(config.plugins).toContain("./plugins/withZenAndroidRelease");
+    expect(config.plugins).toContain("./plugins/withAndroidRelease");
   });
 
   it("accepts an explicit monotonically increasing CI build number", () => {

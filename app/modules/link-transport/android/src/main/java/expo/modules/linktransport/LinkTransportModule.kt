@@ -1,0 +1,272 @@
+package expo.modules.linktransport
+
+import expo.modules.kotlin.modules.Module
+import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.Closeable
+import java.io.IOException
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.Semaphore
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SNIHostName
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.X509TrustManager
+
+class LinkTransportModule : Module() {
+    private val proxies = ConcurrentHashMap<String, PinnedProxy>()
+
+    override fun definition() = ModuleDefinition {
+        Name("LinkTransport")
+
+        AsyncFunction("start") { key: String, host: String, port: Int, pin: String, mode: String ->
+            validateInput(key, host, port, pin, mode)
+            proxies[key]?.let { existing ->
+                if (existing.matches(host, port, pin, mode)) {
+                    return@AsyncFunction mapOf(
+                        "port" to existing.localPort,
+                        "rttMs" to existing.lastRttMs,
+                    )
+                }
+                existing.close()
+                proxies.remove(key, existing)
+            }
+            val proxy = PinnedProxy(host, port, pin, mode == "measure")
+            try {
+                proxy.start()
+                proxies[key] = proxy
+                mapOf("port" to proxy.localPort, "rttMs" to proxy.lastRttMs)
+            } catch (error: Throwable) {
+                proxy.close()
+                throw IllegalStateException("Mewla Link could not reach a pinned relay candidate.", error)
+            }
+        }
+
+        AsyncFunction("stop") { key: String ->
+            proxies.remove(key)?.close()
+        }
+
+        AsyncFunction("stopAll") {
+            stopAll()
+        }
+
+        OnDestroy {
+            stopAll()
+        }
+    }
+
+    private fun stopAll() {
+        val current = proxies.values.toList()
+        proxies.clear()
+        current.forEach { it.close() }
+    }
+
+    private fun validateInput(key: String, host: String, port: Int, pin: String, mode: String) {
+        require(key.isNotBlank()) { "Mewla Link tunnel key is required." }
+        require(host.isNotBlank() && !host.contains('/') && !host.contains('\u0000')) {
+            "Mewla Link host is invalid."
+        }
+        require(port in 1..65535) { "Mewla Link port is invalid." }
+        require(pin.matches(Regex("^[0-9a-fA-F]{64}$"))) {
+            "Mewla Link SPKI pin is invalid."
+        }
+        require(mode == "measure" || mode == "on-demand") {
+            "Mewla Link tunnel mode is invalid."
+        }
+    }
+}
+
+internal class PinnedProxy(
+    private val host: String,
+    private val port: Int,
+    private val pin: String,
+    private val measureBeforeListen: Boolean,
+) : Closeable {
+    private val running = AtomicBoolean(false)
+    private val worker = Executors.newCachedThreadPool { task ->
+        Thread(task, "link-transport").apply { isDaemon = true }
+    }
+    private val connectionLimit = Semaphore(64)
+    private val openSockets = ConcurrentHashMap.newKeySet<Socket>()
+    private val sslContext = pinnedSSLContext(pin)
+    private lateinit var listener: ServerSocket
+
+    var localPort: Int = 0
+        private set
+    var lastRttMs: Int = 0
+        private set
+
+    fun matches(
+        otherHost: String,
+        otherPort: Int,
+        otherPin: String,
+        mode: String,
+    ): Boolean =
+        host == otherHost &&
+            port == otherPort &&
+            pin.equals(otherPin, ignoreCase = true) &&
+            measureBeforeListen == (mode == "measure") &&
+            running.get()
+
+    fun start() {
+        if (measureBeforeListen) {
+            val startedAt = System.nanoTime()
+            createRemoteSocket().use { remote ->
+                remote.startHandshake()
+            }
+            lastRttMs = maxOf(1, ((System.nanoTime() - startedAt) / 1_000_000L).toInt())
+        }
+
+        listener = ServerSocket()
+        listener.reuseAddress = true
+        listener.bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 64)
+        localPort = listener.localPort
+        running.set(true)
+        PinnedEndpointRegistry.register(localPort, pin, this)
+        worker.execute { acceptLoop() }
+    }
+
+    private fun acceptLoop() {
+        while (running.get()) {
+            val local = try {
+                listener.accept()
+            } catch (_: Throwable) {
+                close()
+                break
+            }
+            if (!connectionLimit.tryAcquire()) {
+                closeQuietly(local)
+                continue
+            }
+            openSockets.add(local)
+            try {
+                worker.execute {
+                    try {
+                        bridge(local)
+                    } catch (_: IOException) {
+                        // A failed or cancelled connection must not kill the app.
+                    } catch (_: RejectedExecutionException) {
+                        // close() can stop the pool while this owner starts its pumps.
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                    } finally {
+                        openSockets.remove(local)
+                        closeQuietly(local)
+                        connectionLimit.release()
+                    }
+                }
+            } catch (_: RejectedExecutionException) {
+                openSockets.remove(local)
+                closeQuietly(local)
+                connectionLimit.release()
+            }
+        }
+    }
+
+    private fun bridge(local: Socket) {
+        val remote = createRemoteSocket()
+        openSockets.add(remote)
+        try {
+            remote.startHandshake()
+            remote.soTimeout = 0
+            val done = CountDownLatch(2)
+            worker.execute { pumpSocket(local, remote, done) }
+            worker.execute { pumpSocket(remote, local, done) }
+            done.await()
+        } finally {
+            openSockets.remove(remote)
+            closeQuietly(remote)
+        }
+    }
+
+    private fun createRemoteSocket(): SSLSocket {
+        val plain = Socket()
+        try {
+            plain.tcpNoDelay = true
+            plain.keepAlive = true
+            plain.connect(InetSocketAddress(host, port), 5_000)
+            val socket = sslContext.socketFactory.createSocket(plain, pinnedServerName(host), port, true) as SSLSocket
+            socket.enabledProtocols = arrayOf("TLSv1.3")
+            val parameters = socket.sslParameters
+            parameters.serverNames = listOf(SNIHostName(pinnedServerName(host)))
+            socket.sslParameters = parameters
+            socket.soTimeout = 15_000
+            return socket
+        } catch (error: Throwable) {
+            closeQuietly(plain)
+            throw error
+        }
+    }
+
+    override fun close() {
+        PinnedEndpointRegistry.remove(localPort, this)
+        if (!running.getAndSet(false) && !::listener.isInitialized) {
+            worker.shutdownNow()
+            return
+        }
+        if (::listener.isInitialized) {
+            closeQuietly(listener)
+        }
+        openSockets.forEach(::closeQuietly)
+        openSockets.clear()
+        worker.shutdownNow()
+    }
+}
+
+internal fun pumpSocket(source: Socket, destination: Socket, done: CountDownLatch) {
+    try {
+        source.getInputStream().copyTo(destination.getOutputStream(), 32 * 1024)
+        runCatching { destination.shutdownOutput() }
+    } catch (_: IOException) {
+        // Wake the other pump as well; a reset cannot leave its owner waiting.
+        closeQuietly(source)
+        closeQuietly(destination)
+    } finally {
+        done.countDown()
+    }
+}
+
+private fun pinnedSSLContext(pinHex: String): SSLContext {
+    val expected = pinHex.lowercase().chunked(2)
+        .map { it.toInt(16).toByte() }
+        .toByteArray()
+    val trustManager = object : X509TrustManager {
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+            throw java.security.cert.CertificateException("Client certificates are unsupported.")
+        }
+
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+            val leaf = chain.firstOrNull()
+                ?: throw java.security.cert.CertificateException("Mewla Link peer sent no certificate.")
+            val actual = MessageDigest.getInstance("SHA-256").digest(leaf.publicKey.encoded)
+            if (!MessageDigest.isEqual(actual, expected)) {
+                throw java.security.cert.CertificateException("Mewla Link transport certificate pin mismatch.")
+            }
+        }
+    }
+    return SSLContext.getInstance("TLSv1.3").apply {
+        init(null, arrayOf(trustManager), SecureRandom())
+    }
+}
+
+internal fun pinnedServerName(host: String): String {
+    val literal = host.trim().removePrefix("[").removeSuffix("]")
+    return if (':' in literal || literal.matches(Regex("""^\d{1,3}(?:\.\d{1,3}){3}$"""))) {
+        "mewla-desktop.invalid"
+    } else host
+}
+
+private fun closeQuietly(closeable: Closeable) {
+    runCatching { closeable.close() }
+}
