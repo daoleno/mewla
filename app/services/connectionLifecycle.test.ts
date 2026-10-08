@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
 import {
+  brainScreenSurface,
   createConnectedReadRefreshHandler,
   decideDisconnectLifecycle,
   resolveBrainActiveServerId,
@@ -239,5 +240,34 @@ describe("resume presentation for composer and status", () => {
         sending: false,
       }),
     ).toBe("Daemon unreachable");
+  });
+});
+
+describe("Brain screen while it wakes", () => {
+  const base = { hasServer: true, hydrated: false, hasHostWorker: false, structuredEvents: false };
+
+  test("connecting or awaiting the first snapshot shows the loading chat, not a status card", () => {
+    expect(brainScreenSurface({ ...base, connection: "connecting" })).toBe("waking");
+    expect(brainScreenSurface({ ...base, connection: "connected" })).toBe("waking");
+    // The composer there says it is connecting rather than freezing silently.
+    expect(
+      buildChatComposerPlaceholder({
+        agentKind: "codex",
+        connectionState: "connecting",
+        slashQueryActive: false,
+      }),
+    ).toBe("Connecting…");
+  });
+
+  test("no computer or an offline one keeps the status card", () => {
+    expect(brainScreenSurface({ ...base, hasServer: false, connection: "offline" })).toBe("status");
+    expect(brainScreenSurface({ ...base, connection: "offline" })).toBe("status");
+  });
+
+  test("a hydrated Brain is the chat, cached through a dropped link", () => {
+    const hydrated = { ...base, hydrated: true, hasHostWorker: true, structuredEvents: true };
+    expect(brainScreenSurface({ ...hydrated, connection: "connected" })).toBe("chat");
+    expect(brainScreenSurface({ ...hydrated, connection: "offline" })).toBe("chat");
+    expect(brainScreenSurface({ ...hydrated, structuredEvents: false, connection: "connected" })).toBe("unavailable");
   });
 });

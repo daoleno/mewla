@@ -49,7 +49,7 @@ import { buildChatChrome } from "../../theme";
 import { useAppTheme } from "../../constants/tokens";
 import { wsClient } from "../../services/websocket";
 import { terminalRouteParams } from "../../services/workerRouteId";
-import { shouldShowBrainLoadingState } from "../../services/connectionLifecycle";
+import { brainScreenSurface } from "../../services/connectionLifecycle";
 import { isTargetedBrainThreadReadOnly } from "../../services/brainThreadRouting";
 import { useWorkers, type ConnectionState } from "../../store/workers";
 import {
@@ -203,10 +203,16 @@ export default function BrainScreen() {
   const openPairing = useCallback(() => {
     router.push({ pathname: "/settings", params: activeServer ? {} : { addServer: Date.now().toString() } });
   }, [activeServer, router]);
-  const showBrainLoading = shouldShowBrainLoadingState({
+  const brainSurface = brainScreenSurface({
+    hasServer: Boolean(activeServer),
+    connection: connectionState,
     hydrated: Boolean(activeBrain?.hydrated),
     hasHostWorker: Boolean(hostWorker?.id),
+    structuredEvents: Boolean(hostExecutor?.capabilities?.structured_events),
   });
+  // Until Brain's first snapshot the chat shows its loading outline and the
+  // composer waits, saying "Connecting…".
+  const brainWaking = brainSurface === "waking";
   const brainModelSheet = useSessionProviderSheet({
     serverId: activeServer?.id ?? "",
     workerId: hostWorker?.id ?? "",
@@ -215,9 +221,7 @@ export default function BrainScreen() {
     eagerLoad: true,
     focusActive: screenFocused,
   });
-  const canUseStructuredBrainInterface = Boolean(
-    ready && hostExecutor?.capabilities?.structured_events,
-  );
+  const canUseStructuredBrainInterface = ready && brainSurface === "chat";
   const availableExecutors = activeBrain?.executors ?? [];
   const canSwitchAdapter = availableExecutors.length > 1;
   const openAdapterSheet = useCallback(() => {
@@ -678,7 +682,7 @@ export default function BrainScreen() {
             </View>
           ) : null}
           <BrainCompanionContext.Provider value={brainCompanion}>
-            {canUseStructuredBrainInterface ? (
+            {canUseStructuredBrainInterface || brainWaking ? (
               <InterfaceChatSurface
                 key={`brain-chat:${activeServer?.id}:${brainChatScopeKey ?? ""}`}
                 visible
@@ -694,7 +698,7 @@ export default function BrainScreen() {
                   processId: hostWorker?.process_id,
                   startedAt: hostWorker?.started_at,
                 }}
-                connectionState={connectionState}
+                connectionState={brainWaking ? "connecting" : connectionState}
                 connectionIssue={connectionIssue}
                 theme={theme}
                 chrome={chrome}
@@ -708,14 +712,14 @@ export default function BrainScreen() {
                 readOnly={targetedThreadReadOnly}
                 onSwitchToTerminal={openBrainTerminal}
                 // Brain is who you talk to; the host executor is an implementation detail.
-                placeholder={connectionState === "connected" ? "Tell Brain…" : undefined}
+                placeholder={connectionState === "connected" && !brainWaking ? "Tell Brain…" : undefined}
                 emptyTitle={BRAIN_EMPTY_TITLE}
                 emptyBody={BRAIN_EMPTY_BODY}
-                renderComposerAccessory={renderBrainComposerAccessory}
-                composerModelControl={brainModelSheet.composerControl}
+                renderComposerAccessory={brainWaking ? undefined : renderBrainComposerAccessory}
+                composerModelControl={brainWaking ? null : brainModelSheet.composerControl}
                 onComposerModelControlPress={() => brainModelSheet.open()}
               />
-            ) : showBrainLoading ? (
+            ) : brainSurface === "status" ? (
               <BrainStatusState
                 hasServer={Boolean(activeServer)}
                 animate={screenFocused}

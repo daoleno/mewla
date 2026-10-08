@@ -20,7 +20,7 @@ interface InterfaceTimelineEmptyStateProps {
   actionLabel?: string;
   actionIcon?: IconName;
   onAction?: () => void;
-  /** An empty or loading conversation: Brain shows its seal cat here. */
+  /** A loaded, empty conversation: Brain shows its seal cat here. */
   conversationEmpty?: boolean;
 }
 
@@ -28,7 +28,7 @@ interface InterfaceTimelineEmptyStateProps {
  * Chat-canvas counterpart of the app EmptyState: same halo, title, detail
  * and capsule action, drawn from the terminal-theme chrome so it follows the
  * Session's canvas instead of the app theme. In Brain the halo is the seal,
- * with the cat asleep in it (or peeking while the chat loads).
+ * with the cat asleep in it; a loading chat shows InterfaceTimelineLoadingState.
  */
 export function InterfaceTimelineEmptyState({
   chrome,
@@ -50,7 +50,7 @@ export function InterfaceTimelineEmptyState({
     <View style={styles.emptyState} accessibilityLiveRegion="polite">
       {seal ? (
         <SealCat
-          state={busy ? "waking" : "idle"}
+          state="idle"
           size={SEAL_SIZE}
           animate={companion.animate}
           style={styles.seal}
