@@ -10,6 +10,7 @@ import {
   desktopSidebarPath,
   isDesktopTopLevelRoute,
   isDesktopWeb,
+  isKeyboardOnlyWeb,
 } from "./desktopWeb";
 import { PRIMARY_DRAWER_DESTINATIONS, PRIMARY_DRAWER_SETTINGS } from "./primaryDrawerDestinations";
 
@@ -97,5 +98,15 @@ describe("sidebar navigation", () => {
     expect(desktopScreenRetained(reopened, 1)).toBe(false);
     expect(desktopScreenRetained(reopened, 2)).toBe(true);
     expect(desktopScreenRetained(reopened, 4)).toBe(true);
+  });
+});
+
+describe("keyboard-only web", () => {
+  test("only web with no touch pointer drops the phone key row", () => {
+    expect(isKeyboardOnlyWeb("web", false)).toBe(true);
+    expect(isKeyboardOnlyWeb("web", true)).toBe(false);
+    expect(isKeyboardOnlyWeb("web", null)).toBe(false);
+    expect(isKeyboardOnlyWeb("ios", false)).toBe(false);
+    expect(isKeyboardOnlyWeb("android", false)).toBe(false);
   });
 });

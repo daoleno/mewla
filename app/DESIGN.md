@@ -143,8 +143,8 @@ phone web and native, tablets included, keep the model above. Rules:
    command palette, `?` lists every shortcut, Esc closes the top overlay, and
    focus rings are visible. Shortcuts never fire while typing in a field or
    the terminal, and tooltips name them. Web with no touch pointer at all
-   drops the terminal key bar (Ctrl, Esc, Tab, ^C, arrows); phones, tablets
-   and touch laptops keep it.
+   drops the terminal's phone keys (keyboard toggle, Ctrl, Esc, Tab, ^C,
+   arrows) and keeps Attach; phones, tablets and touch laptops keep them.
 7. **Desktop affordances.** Rows show hover and a pointer, chats are
    selectable, and each tab has a title ("Calendar · Mewla").
 
