@@ -1,0 +1,13 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["TerminalVtModule"],
+    "podspecPath": ["TerminalVt.podspec"]
+  },
+  "android": {
+    "modules": ["expo.modules.terminalvt.TerminalVtModule"]
+  },
+  "ios": {
+    "modules": ["TerminalVtModule"]
+  }
+}

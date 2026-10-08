@@ -7,13 +7,13 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
-    <activity-alias android:name=".StandaloneLauncher" android:targetActivity=".MainActivity" android:enabled="${zenStandaloneLauncher}" android:exported="true">
+    <activity-alias android:name=".StandaloneLauncher" android:targetActivity=".MainActivity" android:enabled="${mewlaStandaloneLauncher}" android:exported="true">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity-alias>
-    <activity android:name=".MetroConnectActivity" android:enabled="${zenMetroLauncher}" android:exported="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <activity android:name=".MetroConnectActivity" android:enabled="${mewlaMetroLauncher}" android:exported="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />

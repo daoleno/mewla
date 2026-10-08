@@ -6,4 +6,4 @@ See the LICENSE file for the full license text.
 
 Third-party components and bundled assets remain under their own licenses.
 See docs/third-party-assets.md and the notice files under app/assets/notices/
-and app/modules/zen-terminal-vt/ for attribution and redistribution details.
+and app/modules/terminal-vt/ for attribution and redistribution details.

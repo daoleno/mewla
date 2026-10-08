@@ -19,7 +19,7 @@ function runAssert(lockDir) {
 
 describe("assert-ios-camera-barcode-pod.sh", () => {
   test("passes when ExpoCameraBarcodeScanning and ZXingObjC are present", () => {
-    const dir = mkdtempSync(join(scratchRoot, "zen-cam-pod-ok-"));
+    const dir = mkdtempSync(join(scratchRoot, "mewla-cam-pod-ok-"));
     try {
       writeFileSync(
         join(dir, "Podfile.lock"),
@@ -41,7 +41,7 @@ describe("assert-ios-camera-barcode-pod.sh", () => {
   });
 
   test("fails when ZXingObjC is missing", () => {
-    const dir = mkdtempSync(join(scratchRoot, "zen-cam-pod-zx-"));
+    const dir = mkdtempSync(join(scratchRoot, "mewla-cam-pod-zx-"));
     try {
       writeFileSync(
         join(dir, "Podfile.lock"),
@@ -56,7 +56,7 @@ describe("assert-ios-camera-barcode-pod.sh", () => {
   });
 
   test("fails when sibling Podfile.properties.json disables barcode scanning", () => {
-    const dir = mkdtempSync(join(scratchRoot, "zen-cam-pod-off-"));
+    const dir = mkdtempSync(join(scratchRoot, "mewla-cam-pod-off-"));
     try {
       writeFileSync(
         join(dir, "Podfile.lock"),

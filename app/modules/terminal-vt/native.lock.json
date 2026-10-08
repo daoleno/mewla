@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "description": "Canonical ABI and toolchain contract for mewla Android and iOS libghostty-vt builds. Invalid combinations are not supported.",
+  "ghostty": {
+    "component": "libghostty-vt",
+    "api": "C",
+    "repository": "https://github.com/ghostty-org/ghostty.git",
+    "commit": "28972454c0c9493b96b42de5d88f88c0bdc277a4",
+    "headers_sha256": "79b9f3c461562b469afb54c221066603c1bf52d646f6fe1bf4f5022bb29a8dd4",
+    "license": "MIT",
+    "license_url": "https://github.com/ghostty-org/ghostty/blob/28972454c0c9493b96b42de5d88f88c0bdc277a4/LICENSE",
+    "license_sha256": "386211873e5b7a02f663ae4d7adf96285999f91608f8f9f31fecfd0f4095e6f1",
+    "copyright_line": "Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors"
+  },
+  "zig": {
+    "version": "0.15.2",
+    "version_match": "prefix",
+    "downloads": {
+      "x86_64-linux": {
+        "tarball": "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz",
+        "sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239",
+        "archive_root": "zig-x86_64-linux-0.15.2"
+      },
+      "aarch64-linux": {
+        "tarball": "https://ziglang.org/download/0.15.2/zig-aarch64-linux-0.15.2.tar.xz",
+        "sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f",
+        "archive_root": "zig-aarch64-linux-0.15.2"
+      },
+      "aarch64-macos": {
+        "tarball": "https://ziglang.org/download/0.15.2/zig-aarch64-macos-0.15.2.tar.xz",
+        "sha256": "3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b",
+        "archive_root": "zig-aarch64-macos-0.15.2"
+      }
+    }
+  },
+  "android": {
+    "min_api": 29,
+    "ndk_note": "Verified via ELF .note.android.ident API level 29 (0x1d) on pin-built libghostty_vt.so; file(1) reports 'for Android 29'.",
+    "source_patches": [
+      {
+        "path": "app/modules/terminal-vt/patches/android/adb0d793-avoid-posix-shm.patch",
+        "sha256": "33f99d420f2db16f2e0d77fe3619e87dfa4b06062ed7cedff1d44e3712820cf0",
+        "applies_to_ghostty_commit": "28972454c0c9493b96b42de5d88f88c0bdc277a4",
+        "upstream_repository": "https://github.com/ghostty-org/ghostty.git",
+        "upstream_commit": "adb0d793af755841f3dcea8c5e466ea9b8295e11",
+        "upstream_url": "https://github.com/ghostty-org/ghostty/commit/adb0d793af755841f3dcea8c5e466ea9b8295e11",
+        "subject": "android: Avoid referencing POSIX shared memory functions"
+      }
+    ],
+    "forbidden_undefined_symbols": ["shm_open", "shm_unlink"]
+  },
+  "abis": [
+    {
+      "android_abi": "arm64-v8a",
+      "zig_target": "aarch64-linux-android",
+      "elf_machine": "AArch64",
+      "elf_machine_code": 183,
+      "role": "device_release",
+      "required_for_sideload": true
+    },
+    {
+      "android_abi": "x86_64",
+      "zig_target": "x86_64-linux-android",
+      "elf_machine": "Advanced Micro Devices X86-64",
+      "elf_machine_code": 62,
+      "role": "emulator",
+      "required_for_sideload": false
+    }
+  ],
+  "unsupported_abis": ["armeabi-v7a", "x86", "arm64-v8a-hwasan"],
+  "ios": {
+    "deployment_target": "16.4",
+    "device_architecture": "arm64",
+    "simulator_architecture": "arm64",
+    "xcframework_name": "GhosttyVt.xcframework",
+    "upstream_xcframework_name": "ghostty-vt.xcframework",
+    "notice_bundle_path": "GHOSTTY-MIT.txt",
+    "notice_source": "app/assets/notices/GHOSTTY-MIT.txt",
+    "notice_packaging": "Expo plugin withIOSBuild copies into the iOS app bundle; verified by scripts/verify-ios-artifact.sh for Simulator .app and IPA"
+  },
+  "outputs": {
+    "lib_dir": "app/modules/terminal-vt/libs/android",
+    "library_filename": "libghostty_vt.so",
+    "headers_dir": "app/modules/terminal-vt/android/src/main/cpp/ghostty",
+    "checksums_filename": "SHA256SUMS",
+    "manifest_filename": "build-manifest.json"
+  },
+  "release_apk": {
+    "react_native_architectures": "arm64-v8a",
+    "script": "scripts/android-release-apk.sh",
+    "notice_apk_path": "assets/notices/GHOSTTY-MIT.txt",
+    "notice_source": "app/assets/notices/GHOSTTY-MIT.txt",
+    "note": "Sideload beta ships arm64-v8a only. x86_64 is for emulator/dev builds. Notice is packaged via Expo plugin withAndroidRelease into android assets (verified by scripts/verify-apk-notice.sh). iOS notice packaging is owned by withIOSBuild."
+  },
+  "signing": {
+    "env_vars": [
+      "MEWLA_ANDROID_KEYSTORE",
+      "MEWLA_ANDROID_KEYSTORE_PASSWORD",
+      "MEWLA_ANDROID_KEY_ALIAS",
+      "MEWLA_ANDROID_KEY_PASSWORD"
+    ],
+    "mechanism": "Gradle System.getenv via withAndroidRelease plugin; never commit secrets"
+  }
+}

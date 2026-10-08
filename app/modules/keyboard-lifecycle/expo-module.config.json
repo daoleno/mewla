@@ -1,0 +1,13 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["KeyboardLifecycleModule"],
+    "podspecPath": ["KeyboardLifecycle.podspec"]
+  },
+  "android": {
+    "modules": ["expo.modules.keyboardlifecycle.KeyboardLifecycleModule"]
+  },
+  "ios": {
+    "modules": ["KeyboardLifecycleModule"]
+  }
+}

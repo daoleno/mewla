@@ -65,16 +65,16 @@ module.exports = () => {
       // cannot mix precompiled modules and ExpoModulesCore binaries.
       // Also packages Ghostty MIT notice into the iOS app bundle.
       [
-        "./plugins/withZenIOSBuild",
+        "./plugins/withIOSBuild",
         {
           marketingVersion: iosMarketingVersion,
           buildNumber: iosBuildNumber,
         },
       ],
       // Package Ghostty MIT notice into Android assets + env-based release signing.
-      "./plugins/withZenAndroidRelease",
+      "./plugins/withAndroidRelease",
       // Resolve duplicate BouncyCastle metadata in the Android resource merge.
-      "./plugins/withZenAndroidPackaging",
+      "./plugins/withAndroidPackaging",
     ],
     extra,
   };
