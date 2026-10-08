@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { PluginAccount, PluginIntegration } from "./connections";
 import {
+  accessControl,
   accountRecovery,
   accountTone,
-  capabilityState,
   connectSteps,
   isConnecting,
-  pluginCatalogSections,
+  pluginCatalogRows,
 } from "./pluginConnectionsModel";
 
 const plugin = (id: string, name: string): PluginIntegration => ({ id, name, available: true, setup_url: "", description: `${name} service` });
@@ -15,25 +15,33 @@ const account = (patch: Partial<PluginAccount>): PluginAccount => ({
 });
 const flow = { id: "f1", integration: "github", status: "waiting" as const, expires: "2999-01-01T00:00:00Z" };
 
-describe("Plugins catalog sections", () => {
-  const catalog = [plugin("github", "GitHub"), plugin("slack", "Slack"), plugin("mcp", "MCP server")];
-  const reviewed = { github: {}, slack: {} };
+describe("Plugins list rows", () => {
+  const catalog = [plugin("github", "GitHub"), plugin("slack", "Slack"), plugin("linear", "Linear"), plugin("mcp", "MCP server")];
+  const reviewed = { github: {}, slack: {}, linear: {} };
 
-  test("connected lists active accounts once, with their service, and skips disconnected ones", () => {
-    const sections = pluginCatalogSections(catalog, [
+  test("one row per service, carrying its active accounts; unreviewed services are custom", () => {
+    const rows = pluginCatalogRows(catalog, [
       account({ id: "a2", name: "zed" }),
       account({ id: "a1", name: "amy" }),
       account({ id: "a3", name: "gone", status: "disconnected" }),
       account({ id: "a4", name: "stray", integration: "unknown" }),
     ], reviewed);
-    expect(sections.connected.map((entry) => entry.account.id)).toEqual(["a1", "a2"]);
-    expect(sections.connected[0]!.plugin.name).toBe("GitHub");
+    expect(rows.services.map((row) => row.plugin.id)).toEqual(["github", "slack", "linear"]);
+    expect(rows.services[0]!.accounts.map((item) => item.id)).toEqual(["a1", "a2"]);
+    expect(rows.custom.map((row) => row.plugin.id)).toEqual(["mcp"]);
   });
 
-  test("reviewed services stay listed with their account count; others are custom", () => {
-    const sections = pluginCatalogSections(catalog, [account({}), account({ id: "a2", status: "disconnected" })], reviewed);
-    expect(sections.services.map((entry) => [entry.plugin.id, entry.accountCount])).toEqual([["github", 1], ["slack", 0]]);
-    expect(sections.custom.map((entry) => entry.plugin.id)).toEqual(["mcp"]);
+  test("the row offers Connect, Reconnect on the account that needs it, or the worst status", () => {
+    const rows = pluginCatalogRows([...catalog, { ...plugin("google", "Google"), available: false }], [
+      account({ id: "l1", integration: "linear", status: "authorization_required" }),
+      account({ id: "g1" }),
+      account({ id: "g2", status: "error" }),
+    ], { ...reviewed, google: {} });
+    const state = (id: string) => rows.services.find((row) => row.plugin.id === id)!.state;
+    expect(state("slack")).toEqual({ kind: "connect" });
+    expect(state("google").kind).toBe("unavailable");
+    expect(state("linear")).toMatchObject({ kind: "reconnect", account: { id: "l1" } });
+    expect(state("github")).toMatchObject({ kind: "status", label: "Last call failed", tone: "danger" });
   });
 });
 
@@ -45,16 +53,14 @@ describe("account status and capability boundaries", () => {
     expect(accountTone(account({ status: "error" }))).toBe("danger");
   });
 
-  test("a capability is allowed only when every tool in its group is allowed", () => {
-    const tools = [
-      { name: "read_a", description: "", allowed: true, group: "read" as const },
-      { name: "read_b", description: "", allowed: false, group: "read" as const },
-      { name: "write_a", description: "", allowed: true, group: "write" as const },
-    ];
-    expect(capabilityState(account({ tools }), "read")).toBe("off");
-    expect(capabilityState(account({ tools }), "write")).toBe("allowed");
-    expect(capabilityState(account({ tools: tools.slice(0, 1) }), "write")).toBe("unavailable");
-    expect(capabilityState(account({ tools: undefined }), "read")).toBe("unavailable");
+  test("access shows a switch, a sign-in that asks again, or nothing", () => {
+    const access = { read: "partial" as const, write: "off" as const, allowed: 1, tools: 3 };
+    expect(accessControl(account({ access }), "read")).toMatchObject({ kind: "switch", on: true });
+    expect((accessControl(account({ access }), "read") as { note?: string }).note).toMatch(/newer tools/);
+    expect(accessControl(account({ access }), "write")).toEqual({ kind: "switch", on: false, note: undefined });
+    expect(accessControl(account({ access: { ...access, write_consent: true } }), "write")).toEqual({ kind: "consent" });
+    expect(accessControl(account({ access: { ...access, write: "none" } }), "write")).toEqual({ kind: "none" });
+    expect(accessControl(account({}), "read")).toEqual({ kind: "none" });
   });
 
   test("recovery names one action, credential removal first", () => {

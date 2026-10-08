@@ -1,20 +1,24 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { ToolsView } from "../../../components/plugins/PluginConnectionViews";
-import { PluginsPage, usePluginService, usePluginsFlow } from "../../../components/plugins/PluginsFlow";
+import { PluginsPage, usePluginsFlow } from "../../../components/plugins/PluginsFlow";
+import { EmptyState } from "../../../components/ui";
 
 export default function PluginToolsScreen() {
-  const { service } = useLocalSearchParams<{ service: string }>();
+  const { service, account: accountId } = useLocalSearchParams<{ service: string; account?: string }>();
   const flow = usePluginsFlow();
-  usePluginService(service);
-  const account = flow.account?.integration === service ? flow.account : null;
+  // Without an account in the link, the service's first account.
+  const id = accountId ?? flow.accounts.find((item) => item.integration === service && item.status !== "disconnected")?.id;
+  const { loaded, load } = flow;
+  useEffect(() => { if (loaded && id) void load(id); }, [id, load, loaded]);
+  const account = id ? flow.details[id] : undefined;
   return <PluginsPage title="Tools & activity">
     {account ? <ToolsView
       account={account}
-      busy={flow.busy}
-      onToggleEnabled={(enabled) => void flow.send({ action: enabled ? "enable" : "disable", id: account.id })}
-      onRefresh={() => void flow.send({ action: "refresh", id: account.id })}
+      running={flow.running}
+      onToggleEnabled={(enabled) => void flow.send({ action: enabled ? "enable" : "disable", id: account.id }, `recover:${account.id}`)}
+      onRefresh={() => void flow.send({ action: "refresh", id: account.id }, `recover:${account.id}`)}
       onToggleTool={(tool, allowed) => flow.toggleTool(account, tool, allowed)}
-    /> : null}
+    /> : flow.running === `load:${id}` || !flow.loaded ? <EmptyState busy title="Loading tools" /> : null}
   </PluginsPage>;
 }

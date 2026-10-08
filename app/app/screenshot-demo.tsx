@@ -105,7 +105,8 @@ import { BrainStatusState } from "../components/mewla/BrainStatusState";
 import { SealCat } from "../components/mewla/SealCat";
 import { TappableCat } from "../components/mewla/TappableCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
-import { CatalogView, LinkedAccountView, ServiceHeader } from "../components/plugins/PluginConnectionViews";
+import { AccountCard, CatalogView, ServiceHeader } from "../components/plugins/PluginConnectionViews";
+import { pluginCatalogRows } from "../services/pluginConnectionsModel";
 import { HeaderBackButton } from "../components/navigation/HeaderBackButton";
 import { pluginJobs } from "../services/pluginOnboarding";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
@@ -1651,46 +1652,29 @@ function PluginsDemo() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: 760, alignSelf: "center" }}>
         {github ? (
           <>
-            <ServiceHeader plugin={P.github} account={A.github} />
-            <LinkedAccountView
+            <ServiceHeader plugin={P.github} state={{ label: "Connected", tone: "success" }} />
+            <AccountCard
               plugin={P.github}
               account={A.github}
               job={pluginJobs.github}
-              custom={false}
-              busy={false}
-              accountCount={1}
+              running={null}
+              onAccess={NOOP}
               onRecover={NOOP}
-              onOpenPermissions={NOOP}
-              onOpenAccounts={NOOP}
+              onDisconnect={async () => false}
               onOpenTools={NOOP}
             />
           </>
         ) : (
-          <>
-            <CatalogView
-              sections={{
-                connected: [
-                  { account: A.github, plugin: P.github },
-                  { account: A.notion, plugin: P.notion },
-                  { account: A.linear, plugin: P.linear },
-                ],
-                services: [
-                  { plugin: P.google, accountCount: 0 },
-                  { plugin: P.slack, accountCount: 0 },
-                ],
-                custom: [
-                  { plugin: P.mcp, accountCount: 0 },
-                  { plugin: P.openapi, accountCount: 0 },
-                ],
-              }}
-              loading={false}
-              error=""
-              onRetry={NOOP}
-              onOpenAccount={NOOP}
-              onOpenService={NOOP}
-              onOpenCustom={NOOP}
-            />
-          </>
+          <CatalogView
+            rows={pluginCatalogRows(Object.values(P), Object.values(A), pluginJobs)}
+            loading={false}
+            error=""
+            connecting={null}
+            onRetry={NOOP}
+            onOpen={NOOP}
+            onConnect={NOOP}
+            onReconnect={NOOP}
+          />
         )}
       </ScrollView>
     </View>

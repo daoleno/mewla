@@ -762,14 +762,17 @@ export const SCREENSHOT_PLUGIN_ACCOUNTS = {
   github: {
     id: "acct-github", integration: "github", name: "daoleno", identity: "daoleno", enabled: true,
     status: "connected" as const, tools: DEMO_GITHUB_TOOLS, history: [],
+    access: { read: "allowed" as const, write: "off" as const, allowed: 3, tools: DEMO_GITHUB_TOOLS.length },
   },
   notion: {
     id: "acct-notion", integration: "notion", name: "Atlas workspace", identity: "atlas", enabled: true,
     status: "authorization_required" as const, tools: [], history: [],
+    access: { read: "allowed" as const, write: "off" as const, allowed: 6, tools: 11 },
   },
   linear: {
     id: "acct-linear", integration: "linear", name: "Atlas team", identity: "atlas", enabled: true,
     status: "connected" as const, tools: [], history: [],
+    access: { read: "allowed" as const, write: "allowed" as const, allowed: 23, tools: 23 },
   },
 };
 

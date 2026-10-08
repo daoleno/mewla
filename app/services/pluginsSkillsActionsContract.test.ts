@@ -243,7 +243,7 @@ describe("Plugins connection route contract", () => {
   const read = (path: string) => readFileSync(join(import.meta.dir, "..", path), "utf8");
   const layout = read("app/plugins/_layout.tsx");
   const flow = read("components/plugins/PluginsFlow.tsx");
-  const routes = ["index", "custom", "[service]/index", "[service]/accounts", "[service]/permissions", "[service]/tools"]
+  const routes = ["index", "[service]/index", "[service]/tools"]
     .map((name) => read(`app/plugins/${name}.tsx`));
   const views = read("components/plugins/PluginConnectionViews.tsx");
   test("server switches remount the flow and every page shares one keyboard-aware scroll view", () => {
@@ -262,13 +262,18 @@ describe("Plugins connection route contract", () => {
       expect(source).not.toContain("headerLeft");
     }
   });
-  test("consent and destructive changes keep their confirmations", () => {
-    for (const title of [
-      "Disconnect this account?",
-      "Allow changes when asked?",
-      "Allow this tool?",
-    ])
-      expect(flow).toContain(title);
+  test("disconnect confirms once inline, and a single tool shows what it does first", () => {
+    expect(views).toContain("Brain loses access right away");
+    expect(views).not.toContain("Alert.alert");
+    expect(flow).toContain("Allow this tool?");
+  });
+  test("every way to connect is the one connect action", () => {
+    const service = routes[1]!;
+    expect(flow).not.toContain("reconnect = ");
+    expect(flow).not.toContain("authorize = ");
+    expect(service.match(/flow\.connect\(/g)?.length).toBe(2);
+    expect(routes[0]).toContain("flow.connect(plugin.id)");
+    expect(routes[0]).toContain("flow.connect(account.integration)");
   });
   test("built-in connection views contain no text input", () => {
     expect(views).not.toContain("TextInput");

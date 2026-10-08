@@ -28,6 +28,18 @@ export type PluginAccount = {
   verified_at?: string;
   tools?: ConnectionTool[];
   history: { at: string; tool: string; status: string; message?: string }[];
+  /** What Brain may do with this account, summarized by the server. */
+  access?: PluginAccess;
+};
+/** A permission group: every reviewed tool allowed, some, none, or the account has no such tools. */
+export type AccessState = "allowed" | "partial" | "off" | "none";
+export type PluginAccess = {
+  read: AccessState;
+  write: AccessState;
+  /** Allowing changes needs the service to ask again (its sign-in lacks the write scope). */
+  write_consent?: boolean;
+  allowed: number;
+  tools: number;
 };
 export type ConnectionRequest = {
   flow_id?: string;
@@ -62,11 +74,11 @@ export type ConnectionResponse = {
 };
 export function accountStatus(account: PluginAccount): string {
   if (account.status === "disconnected") return "Disconnected";
-  if (!account.enabled) return "Disabled";
+  if (!account.enabled) return "Off";
   return {
     connected: "Connected",
-    configured: "Not verified",
+    configured: "Not checked yet",
     error: "Last call failed",
-    authorization_required: "Reconnect required",
+    authorization_required: "Needs sign-in again",
   }[account.status];
 }

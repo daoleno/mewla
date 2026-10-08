@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { StyleSheet, Switch, TextInput, View, type TextInputProps } from "react-native";
 import { AppText, Button, InlineNotice, ListRow, ListSection } from "../ui";
 import { useAppColors } from "../../constants/tokens";
-import type { ConnectionRequest, ConnectionResponse, PluginIntegration } from "../../services/connections";
+import type { ConnectionRequest, PluginIntegration } from "../../services/connections";
 
-export function CustomServiceForm({ plugin, busy, serverName, send, authorize }: {
-  plugin: PluginIntegration; busy: boolean; serverName: string;
-  send: (request: ConnectionRequest) => Promise<ConnectionResponse | undefined>;
-  authorize: (input: NonNullable<ConnectionRequest["input"]>) => Promise<void>;
+/** A custom service's address and sign-in, handed to the one connect action. */
+export function CustomServiceForm({ plugin, connecting, serverName, onConnect }: {
+  plugin: PluginIntegration; connecting: boolean; serverName: string;
+  onConnect: (input: NonNullable<ConnectionRequest["input"]>, signIn: boolean) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -25,8 +25,7 @@ export function CustomServiceForm({ plugin, busy, serverName, send, authorize }:
     }
     const input = { integration: plugin.id, name: name.trim() || plugin.name, endpoint: endpoint.trim(), credential: token, spec: document, trusted_networks: trust ? networks.split(",").map((s) => s.trim()).filter(Boolean) : undefined };
     setToken("");
-    if (browser) await authorize(input);
-    else await send({ action: "add", input });
+    await onConnect(input, browser);
   };
   return <View>
     <ListSection title="Service">
@@ -45,7 +44,7 @@ export function CustomServiceForm({ plugin, busy, serverName, send, authorize }:
       {trust ? <Field label="Trusted ranges" accessibilityLabel="Trusted network ranges" placeholder="192.168.1.10/32" value={networks} onChangeText={setNetworks} autoCapitalize="none" autoCorrect={false} /> : null}
     </ListSection>
     {error ? <InlineNotice tone="danger" title="Check the form" detail={error} style={styles.error} /> : null}
-    <Button label={browser ? "Continue in browser" : "Connect service"} variant="filled" size="lg" block loading={busy} disabled={!endpoint.trim() || trust && !networks.trim()} onPress={() => void connect()} />
+    <Button label={browser ? "Continue in browser" : "Connect service"} variant="filled" size="lg" block loading={connecting} disabled={!endpoint.trim() || trust && !networks.trim()} onPress={() => void connect()} />
     <AppText variant="caption" tone="tertiary" style={styles.note}>Credentials stay on {serverName}. Each tool needs your permission.</AppText>
   </View>;
 }
