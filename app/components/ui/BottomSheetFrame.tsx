@@ -22,10 +22,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Radii, useAppColors } from "../../constants/tokens";
 import { Spring } from "../../constants/motion";
 import { GlassSurface } from "./GlassSurface";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const DISMISS_DISTANCE = 96;
 const SHEET_GUTTER = 8;
+// The phone sheet's own maximum, so every sheet keeps its width as a dialog.
+const DESKTOP_DIALOG_WIDTH = 720;
 
 interface BottomSheetFrameProps {
   visible: boolean;
@@ -37,12 +40,15 @@ interface BottomSheetFrameProps {
   keyboardAvoiding?: boolean;
   /** Pull the grabber down to close. On by default. */
   dragToDismiss?: boolean;
+  /** Desktop web: the dialog's width. */
+  desktopWidth?: number;
   onClose(): void;
 }
 
 /**
  * The shared bottom sheet: a floating glass card inset from the screen edges
- * and the home indicator, springing up over a dimmed backdrop.
+ * and the home indicator, springing up over a dimmed backdrop. On desktop web
+ * it is a centered dialog without a grabber; Esc and the backdrop close it.
  */
 export function BottomSheetFrame({
   visible,
@@ -52,10 +58,13 @@ export function BottomSheetFrame({
   cardStyle,
   contentStyle,
   keyboardAvoiding = false,
-  dragToDismiss = true,
+  dragToDismiss: dragToDismissOnPhone = true,
+  desktopWidth = DESKTOP_DIALOG_WIDTH,
   onClose,
 }: BottomSheetFrameProps) {
   const colors = useAppColors();
+  const dialog = useDesktopWeb();
+  const dragToDismiss = dragToDismissOnPhone && !dialog;
   const insets = useSafeAreaInsets();
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -76,10 +85,17 @@ export function BottomSheetFrame({
     opacity: progress.value * (1 - Math.min(dragY.value / 400, 0.6)),
   }));
 
-  const cardStyleAnim = useAnimatedStyle(() => ({
-    transform: [{ translateY: (1 - progress.value) * 48 + dragY.value }],
-    opacity: Math.min(1, progress.value * 1.6),
-  }));
+  const cardStyleAnim = useAnimatedStyle(() =>
+    dialog
+      ? {
+          transform: [{ scale: 0.97 + progress.value * 0.03 }],
+          opacity: Math.min(1, progress.value * 1.6),
+        }
+      : {
+          transform: [{ translateY: (1 - progress.value) * 48 + dragY.value }],
+          opacity: Math.min(1, progress.value * 1.6),
+        },
+  );
 
   const finishDragClose = useCallback(() => onClose(), [onClose]);
   const dragGesture = useMemo(
@@ -121,11 +137,13 @@ export function BottomSheetFrame({
     <Animated.View
       style={[
         styles.cardSlot,
-        {
-          maxHeight,
-          height: fixedHeight,
-          marginBottom: Math.max(insets.bottom, SHEET_GUTTER),
-        },
+        dialog
+          ? { maxHeight: "85%", height: fixedHeight, maxWidth: desktopWidth }
+          : {
+              maxHeight,
+              height: fixedHeight,
+              marginBottom: Math.max(insets.bottom, SHEET_GUTTER),
+            },
         cardStyleAnim,
       ]}
     >
@@ -134,9 +152,14 @@ export function BottomSheetFrame({
         radius={Radii.sheet}
         elevation="float"
         accessibilityViewIsModal
-        style={[styles.card, fixedHeight != null && styles.cardFill, cardOverrides]}
+        style={[
+          styles.card,
+          dialog && styles.dialogCard,
+          fixedHeight != null && styles.cardFill,
+          cardOverrides,
+        ]}
       >
-        {dragToDismiss ? (
+        {dialog ? null : dragToDismiss ? (
           <GestureDetector gesture={dragGesture}>{grabber}</GestureDetector>
         ) : (
           grabber
@@ -174,13 +197,13 @@ export function BottomSheetFrame({
     >
       {keyboardAvoiding ? (
         <KeyboardAvoidingView
-          style={[styles.root, rootStyle]}
+          style={[styles.root, dialog && styles.dialogRoot, rootStyle]}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           {body}
         </KeyboardAvoidingView>
       ) : (
-        <View style={[styles.root, rootStyle]}>{body}</View>
+        <View style={[styles.root, dialog && styles.dialogRoot, rootStyle]}>{body}</View>
       )}
     </Modal>
   );
@@ -190,6 +213,13 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: "flex-end",
+  },
+  dialogRoot: {
+    justifyContent: "center",
+    paddingVertical: 32,
+  },
+  dialogCard: {
+    paddingTop: 18,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
