@@ -17,14 +17,15 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 }
 
 export default function TerminalScreenRoute() {
-  const { hydrated, currentServerId } = useCurrentServer();
+  const { hydrated, currentServerId, isCurrentServer } = useCurrentServer();
   const focused = useIsFocused();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string | string[]; serverId?: string | string[] }>();
   const routeId = firstParam(params.id);
   const serverId = firstParam(params.serverId);
   const link = hydrated ? resolveTerminalLink(routeId, serverId, currentServerId) : null;
-  const canonical = link !== null && link.id === routeId && link.serverId === serverId;
+  const canonical =
+    link !== null && link.id === routeId && link.serverId === serverId && isCurrentServer(serverId);
   useEffect(() => {
     if (!focused || !hydrated || canonical) return;
     // A link opened directly may omit the server: it names the current one.
