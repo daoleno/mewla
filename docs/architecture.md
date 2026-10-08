@@ -178,7 +178,7 @@ record instead of creating a region-specific duplicate.
 
 ## Request authentication and revocation
 
-After enrollment, HTTP and WebSocket operations keep the current `ZenDevice`
+After enrollment, HTTP and WebSocket operations keep the current `Device`
 signature contract. Signatures bind daemon ID, device ID, purpose, timestamp,
 and nonce. `/auth-check` and the following `/ws` probe are distinct requests
 and therefore each build a fresh timestamp, nonce, and signature. Session File

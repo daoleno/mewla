@@ -64,7 +64,7 @@ Apple Transporter 4.2 also supports uploading an `.ipa` with `-assetFile` and au
 
 ## GitHub Environments and secrets
 
-Production keeps the existing protected `app-store-connect` Environment. Create a separate protected `app-store-connect-preview` Environment for the friend account. Configure the same generic secret names in each environment; GitHub exposes only the environment selected by `app_identity`. This keeps workflow inputs minimal and prevents Preview values from overwriting or being combined with canonical signing values. Values must be base64-encoded without being committed or printed.
+Production keeps the existing protected `app-store-connect` Environment. Create a separate protected `app-store-connect-preview` Environment for the friend account. Configure the same generic secret names in each environment (they keep their original `ZEN_*` names; the workflow maps each into the `MEWLA_*` name its steps read); GitHub exposes only the environment selected by `app_identity`. This keeps workflow inputs minimal and prevents Preview values from overwriting or being combined with canonical signing values. Values must be base64-encoded without being committed or printed.
 
 | Secret | Required for artifact-only | Required for TestFlight | Purpose |
 | --- | --- | --- | --- |

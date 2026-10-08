@@ -14,8 +14,8 @@ None.
 
 ### `github-plugin-publisher-registration` (resolved 2026-10-04)
 
-- **Summary:** The artifact workflow requires a registered Zen GitHub publisher before building a public release.
-- **Resolution evidence:** commit `9a8988cd` commits the public Client ID of the `daoleno`-owned Zen OAuth app to `release/plugin-publishers.json`; `python3 scripts/plugin-publisher-flags.py --require github` passes.
+- **Summary:** The artifact workflow requires a registered Mewla GitHub publisher before building a public release.
+- **Resolution evidence:** commit `9a8988cd` commits the public Client ID of the `daoleno`-owned Mewla OAuth app to `release/plugin-publishers.json`; `python3 scripts/plugin-publisher-flags.py --require github` passes.
 - **Handoff (historical):** [Publisher setup](internal/plugins-publisher-setup.md#github-approved-owner-and-concrete-registration-handoff).
 
 ### `android-native-terminal-artifacts` (resolved 2026-08-24)

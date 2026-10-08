@@ -10,8 +10,8 @@ The catalog names the current server and its connection state. It lists **Connec
 
 | Service | Built-in authorization | Current implementation boundary |
 | --- | --- | --- |
-| Linear | DCR + PKCE + fixed native return | Live daemon DCR accepted `zen://plugins`; the official Approve screen opens. User approval/login still needed. |
-| Notion | Official remote MCP, DCR + PKCE | Live daemon DCR accepts `zen://plugins` and opens the official Notion login. Account consent and native return after login still need user verification. |
+| Linear | DCR + PKCE + fixed native return | Live daemon DCR accepted `mewla://plugins`; the official Approve screen opens. User approval/login still needed. |
+| Notion | Official remote MCP, DCR + PKCE | Live daemon DCR accepts `mewla://plugins` and opens the official Notion login. Account consent and native return after login still need user verification. |
 | GitHub | Official device authorization, or preview and explicitly import a server-signed-in identity through `gh` | Dev, local and release builds use the committed Mewla-owned public client ID. Live device-code issuance and the official login page are verified; user login/consent remains. Existing identity import is not first-time signup proof. |
 | Slack | Official public-client PKCE with user scopes and rotating tokens | Requires Mewla publisher registration with PKCE enabled and a public client ID in the release. No shared client secret or public daemon callback. |
 | Google Workspace | Existing operator-owned Web OAuth works on an already configured daemon | The prepared Google-only exchange and daemon adapter support distributed no-configuration background access once publisher hosting/registration is provisioned. No end-user configuration workaround is offered. |

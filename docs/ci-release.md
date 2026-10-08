@@ -37,7 +37,7 @@ GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN
 
 ## Repository secrets (names only)
 
-Configure under GitHub → Settings → Secrets and variables → Actions. Values are **not** documented and must never be committed or printed in logs.
+Configure under GitHub → Settings → Secrets and variables → Actions. Values are **not** documented and must never be committed or printed in logs. The secrets keep their original `ZEN_*` names because stored values cannot be read back to copy; each workflow step maps them once into the `MEWLA_*` names that scripts read.
 
 | Secret name | Purpose |
 | --- | --- |
@@ -51,10 +51,10 @@ Runtime mapping (CI materializes the file, mode `0600`, then shreds it):
 
 | CI env | Source |
 | --- | --- |
-| `ZEN_ANDROID_KEYSTORE` | Temp path from `scripts/materialize-android-keystore.sh` |
-| `ZEN_ANDROID_KEYSTORE_PASSWORD` | secret of same name |
-| `ZEN_ANDROID_KEY_ALIAS` | secret of same name |
-| `ZEN_ANDROID_KEY_PASSWORD` | secret of same name |
+| `MEWLA_ANDROID_KEYSTORE` | Temp path from `scripts/materialize-android-keystore.sh` |
+| `MEWLA_ANDROID_KEYSTORE_PASSWORD` | secret `ZEN_ANDROID_KEYSTORE_PASSWORD` |
+| `MEWLA_ANDROID_KEY_ALIAS` | secret `ZEN_ANDROID_KEY_ALIAS` |
+| `MEWLA_ANDROID_KEY_PASSWORD` | secret `ZEN_ANDROID_KEY_PASSWORD` |
 
 Local maintainer builds use a filesystem path via `MEWLA_ANDROID_KEYSTORE` (see [android.md](internal/android-development.md)); agents must not read `~/.mewla/release-keys`.
 
@@ -192,4 +192,4 @@ Daemon archives contain `mewla`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Relea
 - Manual artifact dispatch publishes only with the reviewed boolean; the strict annotated stable/beta tag path remains available for maintainer recovery.
 - Gradle caches only dependency/build state under the runner's Gradle home. Zig/Ghostty source and unsigned native-output keys include the native lock and build/verification inputs; every cache hit still runs release-grade manifest, checksum, ABI, and notice verification.
 - No cache path includes a keystore, updater signing key, signed APK, or staged release output.
-- Pinned Zig archives are SHA-256 verified on both cache misses and hits and extracted under `$RUNNER_TEMP/zen-tools` (not `/usr/local`). No `sudo` or unverified installers.
+- Pinned Zig archives are SHA-256 verified on both cache misses and hits and extracted under `$RUNNER_TEMP/mewla-tools` (not `/usr/local`). No `sudo` or unverified installers.

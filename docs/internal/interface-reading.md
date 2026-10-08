@@ -65,7 +65,7 @@ Development fixture:
 mewla://screenshot-demo?demo=1&state=mermaid
 ```
 
-Requires `EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1` in a development build.
+Requires `EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1` in a development build.
 
 ## Verification
 
@@ -81,7 +81,7 @@ The existing development-only screenshot route has a `reading` scenario:
 mewla://screenshot-demo?demo=1&state=reading
 ```
 
-It requires `EXPO_PUBLIC_ZEN_SCREENSHOT_DEMO=1` in a development build. It uses
+It requires `EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1` in a development build. It uses
 the production timeline/keyboard/preview components with isolated messages and
 normal, large and tall PNG assets plus a large JPEG. History initially arrives after mount, like a
 real subscription. Fixture actions change source data or navigation; they do not

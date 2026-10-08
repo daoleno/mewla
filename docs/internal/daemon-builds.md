@@ -69,7 +69,7 @@ Full local stage (clean directory each run; **no** GitHub Release):
 
 Each archive contains the `mewla` binary plus `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. The command prints the exact stage path; tracked release notes remain on the GitHub Release page instead of becoming duplicate download assets.
 
-Release staging requires the Ed25519 manifest key through `ZEN_UPDATE_SIGNING_KEY` (a local PEM path) or `ZEN_UPDATE_SIGNING_KEY_BASE64` (CI). The committed public key is the trust root embedded in the daemon; private key material is never stored in Git.
+Release staging requires the Ed25519 manifest key through `MEWLA_UPDATE_SIGNING_KEY` (a local PEM path) or `MEWLA_UPDATE_SIGNING_KEY_BASE64` (CI). The committed public key is the trust root embedded in the daemon; private key material is never stored in Git.
 
 Verify identity sources and stage checksums:
 
@@ -101,7 +101,7 @@ module root because the DEV runner rebuilds there.
 
 Install validates the contract before writing anything: it refuses to run as
 root, refuses a binary or working directory this user cannot execute, refuses a
-foreign `zen.service`, and refuses when the state directory is already locked
+foreign `mewla.service`, and refuses when the state directory is already locked
 by a process outside the installed unit's own systemd cgroup, or when the
 listen address is unavailable. It never kills those processes; stop them
 first. After `enable --now` (or `restart` for a changed contract) it verifies
@@ -119,7 +119,7 @@ an ordering cycle at boot and drop the implicit ordering. Ownership is bound
 to the unit, not to a same-binary guess: an active unit that owns a different
 state does not satisfy the cgroup-lock and identity checks above.
 `KillMode=process` is intentional: the daemon reuses the user's ordinary tmux
-server, a shared per-user resource, so stopping or restarting `zen.service`
+server, a shared per-user resource, so stopping or restarting `mewla.service`
 terminates only the daemon and never tears down tmux or Worker sessions; tmux,
 Worker sessions and the pairing/state files are outside the unit's lifecycle.
 

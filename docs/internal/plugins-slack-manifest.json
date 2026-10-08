@@ -1,7 +1,7 @@
 {
   "display_information": { "name": "Mewla", "description": "Connect your workspace to your private Mewla server" },
   "oauth_config": {
-    "redirect_urls": ["zen://plugins"],
+    "redirect_urls": ["mewla://plugins"],
     "scopes": { "user": ["channels:read", "channels:history", "search:read", "chat:write"] },
     "pkce_enabled": true
   },

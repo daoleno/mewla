@@ -1,6 +1,6 @@
 # Executable Behavior Contracts
 
-Mewla uses ordinary Go tests with stable `TestBDD_ZENnnn_...` names, comments
+Mewla uses ordinary Go tests with stable `TestBDD_nnn_...` names, comments
 describing Given/When/Then, and assertions against production state and effects.
 There is no Cucumber dependency, custom scenario language, scheduler or test
 agent. A passing provider exit or a model's assertion of PASS is not an oracle.
@@ -9,32 +9,32 @@ agent. A passing provider exit or a model's assertion of PASS is not an oracle.
 
 | ID / executable suffix | Given | When | Then |
 | --- | --- | --- | --- |
-| ZEN001 `DurableDecisionCleanup/done` | Admitted delegated Worker | Exact terminal report emits Work change, then scripted Brain accepts | Durable result reaches Brain before Work closes; only completed owned Session is removed |
-| ZEN001 `.../failed` | Worker failure | Scripted Brain inspects failure and cancels | Failure remains failure, not implicit success |
-| ZEN001 `.../accept-before-cleanup-crash` | Decision saved without teardown | Store reopens and cleanup reconciles | Saved decision survives and exact Session is reclaimed idempotently |
-| ZEN001 `.../cleanup-failure` | Injected teardown failure | Decision persists; explicit recovery reconciles after fault removal | Failure is visible, acceptance durable, no business input replay |
-| ZEN001 `.../reused-session` | Closed old Work, new turn in same Session | Old cleanup runs after reopen | New owner, user Session and Host survive |
-| ZEN002 `StaleDeliveredHandlerIncident` | Historical delivered handler never ended | Independent Worker completes, including transcript replacement/restart | New result reaches free Brain lane without manually deleting old handling; summary is terminal evidence |
-| ZEN003 `BusyBrainDefersUntilProviderTurnEnds` | Exact foreground provider Activity running | Result arrives, then foreground terminal edge | No interrupt or premature admission; result delivered when lane becomes free |
-| ZEN004 `CLIReportToDecisionAndSessionRemoval` | Canonical admission and isolated Unix control server | Actual CLI reports exact turn; scripted Brain explicitly accepts | Production control/Store/Service delivery and cleanup, duplicate report no-op, closure survives reopen |
-| ZEN005 `PartialResultNeedsScopedFollowup` | Objective needs A and B; result contains A only | Scripted Brain asks only for missing B, then runtime reopens | Incomplete result is not accepted; later result requires explicit acceptance; no replay of original input |
-| ZEN006 `UnrelatedCleanupCannotInvalidateDecision` | Historical cleanup ownership conflict | Independent Work is accepted | Decision succeeds with scoped cleanup; global recovery still reports the genuine historical conflict |
-| ZEN007 `CompletedCleanupSerializesWithNewInput` | Old cleanup waiting for input lock | New turn acquires ownership first | Production watcher rejects old cleanup before transport IO |
-| ZEN008 `AlreadyReclaimedSessionCleanupIsIdempotent` | Completed ledger identity, missing tmux window | Production watcher cleanup runs twice | Proven absence succeeds idempotently through the actual cleanup boundary |
-| ZEN009 `LostOriginalResultSurvivesWaitAndRestart` | Original admitted turn provisionally lost | Brain waits and Store restarts before exact supplied terminal progress | Original result supersedes loss and requires fresh judgment; duplicates dedupe; cancelled/superseded turns cannot revive |
-| ZEN010 `IncompleteInventoryDoesNotDeclareOriginalLost` | Discovery snapshot lacks original Session | Authoritative probe says present, unreadable, or absent | Only proven absence records loss; present/unreadable preserves original progress eligibility without replay |
-| ZEN011 `RealProviderDecision` | Fresh arithmetic objective and independent numeric oracle | Two real API calls produce Worker result and Brain judgment | Actual delivered result checked, explicit decision persisted, exact cleanup asserted; opt-in hybrid, not native E2E |
-| ZEN012 `ProviderPathBudgetAndFailures` | Same provider harness using scripted HTTP | Full loop, 429, truncation, invalid envelope or timeout | Correct side effects or classified failure; no retry and no third call |
-| ZEN013 `DecisionSavedWithCleanupPending` | Cleanup failure on current completed Session | Control accepts Work | `brain_work_cleanup_pending` includes persisted Work; recovery completes only cleanup, not the business action |
-| ZEN014 `QuietMissingSessionCleanupIsAbsentNotUnowned` | Completed ledger identity, tmux 3.6a quiet show-options success for a gone session | Production watcher cleanup runs twice | Proven absence succeeds; not classified as `ErrUnownedTmuxTarget` |
-| ZEN015 `UnownedPresentCompletedCleanupIsProtected` | Completed ledger identity, live tmux target without Mewla ownership marker | Cleanup reconciled twice | Target is untouched and `ErrUnownedTmuxTarget` stays visible |
-| ZEN016 `RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned` | Isolated tmux socket with reclaimed owned window and later unowned identity reuse | Official completed cleanup | Absence is idempotent; reused unowned window is not killed |
-| ZEN017 `RealTmuxWrongSocketAndRebootOwnership` | Completed target on a different socket; leftover owned window after a fresh watcher | Official completed cleanup | Wrong-socket ambient is untouched; reboot leftover owned window is reclaimed; retry is idempotent |
-| ZEN018 `StartupReconciliationAbsentCompletedIsIdempotent` | Mixed absent completed Session and genuine unowned present target | `ReconcileSignalSystemStartup` twice | Absent target is reclaimed; unowned/active/Host survive; unowned error remains visible |
-| ZEN019 `PresentOwnedCleanupRequiresProvenIdentity` | Present owned completed target with recorded identity | Resolver unknown, mismatched/reused generation, matching generation, or dead pane with matching pane generation | Unknown/mismatch refuse with no kill or resource release; known match and proven-absent remain idempotent |
+| BDD-001 `DurableDecisionCleanup/done` | Admitted delegated Worker | Exact terminal report emits Work change, then scripted Brain accepts | Durable result reaches Brain before Work closes; only completed owned Session is removed |
+| BDD-001 `.../failed` | Worker failure | Scripted Brain inspects failure and cancels | Failure remains failure, not implicit success |
+| BDD-001 `.../accept-before-cleanup-crash` | Decision saved without teardown | Store reopens and cleanup reconciles | Saved decision survives and exact Session is reclaimed idempotently |
+| BDD-001 `.../cleanup-failure` | Injected teardown failure | Decision persists; explicit recovery reconciles after fault removal | Failure is visible, acceptance durable, no business input replay |
+| BDD-001 `.../reused-session` | Closed old Work, new turn in same Session | Old cleanup runs after reopen | New owner, user Session and Host survive |
+| BDD-002 `StaleDeliveredHandlerIncident` | Historical delivered handler never ended | Independent Worker completes, including transcript replacement/restart | New result reaches free Brain lane without manually deleting old handling; summary is terminal evidence |
+| BDD-003 `BusyBrainDefersUntilProviderTurnEnds` | Exact foreground provider Activity running | Result arrives, then foreground terminal edge | No interrupt or premature admission; result delivered when lane becomes free |
+| BDD-004 `CLIReportToDecisionAndSessionRemoval` | Canonical admission and isolated Unix control server | Actual CLI reports exact turn; scripted Brain explicitly accepts | Production control/Store/Service delivery and cleanup, duplicate report no-op, closure survives reopen |
+| BDD-005 `PartialResultNeedsScopedFollowup` | Objective needs A and B; result contains A only | Scripted Brain asks only for missing B, then runtime reopens | Incomplete result is not accepted; later result requires explicit acceptance; no replay of original input |
+| BDD-006 `UnrelatedCleanupCannotInvalidateDecision` | Historical cleanup ownership conflict | Independent Work is accepted | Decision succeeds with scoped cleanup; global recovery still reports the genuine historical conflict |
+| BDD-007 `CompletedCleanupSerializesWithNewInput` | Old cleanup waiting for input lock | New turn acquires ownership first | Production watcher rejects old cleanup before transport IO |
+| BDD-008 `AlreadyReclaimedSessionCleanupIsIdempotent` | Completed ledger identity, missing tmux window | Production watcher cleanup runs twice | Proven absence succeeds idempotently through the actual cleanup boundary |
+| BDD-009 `LostOriginalResultSurvivesWaitAndRestart` | Original admitted turn provisionally lost | Brain waits and Store restarts before exact supplied terminal progress | Original result supersedes loss and requires fresh judgment; duplicates dedupe; cancelled/superseded turns cannot revive |
+| BDD-010 `IncompleteInventoryDoesNotDeclareOriginalLost` | Discovery snapshot lacks original Session | Authoritative probe says present, unreadable, or absent | Only proven absence records loss; present/unreadable preserves original progress eligibility without replay |
+| BDD-011 `RealProviderDecision` | Fresh arithmetic objective and independent numeric oracle | Two real API calls produce Worker result and Brain judgment | Actual delivered result checked, explicit decision persisted, exact cleanup asserted; opt-in hybrid, not native E2E |
+| BDD-012 `ProviderPathBudgetAndFailures` | Same provider harness using scripted HTTP | Full loop, 429, truncation, invalid envelope or timeout | Correct side effects or classified failure; no retry and no third call |
+| BDD-013 `DecisionSavedWithCleanupPending` | Cleanup failure on current completed Session | Control accepts Work | `brain_work_cleanup_pending` includes persisted Work; recovery completes only cleanup, not the business action |
+| BDD-014 `QuietMissingSessionCleanupIsAbsentNotUnowned` | Completed ledger identity, tmux 3.6a quiet show-options success for a gone session | Production watcher cleanup runs twice | Proven absence succeeds; not classified as `ErrUnownedTmuxTarget` |
+| BDD-015 `UnownedPresentCompletedCleanupIsProtected` | Completed ledger identity, live tmux target without Mewla ownership marker | Cleanup reconciled twice | Target is untouched and `ErrUnownedTmuxTarget` stays visible |
+| BDD-016 `RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned` | Isolated tmux socket with reclaimed owned window and later unowned identity reuse | Official completed cleanup | Absence is idempotent; reused unowned window is not killed |
+| BDD-017 `RealTmuxWrongSocketAndRebootOwnership` | Completed target on a different socket; leftover owned window after a fresh watcher | Official completed cleanup | Wrong-socket ambient is untouched; reboot leftover owned window is reclaimed; retry is idempotent |
+| BDD-018 `StartupReconciliationAbsentCompletedIsIdempotent` | Mixed absent completed Session and genuine unowned present target | `ReconcileSignalSystemStartup` twice | Absent target is reclaimed; unowned/active/Host survive; unowned error remains visible |
+| BDD-019 `PresentOwnedCleanupRequiresProvenIdentity` | Present owned completed target with recorded identity | Resolver unknown, mismatched/reused generation, matching generation, or dead pane with matching pane generation | Unknown/mismatch refuse with no kill or resource release; known match and proven-absent remain idempotent |
 
-ZEN001 also submits duplicate control and bound provider terminals, asserts no
-extra input, and reopens the Store. ZEN002 covers interrupted Host handling.
+BDD-001 also submits duplicate control and bound provider terminals, asserts no
+extra input, and reopens the Store. BDD-002 covers interrupted Host handling.
 The watcher cleanup lock and missing-resource tests run in the full Go gate;
 they exercise the actual watcher boundary rather than the scripted Session map.
 Stable IDs are retained when contracts change.
@@ -61,7 +61,7 @@ react to source changes; that is not a controlled deployment or live proof.
 PR CI runs the deterministic contracts and uploads standard `go test -json`
 JSONL, including `Test`, `Action`, `Package` and elapsed-time fields. Consumers
 must use terminal `pass`/`fail`/`skip` test actions and the process exit status,
-not text containing PASS. A skipped ZEN011 is not real-provider success. Keep
+not text containing PASS. A skipped BDD-011 is not real-provider success. Keep
 failed runs; never rerun unchanged real calls until green. Deterministic test
 decisions are scripted evidence, not demonstrations of actual AI judgment.
 
@@ -77,7 +77,7 @@ Mewla's current provider or reads/modifies live lifecycle state.
 ```sh
 MEWLA_BDD_REAL_PROVIDER=1 MEWLA_BDD_MAX_CALLS=2 \
   go test -json -count=1 -timeout 120s ./brain \
-  -run '^TestBDD_ZEN011_RealProviderDecision$'
+  -run '^TestBDD_011_RealProviderDecision$'
 ```
 
 The four bound configuration values must already be in the environment;
@@ -110,7 +110,8 @@ price; the operator must approve the selected model's current pricing.
 
 `behavior-provider.yml` provides the same manually dispatched gate with an
 explicit budget checkbox. Its repository variables `ZEN_BDD_BASE_URL` and
-`ZEN_BDD_MODEL` and `ZEN_BDD_PROTOCOL` must be bound to repository secret `ZEN_BDD_API_KEY`; there is
+`ZEN_BDD_MODEL` and `ZEN_BDD_PROTOCOL` must be bound to repository secret `ZEN_BDD_API_KEY`
+(the workflow maps each to the `MEWLA_BDD_*` name the test reads); there is
 no dispatch-time endpoint override that could redirect the secret elsewhere.
 It is never a PR dependency. No configured secret,
 model or budget acknowledgment is an `environment_failure`, not a skip.
@@ -129,7 +130,7 @@ delivery, persisted decision, cleanup and unrelated-Session assertions pass.
 The real-provider path deliberately isolates reasoning from native transport:
 Session sends/removal use the existing fake watcher, but Store, lifecycle,
 event admission and explicit disposition use production code. The scripted
-ZEN012 path verifies that harness offline. Neither proves native provider
+BDD-012 path verifies that harness offline. Neither proves native provider
 launch/discovery or actual automatic Brain execution. A native no-watch
 experiment requires its own producer-triggered Brain event, actual model
 decision and observed owned Session removal; keep its private identities and

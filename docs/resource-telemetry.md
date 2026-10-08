@@ -84,7 +84,7 @@ is a process tree left after a Worker reached `done` or was closed.
 ## Brain pressure events
 
 When the hysteresis state changes, the daemon sends a compact `resource_pressure`
-event through the same Brain event channel used by `zen_work_event`. The event
+event through the same Brain event channel used by `mewla_work_event`. The event
 contains `state`, `previous_state`, `crossed` signal names, `trend`, machine
 totals, the top attributed consumers, orphaned consumers, queue/in-flight
 counts, `sampled_at`, and `snapshot_endpoint: "get_resource_telemetry"`.
@@ -102,7 +102,7 @@ The implemented transport is cached polling: request `get_resource_telemetry`
 on the current server's existing authenticated WebSocket every five seconds.
 There is no unconditional telemetry broadcast. `GET /resources` returns the
 same flat response with the existing signed device authentication and purpose
-`zen-resource-telemetry`; responses use `Cache-Control: no-store`. The local
+`mewla-resource-telemetry`; responses use `Cache-Control: no-store`. The local
 control socket exposes the same snapshot through `mewla resources --json` under
 `resource_telemetry`. Before the first sample, the WebSocket returns
 `resource_telemetry_unavailable` and HTTP returns 503. Changing the app's current
@@ -183,7 +183,7 @@ fields must be avoided. Example (partial overrides are supported):
 
 Sustain/recovery durations accept 15–600 seconds; cooldown accepts 30–3600 seconds.
 Thresholds must be positive and at most 100, with ordered elevated/critical
-values. Notifications are `zen_work_event` envelopes with `kind=resource_pressure`
+values. Notifications are `mewla_work_event` envelopes with `kind=resource_pressure`
 and an embedded `resource_pressure` object. They use the durable Work review
 channel and exact delivery receipts, not user-input admission. Each transition
 has a deterministic event identity and a separate bounded notification Work;
@@ -214,7 +214,7 @@ MEWLA_VERIFY_RESOURCE_COST=1 GOMAXPROCS=2 "$MEWLA_BUILD_TMPDIR/resource-watcher.
 
 Whole-daemon profiling must distinguish this sampler from provider usage
 statistics and channel projections. Usage statistics retain validated sparse
-metadata under `~/.cache/zen/usage-v1` across restarts; source identity, size,
+metadata under `~/.cache/mewla/usage-v1` across restarts; source identity, size,
 modification time and timezone invalidate entries. This disposable cache never
 contains transcript bodies. A summary younger than five minutes can serve a
 quick restart; normal periodic collection resumes afterwards. Telegram polling

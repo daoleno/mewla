@@ -52,19 +52,16 @@ MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' \
 Compose:
 
 ```bash
-cd deploy/zen-link
-ZEN_LINK_CONNECTOR_TOKEN='from-your-secret-manager' docker compose up --build
+cd deploy/mewla-link
+MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' docker compose up --build
 ```
-
-The Compose file still reads the legacy `ZEN_LINK_CONNECTOR_TOKEN` name; the relay
-accepts it as an alias of `MEWLA_LINK_CONNECTOR_TOKEN`.
 
 The Compose file maps public TCP `443` to unprivileged container port `9443`;
 the distroless process remains non-root. The direct binary defaults to `:443`,
 so a bare-host operator should either set `-client-addr` behind a load balancer
 or grant only the platform's narrow low-port binding capability.
 
-Place `tls.crt` and `tls.key` under `deploy/zen-link/secrets/` only for local
+Place `tls.crt` and `tls.key` under `deploy/mewla-link/secrets/` only for local
 operator testing; that directory must remain untracked. In production mount
 from a secret manager instead.
 

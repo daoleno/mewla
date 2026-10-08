@@ -6,7 +6,7 @@
     {
       "id": "github-plugin-publisher-registration",
       "severity": "resolved",
-      "summary": "The approved Zen GitHub OAuth app's public Client ID is committed in release/plugin-publishers.json",
+      "summary": "The approved Mewla GitHub OAuth app's public Client ID is committed in release/plugin-publishers.json",
       "paths": [
         {
           "path": "release/plugin-publishers.json",
@@ -17,7 +17,7 @@
           "referenced_by_app": false
         }
       ],
-      "acceptance": "Commit the public Client ID of the daoleno-owned Zen OAuth app with Device Flow enabled and pass python3 scripts/plugin-publisher-flags.py --require github before release preparation",
+      "acceptance": "Commit the public Client ID of the daoleno-owned Mewla OAuth app with Device Flow enabled and pass python3 scripts/plugin-publisher-flags.py --require github before release preparation",
       "pipeline_status": "complete",
       "evidence": "Commit 9a8988cd sets github.client_id; python3 scripts/plugin-publisher-flags.py --require github passes",
       "resolved_at": "2026-10-04"
@@ -28,11 +28,11 @@
       "summary": "Signed arm64 APK and daemon archives are published with checksums and a signed update manifest",
       "paths": [
         {
-          "path": "app/modules/zen-terminal-vt/libs/android/*/libghostty_vt.so",
+          "path": "app/modules/terminal-vt/libs/android/*/libghostty_vt.so",
           "referenced_by_app": true
         },
         {
-          "path": "app/modules/zen-terminal-vt/native.lock.json",
+          "path": "app/modules/terminal-vt/native.lock.json",
           "referenced_by_app": false
         },
         {
@@ -67,15 +67,15 @@
       "summary": "Protected CI publishes the verified Preview build through the public TestFlight group",
       "paths": [
         {
-          "path": "app/modules/zen-terminal-vt/libs/ios/GhosttyVt.xcframework",
+          "path": "app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework",
           "referenced_by_app": true
         },
         {
-          "path": "app/modules/zen-terminal-vt/ZenTerminalVt.podspec",
+          "path": "app/modules/terminal-vt/TerminalVt.podspec",
           "referenced_by_app": true
         },
         {
-          "path": "app/plugins/withZenIOSBuild.js",
+          "path": "app/plugins/withIOSBuild.js",
           "referenced_by_app": true
         },
         {
@@ -103,7 +103,7 @@
           "referenced_by_app": false
         }
       ],
-      "acceptance": "Reproducible CI verifies the XCFramework and Ghostty notice in the app bundle, signs/archives Zen, and publishes a publicly installable TestFlight/App Store path (Preview IPA upload alone is insufficient)",
+      "acceptance": "Reproducible CI verifies the XCFramework and Ghostty notice in the app bundle, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path (Preview IPA upload alone is insufficient)",
       "pipeline_status": "complete",
       "evidence": "https://testflight.apple.com/join/rTKCDzMt",
       "resolved_at": "2026-08-24"

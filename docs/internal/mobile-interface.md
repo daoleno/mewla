@@ -99,7 +99,7 @@ A segmented **Codex / Claude** switch picks the agent. Below it, one grouped lis
 
 ## Visual tokens
 
-Color lives in `app/theme/primitives.ts` and reaches components through `useZenTheme()` / `useAppColors()`. Type, spacing, radii and shadows live in `app/constants/tokens.ts`. The terminal emulator palette in `app/constants/terminalThemes.ts` is separate.
+Color lives in `app/theme/primitives.ts` and reaches components through `useThemeContext()` / `useAppColors()`. Type, spacing, radii and shadows live in `app/constants/tokens.ts`. The terminal emulator palette in `app/constants/terminalThemes.ts` is separate.
 
 - **Canvas.** Dark mode uses a warm ink canvas (`#12120E`), not a blue-black one, so sage sits on it without vibrating. Light mode uses a warm stone canvas (`#F5F3EE`) with near-white paper cards.
 - **Elevation.** Canvas, surface, elevated and pressed are distinct tonal steps. Hairlines are not the only thing that separates them. Buttons, chips, the composer and other in-flow controls are flat. Only floating sheets, menus, toasts and the FAB cast a shadow, and on Android each one owns its radius and an opaque fill so the elevation shadow follows the shape.

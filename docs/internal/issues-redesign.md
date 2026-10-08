@@ -18,11 +18,11 @@ Replace the current Linear-style issue tracker (task + run + comment with status
 ## Filesystem Layout
 
 ```
-~/.zen/
+~/.mewla/
 └── issues/
     ├── inbox/                          # unassigned issues (no project.toml required)
     │   └── 2026-04-21-fix-push.md
-    ├── zen/
+    ├── mewla/
     │   ├── project.toml
     │   └── 2026-04-21-redesign-issues.md
     └── homelab/
@@ -31,7 +31,7 @@ Replace the current Linear-style issue tracker (task + run + comment with status
 ```
 
 Rules:
-- `~/.zen/issues/<project>/` is the root for issues of a project.
+- `~/.mewla/issues/<project>/` is the root for issues of a project.
 - `inbox` is a reserved project name. It has no `project.toml` and works out of the box for quick capture.
 - Filename carries no semantics. Humans use `YYYY-MM-DD-slug.md` by convention; the daemon identifies issues by the `id` in frontmatter, so renaming or moving the file is safe.
 - Creating a new project = creating a new subdirectory under `issues/` with a `project.toml`.
@@ -64,8 +64,8 @@ Body: free-form Markdown. The first `#` heading (or the first non-empty line) is
 ## Project Config (`project.toml`)
 
 ```toml
-name = "zen"
-cwd = "/home/daoleno/workspace/zen"     # default cwd for dispatched agents
+name = "mewla"
+cwd = "/home/daoleno/workspace/mewla"     # default cwd for dispatched agents
 executor = "claude"                     # default executor when no @mention present
 ```
 
@@ -75,7 +75,7 @@ Minimal. The daemon reads this on load and on file change. `inbox/` skips this f
 
 Syntax:
 - `@<role>` — any idle agent of that role; spawn a new one if none is available. Example: `@claude`.
-- `@<role>#<session>` — specific existing tmux session. Example: `@claude#zen-claude-3`.
+- `@<role>#<session>` — specific existing tmux session. Example: `@claude#mewla-claude-3`.
 
 Extraction regex (applied after escaping email-like patterns): `(?:^|\s)@([a-z][a-z0-9-]*)(?:#([a-z0-9-]+))?\b`. Emails like `user@host.com` do not match because they are preceded by a non-space character.
 
@@ -93,7 +93,7 @@ The first mention in the body is the primary; later mentions are text only. A si
 
 - `task/` package in its entirety: `types.go`, `store.go`, `run.go`, related tests.
 - Persisted files: `tasks.json`, `runs.json`, `meta.json`. Deleted on first run of new daemon.
-- `.zen/task.md` per-worktree writer.
+- `.mewla/task.md` per-worktree writer.
 - WebSocket messages: `create_task`, `update_task`, `list_tasks`, `list_runs`, `create_run`, `delegate_task`, `add_task_comment`, `delete_task`, and their broadcast events (`task_created`, `task_updated`, `run_created`, `run_updated`).
 
 ### Daemon — new
@@ -159,9 +159,9 @@ Failure modes (all return structured errors on the `send_issue` response and a t
 
 ## Watcher + Sync Flow
 
-- `fsnotify` recursive watcher on `~/.zen/issues/`. Events debounced 200ms per path.
+- `fsnotify` recursive watcher on `~/.mewla/issues/`. Events debounced 200ms per path.
 - On event, re-read file, re-parse, compare with snapshot, broadcast `issue_changed` with the full payload (or `issue_deleted`).
-- On daemon startup, full rescan of `~/.zen/issues/`, rebuild in-memory snapshot. First-connected-client receives `issues_snapshot`.
+- On daemon startup, full rescan of `~/.mewla/issues/`, rebuild in-memory snapshot. First-connected-client receives `issues_snapshot`.
 - Full body is broadcast (no diff). Issues are small enough (single-KB Markdown) that diffing is unnecessary complexity.
 
 Done detection: the watcher parses `done` frontmatter. Non-empty → Done section. Empty → Active section. Toggling is bidirectional — clearing `done` manually re-activates the issue.
@@ -184,14 +184,14 @@ Daemon uses `os.CreateTemp` in the target directory + `os.Rename` for atomicity 
 │ @claude                   │  ← role, always listed
 │ @codex                    │  ← role, always listed
 │ ─────────────────────     │
-│ zen-claude-3  · zen       │  ← running session in current project
+│ mewla-claude-3  · mewla       │  ← running session in current project
 │ home-codex-1  · homelab   │  ← (only if same project; otherwise hidden)
 └───────────────────────────┘
 ```
 
 - Trigger: `@` at start of line or after whitespace.
 - Filter: characters after `@` filter the list by prefix.
-- Confirm: `Enter` / `Tab` / tap inserts the mention as plain text (`@claude` or `@claude#zen-claude-3`).
+- Confirm: `Enter` / `Tab` / tap inserts the mention as plain text (`@claude` or `@claude#mewla-claude-3`).
 - Dismiss: `Esc` / blur / leading space without selection.
 - Only sessions from the current issue's project are shown to avoid cross-project noise.
 - Mentions render as plain text in the editor. Only the read-only view (not the edit view) renders them as visual chips.
@@ -205,7 +205,7 @@ type MentionCandidate =
 
 ## Executor Configuration
 
-Daemon today is flag-based. Rather than adding TOML to the existing config surface, introduce a **single new file** `~/.zen/executors.toml` read at startup:
+Daemon today is flag-based. Rather than adding TOML to the existing config surface, introduce a **single new file** `~/.mewla/executors.toml` read at startup:
 
 ```toml
 default_executor = "claude"
