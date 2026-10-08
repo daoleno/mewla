@@ -226,6 +226,7 @@ export function InterfaceChatBody({
       ) : null}
       {composerAccessory}
       <InterfaceChatComposerSection
+        accessoryOpen={composerAccessory != null}
         inputRef={inputRef}
         draft={draft}
         editable={editable}

@@ -36,6 +36,8 @@ interface InterfaceChatComposerSectionProps {
   onSendPress(): void;
   onStopPress(): void;
   onModelControlPress?(): void;
+  /** A picker above the composer (Brain's @executor) is showing. */
+  accessoryOpen?: boolean;
 }
 
 export function InterfaceChatComposerSection({
@@ -64,6 +66,7 @@ export function InterfaceChatComposerSection({
   onSendPress,
   onStopPress,
   onModelControlPress,
+  accessoryOpen = false,
 }: InterfaceChatComposerSectionProps) {
   return (
     <InterfaceChatComposer
@@ -91,6 +94,7 @@ export function InterfaceChatComposerSection({
       showAttachmentRail={presentation.showAttachmentRail}
       showCommandMenu={presentation.showCommandMenu}
       showCommandList={presentation.showCommandList}
+      pickerOpen={presentation.showCommandList || accessoryOpen}
       showComposerActions={presentation.showComposerActions}
       composerActionButtonEnabled={presentation.composerActionButtonEnabled}
       commandQuery={presentation.commandQuery}

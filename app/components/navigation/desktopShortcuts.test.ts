@@ -39,6 +39,14 @@ describe("composer keys", () => {
     expect(isImeComposing({ key: "Enter", keyCode: 13 })).toBe(false);
   });
 
+  test("an open command or mention list holds Enter instead of sending", () => {
+    const picker = { desktop: true, draftEmpty: false, pickerOpen: true };
+    expect(composerKeyIntent({ key: "Enter" }, picker)).toBe("hold");
+    expect(composerKeyIntent({ key: "Enter", ctrlKey: true }, picker)).toBe("hold");
+    expect(composerKeyIntent({ key: "Enter", shiftKey: true }, picker)).toBeNull();
+    expect(composerKeyIntent({ key: "Enter" }, { ...picker, desktop: false })).toBeNull();
+  });
+
   test("Esc leaves the box; ↑ recalls only in an empty box on desktop", () => {
     expect(composerKeyIntent({ key: "Escape" }, desktop)).toBe("blur");
     expect(composerKeyIntent({ key: "ArrowUp" }, { desktop: true, draftEmpty: true })).toBe("recall");
