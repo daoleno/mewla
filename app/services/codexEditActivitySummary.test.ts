@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildInterfaceTimelineActivityPresentation } from "../components/terminal/InterfaceTimelineActivityModel";
-import type { ZenActivityTimelineItem } from "../components/terminal/InterfaceTimelineActivityTypes";
-import { buildZenTimeline } from "../components/terminal/InterfaceTimelineModel";
+import type { ActivityTimelineItem } from "../components/terminal/InterfaceTimelineActivityTypes";
+import { buildTimeline } from "../components/terminal/InterfaceTimelineModel";
 import { normalizeCodexConversation } from "./codexConversation";
 
 function normalizedPatchActivity(event: Record<string, unknown>) {
@@ -18,8 +18,8 @@ function normalizedPatchActivity(event: Record<string, unknown>) {
       },
     ],
   });
-  const activities = buildZenTimeline(conversation.events).filter(
-    (item): item is ZenActivityTimelineItem => item.type === "activity",
+  const activities = buildTimeline(conversation.events).filter(
+    (item): item is ActivityTimelineItem => item.type === "activity",
   );
   expect(activities).toHaveLength(1);
   return { activity: activities[0]!, event: conversation.events[0]! };

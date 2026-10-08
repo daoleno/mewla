@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
-import { buildZenTimeline } from "./InterfaceTimelineModel";
+import { buildTimeline } from "./InterfaceTimelineModel";
 import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
 import {
-  projectZenTimeline,
+  projectTimeline,
   resolveProjectionEventOrder,
-  type ZenTimelineProjectionCache,
-} from "./projectZenTimeline";
+  type TimelineProjectionCache,
+} from "./projectTimeline";
 import {
   disableTimelineProjectionPerf,
   enableTimelineProjectionPerf,
@@ -23,14 +23,14 @@ import {
   makeMixedTimelineEvents,
   withAssistantBodyRevision,
 } from "./timelineProjectionFixtures";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 
 afterEach(() => {
   disableTimelineProjectionPerf();
   resetTimelineProjectionPerf();
 });
 
-describe("projectZenTimeline incremental projection", () => {
+describe("projectTimeline incremental projection", () => {
   test("500-event streaming upserts stay under 20% of full projection CPU with stable settled rows", () => {
     const base = makeMixedTimelineEvents(500);
     const streamId = firstAssistantEventId(base);
@@ -43,18 +43,18 @@ describe("projectZenTimeline incremental projection", () => {
     enableTimelineProjectionPerf();
     try {
       // Shared warmup so cold JIT does not dominate either path.
-      let warmCache: ZenTimelineProjectionCache | null = null;
+      let warmCache: TimelineProjectionCache | null = null;
       for (let revision = 0; revision < 10; revision += 1) {
-        warmCache = projectZenTimeline(
+        warmCache = projectTimeline(
           revisionEvents[revision],
           warmCache,
         ).cache;
       }
 
-      let cache: ZenTimelineProjectionCache | null = null;
+      let cache: TimelineProjectionCache | null = null;
       let minStableReuse = Number.POSITIVE_INFINITY;
       for (let revision = 0; revision < revisions; revision += 1) {
-        const result = projectZenTimeline(revisionEvents[revision], cache);
+        const result = projectTimeline(revisionEvents[revision], cache);
         cache = result.cache;
         if (revision === 0) {
           expect(result.mode).toBe("full");
@@ -75,17 +75,17 @@ describe("projectZenTimeline incremental projection", () => {
       for (let trial = 0; trial < 3; trial += 1) {
         const fullStart = nowMs();
         for (let revision = 1; revision <= revisions; revision += 1) {
-          projectZenTimeline(revisionEvents[revision], null);
+          projectTimeline(revisionEvents[revision], null);
         }
         const fullWallMs = nowMs() - fullStart;
 
-        let rolling: ZenTimelineProjectionCache | null = projectZenTimeline(
+        let rolling: TimelineProjectionCache | null = projectTimeline(
           revisionEvents[0],
           null,
         ).cache;
         const incrementalStart = nowMs();
         for (let revision = 1; revision <= revisions; revision += 1) {
-          rolling = projectZenTimeline(revisionEvents[revision], rolling).cache;
+          rolling = projectTimeline(revisionEvents[revision], rolling).cache;
         }
         const incrementalWallMs = nowMs() - incrementalStart;
         expect(fullWallMs).toBeGreaterThan(0);
@@ -381,9 +381,9 @@ describe("projectZenTimeline incremental projection", () => {
     });
 
     for (const testCase of cases) {
-      const primed = projectZenTimeline(testCase.previous, null);
-      const optimized = projectZenTimeline(testCase.next, primed.cache);
-      const canonical = buildZenTimeline(testCase.next);
+      const primed = projectTimeline(testCase.previous, null);
+      const optimized = projectTimeline(testCase.next, primed.cache);
+      const canonical = buildTimeline(testCase.next);
       expect(optimized.mode, testCase.name).toBe(testCase.expectMode);
       if (testCase.fallbackReason) {
         expect(optimized.fallbackReason, testCase.name).toBe(
@@ -400,12 +400,12 @@ describe("projectZenTimeline incremental projection", () => {
   test("50 and 500 fixtures project deterministically", () => {
     const fifty = makeMixedTimelineEvents(50);
     const fiveHundred = makeMixedTimelineEvents(500);
-    expect(buildZenTimeline(fifty).map((item) => item.id)).toEqual(
-      projectZenTimeline(fifty, null).items.map((item) => item.id),
+    expect(buildTimeline(fifty).map((item) => item.id)).toEqual(
+      projectTimeline(fifty, null).items.map((item) => item.id),
     );
-    expect(buildZenTimeline(fiveHundred).length).toBeGreaterThan(400);
-    expect(projectZenTimeline(fiveHundred, null).items.length).toEqual(
-      buildZenTimeline(fiveHundred).length,
+    expect(buildTimeline(fiveHundred).length).toBeGreaterThan(400);
+    expect(projectTimeline(fiveHundred, null).items.length).toEqual(
+      buildTimeline(fiveHundred).length,
     );
   });
 
@@ -433,46 +433,46 @@ describe("mid-review projection contracts", () => {
       new URL("./InterfaceTimelineModel.ts", import.meta.url),
     ).text();
     const projectorSource = await Bun.file(
-      new URL("./projectZenTimeline.ts", import.meta.url),
+      new URL("./projectTimeline.ts", import.meta.url),
     ).text();
 
     expect(modelSource).toContain(
-      "export function buildZenTimelineFromSortedEvents(",
+      "export function buildTimelineFromSortedEvents(",
     );
     expect(modelSource).toContain(
-      "return buildZenTimelineFromSortedEvents(\n    events.slice().sort(compareConversationEvents),",
+      "return buildTimelineFromSortedEvents(\n    events.slice().sort(compareConversationEvents),",
     );
     expect(modelSource).toContain("for (const event of sortedEvents)");
     const sortedCore = sourceBetween(
       modelSource,
-      "export function buildZenTimelineFromSortedEvents(",
+      "export function buildTimelineFromSortedEvents(",
       "\nfunction attachWaitStatusToLastCommand(",
     );
     expect(sortedCore).not.toContain(".sort(");
     expect(sortedCore).not.toContain("compareConversationEvents");
 
-    expect(projectorSource).toContain("buildZenTimelineFromSortedEvents");
+    expect(projectorSource).toContain("buildTimelineFromSortedEvents");
     expect(projectorSource).toContain(
-      "const items = buildZenTimelineFromSortedEvents(sortedEvents);",
+      "const items = buildTimelineFromSortedEvents(sortedEvents);",
     );
     // Projector must not call the sorting wrapper on the full path.
     expect(projectorSource).not.toMatch(
-      /buildZenTimeline\s*\(\s*sortedEvents/,
+      /buildTimeline\s*\(\s*sortedEvents/,
     );
-    expect(projectorSource).not.toContain('import { buildZenTimeline }');
+    expect(projectorSource).not.toContain('import { buildTimeline }');
 
     const shuffled = [...makeMixedTimelineEvents(40)].reverse();
-    const full = projectZenTimeline(shuffled, null);
+    const full = projectTimeline(shuffled, null);
     expect(full.mode).toBe("full");
     expect(full.eventOrder).toBe("sorted");
     expect(
-      timelineItemsSemanticallyEqual(full.items, buildZenTimeline(shuffled)),
+      timelineItemsSemanticallyEqual(full.items, buildTimeline(shuffled)),
     ).toBe(true);
   });
 
   test("projector never accepts aliases; turn-focus stays hook-owned", async () => {
     const projectorSource = await Bun.file(
-      new URL("./projectZenTimeline.ts", import.meta.url),
+      new URL("./projectTimeline.ts", import.meta.url),
     ).text();
     const hookSource = await Bun.file(
       new URL("./useInterfaceTimelineItems.ts", import.meta.url),
@@ -482,7 +482,7 @@ describe("mid-review projection contracts", () => {
     expect(projectorSource).toContain(
       "this API never accepts or caches aliases",
     );
-    expect(projectZenTimeline.length).toBe(2);
+    expect(projectTimeline.length).toBe(2);
 
     const events: CodexConversationEvent[] = [
       {
@@ -494,7 +494,7 @@ describe("mid-review projection contracts", () => {
         timestamp: "2026-08-06T05:00:00.000Z",
       },
     ];
-    const projected = projectZenTimeline(events, null);
+    const projected = projectTimeline(events, null);
     expect(projected.items[0]).toMatchObject({
       id: "provider-user-9",
       body: "provider canonical body",
@@ -505,7 +505,7 @@ describe("mid-review projection contracts", () => {
 
     // Canonical build with aliases still works for tests that need it; hook
     // applies aliases after projection so cache cannot retain stale maps.
-    const withAlias = buildZenTimeline(
+    const withAlias = buildTimeline(
       events,
       new Map([["provider-user-9", "pending-current"]]),
     );
@@ -513,7 +513,7 @@ describe("mid-review projection contracts", () => {
       turnFocusAnchorId: "pending-current",
     });
     expect(hookSource).toContain("turnFocusAnchorAliases.get(item.id)");
-    expect(hookSource).toContain("projectZenTimeline(\n      events,");
+    expect(hookSource).toContain("projectTimeline(\n      events,");
   });
 
   test("instrumentation collection is impossible in production builds", () => {
@@ -568,7 +568,7 @@ describe("mid-review projection contracts", () => {
     enableTimelineProjectionPerf();
     try {
       resetTimelineProjectionPerf();
-      projectZenTimeline(makeMixedTimelineEvents(5), null);
+      projectTimeline(makeMixedTimelineEvents(5), null);
       expect(getTimelineProjectionPerfSnapshot().projections.length).toBe(1);
     } finally {
       disableTimelineProjectionPerf();
@@ -579,7 +579,7 @@ describe("mid-review projection contracts", () => {
   test("streaming revisions reuse cached raw order keys without re-sorting", () => {
     const base = makeMixedTimelineEvents(80);
     const streamId = firstAssistantEventId(base);
-    const primed = projectZenTimeline(base, null);
+    const primed = projectTimeline(base, null);
     expect(["already-sorted", "sorted"]).toContain(primed.eventOrder);
 
     let cache = primed.cache;
@@ -587,7 +587,7 @@ describe("mid-review projection contracts", () => {
       const next = withAssistantBodyRevision(base, streamId, revision);
       const ordered = resolveProjectionEventOrder(next, cache);
       expect(ordered.source).toBe("cached-ids");
-      const projected = projectZenTimeline(next, cache);
+      const projected = projectTimeline(next, cache);
       expect(projected.eventOrder).toBe("cached-ids");
       expect(projected.mode).toBe("incremental");
       cache = projected.cache;
@@ -597,7 +597,7 @@ describe("mid-review projection contracts", () => {
     expect(resolveProjectionEventOrder(unsorted, null).source).toBe("sorted");
     expect(resolveProjectionEventOrder(unsorted, cache).source).toBe("sorted");
     // Same event refs after a forced sort are a proven no-op, not a second model.
-    const resortedNoop = projectZenTimeline(unsorted, cache);
+    const resortedNoop = projectTimeline(unsorted, cache);
     expect(resortedNoop.eventOrder).toBe("sorted");
     expect(resortedNoop.mode).toBe("incremental");
     expect(resortedNoop.stableRowChurn).toBe(0);
@@ -605,7 +605,7 @@ describe("mid-review projection contracts", () => {
     const structurallyDifferent = unsorted.map((event, index) =>
       index === 0 ? { ...event, id: `other-${event.id}` } : event,
     );
-    const structural = projectZenTimeline(structurallyDifferent, cache);
+    const structural = projectTimeline(structurallyDifferent, cache);
     expect(structural.eventOrder).toBe("sorted");
     expect(structural.mode).toBe("full");
     expect(structural.fallbackReason).toBe("id-sequence-change");
@@ -631,7 +631,7 @@ describe("mid-review projection contracts", () => {
         partial: true,
       },
     ];
-    const primed = projectZenTimeline(previous, null);
+    const primed = projectTimeline(previous, null);
     // Same array ID order, but move-b's timestamp/seq now sorts before keep-a.
     const crossed: CodexConversationEvent[] = [
       previous[0],
@@ -650,7 +650,7 @@ describe("mid-review projection contracts", () => {
       "cached-ids",
     );
 
-    const projected = projectZenTimeline(crossed, primed.cache);
+    const projected = projectTimeline(crossed, primed.cache);
     expect(projected.eventOrder).toBe("sorted");
     expect(projected.mode).toBe("full");
     expect(projected.cache.sortedEvents.map((event) => event.id)).toEqual([
@@ -660,7 +660,7 @@ describe("mid-review projection contracts", () => {
     expect(
       timelineItemsSemanticallyEqual(
         projected.items,
-        buildZenTimeline(crossed),
+        buildTimeline(crossed),
       ),
     ).toBe(true);
   });
@@ -686,7 +686,7 @@ describe("mid-review projection contracts", () => {
         partial: true,
       },
     ];
-    const primed = projectZenTimeline(duplicates, null);
+    const primed = projectTimeline(duplicates, null);
     expect(primed.mode).toBe("full");
     expect(primed.cache.incrementalSafe).toBe(false);
     expect(primed.cache.itemIndexById).toBeNull();
@@ -700,12 +700,12 @@ describe("mid-review projection contracts", () => {
         partial: true,
       },
     ];
-    const projected = projectZenTimeline(next, primed.cache);
+    const projected = projectTimeline(next, primed.cache);
     expect(projected.mode).toBe("full");
     expect(projected.fallbackReason).toBe("duplicate-event-id");
     expect(projected.cache.incrementalSafe).toBe(false);
     expect(
-      timelineItemsSemanticallyEqual(projected.items, buildZenTimeline(next)),
+      timelineItemsSemanticallyEqual(projected.items, buildTimeline(next)),
     ).toBe(true);
     expect(
       (projected.items[1] as { body?: string } | undefined)?.body,
@@ -732,7 +732,7 @@ describe("mid-review projection contracts", () => {
 describe("final architecture ownership contracts", () => {
   test("benchmark precomputes revision arrays outside timed projection loops", async () => {
     const testSource = await Bun.file(
-      new URL("./projectZenTimeline.test.ts", import.meta.url),
+      new URL("./projectTimeline.test.ts", import.meta.url),
     ).text();
     const bench = sourceBetween(
       testSource,
@@ -762,7 +762,7 @@ describe("final architecture ownership contracts", () => {
 
   test("incremental inherits cache uniqueness; hot path never allocates duplicate Sets", async () => {
     const projectorSource = await Bun.file(
-      new URL("./projectZenTimeline.ts", import.meta.url),
+      new URL("./projectTimeline.ts", import.meta.url),
     ).text();
     expect(projectorSource).toContain("incrementalSafe: boolean");
     expect(projectorSource).toContain("function computeIncrementalSafety(");
@@ -779,13 +779,13 @@ describe("final architecture ownership contracts", () => {
 
     const base = makeMixedTimelineEvents(20);
     const streamId = firstAssistantEventId(base);
-    const primed = projectZenTimeline(base, null);
+    const primed = projectTimeline(base, null);
     expect(primed.cache.incrementalSafe).toBe(true);
     const mapRef = primed.cache.itemIndexById;
     expect(mapRef).not.toBeNull();
 
     const next = withAssistantBodyRevision(base, streamId, 3);
-    const incremental = projectZenTimeline(next, primed.cache);
+    const incremental = projectTimeline(next, primed.cache);
     expect(incremental.mode).toBe("incremental");
     expect(incremental.cache.incrementalSafe).toBe(true);
     expect(incremental.cache.itemIndexById).toBe(mapRef);
@@ -793,7 +793,7 @@ describe("final architecture ownership contracts", () => {
 
   test("disabled instrumentation skips timing and sample construction", async () => {
     const projectorSource = await Bun.file(
-      new URL("./projectZenTimeline.ts", import.meta.url),
+      new URL("./projectTimeline.ts", import.meta.url),
     ).text();
     expect(projectorSource).toContain(
       "const measure = isTimelineProjectionPerfEnabled();",
@@ -807,7 +807,7 @@ describe("final architecture ownership contracts", () => {
     disableTimelineProjectionPerf();
     resetTimelineProjectionPerf();
     expect(isTimelineProjectionPerfEnabled()).toBe(false);
-    projectZenTimeline(makeMixedTimelineEvents(12), null);
+    projectTimeline(makeMixedTimelineEvents(12), null);
     expect(getTimelineProjectionPerfSnapshot().projections).toEqual([]);
   });
 
@@ -816,7 +816,7 @@ describe("final architecture ownership contracts", () => {
       new URL("./useInterfaceTimelineItems.ts", import.meta.url),
     ).text();
     expect(hookSource).toContain("const projectedTimelineItems = useMemo(() => {");
-    expect(hookSource).toContain("projectZenTimeline(\n      events,");
+    expect(hookSource).toContain("projectTimeline(\n      events,");
     expect(hookSource).toContain("}, [events]);");
     expect(hookSource).toContain(
       "attachBrainWorkEventActions(\n        projectedTimelineItems,",
@@ -838,7 +838,7 @@ describe("final architecture ownership contracts", () => {
 
   test("cached-order proof uses exact raw timestamp+seq+id without Date.parse or O(n) churn scan", async () => {
     const projectorSource = await Bun.file(
-      new URL("./projectZenTimeline.ts", import.meta.url),
+      new URL("./projectTimeline.ts", import.meta.url),
     ).text();
     expect(projectorSource).toContain("function eventsHaveSameCachedOrderKeys(");
     expect(projectorSource).toContain("left.timestamp === right.timestamp");
@@ -878,7 +878,7 @@ describe("final architecture ownership contracts", () => {
         partial: true,
       },
     ];
-    const primed = projectZenTimeline(previous, null);
+    const primed = projectTimeline(previous, null);
     // Same parseable instant, different raw string → reject cached-ids.
     const rawChanged: CodexConversationEvent[] = [
       previous[0],
@@ -894,15 +894,15 @@ describe("final architecture ownership contracts", () => {
     expect(resolveProjectionEventOrder(rawChanged, primed.cache).source).not.toBe(
       "cached-ids",
     );
-    const projected = projectZenTimeline(rawChanged, primed.cache);
+    const projected = projectTimeline(rawChanged, primed.cache);
     expect(
       timelineItemsSemanticallyEqual(
         projected.items,
-        buildZenTimeline(rawChanged),
+        buildTimeline(rawChanged),
       ),
     ).toBe(true);
 
-    const streaming = projectZenTimeline(
+    const streaming = projectTimeline(
       [
         previous[0],
         { ...previous[1], body: "yo streamed", partial: true },
@@ -931,8 +931,8 @@ function nowMs() {
 }
 
 function timelineItemsSemanticallyEqual(
-  left: ZenTimelineItem[],
-  right: ZenTimelineItem[],
+  left: TimelineItem[],
+  right: TimelineItem[],
 ) {
   if (left.length !== right.length) {
     return false;
@@ -945,10 +945,10 @@ function timelineItemsSemanticallyEqual(
   return true;
 }
 
-function stableItemKey(item: ZenTimelineItem) {
+function stableItemKey(item: TimelineItem) {
   const { onPress: _onPress, onRetryPending: _onRetry, ...rest } = item as {
     onPress?: unknown;
     onRetryPending?: unknown;
-  } & ZenTimelineItem;
+  } & TimelineItem;
   return JSON.stringify(rest);
 }

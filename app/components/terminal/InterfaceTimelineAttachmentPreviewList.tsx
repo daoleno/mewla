@@ -4,11 +4,11 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
 
-import { ZenImage } from "./ZenImage";
-import { imageReference, isImageAttachment, type ZenImageSource } from "../../services/imageSource";
+import { AppImage } from "./AppImage";
+import { imageReference, isImageAttachment, type ImageSource } from "../../services/imageSource";
 import { Icon } from "../icons/Icon";
 
-function attachmentSource(attachment: DisplayAttachment): ZenImageSource {
+function attachmentSource(attachment: DisplayAttachment): ImageSource {
   return attachment.localUri ? { kind: "phone", uri: attachment.localUri, name: attachment.name, mimeType: attachment.mimeType } : imageReference(attachment.path, attachment.name, attachment.mimeType);
 }
 
@@ -46,11 +46,11 @@ function InterfaceTimelineAttachmentPreviewPill({
   gallery,
 }: {
   attachment: DisplayAttachment;
-  gallery: ZenImageSource[];
+  gallery: ImageSource[];
   chrome: TerminalThemeChrome;
 }) {
   if (isImageAttachment(attachment)) {
-    return <ZenImage source={attachmentSource(attachment)} gallery={gallery} chrome={chrome} />;
+    return <AppImage source={attachmentSource(attachment)} gallery={gallery} chrome={chrome} />;
   }
 
   return (

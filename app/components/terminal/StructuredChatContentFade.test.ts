@@ -10,7 +10,7 @@ type TestElement = React.ReactElement<
   React.ElementType
 >;
 
-const ISOLATED_RUN_ENV = "ZEN_STRUCTURED_CHAT_CONTENT_FADE_TEST";
+const ISOLATED_RUN_ENV = "MEWLA_STRUCTURED_CHAT_CONTENT_FADE_TEST";
 const isolatedRun = process.env[ISOLATED_RUN_ENV] === "1";
 
 let platformOS: TestPlatform = "android";

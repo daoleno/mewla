@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { resolveTheme } from "./resolve";
 import {
-  navigationThemeFromZenTheme,
+  navigationThemeFromTheme,
   type NavigationThemeFonts,
 } from "./navigation";
 
@@ -14,18 +14,18 @@ const fonts: NavigationThemeFonts = {
 
 describe("Session exit navigation theme continuity", () => {
   test("uses the resolved dark canvas for the native stack transition owner", () => {
-    const zenTheme = resolveTheme({ colorScheme: "dark" });
-    const navigationTheme = navigationThemeFromZenTheme(zenTheme, fonts);
+    const appTheme = resolveTheme({ colorScheme: "dark" });
+    const navigationTheme = navigationThemeFromTheme(appTheme, fonts);
 
     expect(navigationTheme).toEqual({
       dark: true,
       colors: {
-        primary: zenTheme.colors.accent,
-        background: zenTheme.colors.bgPrimary,
-        card: zenTheme.colors.bgSurface,
-        text: zenTheme.colors.textPrimary,
-        border: zenTheme.colors.border,
-        notification: zenTheme.colors.statusFailed,
+        primary: appTheme.colors.accent,
+        background: appTheme.colors.bgPrimary,
+        card: appTheme.colors.bgSurface,
+        text: appTheme.colors.textPrimary,
+        border: appTheme.colors.border,
+        notification: appTheme.colors.statusFailed,
       },
       fonts,
     });
@@ -34,46 +34,46 @@ describe("Session exit navigation theme continuity", () => {
   });
 
   test("re-resolves the complete navigation theme for live Light/Dark changes", () => {
-    const darkZenTheme = resolveTheme({ colorScheme: "dark" });
-    const lightZenTheme = resolveTheme({ colorScheme: "light" });
-    const darkNavigationTheme = navigationThemeFromZenTheme(
-      darkZenTheme,
+    const darkTheme = resolveTheme({ colorScheme: "dark" });
+    const lightTheme = resolveTheme({ colorScheme: "light" });
+    const darkNavigationTheme = navigationThemeFromTheme(
+      darkTheme,
       fonts,
     );
-    const lightNavigationTheme = navigationThemeFromZenTheme(
-      lightZenTheme,
+    const lightNavigationTheme = navigationThemeFromTheme(
+      lightTheme,
       fonts,
     );
 
     expect(darkNavigationTheme.dark).toBe(true);
     expect(lightNavigationTheme.dark).toBe(false);
     expect(darkNavigationTheme.colors.background).toBe(
-      darkZenTheme.colors.bgPrimary,
+      darkTheme.colors.bgPrimary,
     );
     expect(lightNavigationTheme.colors.background).toBe(
-      lightZenTheme.colors.bgPrimary,
+      lightTheme.colors.bgPrimary,
     );
     expect(lightNavigationTheme.colors.card).toBe(
-      lightZenTheme.colors.bgSurface,
+      lightTheme.colors.bgSurface,
     );
     expect(lightNavigationTheme.colors.text).toBe(
-      lightZenTheme.colors.textPrimary,
+      lightTheme.colors.textPrimary,
     );
     expect(darkNavigationTheme.fonts).toBe(fonts);
     expect(lightNavigationTheme.fonts).toBe(fonts);
   });
 
   test("follows the resolved theme instead of maintaining a second scheme", () => {
-    const explicitlyDarkZenTheme = resolveTheme({
+    const explicitlyDarkTheme = resolveTheme({
       colorScheme: "light",
       themeId: "classic-dark",
     });
-    const navigationTheme = navigationThemeFromZenTheme(
-      explicitlyDarkZenTheme,
+    const navigationTheme = navigationThemeFromTheme(
+      explicitlyDarkTheme,
       fonts,
     );
 
-    expect(explicitlyDarkZenTheme.colorScheme).toBe("dark");
+    expect(explicitlyDarkTheme.colorScheme).toBe("dark");
     expect(navigationTheme.dark).toBe(true);
     expect(navigationTheme.colors.background).toBe("#141210");
   });

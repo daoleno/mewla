@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
-import { buildZenTimeline } from "./InterfaceTimelineModel";
+import { buildTimeline } from "./InterfaceTimelineModel";
 
 const SCREENSHOT_DIAGRAM = `用户 / 本地 Agent
         |
@@ -44,13 +44,13 @@ function assistant(body: string): CodexConversationEvent {
 }
 
 function renderedBody(body: string) {
-  const [item] = buildZenTimeline([assistant(body)]);
+  const [item] = buildTimeline([assistant(body)]);
   expect(item?.type).toBe("message");
   return item?.type === "message" ? item.body : undefined;
 }
 
 function renderedToolBody(output: string) {
-  const [item] = buildZenTimeline([
+  const [item] = buildTimeline([
     {
       id: "terminal-tool-output",
       seq: 1,

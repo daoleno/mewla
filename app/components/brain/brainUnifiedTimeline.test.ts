@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import {
   attachBrainWorkEventActions,
-  buildZenTimeline,
+  buildTimeline,
 } from "../terminal/InterfaceTimelineModel";
 
 describe("Brain work cards in canonical conversation timeline", () => {
@@ -24,7 +24,7 @@ describe("Brain work cards in canonical conversation timeline", () => {
       work_session_state: "open",
       work_result_current: true,
     };
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       {
         id: "user-1",
         seq: 0,
@@ -60,7 +60,7 @@ describe("Brain work cards in canonical conversation timeline", () => {
   });
 
   test("attaches activate handlers for unread or openable cards", () => {
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       {
         id: "event-1",
         seq: 1,
@@ -95,7 +95,7 @@ describe("Brain work cards in canonical conversation timeline", () => {
   });
 
   test("does not invent lifecycle labels when the daemon omits authority", () => {
-    const items = buildZenTimeline([
+    const items = buildTimeline([
       {
         id: "incomplete-work-result",
         seq: 1,

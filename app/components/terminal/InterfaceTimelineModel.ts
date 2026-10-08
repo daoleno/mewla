@@ -28,23 +28,23 @@ import { presentPendingUserMessageLifecycle } from "./pendingUserMessageLifecycl
 import {
   type PatchFileSummary,
   type PatchOperation,
-  type ZenActivityChild,
-  type ZenActivityTimelineItem,
+  type ActivityChild,
+  type ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 
 const ATTACHMENT_TAG_RE =
-  /<zen_attachments>\s*([\s\S]*?)\s*<\/zen_attachments>/i;
+  /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
 const COMMAND_OUTPUT_PREVIEW_LINES = 7;
 const COMMAND_OUTPUT_PREVIEW_CHARS = 1200;
 const TOOL_PAYLOAD_PREVIEW_LINES = 6;
 const TOOL_PAYLOAD_PREVIEW_CHARS = 1000;
 const FULL_OUTPUT_HINT = "Expand this item for full output.";
 
-type TimelineIconName = ZenActivityTimelineItem["icon"];
+type TimelineIconName = ActivityTimelineItem["icon"];
 
 type ToolPresentation = {
   subtitle?: string;
@@ -94,11 +94,11 @@ type PatchSummary = {
   totalRemoved?: number;
 };
 
-export function buildZenTimeline(
+export function buildTimeline(
   events: CodexConversationEvent[],
   turnFocusAnchorAliases?: ReadonlyMap<string, string>,
-): ZenTimelineItem[] {
-  return buildZenTimelineFromSortedEvents(
+): TimelineItem[] {
+  return buildTimelineFromSortedEvents(
     events.slice().sort(compareConversationEvents),
     turnFocusAnchorAliases,
   );
@@ -108,11 +108,11 @@ export function buildZenTimeline(
  * Canonical projection core. Callers must pass events already ordered by
  * `compareConversationEvents` — this path never sorts.
  */
-export function buildZenTimelineFromSortedEvents(
+export function buildTimelineFromSortedEvents(
   sortedEvents: CodexConversationEvent[],
   turnFocusAnchorAliases?: ReadonlyMap<string, string>,
-): ZenTimelineItem[] {
-  const items: ZenTimelineItem[] = [];
+): TimelineItem[] {
+  const items: TimelineItem[] = [];
   const workItemIndexById = new Map<string, number>();
   let explorationEntries: ExplorationEntry[] = [];
 
@@ -246,7 +246,7 @@ export function buildZenTimelineFromSortedEvents(
 }
 
 function attachWaitStatusToLastCommand(
-  items: ZenTimelineItem[],
+  items: TimelineItem[],
   event: CodexConversationEvent,
 ) {
   const details = buildExpandedToolDetails({
@@ -284,10 +284,10 @@ function attachWaitStatusToLastCommand(
 }
 
 export function mergePendingUserMessagesIntoTimeline(
-  timelineItems: ZenTimelineItem[],
+  timelineItems: TimelineItem[],
   pendingUserMessages: PendingUserMessage[],
   onRetryPendingUserMessage?: (id: string) => void,
-): ZenTimelineItem[] {
+): TimelineItem[] {
   if (pendingUserMessages.length === 0) {
     return timelineItems;
   }
@@ -330,8 +330,8 @@ export function mergePendingUserMessagesIntoTimeline(
 }
 
 function insertPendingCurrentAtCausalBoundary(
-  timelineItems: ZenTimelineItem[],
-  item: ZenTimelineItem,
+  timelineItems: TimelineItem[],
+  item: TimelineItem,
   message: PendingUserMessage,
   placedLocalRowIDs: ReadonlySet<string>,
 ) {
@@ -359,7 +359,7 @@ function insertPendingCurrentAtCausalBoundary(
 export const PROVIDER_ACTIVITY_ITEM_PREFIX = "provider-activity:";
 
 export function mergeRunningActivityIntoTimeline(
-  timelineItems: ZenTimelineItem[],
+  timelineItems: TimelineItem[],
   activity?: ProviderActivity,
 ) {
   if (activity?.status !== "running") {
@@ -383,8 +383,8 @@ export function mergeRunningActivityIntoTimeline(
 }
 
 function insertTimelineItemByTimestamp(
-  timelineItems: ZenTimelineItem[],
-  item: ZenTimelineItem,
+  timelineItems: TimelineItem[],
+  item: TimelineItem,
 ) {
   const timestamp = item.timestamp
     ? new Date(item.timestamp).getTime()
@@ -449,11 +449,11 @@ function countBrainWorkSources(events: BrainWorkResultEvent[]) {
 }
 
 export function attachBrainWorkEventActions(
-  items: ZenTimelineItem[],
+  items: TimelineItem[],
   onActivate?: (event: BrainWorkResultEvent, canOpenSession: boolean) => void,
   openSessionIds?: ReadonlySet<string>,
   currentWork?: readonly BrainCurrentWork[],
-): ZenTimelineItem[] {
+): TimelineItem[] {
   if (!onActivate && !currentWork?.length) {
     return items;
   }
@@ -482,7 +482,7 @@ export function attachBrainWorkEventActions(
 
 function activityFromEvent(
   event: CodexConversationEvent,
-): ZenTimelineItem | null {
+): TimelineItem | null {
   switch (event.kind) {
     case "command": {
       const presentation = commandPresentation(event.command || "");
@@ -851,7 +851,7 @@ function explorationEntryFromEvent(
 
 function explorationActivityFromEntries(
   entries: ExplorationEntry[],
-): Extract<ZenTimelineItem, { type: "activity" }> {
+): Extract<TimelineItem, { type: "activity" }> {
   const first = entries[0];
   const last = entries[entries.length - 1] ?? first;
   const running = entries.some((entry) => entry.running);
@@ -1440,7 +1440,7 @@ function commandPresentation(command: string): CommandPresentation {
 function commandOutputBodyKind(
   command: string,
   output: string,
-): ZenActivityTimelineItem["bodyKind"] {
+): ActivityTimelineItem["bodyKind"] {
   const summary = (commandSummary(command) || "").toLowerCase();
   if (/\bgit\s+diff\b/.test(summary) && /\s\|\s+\d+\s+[+-]+/.test(output)) {
     return "diff-stat";
@@ -1451,7 +1451,7 @@ function commandOutputBodyKind(
 function toolOutputBodyKind(
   event: CodexConversationEvent,
   output: string,
-): ZenActivityTimelineItem["bodyKind"] {
+): ActivityTimelineItem["bodyKind"] {
   const name = (event.tool_name || event.title || "")
     .trim()
     .replace(/^functions\./, "");
@@ -1558,7 +1558,7 @@ function statusActivityTitle(status?: string) {
   }
 }
 
-function statusActivityTone(status?: string): ZenActivityTimelineItem["tone"] {
+function statusActivityTone(status?: string): ActivityTimelineItem["tone"] {
   switch ((status || "").trim()) {
     case "failed":
     case "error":
@@ -1600,7 +1600,7 @@ function statusActivityDetail(body: string) {
 function statusActivityBodyKind(
   event: CodexConversationEvent,
   body: string,
-): ZenActivityTimelineItem["bodyKind"] {
+): ActivityTimelineItem["bodyKind"] {
   if (!body) {
     return undefined;
   }
@@ -2113,7 +2113,7 @@ function safeCollapsedDetail(value?: string): string | undefined {
 function semanticChildren(
   parentId: string,
   children?: SemanticAction[],
-): ZenActivityChild[] | undefined {
+): ActivityChild[] | undefined {
   if (!children?.length) {
     return undefined;
   }

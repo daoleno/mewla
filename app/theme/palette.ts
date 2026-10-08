@@ -24,7 +24,7 @@ export interface AppColors {
   statusUnknown: string;
   statusRunning: string;
   statusDone: string;
-  zenGreen: string;
+  readyGreen: string;
   priorityUrgent: string;
   priorityHigh: string;
   priorityMedium: string;

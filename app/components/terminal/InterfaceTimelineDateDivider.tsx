@@ -4,7 +4,7 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { ContinuousCorners, TypeScale } from "../../constants/tokens";
 import { mixHex, relativeLuminance } from "../../theme/colorUtils";
 
-export type ZenDateDividerItem = {
+export type DateDividerItem = {
   type: "date-divider";
   id: string;
   label: string;

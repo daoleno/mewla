@@ -87,13 +87,13 @@ export default function BrainScreen() {
     brainMessageId?: string;
     serverId?: string;
   }>();
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const styles = useMemo(() => createStyles(), []);
   const insets = useSafeAreaInsets();
   const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
   const { chrome, theme } = useMemo(
-    () => buildChatChrome(zenTheme),
-    [zenTheme],
+    () => buildChatChrome(appTheme),
+    [appTheme],
   );
   const { state: workerState } = useWorkers();
   const { state: brainState } = useBrain();

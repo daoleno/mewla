@@ -18,12 +18,12 @@ import { InterfaceTimelineExpandedBlock } from "./InterfaceTimelineExpandedBlock
 import { expandedActivityStatusLine } from "./InterfaceTimelineActivityModel";
 import type {
   PatchFileSummary,
-  ZenActivityChild,
-  ZenActivityTimelineItem,
+  ActivityChild,
+  ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 
 interface InterfaceTimelineActivityDetailsProps {
-  item: ZenActivityTimelineItem;
+  item: ActivityTimelineItem;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   assetPreviewUri: string | null;
@@ -169,7 +169,7 @@ function StepRow({
   child,
   chrome,
 }: {
-  child: ZenActivityChild;
+  child: ActivityChild;
   chrome: TerminalThemeChrome;
 }) {
   const tone = child.tone ?? "neutral";

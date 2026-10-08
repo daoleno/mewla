@@ -6,8 +6,8 @@ import { InterfaceComposerAttachmentIcon } from "./InterfaceComposerAttachmentIc
 import { InterfaceComposerAttachmentRemoveButton } from "./InterfaceComposerAttachmentRemoveButton";
 import { chromeTint } from "./composerMaterial";
 
-import { isImageAttachment, type ZenImageSource } from "../../services/imageSource";
-import { ZenImage } from "./ZenImage";
+import { isImageAttachment, type ImageSource } from "../../services/imageSource";
+import { AppImage } from "./AppImage";
 
 export type InterfaceComposerAttachment = import("./InterfaceChatSession").ComposerAttachment;
 
@@ -15,7 +15,7 @@ interface InterfaceComposerAttachmentChipProps {
   attachment: InterfaceComposerAttachment;
   chrome: TerminalThemeChrome;
   onRemove(id: string): void;
-  gallery?: ZenImageSource[];
+  gallery?: ImageSource[];
 }
 
 /** Shared tile geometry for every Composer attachment (file, image, upload). */
@@ -39,7 +39,7 @@ export function InterfaceComposerAttachmentChip({
           { backgroundColor: chrome.composerInput, borderColor: chrome.border },
         ]}
       >
-        <ZenImage source={{ kind: "phone", uri: thumbnailUri, name: attachment.name, mimeType: attachment.mimeType }} chrome={chrome} gallery={gallery} compact />
+        <AppImage source={{ kind: "phone", uri: thumbnailUri, name: attachment.name, mimeType: attachment.mimeType }} chrome={chrome} gallery={gallery} compact />
         <InterfaceComposerAttachmentRemoveButton
           attachmentName={attachment.name}
           chrome={chrome}

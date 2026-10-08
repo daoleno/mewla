@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { normalizeCodexConversation } from "./codexConversation";
-import { projectZenTimeline } from "../components/terminal/projectZenTimeline";
+import { projectTimeline } from "../components/terminal/projectTimeline";
 import { reconcileConversationDeltaEvents } from "../components/terminal/interfaceConversationReconciliation";
 
 const T = (sec: number) =>
@@ -156,7 +156,7 @@ describe("OpenCode Interface tool-call projection", () => {
     const inFlight = normalizeCodexConversation(
       daemonConversation(openCodeDaemonEvents(false)),
     );
-    const inFlightItems = projectZenTimeline(inFlight.events, null).items;
+    const inFlightItems = projectTimeline(inFlight.events, null).items;
     const inFlightTools = inFlightItems.filter(
       (item) => item.type === "activity" && item.id?.startsWith("prt_tool"),
     );
@@ -174,7 +174,7 @@ describe("OpenCode Interface tool-call projection", () => {
     const settled = normalizeCodexConversation(
       daemonConversation(openCodeDaemonEvents(true)),
     );
-    const settledItems = projectZenTimeline(settled.events, null).items;
+    const settledItems = projectTimeline(settled.events, null).items;
     const settledToolA = settledItems.find((item) => item.id === "prt_tool_a");
     const settledToolB = settledItems.find((item) => item.id === "prt_tool_b");
     expect(settledToolA).toMatchObject({ type: "activity", tone: "success" });
@@ -209,7 +209,7 @@ describe("OpenCode Interface tool-call projection", () => {
     expect(byId.size).toBe(reconciled.length);
     expect(byId.size).toBe(6);
     expect(
-      projectZenTimeline(reconciled, null).items.filter((item) =>
+      projectTimeline(reconciled, null).items.filter((item) =>
         item.id?.startsWith("prt_tool"),
       ),
     ).toHaveLength(2);

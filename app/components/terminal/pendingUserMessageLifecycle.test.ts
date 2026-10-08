@@ -9,7 +9,7 @@ import {
   staleReceiptAutoRetryPolicy,
 } from "./pendingUserMessageLifecycle";
 import {
-  buildZenTimeline,
+  buildTimeline,
   mergePendingUserMessagesIntoTimeline,
 } from "./InterfaceTimelineModel";
 
@@ -71,21 +71,21 @@ describe("pending user message lifecycle", () => {
     const listSource = await Bun.file(
       new URL("./InterfaceTimelineView.tsx", import.meta.url),
     ).text();
-    const zenUser = bubbleSource.slice(
-      bubbleSource.indexOf("export function ZenUserMessage"),
-      bubbleSource.indexOf("export function ZenAssistantMessage"),
+    const mewlaUser = bubbleSource.slice(
+      bubbleSource.indexOf("export function UserMessage"),
+      bubbleSource.indexOf("export function AssistantMessage"),
     );
-    expect(zenUser).not.toContain("resolvePendingUserBubbleBorderColor");
-    expect(zenUser).not.toContain("StyleSheet.hairlineWidth");
-    expect(zenUser).not.toContain("borderColor:");
-    expect(zenUser).not.toContain("borderWidth:");
-    expect(zenUser).toContain("showsPendingSendStatusMark({");
-    expect(zenUser).toContain("<PendingSendStatusMark");
-    expect(zenUser).toMatch(
-      /PendingSendStatusMark color=\{zenTheme\.chat\.outboundSentClock\}/,
+    expect(mewlaUser).not.toContain("resolvePendingUserBubbleBorderColor");
+    expect(mewlaUser).not.toContain("StyleSheet.hairlineWidth");
+    expect(mewlaUser).not.toContain("borderColor:");
+    expect(mewlaUser).not.toContain("borderWidth:");
+    expect(mewlaUser).toContain("showsPendingSendStatusMark({");
+    expect(mewlaUser).toContain("<PendingSendStatusMark");
+    expect(mewlaUser).toMatch(
+      /PendingSendStatusMark color=\{appTheme\.chat\.outboundSentClock\}/,
     );
-    expect(zenUser).toContain("styles.pendingSendMark");
-    expect(zenUser).not.toContain("userBubbleHost");
+    expect(mewlaUser).toContain("styles.pendingSendMark");
+    expect(mewlaUser).not.toContain("userBubbleHost");
     expect(bubbleSource).not.toContain("userBubbleHost");
     expect(bubbleSource).toContain(
       "right: PENDING_SEND_STATUS_OUTSIDE_RIGHT",
@@ -93,13 +93,13 @@ describe("pending user message lifecycle", () => {
     expect(bubbleSource).toMatch(/userBubble:[\s\S]*?maxWidth: "86%"/);
     expect(bubbleSource).toMatch(/userBubbleChatGpt:[\s\S]*?maxWidth: "88%"/);
     expect(bubbleSource).toMatch(/pendingSendMark:[\s\S]*bottom: 0/);
-    expect(zenUser).toContain(
+    expect(mewlaUser).toContain(
       "accessibilityState={item.pending ? { busy: true } : undefined}",
     );
-    expect(zenUser).not.toMatch(/accessibilityLabel\s*=/);
-    expect(zenUser).not.toContain("lifecycleAccessibilityLabel");
-    expect(zenUser).not.toMatch(/["']Pending["']/);
-    expect(zenUser).not.toMatch(/["']Sending["']/);
+    expect(mewlaUser).not.toMatch(/accessibilityLabel\s*=/);
+    expect(mewlaUser).not.toContain("lifecycleAccessibilityLabel");
+    expect(mewlaUser).not.toMatch(/["']Pending["']/);
+    expect(mewlaUser).not.toMatch(/["']Sending["']/);
     expect(footerSource).not.toContain("pending?:");
     expect(footerSource).not.toContain("lifecycleAccessibilityLabel");
     expect(markSource).toContain("useReducedMotion");
@@ -480,7 +480,7 @@ describe("pending timeline rows", () => {
     ]);
     expect(reconciled.pendingUserMessages).toEqual([]);
 
-    const timeline = buildZenTimeline([
+    const timeline = buildTimeline([
       {
         id: receiptId,
         seq: 2,
@@ -510,7 +510,7 @@ describe("pending timeline rows", () => {
   });
 
   test("local rows render in FIFO order at their causal boundary without Pending label", () => {
-    const timeline = buildZenTimeline([
+    const timeline = buildTimeline([
       {
         id: "history",
         seq: 10,
@@ -571,7 +571,7 @@ describe("pending timeline rows", () => {
   });
 
   test("provider rows never inherit App-local pending lifecycle", () => {
-    const timeline = buildZenTimeline([
+    const timeline = buildTimeline([
       {
         id: "provider-user",
         seq: 1,

@@ -21,7 +21,7 @@ import {
   buildInterfaceComposerPresentation,
   type InterfaceComposerPresentationInput,
 } from "./InterfaceChatSurfaceModel";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import {
   INITIAL_TIMELINE_SCROLL_STATE,
   reduceTimelineScrollPosition,
@@ -129,7 +129,7 @@ export function usePinnedTimeline(
   resetKey: string,
   topChromeInset: number = 0,
 ) {
-  const scrollRef = useRef<FlatList<ZenTimelineItem>>(null);
+  const scrollRef = useRef<FlatList<TimelineItem>>(null);
   const initialReading = useMemo(
     () => recallTimelineReadingPosition(resetKey),
     [resetKey],

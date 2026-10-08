@@ -22,7 +22,7 @@ function getNativeModule(): NativeTerminalModule | null {
   }
 
   try {
-    return require('../modules/zen-terminal-vt/src') as NativeTerminalModule;
+    return require('../modules/terminal-vt/src') as NativeTerminalModule;
   } catch {
     return null;
   }

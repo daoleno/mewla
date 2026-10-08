@@ -7,13 +7,13 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { ZenActivityEvent } from "./InterfaceTimelineActivity";
+import { ActivityEvent } from "./InterfaceTimelineActivity";
 import type {
   PatchFileSummary,
-  ZenActivityTimelineItem,
+  ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
-import { ZenPlanUpdate } from "./InterfaceTimelinePlan";
-import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
+import { PlanUpdate } from "./InterfaceTimelinePlan";
+import type { PlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
 import { TaskNotificationCard } from "./TaskNotificationCard";
 import {
@@ -24,21 +24,21 @@ import {
 import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "./InterfaceTimelineModel";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 import {
-  ZenAssistantMessage,
-  ZenUserMessage,
-  type ZenMessageTimelineItem,
+  AssistantMessage,
+  UserMessage,
+  type MessageTimelineItem,
 } from "./InterfaceTimelineMessage";
 
-export type ZenTimelineItem =
-  | (ZenMessageTimelineItem & { role: "user" })
-  | (ZenMessageTimelineItem & { role: "assistant" })
-  | ZenActivityTimelineItem
-  | ZenPlanTimelineItem
+export type TimelineItem =
+  | (MessageTimelineItem & { role: "user" })
+  | (MessageTimelineItem & { role: "assistant" })
+  | ActivityTimelineItem
+  | PlanTimelineItem
   | BrainWorkEventTimelineItem
   | TaskNotificationTimelineItem;
 
-interface ZenTimelineItemViewProps {
-  item: ZenTimelineItem;
+interface TimelineItemViewProps {
+  item: TimelineItem;
   presentation?: MessagePresentation;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
@@ -47,7 +47,7 @@ interface ZenTimelineItemViewProps {
   truncateBody(value: string, limit: number): string;
 }
 
-function ZenTimelineItemViewImpl({
+function TimelineItemViewImpl({
   item,
   presentation,
   chrome,
@@ -55,11 +55,11 @@ function ZenTimelineItemViewImpl({
   loadAssetPreview,
   formatPatchPath,
   truncateBody,
-}: ZenTimelineItemViewProps) {
+}: TimelineItemViewProps) {
   if (item.type === "message") {
     if (item.role === "user") {
       return (
-        <ZenUserMessage
+        <UserMessage
           item={item}
           presentation={presentation}
           chrome={chrome}
@@ -68,7 +68,7 @@ function ZenTimelineItemViewImpl({
       );
     }
     return (
-      <ZenAssistantMessage
+      <AssistantMessage
         item={item}
         presentation={presentation}
         chrome={chrome}
@@ -77,7 +77,7 @@ function ZenTimelineItemViewImpl({
     );
   }
   if (item.type === "plan") {
-    return <ZenPlanUpdate item={item} chrome={chrome} theme={theme} />;
+    return <PlanUpdate item={item} chrome={chrome} theme={theme} />;
   }
   if (item.type === "brain-work-event") {
     return (
@@ -97,7 +97,7 @@ function ZenTimelineItemViewImpl({
     );
   }
   const activity = (
-    <ZenActivityEvent
+    <ActivityEvent
       item={item}
       chrome={chrome}
       theme={theme}
@@ -121,7 +121,7 @@ function BrainActivityRow({
   chrome,
   fallback,
 }: {
-  item: ZenTimelineItem;
+  item: TimelineItem;
   chrome: TerminalThemeChrome;
   fallback: React.ReactElement;
 }) {
@@ -142,14 +142,14 @@ function BrainActivityRow({
   );
 }
 
-export const ZenTimelineItemView = React.memo(
-  ZenTimelineItemViewImpl,
-  areZenTimelineItemViewPropsEqual,
+export const TimelineItemView = React.memo(
+  TimelineItemViewImpl,
+  areTimelineItemViewPropsEqual,
 );
 
-function areZenTimelineItemViewPropsEqual(
-  previous: ZenTimelineItemViewProps,
-  next: ZenTimelineItemViewProps,
+function areTimelineItemViewPropsEqual(
+  previous: TimelineItemViewProps,
+  next: TimelineItemViewProps,
 ) {
   return (
     previous.presentation === next.presentation &&

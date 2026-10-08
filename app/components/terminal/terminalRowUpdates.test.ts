@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { RenderSnapshot } from '../../modules/zen-terminal-vt/src';
+import type { RenderSnapshot } from '../../modules/terminal-vt/src';
 import { TERMINAL_ROW_UPDATES_SOURCE, type TerminalRowUpdates } from './terminalRowUpdates';
 
 class Row {

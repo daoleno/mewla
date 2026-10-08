@@ -3,9 +3,9 @@ import { Image, StyleSheet, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 import type { SessionFileBinarySource } from "../../services/sessionFilePreview";
 import { loadSvgPreview } from "../../services/svgPreview";
-import { loadedImageRatio } from "./zenImageRatio";
+import { loadedImageRatio } from "./imageRatio";
 
-export function ZenImageContent({ source, svg, onLoad, onError }: {
+export function ImageContent({ source, svg, onLoad, onError }: {
   source: SessionFileBinarySource;
   svg: boolean;
   onLoad?(ratio: number): void;

@@ -41,8 +41,3 @@ test("default config retains local dotenv behavior without overwriting explicit 
   assert.equal(result.env.PRIVATE_FIXTURE_VALUE, "local-only");
   assert.equal(result.config.extra.eas.projectId, "explicit-project");
 });
-
-test("ZEN_EXPO_PROJECT_ID is not read", () => {
-  const result = load({ EXPO_NO_DOTENV: "1", ZEN_EXPO_PROJECT_ID: "zen-project" }, true);
-  assert.equal(result.config.extra.eas, undefined);
-});

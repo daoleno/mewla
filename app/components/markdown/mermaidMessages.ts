@@ -132,6 +132,6 @@ export function isAllowedMermaidEngineUrl(url: string) {
   return (
     url === "about:blank" ||
     url === "about:srcdoc" ||
-    url.startsWith("https://zen.local/mermaid")
+    url.startsWith("https://mewla.local/mermaid")
   );
 }

@@ -9,10 +9,10 @@ import { useAppTheme } from "../../../constants/tokens";
 import { buildChatChrome } from "../../../theme";
 
 export function useTerminalThemeChrome() {
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const themeName = useMemo(
-    () => resolveTerminalThemeName(zenTheme.colorScheme),
-    [zenTheme.colorScheme],
+    () => resolveTerminalThemeName(appTheme.colorScheme),
+    [appTheme.colorScheme],
   );
   const terminalTheme = useMemo(
     () => resolveTerminalTheme(themeName),
@@ -21,30 +21,30 @@ export function useTerminalThemeChrome() {
   const chromeColors = useMemo(
     () => ({
       ...buildTerminalChrome(terminalTheme),
-      appBackground: zenTheme.colors.bgPrimary,
-      surface: zenTheme.colors.modalSurface,
-      surfaceMuted: zenTheme.colors.modalSurfaceAlt,
-      surfaceActive: zenTheme.colors.surfaceActive,
-      composerInput: zenTheme.colors.inputBackground,
-      border: zenTheme.colors.border,
-      borderStrong: zenTheme.colors.borderStrong,
-      text: zenTheme.colors.textPrimary,
-      textMuted: zenTheme.colors.textSecondary,
-      textSubtle: zenTheme.colors.textTertiary,
-      textOnAccent: zenTheme.colors.textOnAccent,
-      accent: zenTheme.colors.accent,
-      accentSoft: zenTheme.colors.accentSoft,
-      disabledSurface: zenTheme.colors.disabledSurface,
-      focus: zenTheme.colors.focusRing,
-      link: zenTheme.colors.accentStrong,
-      danger: zenTheme.colors.dangerText,
-      dangerSoft: zenTheme.colors.dangerSoft,
-      overlay: zenTheme.colors.modalBackdrop,
-      shadowColor: zenTheme.colors.shadowColor,
+      appBackground: appTheme.colors.bgPrimary,
+      surface: appTheme.colors.modalSurface,
+      surfaceMuted: appTheme.colors.modalSurfaceAlt,
+      surfaceActive: appTheme.colors.surfaceActive,
+      composerInput: appTheme.colors.inputBackground,
+      border: appTheme.colors.border,
+      borderStrong: appTheme.colors.borderStrong,
+      text: appTheme.colors.textPrimary,
+      textMuted: appTheme.colors.textSecondary,
+      textSubtle: appTheme.colors.textTertiary,
+      textOnAccent: appTheme.colors.textOnAccent,
+      accent: appTheme.colors.accent,
+      accentSoft: appTheme.colors.accentSoft,
+      disabledSurface: appTheme.colors.disabledSurface,
+      focus: appTheme.colors.focusRing,
+      link: appTheme.colors.accentStrong,
+      danger: appTheme.colors.dangerText,
+      dangerSoft: appTheme.colors.dangerSoft,
+      overlay: appTheme.colors.modalBackdrop,
+      shadowColor: appTheme.colors.shadowColor,
     }),
-    [terminalTheme, zenTheme.colors],
+    [terminalTheme, appTheme.colors],
   );
-  const chat = useMemo(() => buildChatChrome(zenTheme), [zenTheme]);
+  const chat = useMemo(() => buildChatChrome(appTheme), [appTheme]);
   const statusBarStyle: "dark" | "light" = isLightTerminalTheme(terminalTheme)
     ? "dark"
     : "light";

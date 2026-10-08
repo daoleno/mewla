@@ -4,9 +4,9 @@ import {
   type UploadProgress as NativeUploadProgress,
 } from "expo-file-system";
 import {
-  getZenFileUploadModule,
+  getFileUploadModule,
   type NativeUploadResult,
-} from "../modules/zen-file-upload/src";
+} from "../modules/file-upload/src";
 
 const BINARY_UPLOAD_TYPE = 0;
 import { buildAuthorizationHeader } from "./auth";
@@ -67,7 +67,7 @@ export class AttachmentUploadCancelledError extends Error {
 // Mirrors the daemon's explicit V1 file limit to avoid starting a transfer the
 // server cannot accept. The daemon still enforces its policy authoritatively.
 export const V1_MAX_UPLOAD_FILE_BYTES = 2 * 1024 * 1024 * 1024;
-const UPLOAD_NAME_HEADER = "X-Zen-Upload-Name";
+const UPLOAD_NAME_HEADER = "X-Mewla-Upload-Name";
 const MAX_UPLOAD_NAME_BYTES = 1024;
 const MAX_UPLOAD_NAME_HEADER_BYTES = 3 * 1024;
 
@@ -77,7 +77,7 @@ export async function buildUploadHeaders(
   return {
     Authorization: await buildAuthorizationHeader({
       daemonId,
-      purpose: "zen-upload",
+      purpose: "mewla-upload",
     }),
   };
 }
@@ -258,7 +258,7 @@ async function createAndroidNativeUploadTask(input: {
   if (typeof navigator === "undefined" || navigator.product !== "ReactNative") {
     return null;
   }
-  const native = getZenFileUploadModule();
+  const native = getFileUploadModule();
   if (!native) {
     return null;
   }
@@ -358,7 +358,7 @@ export const MAX_COMPOSER_ATTACHMENTS = 8;
 
 export async function pickUploadDocuments(maxCount = MAX_COMPOSER_ATTACHMENTS): Promise<UploadDocumentAsset[]> {
   if (maxCount < 1 || maxCount > MAX_COMPOSER_ATTACHMENTS) throw new Error("Remove an attachment before selecting more files.");
-  const native = getZenFileUploadModule();
+  const native = getFileUploadModule();
   let assets: UploadDocumentAsset[];
   if (native && typeof native.pickDocuments === "function") {
     assets = (await native.pickDocuments(maxCount)).map((asset) => ({ ...asset, size: asset.size ?? undefined }));

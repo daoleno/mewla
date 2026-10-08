@@ -7,7 +7,7 @@ import {
   InterfaceComposerAttachmentChip,
   type InterfaceComposerAttachment,
 } from "./InterfaceComposerAttachmentChip";
-import { imageReference, isImageAttachment, type ZenImageSource } from "../../services/imageSource";
+import { imageReference, isImageAttachment, type ImageSource } from "../../services/imageSource";
 import { InterfaceComposerUploadingChip } from "./InterfaceComposerUploadingChip";
 import { Icon } from "../icons/Icon";
 
@@ -28,7 +28,7 @@ export function InterfaceComposerAttachmentRail({
   onRemoveAttachment,
   onCancelUpload,
 }: InterfaceComposerAttachmentRailProps) {
-  const gallery: ZenImageSource[] = attachments.filter((item) => item.uploadStatus !== "failed" && isImageAttachment(item)).map((attachment) => attachment.localUri
+  const gallery: ImageSource[] = attachments.filter((item) => item.uploadStatus !== "failed" && isImageAttachment(item)).map((attachment) => attachment.localUri
     ? { kind: "phone", uri: attachment.localUri, name: attachment.name, mimeType: attachment.mimeType }
     : imageReference(attachment.path, attachment.name, attachment.mimeType));
   if (attachments.length === 0 && !activeUpload) {

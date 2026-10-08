@@ -8,7 +8,7 @@ const appRoot = join(import.meta.dir, "../..");
 // chrome whose leading slot swaps Close/Back in its own filled button family.
 const NOT_BACK = new Set([
   "app/calendar.tsx", // Previous month
-  "components/terminal/ZenImage.tsx", // Previous image
+  "components/terminal/AppImage.tsx", // Previous image
   "components/terminal/GitDiffSheetTopChrome.tsx",
   "components/navigation/HeaderBackButton.tsx",
 ]);

@@ -20,10 +20,10 @@ export {
 } from "./deviceAuthContract";
 export type { DaemonAssertionInput } from "./deviceAuthContract";
 
-const DEVICE_ID_KEY = "zen.device.v3.id";
-const DEVICE_NAME_KEY = "zen.device.v3.name";
-const DEVICE_SEED_KEY = "zen.device.v3.seed";
-const DEVICE_PUBLIC_KEY_KEY = "zen.device.v3.public-key";
+const DEVICE_ID_KEY = "mewla.device.v3.id";
+const DEVICE_NAME_KEY = "mewla.device.v3.name";
+const DEVICE_SEED_KEY = "mewla.device.v3.seed";
+const DEVICE_PUBLIC_KEY_KEY = "mewla.device.v3.public-key";
 
 export interface LocalDeviceIdentity {
   deviceId: string;
@@ -33,13 +33,13 @@ export interface LocalDeviceIdentity {
 }
 
 export type AuthPurpose =
-  | "zen-connect"
-  | "zen-browser"
-  | `zen-browser-view:${string}`
-  | "zen-upload"
-  | "zen-enrollment:decision:POST:/enrollment/decision"
-  | "zen-probe"
-  | "zen-session-file";
+  | "mewla-connect"
+  | "mewla-browser"
+  | `mewla-browser-view:${string}`
+  | "mewla-upload"
+  | "mewla-enrollment:decision:POST:/enrollment/decision"
+  | "mewla-probe"
+  | "mewla-session-file";
 
 export function normalizePairingToken(
   rawValue: string | null | undefined,

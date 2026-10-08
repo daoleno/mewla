@@ -103,7 +103,7 @@ export const TerminalSurfaceGhosttyWebView = forwardRef<
   const baseUrl = useMemo(
     () => (font.uri
       ? terminalWebViewBaseUrl(font.uri, Platform.OS)
-      : 'https://zen.local/'),
+      : 'https://mewla.local/'),
     [font.uri],
   );
 

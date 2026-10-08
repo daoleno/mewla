@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import {
-  buildZenTimeline,
+  buildTimeline,
 } from "./InterfaceTimelineModel";
 import { timelineListStabilityProps } from "./timelineScrollPolicy";
 
@@ -23,11 +23,11 @@ function assistant(
 
 describe("timeline history viewport stability", () => {
   test("canonical append retains history item identity", () => {
-    const before = buildZenTimeline([
+    const before = buildTimeline([
       assistant("oldest", 0, "oldest"),
       assistant("history-anchor", 2, "settled history"),
     ]);
-    const after = buildZenTimeline([
+    const after = buildTimeline([
       ...[
         assistant("oldest", 0, "oldest"),
         assistant("history-anchor", 2, "settled history"),
@@ -43,11 +43,11 @@ describe("timeline history viewport stability", () => {
   });
 
   test("same-ID streaming update keeps the mounted item key", () => {
-    const partial = buildZenTimeline([
+    const partial = buildTimeline([
       assistant("history-anchor", 1, "history"),
       assistant("streaming-assistant", 2, "partial"),
     ]);
-    const complete = buildZenTimeline([
+    const complete = buildTimeline([
       assistant("history-anchor", 1, "history"),
       assistant(
         "streaming-assistant",

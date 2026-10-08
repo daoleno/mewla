@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { ProviderActivity } from "../../services/codexConversation";
 import type { PendingUserMessage } from "./InterfaceChatSession";
 import { mergePendingUserMessagesIntoTimeline } from "./InterfaceTimelineModel";
-import { projectZenTimeline } from "./projectZenTimeline";
+import { projectTimeline } from "./projectTimeline";
 
 mock.module("react-native", () => ({ Platform: { OS: "web" } }));
 mock.module("../../services/auth", () => ({
@@ -1277,7 +1277,7 @@ describe("fresh-generation unavailable snapshots never erase a populated timelin
 
 describe("one user bubble per send across stream ordering", () => {
   function visibleUserIds(current: ReturnType<typeof state>) {
-    const projected = projectZenTimeline(current.conversation?.events ?? [], null);
+    const projected = projectTimeline(current.conversation?.events ?? [], null);
     return mergePendingUserMessagesIntoTimeline(
       projected.items,
       current.pendingUserMessages,

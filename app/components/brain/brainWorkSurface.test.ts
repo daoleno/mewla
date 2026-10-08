@@ -16,10 +16,10 @@ function work(overrides: Partial<BrainCurrentWork>): BrainCurrentWork {
 
 // Shapes taken from the live daemon's current_work on 2026-10-07.
 const live: BrainCurrentWork[] = [
-  work({ work_id: "pipeline", title: "zen-terminal-pipeline-2", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true }),
+  work({ work_id: "pipeline", title: "mewla-terminal-pipeline-2", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true }),
   work({
     work_id: "release",
-    title: "zen-release-next",
+    title: "mewla-release-next",
     status: "waiting",
     progress_mode: "waiting",
     attention_state: "queued",

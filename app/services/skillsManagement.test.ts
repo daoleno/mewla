@@ -49,10 +49,10 @@ describe("Skill inspection normalization", () => {
     const detail = normalizeSkillsInspectDetail({
       ...base,
       scope: "plugin",
-      plugin: "design@zen-plugins",
+      plugin: "design@mewla-plugins",
       capability: { can_delete: false, reason: "Owned by plugin" },
     });
-    expect(detail.plugin).toBe("design@zen-plugins");
+    expect(detail.plugin).toBe("design@mewla-plugins");
     expect(detail.scope).toBe("plugin");
     expect(detail.capability).toEqual({
       canDelete: false,

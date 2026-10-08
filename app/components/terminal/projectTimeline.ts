@@ -1,7 +1,7 @@
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
-import { buildZenTimelineFromSortedEvents } from "./InterfaceTimelineModel";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import { buildTimelineFromSortedEvents } from "./InterfaceTimelineModel";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { isWaitSessionPoll } from "../../services/toolCallDetails";
 import {
   isTimelineProjectionPerfEnabled,
@@ -10,9 +10,9 @@ import {
   type TimelineProjectionMode,
 } from "./timelineProjectionPerf";
 
-export type ZenTimelineProjectionCache = {
+export type TimelineProjectionCache = {
   sortedEvents: CodexConversationEvent[];
-  items: ZenTimelineItem[];
+  items: TimelineItem[];
   /**
    * Computed on canonical full projection. When false, incremental replacement
    * is unsafe (duplicate event/item ids) and must full-fallback. Inherited on
@@ -23,14 +23,14 @@ export type ZenTimelineProjectionCache = {
   itemIndexById: ReadonlyMap<string, number> | null;
 };
 
-export type ZenTimelineEventOrderSource =
+export type TimelineEventOrderSource =
   | "cached-ids"
   | "already-sorted"
   | "sorted";
 
-export type ZenTimelineProjectionResult = {
-  items: ZenTimelineItem[];
-  cache: ZenTimelineProjectionCache;
+export type TimelineProjectionResult = {
+  items: TimelineItem[];
+  cache: TimelineProjectionCache;
   mode: TimelineProjectionMode;
   fallbackReason?: TimelineProjectionFallbackReason;
   dirtyStart?: number;
@@ -38,22 +38,22 @@ export type ZenTimelineProjectionResult = {
   stableRowReuse: number;
   stableRowChurn: number;
   /** How event order was established for this projection (exactly one sort when "sorted"). */
-  eventOrder: ZenTimelineEventOrderSource;
+  eventOrder: TimelineEventOrderSource;
 };
 
 /**
  * Canonical timeline projection entry.
- * Full path uses `buildZenTimelineFromSortedEvents` after at most one order resolve.
+ * Full path uses `buildTimelineFromSortedEvents` after at most one order resolve.
  * Incremental path runs only when a bounded same-id/same-kind message streaming
  * mutation is proven; otherwise falls back without forking presentation semantics.
  *
  * Turn-focus aliases are owned by `useInterfaceTimelineItems` after projection —
  * this API never accepts or caches aliases.
  */
-export function projectZenTimeline(
+export function projectTimeline(
   events: CodexConversationEvent[],
-  previous: ZenTimelineProjectionCache | null | undefined,
-): ZenTimelineProjectionResult {
+  previous: TimelineProjectionCache | null | undefined,
+): TimelineProjectionResult {
   const measure = isTimelineProjectionPerfEnabled();
   const started = measure ? nowMs() : 0;
 
@@ -158,7 +158,7 @@ export function projectZenTimeline(
     return finishFull(ordered, started, measure, "ambiguous");
   }
 
-  const nextProjected = buildZenTimelineFromSortedEvents([nextEvent]);
+  const nextProjected = buildTimelineFromSortedEvents([nextEvent]);
   if (nextProjected.length !== 1) {
     return finishFull(ordered, started, measure, "presence-change");
   }
@@ -206,11 +206,11 @@ export function projectZenTimeline(
  */
 function tryProvenEventPrepend(
   sortedEvents: CodexConversationEvent[],
-  previous: ZenTimelineProjectionCache,
+  previous: TimelineProjectionCache,
   started: number,
   measure: boolean,
-  eventOrder: ZenTimelineEventOrderSource,
-): ZenTimelineProjectionResult | null {
+  eventOrder: TimelineEventOrderSource,
+): TimelineProjectionResult | null {
   const addedCount = sortedEvents.length - previous.sortedEvents.length;
   if (
     addedCount <= 0 ||
@@ -247,7 +247,7 @@ function tryProvenEventPrepend(
   ) {
     return null;
   }
-  const prefixItems = buildZenTimelineFromSortedEvents(prefixEvents);
+  const prefixItems = buildTimelineFromSortedEvents(prefixEvents);
   const itemIndexById = new Map<string, number>();
   for (let index = 0; index < prefixItems.length; index += 1) {
     const item = prefixItems[index];
@@ -294,10 +294,10 @@ function tryProvenEventPrepend(
  */
 export function resolveProjectionEventOrder(
   events: CodexConversationEvent[],
-  previous: ZenTimelineProjectionCache | null | undefined,
+  previous: TimelineProjectionCache | null | undefined,
 ): {
   sortedEvents: CodexConversationEvent[];
-  source: ZenTimelineEventOrderSource;
+  source: TimelineEventOrderSource;
 } {
   if (
     previous &&
@@ -317,15 +317,15 @@ export function resolveProjectionEventOrder(
 }
 
 function finishFull(
-  ordered: { sortedEvents: CodexConversationEvent[]; source: ZenTimelineEventOrderSource },
+  ordered: { sortedEvents: CodexConversationEvent[]; source: TimelineEventOrderSource },
   started: number,
   measure: boolean,
   fallbackReason: TimelineProjectionFallbackReason,
-): ZenTimelineProjectionResult {
+): TimelineProjectionResult {
   const sortedEvents = ordered.sortedEvents;
   const eventOrder = ordered.source;
   // Sorted core — never sort again here.
-  const items = buildZenTimelineFromSortedEvents(sortedEvents);
+  const items = buildTimelineFromSortedEvents(sortedEvents);
   const safety = computeIncrementalSafety(sortedEvents, items);
   return finishMeasured(
     {
@@ -349,11 +349,11 @@ function finishFull(
 }
 
 function finishMeasured(
-  result: ZenTimelineProjectionResult,
+  result: TimelineProjectionResult,
   eventCount: number,
   started: number,
   measure: boolean,
-): ZenTimelineProjectionResult {
+): TimelineProjectionResult {
   if (measure) {
     recordTimelineProjectionSample({
       mode: result.mode,
@@ -373,7 +373,7 @@ function finishMeasured(
 /** One Set scan on canonical full projection only. */
 function computeIncrementalSafety(
   sortedEvents: CodexConversationEvent[],
-  items: ZenTimelineItem[],
+  items: TimelineItem[],
 ): {
   incrementalSafe: boolean;
   itemIndexById: Map<string, number> | null;
@@ -403,11 +403,11 @@ function computeIncrementalSafety(
  */
 function tryProvenSingleEventAppend(
   sortedEvents: CodexConversationEvent[],
-  previous: ZenTimelineProjectionCache,
+  previous: TimelineProjectionCache,
   started: number,
   measure: boolean,
-  eventOrder: ZenTimelineEventOrderSource,
-): ZenTimelineProjectionResult | null {
+  eventOrder: TimelineEventOrderSource,
+): TimelineProjectionResult | null {
   if (
     !previous.incrementalSafe ||
     !previous.itemIndexById ||
@@ -444,7 +444,7 @@ function tryProvenSingleEventAppend(
   ) {
     return null;
   }
-  const projected = buildZenTimelineFromSortedEvents([newEvent]);
+  const projected = buildTimelineFromSortedEvents([newEvent]);
   if (projected.length !== 1) {
     // Empty (wait-status mutation) or multi-row presence is not a pure append.
     return null;

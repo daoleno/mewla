@@ -6,9 +6,9 @@ import type {
 } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import type { CodexPlanStep } from "../../services/codexConversation";
-import { ZenPlanStepRow } from "./InterfaceTimelinePlanStepRow";
+import { PlanStepRow } from "./InterfaceTimelinePlanStepRow";
 
-export function ZenPlanSteps({
+export function PlanSteps({
   steps,
   chrome,
   theme,
@@ -28,7 +28,7 @@ export function ZenPlanSteps({
   return (
     <View style={styles.planSteps}>
       {steps.map((step, index) => (
-        <ZenPlanStepRow
+        <PlanStepRow
           key={`${index}:${step.step}`}
           step={step}
           chrome={chrome}

@@ -10,7 +10,7 @@ const selectedAsset = {
 const manualServer = {
   id: "server-a",
   name: "Self-managed",
-  url: "wss://zen.test/ws?stale=true",
+  url: "wss://mewla.test/ws?stale=true",
   daemonId: "daemon-a",
   daemonPublicKey: "public-key-a",
   transportKind: "manual" as const,
@@ -109,15 +109,15 @@ mock.module("expo-file-system", () => ({
 // The production module is Android-only and imports expo-modules-core. Keep
 // the Bun service tests on the shared JS fallback path unless a test opts into
 // a React Native navigator explicitly.
-mock.module("../modules/zen-file-upload/src", () => ({
-  getZenFileUploadModule: () => nativeModule,
-  getZenFileDownloadModule: () => null,
+mock.module("../modules/file-upload/src", () => ({
+  getFileUploadModule: () => nativeModule,
+  getFileDownloadModule: () => null,
 }));
 
 mock.module("./auth", () => ({
   buildAuthorizationHeader: async (options: unknown) => {
     authorizationOptions = options;
-    return "Zen test-authorization";
+    return "Mewla test-authorization";
   },
   getOrCreateLocalDeviceIdentity: async () => ({
     deviceId: "test-device",
@@ -137,7 +137,7 @@ mock.module("./storage", () => ({
   getServerById: async () => storedServer,
 }));
 
-mock.module("../modules/zen-link-transport/src", () => ({
+mock.module("../modules/link-transport/src", () => ({
   startPinnedTunnel: async () => {
     nativeTunnelStarts += 1;
     throw new Error("pinned candidate offline");
@@ -287,22 +287,22 @@ describe("native attachment upload", () => {
     expect(uploadCalls).toHaveLength(1);
     expect(authorizationOptions).toEqual({
       daemonId: "daemon-a",
-      purpose: "zen-upload",
+      purpose: "mewla-upload",
     });
     expect(uploadCalls[0]).toEqual({
       file: expect.objectContaining({
         uri: selectedAsset.uri,
         name: selectedAsset.name,
       }),
-      url: "https://zen.test/upload",
+      url: "https://mewla.test/upload",
       options: {
         httpMethod: "POST",
         uploadType: 0,
         onProgress: expect.any(Function),
         headers: {
-          Authorization: "Zen test-authorization",
+          Authorization: "Mewla test-authorization",
           "Content-Type": "application/zip",
-          "X-Zen-Upload-Name": "..%2F..%2F%E6%8A%A5%E5%91%8A%202026.ZIP",
+          "X-Mewla-Upload-Name": "..%2F..%2F%E6%8A%A5%E5%91%8A%202026.ZIP",
         },
       },
     });
@@ -514,7 +514,7 @@ describe("Android document selection boundary", () => {
     picker(async () => ({ uri: "content://fixture/document/opaque", name: "报告.txt", mimeType: "text/plain", size: 12 }));
     const result = await uploadDocumentForServer("server-a");
     expect(result?.localUri).toBe("content://fixture/document/opaque");
-    expect(uploadCalls[0].options.headers).toMatchObject({ "X-Zen-Upload-Name": encodeURIComponent("报告.txt"), "Content-Type": "text/plain" });
+    expect(uploadCalls[0].options.headers).toMatchObject({ "X-Mewla-Upload-Name": encodeURIComponent("报告.txt"), "Content-Type": "text/plain" });
     expect(pickerOptions).toBeUndefined();
   });
 

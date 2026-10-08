@@ -10,7 +10,7 @@ describe("one StoredServer transport candidate migration", () => {
       {
         id: "legacy",
         name: "Cloudflare workstation",
-        url: "wss://zen.example/ws",
+        url: "wss://mewla.example/ws",
         daemonId: "1".repeat(64),
         daemonPublicKey: "2".repeat(64),
       },
@@ -19,13 +19,13 @@ describe("one StoredServer transport candidate migration", () => {
     expect(servers[0]).toMatchObject({
       id: "legacy",
       name: "Cloudflare workstation",
-      url: "wss://zen.example/ws",
+      url: "wss://mewla.example/ws",
       transportKind: "manual",
       transportCandidates: [
         {
           name: "Manual",
           kind: "manual",
-          url: "wss://zen.example/ws",
+          url: "wss://mewla.example/ws",
         },
       ],
     });

@@ -14,7 +14,7 @@ import {
 } from "./brainWorkEventPresentation";
 
 const canonicalSessionID =
-  "zen-worker-zen-brain-event-cards-1785779310481592975:@7163";
+  "mewla-worker-mewla-brain-event-cards-1785779310481592975:@7163";
 
 function resultEvent(
   overrides: Partial<BrainWorkResultEvent> = {},
@@ -26,7 +26,7 @@ function resultEvent(
     work_title: "Ship Brain cards",
     summary: "The delegated implementation completed.",
     session_id: canonicalSessionID,
-    session_name: `zen-brain-event-cards (${canonicalSessionID})`,
+    session_name: `mewla-brain-event-cards (${canonicalSessionID})`,
     occurred_at: "2026-08-04T02:00:00Z",
     unread: true,
     review_state: "queued",
@@ -52,37 +52,37 @@ describe("Brain Work event source presentation", () => {
     expect(brainCurrentWorkLifecycle({ ...current, status: "running", attention_state: undefined, attempt_session_id: "new-owner" }, { ...event, current_result: false }).label).toBe("Working");
     expect(brainWorkEventLifecycle({ ...event, review_state: "resolved" }).label).toBe("Done");
   });
-  test("removes Zen's canonical Session identity suffix", () => {
+  test("removes Mewla's canonical Session identity suffix", () => {
     expect(brainWorkEventSourceLabel(resultEvent())).toBe(
-      "zen-brain-event-cards",
+      "mewla-brain-event-cards",
     );
   });
 
   test("removes the canonical Session identity from a legacy Work title", () => {
     const event = resultEvent({
-      work_title: `zen-device-revocation-acceptance (${canonicalSessionID})`,
+      work_title: `mewla-device-revocation-acceptance (${canonicalSessionID})`,
       session_name: "Device revocation worker",
     });
 
     expect(brainWorkEventWorkTitle(event)).toBe(
-      "zen device revocation acceptance",
+      "mewla device revocation acceptance",
     );
     const label = brainWorkEventAccessibilityLabel({
       event,
       statusLabel: "Done",
       occurredAtLabel: "August 4, 2026 at 10:00",
     });
-    expect(label).toContain("Work zen device revocation acceptance");
+    expect(label).toContain("Work mewla device revocation acceptance");
     expect(label).not.toContain(canonicalSessionID);
-    expect(label).not.toContain("zen-worker-");
+    expect(label).not.toContain("mewla-worker-");
   });
 
   test("omits a normalized source that repeats the Work title", () => {
     expect(
       brainWorkEventSourceLabel(
         resultEvent({
-          work_title: "  Zen Work Result Cards  ",
-          session_name: `zen work result cards (${canonicalSessionID})`,
+          work_title: "  Mewla Work Result Cards  ",
+          session_name: `mewla work result cards (${canonicalSessionID})`,
         }),
       ),
     ).toBeUndefined();
@@ -92,8 +92,8 @@ describe("Brain Work event source presentation", () => {
     expect(
       brainWorkEventSourceLabel(
         resultEvent({
-          work_title: `zen-device-revocation-acceptance (${canonicalSessionID})`,
-          session_name: `ZEN-DEVICE-REVOCATION-ACCEPTANCE (${canonicalSessionID})`,
+          work_title: `mewla-device-revocation-acceptance (${canonicalSessionID})`,
+          session_name: `MEWLA-DEVICE-REVOCATION-ACCEPTANCE (${canonicalSessionID})`,
         }),
       ),
     ).toBeUndefined();
@@ -139,9 +139,9 @@ describe("Brain Work event source presentation", () => {
       occurredAtLabel: "August 4, 2026 at 10:00",
     });
 
-    expect(label).toContain("Source: zen-brain-event-cards");
+    expect(label).toContain("Source: mewla-brain-event-cards");
     expect(label).not.toContain(canonicalSessionID);
-    expect(label).not.toContain("zen-worker-");
+    expect(label).not.toContain("mewla-worker-");
   });
 
   test("keeps result fact, review attention, and Session finalization distinct", () => {

@@ -1,6 +1,6 @@
 import type { CodexPlanStep } from "../../services/codexConversation";
 
-export interface ZenPlanTimelineItem {
+export interface PlanTimelineItem {
   type: "plan";
   id: string;
   timestamp?: string;

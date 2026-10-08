@@ -155,9 +155,9 @@ export function useInterfaceChatSurfaceState({
   onConsumeInitialComposerFocus,
 }: UseInterfaceChatSurfaceStateInput): InterfaceChatSurfaceState {
   const insets = useSafeAreaInsets();
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const { state: workerState } = useWorkers();
-  const composerLayout = zenTheme.chat.layout;
+  const composerLayout = appTheme.chat.layout;
   const active = visible && screenFocused;
   const handledInitialComposerFocusGrantRef =
     useRef<InterfaceComposerInitialFocusGrant>(null);

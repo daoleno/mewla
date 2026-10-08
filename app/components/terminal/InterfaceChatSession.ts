@@ -36,7 +36,7 @@ import { shouldDropStructuredChatEvent } from "./interfaceConversationVisibility
 import { interfaceChatSessionCacheKey } from "./interfaceChatSessionIdentity";
 
 const INSTRUCTION_CONTEXT_ATTACHMENT_TAG_RE =
-  /<zen_attachments>\s*([\s\S]*?)\s*<\/zen_attachments>/i;
+  /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
 
 type KeyedState<T> = {
   cacheKey: string;

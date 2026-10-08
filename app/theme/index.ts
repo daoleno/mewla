@@ -5,39 +5,39 @@ export type {
   ChatPalette,
   DataVisualizationPalette,
   MaterialPalette,
-  ResolvedZenTheme,
+  ResolvedTheme,
   SurfacePalette,
   ThemeColorScheme,
   ThemePreference,
-  ZenThemeDefinition,
+  ThemeDefinition,
 } from './types';
 
 export {
-  ZEN_BRAND_COLORS,
-  ZEN_DARK_APP_COLORS,
-  ZEN_DARK_CHAT_PALETTE,
-  ZEN_DARK_DATA_VISUALIZATION,
-  ZEN_DARK_MATERIALS,
-  ZEN_DARK_NEUTRALS,
-  ZEN_DARK_OVERLAYS,
-  ZEN_DARK_STATUS,
-  ZEN_DARK_SURFACE_PALETTE,
-  ZEN_LIGHT_APP_COLORS,
-  ZEN_LIGHT_CHAT_PALETTE,
-  ZEN_LIGHT_DATA_VISUALIZATION,
-  ZEN_LIGHT_MATERIALS,
-  ZEN_LIGHT_NEUTRALS,
-  ZEN_LIGHT_OVERLAYS,
-  ZEN_LIGHT_STATUS,
-  ZEN_LIGHT_SURFACE_PALETTE,
-  ZEN_SAGE,
-  ZEN_ACCENTS,
+  BRAND_COLORS,
+  DARK_APP_COLORS,
+  DARK_CHAT_PALETTE,
+  DARK_DATA_VISUALIZATION,
+  DARK_MATERIALS,
+  DARK_NEUTRALS,
+  DARK_OVERLAYS,
+  DARK_STATUS,
+  DARK_SURFACE_PALETTE,
+  LIGHT_APP_COLORS,
+  LIGHT_CHAT_PALETTE,
+  LIGHT_DATA_VISUALIZATION,
+  LIGHT_MATERIALS,
+  LIGHT_NEUTRALS,
+  LIGHT_OVERLAYS,
+  LIGHT_STATUS,
+  LIGHT_SURFACE_PALETTE,
+  SAGE,
+  THEME_ACCENTS,
   DEFAULT_ACCENT_ID,
   getAccentById,
 } from './primitives';
-export type { ZenAccent, ZenAccentId } from './primitives';
+export type { ThemeAccent, ThemeAccentId } from './primitives';
 
-export { ThemeProvider, useZenTheme } from './provider';
+export { ThemeProvider, useThemeContext } from './provider';
 export { buildChatChrome } from './buildChatChrome';
 export { resolveTheme } from './resolve';
 export {

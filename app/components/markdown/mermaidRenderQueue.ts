@@ -202,7 +202,7 @@ function flushQueue() {
     inflight = job.requestId;
     job.injected = true;
     inject(
-      `window.__zenMermaidRender(${serializeMermaidRenderRequest({
+      `window.__mewlaMermaidRender(${serializeMermaidRenderRequest({
         v: MERMAID_MESSAGE_VERSION,
         type: "render",
         requestId: job.requestId,

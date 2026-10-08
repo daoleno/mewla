@@ -1,8 +1,8 @@
 import { expect, mock, test } from "bun:test";
 
-if (!process.env.ZEN_ENROLLMENT_API_TEST) {
+if (!process.env.MEWLA_ENROLLMENT_API_TEST) {
   test("enrollment API contract in isolation", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], { env: { ...process.env, ZEN_ENROLLMENT_API_TEST: "1" } });
+    const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], { env: { ...process.env, MEWLA_ENROLLMENT_API_TEST: "1" } });
     if (result.exitCode) throw new Error(new TextDecoder().decode(result.stderr));
     expect(result.exitCode).toBe(0);
   });
@@ -17,13 +17,13 @@ if (!process.env.ZEN_ENROLLMENT_API_TEST) {
       }
       return Response.json({ status: "approved", daemon_id: "a".repeat(64), daemon_public_key: "b".repeat(64), device_id: "device" });
     }) as unknown as typeof fetch;
-    const prompt = await requestBrowserEnrollment("https://zen.example", fetcher);
+    const prompt = await requestBrowserEnrollment("https://mewla.example", fetcher);
     expect(prompt.requestId).toBe("r");
     expect(prompt.verificationNumber).toBe("042");
-    const status = await readBrowserEnrollmentStatus("https://zen.example", prompt, fetcher);
+    const status = await readBrowserEnrollmentStatus("https://mewla.example", prompt, fetcher);
     const server = browserEnrollmentServer("https://manjaro.example.ts.net/", status);
     expect(server?.daemonId).toBe("a".repeat(64));
     expect(server?.name).toBe("manjaro.example.ts.net");
-    expect(browserEnrollmentServer("https://zen.example", { status: "denied" })).toBeNull();
+    expect(browserEnrollmentServer("https://mewla.example", { status: "denied" })).toBeNull();
   });
 }

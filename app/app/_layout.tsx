@@ -78,7 +78,7 @@ async function registerForPushNotificationsAsync(): Promise<
   string | undefined
 > {
   if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("zen-agents", {
+    await Notifications.setNotificationChannelAsync("mewla-agents", {
       name: "Worker Alerts",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],

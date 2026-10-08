@@ -4,9 +4,7 @@ The app follows the landing page (`site/index.html`, `site/styles.css`,
 `site/sealcat.js`): warm paper, warm ink and one vermilion seal with a cat
 carved in it. This file maps that language onto the app's theme system
 (`app/theme/`, `app/constants/tokens.ts`). It does not define a second one.
-The product is Mewla. Internal identifiers (`ZenTheme`, `ZEN_*_COLORS`) and
-the `zen-*` native modules keep their legacy names. No Zen-era art remains:
-every brand asset is `assets/branding/mewla-*`.
+The product is Mewla, and every brand asset is `assets/branding/mewla-*`.
 
 ## Principles
 

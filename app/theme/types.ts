@@ -1,5 +1,5 @@
 import type { AppColors } from './palette';
-import type { ZenAccentId } from './primitives';
+import type { ThemeAccentId } from './primitives';
 
 export type ThemeColorScheme = 'light' | 'dark';
 
@@ -66,7 +66,7 @@ export interface DataVisualizationPalette {
   activityRamp: readonly [string, string, string, string];
 }
 
-export interface ZenThemeDefinition {
+export interface ThemeDefinition {
   id: string;
   name: string;
   colorScheme: ThemeColorScheme;
@@ -78,9 +78,9 @@ export interface ZenThemeDefinition {
   avatarColors: readonly string[];
 }
 
-export interface ResolvedZenTheme extends ZenThemeDefinition {
+export interface ResolvedTheme extends ThemeDefinition {
   isLight: boolean;
-  accentId: ZenAccentId;
+  accentId: ThemeAccentId;
 }
 
 export type ThemePreference = 'system' | string;

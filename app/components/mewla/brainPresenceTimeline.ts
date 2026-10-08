@@ -1,5 +1,5 @@
-import type { ZenTimelineItem } from "../terminal/InterfaceTimelineItemView";
-import type { ZenActivityTimelineItem } from "../terminal/InterfaceTimelineActivityTypes";
+import type { TimelineItem } from "../terminal/InterfaceTimelineItemView";
+import type { ActivityTimelineItem } from "../terminal/InterfaceTimelineActivityTypes";
 import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "../terminal/InterfaceTimelineModel";
 import type { BrainWorkEventTimelineItem } from "../brain/BrainWorkEventCard";
 import { brainCatTailLabel, type BrainCatPresence } from "./brainCatState";
@@ -17,9 +17,9 @@ export const BRAIN_PRESENCE_ITEM_PREFIX = "brain-presence:";
  * An empty chat has the seal instead. Never more than one of these.
  */
 export function mergeBrainPresenceIntoTimeline(
-  items: ZenTimelineItem[],
+  items: TimelineItem[],
   presence: BrainCatPresence | undefined,
-): ZenTimelineItem[] {
+): TimelineItem[] {
   const working = items.findIndex((item) => item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX));
   if (working >= 0) {
     // The walking cat says what Brain is doing: its newest step this turn.
@@ -56,7 +56,7 @@ export function mergeBrainPresenceIntoTimeline(
 }
 
 /** The newest tool row's title before the Working row, within this turn. */
-function latestStep(items: ZenTimelineItem[], working: number): string | undefined {
+function latestStep(items: TimelineItem[], working: number): string | undefined {
   for (let index = working - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item.type === "message") return undefined;
@@ -69,7 +69,7 @@ function latestStep(items: ZenTimelineItem[], working: number): string | undefin
 }
 
 /** The newest slip of any Work that needs you, or -1. */
-function perchIndex(items: ZenTimelineItem[], workIds: readonly string[] | undefined): number {
+function perchIndex(items: TimelineItem[], workIds: readonly string[] | undefined): number {
   if (!workIds?.length) return -1;
   const needs = new Set(workIds);
   for (let index = items.length - 1; index >= 0; index -= 1) {
@@ -88,9 +88,9 @@ export const BRAIN_STEPS_ITEM_PREFIX = "brain-steps:";
  * reads as messages and Work slips. A single row stays as it is, and a
  * still-running row stays visible on its own.
  */
-export function foldBrainToolRows(items: ZenTimelineItem[]): ZenTimelineItem[] {
-  const out: ZenTimelineItem[] = [];
-  let run: ZenActivityTimelineItem[] = [];
+export function foldBrainToolRows(items: TimelineItem[]): TimelineItem[] {
+  const out: TimelineItem[] = [];
+  let run: ActivityTimelineItem[] = [];
   const flush = () => {
     if (run.length > 1) out.push(foldedSteps(run));
     else out.push(...run);
@@ -108,7 +108,7 @@ export function foldBrainToolRows(items: ZenTimelineItem[]): ZenTimelineItem[] {
   return out.length === items.length ? items : out;
 }
 
-function isFoldableToolRow(item: ZenTimelineItem): item is ZenActivityTimelineItem {
+function isFoldableToolRow(item: TimelineItem): item is ActivityTimelineItem {
   return (
     item.type === "activity" &&
     item.tone !== "running" &&
@@ -118,7 +118,7 @@ function isFoldableToolRow(item: ZenTimelineItem): item is ZenActivityTimelineIt
   );
 }
 
-function foldedSteps(run: ZenActivityTimelineItem[]): ZenActivityTimelineItem {
+function foldedSteps(run: ActivityTimelineItem[]): ActivityTimelineItem {
   const failed = run.filter((item) => item.tone === "failed").length;
   const title = `Worked · ${run.length} steps${failed ? ` · ${failed} failed` : ""}`;
   return {

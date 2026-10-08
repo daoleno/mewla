@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainWorkResultEvent } from "../brain/brainWorkEvent";
 import type { ToolDeveloperDetails } from "../../services/toolCallDetails";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type {
-  ZenActivityChild,
-  ZenActivityTimelineItem,
+  ActivityChild,
+  ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import {
   activityChildrenEqual,
@@ -15,12 +15,12 @@ import {
   toolDeveloperDetailsEqual,
 } from "./timelineItemsSemanticEqual";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
-import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
+import type { PlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { CodexPlanStep } from "../../services/codexConversation";
 
 function makeActivity(
-  overrides: Partial<ZenActivityTimelineItem> = {},
-): ZenActivityTimelineItem {
+  overrides: Partial<ActivityTimelineItem> = {},
+): ActivityTimelineItem {
   return {
     type: "activity",
     id: "activity-1",
@@ -49,7 +49,7 @@ function makeDeveloperDetails(
   };
 }
 
-function makeChildren(): ZenActivityChild[] {
+function makeChildren(): ActivityChild[] {
   return [
     {
       id: "child-a",
@@ -87,8 +87,8 @@ function makeBrainEvent(
 }
 
 function makeBrainItem(
-  overrides: Partial<Extract<ZenTimelineItem, { type: "brain-work-event" }>> = {},
-): Extract<ZenTimelineItem, { type: "brain-work-event" }> {
+  overrides: Partial<Extract<TimelineItem, { type: "brain-work-event" }>> = {},
+): Extract<TimelineItem, { type: "brain-work-event" }> {
   const event = makeBrainEvent();
   return {
     type: "brain-work-event",
@@ -114,8 +114,8 @@ function makeAttachment(
 }
 
 function makeMessage(
-  overrides: Partial<Extract<ZenTimelineItem, { type: "message" }>> = {},
-): Extract<ZenTimelineItem, { type: "message" }> {
+  overrides: Partial<Extract<TimelineItem, { type: "message" }>> = {},
+): Extract<TimelineItem, { type: "message" }> {
   return {
     type: "message",
     id: "msg-1",
@@ -138,8 +138,8 @@ function makePlanStep(
 }
 
 function makePlan(
-  overrides: Partial<ZenPlanTimelineItem> = {},
-): ZenPlanTimelineItem {
+  overrides: Partial<PlanTimelineItem> = {},
+): PlanTimelineItem {
   return {
     type: "plan",
     id: "plan-1",
@@ -157,8 +157,8 @@ function makePlan(
  * used the explicit helpers below.
  */
 function legacyRemovedProductionTimelineItemsEqual(
-  left: ZenTimelineItem,
-  right: ZenTimelineItem,
+  left: TimelineItem,
+  right: TimelineItem,
 ): boolean {
   if (left === right) {
     return true;
@@ -269,8 +269,8 @@ function legacyStringArraysEqual(left?: string[], right?: string[]) {
 }
 
 function legacyPatchSummariesEqual(
-  left?: ZenActivityTimelineItem["fileSummaries"],
-  right?: ZenActivityTimelineItem["fileSummaries"],
+  left?: ActivityTimelineItem["fileSummaries"],
+  right?: ActivityTimelineItem["fileSummaries"],
 ) {
   if (left === right) {
     return true;
@@ -304,7 +304,7 @@ function medianMs(samples: number[]) {
 }
 
 /** Structurally equal clones preserving transport insertion order. */
-function cloneBenchmarkEqualPair(item: ZenTimelineItem): ZenTimelineItem {
+function cloneBenchmarkEqualPair(item: TimelineItem): TimelineItem {
   if (item.type === "activity") {
     return {
       ...item,
@@ -367,8 +367,8 @@ function buildTransport(seed: number): Record<string, string> {
   };
 }
 
-function buildChildren(seed: number): ZenActivityChild[] {
-  const children: ZenActivityChild[] = [];
+function buildChildren(seed: number): ActivityChild[] {
+  const children: ActivityChild[] = [];
   for (let index = 0; index < 12; index += 1) {
     children.push({
       id: `child-${seed}-${index}`,
@@ -381,8 +381,8 @@ function buildChildren(seed: number): ZenActivityChild[] {
 }
 
 /** Precompute 500 mixed Activity / Brain Work items outside timed regions. */
-function buildEqualityBenchmarkItems(count: number): ZenTimelineItem[] {
-  const items: ZenTimelineItem[] = [];
+function buildEqualityBenchmarkItems(count: number): TimelineItem[] {
+  const items: TimelineItem[] = [];
   for (let index = 0; index < count; index += 1) {
     if (index % 5 === 0) {
       const onPress = () => {};

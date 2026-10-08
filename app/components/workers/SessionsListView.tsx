@@ -14,7 +14,7 @@ import {
   shadow,
   useAppTheme,
 } from "../../constants/tokens";
-import type { ResolvedZenTheme } from "../../theme";
+import type { ResolvedTheme } from "../../theme";
 import { surfacesFromTheme } from "../../constants/themedSurfaces";
 import type { Worker } from "../../store/workers";
 import type { WorkerDirectorySection } from "../../services/workerDirectory";
@@ -197,7 +197,7 @@ export function NewSessionButton({
   );
 }
 
-function createStyles(theme: ResolvedZenTheme) {
+function createStyles(theme: ResolvedTheme) {
   const colors = theme.colors;
   const { sectionLabel } = surfacesFromTheme(theme);
   return StyleSheet.create({

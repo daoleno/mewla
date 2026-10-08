@@ -50,13 +50,13 @@ export function buildInterfaceComposerMessage(
   if (attachments.length === 0) {
     return body;
   }
-  const attachmentBlock = `<zen_attachments>${JSON.stringify({
+  const attachmentBlock = `<mewla_attachments>${JSON.stringify({
     files: attachments.map((attachment) => ({
       name: attachment.name,
       path: attachment.path,
       content_type: attachment.mimeType,
     })),
-  })}</zen_attachments>`;
+  })}</mewla_attachments>`;
   return [body, attachmentBlock].filter(Boolean).join("\n\n");
 }
 

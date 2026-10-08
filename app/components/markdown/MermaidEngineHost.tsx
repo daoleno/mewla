@@ -71,12 +71,12 @@ export function MermaidEngineHost() {
     >
       <WebView
         ref={webviewRef}
-        originWhitelist={["https://zen.local"]}
+        originWhitelist={["https://mewla.local"]}
         source={{ html, baseUrl: MERMAID_ENGINE_BASE_URL }}
         onMessage={handleMessage}
         onLoadEnd={() => {
           webviewRef.current?.injectJavaScript(
-            `(function(){if(window.mermaid&&window.__zenMermaidRender&&window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({v:1,type:"ready"}));}})(); true;`,
+            `(function(){if(window.mermaid&&window.__mewlaMermaidRender&&window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({v:1,type:"ready"}));}})(); true;`,
           );
         }}
         onRenderProcessGone={() => failMermaidEngine("engine")}

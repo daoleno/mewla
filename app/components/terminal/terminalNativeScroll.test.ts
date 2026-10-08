@@ -78,7 +78,7 @@ async function renderer() {
     for (const fn of handlers.get(name) || []) fn({ touches: [touch], changedTouches: [touch], target: {} });
   };
   flush();
-  window.__zenSetScrollContext('session', 'token', 'session-change');
+  window.__mewlaSetScrollContext('session', 'token', 'session-change');
   return { window, elements, sent, animations, flush, dispatch, idle() {
     const pending = [...timers.values()]; timers.clear(); pending.forEach((fn) => fn()); flush();
   } };
@@ -88,10 +88,10 @@ test('PTY redraw cannot detach the Android touch target during a drag or fling',
   const r = await renderer();
   const frame = (text: string, dirty = 'partial') => ({ dirty, rows: 1, cols: 80,
     dirtyLines: [0], lineHtml: [text], cursorVisible: false });
-  r.window.__zenRenderSnapshot(frame('before', 'full')); r.flush();
+  r.window.__mewlaRenderSnapshot(frame('before', 'full')); r.flush();
   r.dispatch('touchstart', 100);
   r.dispatch('touchmove', 200);
-  r.window.__zenRenderSnapshot(frame('after')); r.flush();
+  r.window.__mewlaRenderSnapshot(frame('after')); r.flush();
   expect(r.elements['terminal-html'].innerHTML).toBe('before');
   r.dispatch('touchend', 200); r.flush();
   expect(r.elements['terminal-html'].innerHTML).toBe('before');
@@ -130,7 +130,7 @@ test('Brain history and mouse-reporting Worker use the same surface with distinc
     [true, false, 'none'], [true, true, 'wheel'],
   ] as const) {
     const r = await renderer();
-    r.window.__zenHistory({ rows: [], reset: true, removed: 0, paneId: '%1',
+    r.window.__mewlaHistory({ rows: [], reset: true, removed: 0, paneId: '%1',
       panes: [{ id: '%1', left: 0, top: 0, cols: 80, rows: 40, alternate, mouse }] });
     r.dispatch('touchstart', 100);
     r.dispatch('touchmove', 102);
@@ -141,7 +141,7 @@ test('Brain history and mouse-reporting Worker use the same surface with distinc
     expect(wheel).toHaveLength(route === 'wheel' ? 1 : 0);
     if (route === 'wheel') expect(wheel[0]).toMatchObject({ ticks: -1, sessionId: 'session', token: 'token' });
     expect(r.sent.filter((event) => event.type === 'focusInput' || event.type === 'mouse')).toEqual([]);
-    r.window.__zenSetScrollContext('next-session', 'next-token', 'session-change');
+    r.window.__mewlaSetScrollContext('next-session', 'next-token', 'session-change');
     r.elements.root.scrollTop -= 100;
     r.dispatch('scroll', 120);
     r.flush();
@@ -156,14 +156,14 @@ test('TUI old-frame interpolation finishes in one frame and cancellation reveals
     dirtyLines: Array.from({ length: 20 }, (_, i) => i),
     lineHtml: Array.from({ length: 20 }, (_, i) => `<div class="terminal-row"><span>ANSI 中文 row ${i + offset}</span></div>`),
     cursorVisible: false });
-  r.window.__zenHistory({ rows: [], paneId: '%1', panes: [
+  r.window.__mewlaHistory({ rows: [], paneId: '%1', panes: [
     { id: '%1', left: 0, top: 0, cols: 80, rows: 40, alternate: true, mouse: true },
   ] });
-  r.window.__zenRenderSnapshot(frame(0, 'full')); r.flush();
+  r.window.__mewlaRenderSnapshot(frame(0, 'full')); r.flush();
   const touched = r.elements['terminal-html'].children[0];
   r.dispatch('touchstart', 100); r.dispatch('touchmove', 120);
-  r.window.__zenRenderSnapshot(frame(1)); r.flush();
-  r.window.__zenRenderSnapshot(frame(2)); r.flush();
+  r.window.__mewlaRenderSnapshot(frame(1)); r.flush();
+  r.window.__mewlaRenderSnapshot(frame(2)); r.flush();
   expect(r.animations).toHaveLength(2);
   expect(r.animations.map((a) => a.options.duration)).toEqual([16, 16]);
   // A slow PTY response cannot extend or accumulate the previous displacement.
@@ -180,7 +180,7 @@ test('TUI old-frame interpolation finishes in one frame and cancellation reveals
 
 test('a TUI consuming the first wheel without redraw cannot stall fresh movement for 100 ms', async () => {
   const r = await renderer();
-  r.window.__zenHistory({ rows: [], paneId: '%1', panes: [
+  r.window.__mewlaHistory({ rows: [], paneId: '%1', panes: [
     { id: '%1', left: 0, top: 0, cols: 80, rows: 40, alternate: true, mouse: true },
   ] });
   r.dispatch('touchstart', 100); r.dispatch('touchmove', 120);

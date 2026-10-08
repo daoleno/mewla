@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
-import { dispatchRenderer } from '../../modules/zen-terminal-vt/src';
+import { dispatchRenderer } from '../../modules/terminal-vt/src';
 import { createTerminalRendererTransport } from './terminalRendererTransport';
 import type {
   MouseAction,
   MouseButton,
   RenderSnapshot,
-} from '../../modules/zen-terminal-vt/src';
+} from '../../modules/terminal-vt/src';
 import type { TerminalThemePalette } from '../../constants/terminalThemes';
 import { createTerminalRenderScheduler } from './terminalRenderScheduler';
 import { useGhosttyCoreTerminal } from './useGhosttyCoreTerminal';
@@ -121,10 +121,10 @@ export function useGhosttyTerminalController({
 
   const injectRendererState = useCallback((payload: RendererStateMessage) => {
     const script = payload.type === 'renderSnapshot'
-      ? `window.__zenRenderSnapshot && window.__zenRenderSnapshot(${JSON.stringify(payload.snapshot)}); true;`
+      ? `window.__mewlaRenderSnapshot && window.__mewlaRenderSnapshot(${JSON.stringify(payload.snapshot)}); true;`
       : payload.type === 'history'
-        ? `window.__zenHistory && window.__zenHistory(${JSON.stringify(payload.history)}); true;`
-      : `window.__zenTheme && window.__zenTheme(${JSON.stringify(payload.theme)}); true;`;
+        ? `window.__mewlaHistory && window.__mewlaHistory(${JSON.stringify(payload.history)}); true;`
+      : `window.__mewlaTheme && window.__mewlaTheme(${JSON.stringify(payload.theme)}); true;`;
     rendererTransport.send(script);
   }, [rendererTransport]);
 
@@ -147,10 +147,10 @@ export function useGhosttyTerminalController({
 
   const injectRendererCommand = useCallback((command: RendererCommand) => {
     const scripts: Record<RendererCommand, string> = {
-      blur: 'window.__zenBlur && window.__zenBlur(); true;',
-      wakeRenderer: 'window.__zenWakeRenderer && window.__zenWakeRenderer(); true;',
-      resumeInput: 'window.__zenResumeInput && window.__zenResumeInput(); true;',
-      scrollToBottom: 'window.__zenScrollToBottom && window.__zenScrollToBottom(); true;',
+      blur: 'window.__mewlaBlur && window.__mewlaBlur(); true;',
+      wakeRenderer: 'window.__mewlaWakeRenderer && window.__mewlaWakeRenderer(); true;',
+      resumeInput: 'window.__mewlaResumeInput && window.__mewlaResumeInput(); true;',
+      scrollToBottom: 'window.__mewlaScrollToBottom && window.__mewlaScrollToBottom(); true;',
     };
     rendererTransport.send(scripts[command]);
   }, [rendererTransport]);
@@ -170,7 +170,7 @@ export function useGhosttyTerminalController({
     const context = scrollCorrelationRef.current.replace(sessionId);
     if (webReadyRef.current) {
       rendererTransport.send(
-        `window.__zenSetScrollContext && window.__zenSetScrollContext(${JSON.stringify(context.sessionId)}, ${JSON.stringify(context.token)}, ${JSON.stringify(reason)}); true;`,
+        `window.__mewlaSetScrollContext && window.__mewlaSetScrollContext(${JSON.stringify(context.sessionId)}, ${JSON.stringify(context.token)}, ${JSON.stringify(reason)}); true;`,
       );
     }
   }, [rendererTransport]);
@@ -385,7 +385,7 @@ export function useGhosttyTerminalController({
         }
         const scrollContext = scrollCorrelationRef.current.context;
         rendererTransport.send(
-          `window.__zenSetScrollContext && window.__zenSetScrollContext(${JSON.stringify(scrollContext.sessionId)}, ${JSON.stringify(scrollContext.token)}, "session-change"); true;`,
+          `window.__mewlaSetScrollContext && window.__mewlaSetScrollContext(${JSON.stringify(scrollContext.sessionId)}, ${JSON.stringify(scrollContext.token)}, "session-change"); true;`,
         );
         scheduleRenderState();
         history.replay();

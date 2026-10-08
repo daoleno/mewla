@@ -15,7 +15,7 @@ import { sessionsNeedYou } from "./primarySessionsAttention";
 import {
   beginInteraction,
   type PrimaryRouteName,
-  type ZenInteractionToken,
+  type InteractionToken,
 } from "../../services/interactionTrace";
 import { usePrimaryPagerPosition } from "./primaryPagerPosition";
 import {
@@ -37,7 +37,7 @@ const PAGER_POSITION_INPUT_RANGE = [0, 1] as const;
 interface PendingSwitchTrace {
   activated: boolean;
   target: PrimaryRouteName;
-  token: ZenInteractionToken<"primary.switch">;
+  token: InteractionToken<"primary.switch">;
 }
 
 interface PrimarySwitchOptionProps {

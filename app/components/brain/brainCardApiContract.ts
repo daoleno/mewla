@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import { projectZenTimeline } from "../terminal/projectZenTimeline";
+import { projectTimeline } from "../terminal/projectTimeline";
 import { attachBrainWorkEventActions } from "../terminal/InterfaceTimelineModel";
 import { brainCurrentWorkLifecycle, brainWorkEventLifecycle } from "./brainWorkEventPresentation";
 import { brainWorkEventCardModel } from "./brainWorkEventCardModel";
 
 // Executed by the Go BDD with real emitted, persisted and API-projected data.
 const payload = JSON.parse(await Bun.stdin.text());
-let cache: ReturnType<typeof projectZenTimeline>["cache"] | null = null;
+let cache: ReturnType<typeof projectTimeline>["cache"] | null = null;
 for (const phase of ["live", "accepted", "reconnect"] as const) {
   const wire = payload[phase];
-  const projection = projectZenTimeline(wire.events, phase === "reconnect" ? null : cache);
+  const projection = projectTimeline(wire.events, phase === "reconnect" ? null : cache);
   cache = projection.cache;
   const items = attachBrainWorkEventActions(projection.items, undefined, undefined, wire.current_work);
   const cards = items.filter(item => item.type === "brain-work-event");

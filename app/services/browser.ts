@@ -68,7 +68,7 @@ export async function browserRequest(
 ): Promise<BrowserResponse> {
   const url = await endpoint(server, "/browser");
   url.protocol = url.protocol === "wss:" ? "https:" : url.protocol === "ws:" ? "http:" : url.protocol;
-  const authorization = await buildAuthorizationHeader({ daemonId: server.daemonId, purpose: "zen-browser" });
+  const authorization = await buildAuthorizationHeader({ daemonId: server.daemonId, purpose: "mewla-browser" });
   if (signal?.aborted) throw new Error("Browser request cancelled");
   const response = await fetch(url.toString(), {
     method: "POST", signal,
@@ -118,7 +118,7 @@ export class BrowserViewer {
     const url = await endpoint(this.server, "/browser/viewer");
     url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
     url.searchParams.set("id", this.id);
-    const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: `zen-browser-view:${this.id}` });
+    const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: `mewla-browser-view:${this.id}` });
     if (this.closed) return;
     const NativeWebSocket = WebSocket as unknown as { new(url: string, protocols: undefined, options: { headers: Record<string, string> }): WebSocket };
     const socket = new NativeWebSocket(url.toString(), undefined, { headers: { Authorization: authorization } });

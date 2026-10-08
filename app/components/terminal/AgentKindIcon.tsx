@@ -6,7 +6,7 @@ import type { ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Claude, Codex, Grok, OpenCode, DeepSeek } from '@lobehub/icons-rn';
 import { useAppTheme } from '../../constants/tokens';
-import type { ResolvedZenTheme } from '../../theme';
+import type { ResolvedTheme } from '../../theme';
 import { surfacesFromTheme } from '../../constants/themedSurfaces';
 import type { AgentKind } from '../../services/workerPresentation';
 import type { TerminalFlavor } from '../../services/terminalFlavor';
@@ -139,7 +139,7 @@ function renderContent({
   flavor: TerminalFlavor;
   iconSize: number;
   styles: ReturnType<typeof createStyles>;
-  theme: ResolvedZenTheme;
+  theme: ResolvedTheme;
   variant: 'compact' | 'avatar';
 }) {
   if (kind === 'claude') {
@@ -279,7 +279,7 @@ function withAlpha(hex: string, alpha: number): string {
   return `#${normalized}${value}`;
 }
 
-function createStyles(theme: ResolvedZenTheme) {
+function createStyles(theme: ResolvedTheme) {
   const { subtle: themedSubtle, border: themedBorder } = surfacesFromTheme(theme);
 
   return StyleSheet.create({

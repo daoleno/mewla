@@ -1,6 +1,6 @@
 import { Platform, type TextStyle, type ViewStyle } from "react-native";
 import type { AppColors } from "../theme/palette";
-import { useZenTheme } from "../theme/provider";
+import { useThemeContext } from "../theme/provider";
 import type { MaterialPalette } from "../theme/types";
 import { FontFamilies } from "./fontFamilies";
 
@@ -13,9 +13,9 @@ export function useAppTheme(): {
   colors: AppColors;
   colorScheme: AppColorScheme;
   isLight: boolean;
-  theme: ReturnType<typeof useZenTheme>['theme'];
+  theme: ReturnType<typeof useThemeContext>['theme'];
 } {
-  const { theme } = useZenTheme();
+  const { theme } = useThemeContext();
   return {
     colors: theme.colors,
     colorScheme: theme.colorScheme,
@@ -25,11 +25,11 @@ export function useAppTheme(): {
 }
 
 export function useAppColors(): AppColors {
-  return useZenTheme().theme.colors;
+  return useThemeContext().theme.colors;
 }
 
 export function useMaterials(): MaterialPalette {
-  return useZenTheme().theme.materials;
+  return useThemeContext().theme.materials;
 }
 
 export const Spacing = {

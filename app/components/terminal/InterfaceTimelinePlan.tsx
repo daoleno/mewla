@@ -6,28 +6,28 @@ import type {
 } from "../../constants/terminalThemes";
 import { InterfaceTimelineExpandedBlock } from "./InterfaceTimelineExpandedBlock";
 import { InterfaceTimelinePlanExplanation } from "./InterfaceTimelinePlanExplanation";
-import { ZenPlanHeader } from "./InterfaceTimelinePlanHeader";
-import { ZenPlanSteps } from "./InterfaceTimelinePlanSteps";
-import type { ZenPlanTimelineItem } from "./InterfaceTimelinePlanTypes";
+import { PlanHeader } from "./InterfaceTimelinePlanHeader";
+import { PlanSteps } from "./InterfaceTimelinePlanSteps";
+import type { PlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 
-export function ZenPlanUpdate({
+export function PlanUpdate({
   item,
   chrome,
   theme,
 }: {
-  item: ZenPlanTimelineItem;
+  item: PlanTimelineItem;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
 }) {
   return (
     <View style={styles.wrap}>
-      <ZenPlanHeader accentColor={chrome.textSubtle} chrome={chrome} />
+      <PlanHeader accentColor={chrome.textSubtle} chrome={chrome} />
       <InterfaceTimelineExpandedBlock chrome={chrome} style={styles.planBlock}>
         <InterfaceTimelinePlanExplanation
           chrome={chrome}
           explanation={item.explanation}
         />
-        <ZenPlanSteps steps={item.steps} chrome={chrome} theme={theme} />
+        <PlanSteps steps={item.steps} chrome={chrome} theme={theme} />
       </InterfaceTimelineExpandedBlock>
     </View>
   );

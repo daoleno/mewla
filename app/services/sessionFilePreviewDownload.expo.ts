@@ -1,6 +1,6 @@
 import { Directory } from "expo-file-system";
 import { Platform } from "react-native";
-import { getZenFileDownloadModule } from "../modules/zen-file-upload/src";
+import { getFileDownloadModule } from "../modules/file-upload/src";
 import type { SessionFileDownloadBackend } from "./sessionFilePreviewDownload";
 import { SESSION_FILE_BINARY_LIMIT_BYTES } from "./sessionFilePreviewDownload";
 import { createFetchSessionFileDownloadBackend } from "./sessionFilePreviewDownloadFetch";
@@ -13,7 +13,7 @@ function nextDownloadId(): string {
 }
 
 function createNativeAndroidDownloadBackend(): SessionFileDownloadBackend {
-  const native = getZenFileDownloadModule();
+  const native = getFileDownloadModule();
   return {
     async pickDirectory() {
       if (!native?.download) {

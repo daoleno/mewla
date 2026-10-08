@@ -10,13 +10,13 @@ import {
   parseExecWrapperCalls,
   primarySemanticAction,
 } from "./toolCallSemantics";
-import { buildZenTimeline } from "../components/terminal/InterfaceTimelineModel";
+import { buildTimeline } from "../components/terminal/InterfaceTimelineModel";
 import type { CodexConversationEvent } from "./codexConversation";
 import {
   shouldAutoExpandActivity,
   buildInterfaceTimelineActivityPresentation,
 } from "../components/terminal/InterfaceTimelineActivityModel";
-import type { ZenActivityTimelineItem } from "../components/terminal/InterfaceTimelineActivityTypes";
+import type { ActivityTimelineItem } from "../components/terminal/InterfaceTimelineActivityTypes";
 
 const FIXTURES = {
   codexExecCommand: `const r = await tools.exec_command({"cmd":"rg -n SemanticAction app","workdir":"/repo","yield_time_ms":10000});
@@ -205,7 +205,7 @@ describe("semantic action model", () => {
 });
 
 describe("timeline presentation", () => {
-  test("buildZenTimeline uses semantic titles for Codex/Grok/Cursor shapes", () => {
+  test("buildTimeline uses semantic titles for Codex/Grok/Cursor shapes", () => {
     const events: CodexConversationEvent[] = [
       {
         id: "1",
@@ -257,9 +257,9 @@ describe("timeline presentation", () => {
       },
     ];
 
-    const timeline = buildZenTimeline(events);
+    const timeline = buildTimeline(events);
     const activities = timeline.filter(
-      (item): item is ZenActivityTimelineItem => item.type === "activity",
+      (item): item is ActivityTimelineItem => item.type === "activity",
     );
     expect(activities.map((item) => item.title)).toEqual([
       "Search SemanticAction",
@@ -360,8 +360,8 @@ describe("timeline presentation", () => {
       },
     ];
 
-    const activities = buildZenTimeline(events).filter(
-      (item): item is ZenActivityTimelineItem => item.type === "activity",
+    const activities = buildTimeline(events).filter(
+      (item): item is ActivityTimelineItem => item.type === "activity",
     );
     expect(activities).toHaveLength(5);
 

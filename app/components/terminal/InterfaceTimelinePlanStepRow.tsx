@@ -7,13 +7,13 @@ import type {
 import { Typography } from "../../constants/tokens";
 import type { CodexPlanStep } from "../../services/codexConversation";
 
-interface ZenPlanStepRowProps {
+interface PlanStepRowProps {
   step: CodexPlanStep;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
 }
 
-export function ZenPlanStepRow({ step, chrome }: ZenPlanStepRowProps) {
+export function PlanStepRow({ step, chrome }: PlanStepRowProps) {
   const completed = step.status === "completed";
   const inProgress = step.status === "in_progress";
   const marker = completed ? "\u2714" : "\u25a1";

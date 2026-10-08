@@ -1,11 +1,11 @@
 import {
-  ZEN_BRAND_COLORS,
-  ZEN_DARK_NEUTRALS,
-  ZEN_DARK_SEAL,
-  ZEN_DARK_STATUS,
-  ZEN_LIGHT_NEUTRALS,
-  ZEN_LIGHT_SEAL,
-  ZEN_LIGHT_STATUS,
+  BRAND_COLORS,
+  DARK_NEUTRALS,
+  DARK_SEAL,
+  DARK_STATUS,
+  LIGHT_NEUTRALS,
+  LIGHT_SEAL,
+  LIGHT_STATUS,
 } from '../theme/primitives';
 
 export interface TerminalThemePalette {
@@ -109,42 +109,42 @@ export type TerminalSystemColorScheme =
  */
 export const TerminalThemes: Record<TerminalThemeName, TerminalThemePalette> = {
   dark: {
-    background: ZEN_BRAND_COLORS.environment,
+    background: BRAND_COLORS.environment,
     // The landing's terminal ink: a step softer than text for a dense grid.
     foreground: '#E9E4DB',
-    cursor: ZEN_DARK_NEUTRALS.textPrimary,
-    cursorAccent: ZEN_BRAND_COLORS.environment,
-    selectionBackground: withAlpha(ZEN_DARK_STATUS.running, 0.28),
-    selectionInactiveBackground: withAlpha(ZEN_DARK_STATUS.running, 0.14),
-    black: ZEN_DARK_NEUTRALS.elevated,
+    cursor: DARK_NEUTRALS.textPrimary,
+    cursorAccent: BRAND_COLORS.environment,
+    selectionBackground: withAlpha(DARK_STATUS.running, 0.28),
+    selectionInactiveBackground: withAlpha(DARK_STATUS.running, 0.14),
+    black: DARK_NEUTRALS.elevated,
     red: '#F08592',
-    green: ZEN_DARK_STATUS.ready,
-    yellow: ZEN_DARK_STATUS.warning,
-    blue: ZEN_DARK_STATUS.running,
+    green: DARK_STATUS.ready,
+    yellow: DARK_STATUS.warning,
+    blue: DARK_STATUS.running,
     magenta: '#D49BE6',
     cyan: '#6FC6C4',
     white: '#D6D0C5',
-    brightBlack: ZEN_DARK_NEUTRALS.borderStrong,
+    brightBlack: DARK_NEUTRALS.borderStrong,
     brightRed: '#F7A8B2',
     brightGreen: '#9ADDB7',
     brightYellow: '#F5D08A',
     brightBlue: '#BCCEFF',
     brightMagenta: '#E4BDF0',
     brightCyan: '#97DCDA',
-    brightWhite: ZEN_DARK_NEUTRALS.textPrimary,
+    brightWhite: DARK_NEUTRALS.textPrimary,
   },
   light: {
-    background: ZEN_LIGHT_NEUTRALS.canvas,
-    foreground: ZEN_LIGHT_NEUTRALS.textPrimary,
-    cursor: ZEN_LIGHT_NEUTRALS.textPrimary,
-    cursorAccent: ZEN_LIGHT_NEUTRALS.canvas,
-    selectionBackground: withAlpha(ZEN_LIGHT_STATUS.running, 0.18),
-    selectionInactiveBackground: withAlpha(ZEN_LIGHT_STATUS.running, 0.1),
+    background: LIGHT_NEUTRALS.canvas,
+    foreground: LIGHT_NEUTRALS.textPrimary,
+    cursor: LIGHT_NEUTRALS.textPrimary,
+    cursorAccent: LIGHT_NEUTRALS.canvas,
+    selectionBackground: withAlpha(LIGHT_STATUS.running, 0.18),
+    selectionInactiveBackground: withAlpha(LIGHT_STATUS.running, 0.1),
     black: '#2A2622',
     red: '#A01F3A',
     green: '#2E7550',
     yellow: '#8F5D10',
-    blue: ZEN_LIGHT_STATUS.running,
+    blue: LIGHT_STATUS.running,
     magenta: '#8A3D9E',
     cyan: '#1E6B73',
     white: '#6F685E',
@@ -202,8 +202,8 @@ export function buildTerminalChrome(theme: TerminalThemePalette): TerminalThemeC
   // The seal and the Work states are the app's, never an ANSI stand-in:
   // ANSI red is deliberately not the seal.
   const light = isLightTerminalTheme(theme);
-  const seal = light ? ZEN_LIGHT_SEAL : ZEN_DARK_SEAL;
-  const status = light ? ZEN_LIGHT_STATUS : ZEN_DARK_STATUS;
+  const seal = light ? LIGHT_SEAL : DARK_SEAL;
+  const status = light ? LIGHT_STATUS : DARK_STATUS;
 
   return {
     appBackground: surface,

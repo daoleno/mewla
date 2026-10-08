@@ -1,13 +1,13 @@
 import type { SessionFileBinarySource } from "./sessionFilePreview";
 
 /** A phone grant is only accepted from the upload owner, never provider text. */
-export type ZenImageSource =
+export type ImageSource =
   | { kind: "phone"; uri: string; name: string; mimeType?: string }
   | { kind: "external"; uri: string; name: string; mimeType?: string }
   | { kind: "inline"; uri: string; name: string; mimeType?: string }
   | { kind: "owned"; path: string; name: string; mimeType?: string };
 
-export interface ZenImageOwner {
+export interface ImageOwner {
   key: string;
   resolve(path: string, signal: AbortSignal): Promise<SessionFileBinarySource>;
 }
@@ -16,20 +16,20 @@ export function isImageAttachment(value: { mimeType?: string; name?: string; pat
   return Boolean(value.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif|svg)(?:[?#].*)?$/i.test(value.name || value.path || ""));
 }
 
-export function isSvgImage(source: ZenImageSource, resolved?: SessionFileBinarySource) {
+export function isSvgImage(source: ImageSource, resolved?: SessionFileBinarySource) {
   if ([source.mimeType, resolved?.mimeType].some((type) => type?.toLowerCase().split(";", 1)[0] === "image/svg+xml")) return true;
   if (/\.svg(?:[?#].*)?$/i.test(source.name) || (source.kind === "owned" && /\.svg(?:[?#].*)?$/i.test(source.path))) return true;
   const uri = resolved?.uri || (source.kind === "owned" ? "" : source.uri);
   return /^data:image\/svg\+xml(?:;|,)/i.test(uri) || /\.svg(?:[?#].*)?$/i.test(uri);
 }
 
-export function imageReference(path: string, name = "Image", mimeType?: string): ZenImageSource {
+export function imageReference(path: string, name = "Image", mimeType?: string): ImageSource {
   if (path.startsWith("data:")) return { kind: "inline", uri: path, name, mimeType };
   if (/^https?:\/\//i.test(path)) return { kind: "external", uri: path, name, mimeType };
   return { kind: "owned", path, name, mimeType };
 }
 
-export async function resolveImageSource(source: ZenImageSource, owner: ZenImageOwner | null, signal: AbortSignal): Promise<SessionFileBinarySource> {
+export async function resolveImageSource(source: ImageSource, owner: ImageOwner | null, signal: AbortSignal): Promise<SessionFileBinarySource> {
   if (signal.aborted) throw new Error("Image request cancelled.");
   if (source.kind === "owned") {
     if (!owner) throw new Error("Open this image from its Session or workspace.");
@@ -51,6 +51,6 @@ export async function resolveImageSource(source: ZenImageSource, owner: ZenImage
   return { uri: source.uri, headers: {} };
 }
 
-export function imageSourceKey(source: ZenImageSource, ownerKey: string) {
+export function imageSourceKey(source: ImageSource, ownerKey: string) {
   return JSON.stringify([ownerKey, source.kind, source.kind === "owned" ? source.path : source.uri]);
 }

@@ -12,7 +12,7 @@ import {
   uiLineHeight,
   useAppTheme,
 } from "../../constants/tokens";
-import type { ResolvedZenTheme } from "../../theme";
+import type { ResolvedTheme } from "../../theme";
 import { surfacesFromTheme } from "../../constants/themedSurfaces";
 import type { BrainExecutorRef } from "../../store/brain";
 import { BrainExecutorIcon } from "./BrainExecutorIcon";
@@ -152,7 +152,7 @@ export function BrainExecutorSheet({
   );
 }
 
-function createStyles(theme: ResolvedZenTheme) {
+function createStyles(theme: ResolvedTheme) {
   const colors = theme.colors;
   return StyleSheet.create({
     sheetContent: {

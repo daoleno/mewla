@@ -2,9 +2,9 @@ import { expect, mock, test } from "bun:test";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
-if (!process.env.ZEN_TELEGRAM_PANEL_CHILD) {
+if (!process.env.MEWLA_TELEGRAM_PANEL_CHILD) {
   test("mounted Telegram connection states and actions", () => {
-    const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], { env: { ...process.env, ZEN_TELEGRAM_PANEL_CHILD: "1" } });
+    const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], { env: { ...process.env, MEWLA_TELEGRAM_PANEL_CHILD: "1" } });
     if (result.exitCode) throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));
     expect(result.exitCode).toBe(0);
   });

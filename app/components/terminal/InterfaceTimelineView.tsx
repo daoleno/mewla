@@ -34,8 +34,8 @@ import {
   type TimelineTextSelectableContextValue,
 } from "./TimelineTextSelectableContext";
 import {
-  ZenTimelineItemView,
-  type ZenTimelineItem,
+  TimelineItemView,
+  type TimelineItem,
 } from "./InterfaceTimelineItemView";
 import { InterfaceTimelineDateDivider } from "./InterfaceTimelineDateDivider";
 import {
@@ -78,9 +78,9 @@ const TURN_FOCUS_SPACER_USES_NATIVE_MEASUREMENT = Platform.OS !== "web";
 const TURN_FOCUS_ZERO_EPSILON = 0.5;
 
 interface InterfaceTimelineViewProps {
-  scrollRef: React.RefObject<FlatList<ZenTimelineItem> | null>;
+  scrollRef: React.RefObject<FlatList<TimelineItem> | null>;
   readingPosition?: TimelineReadingPosition;
-  items: ZenTimelineItem[];
+  items: TimelineItem[];
   loading: boolean;
   error?: string | null;
   emptyStateSuppressed: boolean;
@@ -173,7 +173,7 @@ export function InterfaceTimelineView({
   formatPatchPath,
   truncateBody,
 }: InterfaceTimelineViewProps) {
-  const { theme: zenTheme } = useAppTheme();
+  const { theme: appTheme } = useAppTheme();
   const listStabilityProps = React.useMemo(
     () => timelineListStabilityProps(),
     [],
@@ -187,7 +187,7 @@ export function InterfaceTimelineView({
   const renderProjectionCacheRef =
     React.useRef<TimelineRenderProjectionCache | null>(null);
   const previousItemsRef = React.useRef(items);
-  const previousPerfItemsRef = React.useRef<ZenTimelineItem[] | null>(null);
+  const previousPerfItemsRef = React.useRef<TimelineItem[] | null>(null);
   const perfItemCountRef = React.useRef(items.length);
   const perfSawVisibleRowsRef = React.useRef(false);
   const perfBlankStartedAtRef = React.useRef<number | null>(null);
@@ -213,13 +213,13 @@ export function InterfaceTimelineView({
     const projected = projectTimelineRenderItems(
       items,
       {
-        showDateDividers: zenTheme.chat.showDateDividers,
+        showDateDividers: appTheme.chat.showDateDividers,
       },
       renderProjectionCacheRef.current,
     );
     renderProjectionCacheRef.current = projected.cache;
     return projected.items;
-  }, [items, zenTheme.chat.showDateDividers]);
+  }, [items, appTheme.chat.showDateDividers]);
   // A remounted variable-height list measures a small prefix around the saved
   // message, rather than guessing an offset through thousands of unmounted rows.
   const readingIds = React.useMemo(
@@ -334,7 +334,7 @@ export function InterfaceTimelineView({
         );
       }
       return (
-        <ZenTimelineItemView
+        <TimelineItemView
           item={item}
           presentation={item.type === "message" ? item.presentation : undefined}
           chrome={chrome}

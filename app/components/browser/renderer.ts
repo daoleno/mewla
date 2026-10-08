@@ -9,7 +9,7 @@ export const browserRendererHTML = `<!doctype html><html><head>
 <body><img id="screen" alt="Remote host browser"><script>
 const screen=document.getElementById('screen');let width=1280,height=800,seq=0,ready=true,start=null,scroll=false,lastMove=0;
 const post=v=>window.ReactNativeWebView.postMessage(JSON.stringify(v));
-window.zenFrame=frame=>{
+window.browserFrame=frame=>{
  if(!ready||frame.seq<=seq)return;
  ready=false;seq=frame.seq;
  width=frame.metadata.deviceWidth||1280;height=frame.metadata.deviceHeight||800;
@@ -17,7 +17,7 @@ window.zenFrame=frame=>{
  screen.onerror=()=>{ready=true;post({type:'ack',seq});};
  screen.src='data:image/jpeg;base64,'+frame.data;
 };
-window.zenScroll=value=>{scroll=value;};
+window.browserScroll=value=>{scroll=value;};
 const point=e=>{
  const r=screen.getBoundingClientRect(),scale=Math.min(r.width/width,r.height/height);
  return {x:Math.max(0,Math.min(width,(e.clientX-r.left-(r.width-width*scale)/2)/scale)),y:Math.max(0,Math.min(height,(e.clientY-r.top-(r.height-height*scale)/2)/scale))};

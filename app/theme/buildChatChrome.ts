@@ -3,9 +3,9 @@ import {
   type TerminalThemeChrome,
   type TerminalThemePalette,
 } from '../constants/terminalThemes';
-import type { ResolvedZenTheme } from './types';
+import type { ResolvedTheme } from './types';
 
-export function buildChatChrome(theme: ResolvedZenTheme): {
+export function buildChatChrome(theme: ResolvedTheme): {
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
 } {

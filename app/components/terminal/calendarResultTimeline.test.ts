@@ -3,7 +3,7 @@ import {
   isProviderActivityRunning,
   type CodexConversationEvent,
 } from "../../services/codexConversation";
-import { buildZenTimeline } from "./InterfaceTimelineModel";
+import { buildTimeline } from "./InterfaceTimelineModel";
 
 describe("Calendar result timeline", () => {
   const failedResult: CodexConversationEvent = {
@@ -27,7 +27,7 @@ describe("Calendar result timeline", () => {
       body: "Later answer",
     };
 
-    const timeline = buildZenTimeline([laterAssistant, failedResult]);
+    const timeline = buildTimeline([laterAssistant, failedResult]);
     expect(timeline.map((item) => item.id)).toEqual([
       "calendar_result:item:run",
       "assistant-later",

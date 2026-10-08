@@ -3,9 +3,8 @@ import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPlug
 const pending: PendingConnection = { serverId: "server-a", flow: { id: "flow-a", integration: "linear", status: "waiting", expires: new Date(Date.now() + 60000).toISOString(), authorization_url: "https://mcp.linear.app/authorize?state=secret-state" } };
 test("native return is bound to exact URI and original state", () => {
   expect(matchesPluginReturn("mewla://plugins?state=secret-state&code=one", pending.flow)).toBe(true);
-  expect(matchesPluginReturn("zen://plugins?state=secret-state&code=one", pending.flow)).toBe(false);
   for (const uri of ["other://plugins?state=secret-state&code=one", "mewla://plugins/path?state=secret-state", "mewla://plugins?state=other", "mewla://plugins?state=secret-state#fragment"]) expect(matchesPluginReturn(uri, pending.flow)).toBe(false);
-  for (const uri of ["https://evil.test?state=secret-state", "zen://plugins/path?state=secret-state", "zen://plugins?state=other", "zen://plugins?state=secret-state#fragment", "zen://user@plugins?state=secret-state", "zen://plugins:123?state=secret-state", "zen://plugins?state=secret-state&state=secret-state", "zen://plugins?state=secret-state&code=one&code=two"]) expect(matchesPluginReturn(uri, pending.flow)).toBe(false);
+  for (const uri of ["https://evil.test?state=secret-state", "mewla://plugins/path?state=secret-state", "mewla://plugins?state=other", "mewla://plugins?state=secret-state#fragment", "mewla://user@plugins?state=secret-state", "mewla://plugins:123?state=secret-state", "mewla://plugins?state=secret-state&state=secret-state", "mewla://plugins?state=secret-state&code=one&code=two"]) expect(matchesPluginReturn(uri, pending.flow)).toBe(false);
 });
 test("server switch and expiry never dispatch authorization to another server", async () => {
   let calls = 0;
@@ -34,18 +33,14 @@ test("return during a server switch is saved only for its original unexpired flo
 
 test("only Plugins authorization returns are recognised as returns", () => {
   expect(isPluginReturnUrl("mewla://plugins?state=abc&code=1")).toBe(true);
-  expect(isPluginReturnUrl("zen://plugins?state=abc&code=1")).toBe(false);
   expect(isPluginReturnUrl("mewla://plugins")).toBe(false);
   expect(isPluginReturnUrl("mewla://settings?p=abc")).toBe(false);
   expect(isPluginReturnUrl("other://plugins?state=abc")).toBe(false);
-  expect(isPluginReturnUrl("zen://plugins")).toBe(false);
-  expect(isPluginReturnUrl("zen://settings?p=abc")).toBe(false);
-  expect(isPluginReturnUrl("https://zen.example/#pair=abc")).toBe(false);
+  expect(isPluginReturnUrl("https://mewla.example/#pair=abc")).toBe(false);
   expect(isPluginReturnUrl("/plugins?state=abc")).toBe(false);
 });
 
 test("bare Plugins callbacks are recognised only on the mewla scheme", () => {
-  expect(isPluginCallbackUrl("zen://plugins")).toBe(false);
   expect(isPluginCallbackUrl("mewla://plugins")).toBe(true);
   expect(isPluginCallbackUrl("other://plugins")).toBe(false);
   expect(isPluginCallbackUrl("mewla://plugins?state=abc")).toBe(false);

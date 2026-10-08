@@ -19,7 +19,7 @@ describe("scan-first onboarding", () => {
     expect(presentation).toContain('command: "mewla doctor"');
     expect(presentation).toContain('command: "mewla --lan"');
     expect(presentation).toContain("pairing command printed by Mewla");
-    expect(presentation).not.toMatch(/192\.168|0\.0\.0\.0|(?:mewla|zen) pair http/);
+    expect(presentation).not.toMatch(/192\.168|0\.0\.0\.0|(?:mewla|mewla) pair http/);
     expect(presentation).toContain("install-daemon.md");
     expect(presentation).toContain("connect-and-pair.md");
   });

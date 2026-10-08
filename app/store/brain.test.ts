@@ -26,8 +26,8 @@ describe("brain scheduled result normalization", () => {
     const received = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         ...snapshot,
         scheduled_results: [
@@ -48,8 +48,8 @@ describe("brain scheduled result normalization", () => {
     const received = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         ...snapshot,
         scheduled_results: [
@@ -78,14 +78,14 @@ describe("Brain current Work and backlog normalization", () => {
     const received = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         current_work: [
           {
             work_id: "work-a",
             revision: 7,
-            title: "Release Zen",
+            title: "Release Mewla",
             status: "running",
             progress_mode: "owned",
             attempt_session_id: "agent-a",
@@ -146,7 +146,7 @@ describe("Brain current Work and backlog normalization", () => {
       {
         work_id: "work-a",
         revision: 7,
-        title: "Release Zen",
+        title: "Release Mewla",
         status: "running",
         progress_mode: "owned",
         attempt_session_id: "agent-a",
@@ -206,8 +206,8 @@ describe("Brain current Work and backlog normalization", () => {
     const first = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         current_work: [
           {
@@ -230,8 +230,8 @@ describe("Brain current Work and backlog normalization", () => {
     const second = brainReducer(first, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         current_work: [
           {
@@ -259,8 +259,8 @@ describe("Brain current Work and backlog normalization", () => {
     const first = brainReducer(initialBrainState, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         current_work: [
           {
@@ -285,8 +285,8 @@ describe("Brain current Work and backlog normalization", () => {
     const second = brainReducer(first, {
       type: "BRAIN_SNAPSHOT",
       serverId: "server-1",
-      serverName: "Zen",
-      serverUrl: "ws://zen",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
       brain: {
         current_work: [
           {

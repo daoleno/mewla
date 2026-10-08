@@ -11,14 +11,14 @@ describe("worker route IDs", () => {
   });
 
   test("round-trip legacy punctuation and unicode display identities", () => {
-    for (const workerId of ["zen-worker-brain:@1", "会话:@7"]) {
+    for (const workerId of ["mewla-worker-brain:@1", "会话:@7"]) {
       expect(decodeWorkerRouteId(encodeWorkerRouteId(workerId))).toBe(workerId);
     }
   });
 
   test("renders a real daemon pane identity through the Terminal route model", () => {
     const route = terminalRouteParams("%152", "server-live", {
-      cwd: "/home/daoleno/workspace/zen",
+      cwd: "/home/daoleno/workspace/mewla",
       command: "zsh",
       name: "Shell",
     });

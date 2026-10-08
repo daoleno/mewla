@@ -1502,16 +1502,16 @@ describe("Telegram current-daemon connection boundary", () => {
       connection: {
         state: "setup_pending",
         enabled: true,
-        bot_name: "Zen",
-        bot_username: "zen_fixture_bot",
+        bot_name: "Mewla",
+        bot_username: "mewla_fixture_bot",
         binding_pending: false,
       },
     });
     await expect(pending).resolves.toEqual({
       state: "setup_pending",
       enabled: true,
-      bot_name: "Zen",
-      bot_username: "zen_fixture_bot",
+      bot_name: "Mewla",
+      bot_username: "mewla_fixture_bot",
       binding_pending: false,
     });
     expect(registeredHandlerCount(client)).toBe(0);
@@ -1530,12 +1530,12 @@ describe("Telegram current-daemon connection boundary", () => {
       type: "telegram_binding_challenge",
       request_id: outbound.request_id,
       challenge: {
-        url: "https://t.me/zen_fixture_bot?start=fixture",
+        url: "https://t.me/mewla_fixture_bot?start=fixture",
         expires_at: "2026-08-24T12:10:00Z",
       },
     });
     await expect(pending).resolves.toEqual({
-      url: "https://t.me/zen_fixture_bot?start=fixture",
+      url: "https://t.me/mewla_fixture_bot?start=fixture",
       expires_at: "2026-08-24T12:10:00Z",
     });
     expect(registeredHandlerCount(client)).toBe(0);

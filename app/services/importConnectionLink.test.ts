@@ -2,7 +2,7 @@ import { afterAll, describe, expect, mock, test } from "bun:test";
 import { createHash } from "node:crypto";
 import nacl from "tweetnacl";
 
-const integrationEnabled = process.env.ZEN_LINK_IMPORT_E2E === "1";
+const integrationEnabled = process.env.MEWLA_LINK_IMPORT_E2E === "1";
 
 if (!integrationEnabled) {
   test.skip("Pairing V2 import cross-layer harness runs in isolation", () => {});
@@ -32,7 +32,7 @@ if (!integrationEnabled) {
       setItem: async () => undefined,
     },
   }));
-  mock.module("../modules/zen-link-transport/src", () => ({
+  mock.module("../modules/link-transport/src", () => ({
     startPinnedTunnel: async (
       key: string,
       host: string,
@@ -91,7 +91,7 @@ if (!integrationEnabled) {
       const timestamp = Date.now().toString();
       const nonce = "5".repeat(32);
       const assertion = new TextEncoder().encode(
-        ["zen-pair", daemonId, timestamp, nonce].join("\n"),
+        ["mewla-pair", daemonId, timestamp, nonce].join("\n"),
       );
       return new Response(
         JSON.stringify({
@@ -189,7 +189,7 @@ if (!integrationEnabled) {
         stableURL,
       ].join("\n"),
     );
-    const domain = new TextEncoder().encode("zen-link-pairing-v2\u0000");
+    const domain = new TextEncoder().encode("mewla-link-pairing-v2\u0000");
     const signed = new Uint8Array(domain.length + binding.length);
     signed.set(domain);
     signed.set(binding, domain.length);

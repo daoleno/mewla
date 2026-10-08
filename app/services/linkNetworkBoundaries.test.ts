@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
-const integrationEnabled = process.env.ZEN_LINK_BOUNDARY_E2E === "1";
+const integrationEnabled = process.env.MEWLA_LINK_BOUNDARY_E2E === "1";
 
 if (!integrationEnabled) {
   test.skip("Link network boundary harness runs in isolation", () => {});
@@ -53,7 +53,7 @@ if (!integrationEnabled) {
       authorizationBuilds += 1;
       const timestamp = String(1_800_000_000_000 + authorizationBuilds);
       const nonce = authorizationBuilds.toString(16).padStart(32, "0");
-      const header = `ZenDevice v1:device-a:${linkServer.daemonId}:${timestamp}:${nonce}:${"a".repeat(128)}`;
+      const header = `Device v1:device-a:${linkServer.daemonId}:${timestamp}:${nonce}:${"a".repeat(128)}`;
       observedAuthorizationHeaders.push(header);
       return header;
     },
@@ -71,7 +71,7 @@ if (!integrationEnabled) {
       return parsed.toString();
     },
     buildSignedRequestHeaders: async () => ({
-      Authorization: "ZenDevice test",
+      Authorization: "Device test",
     }),
   }));
   mock.module("./storage", () => ({
@@ -89,7 +89,7 @@ if (!integrationEnabled) {
       return null;
     },
   }));
-  mock.module("../modules/zen-link-transport/src", () => ({
+  mock.module("../modules/link-transport/src", () => ({
     startPinnedTunnel: async () => {
       nativeStarts += 1;
       if (nativeOffline) {

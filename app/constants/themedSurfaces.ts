@@ -1,4 +1,4 @@
-import type { ResolvedZenTheme } from '../theme';
+import type { ResolvedTheme } from '../theme';
 import type { TerminalThemeChrome } from './terminalThemes';
 
 export type ThemedSurfaces = {
@@ -9,7 +9,7 @@ export type ThemedSurfaces = {
   sectionLabel: string;
 };
 
-export function surfacesFromTheme(theme: Pick<ResolvedZenTheme, 'surfaces'>): ThemedSurfaces {
+export function surfacesFromTheme(theme: Pick<ResolvedTheme, 'surfaces'>): ThemedSurfaces {
   return {
     surface: theme.surfaces.card,
     surfaceStrong: theme.surfaces.cardStrong,

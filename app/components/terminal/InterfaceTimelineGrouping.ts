@@ -2,8 +2,8 @@ import {
   dayKeyFromTimestamp,
   formatDateDividerLabel,
 } from "../../constants/telegramPresentation";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
-import type { ZenDateDividerItem } from "./InterfaceTimelineDateDivider";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
+import type { DateDividerItem } from "./InterfaceTimelineDateDivider";
 import {
   isTimelineProjectionPerfEnabled,
   recordTimelineRenderProjectionSample,
@@ -18,12 +18,12 @@ export type MessagePresentation = {
   compactBottom: boolean;
 };
 
-export type GroupedTimelineItem = ZenTimelineItem & {
+export type GroupedTimelineItem = TimelineItem & {
   presentation?: MessagePresentation;
-  sourceItem?: ZenTimelineItem;
+  sourceItem?: TimelineItem;
 };
 
-export type TimelineRenderItem = GroupedTimelineItem | ZenDateDividerItem;
+export type TimelineRenderItem = GroupedTimelineItem | DateDividerItem;
 
 export type TimelineRenderProjectionMode =
   | "full"
@@ -33,7 +33,7 @@ export type TimelineRenderProjectionMode =
   | "prepend";
 
 export type TimelineRenderProjectionCache = {
-  sourceItems: ZenTimelineItem[];
+  sourceItems: TimelineItem[];
   renderItems: TimelineRenderItem[];
   showDateDividers: boolean;
 };
@@ -55,7 +55,7 @@ export type TimelineRenderProjectionResult = {
  * canonical full builder rather than risking an incorrect divider or group.
  */
 export function projectTimelineRenderItems(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   options: { showDateDividers: boolean },
   previous?: TimelineRenderProjectionCache | null,
 ): TimelineRenderProjectionResult {
@@ -81,7 +81,7 @@ export function projectTimelineRenderItems(
 }
 
 function projectTimelineRenderItemsUninstrumented(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   options: { showDateDividers: boolean },
   previous?: TimelineRenderProjectionCache | null,
 ): TimelineRenderProjectionResult {
@@ -133,7 +133,7 @@ function timelineRenderNowMs() {
 }
 
 export function buildTimelineRenderItems(
-  items: ZenTimelineItem[],
+  items: TimelineItem[],
   options?: { showDateDividers?: boolean },
 ): TimelineRenderItem[] {
   const withDividers =
@@ -183,7 +183,7 @@ function dedupeTimelineRenderItems(
  * so a day's divider must come *after* that day's items in the array —
  * visually above them, matching Telegram.
  */
-function injectDateDividers(items: ZenTimelineItem[]): TimelineRenderItem[] {
+function injectDateDividers(items: TimelineItem[]): TimelineRenderItem[] {
   const output: TimelineRenderItem[] = [];
   let previousDayKey: string | null = null;
   let previousDayLabel: string | null = null;
@@ -222,7 +222,7 @@ function injectDateDividers(items: ZenTimelineItem[]): TimelineRenderItem[] {
 }
 
 function fullTimelineRenderProjection(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   showDateDividers: boolean,
 ): TimelineRenderProjectionResult {
   const renderItems = buildTimelineRenderItems(sourceItems.slice().reverse(), {
@@ -240,7 +240,7 @@ function fullTimelineRenderProjection(
 }
 
 function projectStableTopologyUpdates(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   previous: TimelineRenderProjectionCache,
   showDateDividers: boolean,
 ): TimelineRenderProjectionResult {
@@ -306,7 +306,7 @@ function projectStableTopologyUpdates(
 }
 
 function projectProvenAppend(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   previous: TimelineRenderProjectionCache,
   showDateDividers: boolean,
 ): TimelineRenderProjectionResult | null {
@@ -354,7 +354,7 @@ function projectProvenAppend(
 }
 
 function projectProvenPrepend(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   previous: TimelineRenderProjectionCache,
   showDateDividers: boolean,
 ): TimelineRenderProjectionResult | null {
@@ -401,7 +401,7 @@ function projectProvenPrepend(
 }
 
 function timelineRenderProjectionResult(
-  sourceItems: ZenTimelineItem[],
+  sourceItems: TimelineItem[],
   renderItems: TimelineRenderItem[],
   showDateDividers: boolean,
   mode: TimelineRenderProjectionMode,
@@ -420,8 +420,8 @@ function timelineRenderProjectionResult(
 }
 
 function timelineItemTopologyEqual(
-  previous: ZenTimelineItem | undefined,
-  next: ZenTimelineItem | undefined,
+  previous: TimelineItem | undefined,
+  next: TimelineItem | undefined,
 ) {
   if (
     !previous ||
@@ -450,7 +450,7 @@ function findRenderItemIndexById(
   return -1;
 }
 
-function startOfDayGroup(items: ZenTimelineItem[], index: number) {
+function startOfDayGroup(items: TimelineItem[], index: number) {
   const dayKey = dayKeyFromTimestamp(items[index]?.timestamp);
   if (!dayKey) {
     return -1;
@@ -465,7 +465,7 @@ function startOfDayGroup(items: ZenTimelineItem[], index: number) {
   return start;
 }
 
-function endOfDayGroup(items: ZenTimelineItem[], index: number) {
+function endOfDayGroup(items: TimelineItem[], index: number) {
   const dayKey = dayKeyFromTimestamp(items[index]?.timestamp);
   if (!dayKey) {
     return -1;

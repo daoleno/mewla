@@ -5,7 +5,7 @@ import { AttachmentUploadQueue } from "../../services/attachmentUploadQueue";
 import { pickUploadDocuments } from "../../services/uploads";
 import type { ComposerAttachment } from "./InterfaceChatSession";
 import { InterfaceComposerAttachmentRail } from "./InterfaceComposerAttachmentRail";
-import { ZenImage, ZenImageOwnerContext } from "./ZenImage";
+import { AppImage, ImageOwnerContext } from "./AppImage";
 
 /** Inert native QA: production chooser, queue, attachment rail and image viewer;
  * uploaded bytes never leave the emulator and no provider is called. */
@@ -39,11 +39,11 @@ export function ImageReviewFixture({ chrome }: { chrome: TerminalThemeChrome }) 
     catch (error) { if (generation.current === epoch) setError(error instanceof Error ? error.message : "Selection failed"); }
   }
   const images = [{ kind: "owned" as const, path: "normal.png", name: "Normal fixture" }, { kind: "owned" as const, path: "tall.png", name: "Tall fixture" }];
-  return <ZenImageOwnerContext.Provider value={imageOwner}><View style={{ padding: 12, gap: 10 }}>
+  return <ImageOwnerContext.Provider value={imageOwner}><View style={{ padding: 12, gap: 10 }}>
     <Text style={{ color: chrome.text }}>Image/upload fixture · Owner {owner}</Text>
     <View style={{ flexDirection: "row", gap: 16 }}><Pressable accessibilityRole="button" onPress={() => void select()} style={{ padding: 12 }}><Text style={{ color: chrome.accent }}>Select files</Text></Pressable><Pressable accessibilityRole="button" onPress={() => setOwner((value) => value + 1)} style={{ padding: 12 }}><Text style={{ color: chrome.accent }}>Switch owner</Text></Pressable></View>
     {error ? <Text style={{ color: chrome.danger }}>{error}</Text> : null}
     <InterfaceComposerAttachmentRail attachments={attachments} activeUpload={null} chrome={chrome} onRemoveAttachment={(id) => queue.current?.remove(id)} onCancelUpload={() => { for (const item of attachments) queue.current?.remove(item.id); }} />
-    {images.map((source) => <ZenImage key={source.path} source={source} gallery={images} chrome={chrome} />)}
-  </View></ZenImageOwnerContext.Provider>;
+    {images.map((source) => <AppImage key={source.path} source={source} gallery={images} chrome={chrome} />)}
+  </View></ImageOwnerContext.Provider>;
 }

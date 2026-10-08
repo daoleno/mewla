@@ -3,10 +3,10 @@ import type { CodexConversationEvent } from "../../services/codexConversation";
 import { reconcileConversationDeltaEvents } from "./interfaceConversationReconciliation";
 import { projectTimelineRenderItems } from "./InterfaceTimelineGrouping";
 import { makeComplexTimelineEvents, lastAssistantEventId } from "./timelineProjectionFixtures";
-import { projectZenTimeline } from "./projectZenTimeline";
+import { projectTimeline } from "./projectTimeline";
 
 const benchmark =
-  process.env.ZEN_INTERFACE_PERF_BENCH === "1" ? test : test.skip;
+  process.env.MEWLA_INTERFACE_PERF_BENCH === "1" ? test : test.skip;
 const COUNTS = [1_000, 5_000, 10_000] as const;
 const STREAM_ITERATIONS = 40;
 const APPEND_ITERATIONS = 20;
@@ -38,7 +38,7 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
     const initialDurations: number[] = [];
     for (let iteration = 0; iteration < 10; iteration += 1) {
       const started = nowMs();
-      const timeline = projectZenTimeline(fixture, null);
+      const timeline = projectTimeline(fixture, null);
       const render = projectTimelineRenderItems(
         timeline.items,
         { showDateDividers: true },
@@ -49,7 +49,7 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
     }
 
     let events = fixture;
-    let timeline = projectZenTimeline(events, null);
+    let timeline = projectTimeline(events, null);
     let render = projectTimelineRenderItems(
       timeline.items,
       { showDateDividers: true },
@@ -68,7 +68,7 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       };
       const started = nowMs();
       events = reconcileConversationDeltaEvents(events, [upsert]);
-      timeline = projectZenTimeline(events, timeline.cache);
+      timeline = projectTimeline(events, timeline.cache);
       render = projectTimelineRenderItems(
         timeline.items,
         { showDateDividers: true },
@@ -101,7 +101,7 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       };
       const nextEvents = events.concat(appended);
       const started = nowMs();
-      timeline = projectZenTimeline(nextEvents, timeline.cache);
+      timeline = projectTimeline(nextEvents, timeline.cache);
       render = projectTimelineRenderItems(
         timeline.items,
         { showDateDividers: true },
@@ -133,7 +133,7 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       );
       const nextEvents = older.concat(events);
       const started = nowMs();
-      timeline = projectZenTimeline(nextEvents, timeline.cache);
+      timeline = projectTimeline(nextEvents, timeline.cache);
       render = projectTimelineRenderItems(
         timeline.items,
         { showDateDividers: true },
@@ -158,5 +158,5 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       blankWindowMeasurement: "device onViewableItemsChanged collector",
     });
   }
-  console.log(`zen-interface-long-history-benchmark ${JSON.stringify(output)}`);
+  console.log(`mewla-interface-long-history-benchmark ${JSON.stringify(output)}`);
 });

@@ -9,7 +9,7 @@ import {
   shouldDropProviderChatNoiseEvent,
   shouldDropStructuredChatEvent,
 } from "./interfaceConversationVisibility";
-import { buildZenTimeline } from "./InterfaceTimelineModel";
+import { buildTimeline } from "./InterfaceTimelineModel";
 import {
   reconcileConversationDeltaEvents,
   reconcileConversationSnapshot,
@@ -250,7 +250,7 @@ describe("incremental structured conversation streaming", () => {
       partial: true,
     });
 
-    const partialTimeline = buildZenTimeline([assistant, reasoning]);
+    const partialTimeline = buildTimeline([assistant, reasoning]);
     expect(partialTimeline[0]).toMatchObject({
       type: "message",
       id: "assistant:turn",
@@ -268,7 +268,7 @@ describe("incremental structured conversation streaming", () => {
       defaultExpanded: true,
     });
 
-    const finalTimeline = buildZenTimeline([
+    const finalTimeline = buildTimeline([
       { ...assistant, body: "A **complete** answer", partial: false },
       {
         ...reasoning,
@@ -343,8 +343,8 @@ describe("incremental structured conversation streaming", () => {
       body: "Following up",
       partial: true,
     });
-    const before = buildZenTimeline([partial, calendarResult]);
-    const after = buildZenTimeline([
+    const before = buildTimeline([partial, calendarResult]);
+    const after = buildTimeline([
       { ...partial, body: "Following up now", partial: false, status: "done" },
       calendarResult,
     ]);

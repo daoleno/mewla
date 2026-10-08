@@ -42,7 +42,7 @@ describe("calendarReducer", () => {
     const second = calendarReducer(first, {
       type: "CALENDAR_CHANGED",
       serverId: "s",
-      serverName: "Zen",
+      serverName: "Mewla",
       serverUrl: "ws://z",
       item: changed,
     });

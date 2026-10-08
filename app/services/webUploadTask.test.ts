@@ -41,7 +41,7 @@ describe("browser attachment upload", () => {
     const task = createWebUploadTask({
       file,
       uploadUrl: "https://manjaro.example/upload",
-      headers: { Authorization: "Zen a", "X-Zen-Upload-Name": "a.pdf" },
+      headers: { Authorization: "Mewla a", "X-Mewla-Upload-Name": "a.pdf" },
       onProgress: (value) => progress.push(value),
     });
     const result = task.uploadAsync();
@@ -51,7 +51,7 @@ describe("browser attachment upload", () => {
       "https://manjaro.example/upload",
       file,
     ]);
-    expect(xhr.headers).toEqual({ Authorization: "Zen a", "X-Zen-Upload-Name": "a.pdf" });
+    expect(xhr.headers).toEqual({ Authorization: "Mewla a", "X-Mewla-Upload-Name": "a.pdf" });
     xhr.upload.onprogress?.({ loaded: 4, total: 8, lengthComputable: true } as ProgressEvent);
     xhr.status = 200;
     xhr.responseText = '{"path":"/state/uploads/a.pdf"}';

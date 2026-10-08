@@ -7,7 +7,7 @@ import {
   type CalendarNotificationDependencies,
 } from "./calendarNotificationReconciler";
 
-const storageKey = "zen.calendar.notification_ids.v1";
+const storageKey = "mewla.calendar.notification_ids.v1";
 export type CalendarNotificationState =
   "granted" | "denied" | "undetermined" | "unavailable";
 
@@ -65,13 +65,13 @@ function notificationDeps(): CalendarNotificationDependencies {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(request.trigger),
-          channelId: Platform.OS === "android" ? "zen-calendar" : undefined,
+          channelId: Platform.OS === "android" ? "mewla-calendar" : undefined,
         },
       }),
     cancel: (id) => Notifications.cancelScheduledNotificationAsync(id),
     ensureChannel: async () => {
       if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("zen-calendar", {
+        await Notifications.setNotificationChannelAsync("mewla-calendar", {
           name: "Calendar reminders",
           importance: Notifications.AndroidImportance.HIGH,
         });

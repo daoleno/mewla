@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { SessionFileBinarySource } from "../../services/sessionFilePreview";
-import { ZenImageContent } from "./ZenImageContent";
+import { ImageContent } from "./ImageContent";
 
 export function SessionFileImagePreview({
   source,
@@ -111,7 +111,7 @@ export function SessionFileImagePreview({
         style={[styles.imageStage, { backgroundColor: chrome.surfaceMuted }]}
       >
         <Reanimated.View style={[styles.image, imageStyle]}>
-          <ZenImageContent source={source} svg={svg} onLoad={() => setLoading(false)} onError={() => { setLoading(false); onError(); }} />
+          <ImageContent source={source} svg={svg} onLoad={() => setLoading(false)} onError={() => { setLoading(false); onError(); }} />
         </Reanimated.View>
         {loading ? <ActivityIndicator style={StyleSheet.absoluteFill} color={chrome.textMuted} /> : null}
       </View>

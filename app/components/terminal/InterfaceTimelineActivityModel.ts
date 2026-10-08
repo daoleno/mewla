@@ -1,6 +1,6 @@
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { WorkStatus } from "../ui/workStatus";
-import type { ZenActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
+import type { ActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
 
 export interface InterfaceTimelineActivityPresentation {
   canExpand: boolean;
@@ -12,7 +12,7 @@ export interface InterfaceTimelineActivityPresentation {
 }
 
 export function buildInterfaceTimelineActivityPresentation(
-  item: ZenActivityTimelineItem,
+  item: ActivityTimelineItem,
   chrome: TerminalThemeChrome,
 ): InterfaceTimelineActivityPresentation {
   const status = splitActivityStatusDetail(item.detail, item.tone);
@@ -45,7 +45,7 @@ const ACTIVITY_STATUS_WORDS: Readonly<Record<string, WorkStatus | null>> = {
  */
 export function splitActivityStatusDetail(
   detail: string | undefined,
-  tone: ZenActivityTimelineItem["tone"],
+  tone: ActivityTimelineItem["tone"],
 ): { mark: WorkStatus | null; rest?: string } {
   const toneMark: WorkStatus | null =
     tone === "running" ? "running" : tone === "failed" ? "failed" : null;
@@ -65,7 +65,7 @@ export function splitActivityStatusDetail(
   };
 }
 
-export function shouldAutoExpandActivity(item: ZenActivityTimelineItem) {
+export function shouldAutoExpandActivity(item: ActivityTimelineItem) {
   if (typeof item.defaultExpanded === "boolean") {
     return item.defaultExpanded;
   }
@@ -73,7 +73,7 @@ export function shouldAutoExpandActivity(item: ZenActivityTimelineItem) {
 }
 
 export function expandedActivityStatusLine(
-  item: ZenActivityTimelineItem,
+  item: ActivityTimelineItem,
 ): string | undefined {
   const status = item.statusLine?.trim();
   if (!status || status === item.detail?.trim()) {
@@ -82,7 +82,7 @@ export function expandedActivityStatusLine(
   return item.statusLine;
 }
 
-function canExpandActivity(item: ZenActivityTimelineItem) {
+function canExpandActivity(item: ActivityTimelineItem) {
   return Boolean(
     item.body ||
     expandedActivityStatusLine(item) ||
@@ -96,7 +96,7 @@ function canExpandActivity(item: ZenActivityTimelineItem) {
 }
 
 function activityToneColor(
-  item: ZenActivityTimelineItem,
+  item: ActivityTimelineItem,
   chrome: TerminalThemeChrome,
 ) {
   if (item.activityKind === "reasoning") {

@@ -16,7 +16,7 @@ export function createTerminalRendererTransport(
     send(script: string) {
       const current = target;
       if (!current) return;
-      const guarded = `if (window.__zenRendererGeneration === ${current.generation}) { ${script} } true;`;
+      const guarded = `if (window.__mewlaRendererGeneration === ${current.generation}) { ${script} } true;`;
       void dispatch(current.viewTag, guarded).catch(() => {
         if (target !== current) return;
         target = null;

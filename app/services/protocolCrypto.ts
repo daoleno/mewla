@@ -5,7 +5,7 @@ export function verifyLinkPairingSignature(input: {
   bindingPayload: Uint8Array;
   signatureHex: string;
 }): boolean {
-  return verifyDomainSignature("zen-link-pairing-v2\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
+  return verifyDomainSignature("mewla-link-pairing-v2\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
 }
 
 function verifyDomainSignature(

@@ -40,9 +40,9 @@ export type BrainWorkLifecyclePresentation = {
 };
 
 const CANONICAL_SESSION_SUFFIX =
-  /\s*\(zen-worker-[^()\s]+:@\d+\)\s*$/i;
-const CANONICAL_SESSION_ID = /zen-worker-[^()\s]+:@\d+/i;
-const CANONICAL_SESSION_ID_GLOBAL = /zen-worker-[^()\s]+:@\d+/gi;
+  /\s*\(mewla-worker-[^()\s]+:@\d+\)\s*$/i;
+const CANONICAL_SESSION_ID = /mewla-worker-[^()\s]+:@\d+/i;
+const CANONICAL_SESSION_ID_GLOBAL = /mewla-worker-[^()\s]+:@\d+/gi;
 const PROVIDER_TURN_ID_GLOBAL = /\bturn:[a-z0-9-]+\b/gi;
 
 export function brainWorkEventWorkTitle(event: BrainWorkResultEvent): string {

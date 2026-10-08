@@ -12,7 +12,7 @@ import {
   getAccentById,
 } from './primitives';
 import { DEFAULT_THEME_IDS, getThemeById } from './registry';
-import type { ResolvedZenTheme, ThemeColorScheme } from './types';
+import type { ResolvedTheme, ThemeColorScheme } from './types';
 
 export function resolveTheme({
   colorScheme,
@@ -22,7 +22,7 @@ export function resolveTheme({
   colorScheme: ThemeColorScheme;
   themeId?: string | null;
   accentId?: string | null;
-}): ResolvedZenTheme {
+}): ResolvedTheme {
   const fallbackId = DEFAULT_THEME_IDS[colorScheme];
   const requested = themeId ? getThemeById(themeId) : undefined;
   const definition = requested ?? getThemeById(fallbackId)!;

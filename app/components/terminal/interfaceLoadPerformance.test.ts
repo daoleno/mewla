@@ -11,8 +11,8 @@ import {
   reconcileConversationDeltaEvents,
   reconcileConversationSnapshot,
 } from "./interfaceConversationReconciliation";
-import { projectZenTimeline } from "./projectZenTimeline";
-import { buildZenTimelineFromSortedEvents } from "./InterfaceTimelineModel";
+import { projectTimeline } from "./projectTimeline";
+import { buildTimelineFromSortedEvents } from "./InterfaceTimelineModel";
 import { normalizeCodexConversation } from "../../services/codexConversation";
 
 mock.module("react-native", () => ({ Platform: { OS: "web" } }));
@@ -102,7 +102,7 @@ function timed<T>(label: string, run: () => T): T {
   const result = run();
   const durationMs = (Bun.nanoseconds() - started) / 1e6;
   console.log(
-    `zen-interface-perf app ${label}: ${durationMs.toFixed(3)}ms`,
+    `mewla-interface-perf app ${label}: ${durationMs.toFixed(3)}ms`,
   );
   return result;
 }
@@ -122,12 +122,12 @@ describe("app interface load performance regression", () => {
     expect(reconciled.events.length).toBe(normalized.events.length);
 
     const projected = timed("project-timeline-full", () =>
-      projectZenTimeline(reconciled.events, null),
+      projectTimeline(reconciled.events, null),
     );
     expect(projected.items.length).toBeGreaterThan(700);
 
     timed("build-timeline-full", () =>
-      buildZenTimelineFromSortedEvents(reconciled.events),
+      buildTimelineFromSortedEvents(reconciled.events),
     );
   });
 
@@ -281,21 +281,21 @@ describe("app interface load performance regression", () => {
 
     const events = second.conversation!.events;
     const projected = timed("project-timeline-revisit-warm", () =>
-      projectZenTimeline(events, null),
+      projectTimeline(events, null),
     );
     expect(projected.items.length).toBeGreaterThan(700);
   });
 
   test("timeline incremental path after one upsert (content-free)", () => {
     const events = syntheticEvents();
-    const first = projectZenTimeline(events, null);
+    const first = projectTimeline(events, null);
     const changed = events.slice();
     changed[changed.length - 1] = {
       ...changed[changed.length - 1]!,
       output: "o".repeat(12000) + "y".repeat(64),
     };
     const second = timed("project-timeline-incremental", () =>
-      projectZenTimeline(changed, first.cache),
+      projectTimeline(changed, first.cache),
     );
     expect(second.mode).toBe("incremental");
   });

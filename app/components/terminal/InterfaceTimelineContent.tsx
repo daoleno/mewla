@@ -2,10 +2,10 @@ import React from "react";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { InterfaceSessionIdleView } from "./InterfaceSessionIdleView";
 import { InterfaceTimelineEmptyState } from "./InterfaceTimelineEmptyState";
-import type { ZenTimelineItem } from "./InterfaceTimelineItemView";
+import type { TimelineItem } from "./InterfaceTimelineItemView";
 
 interface InterfaceTimelineEmptyContentProps {
-  items: ZenTimelineItem[];
+  items: TimelineItem[];
   loading: boolean;
   error?: string | null;
   suppressed: boolean;

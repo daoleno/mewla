@@ -13,11 +13,11 @@ import {
 } from "./InterfaceTimelineActivityModel";
 import type {
   PatchFileSummary,
-  ZenActivityTimelineItem,
+  ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 
-interface ZenActivityEventProps {
-  item: ZenActivityTimelineItem;
+interface ActivityEventProps {
+  item: ActivityTimelineItem;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   loadAssetPreview(path: string): Promise<string | null>;
@@ -25,14 +25,14 @@ interface ZenActivityEventProps {
   truncateBody(value: string, limit: number): string;
 }
 
-export function ZenActivityEvent({
+export function ActivityEvent({
   item,
   chrome,
   theme,
   loadAssetPreview: _loadAssetPreview,
   formatPatchPath,
   truncateBody,
-}: ZenActivityEventProps) {
+}: ActivityEventProps) {
   const defaultExpanded = shouldAutoExpandActivity(item);
   const { detailsExpanded, expanded, toggle } = useTimelineActivityExpansion(
     item.id,
