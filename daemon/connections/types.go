@@ -65,6 +65,21 @@ type Account struct {
 	VerifiedAt               *time.Time `json:"verified_at,omitempty"`
 	Tools                    []Tool     `json:"tools"`
 	History                  []Event    `json:"history"`
+	// Access is projected for clients and never stored.
+	Access *Access `json:"access,omitempty"`
+}
+
+// Access summarizes what Brain may do with an account, so a client can show
+// it without the tool list. A group is allowed, partial, off, or none when
+// the account has no reviewed tools in it.
+type Access struct {
+	Read  string `json:"read"`
+	Write string `json:"write"`
+	// WriteConsent: allowing changes needs the service to ask the user again,
+	// because the saved grant does not include the service's write scope.
+	WriteConsent bool `json:"write_consent,omitempty"`
+	Allowed      int  `json:"allowed"`
+	Tools        int  `json:"tools"`
 }
 
 type Input struct {

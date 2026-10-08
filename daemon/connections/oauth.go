@@ -272,14 +272,14 @@ func (m *Manager) BrowserOAuthCallback(w http.ResponseWriter, req *http.Request,
 	m.finishOAuth(w, req, ctx, false, webUI)
 }
 
-// pluginsReturn sends a web sign-in back to the Plugins page. The target is a
-// path, so the browser stays on the origin the provider returned it to.
+// pluginsReturn sends a web sign-in back to the Plugins list, where it
+// started, naming the service it was for. The target is a path, so the
+// browser stays on the origin the provider returned it to.
 func pluginsReturn(w http.ResponseWriter, req *http.Request, integration string, query url.Values) {
-	target := "/plugins"
 	if integration != "" {
-		target += "/" + url.PathEscape(integration)
+		query.Set("service", integration)
 	}
-	http.Redirect(w, req, target+"?"+query.Encode(), http.StatusSeeOther)
+	http.Redirect(w, req, "/plugins?"+query.Encode(), http.StatusSeeOther)
 }
 
 func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) {
