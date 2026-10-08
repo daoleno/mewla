@@ -7,6 +7,7 @@ import { buildAttachmentUploadPresentation } from "./attachmentUploadPresentatio
 import { TerminalAccessoryIconButton } from "./TerminalAccessoryIconButton";
 import { TerminalAccessoryShortcutList } from "./TerminalAccessoryShortcutList";
 import { Icon } from "../icons/Icon";
+import { useKeyboardOnlyWeb } from "../navigation/useDesktopWeb";
 
 interface TerminalAccessoryControlsProps {
   uploadEnabled: boolean;
@@ -37,6 +38,8 @@ export function TerminalAccessoryControls({
   onHoldPressOut,
   onTapSequence,
 }: TerminalAccessoryControlsProps) {
+  // A physical keyboard already has every key here; only Attach remains.
+  const keyboardOnly = useKeyboardOnlyWeb();
   return (
     <ScrollView
       horizontal
@@ -65,26 +68,30 @@ export function TerminalAccessoryControls({
         </TerminalAccessoryIconButton>
       )}
 
-      <TerminalAccessoryIconButton
-        accessibilityLabel={keyboardVisible ? "Hide keyboard" : "Show keyboard"}
-        accessibilityState={{ selected: keyboardVisible }}
-        onPress={onKeyboardToggle}
-      >
-        <Icon
-          name="keyboard"
-          size={18}
-          color={keyboardVisible ? chrome.accent : chrome.textMuted}
-        />
-      </TerminalAccessoryIconButton>
+      {keyboardOnly ? null : (
+        <>
+          <TerminalAccessoryIconButton
+            accessibilityLabel={keyboardVisible ? "Hide keyboard" : "Show keyboard"}
+            accessibilityState={{ selected: keyboardVisible }}
+            onPress={onKeyboardToggle}
+          >
+            <Icon
+              name="keyboard"
+              size={18}
+              color={keyboardVisible ? chrome.accent : chrome.textMuted}
+            />
+          </TerminalAccessoryIconButton>
 
-      <TerminalAccessoryShortcutList
-        chrome={chrome}
-        ctrlArmed={ctrlArmed}
-        onCtrlToggle={onCtrlToggle}
-        onHoldPressIn={onHoldPressIn}
-        onHoldPressOut={onHoldPressOut}
-        onTapSequence={onTapSequence}
-      />
+          <TerminalAccessoryShortcutList
+            chrome={chrome}
+            ctrlArmed={ctrlArmed}
+            onCtrlToggle={onCtrlToggle}
+            onHoldPressIn={onHoldPressIn}
+            onHoldPressOut={onHoldPressOut}
+            onTapSequence={onTapSequence}
+          />
+        </>
+      )}
     </ScrollView>
   );
 }

@@ -9,6 +9,18 @@ export function isDesktopWeb(platform: string, width: number): boolean {
   return platform === "web" && width >= DESKTOP_WEB_MIN_WIDTH;
 }
 
+/** Any touch input at all, primary or not (touch laptops included). */
+export const TOUCH_POINTER_QUERY = "(any-pointer: coarse)";
+
+/**
+ * Web with no touch pointer, so typing comes from a physical keyboard and
+ * phone keyboard aids (the terminal's key row) stay out. `touch` is the
+ * TOUCH_POINTER_QUERY match, or null where media queries are unavailable.
+ */
+export function isKeyboardOnlyWeb(platform: string, touch: boolean | null): boolean {
+  return platform === "web" && touch === false;
+}
+
 export type DesktopSidebarKey =
   | "brain"
   | "sessions"

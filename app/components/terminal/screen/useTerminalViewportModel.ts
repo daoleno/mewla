@@ -12,8 +12,6 @@ interface UseTerminalViewportModelInput {
   hasTerminalRoute: boolean;
   showInterfaceChat: boolean;
   screenFocused: boolean;
-  /** Web without touch (`useKeyboardOnlyWeb`). */
-  keyboardOnly: boolean;
   connectionState: ConnectionState;
   connectionIssue?: ConnectionIssue | null;
   terminalTheme: TerminalThemePalette;
@@ -32,8 +30,6 @@ export function resolveTerminalSurfaceMountPolicy(input: {
   canRenderTerminal: boolean;
   screenFocused: boolean;
   showInterfaceChat: boolean;
-  /** Web without touch: the physical keyboard replaces the key bar. */
-  keyboardOnly?: boolean;
 }): {
   shouldMountTerminalSurface: boolean;
   terminalSurfaceActive: boolean;
@@ -46,7 +42,7 @@ export function resolveTerminalSurfaceMountPolicy(input: {
   return {
     shouldMountTerminalSurface,
     terminalSurfaceActive,
-    accessoryVisible: terminalSurfaceActive && !input.keyboardOnly,
+    accessoryVisible: terminalSurfaceActive,
   };
 }
 
@@ -54,7 +50,6 @@ export function useTerminalViewportModel({
   hasTerminalRoute,
   showInterfaceChat,
   screenFocused,
-  keyboardOnly,
   connectionState,
   connectionIssue,
   terminalTheme,
@@ -70,7 +65,6 @@ export function useTerminalViewportModel({
     canRenderTerminal,
     screenFocused,
     showInterfaceChat,
-    keyboardOnly,
   });
   const terminalState = useMemo(
     () =>

@@ -56,19 +56,4 @@ describe("resolveTerminalSurfaceMountPolicy", () => {
       accessoryVisible: false,
     });
   });
-
-  test("web without touch leaves the key bar to the physical keyboard", () => {
-    expect(
-      resolveTerminalSurfaceMountPolicy({
-        canRenderTerminal: true,
-        screenFocused: true,
-        showInterfaceChat: false,
-        keyboardOnly: true,
-      }),
-    ).toEqual({
-      shouldMountTerminalSurface: true,
-      terminalSurfaceActive: true,
-      accessoryVisible: false,
-    });
-  });
 });
