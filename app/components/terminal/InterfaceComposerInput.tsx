@@ -16,6 +16,19 @@ import {
   COMPOSER_SUBMIT_BEHAVIOR,
   composerReturnKeyType,
 } from "./composerInputBehavior";
+import { composerKeyIntent } from "../navigation/desktopShortcuts";
+
+/**
+ * No touchscreen as the primary pointer: there Enter sends (desktop web).
+ * Phones and tablets report a coarse pointer and keep Enter as a new line.
+ */
+function hasDesktopPointer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    !window.matchMedia("(pointer: coarse)").matches
+  );
+}
 
 interface InterfaceComposerInputProps {
   inputRef: React.RefObject<TextInputInstance | null>;
@@ -26,6 +39,9 @@ interface InterfaceComposerInputProps {
   onDraftChange(value: string): void;
   onInputFocus(): void;
   onInputBlur(): void;
+  /** Web keyboard send; absent while sending is not possible. */
+  onKeyboardSend?(): void;
+  lastSentRef?: React.RefObject<string>;
 }
 
 export function InterfaceComposerInput({
@@ -37,6 +53,8 @@ export function InterfaceComposerInput({
   onDraftChange,
   onInputFocus,
   onInputBlur,
+  onKeyboardSend,
+  lastSentRef,
 }: InterfaceComposerInputProps) {
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const draftEmpty = draft.length === 0;
@@ -58,6 +76,30 @@ export function InterfaceComposerInput({
       setInputHeight(MIN_INPUT_HEIGHT);
     }
   }, [draftEmpty]);
+
+  // Web keys: Enter sends with a mouse and keyboard, Shift+Enter is a new
+  // line, Ctrl/⌘+Enter always sends, Esc leaves the box, ↑ in an empty box
+  // brings back the last message. Nothing acts while an IME is composing.
+  // Native keeps its keyboard's own Return.
+  const handleKeyPress = useCallback(
+    (event: { nativeEvent: unknown; preventDefault(): void }) => {
+      const key = event.nativeEvent as KeyboardEvent;
+      const intent = composerKeyIntent(key, {
+        desktop: hasDesktopPointer(),
+        draftEmpty,
+      });
+      if (intent === "send") {
+        event.preventDefault();
+        onKeyboardSend?.();
+      } else if (intent === "blur") {
+        inputRef.current?.blur();
+      } else if (intent === "recall" && lastSentRef?.current) {
+        event.preventDefault();
+        onDraftChange(lastSentRef.current);
+      }
+    },
+    [draftEmpty, inputRef, lastSentRef, onDraftChange, onKeyboardSend],
+  );
 
   return (
     <View
@@ -97,6 +139,8 @@ export function InterfaceComposerInput({
         blurOnSubmit={false}
         onFocus={onInputFocus}
         onBlur={onInputBlur}
+        onKeyPress={Platform.OS === "web" ? handleKeyPress : undefined}
+        nativeID="mewla-composer"
       />
       {draftEmpty && placeholder ? (
         <View pointerEvents="none" style={styles.placeholderOverlay}>

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -82,6 +82,13 @@ export function InterfaceComposerPanel({
   onSendPress,
   onStopPress,
 }: InterfaceComposerPanelProps) {
+  // The last message this composer sent, for ↑ in an empty box (desktop web).
+  const lastSentRef = useRef("");
+  const send = useCallback(() => {
+    lastSentRef.current = draft;
+    onSendPress();
+  }, [draft, onSendPress]);
+  const keyboardSend = sendEnabled && !showStopButton ? send : undefined;
   const actionButton = (
     <ComposerSendButton
       accessibilityLabel={showStopButton ? stopLabel : sendLabel}
@@ -93,7 +100,7 @@ export function InterfaceComposerPanel({
       running={showStopButton}
       elapsedStartedAt={providerActivityStartedAt}
       fixedWidth={COMPOSER_ACTION_SLOT_WIDTH}
-      onPress={showStopButton ? onStopPress : onSendPress}
+      onPress={showStopButton ? onStopPress : send}
       variant={composerLayout === "chatgpt" ? "chatgpt" : "default"}
     />
   );
@@ -134,6 +141,8 @@ export function InterfaceComposerPanel({
             onDraftChange={onDraftChange}
             onInputFocus={onInputFocus}
             onInputBlur={onInputBlur}
+            onKeyboardSend={keyboardSend}
+            lastSentRef={lastSentRef}
           />
         </InterfaceComposerPanelFrame>
 
@@ -171,8 +180,9 @@ export function InterfaceComposerPanel({
         onModelControlPress={onModelControlPress}
         onInputFocus={onInputFocus}
         onInputBlur={onInputBlur}
-        onSendPress={onSendPress}
+        onSendPress={send}
         onStopPress={onStopPress}
+        lastSentRef={lastSentRef}
       />
     );
   }
@@ -215,6 +225,8 @@ export function InterfaceComposerPanel({
         onDraftChange={onDraftChange}
         onInputFocus={onInputFocus}
         onInputBlur={onInputBlur}
+        onKeyboardSend={keyboardSend}
+        lastSentRef={lastSentRef}
       />
 
       {actionButton}

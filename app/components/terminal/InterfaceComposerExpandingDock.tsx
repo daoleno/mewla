@@ -61,6 +61,8 @@ interface InterfaceComposerExpandingDockProps {
   onInputBlur(): void;
   onSendPress(): void;
   onStopPress(): void;
+  /** The last message sent, for ↑ in an empty composer (desktop web). */
+  lastSentRef?: React.RefObject<string>;
 }
 
 /**
@@ -97,6 +99,7 @@ export function InterfaceComposerExpandingDock({
   onInputFocus,
   onInputBlur,
   onSendPress,
+  lastSentRef,
   onStopPress,
 }: InterfaceComposerExpandingDockProps) {
   const reducedMotion = useReducedMotion();
@@ -175,6 +178,8 @@ export function InterfaceComposerExpandingDock({
           onDraftChange={onDraftChange}
           onInputFocus={onInputFocus}
           onInputBlur={onInputBlur}
+          onKeyboardSend={sendEnabled && !showStopButton ? onSendPress : undefined}
+          lastSentRef={lastSentRef}
         />
       </Reanimated.View>
 
