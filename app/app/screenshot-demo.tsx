@@ -20,7 +20,6 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { NewSessionButton, SessionsListView } from "../components/workers/SessionsListView";
-import { SessionsOverview } from "../components/workers/SessionsOverview";
 import { WorkerSessionSelectionBar } from "../components/workers/WorkerSessionSelectionBar";
 import { usePrimarySelectionBar } from "../components/navigation/PrimarySelectionBar";
 import { groupWorkersByDirectory } from "../services/workerDirectory";
@@ -94,7 +93,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { sessionEmptyState } from "../services/sessionEmptyState";
 import { BrainCompanionContext, type BrainCompanion } from "../components/mewla/BrainCompanion";
 import type { BrainCatPresence, BrainCatState } from "../components/mewla/brainCatState";
-import { BrainWorkColumn, BrainWorkHeader } from "../components/brain/BrainWorkPanel";
+import { BrainWorkColumn } from "../components/brain/BrainWorkPanel";
 import {
   brainWorkSurface,
   type BrainCurrentWork,
@@ -766,22 +765,13 @@ function BrainChatDemo({ empty, running, events, work }: { empty: boolean; runni
   const { width } = useWindowDimensions();
   const workColumn = Boolean(work) && width >= PRIMARY_SIDEBAR_BREAKPOINT;
   const surface = useMemo(() => brainWorkSurface(work?.currentWork, work?.workers), [work]);
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const topChromeInset = appBarInset + (work ? headerHeight : 0);
+  const topChromeInset = appBarInset;
 
   return (
     <PrimaryDrawerShell activePrimaryRoute="brain" onSelectPrimaryRoute={NOOP}>
       <View style={{ flex: 1, flexDirection: "row" }}>
       <View style={{ flex: 1 }}>
       <ChatCanvas chrome={chrome}>
-        {work ? (
-          <View
-            onLayout={(event) => setHeaderHeight(Math.ceil(event.nativeEvent.layout.height))}
-            style={{ position: "absolute", top: appBarInset, left: 0, right: 0, zIndex: 2, paddingHorizontal: 16, backgroundColor: chrome.appBackground }}
-          >
-            <BrainWorkHeader objective={work.objective} surface={surface} chrome={chrome} showSummary={!workColumn} onOpenWork={NOOP} />
-          </View>
-        ) : null}
         <InterfaceChatKeyboardFrame
           enabled
           keyboardVerticalOffset={0}
@@ -870,7 +860,7 @@ function BrainChatDemo({ empty, running, events, work }: { empty: boolean; runni
       </ChatCanvas>
       </View>
       {workColumn ? (
-        <BrainWorkColumn surface={surface} chrome={chrome} topInset={appBarInset} animate onOpenSlip={NOOP} />
+        <BrainWorkColumn surface={surface} objective={work?.objective} chrome={chrome} topInset={appBarInset} animate onOpenSlip={NOOP} />
       ) : null}
       </View>
     </PrimaryDrawerShell>
@@ -1459,14 +1449,6 @@ function SessionsDemoBody() {
     >
       <SessionsListView
         sections={sections}
-        header={
-          <SessionsOverview
-            serverName="Studio computer"
-            connection={offline ? "offline" : "connected"}
-            issue={null}
-            onRetry={NOOP}
-          />
-        }
         rowState={rowState}
         selectionMode={selectionMode}
         showServerName={false}

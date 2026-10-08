@@ -174,7 +174,8 @@ opt-in provider gate are documented in [Behavior Testing](behavior-testing.md).
 ### In the app
 
 Brain's Work shows as slips in the conversation and in one Work surface (a
-column on wide screens, a summary line and sheet on phones); see
+column on wide screens, a sheet on phones, opened from the cat's tail row
+or ⋯ → Work); see
 [Brain and Work](brain-and-work.md#follow-the-work). The app reads
 `current_work` and maps each lifecycle onto six marks in
 `brainWorkLifecycleStatus` (`app/components/brain/brainWorkEventPresentation.ts`).

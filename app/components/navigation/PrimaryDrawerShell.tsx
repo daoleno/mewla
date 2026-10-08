@@ -20,8 +20,6 @@ import { useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Typography, useAppColors } from "../../constants/tokens";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
-import { useCurrentServer } from "../../store/currentServer";
-import { useWorkerServerSummary } from "../../store/workers";
 import { Icon } from "../icons/Icon";
 import { PrimaryChromeButton } from "./PrimaryChromeButton";
 import {
@@ -42,6 +40,7 @@ import { resolvePrimaryAppBarGeometry } from "./primaryAppBarGeometry";
 import { useDrawerFocusContainment } from "./useDrawerFocusContainment";
 import { usePrimaryDrawerBack } from "./usePrimaryDrawerBack";
 import { useDesktopWebShellHosted } from "./useDesktopWeb";
+import { useConnectionAttention } from "./useConnectionAttention";
 
 export {
   PRIMARY_APP_BAR_HEIGHT,
@@ -85,31 +84,16 @@ function PrimaryAppBar({
   const colors = useAppColors();
   const geometry = resolvePrimaryAppBarGeometry(topInset);
   const showBrainCanvas = activePrimaryRoute === "brain";
-  const { currentServer } = useCurrentServer();
-  const { serverConnections, serverConnectionIssues } = useWorkerServerSummary();
-  const connection = currentServer
-    ? serverConnections[currentServer.id] || "offline"
-    : "offline";
-  const connectionIssue = currentServer
-    ? serverConnectionIssues[currentServer.id] ?? null
-    : null;
-  // The menu glyph stays clean while the current server is healthy. A dot
-  // appears only when the user can act on it: oxblood for a connection issue,
-  // amber while the server is offline. Connecting is transient and silent.
-  const connectionBadge = !currentServer
-    ? null
-    : connectionIssue
+  // The dot on ☰ is the connection signal on phones; healthy and a short
+  // reconnect stay quiet (see connectionAttention).
+  const attention = useConnectionAttention();
+  const connectionBadge =
+    attention.badge === "issue"
       ? colors.statusFailed
-      : connection === "offline"
+      : attention.badge === "offline"
         ? colors.warning
         : null;
-  const menuLabel = !currentServer
-    ? "Open navigation drawer, no server"
-    : connectionIssue
-      ? `Open navigation drawer, ${connectionIssue.title}`
-      : connection === "offline"
-        ? "Open navigation drawer, server offline"
-        : "Open navigation drawer";
+  const menuLabel = attention.menuLabel;
   const selectionBar = usePrimarySelectionBarContent();
   if (selectionBar != null) {
     return (
