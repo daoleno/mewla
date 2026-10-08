@@ -8,7 +8,7 @@ import { useCurrentServer } from "../../store/currentServer";
 import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { NoServerState } from "./PluginConnectionViews";
-import { ServerContextRow, type ServerConnection } from "../extensions/ServerContextRow";
+import { ServerOfflineNotice, type ServerConnection } from "../extensions/ServerOfflineNotice";
 import { pluginCatalogSections, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
@@ -327,7 +327,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
   return <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
     <Stack.Screen options={{ title }} />
     <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
-      {catalog && flow.serverId ? <ServerContextRow name={flow.serverName} connection={flow.connection} /> : null}
+      {catalog && flow.serverId ? <ServerOfflineNotice name={flow.serverName} connection={flow.connection} /> : null}
       {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {showError ? <InlineNotice tone={flow.phase === "cancelled" ? "neutral" : "danger"} title={flow.phase === "cancelled" ? "Connection cancelled" : flow.phase === "failed" ? "Connection didn't finish" : "Request failed"} detail={flow.error} action={catalog ? { label: "Try again", onPress: () => void flow.send({ action: "list" }), disabled: flow.busy } : undefined} /> : null}
       {!flow.error && flow.phase === "cancelled" ? <InlineNotice title="Connection cancelled" detail="You can try again." /> : null}

@@ -5,7 +5,7 @@ import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
 import { useStackScreenOptions } from "../../components/navigation/stackScreenOptions";
 import { PluginsFlowProvider } from "../../components/plugins/PluginsFlow";
-import type { ServerConnection } from "../../components/extensions/ServerContextRow";
+import type { ServerConnection } from "../../components/extensions/ServerOfflineNotice";
 import { secureStorage } from "../../services/secureStorage";
 import { retainPluginReturn } from "../../services/pluginOnboarding";
 
