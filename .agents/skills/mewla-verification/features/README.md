@@ -4,7 +4,7 @@ This map describes the control-plane paths that a Worker can verify without invo
 
 ## Baseline
 
-- Run from a Mewla checkout with `scripts/verify-zen-orchestration.sh` present.
+- Run from a Mewla checkout with `scripts/verify-mewla-orchestration.sh` present.
 - Pass the exact existing, non-symlink `--state-dir` for the daemon being checked.
 - Run `mewla doctor --json` before reading Brain or Worker state.
 - Treat raw Brain and Worker payloads as private. Keep only the compact report.

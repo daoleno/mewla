@@ -1,13 +1,13 @@
 # Verify Mewla control-plane changes
 
-Mewla's reusable verification entry point is the project skill at `.agents/skills/zen-verification/SKILL.md`. Mewla's native Skill loaders and shared inventory discover this project root for supported local agents, including Pi. Its feature map binds each named user path to source files, tests, and a separately classified source or runtime check.
+Mewla's reusable verification entry point is the project skill at `.agents/skills/mewla-verification/SKILL.md`. Mewla's native Skill loaders and shared inventory discover this project root for supported local agents, including Pi. Its feature map binds each named user path to source files, tests, and a separately classified source or runtime check.
 
 ## Run the control-plane check
 
 Run the check from the repository root with the exact existing state directory of the daemon you intend to check:
 
 ```sh
-scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state
+scripts/verify-mewla-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state
 ```
 
 The check validates the feature manifest and then runs these bounded commands against the canonical daemon:
@@ -22,7 +22,7 @@ The output is compact JSON with separate source and runtime identities, feature 
 To target a daemon explicitly, pass its exact state directory:
 
 ```sh
-scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/mewla-state
+scripts/verify-mewla-orchestration.sh --json --state-dir /absolute/path/to/mewla-state
 ```
 
 The check does not start a server, call an AI provider, create a Work item, or touch desktop input. `mewla doctor` is not read-only. It may write its state probe and start an ephemeral tmux probe. Executor probes may have their own side effects. The script rejects an absent or symlink state directory before invoking doctor. The script does not claim that those tmux or executor probes are isolated by the state directory. Do not start a second daemon to make the check pass.
@@ -42,7 +42,7 @@ The lever uses GNU `timeout` without `--foreground`. Each command runs through a
 Run the committed inert regressions before changing this lever:
 
 ```sh
-scripts/tests/test_verify_zen_orchestration.sh
+scripts/tests/test_verify_mewla_orchestration.sh
 ```
 
 The regressions use an owned process group and assert that a child process is no longer running after timeout and signal cleanup. They do not use process-name cleanup or a global supervisor.

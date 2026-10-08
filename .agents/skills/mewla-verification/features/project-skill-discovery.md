@@ -1,17 +1,17 @@
 # Project skill loading
 
-Mewla's native Skill loaders and shared inventory discover the project Skill from `.agents/skills`. Pi's native `PackageManager.resolve` and `loadSkills` path has already loaded `zen-verification` with `diagnostics: []`. This feature verifies the source contract only. It does not claim that the shell lever re-proves native loader behavior.
+Mewla's native Skill loaders and shared inventory discover the project Skill from `.agents/skills`. Pi's native `PackageManager.resolve` and `loadSkills` path has already loaded `mewla-verification` with `diagnostics: []`. This feature verifies the source contract only. It does not claim that the shell lever re-proves native loader behavior.
 
 ## Sub-features
 
 - `shared-project-root` uses the repository's `.agents/skills` path for the native project loader and shared inventory.
-- `skill-frontmatter` exposes the `zen-verification` name and description.
+- `skill-frontmatter` exposes the `mewla-verification` name and description.
 - `feature-map` links each feature to runtime, source, and test anchors.
 
 ## How to get to it (user POV)
 
-- Open `.agents/skills/zen-verification/SKILL.md` in a Mewla checkout.
-- Run `scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` to validate the map against the checkout.
+- Open `.agents/skills/mewla-verification/SKILL.md` in a Mewla checkout.
+- Run `scripts/verify-mewla-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state` to validate the map against the checkout.
 
 ## Driving it with the Mewla CLI
 

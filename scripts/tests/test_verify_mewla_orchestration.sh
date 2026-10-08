@@ -2,16 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="$SCRIPT_DIR/verify-zen-orchestration.sh"
+SCRIPT="$SCRIPT_DIR/verify-mewla-orchestration.sh"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
-SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/zen-verification-test.XXXXXX")"
+SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/mewla-verification-test.XXXXXX")"
 chmod 700 "$SANDBOX"
 trap 'rm -rf "$SANDBOX"' EXIT
 export TMPDIR="$SANDBOX/tmp"
 mkdir -p "$TMPDIR" "$SANDBOX/state"
 chmod 700 "$TMPDIR" "$SANDBOX/state"
 
-FAKE_ZEN="$SANDBOX/zen"
+FAKE_MEWLA="$SANDBOX/mewla"
 OBSERVE="$SANDBOX/observe"
 DOCTOR_MARKER="$SANDBOX/doctor-called"
 CHILD_PID_DIR="$SANDBOX/children"
@@ -19,7 +19,7 @@ CALLER_SENTINEL="$SANDBOX/caller-sentinel"
 mkdir -p "$CHILD_PID_DIR"
 printf 'caller\n' >"$CALLER_SENTINEL"
 export OBSERVE DOCTOR_MARKER CHILD_PID_DIR
-cat >"$FAKE_ZEN" <<'EOF'
+cat >"$FAKE_MEWLA" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 mode="${FAKE_MODE:-normal}"
@@ -49,7 +49,7 @@ if [[ "$1 $2 $3" == "brain context --json" ]]; then
 fi
 if [[ "$1 $2 $3" == "worker list --json" ]]; then
   [[ "$mode" != "worker-hang" ]] || spawn_child
-  report_dir="$(find "$TMPDIR" -maxdepth 1 -type d -name 'zen-verification.*' -print -quit)"
+  report_dir="$(find "$TMPDIR" -maxdepth 1 -type d -name 'mewla-verification.*' -print -quit)"
   if [[ -n "$report_dir" ]]; then
     stat -c '%a' "$report_dir" >"$OBSERVE"
     find "$report_dir" -maxdepth 1 -type f -printf '%m\n' | sort -n >>"$OBSERVE"
@@ -60,12 +60,12 @@ fi
 printf 'unexpected fake mewla command\n' >&2
 exit 11
 EOF
-chmod 700 "$FAKE_ZEN"
+chmod 700 "$FAKE_MEWLA"
 
 run() {
   local output status
   set +e
-  output="$("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_ZEN" "$@" 2>&1)"
+  output="$("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_MEWLA" "$@" 2>&1)"
   status=$?
   set -e
   LAST_OUTPUT="$output"
@@ -119,7 +119,7 @@ if tail -n +2 "$OBSERVE" | grep -v '^600$' >/dev/null; then
 fi
 assert_caller_sentinel
 
-sentinel="$TMPDIR/zen-verification-$$"
+sentinel="$TMPDIR/mewla-verification-$$"
 mkdir "$sentinel"
 printf 'keep\n' >"$sentinel/sentinel"
 run
@@ -132,10 +132,10 @@ assert_eq "$LAST_STATUS" 0
 assert_caller_sentinel
 
 BAD_ROOT="$SANDBOX/bad-root"
-mkdir -p "$BAD_ROOT/.agents/skills/zen-verification/features"
-cp "$REPO/.agents/skills/zen-verification/SKILL.md" "$BAD_ROOT/.agents/skills/zen-verification/SKILL.md"
-cp "$REPO/.agents/skills/zen-verification/features/README.md" "$BAD_ROOT/.agents/skills/zen-verification/features/README.md"
-printf '%s\n' '{"schema_version":1,"features":[{"id":"broken","runtime_check":"does-not-exist"}]}' >"$BAD_ROOT/.agents/skills/zen-verification/features/manifest.json"
+mkdir -p "$BAD_ROOT/.agents/skills/mewla-verification/features"
+cp "$REPO/.agents/skills/mewla-verification/SKILL.md" "$BAD_ROOT/.agents/skills/mewla-verification/SKILL.md"
+cp "$REPO/.agents/skills/mewla-verification/features/README.md" "$BAD_ROOT/.agents/skills/mewla-verification/features/README.md"
+printf '%s\n' '{"schema_version":1,"features":[{"id":"broken","runtime_check":"does-not-exist"}]}' >"$BAD_ROOT/.agents/skills/mewla-verification/features/manifest.json"
 rm -f "$DOCTOR_MARKER"
 run --root "$BAD_ROOT"
 assert_eq "$LAST_STATUS" 1
@@ -145,10 +145,10 @@ assert_not_contains "$LAST_OUTPUT" "Cannot iterate over null"
 [[ ! -e "$DOCTOR_MARKER" ]] || { echo "doctor ran for an invalid manifest" >&2; exit 1; }
 
 MISSING_ROOT="$SANDBOX/missing-root"
-mkdir -p "$MISSING_ROOT/.agents/skills/zen-verification/features"
-cp "$REPO/.agents/skills/zen-verification/SKILL.md" "$MISSING_ROOT/.agents/skills/zen-verification/SKILL.md"
-cp "$REPO/.agents/skills/zen-verification/features/README.md" "$MISSING_ROOT/.agents/skills/zen-verification/features/README.md"
-cp "$REPO/.agents/skills/zen-verification/features/manifest.json" "$MISSING_ROOT/.agents/skills/zen-verification/features/manifest.json"
+mkdir -p "$MISSING_ROOT/.agents/skills/mewla-verification/features"
+cp "$REPO/.agents/skills/mewla-verification/SKILL.md" "$MISSING_ROOT/.agents/skills/mewla-verification/SKILL.md"
+cp "$REPO/.agents/skills/mewla-verification/features/README.md" "$MISSING_ROOT/.agents/skills/mewla-verification/features/README.md"
+cp "$REPO/.agents/skills/mewla-verification/features/manifest.json" "$MISSING_ROOT/.agents/skills/mewla-verification/features/manifest.json"
 run --root "$MISSING_ROOT"
 assert_eq "$LAST_STATUS" 1
 assert_contains "$LAST_OUTPUT" "source: missing"
@@ -171,7 +171,7 @@ assert_caller_sentinel
 rm -f "$CHILD_PID_DIR/doctor-hang.pid"
 export FAKE_MODE=doctor-hang
 set +e
-("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_ZEN" --timeout-seconds 30 >"$SANDBOX/early.json" 2>"$SANDBOX/early.err") &
+("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_MEWLA" --timeout-seconds 30 >"$SANDBOX/early.json" 2>"$SANDBOX/early.err") &
 early_pid=$!
 kill -TERM "$early_pid"
 wait "$early_pid"
@@ -183,7 +183,7 @@ assert_caller_sentinel
 
 rm -f "$DOCTOR_MARKER"
 set +e
-NO_STATE_OUTPUT="$("$SCRIPT" --json --root "$REPO" --mewla-bin "$FAKE_ZEN" 2>&1)"
+NO_STATE_OUTPUT="$("$SCRIPT" --json --root "$REPO" --mewla-bin "$FAKE_MEWLA" 2>&1)"
 NO_STATE_STATUS=$?
 set -e
 assert_eq "$NO_STATE_STATUS" 1
@@ -193,7 +193,7 @@ assert_contains "$NO_STATE_OUTPUT" "explicit existing state directory"
 export FAKE_MODE=doctor-hang
 rm -f "$CHILD_PID_DIR/doctor-hang.pid"
 set +e
-("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_ZEN" --timeout-seconds 30 >"$SANDBOX/signal.json" 2>"$SANDBOX/signal.err") &
+("$SCRIPT" --json --root "$REPO" --state-dir "$SANDBOX/state" --mewla-bin "$FAKE_MEWLA" --timeout-seconds 30 >"$SANDBOX/signal.json" 2>"$SANDBOX/signal.err") &
 signal_pid=$!
 set -e
 for _ in $(seq 1 50); do
@@ -208,9 +208,9 @@ set -e
 [[ "$signal_status" -ne 0 ]] || { echo "signal run unexpectedly passed" >&2; exit 1; }
 assert_child_stopped "$CHILD_PID_DIR/doctor-hang.pid"
 assert_caller_sentinel
-[[ -z "$(find "$TMPDIR" -maxdepth 1 -type d -name 'zen-verification.*' -print -quit)" ]] || {
+[[ -z "$(find "$TMPDIR" -maxdepth 1 -type d -name 'mewla-verification.*' -print -quit)" ]] || {
   echo "signal cleanup left a private report directory" >&2
   exit 1
 }
 
-echo "verify-zen-orchestration regressions: PASS"
+echo "verify-mewla-orchestration regressions: PASS"

@@ -1,5 +1,5 @@
 ---
-name: zen-verification
+name: mewla-verification
 description: "Verify Mewla's provider-neutral Brain and Worker control plane from the real CLI. Use when a change needs a bounded runtime preflight tied to source and tests."
 disable-model-invocation: false
 ---
@@ -17,7 +17,7 @@ This skill does not start Mewla. Every run must pass an explicit, existing, non-
 Run the lever from the repository root:
 
 ```sh
-scripts/verify-zen-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state
+scripts/verify-mewla-orchestration.sh --json --state-dir /absolute/path/to/existing-mewla-state
 ```
 
 Pass `--state-dir <absolute-path>` only when the daemon was started with that exact state directory. Do not omit the flag, guess a state directory, or attach to another user's daemon.
@@ -54,7 +54,7 @@ The default run creates a private temporary directory and removes only the files
 
 ## Helpers
 
-The executable helper is `scripts/verify-zen-orchestration.sh`. Use `--help` for the short interface. Use `--json` for agent assertions. Use `--root <absolute-path>` to validate a checkout other than the current repository. Use `--zen-bin <absolute-path>` only with an owned inert fixture. Use `--timeout-seconds <1-300>` to bound each command.
+The executable helper is `scripts/verify-mewla-orchestration.sh`. Use `--help` for the short interface. Use `--json` for agent assertions. Use `--root <absolute-path>` to validate a checkout other than the current repository. Use `--mewla-bin <absolute-path>` only with an owned inert fixture. Use `--timeout-seconds <1-300>` to bound each command.
 
 ## Maintenance
 

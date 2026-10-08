@@ -4,7 +4,7 @@ umask 077
 
 usage() {
   cat <<'EOF'
-Usage: scripts/verify-zen-orchestration.sh --state-dir PATH [--json] [--root PATH]
+Usage: scripts/verify-mewla-orchestration.sh --state-dir PATH [--json] [--root PATH]
        [--mewla-bin PATH] [--timeout-seconds 1-300]
 
 Check the project feature map and bounded Mewla control paths.
@@ -65,7 +65,7 @@ daemon_id=""
 runtime_addr=""
 runtime_running=false
 
-manifest="$root/.agents/skills/zen-verification/features/manifest.json"
+manifest="$root/.agents/skills/mewla-verification/features/manifest.json"
 if [[ -f "$manifest" ]] && jq -e '
   def text: type == "string" and length > 0;
   def safe_path: text and (startswith("/") | not) and ((test("(^|/)\\.\\.?(/|$)") | not));
@@ -114,11 +114,11 @@ if [[ "$manifest_valid" == true ]]; then
       failures+=("test: missing $path")
     fi
   done <<< "$test_paths"
-  if [[ -f "$root/.agents/skills/zen-verification/SKILL.md" ]] && grep -q '^name: zen-verification$' "$root/.agents/skills/zen-verification/SKILL.md"; then
+  if [[ -f "$root/.agents/skills/mewla-verification/SKILL.md" ]] && grep -q '^name: mewla-verification$' "$root/.agents/skills/mewla-verification/SKILL.md"; then
     skill_source_pass=true
   else
     source_check_pass=false
-    failures+=("skill_source: zen-verification frontmatter is missing")
+    failures+=("skill_source: mewla-verification frontmatter is missing")
   fi
 fi
 
@@ -173,7 +173,7 @@ trap 'stop_active_probe; exit 130' INT HUP
 trap 'stop_active_probe; exit 143' TERM
 
 if [[ -d "${TMPDIR:-/tmp}" ]]; then
-  report_dir="$(mktemp -d "${TMPDIR:-/tmp}/zen-verification.XXXXXX")"
+  report_dir="$(mktemp -d "${TMPDIR:-/tmp}/mewla-verification.XXXXXX")"
   chmod 700 "$report_dir"
 else
   failures+=("temp: TMPDIR is unavailable")
@@ -201,7 +201,7 @@ run_json() {
     "$@" &
     child_pid=$!
     wait "$child_pid"
-  ' zen-probe "$@" >"$output" 2>"$error" &
+  ' mewla-probe "$@" >"$output" 2>"$error" &
   active_probe_pid=$!
   wait "$active_probe_pid" || status=$?
   active_probe_pid=0
