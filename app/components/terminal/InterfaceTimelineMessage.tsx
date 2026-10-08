@@ -12,6 +12,7 @@ import {
 } from "../../constants/tokens";
 import { mixHex } from "../../theme/colorUtils";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
+import { MessageCopyAction } from "./MessageCopyAction";
 import { MessageBubbleFooter } from "./MessageBubbleFooter";
 import {
   chatgptUserBubbleRadii,
@@ -197,6 +198,7 @@ export function AssistantMessage({
         {appTheme.chat.showTimestamps ? (
           <MessageBubbleFooter timestamp={item.timestamp} tone="received" />
         ) : null}
+        {item.streaming ? null : <MessageCopyAction text={item.body} chrome={chrome} />}
       </View>
     </View>
   );

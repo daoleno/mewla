@@ -18,6 +18,7 @@ import { useTerminalNavigationActions } from "./useTerminalNavigationActions";
 import { useSessionProviderSheet } from "./useSessionProviderSheet";
 import { dshWebServiceURL } from "../../../services/sessionServicesPresentation";
 import { wsClient } from "../../../services/websocket";
+import { useDesktopPageTitle } from "../../navigation/useDesktopWeb";
 
 export default function TerminalScreen() {
   const { state } = useWorkers();
@@ -109,6 +110,7 @@ export default function TerminalScreen() {
     presentedWorker,
     showInterfaceChat,
   } = route;
+  useDesktopPageTitle(displayName, screenFocused);
   const {
     keyboardVisible,
     ctrlArmed,

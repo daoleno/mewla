@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -79,12 +80,29 @@ export function WorkerSessionRow({
   const statusMark = needsYou ? 'needs' : WORKER_STATUS_MARK[status];
   const inSelectionMode = selectionMode;
   const rowDisabled = inSelectionMode && selectionDisabled;
+  // Web: a mouse shows where a click lands, and a right-click selects the
+  // row the way a long press does on the phone.
+  const [hovered, setHovered] = useState(false);
+  const webPointerProps =
+    Platform.OS === 'web'
+      ? {
+          onHoverIn: () => setHovered(true),
+          onHoverOut: () => setHovered(false),
+          onContextMenu: (event: { preventDefault(): void }) => {
+            if (inSelectionMode) return;
+            event.preventDefault();
+            onLongPress();
+          },
+        }
+      : {};
 
   return (
     <AnimatedPressable
+      {...webPointerProps}
       style={[
         styles.row,
         cornerStyle,
+        hovered && !(inSelectionMode && selected) && styles.rowHover,
         inSelectionMode && selected && styles.rowActive,
       ]}
       preset="card"
@@ -237,6 +255,9 @@ function createStyles(colors: AppColors) {
       paddingVertical: 10,
       paddingHorizontal: 14,
       backgroundColor: 'transparent',
+    },
+    rowHover: {
+      backgroundColor: colors.surfaceSubtle,
     },
     rowActive: {
       backgroundColor: colors.accentSoft,

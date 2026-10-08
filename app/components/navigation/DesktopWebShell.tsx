@@ -1,5 +1,4 @@
 import React, {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -17,7 +16,11 @@ import { useBrain } from "../../store/brain";
 import { terminalRouteParams } from "../../services/workerRouteId";
 import { brainWorkSurface } from "../brain/brainWorkSurface";
 import { PrimaryDrawerPanel } from "./PrimaryDrawerPanel";
-import { DesktopWebShellContext, useDesktopWeb } from "./useDesktopWeb";
+import {
+  DesktopPageTitleContext,
+  DesktopWebShellContext,
+  useDesktopWeb,
+} from "./useDesktopWeb";
 import {
   desktopDocumentTitle,
   desktopShellExcluded,
@@ -75,18 +78,6 @@ function DesktopRetainedScreen({ route, navigation, children }: ScreenLayoutProp
 /** The root Stack's `screenLayout`: drops pages deep under the newest ones. */
 export function desktopScreenLayout(props: ScreenLayoutProps) {
   return <DesktopRetainedScreen {...props} />;
-}
-
-/** A page names itself in the tab title (a Session its name). */
-const PageTitleContext = createContext<((title: string | null) => void) | null>(null);
-
-export function useDesktopPageTitle(title: string | null | undefined, active = true) {
-  const setTitle = useContext(PageTitleContext);
-  useEffect(() => {
-    if (!setTitle || !active) return;
-    setTitle(title?.trim() || null);
-    return () => setTitle(null);
-  }, [active, setTitle, title]);
 }
 
 function keyTarget(target: EventTarget | null): KeyTarget | null {
@@ -265,7 +256,7 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
 
   return (
     <DesktopWebShellContext.Provider value={desktop}>
-      <PageTitleContext.Provider value={setPageTitle}>
+      <DesktopPageTitleContext.Provider value={setPageTitle}>
         <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
           {desktop ? (
             <View
@@ -314,7 +305,7 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
             />
           </>
         ) : null}
-      </PageTitleContext.Provider>
+      </DesktopPageTitleContext.Provider>
     </DesktopWebShellContext.Provider>
   );
 }

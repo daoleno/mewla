@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 import { isDesktopWeb } from "./desktopWeb";
 
@@ -17,4 +17,20 @@ export const DesktopWebShellContext = createContext(false);
 
 export function useDesktopWebShellHosted(): boolean {
   return useContext(DesktopWebShellContext);
+}
+
+/** The shell's setter for the tab title a page gives itself. */
+export const DesktopPageTitleContext = createContext<((title: string | null) => void) | null>(null);
+
+/**
+ * A page names itself in the browser tab ("atlas-notes · Mewla") while it is
+ * the focused page; without one the tab names the page's place.
+ */
+export function useDesktopPageTitle(title: string | null | undefined, active = true) {
+  const setTitle = useContext(DesktopPageTitleContext);
+  useEffect(() => {
+    if (!setTitle || !active) return;
+    setTitle(title?.trim() || null);
+    return () => setTitle(null);
+  }, [active, setTitle, title]);
 }
