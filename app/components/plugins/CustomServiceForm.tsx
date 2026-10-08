@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { StyleSheet, Switch, TextInput, View, type TextInputProps } from "react-native";
+import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { InkSwitch } from "./PluginConnectionViews";
 import { AppText, Button, InlineNotice, ListRow, ListSection } from "../ui";
 import { useAppColors } from "../../constants/tokens";
 import type { ConnectionRequest, PluginIntegration } from "../../services/connections";
@@ -33,14 +34,14 @@ export function CustomServiceForm({ plugin, connecting, serverName, onConnect }:
       <Field label="Endpoint" accessibilityLabel="Service endpoint" placeholder="https://service.example.com/mcp" value={endpoint} onChangeText={setEndpoint} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
     </ListSection>
     <ListSection title="Authorization">
-      {plugin.id === "mcp" ? <ListRow icon="open-external" title="Sign in with browser" trailing={<Switch accessibilityLabel="Sign in with browser" value={browser} onValueChange={setBrowser} />} /> : null}
+      {plugin.id === "mcp" ? <ListRow icon="open-external" title="Sign in with browser" trailing={<InkSwitch accessibilityLabel="Sign in with browser" value={browser} onValueChange={setBrowser} />} /> : null}
       {!browser ? <Field label="Token" accessibilityLabel="Service token" placeholder="Optional for public services" secureTextEntry autoCapitalize="none" autoCorrect={false} value={token} onChangeText={setToken} /> : null}
     </ListSection>
     {plugin.id === "openapi" ? <ListSection title="OpenAPI document">
       <Field label="OpenAPI 3 JSON" accessibilityLabel="OpenAPI document" placeholder="Paste the JSON document" multiline value={spec} onChangeText={setSpec} />
     </ListSection> : null}
     <ListSection title="Network" footer="Only for an internal service you trust.">
-      <ListRow icon="lock-open" title="Allow a private network" trailing={<Switch accessibilityLabel="Allow a private network" value={trust} onValueChange={setTrust} />} />
+      <ListRow icon="lock-open" title="Allow a private network" trailing={<InkSwitch accessibilityLabel="Allow a private network" value={trust} onValueChange={setTrust} />} />
       {trust ? <Field label="Trusted ranges" accessibilityLabel="Trusted network ranges" placeholder="192.168.1.10/32" value={networks} onChangeText={setNetworks} autoCapitalize="none" autoCorrect={false} /> : null}
     </ListSection>
     {error ? <InlineNotice tone="danger" title="Check the form" detail={error} style={styles.error} /> : null}

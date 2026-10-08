@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, StyleSheet, Switch, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, Radii, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
@@ -49,6 +49,14 @@ export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
       )}
     </View>
   );
+}
+
+/** Switches are ink, like every other control (DESIGN.md: Paper and ink). */
+export function InkSwitch(props: SwitchProps) {
+  const { colors } = useAppTheme();
+  // react-native-web colours an on thumb with activeThumbColor, outside SwitchProps.
+  const web = { activeThumbColor: colors.bgSurface, activeTrackColor: colors.accent } as object;
+  return <Switch trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.bgSurface} {...web} {...props} />;
 }
 
 export function NoServerState({ onOpenSettings }: { onOpenSettings(): void }) {
@@ -202,6 +210,7 @@ export function ConnectStatusCard({
   onRetry,
   onDismiss,
   onAllowChanges,
+  onChooseTools,
   onUseServerAccount,
   onImport,
 }: {
@@ -220,6 +229,7 @@ export function ConnectStatusCard({
   onRetry(): void;
   onDismiss(): void;
   onAllowChanges(account: PluginAccount): void;
+  onChooseTools(account: PluginAccount): void;
   onUseServerAccount?(): void;
   onImport(): void;
 }) {
@@ -253,6 +263,15 @@ export function ConnectStatusCard({
       <StatusCard busy title={`Waiting for ${serviceName}`} detail={`Finish signing in on ${serviceName}'s page. This updates when you're back.`}>
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
+      </StatusCard>
+    );
+  }
+  if (phase === "connected" && connected && connected.access?.read === "none") {
+    // A custom service: nothing is allowed until its tools are chosen.
+    return (
+      <StatusCard glyph="check-circle-fill" glyphColor={colors.success} title={`${connected.name} connected`} detail="Choose which of its tools Brain may use. None are allowed yet.">
+        <Button label="Choose tools" variant="tinted" block onPress={() => onChooseTools(connected)} />
+        <Button label="Later" variant="plain" block onPress={onDismiss} />
       </StatusCard>
     );
   }
@@ -372,17 +391,18 @@ export function AccountCard({
     const trailing = pending ? <ActivityIndicator /> : control.kind === "consent" ? (
       <Button label="Allow" size="sm" variant="tinted" disabled={busy} onPress={() => onAccess(name, true)} accessibilityLabel={`Allow changes in ${plugin.name}`} />
     ) : (
-      <Switch accessibilityLabel={title} value={control.on} disabled={busy} onValueChange={(allowed) => onAccess(name, allowed)} />
+      <InkSwitch accessibilityLabel={title} value={control.on} disabled={busy} onValueChange={(allowed) => onAccess(name, allowed)} />
     );
     const note = control.kind === "consent" ? `${plugin.name} asks you to approve this once.` : control.note;
     return <ListRow key={name} icon={name === "read" ? "eye" : "edit"} title={title} subtitle={[describe, note].filter(Boolean).join(". ")} numberOfLines={4} trailing={trailing} />;
   };
   return (
-    <ListSection title={account.name}>
+    <ListSection>
       <ListRow
         icon="person-circle"
-        title={account.identity && account.identity !== account.name ? account.identity : account.name}
-        subtitle={account.verified_at ? `Checked ${new Date(account.verified_at).toLocaleString()}` : undefined}
+        title={account.name}
+        subtitle={[custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${new Date(account.verified_at).toLocaleString()}` : ""].filter(Boolean).join(" · ") || undefined}
+        numberOfLines={2}
         trailing={<StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
       />
       {recovery ? (
@@ -443,7 +463,7 @@ export function ToolsView({
           icon="power"
           title="On"
           subtitle="Brain and Workers can use this account."
-          trailing={running === `recover:${account.id}` ? <ActivityIndicator /> : <Switch accessibilityLabel="Account on" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />}
+          trailing={running === `recover:${account.id}` ? <ActivityIndicator /> : <InkSwitch accessibilityLabel="Account on" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />}
         />
         <ListRow
           icon="pulse"
@@ -480,6 +500,11 @@ export function ToolsView({
   );
 }
 
+/** A custom service is known by its address; its account has no identity to show. */
+function endpointHost(endpoint?: string): string {
+  try { return endpoint ? new URL(endpoint).host : ""; } catch { return ""; }
+}
+
 function callTone(status: string): StatusTone {
   const value = status.toLowerCase();
   if (value === "ok" || value === "success" || value === "succeeded") return "success";
@@ -496,7 +521,7 @@ function ToolRow({ tool, busy, pending, onToggle }: { tool: NonNullable<PluginAc
         title={tool.name}
         subtitle={tool.description}
         numberOfLines={2}
-        trailing={pending ? <ActivityIndicator /> : <Switch accessibilityLabel={`Allow ${tool.name}`} value={tool.allowed} disabled={busy} onValueChange={onToggle} />}
+        trailing={pending ? <ActivityIndicator /> : <InkSwitch accessibilityLabel={`Allow ${tool.name}`} value={tool.allowed} disabled={busy} onValueChange={onToggle} />}
       />
       <View style={styles.schema}>
         <Button

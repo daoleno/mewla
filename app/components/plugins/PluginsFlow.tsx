@@ -123,6 +123,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     } else if (result.flow?.status === "failed" || result.flow?.status === "cancelled") {
       fail(result.flow.message ?? "Connection cancelled. No new account was connected.", result.flow.status);
       await remember(null);
+    } else if (result.flow?.status === "waiting") {
+      setPhase("waiting"); setConnectError("");
     }
   }, [apply, fail, remember, valid]);
   const finish = useCallback(async (url: string) => {
@@ -147,7 +149,14 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     if (active.callback) { await finish(active.callback); return; }
     completion.current = true;
     try { await settle(await wsClient.requestConnections(active.serverId, { action: "connect_status", flow_id: active.flow.id })); }
-    catch (failure) { fail(failure instanceof Error ? failure.message : "Connection interrupted. Try again."); }
+    catch (failure) {
+      // The server answered: it no longer has this sign-in (it expired or restarted).
+      if ((failure as { code?: string }).code === "plugin_request_failed") {
+        fail(failure instanceof Error ? failure.message : "This sign-in expired. Start again."); await remember(null);
+      // The server can't be asked yet (a page load, a reconnect). The sign-in
+      // still waits there; reconnecting checks it again.
+      } else if (valid() && pending.current) setPhase("waiting");
+    }
     finally {
       completion.current = false;
       if (pending.current?.callback && valid()) void finish(pending.current.callback);
@@ -159,7 +168,9 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     // already settled there; the stored flow, if any, only confirms it.
     const { connected, plugin_error: returnedError, service: returnedService } = returnParams;
     if (connected || returnedError) {
-      router.setParams({ plugin_error: undefined, connected: undefined, service: undefined });
+      // Drop the outcome from the address, so a reload or Back doesn't replay it.
+      if (Platform.OS === "web") globalThis.history?.replaceState(globalThis.history.state, "", globalThis.location.pathname);
+      else router.setParams({ plugin_error: undefined, connected: undefined, service: undefined });
       setService(returnedService ?? null);
       if (connected) { setConnectedId(connected); setPhase("connected"); }
       else fail(pluginReturnError(returnedError) ?? "", returnedError === "cancelled" ? "cancelled" : "failed");
@@ -214,7 +225,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     try {
       setPhase("waiting");
       if (active.flow.user_code) await Clipboard.setStringAsync(active.flow.user_code);
-      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code, Platform.OS === "web" && !!active.flow.web_return);
+      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code, Platform.OS === "web" ? active.flow.web_return ? "same-tab" : "new-tab" : undefined);
       if (result.type === "external") { await check(); return; }
       if (!valid()) {
         if (result.type === "success") await deferReturn(result.url);
@@ -349,6 +360,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
         }}
         onDismiss={flow.dismiss}
         onAllowChanges={(account) => flow.setAccess(account, "write", true)}
+        onChooseTools={(account) => { flow.dismiss(); router.push({ pathname: `${pluginServicePath(account.integration)}/tools`, params: { account: account.id } } as never); }}
         onUseServerAccount={flow.service === "github" ? () => void flow.useServerGitHub() : undefined}
         onImport={() => void flow.importGitHub()}
       /> : null}

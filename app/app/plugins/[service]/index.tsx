@@ -18,7 +18,7 @@ export default function PluginServiceScreen() {
       {flow.loaded && flow.catalog.length ? <InlineNotice title="Service unavailable" detail={`${flow.serverName} does not offer this service.`} /> : null}
     </PluginsPage>;
   }
-  const { plugin, accounts, state } = row;
+  const { plugin, accounts } = row;
   const job = pluginJobs[plugin.id];
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
   const connecting = flow.running === `connect:${plugin.id}` || isConnecting(flow.phase) && flow.service === plugin.id;
@@ -27,7 +27,7 @@ export default function PluginServiceScreen() {
   const github = plugin.id === "github" ? () => void flow.useServerGitHub() : undefined;
   const form = <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={(input, signIn) => flow.connect(plugin.id, { input, signIn })} />;
   return <PluginsPage title={plugin.name}>
-    <ServiceHeader plugin={plugin} state={state.kind === "status" ? state : null} />
+    <ServiceHeader plugin={plugin} />
     {accounts.map((account) => <AccountCard
       key={account.id}
       plugin={plugin}

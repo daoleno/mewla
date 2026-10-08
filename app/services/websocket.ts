@@ -3656,7 +3656,8 @@ export class MultiServerWebSocketClient {
       };
       const handleError = (payload: any) => {
         if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup(); reject(new Error(payload.message || "Plugin request failed."));
+        // The code tells a refusal by the server from a request that never got there.
+        cleanup(); reject(Object.assign(new Error(payload.message || "Plugin request failed."), { code: payload.code as string | undefined }));
       };
       const handleDisconnect = (payload: any) => {
         if (payload.serverId !== serverId) return;

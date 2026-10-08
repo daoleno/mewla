@@ -56,7 +56,7 @@ describe("account status and capability boundaries", () => {
   test("access shows a switch, a sign-in that asks again, or nothing", () => {
     const access = { read: "partial" as const, write: "off" as const, allowed: 1, tools: 3 };
     expect(accessControl(account({ access }), "read")).toMatchObject({ kind: "switch", on: true });
-    expect((accessControl(account({ access }), "read") as { note?: string }).note).toMatch(/newer tools/);
+    expect((accessControl(account({ access }), "read") as { note?: string }).note).toMatch(/Newer tools/);
     expect(accessControl(account({ access }), "write")).toEqual({ kind: "switch", on: false, note: undefined });
     expect(accessControl(account({ access: { ...access, write_consent: true } }), "write")).toEqual({ kind: "consent" });
     expect(accessControl(account({ access: { ...access, write: "none" } }), "write")).toEqual({ kind: "none" });
