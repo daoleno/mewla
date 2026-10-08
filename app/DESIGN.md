@@ -268,7 +268,9 @@ Rounded set but never copied or traced from it. The grammar:
 - **Geometry.** Open and friendly: outline only, few strokes, dots for
   detail (r 1), and no hairline inner detail that vanishes at 16 px.
 - **Mewla touches.** Brain is a round chat bubble with two soft cat ears,
-  and the menu is two lines.
+  and the menu is two lines. Skills is a recipe card: a soft card with three
+  steps, the first one ticked. A Skill is a written procedure an agent
+  follows, so the glyph shows one, not sparkles, stars or a wand.
 
 Add a glyph by drawing it in `mewlaGlyphs.ts` with the same helpers
 (`box`, `circle`, `soft`, `dot`), never by importing an icon font or
