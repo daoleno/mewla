@@ -50,7 +50,6 @@ import (
 
 const maxCodexAssetBytes = 6 << 20
 const codexConversationSubscriptionInterval = 220 * time.Millisecond
-const defaultScheduledResultLimit = 120
 const maxUploadFileBytes int64 = 2 << 30
 const maxUploadStoreBytes int64 = 8 << 30
 const uploadNameHeader = "X-Mewla-Upload-Name"
@@ -539,7 +538,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if s.work != nil {
 		s.sendJSON(conn, map[string]any{
 			"type":       "work_items_snapshot",
-			"work_items": work.FilterCalendarWorkItems(s.work.List()),
+			"work_items": s.workItemsForClients(),
 		})
 	}
 	if s.calendar != nil {
@@ -2692,6 +2691,24 @@ func codexAssetContentType(path string, data []byte) string {
 	return contentType
 }
 
+// workItemsForClients is the Work read model clients load: calendar Work they
+// can still reach, each with its full body.
+func (s *Server) workItemsForClients() []*work.Item {
+	linked := map[string]bool{}
+	if s.calendar != nil {
+		for _, item := range s.calendar.List() {
+			if id := strings.TrimSpace(item.LinkedWorkID); id != "" {
+				linked[id] = true
+			}
+		}
+	}
+	live := map[string]bool{}
+	for _, session := range s.currentVisibleWorkerSessions() {
+		live[session.ID] = true
+	}
+	return work.InUseCalendarWorkItems(s.work.List(), linked, live)
+}
+
 func (s *Server) handleListWorkItems(conn *websocket.Conn, raw clientMessage) {
 	if s.work == nil {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "list_work_items_failed", "work store not configured")
@@ -2700,7 +2717,7 @@ func (s *Server) handleListWorkItems(conn *websocket.Conn, raw clientMessage) {
 	s.sendJSON(conn, map[string]any{
 		"type":       "work_items_snapshot",
 		"request_id": raw.RequestID,
-		"work_items": work.FilterCalendarWorkItems(s.work.List()),
+		"work_items": s.workItemsForClients(),
 	})
 }
 
@@ -2878,11 +2895,6 @@ func (s *Server) brainSnapshotWire(snapshot brain.Snapshot) (any, error) {
 		payload["adapters"] = snapshot.Executors
 	}
 	s.enrichBrainSnapshotHostWorkerCapabilities(payload, snapshot)
-	results, err := s.scheduledResultsForKnownBrainThreads(defaultScheduledResultLimit)
-	if err != nil {
-		return nil, err
-	}
-	payload["scheduled_results"] = results
 	return payload, nil
 }
 
@@ -2914,33 +2926,6 @@ func (s *Server) enrichBrainSnapshotHostWorkerCapabilities(payload map[string]an
 	}
 	hostMap["capabilities"] = s.hostWorkerWireCapabilities(sessionID)
 	payload["host_worker"] = hostMap
-}
-
-func (s *Server) scheduledResultsForKnownBrainThreads(limit int) ([]calendar.ScheduledResult, error) {
-	if s == nil || s.calendar == nil || s.brain == nil {
-		return []calendar.ScheduledResult{}, nil
-	}
-	threadIDs, err := s.brain.ChatThreadIDs()
-	if err != nil {
-		return nil, err
-	}
-	known := make(map[string]struct{}, len(threadIDs))
-	for _, threadID := range threadIDs {
-		if threadID = strings.TrimSpace(threadID); threadID != "" {
-			known[threadID] = struct{}{}
-		}
-	}
-	all := s.calendar.ScheduledResults("", 0)
-	results := make([]calendar.ScheduledResult, 0, len(all))
-	for _, result := range all {
-		if _, ok := known[result.ThreadID]; ok {
-			results = append(results, result)
-		}
-	}
-	if limit > 0 && len(results) > limit {
-		results = results[len(results)-limit:]
-	}
-	return results, nil
 }
 
 func visibleWorkerSessions(workers []*classifier.Worker) []*classifier.Worker {
@@ -3165,7 +3150,7 @@ func (s *Server) emitBrainSnapshotBroadcast(snapshot brain.Snapshot) {
 }
 
 func (s *Server) handleCalendarEvent(event calendar.Event) {
-	s.broadcastJSON(map[string]any{"type": "calendar_item_changed", "calendar_item": event.Item})
+	s.broadcastJSON(map[string]any{"type": "calendar_item_changed", "calendar_item": calendarItemWire(event.Item)})
 	if s.brain != nil {
 		if _, err := s.brain.RouteCalendarEvent(event); err != nil {
 			log.Printf("calendar Work event routing failed for %s: %v", event.Item.ID, err)

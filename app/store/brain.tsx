@@ -9,18 +9,6 @@ import {
   type WorkerSessionCapabilities,
 } from "../services/providers/sessionCapabilities";
 
-export type BrainScheduledResult = {
-  id: string;
-  thread_id: string;
-  body: string;
-  created_at: string;
-  status: string;
-  title: string;
-  calendar_item_id: string;
-  calendar_run_id: string;
-  scheduled_for: string;
-};
-
 export type BrainWorkStatus =
   | "open"
   | "running"
@@ -140,7 +128,6 @@ export type BrainSnapshot = {
   host_executor?: BrainExecutorRef | null;
   executors?: BrainExecutorRef[];
   chat_thread_id?: string;
-  scheduled_results?: BrainScheduledResult[];
   current_work?: BrainCurrentWork[];
   work_backlog?: BrainWorkBacklog;
   objective?: BrainObjective;
@@ -166,9 +153,8 @@ export const initialBrainState: BrainState = {
 
 type RawBrainSnapshot = Omit<
   Partial<BrainSnapshot>,
-  "scheduled_results" | "current_work" | "work_backlog" | "objective"
+  "current_work" | "work_backlog" | "objective"
 > & {
-  scheduled_results?: unknown[];
   current_work?: unknown[];
   work_backlog?: unknown;
   objective?: unknown;
@@ -213,9 +199,6 @@ function normalizeSnapshot(
     executors: executors.map(normalizeExecutorRef).filter((adapter) => adapter.id),
     chat_thread_id:
       typeof raw?.chat_thread_id === "string" ? raw.chat_thread_id : undefined,
-    scheduled_results: Array.isArray(raw?.scheduled_results)
-      ? normalizeScheduledResults(raw.scheduled_results)
-      : [],
     current_work: Array.isArray(raw?.current_work)
       ? normalizeCurrentWork(raw.current_work)
       : [],
@@ -456,57 +439,6 @@ function normalizeWorkStatus(value: unknown): BrainWorkStatus | null {
   }
 }
 
-function normalizeScheduledResult(raw: any): BrainScheduledResult {
-  return {
-    id: typeof raw?.id === "string" ? raw.id : "",
-    thread_id: typeof raw?.thread_id === "string" ? raw.thread_id : "",
-    body: typeof raw?.body === "string" ? raw.body : "",
-    created_at: typeof raw?.created_at === "string" ? raw.created_at : "",
-    status: typeof raw?.status === "string" ? raw.status : "",
-    title: typeof raw?.title === "string" ? raw.title : "",
-    calendar_item_id:
-      typeof raw?.calendar_item_id === "string" ? raw.calendar_item_id : "",
-    calendar_run_id:
-      typeof raw?.calendar_run_id === "string" ? raw.calendar_run_id : "",
-    scheduled_for:
-      typeof raw?.scheduled_for === "string" ? raw.scheduled_for : "",
-  };
-}
-
-function normalizeScheduledResults(raw: any[]): BrainScheduledResult[] {
-  const byId = new Map<string, BrainScheduledResult>();
-  raw
-    .map(normalizeScheduledResult)
-    .filter(
-      (result) =>
-        result.id &&
-        result.thread_id &&
-        result.body &&
-        result.created_at &&
-        result.status &&
-        result.title &&
-        result.calendar_item_id &&
-        result.calendar_run_id &&
-        result.scheduled_for,
-    )
-    .forEach((result) => byId.set(result.id, result));
-  return Array.from(byId.values()).sort((left, right) => {
-    const leftTime = Date.parse(left.created_at);
-    const rightTime = Date.parse(right.created_at);
-    if (
-      Number.isFinite(leftTime) &&
-      Number.isFinite(rightTime) &&
-      leftTime !== rightTime
-    ) {
-      return leftTime - rightTime;
-    }
-    if (Number.isFinite(leftTime) !== Number.isFinite(rightTime)) {
-      return Number.isFinite(leftTime) ? 1 : -1;
-    }
-    return left.id.localeCompare(right.id);
-  });
-}
-
 function normalizeWorkerRef(raw: any): BrainWorkerRef {
   const parsedStartedAt =
     typeof raw?.started_at === "string" ||
@@ -626,10 +558,6 @@ function brainServerStatesEqual(
     executorRefsEqual(left.host_executor, right.host_executor) &&
     workerRefArraysEqual(left.workers ?? [], right.workers ?? []) &&
     executorRefArraysEqual(left.executors ?? [], right.executors ?? []) &&
-    scheduledResultArraysEqual(
-      left.scheduled_results ?? [],
-      right.scheduled_results ?? [],
-    ) &&
     currentWorkArraysEqual(left.current_work ?? [], right.current_work ?? []) &&
     workBacklogEqual(left.work_backlog, right.work_backlog) &&
     left.objective?.title === right.objective?.title &&
@@ -720,35 +648,6 @@ function workBacklogEqual(
       left.total === right.total &&
       left.queued_attention === right.queued_attention &&
       left.historical_results === right.historical_results,
-  );
-}
-
-function scheduledResultArraysEqual(
-  left: BrainScheduledResult[],
-  right: BrainScheduledResult[],
-) {
-  return (
-    left.length === right.length &&
-    left.every((message, index) =>
-      scheduledResultEqual(message, right[index]),
-    )
-  );
-}
-
-function scheduledResultEqual(
-  left: BrainScheduledResult,
-  right: BrainScheduledResult,
-): boolean {
-  return (
-    left.id === right.id &&
-    left.thread_id === right.thread_id &&
-    left.body === right.body &&
-    left.created_at === right.created_at &&
-    left.status === right.status &&
-    left.title === right.title &&
-    left.calendar_item_id === right.calendar_item_id &&
-    left.calendar_run_id === right.calendar_run_id &&
-    left.scheduled_for === right.scheduled_for
   );
 }
 
