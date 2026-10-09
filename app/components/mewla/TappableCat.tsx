@@ -10,10 +10,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import type { BrainCatState } from "./brainCatState";
-import { SealCat } from "./SealCat";
-
-/** States drawn in the seal; the rest stand on their feet. */
-const SEAL_STATES = new Set<BrainCatState>(["homeless", "offline", "waking", "idle"]);
+import { PetSprite } from "../pets/PetSprite";
+import { petInSeal } from "../pets/petModel";
 
 /**
  * The cat's "I heard you": a standing cat hops, a cat in the seal stirs (a
@@ -22,7 +20,7 @@ const SEAL_STATES = new Set<BrainCatState>(["homeless", "offline", "waking", "id
 export function useCatHop(state: BrainCatState, size: number) {
   const reduced = useReducedMotion();
   const hop = useSharedValue(0);
-  const inSeal = SEAL_STATES.has(state);
+  const inSeal = petInSeal(state);
   const style = useAnimatedStyle(() => {
     const t = hop.value;
     return inSeal
@@ -54,7 +52,7 @@ export function HoppingCat({
 }) {
   return (
     <Animated.View style={[{ transformOrigin: "50% 100%" }, hopStyle]}>
-      <SealCat state={state} size={size} animate={animate} />
+      <PetSprite state={state} size={size} animate={animate} />
     </Animated.View>
   );
 }

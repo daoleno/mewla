@@ -31,7 +31,7 @@ interface EmptyStateProps {
   secondary?: EmptyAction;
   /** `inline` sits inside lists and sheets: no halo, smaller type. */
   size?: "hero" | "inline";
-  /** Hero only: an illustration (Brain's seal cat) in place of the halo. */
+  /** Hero only: an illustration (Brain's pet) in place of the halo. */
   art?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }

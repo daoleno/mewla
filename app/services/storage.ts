@@ -24,6 +24,7 @@ const KEYS = {
   interfaceRenderModes: "mewla:codex_render_modes",
   themePreference: "mewla:theme_preference",
   accentPreference: "mewla:accent_preference",
+  petPreference: "mewla:pet_preference",
 } as const;
 
 let serverWriteTail: Promise<unknown> = Promise.resolve();
@@ -293,4 +294,14 @@ export async function getAccentPreference(): Promise<string | null> {
 
 export async function setAccentPreference(accentId: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.accentPreference, accentId);
+}
+
+export async function getPetPreference(): Promise<string | null> {
+  const value = await AsyncStorage.getItem(KEYS.petPreference);
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export async function setPetPreference(petId: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.petPreference, petId);
 }

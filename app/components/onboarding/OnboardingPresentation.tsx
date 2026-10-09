@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { MewlaMark } from "../mewla/MewlaMark";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
-import { SealCat } from "../mewla/SealCat";
+import { PetSprite } from "../pets/PetSprite";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Icon } from "../icons/Icon";
@@ -44,7 +44,7 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
             icon={connected ? "check-circle" : "server"}
             busy={connecting}
             // The cat's first moment: it moves into the seal once paired.
-            art={<SealCat state={connected ? "idle" : connecting ? "waking" : "offline"} size={120} />}
+            art={<PetSprite state={connected ? "idle" : connecting ? "waking" : "offline"} size={120} />}
             action={connected ? { label: "Open Brain", icon: "arrow-forward", onPress: onContinue } : connecting ? undefined : { label: "Retry connection", icon: "refresh", onPress: onRetry }}
             secondary={!connected ? { label: "Server settings", icon: "settings", onPress: onSettings } : undefined}
           />
@@ -52,7 +52,7 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
           <>
             <View style={styles.heading}>
               {/* An empty seal until a computer is paired: Brain has no home yet. */}
-              <SealCat state="homeless" size={120} />
+              <PetSprite state="homeless" size={120} />
               <Text accessibilityRole="header" style={[styles.title, { color: colors.textPrimary }]}>Give Brain a home</Text>
               <Text style={[styles.lede, { color: colors.textSecondary }]}>Brain lives on your computer. Pair this phone with it once.</Text>
             </View>

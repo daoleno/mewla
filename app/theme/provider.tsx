@@ -15,10 +15,13 @@ import * as SystemUI from "expo-system-ui";
 import { useColorScheme } from "react-native";
 import {
   getAccentPreference,
+  getPetPreference,
   getThemePreference,
   setAccentPreference,
+  setPetPreference,
   setThemePreference,
 } from "../services/storage";
+import { DEFAULT_PET_ID, PET_PACKS } from "../components/pets/petPacks";
 import { navigationThemeFromTheme } from "./navigation";
 import { DEFAULT_ACCENT_ID, getAccentById, type ThemeAccentId } from "./primitives";
 import { resolveTheme } from "./resolve";
@@ -31,6 +34,9 @@ type ThemeContextValue = {
   setPreference: (next: ThemePreference) => Promise<void>;
   accentId: ThemeAccentId;
   setAccentId: (next: ThemeAccentId) => Promise<void>;
+  /** The pet shown wherever Brain appears; one per device. */
+  petId: string;
+  setPetId: (next: string) => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -39,14 +45,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
   const [accentId, setAccentIdState] = useState<ThemeAccentId>(DEFAULT_ACCENT_ID);
+  const [petId, setPetIdState] = useState(DEFAULT_PET_ID);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [stored, storedAccent] = await Promise.all([
+      const [stored, storedAccent, storedPet] = await Promise.all([
         getThemePreference().catch(() => null),
         getAccentPreference().catch(() => null),
+        getPetPreference().catch(() => null),
       ]);
       if (cancelled) return;
       if (stored) {
@@ -55,6 +63,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const accent = getAccentById(storedAccent);
       if (accent) {
         setAccentIdState(accent.id);
+      }
+      if (storedPet && PET_PACKS.some((pack) => pack.id === storedPet)) {
+        setPetIdState(storedPet);
       }
       setHydrated(true);
     })();
@@ -90,6 +101,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     await setAccentPreference(next);
   }, []);
 
+  const setPetId = useCallback(async (next: string) => {
+    setPetIdState(next);
+    await setPetPreference(next);
+  }, []);
+
   useEffect(() => {
     if (!hydrated) {
       return;
@@ -109,8 +125,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setPreference,
       accentId,
       setAccentId,
+      petId,
+      setPetId,
     }),
-    [accentId, preference, setAccentId, setPreference, theme],
+    [accentId, petId, preference, setAccentId, setPetId, setPreference, theme],
   );
 
   if (!hydrated) {
