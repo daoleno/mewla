@@ -115,25 +115,29 @@ mewla brain work list --json -id <work-id>   # one Work with its history
 mewla brain work update -id <work-id> -status done
 ```
 
-## The cat
+## The pet
 
-The cat is Brain. It is on screen once, and its pose is Brain's real state:
+Brain is a pet, a small cat by default. It is on screen once, and what it
+does is Brain's real state:
 
-| Cat | Brain |
+| Pet | Brain |
 | --- | --- |
 | Asleep in the seal | Idle |
-| One eye open, an ear flicking | The app is starting, connecting or loading the conversation |
-| Sitting up, kneading, tail swishing | Working on your message |
-| Ears up, sitting on a slip | That Work needs you |
-| Sitting by moving dots | Workers hold delegated Work |
-| Lying beside a parcel | A result is waiting for you to read |
+| Hops out of the seal | The app is starting, connecting or loading the conversation |
+| Walking | Working on your message |
+| Peeking over the seal, on a slip | That Work needs you |
+| Sitting, watching | Workers hold delegated Work |
+| A happy hop | A result is waiting for you to read |
 | Asleep in a grey seal | Your computer is offline |
 | Empty seal | No computer is paired yet |
 
 Tap it and it answers: idle, it says how things stand ("All quiet. 2 running,
 nothing needs you."); when Work needs you, it opens the first one; while Brain
-works, it says what Brain is doing; offline, it tries to reconnect. The cat
-stays still when your device asks for reduced motion.
+works, it says what Brain is doing; offline, it tries to reconnect. It holds
+still when your device asks for reduced motion.
+
+Pick another pet in **Settings → Pet**: ten to choose from, and the choice
+stays on that device (the phone and the web UI each keep their own).
 
 ## Worker routing
 

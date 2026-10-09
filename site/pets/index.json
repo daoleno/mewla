@@ -1,0 +1,113 @@
+{
+  "default": "p05",
+  "clips": {
+    "homeless": {
+      "loop": false,
+      "durationMs": 100
+    },
+    "offline": {
+      "loop": true,
+      "durationMs": 1600
+    },
+    "waking": {
+      "loop": false,
+      "durationMs": 888
+    },
+    "idle": {
+      "loop": true,
+      "durationMs": 1600
+    },
+    "working": {
+      "loop": true,
+      "durationMs": 800
+    },
+    "delegating": {
+      "loop": true,
+      "durationMs": 1600
+    },
+    "attention": {
+      "loop": true,
+      "durationMs": 1000
+    },
+    "delivered": {
+      "loop": false,
+      "durationMs": 1000
+    },
+    "going_back": {
+      "loop": false,
+      "durationMs": 888
+    }
+  },
+  "pets": [
+    {
+      "id": "p01",
+      "name": {
+        "en": "Mochi",
+        "zh": "糯糯"
+      }
+    },
+    {
+      "id": "p02",
+      "name": {
+        "en": "Bun",
+        "zh": "包子"
+      }
+    },
+    {
+      "id": "p03",
+      "name": {
+        "en": "Soot",
+        "zh": "煤球"
+      }
+    },
+    {
+      "id": "p04",
+      "name": {
+        "en": "Ember",
+        "zh": "火苗"
+      }
+    },
+    {
+      "id": "p05",
+      "name": {
+        "en": "Dango",
+        "zh": "团团"
+      }
+    },
+    {
+      "id": "p06",
+      "name": {
+        "en": "Ginger",
+        "zh": "姜姜"
+      }
+    },
+    {
+      "id": "p07",
+      "name": {
+        "en": "Biscuit",
+        "zh": "饼干"
+      }
+    },
+    {
+      "id": "p08",
+      "name": {
+        "en": "Ink",
+        "zh": "墨墨"
+      }
+    },
+    {
+      "id": "p09",
+      "name": {
+        "en": "Peach",
+        "zh": "桃子"
+      }
+    },
+    {
+      "id": "p10",
+      "name": {
+        "en": "Stripe",
+        "zh": "条条"
+      }
+    }
+  ]
+}

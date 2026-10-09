@@ -65,6 +65,7 @@ Settings is one grouped list:
 - **Channels**: one **Telegram** row with the bot name and a status pill. It opens the Telegram page, which shows the identity, one primary next step (Verify token, Connect Telegram, Open Telegram, or Reconnect), grouped secondary actions, and diagnostics as one-line label/value rows (long IDs truncate in the middle and copy on tap). Destructive actions (Unlink account, Remove bot) sit behind **Advanced**.
 - **Agents**: one **Model Providers** row, which opens Model Providers: how Codex and Claude reach models (official login or your own API keys).
 - **Appearance**: one segmented control (Auto / Light / Dark). Theme lives only here.
+- **Pet**: the chosen pet acting out a few Brain states, over a grid of all ten. Tapping one picks it; the choice is stored on the device.
 
 ## Plugins
 

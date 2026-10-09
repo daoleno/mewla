@@ -286,7 +286,7 @@ def description(page: Page) -> str:
 
 
 def icon_href() -> str:
-    for candidate in ("seal-icon.svg",):
+    for candidate in ("favicon-32.png",):
         if (SITE / candidate).is_file():
             return candidate
     return ""
@@ -342,7 +342,7 @@ TEMPLATE = """<!doctype html>
 
 def write_page(out: Path, page: Page, pages: list[Page], nav_pages: list[Page], icon: str) -> None:
     title = "Mewla documentation" if not page.slug else f"{page.title} · Mewla docs"
-    icon_tag = f'<link rel="icon" href="{page.site_root}{icon}" type="image/svg+xml">\n' if icon else ""
+    icon_tag = f'<link rel="icon" href="{page.site_root}{icon}" type="image/png">\n' if icon else ""
     doc = TEMPLATE.format(
         title=html.escape(title),
         description=html.escape(description(page)),

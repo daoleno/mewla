@@ -66,7 +66,7 @@ starts Workers you can watch in Sessions, and puts a slip in the conversation
 for each part. It calls you only when a slip needs your decision. More in
 [Brain and Work](brain-and-work.md).
 
-![Brain on a wide screen: the goal line, Work slips in the conversation and the Work column, with the cat on the slip that needs you](assets/brain.svg)
+![Brain on a wide screen: the goal line, Work slips in the conversation and the Work column, with the pet on the slip that needs you](assets/brain.svg)
 
 Workers run without asking for approval. Before you leave Brain working on a
 machine with secrets, read [Permission bypass risks](executors.md#permission-bypass-risks).

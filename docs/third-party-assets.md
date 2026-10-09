@@ -32,12 +32,19 @@ OFL redistribution still expects copyright/license notice availability to recipi
 
 | Path                                                                          | Provenance                              | License notes                                                              |
 | ----------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
-| `app/assets/branding/mewla-*.png` and `branding/source/*.svg`                 | First-party Mewla seal mark, drawn by `scripts/render-mewla-brand.ts` | Product assets; not third-party. See [TRADEMARKS.md](../TRADEMARKS.md). |
-| `site/seal-icon.svg`, `site/sealcat.js`, `docs/assets/*`                      | First-party Mewla artwork and demo app screenshots | Product assets; not third-party.                                     |
+| `app/assets/pets/*`, `site/pets/*`                                            | First-party Mewla pets: ten characters and their state clips, generated for Mewla with gpt-image-2.5, then sliced, matted and encoded by our own scripts | Product assets; not third-party. See [Pet and brand art](#pet-and-brand-art). |
+| `app/assets/branding/mewla-*`, `site/mark.png`, `site/favicon*`, `site/apple-touch-icon.png`, `site/og-card.png` | First-party Mewla mark: the default pet (`p05`) in the vermilion seal, generated the same way | Product assets; not third-party. See [TRADEMARKS.md](../TRADEMARKS.md). |
+| `docs/assets/*`                                                               | First-party drawings (`scripts/site-svg/`, embedding the mark and the default pet) and demo app screenshots | Product assets; not third-party.                                     |
 | Product logos in `site/index.html` and `app/components/plugins/ServiceMarks.tsx` | [LobeHub Icons](https://github.com/lobehub/lobe-icons) (AI brands), [Simple Icons](https://simpleicons.org) (the rest) | MIT and CC0; the marks stay their owners' trademarks. |
 | `app/assets/theme/`                                                           | No bundled rasters                      | README only; do not add unattributed stock.                                |
 
 Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and `moonlit-meadow-ambient.webp`.
+
+### Pet and brand art
+
+- **Generated, not traced.** Every pet frame, portrait and brand image was generated with gpt-image-2.5 from Mewla's own character sheets. The "catonchair" animation was used only as a style reference for the look of a hand-drawn crayon cat; none of its frames or pixels were traced, copied or used as an input image.
+- **Processing.** The model's grids were sliced, the paper background removed and the frames registered to one ground line by scripts in the asset lab; `scripts/import-pets.py` then re-encodes each pack for the app and the landing. No frame was redrawn by hand.
+- **Pack format.** `pets/<id>/meta.json` (`id`, `name.en`/`name.zh`, `default`, and `actions` keyed by Brain state plus `going_back`, each with `file`, `loop`, `fps`, `frames`, `anchor`), one animated WebP per action on a shared square canvas, and a `portrait.png`. `pets/index.json` lists the pets in order.
 
 ## Native dependency: Ghostty VT
 
