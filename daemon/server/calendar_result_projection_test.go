@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +13,10 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-func TestBrainSnapshotProjectsOnlyKnownThreadCalendarRunsWithoutWriting(t *testing.T) {
+// Calendar results reach Brain through its thread conversation. The snapshot,
+// which every client loads on connect and on each Calendar change, carries
+// none of their bodies and reading it writes nothing.
+func TestBrainSnapshotCarriesNoCalendarResultsAndDoesNotWrite(t *testing.T) {
 	brainStore, err := brain.NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -26,9 +31,9 @@ func TestBrainSnapshotProjectsOnlyKnownThreadCalendarRunsWithoutWriting(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	current := finishScheduledResult(t, calendarStore, "item-current", "Current", "thread-current", "current result", "")
-	history := finishScheduledResult(t, calendarStore, "item-history", "History", "thread-history", "", "historical failure")
-	_ = finishScheduledResult(t, calendarStore, "item-unknown", "Unknown", "thread-unknown", "must stay hidden", "")
+	large := strings.Repeat("briefing ", 16<<10)
+	_ = finishScheduledResult(t, calendarStore, "item-current", "Current", "thread-current", large, "")
+	_ = finishScheduledResult(t, calendarStore, "item-history", "History", "thread-history", "", "historical failure")
 
 	snapshot, err := service.Snapshot()
 	if err != nil {
@@ -47,39 +52,19 @@ func TestBrainSnapshotProjectsOnlyKnownThreadCalendarRunsWithoutWriting(t *testi
 		if !ok {
 			t.Fatalf("snapshot wire = %T", wire)
 		}
-		results, ok := payload["scheduled_results"].([]calendar.ScheduledResult)
-		if !ok || len(results) != 2 {
-			t.Fatalf("scheduled results = %#v", payload["scheduled_results"])
+		if _, ok := payload["scheduled_results"]; ok {
+			t.Fatalf("brain snapshot carries scheduled results")
 		}
-		seen := map[string]bool{}
-		for _, result := range results {
-			seen[result.ID] = true
-			if result.ThreadID == "thread-unknown" {
-				t.Fatalf("unknown thread projected: %#v", result)
-			}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if !seen[current.ID] || !seen[history.ID] {
-			t.Fatalf("known results missing: %#v", results)
+		if bytes.Contains(raw, []byte("briefing")) {
+			t.Fatalf("brain snapshot carries a calendar result body (%d bytes)", len(raw))
 		}
 	}
 	assertFileIdentity(t, calendarStore.Path(), calendarRaw, calendarInfo)
 	assertFileIdentity(t, brainStore.ChatStatePath(), registryRaw, registryInfo)
-}
-
-func TestBrainSnapshotWithNilCalendarHasEmptyResultProjection(t *testing.T) {
-	service, _ := newBrainCalendarFixture(t, "thread-current")
-	snapshot, err := service.Snapshot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	wire, err := (&Server{brain: service}).brainSnapshotWire(snapshot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	results, ok := wire.(map[string]any)["scheduled_results"].([]calendar.ScheduledResult)
-	if !ok || len(results) != 0 {
-		t.Fatalf("nil-Calendar results = %#v", wire)
-	}
 }
 
 func TestHistoricalBrainThreadUsesOnlyItsCalendarProjection(t *testing.T) {

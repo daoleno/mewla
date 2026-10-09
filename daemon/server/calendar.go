@@ -9,12 +9,25 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// calendarItemWire is a calendar item as lists, broadcasts and mutation
+// replies carry it: without run history. Every run keeps its full result, so a
+// daily item grows by one deliverable a day; get_calendar_item still returns
+// the runs.
+func calendarItemWire(item calendar.Item) calendar.Item {
+	item.Runs = nil
+	return item
+}
+
 func (s *Server) sendCalendarSnapshot(conn *websocket.Conn, requestID string) {
 	if s.calendar == nil {
 		s.sendErrorWithRequestID(conn, requestID, "calendar_unavailable", "calendar store not configured")
 		return
 	}
-	s.sendJSON(conn, map[string]any{"type": "calendar_items_snapshot", "request_id": requestID, "calendar_items": s.calendar.List()})
+	items := s.calendar.List()
+	for i := range items {
+		items[i] = calendarItemWire(items[i])
+	}
+	s.sendJSON(conn, map[string]any{"type": "calendar_items_snapshot", "request_id": requestID, "calendar_items": items})
 }
 func (s *Server) handleGetCalendarItem(conn *websocket.Conn, raw clientMessage) {
 	if s.calendar == nil {
@@ -38,7 +51,7 @@ func (s *Server) handleCreateCalendarItem(conn *websocket.Conn, raw clientMessag
 		s.sendCalendarError(conn, raw.RequestID, err)
 		return
 	}
-	s.sendJSON(conn, map[string]any{"type": "calendar_item_created", "request_id": raw.RequestID, "calendar_item": item})
+	s.sendJSON(conn, map[string]any{"type": "calendar_item_created", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
 }
 func (s *Server) handleUpdateCalendarItem(conn *websocket.Conn, raw clientMessage) {
 	if s.calendar == nil || raw.CalendarItem == nil {
@@ -50,7 +63,7 @@ func (s *Server) handleUpdateCalendarItem(conn *websocket.Conn, raw clientMessag
 		s.sendCalendarError(conn, raw.RequestID, err)
 		return
 	}
-	s.sendJSON(conn, map[string]any{"type": "calendar_item_updated", "request_id": raw.RequestID, "calendar_item": item})
+	s.sendJSON(conn, map[string]any{"type": "calendar_item_updated", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
 }
 func (s *Server) handleCancelCalendarItem(conn *websocket.Conn, raw clientMessage) {
 	if s.calendar == nil {
@@ -62,7 +75,7 @@ func (s *Server) handleCancelCalendarItem(conn *websocket.Conn, raw clientMessag
 		s.sendCalendarError(conn, raw.RequestID, err)
 		return
 	}
-	s.sendJSON(conn, map[string]any{"type": "calendar_item_cancelled", "request_id": raw.RequestID, "calendar_item": item})
+	s.sendJSON(conn, map[string]any{"type": "calendar_item_cancelled", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
 }
 func (s *Server) handleRunCalendarItem(conn *websocket.Conn, raw clientMessage) {
 	if s.calendarScheduler == nil {
@@ -74,7 +87,7 @@ func (s *Server) handleRunCalendarItem(conn *websocket.Conn, raw clientMessage) 
 		s.sendCalendarError(conn, raw.RequestID, err)
 		return
 	}
-	s.sendJSON(conn, map[string]any{"type": "calendar_item_running", "request_id": raw.RequestID, "calendar_item": item})
+	s.sendJSON(conn, map[string]any{"type": "calendar_item_running", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
 }
 func (s *Server) sendCalendarError(conn *websocket.Conn, requestID string, err error) {
 	code := "calendar_request_failed"

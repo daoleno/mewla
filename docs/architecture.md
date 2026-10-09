@@ -138,9 +138,19 @@ Terminal WebSocket. Existing daemon uploads are HTTP, while Terminal remains on
 Inside the daemon, each `/ws` client has its own ordered send queue and a single
 writer goroutine. Broadcasts, request replies and watcher events only enqueue,
 so a client that stops reading (a suspended phone, a dead proxy leg) never
-stalls broadcast, the watcher, control-socket writes or session creation. That
-client is closed when one write passes the 30 s deadline or its queue passes
-16 MiB, and it reconnects to fresh snapshots. Terminal output for a client waits
+stalls broadcast, the watcher, control-socket writes or session creation. The
+writer sends each message in 32 KiB chunks and renews the 30 s write deadline
+per chunk, so the deadline measures progress: a slow link that keeps draining
+is never cut off mid-snapshot, while a client that accepts nothing for 30 s or
+lets its queue pass 16 MiB is closed and reconnects to fresh snapshots. JSON
+messages use permessage-deflate when the client offers it.
+
+Connect snapshots stay small as history grows: `calendar_items_snapshot`,
+`calendar_item_changed` and Calendar mutation replies omit run history
+(`get_calendar_item` returns it), `brain_snapshot` carries no scheduled-result
+bodies (they reach Brain through its thread conversation), and
+`work_items_snapshot` lists only calendar Work that is unfinished, linked from
+a Calendar item or tied to a live Session, each with its full body. Terminal output for a client waits
 for room in that client's queue instead, so a busy terminal slows to the
 client's pace. The watcher publishes events through an ordered overflow queue
 and never blocks on its consumer.
