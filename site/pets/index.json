@@ -1,41 +1,251 @@
 {
   "default": "p05",
+  "side": 256,
+  "anchor": [
+    128,
+    232
+  ],
   "clips": {
     "homeless": {
-      "loop": false,
-      "durationMs": 100
+      "frames": 1,
+      "durations": [
+        100
+      ],
+      "loop": false
     },
     "offline": {
-      "loop": true,
-      "durationMs": 1600
+      "frames": 8,
+      "durations": [
+        390,
+        280,
+        370,
+        300,
+        280,
+        350,
+        390,
+        340
+      ],
+      "loop": true
     },
     "waking": {
-      "loop": false,
-      "durationMs": 888
+      "frames": 8,
+      "durations": [
+        620,
+        280,
+        240,
+        200,
+        110,
+        110,
+        170,
+        460
+      ],
+      "loop": false
     },
     "idle": {
-      "loop": true,
-      "durationMs": 1600
+      "frames": 8,
+      "durations": [
+        390,
+        280,
+        370,
+        300,
+        280,
+        350,
+        390,
+        340
+      ],
+      "loop": true
     },
     "working": {
-      "loop": true,
-      "durationMs": 800
+      "frames": 8,
+      "durations": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "loop": true
     },
     "delegating": {
-      "loop": true,
-      "durationMs": 1600
+      "frames": 6,
+      "durations": [
+        460,
+        200,
+        170,
+        240,
+        190,
+        420
+      ],
+      "loop": true
     },
     "attention": {
-      "loop": true,
-      "durationMs": 1000
+      "frames": 6,
+      "durations": [
+        420,
+        160,
+        140,
+        160,
+        180,
+        400
+      ],
+      "loop": true
     },
     "delivered": {
-      "loop": false,
-      "durationMs": 1000
+      "frames": 8,
+      "durations": [
+        300,
+        140,
+        100,
+        90,
+        110,
+        130,
+        160,
+        420
+      ],
+      "loop": false
     },
     "going_back": {
-      "loop": false,
-      "durationMs": 888
+      "frames": 8,
+      "durations": [
+        460,
+        170,
+        110,
+        110,
+        200,
+        240,
+        280,
+        620
+      ],
+      "loop": false
+    },
+    "run": {
+      "frames": 8,
+      "durations": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
+      "loop": true
+    },
+    "stalk": {
+      "frames": 8,
+      "durations": [
+        160,
+        140,
+        160,
+        140,
+        160,
+        140,
+        160,
+        140
+      ],
+      "loop": true
+    },
+    "wiggle": {
+      "frames": 8,
+      "durations": [
+        90,
+        80,
+        90,
+        80,
+        90,
+        80,
+        90,
+        80
+      ],
+      "loop": true
+    },
+    "pounce": {
+      "frames": 8,
+      "durations": [
+        120,
+        90,
+        70,
+        70,
+        70,
+        80,
+        140,
+        260
+      ],
+      "loop": false
+    },
+    "swat": {
+      "frames": 8,
+      "durations": [
+        180,
+        90,
+        60,
+        60,
+        120,
+        90,
+        60,
+        200
+      ],
+      "loop": true
+    },
+    "rear": {
+      "frames": 8,
+      "durations": [
+        140,
+        110,
+        90,
+        90,
+        110,
+        90,
+        110,
+        160
+      ],
+      "loop": false
+    },
+    "jump": {
+      "frames": 8,
+      "durations": [
+        140,
+        90,
+        70,
+        70,
+        70,
+        80,
+        120,
+        200
+      ],
+      "loop": false
+    },
+    "eat": {
+      "frames": 8,
+      "durations": [
+        180,
+        120,
+        140,
+        120,
+        140,
+        120,
+        140,
+        200
+      ],
+      "loop": true
+    },
+    "groom": {
+      "frames": 8,
+      "durations": [
+        220,
+        160,
+        160,
+        180,
+        160,
+        160,
+        180,
+        260
+      ],
+      "loop": true
     }
   },
   "pets": [
