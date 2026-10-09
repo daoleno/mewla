@@ -1,8 +1,8 @@
 # Mewla design language (app)
 
 The app follows the landing page (`site/index.html`, `site/styles.css`,
-`site/sealcat.js`): warm paper, warm ink and one vermilion seal with a cat
-carved in it. This file maps that language onto the app's theme system
+`site/pet.js`): warm paper, warm ink and one vermilion seal with Brain's pet
+asleep in it. This file maps that language onto the app's theme system
 (`app/theme/`, `app/constants/tokens.ts`). It does not define a second one.
 The product is Mewla, and every brand asset is `assets/branding/mewla-*`.
 
@@ -364,28 +364,27 @@ format, that every glyph stays inside the grid, and the cat ears.
 
 ### Brand assets
 
-Every brand asset is the seal: seal-icon.svg's vermilion block with the
-curled paper cat under a crescent moon. `components/mewla/mewlaBrandArt.ts`
-draws them all from `sealCatGeometry.ts`; `bun scripts/render-mewla-brand.ts`
-writes the SVG sources (`assets/branding/source/`) and the PNGs
-(`assets/branding/mewla-*.png`), and `mewlaBrandArt.test.ts` fails when a
-committed file drifts or the config strays from the theme colours.
+Every brand asset is the default pet (`p05`) in the vermilion seal. The art
+is generated (provenance in `docs/third-party-assets.md`) and committed as
+PNGs in `assets/branding/mewla-*`; `mewlaBrandAssets.test.ts` checks their
+sizes, that App Store icons carry no alpha, and that the config points at
+them in the theme's colours.
 
 | Surface | Drawing |
 | --- | --- |
-| iOS icon | The seal is the icon: vermilion full bleed, cat and moon inside 80% |
-| iOS dark / tinted | The seal stamped at 72% on transparent (iOS adds the dark ground) / white seal, cat cut out, on black |
-| Android adaptive | Vermilion background colour; the paper cat and moon fitted to the 66 dp safe circle |
-| Android themed | The cat and crescent alone, knife lines cut through |
+| iOS icon | The pet's face in the seal on paper `#F6F1E8` |
+| iOS dark / tinted | The same on warm ink / a white silhouette for the system tint |
+| Android adaptive | Paper `#F6F1E8` background colour; the seal and face fitted to the safe circle |
+| Android themed | The silhouette, for the system tint |
 | Splash | The seal at 128 pt on paper `#FBFAF7` / ink `#141210` (fits Android 12's 192 dp circle mask) |
-| Notification | The white seal with the cat cut out, tinted vermilion |
-| Favicon | The seal, carved for 48 px |
-| Drawer and About | `MewlaMark`, the same seal in react-native-svg |
+| Notification | The white silhouette, tinted vermilion |
+| Favicon | The seal and face at 48 px |
+| Drawer and About | `MewlaMark`, `assets/branding/mewla-mark.webp` |
 
-The mark is the logo, not Brain: it never moves or changes with state. The
-drawer, the About row and Onboarding's brand row all show `MewlaMark`. Small
-inline waits (composer send, upload chip, sheets) use the platform activity
-indicator in ink, never a brand mark.
+The mark is the logo, not Brain: it never moves, changes with state or
+follows the chosen pet. The drawer, the About row and Onboarding's brand row
+all show `MewlaMark`. Small inline waits (composer send, upload chip, sheets)
+use the platform activity indicator in ink, never a brand mark.
 
 ## Connecting a service
 
@@ -458,33 +457,41 @@ ANSI colours are warm-tuned for TUIs and tested in `terminalThemes.test.ts`:
 Both renderers (xterm.js on web, ghostty on native) read the same palette, and
 chat code, inline code and git diffs inherit it.
 
-## The cat
+## The pet
 
-The geometry has one source: `site/sealcat.js` and `site/seal-icon.svg`.
-`components/mewla/sealCatGeometry.ts` copies its paths, poses and rig as pure
-data, and `sealCatGeometry.test.ts` reads the landing files and fails on any
-drift. Rendering uses react-native-svg, which is already a dependency, so no
-Lottie or new package is needed. The landing's ink-paste filters
-(`feTurbulence`) are not ported. The app draws the clean `seal-icon.svg`
-look, with the landing's bolder carving at small sizes.
+Brain is a pet the user picks in Settings → Pet: ten pets, `p05` by default,
+one per device (stored like the theme, since Settings does not sync through
+the daemon). Every pet is a pack of animated WebPs, one clip per Brain state
+plus `going_back`, on one square canvas with a shared ground line, so
+switching state or pet never jumps. `scripts/import-pets.py` re-encodes the
+packs into `assets/pets/<id>/` (the default at 256 px, the rest at 192 px),
+regenerates `components/pets/petPacks.ts` and copies what the landing needs
+into `site/pets/`.
+
+`PetSprite` plays the clip with `expo-image` on Android, iOS and web. Moving
+between the seal and its feet plays the hop first (`petTransition` in
+`components/pets/petModel.ts`): `waking` on the way out, `going_back` on the
+way in. One-shot clips hold their last frame. Motion stops when the screen
+is hidden, the app is in the background or the OS asks for reduced motion;
+native then holds the clip's first frame, while browsers keep playing it.
 
 ### State map
 
-| Product state | Cat | Where | Tap |
+| Product state | Clip | Where | Tap |
 | --- | --- | --- | --- |
-| Brain idle | Curled in the seal, breathing, three z's | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
-| App start, connecting, loading history | In the seal, one eye open, the right ear flicks twice every 3.2 s | App start (`CatSplash`), the Brain chat while it connects or loads history (tail row "Waking up" under the still outline), Sessions loading/connecting | "Still waking up…" |
-| Brain's turn running | Out of the seal, sitting up and kneading, tail swishing | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
-| Work needs your input | Alert, ears up, seal ping | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
-| Delegated Work on Workers | Sitting, dispatch dots | Tail row, "Waiting on 3 Workers" | The status line |
-| Unread result | Loafing with a parcel | Tail row, "Brought 2 things back" | The status line |
-| Offline | Asleep in a greyed seal | Brain status screen, Sessions' offline empty state; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
-| No computer paired | The empty bed (a ghost cat in the seal) | Brain status screen, Sessions, Onboarding | Opens pairing |
-| Paired | Asleep in the seal (moved in) | Onboarding, connected; an empty Work sheet | — |
+| Brain idle | `idle`: asleep in the seal | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
+| App start, connecting, loading history | `waking`: hops out of the seal, then stands | App start (`CatSplash`), the Brain chat while it connects or loads history (tail row "Waking up" under the still outline), Sessions loading/connecting | "Still waking up…" |
+| Brain's turn running | `working`: walking | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
+| Work needs your input | `attention`: peeking over the seal | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
+| Delegated Work on Workers | `delegating`: sitting, tail and blink | Tail row, "Waiting on 3 Workers" | The status line |
+| Unread result | `delivered`: a happy hop | Tail row, "Brought 2 things back" | The status line |
+| Offline | `offline`: asleep in a grey seal | Brain status screen, Sessions' offline empty state; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
+| No computer paired | `homeless`: the empty seal | Brain status screen, Sessions, Onboarding | Opens pairing |
+| Paired | `idle`: asleep in the seal (moved in) | Onboarding, connected; an empty Work sheet | — |
 
 **Tap feedback.** Every tap has a body response (`TappableCat`): a standing
-cat hops 12% of its size and lands on the landing's curve (130 + 220 ms); a
-cat in the seal stirs (a 5% squash). A selection haptic goes with it. The
+pet hops 12% of its size and lands on the landing's curve (130 + 220 ms); a
+pet in the seal stirs (a 5% squash). A selection haptic goes with it. The
 answer replaces the row's text for 4.5 s and is announced to screen readers.
 Under reduced motion only the haptic and the words remain. The cat's poses
 still mean only Brain states; a tap never changes the state.

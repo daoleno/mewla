@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
-import { SealCat } from "./SealCat";
+import { PetSprite } from "../pets/PetSprite";
 
 /**
  * App start, before the first screen can draw: the cat in its seal, one eye
@@ -16,7 +16,7 @@ export function CatSplash() {
       accessibilityRole="progressbar"
       accessibilityLabel="Starting Mewla"
     >
-      <SealCat state="waking" size={96} />
+      <PetSprite state="waking" size={96} />
     </View>
   );
 }

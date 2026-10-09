@@ -27,7 +27,7 @@ import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAct
 import { resolvePrimaryAppBarGeometry } from "../../components/navigation/PrimaryDrawerShell";
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
 import { sessionEmptyCat, sessionEmptyState } from "../../services/sessionEmptyState";
-import { SealCat } from "../../components/mewla/SealCat";
+import { PetSprite } from "../../components/pets/PetSprite";
 import {
   NewSessionButton,
   SESSIONS_COLUMN_MAX_WIDTH,
@@ -779,7 +779,7 @@ export default function InboxScreen() {
             alwaysBounceVertical
             showsVerticalScrollIndicator={false}
           >
-            <EmptyState title="Loading sessions" art={<SealCat state="waking" size={88} />} />
+            <EmptyState title="Loading sessions" art={<PetSprite state="waking" size={88} />} />
           </ScrollView>
         ) : sortedWorkers.length === 0 ? (
           <ScrollView
@@ -790,7 +790,7 @@ export default function InboxScreen() {
           >
             <View style={styles.emptyFill}>
             <EmptyState title={empty.title} icon={empty.icon} busy={empty.busy}
-              art={emptyCat ? <SealCat state={emptyCat} size={104} /> : undefined}
+              art={emptyCat ? <PetSprite state={emptyCat} size={104} /> : undefined}
               detail={primaryIssue?.detail}
               action={empty.action ? {
                 label: creatingServerId ? "Starting..." : empty.label,

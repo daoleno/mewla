@@ -6,7 +6,7 @@ import { ContinuousCorners, TypeScale } from "../../constants/tokens";
 import { chromeTint } from "./composerMaterial";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
 import { useBrainCompanion } from "../mewla/BrainCompanion";
-import { SealCat } from "../mewla/SealCat";
+import { PetSprite } from "../pets/PetSprite";
 import { Icon, type IconName } from "../icons/Icon";
 
 interface InterfaceTimelineEmptyStateProps {
@@ -20,7 +20,7 @@ interface InterfaceTimelineEmptyStateProps {
   actionLabel?: string;
   actionIcon?: IconName;
   onAction?: () => void;
-  /** A loaded, empty conversation: Brain shows its seal cat here. */
+  /** A loaded, empty conversation: Brain's pet sleeps here. */
   conversationEmpty?: boolean;
 }
 
@@ -49,7 +49,7 @@ export function InterfaceTimelineEmptyState({
   return (
     <View style={styles.emptyState} accessibilityLiveRegion="polite">
       {seal ? (
-        <SealCat
+        <PetSprite
           state="idle"
           size={SEAL_SIZE}
           animate={companion.animate}

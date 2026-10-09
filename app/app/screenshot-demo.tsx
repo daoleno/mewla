@@ -101,7 +101,7 @@ import {
   type BrainWorkerRef,
 } from "../components/brain/brainWorkSurface";
 import { BrainStatusState } from "../components/mewla/BrainStatusState";
-import { SealCat } from "../components/mewla/SealCat";
+import { PetSprite } from "../components/pets/PetSprite";
 import { TappableCat } from "../components/mewla/TappableCat";
 import { NewTerminalSheet } from "../components/terminal/NewTerminalSheet";
 import { AccountCard, CatalogView, ServiceHeader } from "../components/plugins/PluginConnectionViews";
@@ -869,13 +869,13 @@ function BrainChatDemo({ empty, running, events, work }: { empty: boolean; runni
 
 const CAT_GALLERY: { state: BrainCatState; title: string; when: string }[] = [
   { state: "idle", title: "Idle", when: "Connected, nothing to do: asleep in the seal" },
-  { state: "waking", title: "Waking", when: "Starting, connecting or loading: one eye open, an ear flicks" },
-  { state: "working", title: "Working", when: "Brain's turn is running: kneading, tail swishing" },
-  { state: "delegating", title: "Delegating", when: "Workers hold delegated Work" },
-  { state: "attention", title: "Needs you", when: "Work is waiting on your input" },
-  { state: "delivered", title: "Delivered", when: "An unread result is waiting" },
-  { state: "offline", title: "Offline", when: "Your computer is unreachable" },
-  { state: "homeless", title: "No home", when: "No computer paired yet" },
+  { state: "waking", title: "Waking", when: "Starting, connecting or loading: hops out of the seal" },
+  { state: "working", title: "Working", when: "Brain's turn is running: on the move" },
+  { state: "delegating", title: "Delegating", when: "Workers hold delegated Work: sitting, watching" },
+  { state: "attention", title: "Needs you", when: "Work is waiting on your input: peeking over the seal" },
+  { state: "delivered", title: "Delivered", when: "An unread result is waiting: a happy hop" },
+  { state: "offline", title: "Offline", when: "Your computer is unreachable: asleep in a grey seal" },
+  { state: "homeless", title: "No home", when: "No computer paired yet: an empty seal" },
 ];
 
 const CAT_TAP_DEMO: Partial<Record<BrainCatState, string>> = {
@@ -917,8 +917,8 @@ function CatGalleryDemo() {
       {CAT_GALLERY.map(({ state, title, when }) => (
         <View key={state} style={[catGalleryStyles.cell, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
           <View style={catGalleryStyles.art}>
-            <SealCat state={state} size={112} animate={still !== "1"} />
-            <SealCat state={state} size={46} animate={still !== "1"} />
+            <PetSprite state={state} size={112} animate={still !== "1"} />
+            <PetSprite state={state} size={46} animate={still !== "1"} />
           </View>
           <Text style={[TypeScale.title, { color: colors.textPrimary }]}>{title}</Text>
           <Text style={[TypeScale.caption, { color: colors.textSecondary }]}>{when}</Text>

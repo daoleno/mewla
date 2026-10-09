@@ -15,7 +15,7 @@ import {
   type BrainWorkSlip,
   type BrainWorkSurface,
 } from "./brainWorkSurface";
-import { SealCat } from "../mewla/SealCat";
+import { PetSprite } from "../pets/PetSprite";
 import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
 import { Icon } from "../icons/Icon";
 
@@ -68,7 +68,7 @@ export function BrainWorkList({
   if (surface.slips.length === 0) {
     return (
       <View style={emptyCat ? styles.emptyWithCat : undefined}>
-        {emptyCat ? <SealCat state="idle" size={72} animate={animate} /> : null}
+        {emptyCat ? <PetSprite state="idle" size={72} animate={animate} /> : null}
         <Text style={[styles.empty, emptyCat ? styles.emptyCentered : null]}>
           Nothing out right now. Work Brain hands off shows up here.
         </Text>

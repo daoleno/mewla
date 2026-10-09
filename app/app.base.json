@@ -32,7 +32,7 @@
     "android": {
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#C8372B",
+        "backgroundColor": "#F6F1E8",
         "foregroundImage": "./assets/branding/mewla-adaptive-foreground.png",
         "monochromeImage": "./assets/branding/mewla-adaptive-monochrome.png"
       },
