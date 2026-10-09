@@ -72,8 +72,12 @@ func productionUploadLimits() uploadLimits {
 	}
 }
 
+// upgrader negotiates permessage-deflate when the client offers it: snapshots
+// and transcripts are JSON and markdown, which shrink several times over a
+// phone or proxy link.
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin:       func(r *http.Request) bool { return true },
+	EnableCompression: true,
 }
 
 type notificationPusher interface {
