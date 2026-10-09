@@ -49,22 +49,22 @@
     {
       "id": "p02",
       "name": {
-        "en": "Bun",
-        "zh": "包子"
+        "en": "Miso",
+        "zh": "味噌"
       }
     },
     {
       "id": "p03",
       "name": {
-        "en": "Soot",
-        "zh": "煤球"
+        "en": "Pip",
+        "zh": "皮皮"
       }
     },
     {
       "id": "p04",
       "name": {
-        "en": "Ember",
-        "zh": "火苗"
+        "en": "Nori",
+        "zh": "诺里"
       }
     },
     {
@@ -77,36 +77,36 @@
     {
       "id": "p06",
       "name": {
-        "en": "Ginger",
-        "zh": "姜姜"
+        "en": "Kiko",
+        "zh": "奇可"
       }
     },
     {
       "id": "p07",
       "name": {
-        "en": "Biscuit",
-        "zh": "饼干"
+        "en": "Lumi",
+        "zh": "露米"
       }
     },
     {
       "id": "p08",
       "name": {
-        "en": "Ink",
-        "zh": "墨墨"
+        "en": "Poko",
+        "zh": "波可"
       }
     },
     {
       "id": "p09",
       "name": {
-        "en": "Peach",
-        "zh": "桃子"
+        "en": "Tama",
+        "zh": "塔玛"
       }
     },
     {
       "id": "p10",
       "name": {
-        "en": "Stripe",
-        "zh": "条条"
+        "en": "Sumi",
+        "zh": "苏米"
       }
     }
   ]
