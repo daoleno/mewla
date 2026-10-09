@@ -5,7 +5,9 @@ A pack is a directory of animated WebPs with a meta.json (see
 docs/third-party-assets.md). This re-encodes every action to one canvas size
 so the app bundle stays small, writes app/assets/pets/<id>/, regenerates
 app/components/pets/petPacks.ts with static requires, and copies what the
-landing needs into site/pets/.
+landing needs into site/pets/: sprite strips of the default pet's clips
+(state and play clips, from the pack's registered frames/) and a small loop
+of every pet for the strip.
 
 Usage:
   python3 scripts/import-pets.py [PETS_DIR]
@@ -39,6 +41,10 @@ APP_QUALITY = 78
 PORTRAIT_SIDE = 256
 # The landing's strip pets are small; its hero plays the default at full size.
 SITE_STRIP_SIDE = 160
+# The landing draws the default pet itself, frame by frame, from one sprite
+# strip per clip (state clips and the play clips for its games).
+SITE_SPRITE_SIDE = 256
+SITE_SPRITE_QUALITY = 80
 
 
 def frames_of(path):
@@ -127,21 +133,38 @@ def write_catalog(pets):
     CATALOG.write_text("\n".join(lines))
 
 
-def write_site(pets):
-    """The landing plays the default pet's clips and shows every pet in a strip."""
+def write_site(source, pets):
+    """The landing draws the default pet from sprite strips and shows every pet in a strip."""
     shutil.rmtree(SITE, ignore_errors=True)
     default = next(pet for pet in pets if pet["default"])
-    for name in default["actions"]:
-        target = SITE / default["id"] / f"{name}.webp"
+    meta = json.loads((source / default["id"] / "meta.json").read_text())
+    clips = {}
+    for name, spec in meta["actions"].items():
+        frames = [Image.open(path).convert("RGBA")
+                  for path in sorted((source / default["id"] / "frames" / name).glob("*.png"))]
+        if not frames:
+            raise SystemExit(f"{default['id']}/{name}: no frames/ in the pack; rebuild it")
+        side = SITE_SPRITE_SIDE
+        strip = Image.new("RGBA", (side * len(frames), side))
+        for i, frame in enumerate(frames):
+            strip.alpha_composite(frame.resize((side, side), Image.Resampling.LANCZOS), (side * i, 0))
+        target = SITE / default["id"] / "sprites" / f"{name}.webp"
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(APP_ASSETS / default["id"] / f"{name}.webp", target)
+        strip.save(target, quality=SITE_SPRITE_QUALITY, method=6, exact=True)
+        clips[name] = {"frames": len(frames), "durations": spec.get("durations") or [100] * len(frames),
+                       "loop": bool(spec.get("loop", True))}
+    # Without scripts (or with reduced motion) the hero shows these as plain images.
+    for name in ("idle", "delegating"):
+        shutil.copyfile(APP_ASSETS / default["id"] / f"{name}.webp", SITE / default["id"] / f"{name}.webp")
     for pet in pets:
         frames, durations, _ = frames_of(APP_ASSETS / pet["id"] / "delegating.webp")
         encode(frames, durations, True, SITE_STRIP_SIDE, SITE / pet["id"] / "delegating-small.webp", quality=75)
         shutil.copyfile(APP_ASSETS / pet["id"] / "portrait.webp", SITE / pet["id"] / "portrait.webp")
     index = {
         "default": default["id"],
-        "clips": default["actions"],
+        "side": SITE_SPRITE_SIDE,
+        "anchor": [128, 232],
+        "clips": clips,
         "pets": [{"id": pet["id"], "name": pet["name"]} for pet in pets],
     }
     (SITE / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n")
@@ -158,7 +181,7 @@ def main():
         if stale.name not in ids:
             shutil.rmtree(stale)
     write_catalog(pets)
-    write_site(pets)
+    write_site(source, pets)
     total = sum(f.stat().st_size for f in APP_ASSETS.rglob("*.webp"))
     print(f"Imported {len(pets)} pets: app/assets/pets {total / 1e6:.2f} MB")
 

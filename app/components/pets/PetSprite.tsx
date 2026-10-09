@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AppState, View, type StyleProp, type ViewStyle } from "react-native";
+import { AppState, Platform, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from "react-native";
+import { Asset } from "expo-asset";
 import { Image } from "expo-image";
 import { useReducedMotion } from "react-native-reanimated";
 import { useThemeContext } from "../../theme";
@@ -27,7 +28,8 @@ export function PetSprite({ state, size, animate = true, petId, style }: PetSpri
   const chosen = useThemeContext().petId;
   const pack = findPetPack(PET_PACKS, petId ?? chosen, DEFAULT_PET_ID);
   const moving = usePetMotion(animate);
-  const clip = pack.clips[usePetClip(pack, state, moving)];
+  const shown = usePetClip(pack, state, moving);
+  const clip = pack.clips[shown.name];
   return (
     <View
       style={[{ width: size, height: size, pointerEvents: "none" }, style]}
@@ -35,7 +37,7 @@ export function PetSprite({ state, size, animate = true, petId, style }: PetSpri
       importantForAccessibility="no-hide-descendants"
     >
       <Image
-        source={clip.source}
+        source={clip.loop ? clip.source : freshPlay(clip.source, shown.play)}
         autoplay={moving}
         contentFit="contain"
         style={{ width: size, height: size }}
@@ -44,20 +46,30 @@ export function PetSprite({ state, size, animate = true, petId, style }: PetSpri
   );
 }
 
-/** The clip on screen: the state's own, after any hop has played through once. */
-function usePetClip(pack: PetPack, state: BrainCatState, moving: boolean): PetClipName {
-  const [shown, setShown] = useState<PetClipName>(state);
+/**
+ * A browser keeps one animation per image URL, so a one-shot shown again would
+ * hold its last frame. On web each play of a one-shot gets its own URL.
+ */
+function freshPlay(source: ImageSourcePropType, play: number): ImageSourcePropType {
+  if (Platform.OS !== "web") return source;
+  return { uri: `${Asset.fromModule(source as number).uri}#${play}` };
+}
+
+/** The clip on screen, after any hop has played through once; play counts every change. */
+function usePetClip(pack: PetPack, state: BrainCatState, moving: boolean): { name: PetClipName; play: number } {
+  const [shown, setShown] = useState<{ name: PetClipName; play: number }>({ name: state, play: 0 });
   const settled = useRef(state);
   useEffect(() => {
+    const show = (name: PetClipName) => setShown((current) => ({ name, play: current.play + 1 }));
     const from = settled.current;
     settled.current = state;
     const hop = moving ? petTransition(from, state) : null;
     if (!hop) {
-      setShown(state);
+      show(state);
       return;
     }
-    setShown(hop);
-    const timer = setTimeout(() => setShown(state), pack.clips[hop].durationMs);
+    show(hop);
+    const timer = setTimeout(() => show(state), pack.clips[hop].durationMs);
     return () => clearTimeout(timer);
   }, [moving, pack, state]);
   return shown;
