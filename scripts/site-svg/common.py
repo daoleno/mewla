@@ -3,10 +3,10 @@
 # script, one <style>. Colours and shapes follow app/DESIGN.md (Seal & Slip):
 # paper and ink, vermilion only for the seal, Send and "Needs you", and one
 # glyph per Work state.
-import json
+import base64
+import io
 import os
 import re
-import subprocess
 from html import escape
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -127,36 +127,43 @@ class Svg:
         return head + "".join(body) + "".join(self.out) + "</svg>\n"
 
 
-# --- The seal and the cat -------------------------------------------------
+# --- The mark and the pet ---------------------------------------------------
+# Raster art (generated, see docs/third-party-assets.md), embedded at 2x.
 
-def _seal_inner():
-    with open(os.path.join(ROOT, "site", "seal-icon.svg")) as f:
-        src = f.read()
-    return re.sub(r"^.*?<svg[^>]*>|</svg>\s*$", "", src, flags=re.S).strip()
+def _png_uri(path, width, frame=0):
+    from PIL import Image  # noqa: PLC0415
 
-
-SEAL_INNER = _seal_inner()
-_CATS = None
-
-
-def cats():
-    """Standing cat poses drawn from the app's geometry (cat.ts)."""
-    global _CATS
-    if _CATS is None:
-        out = subprocess.run(["bun", os.path.join(HERE, "cat.ts")], check=True, capture_output=True, text=True, cwd=ROOT)
-        _CATS = json.loads(out.stdout)
-    return _CATS
+    with Image.open(path) as image:
+        image.seek(frame)
+        image.load()
+        still = image.convert("RGBA")
+    still = still.resize((round(width * 2), round(width * 2 * still.height / still.width)), Image.Resampling.LANCZOS)
+    buffer = io.BytesIO()
+    still.save(buffer, format="PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
 def seal(s, x, y, size):
-    """The brand mark (site/seal-icon.svg), size px square."""
-    s.add(f'<svg x="{x:g}" y="{y:g}" width="{size:g}" height="{size:g}" viewBox="0 0 100 100">{SEAL_INNER}</svg>')
+    """The brand mark (site/mark.png), size px square."""
+    uri = _png_uri(os.path.join(ROOT, "site", "mark.png"), size)
+    s.add(f'<image x="{x:g}" y="{y:g}" width="{size:g}" height="{size:g}" href="{uri}"/>')
 
 
-def cat(s, name, x, y, width):
-    """A standing cat whose feet rest on y, centred on x. Crop as SealCat.tsx."""
-    h = width * 84 / 110
-    s.add(f'<svg x="{x - width / 2:g}" y="{y - h:g}" width="{width:g}" height="{h:g}" viewBox="-58 -80 110 84">{cats()[name]}</svg>')
+# The default pet's canvas: square, feet on this line of 256.
+PET_GROUND = 232 / 256
+
+
+def pet(s, clip, x, y, width, frame=-1):
+    """The default pet in one frame of a clip, feet on y, centred on x."""
+    path = os.path.join(ROOT, "app", "assets", "pets", "p05", f"{clip}.webp")
+    if frame < 0:
+        from PIL import Image  # noqa: PLC0415
+
+        with Image.open(path) as image:
+            frame = getattr(image, "n_frames", 1) + frame
+    uri = _png_uri(path, width, frame)
+    top = y - width * PET_GROUND
+    s.add(f'<image x="{x - width / 2:g}" y="{top:g}" width="{width:g}" height="{width:g}" href="{uri}"/>')
 
 
 # --- Status marks (components/ui/StatusMark.tsx) ---------------------------
@@ -225,7 +232,7 @@ def slip(s, x, y, w, meta, title, line=None, kind="ready", h=None, perch=False, 
     if line:
         s.text(x + 18, y + 80, line, size=14, fill="soft")
     if perch:
-        cat(s, "alert", x + w - 46, y + 1, 60)
+        pet(s, "attention", x + w - 50, y + 6, 84)
     return h
 
 
