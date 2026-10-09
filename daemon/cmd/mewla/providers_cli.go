@@ -44,22 +44,23 @@ func runProvidersImageModel(args []string, stderr io.Writer) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		action, args = args[0], args[1:]
 	}
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseInterleaved(fs, args)
+	if err != nil {
 		return err
 	}
 	req := control.Request{Type: "provider_list"}
 	switch action {
 	case "show":
-		if fs.NArg() != 0 {
+		if len(positional) != 0 {
 			return fmt.Errorf("usage: mewla providers image-model show")
 		}
 	case "set":
-		if fs.NArg() != 1 || strings.TrimSpace(fs.Arg(0)) == "" {
+		if len(positional) != 1 || strings.TrimSpace(positional[0]) == "" {
 			return fmt.Errorf("usage: mewla providers image-model set <model> [--connection <id>]")
 		}
-		req = control.Request{Type: "provider_set_image_model", ConnectionID: connectionID, ModelID: fs.Arg(0)}
+		req = control.Request{Type: "provider_set_image_model", ConnectionID: connectionID, ModelID: positional[0]}
 	case "clear":
-		if fs.NArg() != 0 {
+		if len(positional) != 0 {
 			return fmt.Errorf("usage: mewla providers image-model clear [--connection <id>]")
 		}
 		req = control.Request{Type: "provider_set_image_model", ConnectionID: connectionID}
@@ -77,6 +78,22 @@ func runProvidersImageModel(args []string, stderr io.Writer) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(codexImageModels(*resp.Providers))
+}
+
+// parseInterleaved parses flags given before or after positional arguments
+// (flag.Parse alone stops at the first positional one).
+func parseInterleaved(fs *flag.FlagSet, args []string) ([]string, error) {
+	positional := []string{}
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if fs.NArg() == 0 {
+			return positional, nil
+		}
+		positional = append(positional, fs.Arg(0))
+		args = fs.Args()[1:]
+	}
 }
 
 type codexImageModelRow struct {
