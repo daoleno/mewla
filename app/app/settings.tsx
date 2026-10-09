@@ -17,7 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   SafeAreaView,
@@ -89,6 +89,7 @@ import {
 } from "../components/ui";
 import type { ActionMenuItem } from "../components/ui/ActionMenu";
 import { MewlaMark } from "../components/mewla/MewlaMark";
+import { PetPicker } from "../components/settings/PetPicker";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
 import { RisingSheet } from "../components/ui/RisingSheet";
@@ -115,6 +116,7 @@ const THEME_CHOICES = [
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const screenFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const agents = useWorkerList();
   const {
@@ -668,6 +670,9 @@ export default function SettingsScreen() {
             onChange={(value) => void setPreference(value)}
             style={styles.appearance}
           />
+
+          <SettingsSectionHeader>Pet</SettingsSectionHeader>
+          <PetPicker animate={screenFocused} />
 
           <SettingsSectionHeader>About</SettingsSectionHeader>
           <ListSection>
