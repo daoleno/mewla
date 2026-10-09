@@ -137,6 +137,8 @@ func run(args []string, stderr io.Writer) error {
 			return runBrowserCommand(args[1:], stderr)
 		case "connections":
 			return runConnectionsCommand(args[1:], stderr)
+		case "providers":
+			return runProvidersCommand(args[1:], stderr)
 		case "telegram":
 			return runTelegramCommand(args[1:], stderr)
 		case "devices":
@@ -2053,6 +2055,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 		fmt.Fprintln(stderr, "  update     Verify and install the latest Mewla release")
 		fmt.Fprintln(stderr, "  worker     List, spawn, inspect, message, progress, and close Mewla Workers")
 		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
+		fmt.Fprintln(stderr, "  providers  Set the image model behind Codex image_gen")
 		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
 		fmt.Fprintln(stderr, "  address    Add, remove, or list daemon entry points")
 	}

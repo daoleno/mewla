@@ -262,6 +262,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleProviderSwitch(req)
 	case "provider_set_models":
 		return a.handleProviderSetModels(req)
+	case "provider_set_image_model":
+		return a.handleProviderSetImageModel(req)
 	case "provider_discover":
 		return a.handleProviderDiscover(req)
 	case "thread_runtime_get":
@@ -1891,6 +1893,17 @@ func (a *controlApp) handleProviderSetModels(req control.Request) control.Respon
 		response.Confirmation = "Model support updated; persistence was applied but directory durability is uncertain."
 	}
 	return response
+}
+
+// handleProviderSetImageModel sets (model_id) or clears (empty model_id) the
+// image_model of a Codex connection; an empty connection_id means the selected
+// Codex connection.
+func (a *controlApp) handleProviderSetImageModel(req control.Request) control.Response {
+	if a == nil || a.profiles == nil {
+		return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
+	}
+	proj, err := a.profiles.SetProviderImageModel(req.ConnectionID, req.ModelID)
+	return a.providersMutationResponse(proj, err)
 }
 
 func (a *controlApp) handleProviderDiscover(req control.Request) control.Response {

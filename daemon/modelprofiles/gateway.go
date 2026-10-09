@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -54,6 +55,9 @@ type GatewayUpstream struct {
 	AuthMode      string
 	CredentialEnv string
 	CredentialRef string
+	// ImageModel replaces the model of Codex image_gen requests; empty
+	// forwards them unchanged.
+	ImageModel string
 }
 
 // GatewayRequestResolver selects a ready Provider from the request model id.
@@ -305,6 +309,7 @@ func normalizeGatewayUpstream(up GatewayUpstream) GatewayUpstream {
 	up.AuthMode = normalizeID(up.AuthMode)
 	up.CredentialEnv = normalizeSpace(up.CredentialEnv)
 	up.CredentialRef = normalizeSpace(up.CredentialRef)
+	up.ImageModel = normalizeSpace(up.ImageModel)
 	return up
 }
 
@@ -323,12 +328,14 @@ func GatewayUpstreamFromProfile(profile Profile) GatewayUpstream {
 		AuthMode:      normalizeID(profile.AuthMode),
 		CredentialEnv: normalizeSpace(profile.CredentialEnv),
 		CredentialRef: ref,
+		ImageModel:    normalizeSpace(profile.ImageModel),
 	}
 }
 
 // ServeHTTP implements the loopback gateway handler. Every /v1/* request is
-// proxied to the selected upstream with the request body preserved exactly;
-// nothing is rewritten (model, effort, and client payload stay byte-identical).
+// proxied to the selected upstream with the request body preserved exactly
+// (model, effort, and client payload stay byte-identical), except the model of
+// Codex image_gen requests when the Codex connection sets image_model.
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if g == nil {
 		writeRouteError(w, http.StatusServiceUnavailable, ErrInvalid)
@@ -462,6 +469,25 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	body := io.Reader(http.NoBody)
 	if bodyBytes != nil {
 		body = bytes.NewReader(bodyBytes)
+	}
+	// A connection's image_model replaces the model Codex's image_gen names
+	// (always gpt-image-2). The splice reads around the buffered body, and
+	// tool endpoints are never retried, so the body is not copied again.
+	if protocol == GatewayProtocolCodexTools && isCodexImageModelPath(req.URL.Path) {
+		contentType := req.Header.Get("Content-Type")
+		if upstream.ImageModel == "" {
+			log.Printf("gateway: codex image %s (%s) model unchanged", req.URL.Path, contentType)
+		} else {
+			splice, spliceErr := imageModelSplice(bodyBytes, req.Header, upstream.ImageModel)
+			if spliceErr != nil {
+				log.Printf("gateway: codex image %s (%s) model rewrite failed: %v", req.URL.Path, contentType, spliceErr)
+				writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+				return
+			}
+			log.Printf("gateway: codex image %s (%s) model %s -> %s", req.URL.Path, contentType, firstNonEmpty(splice.from, "(none)"), upstream.ImageModel)
+			body = splice.reader(bodyBytes)
+			req.ContentLength = splice.length(bodyBytes)
+		}
 	}
 	upReq, err := http.NewRequestWithContext(req.Context(), req.Method, target, body)
 	if err != nil {

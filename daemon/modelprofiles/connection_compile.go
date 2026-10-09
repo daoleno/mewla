@@ -103,6 +103,7 @@ func CompileConnectionTarget(conn Profile, clientOrExecutor, modelOverride, effo
 	target.Client = ""
 	target.CredentialEnv = conn.CredentialEnv
 	target.CredentialRef = conn.CredentialRef
+	target.ImageModel = conn.ImageModel
 	target.ReasoningEffort = effortOverride
 	return target, nil
 }

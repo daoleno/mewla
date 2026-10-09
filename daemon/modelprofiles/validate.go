@@ -58,6 +58,9 @@ func ValidateProviderSlug(slug string) error {
 
 // ValidateProfile checks durable profile fields without reading secret values.
 func ValidateProfile(profile Profile) error {
+	if err := validateImageModel(profile); err != nil {
+		return err
+	}
 	if isAccountConnection(profile) {
 		return validateAccountConnection(profile)
 	}
@@ -214,6 +217,21 @@ func upstreamHostname(raw string) (string, error) {
 }
 
 // ValidateModelID accepts opaque model identifiers including org/model forms.
+// validateImageModel admits image_model only on Codex connections, whose
+// built-in image_gen is the only client of the rewritten endpoints.
+func validateImageModel(profile Profile) error {
+	if profile.ImageModel == "" {
+		return nil
+	}
+	if err := ValidateModelID(profile.ImageModel); err != nil {
+		return fmt.Errorf("%w: image_model: %v", ErrInvalid, err)
+	}
+	if clientFromExecutor(firstNonEmpty(profile.Client, profile.ExecutorID)) != ClientCodex {
+		return fmt.Errorf("%w: image_model is only supported on Codex connections", ErrInvalid)
+	}
+	return nil
+}
+
 func ValidateModelID(model string) error {
 	if strings.TrimSpace(model) == "" {
 		return fmt.Errorf("%w: model is required", ErrInvalid)
@@ -401,6 +419,7 @@ func normalizeProfile(profile Profile) Profile {
 	profile.ClientModel = normalizeSpace(profile.ClientModel)
 	profile.ClientModelProvenance = normalizeID(profile.ClientModelProvenance)
 	profile.Model = normalizeSpace(profile.Model)
+	profile.ImageModel = normalizeSpace(profile.ImageModel)
 	profile.BaseURL = normalizeSpace(profile.BaseURL)
 	profile.AuthMode = normalizeID(profile.AuthMode)
 	if profile.AuthMode == "" {
