@@ -37,6 +37,7 @@ var contentTypes = map[string]string{
 	".svg":  "image/svg+xml",
 	".ttf":  "font/ttf",
 	".wasm": "application/wasm",
+	".webp": "image/webp",
 }
 
 // Embedded returns the bundle compiled into this binary.
