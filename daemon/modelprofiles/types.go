@@ -218,6 +218,11 @@ type Profile struct {
 	// Session activation own model selection. Legacy executor-scoped profiles
 	// may still store a catalog model.
 	Model string `toml:"model,omitempty" json:"model,omitempty"`
+	// ImageModel, on a Codex connection, replaces the model of Codex's built-in
+	// image_gen requests (/v1/images/generations and /v1/images/edits) at the
+	// machine gateway. Codex always names gpt-image-2; empty keeps that request
+	// byte-for-byte.
+	ImageModel string `toml:"image_model,omitempty" json:"image_model,omitempty"`
 	// ReasoningEffort is an ephemeral compile-only carrier for Session effort
 	// activation (same pattern as ModelPlaceholder). It is never durable and
 	// never a connection setting: the Session route owns the override and

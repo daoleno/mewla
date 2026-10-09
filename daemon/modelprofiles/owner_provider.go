@@ -473,6 +473,7 @@ func providerConnectionFromProfile(profile Profile, ready bool) ProviderConnecti
 		Clients:         clients,
 		CredentialReady: ready,
 		Advanced:        advanced,
+		ImageModel:      profile.ImageModel,
 	}
 	if advanced {
 		conn.BaseURL = profile.BaseURL
@@ -529,6 +530,8 @@ func (o *Owner) UpsertProviderConnection(in ProviderConnectionInput, apiKey stri
 			// Preserve the active credential slot across edits that do not
 			// rotate the key; only a staged-ref commit may change it.
 			profile.CredentialRef = previous.CredentialRef
+			// image_model is set outside the connection editor.
+			profile.ImageModel = previous.ImageModel
 		}
 
 		stagedRef := ""
@@ -911,6 +914,45 @@ func (o *Owner) SetProviderModelSupport(connectionID string, enabledIDs []string
 	o.mu.Unlock()
 	proj, _ := o.ProjectProviders()
 	return proj, persist, nil
+}
+
+// SetProviderImageModel sets or clears (empty model) the image_model of one
+// Codex connection; an empty connectionID means the selected Codex
+// connection. The gateway reads it per request, so the next image_gen call
+// uses it without a Codex restart.
+func (o *Owner) SetProviderImageModel(connectionID, model string) (ProviderCatalogProjection, error) {
+	if o == nil || !o.started || o.store == nil {
+		return ProviderCatalogProjection{}, fmt.Errorf("%w: owner not started", ErrInvalid)
+	}
+	o.mu.Lock()
+	applyErr := func() error {
+		if err := o.ensureProviderSwitchJournalClearedLocked(); err != nil {
+			return fmt.Errorf("%w: resolve prior provider switch: %v", ErrInvalid, err)
+		}
+		id := normalizeID(connectionID)
+		if id == "" {
+			id = normalizeID(o.store.DefaultProfileID(ExecutorCodex))
+			if id == "" {
+				return fmt.Errorf("%w: no Codex connection selected", ErrNotFound)
+			}
+		}
+		profile, err := o.store.Get(id)
+		if err != nil {
+			return err
+		}
+		profile.ImageModel = normalizeSpace(model)
+		_, err = o.store.Update(profile, o.store.Revision())
+		return err
+	}()
+	o.mu.Unlock()
+	if applyErr != nil && !errors.Is(applyErr, ErrPersistDirSync) {
+		return ProviderCatalogProjection{}, applyErr
+	}
+	proj, perr := o.ProjectProviders()
+	if perr != nil {
+		return ProviderCatalogProjection{}, errors.Join(applyErr, perr)
+	}
+	return proj, applyErr
 }
 
 // SetCredentialStore installs Mewla's private credential store (or a test fake).

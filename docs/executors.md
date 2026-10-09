@@ -150,6 +150,16 @@ ChatGPT plan, even when requests go through the gateway. To offer it anyway, add
 `-c cli_auth_credentials_store="ephemeral"` to the Codex executor command. That
 launch then ignores the stored sign-in and leaves the file in place.
 
+Codex always asks `image_gen` for `gpt-image-2`. To use another image model, set
+`image_model` on the Codex connection:
+`mewla providers image-model set gpt-image-2.5-sunburst` (selected connection;
+`--connection <id>` for another), `mewla providers image-model show`, and
+`mewla providers image-model clear`. The gateway then replaces the model on
+`/v1/images/generations` and `/v1/images/edits` (JSON or multipart bodies) and
+leaves `/v1/alpha/search` alone. The next image call uses the new setting, with
+no Codex restart. Without it, image requests pass through unchanged. The
+setting is stored as `image_model` in `model-profiles.toml`.
+
 While the daemon is stopped, the gateway refuses connections. To use a CLI
 without Mewla, restore its backup or remove those two Claude settings.
 
