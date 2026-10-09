@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -119,6 +120,55 @@ func TestOutboxDropsAClientThatStopsReading(t *testing.T) {
 			t.Fatal("writer kept a client that stopped reading")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// A slow link that keeps draining is not dropped, even when one message takes
+// many write timeouts to deliver: the deadline measures progress.
+func TestOutboxKeepsASlowButProgressingClient(t *testing.T) {
+	previousTimeout, previousLimit := wsWriteTimeout, wsOutboxLimit
+	wsWriteTimeout, wsOutboxLimit = 250*time.Millisecond, 64<<20
+	defer func() { wsWriteTimeout, wsOutboxLimit = previousTimeout, previousLimit }()
+
+	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
+	if tcp, ok := serverConn.NetConn().(*net.TCPConn); ok {
+		_ = tcp.SetWriteBuffer(4096)
+	}
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+
+	// About 4 MB/s against a 250 ms deadline: the message takes several
+	// deadlines, each 32 KiB chunk a few milliseconds.
+	payload := []byte(strings.Repeat("s", 3<<20))
+	if err := outbox.enqueue(websocket.BinaryMessage, payload, false); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	_, reader, err := client.NextReader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 16<<10)
+	total := 0
+	for {
+		n, err := reader.Read(buf)
+		total += n
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("slow reader dropped after %d of %d bytes in %v: %v", total, len(payload), time.Since(started), err)
+		}
+		time.Sleep(4 * time.Millisecond)
+	}
+	if total != len(payload) {
+		t.Fatalf("received %d bytes, want %d", total, len(payload))
+	}
+	if elapsed := time.Since(started); elapsed < 2*wsWriteTimeout {
+		t.Fatalf("delivery took %v; the reader was not slow enough to exercise the deadline", elapsed)
+	}
+	if err := outbox.enqueue(websocket.TextMessage, []byte("after"), false); err != nil {
+		t.Fatalf("slow client was dropped: %v", err)
 	}
 }
 

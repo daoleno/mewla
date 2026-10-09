@@ -10,10 +10,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// wsWriteTimeout bounds one message to one client. A client that stops
-// reading (a suspended phone, a dead proxy leg) fails its own writer within
-// this deadline and is disconnected; nobody else waits on it.
+// wsWriteTimeout bounds how long one client may go without accepting the next
+// write chunk. A client that stops reading (a suspended phone, a dead proxy
+// leg) fails its own writer within this deadline and is disconnected; nobody
+// else waits on it. A slow link that keeps draining is never cut off mid
+// message, however large the message.
 var wsWriteTimeout = 30 * time.Second
+
+// wsWriteChunk is the progress unit for wsWriteTimeout: each chunk of a
+// message gets a fresh deadline.
+var wsWriteChunk = 32 << 10
 
 // wsOutboxLimit bounds the bytes queued for one client. A client this far
 // behind is closed and reconnects to a fresh snapshot. Producers that wait for
@@ -89,8 +95,7 @@ func (o *clientOutbox) run() {
 		o.mu.Unlock()
 
 		for _, msg := range batch {
-			_ = o.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-			err := o.conn.WriteMessage(msg.messageType, msg.data)
+			err := writeWithProgressDeadline(o.conn, msg)
 			o.mu.Lock()
 			if err != nil {
 				o.failLocked(err)
@@ -104,6 +109,34 @@ func (o *clientOutbox) run() {
 			}
 		}
 	}
+}
+
+// writeWithProgressDeadline writes one message in chunks and renews the write
+// deadline before each, so the deadline measures progress rather than the
+// time a whole message takes on a slow link.
+// Only JSON text is compressed when the client negotiated permessage-deflate;
+// terminal bytes and browser frames are binary and gain little.
+func writeWithProgressDeadline(conn *websocket.Conn, msg outboundMessage) error {
+	conn.EnableWriteCompression(msg.messageType == websocket.TextMessage)
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+	if len(msg.data) <= wsWriteChunk {
+		return conn.WriteMessage(msg.messageType, msg.data)
+	}
+	w, err := conn.NextWriter(msg.messageType)
+	if err != nil {
+		return err
+	}
+	for data := msg.data; len(data) > 0; {
+		n := min(len(data), wsWriteChunk)
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+		if _, err := w.Write(data[:n]); err != nil {
+			_ = w.Close()
+			return err
+		}
+		data = data[n:]
+	}
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+	return w.Close()
 }
 
 // close stops the writer and wakes waiting producers. Detach owns closing the
