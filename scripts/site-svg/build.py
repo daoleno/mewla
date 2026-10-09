@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Writes the documentation drawings to docs/assets/ (README and docs pages).
-# Run from anywhere: python3 scripts/site-svg/build.py  (needs bun for the cat)
+# Run from anywhere: python3 scripts/site-svg/build.py  (needs Pillow for the pet)
 import os
 import sys
 
