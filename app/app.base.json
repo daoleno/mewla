@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mewla",
     "slug": "mewla",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "orientation": "portrait",
     "icon": "./assets/branding/mewla-icon.png",
     "userInterfaceStyle": "automatic",
@@ -37,7 +37,7 @@
         "monochromeImage": "./assets/branding/mewla-adaptive-monochrome.png"
       },
       "package": "com.daoleno.mewla",
-      "versionCode": 45,
+      "versionCode": 46,
       "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "permissions": ["android.permission.CAMERA"]
     },
