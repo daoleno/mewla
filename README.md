@@ -5,7 +5,7 @@
 <h1 align="center">Mewla</h1>
 
 <p align="center">
-  <strong>One person. A whole team.</strong><br>
+  <strong>Naps all day. Ships all night.</strong><br>
   Tell Brain the goal. It leads a team of coding agents on your own computer, and calls you only when it matters.
 </p>
 

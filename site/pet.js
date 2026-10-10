@@ -24,6 +24,14 @@ const STRIDE = { walk: 12, run: 17, stalk: 5 };
 const REACH_PAT = [0.3, -0.31];
 // The idle row's frame with its eyes shut: purring. Page px per ms² for a drop.
 const PURR = 3, GRAVITY = 0.0026;
+// Room the home canvas keeps around the seal for the hops' zoom (at least any clip's pad).
+const HOME_PAD = 112;
+// A clip a pet has no drawing for stands in with the first of these it has.
+const SUB = {
+  walk: ['run', 'working'], run: ['walk', 'working'], stalk: ['walk', 'run'], wiggle: ['delegating'],
+  pounce: ['jump', 'delivered'], swat: ['wave', 'attention'], rear: ['jump', 'delivered'], jump: ['delivered'],
+  eat: ['groom', 'delegating'], groom: ['delegating'], wave: ['attention', 'delivered'],
+};
 // Canvas px a gait lifts at its passing frames, less what the drawings bob.
 const BOB = 4;
 // ms: the pause on a front-facing frame before a turn, and the settle into and
@@ -33,49 +41,72 @@ const TURN = 150, SETTLE = 90;
 export async function startPet(homeImg, strip) {
   const index = await (await fetch(`${ROOT}index.json`)).json();
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  fillStrip(strip, index, reduce);
-  if (reduce) return null;
+  const pets = Object.fromEntries(index.pets.map((p) => [p.id, p]));
+  let petId = pets[saved()] ? saved() : index.default;
+  // the strip picks the pet; without motion the hero still shows the one you picked
+  const pickers = fillStrip(strip, index, reduce, (id) => api ? api.switchTo(id) : still(id));
+  const still = (id) => { petId = id; save(id); homeImg.src = `${ROOT}${id}/idle.webp`; pickers.mark(id); };
+  let api = null;
+  pickers.mark(petId);
+  if (reduce) { if (petId !== index.default) still(petId); return null; }
 
   const [ax, ay] = index.anchor;
-  const clips = {};
-  const load = (name) => clips[name] ??= (async () => {
-    const spec = index.clips[name];
+  // every pet's clips, decoded on first use; ready holds the shown pet's, a
+  // clip it hasn't drawn standing in with the nearest one it has (SUB)
+  const loads = {}, sets = {};
+  const load = (id, name) => (loads[id] ??= {})[name] ??= (async () => {
+    const spec = pets[id].clips[name];
     const img = new Image();
-    img.src = `${ROOT}${index.default}/sprites/${name}.webp`;
+    img.src = `${ROOT}${id}/sprites/${name}.webp`;
     await img.decode();
     const ends = [];
     spec.durations.reduce((t, d) => (ends.push(t + d), t + d), 0);
-    return { ...spec, name, img, ends, total: ends[ends.length - 1], gait: spec.contact && gaitOf(name, spec) };
+    return { pad: 0, ...spec, name, img, ends, total: ends[ends.length - 1], gait: spec.contact && gaitOf(name, spec) };
   })();
-  const ready = {};
-  const need = async (name) => (ready[name] = await load(name));
-  await Promise.all(['idle', 'waking', 'delegating', 'delivered', 'going_back', 'homeless'].map(need));
-  // the rest decode in the background; until then the current clip stays up
-  for (const name of Object.keys(index.clips)) need(name).catch(() => {});
+  const own = (id, name) => [name, ...(SUB[name] ?? [])].find((n) => pets[id].clips[n]);
+  async function needOf(id, name) {
+    const set = sets[id] ??= {};
+    const from = own(id, name);
+    if (from) set[name] = await load(id, from);
+    return set[name];
+  }
+  const HOME_CLIPS = ['idle', 'waking', 'delegating', 'delivered', 'going_back', 'homeless'];
+  async function loadPet(id) {
+    await Promise.all(HOME_CLIPS.map((name) => needOf(id, name)));
+    // the rest decode in the background; until then the current clip stays up
+    for (const name of new Set([...Object.keys(pets[id].clips), ...Object.keys(SUB)])) needOf(id, name).catch(() => {});
+    return sets[id];
+  }
+  let ready = await loadPet(petId);
+  const need = (name) => needOf(petId, name);
 
-  // ---- drawing: a sprite view is a 256 px canvas scaled into place --------------
-  function view(canvas) {
-    canvas.width = canvas.height = SIDE;
+  // ---- drawing: a sprite view is a canvas scaled into place, the 256 px pet
+  // square inset by pad (the home view keeps room for the hops' zoom)
+  function view(canvas, pad = 0) {
+    const size = SIDE + 2 * pad;
+    canvas.width = canvas.height = size;
     const ctx = canvas.getContext('2d');
-    const v = { canvas, clip: null, frame: 0, flip: false, fade: null, alpha: 1 };
+    const v = { canvas, pad, size, clip: null, frame: 0, flip: false, fade: null, alpha: 1 };
     v.draw = (now) => {
-      ctx.clearRect(0, 0, SIDE, SIDE);
-      paint(ctx, v.clip, v.frame, v.flip, v.alpha);
+      ctx.clearRect(0, 0, size, size);
+      paint(ctx, v, v.clip, v.frame, v.flip, v.alpha);
       // the clip it left fades out over the new one (the seal behind a hop)
       if (v.fade) {
         const u = (now - v.fade.t0) / 260;
         if (u >= 1) v.fade = null;
-        else paint(ctx, v.fade.clip, v.fade.frame, v.fade.flip, 1 - u);
+        else paint(ctx, v, v.fade.clip, v.fade.frame, v.fade.flip, 1 - u);
       }
     };
     return v;
   }
-  function paint(ctx, clip, frame, flip, alpha) {
+  // a clip's cell is 256 px plus its own pad (a hop drawn whole on a wider canvas)
+  function paint(ctx, v, clip, frame, flip, alpha) {
     if (!clip) return;
+    const cell = SIDE + 2 * clip.pad, at = v.pad - clip.pad;
     ctx.save();
     ctx.globalAlpha = alpha;
-    if (flip) { ctx.translate(SIDE, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(clip.img, frame * SIDE, 0, SIDE, SIDE, 0, 0, SIDE, SIDE);
+    if (flip) { ctx.translate(v.size, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(clip.img, frame * cell, 0, cell, cell, at, at, cell, cell);
     ctx.restore();
   }
   // the frame a clip shows t ms in, honouring each frame's own hold
@@ -88,8 +119,8 @@ export async function startPet(homeImg, strip) {
   }
 
   // ---- home: the hero seal ------------------------------------------------------
-  const home = view(document.createElement('canvas'));
-  home.canvas.className = homeImg.className;
+  const home = view(document.createElement('canvas'), HOME_PAD);
+  home.canvas.className = `${homeImg.className} roomy`;
   home.canvas.setAttribute('role', 'img');
   home.canvas.setAttribute('aria-label', homeImg.alt);
   homeImg.replaceWith(home.canvas);
@@ -110,16 +141,26 @@ export async function startPet(homeImg, strip) {
   }
   homeTo(['idle']);
   homeTimer = setTimeout(() => homeTo(['waking', 'delegating']), 2200);
-  home.canvas.addEventListener('click', () => {
+  home.canvas.addEventListener('click', (e) => {
+    if (!inSeal(e)) return;
     clearTimeout(homeTimer);
     if (pet.away) return;
     if (home.clip.name === 'idle') homeTo(['waking', 'delegating']);
     else homeTo(['delivered', 'delegating']);
     api.onHomeTap?.();
   });
+  // the seal's own square inside the roomier home canvas, in client px
+  function sealBox() {
+    const r = home.canvas.getBoundingClientRect(), k = r.width / home.size;
+    return { left: r.left + home.pad * k, top: r.top + home.pad * k, width: SIDE * k, height: SIDE * k };
+  }
+  const inSeal = (e) => {
+    const b = sealBox();
+    return e.clientX >= b.left && e.clientX <= b.left + b.width && e.clientY >= b.top && e.clientY <= b.top + b.height;
+  };
   // where a cat at home stands: the seal's ground line, at the seal's size
   function homeSpot() {
-    const r = home.canvas.getBoundingClientRect();
+    const r = sealBox();
     return { x: r.left + scrollX + r.width * ax / SIDE, y: r.top + scrollY + r.height * ay / SIDE, z: r.width };
   }
 
@@ -486,8 +527,7 @@ export async function startPet(homeImg, strip) {
       pet.held = false;
       document.documentElement.classList.remove('pet-carrying');
       pet.pivot = null;
-      const sr = home.canvas.getBoundingClientRect();
-      if (e.clientX > sr.left && e.clientX < sr.right && e.clientY > sr.top && e.clientY < sr.bottom) {
+      if (inSeal(e)) {
         pet.placed = null;
         run([fall(() => homeSpot()), ...comeHome().slice(1)]);
         return;
@@ -553,7 +593,8 @@ export async function startPet(homeImg, strip) {
       if (from === 'home' && e.pointerType !== 'mouse') press.timer = setTimeout(() => { if (press && !press.moved) pickUp(e); }, 380);
     }
     hit.addEventListener('pointerdown', (e) => { e.preventDefault(); down(e, 'hit'); });
-    home.canvas.addEventListener('pointerdown', (e) => down(e, 'home'));
+    home.canvas.addEventListener('pointerdown', (e) => { if (inSeal(e)) down(e, 'home'); });
+    home.canvas.addEventListener('pointermove', (e) => { home.canvas.style.cursor = inSeal(e) ? '' : 'default'; });
     addEventListener('pointermove', (e) => {
       if (!press || e.pointerId !== press.id) return;
       if (press.drag) { move(e); return; }
@@ -606,6 +647,52 @@ export async function startPet(homeImg, strip) {
     };
   })();
 
+  // ---- a new pet: the old one hops off, the new one drops in where it stood -------------------
+  let switching = false;
+  async function switchTo(id) {
+    if (!pets[id] || id === petId || switching) return;
+    save(id);
+    pickers.mark(id);
+    switching = true;
+    const next = await loadPet(id).catch(() => null);
+    switching = false;
+    if (!next) return;
+    if (pet.held) { swap(id, next); return; }
+    const wasHome = !pet.away;
+    const steps = wasHome ? [wakeHome(), call(leaveHome)] : [];
+    steps.push(hopOff(), call(() => swap(id, next)), dropIn(), call(() => {
+      const h = headAt(pet, 'jump');
+      api.fx?.('heart', h.x, h.y - 0.1 * pet.z);
+    }), hop(0.14 * pet.z, 380, 'jump'));
+    if (wasHome) steps.push(...comeHome().slice(1), call(() => { homeTimer = setTimeout(() => homeTo(['waking', 'delegating']), 1400); }));
+    else if (!api.game) steps.push(rest('delegating'));
+    run(steps);
+  }
+  function swap(id, next) {
+    petId = id;
+    ready = next;
+    gait.name = null;
+    if (pet.away) homeTo(['homeless']);
+  }
+  // up and away, fading out
+  function hopOff() {
+    let y0;
+    return act(460, (u) => {
+      pet.y = u >= 1 ? y0 : y0 - 0.45 * pet.z * Math.sin(Math.min(1, u * 1.25) * Math.PI / 2);
+      show('jump', 1 + Math.min(1, Math.floor(u * 2)));
+      out.alpha = u >= 1 ? 0 : 1 - clamp((u - 0.3) / 0.7, 0, 1);
+    }, () => { y0 = pet.y; api.fx?.('ring', pet.x, pet.y - 0.3 * pet.z); });
+  }
+  // down from above onto the same spot, fading in
+  function dropIn() {
+    let y0;
+    return act(480, (u) => {
+      pet.y = y0 - 0.45 * pet.z * (1 - u * u);
+      out.alpha = clamp(u / 0.4, 0, 1);
+      show('jump', u < 0.75 ? 2 : 3);
+    }, () => { y0 = pet.y; });
+  }
+
   // ---- the loop ------------------------------------------------------------------------
   let last = performance.now();
   function tick(now) {
@@ -634,8 +721,8 @@ export async function startPet(homeImg, strip) {
     api.after?.(now, dt);
     requestAnimationFrame(tick);
   }
-  const api = {
-    pet, ready, need, home: home.canvas, stage, game: null, onHomeTap: null, after: null, fx: null,
+  api = {
+    pet, get ready() { return ready; }, need, switchTo, home: home.canvas, stage, game: null, onHomeTap: null, after: null, fx: null,
     show, stride, strideFor, run, queue: () => queue, busy: () => !!current || queue.length > 0,
     push: (...steps) => queue.push(...steps), unshift: (...steps) => queue.unshift(...steps),
     act, call, wait, play, rest, leap, hop, walkTo, leaveHome, comeHome, travel,
@@ -701,11 +788,15 @@ function gaitOf(name, spec) {
   };
 }
 
-// Every other pet, the way it sits when Brain hands work off.
-function fillStrip(strip, index, reduce) {
+// Every pet, the way it sits when Brain hands work off, as a button that swaps
+// it in; "Back to Dango" shows once you have picked another.
+function fillStrip(strip, index, reduce, pick) {
+  const buttons = {};
   for (const pet of index.pets) {
-    if (pet.id === index.default) continue;
     const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('aria-pressed', 'false');
     const img = document.createElement('img');
     img.src = `${ROOT}${pet.id}/${reduce ? 'portrait' : 'delegating-small'}.webp`;
     img.alt = '';
@@ -713,7 +804,27 @@ function fillStrip(strip, index, reduce) {
     img.loading = 'lazy';
     const name = document.createElement('span');
     name.textContent = pet.name.en;
-    item.append(img, name);
+    button.append(img, name);
+    button.addEventListener('click', () => pick(pet.id));
+    item.append(button);
     strip.append(item);
+    buttons[pet.id] = button;
   }
+  const back = strip.parentElement.querySelector('[data-pet="back"]');
+  back?.addEventListener('click', () => pick(index.default));
+  return {
+    mark(id) {
+      for (const [key, button] of Object.entries(buttons)) button.setAttribute('aria-pressed', String(key === id));
+      if (back) back.hidden = id === index.default;
+    },
+  };
+}
+
+// The visitor's pet, kept in this browser.
+const KEY = 'mewla.pet';
+function saved() {
+  try { return localStorage.getItem(KEY); } catch { return null; }
+}
+function save(id) {
+  try { localStorage.setItem(KEY, id); } catch { /* private mode: this visit only */ }
 }
