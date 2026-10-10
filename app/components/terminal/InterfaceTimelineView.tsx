@@ -429,7 +429,8 @@ export function InterfaceTimelineView({
   );
 
   // Loading draws over the list, so it can fade over the history that
-  // replaces it; a fast load draws nothing.
+  // replaces it; a fast load draws nothing. Brain's chat remounts when its
+  // first snapshot names the thread, so its load carries across that.
   const loadingVeil = useLoadingVeil(
     interfaceTimelinePhase({
       itemCount: items.length,
@@ -439,7 +440,9 @@ export function InterfaceTimelineView({
       unavailable,
       syncing,
     }) === "loading",
+    emptyTitle ? BRAIN_LOADING_CONTINUITY : undefined,
   );
+  const loadingVeilAtMount = React.useRef(loadingVeil).current;
 
   const emptyContent = React.useMemo(
     () => (
@@ -545,7 +548,11 @@ export function InterfaceTimelineView({
           <View style={styles.emptyOverlay}>{emptyContent}</View>
         ) : null}
         {loadingVeil === "shown" || loadingVeil === "leaving" ? (
-          <TimelineLoadingVeil leaving={loadingVeil === "leaving"} chrome={chrome}>
+          <TimelineLoadingVeil
+            leaving={loadingVeil === "leaving"}
+            instant={loadingVeilAtMount === "shown"}
+            chrome={chrome}
+          >
             {emptyTitle ? (
               <InterfaceTimelineLoadingState chrome={chrome} />
             ) : (
@@ -559,16 +566,21 @@ export function InterfaceTimelineView({
 }
 
 /** The loading screen on the canvas: fades in, then out over what loaded. */
+const BRAIN_LOADING_CONTINUITY = "brain-timeline";
+
 function TimelineLoadingVeil({
   leaving,
+  instant,
   chrome,
   children,
 }: {
   leaving: boolean;
+  /** Already on screen before a remount: no second fade-in. */
+  instant: boolean;
   chrome: TerminalThemeChrome;
   children: React.ReactNode;
 }) {
-  const opacity = useSharedValue(0);
+  const opacity = useSharedValue(instant ? 1 : 0);
   React.useEffect(() => {
     opacity.value = withTiming(leaving ? 0 : 1, { duration: leaving ? LOADING_VEIL.fadeMs : 160 });
   }, [leaving, opacity]);
