@@ -54,7 +54,7 @@ The workflow fails before building if an input or required signing secret is abs
 
 When `destination=testflight`, the workflow uploads that same IPA through Apple's official App Store Connect Build Upload API. It creates a build-upload reservation, uploads every Apple-specified byte range to its temporary URL with the returned headers, commits the IPA's streamed MD5 file checksum, and waits for the build upload to become `COMPLETE` or `FAILED`. Preview first looks up both the exact processed build and its marketing-version/build-number upload reservation; if either has completed, a rerun resumes post-processing instead of creating a duplicate upload. An ambiguous identity or an existing incomplete/failed reservation stops for recovery rather than risking another upload. It then waits for the build resource to become `VALID`, records that Mewla uses no non-exempt encryption, requires and attaches the exact public `Mewla Preview` beta group, and creates the Beta App Review submission only when the build does not already have one. Apple still controls review and tester availability; the workflow does not submit the app for App Review.
 
-If upload succeeds but a later App Store operation fails, the manual `iOS TestFlight post-process` workflow resumes the existing Preview build by marketing/build number without rebuilding or uploading a duplicate IPA. An export-compliance HTTP 409 is accepted only after a fresh exact-build query proves that `usesNonExemptEncryption` already equals the required `false`; every other 409 remains fatal.
+If upload succeeds but a later App Store operation fails, the manual `iOS TestFlight post-process` workflow resumes the existing Preview build by marketing/build number without rebuilding or uploading a duplicate IPA. It reads the same `MEWLA_ASC_PREVIEW_APP_ID` variable as the signed release workflow; neither workflow may fall back to Production or the old Zen record when that Preview variable is missing. Both workflows reject missing or nonnumeric app IDs before using Apple credentials. An export-compliance HTTP 409 is accepted only after a fresh exact-build query proves that `usesNonExemptEncryption` already equals the required `false`; every other 409 remains fatal.
 
 The signed release job caches only checksum-pinned Zig/Ghostty sources, verified unsigned Ghostty XCFramework output, and CocoaPods download repositories. Keys include runner architecture, Xcode/CocoaPods toolchain, native lock, and relevant build inputs; verification still runs after every native-output restore. It intentionally does not cache Xcode DerivedData: signed archive intermediates are large and identity-sensitive, and safe invalidation would erase most benefit. Certificates, profiles, keychains, API keys, archives, and signed IPAs are never cached.
 
@@ -151,6 +151,17 @@ xcodebuild \
 Do not test release signing by copying production secrets into a pull-request workflow or a developer `.env.local` file.
 
 ## Remaining release gates
+
+### Mewla rename recovery (2026-10-10)
+
+The earlier successful Zen TestFlight pipeline does not establish release readiness for the renamed Mewla bundle:
+
+- [`v0.2.3`, build 41, run 38016963783](https://github.com/daoleno/mewla/actions/runs/38016963783) stopped before building because `MEWLA_ASC_PREVIEW_APP_ID` was not configured. The historical error incorrectly named `ZEN_ASC_APP_ID`; validation now names the actual variable for the selected identity and never substitutes the other app's ID.
+- [`v0.2.0`, run 37609541307](https://github.com/daoleno/mewla/actions/runs/37609541307) reached signing setup and rejected the configured provisioning profile because it did not match `com.daoleno.mewla.preview`.
+- The Mewla app record is now `6821246662`, with subtitle `One person. A whole team.` and bundle `com.daoleno.mewla.preview`. Repository variable `MEWLA_ASC_PREVIEW_APP_ID` points to that record. The Preview environment now has a matching `Mewla Preview App Store` profile using the existing distribution certificate; team, bundle, App Store eligibility, expiration, and production push entitlement were verified before storing it. The build supplies the current seal-cat icon from `app/assets/branding/mewla-icon.png`.
+- Recovery run [38027369612](https://github.com/daoleno/mewla/actions/runs/38027369612) builds the latest release `v0.2.4`, build `42`, with `app_identity=preview` and `destination=testflight`. Verify its final result and the new app's TestFlight group/review status before claiming distribution is complete. Use the post-process workflow only if that exact app/version/build has already uploaded successfully.
+
+### Verification still required
 
 - A successful GitHub-hosted macOS run with the currently selected Xcode image.
 - A signed archive/export using the real team certificate and profile.
