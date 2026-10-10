@@ -717,6 +717,9 @@ function BrainDemo() {
       </PrimaryDrawerShell>
     );
   }
+  if (fixture === "cold" || fixture === "cold-empty") {
+    return <BrainColdLoadDemo empty={fixture === "cold-empty"} />;
+  }
   const presence = fixture === "goal" ? { state: "idle" as const } : fixture ? BRAIN_DEMO_PRESENCE[fixture] : undefined;
   const companion: BrainCompanion = { presence: presence ?? { state: "idle" }, animate: true };
   return (
@@ -731,7 +734,31 @@ function BrainDemo() {
   );
 }
 
-function BrainChatDemo({ empty, running, events, work }: { empty: boolean; running: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS; work?: BrainWorkDemo }) {
+/**
+ * A cold open of Brain's chat: history arrives after `loadMs` (default 2 s),
+ * so the loading state and its hand-off can be filmed. `cold-empty` loads an
+ * empty conversation.
+ */
+function BrainColdLoadDemo({ empty }: { empty: boolean }) {
+  const { loadMs } = useLocalSearchParams<{ loadMs?: string }>();
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), Number(loadMs) || 2000);
+    return () => clearTimeout(timer);
+  }, [loadMs]);
+  const companion: BrainCompanion = {
+    presence: loading ? { state: "waking" } : { state: "delegating", count: 3 },
+    animate: true,
+    onCatTap: () => "Still waking up…",
+  };
+  return (
+    <BrainCompanionContext.Provider value={companion}>
+      <BrainChatDemo empty={empty} running={false} loading={loading} events={SCREENSHOT_BRAIN_EVENTS} />
+    </BrainCompanionContext.Provider>
+  );
+}
+
+function BrainChatDemo({ empty, running, loading = false, events, work }: { empty: boolean; running: boolean; loading?: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS; work?: BrainWorkDemo }) {
   const { theme: appTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { chrome, theme } = useMemo(
@@ -755,7 +782,7 @@ function BrainChatDemo({ empty, running, events, work }: { empty: boolean; runni
     [providerActivityStartedAt],
   );
   const timeline = useInterfaceTimelineItems({
-    events: empty ? emptyPending : events,
+    events: empty || loading ? emptyPending : events,
     pendingUserMessages: emptyPending,
     runningActivity: running ? runningActivity : undefined,
     onRetryPendingUserMessage: NOOP,
@@ -826,13 +853,9 @@ function BrainChatDemo({ empty, running, events, work }: { empty: boolean; runni
             <InterfaceTimelineView
               scrollRef={scrollRef}
               items={timeline}
-              emptyTitle={empty ? "Ready when you are" : undefined}
-              emptyBody={
-                empty
-                  ? "Brain naps in the seal until you ask, then gets to work and brings back what it finds."
-                  : undefined
-              }
-              loading={false}
+              emptyTitle="Ready when you are"
+              emptyBody="Brain naps in the seal until you ask, then gets to work and brings back what it finds."
+              loading={loading}
               emptyStateSuppressed={false}
               unavailable={false}
               syncing={false}

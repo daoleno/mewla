@@ -182,11 +182,16 @@ Brain has one Work surface, built from the daemon's `current_work`
 - **Loading is not empty.** "Ready when you are" appears only once the
   conversation has loaded and has nothing in it. Until then (connecting,
   waiting for Brain's first snapshot, loading or syncing history) the chat
-  shows a still outline of the exchange, grey bubbles and lines with no
-  shimmer, and the cat waking in the tail row ("Waking up"). The composer
-  is there from the start; it says "Connecting…" until Brain can take a
-  message. `interfaceTimelinePhase` and `brainScreenSurface` decide this,
-  and both are pure and tested.
+  shows the chosen pet in the middle, at the empty state's seal size,
+  hopping out of its seal and standing, over one line, "Waking up". No
+  skeleton bubbles and no spinner. A load under 250 ms shows nothing;
+  once the cat shows it stays at least 600 ms and then fades out over
+  whatever loaded, so history or "Ready when you are" fades in where it
+  stood (`loadingVeilPhase`, the same timing for App start and "Loading
+  sessions"). Under reduced motion the cat is the pet's still portrait.
+  The composer is there from the start; it says "Connecting…" until Brain
+  can take a message. `interfaceTimelinePhase` and `brainScreenSurface`
+  decide this, and both are pure and tested.
 - **Goal line.** When Brain has declared an objective
   (`mewla brain objective set`), it heads the Work column and the Work sheet:
   "Ship atlas-notes v1.4 this week · 2 of 5 back". It never takes header
@@ -476,13 +481,15 @@ between the seal and its feet plays the hop first (`petTransition` in
 way in. One-shot clips hold their last frame. Motion stops when the screen
 is hidden, the app is in the background or the OS asks for reduced motion;
 native then holds the clip's first frame, while browsers keep playing it.
+Loading screens pass `stillPortrait` and draw the pet's portrait instead,
+so they are still on every platform.
 
 ### State map
 
 | Product state | Clip | Where | Tap |
 | --- | --- | --- | --- |
 | Brain idle | `idle`: asleep in the seal | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
-| App start, connecting, loading history | `waking`: hops out of the seal, then stands | App start (`CatSplash`), the Brain chat while it connects or loads history (tail row "Waking up" under the still outline), Sessions loading/connecting | "Still waking up…" |
+| App start, connecting, loading history | `waking`: hops out of the seal, then stands | App start (`CatSplash`), the Brain chat while it connects or loads history (centred, "Waking up"), Sessions loading/connecting; each only past the 250 ms loading delay | "Still waking up…" |
 | Brain's turn running | `working`: walking | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
 | Work needs your input | `attention`: waiting on its feet, ears up | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
 | Delegated Work on Workers | `delegating`: sitting, tail and blink | Tail row, "Waiting on 3 Workers" | The status line |

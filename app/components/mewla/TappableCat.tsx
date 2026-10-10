@@ -50,16 +50,18 @@ export function HoppingCat({
   animate,
   hopStyle,
   cheer,
+  stillPortrait,
 }: {
   state: BrainCatState;
   size: number;
   animate?: boolean;
   hopStyle: ReturnType<typeof useCatHop>["style"];
   cheer?: number;
+  stillPortrait?: boolean;
 }) {
   return (
     <Animated.View style={[{ transformOrigin: "50% 100%" }, hopStyle]}>
-      <PetSprite state={state} size={size} animate={animate} cheer={cheer} />
+      <PetSprite state={state} size={size} animate={animate} cheer={cheer} stillPortrait={stillPortrait} />
     </Animated.View>
   );
 }
@@ -224,6 +226,7 @@ export function TappableCat({
   onPress,
   accessibilityLabel,
   accessibilityHint,
+  stillPortrait,
 }: {
   state: BrainCatState;
   size: number;
@@ -232,6 +235,8 @@ export function TappableCat({
   onPress?: () => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
+  /** See PetSprite. */
+  stillPortrait?: boolean;
 }) {
   const hop = useCatHop(state, size);
   const play = useCatPlay(state, size, Boolean(onPress) && catCanPlay(state));
@@ -242,7 +247,7 @@ export function TappableCat({
     onPress?.();
   }, [consumed, doubleTap, hop, onPress]);
   const cat = (
-    <HoppingCat state={state} size={size} animate={animate} hopStyle={hop.style} cheer={play.cheer} />
+    <HoppingCat state={state} size={size} animate={animate} hopStyle={hop.style} cheer={play.cheer} stillPortrait={stillPortrait} />
   );
   if (!onPress) {
     return <Animated.View style={style}>{cat}</Animated.View>;
