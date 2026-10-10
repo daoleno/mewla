@@ -16,9 +16,9 @@ const ease = (t) => t * t * (3 - 2 * t);
 // What each story card asks of it.
 const ACTS = { wake: 'delivered', stamp: 'delivered', patrol: 'working', perk: 'rear', sleep: 'idle' };
 // Clips drawn facing the viewer, or with the seal: never mirrored.
-const FRONT = new Set(['homeless', 'offline', 'waking', 'idle', 'delegating', 'attention', 'delivered', 'going_back']);
+const FRONT = new Set(['homeless', 'offline', 'waking', 'idle', 'working', 'delegating', 'attention', 'delivered', 'going_back']);
 // Canvas px the pet moves per frame of a cycle, so its paws stay planted.
-const STRIDE = { working: 10, run: 17, stalk: 5 };
+const STRIDE = { walk: 12, run: 17, stalk: 5 };
 
 export async function startPet(homeImg, strip) {
   const index = await (await fetch(`${ROOT}index.json`)).json();
@@ -125,6 +125,7 @@ export async function startPet(homeImg, strip) {
   let shown = { name: 'delegating', t0: 0, frame: null };
   function show(name, frame = null, restart = false) {
     if (!ready[name]) return;
+    if (frame !== null) frame = Math.min(frame, ready[name].frames - 1); // clips differ in length
     if (restart || shown.name !== name || frame === null && shown.frame !== null) shown = { name, t0: performance.now(), frame };
     else shown.frame = frame;
   }
@@ -193,7 +194,7 @@ export async function startPet(homeImg, strip) {
     }, () => { y0 = pet.y; });
   }
   // walk (or creep, or dash) along the floor to x
-  function walkTo(getX, name = 'working', speed = 0.09) {
+  function walkTo(getX, name = 'walk', speed = 0.09) {
     let x1;
     return act(400, (u, dt) => {
       const dx = x1 - pet.x;

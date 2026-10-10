@@ -126,10 +126,10 @@ export function startPlay(P, onEvent) {
   // where a strike lands, in page coordinates: the raised front paw at the top
   // of each clip's swing, measured from the frames as a fraction of the drawn
   // size from the feet; or the mouth
-  const REACH = { swat: [0.39, -0.29], rear: [0.06, -0.79], jump: [0.05, -0.83], pounce: [0.38, -0.11] };
+  const REACH = { swat: [0, -0.32], rear: [-0.1, -0.66], jump: [0, -0.62], pounce: [0.31, -0.28] };
   const at = ([rx, ry]) => ({ x: pet.x + rx * pet.z * pet.dir, y: pet.y - pet.lift + ry * pet.z });
   const pawTip = () => at(REACH[P.clip()] ?? [0.3, -0.3]);
-  const mouthAt = () => at(P.clip() === 'jump' ? [0.15, -0.74] : P.clip() === 'eat' ? [0.36, -0.1] : [0.26, -0.36]);
+  const mouthAt = () => at(P.clip() === 'jump' ? [-0.04, -0.5] : P.clip() === 'eat' ? [0.05, -0.05] : [0.05, -0.42]);
 
   function score(kind, text, extra) {
     // kind: hit builds the streak, snack counts without it, miss ends it
@@ -144,7 +144,7 @@ export function startPlay(P, onEvent) {
   }
 
   // walk, creep or dash along the floor toward x; true once there
-  function stepTo(x, speed, dt, clip = 'working') {
+  function stepTo(x, speed, dt, clip = 'walk') {
     const f = P.floor(), want = clamp(x, f.a, f.b), dx = want - pet.x;
     if (Math.abs(dx) < 3) return true;
     pet.dir = dx > 0 ? 1 : -1;
@@ -257,7 +257,7 @@ export function startPlay(P, onEvent) {
     const onMiss = s.miss(() => { const p = pawTip(); spark('whiff', p.x, p.y); score('miss', missText()); });
     if (kind === 'low') return [P.play('swat', null, (u) => { if (u > 0.2 && u < 0.62) s.check(); }), onMiss, P.call(sit)];
     if (kind === 'rear') return [P.play('rear', null, (u) => { if (u > 0.25 && u < 0.7) s.check(); }), onMiss, P.call(sit)];
-    const h = clamp(pet.y - game.y - 0.85 * pet.z, 24 * K(), 200);
+    const h = clamp(pet.y - game.y - 0.62 * pet.z, 24 * K(), 200);
     return [P.hop(h, clamp(420 + h * 1.4, 460, 720), 'jump', (u, fly) => { if (fly > 0.25 && fly < 0.8) s.check(); }), onMiss, P.call(sit)];
   }
 
@@ -269,7 +269,7 @@ export function startPlay(P, onEvent) {
     if (Math.abs(dx) > (feather ? 24 : 16) * k) {
       // the toy is past this floor's edge: wait at the edge for leapToward
       const far = Math.abs(dx) > 120 * k;
-      stepTo(want, far ? 0.36 : 0.2, dt, far ? 'run' : 'working');
+      stepTo(want, far ? 0.36 : 0.2, dt, far ? 'run' : 'walk');
       return;
     }
     sit();
@@ -462,7 +462,7 @@ export function startPlay(P, onEvent) {
     if (rest && rest.node !== pet.perch) { leapTo(rest.x, rest.y - 20, rest.node); return; }
     if (rest) {
       const side = rest.x >= pet.x ? 1 : -1;
-      if (!stepTo(rest.x - side * 0.36 * pet.z, 0.26, dt)) return;
+      if (!stepTo(rest.x - side * 0.05 * pet.z, 0.26, dt)) return;
       pet.dir = side;
       // the eat clip draws its own treat, so the tossed one goes as it starts
       P.run([P.call(() => { rest.scale = 0; }), P.play('eat'), P.call(() => eaten(rest, false)), P.call(sit)]);
