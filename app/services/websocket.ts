@@ -523,6 +523,10 @@ class ServerSocket {
       };
 
       ws.onmessage = (event: any) => {
+        // A replaced or ended socket can still deliver a late frame.
+        if (attemptId !== this.attemptSequence) {
+          return;
+        }
         try {
           const data = JSON.parse(event.data);
           this.emit(data.type, data);
@@ -619,47 +623,60 @@ interface RequestOptions<T> {
   abortMessage?: string;
 }
 
-export class MultiServerWebSocketClient {
+/**
+ * The App's one live daemon connection. Many servers can be saved, but only
+ * the current one is ever connected: connecting to another server first ends
+ * the live connection, whose intentional disconnect clears that server's
+ * state before the new socket can publish anything. Every send names its
+ * server and fails unless that server is the live one.
+ */
+export class WebSocketClient {
   private readonly handlers = new Map<string, MessageHandler[]>();
-  private readonly connections = new Map<string, ServerSocket>();
-  private readonly serverMeta = new Map<string, ConnectionMeta>();
+  private live: { meta: ConnectionMeta; socket: ServerSocket } | null = null;
 
-  connectServer(server: StoredServer) {
-    const meta = toConnectionMeta(server);
-    this.serverMeta.set(server.id, meta);
-
-    const existing = this.connections.get(server.id);
-    if (existing) {
-      existing.disconnect();
-      this.connections.delete(server.id);
+  /** Connects to `server`, ending any live connection first. */
+  connect(server: StoredServer) {
+    if (this.live && this.live.meta.serverId !== server.id) {
+      this.disconnect();
     }
-
+    // Reconnecting the live server replaces only its socket and keeps state.
+    const stale = this.live?.socket;
+    const meta = toConnectionMeta(server);
     const socket = new ServerSocket(meta, (type, payload) => {
       this.emit(type, server.id, payload);
     });
-    this.connections.set(server.id, socket);
+    this.live = { meta, socket };
+    stale?.disconnect();
     socket.connect();
   }
 
-  disconnectServer(serverId: string) {
-    this.connections.get(serverId)?.disconnect();
-    this.connections.delete(serverId);
-    this.serverMeta.delete(serverId);
-    this.emit("disconnected", serverId, { reason: "intentional" });
-    this.emit("connection_issue", serverId, { issue: null });
+  /**
+   * Ends the live connection, or does nothing when `serverId` names a server
+   * that is not live. Listeners see an intentional disconnect.
+   */
+  disconnect(serverId?: string) {
+    const live = this.live;
+    if (!live || (serverId !== undefined && serverId !== live.meta.serverId)) {
+      return;
+    }
+    live.socket.disconnect();
+    this.live = null;
+    this.emit("disconnected", live.meta.serverId, { reason: "intentional" });
+    this.emit("connection_issue", live.meta.serverId, { issue: null });
   }
 
-  disconnectAll() {
-    for (const serverId of this.connections.keys()) {
-      this.disconnectServer(serverId);
-    }
+  /** On foreground, immediately resume a suspended reconnect backoff. */
+  resumeReconnect() {
+    this.live?.socket.resumeReconnect();
   }
 
-  /** On foreground, immediately resume any suspended reconnect backoffs. */
-  resumeReconnects() {
-    for (const socket of this.connections.values()) {
-      socket.resumeReconnect();
-    }
+  /** The live server's id, or null when nothing is connected or connecting. */
+  liveServerId(): string | null {
+    return this.live?.meta.serverId ?? null;
+  }
+
+  private liveSocket(serverId: string): ServerSocket | null {
+    return this.live?.meta.serverId === serverId ? this.live.socket : null;
   }
 
   on(type: string, handler: MessageHandler) {
@@ -678,7 +695,7 @@ export class MultiServerWebSocketClient {
   }
 
   send(serverId: string, msg: object) {
-    const socket = this.connections.get(serverId);
+    const socket = this.liveSocket(serverId);
     if (!socket) {
       throw new Error("Daemon is not connected.");
     }
@@ -686,7 +703,7 @@ export class MultiServerWebSocketClient {
   }
 
   private trySendNow(serverId: string, msg: object) {
-    return this.connections.get(serverId)?.trySendNow(msg) ?? false;
+    return this.liveSocket(serverId)?.trySendNow(msg) ?? false;
   }
 
   /**
@@ -1235,7 +1252,7 @@ export class MultiServerWebSocketClient {
     timeoutMessage: string,
     isList: boolean,
   ): Promise<ProvidersMutationResult> {
-    if (!this.connections.get(serverId)) {
+    if (!this.liveSocket(serverId)) {
       return Promise.reject(offlineProviderError());
     }
     return this.request(serverId, type, body, {
@@ -2077,7 +2094,7 @@ export class MultiServerWebSocketClient {
     workerId: string,
     action: string,
   ): StructuredCommandReceipt {
-    const socket = this.connections.get(serverId);
+    const socket = this.liveSocket(serverId);
     if (!socket?.isConnected) {
       throw new Error("Daemon is not connected.");
     }
@@ -2112,7 +2129,7 @@ export class MultiServerWebSocketClient {
       requestId?: string;
     },
   ): StructuredCommandReceipt {
-    const socket = this.connections.get(serverId);
+    const socket = this.liveSocket(serverId);
     if (!socket?.isConnected) {
       throw new Error("Daemon is not connected.");
     }
@@ -2236,16 +2253,16 @@ export class MultiServerWebSocketClient {
     });
   }
 
+  /** Tells the live server which of its workers is on screen, if any. */
   clearActiveWorkersExcept(
     selected: { serverId: string; workerId: string } | null,
   ) {
-    for (const [serverId] of this.connections) {
-      if (selected && selected.serverId === serverId) {
-        this.setActiveWorker(serverId, selected.workerId);
-      } else {
-        this.setActiveWorker(serverId, null);
-      }
-    }
+    const serverId = this.liveServerId();
+    if (!serverId) return;
+    this.setActiveWorker(
+      serverId,
+      selected?.serverId === serverId ? selected.workerId : null,
+    );
   }
 
   getStats(serverId: string): Promise<StatsPayload> {
@@ -2755,17 +2772,12 @@ export class MultiServerWebSocketClient {
   }
 
   isConnected(serverId: string) {
-    return this.connections.get(serverId)?.isConnected ?? false;
-  }
-
-  connectedServerIds() {
-    return [...this.connections.keys()].filter((serverId) =>
-      this.isConnected(serverId),
-    );
+    return this.liveSocket(serverId)?.isConnected ?? false;
   }
 
   private emit(type: string, serverId: string, payload: any) {
-    const meta = this.serverMeta.get(serverId);
+    const meta =
+      this.live?.meta.serverId === serverId ? this.live.meta : undefined;
     const data = {
       ...payload,
       serverId,
@@ -3047,4 +3059,4 @@ function base64URL(value: string): string {
     .replace(/=+$/g, "");
 }
 
-export const wsClient = new MultiServerWebSocketClient();
+export const wsClient = new WebSocketClient();

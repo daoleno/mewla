@@ -422,7 +422,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
     return () => {
       // Disconnect first so the mounted listeners can drive connection state
       // back to offline during hot reloads and remounts.
-      wsClient.disconnectAll();
+      wsClient.disconnect();
 
       wsClient.off("worker_session_list", onWorkerSessionList);
       wsClient.off("worker_session_created", onWorkerSessionUpsert);
@@ -475,7 +475,7 @@ const CurrentServerConnectionBinder = memo(
       // Transport follows the canonical owner. Intentional disconnect events
       // clear the previous server's presentation stores before the new socket
       // can publish data.
-      wsClient.disconnectAll();
+      wsClient.disconnect();
       if (!currentServer) {
         return () => {
           cancelled = true;
@@ -485,7 +485,7 @@ const CurrentServerConnectionBinder = memo(
         if (cancelled || disabledServerIds.includes(currentServer.id)) {
           return;
         }
-        wsClient.connectServer(currentServer);
+        wsClient.connect(currentServer);
       });
       return () => {
         cancelled = true;
@@ -546,7 +546,7 @@ const NotificationObserver = memo(function NotificationObserver() {
       }
       // Foreground resume: skip reconnect backoff and silently restore transport.
       if (previous !== "active") {
-        wsClient.resumeReconnects();
+        wsClient.resumeReconnect();
       }
     });
 
@@ -583,8 +583,9 @@ const NotificationObserver = memo(function NotificationObserver() {
       };
       wsClient.on("connected", onConnected);
 
-      for (const serverId of wsClient.connectedServerIds()) {
-        registerPush(serverId);
+      const liveServerId = wsClient.liveServerId();
+      if (liveServerId && wsClient.isConnected(liveServerId)) {
+        registerPush(liveServerId);
       }
     })();
 

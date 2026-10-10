@@ -72,7 +72,7 @@ class FakeWebSocket {
 const originalWebSocket = globalThis.WebSocket;
 Object.assign(globalThis, { WebSocket: FakeWebSocket });
 
-const { MultiServerWebSocketClient } = await import("./websocket");
+const { WebSocketClient } = await import("./websocket");
 
 const server = {
   id: "server-a",
@@ -91,16 +91,15 @@ const secondServer = {
 };
 
 test("diff pages preserve literal paths and correlate requests with their owning server", async () => {
-  const client = new MultiServerWebSocketClient();
+  const client = new WebSocketClient();
   const socket = await connectClient(client, server);
-  const other = await connectClient(client, secondServer);
-  socket.open(); other.open();
+  socket.open();
   const path = " leading [x]\t\ntrailing ";
   const pending = client.getGitDiffPage(server.id, { targetId: "worker", cwd: "/fixture", path, scope: "working", row: 120, version: "snapshot", query: "needle" });
   const outbound = JSON.parse(socket.sent.at(-1)!);
   expect(outbound).toMatchObject({ type: "git_diff_page", path, scope: "working", row: 120, file_generation: "snapshot", query: "needle" });
   const page = { path, scope: "working" as const, version: "new-snapshot", start: 120, total: 400, rows: [], stale: true, hunks: 1, previous_hunk: 0, next_hunk: -1, matches: 0, previous_match: -1, next_match: -1 };
-  other.receive({ type: "git_diff_page", request_id: outbound.request_id, page: { path: "wrong server" } });
+  socket.receive({ type: "git_diff_page", request_id: "stale", page: { path: "stale request" } });
   expect(registeredHandlerCount(client)).toBeGreaterThan(0);
   socket.receive({ type: "git_diff_page", request_id: outbound.request_id, page });
   await expect(pending).resolves.toEqual(page);
@@ -109,15 +108,104 @@ test("diff pages preserve literal paths and correlate requests with their owning
   socket.receive({ type: "error", request_id: JSON.parse(socket.sent.at(-1)!).request_id, message: "File no longer changed" });
   await expect(failed).rejects.toThrow("File no longer changed");
   expect(registeredHandlerCount(client)).toBe(0);
-  client.disconnectAll();
+  const sentCount = socket.sent.length;
+  await expect(
+    client.getGitDiffPage(secondServer.id, { targetId: "worker", cwd: "/fixture", path, scope: "all", row: 0 }),
+  ).rejects.toThrow("Daemon is not connected.");
+  expect(socket.sent).toHaveLength(sentCount);
+  expect(registeredHandlerCount(client)).toBe(0);
+  client.disconnect();
+});
+
+describe("one live connection", () => {
+  test("switching servers ends the old socket and isolates its requests", async () => {
+    const client = new WebSocketClient();
+    const disconnects: Array<{ serverId: string; reason: string }> = [];
+    client.on("disconnected", (payload) => disconnects.push(payload));
+    const first = await connectClient(client, server);
+    first.open();
+    let timeout!: () => void;
+    const timer = spyOn(globalThis, "setTimeout").mockImplementation(((fn: () => void) => {
+      timeout = fn;
+      return 1;
+    }) as typeof setTimeout);
+    const pending = client.getTelegramConnectionStatus(server.id);
+    timer.mockRestore();
+    const outbound = JSON.parse(first.sent.at(-1)!);
+    const settled = pending.then(() => "resolved", () => "rejected");
+
+    const second = await connectClient(client, secondServer);
+    expect(first.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(disconnects).toEqual([
+      expect.objectContaining({ serverId: server.id, reason: "intentional" }),
+    ]);
+    expect(client.liveServerId()).toBe(secondServer.id);
+    second.open();
+    expect(
+      FakeWebSocket.instances.filter((socket) => socket.readyState === FakeWebSocket.OPEN),
+    ).toEqual([second]);
+
+    // The new server's reply to a reused request id never settles the old request.
+    second.receive({
+      type: "telegram_connection_status",
+      request_id: outbound.request_id,
+      connection: { state: "connected", enabled: true },
+    });
+    await Promise.resolve();
+    expect(registeredHandlerCount(client)).toBeGreaterThan(1);
+
+    // A late frame from the replaced socket never reaches listeners.
+    const lists: unknown[] = [];
+    client.on("worker_session_list", (payload) => lists.push(payload));
+    first.onmessage?.({
+      data: JSON.stringify({ type: "worker_session_list", worker_sessions: [{ id: "old" }] }),
+    });
+    expect(lists).toEqual([]);
+
+    expect(client.isConnected(server.id)).toBe(false);
+    expect(client.isConnected(secondServer.id)).toBe(true);
+    expect(() => client.killWorker(server.id, "agent-a")).toThrow("Daemon is not connected.");
+    await expect(client.listDir(server.id)).rejects.toThrow("Daemon is not connected.");
+    expect(second.sent).toEqual([]);
+
+    timeout();
+    expect(await settled).toBe("rejected");
+    expect(registeredHandlerCount(client)).toBe(2);
+    client.disconnect();
+  });
+
+  test("reconnecting the live server keeps its state and disconnecting another server is a no-op", async () => {
+    const client = new WebSocketClient();
+    const disconnects: unknown[] = [];
+    client.on("disconnected", (payload) => disconnects.push(payload));
+    const first = await connectClient(client, server);
+    first.open();
+
+    client.disconnect(secondServer.id);
+    expect(disconnects).toEqual([]);
+    expect(client.isConnected(server.id)).toBe(true);
+
+    const second = await connectClient(client, server);
+    expect(first.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(disconnects).toEqual([]);
+    second.open();
+    client.killWorker(server.id, "agent-a");
+    expect(second.sent).toEqual([JSON.stringify({ type: "kill_worker", worker_id: "agent-a" })]);
+
+    client.disconnect();
+    expect(disconnects).toEqual([
+      expect.objectContaining({ serverId: server.id, reason: "intentional" }),
+    ]);
+    expect(client.liveServerId()).toBeNull();
+  });
 });
 
 async function connectClient(
-  client: InstanceType<typeof MultiServerWebSocketClient>,
+  client: InstanceType<typeof WebSocketClient>,
   targetServer = server,
 ) {
   const socketIndex = FakeWebSocket.instances.length;
-  client.connectServer(targetServer);
+  client.connect(targetServer);
   return waitForSocket(socketIndex);
 }
 
@@ -132,7 +220,7 @@ async function waitForSocket(socketIndex: number) {
 }
 
 function registeredHandlerCount(
-  client: InstanceType<typeof MultiServerWebSocketClient>,
+  client: InstanceType<typeof WebSocketClient>,
 ) {
   const internals = client as unknown as {
     handlers: Map<string, Array<(payload: unknown) => void>>;
@@ -211,8 +299,8 @@ afterAll(() => {
 
 describe("generic WebSocket live boundary", () => {
   test("an incomplete Link server fails closed before WebSocket construction", async () => {
-    const client = new MultiServerWebSocketClient();
-    client.connectServer({
+    const client = new WebSocketClient();
+    client.connect({
       ...server,
       url: "wss://raw.link.test/ws",
       transportKind: "link",
@@ -220,11 +308,11 @@ describe("generic WebSocket live boundary", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(FakeWebSocket.instances).toHaveLength(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("one terminal scroll batch sends one current-session mutation", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -237,11 +325,11 @@ describe("generic WebSocket live boundary", () => {
         lines: -3,
       }),
     ]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("a disconnected mutation fails and is not sent by a later open", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
 
     expect(() => client.killWorker(server.id, "agent-a")).toThrow(
@@ -258,15 +346,15 @@ describe("generic WebSocket live boundary", () => {
 
     socket.open();
     expect(socket.sent).toEqual([]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("intentional disconnect and reconnect do not replay an operation", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const firstSocket = await connectClient(client);
     firstSocket.open();
 
-    client.disconnectServer(server.id);
+    client.disconnect(server.id);
     expect(() =>
       client.sendTerminalInput(server.id, "terminal-a", "pwd\n"),
     ).toThrow("Daemon is not connected.");
@@ -275,11 +363,11 @@ describe("generic WebSocket live boundary", () => {
     secondSocket.open();
     expect(firstSocket.sent).toEqual([]);
     expect(secondSocket.sent).toEqual([]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("an open socket sends one frame for one invocation", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -288,11 +376,11 @@ describe("generic WebSocket live boundary", () => {
     expect(socket.sent).toEqual([
       JSON.stringify({ type: "kill_worker", worker_id: "agent-a" }),
     ]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("structured Chat writes once now with minimal correlated responses", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -334,11 +422,11 @@ describe("generic WebSocket live boundary", () => {
       request_id: actionReceipt.requestId,
     });
     expect(await actionReceipt.outcome).toEqual({ kind: "sent" });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("each repeated structured input is a fresh live attempt", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -363,11 +451,11 @@ describe("generic WebSocket live boundary", () => {
     socket.receive({ type: "input_sent", request_id: second.requestId });
     expect(await first.outcome).toEqual({ kind: "sent" });
     expect(await second.outcome).toEqual({ kind: "sent" });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("a reconnect that errors without a close event still ends, reports and retries", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const disconnects: unknown[] = [];
     const issues: unknown[] = [];
     client.on("disconnected", (payload) => disconnects.push(payload));
@@ -378,7 +466,7 @@ describe("generic WebSocket live boundary", () => {
     expect(disconnects).toHaveLength(1);
 
     const retryIndex = FakeWebSocket.instances.length;
-    client.resumeReconnects();
+    client.resumeReconnect();
     const refused = await waitForSocket(retryIndex);
     const issuesBefore = issues.length;
     refused.failWithoutClose();
@@ -390,11 +478,11 @@ describe("generic WebSocket live boundary", () => {
     const nextIndex = FakeWebSocket.instances.length;
     await new Promise((resolve) => setTimeout(resolve, 1100));
     expect(FakeWebSocket.instances.length).toBeGreaterThan(nextIndex);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("repeated transient reconnects never replay an earlier failed operation", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     let socket = await connectClient(client);
     socket.open();
     const sockets = [socket];
@@ -406,7 +494,7 @@ describe("generic WebSocket live boundary", () => {
 
     for (let reconnect = 0; reconnect < 3; reconnect += 1) {
       const socketIndex = FakeWebSocket.instances.length;
-      client.resumeReconnects();
+      client.resumeReconnect();
       socket = await waitForSocket(socketIndex);
       socket.open();
       sockets.push(socket);
@@ -423,11 +511,11 @@ describe("generic WebSocket live boundary", () => {
     expect(socket.sent).toEqual([
       JSON.stringify({ type: "kill_worker", worker_id: "agent-new" }),
     ]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("offline active-agent presence is dropped without throw or later replay", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
 
     expect(() =>
       client.setActiveWorker(server.id, "agent-without-connection"),
@@ -449,17 +537,17 @@ describe("generic WebSocket live boundary", () => {
 
     expect(() => client.clearActiveWorkersExcept(null)).not.toThrow();
     const reconnectIndex = FakeWebSocket.instances.length;
-    client.resumeReconnects();
+    client.resumeReconnect();
     const reconnectedSocket = await waitForSocket(reconnectIndex);
     reconnectedSocket.open();
 
     expect(firstSocket.sent).toEqual([]);
     expect(reconnectedSocket.sent).toEqual([]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("an open socket sends exactly the current selected and cleared presence", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -473,45 +561,40 @@ describe("generic WebSocket live boundary", () => {
       { type: "set_active_worker", worker_id: "agent-selected" },
       { type: "set_active_worker", worker_id: "" },
     ]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
-  test("mixed connections send presence only to sockets open at call time", async () => {
-    const client = new MultiServerWebSocketClient();
-    const openSocket = await connectClient(client, server);
-    const offlineSocket = await connectClient(client, secondServer);
-    openSocket.open();
+  test("presence goes only to the live server while its socket is open", async () => {
+    const client = new WebSocketClient();
+    const socket = await connectClient(client, server);
 
     expect(() =>
       client.clearActiveWorkersExcept({
-        serverId: secondServer.id,
+        serverId: server.id,
         workerId: "agent-offline",
       }),
     ).not.toThrow();
-    expect(openSocket.sent.map((frame) => JSON.parse(frame))).toEqual([
-      { type: "set_active_worker", worker_id: "" },
-    ]);
-    expect(offlineSocket.sent).toEqual([]);
+    expect(socket.sent).toEqual([]);
 
-    offlineSocket.open();
-    expect(offlineSocket.sent).toEqual([]);
+    socket.open();
+    client.clearActiveWorkersExcept({
+      serverId: secondServer.id,
+      workerId: "agent-elsewhere",
+    });
     client.clearActiveWorkersExcept({
       serverId: server.id,
       workerId: "agent-current",
     });
 
-    expect(openSocket.sent.map((frame) => JSON.parse(frame))).toEqual([
+    expect(socket.sent.map((frame) => JSON.parse(frame))).toEqual([
       { type: "set_active_worker", worker_id: "" },
       { type: "set_active_worker", worker_id: "agent-current" },
     ]);
-    expect(offlineSocket.sent.map((frame) => JSON.parse(frame))).toEqual([
-      { type: "set_active_worker", worker_id: "" },
-    ]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("a disconnected Promise request rejects immediately and cleans its timer and handlers", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     const setTimeoutSpy = spyOn(globalThis, "setTimeout");
     const clearTimeoutSpy = spyOn(globalThis, "clearTimeout");
@@ -526,11 +609,11 @@ describe("generic WebSocket live boundary", () => {
     expect(socket.sent).toEqual([]);
     setTimeoutSpy.mockRestore();
     clearTimeoutSpy.mockRestore();
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("a disconnected subscription fails without retaining handlers", () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
 
     expect(() =>
       client.subscribeCodexConversation(
@@ -548,7 +631,7 @@ describe("generic WebSocket live boundary", () => {
   });
 
   test("subscription cleanup after disconnect is a local no-op without replay", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const firstSocket = await connectClient(client);
     firstSocket.open();
     const unsubscribe = client.subscribeCodexConversation(
@@ -563,18 +646,18 @@ describe("generic WebSocket live boundary", () => {
     );
     expect(firstSocket.sent).toHaveLength(1);
 
-    client.disconnectServer(server.id);
+    client.disconnect(server.id);
     expect(() => unsubscribe()).not.toThrow();
     expect(registeredHandlerCount(client)).toBe(0);
 
     const secondSocket = await connectClient(client);
     secondSocket.open();
     expect(secondSocket.sent).toEqual([]);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("conversation error frames preserve server detail and leave missing display copy to Interface", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
     const errors: Error[] = [];
@@ -611,11 +694,11 @@ describe("generic WebSocket live boundary", () => {
       "",
     ]);
     unsubscribe();
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("conversation wire normalization carries only current Activity lifecycle", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
     const snapshots: any[] = [];
@@ -691,13 +774,13 @@ describe("generic WebSocket live boundary", () => {
     });
 
     unsubscribe();
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
 describe("Provider public WebSocket boundary", () => {
   test("ordinary create omits profile_id and accepts a correlated ordinary reply", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -724,11 +807,11 @@ describe("Provider public WebSocket boundary", () => {
       workerId: "agent-new",
       persistence: undefined,
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("list_providers ignores a stale request id and returns only the correlated catalog", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -749,11 +832,11 @@ describe("Provider public WebSocket boundary", () => {
     expect(catalog.revision).toBe(4);
     expect(catalog.connections[0]?.id).toBe("deepseek-main");
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("Provider catalog writes use revisioned public fields and parse durability", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -833,11 +916,11 @@ describe("Provider public WebSocket boundary", () => {
       snapshot: { revision: 6 },
       persistence: { applied: true, durable: true },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("thread runtime get and set send no legacy aliases or generation", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -913,11 +996,11 @@ describe("Provider public WebSocket boundary", () => {
     await expect(defaultEffectPending).resolves.toMatchObject({
       runtime: { reasoning_effort: undefined },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("activation rejects a mismatched connection/model reply", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -938,11 +1021,11 @@ describe("Provider public WebSocket boundary", () => {
     });
     await expect(pending).rejects.toThrow(/invalid activation selection/i);
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("credential is write-only and daemon error text cannot echo it", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
     const submittedKey = "sk-provider-test-never-echo";
@@ -970,11 +1053,11 @@ describe("Provider public WebSocket boundary", () => {
     expect(error.message).not.toContain(submittedKey);
     expect(error.message).toMatch(/API key/i);
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("connection test sends a transient key and retains only secret-free facts", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
     const submittedKey = "sk-transient-test-only";
@@ -1007,13 +1090,13 @@ describe("Provider public WebSocket boundary", () => {
     expect(result).toEqual({ client: "codex", modelCount: 4, latencyMs: 87 });
     expect(JSON.stringify(result)).not.toMatch(/credential|api.?key|secret/i);
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
 describe("executor switch transport", () => {
   test("setBrainExecutor is request-correlated and returns the brain snapshot", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1038,11 +1121,11 @@ describe("executor switch transport", () => {
     await expect(pending).resolves.toEqual({
       host_executor: { id: "claude", name: "Claude Code", provider: "claude" },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("setBrainExecutor rejects only the matching request error", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1062,7 +1145,7 @@ describe("executor switch transport", () => {
     });
 
     await expect(pending).rejects.toThrow("unknown executor: missing");
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
@@ -1078,7 +1161,7 @@ describe("Skills management transport", () => {
   };
 
   test("inventory is request-correlated and generation-safe", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1126,11 +1209,11 @@ describe("Skills management transport", () => {
         mutationOperations: ["delete"],
       },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("inspect rejects a valid but mismatched copy identity", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1159,11 +1242,11 @@ describe("Skills management transport", () => {
     });
 
     await expect(pending).rejects.toThrow("different Skill copy");
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("a reviewed delete command for a different exact copy is rejected", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1197,11 +1280,11 @@ describe("Skills management transport", () => {
     });
 
     await expect(pending).rejects.toThrow("different copy");
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("delete accepts daemon-derived affected Agents after exact identity review", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1229,11 +1312,11 @@ describe("Skills management transport", () => {
       operation: "delete",
       agents: ["codex", "pi"],
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("delete accepts the daemon top-level mutation result", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1282,7 +1365,7 @@ describe("Skills management transport", () => {
         durationMs: 12,
       },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
@@ -1326,7 +1409,7 @@ describe("Plugin management transport", () => {
   };
 
   test("inventory is request-correlated and generation-safe", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1354,11 +1437,11 @@ describe("Plugin management transport", () => {
       generation: 9,
       inventory: { installed: [], available: [] },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("review sends and verifies the complete exact-copy identity", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1390,11 +1473,11 @@ describe("Plugin management transport", () => {
       version: identity.version,
       agents: identity.agents,
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("mutation accepts a top-level result and rejects identity drift", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1411,11 +1494,11 @@ describe("Plugin management transport", () => {
     });
 
     await expect(pending).rejects.toThrow("different Plugin copy");
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("mutation returns truthful loading success and failure outcomes", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1435,13 +1518,13 @@ describe("Plugin management transport", () => {
       command: { copyId: identity.copyId, revision: identity.revision },
       execution: { success: true, exitCode: 0 },
     });
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
 describe("structured input identity reuse", () => {
   test("a retry reuses its stable request id while a new input stays fresh", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1471,11 +1554,11 @@ describe("structured input identity reuse", () => {
     socket.receive({ type: "input_sent", request_id: next.requestId });
     expect(await retry.outcome).toEqual({ kind: "sent" });
     expect(await next.outcome).toEqual({ kind: "sent" });
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("late ack for a reused identity settles only that logical input", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
 
@@ -1499,17 +1582,15 @@ describe("structured input identity reuse", () => {
     // attempt order.
     socket.receive({ type: "input_sent", request_id: "request-reused" });
     expect(await second.outcome).toEqual({ kind: "sent" });
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
 describe("Telegram current-daemon connection boundary", () => {
   test("status and configuration correlate to the requested daemon", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const first = await connectClient(client, server);
-    const second = await connectClient(client, secondServer);
     first.open();
-    second.open();
 
     const pending = client.configureTelegramConnection(
       server.id,
@@ -1521,9 +1602,9 @@ describe("Telegram current-daemon connection boundary", () => {
       credential: "fixture-token-never-returned",
     });
 
-    second.receive({
+    first.receive({
       type: "telegram_connection_status",
-      request_id: outbound.request_id,
+      request_id: "stale",
       connection: { state: "connected", enabled: true },
     });
     await Promise.resolve();
@@ -1548,11 +1629,11 @@ describe("Telegram current-daemon connection boundary", () => {
       binding_pending: false,
     });
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("binding challenge is validated and scoped to the current daemon", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client, server);
     socket.open();
 
@@ -1572,16 +1653,15 @@ describe("Telegram current-daemon connection boundary", () => {
       expires_at: "2026-08-24T12:10:00Z",
     });
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
 describe("resource telemetry live boundary", () => {
-  test("correlates the flat daemon contract with the authenticated owning socket", async () => {
-    const client = new MultiServerWebSocketClient();
+  test("correlates the flat daemon contract with its request", async () => {
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
-    const other = await connectClient(client, secondServer);
-    socket.open(); other.open();
+    socket.open();
     const pending = client.getResourceTelemetry(server.id);
     const request = JSON.parse(socket.sent.at(-1)!);
     expect(request.type).toBe("get_resource_telemetry");
@@ -1589,7 +1669,6 @@ describe("resource telemetry live boundary", () => {
       sampled_at: "2026-10-01T06:00:00Z", state: "elevated",
       cpu: { utilization_percent: 0 }, memory: { available_bytes: 42 },
       history: [{ sampled_at: "2026-10-01T06:00:00Z", cpu_percent: 0 }] };
-    other.receive(payload);
     socket.receive({ ...payload, request_id: "unrelated" });
     expect(registeredHandlerCount(client)).toBe(3);
     socket.receive(payload);
@@ -1599,11 +1678,11 @@ describe("resource telemetry live boundary", () => {
     expect(result.memory.totalBytes).toBeUndefined();
     expect(result.history[0].cpuPercent).toBe(0);
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 
   test("first sample errors, invalid replies, disconnect and cancellation release listeners", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
     const first = client.getResourceTelemetry(server.id);
@@ -1623,7 +1702,7 @@ describe("resource telemetry live boundary", () => {
     await expect(client.getResourceTelemetry(server.id, controller.signal)).rejects.toThrow("cancelled");
     expect(socket.sent).toHaveLength(sentCount);
     const disconnected = client.getResourceTelemetry(server.id);
-    client.disconnectAll();
+    client.disconnect();
     await expect(disconnected).rejects.toThrow("not connected");
     expect(registeredHandlerCount(client)).toBe(0);
     await expect(client.getResourceTelemetry(server.id)).rejects.toThrow("not connected");
@@ -1631,7 +1710,7 @@ describe("resource telemetry live boundary", () => {
   });
 
   test("a timed out resource request releases all handlers", async () => {
-    const client = new MultiServerWebSocketClient();
+    const client = new WebSocketClient();
     const socket = await connectClient(client);
     socket.open();
     let timeout!: () => void;
@@ -1644,27 +1723,26 @@ describe("resource telemetry live boundary", () => {
     timeout();
     await expect(pending).rejects.toThrow("timed out");
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 });
 
 describe("Plugins account boundary", () => {
-  test("ignores another server and cleans pending calls on disconnect", async () => {
-    const client = new MultiServerWebSocketClient();
+  test("ignores another request and cleans pending calls on disconnect", async () => {
+    const client = new WebSocketClient();
     const first = await connectClient(client, server);
-    const second = await connectClient(client, secondServer);
-    first.open(); second.open();
+    first.open();
     const pending = client.requestConnections(server.id, { action: "get", id: "personal" });
     const outbound = JSON.parse(first.sent.at(-1)!);
-    second.receive({ type: "connections_result", request_id: outbound.request_id, connections: { account: { id: "wrong" } } });
+    first.receive({ type: "connections_result", request_id: "stale", connections: { account: { id: "wrong" } } });
     expect(registeredHandlerCount(client)).toBeGreaterThan(0);
     first.receive({ type: "connections_result", request_id: outbound.request_id, connections: { account: { id: "personal" } } });
     expect((await pending).account?.id).toBe("personal");
     expect(registeredHandlerCount(client)).toBe(0);
     const disconnected = client.requestConnections(server.id, { action: "list" });
-    client.disconnectServer(server.id);
+    client.disconnect(server.id);
     await expect(disconnected).rejects.toThrow("Server disconnected");
     expect(registeredHandlerCount(client)).toBe(0);
-    client.disconnectAll();
+    client.disconnect();
   });
 });

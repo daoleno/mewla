@@ -227,12 +227,12 @@ export default function SettingsScreen() {
       await switchCurrentServer(server.id);
       return;
     }
-    wsClient.connectServer(server);
+    wsClient.connect(server);
   };
 
   const disconnectServer = async (serverId: string) => {
     await Storage.setServerAutoConnect(serverId, false);
-    wsClient.disconnectServer(serverId);
+    wsClient.disconnect(serverId);
   };
 
   const openCreateServer = () => {
@@ -345,9 +345,9 @@ export default function SettingsScreen() {
     await refreshServers();
     closeEditor();
 
-    if (shouldReconnect) {
+    if (shouldReconnect && savedServer.id === currentServerId) {
       await Storage.setServerAutoConnect(savedServer.id, true);
-      wsClient.connectServer(savedServer);
+      wsClient.connect(savedServer);
     }
   };
 
@@ -400,7 +400,7 @@ export default function SettingsScreen() {
       message: "Its Sessions stay on the computer. Pair again to reconnect.",
       confirmLabel: "Remove",
       onConfirm: async () => {
-        wsClient.disconnectServer(server.id);
+        wsClient.disconnect(server.id);
         dispatch({ type: "REMOVE_SERVER", serverId: server.id });
         await Storage.removeServer(server.id);
         await cancelCalendarNotifications(server.id);

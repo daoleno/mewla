@@ -103,7 +103,7 @@ if (!process.env.MEWLA_BRAIN_SWITCH_TEST_CHILD) {
       const originalSocket = globalThis.WebSocket;
       Object.assign(globalThis, { WebSocket: Socket });
       const previousSocket = Socket.instance;
-      wsClient.connectServer(server);
+      wsClient.connect(server);
       for (
         let i = 0;
         (Socket.instance === previousSocket || !Socket.instance?.onopen) &&
@@ -329,7 +329,7 @@ if (!process.env.MEWLA_BRAIN_SWITCH_TEST_CHILD) {
         await act(async () => {
           renderer?.unmount();
         });
-        wsClient.disconnectAll();
+        wsClient.disconnect();
         Object.assign(globalThis, { WebSocket: originalSocket });
       }
     });

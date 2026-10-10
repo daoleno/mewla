@@ -654,7 +654,7 @@ export default function InboxScreen() {
     if (!currentServer || !isCurrentServer(currentServer.id)) return;
     try {
       await setServerAutoConnect(currentServer.id, true);
-      if (isCurrentServer(currentServer.id)) wsClient.connectServer(currentServer);
+      if (isCurrentServer(currentServer.id)) wsClient.connect(currentServer);
     } catch (error) {
       Alert.alert("Connection failed", error instanceof Error ? error.message : "Could not retry this server.");
     }
