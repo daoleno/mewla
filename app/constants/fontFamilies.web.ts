@@ -1,9 +1,8 @@
-// The bundled Maple Mono CN faces total ~15 MB; browsers ship CJK fallbacks,
-// so web leads with the small Latin faces (Inter, Bricolage Grotesque; see
-// appFontAssets.web.ts) and resolves CJK through installed families. Mono
-// leads with a Latin/symbol subset of Maple Mono: xterm sizes cells from the
-// first family, and generic `monospace` can resolve to a proportional CJK
-// face on Linux.
+// Browsers ship CJK fallbacks, so web leads with the small Latin faces
+// (Inter, Bricolage Grotesque; see appFontAssets.web.ts) and resolves CJK
+// through installed families. Mono leads with a Latin/symbol subset of Maple
+// Mono: xterm sizes cells from the first family, and generic `monospace` can
+// resolve to a proportional CJK face on Linux.
 export const WEB_MONO_FAMILY = "Mewla Maple Mono";
 export const WEB_MONO_BOLD_FAMILY = "Mewla Maple Mono SemiBold";
 export const WEB_UI_FAMILY = "Inter";

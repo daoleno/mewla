@@ -39,6 +39,14 @@ describe("Ghostty WebView bootstrap boundary", () => {
     expect(html).toContain("const gridSize = (viewportWidth, viewportHeight, cellWidth, cellHeight)");
   });
 
+  test("cells drawn by a system fallback face keep their grid width", () => {
+    const html = buildGhosttyTerminalHtml(theme, null, 13, 0);
+
+    expect(html).toContain(".terminal-row w { width: 2ch; }");
+    expect(html).toContain(".terminal-row n { width: 1ch; }");
+    expect(html).toContain("text-decoration: inherit;");
+  });
+
   test("inline bootstrap failures and font timeout are observable and bounded", () => {
     const html = buildGhosttyTerminalHtml(
       theme,

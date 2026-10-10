@@ -264,6 +264,29 @@ static void appendHtmlEscapedCodepoint(std::string* out, uint32_t codepoint) {
     }
 }
 
+// Rows are text runs, so a glyph advances by its font's width, not its cell's.
+// The bundled mono face carries Latin, box drawing, blocks, braille and
+// Powerline at exactly one cell, drawn as plain text; everything else may come from a system
+// fallback face (CJK, symbols, emoji) with its own advance. Pin those cells to
+// their grid width (<w> two cells, <n> one) so later columns never drift. The
+// bare tags keep Chinese scrollback inside the history HTML budget.
+static const char* pinnedCellClass(GhosttyCell cell, GhosttyCellWide wide) {
+    if (wide == GHOSTTY_CELL_WIDE_WIDE) {
+        return "w";
+    }
+    uint32_t codepoint = 0;
+    ghostty_cell_get(cell, GHOSTTY_CELL_DATA_CODEPOINT, &codepoint);
+    // Keep in sync with PLAIN_RANGES in scripts/subset-maple-mono.py.
+    if (codepoint < 0x2000 ||
+        (codepoint >= 0x2500 && codepoint <= 0x259F) ||
+        (codepoint >= 0x2800 && codepoint <= 0x28FF) ||
+        (codepoint >= 0xE0A0 && codepoint <= 0xE0A2) ||
+        (codepoint >= 0xE0B0 && codepoint <= 0xE0B7)) {
+        return nullptr;
+    }
+    return "n";
+}
+
 static bool appendCellText(
     GhosttyRenderStateRowCells rowCells,
     GhosttyCell cell,
@@ -696,8 +719,19 @@ static std::string buildRowHtml(
         }
 
         const bool preserveBlankCell = true;
+        const char* pinned = pinnedCellClass(cell, wide);
+        if (pinned) {
+            segmentText.push_back('<');
+            segmentText.append(pinned);
+            segmentText.push_back('>');
+        }
         if (appendCellText(rowCells, cell, preserveBlankCell, &segmentText)) {
             sawVisibleText = true;
+        }
+        if (pinned) {
+            segmentText.append("</");
+            segmentText.append(pinned);
+            segmentText.push_back('>');
         }
     }
 

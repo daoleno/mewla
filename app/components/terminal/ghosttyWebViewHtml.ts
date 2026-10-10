@@ -120,6 +120,16 @@ export function buildGhosttyTerminalHtml(
       .terminal-row * {
         white-space: pre;
       }
+      /* The native formatter pins cells a fallback face may draw (CJK,
+         symbols, emoji) to their grid width; 1ch is the bundled cell.
+         Decorations do not propagate into inline-blocks, so inherit them. */
+      .terminal-row w, .terminal-row n {
+        display: inline-block;
+        text-align: center;
+        text-decoration: inherit;
+      }
+      .terminal-row w { width: 2ch; }
+      .terminal-row n { width: 1ch; }
       #terminal-html pre {
         margin: 0;
         white-space: pre;
