@@ -39,7 +39,7 @@ export interface SessionTerminationSummary {
 }
 
 /**
- * Minimal structural transport; MultiServerWebSocketClient satisfies it.
+ * Minimal structural transport; WebSocketClient satisfies it.
  * Kept narrow so the batch is fully testable with a fake.
  */
 export interface SessionTerminationTransport {

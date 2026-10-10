@@ -56,7 +56,7 @@ class FakeWebSocket {
 const originalWebSocket = globalThis.WebSocket;
 Object.assign(globalThis, { WebSocket: FakeWebSocket });
 
-const { MultiServerWebSocketClient: WebSocketClient } = await import("./websocket");
+const { WebSocketClient } = await import("./websocket");
 type Client = InstanceType<typeof WebSocketClient>;
 
 const server = {
@@ -202,7 +202,7 @@ async function flush() {
 async function connected(): Promise<{ client: Client; socket: FakeWebSocket }> {
   const client = new WebSocketClient();
   const index = FakeWebSocket.instances.length;
-  client.connectServer(server);
+  client.connect(server);
   await flush();
   const socket = FakeWebSocket.instances[index];
   if (!socket) throw new Error("expected a socket");
@@ -284,7 +284,7 @@ async function probe(rpc: Rpc) {
     result.reply = state.outcome;
     await settleByTimeout(state);
     result.handlersAfterReply = handlerCount(client);
-    client.disconnectAll();
+    client.disconnect();
   }
 
   // Each error channel, with message/code/current and without a message.
@@ -313,7 +313,7 @@ async function probe(rpc: Rpc) {
         }
       }
       expect(handlerCount(client)).toBe(0);
-      client.disconnectAll();
+      client.disconnect();
     }
     result.errorChannels = rejecting;
     result.ignoredErrorChannels = ignored;
@@ -328,14 +328,14 @@ async function probe(rpc: Rpc) {
     await flush();
     result.timeout = state.outcome;
     result.handlersAfterTimeout = handlerCount(client);
-    client.disconnectAll();
+    client.disconnect();
   }
 
   // Intentional disconnect while pending.
   {
     const { client } = await connected();
     const state = track(withTimers(() => rpc.call(client)));
-    client.disconnectAll();
+    client.disconnect();
     await flush();
     result.disconnect = state.outcome;
     await settleByTimeout(state);

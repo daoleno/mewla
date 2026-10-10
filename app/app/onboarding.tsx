@@ -29,7 +29,7 @@ export default function OnboardingScreen() {
       onRetry={() => {
         if (!server || !isCurrentServer(server.id)) return;
         void setServerAutoConnect(server.id, true).then(() => {
-          if (isCurrentServer(server.id)) wsClient.connectServer(server);
+          if (isCurrentServer(server.id)) wsClient.connect(server);
         }).catch((error) => Alert.alert("Connection failed", error instanceof Error ? error.message : "Could not retry this server."));
       }}
     />

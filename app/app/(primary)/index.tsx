@@ -215,7 +215,7 @@ export default function BrainScreen() {
   const retryConnection = useCallback(() => {
     if (!activeServer || !isCurrentServer(activeServer.id)) return;
     void setServerAutoConnect(activeServer.id, true).then(() => {
-      if (isCurrentServer(activeServer.id)) wsClient.connectServer(activeServer);
+      if (isCurrentServer(activeServer.id)) wsClient.connect(activeServer);
     }).catch((error) => toast.show({ title: "Couldn't reconnect", detail: String(error), tone: "error" }));
   }, [activeServer, isCurrentServer, toast]);
   const openPairing = useCallback(() => {

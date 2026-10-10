@@ -4,7 +4,6 @@ import {
   brainScreenSurface,
   createConnectedReadRefreshHandler,
   decideDisconnectLifecycle,
-  resolveBrainActiveServerId,
   shouldShowBrainLoadingState,
 } from "./connectionLifecycle";
 import { brainReducer, initialBrainState } from "../store/brain";
@@ -165,31 +164,6 @@ describe("Brain cache across background->foreground resume", () => {
     expect(afterReconnectSnapshot.byServer["srv-1"]?.host_worker?.id).toBe(
       "host-1",
     );
-  });
-});
-
-describe("resolveBrainActiveServerId during resume", () => {
-  test("prefers hydrated server while reconnecting (not connected)", () => {
-    const id = resolveBrainActiveServerId({
-      servers: [{ id: "other" }, { id: "brain-host" }],
-      connectedServerIds: [],
-      brainHydratedByServer: { "brain-host": true },
-      connectionStates: {
-        other: "offline",
-        "brain-host": "connecting",
-      },
-    });
-    expect(id).toBe("brain-host");
-  });
-
-  test("prefers connected hydrated over merely hydrated", () => {
-    const id = resolveBrainActiveServerId({
-      servers: [{ id: "a" }, { id: "b" }],
-      connectedServerIds: ["b"],
-      brainHydratedByServer: { a: true, b: true },
-      connectionStates: { a: "connecting", b: "connected" },
-    });
-    expect(id).toBe("b");
   });
 });
 

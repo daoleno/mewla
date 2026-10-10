@@ -115,6 +115,11 @@ After pairing, the app reconnects with the stored server and device key. You
 only need a new pairing code for a new device or after you clear the daemon's
 state.
 
+The app can keep several paired servers, but it connects to only one at a
+time: the current server. Switching servers in **Settings** disconnects from the
+previous one and clears its Sessions, Brain, Work and Calendar from the app
+before the new server loads.
+
 ## Add another device
 
 Once one device is paired, a new browser or phone can request access from any
