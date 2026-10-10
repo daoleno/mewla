@@ -1,16 +1,16 @@
 import React, {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { Alert } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import {
-  SkillsPresentation,
-  type SurfaceMutationNotice,
-} from "../components/skills/SkillsPresentation";
+import { useFocusEffect } from "expo-router";
+import type { SurfaceMutationNotice } from "../skills/SkillsPresentation";
 import {
   beginSkillsRequest,
   buildSkillsMutationConfirmation,
@@ -22,43 +22,39 @@ import {
   type PackageDetail,
   type SkillsInventory,
   type SkillsRequestState,
-} from "../services/skillsManagement";
+} from "../../services/skillsManagement";
 import {
   buildPluginMutationConfirmation,
   pluginUninstallInput,
   type InstalledPluginCopy,
   type PluginInventory,
-} from "../services/pluginsManagement";
+} from "../../services/pluginsManagement";
 import {
   evaluatePluginUninstall,
   groupLogicalPlugins,
   reconcilePluginUninstallInventory,
-} from "../services/pluginsScreenModel";
+} from "../../services/pluginsScreenModel";
 import {
   SkillsAutomaticInventoryOwner,
-  groupLogicalSkills,
   selectStableSkillsProjectCwd,
-} from "../services/skillsScreenModel";
-import { skillsOutsidePlugins } from "../services/skillsPluginOwnership";
-import {
-  createSkillsSurfaceState,
-  isPluginProvidedSkill,
-  reduceSkillsSurface,
-  type SkillsSurfaceSection,
-} from "../services/skillsSurfaceModel";
-import { wsClient } from "../services/websocket";
-import { useWorkers } from "../store/workers";
-import { useCurrentServer } from "../store/currentServer";
+} from "../../services/skillsScreenModel";
+import { skillsOutsidePlugins } from "../../services/skillsPluginOwnership";
+import { isPluginProvidedSkill } from "../../services/skillsSurfaceModel";
+import { wsClient } from "../../services/websocket";
+import { useWorkers } from "../../store/workers";
+import { useCurrentServer } from "../../store/currentServer";
 
-export default function SkillsScreen() {
-  const router = useRouter();
+/**
+ * The agents' own plugins and Skills, read once for every Extensions page:
+ * the index counts them per tool, and each tool's page lists and changes them.
+ */
+function useAgentExtensionsState() {
   const { state } = useWorkers();
   const { currentServer } = useCurrentServer();
   const serverId = currentServer?.id ?? null;
   const connected = Boolean(
     serverId && state.serverConnections[serverId] === "connected",
   );
-  const [surface, setSurface] = useState(createSkillsSurfaceState);
   const [inventoryState, setInventoryState] = useState<
     SkillsRequestState<SkillsInventory>
   >(createSkillsRequestState);
@@ -73,7 +69,6 @@ export default function SkillsScreen() {
   const [preparingMutation, setPreparingMutation] = useState("");
   const [notice, setNotice] = useState<SurfaceMutationNotice | null>(null);
   const [focusGeneration, setFocusGeneration] = useState(0);
-  const [focusedPluginKey, setFocusedPluginKey] = useState<string | null>(null);
   const inventoryGeneration = useRef(0);
   const pluginsGeneration = useRef(0);
   const inspectGeneration = useRef(0);
@@ -121,7 +116,6 @@ export default function SkillsScreen() {
     setInspectedCopyId(null);
     setPreparingMutation("");
     setNotice(null);
-    setFocusedPluginKey(null);
   }, [serverId]);
   useEffect(() => {
     inventoryGeneration.current += 1;
@@ -252,22 +246,22 @@ export default function SkillsScreen() {
     }
   }, [connected, serverId]);
 
+  // Both inventories load on focus and again once the server connects, so a
+  // page opened while connecting fills in without a manual retry. Plugin
+  // ownership has to be known before Skills are split by tool.
   useEffect(() => {
     if (
       automaticInventory.current.shouldRefresh(
         focusGeneration,
-        skillsContextKey,
+        `${skillsContextKey}\u0000${connected}`,
       )
     )
       void refreshInventory();
-  }, [focusGeneration, refreshInventory, skillsContextKey]);
-  // Plugin ownership must be known on the Skills tab too, so the Plugins
-  // inventory loads with the same focus/server cadence as Skills instead of
-  // waiting for the Plugins tab to be opened.
+  }, [connected, focusGeneration, refreshInventory, skillsContextKey]);
   useEffect(() => {
-    if (automaticPlugins.current.shouldRefresh(focusGeneration, serverId))
+    if (automaticPlugins.current.shouldRefresh(focusGeneration, `${serverId}\u0000${connected}`))
       void refreshPlugins();
-  }, [focusGeneration, refreshPlugins, serverId]);
+  }, [connected, focusGeneration, refreshPlugins, serverId]);
 
   const inspectSkill = useCallback(
     async (skill: InstalledSkill, path?: string) => {
@@ -526,72 +520,64 @@ export default function SkillsScreen() {
 
   const inventory = skillsRequestData(inventoryState);
   const plugins = skillsRequestData(pluginsState);
-  const logicalPlugins = groupLogicalPlugins(plugins?.installed ?? []);
   // Plugin-owned copies are presented once, inside their owning Plugin's
   // expandable Skills directory. Exclusion waits for a completed Plugins read
   // so ownership is never guessed from a partially loaded inventory.
   const pluginsResolved =
     pluginsState.status === "ready" || pluginsState.status === "empty";
+  const allLogicalPlugins = useMemo(
+    () => groupLogicalPlugins(plugins?.installed ?? []),
+    [plugins?.installed],
+  );
   const listableSkills = useMemo(
     () =>
       pluginsResolved
-        ? skillsOutsidePlugins(inventory?.skills ?? [], logicalPlugins)
+        ? skillsOutsidePlugins(inventory?.skills ?? [], allLogicalPlugins)
         : inventory?.skills ?? [],
-    [inventory?.skills, logicalPlugins, pluginsResolved],
+    [allLogicalPlugins, inventory?.skills, pluginsResolved],
   );
-  const pluginOwnedSkillCount =
-    (inventory?.skills.length ?? 0) - listableSkills.length;
-  const logicalSkills = groupLogicalSkills(listableSkills);
-  return (
-    <SkillsPresentation
-      section={surface.section}
-      inventoryState={inventoryState}
-      logicalSkills={logicalSkills}
-      pluginsState={pluginsState}
-      logicalPlugins={logicalPlugins}
-      skills={inventory?.skills ?? []}
-      mutationOperations={inventory?.mutationOperations ?? []}
-      preparingMutation={preparingMutation}
-      mutationNotice={notice}
-      currentServerAvailable={Boolean(currentServer)}
-      serverName={currentServer?.name ?? ""}
-      connection={
-        serverId ? state.serverConnections[serverId] ?? "offline" : "offline"
-      }
-      projectCwd={projectCwd}
-      inspectedName={inspectedName}
-      inspectedCopyId={inspectedCopyId}
-      inspectState={inspectState}
-      pluginOwnedSkillCount={pluginOwnedSkillCount}
-      onSelectSection={(section: SkillsSurfaceSection) =>
-        setSurface((current) =>
-          reduceSkillsSurface(current, { type: "select_section", section }),
-        )
-      }
-      onOpenSettings={() => router.push("/settings")}
-      onRefreshSkills={() => void refreshInventory()}
-      onRetryPlugins={() => void refreshPlugins()}
-      onInspectSkill={(skill, path) => void inspectSkill(skill, path)}
-      onInspectSkillCopy={inspectSkillCopyDetail}
-      onDismissInspector={dismissInspector}
-      onDeleteSkill={(skill) => void runSkillDelete(skill)}
-      onUninstallPlugin={(copy: InstalledPluginCopy) =>
-        void runPluginUninstall(copy)
-      }
-      onDismissNotice={() => setNotice(null)}
-      onViewSkillPlugin={(pluginKey) => {
-        setFocusedPluginKey(pluginKey);
-        setSurface((current) =>
-          reduceSkillsSurface(current, {
-            type: "select_section",
-            section: "plugins",
-          }),
-        );
-      }}
-      focusedPluginKey={focusedPluginKey}
-      onFocusPluginConsumed={() => setFocusedPluginKey(null)}
-    />
-  );
+  return {
+    inventoryState,
+    pluginsState,
+    inspectState,
+    inspectedName,
+    inspectedCopyId,
+    preparingMutation,
+    notice,
+    projectCwd,
+    currentServerAvailable: Boolean(currentServer),
+    serverName: currentServer?.name ?? "",
+    connection: serverId ? state.serverConnections[serverId] ?? "offline" : "offline",
+    /** Every Skill copy, Plugin-owned ones included. */
+    skills: inventory?.skills ?? [],
+    /** Skill copies no installed Plugin owns: the ones listed by tool. */
+    listableSkills,
+    pluginCopies: plugins?.installed ?? [],
+    mutationOperations: inventory?.mutationOperations ?? [],
+    refreshInventory,
+    refreshPlugins,
+    inspectSkill,
+    inspectSkillCopyDetail,
+    dismissInspector,
+    runSkillDelete,
+    runPluginUninstall,
+    dismissNotice: () => setNotice(null),
+  };
+}
+
+export type AgentExtensions = ReturnType<typeof useAgentExtensionsState>;
+
+const AgentExtensionsContext = createContext<AgentExtensions | null>(null);
+
+export function AgentExtensionsProvider({ children }: { children: ReactNode }) {
+  const value = useAgentExtensionsState();
+  return <AgentExtensionsContext.Provider value={value}>{children}</AgentExtensionsContext.Provider>;
+}
+
+export function useAgentExtensions(): AgentExtensions {
+  const value = useContext(AgentExtensionsContext);
+  if (!value) throw new Error("useAgentExtensions needs an AgentExtensionsProvider");
+  return value;
 }
 
 function confirm(

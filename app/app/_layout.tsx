@@ -669,12 +669,11 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="(primary)" options={{ headerShown: false }} />
       <Stack.Screen name="calendar" options={{ title: "Calendar" }} />
       <Stack.Screen name="plugins" options={{ headerShown: false }} />
-      <Stack.Screen name="skills" options={{ title: "Skills" }} />
       <Stack.Screen name="stats" options={{ title: "Stats" }} />
       <Stack.Screen name="browser" options={{ title: "Browser" }} />
       <Stack.Screen name="resources" options={{ title: "Resources" }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
-      <Stack.Screen name="model-profiles" options={{ title: "Model Providers" }} />
+      <Stack.Screen name="settings/model-providers" options={{ title: "Model Providers" }} />
       <Stack.Screen
         name="terminal/[id]"
         options={{ headerShown: false, animation: "none" }}

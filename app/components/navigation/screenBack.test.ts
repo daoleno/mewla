@@ -10,17 +10,17 @@ describe("screen back", () => {
   });
 
   test("deep-linked screens land on their logical parent", () => {
-    expect(screenBackParent("model-profiles")).toBe("/settings");
+    expect(screenBackParent("settings/model-providers")).toBe("/settings");
     for (const route of [
       "calendar",
-      "skills",
       "stats",
       "browser",
       "resources",
       "settings",
       "work/[id]",
-      // Nested Plugins stack
+      // Nested Extensions stack
       "index",
+      "agents/[tool]",
       "custom",
       "[service]/index",
       "[service]/permissions",

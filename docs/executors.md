@@ -171,22 +171,26 @@ picked for one Session applies to that Session only.
 The Model Provider and Brain's executor are separate choices; changing one
 never changes the other.
 
-## Skills and Agent Plugins
+## Your agents' plugins and Skills
 
 ![Skills on Studio Mac: release-notes, go-tests, brand-voice and design-audit, with the agent that loads each](assets/skills.svg)
 
-**Skills**, in the menu, lists the Skills your agents load on the current
-server: Codex built-ins, each agent's global and project Skills, shared Skills
-in `~/.agents/skills`, and Skills that come from Agent Plugins. A Skill found in
-several places shows each copy and its location.
+**Extensions**, in the menu, leads with Mewla's own [plugins](plugins.md).
+Below them, **From your agents** has one row per tool with what that tool
+installed itself, such as "Codex · 6 plugins · 34 Skills". Tools with nothing
+installed are named in one line underneath.
+
+A tool's page lists its **Plugins** (Claude Code and Codex) and its **Skills**:
+Codex built-ins and the tool's global and project Skills. Skills that come
+with a plugin are listed inside that plugin. Skills in `~/.agents/skills` serve
+several tools, so they are listed once, under **Shared**, rather than under
+each tool.
 
 Open a Skill to see its description, files, the agents it is available to and
 every copy. **Delete Skill** removes exactly the copy you opened, after you
-confirm. Built-in copies and copies owned by an Agent Plugin are protected.
-
-The **Agent Plugins** tab lists the plugins installed for Claude Code and
-Codex, with the Skills, MCP servers and apps each one brings. A plugin can be
-uninstalled from there, after you confirm.
+confirm. Built-in copies and copies owned by a plugin are protected. A plugin
+shows the Skills, MCP servers and apps it brings, and can be uninstalled from
+its page, after you confirm.
 
 ## Check your agents
 

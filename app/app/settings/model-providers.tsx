@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
-import { confirmDestructive } from "../components/ui/confirmDestructive";
+import { confirmDestructive } from "../../components/ui/confirmDestructive";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   ProvidersPresentation,
   type ModelSyncPickerState,
   type ProvidersEditorState,
   type ProviderSaveOutcome,
-} from "../components/providers/ProvidersPresentation";
-import { providerEditorAfterSave } from "../components/providers/providersPresentationModel";
+} from "../../components/providers/ProvidersPresentation";
+import { providerEditorAfterSave } from "../../components/providers/providersPresentationModel";
 import {
   ProviderError,
   ProviderRequestOwner,
@@ -27,10 +27,10 @@ import {
   type ProviderClient,
   type ProvidersMutationResult,
   type ProvidersSnapshot,
-} from "../services/providers";
-import { wsClient } from "../services/websocket";
-import { useWorkers } from "../store/workers";
-import { useCurrentServer } from "../store/currentServer";
+} from "../../services/providers";
+import { wsClient } from "../../services/websocket";
+import { useWorkers } from "../../store/workers";
+import { useCurrentServer } from "../../store/currentServer";
 
 export default function ProvidersScreen() {
   const router = useRouter();

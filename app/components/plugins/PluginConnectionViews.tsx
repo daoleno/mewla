@@ -71,6 +71,19 @@ export function NoServerState({ onOpenSettings }: { onOpenSettings(): void }) {
 }
 
 /**
+ * Mewla's own plugins lead Extensions: the heading every state sits under.
+ * The agents' own plugins and Skills follow, quieter (AgentToolsSection).
+ */
+export function MewlaPluginsHeading() {
+  return (
+    <View style={styles.mewlaHeading}>
+      <AppText variant="sheetTitle" accessibilityRole="header">Mewla plugins</AppText>
+      <AppText variant="compact" tone="secondary">Brain and Workers reach these through Mewla. You decide what each may do.</AppText>
+    </View>
+  );
+}
+
+/**
  * The Plugins list: one row per service. A service with nothing connected
  * offers Connect right on its row, one that needs sign-in offers Reconnect,
  * and the row itself opens the service's page.
@@ -117,7 +130,7 @@ export function CatalogView({
   );
   return (
     <>
-      <ListSection title="Services">{rows.services.map(row)}</ListSection>
+      <ListSection>{rows.services.map(row)}</ListSection>
       {rows.custom.length ? (
         <ListSection title="Your own services" footer="Any MCP server or OpenAPI service, by its address.">
           {rows.custom.map(row)}
@@ -554,6 +567,7 @@ function ToolRow({ tool, busy, pending, onToggle }: { tool: NonNullable<PluginAc
 }
 
 const styles = StyleSheet.create({
+  mewlaHeading: { gap: 4, paddingHorizontal: 4 },
   glyph: { alignItems: "center", justifyContent: "center", ...ContinuousCorners },
   serviceHeader: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 4 },
   serviceCopy: { flex: 1, minWidth: 0, gap: 4 },

@@ -26,7 +26,6 @@ export type DesktopSidebarKey =
   | "sessions"
   | "calendar"
   | "plugins"
-  | "skills"
   | "stats"
   | "resources"
   | "settings";
@@ -60,14 +59,11 @@ export function desktopSidebarKey(pathname: string): DesktopSidebarKey | null {
       return "calendar";
     case "plugins":
       return "plugins";
-    case "skills":
-      return "skills";
     case "stats":
       return "stats";
     case "resources":
       return "resources";
     case "settings":
-    case "model-profiles":
       return "settings";
     default:
       return null;
@@ -80,12 +76,10 @@ const PAGE_TITLES: Record<string, string> = {
   terminal: "Session",
   work: "Work",
   calendar: "Calendar",
-  plugins: "Plugins",
-  skills: "Skills",
+  plugins: "Extensions",
   stats: "Stats",
   resources: "Resources",
   settings: "Settings",
-  "model-profiles": "Model Providers",
   browser: "Browser",
   onboarding: "Pair",
 };
@@ -104,14 +98,13 @@ export function desktopShellExcluded(pathname: string): boolean {
 
 /**
  * Stack routes that are menu destinations. On desktop web the sidebar is their
- * way out, so they draw no Back; sub-pages keep theirs. `index` is the Plugins
- * catalog in its nested Stack.
+ * way out, so they draw no Back; sub-pages keep theirs. `index` is the
+ * Extensions page in its nested Stack.
  */
 export function isDesktopTopLevelRoute(routeName: string): boolean {
   switch (routeName) {
     case "calendar":
     case "index":
-    case "skills":
     case "stats":
     case "resources":
     case "settings":

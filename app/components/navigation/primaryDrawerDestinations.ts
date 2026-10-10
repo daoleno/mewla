@@ -4,7 +4,6 @@ import type { PrimaryRouteName } from "../../services/interactionTrace";
 export type PrimaryDrawerPathname =
   | "/calendar"
   | "/plugins"
-  | "/skills"
   | "/stats"
   | "/browser"
   | "/resources"
@@ -38,8 +37,7 @@ export const PRIMARY_DRAWER_PLACES: readonly PrimaryDrawerPlace[] = [
  */
 export const PRIMARY_DRAWER_DESTINATIONS: readonly PrimaryDrawerDestination[] = [
   { key: "calendar", label: "Calendar", pathname: "/calendar", icon: "calendar" },
-  { key: "plugins", label: "Plugins", pathname: "/plugins", icon: "plugins" },
-  { key: "skills", label: "Skills", pathname: "/skills", icon: "skills" },
+  { key: "plugins", label: "Extensions", pathname: "/plugins", icon: "plugins" },
   { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
   { key: "resources", label: "Resources", pathname: "/resources", icon: "resources" },
 ];

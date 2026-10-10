@@ -30,7 +30,8 @@ describe("route mapping", () => {
     expect(desktopSidebarKey("/list")).toBe("sessions");
     expect(desktopSidebarKey("/terminal/w2533")).toBe("sessions");
     expect(desktopSidebarKey("/plugins/github/tools")).toBe("plugins");
-    expect(desktopSidebarKey("/model-profiles")).toBe("settings");
+    expect(desktopSidebarKey("/plugins/agents/codex")).toBe("plugins");
+    expect(desktopSidebarKey("/settings/model-providers")).toBe("settings");
     expect(desktopSidebarKey("/settings?addServer=1")).toBe("settings");
     expect(desktopSidebarKey("/browser")).toBeNull();
   });
@@ -46,7 +47,7 @@ describe("route mapping", () => {
 
   test("tab titles", () => {
     expect(desktopDocumentTitle("/")).toBe("Brain · Mewla");
-    expect(desktopDocumentTitle("/plugins/linear")).toBe("Plugins · Mewla");
+    expect(desktopDocumentTitle("/plugins/linear")).toBe("Extensions · Mewla");
     expect(desktopDocumentTitle("/terminal/w25", "atlas-notes")).toBe("atlas-notes · Mewla");
     expect(desktopDocumentTitle("/terminal/w25", "  ")).toBe("Session · Mewla");
     expect(desktopDocumentTitle("/nowhere")).toBe("Mewla");
@@ -59,16 +60,16 @@ describe("route mapping", () => {
   });
 
   test("menu destinations draw no Back; sub-pages keep it", () => {
-    for (const name of ["calendar", "index", "skills", "stats", "resources", "settings"]) {
+    for (const name of ["calendar", "index", "stats", "resources", "settings"]) {
       expect(isDesktopTopLevelRoute(name)).toBe(true);
     }
-    for (const name of ["model-profiles", "[service]/index", "terminal/[id]", "work/[id]", "browser"]) {
+    for (const name of ["settings/model-providers", "[service]/index", "agents/[tool]", "terminal/[id]", "work/[id]", "browser"]) {
       expect(isDesktopTopLevelRoute(name)).toBe(false);
     }
   });
 
   test("chats and the terminal lay out their own width", () => {
-    expect(desktopReadableRoute("skills")).toBe(true);
+    expect(desktopReadableRoute("stats")).toBe(true);
     expect(desktopReadableRoute("(primary)")).toBe(false);
     expect(desktopReadableRoute("terminal/[id]")).toBe(false);
   });
@@ -77,7 +78,7 @@ describe("route mapping", () => {
 describe("sidebar navigation", () => {
   test("pages always open as a new history entry", () => {
     expect(desktopSidebarNavigation(["(primary)", "calendar"], "calendar")).toBe("open");
-    expect(desktopSidebarNavigation(["(primary)"], "skills")).toBe("open");
+    expect(desktopSidebarNavigation(["(primary)"], "plugins")).toBe("open");
   });
 
   test("Brain and Sessions switch in place when showing, and open as a page elsewhere", () => {
@@ -87,13 +88,13 @@ describe("sidebar navigation", () => {
   });
 
   test("only the newest copy of a page, and only recent pages or home, stay mounted", () => {
-    const stack = ["(primary)", "calendar", "skills", "stats", "resources", "settings"];
+    const stack = ["(primary)", "calendar", "plugins", "stats", "resources", "settings"];
     expect(desktopScreenRetained(stack, 0)).toBe(true);
     expect(desktopScreenRetained(stack, stack.length - 1)).toBe(true);
     expect(desktopScreenRetained(stack, stack.length - DESKTOP_RETAINED_PAGES)).toBe(true);
     expect(desktopScreenRetained(stack, stack.length - DESKTOP_RETAINED_PAGES - 1)).toBe(false);
     // Brain opened again: the older copy is a history entry only.
-    const reopened = ["(primary)", "skills", "(primary)", "calendar", "skills"];
+    const reopened = ["(primary)", "plugins", "(primary)", "calendar", "plugins"];
     expect(desktopScreenRetained(reopened, 0)).toBe(false);
     expect(desktopScreenRetained(reopened, 1)).toBe(false);
     expect(desktopScreenRetained(reopened, 2)).toBe(true);
