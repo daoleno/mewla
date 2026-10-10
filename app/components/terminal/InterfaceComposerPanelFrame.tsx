@@ -14,7 +14,8 @@ interface InterfaceComposerPanelFrameProps {
 }
 
 /**
- * Static capsule frames for legacy layouts. The shared mobile Composer
+ * Static capsule frames for the chatgpt and classic panel layouts that
+ * InterfaceComposerPanel still renders. The shared mobile Composer
  * (telegram) uses InterfaceComposerExpandingDock, which owns the animated
  * capsule geometry.
  */
