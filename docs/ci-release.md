@@ -77,7 +77,7 @@ Release notes leave out maintainer identity. It lives in tracked files instead:
 | Version | `app/app.base.json` `expo.version`, mirrored in `daemon/cmd/mewla/version.go` |
 | Android package | `com.daoleno.mewla` (`app/app.base.json`) |
 | Android `versionCode` | `app/app.base.json`; preparation increments it by one |
-| Android ABI | `arm64-v8a` only (`app/modules/terminal-vt/native.lock.json`) |
+| Android ABI | `arm64-v8a` only (`app/package.json` `build:apk`, `app/modules/terminal-vt/native.lock.json`) |
 | iOS Preview bundle, marketing version and build number | See [iOS CI](ios-ci-release.md#signed-release-and-testflight) |
 
 `scripts/verify-release-identity.sh` checks all of them against the tracked version.
