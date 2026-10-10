@@ -40,8 +40,6 @@ type controlWatcher interface {
 	SendInputWithReceiptWhenReadyResult(sessionID, command, payload string, receiptFor watcher.InputReceiptForGeneration) (watcher.InputResult, watcher.OwnedGeneration, error)
 	InputReceiptResult(sessionID, receipt string) (watcher.InputResult, bool, error)
 	SendInputWhenReady(sessionID, command, text string) error
-	SubmitInput(sessionID, payload string) error
-	SubmitInputWhenReady(sessionID, command, payload string) error
 	SubmitDelegatedInput(sessionID, payload, turnID string, acceptedAt time.Time) (watcher.InputResult, error)
 	SubmitDelegatedInputWhenReady(sessionID, command, payload, workID, turnID string, acceptedAt time.Time) (watcher.InputResult, error)
 	SubmitDelegatedInputWhenReadyBudgeted(sessionID, command, payload, workID, turnID string, acceptedAt time.Time, budget time.Duration) (watcher.InputResult, error)
