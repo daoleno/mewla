@@ -506,7 +506,7 @@ func TestWorkerProgressCommandExplicitIDOverridesEnv(t *testing.T) {
 }
 
 func TestWorkerProgressCommandUsesStateDirFallback(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortControlStateDir(t)
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 
@@ -537,7 +537,7 @@ func TestWorkerProgressCommandUsesStateDirFallback(t *testing.T) {
 }
 
 func TestBrainResolveCLI(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortControlStateDir(t)
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 	var stderr bytes.Buffer
@@ -567,7 +567,7 @@ func TestBrainResolveCLI(t *testing.T) {
 }
 
 func TestBrainResolveCLIDueRetry(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortControlStateDir(t)
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 	const due = "2026-08-23T03:04:05Z"
@@ -600,7 +600,7 @@ func TestBrainResolveCLIDueRetry(t *testing.T) {
 }
 
 func TestBrainWorkCloseCLI(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortControlStateDir(t)
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 	var stderr bytes.Buffer
@@ -628,7 +628,7 @@ func TestBrainWorkCloseCLI(t *testing.T) {
 }
 
 func TestRevokeDeviceUsesRunningDaemonControlOwner(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortControlStateDir(t)
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 
@@ -664,7 +664,7 @@ func TestWorkerProgressCommandRequiresIDOrEnv(t *testing.T) {
 
 func runProgressCLIAndCaptureRequest(t *testing.T, envWorkerID string, args []string) control.Request {
 	t.Helper()
-	stateDir := t.TempDir()
+	stateDir := shortControlStateDir(t)
 	handler, done, cancel := startCLIControlServer(t, stateDir)
 	defer cancel()
 
@@ -759,7 +759,7 @@ func TestBrainObjectiveCLISendsControlRequests(t *testing.T) {
 		{args: []string{"clear"}, wantType: "brain_objective_clear"},
 		{args: nil, wantType: "brain_objective"},
 	} {
-		stateDir := t.TempDir()
+		stateDir := shortControlStateDir(t)
 		handler, done, cancel := startCLIControlServer(t, stateDir)
 		args := append([]string(nil), tc.args...)
 		if len(args) > 0 {
