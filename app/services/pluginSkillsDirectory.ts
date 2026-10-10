@@ -4,6 +4,7 @@ import type {
 } from "./pluginsManagement";
 import type { LogicalPlugin } from "./pluginsScreenModel";
 import type { InstalledSkill } from "./skillsManagement";
+import { pathBasename } from "./pathDisplay";
 
 /**
  * Directory of Skills provided by one installed Plugin.
@@ -63,7 +64,7 @@ function matchComponentCopy(
     (skill) =>
       skill.scope === "plugin" &&
       withinRoot(skill.rootPath, pluginCopy.rootPath) &&
-      basename(skill.rootPath) === component.name,
+      pathBasename(skill.rootPath) === component.name,
   );
 }
 
@@ -80,6 +81,3 @@ function withinRoot(path: string, root: string): boolean {
   );
 }
 
-function basename(path: string): string {
-  return path.replace(/\/+$/, "").split("/").pop() ?? "";
-}

@@ -1,6 +1,6 @@
 import { isDSHCommand } from "./agentCommands";
 import type { Worker } from '../store/workers';
-import { displayPathSubtitle } from './pathDisplay';
+import { displayPathSubtitle, pathBasename } from './pathDisplay';
 import { isClaudeCommand, isCodexCommand, isCursorAgentCommand, isGrokCommand, isOpenCodeCommand, isPiCommand } from './agentCommands';
 import {
   detectTerminalFlavor,
@@ -29,7 +29,7 @@ export function presentWorker(agent: Pick<Worker, 'name' | 'project' | 'cwd' | '
     kind === 'terminal' ? detectTerminalFlavor(agent) : 'shell';
   const label = typeLabel(kind, terminalFlavor);
   const cwd = normalize(agent.cwd);
-  const cwdBase = basename(cwd);
+  const cwdBase = pathBasename(cwd);
   const project = normalize(agent.project);
   const cleanName = sanitizeName(agent.name);
   const explicitAlias = normalize(alias);
@@ -114,13 +114,6 @@ function sanitizeName(value?: string): string {
   const trimmed = normalize(value);
   if (!trimmed) return '';
   return trimmed.replace(/\s+\([^)]+\)\s*$/, '').trim();
-}
-
-function basename(value: string): string {
-  if (!value) return '';
-  const normalized = value.replace(/\/+$/, '');
-  const parts = normalized.split('/');
-  return parts[parts.length - 1] || normalized;
 }
 
 function normalize(value?: string): string {

@@ -42,6 +42,7 @@ import { useGitDiffClipboard } from "./gitDiffClipboard";
 import { resolveGitDiffBack, type GitDiffViewMode } from "./gitDiffNavigation";
 import { summarizeGitDiffFiles } from "./gitDiffPresentation";
 import { useGitDiffChrome } from "./gitDiffSurface";
+import { pathBasename } from "../../services/pathDisplay";
 
 const WIDE_BREAKPOINT = 720;
 
@@ -555,15 +556,10 @@ function GitDiffSheetBody({
   );
 }
 
-function pathBaseName(path: string): string {
-  const index = path.lastIndexOf("/");
-  return index === -1 ? path : path.slice(index + 1);
-}
-
 function repoBaseName(path: string): string {
   const trimmed = path.replace(/\/+$/, "");
   if (!trimmed) return "";
-  return pathBaseName(trimmed);
+  return pathBasename(trimmed);
 }
 
 const styles = StyleSheet.create({

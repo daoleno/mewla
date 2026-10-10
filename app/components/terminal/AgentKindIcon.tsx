@@ -14,6 +14,7 @@ import { FlavorLetterBadge } from './FlavorLetterBadge';
 import { CursorMark } from '../icons/CursorMark';
 import { PiMark } from '../icons/PiMark';
 import { Icon } from "../icons/Icon";
+import { withAlpha } from './colorWithAlpha';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 type FontAwesome5Name = ComponentProps<typeof FontAwesome5>['name'];
@@ -266,17 +267,6 @@ function renderFlavorIcon(presentation: Exclude<FlavorPresentation, { family: 'l
         />
       );
   }
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const normalized = hex.replace('#', '');
-  if (normalized.length !== 6) {
-    return hex;
-  }
-  const value = Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `#${normalized}${value}`;
 }
 
 function createStyles(theme: ResolvedTheme) {

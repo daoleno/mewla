@@ -1,5 +1,6 @@
 import React from "react";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
+import { isImageAttachment } from "../../services/imageSource";
 import { Icon } from "../icons/Icon";
 
 interface InterfaceComposerAttachmentIconProps {
@@ -18,7 +19,7 @@ export function InterfaceComposerAttachmentIcon({
   return (
     <Icon
       name={
-        looksLikeImagePath(fileName)
+        isImageAttachment({ name: fileName })
           ? "image"
           : "document-text"
       }
@@ -26,8 +27,4 @@ export function InterfaceComposerAttachmentIcon({
       color={color ?? chrome.textMuted}
     />
   );
-}
-
-function looksLikeImagePath(value: string) {
-  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(value.trim());
 }

@@ -8,6 +8,7 @@ import { chromeTint } from "./composerMaterial";
 
 import { isImageAttachment, type ImageSource } from "../../services/imageSource";
 import { AppImage } from "./AppImage";
+import { pathBasename } from "../../services/pathDisplay";
 
 export type InterfaceComposerAttachment = import("./InterfaceChatSession").ComposerAttachment;
 
@@ -82,7 +83,7 @@ export function InterfaceComposerAttachmentChip({
           {attachment.name}
         </Text>
         {failed ? <Text style={[styles.path, styles.failed, { color: chrome.danger }]} numberOfLines={1}>Upload failed</Text>
-          : attachment.path ? <Text style={[styles.path, { color: chrome.textSubtle }]} numberOfLines={1}>{basename(attachment.path)}</Text> : null}
+          : attachment.path ? <Text style={[styles.path, { color: chrome.textSubtle }]} numberOfLines={1}>{pathBasename(attachment.path)}</Text> : null}
       </View>
       <InterfaceComposerAttachmentRemoveButton
         attachmentName={attachment.name}
@@ -98,11 +99,6 @@ function attachmentThumbnailUri(attachment: InterfaceComposerAttachment) {
     return attachment.localUri;
   }
   return null;
-}
-
-function basename(value: string) {
-  const parts = value.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] || value;
 }
 
 const styles = StyleSheet.create({

@@ -62,6 +62,7 @@ import { SessionFilePreviewContext } from "./SessionFilePreviewContext";
 import { SessionFilePdfPreview } from "./SessionFilePdfPreview";
 import { SessionFileMediaPreview } from "./SessionFileMediaPreview";
 import { Icon, type IconName } from "../icons/Icon";
+import { pathBasename } from "../../services/pathDisplay";
 
 export interface SessionFilePreviewLoader {
   metadata(
@@ -434,7 +435,7 @@ function SessionFilePreviewHeader({
   onClose(): void;
 }) {
   const metadata = state.metadata;
-  const title = metadata?.name || pathBaseName(state.reference || "") || "File";
+  const title = metadata?.name || pathBasename(state.reference || "") || "File";
   const meta = metadata
     ? [
         metadata.relativePath,
@@ -780,10 +781,6 @@ function sessionFileKindLabel(metadata: SessionFileMetadata): string {
     default:
       return "Binary";
   }
-}
-
-function pathBaseName(path: string): string {
-  return path.replace(/\\/g, "/").split("/").at(-1) || "";
 }
 
 const styles = StyleSheet.create({

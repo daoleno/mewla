@@ -1,3 +1,5 @@
+import { pathBasename } from "../../services/pathDisplay";
+
 type SyntaxLanguage =
   | "c"
   | "css"
@@ -137,7 +139,7 @@ function detectSyntaxLanguageForFence(language: string | undefined): SyntaxLangu
 
 function detectSyntaxLanguage(path: string): SyntaxLanguage {
   const normalized = path.toLowerCase();
-  const fileName = pathBaseName(normalized);
+  const fileName = pathBasename(normalized);
   const extension = fileName.includes(".") ? fileName.split(".").pop() || "" : "";
 
   if (fileName === "dockerfile" || fileName.endsWith(".dockerfile")) {
@@ -504,11 +506,6 @@ function keywordSetForLanguage(language: SyntaxLanguage): Set<string> {
     default:
       return EMPTY_KEYWORDS;
   }
-}
-
-function pathBaseName(path: string): string {
-  const index = path.lastIndexOf("/");
-  return index === -1 ? path : path.slice(index + 1);
 }
 
 const EMPTY_KEYWORDS = new Set<string>();
