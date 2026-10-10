@@ -1915,7 +1915,7 @@ func (w *Watcher) resolvePendingProviderAdmission(
 	default:
 		return InputAdmission{}, false
 	}
-	admission := admissionFromObservation(provider)
+	admission := AdmissionFromObservation(provider)
 	if strings.TrimSpace(provider.ID) == "" || admission.Empty() ||
 		strings.TrimSpace(admission.SHA256) != submission.PayloadSHA256 {
 		return InputAdmission{}, false
@@ -2188,7 +2188,7 @@ func admissionFactFromObservation(sessionID string, turn TurnSnapshot, provider 
 		Kind:       "admission",
 		SourceID:   fmt.Sprintf("provider\x00%s\x00%s\x00%s\x00%d", sessionID, strings.TrimSpace(provider.AdmissionStream), strings.TrimSpace(provider.AdmissionID), provider.AdmissionCursor),
 		Cursor:     provider.AdmissionCursor,
-		Admission:  admissionFromObservation(provider),
+		Admission:  AdmissionFromObservation(provider),
 		ActivityID: strings.TrimSpace(provider.ID),
 		StartedAt:  provider.StartedAt,
 		At:         time.Now().UTC(),
@@ -2217,9 +2217,9 @@ func activityFactFromObservation(sessionID string, turn TurnSnapshot, provider P
 		TurnID:     turn.TurnID,
 		Class:      EvidenceProvider,
 		Kind:       kind,
-		SourceID:   providerFactSourceID(sessionID, provider),
+		SourceID:   ProviderFactSourceID(sessionID, provider),
 		Cursor:     provider.AdmissionCursor,
-		Admission:  admissionFromObservation(provider),
+		Admission:  AdmissionFromObservation(provider),
 		ActivityID: strings.TrimSpace(provider.ID),
 		StartedAt:  provider.StartedAt,
 		SettledAt:  provider.SettledAt,
