@@ -8,7 +8,12 @@ This file records release-readiness blockers and the evidence that resolved them
 
 ## Open blockers
 
-None.
+### `ios-distribution-artifacts` (reopened 2026-10-10)
+
+- **Summary:** Mewla's new bundle requires its own external TestFlight group and Beta App Review. The previous Zen distribution does not establish Mewla installability.
+- **Acceptance:** CI verifies the XCFramework and Ghostty notice, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path; an IPA upload alone is insufficient.
+- **Evidence:** [Run 38027369612](https://github.com/daoleno/mewla/actions/runs/38027369612) successfully signed and uploaded Mewla `0.2.4 (42)` to app record `6821246662`. Post-processing stopped because the `Mewla Preview` external group does not exist.
+- **Recovery:** Create the public external group, then run `iOS TestFlight post-process` for version `0.2.4`, build `42`. Verify group assignment and Apple review status before publishing the new installation link. See [iOS CI](ios-ci-release.md).
 
 ## Resolved
 
@@ -24,13 +29,6 @@ None.
 - **Acceptance:** Documented prebuilt APK/libs with MIT notice, or a reproducible CI artifact pipeline.
 - **Resolution evidence:** [`v0.1.0-beta.22`](https://github.com/daoleno/mewla/releases/tag/v0.1.0-beta.22) publishes the signed arm64 APK, three daemon archives, `SHA256SUMS`, and the signed update manifest. The release workflow verifies ABI, native imports, notice packaging, package identity, signing certificate, checksums, and manifest signature before publication.
 - **User/CI commands:** `./scripts/verify-libghostty.sh --contract`; `./scripts/build-libghostty.sh` then `./scripts/verify-libghostty.sh --release`; APK `./scripts/android-release-apk.sh` + `./scripts/verify-apk-notice.sh <apk>`.
-
-### `ios-distribution-artifacts` (resolved 2026-08-24)
-
-- **Summary:** The iOS source build and Simulator runtime path work. `GhosttyVt.xcframework` remains generated/gitignored. A signed Preview IPA can be uploaded to App Store Connect via the protected release workflow, but that is not the same as public TestFlight/App Store installability.
-- **Acceptance:** Reproducible CI produces and verifies the pinned XCFramework, packages the Ghostty MIT notice into the app bundle, archives/signs the app, and publishes a supported installation path with checksummed artifacts where applicable.
-- **Resolution evidence:** the protected `v0.1.0-beta.22` iOS workflow completed archive, identity, signature, upload, processing, public TestFlight-group attachment, and Beta App Review submission. That public Preview URL, <https://testflight.apple.com/join/rTKCDzMt>, belongs to the pre-rename `Zen — Coding Agents` record (`com.daoleno.zen.preview`); Mewla Preview needs its own record and group (see [iOS CI](ios-ci-release.md)).
-- **User/CI commands:** `bun run native:build:ios`; `bun run native:verify:ios`; Expo prebuild/Pods; the `CI` macOS job; or a protected manual `iOS signed release` dispatch.
 
 ### `theme-image-provenance-unknown` (resolved)
 

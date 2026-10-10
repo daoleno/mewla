@@ -1,7 +1,54 @@
 {
   "schema_version": 1,
-  "updated": "2026-10-06",
-  "blockers": [],
+  "updated": "2026-10-10",
+  "blockers": [
+    {
+      "id": "ios-distribution-artifacts",
+      "severity": "blocking",
+      "summary": "Mewla build 0.2.4 (42) is uploaded; external TestFlight group configuration and Beta App Review remain pending",
+      "paths": [
+        {
+          "path": "app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework",
+          "referenced_by_app": true
+        },
+        {
+          "path": "app/modules/terminal-vt/TerminalVt.podspec",
+          "referenced_by_app": true
+        },
+        {
+          "path": "app/plugins/withIOSBuild.js",
+          "referenced_by_app": true
+        },
+        {
+          "path": "scripts/build-libghostty-ios.sh",
+          "referenced_by_app": false
+        },
+        {
+          "path": "scripts/verify-libghostty-ios.sh",
+          "referenced_by_app": false
+        },
+        {
+          "path": "scripts/verify-ios-artifact.sh",
+          "referenced_by_app": false
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "referenced_by_app": false
+        },
+        {
+          "path": ".github/workflows/ios-release.yml",
+          "referenced_by_app": false
+        },
+        {
+          "path": "docs/internal/ios-development.md",
+          "referenced_by_app": false
+        }
+      ],
+      "acceptance": "Reproducible CI verifies the XCFramework and Ghostty notice in the app bundle, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path (Preview IPA upload alone is insufficient)",
+      "pipeline_status": "postprocessing_pending",
+      "evidence": "https://github.com/daoleno/mewla/actions/runs/38027369612"
+    }
+  ],
   "resolved": [
     {
       "id": "github-plugin-publisher-registration",
@@ -59,53 +106,6 @@
       "acceptance": "Ship reproducible libs/APK with MIT notice or documented binary distribution",
       "pipeline_status": "complete",
       "evidence": "https://github.com/daoleno/mewla/releases/tag/v0.1.0-beta.22",
-      "resolved_at": "2026-08-24"
-    },
-    {
-      "id": "ios-distribution-artifacts",
-      "severity": "resolved",
-      "summary": "Protected CI publishes the verified Preview build through the public TestFlight group",
-      "paths": [
-        {
-          "path": "app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework",
-          "referenced_by_app": true
-        },
-        {
-          "path": "app/modules/terminal-vt/TerminalVt.podspec",
-          "referenced_by_app": true
-        },
-        {
-          "path": "app/plugins/withIOSBuild.js",
-          "referenced_by_app": true
-        },
-        {
-          "path": "scripts/build-libghostty-ios.sh",
-          "referenced_by_app": false
-        },
-        {
-          "path": "scripts/verify-libghostty-ios.sh",
-          "referenced_by_app": false
-        },
-        {
-          "path": "scripts/verify-ios-artifact.sh",
-          "referenced_by_app": false
-        },
-        {
-          "path": ".github/workflows/ci.yml",
-          "referenced_by_app": false
-        },
-        {
-          "path": ".github/workflows/ios-release.yml",
-          "referenced_by_app": false
-        },
-        {
-          "path": "docs/internal/ios-development.md",
-          "referenced_by_app": false
-        }
-      ],
-      "acceptance": "Reproducible CI verifies the XCFramework and Ghostty notice in the app bundle, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path (Preview IPA upload alone is insufficient)",
-      "pipeline_status": "complete",
-      "evidence": "https://testflight.apple.com/join/rTKCDzMt",
       "resolved_at": "2026-08-24"
     },
     {

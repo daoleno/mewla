@@ -159,14 +159,14 @@ The earlier successful Zen TestFlight pipeline does not establish release readin
 - [`v0.2.3`, build 41, run 38016963783](https://github.com/daoleno/mewla/actions/runs/38016963783) stopped before building because `MEWLA_ASC_PREVIEW_APP_ID` was not configured. The historical error incorrectly named `ZEN_ASC_APP_ID`; validation now names the actual variable for the selected identity and never substitutes the other app's ID.
 - [`v0.2.0`, run 37609541307](https://github.com/daoleno/mewla/actions/runs/37609541307) reached signing setup and rejected the configured provisioning profile because it did not match `com.daoleno.mewla.preview`.
 - The Mewla app record is now `6821246662`, with subtitle `One person. A whole team.` and bundle `com.daoleno.mewla.preview`. Repository variable `MEWLA_ASC_PREVIEW_APP_ID` points to that record. The Preview environment now has a matching `Mewla Preview App Store` profile using the existing distribution certificate; team, bundle, App Store eligibility, expiration, and production push entitlement were verified before storing it. The build supplies the current seal-cat icon from `app/assets/branding/mewla-icon.png`.
-- Recovery run [38027369612](https://github.com/daoleno/mewla/actions/runs/38027369612) builds the latest release `v0.2.4`, build `42`, with `app_identity=preview` and `destination=testflight`. Verify its final result and the new app's TestFlight group/review status before claiming distribution is complete. Use the post-process workflow only if that exact app/version/build has already uploaded successfully.
+- Recovery run [38027369612](https://github.com/daoleno/mewla/actions/runs/38027369612) successfully archived, signed, exported, verified, and uploaded `v0.2.4`, build `42`, with `app_identity=preview` and `destination=testflight`. Apple accepted upload `a5c2d348-d31a-48cd-8b26-c35c6e305c93`. The run failed afterward because the new app has no external beta group named `Mewla Preview`. Create that exact public group, then run `iOS TestFlight post-process` with version `0.2.4` and build `42`; no rebuild or duplicate upload is needed. Distribution is not complete until group assignment and Beta App Review status are verified.
+- The downloaded signed IPA passed local artifact verification and SHA-256 validation. Its packaged identity is `Mewla` / `com.daoleno.mewla.preview`, version `0.2.4`, build `42`, from source commit `a23c3c18598e952c7e6a275c13320d79dd7395f4`. Its SHA-256 is `5623214ec33cab14ce5d85927b1788b57428c5968af0b7e4ec59d566160c4fdf`.
 
 ### Verification still required
 
-- A successful GitHub-hosted macOS run with the currently selected Xcode image.
-- A signed archive/export using the real team certificate and profile.
+- Successful TestFlight post-processing for the uploaded Mewla build; the real GitHub-hosted macOS archive/export, signing, and upload gates passed in the recovery run above.
 - Installation and terminal I/O testing on at least one physical device.
-- First App Store Connect upload, processing, export-compliance answers, privacy metadata, screenshots, TestFlight tester configuration, and any Beta App Review.
-- For Preview specifically: friend-team invitation acceptance, Preview App ID/app record/profile/API key creation, protected environment population, and tester-group assignment after upload.
+- Export-compliance answers, external TestFlight tester configuration, and Beta App Review for the new Mewla record. App Store production submission additionally needs its own metadata and screenshots.
+- For Preview specifically: external `Mewla Preview` group creation, public-link configuration, and uploaded-build assignment. The exact Preview App ID/app record/profile and environment signing configuration have been exercised by the successful upload.
 - Crash-symbol and native Ghostty attribution review in the exported app.
 - Certificate, provisioning-profile, and API-key rotation practice before expiry.
