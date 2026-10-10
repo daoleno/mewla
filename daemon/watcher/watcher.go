@@ -260,7 +260,6 @@ type Watcher struct {
 	tunnelResolveHost     func(context.Context, string) ([]net.IPAddr, error)
 	pollInterval          time.Duration
 	workers               map[string]*classifier.Worker
-	legacyWorkerIDs       map[string]string
 	workerOrder           []string
 	prevContent           map[string]string
 	hidden                map[string]bool

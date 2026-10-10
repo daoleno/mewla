@@ -280,9 +280,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("resolve route bindings path: %w", err)
 	}
-	if err := brain.MigrateWorkerPaneIdentity(brainRoot, w, brain.PaneMigrationPaths{RouteBindings: routesPath, TelegramState: filepath.Join(authManager.StorageDir(), "telegram", "state.json")}); err != nil {
-		return fmt.Errorf("migrate Worker pane identities: %w", err)
-	}
 	brainStore, err := brain.NewStore(brainRoot)
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
