@@ -3,7 +3,6 @@ package workerproc
 import (
 	"bytes"
 	"encoding/binary"
-	"golang.org/x/sys/unix"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -33,11 +32,11 @@ func readProcesses(_ map[int]Process) (map[int]Process, error) {
 	}
 
 	for pid, p := range records {
-		raw, err := unix.SysctlRaw("kern.procargs2", pid)
-		if err != nil {
+		env := Environ(pid)
+		if env == nil {
 			continue
 		}
-		if resourceID, workerID := workerEnvIdentity(parseProcArgsEnvironment(raw)); resourceID != "" || workerID != "" {
+		if resourceID, workerID := workerEnvIdentity(env); resourceID != "" || workerID != "" {
 			p.ResourceID, p.WorkerID = resourceID, workerID
 		}
 		records[pid] = p

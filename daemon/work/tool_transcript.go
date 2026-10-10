@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 const (
@@ -265,19 +266,8 @@ func openCodexRolloutPathsForProcess(processID int) []string {
 }
 
 func procOpenCodexRolloutPaths(processID int) []string {
-	if processID <= 0 {
-		return nil
-	}
-	entries, err := os.ReadDir(filepath.Join("/proc", strconv.Itoa(processID), "fd"))
-	if err != nil {
-		return nil
-	}
 	var paths []string
-	for _, entry := range entries {
-		path, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(processID), "fd", entry.Name()))
-		if err != nil {
-			continue
-		}
+	for _, path := range workerproc.OpenFiles(processID) {
 		if isCodexRolloutPath(path) {
 			paths = append(paths, normalizeOpenFilePath(path))
 		}

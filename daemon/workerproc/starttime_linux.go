@@ -1,9 +1,8 @@
 //go:build linux
 
-package watcher
+package workerproc
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 	"strconv"
@@ -12,13 +11,13 @@ import (
 	"time"
 )
 
-// processStartTimeFromProc derives the precise start time of pid from
+// StartTime derives the precise start time of pid from
 // /proc/<pid>/stat field 22 (starttime, clock ticks since boot) converted
 // with btime from /proc/stat and the system clock tick rate. ps lstart only
 // carries whole-second precision; the proc derivation is typically 10ms, so
 // instance-ownership arms can compare against the true process start instead
 // of its rounded second.
-func processStartTimeFromProc(pid int) (time.Time, bool) {
+func StartTime(pid int) (time.Time, bool) {
 	if pid <= 0 {
 		return time.Time{}, false
 	}
@@ -49,17 +48,13 @@ func processStartTimeFromProc(pid int) (time.Time, bool) {
 }
 
 // parseProcStatStartTicks extracts field 22 (starttime) from /proc/<pid>/stat
-// content. The comm field may contain spaces or parentheses, so parsing
-// starts after the final ')'.
+// content. Unlike ParseProcStat it accepts zombies: a zombie's start is still
+// its identity.
 func parseProcStatStartTicks(stat []byte) (int64, bool) {
-	close := bytes.LastIndexByte(stat, ')')
-	if close < 0 {
-		return 0, false
-	}
-	fields := strings.Fields(string(stat[close+1:]))
+	_, _, fields, err := procStatFields(string(stat))
 	// After ')', the first field is state (proc field 3); starttime is proc
 	// field 22, i.e. index 19 in this slice.
-	if len(fields) <= 19 {
+	if err != nil || len(fields) <= 19 {
 		return 0, false
 	}
 	ticks, err := strconv.ParseInt(fields[19], 10, 64)

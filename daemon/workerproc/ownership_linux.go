@@ -1,6 +1,7 @@
 package workerproc
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,8 +42,8 @@ func readProcesses(previous map[int]Process) (map[int]Process, error) {
 			p.ContainerID = old.ContainerID
 		} else {
 			if p.UID == os.Getuid() {
-				if env, err := os.ReadFile(root + "/environ"); err == nil {
-					p.ResourceID, p.WorkerID = workerEnvIdentity(strings.Split(string(env), "\x00"))
+				if env := Environ(pid); env != nil {
+					p.ResourceID, p.WorkerID = workerEnvIdentity(env)
 				}
 			}
 			if cg, err := os.ReadFile(root + "/cgroup"); err == nil {
@@ -53,24 +54,48 @@ func readProcesses(previous map[int]Process) (map[int]Process, error) {
 	}
 	return records, nil
 }
-func ParseProcStat(raw string) (Process, error) {
+
+// ErrExited reports a zombie or dead process: it holds no live identity.
+var ErrExited = errors.New("exited process")
+
+// procStatFields splits /proc/<pid>/stat into the pid, the comm and the
+// fields after it, state first. The comm may contain spaces or parentheses,
+// so the split is at the final ')'.
+func procStatFields(raw string) (pid int, comm string, fields []string, err error) {
 	end := strings.LastIndex(raw, ")")
 	start := strings.Index(raw, "(")
 	if start < 1 || end <= start {
-		return Process{}, fmt.Errorf("invalid proc stat")
+		return 0, "", nil, fmt.Errorf("invalid proc stat")
 	}
-	f := strings.Fields(raw[end+1:])
+	pid, err = strconv.Atoi(strings.TrimSpace(raw[:start]))
+	if err != nil {
+		return 0, "", nil, err
+	}
+	return pid, raw[start+1 : end], strings.Fields(raw[end+1:]), nil
+}
+
+// ReadProcStat parses /proc/<pid>/stat. A missing process returns an
+// os.IsNotExist error and a zombie returns ErrExited.
+func ReadProcStat(pid int) (Process, error) {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return Process{}, err
+	}
+	return ParseProcStat(string(raw))
+}
+
+func ParseProcStat(raw string) (Process, error) {
+	pid, comm, f, err := procStatFields(raw)
+	if err != nil {
+		return Process{}, err
+	}
 	if len(f) < 22 {
 		return Process{}, fmt.Errorf("short proc stat")
 	}
 	if f[0] == "Z" || f[0] == "X" {
-		return Process{}, fmt.Errorf("exited process")
+		return Process{}, ErrExited
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(raw[:start]))
-	if err != nil {
-		return Process{}, err
-	}
-	p := Process{PID: pid, Args: raw[start+1 : end], Start: f[19]}
+	p := Process{PID: pid, Args: comm, Start: f[19]}
 	p.PPID, _ = strconv.Atoi(f[1])
 	p.PGID, _ = strconv.Atoi(f[2])
 	p.SID, _ = strconv.Atoi(f[3])
@@ -82,11 +107,7 @@ func ParseProcStat(raw string) (Process, error) {
 	return p, nil
 }
 func processIdentityMatches(p Process) bool {
-	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", p.PID))
-	if err != nil {
-		return false
-	}
-	now, err := ParseProcStat(string(raw))
+	now, err := ReadProcStat(p.PID)
 	return err == nil && now.Start == p.Start
 }
 func containerID(cgroup string) string {

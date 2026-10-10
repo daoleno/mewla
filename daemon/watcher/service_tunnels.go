@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 type ServiceTunnel struct {
@@ -47,7 +49,7 @@ func (w *Watcher) tunnelOwner() *serviceTunnels {
 }
 
 func serviceGeneration(pid int) string {
-	started, ok := processStartTimeFromProc(pid)
+	started, ok := workerproc.StartTime(pid)
 	if !ok {
 		return ""
 	}

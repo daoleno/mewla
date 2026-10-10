@@ -6,17 +6,19 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 func TestProcessStartTimeFromDarwinCurrentProcess(t *testing.T) {
-	started, ok := processStartTimeFromProc(os.Getpid())
+	started, ok := workerproc.StartTime(os.Getpid())
 	if !ok {
-		t.Fatal("processStartTimeFromProc did not return Darwin kernel starttime")
+		t.Fatal("workerproc.StartTime did not return Darwin kernel starttime")
 	}
 	if started.IsZero() {
 		t.Fatal("Darwin process starttime is zero")
 	}
-	again, ok := processStartTimeFromProc(os.Getpid())
+	again, ok := workerproc.StartTime(os.Getpid())
 	if !ok || !again.Equal(started) {
 		t.Fatalf("Darwin process starttime is not stable: %v then %v", started, again)
 	}
@@ -40,10 +42,10 @@ func TestProcessStartTimeFromDarwinCurrentProcess(t *testing.T) {
 		t.Fatalf("zero observation must stay zero, got %v", got)
 	}
 	// Invalid and unknown pids yield no evidence.
-	if _, ok := processStartTimeFromProc(0); ok {
+	if _, ok := workerproc.StartTime(0); ok {
 		t.Fatal("zero pid must not yield starttime evidence")
 	}
-	if _, ok := processStartTimeFromProc(2147483647); ok {
+	if _, ok := workerproc.StartTime(2147483647); ok {
 		t.Fatal("unknown pid must not yield starttime evidence")
 	}
 }

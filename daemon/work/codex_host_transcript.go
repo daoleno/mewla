@@ -5,10 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // CodexTranscriptIdentity is the stable provider transcript binding for a Host
@@ -349,12 +349,8 @@ func procEnvironValue(processID int, key string) string {
 	if processID <= 0 || strings.TrimSpace(key) == "" {
 		return ""
 	}
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(processID), "environ"))
-	if err != nil {
-		return ""
-	}
 	prefix := key + "="
-	for _, entry := range strings.Split(string(raw), "\x00") {
+	for _, entry := range workerproc.Environ(processID) {
 		if strings.HasPrefix(entry, prefix) {
 			return strings.TrimSpace(strings.TrimPrefix(entry, prefix))
 		}
@@ -363,45 +359,5 @@ func procEnvironValue(processID int, key string) string {
 }
 
 func procDescendantPIDs(root int) []int {
-	if root <= 0 {
-		return nil
-	}
-	seen := map[int]bool{root: true}
-	queue := []int{root}
-	var out []int
-	for len(queue) > 0 {
-		pid := queue[0]
-		queue = queue[1:]
-		for _, child := range procChildPIDs(pid) {
-			if seen[child] {
-				continue
-			}
-			seen[child] = true
-			out = append(out, child)
-			queue = append(queue, child)
-		}
-	}
-	return out
-}
-
-func procChildPIDs(processID int) []int {
-	if processID <= 0 {
-		return nil
-	}
-	raw, err := os.ReadFile(filepath.Join(
-		"/proc", strconv.Itoa(processID), "task", strconv.Itoa(processID), "children",
-	))
-	if err != nil {
-		return nil
-	}
-	fields := strings.Fields(string(raw))
-	out := make([]int, 0, len(fields))
-	for _, field := range fields {
-		pid, err := strconv.Atoi(field)
-		if err != nil || pid <= 0 {
-			continue
-		}
-		out = append(out, pid)
-	}
-	return out
+	return workerproc.Descendants(root)
 }

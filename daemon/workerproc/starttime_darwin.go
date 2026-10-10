@@ -1,6 +1,6 @@
 //go:build darwin
 
-package watcher
+package workerproc
 
 import (
 	"time"
@@ -8,11 +8,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// processStartTimeFromProc derives the precise Darwin process start from the
+// StartTime derives the precise Darwin process start from the
 // kernel's kern.proc.pid kinfo_proc record. P_starttime is a timeval with
 // microsecond precision and is the Darwin counterpart to Linux
 // /proc/<pid>/stat starttime.
-func processStartTimeFromProc(pid int) (time.Time, bool) {
+func StartTime(pid int) (time.Time, bool) {
 	if pid <= 0 {
 		return time.Time{}, false
 	}
