@@ -249,7 +249,7 @@ type ResourceThresholds struct {
 }
 
 func DefaultResourceThresholds() ResourceThresholds {
-	return ResourceThresholds{ThresholdPair{15, 7}, ThresholdPair{90, 98}, ThresholdPair{20, 60}, ThresholdPair{2, 10}, ThresholdPair{1, 5}, ThresholdPair{15, 40}, ThresholdPair{10, 3}, 20, 30, 60}
+	return ResourceThresholds{ThresholdPair{15, 7}, ThresholdPair{90, 98}, ThresholdPair{20, 60}, ThresholdPair{2, 10}, ThresholdPair{3, 15}, ThresholdPair{15, 40}, ThresholdPair{10, 3}, 20, 30, 60}
 }
 
 // A single JSON override keeps configuration typed and the complete default

@@ -151,7 +151,7 @@ trigger at or above the value; low-water signals trigger at or below it.
 | Total CPU utilization (%) | 90 | 98 |
 | CPU PSI some avg10 (%) | 20 | 60 |
 | Memory PSI some avg10 (%) | 2 | 10 |
-| Memory PSI full avg10 (%) | 1 | 5 |
+| Memory PSI full avg10 (%) | 3 | 15 |
 | IO PSI full avg10 (%) | 5 | 20 |
 | Free disk (% capacity, low) | 10 | 3 |
 
@@ -175,7 +175,7 @@ fields must be avoided. Example (partial overrides are supported):
   "cpu_busy_percent": { "elevated": 90, "critical": 98 },
   "cpu_some": { "elevated": 20, "critical": 60 },
   "memory_some": { "elevated": 2, "critical": 10 },
-  "memory_full": { "elevated": 1, "critical": 5 },
+  "memory_full": { "elevated": 3, "critical": 15 },
   "io_full": { "elevated": 15, "critical": 40 },
   "disk_free_percent": { "elevated": 10, "critical": 3 },
   "sustain_seconds": 20,
