@@ -2,8 +2,6 @@
 
 For the iOS build, signing, artifact, and Apple distribution gates, see [iOS CI and release automation](ios-ci-release.md).
 
-Machine-readable companion: [`release-blockers.json`](release-blockers.json).
-
 This file records release-readiness blockers and the evidence that resolved them. It is **not** an attribution source.
 
 ## Open blockers
@@ -33,7 +31,6 @@ This file records release-readiness blockers and the evidence that resolved them
 ### `theme-image-provenance-unknown` (resolved)
 
 - All unknown `app/assets/theme/*.webp` rasters removed.
-- `SkyNatureBackdrop` is first-party gradients only (no stock images).
 
 ## Non-blockers recorded for honesty
 

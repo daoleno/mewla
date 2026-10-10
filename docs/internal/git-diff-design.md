@@ -259,8 +259,8 @@ accessibility label of the form
 
 - **Loading:** a centered busy state on first load; a small pending indicator at
   the loaded edge during pagination. The list/reader never blanks.
-- **Clean/empty:** `Working tree is clean` for a clean repository;
-  `No matching changes` for an empty filter; `No changes in this comparison`
+- **Clean/empty:** `Working tree clean` for a clean repository;
+  `No matching files` for an empty filter; `No changes in this comparison`
   for an empty scope.
 - **Error:** an inline card with a retry control. Errors are visible even after
   an earlier success.
