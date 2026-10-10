@@ -17,8 +17,14 @@ const ease = (t) => t * t * (3 - 2 * t);
 const ACTS = { wake: 'delivered', stamp: 'delivered', patrol: 'working', perk: 'rear', sleep: 'idle' };
 // Clips drawn facing the viewer, or with the seal: never mirrored.
 const FRONT = new Set(['homeless', 'offline', 'waking', 'idle', 'working', 'delegating', 'attention', 'delivered', 'going_back']);
-// Canvas px the pet moves per frame of a cycle, so its paws stay planted.
+// Canvas px the pet moves per cycle frame when the drawings don't say: an
+// in-place drawing (no paw slides back) spreads this by contact instead.
 const STRIDE = { walk: 12, run: 17, stalk: 5 };
+// Canvas px a gait lifts at its passing frames, less what the drawings bob.
+const BOB = 4;
+// ms: the pause on a front-facing frame before a turn, and the settle into and
+// out of a walk.
+const TURN = 150, SETTLE = 90;
 
 export async function startPet(homeImg, strip) {
   const index = await (await fetch(`${ROOT}index.json`)).json();
@@ -35,7 +41,7 @@ export async function startPet(homeImg, strip) {
     await img.decode();
     const ends = [];
     spec.durations.reduce((t, d) => (ends.push(t + d), t + d), 0);
-    return { ...spec, name, img, ends, total: ends[ends.length - 1] };
+    return { ...spec, name, img, ends, total: ends[ends.length - 1], gait: spec.contact && gaitOf(name, spec) };
   })();
   const ready = {};
   const need = async (name) => (ready[name] = await load(name));
@@ -120,22 +126,50 @@ export async function startPet(homeImg, strip) {
   document.body.append(out.canvas);
   const awaySize = () => (innerWidth < 600 ? 92 : 116);
   // x, y: the feet in page px; z: drawn size; dir: 1 faces right
-  const pet = { x: 0, y: 0, z: 116, dir: 1, lift: 0, away: false, perch: null, frac: null };
+  const pet = { x: 0, y: 0, z: 116, dir: 1, lift: 0, bob: 0, away: false, perch: null, frac: null };
   // what it shows: a clip on its own clock, or a frame chosen by the action
   let shown = { name: 'delegating', t0: 0, frame: null };
   function show(name, frame = null, restart = false) {
     if (!ready[name]) return;
+    if (name !== gait.name) { gait.name = null; pet.bob = 0; }
     if (frame !== null) frame = Math.min(frame, ready[name].frames - 1); // clips differ in length
     if (restart || shown.name !== name || frame === null && shown.frame !== null) shown = { name, t0: performance.now(), frame };
     else shown.frame = frame;
   }
-  // a walk or run whose frame follows the distance covered
-  let walked = 0;
+  // a walk or run whose frame follows the distance covered: each drawing holds
+  // for its own measured travel, so the planted paws stay put, and the body
+  // bobs with the steps: down on contact, up passing
+  let gait = { name: null, frame: 0, into: 0, scale: 1 };
   function stride(name, dist) {
-    walked += Math.abs(dist) * SIDE / pet.z;
-    show(name, Math.floor(walked / STRIDE[name]) % (ready[name]?.frames ?? 8));
+    const c = ready[name];
+    if (!c?.gait) return;
+    if (gait.name !== name) gait = { name, frame: c.gait.contacts[0], into: 0, scale: 1 };
+    gait.into += Math.abs(dist) * SIDE / pet.z * gait.scale;
+    const { travel, bob } = c.gait;
+    while (gait.into >= travel[gait.frame] - 1e-6) { gait.into -= travel[gait.frame]; gait.frame = (gait.frame + 1) % c.frames; }
+    show(name, gait.frame);
+    const u = gait.into / travel[gait.frame];
+    pet.bob = bob * (1 - lerp(c.contact[gait.frame], c.contact[(gait.frame + 1) % c.frames], u)) * pet.z / SIDE;
   }
-
+  // ms of walking at a mean speed (page px per ms), at most max px: the body
+  // goes at the gait's own pace through each drawing (slow while paws are
+  // down, quicker in flight), so every drawing stays up for its hold. Returns
+  // the px covered.
+  function strideFor(name, ms, speed, max = Infinity) {
+    const c = ready[name]?.gait;
+    if (!c) { const d = Math.min(max, speed * ms); stride(name, d); return d; }
+    if (gait.name !== name) stride(name, 0);
+    const px = pet.z / SIDE / gait.scale; // page px per gait px
+    let moved = 0;
+    while (ms > 1e-6 && moved < max) {
+      const v = speed * c.pace[gait.frame];
+      const d = Math.min((c.travel[gait.frame] - gait.into) * px, max - moved, v * ms);
+      ms -= d / v;
+      moved += d;
+      stride(name, d);
+    }
+    return moved;
+  }
   // ---- actions: a queue of timed steps (u from 0 to 1) ----------------------------
   let queue = [], current = null;
   const act = (ms, step, init) => ({ ms, step, init });
@@ -193,18 +227,52 @@ export async function startPet(homeImg, strip) {
       onStep?.(u, fly);
     }, () => { y0 = pet.y; });
   }
-  // walk (or creep, or dash) along the floor to x
+  // walk (or creep, or dash) along the floor to x: a pause facing out before a
+  // turn, a settle on the first step, speed easing in over about a step and
+  // out over the last, at the gait's own pace, and a stop as a paw comes down
   function walkTo(getX, name = 'walk', speed = 0.09) {
-    let x1;
-    return act(400, (u, dt) => {
-      const dx = x1 - pet.x;
-      const step = Math.sign(dx) * Math.min(Math.abs(dx), speed * dt * pet.z / 116);
-      pet.x += step;
-      stride(name, step);
+    let x0, d, dir, turn, ramp, vmax, scale, s, t, stopped;
+    return act(1e9, function (u, dt) {
+      t += dt;
+      if (t < turn) { show('delegating'); return; }
+      pet.dir = dir;
+      if (gait.name !== name) { stride(name, 0); gait.scale = scale; } // after the turn's front frame
+      if (t < turn + SETTLE) return stride(name, 0);
+      if (s >= d) {
+        stride(name, 0);
+        stopped ??= t;
+        if (t - stopped >= SETTLE) this.ms = 0;
+        return;
+      }
+      // constant acceleration over the first ramp of distance, the same braking
+      // over the last
+      const e = clamp(Math.min(s, d - s) / ramp, 0, 1);
+      s += strideFor(name, dt, vmax * (0.18 + 0.82 * Math.sqrt(e)), d - s);
+      pet.x = x0 + dir * s;
     }, function () {
-      x1 = getX();
-      if (Math.abs(x1 - pet.x) > 2) pet.dir = x1 > pet.x ? 1 : -1;
-      this.ms = Math.max(120, Math.abs(x1 - pet.x) / (speed * pet.z / 116));
+      x0 = pet.x;
+      const x1 = getX();
+      d = Math.abs(x1 - x0);
+      dir = d > 2 ? (x1 > x0 ? 1 : -1) : pet.dir;
+      turn = dir !== pet.dir && d > 2 ? TURN : 0;
+      vmax = speed * pet.z / 116;
+      ramp = Math.max(1, Math.min(d / 2, 0.3 * pet.z));
+      s = 0; t = 0; stopped = null;
+      // stretch the steps a little so the walk ends as a paw comes down
+      if (turn) gait.name = null; // the turn's front frame breaks the step
+      stride(name, 0);
+      const c = ready[name]?.gait;
+      if (c && gait.name === name) {
+        const want = d * SIDE / pet.z;
+        let at = 0, best = null;
+        for (let f = gait.frame; at < want * 1.4 + c.cycle; f = (f + 1) % c.travel.length) {
+          at += c.travel[f];
+          if (c.contacts.includes((f + 1) % c.travel.length) && (!best || Math.abs(at - want) < Math.abs(best - want))) best = at;
+        }
+        gait.into = 0;
+        gait.scale = best && best / want > 0.75 && best / want < 1.33 ? best / want : 1;
+      }
+      scale = gait.scale;
     });
   }
 
@@ -364,14 +432,14 @@ export async function startPet(homeImg, strip) {
       out.flip = pet.dir < 0 && !FRONT.has(clip.name);
       out.draw(now);
       const s = pet.z / SIDE;
-      out.canvas.style.transform = `translate3d(${(pet.x - ax * s).toFixed(1)}px, ${(pet.y - pet.lift - ay * s).toFixed(1)}px, 0) scale(${s.toFixed(4)})`;
+      out.canvas.style.transform = `translate3d(${(pet.x - ax * s).toFixed(1)}px, ${(pet.y - pet.lift - pet.bob - ay * s).toFixed(1)}px, 0) scale(${s.toFixed(4)})`;
     }
     api.after?.(now, dt);
     requestAnimationFrame(tick);
   }
   const api = {
     pet, ready, need, home: home.canvas, stage, game: null, onHomeTap: null, after: null,
-    show, stride, run, queue: () => queue, busy: () => !!current || queue.length > 0,
+    show, stride, strideFor, run, queue: () => queue, busy: () => !!current || queue.length > 0,
     push: (...steps) => queue.push(...steps), unshift: (...steps) => queue.unshift(...steps),
     act, call, wait, play, rest, leap, hop, walkTo, leaveHome, comeHome, travel,
     spot, floor, topOf, surfaceUnder, column, pick, nearest, awaySize,
@@ -386,12 +454,38 @@ export async function startPet(homeImg, strip) {
 // Where the head is in each clip, as a fraction of the drawn size from the
 // feet, facing right: what the toys aim at and the scores pop over.
 const HEAD = {
-  working: [0.22, -0.45], run: [0.24, -0.42], stalk: [0.3, -0.22], wiggle: [0.3, -0.25], pounce: [0.26, -0.3],
-  swat: [0.15, -0.48], rear: [0.1, -0.62], jump: [0.1, -0.62], eat: [0.3, -0.22], groom: [0.15, -0.48],
+  working: [0.22, -0.45], run: [0.24, -0.42], stalk: [0.3, -0.22], wiggle: [0.3, -0.25], pounce: [0.2, -0.2],
+  swat: [-0.08, -0.45], rear: [0.03, -0.69], jump: [-0.12, -0.62], eat: [-0.06, -0.2], groom: [-0.1, -0.45],
 };
 function headAt(pet, name) {
   const [hx, hy] = HEAD[name] ?? [0, -0.6];
   return { x: pet.x + hx * pet.z * pet.dir, y: pet.y - pet.lift + hy * pet.z };
+}
+
+// A moving clip's travel per frame (canvas px), measured from its drawings by
+// scripts/import-pets.py; an in-place drawing gets its cycle's STRIDE spread by
+// contact, little while paws are down and most in flight. Its contact frames,
+// its pace (speed per frame that keeps each drawing up for its hold), and the
+// bob the page adds.
+function gaitOf(name, spec) {
+  const n = spec.frames;
+  let travel = spec.travel;
+  if (!travel) {
+    const w = spec.contact.map((c) => 0.25 + (1 - c));
+    const sum = w.reduce((a, b) => a + b, 0);
+    travel = w.map((x) => x * (STRIDE[name] ?? 12) * n / sum);
+  }
+  // each drawing's hold, the loop's long last hold capped
+  const mid = [...spec.durations].sort((a, b) => a - b)[n >> 1];
+  const holds = spec.durations.map((d) => Math.min(d, mid * 1.5));
+  const cycle = travel.reduce((a, b) => a + b, 0), time = holds.reduce((a, b) => a + b, 0);
+  const most = Math.max(...spec.contact);
+  const contacts = spec.contact.map((c, i) => (c >= 0.6 * most ? i : -1)).filter((i) => i >= 0);
+  return {
+    travel, cycle, contacts: contacts.length ? contacts : [0],
+    pace: travel.map((t, i) => (t / holds[i]) / (cycle / time)),
+    bob: Math.max(0, BOB - Math.max(...spec.rise)),
+  };
 }
 
 // Every other pet, the way it sits when Brain hands work off.
