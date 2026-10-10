@@ -97,7 +97,7 @@ func TestNativeBrainTopicCreationAndDestinationSurviveRestart(t *testing.T) {
 	if err := m.ensureBrainTopic(); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.deliverTopicOpOne(t.Context(), "token"); err != nil {
+	if err := m.deliverTopicOpOne(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	topic := m.store.snapshot().BrainTopicID
@@ -116,7 +116,7 @@ func TestNativeBrainTopicCreationAndDestinationSurviveRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	for reopened.hasDeliverableOutbox() {
-		if err := reopened.deliverOne(t.Context(), "token"); err != nil {
+		if err := reopened.deliverOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -124,7 +124,7 @@ func TestNativeBrainTopicCreationAndDestinationSurviveRestart(t *testing.T) {
 	if err := reopened.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.deliverOne(t.Context(), "token"); err != nil {
+	if err := reopened.deliverOne(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.edited) != 1 || api.edited[0].Text != "First and final" {
@@ -190,13 +190,13 @@ func TestFloodWaitBlocksOtherRowsInSamePrivateChat(t *testing.T) {
 	bindOwner(t, m, 1, 10, 10)
 	m.enqueueText("second", "Second", 0)
 	api.nextSendErr = &APIError{Code: 429, Retryable: true, RetryAfter: time.Minute}
-	if err := m.deliverOne(t.Context(), "token"); err != nil {
+	if err := m.deliverOne(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if m.hasDeliverableOutbox() {
 		t.Fatal("another row bypassed per-chat flood wait")
 	}
-	if err := m.deliverOne(t.Context(), "token"); err != nil {
+	if err := m.deliverOne(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != 0 {
@@ -247,7 +247,7 @@ func TestPrivateFallbackDoesNotEditAnOldNativeTopicMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	for m.hasDeliverableOutbox() {
-		if err := m.deliverOne(t.Context(), "token"); err != nil {
+		if err := m.deliverOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}

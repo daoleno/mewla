@@ -32,7 +32,7 @@ func createTopicFor(t *testing.T, manager *Manager) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -95,7 +95,7 @@ func TestTwoMappedSessionsRemainIsolatedBothDirections(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -124,7 +124,7 @@ func TestTwoMappedSessionsRemainIsolatedBothDirections(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 
@@ -271,7 +271,7 @@ func TestSessionTopicFailClosedCases(t *testing.T) {
 
 	// The actionable replies are scoped to the exact Topic the owner wrote in
 	// (the unknown-topic reply stays in the unknown Topic, never General).
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	api.mu.Lock()
@@ -321,7 +321,7 @@ func TestTopicCreateLifecyclePersistenceAndCompletionReopen(t *testing.T) {
 	if state.Topics[0].State != topicStateCompleted {
 		t.Fatalf("completion state=%s", state.Topics[0].State)
 	}
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	markerSent := false
@@ -369,7 +369,7 @@ func TestTopicCreateDefiniteRejectionRetriesButAmbiguousNeverRepeats(t *testing.
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOpOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverTopicOpOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -377,7 +377,7 @@ func TestTopicCreateDefiniteRejectionRetriesButAmbiguousNeverRepeats(t *testing.
 		t.Fatalf("definite rejection did not stay retryable: %+v", state.TopicOps[0])
 	}
 	manager.now = func() time.Time { return time.Date(2026, 8, 24, 12, 0, 2, 0, time.UTC) }
-	if err := manager.deliverTopicOpOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverTopicOpOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.createdTopics) != 2 || len(manager.store.snapshot().Topics) != 1 {
@@ -401,7 +401,7 @@ func TestTopicCreateDefiniteRejectionRetriesButAmbiguousNeverRepeats(t *testing.
 	if err := manager2.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager2.deliverTopicOpOne(context.Background(), "token"); err == nil {
+	if err := manager2.deliverTopicOpOne(context.Background()); err == nil {
 		t.Fatal("ambiguous create returned success")
 	}
 	state = manager2.store.snapshot()
@@ -413,7 +413,7 @@ func TestTopicCreateDefiniteRejectionRetriesButAmbiguousNeverRepeats(t *testing.
 	if err := manager2.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager2.deliverTopicOps(context.Background(), "token", 8); err != nil && !errors.As(err, new(*APIError)) {
+	if err := manager2.deliverTopicOps(context.Background(), 8); err != nil && !errors.As(err, new(*APIError)) {
 		// No deliverable op exists: deliverTopicOps returns nil.
 		t.Fatal(err)
 	}
@@ -435,7 +435,7 @@ func TestTopicRenameLabelAndCapabilityDisabled(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -460,7 +460,7 @@ func TestTopicRenameLabelAndCapabilityDisabled(t *testing.T) {
 	if len(api.createdTopics) != before {
 		t.Fatalf("create attempted with capability disabled")
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if status := manager.Status(); status.TopicsAvailable || status.TopicMappings != 1 || status.State != StateConnected {
@@ -516,7 +516,7 @@ func TestPrivateTopicLegacyDestructiveOperationsAreCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 	for manager.hasDeliverableTopicOp() {
-		if err := manager.deliverTopicOpOne(t.Context(), "token"); err != nil {
+		if err := manager.deliverTopicOpOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -640,7 +640,7 @@ func TestSessionTopicUncertainAdmissionIsNeverReplayed(t *testing.T) {
 		t.Fatalf("uncertain update resubmitted: %v", bodies)
 	}
 	// The no-replay reply itself is delivered once into the mapped Topic only.
-	if err := reopened.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := reopened.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	for _, sent := range api.sent {
@@ -669,7 +669,7 @@ func TestSessionTopicOutputAndLifecycleOnlyInOwnTopic(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	api.mu.Lock()
@@ -765,7 +765,7 @@ func TestReapedSessionDeletesExactMappedTopicOnce(t *testing.T) {
 	if len(state.Topics) != 1 || state.Topics[0].State != topicStateStale {
 		t.Fatalf("mapping did not fail closed before delete: %+v", state.Topics)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != 1 || api.deletedTopics[0].ChatID != 10 || api.deletedTopics[0].MessageThreadID != threadID {
@@ -817,7 +817,7 @@ func TestReapedSessionDeletesExactMappedTopicOnce(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != 1 || len(api.createdTopics) != creates {
@@ -863,7 +863,7 @@ func TestHistoricalClosedMappingDeletedAfterAbsenceConfirmed(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != 0 {
@@ -886,7 +886,7 @@ func TestHistoricalClosedMappingDeletedAfterAbsenceConfirmed(t *testing.T) {
 	if !foundDelete {
 		t.Fatalf("historical stale mapping did not get a delete operation: %+v", manager.store.snapshot().TopicOps)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != 1 || api.deletedTopics[0].MessageThreadID != threadID {
@@ -971,7 +971,7 @@ func TestSessionTopicCommandsAreRouteLocal(t *testing.T) {
 	if err := manager.handleUpdate(context.Background(), "token", topicUpdate(92, threadID, "/new")); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1028,7 +1028,7 @@ func TestStaleMappingRevivesWhenSessionReappears(t *testing.T) {
 	if state.Topics[0].State != topicStateActive {
 		t.Fatalf("revive state=%s", state.Topics[0].State)
 	}
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	revivalSent := false
@@ -1131,7 +1131,7 @@ func TestPrivateChatFallbackRecipientKeepsBrainAndSessionRoutesSeparate(t *testi
 	if err := manager.projectFallbackSession(); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverPending(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverPending(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	found := false

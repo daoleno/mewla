@@ -1297,7 +1297,6 @@ func (s *Service) reconcileReviewLeasesLocked() error {
 				"delivery.ambiguous",
 				"delivery:"+claimed.EventID+":ambiguous",
 				"Delivery of Work review "+claimed.EventID+" is quarantined because its exact provider outcome remains ambiguous. It will not be replayed automatically; wait for exact provider evidence or resolve the held lease explicitly (mark_delivered, discard, or replay).",
-				false,
 			); noteErr != nil {
 				return fmt.Errorf("persist ambiguous delivery quarantine for Work review %s: %w", claimed.WorkID, noteErr)
 			}
@@ -1320,7 +1319,7 @@ func (s *Service) reconcileUnsentReview(action WorkReviewAction) error {
 	}
 	_, _, noteErr := s.store.AppendDeliveryNote(action.WorkID, action.EventID,
 		"delivery.ambiguous", "delivery:"+action.EventID+":ambiguous",
-		"Review delivery is unconfirmed: canonical admission may have mutated the provider despite missing transport confirmation; automatic replay is held.", false)
+		"Review delivery is unconfirmed: canonical admission may have mutated the provider despite missing transport confirmation; automatic replay is held.")
 	return noteErr
 }
 

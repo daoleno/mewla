@@ -88,7 +88,7 @@ func TestBrainEntryReusesPrimaryPinsMessageAndSurvivesRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := m.deliverPending(t.Context(), "fixture-token", 8); err != nil {
+	if err := m.deliverPending(t.Context(), 8); err != nil {
 		t.Fatal(err)
 	}
 	s := m.store.snapshot()
@@ -111,7 +111,7 @@ func TestBrainEntryReusesPrimaryPinsMessageAndSurvivesRestart(t *testing.T) {
 	if err := reopened.ensureBrainEntry(); err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.deliverPending(t.Context(), "fixture-token", 8); err != nil {
+	if err := reopened.deliverPending(t.Context(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(a.pins) != 1 || len(reopened.store.snapshot().TopicOps) != len(s.TopicOps) {
@@ -130,8 +130,8 @@ func TestBrainEntryPinRejectionDoesNotClaimTopicPinOrResend(t *testing.T) {
 	if err := m.ensureBrainEntry(); err != nil {
 		t.Fatal(err)
 	}
-	_ = m.deliverPending(t.Context(), "fixture-token", 8)
-	_ = m.deliverPending(t.Context(), "fixture-token", 8)
+	_ = m.deliverPending(t.Context(), 8)
+	_ = m.deliverPending(t.Context(), 8)
 	if m.store.snapshot().BrainEntryState != "sent" || len(a.pins) != 1 {
 		t.Fatal("pin rejection lied or retried")
 	}
@@ -144,7 +144,7 @@ func TestAssistantFeedbackHasExactCanonicalSourceAfterDelivery(t *testing.T) {
 	if err := m.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.deliverPending(t.Context(), "fixture-token", 8); err != nil {
+	if err := m.deliverPending(t.Context(), 8); err != nil {
 		t.Fatal(err)
 	}
 	s := m.store.snapshot()

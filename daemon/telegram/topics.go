@@ -859,12 +859,12 @@ func (m *Manager) deliverableTopicOpIndex(state durableState) int {
 	return -1
 }
 
-func (m *Manager) deliverTopicOps(ctx context.Context, token string, limit int) error {
+func (m *Manager) deliverTopicOps(ctx context.Context, limit int) error {
 	for delivered := 0; delivered < limit; delivered++ {
 		if !m.hasDeliverableTopicOp() {
 			return nil
 		}
-		if err := m.deliverTopicOpOne(ctx, token); err != nil {
+		if err := m.deliverTopicOpOne(ctx); err != nil {
 			return err
 		}
 		if !m.hasDeliverableTopicOp() {
@@ -890,18 +890,17 @@ func (m *Manager) deliverTopicOps(ctx context.Context, token string, limit int) 
 // already-missing response converges local state as a success. Other definite
 // rejections are terminal and opportunistic; any transport-indeterminate
 // outcome becomes durable ambiguous and is never retried automatically.
-func (m *Manager) deliverTopicOpOne(ctx context.Context, token string) error {
+func (m *Manager) deliverTopicOpOne(ctx context.Context) error {
 	m.outboundMu.Lock()
 	defer m.outboundMu.Unlock()
 	state := m.store.snapshot()
 	if !state.Enabled || state.ChatID == 0 {
 		return nil
 	}
-	currentToken, tokenErr := m.store.readToken()
-	if tokenErr != nil || currentToken == "" {
+	token, tokenErr := m.store.readToken()
+	if tokenErr != nil || token == "" {
 		return fmt.Errorf("Telegram credential is unavailable")
 	}
-	token = currentToken
 	index := m.deliverableTopicOpIndex(state)
 	if index < 0 {
 		return nil

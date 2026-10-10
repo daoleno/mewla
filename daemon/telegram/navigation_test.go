@@ -46,7 +46,7 @@ func TestTopicChooserAndBackStayLocalAndUseExactLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	for m.hasDeliverableTopicOp() {
-		if err := m.deliverTopicOpOne(t.Context(), "fixture-token"); err != nil {
+		if err := m.deliverTopicOpOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}

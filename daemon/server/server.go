@@ -420,15 +420,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/enrollment/status", s.handleEnrollmentStatus)
 	mux.HandleFunc("/enrollment/pending", s.handleEnrollmentPending)
 	mux.HandleFunc("/enrollment/decision", s.handleEnrollmentDecision)
-	// Short aliases keep links easy to type while the longer paths remain the
-	// documented API.
-	mux.HandleFunc("/enroll/request", s.handleEnrollmentRequest)
-	mux.HandleFunc("/enroll/status", s.handleEnrollmentStatus)
-	mux.HandleFunc("/enroll/pending", s.handleEnrollmentPending)
-	mux.HandleFunc("/enroll/decision", s.handleEnrollmentDecision)
 	mux.HandleFunc("/auth-check", s.handleAuthCheck)
 	mux.HandleFunc("/devices", s.handleDevices)
-	mux.HandleFunc("/addresses", s.handleAddresses)
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)
