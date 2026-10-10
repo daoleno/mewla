@@ -24,6 +24,7 @@ func writeOpenCodeDBFixture(t *testing.T, home string, rows []string) string {
 		t.Fatal(err)
 	}
 	dbPath := filepath.Join(dir, "opencode.db")
+	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	sql := `DROP TABLE IF EXISTS message;
 	CREATE TABLE message (
 		id text PRIMARY KEY,

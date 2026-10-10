@@ -44,8 +44,9 @@ entries remain unknown until authoritative pricing becomes available.
 
 ## Claude Code local usage
 
-Claude Code usage is already collected from the current daemon host's standard
-`~/.claude/projects/**/*.jsonl` history. This also works when Claude Code was
+Claude Code usage is already collected from the current daemon host's
+`~/.claude/projects/**/*.jsonl` history, or `$CLAUDE_CONFIG_DIR/projects` when
+the daemon's environment sets it. This also works when Claude Code was
 launched with a Mewla Custom Provider: the client still writes its normal native
 history. No proxy management API, remote helper, extra login or quota bridge is
 required. Background collection runs at startup and every five minutes; reopening
@@ -74,8 +75,8 @@ Claude JSONL token usage normally has no actual charge. Any displayed cost is an
 API reference estimate, not a Claude subscription charge or the Custom Provider's
 bill. Missing reference rates remain unknown while tokens remain visible.
 
-Collection currently covers the standard home directory. History stored in an
-alternate `CLAUDE_CONFIG_DIR`, a remote host, or a disabled/non-persistent Claude
-session is not automatically discovered. Cross-file copies/forks are not globally
+Collection covers the one config root the daemon resolves. History under a
+different per-process `CLAUDE_CONFIG_DIR`, a remote host, or a
+disabled/non-persistent Claude session is not automatically discovered. Cross-file copies/forks are not globally
 deduplicated. These limits are distinct from ordinary Custom Provider routing,
 which does not itself prevent standard native history from being counted.

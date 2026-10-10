@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/providerpaths"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
@@ -113,7 +114,7 @@ func (u *piUsage) reasoningTokens() int64 {
 func (c *Collector) collectPiStats(home string) map[string]*dateAgg {
 	byDate := make(map[string]*dateAgg)
 
-	sessionsRoot := filepath.Join(home, ".pi", "agent", "sessions")
+	sessionsRoot := filepath.Join(providerpaths.PiAgentDir(home), "sessions")
 	projectDirs, err := os.ReadDir(sessionsRoot)
 	if err == nil {
 		for _, projectDir := range projectDirs {

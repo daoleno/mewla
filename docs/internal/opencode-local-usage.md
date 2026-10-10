@@ -7,7 +7,10 @@ needs nothing beyond the data the OpenCode CLI already writes on the host.
 
 ## Data source
 
-The OpenCode CLI stores one row per message in its SQLite database:
+The OpenCode CLI stores one row per message in its SQLite database. Stats and
+Work resolve it the same way (`daemon/providerpaths`): `MEWLA_OPENCODE_DB`,
+then the path `opencode db path` reports (spawned once and memoized), then the
+platform default when that file exists:
 
 - Linux: `$XDG_DATA_HOME/opencode/opencode.db` (default
   `~/.local/share/opencode/opencode.db`)

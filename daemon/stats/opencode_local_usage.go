@@ -6,41 +6,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 // OpenCode model usage is collected entirely from the OpenCode CLI's local
-// structured database ($XDG_DATA_HOME/opencode/opencode.db, or the platform
-// equivalent). There is no subscription probing, no credential read, and no
-// upstream API access: the collector reads only the observed usage fields the
+// structured database (resolved by providerpaths.OpenCodeDB, the same path
+// Work reads transcripts from). There is no subscription probing, no
+// credential read, and no upstream API access: the collector reads only the observed usage fields the
 // CLI already records per assistant message (model, token counts, cost,
 // timestamp, working directory) and aggregates exactly those facts. Rows
 // without usage are ignored, unavailable metrics are omitted, and quota or
 // subscription state is never inferred.
-
-// openCodeDBPath resolves the OpenCode CLI data directory: $XDG_DATA_HOME on
-// Linux, the Library Application Support dir on macOS, and LOCALAPPDATA on
-// Windows, mirroring the official CLI's platform layout.
-func openCodeDBPath(home string) string {
-	var dataDir string
-	switch {
-	case strings.TrimSpace(os.Getenv("XDG_DATA_HOME")) != "":
-		dataDir = filepath.Join(os.Getenv("XDG_DATA_HOME"), "opencode")
-	case runtime.GOOS == "darwin":
-		dataDir = filepath.Join(home, "Library", "Application Support", "opencode")
-	case runtime.GOOS == "windows":
-		if local := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); local != "" {
-			dataDir = filepath.Join(local, "opencode")
-		} else {
-			dataDir = filepath.Join(home, "AppData", "Local", "opencode")
-		}
-	default:
-		dataDir = filepath.Join(home, ".local", "share", "opencode")
-	}
-	return filepath.Join(dataDir, "opencode.db")
-}
 
 // openCodeUsageQuery projects the observed usage fields from the OpenCode
 // message table. The message data column is JSON metadata (the conversation
@@ -88,8 +67,8 @@ type openCodeMessageUsageRow struct {
 func (c *Collector) collectOpenCodeStats(home string) map[string]*dateAgg {
 	byDate := make(map[string]*dateAgg)
 
-	dbPath := openCodeDBPath(home)
-	if _, err := os.Stat(dbPath); err != nil {
+	dbPath := providerpaths.OpenCodeDB(home)
+	if _, err := os.Stat(dbPath); dbPath == "" || err != nil {
 		return byDate
 	}
 
