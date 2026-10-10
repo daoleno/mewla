@@ -64,7 +64,7 @@ Use when the session ended in a failure state that likely needs inspection.
 Use when the session finished and the user is not currently in that session.
 
 - Title: `<label> finished`
-- Body: cleaned summary, or `Session finished.`
+- Body: cleaned summary, or `Session completed.`
 - Priority: default
 
 Important:

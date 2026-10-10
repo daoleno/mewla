@@ -1,6 +1,6 @@
 # Third-party assets
 
-Inclusion does not imply endorsement. Prefer verifiable upstream license text over guesswork. Assets without defensible provenance are listed in [release-blockers.md](release-blockers.md) and `release-blockers.json`.
+Inclusion does not imply endorsement. Prefer verifiable upstream license text over guesswork. Assets without defensible provenance are listed in [release-blockers.md](release-blockers.md).
 
 ## Fonts (bundled under `app/assets/fonts/`)
 

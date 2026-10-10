@@ -11,7 +11,7 @@ with `cursor-agent --model claude-opus-5-5-high` is a Cursor Session; a model
 argument containing `claude` does not select the Claude transcript reader.
 Visible delegated Workers are included in the mobile Session index even when
 their lifecycle status is `unknown`. That status means Mewla lacks authoritative
-turn evidence, and does not mean the provider process stopped. Sessions use the
+turn evidence, and does not mean the provider process stopped.
 
 ## Delegated launch adapters
 
