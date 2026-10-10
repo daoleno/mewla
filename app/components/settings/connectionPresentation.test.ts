@@ -43,7 +43,7 @@ describe("Settings connection information architecture", () => {
     expect(overview).toContain('serverId={currentServerId}');
     expect(overview).toContain('serverConnections[currentServerId] === "connected"');
     expect(overview).toContain('No current server');
-    expect(settingsSource).toContain(': server.url}');
+    expect(settingsSource).toContain(": Storage.serverAddressForDisplay(server.url);");
     expect(settingsSource).not.toMatch(/>\s*Messaging\s*</);
   });
   test("standalone Telegram entry is one grouped list row with semantic status", () => {
