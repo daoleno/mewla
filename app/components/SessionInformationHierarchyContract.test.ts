@@ -11,10 +11,6 @@ const rowContainerSource = readFileSync(
   join(componentRoot, "workers/WorkerListRowContainer.tsx"),
   "utf8",
 );
-const sheetSource = readFileSync(
-  join(componentRoot, "terminal/SessionResourceSheet.tsx"),
-  "utf8",
-);
 const overlaysSource = readFileSync(
   join(componentRoot, "terminal/screen/TerminalScreenOverlays.tsx"),
   "utf8",
@@ -83,23 +79,5 @@ describe("Interface Session title ownership", () => {
     expect(overlayPropsSource).toContain("menuTitle,");
     expect(overlaysSource).toContain("title={menuTitle}");
     expect(overlaysSource).not.toContain("<SessionResourceSheet");
-  });
-
-  test("renders the selectable full title before every resource state", () => {
-    const scrollStart = sheetSource.indexOf("<ScrollView");
-    const titleStart = sheetSource.indexOf('accessibilityRole="header"');
-    const titleEnd = sheetSource.indexOf("</Text>", titleStart);
-    const stateBranch = sheetSource.indexOf("{m ? (", titleEnd);
-    const titleBlock = sheetSource.slice(titleStart, titleEnd);
-
-    expect(scrollStart).toBeGreaterThan(-1);
-    expect(titleStart).toBeGreaterThan(scrollStart);
-    expect(titleEnd).toBeLessThan(stateBranch);
-    expect(titleBlock).toContain("styles.sessionTitle");
-    expect(titleBlock).toContain("selectable");
-    expect(titleBlock).toContain("{sessionTitle}");
-    expect(titleBlock).not.toContain("numberOfLines");
-    expect(titleBlock).not.toContain("ellipsizeMode");
-    expect(sheetSource).not.toContain("presentWorker");
   });
 });
