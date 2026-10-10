@@ -11,9 +11,10 @@ where the pack has them), and a small loop and a still of every pet for the
 strip and the hero without scripts.
 
 Usage:
-  python3 scripts/import-pets.py [--site] [PETS_DIR]
+  python3 scripts/import-pets.py [--site | --app] [PETS_DIR]
 
---site rewrites only site/pets/ (from the app assets already imported).
+--site rewrites only site/pets/ (from the app assets already imported);
+--app rewrites only app/assets/pets/ and the catalog.
 
 PETS_DIR defaults to ~/workspace/mewla-cat-lab/imagegen/pets-codex and must hold
 index.json plus one directory per pet. Requires Pillow.
@@ -97,9 +98,21 @@ def import_pet(source, pet_id):
     entries = {}
     for name in CLIPS:
         spec = actions[name]
+        loop = bool(spec.get("loop", True))
+        pad = spec.get("wide", 0)
+        if pad:
+            # A hop drawn past the canvas (frames-wide/, pad px each side of the 256 canvas)
+            # keeps that room; the app draws it past the pet's box by `bleed` per side.
+            folder = source / pet_id / "frames-wide" / name
+            frames = [Image.open(path).convert("RGBA") for path in sorted(folder.glob("*.png"))]
+            if not frames:
+                raise SystemExit(f"{pet_id}/{name}: no frames-wide/ in the pack; rebuild it")
+            durations = spec["durations"]
+            encode(frames, durations, loop, round(side * frames[0].width / SITE_SPRITE_SIDE), out / f"{name}.webp")
+            entries[name] = {"loop": loop, "durationMs": sum(durations), "bleed": round(pad / SITE_SPRITE_SIDE, 4)}
+            continue
         frames, durations, _ = frames_of(source / pet_id / spec["file"])
         frames = [square(frame) for frame in frames]
-        loop = bool(spec.get("loop", True))
         encode(frames, durations, loop, side, out / f"{name}.webp")
         entries[name] = {"loop": loop, "durationMs": sum(durations)}
     with Image.open(source / pet_id / "portrait.png") as portrait:
@@ -174,9 +187,10 @@ def write_catalog(pets):
             "    clips: {",
         ]
         for name, entry in pet["actions"].items():
+            bleed = f", bleed: {entry['bleed']}" if entry.get("bleed") else ""
             lines.append(
                 f"      {name}: {{ source: require(\"{base}/{name}.webp\"), loop: {str(entry['loop']).lower()}, "
-                f"durationMs: {entry['durationMs']} }},"
+                f"durationMs: {entry['durationMs']}{bleed} }},"
             )
         lines += ["    },", "  },"]
     default = next(pet["id"] for pet in pets if pet["default"])
@@ -239,7 +253,8 @@ def write_site(source, pets):
 def main():
     args = sys.argv[1:]
     site_only = "--site" in args
-    args = [arg for arg in args if arg != "--site"]
+    app_only = "--app" in args
+    args = [arg for arg in args if arg not in ("--site", "--app")]
     source = Path(args[0]) if args else DEFAULT_SOURCE
     order = json.loads((source / "index.json").read_text())
     ids = [entry if isinstance(entry, str) else entry["id"] for entry in order.get("pets", order)]
@@ -256,7 +271,8 @@ def main():
         if stale.name not in ids:
             shutil.rmtree(stale)
     write_catalog(pets)
-    write_site(source, pets)
+    if not app_only:
+        write_site(source, pets)
     total = sum(f.stat().st_size for f in APP_ASSETS.rglob("*.webp"))
     print(f"Imported {len(pets)} pets: app/assets/pets {total / 1e6:.2f} MB")
 
