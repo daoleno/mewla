@@ -136,9 +136,45 @@ func TestProviderAdapters_RetainPaneAndProcessEvidence(t *testing.T) {
 		},
 		{
 			name:       "claude permission",
-			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\nPermission required"},
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n Edit file\n Do you want to make this edit to main.go?\n ❯ 1. Yes\n   2. Yes, allow all edits during this session (shift+tab)\n   3. No\n Esc to cancel · Tab to amend\n"},
 			wantState:  StateBlocked,
 			wantSource: "claude_pane_blocked",
+		},
+		{
+			name:       "claude ask user question",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n←  ☐ Fruit  ☐ Colors  ✔ Submit  →\nWhich fruit?\n❯ 1. Apple\n     Red\n  2. Type something.\n────\n  3. Chat about this\n\nEnter to select · Tab/Arrow keys to navigate · Esc to\ncancel\n"},
+			wantState:  StateBlocked,
+			wantSource: "claude_pane_choice",
+		},
+		{
+			name:       "claude ask user question review",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\nReview your answers\n ● Which fruit?\n   → Apple\nReady to submit your answers?\n❯ 1. Submit answers\n  2. Cancel\n"},
+			wantState:  StateBlocked,
+			wantSource: "claude_pane_choice",
+		},
+		{
+			name:       "claude plan approval",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n Ready to code?\n Here is Claude's plan:\n Steps\n Claude has written up a plan and is ready to execute. Would you like to proceed?\n ❯ 1. Yes, and use auto mode\n   2. Yes, manually approve edits\n   3. Tell Claude what to change\n      shift+tab to approve with this feedback\n ctrl+g to edit in VS Code\n"},
+			wantState:  StateBlocked,
+			wantSource: "claude_pane_plan",
+		},
+		{
+			name:       "claude bash permission",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n Bash command\n mkdir -p made_by_test\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don't ask again for mkdir commands\n   3. No\n Esc to cancel · Tab to amend\n"},
+			wantState:  StateBlocked,
+			wantSource: "claude_pane_blocked",
+		},
+		{
+			name:       "claude answered choice is not blocked",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n● User answered Claude's questions:\n  ⎿  · Which fruit? → Apple\n● Apple it is.\n────\n❯ \n────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n"},
+			wantState:  StateUnknown,
+			wantSource: "claude_idle",
+		},
+		{
+			name:       "claude conversation about permissions is not blocked",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n● The AskUserQuestion prompt needs permission required to allow the user to answer.\n  Do you want to proceed with the plan?\n────\n❯ \n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt\n"},
+			wantState:  StateUnknown,
+			wantSource: "claude_idle",
 		},
 		{
 			name:       "cursor workspace trust",
