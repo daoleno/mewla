@@ -12,7 +12,7 @@ of every pet for the strip.
 Usage:
   python3 scripts/import-pets.py [PETS_DIR]
 
-PETS_DIR defaults to ~/workspace/mewla-cat-lab/imagegen/pets and must hold
+PETS_DIR defaults to ~/workspace/mewla-cat-lab/imagegen/pets-codex and must hold
 index.json plus one directory per pet. Requires Pillow.
 """
 
@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_ASSETS = ROOT / "app" / "assets" / "pets"
 CATALOG = ROOT / "app" / "components" / "pets" / "petPacks.ts"
 SITE = ROOT / "site" / "pets"
-DEFAULT_SOURCE = Path.home() / "workspace" / "mewla-cat-lab" / "imagegen" / "pets"
+DEFAULT_SOURCE = Path.home() / "workspace" / "mewla-cat-lab" / "imagegen" / "pets-codex"
 
 # One clip per Brain state (app/components/mewla/brainCatState.ts), plus the
 # hop back into the seal. waking is the hop out.
