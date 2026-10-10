@@ -37,3 +37,20 @@ export function loadingVeilPhase(
   if (now < goneAt) return { phase: "leaving", nextAt: goneAt };
   return { phase: "gone" };
 }
+
+/** A load still running when its screen remounts (a chat re-keyed mid-load). */
+export interface CarriedLoad {
+  startedAt: number;
+  /** When the screen that held it unmounted; null while it is still mounted. */
+  leftAt: number | null;
+}
+
+/** How long after unmounting a load's start time carries to the next mount. */
+export const LOADING_CARRY_MS = 1000;
+
+/** The start time a remount continues from, so the loading screen doesn't restart. */
+export function carriedLoadStart(carried: CarriedLoad | undefined, now: number): number | null {
+  if (!carried) return null;
+  if (carried.leftAt !== null && now - carried.leftAt > LOADING_CARRY_MS) return null;
+  return carried.startedAt;
+}

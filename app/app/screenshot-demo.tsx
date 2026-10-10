@@ -737,15 +737,21 @@ function BrainDemo() {
 /**
  * A cold open of Brain's chat: history arrives after `loadMs` (default 2 s),
  * so the loading state and its hand-off can be filmed. `cold-empty` loads an
- * empty conversation.
+ * empty conversation. `remountMs` re-keys the chat mid-load, as the real one
+ * does when Brain's first snapshot names the thread.
  */
 function BrainColdLoadDemo({ empty }: { empty: boolean }) {
-  const { loadMs } = useLocalSearchParams<{ loadMs?: string }>();
+  const { loadMs, remountMs } = useLocalSearchParams<{ loadMs?: string; remountMs?: string }>();
   const [loading, setLoading] = useState(true);
+  const [mount, setMount] = useState(0);
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), Number(loadMs) || 2000);
-    return () => clearTimeout(timer);
-  }, [loadMs]);
+    const remount = remountMs ? setTimeout(() => setMount(1), Number(remountMs)) : undefined;
+    return () => {
+      clearTimeout(timer);
+      if (remount) clearTimeout(remount);
+    };
+  }, [loadMs, remountMs]);
   const companion: BrainCompanion = {
     presence: loading ? { state: "waking" } : { state: "delegating", count: 3 },
     animate: true,
@@ -753,7 +759,7 @@ function BrainColdLoadDemo({ empty }: { empty: boolean }) {
   };
   return (
     <BrainCompanionContext.Provider value={companion}>
-      <BrainChatDemo empty={empty} running={false} loading={loading} events={SCREENSHOT_BRAIN_EVENTS} />
+      <BrainChatDemo key={mount} empty={empty} running={false} loading={loading} events={SCREENSHOT_BRAIN_EVENTS} />
     </BrainCompanionContext.Provider>
   );
 }

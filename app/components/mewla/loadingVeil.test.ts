@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LOADING_VEIL, loadingVeilPhase } from "./loadingVeil";
+import { carriedLoadStart, LOADING_CARRY_MS, LOADING_VEIL, loadingVeilPhase } from "./loadingVeil";
 
 const { delayMs, minMs, fadeMs } = LOADING_VEIL;
 
@@ -29,5 +29,17 @@ describe("loadingVeilPhase", () => {
   test("a long load fades out as soon as it ends", () => {
     expect(loadingVeilPhase({ startedAt: 0, endedAt: 2000, now: 2000 })).toEqual({ phase: "leaving", nextAt: 2000 + fadeMs });
     expect(loadingVeilPhase({ startedAt: 0, endedAt: 2000, now: 2000 + fadeMs })).toEqual({ phase: "gone" });
+  });
+});
+
+describe("carriedLoadStart", () => {
+  test("a remount continues a load that is still running", () => {
+    expect(carriedLoadStart({ startedAt: 10, leftAt: null }, 900)).toBe(10);
+    expect(carriedLoadStart({ startedAt: 10, leftAt: 800 }, 900)).toBe(10);
+  });
+
+  test("a stale or missing load starts fresh", () => {
+    expect(carriedLoadStart(undefined, 900)).toBeNull();
+    expect(carriedLoadStart({ startedAt: 10, leftAt: 100 }, 100 + LOADING_CARRY_MS + 1)).toBeNull();
   });
 });
