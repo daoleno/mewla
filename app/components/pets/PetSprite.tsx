@@ -21,6 +21,11 @@ interface PetSpriteProps {
    * clip once on a pet standing on its feet; the seal ignores it.
    */
   cheer?: number;
+  /**
+   * Without motion, draw the pack's portrait (a whole still drawing) instead
+   * of holding the clip, which a browser can't pause.
+   */
+  stillPortrait?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -29,7 +34,7 @@ interface PetSpriteProps {
  * and its feet plays the hop out or back in first. Without motion it holds
  * the clip's first frame (native only; browsers can't pause an image).
  */
-export function PetSprite({ state, size, animate = true, petId, cheer = 0, style }: PetSpriteProps) {
+export function PetSprite({ state, size, animate = true, petId, cheer = 0, stillPortrait = false, style }: PetSpriteProps) {
   const chosen = useThemeContext().petId;
   const pack = findPetPack(PET_PACKS, petId ?? chosen, DEFAULT_PET_ID);
   const moving = usePetMotion(animate);
@@ -38,6 +43,13 @@ export function PetSprite({ state, size, animate = true, petId, cheer = 0, style
   // A clip with bleed is drawn larger around the same box, so the pet keeps
   // its size and seat while the hop's ring overflows the box.
   const bleed = (clip.bleed ?? 0) * size;
+  if (stillPortrait && !moving) {
+    return (
+      <View style={[{ width: size, height: size, pointerEvents: "none" }, style]} accessible={false} importantForAccessibility="no-hide-descendants">
+        <Image source={pack.portrait} contentFit="contain" style={{ width: size, height: size }} />
+      </View>
+    );
+  }
   return (
     <View
       style={[{ width: size, height: size, overflow: "visible", pointerEvents: "none" }, style]}

@@ -2,13 +2,16 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import { PetSprite } from "../pets/PetSprite";
+import { useLoadingVeil } from "./useLoadingVeil";
 
 /**
- * App start, before the first screen can draw: the cat in its seal, one eye
- * open and an ear flicking, in place of a blank page or a spinner.
+ * App start, before the first screen can draw: the cat hops out of its seal
+ * in place of a blank page or a spinner. A start faster than the loading
+ * delay shows only the background.
  */
 export function CatSplash() {
   const { colors } = useAppTheme();
+  const shown = useLoadingVeil(true) !== "waiting";
   return (
     <View
       style={[styles.fill, { backgroundColor: colors.bgPrimary }]}
@@ -16,7 +19,7 @@ export function CatSplash() {
       accessibilityRole="progressbar"
       accessibilityLabel="Starting Mewla"
     >
-      <PetSprite state="waking" size={96} />
+      {shown ? <PetSprite state="waking" size={96} stillPortrait /> : null}
     </View>
   );
 }

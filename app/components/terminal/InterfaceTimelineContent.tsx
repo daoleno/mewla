@@ -2,7 +2,6 @@ import React from "react";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { InterfaceSessionIdleView } from "./InterfaceSessionIdleView";
 import { InterfaceTimelineEmptyState } from "./InterfaceTimelineEmptyState";
-import { InterfaceTimelineLoadingState } from "./InterfaceTimelineLoadingState";
 import { interfaceTimelinePhase } from "./interfaceTimelinePhase";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 
@@ -49,14 +48,10 @@ export function InterfaceTimelineEmptyContent({
   ) {
     case "content":
     case "hidden":
-      return null;
+    // History may still arrive, so never "empty": the timeline draws the
+    // loading screen over the list once a load runs past its delay.
     case "loading":
-      // History may still arrive, so Brain shows its outline, not "empty".
-      return emptyTitle ? (
-        <InterfaceTimelineLoadingState chrome={chrome} />
-      ) : (
-        <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} busy />
-      );
+      return null;
     case "error":
       return (
         <InterfaceTimelineEmptyState

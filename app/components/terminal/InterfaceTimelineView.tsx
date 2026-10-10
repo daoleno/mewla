@@ -21,6 +21,8 @@ import Reanimated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useEvent,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { useAppTheme } from "../../constants/tokens";
 import type {
@@ -29,6 +31,11 @@ import type {
 } from "../../constants/terminalThemes";
 
 import { InterfaceTimelineEmptyContent } from "./InterfaceTimelineContent";
+import { InterfaceTimelineLoadingState } from "./InterfaceTimelineLoadingState";
+import { InterfaceSessionIdleView } from "./InterfaceSessionIdleView";
+import { interfaceTimelinePhase } from "./interfaceTimelinePhase";
+import { LOADING_VEIL } from "../mewla/loadingVeil";
+import { useLoadingVeil } from "../mewla/useLoadingVeil";
 import {
   TimelineTextSelectableContext,
   type TimelineTextSelectableContextValue,
@@ -421,6 +428,19 @@ export function InterfaceTimelineView({
     [],
   );
 
+  // Loading draws over the list, so it can fade over the history that
+  // replaces it; a fast load draws nothing.
+  const loadingVeil = useLoadingVeil(
+    interfaceTimelinePhase({
+      itemCount: items.length,
+      loading,
+      error,
+      suppressed: emptyStateSuppressed,
+      unavailable,
+      syncing,
+    }) === "loading",
+  );
+
   const emptyContent = React.useMemo(
     () => (
       <InterfaceTimelineEmptyContent
@@ -524,8 +544,45 @@ export function InterfaceTimelineView({
         {items.length === 0 ? (
           <View style={styles.emptyOverlay}>{emptyContent}</View>
         ) : null}
+        {loadingVeil === "shown" || loadingVeil === "leaving" ? (
+          <TimelineLoadingVeil leaving={loadingVeil === "leaving"} chrome={chrome}>
+            {emptyTitle ? (
+              <InterfaceTimelineLoadingState chrome={chrome} />
+            ) : (
+              <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} busy />
+            )}
+          </TimelineLoadingVeil>
+        ) : null}
       </View>
     </TimelineTextSelectableContext.Provider>
+  );
+}
+
+/** The loading screen on the canvas: fades in, then out over what loaded. */
+function TimelineLoadingVeil({
+  leaving,
+  chrome,
+  children,
+}: {
+  leaving: boolean;
+  chrome: TerminalThemeChrome;
+  children: React.ReactNode;
+}) {
+  const opacity = useSharedValue(0);
+  React.useEffect(() => {
+    opacity.value = withTiming(leaving ? 0 : 1, { duration: leaving ? LOADING_VEIL.fadeMs : 160 });
+  }, [leaving, opacity]);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Reanimated.View
+      style={[
+        styles.emptyOverlay,
+        { backgroundColor: chrome.appBackground, pointerEvents: leaving ? "none" : "box-none" },
+        fade,
+      ]}
+    >
+      {children}
+    </Reanimated.View>
   );
 }
 

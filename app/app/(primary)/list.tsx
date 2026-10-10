@@ -28,6 +28,7 @@ import { resolvePrimaryAppBarGeometry } from "../../components/navigation/Primar
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
 import { sessionEmptyCat, sessionEmptyState } from "../../services/sessionEmptyState";
 import { PetSprite } from "../../components/pets/PetSprite";
+import { useLoadingVeil } from "../../components/mewla/useLoadingVeil";
 import {
   NewSessionButton,
   SESSIONS_COLUMN_MAX_WIDTH,
@@ -196,6 +197,9 @@ export default function InboxScreen() {
       sortedWorkers.length === 0 &&
       hasConfiguredServers &&
       waitingForInitialWorkerSnapshot);
+  // The cat shows only past the loading delay, then stays long enough to read.
+  const sessionsLoadingVeil = useLoadingVeil(shouldShowInitialLoading);
+  const showSessionsLoading = shouldShowInitialLoading || sessionsLoadingVeil === "shown";
   const primaryIssue = currentServerId ? state.serverConnectionIssues[currentServerId] ?? null : null;
 
   const openWorker = useCallback(
@@ -772,14 +776,16 @@ export default function InboxScreen() {
         style={[styles.container, { marginTop: topChromeInset }]}
         edges={[]}
       >
-        {shouldShowInitialLoading ? (
+        {showSessionsLoading ? (
           <ScrollView
             style={styles.flex}
             contentContainerStyle={styles.loadingContainer}
             alwaysBounceVertical
             showsVerticalScrollIndicator={false}
           >
-            <EmptyState title="Loading sessions" art={<PetSprite state="waking" size={88} />} />
+            {sessionsLoadingVeil === "shown" ? (
+              <EmptyState title="Loading sessions" art={<PetSprite state="waking" size={88} stillPortrait />} />
+            ) : null}
           </ScrollView>
         ) : sortedWorkers.length === 0 ? (
           <ScrollView
