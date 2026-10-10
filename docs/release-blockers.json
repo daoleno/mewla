@@ -5,7 +5,7 @@
     {
       "id": "ios-distribution-artifacts",
       "severity": "blocking",
-      "summary": "Mewla build 0.2.4 (42) is uploaded; external TestFlight group configuration and Beta App Review remain pending",
+      "summary": "Mewla 0.2.4 (42) completed CI distribution steps and is awaiting Apple Beta App Review",
       "paths": [
         {
           "path": "app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework",
@@ -45,8 +45,9 @@
         }
       ],
       "acceptance": "Reproducible CI verifies the XCFramework and Ghostty notice in the app bundle, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path (Preview IPA upload alone is insufficient)",
-      "pipeline_status": "postprocessing_pending",
-      "evidence": "https://github.com/daoleno/mewla/actions/runs/38027369612"
+      "pipeline_status": "complete_awaiting_apple_review",
+      "evidence": "https://github.com/daoleno/mewla/actions/runs/38030080400",
+      "testflight_url": "https://testflight.apple.com/join/nMQheDCE"
     }
   ],
   "resolved": [

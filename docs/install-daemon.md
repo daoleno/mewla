@@ -162,8 +162,10 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 
 ### iOS
 
-There is no TestFlight build yet. Build the app from source on an Apple
-Silicon Mac.
+Mewla Preview `0.2.4 (42)` is uploaded and awaiting Apple Beta App Review as of
+2026-10-10. The new [TestFlight public link](https://testflight.apple.com/join/nMQheDCE)
+will accept testers after Apple approves a build in the group. Until then, build
+the app from source on an Apple Silicon Mac.
 
 #### Build the iOS app from source
 
