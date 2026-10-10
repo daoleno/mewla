@@ -12,6 +12,7 @@ on:
       - app/package.json
       - app/plugins/**
       - app/modules/terminal-vt/**
+      - app/modules/*/android/**
       - app/assets/notices/GHOSTTY-MIT.txt
       - scripts/android-release-apk.sh
       - scripts/build-libghostty.sh
