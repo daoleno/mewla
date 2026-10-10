@@ -61,7 +61,7 @@
     "react-native-keyboard-controller": "1.21.9",
     "react-native-pager-view": "8.0.2",
     "react-native-pdf-renderer": "2.3.0",
-    "react-native-reanimated": "4.5.1",
+    "react-native-reanimated": "4.5.5",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
@@ -80,6 +80,13 @@
     "mermaid": "11.6.0",
     "react-test-renderer": "19.2.3",
     "typescript": "~6.0.3"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "react-native-reanimated"
+      ]
+    }
   },
   "private": true
 }
