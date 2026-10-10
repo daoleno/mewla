@@ -2,6 +2,12 @@ export function normalizePath(value?: string): string {
   return value?.trim().replace(/\/+$/, "") || "";
 }
 
+/** The last segment of a POSIX or Windows path; trailing separators are ignored. */
+export function pathBasename(value: string): string {
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || value;
+}
+
 export function isLikelyPath(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) {

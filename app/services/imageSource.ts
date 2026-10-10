@@ -13,7 +13,7 @@ export interface ImageOwner {
 }
 
 export function isImageAttachment(value: { mimeType?: string; name?: string; path?: string }) {
-  return Boolean(value.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif|svg)(?:[?#].*)?$/i.test(value.name || value.path || ""));
+  return Boolean(value.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif|svg)(?:[?#].*)?$/i.test((value.name || value.path || "").trim()));
 }
 
 export function isSvgImage(source: ImageSource, resolved?: SessionFileBinarySource) {

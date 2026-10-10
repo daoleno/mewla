@@ -1,5 +1,5 @@
 import type { Worker } from "../store/workers";
-import { compactPathLabel } from "./pathDisplay";
+import { compactPathLabel, pathBasename } from "./pathDisplay";
 
 export interface WorkerDirectorySection {
   key: string;
@@ -26,7 +26,7 @@ export function groupWorkersByDirectory(
 
     if (directory) {
       key = `${agent.serverId}::cwd::${directory}`;
-      title = basename(directory);
+      title = pathBasename(directory);
       const directoryLabel = compactPathLabel(directory);
       subtitle = directoryLabel;
     } else if (project) {
@@ -72,11 +72,3 @@ function normalizeDirectory(value?: string): string {
   return normalized || "/";
 }
 
-function basename(value: string): string {
-  if (!value || value === "/") {
-    return value || "/";
-  }
-
-  const parts = value.split("/").filter(Boolean);
-  return parts[parts.length - 1] || value;
-}

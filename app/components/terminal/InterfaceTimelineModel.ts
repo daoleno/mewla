@@ -34,7 +34,9 @@ import {
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
+import { isImageAttachment } from "../../services/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
+import { pathBasename } from "../../services/pathDisplay";
 
 const ATTACHMENT_TAG_RE =
   /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
@@ -1287,7 +1289,7 @@ function imagePathFromTool(event: CodexConversationEvent) {
         : typeof nested[0].object?.image_url === "string"
           ? nested[0].object.image_url
           : "";
-    if (path && !previewableImageUri(path) && looksLikeImagePath(path)) {
+    if (path && !previewableImageUri(path) && isImageAttachment({ path })) {
       return path;
     }
   }
@@ -1296,7 +1298,7 @@ function imagePathFromTool(event: CodexConversationEvent) {
     return undefined;
   }
   const path = stringField(parsed, "path") || stringField(parsed, "image_url");
-  if (!path || previewableImageUri(path) || !looksLikeImagePath(path)) {
+  if (!path || previewableImageUri(path) || !isImageAttachment({ path })) {
     return undefined;
   }
   return path;
@@ -1665,7 +1667,7 @@ function tokenizeShellLike(value: string): string[] {
 
 function commandTokens(value: string): string[] {
   const tokens = tokenizeShellLike(value);
-  const executable = basename(tokens[0] || "").toLowerCase();
+  const executable = pathBasename(tokens[0] || "").toLowerCase();
   if (executable === "bash" || executable === "sh" || executable === "zsh") {
     const commandIndex = tokens.findIndex(
       (token) => token === "-c" || token === "-lc",
@@ -1683,7 +1685,7 @@ function commandExecutable(tokens: string[]) {
     executableTokens.shift();
   }
   const executable = executableTokens[0] || "";
-  return basename(executable).toLowerCase();
+  return pathBasename(executable).toLowerCase();
 }
 
 function commandTarget(tokens: string[], executable: string) {
@@ -1706,7 +1708,7 @@ function commandTarget(tokens: string[], executable: string) {
 
 function commandPositionals(tokens: string[], executable: string) {
   const start = tokens.findIndex(
-    (token) => basename(token).toLowerCase() === executable,
+    (token) => pathBasename(token).toLowerCase() === executable,
   );
   const relevant = start >= 0 ? tokens.slice(start + 1) : tokens.slice(1);
   const positionals: string[] = [];
@@ -1963,13 +1965,13 @@ function toolPresentation(event: CodexConversationEvent): ToolPresentation {
   if (browserAction) {
     const browserFile =
       stringField(inputObject, "filename") || firstString(inputObject.paths);
-    const browserPreviewUri = looksLikeImagePath(browserFile)
+    const browserPreviewUri = isImageAttachment({ path: browserFile })
       ? previewableImageUri(browserFile)
       : undefined;
     return {
       icon: browserToolIcon(name),
       localImagePath:
-        browserFile && !browserPreviewUri && looksLikeImagePath(browserFile)
+        browserFile && !browserPreviewUri && isImageAttachment({ path: browserFile })
           ? browserFile
           : undefined,
     };
@@ -2078,15 +2080,6 @@ function previewableImageUri(value?: string) {
     return value;
   }
   return undefined;
-}
-
-function looksLikeImagePath(value: string) {
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(value.trim());
-}
-
-function basename(value: string) {
-  const parts = value.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] || value;
 }
 
 function uniqueStrings(values: string[]) {

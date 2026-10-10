@@ -3,6 +3,7 @@ import {
   normalizeFixedHex,
   verifyLinkPairingSignature,
 } from "./protocolCrypto";
+import { normalizeServerURL } from "./storedServerContract";
 
 export interface LinkTransportCandidate {
   name: string;
@@ -49,38 +50,6 @@ const normalizePairingToken = (value: string | null | undefined) =>
   normalizeFixedHex(value, 64);
 const normalizePublicKeyHex = (value: string | null | undefined) =>
   normalizeFixedHex(value, 64);
-
-export function normalizeServerURL(rawValue: string): string {
-  const trimmed = rawValue.trim();
-  if (!trimmed) return "";
-
-  try {
-    const parsed = new URL(trimmed);
-    switch (parsed.protocol) {
-      case "http:":
-        parsed.protocol = "ws:";
-        break;
-      case "https:":
-        parsed.protocol = "wss:";
-        break;
-      case "ws:":
-      case "wss:":
-        break;
-      default:
-        return "";
-    }
-
-    if (parsed.pathname === "" || parsed.pathname === "/") {
-      parsed.pathname = "/ws";
-    }
-
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
-  } catch {
-    return "";
-  }
-}
 
 export function parseConnectLink(
   rawValue: string,

@@ -7,6 +7,8 @@ import {
   LIGHT_SEAL,
   LIGHT_STATUS,
 } from '../theme/primitives';
+import { mixHex, parseHex, rgbToHex } from '../theme/colorUtils';
+import { withAlpha } from '../components/terminal/colorWithAlpha';
 
 export interface TerminalThemePalette {
   background: string;
@@ -240,46 +242,4 @@ export function isLightTerminalTheme(theme: TerminalThemePalette): boolean {
   const { red, green, blue } = parseHex(theme.background);
   const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
   return luminance > 0.62;
-}
-
-function rgbToHex(red: number, green: number, blue: number): string {
-  return (
-    '#' +
-    red.toString(16).padStart(2, '0') +
-    green.toString(16).padStart(2, '0') +
-    blue.toString(16).padStart(2, '0')
-  );
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const { red, green, blue } = parseHex(hex);
-  return `rgba(${red}, ${green}, ${blue}, ${clamp(alpha, 0, 1)})`;
-}
-
-function mixHex(from: string, to: string, weight: number): string {
-  const start = parseHex(from);
-  const end = parseHex(to);
-  const factor = clamp(weight, 0, 1);
-  return rgbToHex(
-    Math.round(start.red + (end.red - start.red) * factor),
-    Math.round(start.green + (end.green - start.green) * factor),
-    Math.round(start.blue + (end.blue - start.blue) * factor),
-  );
-}
-
-function parseHex(value: string): { red: number; green: number; blue: number } {
-  const normalized = value.trim().replace('#', '');
-  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
-    throw new Error(`Expected 6-digit hex color, received "${value}"`);
-  }
-
-  return {
-    red: parseInt(normalized.slice(0, 2), 16),
-    green: parseInt(normalized.slice(2, 4), 16),
-    blue: parseInt(normalized.slice(4, 6), 16),
-  };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }

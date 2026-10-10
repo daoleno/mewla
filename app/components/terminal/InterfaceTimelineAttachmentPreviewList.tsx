@@ -7,6 +7,7 @@ import type { DisplayAttachment } from "./InterfaceTimelineMessage";
 import { AppImage } from "./AppImage";
 import { imageReference, isImageAttachment, type ImageSource } from "../../services/imageSource";
 import { Icon } from "../icons/Icon";
+import { pathBasename } from "../../services/pathDisplay";
 
 function attachmentSource(attachment: DisplayAttachment): ImageSource {
   return attachment.localUri ? { kind: "phone", uri: attachment.localUri, name: attachment.name, mimeType: attachment.mimeType } : imageReference(attachment.path, attachment.name, attachment.mimeType);
@@ -64,11 +65,7 @@ function InterfaceTimelineAttachmentPreviewPill({
       ]}
     >
       <Icon
-        name={
-          looksLikeImagePath(attachment.name)
-            ? "image"
-            : "attach"
-        }
+        name="attach"
         size={13}
         color={chrome.textSubtle}
       />
@@ -76,19 +73,10 @@ function InterfaceTimelineAttachmentPreviewPill({
         style={[styles.attachmentPillText, { color: chrome.textMuted }]}
         numberOfLines={1}
       >
-        {attachment.name || basename(attachment.path)}
+        {attachment.name || pathBasename(attachment.path)}
       </Text>
     </View>
   );
-}
-
-function looksLikeImagePath(value: string) {
-  return /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(value.trim());
-}
-
-function basename(value: string) {
-  const parts = value.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] || value;
 }
 
 const styles = StyleSheet.create({
