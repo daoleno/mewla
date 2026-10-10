@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 // Collector scans local Claude Code, Codex CLI, Grok, Cursor Agent, OpenCode,
@@ -499,7 +501,7 @@ func addEstimatedCost(m *modelAggEntry, provider, modelID string, at time.Time, 
 func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 	byDate := make(map[string]*dateAgg)
 
-	projectsDir := filepath.Join(home, ".claude", "projects")
+	projectsDir := filepath.Join(providerpaths.ClaudeConfigDir(home), "projects")
 	if _, err := os.Stat(projectsDir); err != nil {
 		return byDate
 	}

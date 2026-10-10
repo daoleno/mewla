@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 // Claude's process registry names the native session even for a fresh CLI with
@@ -82,14 +83,11 @@ func LiveClaudeSessionOwner(sessionID, root string) (int, error) {
 		return 0, nil
 	}
 	if root == "" {
-		root = os.Getenv("CLAUDE_CONFIG_DIR")
-		if root == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return 0, err
-			}
-			root = filepath.Join(home, ".claude")
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return 0, err
 		}
+		root = providerpaths.ClaudeConfigDir(home)
 	}
 	if !filepath.IsAbs(root) {
 		return 0, fmt.Errorf("Claude provider root must be absolute")

@@ -31,12 +31,14 @@ left.
 
 Per agent:
 
-- **Claude Code**: read from `~/.claude/projects` every five minutes,
-  including traffic through a Custom Gateway. Costs are reference estimates,
-  not your subscription bill. A custom `CLAUDE_CONFIG_DIR` is not read.
+- **Claude Code**: read from `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`)
+  every five minutes, including traffic through a Custom Gateway. Costs are
+  reference estimates, not your subscription bill.
 - **Codex**: each request is priced at its own context size, so long-context
   tiers apply per request.
-- **OpenCode**: read from OpenCode's local database.
+- **OpenCode**: read from OpenCode's local database, the one
+  `opencode db path` reports (or `MEWLA_OPENCODE_DB`).
+- **Pi**: read from `~/.pi/agent/sessions` (or `$PI_CODING_AGENT_DIR/sessions`).
 
 ## Resources
 

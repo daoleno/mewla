@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 const (
@@ -323,27 +324,11 @@ func freshestPiTranscript(candidates []piTranscriptCandidate) (piTranscriptCandi
 // piAgentSessionsDir resolves Pi's shared session root. It honors Pi's
 // PI_CODING_AGENT_DIR override and defaults to ~/.pi/agent/sessions.
 func piAgentSessionsDir() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("PI_CODING_AGENT_DIR")); override != "" {
-		if override == "~" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", err
-			}
-			override = home
-		} else if strings.HasPrefix(override, "~/") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", err
-			}
-			override = filepath.Join(home, strings.TrimPrefix(override, "~/"))
-		}
-		return filepath.Join(override, "sessions"), nil
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".pi", "agent", "sessions"), nil
+	return filepath.Join(providerpaths.PiAgentDir(home), "sessions"), nil
 }
 
 // encodePiSessionDirName mirrors pi-mono's SessionManager cwd encoding:

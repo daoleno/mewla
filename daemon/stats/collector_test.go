@@ -463,6 +463,45 @@ func TestCollectClaudeSessionStatsIncludesSubagents(t *testing.T) {
 	}
 }
 
+// Stats reads provider data where Work does: provider home overrides win
+// over the default ~/.claude and ~/.pi/agent roots.
+func TestCollectorHonoursProviderHomeOverrides(t *testing.T) {
+	home := t.TempDir()
+	claudeRoot := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeRoot)
+	projectDir := filepath.Join(claudeRoot, "projects", "-tmp-mewla")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"type":"assistant","timestamp":"2026-04-04T10:00:00.000Z","cwd":"/tmp/mewla","message":{"id":"m1","model":"claude-sonnet-4-6","content":[],"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+`
+	if err := os.WriteFile(filepath.Join(projectDir, "session-a.jsonl"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	day := NewCollector().collectClaudeSessionStats(home)["2026-04-04"]
+	if day == nil || day.models["claude-sonnet-4-6"].totalTokens != 15 {
+		t.Fatalf("CLAUDE_CONFIG_DIR session not counted: %+v", day)
+	}
+
+	piRoot := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", piRoot)
+	piDir := filepath.Join(piRoot, "sessions", "--tmp-mewla--")
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	piLines := strings.Join([]string{
+		piHeader("/tmp/mewla", "2026-04-05T10:00:00.000Z"),
+		piUserLine("u1", "2026-04-05T10:00:01.000Z"),
+		piAssistantLine("a1", "2026-04-05T10:00:02.000Z", "opencode-go", "deepseek-v4-flash", `{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"total":0.001}}`),
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(piDir, "2026-04-05T10-00-00-000Z_abc.jsonl"), []byte(piLines), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if (&Collector{}).collectPiStats(home)["2026-04-05"] == nil {
+		t.Fatal("PI_CODING_AGENT_DIR session not counted")
+	}
+}
+
 func TestCollectGrokStatsFromUpdates(t *testing.T) {
 	setTestLocalLocation(t, time.UTC)
 

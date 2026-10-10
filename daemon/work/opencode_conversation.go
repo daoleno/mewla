@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 const (
@@ -784,61 +784,11 @@ func rebuildOpenCodeConversation(entry *openCodeCacheEntry, sessionID string) (C
 // SQLite queries (spawned sqlite3 CLI; read-only URI).
 // ---------------------------------------------------------------------------
 
-// openCodeDBPathResolved memoizes the resolved OpenCode SQLite path. The
-// `opencode db path` CLI spawn is expensive (the opencode process startup can
-// take hundreds of milliseconds), so it must never run per poll. The
-// MEWLA_OPENCODE_DB override is re-read every call (tests set it dynamically).
-// openCodeDBPathResolved memoizes a successful OpenCode SQLite path
-// resolution. The `opencode db path` CLI spawn is expensive (the opencode
-// process startup can take hundreds of milliseconds), so it must never run
-// per poll. A failed resolution is NOT cached: the discovery is retried on
-// later calls so a transient failure (or a late-arriving opencode install)
-// self-corrects. The MEWLA_OPENCODE_DB override is re-read every call (tests
-// set it dynamically).
-var (
-	openCodeDBPathMu       sync.Mutex
-	openCodeDBPathResolved string
-)
-
+// openCodeDBPath resolves OpenCode's SQLite database through providerpaths,
+// which memoizes the `opencode db path` spawn and honours MEWLA_OPENCODE_DB.
 func openCodeDBPath() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("MEWLA_OPENCODE_DB")); override != "" {
-		return override, nil
-	}
-	openCodeDBPathMu.Lock()
-	defer openCodeDBPathMu.Unlock()
-	if openCodeDBPathResolved != "" {
-		return openCodeDBPathResolved, nil
-	}
-	if sqlitePath, err := lookPathOpenCodeDB(); err == nil && sqlitePath != "" {
-		openCodeDBPathResolved = sqlitePath
-		return openCodeDBPathResolved, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", nil
-	}
-	fallback := filepath.Join(home, ".local", "share", "opencode", "opencode.db")
-	if _, err := os.Stat(fallback); err == nil {
-		openCodeDBPathResolved = fallback
-		return openCodeDBPathResolved, nil
-	}
-	return "", nil
-}
-
-func lookPathOpenCodeDB() (string, error) {
-	binary, err := exec.LookPath("opencode")
-	if err != nil {
-		return "", err
-	}
-	out, err := exec.Command(binary, "db", "path").CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	path := strings.TrimSpace(string(out))
-	if path == "" {
-		return "", fmt.Errorf("empty opencode db path")
-	}
-	return path, nil
+	home, _ := os.UserHomeDir()
+	return providerpaths.OpenCodeDB(home), nil
 }
 
 type openCodeSessionRow struct {
