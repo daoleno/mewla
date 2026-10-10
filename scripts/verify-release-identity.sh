@@ -290,6 +290,7 @@ for rel in (
     "release/mewla-update-public-key.pem",
     "docs/ci-release.md",
     ".github/workflows/release-artifacts.yml",
+    ".github/actions/android-native/action.yml",
 ):
     if not (root / rel).is_file():
         errors.append(f"missing required release file: {rel}")
@@ -317,12 +318,17 @@ if "materialize-android-keystore" not in wf:
     errors.append("release-artifacts.yml must materialize keystore via helper script")
 if "-Dorg.gradle.jvmargs=-Xmx6g" not in wf:
     errors.append("release-artifacts.yml must provide enough Gradle heap for release dex merging")
+if "uses: ./.github/actions/android-native" not in wf:
+    errors.append("release-artifacts.yml must build Android through .github/actions/android-native")
+android_native = root / ".github/actions/android-native/action.yml"
+native_action = android_native.read_text(encoding="utf-8") if android_native.is_file() else ""
 for required in (
     "android-ghostty-output-v2-arm64-",
     "app/modules/terminal-vt/android/src/main/cpp/ghostty",
+    "./scripts/verify-libghostty.sh --release",
 ):
-    if required not in wf:
-        errors.append(f"release-artifacts.yml missing complete native cache contract: {required}")
+    if required not in native_action:
+        errors.append(f"android-native action missing complete native cache contract: {required}")
 if "MEWLA_UPDATE_SIGNING_KEY_BASE64" not in wf:
     errors.append("release-artifacts.yml must use the updater manifest signing secret")
 for asset in (
@@ -335,7 +341,11 @@ for asset in (
 if "GH_REPO" not in wf or "github.repository" not in wf:
     errors.append("release-artifacts.yml publish path must set GH_REPO from github.repository")
 for required in (
-    'needs: [validate, daemon, android]',
+    # Desktop first: archives publish without waiting for Android, and the
+    # APK joins the same signed asset set when it is ready.
+    'needs: [validate, daemon]',
+    'needs: [validate, daemon, android, desktop-stage]',
+    'needs: [validate, desktop-publish, complete-stage]',
     'RELEASE_IS_PRERELEASE=true',
     'RELEASE_IS_PRERELEASE=false',
     '--prerelease="$RELEASE_IS_PRERELEASE"',

@@ -9,7 +9,8 @@
 #   ALLOW_UNPROVEN_GHOSTTY=1 ./scripts/build-libghostty.sh  # no .git; non-release
 #   MEWLA_BUILD_TMPDIR=/durable/path ./scripts/build-libghostty.sh
 #
-# Requires: zig (version from native.lock.json), git, python3
+# Requires: git, python3, curl. The pinned Zig from native.lock.json is used from
+# PATH when it matches, otherwise fetched into ${MEWLA_TOOL_CACHE:-.cache/mewla-tools}.
 # Ghostty source: GHOSTTY_SRC, or a clone under ${MEWLA_GHOSTTY_CACHE:-$HOME/.cache/mewla/ghostty}
 
 set -euo pipefail
@@ -194,20 +195,10 @@ need_abi() {
   return 1
 }
 
-ZIG_BIN="${ZIG_BIN:-zig}"
-if ! command -v "$ZIG_BIN" >/dev/null 2>&1; then
-  echo "error: zig not found on PATH (need ${LOCK_ZIG_VERSION})" >&2
-  exit 1
-fi
+# shellcheck source=lib/zig.sh
+source "$ROOT/scripts/lib/zig.sh"
+ZIG_BIN="$(mewla_resolve_zig "$LOCK" "${MEWLA_TOOL_CACHE:-$ROOT/.cache/mewla-tools}")"
 ZIG_VER="$("$ZIG_BIN" version)"
-case "$ZIG_VER" in
-  "${LOCK_ZIG_VERSION}"|"${LOCK_ZIG_VERSION}".*)
-    ;;
-  *)
-    echo "error: zig version mismatch: have $ZIG_VER, lock wants ${LOCK_ZIG_VERSION}" >&2
-    exit 1
-    ;;
-esac
 
 PROVENANCE="proven"
 RELEASE_GRADE=1

@@ -71,21 +71,23 @@ describe("ordinary CI contract", () => {
     expect(workflow).toMatch(
       /android-native:\s*[\s\S]*?name: Android native \(bounded link\)/,
     );
-    expect(workflow).toContain("android-ghostty-output-v2-arm64-");
-    expect(workflow).toContain(
+    // The release build and the cache warmer share this toolchain step, and
+    // the Ghostty build script bootstraps its own pinned Zig.
+    const androidNative = fs.readFileSync(
+      path.join(root, ".github", "actions", "android-native", "action.yml"),
+      "utf8",
+    );
+    expect(workflow).toMatch(
+      /android-native:[\s\S]*?uses: \.\/\.github\/actions\/android-native\n/,
+    );
+    expect(androidNative).toContain("android-ghostty-output-v2-arm64-");
+    expect(androidNative).toContain(
       "app/modules/terminal-vt/android/src/main/cpp/ghostty",
     );
-    expect(workflow).toContain(
+    expect(androidNative).toContain(
       "./scripts/build-libghostty.sh --abis arm64-v8a",
     );
-    const installZigStep = workflow.indexOf(
-      "- name: Install Zig when Android Ghostty cache misses",
-    );
-    const buildGhosttyStep = workflow.indexOf(
-      "- name: Build arm64 Ghostty when cache misses",
-    );
-    expect(installZigStep).toBeGreaterThan(-1);
-    expect(buildGhosttyStep).toBeGreaterThan(installZigStep);
+    expect(workflow).not.toMatch(/python3 <<'PY'[\s\S]*?zig/);
     expect(workflow).toContain("./scripts/verify-terminal-abi-gradle.sh");
     expect(workflow).toContain(":terminal-vt:assembleDebug");
     expect(workflow).toContain(":app:assembleDebug");

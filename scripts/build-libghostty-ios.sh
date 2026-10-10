@@ -17,10 +17,6 @@ lock = json.load(open(sys.argv[1]))
 values = {
     "GHOSTTY_REPO": lock["ghostty"]["repository"],
     "GHOSTTY_COMMIT": lock["ghostty"]["commit"],
-    "ZIG_VERSION": lock["zig"]["version"],
-    "ZIG_URL": lock["zig"]["downloads"]["aarch64-macos"]["tarball"],
-    "ZIG_SHA256": lock["zig"]["downloads"]["aarch64-macos"]["sha256"],
-    "ZIG_ARCHIVE_ROOT": lock["zig"]["downloads"]["aarch64-macos"]["archive_root"],
     "XCFRAMEWORK_NAME": lock["ios"]["xcframework_name"],
     "UPSTREAM_XCFRAMEWORK_NAME": lock["ios"]["upstream_xcframework_name"],
 }
@@ -35,37 +31,9 @@ if ! xcodebuild -version >/dev/null 2>&1; then
   exit 1
 fi
 
-resolve_zig() {
-  local candidate="${ZIG_BIN:-zig}"
-  if command -v "$candidate" >/dev/null 2>&1; then
-    local version
-    version="$("$candidate" version)"
-    if [[ "$version" == "$ZIG_VERSION" || "$version" == "$ZIG_VERSION".* ]]; then
-      command -v "$candidate"
-      return
-    fi
-  fi
-
-  local install_dir="$TOOL_CACHE/$ZIG_ARCHIVE_ROOT"
-  local archive="$TOOL_CACHE/${ZIG_URL##*/}"
-  mkdir -p "$TOOL_CACHE"
-  if [[ ! -f "$archive" ]]; then
-    echo "Downloading pinned Zig $ZIG_VERSION..." >&2
-    curl -fL "$ZIG_URL" -o "$archive"
-  fi
-  local actual
-  actual="$(shasum -a 256 "$archive" | awk '{print $1}')"
-  if [[ "$actual" != "$ZIG_SHA256" ]]; then
-    echo "error: Zig archive checksum mismatch" >&2
-    exit 1
-  fi
-  if [[ ! -x "$install_dir/zig" ]]; then
-    tar -xf "$archive" -C "$TOOL_CACHE"
-  fi
-  echo "$install_dir/zig"
-}
-
-ZIG_BIN="$(resolve_zig)"
+# shellcheck source=lib/zig.sh
+source "$ROOT/scripts/lib/zig.sh"
+ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 
 prepare_macos_sdk_for_zig() {
   local sdk

@@ -1,0 +1,116 @@
+name: Android native toolchain
+description: >
+  Java 17, the Android SDK packages, the release-grade arm64 Ghostty library and
+  the Gradle home. Shared by CI, the release build and the cache warmer so their
+  cache keys cannot drift. Only native-cache.yml on main saves caches: GitHub
+  scopes a cache to the ref that saved it, so a tag run can read main's caches
+  but nothing can read a tag's.
+
+inputs:
+  save-caches:
+    description: "'true' only in native-cache.yml on main"
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: platform-tools
+
+    - name: Install Android packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdkmanager --install \
+          "platform-tools" \
+          "platforms;android-35" \
+          "build-tools;35.0.0" \
+          "ndk;27.1.12297006" \
+          "cmake;3.22.1"
+        # sdkmanager may leave licenses pending
+        yes | sdkmanager --licenses >/dev/null || true
+
+    # Ghostty output: the verified arm64 library and headers. Never signing
+    # material or signed output.
+    - name: Restore verified Android Ghostty output
+      id: ghostty-output-cache
+      if: ${{ inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          app/modules/terminal-vt/libs/android
+          app/modules/terminal-vt/android/src/main/cpp/ghostty
+        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+    - name: Restore or save verified Android Ghostty output
+      id: ghostty-output-cache-rw
+      if: ${{ inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          app/modules/terminal-vt/libs/android
+          app/modules/terminal-vt/android/src/main/cpp/ghostty
+        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+
+    # Ghostty build inputs: the pinned Zig and the Ghostty source clone.
+    - name: Restore pinned Zig and Ghostty source
+      if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ runner.temp }}/tools
+          ${{ runner.temp }}/ghostty
+        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
+    - name: Restore or save pinned Zig and Ghostty source
+      if: ${{ steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ runner.temp }}/tools
+          ${{ runner.temp }}/ghostty
+        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
+
+    - name: Build release-grade arm64 Ghostty when the cache misses
+      if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
+        MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
+      # The sideload release ships arm64 only; --release enforces release_grade + arm64.
+      # Bare verify-libghostty.sh would require every ABI in the lock.
+      run: ./scripts/build-libghostty.sh --abis arm64-v8a
+
+    - name: Verify release-grade arm64 Ghostty
+      shell: bash
+      run: ./scripts/verify-libghostty.sh --release
+
+    # Gradle home, including the local build cache. Keyed on dependencies, not
+    # on the app version, so every release can reuse the warmed entry.
+    - name: Restore Gradle home
+      if: ${{ inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle') }}
+        restore-keys: |
+          android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
+    - name: Restore or save Gradle home
+      if: ${{ inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle') }}
+        restore-keys: |
+          android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-

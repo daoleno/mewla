@@ -15,20 +15,29 @@ const nativeVerifier = fs.readFileSync(
   'utf8',
 );
 const appPackage = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8');
+const androidNative = fs.readFileSync(
+  path.join(__dirname, '..', '.github', 'actions', 'android-native', 'action.yml'),
+  'utf8',
+);
+const nativeCache = fs.readFileSync(
+  path.join(__dirname, '..', '.github', 'workflows', 'native-cache.yml'),
+  'utf8',
+);
 
 describe('release asset workflow contract', () => {
   it('prepares native release inputs before compilation in release and ordinary CI', () => {
     const ci = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
     expect(ci).toContain(':app:assembleRelease');
     expect(ci).toContain('./scripts/build-daemon-linux.sh --out-dir');
-    for (const source of [workflow, ci]) {
-      expect(source).toMatch(/uses: android-actions\/setup-android@v3\s+with:\s+packages: platform-tools/);
+    expect(androidNative).toMatch(/uses: android-actions\/setup-android@v3\s+with:\s+packages: platform-tools/);
+    for (const source of [workflow, ci, nativeCache]) {
+      expect(source).toContain('uses: ./.github/actions/android-native');
     }
   });
   it('rejects RN-normalized asset collisions before native and signed builds', () => {
     const gate = workflow.indexOf('run: bun test androidAssetNames.test.js');
     expect(gate).toBeGreaterThan(0);
-    expect(gate).toBeLessThan(workflow.indexOf('- name: Restore pinned Zig and Ghostty source caches'));
+    expect(gate).toBeLessThan(workflow.indexOf('uses: ./.github/actions/android-native'));
     const preparation = fs.readFileSync(
       path.join(__dirname, '..', '.github', 'workflows', 'release-next-beta.yml'), 'utf8',
     );
@@ -57,10 +66,17 @@ describe('release asset workflow contract', () => {
     expect(workflow).toContain('gh release edit "$TAG" --draft=false');
   });
 
-  it('builds daemon and Android in parallel before deterministic signed aggregation', () => {
+  it('publishes desktop archives first and attaches the signed APK when it is ready', () => {
     expect(workflow).toContain('daemon:');
     expect(workflow).toContain('android:');
-    expect(workflow).toContain('needs: [validate, daemon, android]');
+    expect(workflow).toMatch(/desktop-stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon\]\n/);
+    expect(workflow).toMatch(/desktop-publish:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, desktop-stage\]\n/);
+    expect(workflow).toContain('needs: [validate, daemon, android, desktop-stage]');
+    expect(workflow).toContain('needs: [validate, desktop-publish, complete-stage]');
+    expect(workflow).toContain('./scripts/stage-release.sh --skip-build\n');
+    // The complete set must reuse the already-public archive bytes.
+    expect(workflow).toContain('diff -u <(daemon_sums inputs/desktop/SHA256SUMS) <(daemon_sums "$STAGE/SHA256SUMS")');
+    expect(workflow).toContain('sha256sum -c --ignore-missing SHA256SUMS');
     expect(workflow).toContain("grep -Eq 'ELF 64-bit.*(x86-64|x86_64)'");
     expect(workflow).toContain("grep -Eq 'Mach-O 64-bit.*arm64'");
     expect(workflow).toContain('--out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin"');
@@ -71,20 +87,27 @@ describe('release asset workflow contract', () => {
   it('keeps recovery reviewed and caches no signing material or signed output', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('publish:');
-    expect(workflow).toContain('cache: gradle');
     expect(appPackage).toContain('--build-cache');
     expect(workflow).toContain('-Dorg.gradle.jvmargs=-Xmx6g');
-    expect(workflow).toContain('android-native-inputs-');
-    expect(workflow).toContain('android-ghostty-output-v2-arm64-');
-    expect(workflow).toContain('app/modules/terminal-vt/android/src/main/cpp/ghostty');
-    expect(workflow).toContain('app/modules/terminal-vt/patches/android/**');
-    expect(workflow).toContain('scripts/verify-android-native-symbols.py');
-    expect(workflow).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
-    expect(workflow).toContain('run: ./scripts/verify-libghostty.sh --release');
+    expect(androidNative).toContain('~/.gradle/caches');
+    expect(androidNative).toContain('android-native-inputs-');
+    expect(androidNative).toContain('android-ghostty-output-v2-arm64-');
+    expect(androidNative).toContain('app/modules/terminal-vt/android/src/main/cpp/ghostty');
+    expect(androidNative).toContain('app/modules/terminal-vt/patches/android/**');
+    expect(androidNative).toContain('scripts/verify-android-native-symbols.py');
+    expect(androidNative).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
+    expect(androidNative).toContain('run: ./scripts/verify-libghostty.sh --release');
     expect(nativeVerifier).toContain('bad "missing pinned header $HEADERS_DIR/vt.h"');
-    const cacheBlocks = [...workflow.matchAll(/uses: actions\/cache@v4[\s\S]*?(?=\n\s{6}- name:|$)/g)]
+    // Tag runs only restore; the main-branch warmer is the one cache writer.
+    expect(workflow).not.toContain('save-caches');
+    expect(workflow).not.toMatch(/uses: actions\/cache(\/save)?@/);
+    expect(nativeCache).toContain('save-caches: "true"');
+    expect(nativeCache).not.toContain('secrets.');
+    const cacheBlocks = [workflow, androidNative, nativeCache]
+      .flatMap((source) => [...source.matchAll(/uses: actions\/cache(?:\/restore)?@v4[\s\S]*?(?=\n\s*- name:|$)/g)])
       .map((match) => match[0])
       .join('\n');
+    expect(cacheBlocks).toContain('~/.gradle/caches');
     for (const forbidden of ['keystore', '.p12', '.jks', '.apk', 'dist-download']) {
       expect(cacheBlocks.toLowerCase()).not.toContain(forbidden);
     }
