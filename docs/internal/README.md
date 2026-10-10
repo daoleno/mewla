@@ -43,4 +43,3 @@ and [third-party assets](../third-party-assets.md).
 - [Git review](git-review.md) and [Git diff design](git-diff-design.md)
 - [Persistent Browser](persistent-browser.md)
 - [DSH Sessions](dsh-sessions.md)
-- [Design lint](design-lint.md)
