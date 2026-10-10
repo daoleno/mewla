@@ -21,18 +21,20 @@ const (
 	modelsDevCacheFile = "models-dev-metadata.json"
 )
 
-var modelsDevURL = "https://models.dev/api.json"
+// ModelsDevURL is the public models.dev metadata feed the daemon refreshes.
+const ModelsDevURL = "https://models.dev/api.json"
 
 type modelsDevCatalog struct {
 	mu        sync.RWMutex
 	UpdatedAt time.Time                                       `json:"updated_at"`
 	Models    map[string]map[string]modelPresentationMetadata `json:"models"`
 	path      string
+	url       string // empty disables refresh
 	client    *http.Client
 }
 
-func newModelsDevCatalog(path string) *modelsDevCatalog {
-	return &modelsDevCatalog{path: path, client: &http.Client{Timeout: modelsDevTimeout}, Models: map[string]map[string]modelPresentationMetadata{}}
+func newModelsDevCatalog(path, url string) *modelsDevCatalog {
+	return &modelsDevCatalog{path: path, url: strings.TrimSpace(url), client: &http.Client{Timeout: modelsDevTimeout}, Models: map[string]map[string]modelPresentationMetadata{}}
 }
 
 func (c *modelsDevCatalog) load() error {
@@ -103,9 +105,12 @@ func (c *modelsDevCatalog) refresh(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
+	if c.url == "" {
+		return fmt.Errorf("models.dev metadata refresh is disabled")
+	}
 	ctx, cancel := context.WithTimeout(ctx, modelsDevTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsDevURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
 		return err
 	}

@@ -336,6 +336,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		RoutesPath:         routesPath,
 		ListenerPath:       listenerPath,
 		DiscoveryPath:      discoveryPath,
+		ModelsDevURL:       modelprofiles.ModelsDevURL,
 		ModelsObserved:     sc.ObserveModels,
 		Credentials:        credentialStore,
 		LiveRouteEndpoints: modelprofiles.LiveClaudeRouteEndpoints,
