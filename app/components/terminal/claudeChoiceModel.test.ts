@@ -155,5 +155,8 @@ describe("claude choice model", () => {
     });
     const [declined] = buildTimeline([choiceEvent("toolu_1", "declined")]);
     expect(declined).toMatchObject({ title: "Choice dismissed", tone: "neutral" });
+    const [unanswered] = buildTimeline([choiceEvent("toolu_1", "unanswered")]);
+    expect(unanswered).toMatchObject({ title: "Not answered", detail: "Which fruit?" });
+    expect(latestPendingChoice([choiceEvent("toolu_1", "unanswered")])).toBeNull();
   });
 });

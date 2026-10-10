@@ -368,20 +368,34 @@ function choiceActivityFromEvent(event: CodexConversationEvent): TimelineItem | 
   if (!choice || choice.state === "pending") {
     return null;
   }
-  const declined = choice.state === "declined";
-  const detail = declined ? undefined : choiceAnsweredSummary(choice);
+  if (choice.state !== "answered") {
+    const title = choice.state === "declined" ? "Choice dismissed" : "Not answered";
+    return {
+      type: "activity",
+      id: event.id,
+      timestamp: event.timestamp,
+      statusKey: `choice:${choice.state}`,
+      title,
+      tone: "neutral",
+      icon: "close-circle",
+      detail: choice.questions[0]?.question,
+      defaultExpanded: false,
+      accessibilityLabel: title,
+    };
+  }
+  const detail = choiceAnsweredSummary(choice);
   return {
     type: "activity",
     id: event.id,
     timestamp: event.timestamp,
     statusKey: `choice:${choice.state}`,
-    title: declined ? "Choice dismissed" : "Answered",
-    tone: declined ? "neutral" : "success",
-    icon: declined ? "close-circle" : "check-circle",
+    title: "Answered",
+    tone: "success",
+    icon: "check-circle",
     detail,
-    body: declined ? undefined : choiceAnswerDetails(choice),
+    body: choiceAnswerDetails(choice),
     defaultExpanded: false,
-    accessibilityLabel: declined ? "Choice dismissed" : `Answered: ${detail}`,
+    accessibilityLabel: `Answered: ${detail}`,
   };
 }
 

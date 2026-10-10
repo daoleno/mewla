@@ -114,7 +114,9 @@ function isFoldableToolRow(item: TimelineItem): item is ActivityTimelineItem {
     item.tone !== "running" &&
     !item.streaming &&
     !item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX) &&
-    !item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX)
+    !item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX) &&
+    // Your answer to Brain's question is part of the conversation, not a step.
+    !item.statusKey?.startsWith("choice:")
   );
 }
 

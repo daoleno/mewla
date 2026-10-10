@@ -426,6 +426,8 @@ type claudeConversationBuilder struct {
 	events            []CodexConversationEvent
 	eventByCall       map[string]int
 	activityLifecycle providerActivityLifecycle
+	// pendingChoiceCalls are AskUserQuestion calls without a result yet.
+	pendingChoiceCalls []string
 	// pendingTaskTurn holds the activity a task notification would open. It
 	// starts only once the provider actually answers with an assistant record.
 	pendingTaskTurn claudePendingTaskTurn
@@ -788,7 +790,9 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(inner)))
 		}
 	}
-	b.addEvent(event)
+	if b.addEvent(event) {
+		b.abandonPendingChoices()
+	}
 }
 
 func (b *claudeConversationBuilder) addThinking(lineNumber int, recordID string, index int, timestamp, text string) {
@@ -856,6 +860,9 @@ func (b *claudeConversationBuilder) addToolUse(lineNumber int, recordID string, 
 	}
 	if name == ClaudeAskUserQuestionTool {
 		event.Choice = parseClaudeAskUserQuestion(item.Input)
+		if event.Choice != nil && callID != "" {
+			b.pendingChoiceCalls = append(b.pendingChoiceCalls, callID)
+		}
 	}
 	if b.addEvent(event) && callID != "" {
 		b.eventByCall[callID] = len(b.events) - 1
