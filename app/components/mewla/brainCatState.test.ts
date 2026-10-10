@@ -24,6 +24,14 @@ describe("resolveBrainCatPresence", () => {
     expect(resolveBrainCatPresence({ ...connected, hydrated: false }).state).toBe("waking");
   });
 
+  test("a reconnect that outlasts a blip reads Reconnecting, from the menu footer's same moment", () => {
+    const stalled = resolveBrainCatPresence({ ...connected, connection: "connecting", stalled: true });
+    expect(stalled).toEqual({ state: "offline", reconnecting: true });
+    expect(brainCatTailLabel(stalled)).toBe("Reconnecting");
+    expect(resolveBrainCatPresence({ ...connected, connection: "connecting", stalled: false }).state).toBe("waking");
+    expect(brainCatTap({ presence: stalled, counts: { needs: 0, running: 0, back: 0, waiting: 0 } })).toEqual({ kind: "retry" });
+  });
+
   test("between turns: attention, then a delivered result, then delegated Work", () => {
     const needs = work({ work_id: "a", title: "Approve deploy", status: "needs_input" });
     const asked = work({ work_id: "d", title: "Apple agreement", status: "waiting", progress_mode: "waiting", wake: { kind: "user_input", ref: "Apple agreement" } });

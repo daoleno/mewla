@@ -102,6 +102,8 @@ export function BrainWorkList({
                 chrome={chrome}
                 status={slip.status}
                 statusLabel={slip.statusLabel}
+                // The group caption says it once; a card speaks only when it differs.
+                statusShown={slip.statusLabel !== BRAIN_WORK_GROUP_LABELS[group]}
                 title={slip.title}
                 meta={slipMeta(slip)}
                 summary={slipLine(slip)}
@@ -261,7 +263,9 @@ export function BrainWorkSheet({
   actionsFor?: BrainWorkActionsFor;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
-  const summary = brainWorkSummaryLine(surface.counts);
+  // With a goal line above ("2 of 5 back"), a second "back" count would read
+  // as the same number; the Back group below still lists them.
+  const summary = brainWorkSummaryLine(objective ? { ...surface.counts, back: 0 } : surface.counts);
   return (
     <BottomSheetFrame visible={visible} onClose={onClose} maxHeight="85%" cardStyle={{ backgroundColor: chrome.appBackground }}>
       <View style={styles.sheetHeader}>

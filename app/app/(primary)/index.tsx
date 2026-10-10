@@ -23,6 +23,7 @@ import {
   switchExecutorAccessibilityLabel,
 } from "../../components/brain/brainPresentation";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
+import { useConnectionStalled } from "../../components/navigation/useConnectionAttention";
 import {
   PRIMARY_SIDEBAR_BREAKPOINT,
   resolvePrimaryAppBarGeometry,
@@ -228,8 +229,9 @@ export default function BrainScreen() {
     hasHostWorker: Boolean(hostWorker?.id),
     structuredEvents: Boolean(hostExecutor?.capabilities?.structured_events),
   });
-  // Until Brain's first snapshot the chat shows its loading outline and the
-  // composer waits, saying "Connecting…".
+  // Until Brain's first snapshot the chat shows the waking cat and the
+  // composer waits. The cat owns loading and connection; the composer only
+  // ever says "Tell Brain…".
   const brainWaking = brainSurface === "waking";
   const brainModelSheet = useSessionProviderSheet({
     serverId: activeServer?.id ?? "",
@@ -605,12 +607,14 @@ export default function BrainScreen() {
     },
     [runWorkAction, workActionBusy],
   );
+  const connectionStalled = useConnectionStalled();
   const brainCompanion = useMemo<BrainCompanion>(() => {
     const presence = resolveBrainCatPresence({
       hasServer: Boolean(activeServer),
       connection: connectionState,
       hydrated: Boolean(activeBrain?.hydrated),
       currentWork: activeBrain?.current_work,
+      stalled: connectionStalled,
     });
     return {
       // The Work column perches the cat on its first Needs-you slip; the
@@ -656,6 +660,7 @@ export default function BrainScreen() {
     activeBrain?.current_work,
     activeBrain?.hydrated,
     activeServer,
+    connectionStalled,
     connectionState,
     openPairing,
     openWorkList,
@@ -729,7 +734,7 @@ export default function BrainScreen() {
                 readOnly={targetedThreadReadOnly}
                 onSwitchToTerminal={openBrainTerminal}
                 // Brain is who you talk to; the host executor is an implementation detail.
-                placeholder={connectionState === "connected" && !brainWaking ? "Tell Brain…" : undefined}
+                placeholder="Tell Brain…"
                 emptyTitle={BRAIN_EMPTY_TITLE}
                 emptyBody={BRAIN_EMPTY_BODY}
                 renderComposerAccessory={brainWaking ? undefined : renderBrainComposerAccessory}

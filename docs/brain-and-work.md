@@ -59,9 +59,18 @@ On a phone the chat gets the whole screen: tap that line, or ⋯ → Work, to op
 the list as a sheet, with all the counts in one line at its top. On a wide
 screen the list is the Work column beside the chat, and tapping the cat's line
 scrolls the column to the Work it counts. Both group Work by what it asks of
-you: Needs you, Running, Back, Waiting. Closed Work leaves the list. When Work needs
-you, "Brain" gets a red dot (like "Sessions" does for a Session), and the cat
-sits on that Work's slip in the conversation.
+you: Needs you, Running, Back, Waiting. Each group's caption says its state once,
+so a slip in it shows a state word only when it differs, such as Failed under
+Running. Under a goal line ("2 of 5 back") the sheet's count line leaves out its
+own "back". Closed Work leaves the list. When Work needs you while you are
+elsewhere, "Brain" gets a red dot (like "Sessions" does for a Session; on Brain
+itself the cat's line already says so), and the cat sits on that Work's slip in
+the conversation.
+
+**When the computer is unreachable** the cat's line says so, "Can't reach your
+computer", or "Reconnecting" after ten seconds of trying, at the same moment
+the menu's server line does. The message box keeps saying "Tell Brain…"; the
+cat owns connection and loading.
 
 **The cat.** Tap it and Brain answers. It also plays when you address it:
 tap twice and a standing cat does a happy hop; hold it to pet it (it purrs,

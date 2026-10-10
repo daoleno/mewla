@@ -424,7 +424,8 @@ export function AccountCard({
         title={account.name}
         subtitle={[custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${new Date(account.verified_at).toLocaleString()}` : ""].filter(Boolean).join(" · ") || undefined}
         numberOfLines={2}
-        trailing={<StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
+        // A fix row below names the state itself; the pill would repeat it.
+        trailing={recovery ? undefined : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
       />
       {recovery ? (
         <ListRow

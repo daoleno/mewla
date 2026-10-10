@@ -624,9 +624,10 @@ export default function SettingsScreen() {
           </ListSection>
           {currentIssue ? (
             <InlineNotice
-              tone="danger"
-              title={currentIssue.title}
-              detail={currentIssue.hint ?? currentIssue.detail}
+              // The server row above says what is wrong; this says what to do.
+              tone="neutral"
+              title="To fix this"
+              detail={currentIssue.hint || currentIssue.detail}
               style={styles.sectionNotice}
             />
           ) : null}
@@ -1245,9 +1246,7 @@ function TelegramConnectionRow({
     ? telegramConnectionStateLabel(visibleStatus.state)
     : loading
       ? "Loading"
-      : setupMode === "local"
-        ? "Server offline"
-        : "Unavailable";
+      : "Unavailable";
   const stateTone: StatusTone = visibleStatus
     ? telegramConnectionStateTone(visibleStatus.state)
     : "neutral";
@@ -1264,7 +1263,8 @@ function TelegramConnectionRow({
     <ListSection style={styles.channelSection}>
       <ListRow
         title="Telegram"
-        subtitle={visibleStatus?.bot_username ? `@${visibleStatus.bot_username}` : stateLabel}
+        // The pill carries a non-neutral state, so the subtitle never repeats it.
+        subtitle={visibleStatus?.bot_username ? `@${visibleStatus.bot_username}` : stateTone !== "neutral" ? "Talk to Brain from Telegram" : stateLabel}
         leading={
           <View style={styles.serverGlyph}>
             <Icon name="paper-plane" size={20} color={colors.textSecondary} />

@@ -36,6 +36,8 @@ export interface BrainCatPresence {
   away?: boolean;
   /** Delegating with nothing running: every delegated Work is waiting. */
   waiting?: boolean;
+  /** Offline because a reconnect outlasted a short blip (the menu's "Reconnecting"). */
+  reconnecting?: boolean;
 }
 
 /**
@@ -48,16 +50,20 @@ export function resolveBrainCatPresence({
   connection,
   hydrated,
   currentWork,
+  stalled = false,
   now = Date.now(),
 }: {
   hasServer: boolean;
   connection: ConnectionState;
   hydrated: boolean;
   currentWork?: readonly BrainCurrentWork[];
+  /** Connecting for longer than CONNECTION_STALL_MS, as the menu footer counts it. */
+  stalled?: boolean;
   now?: number;
 }): BrainCatPresence {
   if (!hasServer) return { state: "homeless" };
   if (connection === "offline") return { state: "offline" };
+  if (connection === "connecting" && stalled) return { state: "offline", reconnecting: true };
   if (connection !== "connected" || !hydrated) return { state: "waking" };
   const { slips, counts } = brainWorkSurface(currentWork, undefined, now);
   if (counts.needs) {
@@ -94,9 +100,10 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
       return count > 1 ? `${count} Workers running` : "1 Worker running";
     case "idle":
       return "All quiet";
-    // The chat stays readable while the link is down; the cat says so.
+    // The chat stays readable while the link is down; the cat says so, and
+    // the composer stays quiet.
     case "offline":
-      return "Can't reach your computer";
+      return presence.reconnecting ? "Reconnecting" : "Can't reach your computer";
     case "waking":
       return "Waking up";
     default:
