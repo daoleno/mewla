@@ -8,6 +8,7 @@ import {
   type StoredTransportCandidate,
 } from "./storedServerContract";
 
+export { serverAddressForDisplay, serverAddressProblem } from "./storedServerContract";
 export type {
   ServerTransportKind,
   StoredServer,

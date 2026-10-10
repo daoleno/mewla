@@ -247,7 +247,7 @@ export default function SettingsScreen() {
   const openEditServer = (server: Storage.StoredServer) => {
     setEditingServerId(server.id);
     setDraftName(server.name);
-    setDraftEndpoint(server.url);
+    setDraftEndpoint(Storage.serverAddressForDisplay(server.url));
     setDraftImportValue("");
     setCameraMountError(null);
     setPairPresentation(openPairEditor());
@@ -308,11 +308,9 @@ export default function SettingsScreen() {
     }
 
     const normalizedEndpoint = draftEndpoint.trim();
-    if (!normalizedEndpoint) {
-      Alert.alert(
-        "Endpoint required",
-        "Enter the WebSocket endpoint exposed by your tunnel or private network.",
-      );
+    const addressProblem = Storage.serverAddressProblem(normalizedEndpoint);
+    if (addressProblem) {
+      Alert.alert("Check the server address", addressProblem);
       return;
     }
 
@@ -338,9 +336,8 @@ export default function SettingsScreen() {
       });
     } catch (error: any) {
       Alert.alert(
-        "Invalid endpoint",
-        error?.message ||
-          "Use a full ws://, wss://, http://, or https:// URL that points at mewla.",
+        "Check the server address",
+        error?.message || "Use an address like https://mewla.example.com.",
       );
       return;
     }
@@ -557,7 +554,9 @@ export default function SettingsScreen() {
               const latencySample = serverLatencyById[server.id];
               const connectionIssue = serverConnectionIssues[server.id] || null;
               const endpoint =
-                server.transportKind === "link" ? "Mewla Link" : server.url;
+                server.transportKind === "link"
+                  ? "Mewla Link"
+                  : Storage.serverAddressForDisplay(server.url);
               const status = [
                 connectionIssue?.title ?? connectionLabel(connectionState),
                 connectionState === "connected" && latencySample
@@ -606,7 +605,7 @@ export default function SettingsScreen() {
                     connectionState === "connected" && latencySample
                       ? `, ${formatLatency(latencySample.latencyMs)} latency`
                       : ""
-                  }, ${server.transportKind === "link" ? "Mewla Link" : server.url}`}
+                  }, ${endpoint}`}
                   accessibilityHint="Shows actions for this server"
                   onPress={() => setServerMenuId(server.id)}
                 />
@@ -907,19 +906,20 @@ export default function SettingsScreen() {
                 ) : (
                   <>
                     <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
-                      Server endpoint
+                      Server address
                     </Text>
                     <TextInput
                       style={styles.input}
                       value={draftEndpoint}
                       onChangeText={setDraftEndpoint}
-                      accessibilityLabel="Server endpoint"
-                      placeholder="wss://mewla.example.com/ws"
+                      accessibilityLabel="Server address"
+                      placeholder="https://mewla.example.com"
                       placeholderTextColor={colors.textSecondary}
-                  selectionColor={colors.selectionBackground}
-                  cursorColor={colors.accentStrong}
+                      selectionColor={colors.selectionBackground}
+                      cursorColor={colors.accentStrong}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      keyboardType="url"
                     />
                   </>
                 )}

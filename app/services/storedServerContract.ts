@@ -89,7 +89,7 @@ export function mergeStoredServer(
 ): { server: StoredServer; servers: StoredServer[] } {
   const normalizedURL = normalizeServerURL(input.url);
   if (!normalizedURL) {
-    throw new Error("Invalid server URL.");
+    throw new Error(serverAddressProblem(input.url) ?? "This server address can't be used.");
   }
   const daemonId = normalizeHex(input.daemonId, 64) || "";
   const daemonPublicKey = normalizeHex(input.daemonPublicKey, 64) || "";
@@ -171,6 +171,38 @@ export function normalizeServerURL(rawValue: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * The saved address as people write it: https:// for a secure connection,
+ * http:// for a plain one, and no /ws when it is the default path. Saving it
+ * back yields the same stored URL.
+ */
+export function serverAddressForDisplay(storedURL: string): string {
+  try {
+    const parsed = new URL(storedURL);
+    const scheme =
+      parsed.protocol === "wss:" ? "https:" : parsed.protocol === "ws:" ? "http:" : parsed.protocol;
+    const path = parsed.pathname === "/ws" || parsed.pathname === "/" ? "" : parsed.pathname;
+    return `${scheme}//${parsed.host}${path}`;
+  } catch {
+    return storedURL;
+  }
+}
+
+/** What is wrong with an address the user typed, or null when it works. */
+export function serverAddressProblem(rawValue: string): string | null {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return "Enter the server address.";
+  if (normalizeServerURL(trimmed)) return null;
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(trimmed)?.[1]?.toLowerCase();
+  if (!scheme || !trimmed.includes("//")) {
+    return "Start the address with https:// (or http:// on a private network), like https://mewla.example.com.";
+  }
+  if (!["http", "https", "ws", "wss"].includes(scheme)) {
+    return `Mewla can't connect to a ${scheme}: address. Use https:// (or http:// on a private network).`;
+  }
+  return "This server address is incomplete. Check the host name, like https://mewla.example.com.";
 }
 
 function normalizeTransportCandidates(

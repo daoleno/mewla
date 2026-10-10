@@ -30,7 +30,7 @@ describe("Settings copy density", () => {
       "Camera permission required",
       "Allow camera access to scan a mewla pairing QR code.",
       "Scan the one-time QR from mewla pair, or paste its pairing link.",
-      'accessibilityLabel="Server endpoint"',
+      'accessibilityLabel="Server address"',
       "Telegram cloud messages are not deleted.",
       'accessibilityLabel="Appearance theme"',
       "<SegmentedControl",

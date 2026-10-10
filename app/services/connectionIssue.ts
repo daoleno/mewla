@@ -62,9 +62,9 @@ export async function diagnoseConnectionIssue(input: {
   if (!probeURL || !healthURL || !authCheckURL) {
     return createIssue(
       "invalid_url",
-      "Invalid endpoint URL",
-      "The saved server URL could not be parsed.",
-      "Use a full ws:// or wss:// endpoint that points at mewla, usually ending in /ws.",
+      "Invalid server address",
+      "The saved server address could not be read.",
+      "Edit the server and enter its address, like https://mewla.example.com.",
     );
   }
   if (!daemonId || !daemonPublicKey) {
@@ -156,7 +156,7 @@ export async function diagnoseConnectionIssue(input: {
         return createIssue(
           "device_not_paired",
           "Device is not paired",
-          "The daemon reached the WebSocket endpoint, but it rejected this device identity at the /ws probe.",
+          "The server answered, but mewla there does not recognize this device.",
           "Import a fresh pairing link from mewla on this machine to enroll this phone again.",
           probeResponse.status,
         );
@@ -175,7 +175,7 @@ export async function diagnoseConnectionIssue(input: {
       return createIssue(
         "wrong_daemon",
         "Wrong daemon identity",
-        "The WebSocket endpoint responded, but it did not prove the trusted daemon identity for this server.",
+        "The server answered, but it did not prove the trusted daemon identity for this server.",
         "Make sure the tunnel forwards to the correct mewla instance rather than another service or machine.",
         probeResponse.status,
       );
