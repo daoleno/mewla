@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { parseHex, relativeLuminance, rgbToHex } from "./colorUtils";
-import { THEME_ACCENTS } from "./primitives";
 import { resolveTheme } from "./resolve";
 import type { ResolvedTheme, ThemeColorScheme } from "./types";
 
@@ -125,40 +124,35 @@ const SCHEMES: ThemeColorScheme[] = ["light", "dark"];
 
 describe("Mewla palette WCAG AA contrast", () => {
   for (const colorScheme of SCHEMES) {
-    for (const { id: accentId } of THEME_ACCENTS) {
-      test(`${colorScheme}/${accentId}: every shipped text and affordance pairing meets AA`, () => {
-        const failures = pairings(resolveTheme({ colorScheme, accentId }))
-          .map(([label, fg, bg, minimum]) => ({ label, ratio: contrastRatio(fg, bg), minimum }))
-          .filter(({ ratio, minimum }) => ratio < minimum)
-          .map(({ label, ratio, minimum }) => `${label}: ${ratio.toFixed(2)} < ${minimum}`);
-        expect(failures).toEqual([]);
-      });
+    test(`${colorScheme}: every shipped text and affordance pairing meets AA`, () => {
+      const failures = pairings(resolveTheme({ colorScheme }))
+        .map(([label, fg, bg, minimum]) => ({ label, ratio: contrastRatio(fg, bg), minimum }))
+        .filter(({ ratio, minimum }) => ratio < minimum)
+        .map(({ label, ratio, minimum }) => `${label}: ${ratio.toFixed(2)} < ${minimum}`);
+      expect(failures).toEqual([]);
+    });
 
-      test(`${colorScheme}/${accentId}: the densest activity cell stays visible and ordered`, () => {
-        const { dataVisualization, surfaces } = resolveTheme({ colorScheme, accentId });
-        const ramp = dataVisualization.activityRamp;
-        expect(contrastRatio(ramp[3], surfaces.card)).toBeGreaterThanOrEqual(UI);
-        const distance = ramp.map((cell) => contrastRatio(cell, surfaces.card));
-        for (let index = 1; index < distance.length; index += 1) {
-          expect(distance[index]).toBeGreaterThan(distance[index - 1]);
-        }
-      });
+    test(`${colorScheme}: the densest activity cell stays visible and ordered`, () => {
+      const { dataVisualization, surfaces } = resolveTheme({ colorScheme });
+      const ramp = dataVisualization.activityRamp;
+      expect(contrastRatio(ramp[3], surfaces.card)).toBeGreaterThanOrEqual(UI);
+      const distance = ramp.map((cell) => contrastRatio(cell, surfaces.card));
+      for (let index = 1; index < distance.length; index += 1) {
+        expect(distance[index]).toBeGreaterThan(distance[index - 1]);
+      }
+    });
 
-      test(`${colorScheme}/${accentId}: running status stays apart from unknown, done and danger`, () => {
-        const { colors } = resolveTheme({ colorScheme, accentId });
-        const others = [colors.statusUnknown, colors.statusDone, colors.statusFailed, colors.statusBlocked];
-        for (const other of others) {
-          expect(oklabDistance(colors.statusRunning, other)).toBeGreaterThan(0.06);
-        }
-        expect(oklabDistance(colors.accent, colors.statusFailed)).toBeGreaterThan(0.06);
-        expect(oklabDistance(colors.accent, colors.success)).toBeGreaterThan(0.06);
-      });
-    }
+    test(`${colorScheme}: running status stays apart from unknown, done and danger`, () => {
+      const { colors } = resolveTheme({ colorScheme });
+      const others = [colors.statusUnknown, colors.statusDone, colors.statusFailed, colors.statusBlocked];
+      for (const other of others) {
+        expect(oklabDistance(colors.statusRunning, other)).toBeGreaterThan(0.06);
+      }
+      expect(oklabDistance(colors.accent, colors.statusFailed)).toBeGreaterThan(0.06);
+      expect(oklabDistance(colors.accent, colors.success)).toBeGreaterThan(0.06);
+    });
 
-    test(`${colorScheme}: the chrome accent is ink and legacy accents resolve to it`, () => {
-      expect(resolveTheme({ colorScheme }).accentId).toBe("ink");
-      expect(resolveTheme({ colorScheme, accentId: "vermilion" }).accentId).toBe("ink");
-      expect(resolveTheme({ colorScheme, accentId: "unknown" }).accentId).toBe("ink");
+    test(`${colorScheme}: the chrome accent is ink`, () => {
       const { colors } = resolveTheme({ colorScheme });
       expect(colors.accent).toBe(colors.textPrimary);
     });

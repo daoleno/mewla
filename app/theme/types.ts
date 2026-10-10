@@ -1,5 +1,4 @@
 import type { AppColors } from './palette';
-import type { ThemeAccentId } from './primitives';
 
 export type ThemeColorScheme = 'light' | 'dark';
 
@@ -80,7 +79,6 @@ export interface ThemeDefinition {
 
 export interface ResolvedTheme extends ThemeDefinition {
   isLight: boolean;
-  accentId: ThemeAccentId;
 }
 
 export type ThemePreference = 'system' | string;

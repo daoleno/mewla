@@ -1,15 +1,14 @@
 import {
-  buildDarkAppColors,
-  buildDarkChatPalette,
-  buildDarkDataVisualization,
-  buildDarkMaterials,
-  buildLightAppColors,
-  buildLightChatPalette,
-  buildLightDataVisualization,
-  buildLightMaterials,
-  buildSurfacePalette,
-  DEFAULT_ACCENT_ID,
-  getAccentById,
+  DARK_APP_COLORS,
+  DARK_CHAT_PALETTE,
+  DARK_DATA_VISUALIZATION,
+  DARK_MATERIALS,
+  DARK_SURFACE_PALETTE,
+  LIGHT_APP_COLORS,
+  LIGHT_CHAT_PALETTE,
+  LIGHT_DATA_VISUALIZATION,
+  LIGHT_MATERIALS,
+  LIGHT_SURFACE_PALETTE,
 } from './primitives';
 import { DEFAULT_THEME_IDS, getThemeById } from './registry';
 import type { ResolvedTheme, ThemeColorScheme } from './types';
@@ -17,29 +16,22 @@ import type { ResolvedTheme, ThemeColorScheme } from './types';
 export function resolveTheme({
   colorScheme,
   themeId,
-  accentId,
 }: {
   colorScheme: ThemeColorScheme;
   themeId?: string | null;
-  accentId?: string | null;
 }): ResolvedTheme {
   const fallbackId = DEFAULT_THEME_IDS[colorScheme];
   const requested = themeId ? getThemeById(themeId) : undefined;
   const definition = requested ?? getThemeById(fallbackId)!;
   const isLight = definition.colorScheme === 'light';
-  const accent = getAccentById(accentId) ?? getAccentById(DEFAULT_ACCENT_ID)!;
-  const colors = isLight ? buildLightAppColors(accent) : buildDarkAppColors(accent);
 
   return {
     ...definition,
-    colors,
-    chat: isLight ? buildLightChatPalette(accent) : buildDarkChatPalette(accent),
-    surfaces: buildSurfacePalette(colors),
-    materials: isLight ? buildLightMaterials(accent) : buildDarkMaterials(accent),
-    dataVisualization: isLight
-      ? buildLightDataVisualization(accent)
-      : buildDarkDataVisualization(accent),
+    colors: isLight ? LIGHT_APP_COLORS : DARK_APP_COLORS,
+    chat: isLight ? LIGHT_CHAT_PALETTE : DARK_CHAT_PALETTE,
+    surfaces: isLight ? LIGHT_SURFACE_PALETTE : DARK_SURFACE_PALETTE,
+    materials: isLight ? LIGHT_MATERIALS : DARK_MATERIALS,
+    dataVisualization: isLight ? LIGHT_DATA_VISUALIZATION : DARK_DATA_VISUALIZATION,
     isLight,
-    accentId: accent.id,
   };
 }

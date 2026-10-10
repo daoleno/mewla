@@ -8,23 +8,9 @@ import type {
 
 const TRANSPARENT = 'transparent';
 
-// Sage ramp from the original mark; it now only colours the legacy logo (see
-// BRAND_COLORS.sage) and goes with it.
-export const SAGE = {
-  50: '#F1F9F3',
-  100: '#DCF2E3',
-  200: '#BEE6CC',
-  300: '#9ED7B2',
-  400: '#7DC398',
-  500: '#559E72',
-  600: '#397C55',
-  700: '#2A5F41',
-  800: '#214630',
-  900: '#1A3123',
-  950: '#0D1911',
-} as const;
-
-export type AccentRamp = { readonly [Stop in keyof typeof SAGE]: string };
+export type AccentRamp = {
+  readonly [Stop in 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950]: string;
+};
 
 // Seal vermilion (hue ~28), the Mewla accent: 600 is the landing's seal ink,
 // 700 its pressed/ink-on-tint shade, 100 the landing's red-soft wash.
@@ -53,36 +39,14 @@ export interface AccentScheme {
   active: string;
 }
 
-export interface ThemeAccent {
-  id: ThemeAccentId;
-  name: string;
-  light: AccentScheme;
-  dark: AccentScheme;
-}
-
 /**
  * Ink is the one chrome accent. Vermilion is not an accent: it is the seal
  * (the cat, the logo), Send and "Needs you", and lives in the `seal` tokens.
- * A stored legacy preference (vermilion, sage, ...) resolves to ink.
  */
-export type ThemeAccentId = 'ink';
-
-export const THEME_ACCENTS: readonly ThemeAccent[] = [
-  {
-    id: 'ink',
-    name: 'Ink',
-    light: { accent: '#161412', accentStrong: '#161412', active: '#EFEBE3' },
-    dark: { accent: '#F4F0EA', accentStrong: '#F4F0EA', active: '#322D28' },
-  },
-];
-
-export const DEFAULT_ACCENT_ID: ThemeAccentId = 'ink';
-
-export function getAccentById(id: string | null | undefined): ThemeAccent | undefined {
-  return THEME_ACCENTS.find((accent) => accent.id === id);
-}
-
-const DEFAULT_ACCENT = getAccentById(DEFAULT_ACCENT_ID)!;
+const INK: { readonly light: AccentScheme; readonly dark: AccentScheme } = {
+  light: { accent: '#161412', accentStrong: '#161412', active: '#EFEBE3' },
+  dark: { accent: '#F4F0EA', accentStrong: '#F4F0EA', active: '#322D28' },
+};
 
 function rgba(hex: string, alpha: number): string {
   const n = hex.replace('#', '');
@@ -93,7 +57,6 @@ function rgba(hex: string, alpha: number): string {
 export const BRAND_COLORS = {
   // The landing's dark sections: warm ink, never blue-black.
   environment: '#141210',
-  sage: SAGE[400],
   ivory: '#F2EEE5',
   /** The seal: the one brand red. */
   vermilion: VERMILION[600],
@@ -189,7 +152,8 @@ export const DARK_OVERLAYS = {
   modalBackdrop: 'rgba(0,0,0,0.6)',
 } as const;
 
-export function buildLightAppColors({ light: a }: ThemeAccent): AppColors {
+function buildLightAppColors(): AppColors {
+  const a = INK.light;
   const st = LIGHT_STATUS;
   return {
     bgPrimary: LIGHT_NEUTRALS.canvas,
@@ -202,8 +166,6 @@ export function buildLightAppColors({ light: a }: ThemeAccent): AppColors {
     accentSoft: a.active,
     accentStrong: a.accentStrong,
     ...LIGHT_SEAL,
-    // The legacy logo keeps its sage-ink ribbon.
-    logoDetail: SAGE[900],
     statusFailed: st.failed,
     statusBlocked: st.blocked,
     statusWarning: st.warning,
@@ -243,9 +205,10 @@ export function buildLightAppColors({ light: a }: ThemeAccent): AppColors {
   };
 }
 
-export const LIGHT_APP_COLORS: AppColors = buildLightAppColors(DEFAULT_ACCENT);
+export const LIGHT_APP_COLORS: AppColors = buildLightAppColors();
 
-export function buildDarkAppColors({ dark: a }: ThemeAccent): AppColors {
+function buildDarkAppColors(): AppColors {
+  const a = INK.dark;
   const st = DARK_STATUS;
   return {
     bgPrimary: BRAND_COLORS.environment,
@@ -258,7 +221,6 @@ export function buildDarkAppColors({ dark: a }: ThemeAccent): AppColors {
     accentSoft: a.active,
     accentStrong: a.accentStrong,
     ...DARK_SEAL,
-    logoDetail: BRAND_COLORS.ivory,
     statusFailed: st.failed,
     statusBlocked: st.blocked,
     statusWarning: st.warning,
@@ -298,9 +260,10 @@ export function buildDarkAppColors({ dark: a }: ThemeAccent): AppColors {
   };
 }
 
-export const DARK_APP_COLORS: AppColors = buildDarkAppColors(DEFAULT_ACCENT);
+export const DARK_APP_COLORS: AppColors = buildDarkAppColors();
 
-export function buildLightChatPalette({ light: a }: ThemeAccent): ChatPalette {
+function buildLightChatPalette(): ChatPalette {
+  const a = INK.light;
   return {
     layout: 'telegram',
     showWallpaper: false,
@@ -325,9 +288,10 @@ export function buildLightChatPalette({ light: a }: ThemeAccent): ChatPalette {
   };
 }
 
-export const LIGHT_CHAT_PALETTE: ChatPalette = buildLightChatPalette(DEFAULT_ACCENT);
+export const LIGHT_CHAT_PALETTE: ChatPalette = buildLightChatPalette();
 
-export function buildDarkChatPalette({ dark: a }: ThemeAccent): ChatPalette {
+function buildDarkChatPalette(): ChatPalette {
+  const a = INK.dark;
   return {
     layout: 'telegram',
     showWallpaper: false,
@@ -350,9 +314,9 @@ export function buildDarkChatPalette({ dark: a }: ThemeAccent): ChatPalette {
   };
 }
 
-export const DARK_CHAT_PALETTE: ChatPalette = buildDarkChatPalette(DEFAULT_ACCENT);
+export const DARK_CHAT_PALETTE: ChatPalette = buildDarkChatPalette();
 
-export function buildSurfacePalette(colors: AppColors): SurfacePalette {
+function buildSurfacePalette(colors: AppColors): SurfacePalette {
   return {
     card: colors.bgSurface,
     cardStrong: colors.bgElevated,
@@ -366,48 +330,34 @@ export const LIGHT_SURFACE_PALETTE: SurfacePalette = buildSurfacePalette(LIGHT_A
 
 export const DARK_SURFACE_PALETTE: SurfacePalette = buildSurfacePalette(DARK_APP_COLORS);
 
-export function buildLightMaterials(_accent: ThemeAccent): MaterialPalette {
-  return {
-    // The landing's sticky bar: paper at 82% over a blur.
-    chrome: 'rgba(251,250,247,0.86)',
-    regular: 'rgba(255,255,255,0.92)',
-    thick: 'rgba(255,255,255,0.97)',
-    thin: 'rgba(255,255,255,0.68)',
-    stroke: 'rgba(22,20,18,0.08)',
-    separator: 'rgba(22,20,18,0.10)',
-    // A paper tint, not a colour: selected and tinted controls stay neutral.
-    tint: 'rgba(22,20,18,0.06)',
-  };
-}
+export const LIGHT_MATERIALS: MaterialPalette = {
+  // The landing's sticky bar: paper at 82% over a blur.
+  chrome: 'rgba(251,250,247,0.86)',
+  regular: 'rgba(255,255,255,0.92)',
+  thick: 'rgba(255,255,255,0.97)',
+  thin: 'rgba(255,255,255,0.68)',
+  stroke: 'rgba(22,20,18,0.08)',
+  separator: 'rgba(22,20,18,0.10)',
+  // A paper tint, not a colour: selected and tinted controls stay neutral.
+  tint: 'rgba(22,20,18,0.06)',
+};
 
-export const LIGHT_MATERIALS: MaterialPalette = buildLightMaterials(DEFAULT_ACCENT);
-
-export function buildDarkMaterials(_accent: ThemeAccent): MaterialPalette {
-  return {
-    chrome: 'rgba(20,18,16,0.86)',
-    regular: 'rgba(38,34,30,0.92)',
-    thick: 'rgba(44,40,35,0.97)',
-    thin: 'rgba(52,47,42,0.64)',
-    // The landing's dark hairline: white at 10%.
-    stroke: 'rgba(255,255,255,0.08)',
-    separator: 'rgba(255,255,255,0.10)',
-    tint: 'rgba(255,255,255,0.08)',
-  };
-}
-
-export const DARK_MATERIALS: MaterialPalette = buildDarkMaterials(DEFAULT_ACCENT);
+export const DARK_MATERIALS: MaterialPalette = {
+  chrome: 'rgba(20,18,16,0.86)',
+  regular: 'rgba(38,34,30,0.92)',
+  thick: 'rgba(44,40,35,0.97)',
+  thin: 'rgba(52,47,42,0.64)',
+  // The landing's dark hairline: white at 10%.
+  stroke: 'rgba(255,255,255,0.08)',
+  separator: 'rgba(255,255,255,0.10)',
+  tint: 'rgba(255,255,255,0.08)',
+};
 
 // Activity is good news, so the heatmap ramps toward the Ready green.
-export function buildLightDataVisualization(_accent: ThemeAccent): DataVisualizationPalette {
-  return { activityRamp: ['#E3EFE7', '#A9CDB6', '#5E9A76', '#2F6B4F'] };
-}
+export const LIGHT_DATA_VISUALIZATION: DataVisualizationPalette = {
+  activityRamp: ['#E3EFE7', '#A9CDB6', '#5E9A76', '#2F6B4F'],
+};
 
-export const LIGHT_DATA_VISUALIZATION: DataVisualizationPalette =
-  buildLightDataVisualization(DEFAULT_ACCENT);
-
-export function buildDarkDataVisualization(_accent: ThemeAccent): DataVisualizationPalette {
-  return { activityRamp: ['#1F3528', '#2E6045', '#4E9670', '#7FD0A5'] };
-}
-
-export const DARK_DATA_VISUALIZATION: DataVisualizationPalette =
-  buildDarkDataVisualization(DEFAULT_ACCENT);
+export const DARK_DATA_VISUALIZATION: DataVisualizationPalette = {
+  activityRamp: ['#1F3528', '#2E6045', '#4E9670', '#7FD0A5'],
+};

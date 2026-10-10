@@ -16,8 +16,6 @@ export interface AppColors {
   sealSoft: string;
   /** Glyphs and words on a `seal` fill. */
   onSeal: string;
-  /** Contrast semantic for the mark's light-colored ribbon/detail. */
-  logoDetail: string;
   statusFailed: string;
   statusBlocked: string;
   statusWarning: string;
