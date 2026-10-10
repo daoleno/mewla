@@ -208,6 +208,10 @@ jobs:
           test -f "$APK"
           echo "APK_PATH=${APK}" >> "$GITHUB_ENV"
 
+      - name: ccache statistics
+        if: always()
+        run: ccache --show-stats
+
       - name: Verify signed APK (package, ABI, notice, certificate)
         run: |
           set -euo pipefail

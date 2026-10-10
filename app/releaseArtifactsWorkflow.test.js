@@ -98,6 +98,10 @@ describe('release asset workflow contract', () => {
     expect(androidNative).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
     expect(androidNative).toContain('run: ./scripts/verify-libghostty.sh --release');
     expect(nativeVerifier).toContain('bad "missing pinned header $HEADERS_DIR/vt.h"');
+    // ccache: pinned binary, content-checked compiler, saved only from main.
+    expect(androidNative).toContain('7766991b91b3a5a177ab33fa043fe09e72c68586d5a86d20a563a05b74f119c0');
+    expect(androidNative).toContain('CCACHE_COMPILERCHECK=content');
+    expect(androidNative).toContain('android-ccache-v1-');
     // Tag runs only restore; the main-branch warmer is the one cache writer.
     expect(workflow).not.toContain('save-caches');
     expect(workflow).not.toMatch(/uses: actions\/cache(\/save)?@/);

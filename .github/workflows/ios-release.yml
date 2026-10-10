@@ -161,7 +161,6 @@ jobs:
           bun-version: "1.3.5"
 
       - name: Require Apple build tools
-        id: toolchain
         run: |
           set -euo pipefail
           xcodebuild -version
@@ -170,8 +169,6 @@ jobs:
             echo "error: CocoaPods is required on the macOS runner" >&2
             exit 1
           }
-          TOOLCHAIN_KEY="$( { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; pod --version; } | shasum -a 256 | cut -c1-20)"
-          echo "cache_key=$TOOLCHAIN_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
@@ -212,41 +209,10 @@ jobs:
       - name: Verify tracked release identity
         run: ./scripts/verify-release-identity.sh
 
-      - name: Verify shared native contract
-        run: ./scripts/verify-libghostty.sh --contract
-
-      - name: Restore pinned Zig and Ghostty source caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ runner.temp }}/tools
-            ${{ runner.temp }}/ghostty
-          key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/zig-xcode-compat/**') }}
-
-      - name: Restore verified iOS Ghostty output
-        id: ghostty-output-cache
-        uses: actions/cache@v4
-        with:
-          path: app/modules/terminal-vt/libs/ios
-          key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
-
-      - name: Build and verify iOS Ghostty XCFramework
-        if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' }}
-        env:
-          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
-          MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
-        run: ./scripts/build-libghostty-ios.sh
-
-      - name: Verify iOS Ghostty XCFramework
-        run: ./scripts/verify-libghostty-ios.sh
-
-      - name: Restore CocoaPods download cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/CocoaPods
-            ~/.cocoapods/repos
-          key: cocoapods-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/TerminalVt.podspec') }}
+      # Restore-only: native-cache.yml on main is the only writer, because a
+      # tag run can read main's caches but nothing can read a tag's.
+      - name: iOS Ghostty and CocoaPods caches
+        uses: ./.github/actions/ios-native
 
       - name: Generate release project and install pods
         run: |

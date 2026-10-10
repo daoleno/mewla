@@ -19,7 +19,7 @@ The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml
 
 1. installs the locked Bun workspace;
 2. validates the shared Android/iOS native contract;
-3. builds and verifies the pinned `libs/ios/GhosttyVt.xcframework` device and Simulator slices;
+3. restores, or builds when the cache misses, and verifies the pinned `libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
 4. runs a clean Expo iOS prebuild and `pod install`;
 5. runs `xcodebuild` for a generic iOS Simulator with `CODE_SIGNING_ALLOWED=NO`;
 6. verifies the `.app` bundle identifier and Mach-O executable;

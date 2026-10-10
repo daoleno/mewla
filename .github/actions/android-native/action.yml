@@ -114,3 +114,50 @@ runs:
         key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle') }}
         restore-keys: |
           android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
+
+    # ccache for the CMake builds: React Native, the app's codegen and the
+    # native modules. The NDK is reinstalled on every runner, so the compiler
+    # is checked by content, not mtime, and codegen headers written during the
+    # build stay cacheable. Restore is by prefix, so a dependency bump still
+    # starts from the previous objects.
+    - name: Install pinned ccache
+      shell: bash
+      run: |
+        set -euo pipefail
+        [[ "$(uname -m)" == "x86_64" ]] || { echo "error: pinned ccache is x86_64 only" >&2; exit 1; }
+        archive="$RUNNER_TEMP/ccache.tar.xz"
+        curl -fsSL -o "$archive" \
+          https://github.com/ccache/ccache/releases/download/v4.11.3/ccache-4.11.3-linux-x86_64.tar.xz
+        echo "7766991b91b3a5a177ab33fa043fe09e72c68586d5a86d20a563a05b74f119c0  $archive" | sha256sum -c -
+        mkdir -p "$RUNNER_TEMP/ccache-bin"
+        tar -xJf "$archive" -C "$RUNNER_TEMP/ccache-bin" --strip-components=1 ccache-4.11.3-linux-x86_64/ccache
+        echo "$RUNNER_TEMP/ccache-bin" >> "$GITHUB_PATH"
+        {
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
+          echo "CCACHE_NOHASHDIR=true"
+          echo "CCACHE_COMPILERCHECK=content"
+          echo "CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,pch_defines,time_macros"
+          echo "CCACHE_MAXSIZE=1500M"
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        } >> "$GITHUB_ENV"
+    - name: Restore ccache
+      if: ${{ inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**') }}
+        restore-keys: |
+          android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
+    - name: Restore or save ccache
+      if: ${{ inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**') }}
+        restore-keys: |
+          android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
+    - name: Zero ccache statistics
+      shell: bash
+      run: ccache --zero-stats
