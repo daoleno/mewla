@@ -2,8 +2,9 @@ name: Warm native build caches
 
 # GitHub scopes a cache to the ref that saved it. A release tag can read main's
 # caches, but nothing can read a tag's. This workflow is the only writer of the
-# Android caches in .github/actions/android-native: it runs the same release
-# build (debug-signed, no secrets) on main so the next tag starts warm.
+# caches in .github/actions/android-native and .github/actions/ios-native: it
+# runs the same native builds (debug-signed or unsigned, no secrets) on main so
+# the next tag starts warm.
 on:
   push:
     branches: [main]
@@ -20,6 +21,11 @@ on:
       - scripts/verify-libghostty.sh
       - scripts/verify-android-native-symbols.py
       - .github/actions/android-native/**
+      - app/modules/terminal-vt/TerminalVt.podspec
+      - scripts/build-libghostty-ios.sh
+      - scripts/verify-libghostty-ios.sh
+      - scripts/zig-xcode-compat/**
+      - .github/actions/ios-native/**
       - .github/workflows/native-cache.yml
   # Unused caches are evicted after 7 days.
   schedule:
@@ -56,3 +62,34 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
         run: ./scripts/android-release-apk.sh
+      - name: ccache statistics
+        if: always()
+        run: ccache --show-stats
+
+  ios:
+    name: iOS Ghostty and CocoaPods (unsigned)
+    if: github.ref == 'refs/heads/main'
+    # Same image as ios-release.yml: the cache keys hash the Xcode, SDK and
+    # CocoaPods versions.
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      MEWLA_IOS_APP_VARIANT: preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+      - name: iOS Ghostty and CocoaPods caches
+        uses: ./.github/actions/ios-native
+        with:
+          save-caches: "true"
+      - name: Generate the iOS project and install pods
+        run: |
+          set -euo pipefail
+          cd app
+          bunx expo prebuild --platform ios --clean --no-install
+          cd ios
+          pod install

@@ -130,13 +130,8 @@ jobs:
           }
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
-      - name: Verify shared native contract
-        run: ./scripts/verify-libghostty.sh --contract
-      - name: Build and verify iOS Ghostty XCFramework
-        env:
-          MEWLA_GHOSTTY_CACHE: ${{ runner.temp }}/ghostty
-          MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
-        run: ./scripts/build-libghostty-ios.sh
+      - name: iOS Ghostty and CocoaPods caches (restore-only)
+        uses: ./.github/actions/ios-native
       - name: Generate iOS project and install pods
         run: |
           set -euo pipefail

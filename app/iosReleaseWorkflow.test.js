@@ -14,6 +14,14 @@ const nativeLibsWorkflow = fs.readFileSync(
   path.join(__dirname, '..', '.github', 'workflows', 'native-libs.yml'),
   'utf8',
 );
+const nativeCacheWorkflow = fs.readFileSync(
+  path.join(__dirname, '..', '.github', 'workflows', 'native-cache.yml'),
+  'utf8',
+);
+const iosNative = fs.readFileSync(
+  path.join(__dirname, '..', '.github', 'actions', 'ios-native', 'action.yml'),
+  'utf8',
+);
 const postprocessWorkflow = fs.readFileSync(
   path.join(__dirname, '..', '.github', 'workflows', 'ios-testflight-postprocess.yml'),
   'utf8',
@@ -97,17 +105,30 @@ describe('iOS signed release identity contract', () => {
   });
 
   it('caches only unsigned native inputs, verified native output, and CocoaPods downloads', () => {
-    expect(workflow).toContain('ios-native-inputs-');
-    expect(workflow).toContain('ios-ghostty-output-');
-    expect(workflow).toContain('cocoapods-');
-    expect(workflow).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
-    expect(workflow).toContain('run: ./scripts/verify-libghostty-ios.sh');
+    expect(iosNative).toContain('ios-native-inputs-');
+    expect(iosNative).toContain('ios-ghostty-output-');
+    expect(iosNative).toContain('cocoapods-');
+    expect(iosNative).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
+    expect(iosNative).toContain('run: ./scripts/verify-libghostty-ios.sh');
+    const cacheBlocks = [workflow, iosNative, nativeCacheWorkflow]
+      .flatMap((source) => [...source.matchAll(/uses: actions\/cache(?:\/restore)?@v4[\s\S]*?(?=\n\s*- name:|$)/g)])
+      .map((match) => match[0])
+      .join('\n');
+    expect(cacheBlocks).toContain('~/Library/Caches/CocoaPods');
     for (const forbidden of ['.p12', '.mobileprovision', '.keychain', '.xcarchive', '.ipa']) {
-      const cacheBlocks = [...workflow.matchAll(/uses: actions\/cache@v4[\s\S]*?(?=\n\s{6}- name:|$)/g)]
-        .map((match) => match[0])
-        .join('\n');
       expect(cacheBlocks).not.toContain(forbidden);
     }
+  });
+
+  it('restores on tags and lets only the main-branch warmer save', () => {
+    for (const source of [workflow, ciWorkflow]) {
+      expect(source).toContain('uses: ./.github/actions/ios-native');
+      expect(source).not.toMatch(/uses: actions\/cache(\/save)?@/);
+    }
+    expect(workflow).not.toContain('save-caches');
+    expect(nativeCacheWorkflow).toMatch(/uses: \.\/\.github\/actions\/ios-native\s+with:\s+save-caches: "true"/);
+    expect(nativeCacheWorkflow).toContain('runs-on: macos-26');
+    expect(nativeCacheWorkflow).not.toContain('secrets.');
   });
 });
 
