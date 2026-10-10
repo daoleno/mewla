@@ -463,8 +463,9 @@ export function startPlay(P, onEvent) {
         })]);
         return;
       }
-      // stand so the mouth, not the paws, ends up under it
-      const side = air.x >= pet.x ? 1 : -1, tx = air.x - side * Math.abs(mouthAt().x - pet.x);
+      // stand so the mouth, not the paws, ends up under it: back by a mouth drawn
+      // ahead of centre, right under for one at or behind it
+      const side = air.x >= pet.x ? 1 : -1, tx = air.x - side * Math.max(0, (mouthAt().x - pet.x) * pet.dir);
       if (Math.abs(tx - pet.x) > 6) stepTo(tx, 0.45, dt, 'run');
       else { pet.dir = side; P.show('jump', 0); }
       return;
