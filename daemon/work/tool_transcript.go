@@ -963,3 +963,11 @@ func jsonString(raw json.RawMessage) string {
 	}
 	return ""
 }
+
+func stderrSuffix(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return ": " + value
+}
