@@ -1,6 +1,6 @@
 import type { BrainCurrentWork } from "../../store/brain";
 import type { ConnectionState } from "../../store/workers";
-import { brainWorkSurface } from "../brain/brainWorkSurface";
+import { brainWorkSurface, type BrainWorkGroup } from "../brain/brainWorkSurface";
 
 /**
  * What the one cat is doing. It mirrors Brain's real state and nothing else:
@@ -11,7 +11,8 @@ import { brainWorkSurface } from "../brain/brainWorkSurface";
  * - waking: connecting or loading; one eye open in the seal
  * - idle: connected with nothing to do; curled up asleep in the seal
  * - working: Brain's turn is running; out of the seal and on its feet
- * - delegating: Workers hold delegated Work; sitting, watching them
+ * - delegating: Workers are running (or waiting on) delegated Work; sitting,
+ *   watching them
  * - attention: Work needs your input; ears up, looking at you
  * - delivered: an unread result is waiting; it brought you something
  */
@@ -33,6 +34,8 @@ export interface BrainCatPresence {
   workIds?: readonly string[];
   /** The cat is elsewhere on screen (the Work column's perch): no tail row. */
   away?: boolean;
+  /** Delegating with nothing running: every delegated Work is waiting. */
+  waiting?: boolean;
 }
 
 /**
@@ -65,12 +68,16 @@ export function resolveBrainCatPresence({
     };
   }
   if (counts.back) return { state: "delivered", count: counts.back };
-  const delegated = (currentWork ?? []).filter(
-    (item) =>
-      item.attempt_delegated &&
-      (item.status === "running" || item.status === "waiting"),
-  ).length;
-  if (delegated) return { state: "delegating", count: delegated };
+  // Delegated Work in the Work list's Running group. The tail row is where
+  // that count shows; the Work column carries no count of its own.
+  const delegated = new Set(
+    (currentWork ?? [])
+      .filter((item) => item.attempt_delegated && (item.status === "running" || item.status === "waiting"))
+      .map((item) => item.work_id),
+  );
+  const running = slips.filter((slip) => slip.group === "running" && delegated.has(slip.workId)).length;
+  if (running) return { state: "delegating", count: running };
+  if (delegated.size) return { state: "delegating", count: delegated.size, waiting: true };
   return { state: "idle" };
 }
 
@@ -83,7 +90,8 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
     case "delivered":
       return count > 1 ? `Brought ${count} things back` : "Brought something back";
     case "delegating":
-      return count > 1 ? `Waiting on ${count} Workers` : "Waiting on a Worker";
+      if (presence.waiting) return count > 1 ? `Waiting on ${count} Workers` : "Waiting on a Worker";
+      return count > 1 ? `${count} Workers running` : "1 Worker running";
     case "idle":
       return "All quiet";
     // The chat stays readable while the link is down; the cat says so.
@@ -91,6 +99,20 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
       return "Can't reach your computer";
     case "waking":
       return "Waking up";
+    default:
+      return null;
+  }
+}
+
+/** The Work list group the tail row counts, if it counts one. */
+export function presenceWorkGroup(presence: BrainCatPresence): BrainWorkGroup | null {
+  switch (presence.state) {
+    case "attention":
+      return "needs";
+    case "delivered":
+      return "back";
+    case "delegating":
+      return presence.waiting ? "waiting" : "running";
     default:
       return null;
   }

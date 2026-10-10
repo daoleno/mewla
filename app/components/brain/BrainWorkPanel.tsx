@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { ResizeHandle, useResizableWidth } from "../navigation/ResizeHandle";
@@ -12,6 +12,7 @@ import {
   BRAIN_WORK_GROUP_ORDER,
   brainWorkAge,
   brainWorkSummaryLine,
+  type BrainWorkGroup,
   type BrainWorkSlip,
   type BrainWorkSurface,
 } from "./brainWorkSurface";
@@ -40,9 +41,9 @@ function slipMeta(slip: BrainWorkSlip): string | undefined {
 
 /**
  * Current Work as slips, one caption per state. The captions carry no count:
- * the summary line above the list ("6 running · 2 back") is the one count.
- * The first needs-you slip carries the cat when `perch` is set (the wide
- * column is where it sits).
+ * the sheet's summary line ("6 running · 2 back") is the one count there,
+ * and beside the wide column the cat's row is. The first needs-you slip
+ * carries the cat when `perch` is set (the wide column is where it sits).
  */
 export function BrainWorkList({
   surface,
@@ -53,6 +54,8 @@ export function BrainWorkList({
   actionsFor,
   onCatPress,
   emptyCat,
+  highlight,
+  onGroupLayout,
 }: {
   surface: BrainWorkSurface;
   chrome: TerminalThemeChrome;
@@ -63,6 +66,9 @@ export function BrainWorkList({
   onCatPress?: () => void;
   /** The sheet covers the chat, so its empty list can hold the cat. */
   emptyCat?: boolean;
+  /** The group the cat's row just pointed at; its caption lights up. */
+  highlight?: BrainWorkGroup | null;
+  onGroupLayout?(group: BrainWorkGroup, y: number): void;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   if (surface.slips.length === 0) {
@@ -82,8 +88,12 @@ export function BrainWorkList({
         const slips = surface.slips.filter((slip) => slip.group === group);
         if (slips.length === 0) return null;
         return (
-          <View key={group} style={styles.group}>
-            <Text accessibilityRole="header" style={styles.groupLabel}>
+          <View
+            key={group}
+            style={styles.group}
+            onLayout={onGroupLayout ? (event) => onGroupLayout(group, event.nativeEvent.layout.y) : undefined}
+          >
+            <Text accessibilityRole="header" style={[styles.groupLabel, highlight === group ? styles.groupLabelLit : null]}>
               {BRAIN_WORK_GROUP_LABELS[group]}
             </Text>
             {slips.map((slip) => (
@@ -111,6 +121,12 @@ export function BrainWorkList({
   );
 }
 
+/** A request to show one group of the Work column; `seq` repeats a tap. */
+export type BrainWorkReveal = { group: BrainWorkGroup; seq: number };
+
+/** How long a revealed group's caption stays lit. */
+const REVEAL_MS = 1600;
+
 /** Wide screens: the Work column to the right of the conversation. */
 export function BrainWorkColumn({
   surface,
@@ -122,6 +138,7 @@ export function BrainWorkColumn({
   actionsFor,
   onCatPress,
   perch = true,
+  reveal,
 }: {
   surface: BrainWorkSurface;
   /** What the Work is for, while it is current (see the daemon's objective rule). */
@@ -134,8 +151,22 @@ export function BrainWorkColumn({
   onOpenSlip(slip: BrainWorkSlip): void;
   actionsFor?: BrainWorkActionsFor;
   onCatPress?: () => void;
+  /** The cat's row was tapped: scroll to this group and light its caption. */
+  reveal?: BrainWorkReveal | null;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
+  const scrollRef = useRef<ScrollView>(null);
+  const groupY = useRef(new Map<BrainWorkGroup, number>());
+  const [lit, setLit] = useState<BrainWorkGroup | null>(null);
+  useEffect(() => {
+    if (!reveal) return;
+    const y = groupY.current.get(reveal.group);
+    scrollRef.current?.scrollTo({ y: y ?? 0, animated: true });
+    if (y === undefined) return;
+    setLit(reveal.group);
+    const timer = setTimeout(() => setLit(null), REVEAL_MS);
+    return () => clearTimeout(timer);
+  }, [reveal]);
   // Desktop web: a side panel you can resize; the width persists.
   const desktopWeb = useDesktopWeb();
   const panel = useResizableWidth(
@@ -167,11 +198,8 @@ export function BrainWorkColumn({
       <View style={styles.columnHeader}>
         <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
         {objective ? <BrainGoalLine objective={objective} chrome={chrome} /> : null}
-        <Text numberOfLines={1} style={styles.columnSummary}>
-          {brainWorkSummaryLine(surface.counts) ?? ""}
-        </Text>
       </View>
-      <ScrollView contentContainerStyle={styles.columnContent}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.columnContent}>
         <BrainWorkList
           surface={surface}
           chrome={chrome}
@@ -180,6 +208,8 @@ export function BrainWorkColumn({
           onOpenSlip={onOpenSlip}
           actionsFor={actionsFor}
           onCatPress={onCatPress}
+          highlight={lit}
+          onGroupLayout={(group, y) => groupY.current.set(group, y)}
         />
       </ScrollView>
     </View>
@@ -359,6 +389,14 @@ function createStyles(chrome: TerminalThemeChrome) {
       color: chrome.textSubtle,
       marginBottom: 8,
       marginTop: 4,
+    },
+    groupLabelLit: {
+      color: chrome.text,
+      backgroundColor: chrome.surfaceActive,
+      borderRadius: 6,
+      alignSelf: "flex-start",
+      marginHorizontal: -6,
+      paddingHorizontal: 6,
     },
     empty: {
       ...TypeScale.compact,

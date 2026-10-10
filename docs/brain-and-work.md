@@ -53,12 +53,13 @@ again, its slip moves down to that moment instead of piling up copies.
 
 Red always means "needs you", never "failed".
 
-**All current Work in one place.** On a phone the chat gets the whole screen:
-tap the cat's line at the end of the conversation ("Waiting on 3 Workers",
-"Brought something back") or ⋯ → Work to open the list as a sheet. On a wide
-screen it is the Work column beside the chat. Both group Work by what it asks
-of you: Needs you, Running, Back, Waiting. The counts are in one line, at the
-top of the column and the sheet. Closed Work leaves the list. When Work needs
+**All current Work in one place.** The cat's line at the end of the
+conversation says what is out: "3 Workers running", "Brought something back".
+On a phone the chat gets the whole screen: tap that line, or ⋯ → Work, to open
+the list as a sheet, with all the counts in one line at its top. On a wide
+screen the list is the Work column beside the chat, and tapping the cat's line
+scrolls the column to the Work it counts. Both group Work by what it asks of
+you: Needs you, Running, Back, Waiting. Closed Work leaves the list. When Work needs
 you, "Brain" gets a red dot (like "Sessions" does for a Session), and the cat
 sits on that Work's slip in the conversation.
 

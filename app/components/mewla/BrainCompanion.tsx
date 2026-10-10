@@ -13,7 +13,7 @@ export interface BrainCompanion {
   animate: boolean;
   /** Live Session id → "Claude Code · perpetuo", for the slips' meta line. */
   sessionLabels?: ReadonlyMap<string, string>;
-  /** Opens the Work list; the tail row hands off to it. */
+  /** Shows the Work list (the sheet, or the column beside the chat); the tail row hands off to it. */
   onOpenWork?: () => void;
   /** The live slip for a Work, with its inline actions, while it is current. */
   workSlip?: (workId: string) => { slip: BrainWorkSlip; actions: readonly WorkSlipAction[] } | undefined;
@@ -57,7 +57,7 @@ export function BrainCatRow({
   label: string;
   detail?: string;
   chrome: TerminalThemeChrome;
-  /** Between turns the row's text opens the Work list. */
+  /** Between turns the row's text shows the Work list. */
   onPress?: () => void;
   /** This is the Working row of a running turn. */
   turnRunning?: boolean;
@@ -87,7 +87,7 @@ export function BrainCatRow({
         accessible
         accessibilityRole={onPress ? "button" : "text"}
         accessibilityLabel={detail ? `Brain: ${label}, ${detail}` : `Brain: ${label}`}
-        accessibilityHint={onPress ? "Opens the Work list" : undefined}
+        accessibilityHint={onPress ? "Shows the Work list" : undefined}
         accessibilityLiveRegion="polite"
       >
         <Text style={[styles.label, { color: chrome.text }]} numberOfLines={1}>
