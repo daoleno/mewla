@@ -3,8 +3,12 @@
 #
 # Usage:
 #   ./scripts/verify-release-identity.sh
-#   ./scripts/verify-release-identity.sh --tag v0.2.5
-#   ./scripts/verify-release-identity.sh --stage dist-download/v0.2.5
+#   ./scripts/verify-release-identity.sh --tag vX.Y.Z
+#   ./scripts/verify-release-identity.sh --stage dist-download/vX.Y.Z
+#
+# The version, Android versionCode and iOS build number come from
+# app/app.base.json and app/ios-build.json. Every other identity source, the
+# tag, the release notes and the stage must agree with them.
 
 set -euo pipefail
 
@@ -17,15 +21,36 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --stage) STAGE="${2:?}"; shift 2 ;;
     --tag) RELEASE_TAG="${2:?}"; shift 2 ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "error: unknown arg $1" >&2; exit 2 ;;
   esac
 done
 
-EXPECTED_VERSION="0.2.5"
 EXPECTED_PACKAGE="com.daoleno.mewla"
-EXPECTED_VERSION_CODE="45"
-EXPECTED_IOS_BUILD_NUMBER="43"
+IFS=$'\t' read -r EXPECTED_VERSION EXPECTED_VERSION_CODE EXPECTED_IOS_BUILD_NUMBER < <(
+  python3 - "$ROOT" <<'PY'
+import json, re, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+expo = json.loads((root / "app/app.base.json").read_text(encoding="utf-8"))["expo"]
+version = expo.get("version")
+version_code = (expo.get("android") or {}).get("versionCode")
+ios_build = json.loads((root / "app/ios-build.json").read_text(encoding="utf-8")).get("buildNumber")
+if not isinstance(version, str) or not re.fullmatch(
+    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?", version
+):
+    sys.exit(f"error: app.base.json version must be X.Y.Z or X.Y.Z-beta.N; got {version!r}")
+for label, value in (("app.base.json versionCode", version_code), ("ios-build.json buildNumber", ios_build)):
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        sys.exit(f"error: {label} must be a positive integer; got {value!r}")
+print(f"{version}\t{version_code}\t{ios_build}")
+PY
+)
+[[ -n "${EXPECTED_IOS_BUILD_NUMBER:-}" ]] || {
+  echo "error: could not read the tracked release identity" >&2
+  exit 1
+}
 EXPECTED_CERT_FP="C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD"
 
 if [[ -n "$RELEASE_TAG" ]]; then

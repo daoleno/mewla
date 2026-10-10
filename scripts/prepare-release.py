@@ -459,27 +459,6 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         relative="daemon/cmd/mewla/version.go",
     )
 
-    verifier = replace_literal(
-        sources["scripts/verify-release-identity.sh"],
-        current_version,
-        next_version,
-        relative="scripts/verify-release-identity.sh",
-        expected_count=3,
-    )
-    verifier = replace_literal(
-        verifier,
-        f'EXPECTED_VERSION_CODE="{android_version_code}"',
-        f'EXPECTED_VERSION_CODE="{next_version_code}"',
-        relative="scripts/verify-release-identity.sh",
-    )
-    verifier = replace_literal(
-        verifier,
-        f'EXPECTED_IOS_BUILD_NUMBER="{ios_build}"',
-        f'EXPECTED_IOS_BUILD_NUMBER="{next_ios_build}"',
-        relative="scripts/verify-release-identity.sh",
-    )
-    updates["scripts/verify-release-identity.sh"] = verifier
-
     updates["docs/install-daemon.md"] = replace_literal(
         sources["docs/install-daemon.md"],
         current_tag,
