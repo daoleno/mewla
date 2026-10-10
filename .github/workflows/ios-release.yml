@@ -221,14 +221,14 @@ jobs:
           path: |
             ${{ runner.temp }}/tools
             ${{ runner.temp }}/ghostty
-          key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/zig-xcode-compat/**') }}
+          key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/zig-xcode-compat/**') }}
 
       - name: Restore verified iOS Ghostty output
         id: ghostty-output-cache
         uses: actions/cache@v4
         with:
           path: app/modules/terminal-vt/libs/ios
-          key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+          key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
 
       - name: Build and verify iOS Ghostty XCFramework
         if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' }}

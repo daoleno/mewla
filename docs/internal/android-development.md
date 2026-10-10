@@ -68,7 +68,7 @@ Module wiring (source of truth for packaging):
 - Bun (see root `packageManager`)
 - JDK 17 for native Android builds (see root `app:android` script)
 - Android SDK / device or emulator for `expo run:android`
-- For native terminal: Zig **0.15.2** (see lock) + a Ghostty checkout at the **pinned commit**
+- For native terminal: a Ghostty checkout at the **pinned commit** (cloned on demand) and Zig **0.15.2** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`)
 
 ## Day-to-day JS workflow
 
@@ -305,7 +305,7 @@ Each release has versioned notes under `docs/releases/`; the release page includ
 
 ### CI (GitHub Actions)
 
-Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). After gated aggregation and verification, the workflow publishes the matching GitHub Release. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
+Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). The workflow publishes the matching GitHub Release with the verified daemon archives first, then attaches the signed APK and the complete signed manifest when the Android build is verified. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
 
 ## Related docs
 
