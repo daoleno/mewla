@@ -11,7 +11,7 @@ import (
 )
 
 func TestWorkUpdateCompletionCLICommitsCanonicalContract(t *testing.T) {
-	root := t.TempDir()
+	root := shortControlStateDir(t)
 	store, err := brain.NewStore(root)
 	if err != nil {
 		t.Fatal(err)

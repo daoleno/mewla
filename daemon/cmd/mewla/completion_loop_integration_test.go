@@ -86,7 +86,7 @@ func TestBDD_013_DecisionSavedWithCleanupPending(t *testing.T) {
 // BDD-004: Given an admitted Worker, when its real CLI submits exact progress,
 // then durable delivery, explicit decision and exact cleanup complete in order.
 func TestBDD_004_CLIReportToDecisionAndSessionRemoval(t *testing.T) {
-	root := t.TempDir()
+	root := shortControlStateDir(t)
 	store, err := brain.NewStore(root)
 	if err != nil {
 		t.Fatal(err)

@@ -848,9 +848,12 @@ func waitForDeviceControlReady(t *testing.T, socketPath string) {
 	}
 }
 
+// shortControlStateDir keeps run/control.sock under the 108-byte Unix socket
+// limit. t.TempDir and $TMPDIR both grow with the caller's environment and the
+// test name; Mewla Workers already run with a long $TMPDIR.
 func shortControlStateDir(t *testing.T) string {
 	t.Helper()
-	stateDir, err := os.MkdirTemp("", "mewla-revoke-")
+	stateDir, err := os.MkdirTemp("/tmp", "mewla-ctl-")
 	if err != nil {
 		t.Fatal(err)
 	}

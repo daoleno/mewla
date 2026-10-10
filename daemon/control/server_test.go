@@ -24,7 +24,7 @@ func (h *testHandler) HandleControlRequest(req Request) Response {
 }
 
 func TestServerCallRoundTrip(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortStateDir(t)
 	socketPath, err := DefaultSocketPath(stateDir)
 	if err != nil {
 		t.Fatalf("DefaultSocketPath returned error: %v", err)
@@ -77,7 +77,7 @@ func TestServerCallRoundTrip(t *testing.T) {
 }
 
 func TestServerShutdownClosesAndJoinsAcceptedConnections(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortStateDir(t)
 	socketPath, err := DefaultSocketPath(stateDir)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestServerShutdownClosesAndJoinsAcceptedConnections(t *testing.T) {
 }
 
 func TestRemoveStaleSocketRejectsRegularFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(shortStateDir(t), "control.sock")
 	if err := os.WriteFile(path, []byte("not-a-socket"), 0o600); err != nil {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}
@@ -135,4 +135,16 @@ func waitForSocketPath(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for control socket at %s", path)
+}
+
+// shortStateDir keeps socket paths under the 108-byte Unix socket limit, which
+// t.TempDir exceeds under a long $TMPDIR and test name.
+func shortStateDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "mewla-ctl-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
