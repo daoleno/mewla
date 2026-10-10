@@ -421,13 +421,13 @@ func writeLines(w io.Writer, lines ...string) {
 }
 
 func nextSteps(stateDir string) []string {
-	pairHint := "mewla pair https://your-mewla-host.example"
+	pairHint := "mewla pair"
 	if strings.TrimSpace(stateDir) != "" {
-		pairHint = "mewla pair -state-dir " + stateDir + " https://your-mewla-host.example"
+		pairHint = "mewla pair -state-dir " + stateDir
 	}
 	return []string{
-		"Same trusted Wi-Fi or direct Tailnet: start Mewla with mewla --lan, then run a pair command it prints",
-		"HTTPS endpoint: start Mewla with mewla serve, expose the full loopback origin, then run " + pairHint,
+		"Same trusted Wi-Fi or direct Tailnet: start Mewla with mewla --lan, then run " + pairHint,
+		"HTTPS tunnel or proxy: start Mewla with mewla serve, expose the full loopback origin, run mewla address add https://<your-host>, then " + pairHint,
 		"Optional: re-check with mewla doctor",
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -50,26 +49,6 @@ type daemonConfig struct {
 	stateDir       string
 	linkConfigPath string
 	lan            bool
-	webOrigins     []string
-}
-
-// webOriginsFlag collects repeated -web-origin values in canonical form.
-type webOriginsFlag struct{ origins *[]string }
-
-func (f webOriginsFlag) String() string {
-	if f.origins == nil {
-		return ""
-	}
-	return strings.Join(*f.origins, ",")
-}
-
-func (f webOriginsFlag) Set(value string) error {
-	origin, err := server.ParseWebOrigin(value)
-	if err != nil {
-		return err
-	}
-	*f.origins = append(*f.origins, origin)
-	return nil
 }
 
 type pairConfig struct {
@@ -116,8 +95,6 @@ func run(args []string, stderr io.Writer) error {
 			return runDaemon(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
-		case "web":
-			return runWebCommand(args[1:], os.Stdout, stderr)
 		case "doctor":
 			return runDoctorCommand(args[1:], stderr)
 		case "setup":
@@ -148,6 +125,10 @@ func run(args []string, stderr io.Writer) error {
 			return runAddressCommand(args[1:], stderr)
 		case "boot":
 			return runBootCommand(args[1:], stderr)
+		case "help":
+			return runDaemon([]string{"-help"}, stderr)
+		default:
+			return fmt.Errorf("unknown command %q; see mewla --help", args[0])
 		}
 	}
 	return runDaemon(args, stderr)
@@ -404,21 +385,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
 	srv.SetResourceSampler(resourceSampler)
-	srv.SetWebOrigins(cfg.webOrigins)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize address book: %w", err)
 	}
-	port := "9876"
-	if _, configuredPort, splitErr := net.SplitHostPort(cfg.addr); splitErr == nil && configuredPort != "" {
-		port = configuredPort
-	}
-	_, _ = book.Add("http://127.0.0.1:"+port, addressbook.SourceDiscovered)
-	for _, origin := range cfg.webOrigins {
-		_, _ = book.Add(origin, addressbook.SourceManual)
-	}
-	for _, detected := range detectPrivateNetworkAddresses() {
-		_, _ = book.Add("http://"+net.JoinHostPort(detected.ip.String(), port), addressbook.SourceDiscovered)
+	if err := book.ReplaceDiscovered(startupAddresses(cfg.addr, detectPrivateNetworkAddresses())); err != nil {
+		log.Printf("WARN could not record this start's addresses: %v", err)
 	}
 	srv.SetAddressBook(book)
 	enrollmentManager, err := enrollment.New(authManager.StorageDir())
@@ -569,16 +541,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 					if err := printFirstDevicePairing(stderr, authManager, book); err != nil {
 						fmt.Fprintf(stderr, "Could not create first-device pairing link: %v\n", err)
 					}
-					if linkEnabled {
-						printLinkStartupInfo(stderr, cfg.addr, cfg.stateDir)
-						return
+					entries, listErr := book.List()
+					if listErr != nil {
+						fmt.Fprintf(stderr, "Could not read this computer's addresses: %v\n", listErr)
 					}
-					printStartupInfo(
-						stderr,
-						cfg.addr,
-						stateDir,
-						detectPrivateNetworkAddresses(),
-					)
+					printStartupInfo(stderr, cfg.addr, cfg.stateDir, linkEnabled, entries)
 				})
 			},
 		},
@@ -1929,62 +1896,67 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		Value:     pairingInfo.Token,
 		ExpiresAt: pairingInfo.ExpiresAt,
 	}
-	if strings.TrimSpace(cfg.endpoint) != "" {
-		offers, offerErr := buildConnectionOffersWithPublicKey(
-			cfg.endpoint,
-			pairingInfo.DaemonPublicKey,
-			pairing,
-		)
-		if offerErr != nil {
-			return fmt.Errorf("build connection info: %w", offerErr)
-		}
-		printPairCommandInfo(stderr, pairingInfo.DaemonID, offers)
-		return nil
-	}
-
-	authManager, err := auth.NewManager(cfg.stateDir)
+	// The live runtime owner issued the token; read its state without
+	// constructing a second auth manager unless Mewla Link needs one.
+	stateDir, err := auth.ResolveStorageDir(cfg.stateDir)
 	if err != nil {
-		return fmt.Errorf("initialize auth manager: %w", err)
+		return fmt.Errorf("resolve auth storage directory: %w", err)
 	}
-	if authManager.DaemonID() != pairingInfo.DaemonID ||
-		authManager.PublicKeyHex() != pairingInfo.DaemonPublicKey {
-		return errors.New("runtime owner pairing identity changed")
-	}
-	linkConfig, linkConfigPath, enabled, err := loadOptionalLinkConfig(
-		authManager.StorageDir(),
-		cfg.linkConfigPath,
-	)
+	book, err := addressbook.New(stateDir)
 	if err != nil {
 		return err
 	}
-	if !enabled {
-		book, bookErr := addressbook.New(authManager.StorageDir())
-		if bookErr != nil {
-			return bookErr
-		}
-		entries, listErr := book.List()
-		if listErr != nil || len(entries) == 0 {
-			return fmt.Errorf("Mewla Link is not configured and the daemon has no reachable address; run mewla pair <endpoint>")
-		}
-		offers := make([]connectionOffer, 0, len(entries))
-		for _, entry := range entries {
-			offer, offerErr := buildConnectionOffersWithPublicKey(entry.URL, pairingInfo.DaemonPublicKey, pairing)
-			if offerErr == nil {
-				offers = append(offers, offer...)
-			}
-		}
-		if len(offers) == 0 {
-			return fmt.Errorf("the daemon address book has no usable entry points")
-		}
-		printPairCommandInfo(stderr, pairingInfo.DaemonID, offers)
-		return nil
+	entries, err := book.List()
+	if err != nil {
+		return err
 	}
+	phoneAddress := strings.TrimSpace(cfg.endpoint)
+	links, err := buildPairingLinks(entries, phoneAddress, pairingInfo.DaemonPublicKey, pairing)
+	if err != nil {
+		return fmt.Errorf("build pairing links: %w", err)
+	}
+	if phoneAddress == "" {
+		linkConfig, linkConfigPath, linkEnabled, err := loadOptionalLinkConfig(stateDir, cfg.linkConfigPath)
+		if err != nil {
+			return err
+		}
+		if linkEnabled {
+			authManager, err := auth.NewManager(stateDir)
+			if err != nil {
+				return fmt.Errorf("initialize auth manager: %w", err)
+			}
+			if authManager.DaemonID() != pairingInfo.DaemonID ||
+				authManager.PublicKeyHex() != pairingInfo.DaemonPublicKey {
+				return errors.New("runtime owner pairing identity changed")
+			}
+			connectLink, err := buildLinkPairingLink(authManager, linkConfig, linkConfigPath, pairing)
+			if err != nil {
+				return err
+			}
+			links.phoneAddress, links.phoneLink = "Mewla Link", connectLink
+		}
+	}
+	if links.phoneLink == "" && links.localBrowser == "" && len(links.httpsBrowser) == 0 {
+		return errors.New("this computer has no address yet; start Mewla (mewla, or mewla --lan for phones) and run mewla pair again")
+	}
+	printPairing(stderr, "Pair a new phone or browser.", links)
+	return nil
+}
+
+// buildLinkPairingLink admits one phone through the configured Mewla Link
+// relay and returns its connect link.
+func buildLinkPairingLink(
+	authManager *auth.Manager,
+	linkConfig link.ConnectorConfig,
+	linkConfigPath string,
+	pairing auth.PairingToken,
+) (string, error) {
 	identity, err := link.LoadOrCreateTransportIdentity(
 		authManager.StorageDir(),
 		link.RelayDomains(linkConfig),
 	)
 	if err != nil {
-		return fmt.Errorf("initialize Mewla Link transport identity: %w", err)
+		return "", fmt.Errorf("initialize Mewla Link transport identity: %w", err)
 	}
 	pairContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1996,13 +1968,13 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		auth.DefaultPairingTTL,
 	)
 	if err != nil {
-		return fmt.Errorf(
+		return "", fmt.Errorf(
 			"request Mewla Link pairing admission from %s: %w (make sure mewla is running and Link is connected)",
 			linkConfigPath,
 			err,
 		)
 	}
-	connectLink, payload, err := link.BuildPairingLink(
+	connectLink, _, err := link.BuildPairingLink(
 		authManager,
 		identity,
 		linkConfig,
@@ -2010,21 +1982,9 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		admissions,
 	)
 	if err != nil {
-		return fmt.Errorf("build Mewla Link pairing payload: %w", err)
+		return "", fmt.Errorf("build Mewla Link pairing payload: %w", err)
 	}
-	primaryURL := ""
-	for _, candidate := range payload.Candidates {
-		if candidate.AdmissionURL != "" {
-			primaryURL = candidate.StableURL
-			break
-		}
-	}
-	printPairCommandInfo(stderr, pairingInfo.DaemonID, []connectionOffer{{
-		Label:       "Mewla Link",
-		URL:         primaryURL,
-		ConnectLink: connectLink,
-	}})
-	return nil
+	return connectLink, nil
 }
 
 func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
@@ -2032,29 +1992,11 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	fs.SetOutput(stderr)
 
 	cfg := daemonConfig{}
-	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen address")
-	fs.BoolVar(&cfg.lan, "lan", false, "listen on all IPv4 interfaces for trusted private-network access")
+	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen on host:port")
+	fs.BoolVar(&cfg.lan, "lan", false, "listen on all networks (plain HTTP; trusted networks only)")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json when present)")
-	fs.Var(webOriginsFlag{origins: &cfg.webOrigins}, "web-origin", "serve the web UI to browsers on this https origin (repeatable; TLS terminated by a trusted proxy)")
-	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla [flags]")
-		fmt.Fprintln(stderr, "")
-		fs.PrintDefaults()
-		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Subcommands:")
-		fmt.Fprintln(stderr, "  serve      Start the daemon")
-		fmt.Fprintln(stderr, "  pair       Generate a fresh pairing link")
-		fmt.Fprintln(stderr, "  web        Open the web UI in a browser, paired as a new device")
-		fmt.Fprintln(stderr, "  doctor     Diagnose machine readiness for Mewla")
-		fmt.Fprintln(stderr, "  setup      Guided first-run setup (uses doctor)")
-		fmt.Fprintln(stderr, "  update     Verify and install the latest Mewla release")
-		fmt.Fprintln(stderr, "  worker     List, spawn, inspect, message, progress, and close Mewla Workers")
-		fmt.Fprintln(stderr, "  brain      Inspect Brain workspace and host executor configuration")
-		fmt.Fprintln(stderr, "  providers  Set the image model behind Codex image_gen")
-		fmt.Fprintln(stderr, "  devices    List or revoke paired mobile devices")
-		fmt.Fprintln(stderr, "  address    Add, remove, or list daemon entry points")
-	}
+	fs.Usage = func() { printTopLevelUsage(stderr) }
 
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
@@ -2077,6 +2019,46 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	return cfg, nil
 }
 
+func printTopLevelUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: mewla [command] [flags]
+
+Mewla runs on this computer. Phones and browsers reach it at an address
+and get access by pairing once.
+
+Start
+  mewla                 Start Mewla for this computer only
+  mewla --lan           Start Mewla for this computer, your Wi-Fi/LAN and Tailscale
+
+Connect a phone or browser
+  pair      Show a one-time QR code and links to pair a new phone or browser
+  address   List, add or remove the addresses phones and browsers use
+  devices   List paired phones and browsers; approve, deny or revoke them
+
+Set up and maintain
+  doctor    Check this computer is ready for Mewla
+  setup     Guided first-run setup (uses doctor)
+  boot      Start Mewla when you log in (systemd user unit)
+  update    Verify and install the latest Mewla release
+
+Agents and tools
+  brain        Inspect Brain workspace and host executor configuration
+  worker       List, spawn, inspect, message, progress, and close Mewla Workers
+  providers    Set the image model behind Codex image_gen
+  connections  Plugins shared by Brain and Workers
+  calendar     List, create, update, cancel or run scheduled Brain work
+  browser      Give a Worker the Browser as an MCP server
+  telegram     Set up the Telegram channel to Brain
+  service      List or register services Workers can see
+  resources    Print this computer's resource pressure
+
+Flags
+  -lan                  listen on all networks (plain HTTP; trusted networks only)
+  -addr host:port       listen on host:port instead of 127.0.0.1:9876
+  -state-dir dir        state directory (default ~/.mewla)
+  -link-config path     Mewla Link relay config, for self-hosted Link (default <state-dir>/link.json)
+`)
+}
+
 func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 	fs := flag.NewFlagSet("mewla pair", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -2085,8 +2067,12 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [endpoint]")
-		fmt.Fprintln(stderr, "Without endpoint, use configured Mewla Link. Explicit endpoint keeps Pairing V1.")
+		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [address]")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Show a one-time QR code and links that pair a new phone or browser.")
+		fmt.Fprintln(stderr, "The phone QR uses Mewla Link when configured, otherwise this computer's best")
+		fmt.Fprintln(stderr, "address (HTTPS, then Tailscale, then Wi-Fi/LAN). Give an address to use that")
+		fmt.Fprintln(stderr, "one instead, such as a tunnel: mewla pair https://mewla.example.com")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -2095,7 +2081,7 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 		return cfg, err
 	}
 	if fs.NArg() > 1 {
-		return cfg, fmt.Errorf("pair accepts at most one endpoint")
+		return cfg, fmt.Errorf("pair accepts at most one address")
 	}
 	if fs.NArg() == 1 {
 		cfg.endpoint = fs.Arg(0)
@@ -2129,6 +2115,11 @@ func loadOptionalLinkConfig(
 func runDevicesCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
 		fmt.Fprintln(stderr, "Usage: mewla devices <list|pending|approve|deny|revoke> [-state-dir DIR] [flags]")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "  list                            Paired phones and browsers")
+		fmt.Fprintln(stderr, "  pending                         Browsers asking to join, with their number")
+		fmt.Fprintln(stderr, "  approve|deny -id ID -number N   Answer a request; N is the number it shows")
+		fmt.Fprintln(stderr, "  revoke -id DEVICE_ID            Remove a device's access")
 		return flag.ErrHelp
 	}
 	switch args[0] {

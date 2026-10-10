@@ -10,6 +10,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
@@ -21,8 +22,22 @@ func webUITestServer(t *testing.T, origins ...string) *Server {
 	_, _ = writer.Write([]byte("<html>mewla</html>"))
 	_ = writer.Close()
 	s := &Server{webUIFiles: fstest.MapFS{"index.html.gz": {Data: index.Bytes()}}}
-	s.SetWebOrigins(origins)
+	s.SetAddressBook(testAddressBook(t, origins...))
 	return s
+}
+
+func testAddressBook(t *testing.T, addresses ...string) *addressbook.Store {
+	t.Helper()
+	book, err := addressbook.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range addresses {
+		if _, err := book.Add(address, addressbook.SourceManual); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return book
 }
 
 func serveWebUI(s *Server, host, remoteAddr string) *httptest.ResponseRecorder {
@@ -65,8 +80,8 @@ func TestWebUIIsNotServedToTheNetworkByDefault(t *testing.T) {
 	}
 }
 
-func TestWebUIServesExplicitHTTPSOrigins(t *testing.T) {
-	origin, err := ParseWebOrigin("https://Mewla.Example.ts.net:443/")
+func TestWebUIServesHTTPSAddresses(t *testing.T) {
+	origin, err := parseWebOrigin("https://Mewla.Example.ts.net:443/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +105,7 @@ func TestParseWebOriginRequiresBareHTTPSOrigins(t *testing.T) {
 		"https://user@mewla.example.ts.net",
 		"https://mewla.example.ts.net?x=1",
 	} {
-		if _, err := ParseWebOrigin(raw); err == nil {
+		if _, err := parseWebOrigin(raw); err == nil {
 			t.Fatalf("accepted %q", raw)
 		}
 	}

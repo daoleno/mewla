@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
@@ -24,7 +25,6 @@ const (
 )
 
 type connectionOffer struct {
-	Label       string
 	URL         string
 	ConnectLink string
 }
@@ -48,16 +48,184 @@ func buildConnectionOffersWithPublicKey(
 		return nil, err
 	}
 
-	offer := connectionOffer{
-		Label: "Server endpoint",
-		URL:   normalizedURL,
-	}
+	offer := connectionOffer{URL: normalizedURL}
 	offer.ConnectLink = buildConnectLinkWithPublicKey(
 		offer.URL,
 		daemonPublicKey,
 		pairing,
 	)
 	return []connectionOffer{offer}, nil
+}
+
+// addressKind is the reader-facing class of an address: how a phone or
+// browser gets to it.
+type addressKind string
+
+const (
+	kindThisComputer addressKind = "this-computer"
+	kindLAN          addressKind = "lan"
+	kindTailscale    addressKind = "tailscale"
+	kindHTTPS        addressKind = "https"
+)
+
+func (k addressKind) label() string {
+	switch k {
+	case kindThisComputer:
+		return "This computer"
+	case kindLAN:
+		return "Wi-Fi/LAN"
+	case kindTailscale:
+		return "Tailscale"
+	case kindHTTPS:
+		return "HTTPS"
+	}
+	return string(k)
+}
+
+// phoneRank orders addresses for a phone QR; loopback is unreachable from a
+// phone and ranks nowhere.
+func (k addressKind) phoneRank() int {
+	switch k {
+	case kindHTTPS:
+		return 0
+	case kindTailscale:
+		return 1
+	case kindLAN:
+		return 2
+	}
+	return -1
+}
+
+func classifyAddress(raw string) addressKind {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return kindLAN
+	}
+	if parsed.Scheme == "https" {
+		return kindHTTPS
+	}
+	if isLoopbackHost(parsed.Hostname()) {
+		return kindThisComputer
+	}
+	if ip := net.ParseIP(parsed.Hostname()); ip != nil && isTailscaleAddress("", ip) {
+		return kindTailscale
+	}
+	return kindLAN
+}
+
+// rankedPhoneAddresses returns the entries a phone can reach, best first:
+// HTTPS, then Tailscale, then Wi-Fi/LAN, each most recently seen first.
+func rankedPhoneAddresses(entries []addressbook.Entry) []addressbook.Entry {
+	ranked := make([]addressbook.Entry, 0, len(entries))
+	for _, entry := range entries {
+		if classifyAddress(entry.URL).phoneRank() >= 0 {
+			ranked = append(ranked, entry)
+		}
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		left, right := classifyAddress(ranked[i].URL).phoneRank(), classifyAddress(ranked[j].URL).phoneRank()
+		if left != right {
+			return left < right
+		}
+		return ranked[i].LastSeenAt.After(ranked[j].LastSeenAt)
+	})
+	return ranked
+}
+
+// pairingLinks is everything one pairing code can be used through. The code
+// works once, for whichever phone or browser uses it first.
+type pairingLinks struct {
+	expiresAt    time.Time
+	phoneAddress string // "Mewla Link" or the URL in the QR; empty when no phone can reach this computer
+	phoneLink    string
+	localBrowser string
+	httpsBrowser []string
+}
+
+// buildPairingLinks puts phoneAddress (or the best phone address in the book)
+// in the phone QR, and adds a browser link for this computer and for every
+// HTTPS address, where the daemon serves the web UI.
+func buildPairingLinks(
+	entries []addressbook.Entry,
+	phoneAddress string,
+	daemonPublicKey string,
+	pairing auth.PairingToken,
+) (pairingLinks, error) {
+	links := pairingLinks{expiresAt: pairing.ExpiresAt}
+	if phoneAddress == "" {
+		if ranked := rankedPhoneAddresses(entries); len(ranked) > 0 {
+			phoneAddress = ranked[0].URL
+		}
+	}
+	if phoneAddress != "" {
+		offers, err := buildConnectionOffersWithPublicKey(phoneAddress, daemonPublicKey, pairing)
+		if err != nil {
+			return links, err
+		}
+		links.phoneAddress = strings.TrimRight(phoneAddress, "/")
+		links.phoneLink = offers[0].ConnectLink
+	}
+	var localSeen time.Time
+	for _, entry := range entries {
+		switch classifyAddress(entry.URL) {
+		case kindThisComputer:
+			if links.localBrowser != "" && !entry.LastSeenAt.After(localSeen) {
+				continue
+			}
+			browser, err := buildWebPairingURL(entry.URL, daemonPublicKey, pairing)
+			if err != nil {
+				return links, err
+			}
+			links.localBrowser, localSeen = browser, entry.LastSeenAt
+		case kindHTTPS:
+			browser, err := buildWebPairingURL(entry.URL, daemonPublicKey, pairing)
+			if err != nil {
+				return links, err
+			}
+			links.httpsBrowser = append(links.httpsBrowser, browser)
+		}
+	}
+	return links, nil
+}
+
+// buildWebPairingURL carries the connect link in the URL fragment, which
+// browsers never send to the daemon or a proxy.
+func buildWebPairingURL(origin, daemonPublicKey string, pairing auth.PairingToken) (string, error) {
+	origin = strings.TrimRight(origin, "/")
+	offers, err := buildConnectionOffersWithPublicKey(origin, daemonPublicKey, pairing)
+	if err != nil {
+		return "", fmt.Errorf("build connection info: %w", err)
+	}
+	fragment := url.Values{}
+	fragment.Set("pair", offers[0].ConnectLink)
+	return origin + "/#" + fragment.Encode(), nil
+}
+
+func printPairing(w io.Writer, title string, links pairingLinks) {
+	fmt.Fprintf(w, "\n%s This code works once and expires at %s.\n", title, links.expiresAt.Local().Format("15:04"))
+	fmt.Fprintln(w, "Pairing gives that device access to sessions, terminal, Brain, Workers and files.")
+	fmt.Fprintln(w)
+	if links.phoneLink != "" {
+		fmt.Fprintln(w, "Phone — in Mewla, Settings → Pair a computer, scan:")
+		renderPairingQR(w, links.phoneLink)
+		fmt.Fprintf(w, "or paste:  %s\n", links.phoneLink)
+		fmt.Fprintf(w, "Address:   %s   (other addresses: mewla address list)\n", links.phoneAddress)
+	} else {
+		fmt.Fprintln(w, "Phones can't reach this computer yet. Restart with mewla --lan for Wi-Fi/LAN")
+		fmt.Fprintln(w, "and Tailscale, or put HTTPS in front of it and run mewla address add https://…")
+	}
+	if links.localBrowser != "" || len(links.httpsBrowser) > 0 {
+		fmt.Fprintln(w)
+	}
+	if links.localBrowser != "" {
+		fmt.Fprintf(w, "Browser on this computer:  %s\n", links.localBrowser)
+	}
+	for _, browser := range links.httpsBrowser {
+		fmt.Fprintf(w, "Browser anywhere:          %s\n", browser)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Revoke a device later: mewla devices revoke -id DEVICE_ID")
+	fmt.Fprintln(w)
 }
 
 // Print bootstrap credentials only when there is no trusted device yet.
@@ -72,110 +240,76 @@ func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbo
 	if len(entries) == 0 {
 		return nil
 	}
-	// Prefer HTTPS, then private-network endpoints, then loopback.
-	rank := func(raw string) int {
-		u, _ := url.Parse(raw)
-		if u.Scheme == "https" {
-			return 0
-		}
-		if isLoopbackHost(u.Hostname()) {
-			return 2
-		}
-		return 1
-	}
-	sort.SliceStable(entries, func(i, j int) bool { return rank(entries[i].URL) < rank(entries[j].URL) })
 	token, err := manager.IssuePairingToken(auth.DefaultPairingTTL)
 	if err != nil {
 		return err
 	}
-	offers, err := buildConnectionOffersWithPublicKey(entries[0].URL, manager.PublicKeyHex(), token)
+	links, err := buildPairingLinks(entries, "", manager.PublicKeyHex(), token)
 	if err != nil {
 		return err
 	}
-	if strings.HasPrefix(entries[0].URL, "https://") {
-		offers[0].ConnectLink = strings.TrimRight(entries[0].URL, "/") + "/#pair=" + url.QueryEscape(offers[0].ConnectLink)
-	}
-	fmt.Fprintln(w, "First device: scan this QR or open the pairing link.")
-	printPairingInfo(w, offers)
+	printPairing(w, "First device: pair a phone or browser.", links)
 	return nil
 }
 
-func printStartupInfo(w io.Writer, listenAddr, stateDir string, addresses []privateNetworkAddress) {
-	fmt.Fprintf(w, "\n  Mewla %s\n  Listen  %s\n", Version, listenAddr)
+// startupAddresses is what the daemon serves after binding listenAddr: this
+// computer when it listens on loopback or everywhere, and the detected
+// Wi-Fi/LAN and Tailscale addresses it actually listens on.
+func startupAddresses(listenAddr string, detected []privateNetworkAddress) []string {
 	host, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
-		fmt.Fprint(w, "  Pair    mewla pair <reachable-endpoint>\n\n")
-		return
+		return nil
 	}
-	if isLoopbackHost(host) {
-		fmt.Fprintln(w, "  Mode    Local only")
-		fmt.Fprintln(w, "\n  LAN     mewla --lan")
-		fmt.Fprintf(w, "  HTTPS   expose http://%s\n", listenAddr)
-		fmt.Fprintf(w, "  Pair    %s\n\n", pairCommand(stateDir, "https://your-mewla-host.example"))
-		return
+	var addresses []string
+	if isLoopbackHost(host) || isWildcardHost(host) {
+		addresses = append(addresses, "http://"+net.JoinHostPort("127.0.0.1", port))
 	}
-	usable := startupPairingAddresses(host, addresses)
-	for _, address := range usable {
-		label := address.label
-		if label == "Same Wi-Fi/LAN" {
-			label = "LAN"
+	if !isLoopbackHost(host) {
+		for _, address := range startupPairingAddresses(host, detected) {
+			addresses = append(addresses, "http://"+net.JoinHostPort(address.ip.String(), port))
 		}
-		fmt.Fprintf(w, "  %-8s %s\n", label, "http://"+net.JoinHostPort(address.ip.String(), port))
 	}
-	if len(usable) > 0 {
-		endpoint := "http://" + net.JoinHostPort(usable[0].ip.String(), port)
-		fmt.Fprintf(w, "\n  Pair    %s\n", pairCommand(stateDir, endpoint))
-	} else if isWildcardHost(host) {
-		fmt.Fprintln(w, "\n  WARN    No LAN or Tailscale address detected.")
-	} else {
-		fmt.Fprintln(w, "\n  Pair    mewla pair <reachable-endpoint>")
-	}
-	fmt.Fprintln(w)
+	return addresses
 }
 
-func printLinkStartupInfo(w io.Writer, listenAddr, stateDir string) {
-	fmt.Fprintf(w, "\n  Mewla %s\n  Listen  %s\n  Link    Connecting outbound\n", Version, listenAddr)
-	fmt.Fprintf(w, "\n  Pair    %s\n", pairCommand(stateDir, ""))
-	fmt.Fprint(w, "  Direct  mewla pair <endpoint>\n\n")
-}
-
-func printPairingInfo(w io.Writer, offers []connectionOffer) {
-	if len(offers) == 0 {
+func printStartupInfo(w io.Writer, listenAddr, stateDir string, linkEnabled bool, entries []addressbook.Entry) {
+	host, _, err := net.SplitHostPort(listenAddr)
+	listening := listenAddr
+	switch {
+	case err != nil:
+	case isLoopbackHost(host):
+		listening += " (this computer only)"
+	case isWildcardHost(host):
+		_, port, _ := net.SplitHostPort(listenAddr)
+		listening = "all networks, port " + port
+	}
+	fmt.Fprintf(w, "\n  Mewla %s · listening on %s\n", Version, listening)
+	if linkEnabled {
+		fmt.Fprintf(w, "  %-11s %s\n", "Mewla Link", "connecting outbound")
+	}
+	phone := rankedPhoneAddresses(entries)
+	sort.SliceStable(phone, func(i, j int) bool {
+		return classifyAddress(phone[i].URL).phoneRank() > classifyAddress(phone[j].URL).phoneRank()
+	})
+	for _, entry := range phone {
+		fmt.Fprintf(w, "  %-11s %s\n", classifyAddress(entry.URL).label(), entry.URL)
+	}
+	if linkEnabled || len(phone) > 0 {
+		fmt.Fprintf(w, "  %-11s %s\n\n", "Pair", pairCommand(stateDir))
 		return
 	}
-	fmt.Fprintln(w, "Pairing grants this phone access to sessions, terminal, Brain, Workers, and files on this Mewla server.")
-	fmt.Fprintln(w, "Revoke this phone's access with mewla devices revoke -id DEVICE_ID.")
-
-	for _, offer := range offers {
-		fmt.Fprintf(w, "  - %s\n", offer.Label)
-		fmt.Fprintf(w, "    URL:  %s\n", offer.URL)
+	if err == nil && isWildcardHost(host) {
+		fmt.Fprintln(w, "  No Wi-Fi/LAN or Tailscale address found.")
 	}
-
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Paste this link into Settings -> Pair Server:")
-	fmt.Fprintln(w, offers[0].ConnectLink)
-
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Scan on your phone to pair this device:")
-	renderPairingQR(w, offers[0].ConnectLink)
+	fmt.Fprintf(w, "  %-11s %s, then open the browser link\n", "Browser", pairCommand(stateDir))
+	fmt.Fprintf(w, "  %-11s restart with mewla --lan, or add an HTTPS address (mewla address add)\n\n", "Phone")
 }
 
-func printPairCommandInfo(w io.Writer, daemonID string, offers []connectionOffer) {
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Generated a fresh pairing link for the existing daemon identity.")
-	fmt.Fprintf(w, "Daemon ID: %s\n", daemonID)
-	printPairingInfo(w, offers)
-}
-
-func pairCommand(stateDir, endpoint string) string {
-	parts := []string{"mewla", "pair"}
+func pairCommand(stateDir string) string {
 	if strings.TrimSpace(stateDir) != "" {
-		parts = append(parts, "-state-dir", stateDir)
+		return "mewla pair -state-dir " + stateDir
 	}
-	if strings.TrimSpace(endpoint) != "" {
-		parts = append(parts, endpoint)
-	}
-	return strings.Join(parts, " ")
+	return "mewla pair"
 }
 
 func detectPrivateNetworkAddresses() []privateNetworkAddress {

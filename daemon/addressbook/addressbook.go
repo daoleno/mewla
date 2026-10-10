@@ -71,7 +71,7 @@ func Normalize(raw string) (string, error) {
 	case "https":
 		p.Scheme = "https"
 	case "http":
-		if !isLoopback(p.Hostname()) && !net.ParseIP(strings.Trim(p.Hostname(), "[]")).IsPrivate() {
+		if !isLoopback(p.Hostname()) && !isPrivateNetwork(p.Hostname()) {
 			return "", ErrInvalidAddress
 		}
 		p.Scheme = "http"
@@ -83,6 +83,16 @@ func Normalize(raw string) (string, error) {
 		host = strings.TrimSuffix(host, ":443")
 	}
 	return p.Scheme + "://" + host, nil
+}
+
+// tailscaleNetwork is the CGNAT range Tailscale assigns its addresses from.
+var tailscaleNetwork = &net.IPNet{IP: net.IPv4(100, 64, 0, 0).To4(), Mask: net.CIDRMask(10, 32)}
+
+// isPrivateNetwork accepts RFC 1918 and unique-local addresses, plus
+// Tailscale's 100.64.0.0/10, the networks plain http may be offered on.
+func isPrivateNetwork(host string) bool {
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && (ip.IsPrivate() || tailscaleNetwork.Contains(ip))
 }
 
 func isLoopback(host string) bool {
@@ -151,6 +161,46 @@ func (s *Store) Remove(raw string) error {
 	for _, entry := range entries {
 		if entry.URL != value {
 			next = append(next, entry)
+		}
+	}
+	return s.saveLocked(next)
+}
+
+// ReplaceDiscovered makes the discovered entries exactly the addresses this
+// daemon start found. Addresses from an earlier network or listen mode are
+// forgotten, so pairing never offers one the daemon no longer serves. Manual
+// and verified entries are kept. An address that cannot be offered is skipped.
+func (s *Store) ReplaceDiscovered(raws []string) error {
+	current := make(map[string]bool, len(raws))
+	for _, raw := range raws {
+		if value, err := Normalize(raw); err == nil {
+			current[value] = true
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	next := entries[:0]
+	for _, entry := range entries {
+		if current[entry.URL] {
+			if entry.Source == SourceDiscovered {
+				entry.LastSeenAt = now
+			}
+			delete(current, entry.URL)
+		} else if entry.Source == SourceDiscovered {
+			continue
+		}
+		next = append(next, entry)
+	}
+	for _, raw := range raws {
+		value, err := Normalize(raw)
+		if err == nil && current[value] {
+			next = append(next, Entry{URL: value, Source: SourceDiscovered, AddedAt: now, LastSeenAt: now})
+			delete(current, value)
 		}
 	}
 	return s.saveLocked(next)

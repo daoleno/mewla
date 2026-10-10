@@ -140,7 +140,7 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -addr <host:port>   daemon listen address (default: 127.0.0.1:9876)")
 	fmt.Fprintln(w, "  -work-dir <path>    daemon working directory (default: current directory)")
 	fmt.Fprintln(w, "  -path-env <dirs>    executable search PATH stored in the unit (default: current PATH)")
-	fmt.Fprintln(w, "  -lan                bind 0.0.0.0:9876 like `mewla -lan`")
+	fmt.Fprintln(w, "  -lan                bind 0.0.0.0:9876 like `mewla --lan`")
 	fmt.Fprintln(w, "  -dry-run            print the unit without writing or enabling")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The unit starts the same unprivileged runtime before an interactive")
