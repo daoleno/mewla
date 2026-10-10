@@ -1,0 +1,4716 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`correlated WebSocket requests createSession 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to create terminal.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "persistence": undefined,
+      "workerId": "w1",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "model_id": "m",
+    "name": "n",
+    "request_id": "provider_#_#",
+    "type": "create_session",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while creating a new terminal.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests listProviders 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "code": "providers_offline",
+      "message": "The current server is not connected.",
+      "name": "ProviderError",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "connections": [
+        {
+          "advanced": false,
+          "base_url": undefined,
+          "clients": [
+            "codex",
+          ],
+          "credential_hint": undefined,
+          "credential_ready": true,
+          "id": "conn",
+          "manual_model_id": undefined,
+          "models_fetched_at": undefined,
+          "models_stale": undefined,
+          "models_warning": undefined,
+          "name": "Conn",
+          "preset_id": "custom",
+          "slug": "conn",
+        },
+      ],
+      "defaults": {
+        "codex": {
+          "connection_id": "conn",
+        },
+      },
+      "gateway": {
+        "address": undefined,
+        "endpoint": undefined,
+        "model_count": 0,
+        "protocols": [],
+        "running": false,
+      },
+      "models": {
+        "conn": [
+          {
+            "available": true,
+            "context_window_tokens": undefined,
+            "display_name": undefined,
+            "id": "model",
+            "input_price_per_million": undefined,
+            "known": undefined,
+            "metadata_fetched_at": undefined,
+            "metadata_source": undefined,
+            "modalities": undefined,
+            "output_price_per_million": undefined,
+            "reasoning_effort_default": undefined,
+            "reasoning_efforts": undefined,
+            "release_date": undefined,
+            "source": "discovered",
+            "temperature_supported": undefined,
+          },
+        ],
+      },
+      "presets": [
+        {
+          "advanced": true,
+          "clients": [
+            "codex",
+          ],
+          "id": "custom",
+          "label": "Custom",
+        },
+      ],
+      "revision": 1,
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "type": "list_providers",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while loading Providers.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests upsertProviderConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "code": "providers_offline",
+      "message": "The current server is not connected.",
+      "name": "ProviderError",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "catalog": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+      "snapshot": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+    },
+  },
+  "request": {
+    "credential": "key",
+    "operation": "update",
+    "provider_connection": {
+      "id": "conn",
+    },
+    "request_id": "provider_#_#",
+    "revision": 1,
+    "type": "upsert_provider_connection",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while saving Provider connection.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests deleteProviderConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "code": "providers_offline",
+      "message": "The current server is not connected.",
+      "name": "ProviderError",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "catalog": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+      "snapshot": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+    },
+  },
+  "request": {
+    "connection_id": "conn",
+    "request_id": "provider_#_#",
+    "revision": 1,
+    "type": "delete_provider_connection",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while deleting Provider connection.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests setProviderConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "code": "providers_offline",
+      "message": "The current server is not connected.",
+      "name": "ProviderError",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "catalog": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+      "snapshot": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+    },
+  },
+  "request": {
+    "client": "codex",
+    "connection_id": "conn",
+    "executor_id": "codex",
+    "request_id": "provider_#_#",
+    "revision": 1,
+    "type": "set_provider_connection",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while updating Provider connection.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests switchProvider 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "code": "providers_offline",
+      "message": "The current server is not connected.",
+      "name": "ProviderError",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "catalog": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+      "snapshot": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+    },
+  },
+  "request": {
+    "client": "codex",
+    "connection_id": "conn",
+    "executor_id": "codex",
+    "request_id": "provider_#_#",
+    "revision": 1,
+    "type": "switch_provider",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while switching Provider.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests setProviderModels 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "code": "providers_offline",
+      "message": "The current server is not connected.",
+      "name": "ProviderError",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "catalog": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+      "snapshot": {
+        "connections": [
+          {
+            "advanced": false,
+            "base_url": undefined,
+            "clients": [
+              "codex",
+            ],
+            "credential_hint": undefined,
+            "credential_ready": true,
+            "id": "conn",
+            "manual_model_id": undefined,
+            "models_fetched_at": undefined,
+            "models_stale": undefined,
+            "models_warning": undefined,
+            "name": "Conn",
+            "preset_id": "custom",
+            "slug": "conn",
+          },
+        ],
+        "defaults": {
+          "codex": {
+            "connection_id": "conn",
+          },
+        },
+        "gateway": {
+          "address": undefined,
+          "endpoint": undefined,
+          "model_count": 0,
+          "protocols": [],
+          "running": false,
+        },
+        "models": {
+          "conn": [
+            {
+              "available": true,
+              "context_window_tokens": undefined,
+              "display_name": undefined,
+              "id": "model",
+              "input_price_per_million": undefined,
+              "known": undefined,
+              "metadata_fetched_at": undefined,
+              "metadata_source": undefined,
+              "modalities": undefined,
+              "output_price_per_million": undefined,
+              "reasoning_effort_default": undefined,
+              "reasoning_efforts": undefined,
+              "release_date": undefined,
+              "source": "discovered",
+              "temperature_supported": undefined,
+            },
+          ],
+        },
+        "presets": [
+          {
+            "advanced": true,
+            "clients": [
+              "codex",
+            ],
+            "id": "custom",
+            "label": "Custom",
+          },
+        ],
+        "revision": 1,
+      },
+    },
+  },
+  "request": {
+    "connection_id": "conn",
+    "model_ids": [
+      "model",
+    ],
+    "request_id": "provider_#_#",
+    "type": "set_provider_models",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while updating model support.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests discoverProviderModels 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "code": "providers_invalid_reply",
+      "message": "Daemon returned invalid provider models.",
+      "name": "ProviderError",
+    },
+  },
+  "request": {
+    "connection_id": "conn",
+    "request_id": "provider_#_#",
+    "type": "discover_provider_models",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while discovering models.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests refreshModelsDevMetadata 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": "undefined",
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "type": "refresh_models_dev_metadata",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while refreshing model metadata.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests testProviderConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "The Provider request failed. Refresh and try again.",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "code": "providers_invalid_reply",
+      "message": "Daemon returned an invalid connection test result.",
+      "name": "ProviderError",
+    },
+  },
+  "request": {
+    "credential": "k",
+    "provider_connection": {
+      "advanced": true,
+      "base_url": "https://x",
+      "client": "codex",
+      "preset_id": "custom",
+    },
+    "request_id": "provider_#_#",
+    "type": "test_provider_connection",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Connection test timed out.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests testSavedProviderConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "code": "providers_invalid_reply",
+      "message": "Daemon returned an invalid connection test result.",
+      "name": "ProviderError",
+    },
+  },
+  "request": {
+    "connection_id": "conn",
+    "request_id": "provider_#_#",
+    "type": "test_provider_connection",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Connection test timed out.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests getThreadRuntime 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "client": "codex",
+      "connection_id": "conn",
+      "connection_name": "Conn",
+      "credential_ready": true,
+      "hot_switchable": true,
+      "model_id": "model",
+      "provider_label": "Conn",
+      "reasoning_effort": undefined,
+      "reasoning_effort_default": undefined,
+      "reasoning_efforts": undefined,
+      "session_id": "worker",
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "type": "get_thread_runtime",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while loading session provider.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests setThreadRuntime 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+      "runtime": {
+        "client": "codex",
+        "connection_id": "conn",
+        "connection_name": "Conn",
+        "credential_ready": true,
+        "hot_switchable": true,
+        "model_id": "model",
+        "provider_label": "Conn",
+        "reasoning_effort": undefined,
+        "reasoning_effort_default": undefined,
+        "reasoning_efforts": undefined,
+        "session_id": "worker",
+      },
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "runtime": {
+      "connection_id": "conn",
+      "model_id": "model",
+    },
+    "type": "set_thread_runtime",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while switching model.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests setProviderCredential 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "The Provider request failed. Refresh and try again.",
+        "name": "ProviderError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "code": "unknown",
+      "message": "The Provider request failed. Refresh and try again.",
+      "name": "ProviderError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "connection_id": "conn",
+      "credential_ready": true,
+      "persistence": {
+        "applied": true,
+        "durable": true,
+        "outcome": "applied",
+        "warning": undefined,
+      },
+    },
+  },
+  "request": {
+    "connection_id": "conn",
+    "credential": "secret",
+    "request_id": "provider_#_#",
+    "type": "set_provider_credential",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "providers_timeout",
+      "message": "Timed out while saving API key.",
+      "name": "ProviderError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests listDir 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to list directory.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "entries": [
+        {
+          "name": "a",
+          "path": "/w/a",
+        },
+      ],
+      "path": "/w",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "request_id": "#_#",
+    "type": "list_dir",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while listing directory.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getGitDiffStatus 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load git diff status.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "additions": 0,
+      "available": false,
+      "clean": true,
+      "deletions": 0,
+      "file_count": 0,
+      "files": [],
+      "staged_file_count": 0,
+      "unstaged_file_count": 0,
+      "untracked_file_count": 0,
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "git_diff_status",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading git diff status.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getGitDiffPatch 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load git diff patch.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "path": "a",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "path": "a",
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "git_diff_patch",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading git diff patch.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getGitDiffPage 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Could not load diff page.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "path": "a",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "path": "a",
+    "request_id": "#_#",
+    "row": 0,
+    "scope": "all",
+    "target_id": "t",
+    "type": "git_diff_page",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading diff page.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getGitDiffFileContent 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load git diff file content.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "path": "a",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "path": "a",
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "git_diff_file_content",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading git diff file content.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getGitRepoEntries 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load repository files.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "path": "a",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "path": "a",
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "git_repo_entries",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading repository files.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getGitRepoFileContent 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load repository file.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "path": "a",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "path": "a",
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "git_repo_file_content",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading repository file.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getCodexSlashCommands 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Codex commands.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "commands": [
+        {
+          "category": "",
+          "chat_supported": false,
+          "description": "",
+          "execution": "",
+          "input": {
+            "kind": "",
+            "picker": undefined,
+            "placeholder": undefined,
+            "required": undefined,
+          },
+          "interactive": false,
+          "name": "x",
+          "output": {
+            "kind": "",
+          },
+          "source": undefined,
+          "terminal_supported": true,
+          "title": "",
+          "value": "/x",
+        },
+      ],
+      "generated_at": undefined,
+      "source": undefined,
+      "version": "1",
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "codex_slash_commands",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Codex commands.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getCodexSkills 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Codex skills.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "cwd": "/w",
+      "skills": [
+        {
+          "description": undefined,
+          "enabled": true,
+          "name": "s",
+          "path": "/p",
+          "scope": "user",
+        },
+      ],
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "request_id": "#_#",
+    "type": "codex_skills",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Codex skills.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getSkillsInventory 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "skills_inventory_error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load installed Skills.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned a stale Skills inventory generation.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "generation": 3,
+    "request_id": "#_#",
+    "type": "skills_inventory",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading installed Skills.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests buildSkillsCommand 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "skills_command_error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Skills command was rejected.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "error",
+    "skills_inventory_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned an invalid Skills delete command.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "allowed_root": "/home/test/.codex/skills",
+    "canonical_path": "/home/test/.codex/skills/useful",
+    "cwd": "/workspace",
+    "operation": "delete",
+    "request_id": "#_#",
+    "root_path": "/home/test/.codex/skills/useful",
+    "skill_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+    "skill_name": "useful",
+    "type": "skills_command",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while validating the Skills command.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests executeSkillsMutation 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+    "skills_mutation_error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "The Skills mutation failed.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned an invalid Skills delete command.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "allowed_root": "/home/test/.codex/skills",
+    "canonical_path": "/home/test/.codex/skills/useful",
+    "cwd": "/workspace",
+    "operation": "delete",
+    "request_id": "#_#",
+    "root_path": "/home/test/.codex/skills/useful",
+    "skill_id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+    "skill_name": "useful",
+    "type": "skills_mutation",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while running the Skills mutation.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 540000,
+}
+`;
+
+exports[`correlated WebSocket requests getSkillsInspect 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "skills_inspect_error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Could not inspect this Skill.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "error",
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned a stale Skills inspect generation.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "generation": 1,
+    "request_id": "#_#",
+    "skill_name": "useful",
+    "type": "skills_inspect",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while inspecting the Skill.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests getPluginsInventory 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+    "plugins_inventory_error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Plugins.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned a stale Plugins inventory generation.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "generation": 1,
+    "request_id": "#_#",
+    "type": "plugins_inventory",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "timeout",
+      "message": "Timed out while loading Plugins.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests buildPluginCommand 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "plugin_command_error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Plugin command was rejected.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "error",
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned an invalid Plugin command.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "operation": "install",
+    "plugin_host": "codex",
+    "plugin_id": "plug",
+    "request_id": "#_#",
+    "scope": "user",
+    "type": "plugin_command",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "timeout",
+      "message": "Timed out while validating the plugin command.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests executePluginMutation 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+    "plugin_mutation_error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "The Plugin mutation failed.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Daemon returned an invalid Plugin command.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "operation": "install",
+    "plugin_host": "codex",
+    "plugin_id": "plug",
+    "request_id": "#_#",
+    "scope": "user",
+    "type": "plugin_mutation",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while running the Plugin mutation.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 540000,
+}
+`;
+
+exports[`correlated WebSocket requests getCodexTerminalSnapshot 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Codex terminal output.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": "out",
+  },
+  "request": {
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "codex_terminal_snapshot",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Codex terminal output.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getCodexAsset 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Codex asset.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "content_type": "image/*",
+      "data_url": "data:image/png;base64,AA",
+      "path": "/a.png",
+    },
+  },
+  "request": {
+    "cwd": "/w",
+    "path": "/a.png",
+    "request_id": "#_#",
+    "type": "codex_asset",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Codex asset.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests dshInteraction 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "DSH interaction unavailable",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "connected": true,
+      "epoch": "e",
+      "items": [],
+    },
+  },
+  "request": {
+    "process_id": 7,
+    "request_id": "provider_#_#",
+    "started_at": 1759276800000,
+    "type": "dsh_interaction",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "DSH interaction timed out",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests dshInteraction answer 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "DSH interaction unavailable",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Invalid DSH interaction response",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "dsh_answer": {
+      "id": "q",
+    },
+    "process_id": 7,
+    "request_id": "provider_#_#",
+    "started_at": 1759276800000,
+    "type": "dsh_interaction",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "DSH interaction timed out",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests getSessionImage 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Image unavailable",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": "data:image/png;base64,AA",
+  },
+  "request": {
+    "path": "/w/a.png",
+    "process_id": 7,
+    "request_id": "provider_#_#",
+    "started_at": 1759276800000,
+    "type": "session_image",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Image request timed out",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests getSessionFileMetadata 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to inspect the Session file.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Server returned incomplete file metadata.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "path": "/w/a.png",
+    "process_id": 7,
+    "request_id": "#_#",
+    "started_at": 1759276800000,
+    "type": "session_file_metadata",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while inspecting the Session file.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getSessionFileText 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to read the Session file.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "bytesRead": 0,
+      "content": "",
+      "generation": "",
+      "truncated": false,
+    },
+  },
+  "request": {
+    "file_generation": "g",
+    "path": "/w/a.png",
+    "process_id": 7,
+    "request_id": "#_#",
+    "started_at": 1759276800000,
+    "type": "session_file_text",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while reading the Session file.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getTerminalSnapshot 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load terminal snapshot.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "target_id": "t",
+      "text": "x",
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "terminal_snapshot",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading terminal snapshot.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getTerminalHistory 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load terminal snapshot.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "lines": [],
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "session_id": "s",
+    "type": "terminal_history",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading terminal snapshot.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests answerChoice 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Could not send the answer.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": [
+      "A",
+    ],
+  },
+  "request": {
+    "choice_answer": {
+      "answers": [
+        {
+          "selected": [
+            0,
+          ],
+        },
+      ],
+      "call_id": "c",
+    },
+    "request_id": "#_#",
+    "type": "answer_choice",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while answering. Check the Terminal.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 30000,
+}
+`;
+
+exports[`correlated WebSocket requests sendKey 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to send terminal key.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": "undefined",
+  },
+  "request": {
+    "key": "Enter",
+    "request_id": "#_#",
+    "type": "send_key",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while sending terminal key.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 5000,
+}
+`;
+
+exports[`correlated WebSocket requests getStats 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {},
+  "errorWithoutMessage": undefined,
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "error",
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "daemonId": "daemon-a",
+      "daemonPublicKey": "public-key-a",
+      "request_id": "#",
+      "serverId": "server-a",
+      "serverName": "Server A",
+      "serverUrl": "ws://server-a.test/ws",
+      "total": 1,
+      "type": "stats_data",
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "get_stats",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Stats request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests getResourceTelemetry 1`] = `
+{
+  "disconnect": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Resource telemetry failed.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "Invalid resource telemetry.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "get_resource_telemetry",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Resource telemetry timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests actOnBrainWork 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Brain could not take that action.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "admission": undefined,
+      "status": "ok",
+    },
+  },
+  "request": {
+    "action": "reply",
+    "id": "work",
+    "request_id": "work_#_#",
+    "text": "hi",
+    "type": "brain_work_action",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out. The action may still have reached Brain.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 30000,
+}
+`;
+
+exports[`correlated WebSocket requests getBrainContext 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Brain context.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {},
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "brain_context",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Brain context.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests runBrainGC 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to run Brain housekeeping.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "removed": 1,
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "brain_gc",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while running Brain housekeeping.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests startNewBrainChat 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to start a new Brain chat.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {},
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "brain_chat_new",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while starting a new Brain chat.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 30000,
+}
+`;
+
+exports[`correlated WebSocket requests requestConnections 1`] = `
+{
+  "disconnect": {
+    "rejected": {
+      "message": "Server disconnected. Reconnect to check the result.",
+      "name": "Error",
+    },
+  },
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Plugin request failed.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "accounts": [],
+    },
+  },
+  "request": {
+    "connection_request": {
+      "action": "list",
+    },
+    "request_id": "plugins_#_#",
+    "type": "connections",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Plugin request timed out. Refresh to check the result.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 25000,
+}
+`;
+
+exports[`correlated WebSocket requests getTelegramConnectionStatus 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Telegram connection request failed.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "enabled": true,
+      "state": "ready",
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "type": "telegram_connection_status",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Telegram connection request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests configureTelegramConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Telegram connection request failed.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "rejected": {
+      "message": "The daemon returned an invalid Telegram connection status.",
+      "name": "Error",
+    },
+  },
+  "request": {
+    "credential": "token",
+    "request_id": "provider_#_#",
+    "type": "telegram_connection_configure",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Telegram connection request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests removeTelegramConnection 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Telegram connection request failed.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "enabled": false,
+      "state": "ready",
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "type": "telegram_connection_remove",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Telegram connection request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests beginTelegramBinding 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Could not start Telegram owner binding.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "expires_at": "z",
+      "url": "https://t.me/x",
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "type": "telegram_connection_bind",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Telegram owner binding timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 20000,
+}
+`;
+
+exports[`correlated WebSocket requests setBrainExecutor 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to switch Brain executor.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "host_executor": {
+        "id": "claude",
+      },
+    },
+  },
+  "request": {
+    "adapter_id": "claude",
+    "executor_id": "claude",
+    "request_id": "#_#",
+    "type": "brain_set_executor",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while switching Brain executor.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests getBrainWorkspaceTree 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Brain workspace.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "entries": [
+        {
+          "children": [],
+          "kind": "file",
+          "modified_at": undefined,
+          "name": "a",
+          "path": "",
+          "size": undefined,
+        },
+      ],
+      "generated_at": undefined,
+      "path": undefined,
+      "workspace": undefined,
+    },
+  },
+  "request": {
+    "path": "notes",
+    "request_id": "#_#",
+    "type": "brain_workspace_tree",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Brain workspace.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests getBrainWorkspaceFile 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Brain workspace file.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "content": "",
+      "data_url": undefined,
+      "kind": "file",
+      "language": "text",
+      "modified_at": undefined,
+      "name": "a.md",
+      "path": "",
+      "size": undefined,
+    },
+  },
+  "request": {
+    "path": "notes/a.md",
+    "request_id": "#_#",
+    "type": "brain_workspace_file",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading Brain workspace file.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests serviceTunnel 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Tunnel request failed",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "generation": "gen",
+      "state": "up",
+    },
+  },
+  "request": {
+    "request_id": "provider_#_#",
+    "service_generation": "gen",
+    "service_id": "svc",
+    "tunnel_action": "start",
+    "type": "service_tunnel",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Tunnel request timed out",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests listSessionServices 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load session services.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "generated_at": "t",
+      "interfaces": [],
+      "services": [
+        {
+          "binds": [],
+          "command": undefined,
+          "cwd": undefined,
+          "id": "svc",
+          "local_only": false,
+          "pid": 0,
+          "port": 80,
+          "process": undefined,
+          "project": undefined,
+          "protocol": "tcp",
+          "source": undefined,
+          "state": undefined,
+          "status_detail": undefined,
+          "unit": undefined,
+          "urls": [],
+          "worker_id": "",
+          "worker_name": "",
+        },
+      ],
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "type": "list_session_services",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while loading session services.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests getCalendarItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load calendar item.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "id": "cal",
+    },
+  },
+  "request": {
+    "id": "cal",
+    "request_id": "#_#",
+    "type": "get_calendar_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Calendar request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests createCalendarItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to create calendar item.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "id": "cal",
+    },
+  },
+  "request": {
+    "calendar_item": {
+      "title": "t",
+    },
+    "request_id": "#_#",
+    "type": "create_calendar_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Calendar request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests updateCalendarItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to update calendar item.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "id": "cal",
+    },
+  },
+  "request": {
+    "calendar_item": {
+      "id": "cal",
+      "revision": 2,
+    },
+    "request_id": "#_#",
+    "revision": 2,
+    "type": "update_calendar_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Calendar request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests cancelCalendarItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to cancel calendar item.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "id": "cal",
+    },
+  },
+  "request": {
+    "id": "cal",
+    "request_id": "#_#",
+    "revision": 2,
+    "type": "cancel_calendar_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Calendar request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests runCalendarItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to run calendar action.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "id": "cal",
+    },
+  },
+  "request": {
+    "id": "cal",
+    "request_id": "#_#",
+    "type": "run_calendar_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Calendar request timed out.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 15000,
+}
+`;
+
+exports[`correlated WebSocket requests writeWorkItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "current": {
+          "id": "now",
+        },
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to write work item.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "id": "w",
+    },
+  },
+  "request": {
+    "base_mtime": "",
+    "body": "b",
+    "frontmatter": {},
+    "id": "",
+    "path": "",
+    "project": "p",
+    "request_id": "#_#",
+    "type": "write_work_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while writing work item.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;
+
+exports[`correlated WebSocket requests deleteWorkItem 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to delete work item.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": "undefined",
+  },
+  "request": {
+    "id": "w",
+    "request_id": "#_#",
+    "type": "delete_work_item",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while deleting work item.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 10000,
+}
+`;

@@ -663,7 +663,7 @@ describe("Provider transport source contract", () => {
     expect(createIdx).toBeGreaterThan(0);
     expect(listDirIdx).toBeGreaterThan(createIdx);
     const createBlock = source.slice(createIdx, listDirIdx);
-    expect(createBlock).toContain('type: "create_session"');
+    expect(createBlock).toContain('"create_session"');
     expect(createBlock).not.toContain("profile_id");
     for (const method of [
       "list_providers",
