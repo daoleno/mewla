@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/google/uuid"
 )
 
@@ -129,22 +130,7 @@ func (m *Manager) save(e *entry) error {
 	if err != nil {
 		return err
 	}
-	temp, err := os.CreateTemp(path, ".resource-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temp.Name())
-	if _, err = temp.Write(b); err == nil {
-		err = temp.Sync()
-	}
-	closeErr := temp.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return os.Rename(temp.Name(), filepath.Join(path, "resource.json"))
+	return atomicfile.Write(filepath.Join(path, "resource.json"), b, 0o600)
 }
 func (m *Manager) get(id string) (*entry, error) {
 	if !validID.MatchString(id) {

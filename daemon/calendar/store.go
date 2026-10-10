@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/google/uuid"
 
 	"github.com/daoleno/mewla/daemon/statedir"
@@ -487,39 +488,5 @@ func (s *Store) persistLocked() error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".mewla-calendar-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	cleanup := func() { _ = tmp.Close(); _ = os.Remove(tmpPath) }
-	if _, err := tmp.Write(raw); err != nil {
-		cleanup()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		cleanup()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, s.path); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	dir, err := os.Open(filepath.Dir(s.path))
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
-		return err
-	}
-	return nil
+	return atomicfile.Write(s.path, raw, 0o600)
 }

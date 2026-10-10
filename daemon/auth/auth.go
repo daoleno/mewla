@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
@@ -830,56 +831,17 @@ func writeFileAtomicWithParentSync(
 			err,
 		)
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return PersistenceResult{}, fmt.Errorf("create temporary file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	renamed := false
-	defer func() {
-		if !renamed {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return PersistenceResult{}, fmt.Errorf(
-			"set temporary file mode: %w",
-			err,
-		)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return PersistenceResult{}, fmt.Errorf(
-			"write temporary file: %w",
-			err,
-		)
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return PersistenceResult{}, fmt.Errorf(
-			"sync temporary file: %w",
-			err,
-		)
-	}
-	if err := tmp.Close(); err != nil {
-		return PersistenceResult{}, fmt.Errorf(
-			"close temporary file: %w",
-			err,
-		)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return PersistenceResult{}, fmt.Errorf(
-			"replace persisted file: %w",
-			err,
-		)
-	}
-	renamed = true
-	if err := syncParent(parent); err != nil {
+	err = atomicfile.WriteOptions(path, data, perm, atomicfile.Options{
+		SyncDir: func(string) error { return syncParent(parent) },
+	})
+	if errors.Is(err, atomicfile.ErrDirSync) {
 		return PersistenceResult{Applied: true}, fmt.Errorf(
 			"sync parent directory after replacement: %w",
 			err,
 		)
+	}
+	if err != nil {
+		return PersistenceResult{}, fmt.Errorf("replace persisted file: %w", err)
 	}
 	return PersistenceResult{Applied: true, Durable: true}, nil
 }

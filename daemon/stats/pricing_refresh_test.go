@@ -372,7 +372,7 @@ func TestPricingWriteFailureRetainsRegistryAndCleansTemporaryFile(t *testing.T) 
 	if !reflect.DeepEqual(before, prices.models) {
 		t.Fatal("unpersisted registry published")
 	}
-	files, _ := filepath.Glob(filepath.Join(home, ".mewla", ".pricing-*.tmp"))
+	files, _ := filepath.Glob(filepath.Join(home, ".mewla", ".*.tmp-*"))
 	if len(files) != 0 {
 		t.Fatal("temporary files leaked")
 	}

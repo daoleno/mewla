@@ -941,7 +941,7 @@ func TestAtomicPrivateWriteCleansFailedPartial(t *testing.T) {
 	if err := atomicPrivateWrite(target, []byte("secret")); err == nil {
 		t.Fatal("expected rename failure")
 	}
-	matches, err := filepath.Glob(filepath.Join(dir, ".telegram-*.partial"))
+	matches, err := filepath.Glob(filepath.Join(dir, ".target.tmp-*"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 type usageFileStamp struct {
@@ -63,19 +65,7 @@ func writeUsageCache(path string, raw []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".usage-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(raw); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
+	return atomicfile.Write(path, raw, 0o600)
 }
 
 // Explicit wire shape keeps the cache limited to numeric usage aggregates.

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 // ConfigureResourceFiles installs optional persistent thresholds and the last
@@ -82,19 +84,7 @@ func (s *ResourceSampler) saveResourceState() error {
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(s.statePath), ".resource-pressure-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(raw); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), s.statePath)
+	return atomicfile.Write(s.statePath, raw, 0o600)
 }
 
 func (s *ResourceSampler) PendingResourceEvents() []ResourcePressureEvent {

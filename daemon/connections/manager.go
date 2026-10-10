@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
@@ -82,25 +83,7 @@ func (m *Manager) save() error {
 	if err = os.MkdirAll(filepath.Dir(m.path), 0700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(m.path), ".integrations-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if err = f.Chmod(0600); err == nil {
-		_, err = f.Write(raw)
-	}
-	if err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Rename(f.Name(), m.path)
-	}
-	if err != nil {
+	if err := atomicfile.Write(m.path, raw, 0o600); err != nil {
 		return errors.New("plugin catalog could not be saved")
 	}
 	return nil

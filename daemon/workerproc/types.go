@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 var resourceIDRE = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
@@ -77,25 +79,7 @@ func writeLease(path string, lease Lease) error {
 	if err != nil {
 		return err
 	}
-	raw = append(raw, '\n')
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".lease-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(raw); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.Write(path, append(raw, '\n'), 0o600)
 }
 
 // WriteOwnershipLease persists only identity, never limits. Old version-1
