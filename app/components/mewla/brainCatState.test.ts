@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainCurrentWork } from "../../store/brain";
-import { brainCatStatusLine, brainCatTailLabel, brainCatTap, resolveBrainCatPresence } from "./brainCatState";
+import { brainCatStatusLine, brainCatTailLabel, brainCatTap, presenceWorkGroup, resolveBrainCatPresence } from "./brainCatState";
 
 function work(overrides: Partial<BrainCurrentWork>): BrainCurrentWork {
   return {
@@ -41,6 +41,17 @@ describe("resolveBrainCatPresence", () => {
     expect(resolveBrainCatPresence({ ...connected, currentWork: [delegated] })).toEqual({
       state: "delegating",
       count: 1,
+      waiting: true,
+    });
+  });
+
+  test("delegating counts the Workers in the Work list's Running group", () => {
+    const running = (id: string) => work({ work_id: id, attempt_delegated: true });
+    const waiting = work({ work_id: "w", status: "waiting", attempt_delegated: true });
+    const own = work({ work_id: "o", attempt_delegated: false });
+    expect(resolveBrainCatPresence({ ...connected, currentWork: [running("a"), running("b"), running("c"), waiting, own] })).toEqual({
+      state: "delegating",
+      count: 3,
     });
   });
 
@@ -53,10 +64,12 @@ describe("resolveBrainCatPresence", () => {
   test("between turns, and while the link is down, the cat holds a tail row", () => {
     expect(brainCatTailLabel({ state: "attention" })).toBe("Needs you");
     expect(brainCatTailLabel({ state: "delivered" })).toBe("Brought something back");
-    expect(brainCatTailLabel({ state: "delegating" })).toBe("Waiting on a Worker");
+    expect(brainCatTailLabel({ state: "delegating" })).toBe("1 Worker running");
+    expect(brainCatTailLabel({ state: "delegating", waiting: true })).toBe("Waiting on a Worker");
     expect(brainCatTailLabel({ state: "attention", count: 6 })).toBe("6 need you");
     expect(brainCatTailLabel({ state: "delivered", count: 2 })).toBe("Brought 2 things back");
-    expect(brainCatTailLabel({ state: "delegating", count: 3 })).toBe("Waiting on 3 Workers");
+    expect(brainCatTailLabel({ state: "delegating", count: 3 })).toBe("3 Workers running");
+    expect(brainCatTailLabel({ state: "delegating", count: 3, waiting: true })).toBe("Waiting on 3 Workers");
     expect(brainCatTailLabel({ state: "idle" })).toBe("All quiet");
     expect(brainCatTailLabel({ state: "offline" })).toBe("Can't reach your computer");
     expect(brainCatTailLabel({ state: "waking" })).toBe("Waking up");
@@ -87,5 +100,15 @@ describe("tapping the cat", () => {
     expect(brainCatTap({ presence: { state: "offline" }, counts: quiet })).toEqual({ kind: "retry" });
     expect(brainCatTap({ presence: { state: "homeless" }, counts: quiet })).toEqual({ kind: "pair" });
     expect(brainCatTap({ presence: { state: "waking" }, counts: quiet }).kind).toBe("say");
+  });
+});
+
+describe("presenceWorkGroup", () => {
+  test("the tail row points at the group it counts", () => {
+    expect(presenceWorkGroup({ state: "delegating", count: 3 })).toBe("running");
+    expect(presenceWorkGroup({ state: "delegating", count: 1, waiting: true })).toBe("waiting");
+    expect(presenceWorkGroup({ state: "delivered", count: 2 })).toBe("back");
+    expect(presenceWorkGroup({ state: "attention", count: 1 })).toBe("needs");
+    expect(presenceWorkGroup({ state: "idle" })).toBeNull();
   });
 });

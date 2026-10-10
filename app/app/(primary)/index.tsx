@@ -31,10 +31,11 @@ import {
   BrainWorkColumn,
   BrainWorkDetailSheet,
   BrainWorkSheet,
+  type BrainWorkReveal,
 } from "../../components/brain/BrainWorkPanel";
 import {
+  BRAIN_WORK_GROUP_ORDER,
   brainWorkSlipStale,
-  brainWorkSummaryLine,
   brainWorkSurface,
   workerWho,
   type BrainWorkSlip,
@@ -61,7 +62,7 @@ import {
   BrainCompanionContext,
   type BrainCompanion,
 } from "../../components/mewla/BrainCompanion";
-import { brainCatTap, resolveBrainCatPresence } from "../../components/mewla/brainCatState";
+import { brainCatTap, presenceWorkGroup, resolveBrainCatPresence } from "../../components/mewla/brainCatState";
 import {
   brainWorkActions,
   brainWorkAskDraft,
@@ -189,10 +190,12 @@ export default function BrainScreen() {
     [activeBrain?.current_work, activeBrain?.workers],
   );
   const [workSheetVisible, setWorkSheetVisible] = useState(false);
+  const [workReveal, setWorkReveal] = useState<BrainWorkReveal | null>(null);
   const [selectedWorkSlip, setSelectedWorkSlip] = useState<BrainWorkSlip | null>(null);
   const [brainTurnRunning, setBrainTurnRunning] = useState(false);
   useEffect(() => {
     setWorkSheetVisible(false);
+    setWorkReveal(null);
     setSelectedWorkSlip(null);
   }, [activeServer?.id]);
   const openWorkList = useCallback(() => setWorkSheetVisible(true), []);
@@ -350,15 +353,16 @@ export default function BrainScreen() {
 
   const menuActions = useMemo(
     () => [
-      // Phone: the Work list is one tap away here and from the cat's tail
-      // row; it holds no strip above the chat. Wide screens keep the column.
+      // Phone: the Work list opens from the cat's tail row, which carries
+      // the count ("3 Workers running"). This is the way in when there is no
+      // tail row: during a turn, with the cat perched on a slip, or in an
+      // empty chat. Wide screens keep the column.
       ...(canOpenWorkList
         ? [
             {
               key: "work",
               label: "Work",
               icon: "layers" as const,
-              detail: brainWorkSummaryLine(workSurface.counts) ?? "Nothing out right now",
               onPress: openWorkList,
             },
           ]
@@ -417,7 +421,6 @@ export default function BrainScreen() {
       openWorkList,
       openWorkspaceViewer,
       startNewBrainChat,
-      workSurface.counts,
     ],
   );
 
@@ -615,7 +618,14 @@ export default function BrainScreen() {
       presence: workColumn && presence.state === "attention" ? { ...presence, away: true } : presence,
       animate: screenFocused,
       sessionLabels,
-      onOpenWork: workColumn ? undefined : openWorkList,
+      // The tail row's count is the Work list's: on a phone it opens the
+      // sheet, beside the column it scrolls to the group it counts.
+      onOpenWork: workColumn
+        ? () => {
+            const group = presenceWorkGroup(presence) ?? BRAIN_WORK_GROUP_ORDER.find((item) => workSurface.counts[item]);
+            if (group) setWorkReveal((previous) => ({ group, seq: (previous?.seq ?? 0) + 1 }));
+          }
+        : openWorkList,
       // A Work result in the conversation is that Work's slip: same actions,
       // same sheet.
       workSlip: (workId) => {
@@ -755,6 +765,7 @@ export default function BrainScreen() {
           topInset={topChromeInset}
           animate={screenFocused}
           perch={!brainTurnRunning}
+          reveal={workReveal}
           onOpenSlip={openWorkSlip}
           actionsFor={workActionsFor}
           onCatPress={() => {
