@@ -62,6 +62,13 @@ top of the column and the sheet. Closed Work leaves the list. When Work needs
 you, "Brain" gets a red dot (like "Sessions" does for a Session), and the cat
 sits on that Work's slip in the conversation.
 
+**The cat.** Tap it and Brain answers. It also plays when you address it:
+tap twice and a standing cat does a happy hop; hold it to pet it (it purrs,
+with a light tap on the phone); hold and drag to pick it up, and it springs
+back to its spot. It never moves on its own beyond showing Brain's state,
+stays still while you type, and with Reduce Motion on it keeps only the
+haptics.
+
 **Connection.** When the app can't reach your computer, the menu (☰) gets a
 dot and the menu's last line says why. Nothing is pinned over the chat. If
 you press Send while offline, the composer says the message was not sent

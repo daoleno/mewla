@@ -12,6 +12,11 @@ export interface PetClip {
   loop: boolean;
   /** One pass through every frame. */
   durationMs: number;
+  /**
+   * How far the clip draws past the pet's box on each side, as a share of the
+   * box: a hop's ring zooms wider than the canvas. The box itself is unchanged.
+   */
+  bleed?: number;
 }
 
 export interface PetPack {
