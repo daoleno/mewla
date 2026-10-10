@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // TestMergeAgentCommandOwnershipKeepsOnlyOwnedPiLaunch covers the launch
@@ -55,7 +56,7 @@ func TestMergeWorkerCommandOwnershipKeepsOnlyOwnedPiLaunch(t *testing.T) {
 			wantOwnedPath: owned,
 		},
 		{
-			// shellQuoteForLaunch output: a spaced path is single-quote wrapped
+			// shellquote.Word output: a spaced path is single-quote wrapped
 			// exactly as EnsurePiSessionLaunchCommand emits it. The watcher must
 			// strip the quotes for ownership detection and re-emit them in the
 			// merged command so work.PiOwnedSessionPath recovers the same path.
@@ -94,7 +95,16 @@ func TestMergeWorkerCommandOwnershipKeepsOnlyOwnedPiLaunch(t *testing.T) {
 			wantOwnedPath: `/tmp/back\slash/owned file.jsonl`,
 		},
 		{
-			// shellQuoteForLaunch escapes an embedded single quote as '\'';
+			// Separators and globs are quoted too, so an owned path can never
+			// end the launch command early or expand.
+			name:          "quoted separator metachar owned path survives refresh",
+			previous:      "pi --session " + shellquote.Word("/tmp/a;b&c|d*/owned.jsonl"),
+			detected:      "pi",
+			want:          "pi --session '/tmp/a;b&c|d*/owned.jsonl'",
+			wantOwnedPath: "/tmp/a;b&c|d*/owned.jsonl",
+		},
+		{
+			// shellquote.Word escapes an embedded single quote as '\'';
 			// splitLaunchFields cannot keep such a value in one wrapped token
 			// (the escape's first quote closes the span), so the watcher and the
 			// work parser both fail closed here: ownership is not claimed and the
@@ -261,11 +271,11 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 // TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh reproduces the
 // reviewed P2 parser divergence: a Mewla-owned --session path that requires
 // shell quoting (space and metacharacters, exactly as EnsurePiSessionLaunchCommand
-// emits via shellQuoteForLaunch) must keep the owned binding across polls
+// emits via shellquote.Word) must keep the owned binding across polls
 // instead of degrading to bare "pi".
 func TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 	spaced := filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl")
-	quoted := shellQuoteForLaunch(spaced)
+	quoted := shellquote.Word(spaced)
 	launchCommand := "env PATH=/x pi --session " + quoted
 	w := New(time.Second)
 	w.pollNow = fakePollClock([]time.Time{
@@ -429,7 +439,7 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 		if worker == nil {
 			t.Fatalf("poll %d: rediscovered agent missing", poll)
 		}
-		wantCommand := "pi --session " + shellQuoteForLaunch(owned)
+		wantCommand := "pi --session " + shellquote.Word(owned)
 		if worker.Command != wantCommand {
 			t.Fatalf("poll %d: owned launch command not restored: %q, want %q", poll, worker.Command, wantCommand)
 		}
@@ -463,7 +473,7 @@ func TestPiSessionBindingRoundTripsHostilePaths(t *testing.T) {
 	}
 	// The canonical reconstructed command must also survive the flag parser
 	// that binds the transcript after rediscovery.
-	command := "pi --session " + shellQuoteForLaunch(path)
+	command := "pi --session " + shellquote.Word(path)
 	if got := piOwnedLaunchPath(command); got != path {
 		t.Fatalf("piOwnedLaunchPath(%q) = %q, want %q", command, got, path)
 	}
@@ -484,7 +494,7 @@ func TestPiSessionBindingRoundTripsHostilePaths(t *testing.T) {
 	if !ok || decoded != apostrophePath {
 		t.Fatalf("apostrophe round-trip = %q %v, want %q", decoded, ok, apostrophePath)
 	}
-	if got := piOwnedLaunchPath("pi --session " + shellQuoteForLaunch(apostrophePath)); got != "" {
+	if got := piOwnedLaunchPath("pi --session " + shellquote.Word(apostrophePath)); got != "" {
 		t.Fatalf("apostrophe path must fail closed, got %q", got)
 	}
 }

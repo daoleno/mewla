@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
 
@@ -33,10 +34,10 @@ func WithBrowserMCP(command, executable, stateDir, resourceID string) (string, e
 			quoted[i] = strconv.Quote(arg)
 		}
 		config := "mcp_servers.mewla_browser={command=" + strconv.Quote(executable) + ",args=[" + strings.Join(quoted, ",") + "],enabled=true}"
-		return command + " -c " + shellQuoteForLaunch(config), nil
+		return command + " -c " + shellquote.Word(config), nil
 	case WorkerProviderClaude:
 		raw, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"mewla_browser": map[string]any{"command": executable, "args": args}}})
-		return command + " --mcp-config " + shellQuoteForLaunch(string(raw)) + " --allowedTools mcp__mewla_browser__browser", nil
+		return command + " --mcp-config " + shellquote.Word(string(raw)) + " --allowedTools mcp__mewla_browser__browser", nil
 	default:
 		return "", fmt.Errorf("Browser attachment currently supports Codex and Claude sessions; choose either or launch without a Browser")
 	}

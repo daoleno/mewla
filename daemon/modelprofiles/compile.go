@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // Compile builds a secret-free launch plan that targets opts.LoopbackRouteURL when
@@ -163,7 +165,7 @@ func compileCodex(baseCommand, explicitModel string, profile Profile, loopbackRo
 // artifacts after a daemon restart. The TUI replaces the pane shell via exec
 // so watcher foreground detection keeps seeing `codex`.
 func compileCodexAppServerLive(baseCommand, explicitModel, tuiCommand, socket, loopbackRouteURL, modelCatalogPath string) string {
-	appServer := "codex app-server --listen unix://" + shellQuote(socket)
+	appServer := "codex app-server --listen unix://" + shellquote.Word(socket)
 	if explicitModel = normalizeSpace(explicitModel); explicitModel != "" {
 		appServer = appendConfig(appServer, fmt.Sprintf("model=%s", tomlString(explicitModel)))
 	}
@@ -182,7 +184,7 @@ func compileCodexAppServerLive(baseCommand, explicitModel, tuiCommand, socket, l
 	}
 	logPath := CodexControlLogPath(socket)
 	pidPath := CodexControlPidPath(socket)
-	return "set +m; " + appServer + " > " + shellQuote(logPath) + " 2>&1 & echo $! > " + shellQuote(pidPath) + "; exec " + tuiClient
+	return "set +m; " + appServer + " > " + shellquote.Word(logPath) + " 2>&1 & echo $! > " + shellquote.Word(pidPath) + "; exec " + tuiClient
 }
 
 func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRouteURL string) (command string, env map[string]string, err error) {
@@ -294,25 +296,15 @@ func assertNoPlaceholderLeak(command string, profile Profile) error {
 
 func appendArgv(command string, flag, value string) string {
 	command = strings.TrimSpace(command)
-	return strings.TrimSpace(command + " " + flag + " " + shellQuote(value))
+	return strings.TrimSpace(command + " " + flag + " " + shellquote.Word(value))
 }
 
 func appendConfig(command, assignment string) string {
 	command = strings.TrimSpace(command)
-	return strings.TrimSpace(command + " --config " + shellQuote(assignment))
+	return strings.TrimSpace(command + " --config " + shellquote.Word(assignment))
 }
 
 func tomlString(value string) string {
 	escaped := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value)
 	return `"` + escaped + `"`
-}
-
-func shellQuote(value string) string {
-	if value == "" {
-		return "''"
-	}
-	if !strings.ContainsAny(value, " \t\n\"'\\$`|&;()<>!*?[]{}~#") {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // TestPiLiveBindingSurvivesRefreshReconnectAndLateGrowth reproduces the real
@@ -324,7 +325,7 @@ func TestPiLiveInterruptedTurnSettlesRunningTool(t *testing.T) {
 // TestPiQuotedOwnedPathBindsAndRoundTrips covers the reviewed P2 parser
 // divergence at the reader boundary: a Mewla-owned --session path that requires
 // shell quoting (space and metacharacters, exactly as EnsurePiSessionLaunchCommand
-// emits via shellQuoteForLaunch) must be recognized as owned by the work
+// emits via shellquote.Word) must be recognized as owned by the work
 // parser, must bind the exact transcript, and must round-trip through the
 // watcher's canonical merged command form.
 func TestPiQuotedOwnedPathBindsAndRoundTrips(t *testing.T) {
@@ -333,7 +334,7 @@ func TestPiQuotedOwnedPathBindsAndRoundTrips(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(spaced), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	quoted := shellQuoteForLaunch(spaced)
+	quoted := shellquote.Word(spaced)
 	if !strings.Contains(quoted, "'") {
 		t.Fatalf("metachar path was not shell-quoted: %q", quoted)
 	}

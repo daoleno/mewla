@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 func TestBuildWindowCommandForShellStartsInteractiveLoginShell(t *testing.T) {
@@ -239,7 +240,7 @@ func TestWorkerProgressEnvScriptAssignsSingleToken(t *testing.T) {
 	// not a stale "mewla" resolved via PATH.
 	if exe, err := os.Executable(); err == nil {
 		if exe = strings.TrimSpace(exe); exe != "" {
-			if !strings.Contains(script, shellQuote(exe)) {
+			if !strings.Contains(script, shellquote.Quote(exe)) {
 				t.Fatalf("script does not assign the current executable path %q:\n%s", exe, script)
 			}
 		}
@@ -1401,7 +1402,7 @@ func TestMissingWorkerIsRetainedWhenOwnershipProbeIsTemporarilyUnavailable(t *te
 
 func TestProviderCommandDetectionDirectAndEnvWrapped(t *testing.T) {
 	const mewlaPathWrap = "env PATH='/opt/mewla/bin':$PATH"
-	// Exact Host form from withCLIOnPath(shellQuote(dir)): quoted dir may
+	// Exact Host form from withCLIOnPath(shellquote.Quote(dir)): quoted dir may
 	// contain spaces, with :$PATH and other PATH entries appended outside quotes.
 	const mewlaPathWrapSpaced = "env PATH='/Applications/Mewla CLI/bin':$PATH:/home/daoleno/.local/bin:/usr/bin"
 	tests := []struct {

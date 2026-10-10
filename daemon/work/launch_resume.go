@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 var (
@@ -99,7 +101,7 @@ func WithProviderResumeToken(provider, command, token string) (string, error) {
 				}
 				if changed {
 					for i := range fields {
-						fields[i] = shellQuoteForLaunch(fields[i])
+						fields[i] = shellquote.Word(fields[i])
 					}
 					return strings.Join(fields, " "), nil
 				}
@@ -112,7 +114,7 @@ func WithProviderResumeToken(provider, command, token string) (string, error) {
 		// Cannot safely append after "--"; matching existing resume already returned above.
 		return "", ErrResumeTerminated
 	}
-	quoted := shellQuoteForLaunch(token)
+	quoted := shellquote.Word(token)
 	switch provider {
 	case WorkerProviderCodex:
 		return appendCommandOptions(command, "resume", quoted), nil
@@ -131,7 +133,7 @@ func WithProviderResumeToken(provider, command, token string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return shellQuoteForLaunch(executable) + " dsh-session --dsh-session " + quoted, nil
+		return shellquote.Word(executable) + " dsh-session --dsh-session " + quoted, nil
 	case WorkerProviderPi:
 		if !filepath.IsAbs(token) {
 			return "", fmt.Errorf("pi resume requires an absolute --session path")
@@ -375,5 +377,5 @@ func WithClaudeSessionID(command, id string) (string, error) {
 	if present {
 		return "", ErrResumeAmbiguous
 	}
-	return appendCommandOptions(command, "--session-id", shellQuoteForLaunch(id)), nil
+	return appendCommandOptions(command, "--session-id", shellquote.Word(id)), nil
 }

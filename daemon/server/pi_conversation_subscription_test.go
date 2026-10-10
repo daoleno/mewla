@@ -226,7 +226,7 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 	}
 	writePiServerFixture(t, spaced, cwd)
 	// The launcher wraps values containing shell metacharacters in single
-	// quotes (work.shellQuoteForLaunch); the fixture path has no embedded
+	// quotes (shellquote.Word); the fixture path has no embedded
 	// apostrophe, so the simple wrap is byte-identical to its output.
 	quoted := "'" + spaced + "'"
 
