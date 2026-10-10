@@ -4,6 +4,7 @@ import { useReducedMotion } from "react-native-reanimated";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import { useBrainCompanion, useCatSays, type BrainCompanion } from "../mewla/BrainCompanion";
+import { brainCatTailLabel } from "../mewla/brainCatState";
 import { TappableCat } from "../mewla/TappableCat";
 
 /** The empty state's seal size, so the cat wakes where it would sleep. */
@@ -26,9 +27,13 @@ export function InterfaceTimelineLoadingState({
 }) {
   const companion = useBrainCompanion();
   const reduced = useReducedMotion();
-  const waking = companion && !companion.presence.away ? { ...companion, presence: WAKING } : null;
+  // Unreachable before the first load: the cat says so, as it would after.
+  const offline = companion?.presence.state === "offline" ? companion.presence : null;
+  const presence = offline ?? WAKING;
+  const line = brainCatTailLabel(presence) ?? "Waking up";
+  const waking = companion && !companion.presence.away ? { ...companion, presence } : null;
   const { said, tap } = useCatSays(
-    waking ? { ...waking, onCatTap: () => "Still waking up…" } : null,
+    waking ? (offline ? waking : { ...waking, onCatTap: () => "Still waking up…" }) : null,
     false,
   );
   return (
@@ -42,17 +47,17 @@ export function InterfaceTimelineLoadingState({
       {waking ? (
         <>
           <TappableCat
-            state="waking"
+            state={presence.state}
             size={CAT_SIZE}
             animate={waking.animate}
             stillPortrait={reduced}
             onPress={tap}
-            accessibilityLabel="Brain: Waking up"
+            accessibilityLabel={`Brain: ${line}`}
             accessibilityHint="Brain answers"
             style={styles.cat}
           />
           <Text style={[styles.line, { color: chrome.textMuted }]} accessibilityLiveRegion="polite">
-            {said ?? "Waking up"}
+            {said ?? line}
           </Text>
         </>
       ) : null}

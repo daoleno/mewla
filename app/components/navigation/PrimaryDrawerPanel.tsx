@@ -274,7 +274,8 @@ export function PrimaryDrawerPanel({
                   ? activePrimaryRoute === place.route
                   : selectedKey === place.key
               }
-              attention={place.route === "list" ? sessionsAttention : brainAttention}
+              // Brain's dot points elsewhere, so it hides on Brain itself.
+              attention={place.route === "list" ? sessionsAttention : brainAttention && (selectedKey === undefined ? activePrimaryRoute !== place.route : selectedKey !== place.key)}
               tooltip={shortcutTip(place.label, place.key)}
               onPress={() => selectPlace(place.route)}
             />

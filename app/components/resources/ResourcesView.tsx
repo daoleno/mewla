@@ -61,19 +61,20 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
       showsVerticalScrollIndicator={false}
     >
       <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={{ gap: 10 }}>
-        {!connected || error ? (
+        {/* Offline, the headline caption alone says so; a failed refresh keeps its Retry. */}
+        {connected && error ? (
           <EmptyState
             size="inline"
-            title={!connected ? "Server offline" : "Refresh failed"}
-            detail={!connected ? "Showing the last sample. Updates resume when the server reconnects." : error}
-            action={connected ? { label: "Try again", icon: "refresh", onPress: onRetry } : undefined}
+            title="Refresh failed"
+            detail={error}
+            action={{ label: "Try again", icon: "refresh", onPress: onRetry }}
           />
         ) : null}
         <PressureHeadline
           telemetry={telemetry}
           styles={styles}
           now={now ?? Date.now()}
-          statusLabel={!connected || error ? "Last sample" : undefined}
+          statusLabel={!connected ? "Last sample · offline" : error ? "Last sample" : undefined}
           onRetry={onRetry} loading={loading} connected={connected}
           details={details} onToggleDetails={() => setDetails((value) => !value)}
         />

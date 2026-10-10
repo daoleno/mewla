@@ -309,7 +309,9 @@ export function PrimaryTopSwitch({
           href="/"
           isSelected={brainSelected}
           label="Brain"
-          attention={brainAttention}
+          // Brain already says it on its page; Sessions keeps its dot because
+          // its list does not sort needs-you rows first.
+          attention={brainAttention && !brainSelected}
           attentionColor={colors.seal}
           activeOpacity={brainActiveOpacity}
           inactiveColor={colors.textTertiary}

@@ -183,8 +183,9 @@ if (!process.env.MEWLA_RESOURCE_TEST_CHILD) {
     expect(empty().detail).toBe("Unavailable");
     expect(empty().action.label).toBe("Try again");
     act(() => renderer!.update(<ResourcesView {...base} hasServer telemetry={sample} />));
-    expect(empty().title).toBe("Server offline");
-    expect(renderer!.root.findByType("PressureHeadline" as any).props.statusLabel).toBe("Last sample");
+    // A stale sample offline says so once, in the headline caption.
+    expect(renderer!.root.findAllByType("EmptyState" as any)).toHaveLength(0);
+    expect(renderer!.root.findByType("PressureHeadline" as any).props.statusLabel).toBe("Last sample · offline");
     act(() => renderer!.update(<ResourcesView {...base} hasServer connected telemetry={sample} error="Refresh error" />));
     expect(empty().title).toBe("Refresh failed");
     expect(empty().detail).toBe("Refresh error");

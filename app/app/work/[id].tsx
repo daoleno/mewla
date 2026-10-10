@@ -221,9 +221,9 @@ function CurrentWorkDetail() {
   const updatedLabel = relativeTime(item.mtime || item.frontmatter.created);
   const previewBody = stripLeadingTitle(draftBody);
   const headerTitle = item.project;
-  const contextLabel = `${item.serverName ? `${item.serverName} · ${item.project}` : item.project}${
-    updatedLabel ? ` · ${updatedLabel}` : ""
-  }`;
+  // The header already names the project, and there is only one current
+  // server, so the context line is just when it last changed.
+  const contextLabel = updatedLabel;
 
   return (
     <View style={styles.screen}>
@@ -326,7 +326,8 @@ function CurrentWorkDetail() {
               icon={done ? "undo" : "check"}
               variant={done ? "plain" : "tinted"}
               size="sm"
-              loading={saving}
+              // The Saving tag beside it already shows the save in flight.
+              disabled={saving}
               onPress={() => void handleToggleDone()}
             />
           </View>

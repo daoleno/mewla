@@ -65,7 +65,9 @@ describe("Settings connection information architecture", () => {
       "function TelegramConnectionRow",
       "function connectionLabel",
     );
-    expect(telegram).toContain("Server offline");
+    // The server row owns "offline"; Telegram only says it can't be used now.
+    expect(telegram).not.toContain("Server offline");
+    expect(telegram).toContain('"Unavailable"');
     expect(telegram).not.toContain("mewla telegram setup");
     expect(panelSource).toContain("Reconnect the current server in Settings.");
     expect(telegram).toContain(

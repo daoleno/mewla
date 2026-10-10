@@ -27,6 +27,7 @@ export function WorkSlip({
   chrome,
   status,
   statusLabel,
+  statusShown = true,
   title,
   meta,
   summary,
@@ -42,6 +43,8 @@ export function WorkSlip({
   chrome: TerminalThemeChrome;
   status: WorkStatus;
   statusLabel: string;
+  /** False when the list's group caption already says the same word. */
+  statusShown?: boolean;
   title: string;
   /** "Claude Code · perpetuo · 20:11" */
   meta?: string;
@@ -93,7 +96,7 @@ export function WorkSlip({
             </Text>
           )}
           {unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
-          <WorkStatusWord status={status} label={statusLabel} chrome={chrome} />
+          {statusShown ? <WorkStatusWord status={status} label={statusLabel} chrome={chrome} /> : null}
         </View>
         {meta ? (
           <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
