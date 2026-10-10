@@ -333,8 +333,14 @@ img { max-width: 100%; }
 .pets { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 8px; }
 .pets p { margin: 0; font-size: 13px; color: var(--soft); }
 .pet-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; margin: 0; padding: 0; list-style: none; }
-.pet-strip li { display: grid; justify-items: center; width: 64px; font-size: 11.5px; color: var(--faint); }
+.pet-strip li { width: 64px; }
+.pet-strip button { display: grid; justify-items: center; width: 100%; padding: 2px 0 4px; border: 0; border-radius: 14px; background: none; font: inherit; font-size: 11.5px; color: var(--faint); cursor: pointer; transition: background-color .15s, color .15s; -webkit-tap-highlight-color: transparent; }
+.pet-strip button:hover { background: var(--tint); color: var(--soft); }
+.pet-strip button[aria-pressed="true"] { background: var(--red-soft); color: var(--red-ink); font-weight: 600; }
+.pet-strip button:focus-visible { outline: 2px solid var(--red); outline-offset: 1px; }
 .pet-strip img { width: 56px; height: 56px; object-fit: contain; }
+.pet-back { margin-left: 4px; padding: 0; border: 0; background: none; font: inherit; color: var(--red-ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.hero .seal.roomy { width: calc(var(--S) * .9); }
 @media (max-width: 600px) { .pet-strip li { width: 54px; } .pet-strip img { width: 46px; height: 46px; } }
 /* playing with the cat */
 .cat-fx { position: absolute; left: 0; top: 0; z-index: 4; overflow: visible; pointer-events: none; }

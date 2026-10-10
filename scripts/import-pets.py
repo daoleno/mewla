@@ -5,12 +5,15 @@ A pack is a directory of animated WebPs with a meta.json (see
 docs/third-party-assets.md). This re-encodes every action to one canvas size
 so the app bundle stays small, writes app/assets/pets/<id>/, regenerates
 app/components/pets/petPacks.ts with static requires, and copies what the
-landing needs into site/pets/: sprite strips of the default pet's clips
-(state and play clips, from the pack's registered frames/) and a small loop
-of every pet for the strip.
+landing needs into site/pets/: sprite strips of every pet's clips (state and
+play clips, from the pack's registered frames/, the hops from frames-wide/
+where the pack has them), and a small loop and a still of every pet for the
+strip and the hero without scripts.
 
 Usage:
-  python3 scripts/import-pets.py [PETS_DIR]
+  python3 scripts/import-pets.py [--site] [PETS_DIR]
+
+--site rewrites only site/pets/ (from the app assets already imported).
 
 PETS_DIR defaults to ~/workspace/mewla-cat-lab/imagegen/pets-codex and must hold
 index.json plus one directory per pet. Requires Pillow.
@@ -181,49 +184,71 @@ def write_catalog(pets):
     CATALOG.write_text("\n".join(lines))
 
 
-def write_site(source, pets):
-    """The landing draws the default pet from sprite strips and shows every pet in a strip."""
-    shutil.rmtree(SITE, ignore_errors=True)
-    default = next(pet for pet in pets if pet["default"])
-    meta = json.loads((source / default["id"] / "meta.json").read_text())
+def site_clips(source, pet_id):
+    """Sprite strips of one pet's clips; returns their timing (and gait) by name. A hop the
+    pack also wrote on a padded canvas (frames-wide/) keeps that room: its cells are
+    side + 2 * pad wide, the ground line pad lower."""
+    meta = json.loads((source / pet_id / "meta.json").read_text())
     clips = {}
     for name, spec in meta["actions"].items():
-        frames = [Image.open(path).convert("RGBA")
-                  for path in sorted((source / default["id"] / "frames" / name).glob("*.png"))]
+        pad = spec.get("wide", 0)
+        folder = source / pet_id / ("frames-wide" if pad else "frames") / name
+        frames = [Image.open(path).convert("RGBA") for path in sorted(folder.glob("*.png"))]
         if not frames:
-            raise SystemExit(f"{default['id']}/{name}: no frames/ in the pack; rebuild it")
-        side = SITE_SPRITE_SIDE
-        strip = Image.new("RGBA", (side * len(frames), side))
+            raise SystemExit(f"{pet_id}/{name}: no {folder.parent.name}/ in the pack; rebuild it")
+        cell = SITE_SPRITE_SIDE + 2 * pad
+        strip = Image.new("RGBA", (cell * len(frames), cell))
         for i, frame in enumerate(frames):
-            strip.alpha_composite(frame.resize((side, side), Image.Resampling.LANCZOS), (side * i, 0))
-        target = SITE / default["id"] / "sprites" / f"{name}.webp"
+            strip.alpha_composite(frame if frame.size == (cell, cell) else frame.resize((cell, cell), Image.Resampling.LANCZOS),
+                                  (cell * i, 0))
+        target = SITE / pet_id / "sprites" / f"{name}.webp"
         target.parent.mkdir(parents=True, exist_ok=True)
         strip.save(target, quality=SITE_SPRITE_QUALITY, method=6, exact=True)
         clips[name] = {"frames": len(frames), "durations": spec.get("durations") or [100] * len(frames),
                        "loop": bool(spec.get("loop", True))}
+        if pad:
+            clips[name]["pad"] = pad
         if name in GAITS:
             clips[name].update(gait(frames))
-    # Without scripts (or with reduced motion) the hero shows these as plain images.
-    for name in ("idle", "delegating"):
-        shutil.copyfile(APP_ASSETS / default["id"] / f"{name}.webp", SITE / default["id"] / f"{name}.webp")
+    return clips
+
+
+def write_site(source, pets):
+    """The landing draws any pet from sprite strips and shows every pet in a strip."""
+    shutil.rmtree(SITE, ignore_errors=True)
+    default = next(pet for pet in pets if pet["default"])
+    entries = []
     for pet in pets:
+        clips = site_clips(source, pet["id"])
+        # Without scripts (or with reduced motion) the hero shows these as plain images.
+        for name in ("idle", "delegating"):
+            shutil.copyfile(APP_ASSETS / pet["id"] / f"{name}.webp", SITE / pet["id"] / f"{name}.webp")
         frames, durations, _ = frames_of(APP_ASSETS / pet["id"] / "delegating.webp")
         encode(frames, durations, True, SITE_STRIP_SIDE, SITE / pet["id"] / "delegating-small.webp", quality=75)
         shutil.copyfile(APP_ASSETS / pet["id"] / "portrait.webp", SITE / pet["id"] / "portrait.webp")
+        entries.append({"id": pet["id"], "name": pet["name"], "clips": clips})
     index = {
         "default": default["id"],
         "side": SITE_SPRITE_SIDE,
         "anchor": [128, 232],
-        "clips": clips,
-        "pets": [{"id": pet["id"], "name": pet["name"]} for pet in pets],
+        "pets": entries,
     }
     (SITE / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n")
 
 
 def main():
-    source = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SOURCE
+    args = sys.argv[1:]
+    site_only = "--site" in args
+    args = [arg for arg in args if arg != "--site"]
+    source = Path(args[0]) if args else DEFAULT_SOURCE
     order = json.loads((source / "index.json").read_text())
     ids = [entry if isinstance(entry, str) else entry["id"] for entry in order.get("pets", order)]
+    if site_only:
+        pets = [json.loads((source / pet_id / "meta.json").read_text()) for pet_id in ids]
+        write_site(source, [{"id": pet["id"], "name": pet["name"], "default": bool(pet.get("default"))} for pet in pets])
+        total = sum(f.stat().st_size for f in SITE.rglob("*.webp"))
+        print(f"Wrote site/pets for {len(pets)} pets: {total / 1e6:.2f} MB")
+        return
     pets = [import_pet(source, pet_id) for pet_id in ids]
     if sum(pet["default"] for pet in pets) != 1:
         raise SystemExit("exactly one pet must be the default")
