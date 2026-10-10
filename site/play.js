@@ -108,12 +108,12 @@ export function startPlay(P, onEvent) {
     if (!game.mode) return;
     if (e.pointerType === 'mouse') aim(e.pageX, e.pageY);
     // a finger steers too, until the page takes the gesture as a scroll
-    else if (e.buttons && !e.target.closest('a, button, input, .toy')) aim(e.pageX, e.pageY - lift());
+    else if (e.buttons && !e.target.closest('a, button, input, .toy, .pet-hit')) aim(e.pageX, e.pageY - lift());
   }, { passive: true });
   addEventListener('scroll', () => { mouse.x = mouse.cx + scrollX; mouse.y = mouse.cy + scrollY; }, { passive: true });
   // a click (or a tap) on the page aims the toy there, or tosses a treat
   addEventListener('pointerdown', (e) => {
-    if (!game.mode || e.button > 0 || e.target.closest('a, button, input, .toy')) return;
+    if (!game.mode || e.button > 0 || e.target.closest('a, button, input, .toy, .pet-hit, .seal')) return;
     if (e.pointerType !== 'mouse') aim(e.pageX, e.pageY - lift());
     if (game.mode === 'treats') toss(e.pageX, e.pageY);
   }, { passive: true });
@@ -539,6 +539,7 @@ export function startPlay(P, onEvent) {
     else chase(now, dt);
   }
   P.after = (now) => drawSparks(now);
+  P.fx = spark;
   // tapping the hero cat while playing counts as a pet: a heart
   P.onHomeTap = () => { const s = P.home.getBoundingClientRect(); spark('heart', s.left + scrollX + s.width / 2, s.top + scrollY + s.height * 0.3); };
 
