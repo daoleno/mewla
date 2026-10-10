@@ -16,6 +16,7 @@ import type {
 import type { InterfaceChatBodyProps } from "./InterfaceChatBody";
 import type { InterfaceComposerPresentation } from "./InterfaceChatSurfaceModel";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
+import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { useInterfaceChatController } from "./InterfaceChatController";
 import type {
   useInterfaceComposerInput,
@@ -50,6 +51,7 @@ interface UseInterfaceChatBodyPropsInput {
   composerPresentation: InterfaceComposerPresentation;
   topChromeInset?: number;
   terminalActionPrompt?: TerminalActionPrompt | null;
+  choicePrompt?: InterfaceChoicePrompt | null;
   timeline: ReturnType<typeof usePinnedTimeline>;
   jumpLabel?: string;
   emptyTitle?: string;
@@ -97,6 +99,7 @@ export function useInterfaceChatBodyProps({
   composerPresentation,
   topChromeInset,
   terminalActionPrompt,
+  choicePrompt,
   timeline,
   jumpLabel,
   emptyTitle,
@@ -192,6 +195,7 @@ export function useInterfaceChatBodyProps({
       composerPresentation,
       topChromeInset,
       terminalActionPrompt,
+      choicePrompt,
       chrome,
       theme,
       onSelectCommand: controller.pickSlashCommand,
@@ -225,6 +229,7 @@ export function useInterfaceChatBodyProps({
       composerPresentation,
       topChromeInset,
       terminalActionPrompt,
+      choicePrompt,
       connectionState,
       conversation,
       controller.canAttach,

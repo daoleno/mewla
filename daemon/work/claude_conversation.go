@@ -470,8 +470,9 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		Origin      struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
-		Attachment json.RawMessage `json:"attachment"`
-		Message    struct {
+		Attachment    json.RawMessage `json:"attachment"`
+		ToolUseResult json.RawMessage `json:"toolUseResult"`
+		Message       struct {
 			Role       string          `json:"role"`
 			Content    json.RawMessage `json:"content"`
 			StopReason string          `json:"stop_reason"`
@@ -510,7 +511,7 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 			}
 			return
 		}
-		if b.consumeUserContent(lineNumber, recordID, timestamp, envelope.Message.Content) &&
+		if b.consumeUserContent(lineNumber, recordID, timestamp, envelope.Message.Content, envelope.ToolUseResult) &&
 			!b.activityLifecycle.running() {
 			b.pendingTaskTurn = claudePendingTaskTurn{}
 			b.activityLifecycle.start(activityID, timestamp)
@@ -564,7 +565,7 @@ func claudeAssistantRecordContinuesTurn(stopReason string, raw json.RawMessage) 
 	return true
 }
 
-func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID, timestamp string, raw json.RawMessage) bool {
+func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID, timestamp string, raw, toolUseResult json.RawMessage) bool {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return false
 	}
@@ -582,6 +583,7 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 	}
 	hasUserText := false
 	textIndex := 0
+	toolUseResults := claudeToolUseResults(raw, toolUseResult)
 	for index, item := range items {
 		switch strings.ToLower(strings.TrimSpace(item.Type)) {
 		case "text":
@@ -589,6 +591,7 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 			b.addMessage(lineNumber, recordID, textIndex, timestamp, "user", item.Text)
 			hasUserText = hasUserText || claudeVisibleUserText(item.Text)
 		case "tool_result":
+			b.settleChoice(item.ToolUseID, toolUseResults[strings.TrimSpace(item.ToolUseID)], item.IsError)
 			output := claudeContentText(item.Content)
 			if item.IsError {
 				if output == "" {
@@ -851,9 +854,22 @@ func (b *claudeConversationBuilder) addToolUse(lineNumber int, recordID string, 
 	if surface := claudeToolSurface(name, item.Input); surface != "" {
 		event.Files = []string{surface}
 	}
+	if name == ClaudeAskUserQuestionTool {
+		event.Choice = parseClaudeAskUserQuestion(item.Input)
+	}
 	if b.addEvent(event) && callID != "" {
 		b.eventByCall[callID] = len(b.events) - 1
 	}
+}
+
+func (b *claudeConversationBuilder) settleChoice(callID string, toolUseResult json.RawMessage, isError bool) {
+	eventIndex, exists := b.eventByCall[strings.TrimSpace(callID)]
+	if !exists || eventIndex < 0 || eventIndex >= len(b.events) || b.events[eventIndex].Choice == nil {
+		return
+	}
+	choice := *b.events[eventIndex].Choice
+	settleClaudeChoice(&choice, toolUseResult, isError)
+	b.events[eventIndex].Choice = &choice
 }
 
 func (b *claudeConversationBuilder) updateToolResult(lineNumber int, recordID string, index int, timestamp, callID, output string, isError bool) {

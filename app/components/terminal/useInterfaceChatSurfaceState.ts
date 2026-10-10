@@ -35,6 +35,11 @@ import {
 import { CodexStatusSheet } from "./CodexStatusSheet";
 import { CodexSkillsSheet } from "./CodexSkillsSheet";
 import { buildTerminalActionPrompt } from "./TerminalActionPromptModel";
+import {
+  latestPendingChoice,
+  type ChoiceAnswerPayload,
+  type InterfaceChoicePrompt,
+} from "./claudeChoiceModel";
 import { liveActionPromptScopeKey } from "../../services/workerSessionListTransport";
 import { useCodexSlashCommands } from "./CodexSlashCommands";
 import { useInterfaceChatBodyProps } from "./useInterfaceChatBodyProps";
@@ -504,10 +509,38 @@ export function useInterfaceChatSurfaceState({
     composerLayout,
     modelControl: composerModelControl,
   });
+  const pendingChoice = useMemo(() => latestPendingChoice(events), [events]);
+  const pendingChoiceLive =
+    Boolean(pendingChoice) &&
+    workerSessionListFresh &&
+    connectionState === "connected" &&
+    workerInfo?.status === "blocked";
+  const answerPendingChoice = useCallback(
+    async (payload: ChoiceAnswerPayload) => {
+      if (connectionState !== "connected" || !serverId || !workerId) {
+        throw new Error("Daemon is not connected.");
+      }
+      await wsClient.answerChoice(serverId, workerId, payload);
+    },
+    [connectionState, serverId, workerId],
+  );
+  const choicePrompt = useMemo<InterfaceChoicePrompt | null>(
+    () =>
+      pendingChoice?.call_id
+        ? {
+            callId: pendingChoice.call_id,
+            choice: pendingChoice.choice,
+            live: pendingChoiceLive,
+            onSubmit: answerPendingChoice,
+          }
+        : null,
+    [answerPendingChoice, pendingChoice, pendingChoiceLive],
+  );
   const terminalActionPrompt = useMemo(() => {
     // Live pane fact only: require a full worker_session_list for this WebSocket
     // connection generation so retained pre-disconnect snapshots cannot flash.
-    if (!workerId || !workerSessionListFresh) {
+    // A structured transcript choice owns the prompt; never show both.
+    if (!workerId || !workerSessionListFresh || pendingChoice) {
       return null;
     }
     return buildTerminalActionPrompt({
@@ -532,6 +565,7 @@ export function useInterfaceChatSurfaceState({
     workerInfo?.summary,
     workerSessionListFresh,
     connectionGeneration,
+    pendingChoice,
   ]);
   const sendTerminalActionKey = useCallback(
     (key: string) => {
@@ -620,7 +654,9 @@ export function useInterfaceChatSurfaceState({
     events,
     pendingUserMessages,
     turnFocusAnchorAliases,
-    runningActivity,
+    // While Claude waits on a choice the card says so; a Working row would
+    // read as stuck.
+    runningActivity: choicePrompt ? undefined : runningActivity,
     onBrainWorkEventActivate,
     openSessionIds,
     brainCurrentWork,
@@ -631,6 +667,7 @@ export function useInterfaceChatSurfaceState({
     composerPresentation,
     topChromeInset,
     terminalActionPrompt,
+    choicePrompt,
     timeline,
     jumpLabel,
     emptyTitle,

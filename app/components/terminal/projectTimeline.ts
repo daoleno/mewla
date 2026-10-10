@@ -1,4 +1,7 @@
-import type { CodexConversationEvent } from "../../services/codexConversation";
+import {
+  conversationChoicesEqual,
+  type CodexConversationEvent,
+} from "../../services/codexConversation";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
 import { buildTimelineFromSortedEvents } from "./InterfaceTimelineModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
@@ -553,6 +556,7 @@ function isBoundedStreamingFieldDelta(
     sameStringArray(previous.files, next.files) &&
     sameFileChanges(previous.file_changes, next.file_changes) &&
     samePlan(previous.plan, next.plan) &&
+    conversationChoicesEqual(previous.choice, next.choice) &&
     true
   );
 }

@@ -30,6 +30,8 @@ import { InterfaceChatKeyboardFrame } from "./InterfaceChatKeyboardFrame";
 import { InterfaceChatTimelineSection } from "./InterfaceChatTimelineSection";
 import { TerminalActionPromptCard } from "./TerminalActionPromptCard";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
+import { ClaudeChoiceCard } from "./ClaudeChoiceCard";
+import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import { InterfaceTimelineJumpButton } from "./InterfaceTimelineJumpButton";
@@ -111,6 +113,8 @@ export interface InterfaceChatBodyProps {
   composerPresentation: InterfaceComposerPresentation;
   topChromeInset?: number;
   terminalActionPrompt?: TerminalActionPrompt | null;
+  /** A structured provider choice; it replaces the screen-read prompt card. */
+  choicePrompt?: InterfaceChoicePrompt | null;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   onSelectCommand(command: CodexSlashCommand): void;
@@ -193,6 +197,7 @@ export function InterfaceChatBody({
   composerPresentation,
   topChromeInset = 0,
   terminalActionPrompt,
+  choicePrompt,
   chrome,
   theme,
   onSelectCommand,
@@ -214,7 +219,16 @@ export function InterfaceChatBody({
 }: InterfaceChatBodyProps) {
   const composer = !readOnly ? (
     <>
-      {terminalActionPrompt ? (
+      {choicePrompt ? (
+        <ClaudeChoiceCard
+          callId={choicePrompt.callId}
+          choice={choicePrompt.choice}
+          live={choicePrompt.live}
+          chrome={chrome}
+          onSubmit={choicePrompt.onSubmit}
+          onSwitchToTerminal={onUnavailableAction}
+        />
+      ) : terminalActionPrompt ? (
         <TerminalActionPromptCard
           key={terminalActionPrompt.id}
           prompt={terminalActionPrompt}
