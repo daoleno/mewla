@@ -53,9 +53,6 @@ jobs:
       MEWLA_IOS_BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
       MEWLA_IOS_DESTINATION: ${{ github.event_name == 'push' && 'testflight' || inputs.destination }}
       MEWLA_IOS_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
-      # App IDs are public identifiers kept in repository variables because the
-      # App Store Connect records (com.daoleno.mewla[.preview]) are external.
-      MEWLA_ASC_APP_ID: ${{ (github.event_name == 'push' || inputs.app_identity == 'preview') && vars.MEWLA_ASC_PREVIEW_APP_ID || vars.ZEN_ASC_APP_ID }}
     steps:
       - name: Checkout explicit ref
         uses: actions/checkout@v4
@@ -114,6 +111,8 @@ jobs:
 
       - name: Validate explicit inputs and required signing secrets
         env:
+          PREVIEW_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}
+          PRODUCTION_ASC_APP_ID: ${{ vars.ZEN_ASC_APP_ID }}
           MEWLA_APPLE_CERTIFICATE_BASE64: ${{ secrets.ZEN_APPLE_CERTIFICATE_BASE64 }}
           MEWLA_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.ZEN_APPLE_CERTIFICATE_PASSWORD }}
           MEWLA_APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.ZEN_APPLE_PROVISIONING_PROFILE_BASE64 }}
@@ -133,7 +132,19 @@ jobs:
             fi
           done
           if [[ "$MEWLA_IOS_DESTINATION" == "testflight" ]]; then
-            for name in MEWLA_ASC_KEY_ID MEWLA_ASC_API_KEY_BASE64 MEWLA_ASC_APP_ID; do
+            if [[ "$MEWLA_IOS_APP_VARIANT" == "preview" ]]; then
+              MEWLA_ASC_APP_ID="$PREVIEW_ASC_APP_ID"
+              APP_ID_VARIABLE=MEWLA_ASC_PREVIEW_APP_ID
+            else
+              MEWLA_ASC_APP_ID="$PRODUCTION_ASC_APP_ID"
+              APP_ID_VARIABLE=ZEN_ASC_APP_ID
+            fi
+            if [[ ! "$MEWLA_ASC_APP_ID" =~ ^[1-9][0-9]*$ ]]; then
+              echo "error: destination=testflight requires a numeric $APP_ID_VARIABLE variable for $MEWLA_IOS_APP_VARIANT" >&2
+              exit 1
+            fi
+            echo "MEWLA_ASC_APP_ID=$MEWLA_ASC_APP_ID" >> "$GITHUB_ENV"
+            for name in MEWLA_ASC_KEY_ID MEWLA_ASC_API_KEY_BASE64; do
               if [[ -z "${!name:-}" ]]; then
                 echo "error: destination=testflight requires environment configuration ${name/#MEWLA_/ZEN_}" >&2
                 exit 1

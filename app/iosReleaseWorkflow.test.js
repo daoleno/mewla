@@ -14,8 +14,18 @@ const nativeLibsWorkflow = fs.readFileSync(
   path.join(__dirname, '..', '.github', 'workflows', 'native-libs.yml'),
   'utf8',
 );
+const postprocessWorkflow = fs.readFileSync(
+  path.join(__dirname, '..', '.github', 'workflows', 'ios-testflight-postprocess.yml'),
+  'utf8',
+);
 
 describe('iOS signed release identity contract', () => {
+  it('resumes TestFlight processing against the configured Mewla Preview app', () => {
+    expect(postprocessWorkflow).toContain('MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}');
+    expect(postprocessWorkflow).toContain('--app-id "$MEWLA_ASC_APP_ID"');
+    expect(postprocessWorkflow).not.toContain('6790486708');
+  });
+
   it('automatically publishes immutable reviewed stable or beta tag pushes as Preview', () => {
     expect(workflow).toMatch(
       /push:\s*\n\s*tags:\s*\n\s*- "v\*\.\*\.\*"\s*\n\s*- "v\*\.\*\.\*-beta\.\*"/,
