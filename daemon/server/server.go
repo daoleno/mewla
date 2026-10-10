@@ -105,6 +105,7 @@ type Server struct {
 	calendarScheduler            *calendar.Scheduler
 	telegram                     *telegramchannel.Manager
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
+	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 	sendInputOverride            func(workerID, text string) error
 	sendInputWithReceiptOverride func(workerID, text, receipt string) error
 	sendActionOverride           func(workerID, action string) error
@@ -324,6 +325,7 @@ type clientMessage struct {
 	BrowserID            string                                 `json:"browser_id"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request"`
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
+	ChoiceAnswer         json.RawMessage                        `json:"choice_answer"`
 	ServiceID            string                                 `json:"service_id"`
 	ServiceGeneration    string                                 `json:"service_generation"`
 	TunnelAction         string                                 `json:"tunnel_action"`
@@ -872,6 +874,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleTelegramMessage(conn, raw)
 	case "send_input", "send_key", "send_action":
 		s.handleSessionInputMessage(conn, raw)
+	case "answer_choice":
+		go s.handleAnswerChoice(conn, raw)
 	case "git_diff_status", "git_diff_patch", "git_diff_page", "git_diff_file_content", "git_repo_entries", "git_repo_file_content", "list_dir":
 		s.handleRepositoryMessage(conn, raw)
 	case "service_tunnel":
@@ -2492,7 +2496,17 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintFileChanges(w, event.FileChanges)
 	writeFingerprintString(w, event.Explanation)
 	writeFingerprintPlan(w, event.Plan)
+	writeFingerprintChoice(w, event.Choice)
 	writeFingerprintString(w, event.Source)
+}
+
+func writeFingerprintChoice(w io.Writer, choice *work.ConversationChoice) {
+	if choice == nil {
+		writeFingerprintString(w, "")
+		return
+	}
+	encoded, _ := json.Marshal(choice)
+	writeFingerprintString(w, string(encoded))
 }
 
 func writeFingerprintFileChanges(w io.Writer, changes []work.CodexConversationFileChange) {

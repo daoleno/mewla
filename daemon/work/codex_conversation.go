@@ -200,6 +200,7 @@ type CodexConversationEvent struct {
 	FileChanges []CodexConversationFileChange `json:"file_changes,omitempty"`
 	Explanation string                        `json:"explanation,omitempty"`
 	Plan        []CodexPlanStep               `json:"plan,omitempty"`
+	Choice      *ConversationChoice           `json:"choice,omitempty"`
 	Source      string                        `json:"source,omitempty"`
 	// Work-card fields are only set for Brain timeline Source=work_result items.
 	WorkID      string `json:"work_id,omitempty"`

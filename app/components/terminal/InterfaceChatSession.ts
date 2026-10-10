@@ -7,7 +7,10 @@ import {
   type SetStateAction,
 } from "react";
 import type { ConnectionState } from "../../store/workers";
-import type { CodexConversation } from "../../services/codexConversation";
+import {
+  conversationChoicesEqual,
+  type CodexConversation,
+} from "../../services/codexConversation";
 import type { UploadedAttachment } from "../../services/uploads";
 import {
   wsClient,
@@ -794,7 +797,8 @@ function codexEventsEqual(
       left.unread === right.unread &&
       stringArraysEqual(left.files, right.files) &&
       fileChangesEqual(left.file_changes, right.file_changes) &&
-      planStepsEqual(left.plan, right.plan))
+      planStepsEqual(left.plan, right.plan) &&
+      conversationChoicesEqual(left.choice, right.choice))
   );
 }
 

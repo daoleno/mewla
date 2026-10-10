@@ -53,6 +53,30 @@ export interface CodexConversationFileChange {
   deletions?: number;
 }
 
+export type ConversationChoiceState = "pending" | "answered" | "declined";
+
+export interface ConversationChoiceOption {
+  label: string;
+  description?: string;
+  preview?: string;
+}
+
+export interface ConversationChoiceQuestion {
+  question: string;
+  header?: string;
+  multi_select?: boolean;
+  options: ConversationChoiceOption[];
+}
+
+/** A provider choice prompt (Claude AskUserQuestion) read from the transcript. */
+export interface ConversationChoice {
+  kind: string;
+  state: ConversationChoiceState;
+  questions: ConversationChoiceQuestion[];
+  /** Recorded answers, aligned with questions, once answered. */
+  answers?: string[];
+}
+
 export interface CodexConversationEvent {
   id: string;
   seq: number;
@@ -74,6 +98,7 @@ export interface CodexConversationEvent {
   file_changes?: CodexConversationFileChange[];
   explanation?: string;
   plan?: CodexPlanStep[];
+  choice?: ConversationChoice;
   source?: string;
   work_id?: string;
   work_session_id?: string;
@@ -266,6 +291,7 @@ function normalizeCodexConversationEvent(
             Boolean(step),
           )
       : undefined,
+    choice: normalizeConversationChoice(event.choice),
     source: typeof event.source === "string" ? event.source : undefined,
     work_id: typeof event.work_id === "string" ? event.work_id : undefined,
     work_session_id:
@@ -467,4 +493,59 @@ function normalizeKind(value: unknown): CodexConversationEventKind | null {
     default:
       return null;
   }
+}
+
+export function conversationChoicesEqual(
+  left: ConversationChoice | undefined,
+  right: ConversationChoice | undefined,
+) {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
+function normalizeConversationChoice(value: unknown): ConversationChoice | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const state = raw.state;
+  if (state !== "pending" && state !== "answered" && state !== "declined") {
+    return undefined;
+  }
+  if (!Array.isArray(raw.questions) || raw.questions.length === 0) {
+    return undefined;
+  }
+  const questions: ConversationChoiceQuestion[] = [];
+  for (const item of raw.questions) {
+    const question = item && typeof item === "object" ? (item as Record<string, unknown>) : null;
+    if (!question || typeof question.question !== "string" || !Array.isArray(question.options)) {
+      return undefined;
+    }
+    const options: ConversationChoiceOption[] = [];
+    for (const optionItem of question.options) {
+      const option =
+        optionItem && typeof optionItem === "object" ? (optionItem as Record<string, unknown>) : null;
+      if (!option || typeof option.label !== "string") {
+        return undefined;
+      }
+      options.push({
+        label: option.label,
+        description: typeof option.description === "string" ? option.description : undefined,
+        preview: typeof option.preview === "string" ? option.preview : undefined,
+      });
+    }
+    questions.push({
+      question: question.question,
+      header: typeof question.header === "string" ? question.header : undefined,
+      multi_select: question.multi_select === true,
+      options,
+    });
+  }
+  return {
+    kind: typeof raw.kind === "string" ? raw.kind : "",
+    state,
+    questions,
+    answers: Array.isArray(raw.answers)
+      ? raw.answers.map((answer) => (typeof answer === "string" ? answer : ""))
+      : undefined,
+  };
 }

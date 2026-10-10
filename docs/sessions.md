@@ -47,6 +47,23 @@ Open a Session to read it in one of three ways:
 
 What you type in either Chat or Terminal goes to the same `tmux` pane.
 
+### When Claude asks you to choose
+
+When Claude asks a question with options (AskUserQuestion), Chat shows a
+**Waiting for your choice** card above the composer. The card shows each
+question and its options. Pick one option, or several where the question
+allows it, or type your own answer in **Other**. Then tap **Send answer**.
+
+Mewla reads the questions from Claude's transcript, not from the screen. It
+selects your answer in the live terminal and checks the screen before every
+key. If the prompt has changed, or was partly answered in the Terminal, Mewla
+stops and says so, and nothing is submitted. You can always finish in the
+Terminal. Once the question is answered, from the card or from the Terminal,
+the card becomes an **Answered** line in the chat.
+
+Claude's permission and plan-approval prompts also show as **Waiting for your
+choice**, with Claude's own options. Answer those in the Terminal.
+
 ### Files in a reply
 
 Tap a file path in a reply, a tool row or a changed-files list to open it

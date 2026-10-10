@@ -3199,6 +3199,62 @@ export class MultiServerWebSocketClient {
     );
   }
 
+  /**
+   * Answer a pending provider choice (Claude AskUserQuestion). The daemon
+   * re-reads the questions from the transcript, drives the live prompt with
+   * verified keys and resolves only after Claude records these answers.
+   */
+  answerChoice(
+    serverId: string,
+    workerId: string,
+    answer: { call_id: string; answers: Array<{ selected: number[]; other?: string }> },
+  ) {
+    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise<string[]>((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off("choice_answered", handleAnswered);
+        this.off("error", handleError);
+      };
+
+      const handleAnswered = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) {
+          return;
+        }
+        cleanup();
+        resolve(Array.isArray(payload.answers) ? payload.answers : []);
+      };
+
+      const handleError = (payload: any) => {
+        if (payload.serverId !== serverId || payload.request_id !== requestId) {
+          return;
+        }
+        cleanup();
+        reject(new Error(payload.message || "Could not send the answer."));
+      };
+
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Timed out while answering. Check the Terminal."));
+      }, 30000);
+
+      this.on("choice_answered", handleAnswered);
+      this.on("error", handleError);
+      this.sendRequestNow(
+        serverId,
+        {
+          type: "answer_choice",
+          request_id: requestId,
+          worker_id: workerId,
+          choice_answer: answer,
+        },
+        cleanup,
+        reject,
+      );
+    });
+  }
+
   sendKey(serverId: string, workerId: string, key: string) {
     const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 

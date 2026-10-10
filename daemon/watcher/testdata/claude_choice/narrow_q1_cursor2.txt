@@ -1,0 +1,40 @@
+
+✻ Cooked for 4s · done 23:47
+
+❯ Now call AskUserQuestion once with 1 question: "Pick a
+  size?", header "Size", multiSelect false, options
+  "Small" (desc "s"), "Large" (desc "l"). Then reply with
+  the answer verbatim.
+
+● User answered Claude's questions:
+  ⎿  · Pick a size? → Medium "M" 中
+
+● Pick a size?: Medium "M" 中
+
+✻ Baked for 3s · done 23:48
+
+❯ Call AskUserQuestion once with 2 questions. Q1:
+  question "这个功能上线前，你希望先在哪个平台上做完整的
+  真机验证，然后再推送给所有用户？", header "平台",
+  multiSelect false, options "安卓" (desc "Android
+  真机，包括低端机型的性能检查"), "苹果" (desc "iPhone
+  真机"). Q2: "Which checks?", header "Checks",
+  multiSelect true, options "Lint" (desc "style"),
+  "Tests" (desc "unit tests"), "Build" (desc "full
+  build"). Reply with answers verbatim.
+──────────────────────────────────────────────────────────
+←  ☐ 平台  ☐ Checks  ✔ Submit  →
+
+这个功能上线前，你希望先在哪个平台上做完整的真机验证，然后
+再推送给所有用户？
+
+  1. 安卓
+     Android 真机，包括低端机型的性能检查
+❯ 2. 苹果
+     iPhone 真机
+  3. Type something.
+──────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to
+cancel

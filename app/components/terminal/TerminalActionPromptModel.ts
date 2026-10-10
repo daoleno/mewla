@@ -1,4 +1,4 @@
-import { isGrokCommand } from "../../services/agentCommands";
+import { isClaudeCommand, isGrokCommand } from "../../services/agentCommands";
 
 export type TerminalActionPromptOption = {
   id: string;
@@ -56,6 +56,9 @@ export function buildTerminalActionPrompt({
     return null;
   }
   const lines = cleanTerminalPromptLines(lastOutputLines ?? []);
+  if (isClaudeCommand(command)) {
+    return scopePrompt(buildClaudeTerminalPrompt(lines, summary), scopeKey);
+  }
   if (isGrokCommand(command) && looksLikeGrokChoiceMenu(lines)) {
     return scopePrompt(buildGrokChoicePrompt(lines, summary), scopeKey);
   }
@@ -114,6 +117,55 @@ export function buildTerminalActionPrompt({
   );
 }
 
+/**
+ * Claude permission and plan-approval prompts have no transcript contract, so
+ * they are shown read-only with Claude's own option labels and answered in
+ * the Terminal. AskUserQuestion is answered natively from the transcript.
+ */
+function buildClaudeTerminalPrompt(
+  lines: CleanPromptLine[],
+  summary?: string,
+): TerminalActionPrompt | null {
+  const options = extractClaudeNumberedOptions(lines);
+  if (options.length === 0) {
+    return null;
+  }
+  const title = summary?.trim() || "Waiting for your choice";
+  return {
+    id: promptId(title, options),
+    title,
+    detail: "Claude is waiting for you in the Terminal.",
+    defaultOptionId: options.find((option) => option.default)?.id,
+    options,
+    actionable: false,
+  };
+}
+
+function extractClaudeNumberedOptions(lines: CleanPromptLine[]) {
+  const options: TerminalActionPromptOption[] = [];
+  for (const line of lines) {
+    const match = NUMBERED_OPTION_RE.exec(line.text);
+    if (!match) {
+      continue;
+    }
+    // A fresh "1." starts a newer menu; keep only the last one on screen.
+    if (match[1] === "1") {
+      options.length = 0;
+    }
+    if (options.some((option) => option.id === match[1])) {
+      continue;
+    }
+    options.push({
+      id: match[1],
+      label: truncateRunes(match[2].replace(/\s+/g, " ").trim(), 80),
+      key: match[1],
+      default: line.selected,
+      primary: line.selected,
+    });
+  }
+  return options.slice(0, 6);
+}
+
 function scopePrompt(
   prompt: TerminalActionPrompt | null,
   scopeKey?: string,
@@ -135,9 +187,9 @@ function cleanTerminalPromptLines(lines: string[]) {
   return lines
     .map((line) => {
       const cleaned = line.replace(ANSI_RE, "");
-      const selected = /^\s*[›>]\s*/.test(cleaned);
+      const selected = /^\s*[›>❯]\s*/.test(cleaned);
       return {
-        text: cleaned.replace(/^\s*[›>]\s*/, "").trim(),
+        text: cleaned.replace(/^\s*[›>❯]\s*/, "").trim(),
         selected,
       };
     })

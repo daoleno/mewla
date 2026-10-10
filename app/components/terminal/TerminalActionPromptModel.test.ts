@@ -387,3 +387,53 @@ describe("worker_session_list connection-generation freshness", () => {
     ).toBeNull();
   });
 });
+
+describe("Claude terminal prompts", () => {
+  const CLAUDE = "claude --model opus";
+
+  test("plan approval is read-only with Claude's own labels", () => {
+    const prompt = buildTerminalActionPrompt({
+      status: "blocked",
+      command: CLAUDE,
+      summary: "Waiting for plan approval",
+      lastOutputLines: [
+        " Claude has written up a plan and is ready to execute. Would you like to proceed?",
+        " ❯ 1. Yes, and use auto mode",
+        "   2. Yes, manually approve edits",
+        "   3. Tell Claude what to change",
+        "      shift+tab to approve with this feedback",
+        " ctrl+g to edit in VS Code · ~/.claude/plans/plan.md",
+      ],
+    });
+    expect(prompt?.title).toBe("Waiting for plan approval");
+    expect(prompt?.actionable).toBe(false);
+    expect(prompt?.options.map((option) => option.label)).toEqual([
+      "Yes, and use auto mode",
+      "Yes, manually approve edits",
+      "Tell Claude what to change",
+    ]);
+    expect(prompt?.defaultOptionId).toBe("1");
+  });
+
+  test("permission prompt never relabels Claude options as Codex actions", () => {
+    const prompt = buildTerminalActionPrompt({
+      status: "blocked",
+      command: CLAUDE,
+      summary: "Waiting for Claude permission",
+      lastOutputLines: [
+        " Do you want to proceed?",
+        " ❯ 1. Yes",
+        "   2. Yes, and switch to auto mode · auto mode handles these prompts for you",
+        "   3. No",
+        " Esc to cancel · Tab to amend",
+      ],
+    });
+    expect(prompt?.actionable).toBe(false);
+    expect(prompt?.detail).not.toContain("Codex");
+    expect(prompt?.options.map((option) => option.label)).toEqual([
+      "Yes",
+      "Yes, and switch to auto mode · auto mode handles these prompts for you",
+      "No",
+    ]);
+  });
+});

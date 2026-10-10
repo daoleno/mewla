@@ -37,6 +37,7 @@ import { compareConversationEvents } from "./interfaceConversationReconciliation
 import { isImageAttachment } from "../../services/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 import { pathBasename } from "../../services/pathDisplay";
+import { choiceAnswerDetails, choiceAnsweredSummary } from "./claudeChoiceModel";
 
 const ATTACHMENT_TAG_RE =
   /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
@@ -358,6 +359,32 @@ function insertPendingCurrentAtCausalBoundary(
   insertTimelineItemByTimestamp(timelineItems, item);
 }
 
+/**
+ * A provider choice is one line once settled. While pending, the composer's
+ * choice card is its only expression.
+ */
+function choiceActivityFromEvent(event: CodexConversationEvent): TimelineItem | null {
+  const choice = event.choice;
+  if (!choice || choice.state === "pending") {
+    return null;
+  }
+  const declined = choice.state === "declined";
+  const detail = declined ? undefined : choiceAnsweredSummary(choice);
+  return {
+    type: "activity",
+    id: event.id,
+    timestamp: event.timestamp,
+    statusKey: `choice:${choice.state}`,
+    title: declined ? "Choice dismissed" : "Answered",
+    tone: declined ? "neutral" : "success",
+    icon: declined ? "close-circle" : "check-circle",
+    detail,
+    body: declined ? undefined : choiceAnswerDetails(choice),
+    defaultExpanded: false,
+    accessibilityLabel: declined ? "Choice dismissed" : `Answered: ${detail}`,
+  };
+}
+
 export const PROVIDER_ACTIVITY_ITEM_PREFIX = "provider-activity:";
 
 export function mergeRunningActivityIntoTimeline(
@@ -604,6 +631,9 @@ function activityFromEvent(
       };
     }
     case "tool": {
+      if (event.choice) {
+        return choiceActivityFromEvent(event);
+      }
       const name = event.tool_name || event.title || "tool";
       if (isLowSignalToolEvent(name, event.input || "")) {
         return null;
