@@ -77,8 +77,8 @@ machine with secrets, read [Permission bypass risks](executors.md#permission-byp
 | --- | --- |
 | ☰ opens the menu; the top bar switches **Brain · Sessions**; ⋯ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋯ is the same |
 
-The menu holds everything else, each in exactly one place: Calendar, Plugins,
-Skills, Stats, Resources and Settings.
+The menu holds everything else, each in exactly one place: Calendar,
+Extensions, Stats, Resources and Settings.
 
 ## Next
 

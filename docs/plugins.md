@@ -11,19 +11,20 @@ shows that server's accounts and never moves an account between servers.
 
 ![Plugins: one row per service. GitHub and Linear connected, Notion with Reconnect on its row, Google with Connect, and Remote MCP to add](assets/plugins.svg)
 
-1. Open the menu and choose **Plugins**. Each service has one row.
+1. Open the menu and choose **Extensions**. Mewla's plugins come first, one
+   row per service.
 2. Tap **Connect** on the service's row.
 3. Sign in on the service's own page and approve Mewla.
-4. You land back on Plugins with the service **Connected**. Brain can read and
+4. You land back on Extensions with the service **Connected**. Brain can read and
    search it right away.
 
-The card at the top of Plugins follows the sign-in: **Waiting for Linear**
+The card at the top of Extensions follows the sign-in: **Waiting for Linear**
 while you are on the service's page (with **Open Linear again** and **Cancel**),
 then the result. After a connect it offers **Allow changes too**; you can skip
 it and allow changes later on the service's page.
 
 From the web UI, the service returns your browser tab to the web UI's own
-Plugins page. From the phone app it returns to the app.
+Extensions page. From the phone app it returns to the app.
 
 For GitHub, Mewla shows a device code in large type; tap **Copy code and open
 GitHub** and enter it on GitHub's page. You can also choose **Use the GitHub
@@ -40,12 +41,12 @@ Mewla's own app registration with the provider:
 
 | Service | Sign-in | From the web UI |
 | --- | --- | --- |
-| Linear | Official browser sign-in | Returns to the web UI's Plugins page |
-| Notion | Official browser sign-in | Returns to the web UI's Plugins page |
-| Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Plugins page |
-| GitHub | Device code, or import from `gh` | Code page opens in a new tab; Plugins updates when you're done |
+| Linear | Official browser sign-in | Returns to the web UI's Extensions page |
+| Notion | Official browser sign-in | Returns to the web UI's Extensions page |
+| Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
+| GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Shows **Not yet available** until Mewla's Slack app registration ships | Slack's app returns only to the Mewla app: connect Slack from the phone |
-| Google Workspace | Shows **Not yet available** unless your daemon already has Google sign-in configured | Google opens in a new tab; Plugins updates when you're done |
+| Google Workspace | Shows **Not yet available** unless your daemon already has Google sign-in configured | Google opens in a new tab; Extensions updates when you're done |
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
@@ -69,7 +70,7 @@ messages or update records only when the task you gave it calls for that.
 Writes are never retried automatically.
 
 An account's status is **Connected**, **Needs sign-in again**, **Off** or
-**Last call failed**. When an account needs something, its row on Plugins and
+**Last call failed**. When an account needs something, its row on Extensions and
 its card on the service page show one action: **Reconnect** when sign-in
 expired, **Turn on** when it is off, **Check again** after a failed call, or
 **Retry** when removing its credentials did not finish.

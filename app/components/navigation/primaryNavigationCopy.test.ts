@@ -68,8 +68,8 @@ describe("navigation and Skills copy density", () => {
     expect(skillsSource).not.toContain("LeaderboardSelector");
     expect(skillsSource).not.toContain("CatalogSkillRow");
   });
-  test("Plugins and Skills are the only top-level sections", () => {
-    expect(skillsSource).toContain('(["skills", "plugins"] as const)');
+  test("a tool's page switches between its Plugins and Skills only", () => {
+    expect(skillsSource).toContain('label: section === "skills" ? "Skills" : "Plugins"');
     expect(skillsSource).not.toContain("ModeSwitch");
     expect(skillsSource).not.toContain('label="Discover"');
   });

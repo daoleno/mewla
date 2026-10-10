@@ -14,7 +14,7 @@ export default function PluginServiceScreen() {
   const [adding, setAdding] = useState(false);
   const row = [...flow.rows.services, ...flow.rows.custom].find((entry) => entry.plugin.id === service);
   if (!row) {
-    return <PluginsPage title="Plugins">
+    return <PluginsPage title="Extensions">
       {flow.loaded && flow.catalog.length ? <InlineNotice title="Service unavailable" detail={`${flow.serverName} does not offer this service.`} /> : null}
     </PluginsPage>;
   }

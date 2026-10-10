@@ -39,7 +39,7 @@ describe("primary drawer destinations", () => {
       ["Sessions", "list"],
     ]);
     expect(destinations.map((item) => item.label)).toEqual([
-      "Calendar", "Plugins", "Skills", "Stats", "Resources", "Settings",
+      "Calendar", "Extensions", "Stats", "Resources", "Settings",
     ]);
     for (const key of ["key", "label", "pathname", "icon"] as const) {
       expect(new Set(destinations.map((item) => item[key])).size).toBe(destinations.length);
@@ -54,7 +54,7 @@ describe("primary drawer destinations", () => {
     }
   });
 
-  test("Plugins lives in the drawer and not in Settings", () => {
+  test("Extensions lives in the drawer and not in Settings", () => {
     expect(destinations.filter((item) => item.pathname === "/plugins")).toHaveLength(1);
     expect(settingsSource).not.toContain('"/plugins"');
     expect(settingsSource).not.toContain('title="Plugins"');

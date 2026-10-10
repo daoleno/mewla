@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const screen = readFileSync(join(import.meta.dir, "../app/skills.tsx"), "utf8");
+// The agents' plugins and Skills: one provider for every Extensions page, and
+// the per-tool page that lists and changes them.
+const provider = readFileSync(join(import.meta.dir, "../components/extensions/AgentExtensionsProvider.tsx"), "utf8");
+const screen = provider + readFileSync(join(import.meta.dir, "../app/plugins/agents/[tool].tsx"), "utf8");
 const presentation = readFileSync(
   join(import.meta.dir, "../components/skills/SkillsPresentation.tsx"),
   "utf8",
@@ -43,10 +46,11 @@ describe("local-only Skills surface contract", () => {
       "SkillsProductDemo",
       "DEMO_SKILLS",
       "demoRequested",
-      "useLocalSearchParams",
     ]) {
       expect(screen).not.toContain(removed);
     }
+    // Only the tool page reads a route param: which tool it lists.
+    expect(provider).not.toContain("useLocalSearchParams");
   });
   test("uses pull refresh and no duplicate refresh button", () => {
     expect(presentation).toContain("RefreshControl");

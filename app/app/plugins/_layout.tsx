@@ -5,11 +5,12 @@ import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
 import { useStackScreenOptions } from "../../components/navigation/stackScreenOptions";
 import { PluginsFlowProvider } from "../../components/plugins/PluginsFlow";
+import { AgentExtensionsProvider } from "../../components/extensions/AgentExtensionsProvider";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { secureStorage } from "../../services/secureStorage";
 import { retainPluginReturn } from "../../services/pluginOnboarding";
 
-// A deep-linked service page still has the catalog below it.
+// Extensions. A deep-linked service or tool page still has the index below it.
 export const unstable_settings = { initialRouteName: "index" };
 
 export default function PluginsLayout() {
@@ -38,6 +39,8 @@ export default function PluginsLayout() {
     deferredName={deferredName}
     deferReturn={deferReturn}
   >
-    <Stack screenOptions={screenOptions} />
+    <AgentExtensionsProvider>
+      <Stack screenOptions={screenOptions} />
+    </AgentExtensionsProvider>
   </PluginsFlowProvider>;
 }

@@ -22,7 +22,7 @@ const presentationSource = readFileSync(
   "utf8",
 );
 const screenSource = readFileSync(
-  join(import.meta.dir, "../../app/model-profiles.tsx"),
+  join(import.meta.dir, "../../app/settings/model-providers.tsx"),
   "utf8",
 );
 

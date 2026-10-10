@@ -329,7 +329,7 @@ function PluginsList(
     return (
       <PluginState
         icon="puzzle"
-        title="No installed Agent Plugins"
+        title="No plugins installed"
         action="Refresh"
         onAction={props.onRefresh}
       />

@@ -18,7 +18,7 @@ export function resolveScreenBack(input: {
  * Logical parent for each root Stack route that shows the Stack header.
  * Headerless routes return null: native-stack still renders `headerLeft` for a
  * hidden header, so they get no default Back (and no hardware-back listener).
- * The Session screen draws its own Back with "/list" as the parent; Plugins
+ * The Session screen draws its own Back with "/list" as the parent; Extensions
  * draws its header in its own nested Stack.
  */
 export function screenBackParent(routeName: string): ScreenBackParent | null {
@@ -29,7 +29,7 @@ export function screenBackParent(routeName: string): ScreenBackParent | null {
     case "onboarding":
     case "screenshot-demo":
       return null;
-    case "model-profiles":
+    case "settings/model-providers":
       return "/settings";
     default:
       return "/";

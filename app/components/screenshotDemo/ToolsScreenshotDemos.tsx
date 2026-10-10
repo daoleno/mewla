@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { ResourcesView } from "../resources/ResourcesView";
 import { SkillsPresentation } from "../skills/SkillsPresentation";
-import { groupLogicalSkills } from "../../services/skillsScreenModel";
+import { groupLogicalSkills, MANAGED_SKILL_AGENTS } from "../../services/skillsScreenModel";
 import { groupLogicalPlugins } from "../../services/pluginsScreenModel";
 import { skillsOutsidePlugins } from "../../services/skillsPluginOwnership";
 import type { PackageDetail, SkillsRequestState } from "../../services/skillsManagement";
@@ -75,6 +75,8 @@ export function SkillsScreenshotDemo({ header }: { header: React.ReactNode }) {
       {header}
       <SkillsPresentation
         section={section}
+        sections={["plugins", "skills"]}
+        filterAgents={MANAGED_SKILL_AGENTS}
         inventoryState={{ status: "ready", generation: 1, data: SCREENSHOT_SKILLS_INVENTORY }}
         logicalSkills={logicalSkills}
         pluginsState={{ status: "ready", generation: 1, data: SCREENSHOT_PLUGIN_INVENTORY }}

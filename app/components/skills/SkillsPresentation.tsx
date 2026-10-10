@@ -34,7 +34,6 @@ import {
 } from "../../services/skillsManagement";
 import {
   filterLogicalSkills,
-  MANAGED_SKILL_AGENTS,
   skillCopyLocation,
   type LogicalSkill,
   type SkillFilters,
@@ -69,6 +68,10 @@ export interface SurfaceMutationNotice {
 
 export interface SkillsPresentationProps {
   section: SkillsSurfaceSection;
+  /** The sections this page has, in order; one hides the switch. */
+  sections: readonly SkillsSurfaceSection[];
+  /** Tools the Skills filter can narrow to; fewer than two hides it. */
+  filterAgents: readonly ManagedSkillAgent[];
   inventoryState: SkillsRequestState<SkillsInventory>;
   logicalSkills: LogicalSkill[];
   pluginsState: SkillsRequestState<PluginInventory>;
@@ -149,16 +152,18 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
         {props.currentServerAvailable && props.projectCwd ? (
           <ProjectScope cwd={props.projectCwd} />
         ) : null}
-        <SegmentedControl
-          accessibilityLabel="Skills sections"
-          value={props.section}
-          onChange={props.onSelectSection}
-          options={(["skills", "plugins"] as const).map((section) => ({
-            value: section,
-            label: section === "skills" ? "Skills" : "Agent Plugins",
-            icon: section === "skills" ? "book" : "puzzle",
-          }))}
-        />
+        {props.sections.length > 1 ? (
+          <SegmentedControl
+            accessibilityLabel="Plugins and Skills"
+            value={props.section}
+            onChange={props.onSelectSection}
+            options={props.sections.map((section) => ({
+              value: section,
+              label: section === "skills" ? "Skills" : "Plugins",
+              icon: section === "skills" ? "book" : "puzzle",
+            }))}
+          />
+        ) : null}
       </View>
       {props.section === "skills" ? (
         <View style={styles.flex}>
@@ -219,11 +224,6 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
                 size={20}
                 color={activeFilterCount ? colors.accent : colors.textSecondary}
               />
-              {activeFilterCount ? (
-                <Text style={{ color: colors.accent }}>
-                  {activeFilterCount}
-                </Text>
-              ) : null}
             </Pressable>
           </View>
           {activeFilterCount ? (
@@ -239,6 +239,7 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
           />
           <FilterSheet
             visible={filtersOpen}
+            agents={props.filterAgents}
             filters={filters}
             onChange={setFilters}
             onClose={() => setFiltersOpen(false)}
@@ -420,11 +421,13 @@ function ActiveFilters({
 
 function FilterSheet({
   visible,
+  agents,
   filters,
   onChange,
   onClose,
 }: {
   visible: boolean;
+  agents: readonly ManagedSkillAgent[];
   filters: SkillFilters;
   onChange(value: SkillFilters): void;
   onClose(): void;
@@ -449,9 +452,9 @@ function FilterSheet({
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.filterBody}>
-        <FilterSection title="Agents">
+        {agents.length > 1 ? <FilterSection title="Agents">
           <View style={styles.optionWrap}>
-            {MANAGED_SKILL_AGENTS.map((agent) => {
+            {agents.map((agent) => {
               const selected = filters.agents.includes(agent);
               return (
                 <Choice
@@ -471,7 +474,7 @@ function FilterSheet({
               );
             })}
           </View>
-        </FilterSection>
+        </FilterSection> : null}
         <FilterSection title="Status">
           <View style={styles.optionWrap}>
             {(["all", "enabled", "disabled"] as SkillStatusFilter[]).map(
@@ -636,13 +639,14 @@ function LocalSkillsList(
   if (
     !props.filtersActive &&
     props.rows.length === 0 &&
-    props.pluginOwnedSkillCount > 0
+    props.pluginOwnedSkillCount > 0 &&
+    props.sections.includes("plugins")
   )
     return (
       <State
         icon="puzzle"
-        title="All Skills come from Agent Plugins"
-        action="Show Agent Plugins"
+        title="All Skills come with plugins"
+        action="Show plugins"
         onAction={() => props.onSelectSection("plugins")}
       />
     );
@@ -716,18 +720,18 @@ function OwnershipNotice(props: SkillsPresentationProps) {
         tone="warning"
         icon="puzzle"
         title="Plugin ownership unavailable"
-        detail="Skills from Agent Plugins may appear here. They stay protected."
+        detail="Skills that come with plugins may appear here. They stay protected."
         action={{ label: "Retry", onPress: props.onRetryPlugins }}
         style={styles.listNotice}
       />
     );
-  if (!props.pluginOwnedSkillCount) return null;
+  if (!props.pluginOwnedSkillCount || !props.sections.includes("plugins")) return null;
   const count = props.pluginOwnedSkillCount;
   return (
     <InlineNotice
       tone="accent"
       icon="puzzle"
-      title={`${count} more ${count === 1 ? "Skill comes" : "Skills come"} from Agent Plugins`}
+      title={`${count} more ${count === 1 ? "Skill comes" : "Skills come"} with plugins`}
       action={{ label: "View", onPress: () => props.onSelectSection("plugins") }}
       style={styles.listNotice}
     />

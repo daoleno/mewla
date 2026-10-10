@@ -657,7 +657,7 @@ export default function SettingsScreen() {
               accessory="chevron"
               accessibilityLabel="Model Providers"
               accessibilityHint="Choose how Codex and Claude connect to models"
-              onPress={() => router.push("/model-profiles")}
+              onPress={() => router.push("/settings/model-providers")}
             />
           </ListSection>
 
