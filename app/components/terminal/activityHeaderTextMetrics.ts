@@ -4,7 +4,7 @@ import { TypeScale, Typography, UiTextMetrics } from "../../constants/tokens";
 /**
  * Collapsed Tool activity header text metrics.
  *
- * Source Han Sans title and Maple Mono command/detail must share one stable
+ * Inter title and Maple Mono command/detail must share one stable
  * line box and visual center with the tone icon and disclosure chevron —
  * whether the row has no detail, a short command, or a long ellipsized path.
  *

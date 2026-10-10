@@ -34,5 +34,5 @@ This file records release-readiness blockers and the evidence that resolved them
 
 ## Non-blockers recorded for honesty
 
-- Fonts (Source Han Sans SC, Maple Mono CN): upstream OFL evidence recorded in `third-party-assets.md`.
+- Fonts (Maple Mono CN, Inter, Bricolage Grotesque): upstream OFL evidence recorded in `third-party-assets.md`.
 - Ghostty: MIT; redistribution of built `.so`/APK and iOS app/IPA needs notice packaging (Android + iOS verifiers).

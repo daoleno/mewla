@@ -1,4 +1,4 @@
-// The bundled CJK faces total ~70 MB; browsers already ship CJK fallbacks,
+// The bundled Maple Mono CN faces total ~15 MB; browsers ship CJK fallbacks,
 // so web leads with the small Latin faces (Inter, Bricolage Grotesque; see
 // appFontAssets.web.ts) and resolves CJK through installed families. Mono
 // leads with a Latin/symbol subset of Maple Mono: xterm sizes cells from the
@@ -23,8 +23,6 @@ export const FontFamilies = {
   uiSemibold: `"${WEB_UI_SEMIBOLD_FAMILY}", "${WEB_UI_FAMILY}", ${CJK_STACK}`,
   display: `"${WEB_DISPLAY_FAMILY}", "${WEB_UI_SEMIBOLD_FAMILY}", ${CJK_STACK}`,
   displaySemibold: `"${WEB_DISPLAY_SEMIBOLD_FAMILY}", "${WEB_UI_SEMIBOLD_FAMILY}", ${CJK_STACK}`,
-  cjk: CJK_STACK,
-  cjkMedium: CJK_STACK,
   mono: `"${WEB_MONO_FAMILY}", ${MONO_FALLBACK}`,
   monoBold: `"${WEB_MONO_BOLD_FAMILY}", "${WEB_MONO_FAMILY}", ${MONO_FALLBACK}`,
 } as const;

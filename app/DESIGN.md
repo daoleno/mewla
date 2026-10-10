@@ -265,13 +265,15 @@ chats keep every row). The composer says "Tell Brain…".
   shipped to the browser.
 - **CJK on native.** There are no font stacks on native. Inter and Bricolage
   fall back to the OS CJK face (PingFang SC on iOS, Noto Sans CJK on Android,
-  which is Source Han's design). The bundled Source Han Sans SC stays
-  registered as the `cjk` role. Line heights are fixed per role, so fallback
-  glyphs never change a row's height. **Native CJK rendering is not yet
-  verified on a device.**
+  which is Source Han's design); no CJK UI face is bundled. Line heights are
+  fixed per role, so fallback glyphs never change a row's height. **Native
+  CJK rendering is not yet verified on a device.**
 - **Mono.** JetBrains Mono is the landing's mono, but the app keeps Maple Mono
   CN: it has CJK at a 2:1 cell width, and xterm and ghostty size cells from
-  the first family.
+  the first family. The bundled files are subset to the common Han set
+  (GB2312 and Big5 level 1) by `scripts/subset-maple-mono-cn.py`; rarer
+  ideographs fall back to the OS face. The terminal grid still places them
+  per cell, but chat mono text uses the fallback face's advance.
 - **Web weights.** expo-font declares every face at weight 400, and each
   weight here is its own family. Web therefore sets
   `font-synthesis-weight: none` (in `appFontAssets.web.ts`) so browsers don't
@@ -551,6 +553,5 @@ Risky areas to watch:
 - **Markdown.** Native enriched-markdown styles and the mermaid theme read
   `surfaceMuted` and the accent (ink). Check tables and code in sent messages.
 - **Native modules and fonts.** Font registration differs per platform. Check
-  CJK fallback on real iOS and Android devices. Decide whether to drop the
-  bundled Source Han Sans SC files, which would save about 33 MB.
+  CJK fallback on real iOS and Android devices.
 - **Android elevation and translucency.** Keep in-flow cards flat.
