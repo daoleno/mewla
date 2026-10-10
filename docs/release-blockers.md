@@ -10,10 +10,10 @@ This file records release-readiness blockers and the evidence that resolved them
 
 ### `ios-distribution-artifacts` (reopened 2026-10-10)
 
-- **Summary:** Mewla's new bundle requires its own external TestFlight group and Beta App Review. The previous Zen distribution does not establish Mewla installability.
+- **Summary:** Mewla `0.2.4 (42)` is waiting for Apple Beta App Review. The release automation has completed successfully; public installability remains an Apple review gate.
 - **Acceptance:** CI verifies the XCFramework and Ghostty notice, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path; an IPA upload alone is insufficient.
-- **Evidence:** [Run 38027369612](https://github.com/daoleno/mewla/actions/runs/38027369612) successfully signed and uploaded Mewla `0.2.4 (42)` to app record `6821246662`. Post-processing stopped because the `Mewla Preview` external group does not exist.
-- **Recovery:** Create the public external group, then run `iOS TestFlight post-process` for version `0.2.4`, build `42`. Verify group assignment and Apple review status before publishing the new installation link. See [iOS CI](ios-ci-release.md).
+- **Evidence:** [Recovery run 38030080400](https://github.com/daoleno/mewla/actions/runs/38030080400) succeeded: the build is VALID, export compliance is handled, the public `Mewla Preview` group is attached, and Beta App Review is submitted. App Store Connect shows “Waiting for Review”.
+- **Installation:** [Mewla TestFlight](https://testflight.apple.com/join/nMQheDCE) accepts external testers only after Apple approves a build. See [iOS CI](ios-ci-release.md).
 
 ## Resolved
 
