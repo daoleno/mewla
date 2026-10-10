@@ -22,6 +22,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/shellquote"
+	"github.com/daoleno/mewla/daemon/workerproc"
 	"github.com/google/uuid"
 )
 
@@ -5726,7 +5727,7 @@ func refineProcessStartedAt(observed time.Time, pid int) time.Time {
 	if observed.IsZero() {
 		return observed
 	}
-	precise, ok := processStartTimeFromProc(pid)
+	precise, ok := workerproc.StartTime(pid)
 	if !ok {
 		return observed
 	}

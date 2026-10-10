@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // TestWatcherPropagatesPreciseProcessStart proves the full Linux propagation
@@ -25,7 +26,7 @@ func TestWatcherPropagatesPreciseProcessStart(t *testing.T) {
 		_, _ = cmd.Process.Wait()
 	}()
 	pid := cmd.Process.Pid
-	precise, ok := processStartTimeFromProc(pid)
+	precise, ok := workerproc.StartTime(pid)
 	if !ok {
 		t.Fatalf("no /proc start evidence for live pid %d", pid)
 	}

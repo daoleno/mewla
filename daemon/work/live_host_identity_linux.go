@@ -3,33 +3,23 @@
 package work
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
+
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 func claudeProcessRecordLive(record claudeProcessSession) (bool, error) {
-	raw, err := os.ReadFile("/proc/" + strconv.Itoa(record.PID) + "/stat")
-	if os.IsNotExist(err) {
+	process, err := workerproc.ReadProcStat(record.PID)
+	if os.IsNotExist(err) || errors.Is(err, workerproc.ErrExited) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
-	}
-	end := strings.LastIndexByte(string(raw), ')')
-	if end < 0 {
-		return false, fmt.Errorf("invalid process stat for %d", record.PID)
-	}
-	fields := strings.Fields(string(raw[end+1:]))
-	if len(fields) <= 19 {
-		return false, fmt.Errorf("incomplete process stat for %d", record.PID)
-	}
-	if fields[0] == "Z" || fields[0] == "X" {
-		return false, nil
+		return false, fmt.Errorf("invalid process stat for %d: %w", record.PID, err)
 	}
 	if record.ProcStart == "" {
 		return false, fmt.Errorf("Claude process %d has no start identity", record.PID)
 	}
-	return fields[19] == record.ProcStart, nil
+	return process.Start == record.ProcStart, nil
 }
