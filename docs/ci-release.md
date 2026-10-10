@@ -31,7 +31,7 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | Upload workflow artifact | yes | — |
 | Upload/replace assets on **existing** GitHub Release | **no** | yes |
 
-The canonical normal flow is one manual **Release reviewed version** dispatch with an explicit `X.Y.Z` or `X.Y.Z-beta.N` version. It checks out current `main` with full tag history, proves the target is newer than the tracked current version and annotated current tag, increments Android and iOS build identities, generates canonical notes from the intervening commits, updates the root changelog index, and runs the release identity and focused contract tests. Only after every gate passes does it commit exactly those generated paths as `github-actions[bot]`, create the annotated target tag at that commit, prove `origin/main` still equals the starting SHA, and atomically push the new `main` commit and tag. Main drift, malformed identity, missing history, dirty state, existing output, or any failed test stops before that atomic push.
+The canonical normal flow is one manual **Release reviewed version** dispatch with an explicit `X.Y.Z` or `X.Y.Z-beta.N` version. It checks out current `main` with full tag history, proves the target is newer than the tracked current version and annotated current tag, increments Android and iOS build identities, builds the canonical notes from the committed user-facing notes, updates the root changelog index, and runs the release identity and focused contract tests. Only after every gate passes does it commit exactly those generated paths as `github-actions[bot]`, create the annotated target tag at that commit, prove `origin/main` still equals the starting SHA, and atomically push the new `main` commit and tag. Main drift, malformed identity, missing history, missing or malformed user-facing notes, dirty state, existing output, or any failed test stops before that atomic push.
 
 GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN`, so the workflow explicitly dispatches both downstream workflows after the atomic push. It dispatches `release-artifacts.yml` with the exact new tag and `publish=true`, and dispatches `ios-release.yml` at the same tag with the tracked next iOS build number, `app_identity=preview`, and `destination=testflight`. This preserves the two downstream effects of a maintainer-pushed release tag. The artifact workflow checks out that immutable tag, proves strict syntax, version equality, annotated-tag identity, exact HEAD resolution, and ancestry on `origin/main`, then reruns the tracked identity verifier. Daemon builds and Android/native work run in parallel. A final job combines those verified outputs, creates deterministic archives and checksums, signs and verifies the updater manifest, and uploads one complete workflow artifact. Only then does the write-scoped job create or reuse the matching draft, upload and verify the exact non-empty asset set, and publish it. Stable tags become normal Latest releases; beta tags remain prereleases. A failed build cannot create a public release; a failed first upload can leave only a draft.
 
@@ -60,13 +60,27 @@ Local maintainer builds use a filesystem path via `MEWLA_ANDROID_KEYSTORE` (see 
 
 ## Public certificate identity
 
-Release APKs must match the fingerprint published in the current version's tracked release notes (public metadata, not a secret):
+Release APKs must match this fingerprint, which `scripts/verify-release-identity.sh` owns and release preparation copies into the notes' **Verify downloads** block (public metadata, not a secret):
 
 ```
 C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD
 ```
 
 `scripts/verify-apk-release.sh` enforces this after the build.
+
+## Release identity
+
+Release notes leave out maintainer identity. It lives in tracked files instead:
+
+| Fact | Source |
+| --- | --- |
+| Version | `app/app.base.json` `expo.version`, mirrored in `daemon/cmd/mewla/version.go` |
+| Android package | `com.daoleno.mewla` (`app/app.base.json`) |
+| Android `versionCode` | `app/app.base.json`; preparation increments it by one |
+| Android ABI | `arm64-v8a` only (`app/modules/terminal-vt/native.lock.json`) |
+| iOS Preview bundle, marketing version and build number | See [iOS CI](ios-ci-release.md#signed-release-and-testflight) |
+
+`scripts/verify-release-identity.sh` checks all of them against the tracked version.
 
 ## workflow_dispatch inputs
 
@@ -97,7 +111,25 @@ gh workflow run release-next-beta.yml \
 
 Review the requested machine-readable version/tag, identity checks, tests, atomic push, and downstream dispatch. The workflow uses only `GITHUB_TOKEN`; it has no PAT, release service, database, external action bot, or second publication engine.
 
-Before dispatch, maintainers can commit a version-scoped Markdown supplement at `docs/releases/reviewed/vX.Y.Z.md` (including the beta suffix when applicable). Preparation inserts only that target's reviewed highlights and known limitations before the generated commit range in the canonical notes. It does not replace the commit range, installation guidance or verified identity sections. Do not precreate the canonical `docs/releases/vX.Y.Z.md`, which remains a generated, fail-closed output.
+### Write the release notes first
+
+Before dispatch, commit the user-facing notes at `docs/releases/reviewed/vX.Y.Z.md` (with the beta suffix when applicable). Preparation fails without them, and never falls back to commit subjects. Write for someone deciding whether to update: what changed for them, in their words. Leave out commit hashes, identity data and dated status.
+
+```markdown
+One plain sentence: what this release is about, for a user.
+
+## New
+
+- A user-facing change.
+
+## Fixed
+
+- A user-facing fix.
+```
+
+Keep at least one of `## New` and `## Fixed`, with `- ` bullets only. Preparation adds the version heading, **Get it** (update command and one line per download), a compare link, and a collapsed **Verify downloads** block with `SHA256SUMS` usage and the Android certificate fingerprint. Do not precreate the canonical `docs/releases/vX.Y.Z.md`, which remains a generated, fail-closed output.
+
+The generated notes have no iPhone line, because the TestFlight upload runs after the tag. Once the build is in the public `Mewla Preview` group, add `- **iPhone:** [Mewla Preview on TestFlight](https://testflight.apple.com/join/nMQheDCE)` after the Android line in `docs/releases/vX.Y.Z.md`, commit it, and apply the same file to the GitHub Release with `gh release edit vX.Y.Z --notes-file docs/releases/vX.Y.Z.md`.
 
 Preparation, normal app CI and the Android release job run `app/androidAssetNames.test.js` before an expensive signed build. The gate uses Metro asset parsing and React Native's actual Android resource folder/name normalization across repository image and font assets, including density variants. Extensions, punctuation and letter case do not necessarily distinguish Android resource names: use distinct basenames for files such as a PNG and JPEG in the same directory.
 

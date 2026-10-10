@@ -136,8 +136,6 @@ DAEMON_ARCHIVE_ENTRIES = {
 }
 DAEMON_ARCHIVES = tuple(DAEMON_ARCHIVE_ENTRIES)
 
-notes_package = exp_package
-notes_daemons = ("mewla-linux-amd64", "mewla-linux-arm64")
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -326,20 +324,19 @@ if not notes_path.is_file():
     errors.append(f"missing tracked release notes: {notes_path.relative_to(root)}")
 else:
     notes = notes_path.read_text(encoding="utf-8")
-    if exp_version not in notes:
-        errors.append("release notes missing version string")
-    if notes_package not in notes:
-        errors.append("release notes missing android package")
+    if not notes.startswith(f"# Mewla {exp_version}\n"):
+        errors.append("release notes must start with the version heading")
     if exp_cert not in notes:
         errors.append("release notes missing official certificate SHA-256 fingerprint")
+    if not re.search(r"^## (New|Fixed)\n\n- ", notes, re.MULTILINE):
+        errors.append("release notes missing user-facing ## New or ## Fixed bullets")
     for needle in (
+        "## Get it",
+        "mewla update",
+        *DAEMON_ARCHIVES,
+        f"mewla-android-arm64-v{exp_version}.apk",
         "unknown sources",
-        "Play Protect",
-        "Obtainium",
-        "iOS",
-        "Play Store",
-        *notes_daemons,
-        "versionCode",
+        "SHA256SUMS",
     ):
         if needle not in notes:
             errors.append(f"release notes missing required topic: {needle!r}")
