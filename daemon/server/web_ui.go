@@ -13,10 +13,10 @@ import (
 	"github.com/daoleno/mewla/daemon/webui"
 )
 
-// ParseWebOrigin validates a remote browser origin for -web-origin. Remote
-// browsers cannot pin the daemon's Link certificate, so the origin must be
-// https behind a proxy whose certificate the browser already trusts.
-func ParseWebOrigin(raw string) (string, error) {
+// parseWebOrigin canonicalizes a remote browser origin. Remote browsers cannot
+// pin the daemon's Link certificate, so the origin must be https behind a
+// proxy whose certificate the browser already trusts.
+func parseWebOrigin(raw string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return "", fmt.Errorf("parse web origin: %w", err)
@@ -32,14 +32,8 @@ func ParseWebOrigin(raw string) (string, error) {
 	return "https://" + host, nil
 }
 
-// SetWebOrigins admits browsers on these https origins in addition to
-// loopback. Origins must come from ParseWebOrigin.
-func (s *Server) SetWebOrigins(origins []string) {
-	s.webOrigins = append([]string(nil), origins...)
-}
-
 // SetAddressBook binds web admission to the daemon-owned, live-reloaded
-// address book. The existing -web-origin values remain valid seeds.
+// address book: its https entries are the remote web UI origins.
 func (s *Server) SetAddressBook(book *addressbook.Store) { s.addresses = book }
 
 func (s *Server) SetEnrollmentManager(manager *enrollment.Manager) { s.enrollments = manager }
@@ -132,20 +126,11 @@ func (s *Server) webUIAdmitted(r *http.Request) bool {
 	if hostname == "localhost" || net.ParseIP(hostname).IsLoopback() {
 		return isLoopbackRemote(r.RemoteAddr)
 	}
-	requested := "https://" + strings.TrimSuffix(strings.ToLower(r.Host), ":443")
-	if s.addresses != nil && s.addresses.Contains(requested) {
-		return true
-	}
-	for _, origin := range s.webOrigins {
-		if origin == requested {
-			return true
-		}
-	}
-	return false
+	return s.isKnownHTTPSHost(r.Host)
 }
 
 // servesWebOrigin reports whether a browser on origin is served the web UI:
-// a loopback http address, or an https -web-origin or address book entry.
+// a loopback http address, or an https address book entry.
 func (s *Server) servesWebOrigin(origin string) bool {
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Hostname() == "" {
@@ -155,28 +140,17 @@ func (s *Server) servesWebOrigin(origin string) bool {
 		ip := net.ParseIP(parsed.Hostname())
 		return ip != nil && ip.IsLoopback()
 	}
-	if canonical, err := ParseWebOrigin(origin); err != nil || canonical != origin {
+	if canonical, err := parseWebOrigin(origin); err != nil || canonical != origin {
 		return false
 	}
-	if s.addresses != nil && s.addresses.Contains(origin) {
-		return true
-	}
-	for _, configured := range s.webOrigins {
-		if configured == origin {
-			return true
-		}
-	}
-	return false
+	return s.addresses != nil && s.addresses.Contains(origin)
 }
 
-func (s *Server) isConfiguredWebHost(rawHost string) bool {
+// isKnownHTTPSHost reports whether the request Host is an https address in
+// the address book, such as a tunnel or proxy added with mewla address add.
+func (s *Server) isKnownHTTPSHost(rawHost string) bool {
 	requested := "https://" + strings.TrimSuffix(strings.ToLower(rawHost), ":443")
-	for _, origin := range s.webOrigins {
-		if origin == requested {
-			return true
-		}
-	}
-	return false
+	return s.addresses != nil && s.addresses.Contains(requested)
 }
 
 func isLoopbackRemote(remoteAddr string) bool {

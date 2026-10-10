@@ -3,7 +3,8 @@ package server
 import "testing"
 
 func TestServesWebOriginForPluginSignIn(t *testing.T) {
-	s := &Server{webOrigins: []string{"https://mewla.example"}}
+	s := &Server{}
+	s.SetAddressBook(testAddressBook(t, "https://mewla.example"))
 	for origin, want := range map[string]bool{
 		"https://mewla.example":      true,
 		"http://127.0.0.1:9876":      true,

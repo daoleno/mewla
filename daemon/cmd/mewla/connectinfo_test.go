@@ -134,105 +134,216 @@ func TestBuildConnectionOffersUsesEndpoint(t *testing.T) {
 	}
 }
 
-func TestPrintStartupInfoForLoopback(t *testing.T) {
+func testEntries(urls ...string) []addressbook.Entry {
+	entries := make([]addressbook.Entry, 0, len(urls))
+	seen := time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)
+	for index, raw := range urls {
+		entries = append(entries, addressbook.Entry{URL: raw, Source: addressbook.SourceDiscovered, LastSeenAt: seen.Add(time.Duration(index) * time.Minute)})
+	}
+	return entries
+}
+
+func TestPrintStartupInfoForLoopbackWithoutPhoneAddress(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", nil)
+	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", false, testEntries("http://127.0.0.1:9876"))
 
 	rendered := output.String()
 	for _, want := range []string{
-		"Local only",
-		"mewla --lan",
-		"expose http://127.0.0.1:9876",
-		"mewla pair -state-dir /tmp/mewla-state https://your-mewla-host.example",
+		"listening on 127.0.0.1:9876 (this computer only)",
+		"mewla pair -state-dir /tmp/mewla-state, then open the browser link",
+		"restart with mewla --lan, or add an HTTPS address (mewla address add)",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("startup info missing %q: %q", want, rendered)
 		}
 	}
-	if strings.Contains(rendered, "Daemon ID") || strings.Contains(rendered, "Auth:") {
-		t.Fatalf("startup info contains novice noise: %q", rendered)
+	for _, unwanted := range []string{"Daemon ID", "Auth:", "your-mewla-host", "No Wi-Fi/LAN"} {
+		if strings.Contains(rendered, unwanted) {
+			t.Fatalf("startup info contains %q: %q", unwanted, rendered)
+		}
 	}
 }
 
-func TestPrintLinkStartupInfoUsesNoEndpointAsPrimaryAndKeepsAdvanced(t *testing.T) {
+func TestPrintStartupInfoForLoopbackBehindHTTPS(t *testing.T) {
 	var output bytes.Buffer
-	printLinkStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state")
+	printStartupInfo(&output, "127.0.0.1:9876", "", false, testEntries("http://127.0.0.1:9876", "https://mewla.example.com"))
+	rendered := output.String()
+	if !strings.Contains(rendered, "HTTPS       https://mewla.example.com") ||
+		!strings.Contains(rendered, "Pair        mewla pair\n") ||
+		strings.Contains(rendered, "restart with mewla --lan") {
+		t.Fatalf("tunnel startup = %q", rendered)
+	}
+}
+
+func TestPrintStartupInfoWithLink(t *testing.T) {
+	var output bytes.Buffer
+	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", true, testEntries("http://127.0.0.1:9876"))
 	rendered := output.String()
 	for _, expected := range []string{
-		"Connecting outbound",
-		"mewla pair -state-dir /tmp/mewla-state",
-		"Direct",
-		"mewla pair <endpoint>",
+		"Mewla Link  connecting outbound",
+		"Pair        mewla pair -state-dir /tmp/mewla-state",
 	} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("Link startup missing %q: %q", expected, rendered)
 		}
 	}
-	if strings.Contains(rendered, "your-mewla-host") {
-		t.Fatalf("Link startup hard-coded a nonexistent endpoint: %q", rendered)
-	}
 }
 
-func TestPrintStartupInfoForLANUsesDetectedAddresses(t *testing.T) {
+func TestPrintStartupInfoForLANListsAddressesAndOnePairCommand(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "0.0.0.0:9876", "", []privateNetworkAddress{
-		{label: "Same Wi-Fi/LAN", ip: net.ParseIP("192.168.1.42")},
-		{label: "Tailscale", ip: net.ParseIP("100.101.102.103")},
-	})
+	printStartupInfo(&output, "0.0.0.0:9876", "", false, testEntries(
+		"http://127.0.0.1:9876",
+		"http://192.168.1.42:9876",
+		"http://100.101.102.103:9876",
+		"https://zen.example.com",
+	))
 
 	rendered := output.String()
 	for _, want := range []string{
-		"Mewla ",
-		"mewla pair http://192.168.1.42:9876",
-		"http://100.101.102.103:9876",
+		"listening on all networks, port 9876",
+		"Wi-Fi/LAN   http://192.168.1.42:9876",
+		"Tailscale   http://100.101.102.103:9876",
+		"HTTPS       https://zen.example.com",
+		"Pair        mewla pair\n",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("startup info missing %q: %q", want, rendered)
 		}
 	}
-	if strings.Contains(rendered, "mewla pair http://0.0.0.0") {
-		t.Fatalf("startup info offered wildcard pairing address: %q", rendered)
+	if strings.Contains(rendered, "127.0.0.1") {
+		t.Fatalf("startup offered loopback to phones: %q", rendered)
 	}
 	if strings.Count(rendered, "mewla pair") != 1 {
-		t.Fatalf("startup should offer one primary pairing command: %q", rendered)
-	}
-	if !strings.Contains(rendered, "Tailscale http://") {
-		t.Fatalf("long address label must retain a separator: %q", rendered)
+		t.Fatalf("startup should offer one pairing command: %q", rendered)
 	}
 }
 
 func TestStartupWithoutPrivateAddressIsActionable(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "[::]:9876", "", nil)
-	if !strings.Contains(output.String(), "No LAN or Tailscale address detected") || strings.Contains(output.String(), "mewla pair http://") {
+	printStartupInfo(&output, "[::]:9876", "", false, nil)
+	if !strings.Contains(output.String(), "No Wi-Fi/LAN or Tailscale address found") ||
+		!strings.Contains(output.String(), "add an HTTPS address") {
 		t.Fatalf("invalid no-address startup: %q", output.String())
 	}
 }
 
-func TestPrintStartupInfoForSpecificPrivateBind(t *testing.T) {
-	var output bytes.Buffer
-	printStartupInfo(&output, "192.168.1.42:9988", "", nil)
-
-	rendered := output.String()
-	if !strings.Contains(rendered, "mewla pair http://192.168.1.42:9988") {
-		t.Fatalf("specific private bind missing pairing command: %q", rendered)
+func TestStartupAddressesMatchTheListenSocket(t *testing.T) {
+	detected := []privateNetworkAddress{
+		{label: "Same Wi-Fi/LAN", ip: net.ParseIP("192.168.1.42").To4()},
+		{label: "Tailscale", ip: net.ParseIP("100.101.102.103").To4()},
+	}
+	cases := map[string][]string{
+		"127.0.0.1:9876":    {"http://127.0.0.1:9876"},
+		"0.0.0.0:9988":      {"http://127.0.0.1:9988", "http://192.168.1.42:9988", "http://100.101.102.103:9988"},
+		"192.168.1.42:9876": {"http://192.168.1.42:9876"},
+	}
+	for listen, want := range cases {
+		if got := startupAddresses(listen, detected); strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Fatalf("startupAddresses(%s) = %v, want %v", listen, got, want)
+		}
 	}
 }
 
-func TestPrintPairingInfo(t *testing.T) {
+func TestPairingNeverPutsLoopbackInThePhoneQR(t *testing.T) {
+	publicKey := strings.Repeat("ab", 32)
+	token := auth.PairingToken{Value: strings.Repeat("cd", 32), ExpiresAt: time.Now().Add(time.Minute)}
+	links, err := buildPairingLinks(testEntries(
+		"http://127.0.0.1:9876",
+		"http://192.168.1.42:9876",
+		"http://100.101.102.103:9876",
+	), "", publicKey, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if links.phoneAddress != "http://100.101.102.103:9876" {
+		t.Fatalf("phone address = %q, want Tailscale over LAN", links.phoneAddress)
+	}
+	if !strings.HasPrefix(links.localBrowser, "http://127.0.0.1:9876/#pair=") || len(links.httpsBrowser) != 0 {
+		t.Fatalf("browser links = %q %v", links.localBrowser, links.httpsBrowser)
+	}
+
+	entries := testEntries("http://127.0.0.1:9876", "https://old.example.com", "http://192.168.1.42:9876", "https://new.example.com")
+	links, err = buildPairingLinks(entries, "", publicKey, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if links.phoneAddress != "https://new.example.com" || len(links.httpsBrowser) != 2 {
+		t.Fatalf("phone address = %q browsers = %v", links.phoneAddress, links.httpsBrowser)
+	}
+
+	links, err = buildPairingLinks(testEntries("http://127.0.0.1:9876"), "", publicKey, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if links.phoneLink != "" || links.localBrowser == "" {
+		t.Fatalf("loopback-only links = %#v", links)
+	}
 	var output bytes.Buffer
-	printPairingInfo(&output, []connectionOffer{{
-		Label:       "Server endpoint",
-		URL:         "wss://mewla.example.com/ws",
-		ConnectLink: "mewla://settings?p=compact-payload",
-	}})
+	printPairing(&output, "Pair a new phone or browser.", links)
+	if !strings.Contains(output.String(), "Phones can't reach this computer yet") || strings.Contains(output.String(), "█") {
+		t.Fatalf("loopback-only pairing = %q", output.String())
+	}
+}
+
+func TestPairingHonoursAnExplicitAddress(t *testing.T) {
+	links, err := buildPairingLinks(testEntries("http://192.168.1.42:9876"), "https://tunnel.example.com", strings.Repeat("ab", 32), auth.PairingToken{
+		Value:     strings.Repeat("cd", 32),
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if links.phoneAddress != "https://tunnel.example.com" || !strings.HasPrefix(links.phoneLink, "mewla://settings?p=") {
+		t.Fatalf("links = %#v", links)
+	}
+}
+
+func TestBuildWebPairingURLCarriesTheConnectLinkInTheFragment(t *testing.T) {
+	webURL, err := buildWebPairingURL("http://127.0.0.1:9876", strings.Repeat("ab", 32), auth.PairingToken{
+		Value:     strings.Repeat("cd", 32),
+		ExpiresAt: time.Now().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(webURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Scheme != "http" || parsed.Host != "127.0.0.1:9876" || parsed.Path != "/" || parsed.RawQuery != "" {
+		t.Fatalf("web URL = %q", webURL)
+	}
+	fragment, err := url.ParseQuery(parsed.Fragment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if link := fragment.Get("pair"); !strings.HasPrefix(link, "mewla://settings?p=") {
+		t.Fatalf("pair link = %q", link)
+	}
+}
+
+func TestPrintPairing(t *testing.T) {
+	var output bytes.Buffer
+	printPairing(&output, "Pair a new phone or browser.", pairingLinks{
+		expiresAt:    time.Now().Add(time.Minute),
+		phoneAddress: "https://mewla.example.com",
+		phoneLink:    "mewla://settings?p=compact-payload",
+		localBrowser: "http://127.0.0.1:9876/#pair=x",
+		httpsBrowser: []string{"https://mewla.example.com/#pair=x"},
+	})
 
 	rendered := output.String()
-	if !strings.Contains(rendered, "Paste this link into Settings -> Pair Server:") {
-		t.Fatalf("expected pair instruction, got %q", rendered)
-	}
-	if !strings.Contains(rendered, "mewla://settings?p=compact-payload") {
-		t.Fatalf("expected connect link, got %q", rendered)
+	for _, want := range []string{
+		"Phone — in Mewla, Settings → Pair a computer, scan:",
+		"or paste:  mewla://settings?p=compact-payload",
+		"Address:   https://mewla.example.com",
+		"Browser on this computer:  http://127.0.0.1:9876/#pair=x",
+		"Browser anywhere:          https://mewla.example.com/#pair=x",
+		"mewla devices revoke -id DEVICE_ID",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("pairing output missing %q: %q", want, rendered)
+		}
 	}
 }
 
@@ -265,17 +376,30 @@ func TestPairConfigAllowsNoEndpointOnlyForConfiguredLinkPath(t *testing.T) {
 	}
 }
 
-func TestPairCommandWithoutEndpointOrLinkConfigFailsHonestly(t *testing.T) {
+func TestPairCommandWithoutAnyAddressFailsHonestly(t *testing.T) {
 	stateDir := t.TempDir()
 	var output bytes.Buffer
 	err := runPairCommand([]string{"-state-dir", stateDir}, &output)
-	if err == nil ||
-		!strings.Contains(err.Error(), "Mewla Link is not configured") ||
-		!strings.Contains(err.Error(), "mewla pair <endpoint>") {
-		t.Fatalf("unexpected no-Link pair error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "this computer has no address yet") {
+		t.Fatalf("unexpected no-address pair error: %v", err)
 	}
 	if strings.Contains(output.String(), "mewla://") {
-		t.Fatalf("no-Link command printed an unusable pairing link: %q", output.String())
+		t.Fatalf("no-address command printed an unusable pairing link: %q", output.String())
+	}
+}
+
+func TestUnknownCommandIsNotStartedAsTheDaemon(t *testing.T) {
+	for _, removed := range []string{"web", "frobnicate"} {
+		err := run([]string{removed}, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "unknown command") || !strings.Contains(err.Error(), "mewla --help") {
+			t.Fatalf("run(%s) = %v", removed, err)
+		}
+	}
+}
+
+func TestRemovedWebOriginFlagIsRejected(t *testing.T) {
+	if _, err := parseDaemonConfig([]string{"-web-origin", "https://mewla.example.com"}, io.Discard); err == nil {
+		t.Fatal("daemon accepted removed -web-origin flag")
 	}
 }
 
@@ -369,8 +493,11 @@ func TestTopLevelHelpIncludesWorkerAndBrainCommands(t *testing.T) {
 	}
 	rendered := output.String()
 	for _, want := range []string{
-		"worker     List, spawn, inspect, message, progress, and close Mewla Workers",
-		"brain      Inspect Brain workspace and host executor configuration",
+		"worker       List, spawn, inspect, message, progress, and close Mewla Workers",
+		"brain        Inspect Brain workspace and host executor configuration",
+		"pair      Show a one-time QR code and links to pair a new phone or browser",
+		"address   List, add or remove the addresses phones and browsers use",
+		"-addr host:port       listen on host:port",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("top-level help missing %q:\n%s", want, rendered)
@@ -744,8 +871,11 @@ func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := output.String()
-	if !strings.Contains(text, "https://mewla.example/#pair=") || !strings.Contains(text, "Scan on your phone") || !strings.Contains(text, "█") {
-		t.Fatal("fresh startup must print HTTPS link and QR")
+	if !strings.Contains(text, "First device: pair a phone or browser.") ||
+		!strings.Contains(text, "Address:   https://mewla.example") ||
+		!strings.Contains(text, "https://mewla.example/#pair=") ||
+		!strings.Contains(text, "█") {
+		t.Fatalf("fresh startup must print the phone QR and browser links: %q", text)
 	}
 }
 
@@ -786,5 +916,29 @@ func TestBrainObjectiveCLISendsControlRequests(t *testing.T) {
 	var stderr bytes.Buffer
 	if err := runBrainObjective([]string{"set"}, &stderr); err == nil {
 		t.Fatal("objective set without a title was accepted")
+	}
+}
+
+func TestTailscaleOnlyListenIsOfferedToPhones(t *testing.T) {
+	book, err := addressbook.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	detected := []privateNetworkAddress{
+		{label: "Same Wi-Fi/LAN", ip: net.ParseIP("192.168.1.42").To4()},
+		{label: "Tailscale", ip: net.ParseIP("100.92.174.90").To4()},
+	}
+	for _, listen := range []string{"100.92.174.90:9876", "0.0.0.0:9876"} {
+		if err := book.ReplaceDiscovered(startupAddresses(listen, detected)); err != nil {
+			t.Fatal(err)
+		}
+		entries, err := book.List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ranked := rankedPhoneAddresses(entries)
+		if len(ranked) == 0 || ranked[0].URL != "http://100.92.174.90:9876" {
+			t.Fatalf("listen %s: phone addresses = %v", listen, ranked)
+		}
 	}
 }

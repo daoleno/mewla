@@ -336,7 +336,7 @@ func TestNextStepsKeepPrivateAndHTTPSRoutesDistinct(t *testing.T) {
 		"mewla --lan",
 		"direct Tailnet",
 		"start Mewla with mewla serve, expose the full loopback origin",
-		"mewla pair -state-dir /tmp/mewla-state https://your-mewla-host.example",
+		"mewla address add https://<your-host>, then mewla pair -state-dir /tmp/mewla-state",
 	} {
 		if !strings.Contains(steps, want) {
 			t.Fatalf("next steps missing %q:\n%s", want, steps)

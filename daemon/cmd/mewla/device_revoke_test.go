@@ -182,7 +182,7 @@ func TestPairCLIUsesOnlineControlOwnerWithoutSecondManager(t *testing.T) {
 	); err != nil {
 		t.Fatalf("online pair through live owner: %v", err)
 	}
-	if !strings.Contains(output.String(), manager.DaemonID()) ||
+	if !strings.Contains(output.String(), "Pair a new phone or browser.") ||
 		!strings.Contains(output.String(), "mewla://settings?") {
 		t.Fatalf("online pairing output=%q", output.String())
 	}
@@ -243,7 +243,7 @@ func TestPairCLILocksOfflineOwnerBeforeManagerConstruction(t *testing.T) {
 	); err != nil {
 		t.Fatalf("offline pair: %v", err)
 	}
-	if !strings.Contains(output.String(), "Generated a fresh pairing link") ||
+	if !strings.Contains(output.String(), "Pair a new phone or browser.") ||
 		!strings.Contains(output.String(), "mewla://settings?") {
 		t.Fatalf("offline pairing output=%q", output.String())
 	}
