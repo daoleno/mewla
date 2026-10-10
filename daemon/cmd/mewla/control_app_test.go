@@ -340,12 +340,7 @@ func (w *fakeControlWatcher) SendInputWhenReady(sessionID, _ string, text string
 	return w.SendInput(sessionID, text)
 }
 
-func (w *fakeControlWatcher) SubmitInputWhenReady(sessionID, _ string, payload string) error {
-	w.submitted = append(w.submitted, fakeControlSend{id: sessionID, text: payload})
-	return w.SendInput(sessionID, payload)
-}
-
-func (w *fakeControlWatcher) SubmitInput(sessionID, payload string) error {
+func (w *fakeControlWatcher) submitInput(sessionID, payload string) error {
 	w.submitted = append(w.submitted, fakeControlSend{id: sessionID, text: payload})
 	return w.SendInput(sessionID, payload)
 }
@@ -354,7 +349,7 @@ func (w *fakeControlWatcher) SubmitDelegatedInput(
 	sessionID, payload, turnID string,
 	_ time.Time,
 ) (watcher.InputResult, error) {
-	err := w.SubmitInput(sessionID, payload)
+	err := w.submitInput(sessionID, payload)
 	resultTurnID := turnID
 	if w.delegatedResultID != "" {
 		resultTurnID = w.delegatedResultID
@@ -385,7 +380,7 @@ func (w *fakeControlWatcher) SubmitDelegatedInputWhenReady(
 			result := watcher.InputResult{Outcome: watcher.InputAmbiguous, Receipt: turnID, TurnID: turnID}
 			return result, &watcher.InputSubmissionError{Result: result, Cause: errors.New("pending submission was not freshly prepared")}
 		}
-		if err := w.SubmitInputWhenReady(sessionID, "", payload); err != nil {
+		if err := w.submitInput(sessionID, payload); err != nil {
 			outcome := watcher.InputOutcomeFromError(err)
 			if outcome == watcher.InputNotSubmitted {
 				if _, abortErr := w.turnStore.AbortInputAdmission(sessionID, turnID, turnID, pending.PayloadSHA256); abortErr != nil {
@@ -410,7 +405,7 @@ func (w *fakeControlWatcher) SubmitDelegatedInputWhenReady(
 		}
 		return watcher.InputResult{Outcome: watcher.InputAccepted, Receipt: turnID, TurnID: turnID}, nil
 	}
-	err := w.SubmitInputWhenReady(sessionID, "", payload)
+	err := w.submitInput(sessionID, payload)
 	resultTurnID := turnID
 	if w.delegatedResultID != "" {
 		resultTurnID = w.delegatedResultID
@@ -466,7 +461,7 @@ func (w *fakeControlWatcher) SubmitDelegatedWorkInput(
 		}
 		return result, &watcher.InputSubmissionError{Result: result, Cause: err}
 	}
-	if err := w.SubmitInput(sessionID, payload); err != nil {
+	if err := w.submitInput(sessionID, payload); err != nil {
 		result := watcher.InputResult{Outcome: watcher.InputOutcomeFromError(err), Receipt: turnID, TurnID: turnID}
 		return result, &watcher.InputSubmissionError{Result: result, Cause: err}
 	}
@@ -506,7 +501,7 @@ func (w *fakeControlWatcher) SubmitBrainHostInput(
 			return watcher.InputResult{Outcome: watcher.InputNotSubmitted, Receipt: providerTurnID, TurnID: providerTurnID},
 				errors.New("Host submission was not freshly prepared")
 		}
-		if err := w.SubmitInput(sessionID, payload); err != nil {
+		if err := w.submitInput(sessionID, payload); err != nil {
 			return watcher.InputResult{Outcome: watcher.InputOutcomeFromError(err), Receipt: providerTurnID, TurnID: providerTurnID}, err
 		}
 		resolvedAt := acceptedAt.Add(time.Millisecond).UTC()
@@ -524,7 +519,7 @@ func (w *fakeControlWatcher) SubmitBrainHostInput(
 		}
 		return watcher.InputResult{Outcome: watcher.InputAccepted, Receipt: providerTurnID, TurnID: resolved.ResolvedTurnID}, nil
 	}
-	err := w.SubmitInput(sessionID, payload)
+	err := w.submitInput(sessionID, payload)
 	return watcher.InputResult{
 		Outcome: watcher.InputOutcomeFromError(err), Receipt: providerTurnID, TurnID: providerTurnID,
 	}, err

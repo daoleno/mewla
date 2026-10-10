@@ -3037,24 +3037,6 @@ func (w *Watcher) sendInputWhenReadyAttempt(
 	})
 }
 
-// SubmitInputWhenReady submits payload as a structured action. Unlike the
-// legacy terminal-text boundary, payload never contains or loses a transport
-// delimiter; caller-owned final line endings remain payload bytes.
-func (w *Watcher) SubmitInputWhenReady(sessionID, command, payload string) error {
-	resolver := w.targetForSession
-	identity, known := resolveTargetIdentityWhenReady(resolver, sessionID, command)
-	if !known {
-		return definitelyNotSubmitted("", fmt.Errorf("target provider could not be proven"))
-	}
-	if !w.waitForInputReadyGuarded(w.socketPathFor(sessionID), sessionID, identity.Command, inputReadyTimeout(identity.Command), func() error {
-		return guardTargetIdentity(resolver, sessionID, identity)
-	}) && needsInputReadinessWait(identity.Command, "") {
-		return workerInputNotReady(identity.Command)
-	}
-	_, err := w.sessionInputOwner().submit(sessionID, identity, resolver, identity.Command, payload, "")
-	return err
-}
-
 // SubmitDelegatedInputWhenReady submits an initial delegated turn and durably
 // binds its identity to the same Session input boundary.
 func (w *Watcher) SubmitDelegatedInputWhenReady(
@@ -3139,24 +3121,6 @@ func (w *Watcher) submitDelegatedInputWhenReadyAttempt(
 	)
 	_, _, _ = w.ledgerTurnAuthoritative(sessionID, time.Now().UTC())
 	return result, err
-}
-
-// SubmitInput submits one exact payload without consulting rendered provider
-// state. It is the ordinary Chat/follow-up boundary after initial launch.
-func (w *Watcher) SubmitInput(sessionID, payload string) error {
-	identity, known := w.targetForSession(sessionID)
-	if !known {
-		return definitelyNotSubmitted("", fmt.Errorf("target provider could not be proven"))
-	}
-	_, err := w.sessionInputOwner().submit(
-		sessionID,
-		identity,
-		w.targetForSession,
-		identity.Command,
-		payload,
-		"",
-	)
-	return err
 }
 
 // SubmitDelegatedInput submits a follow-up delegated turn through the same
