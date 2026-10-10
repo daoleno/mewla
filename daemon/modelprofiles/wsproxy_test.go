@@ -222,6 +222,12 @@ func TestGatewayWebSocketInjectsStoredCredential(t *testing.T) {
 		t.Fatalf("gateway ws handshake status = %d", status)
 	}
 	_ = client.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create","model":"m"}`))
+	// The upstream handshake completes asynchronously; its first forwarded
+	// frame proves the headers have been recorded.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && upstream.frameCount() < 1 {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if got := upstream.authHeader(); got != "Bearer sk-ws-secret-xyz" {
 		t.Fatalf("upstream ws Authorization = %q, want stored secret", got)
 	}
