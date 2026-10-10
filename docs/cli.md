@@ -10,9 +10,8 @@ flags for that command.
 
 ```sh
 mewla                         # start on 127.0.0.1:9876 (same as mewla serve)
-mewla --lan                   # listen on every IPv4 interface, for a trusted network
-mewla -addr "$(tailscale ip -4):9876"   # listen on one address, here your Tailscale IP
-mewla -web-origin https://mewla.example.com   # serve the web UI behind your HTTPS proxy
+mewla --lan                   # also listen on Wi-Fi/LAN and Tailscale, for a trusted network
+mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Tailscale IP
 mewla doctor [--json]         # is this machine ready? tmux, state, port, agents
 mewla setup                   # guided first run: Brain's agent and the safe profile
 mewla update [--check]        # verify and install the latest release
@@ -25,15 +24,15 @@ value to every command that should use it.
 ## Pair and manage devices
 
 ```sh
-mewla pair [https://origin]   # a fresh one-time pairing link and QR code
-mewla web [-no-open]          # open the web UI on this computer, paired as a new browser
+mewla pair [address]          # one-time code: phone QR and link, plus browser links
+mewla address list [--json]   # every address phones and browsers can use
+mewla address add <https-url> # an HTTPS tunnel or proxy in front of this computer
+mewla address remove <address>
 mewla devices list [--json]
 mewla devices pending         # browsers waiting for approval
 mewla devices approve -id <id> -number <shown-number>
-mewla devices deny -id <id>
+mewla devices deny -id <id> -number <shown-number>
 mewla devices revoke -id <device-id>
-mewla address add|remove <https-url>   # addresses the app may use to reach this daemon
-mewla address list [--json]
 ```
 
 See [Connect and pair](connect-and-pair.md).

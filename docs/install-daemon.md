@@ -136,7 +136,7 @@ To use another state directory, pass the same `-state-dir` to every command:
 
 ```sh
 mewla -state-dir /path/to/state
-mewla pair -state-dir /path/to/state https://mewla.example.com
+mewla pair -state-dir /path/to/state
 ```
 
 ## Install the app
@@ -193,7 +193,7 @@ daemon) and camera access (to scan pairing codes).
 ### Web UI
 
 The daemon also serves the app as a web page for a browser on the same
-computer or behind HTTPS. See [Pair a browser](connect-and-pair.md#pair-a-browser).
+computer or behind HTTPS. See [In a browser](connect-and-pair.md#in-a-browser).
 
 ## Build the daemon from source
 

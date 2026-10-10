@@ -34,8 +34,8 @@ devices you trust with a terminal on that computer.**
 - An HTTPS tunnel or reverse proxy makes the daemon reachable from the
   internet according to that service's settings. `/health` answers without
   authentication; every other route needs a pairing code or a device signature.
-- The web UI is served only to the same computer, or on HTTPS origins you allow
-  with `-web-origin`. Loading the page grants nothing; the browser must still
+- The web UI is served only to the same computer, or at the HTTPS addresses in
+  `mewla address list`. Loading the page grants nothing; the browser must still
   pair.
 
 See [Connect and pair](connect-and-pair.md) for each route.

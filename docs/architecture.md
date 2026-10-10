@@ -42,9 +42,9 @@ the exact same daemon HTTP handler without Mewla Link. The daemon opens no new
 public listener for Link.
 
 The same handler also serves the app's web export (`daemon/webui`) to loopback
-and to HTTPS origins allowed with `-web-origin`. A browser pairs as one more
-device and uses the same signed requests; see
-[Pair a browser](connect-and-pair.md#pair-a-browser).
+and to the HTTPS addresses in the daemon's address book (`mewla address`). A
+browser pairs as one more device and uses the same signed requests; see
+[In a browser](connect-and-pair.md#in-a-browser).
 
 ## Durable invariants
 
@@ -178,14 +178,15 @@ have it:
 
 ### Pairing V1 — preserved
 
-`mewla pair <origin>` remains the existing compact binary V1 payload. It includes
+`mewla pair` without Link, or `mewla pair <address>`, emits the compact binary V1
+payload for the chosen address (never loopback when chosen automatically). It includes
 the full phone-reachable `/ws` URL, daemon public key, and one-time enrollment
 token. HTTP(S) is normalized to WS(S); the app derives the other root routes.
 This is the contract for LAN, Tailscale, Cloudflare Tunnel, and reverse proxies.
 
 ### Pairing V2 — Mewla Link
 
-When `link.json` exists, `mewla pair` with no endpoint requests a short-lived
+When `link.json` exists, `mewla pair` with no address requests a short-lived
 relay admission and emits a JSON V2 payload inside URL-safe base64. It includes:
 
 - daemon ID and public key

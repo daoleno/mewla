@@ -72,7 +72,7 @@ mewla --lan
    [Releases](https://github.com/daoleno/mewla/releases), or
    [see iOS TestFlight status and source builds](docs/install-daemon.md#ios).
 4. Scan the QR code. Open **Sessions** to start an agent, or **Brain** to give
-   it a goal.
+   it a goal. For later phones and browsers, run `mewla pair`.
 
 Away from home, use Tailscale or an HTTPS tunnel instead of `--lan`:
 [Connect and pair](docs/connect-and-pair.md). The full path is in
