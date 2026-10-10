@@ -91,12 +91,12 @@ func delegatedTurnIdentity(identity targetProcessIdentity) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
-// providerFactSourceID derives the stable provider source identity for the
+// ProviderFactSourceID derives the stable provider source identity for the
 // frozen deterministic FactID formula (C.3.1): the adapter's native durable
 // event/message identity plus its monotone cursor. No wall-clock observation
 // time and no per-run UUID appear, so restart re-read and reordered replay
 // dedupe identically.
-func providerFactSourceID(sessionID string, observation ProviderActivityObservation) string {
+func ProviderFactSourceID(sessionID string, observation ProviderActivityObservation) string {
 	return fmt.Sprintf(
 		"provider\x00%s\x00%s\x00%s\x00%d",
 		strings.TrimSpace(sessionID),
@@ -106,7 +106,7 @@ func providerFactSourceID(sessionID string, observation ProviderActivityObservat
 	)
 }
 
-func admissionFromObservation(observation ProviderActivityObservation) TurnAdmission {
+func AdmissionFromObservation(observation ProviderActivityObservation) TurnAdmission {
 	admissionAt := observation.AdmissionAt
 	if admissionAt.IsZero() {
 		// Adapters without a dedicated admission timestamp anchor the window

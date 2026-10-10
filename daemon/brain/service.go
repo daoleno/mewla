@@ -890,33 +890,14 @@ func (s *Service) providerTerminalFact(
 		TurnID:     turnID,
 		Class:      watcher.EvidenceProvider,
 		Kind:       kind,
-		SourceID:   providerFactSourceID(sessionID, observation),
+		SourceID:   watcher.ProviderFactSourceID(sessionID, observation),
 		Cursor:     observation.AdmissionCursor,
-		Admission:  admissionFromObservation(observation),
+		Admission:  watcher.AdmissionFromObservation(observation),
 		ActivityID: strings.TrimSpace(observation.ID),
 		StartedAt:  observation.StartedAt,
 		SettledAt:  observation.SettledAt,
 		At:         s.nowUTC(),
 		Summary:    "Delegated provider completed the turn",
-	}
-}
-
-func providerFactSourceID(sessionID string, observation watcher.ProviderActivityObservation) string {
-	return fmt.Sprintf("provider\x00%s\x00%s\x00%s\x00%d",
-		sessionID,
-		firstNonEmpty(observation.AdmissionStream, "stream"),
-		firstNonEmpty(observation.ID, observation.AdmissionID),
-		observation.AdmissionCursor,
-	)
-}
-
-func admissionFromObservation(observation watcher.ProviderActivityObservation) watcher.TurnAdmission {
-	return watcher.TurnAdmission{
-		Stream: strings.TrimSpace(observation.AdmissionStream),
-		ID:     strings.TrimSpace(observation.AdmissionID),
-		Cursor: observation.AdmissionCursor,
-		SHA256: strings.TrimSpace(observation.InputSHA256),
-		At:     observation.AdmissionAt.UTC(),
 	}
 }
 
@@ -1908,8 +1889,8 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 					snapshot, _, applyErr := s.store.ApplyTurnFact(watcher.TurnFact{
 						SessionID: item.AttemptSessionID, TurnID: turn.TurnID,
 						Class: watcher.EvidenceProvider, Kind: "running",
-						SourceID: providerFactSourceID(item.AttemptSessionID, observation),
-						Cursor:   observation.AdmissionCursor, Admission: admissionFromObservation(observation),
+						SourceID: watcher.ProviderFactSourceID(item.AttemptSessionID, observation),
+						Cursor:   observation.AdmissionCursor, Admission: watcher.AdmissionFromObservation(observation),
 						ActivityID: strings.TrimSpace(observation.ID), StartedAt: observation.StartedAt,
 						At: now, Summary: "Delegated turn running",
 					})
@@ -1951,7 +1932,7 @@ func providerObservationOwnsTurn(turn watcher.TurnSnapshot, observation watcher.
 	if strings.TrimSpace(turn.ActivityID) != "" && activityID == strings.TrimSpace(turn.ActivityID) {
 		return true
 	}
-	admission := admissionFromObservation(observation)
+	admission := watcher.AdmissionFromObservation(observation)
 	if turn.HasAdmission && !admission.Empty() && admission.Stream == turn.Admission.Stream &&
 		admission.ID != "" && admission.Cursor >= turn.Admission.Cursor &&
 		(strings.TrimSpace(turn.Admission.SHA256) == "" || turn.Admission.SHA256 == admission.SHA256) {

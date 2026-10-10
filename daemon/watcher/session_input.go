@@ -1292,7 +1292,7 @@ func providerObservationCanBindTurn(
 	if recorded := strings.TrimSpace(turn.ActivityID); recorded != "" {
 		return activityID == recorded
 	}
-	admission := admissionFromObservation(provider)
+	admission := AdmissionFromObservation(provider)
 	if !turn.Admission.Empty() {
 		return admission.Stream == turn.Admission.Stream &&
 			strings.TrimSpace(admission.ID) != "" &&
