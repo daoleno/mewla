@@ -27,12 +27,13 @@ network, and says what to fix.
    `https://mewla.example.com/health`. If it does not load, the problem is the
    network, not Mewla.
 2. On the same Wi-Fi, check the computer's firewall and whether the network
-   isolates clients from each other. Pair with the private address Mewla printed,
-   never `0.0.0.0`.
+   isolates clients from each other. Start with `mewla --lan`; `mewla address list`
+   shows the Wi-Fi/LAN address the phone should reach.
 3. Behind a tunnel or proxy, forward the whole origin with WebSocket upgrades,
    not only `/ws`. Path prefixes are not supported.
-4. Generate a fresh code with `mewla pair <origin>`; codes expire after 15
-   minutes and work once. Import it in **Settings > Pair a server**.
+4. Generate a fresh code with `mewla pair` (or `mewla pair <address>` for one
+   particular address); codes expire after 15 minutes and work once. Import it
+   in **Settings > Pair a computer**.
 5. With a custom `-state-dir`, pass the same value to `mewla` and `mewla pair`.
 
 ## It paired, but no Sessions appear or agents fail to start

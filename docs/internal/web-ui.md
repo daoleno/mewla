@@ -8,11 +8,12 @@ paired phone and you can revoke it the same way.
 ## Open it on this computer
 
 ```bash
-mewla web
+mewla pair
 ```
 
-This asks the running daemon for a one-time pairing token. It then opens
-`http://127.0.0.1:9876/#pair=...` in your default browser. The page asks **Pair
+This asks the running daemon for a one-time pairing token and prints, among the
+phone QR, a **Browser on this computer** link,
+`http://127.0.0.1:9876/#pair=...`. Open it in your browser. The page asks **Pair
 this browser?**; confirm **Pair and grant access** and the browser lands in
 Settings, connected. Later visits to `http://127.0.0.1:9876/` reuse that
 pairing.
@@ -22,10 +23,9 @@ paste it into a new tab. Without `?serverId=` it means the current server. A
 link to a closed or unknown Session, or to another server, opens the Session
 list.
 
-- `mewla web -no-open` prints the link instead of opening it. The link works once
-  and expires after 15 minutes. Do not share or paste it anywhere else.
-- `mewla web -origin http://localhost:9876` uses a different loopback address.
-  The origin must be the address the browser loads the page from.
+- The link works once and expires after 15 minutes. Do not share or paste it
+  anywhere else. `mewla pair` never opens a browser itself.
+- The loopback link uses the port the daemon listens on (`-addr`).
 
 The pairing link is carried in the URL fragment. Browsers never send the
 fragment to the server, and the app removes it from the address bar once it has
@@ -35,7 +35,7 @@ You can also paste a `mewla://` pairing link in Settings. A browser pairs only
 with the daemon that serves the page. A link for the same daemon at another
 address, such as its tunnel hostname, pairs and connects through the page you
 are on. A link for a different daemon shows an error: open that daemon's own
-web UI or run `mewla web` on that computer.
+web UI or run `mewla pair` on that computer and open its browser link.
 
 ## Open it from another device
 
@@ -47,17 +47,18 @@ does not expose the web UI over plain HTTP.
 To use it remotely, put the daemon behind an HTTPS endpoint the browser trusts,
 such as Tailscale Serve, Cloudflare Tunnel, or a reverse proxy. The endpoint
 must forward the full origin (see [Connect and pair](../connect-and-pair.md)) and
-keep the original `Host` header. Then allow that exact origin:
+keep the original `Host` header. Then add that exact address:
 
 ```bash
-mewla -web-origin https://mewla.example.com
-# in another terminal, on the daemon host:
-mewla web -origin https://mewla.example.com -no-open
+mewla address add https://mewla.example.com
+mewla pair
 ```
 
-Open the printed link on the remote device. `-web-origin` accepts only `https`
-origins without a path, and you can repeat it. Every API call still requires a
-paired device signature. The flag only decides which hostnames may load the page.
+Open the printed **Browser anywhere** link on the remote device. The web UI is
+served at every `https` address in `mewla address list` (added by hand, or seen
+on a paired device's signed request), live, without a restart. Every API call
+still requires a paired device signature. The address book only decides which
+hostnames may load the page.
 
 ## Revoke a browser
 
@@ -75,7 +76,7 @@ mewla devices revoke -id <device-id>
 | -------------------------------- | ------------------------------------------------------- |
 | Brain, Sessions, Work, Settings  | Same as mobile                                          |
 | Terminal                         | xterm.js renderer with the same terminal protocol       |
-| Pairing                          | `mewla web` or paste a `mewla://` link; no QR camera scan   |
+| Pairing                          | `mewla pair` browser link or paste a `mewla://` link; no QR camera scan |
 | Mewla Link (relay with pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
 | Push notifications               | Unsupported                                             |
 | Mermaid diagrams                 | Shown as source                                         |

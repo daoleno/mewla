@@ -112,7 +112,8 @@ After it connects:
 MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' mewla pair
 ```
 
-If Link is not configured, use `mewla pair <origin>`; it remains Pairing V1.
+If Link is not configured, `mewla pair` uses the best address in
+`mewla address list` (or `mewla pair <address>`); it remains Pairing V1.
 
 ## Health, readiness, and metrics
 
