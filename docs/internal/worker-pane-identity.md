@@ -21,30 +21,11 @@ prologue derives `MEWLA_WORKER_ID` directly from `TMUX_PANE`. Tmux client startu
 started default server cannot publish it as global environment. Provider-internal
 tmux isolation and process-generation checks remain in place.
 
-## Existing Workers
+## Pre-pane Workers
 
-At daemon startup, before the control server, polling or Brain lifecycle engine
-starts, Mewla migrates legacy `session:window_id` references. It inventories exact
-window and pane IDs and matches recorded pane-generation evidence. A legacy
-window with no such evidence can migrate only if it has one pane. An ambiguous
-split stops startup with an explicit identity error; focus is never evidence.
-
-The private `state/worker_pane_aliases.json` journal commits the chosen pane
-before any tmux metadata or state document changes. Each state document is
-atomically replaced, and startup repeats the migration safely after an
-interruption. Lifecycle rows and events, presentation references, Host binding
-and activation, timeline session references, provider route bindings (including launch/history
-bindings), and Telegram reply/topic routes use the pane ID afterward. Telegram
-delivery checkpoints migrate with the routes to preserve message deduplication.
-Turn tokens, receipts, process/pane generations, provider transcript identities
-and message text are preserved. Existing running shells may continue reporting
-the old `MEWLA_WORKER_ID`; the control API accepts that saved alias only when the
-pinned pane still carries its exact legacy marker.
-
-Migration moves legacy ownership and receipt options off windows and removes
-Mewla context, private scratch and provider configuration-root variables from
-legacy Mewla-created session environments. It does not send input or relaunch
-running providers.
+Workers created before pane identity are not migrated. Their windows carry no
+pane ownership marker, so discovery ignores them, and the control API no longer
+translates an old `session:window_id` Worker ID to a pane.
 
 ## Verification
 
@@ -52,8 +33,8 @@ The isolated real-tmux regression creates a Worker, focuses a newly split user
 pane and submits through the real input owner. Only the Worker receives the
 payload. Removing it makes the next submission `not_submitted` and preserves
 the sibling. Additional scratch tests cover environment isolation, pane-local
-ownership, cleanup, migration with focus on a sibling, ambiguous migration,
-repeated store reopening with a running turn, and Terminal window linkage.
+ownership, cleanup, distinct Workers in one window, and Terminal window
+linkage.
 
 The same daemon contract serves Android and iOS. Terminal still presents the
 containing window for manual interaction; automatic Worker input always targets
