@@ -68,7 +68,7 @@ const SCHEMES: ThemeColorScheme[] = ["light", "dark"];
 describe("terminal palette on paper and ink", () => {
   for (const scheme of SCHEMES) {
     const palette = TerminalThemes[scheme];
-    const app = resolveTheme({ colorScheme: scheme, accentId: "ink" });
+    const app = resolveTheme({ colorScheme: scheme });
 
     test(`${scheme}: the grid sits on the app canvas with an ink cursor`, () => {
       expect(palette.background).toBe(app.colors.bgPrimary);

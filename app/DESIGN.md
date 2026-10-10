@@ -77,8 +77,8 @@ Brain lifecycles map onto the six states in `brainWorkLifecycleStatus`
 (Reviewing runs, Waiting and Cancelled are inert, Needs review warns, Done
 and Ready share the check).
 
-The old sage, ink, clay and stone accent picker is gone; any stored accent
-preference resolves to ink.
+Ink is the only chrome accent; there is no accent picker or stored accent
+preference.
 
 ## Navigation
 

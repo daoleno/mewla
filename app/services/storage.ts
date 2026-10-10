@@ -24,7 +24,6 @@ const KEYS = {
   workerAliases: "mewla:agent_aliases",
   interfaceRenderModes: "mewla:codex_render_modes",
   themePreference: "mewla:theme_preference",
-  accentPreference: "mewla:accent_preference",
   petPreference: "mewla:pet_preference",
 } as const;
 
@@ -285,16 +284,6 @@ export async function setThemePreference(
   preference: StoredThemePreference,
 ): Promise<void> {
   await AsyncStorage.setItem(KEYS.themePreference, preference);
-}
-
-export async function getAccentPreference(): Promise<string | null> {
-  const value = await AsyncStorage.getItem(KEYS.accentPreference);
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-export async function setAccentPreference(accentId: string): Promise<void> {
-  await AsyncStorage.setItem(KEYS.accentPreference, accentId);
 }
 
 export async function getPetPreference(): Promise<string | null> {

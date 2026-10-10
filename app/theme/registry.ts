@@ -2,7 +2,7 @@ import { classicDarkTheme } from './definitions/classicDark';
 import { classicLightTheme } from './definitions/classicLight';
 import type { ThemeColorScheme, ThemeDefinition } from './types';
 
-export const THEME_REGISTRY: readonly ThemeDefinition[] = [
+const THEME_REGISTRY: readonly ThemeDefinition[] = [
   classicDarkTheme,
   classicLightTheme,
 ] as const;
@@ -14,10 +14,4 @@ export const DEFAULT_THEME_IDS: Record<ThemeColorScheme, string> = {
 
 export function getThemeById(id: string): ThemeDefinition | undefined {
   return THEME_REGISTRY.find((theme) => theme.id === id);
-}
-
-export function listThemesForScheme(
-  scheme: ThemeColorScheme,
-): ThemeDefinition[] {
-  return THEME_REGISTRY.filter((theme) => theme.colorScheme === scheme);
 }
