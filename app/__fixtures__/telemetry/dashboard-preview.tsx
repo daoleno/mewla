@@ -12,8 +12,6 @@ import fixture from "./dashboard-v2.json";
 const telemetry = normalizeResourceTelemetry(fixture)!;
 function ResourcesPreview() {
   const [loaded] = useFonts({
-    "SourceHanSansSC-Regular": require("../../assets/fonts/SourceHanSansSC-Regular.otf"),
-    "SourceHanSansSC-Medium": require("../../assets/fonts/SourceHanSansSC-Medium.otf"),
     "MapleMono-CN-Regular": require("../../assets/fonts/MapleMono-CN-Regular.ttf"),
     "MapleMono-CN-SemiBold": require("../../assets/fonts/MapleMono-CN-SemiBold.ttf"),
   });

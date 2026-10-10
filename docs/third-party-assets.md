@@ -6,13 +6,22 @@ Inclusion does not imply endorsement. Prefer verifiable upstream license text ov
 
 | In-app file                   | Upstream                                                                      | Evidence                                                                                                                      | License                                        |
 | ----------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `SourceHanSansSC-Regular.otf` | [adobe-fonts/source-han-sans](https://github.com/adobe-fonts/source-han-sans) | Name table: Adobe copyright + SIL OFL 1.1 URL (`nameID` 0/13/14)                                                              | SIL OFL 1.1                                    |
-| `SourceHanSansSC-Medium.otf`  | same                                                                          | same                                                                                                                          | SIL OFL 1.1                                    |
-| `MapleMono-CN-Regular.ttf`    | [subframe7536/maple-font](https://github.com/subframe7536/maple-font)         | Name table: Maple Mono Project Authors + SIL OFL 1.1; upstream `OFL.txt`                                                      | SIL OFL 1.1                                    |
+| `MapleMono-CN-Regular.ttf`    | [subframe7536/maple-font](https://github.com/subframe7536/maple-font)         | v7.900, subset to the common Han set (see below). Name table: Maple Mono Project Authors + SIL OFL 1.1; upstream `OFL.txt`                                                      | SIL OFL 1.1                                    |
 | `MapleMono-CN-SemiBold.ttf`   | same                                                                          | same                                                                                                                          | SIL OFL 1.1                                    |
 | `web/MapleMono-Subset-Regular.ttf`, `web/MapleMono-Subset-SemiBold.ttf` | Subsets of the two Maple Mono files above, for the web UI terminal | Name table kept, including the OFL notice (`nameID` 0/13/14); no Reserved Font Name is declared | SIL OFL 1.1 |
 | `Inter-Regular.ttf`, `Inter-Medium.ttf`, `Inter-SemiBold.ttf` | [rsms/inter](https://github.com/rsms/inter), static instances served by Google Fonts (v20) | Name table: "Copyright 2016 The Inter Project Authors" + OFL URL (`nameID` 0/14) | SIL OFL 1.1 |
 | `BricolageGrotesque-SemiBold.ttf`, `BricolageGrotesque-ExtraBold.ttf` | [ateliertriay/bricolage](https://github.com/ateliertriay/bricolage), static instances served by Google Fonts (v9) | Name table: "Copyright 2022 The Bricolage Grotesque Project Authors" + OFL URL (`nameID` 0/14) | SIL OFL 1.1 |
+
+The native Maple Mono CN files keep every upstream glyph except Han
+ideographs outside GB2312 and Big5 level 1 (10,591 of 22,731 codepoints, about
+7.7 MB each instead of 18.6 MB). Name table, metrics, hinting and layout
+features are unchanged, and no Reserved Font Name is declared. To regenerate
+them from the upstream v7.900 TTFs (SHA-256 pinned in the script; git history
+before the subset holds the same files), run from the repository root:
+
+```bash
+python3 scripts/subset-maple-mono-cn.py <upstream-dir> app/assets/fonts
+```
 
 The web subsets keep only Latin, punctuation, arrows, technical symbols, box
 drawing, shapes, dingbats, braille, and Powerline glyphs, with no layout
