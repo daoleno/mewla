@@ -193,7 +193,7 @@ export function serverAddressForDisplay(storedURL: string): string {
 /** What is wrong with an address the user typed, or null when it works. */
 export function serverAddressProblem(rawValue: string): string | null {
   const trimmed = rawValue.trim();
-  if (!trimmed) return "Enter the server address.";
+  if (!trimmed) return "Enter the computer's address.";
   if (normalizeServerURL(trimmed)) return null;
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(trimmed)?.[1]?.toLowerCase();
   if (!scheme || !trimmed.includes("//")) {

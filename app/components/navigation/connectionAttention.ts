@@ -36,7 +36,7 @@ export function connectionAttention({
   if (!hasServer) {
     return {
       badge: null,
-      detail: "Pair a server in Settings",
+      detail: "Pair a computer in Settings",
       menuLabel: "Open navigation drawer, no server",
     };
   }

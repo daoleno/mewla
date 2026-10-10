@@ -1,5 +1,5 @@
 export function sessionEmptyState(hasServer: boolean, connection: string | undefined, filtered = false) {
-  if (!hasServer) return { title: "Connect your computer", icon: "server", action: "pair", label: "Pair a server", busy: false } as const;
+  if (!hasServer) return { title: "Connect your computer", icon: "server", action: "pair", label: "Pair a computer", busy: false } as const;
   if (connection === "connecting") return { title: "Connecting", icon: "server", action: null, label: "", busy: true } as const;
   if (connection !== "connected") return { title: "Server offline", icon: "cloud-offline", action: "retry", label: "Retry connection", busy: false } as const;
   if (filtered) return { title: "No matches", icon: "search", action: "clear", label: "Clear filters", busy: false } as const;

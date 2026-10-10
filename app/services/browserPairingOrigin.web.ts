@@ -39,7 +39,7 @@ export async function resolveBrowserPairingURL(
   throw new Error(
     `This link pairs with ${linkHost}, a different Mewla daemon from the one serving this page. ` +
       `A browser can only pair with the daemon that serves it. Open ${linkOrigin}/ if that daemon serves the web UI, ` +
-      `or run \`mewla web\` on that computer.`,
+      `or run \`mewla pair\` on that computer and open its browser link.`,
   );
 }
 

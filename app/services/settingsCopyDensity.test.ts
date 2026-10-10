@@ -29,8 +29,8 @@ describe("Settings copy density", () => {
     for (const necessaryCopy of [
       "Camera permission required",
       "Allow camera access to scan a mewla pairing QR code.",
-      "Scan the one-time QR from mewla pair, or paste its pairing link.",
-      'accessibilityLabel="Server address"',
+      "On the computer, run mewla pair. Scan its QR code or paste the link it prints.",
+      'accessibilityLabel="Address"',
       "Telegram cloud messages are not deleted.",
       'accessibilityLabel="Appearance theme"',
       "<SegmentedControl",

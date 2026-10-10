@@ -31,7 +31,7 @@ export function ResourcesView({ telemetry, loading, error, connected, hasServer,
 
   if (!telemetry) {
     const state = !hasServer
-      ? { title: "No current server", detail: "Pair a server in Settings to see its resources.", busy: false }
+      ? { title: "No current server", detail: "Pair a computer in Settings to see its resources.", busy: false }
       : loading
         ? { title: connected ? "Reading the machine" : "Connecting to server", detail: null, busy: true }
         : !connected

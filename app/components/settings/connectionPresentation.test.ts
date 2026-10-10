@@ -29,11 +29,11 @@ describe("Settings connection information architecture", () => {
     expect(panelSource).toContain('action("Retry"');
     expect(telegram).toContain("if (!ownerActive.current) return;");
   });
-  test("Servers, Channels and Agents have separate entry points", () => {
-    for (const section of ["Servers", "Channels", "Agents"]) {
+  test("Computers, Channels and Agents have separate entry points", () => {
+    for (const section of ["Computers", "Channels", "Agents"]) {
       expect(settingsSource).toMatch(new RegExp(`>\\s*${section}\\s*<`));
     }
-    expect(settingsSource).toContain('accessibilityLabel="Pair a server"');
+    expect(settingsSource).toContain('accessibilityLabel="Pair a computer"');
     expect(settingsSource).not.toContain("CONNECTION_KIND_OPTIONS");
     expect(settingsSource).not.toContain("Add Connection");
   });
@@ -175,7 +175,7 @@ describe("Settings connection information architecture", () => {
   });
 
   test("connection controls expose roles, state, and disabled state accessibly", () => {
-    expect(settingsSource).toContain('accessibilityLabel="Pair a server"');
+    expect(settingsSource).toContain('accessibilityLabel="Pair a computer"');
     expect(settingsSource).toContain('accessibilityHint="Open Telegram details and actions"');
     expect(panelSource).toContain('accessibilityLabel="Telegram bot token"');
     expect(panelSource).toContain('accessibilityState={{ disabled: unavailable, busy }}');

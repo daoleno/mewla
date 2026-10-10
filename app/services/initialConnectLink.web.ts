@@ -1,7 +1,7 @@
 const PAIR_FRAGMENT_KEY = "pair";
 
 /**
- * `mewla web` opens `<origin>/#pair=<mewla pairing link>`. The fragment never
+ * `mewla pair` prints `<origin>/#pair=<mewla pairing link>` for browsers. The fragment never
  * reaches the daemon or proxies; it is read once and removed from history.
  */
 export async function readInitialConnectLink(): Promise<string | null> {
