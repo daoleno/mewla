@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Iterable
 
 
 BETA_VERSION_RE = re.compile(
@@ -38,6 +37,21 @@ Canonical release notes live under [`docs/releases/`](docs/releases/). This file
 ## Releases
 
 """
+REPOSITORY_URL = "https://github.com/daoleno/mewla"
+INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/daoleno/mewla/main/install.sh"
+INSTALL_DOCS_URL = "https://daoleno.github.io/mewla/docs/install/"
+USER_NOTE_SECTIONS = ("New", "Fixed")
+USER_NOTES_SHAPE = """<one plain sentence: what this release is about, for a user>
+
+## New
+
+- <user-facing change, in user language>
+
+## Fixed
+
+- <user-facing fix>
+
+Keep at least one of ## New and ## Fixed; drop the one with nothing in it."""
 
 
 class PrepareError(RuntimeError):
@@ -211,89 +225,66 @@ def validate_changelog(
             raise PrepareError(f"CHANGELOG.md points to missing canonical notes: {note}")
 
 
-def extract_note_facts(previous_notes: str, current_tag: str) -> dict[str, str]:
-    def capture(pattern: str, label: str, flags: int = 0) -> str:
-        matches = re.findall(pattern, previous_notes, flags)
-        if len(matches) != 1:
-            raise PrepareError(
-                f"current release notes must contain exactly one {label}; "
-                f"found {len(matches)}"
-            )
-        return matches[0].strip()
-
-    source_tag_lines = re.findall(
-        r"^- Source tag: `([^`]+)`$", previous_notes, re.MULTILINE
-    )
-    if source_tag_lines != [current_tag]:
-        raise PrepareError(
-            "current release notes must contain exactly one structured source-tag "
-            f"line for {current_tag}; got {source_tag_lines!r}"
-        )
-    return {
-        "install": capture(
-            r"## Install\n\n(.+?)\n\n## iOS Preview identity",
-            "Install section",
-            re.DOTALL,
-        ),
-        "ios_bundle": capture(r"^- Bundle: `([^`]+)`$", "iOS bundle", re.MULTILINE),
-        "android_abi": capture(r"^- ABI: `([^`]+)`$", "Android ABI", re.MULTILINE),
-        "certificate": capture(
-            r"^- Signing certificate SHA-256: `([^`]+)`$",
-            "Android certificate fingerprint",
-            re.MULTILINE,
-        ),
-    }
-
-
-def extract_preview_bundle(ios_identity_source: str) -> str:
-    preview_blocks = re.findall(
-        r"\bpreview:\s*Object\.freeze\(\{(.+?)\}\),",
-        ios_identity_source,
-        re.DOTALL,
-    )
-    if len(preview_blocks) != 1:
-        raise PrepareError(
-            "app/iosIdentity.js must contain exactly one Preview identity"
-        )
-    bundles = re.findall(
-        r'^\s*bundleIdentifier:\s*"([^"]+)",$',
-        preview_blocks[0],
+def extract_certificate(verifier_source: str) -> str:
+    matches = re.findall(
+        r'^EXPECTED_CERT_FP="([0-9A-F]{2}(?::[0-9A-F]{2}){31})"$',
+        verifier_source,
         re.MULTILINE,
     )
-    if len(bundles) != 1 or not bundles[0]:
+    if len(matches) != 1:
         raise PrepareError(
-            "app/iosIdentity.js Preview identity must contain exactly one bundleIdentifier"
+            "scripts/verify-release-identity.sh must contain exactly one "
+            f"EXPECTED_CERT_FP SHA-256 fingerprint; found {len(matches)}"
         )
-    return bundles[0]
+    return matches[0]
 
 
-def extract_release_android_abi(native_lock: dict) -> str:
-    try:
-        release_abi = native_lock["release_apk"]["react_native_architectures"]
-    except (KeyError, TypeError) as exc:
-        raise PrepareError(
-            "app/modules/terminal-vt/native.lock.json is missing "
-            f"release_apk.react_native_architectures: {exc}"
-        ) from exc
-    if not isinstance(release_abi, str) or not release_abi.strip():
-        raise PrepareError(
-            "app/modules/terminal-vt/native.lock.json "
-            "release_apk.react_native_architectures must be a non-empty string"
+def parse_user_notes(text: str, relative: str) -> tuple[str, dict[str, str]]:
+    """Split the human-written notes into a summary and New/Fixed bullets."""
+
+    def fail(problem: str) -> PrepareError:
+        return PrepareError(
+            f"{relative}: {problem}. Write it before dispatching the release:\n\n"
+            f"{USER_NOTES_SHAPE}"
         )
-    return release_abi
 
+    summary_lines: list[str] = []
+    sections: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in text.strip().splitlines():
+        if line.startswith("#"):
+            heading = line.strip()
+            name = heading.removeprefix("## ")
+            if heading != f"## {name}" or name not in USER_NOTE_SECTIONS:
+                raise fail(f"unexpected heading {heading!r}; use only ## New and ## Fixed")
+            if name in sections:
+                raise fail(f"duplicate ## {name} section")
+            current = sections[name] = []
+        elif current is None:
+            if line.lstrip().startswith(("- ", "* ")):
+                raise fail("put bullets under ## New or ## Fixed, not in the summary")
+            summary_lines.append(line)
+        elif line.strip():
+            continuation = line.startswith("  ") and bool(current)
+            if not (line.startswith("- ") or continuation):
+                raise fail(f"## sections may contain only '- ' bullets; got {line!r}")
+            current.append(line.rstrip())
 
-def markdown_subject(subject: str) -> str:
-    return subject.replace("\\", "\\\\").replace("`", "\\`")
-
-
-def release_install_text(install: str, version: str) -> str:
-    if "-beta." in version:
-        return install
-    return install.replace(
-        "The macOS binary is cross-built and should be treated as beta until it has completed broader real-device testing.",
-        "The macOS binary is cross-built; validate it on a real Apple Silicon host before operational use.",
-    )
+    summary = "\n".join(summary_lines).strip()
+    if not summary:
+        raise fail("missing the one-sentence summary before ## New / ## Fixed")
+    if "\n\n" in summary:
+        raise fail("the summary must be one short paragraph")
+    for name, bullets in sections.items():
+        if not bullets:
+            raise fail(f"## {name} has no bullets; remove it or add one")
+    if not sections:
+        raise fail("missing ## New or ## Fixed bullets")
+    return summary, {
+        name: "\n".join(sections[name])
+        for name in USER_NOTE_SECTIONS
+        if name in sections
+    }
 
 
 def build_release_notes(
@@ -301,53 +292,46 @@ def build_release_notes(
     next_version: str,
     next_tag: str,
     current_tag: str,
-    commits: Iterable[tuple[str, str]],
-    install: str,
-    ios_bundle: str,
-    ios_build: int,
-    android_package: str,
-    android_version_code: int,
-    android_abi: str,
+    user_notes: str,
+    user_notes_path: str,
     certificate: str,
-    reviewed_notes: str = "",
 ) -> str:
-    marketing_version = next_version.split("-beta.", 1)[0]
-    release_description = (
-        "This beta contains" if "-beta." in next_version else "This release contains"
+    summary, sections = parse_user_notes(user_notes, user_notes_path)
+    changes = "".join(
+        f"## {name}\n\n{bullets}\n\n" for name, bullets in sections.items()
     )
-    changes = "\n".join(
-        f"- {markdown_subject(subject)} (`{sha[:7]}`)" for sha, subject in commits
-    )
-    reviewed_section = f"{reviewed_notes}\n\n" if reviewed_notes else ""
-    return f"""# Mewla {next_tag}
+    return f"""# Mewla {next_version}
 
-{release_description} the reviewed changes on `main` since `{current_tag}`.
+{summary}
 
-{reviewed_section}## What changed
+{changes}## Get it
 
-{changes}
+- **Already installed?** Run `mewla update` on your computer, and install the new APK on Android.
+- **New here?** `curl -fsSL {INSTALL_SCRIPT_URL} | sh` picks the right file for you. See [Install]({INSTALL_DOCS_URL}).
+- **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`. Needs `tmux` (`brew install tmux`).
+- **Linux x64:** `mewla-linux-amd64.tar.gz`
+- **Linux ARM:** `mewla-linux-arm64.tar.gz`
+- **Android:** `mewla-android-arm64-{next_tag}.apk`. Android asks you to allow installs from unknown sources.
 
-## Install
+All changes: [{current_tag}...{next_tag}]({REPOSITORY_URL}/compare/{current_tag}...{next_tag})
 
-{install}
+<details markdown="1">
+<summary>Verify downloads</summary>
 
-## iOS Preview identity
+`mewla update` and the installer check downloads for you. To check one by hand against `SHA256SUMS`:
 
-- Bundle: `{ios_bundle}`
-- Marketing version: `{marketing_version}`
-- TestFlight build: `{ios_build}`
-- Source tag: `{next_tag}`
+```sh
+grep 'mewla-linux-amd64.tar.gz$' SHA256SUMS | sha256sum -c -        # Linux
+grep 'mewla-darwin-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -   # Mac
+```
 
-The iOS build number is tracked independently from Android because App Store Connect build history can be ahead.
+Android signing certificate SHA-256:
 
-## Android identity
+```text
+{certificate}
+```
 
-- Package: `{android_package}`
-- `versionCode`: `{android_version_code}`
-- ABI: `{android_abi}`
-- Signing certificate SHA-256: `{certificate}`
-
-Android may require permission to install from unknown sources or display a Play Protect warning. Obtainium can follow this repository's GitHub Releases. Mewla does not currently provide a Play Store package; iOS Preview distribution uses TestFlight.
+</details>
 """
 
 
@@ -422,39 +406,32 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     )
     next_version_code = android_version_code + 1
     next_ios_build = ios_build + 1
-    native_lock = read_json(root, "app/modules/terminal-vt/native.lock.json")
+
+    user_notes_relative = f"docs/releases/reviewed/{next_tag}.md"
+    if not (root / user_notes_relative).is_file():
+        raise PrepareError(
+            f"missing {user_notes_relative}. Commit the user-facing notes for "
+            f"{next_tag} before dispatching the release:\n\n{USER_NOTES_SHAPE}"
+        )
+    user_notes = read_text(root, user_notes_relative)
+    parse_user_notes(user_notes, user_notes_relative)
 
     sources = {
         relative: read_text(root, relative)
         for relative in (
             "app/app.base.json",
-            "app/iosIdentity.js",
             "app/ios-build.json",
             "daemon/cmd/mewla/version.go",
             "scripts/verify-release-identity.sh",
             "docs/install-daemon.md",
             "docs/ios-ci-release.md",
             "CHANGELOG.md",
-            f"docs/releases/{current_tag}.md",
         )
     }
     validate_changelog(root, sources["CHANGELOG.md"], current_version, next_tag)
-    note_facts = extract_note_facts(
-        sources[f"docs/releases/{current_tag}.md"], current_tag
+    certificate = extract_certificate(
+        sources["scripts/verify-release-identity.sh"]
     )
-    preview_bundle = extract_preview_bundle(sources["app/iosIdentity.js"])
-    if note_facts["ios_bundle"] != preview_bundle:
-        raise PrepareError(
-            "current release notes iOS Preview bundle does not match "
-            f"app/iosIdentity.js: {note_facts['ios_bundle']!r} != {preview_bundle!r}"
-        )
-    release_android_abi = extract_release_android_abi(native_lock)
-    if note_facts["android_abi"] != release_android_abi:
-        raise PrepareError(
-            "current release notes Android ABI does not match "
-            "app/modules/terminal-vt/native.lock.json: "
-            f"{note_facts['android_abi']!r} != {release_android_abi!r}"
-        )
 
     updates: dict[str, str] = {}
     updates["app/app.base.json"] = replace_literal(
@@ -540,19 +517,9 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         next_version=next_version,
         next_tag=next_tag,
         current_tag=current_tag,
-        commits=commits,
-        install=release_install_text(note_facts["install"], next_version),
-        ios_bundle=preview_bundle,
-        ios_build=next_ios_build,
-        android_package=android_package,
-        android_version_code=next_version_code,
-        android_abi=release_android_abi,
-        certificate=note_facts["certificate"],
-        reviewed_notes=(
-            read_text(root, f"docs/releases/reviewed/{next_tag}.md").strip()
-            if (root / f"docs/releases/reviewed/{next_tag}.md").is_file()
-            else ""
-        ),
+        user_notes=user_notes,
+        user_notes_path=user_notes_relative,
+        certificate=certificate,
     )
 
     originals = {
