@@ -47,6 +47,7 @@ type OwnerConfig struct {
 	RoutesPath    string
 	ListenerPath  string
 	DiscoveryPath string // secret-free TTL/LKG model id cache
+	ModelsDevURL  string // models.dev metadata feed; empty disables refresh
 	// ModelsObserved queues downstream metadata work without blocking discovery.
 	ModelsObserved func([]string)
 	Lookup         func(string) (string, bool)
@@ -147,6 +148,11 @@ type Owner struct {
 	// credentialSweepWarning records a best-effort orphan-sweep failure; the
 	// sweep is deterministic and retried on the next start.
 	credentialSweepWarning error
+
+	// backgroundCtx bounds advisory goroutines; Close cancels and joins them.
+	backgroundCtx    context.Context
+	cancelBackground context.CancelFunc
+	background       sync.WaitGroup
 }
 
 // SessionLaunchPlan is the secret-free result of resolving a profile for create.
@@ -307,7 +313,8 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 	if strings.TrimSpace(cfg.DiscoveryPath) != "" {
 		modelsDevPath = filepath.Join(filepath.Dir(cfg.DiscoveryPath), modelsDevCacheFile)
 	}
-	o.modelsDev = newModelsDevCatalog(modelsDevPath)
+	o.backgroundCtx, o.cancelBackground = context.WithCancel(context.Background())
+	o.modelsDev = newModelsDevCatalog(modelsDevPath, cfg.ModelsDevURL)
 	_ = o.modelsDev.load()
 	if err := o.recoverProviderSwitchJournal(); err != nil {
 		_ = o.Close()
@@ -319,8 +326,13 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		return nil, err
 	}
 	// Metadata enrichment is advisory and never part of startup or first request.
-	if o.modelsDev.stale() {
-		go func() { _ = o.modelsDev.refresh(context.Background()) }()
+	// Close cancels and joins it, so no refresh outlives the Owner.
+	if o.modelsDev.url != "" && o.modelsDev.stale() {
+		o.background.Add(1)
+		go func() {
+			defer o.background.Done()
+			_ = o.modelsDev.refresh(o.backgroundCtx)
+		}()
 	}
 	if o.discoveryPath != "" {
 		if err := o.discovery.load(o.discoveryPath); err != nil {
@@ -650,6 +662,10 @@ func (o *Owner) Close() error {
 	}
 	o.started = false
 	o.closeNativeMonitors()
+	if o.cancelBackground != nil {
+		o.cancelBackground()
+	}
+	o.background.Wait()
 	return first
 }
 

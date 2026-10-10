@@ -11,15 +11,12 @@ import (
 )
 
 func TestModelsDevMetadataRefreshFixtureAndCachePreservation(t *testing.T) {
-	previousURL := modelsDevURL
-	t.Cleanup(func() { modelsDevURL = previousURL })
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"openai":{"models":{"gpt-live":{"name":"GPT Live","context":128000,"modalities":{"input":["text","image"],"output":["text"]},"temperature":true,"input":1.5,"output":6,"release_date":"2026-01-02"},"models-only":{"name":"Should Not Become Available"}}}}`))
 	}))
 	defer server.Close()
-	modelsDevURL = server.URL
 	home := t.TempDir()
-	catalog := newModelsDevCatalog(filepath.Join(home, "models-dev.json"))
+	catalog := newModelsDevCatalog(filepath.Join(home, "models-dev.json"), server.URL)
 	catalog.client = server.Client()
 	if err := catalog.refresh(context.Background()); err != nil {
 		t.Fatal(err)
@@ -35,7 +32,7 @@ func TestModelsDevMetadataRefreshFixtureAndCachePreservation(t *testing.T) {
 	}
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("invalid")) }))
 	defer bad.Close()
-	modelsDevURL = bad.URL
+	catalog.url = bad.URL
 	if err := catalog.refresh(context.Background()); err == nil {
 		t.Fatal("invalid payload unexpectedly refreshed")
 	}
@@ -89,3 +86,50 @@ func TestModelsDevMetadataFillsOnlyMissingLiveFields(t *testing.T) {
 }
 
 func floatPtr(v float64) *float64 { return &v }
+
+func TestOwnerCloseCancelsAndJoinsModelsDevRefresh(t *testing.T) {
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+		close(canceled)
+	}))
+	defer server.Close()
+	profiles, routes, listener := stage2bRoot(t)
+	discovery := filepath.Join(t.TempDir(), "discovery.json")
+	owner, err := StartOwner(OwnerConfig{
+		ProfilesPath: profiles, RoutesPath: routes, ListenerPath: listener,
+		DiscoveryPath: discovery, ModelsDevURL: server.URL,
+		Lookup: readyLookup("x"), Verifier: lifecycleTestVerifier{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stale metadata did not start a background refresh")
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("Close returned before the refresh request was canceled")
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(discovery), modelsDevCacheFile)); !os.IsNotExist(err) {
+		t.Fatalf("canceled refresh wrote the cache: %v", err)
+	}
+}
+
+func TestOwnerWithoutModelsDevURLNeverRefreshes(t *testing.T) {
+	owner := startTestOwner(t, readyLookup("x"))
+	if owner.modelsDev.url != "" {
+		t.Fatalf("test Owner refreshes %q", owner.modelsDev.url)
+	}
+	if err := owner.RefreshModelsDevMetadata(t.Context()); err == nil {
+		t.Fatal("explicit refresh without a feed URL succeeded")
+	}
+}
