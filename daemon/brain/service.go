@@ -17,6 +17,7 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
@@ -3450,7 +3451,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 			command = strings.TrimSpace(command + " --no-alt-screen")
 		}
 		if workspace != "" && !strings.Contains(command, " -C ") && !strings.Contains(command, " --cd ") {
-			command = strings.TrimSpace(command + " -C " + shellQuote(workspace))
+			command = strings.TrimSpace(command + " -C " + shellquote.Quote(workspace))
 		}
 		return withCLIOnPath(command), nil
 	case work.WorkerProviderClaude:
@@ -3463,7 +3464,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 			}
 		}
 		if workspace != "" && !strings.Contains(command, " --add-dir ") {
-			command = strings.TrimSpace(command + " --add-dir " + shellQuote(workspace))
+			command = strings.TrimSpace(command + " --add-dir " + shellquote.Quote(workspace))
 		}
 		return withCLIOnPath(command), nil
 	case work.WorkerProviderGrok, work.WorkerProviderCursor:
@@ -3522,7 +3523,7 @@ func withCLIOnPath(command string) string {
 	if dir == "" || pathContainsDir(os.Getenv("PATH"), dir) {
 		return command
 	}
-	return "env PATH=" + shellQuote(dir) + ":$PATH " + command
+	return "env PATH=" + shellquote.Quote(dir) + ":$PATH " + command
 }
 
 func executableDir() string {
@@ -3556,10 +3557,6 @@ func pathContainsDir(pathValue, dir string) bool {
 
 func codexCommandHasFullAuthorization(command string) bool {
 	return strings.Contains(command, codexFullAuthorizationFlag)
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
 
 func commandBase(value string) string {
@@ -3644,7 +3641,7 @@ func cliCommand() string {
 		return "mewla"
 	}
 	if strings.ContainsAny(exe, " \t'") {
-		return shellQuote(exe)
+		return shellquote.Quote(exe)
 	}
 	return exe
 }

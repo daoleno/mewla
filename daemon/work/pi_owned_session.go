@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
@@ -88,7 +89,7 @@ func EnsurePiSessionLaunchCommand(command string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return appendCommandOptions(command, "--session", shellQuoteForLaunch(ownedPath)), nil
+	return appendCommandOptions(command, "--session", shellquote.Word(ownedPath)), nil
 }
 
 // PiOwnedSessionPath extracts the absolute --session path from a Pi launch
@@ -148,15 +149,4 @@ func OpenCodeOwnedSessionID(command string) string {
 		}
 	}
 	return ""
-}
-
-func shellQuoteForLaunch(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return value
-	}
-	if !strings.ContainsAny(value, " \t\"'\\$`") {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }

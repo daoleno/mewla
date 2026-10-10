@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
 
@@ -1390,7 +1391,7 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 			// then preserves it exactly as it would for a never-restarted
 			// daemon, and a provider switch still clears it.
 			if flag, path, ok := DecodePiSessionBinding(win.piSessionBinding); ok {
-				worker.Command = "pi " + flag + " " + shellQuoteForLaunch(path)
+				worker.Command = "pi " + flag + " " + shellquote.Word(path)
 			}
 		}
 		previousMetadata := workerMetadataSnapshotFor(worker)
@@ -1711,7 +1712,7 @@ func (w *Watcher) restoreTurnTranscriptBindingLocked(worker *classifier.Worker, 
 		commandExecutableBase(worker.Command) != "pi" {
 		return
 	}
-	owned := commandExecutableBase(worker.Command) + " " + binding.PiFlag + " " + shellQuoteForLaunch(binding.PiPath)
+	owned := commandExecutableBase(worker.Command) + " " + binding.PiFlag + " " + shellquote.Word(binding.PiPath)
 	if strings.TrimSpace(worker.Command) != owned {
 		worker.Command = owned
 	}
@@ -3831,7 +3832,7 @@ func looksLikeOpenCodePane(content string) bool {
 //	env [NAME=value...] [--] executable [args...]
 //
 // Only that optional env prefix is recognized. Assignment values may be
-// shell-quoted (as withCLIOnPath/shellQuote produce) and can contain
+// shell-quoted (as withCLIOnPath/shellquote.Quote produce) and can contain
 // spaces. Later arguments are never scanned for provider names, and env
 // without an executable yields "".
 func commandExecutableBase(command string) string {
@@ -3860,7 +3861,7 @@ func commandExecutableBase(command string) string {
 }
 
 // splitLaunchFields splits a Mewla launch command on whitespace while keeping
-// single-quoted spans intact so shellQuote'd PATH values with spaces stay one
+// single-quoted spans intact so shellquote.Quote PATH values with spaces stay one
 // assignment token. It is not a general shell parser.
 func splitLaunchFields(command string) []string {
 	command = strings.TrimSpace(command)
@@ -4634,19 +4635,19 @@ func buildWindowCommandForShell(shellPath, command string) string {
 }
 
 func buildWindowCommandForShellWithOptions(shellPath, command string, progressEnv bool) string {
-	quotedShell := shellQuote(shellPath)
+	quotedShell := shellquote.Quote(shellPath)
 	command = strings.TrimSpace(command)
 	if progressEnv {
 		prefix := workerProgressEnvScript()
 		if command == "" {
-			return "exec " + quotedShell + " -i -l -c " + shellQuote(prefix+"; exec "+quotedShell+" -i -l")
+			return "exec " + quotedShell + " -i -l -c " + shellquote.Quote(prefix+"; exec "+quotedShell+" -i -l")
 		}
 		command = prefix + "; " + command
 	}
 	if command == "" {
 		return "exec " + quotedShell + " -i -l"
 	}
-	return "exec " + quotedShell + " -i -l -c " + shellQuote(command)
+	return "exec " + quotedShell + " -i -l -c " + shellquote.Quote(command)
 }
 
 func workerProgressEnvScript() string {
@@ -4654,7 +4655,7 @@ func workerProgressEnvScript() string {
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
 	// target the host server.
-	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellQuote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
+	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
 // ExecutablePath returns the absolute path of the currently running mewla
@@ -4791,10 +4792,6 @@ func applyProviderTmuxIsolation(opts *CreateSessionOptions, w *Watcher) {
 	if scratch := strings.TrimSpace(w.tmuxScratchDir); scratch != "" {
 		opts.Env["TMUX_TMPDIR"] = scratch
 	}
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
 
 // KillCompletedSession shares the input lock with sends, so acceptance cleanup
@@ -5296,7 +5293,7 @@ func mergeWorkerCommandOwnership(previous, detected string) string {
 	if flag == "" {
 		return detected
 	}
-	return commandExecutableBase(detected) + " " + flag + " " + shellQuoteForLaunch(path)
+	return commandExecutableBase(detected) + " " + flag + " " + shellquote.Word(path)
 }
 
 // piOwnedLaunchPath returns the absolute --session or --session-dir value
@@ -5365,7 +5362,7 @@ func piOwnedLaunchFlag(command string) (string, string) {
 // unquoteLaunchValue removes one layer of Mewla launcher quoting from a launch
 // token so the watcher and the work reader agree on the owned session path
 // value. Mewla wraps values containing shell metacharacters in single quotes
-// with backslash-escaped apostrophes (work.shellQuoteForLaunch); a token whose
+// with backslash-escaped apostrophes (shellquote.Word); a token whose
 // first and last characters are both the wrapping quote is returned without
 // them. Values with an embedded literal apostrophe cannot form one wrapped
 // token in splitLaunchFields (the escape's first quote closes the span), so
@@ -5436,21 +5433,6 @@ func unquoteLaunchValue(value string) string {
 		return value[1 : len(value)-1]
 	}
 	return value
-}
-
-// shellQuoteForLaunch mirrors work.shellQuoteForLaunch so the merged command
-// form is byte-identical to the injected launch command: values containing
-// shell metacharacters are wrapped in single quotes with backslash-escaped
-// apostrophes, clean values are unchanged.
-func shellQuoteForLaunch(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return value
-	}
-	if !strings.ContainsAny(value, " \t\"'\\$`") {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 func processDescendsFrom(rootPID, processID int, processes map[int]processInfo) bool {
@@ -5556,7 +5538,7 @@ func claudeProcessCommand(command, args string) string {
 			if flag == "-r" {
 				flag = "--resume"
 			}
-			return command + " " + flag + " " + shellQuoteForLaunch(value)
+			return command + " " + flag + " " + shellquote.Word(value)
 		}
 	}
 	return command

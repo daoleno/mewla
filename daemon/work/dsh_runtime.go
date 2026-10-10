@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
@@ -59,7 +60,7 @@ func EnsureDSHSessionLaunchCommand(command string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return shellQuoteForLaunch(executable) + " dsh-session --dsh-session " + "session-" + uuid.NewString(), nil
+	return shellquote.Word(executable) + " dsh-session --dsh-session " + "session-" + uuid.NewString(), nil
 }
 
 func dshSocket(id string) (string, error) {

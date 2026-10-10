@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
@@ -21,7 +22,7 @@ func TestRealWorkerCloseCleansDetachedDescendantsWithoutSupervisor(t *testing.T)
 		t.Fatal(err)
 	}
 	marker := filepath.Join(h.root, "owned-tool.pid")
-	cmd := "setsid /bin/sh -c " + shellQuote("echo $$ > "+shellQuote(marker)+"; exec sleep 90") + " & exec /bin/sh"
+	cmd := "setsid /bin/sh -c " + shellquote.Quote("echo $$ > "+shellquote.Quote(marker)+"; exec sleep 90") + " & exec /bin/sh"
 	target, err := h.w.CreateSession("", CreateSessionOptions{Name: "ownership-cleanup", Cwd: cwd, Command: cmd, Detached: true, Delegated: true, ProgressEnv: true})
 	if err != nil {
 		t.Fatal(err)

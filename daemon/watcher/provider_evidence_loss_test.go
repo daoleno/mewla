@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // fixedStateProbe replays one constant provider observation, used to drive
@@ -237,7 +238,7 @@ func TestLedgerTranscriptBindingRestoresAndBackfills(t *testing.T) {
 		w.mu.Lock()
 		w.restoreTurnTranscriptBindingLocked(worker, turn)
 		w.mu.Unlock()
-		want := "pi --session " + shellQuoteForLaunch(ownedPath)
+		want := "pi --session " + shellquote.Word(ownedPath)
 		if worker.Command != want {
 			t.Fatalf("restored command = %q, want %q", worker.Command, want)
 		}
@@ -252,12 +253,12 @@ func TestLedgerTranscriptBindingRestoresAndBackfills(t *testing.T) {
 		w.turnLedger = ledger
 		worker := &classifier.Worker{
 			ID:      sessionID,
-			Command: "pi --session " + shellQuoteForLaunch(ownedPath),
+			Command: "pi --session " + shellquote.Word(ownedPath),
 		}
 		w.mu.Lock()
 		w.restoreTurnTranscriptBindingLocked(worker, TurnSnapshot{SessionID: sessionID, TurnID: sessionID + ":turn:1"})
 		w.mu.Unlock()
-		if worker.Command != "pi --session "+shellQuoteForLaunch(ownedPath) {
+		if worker.Command != "pi --session "+shellquote.Word(ownedPath) {
 			t.Fatalf("command changed without a binding: %q", worker.Command)
 		}
 	})

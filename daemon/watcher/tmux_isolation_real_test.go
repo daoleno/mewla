@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 func TestRealTmuxProviderPlainTmuxCannotReachSharedHostServer(t *testing.T) {
@@ -46,7 +48,7 @@ func TestRealTmuxProviderPlainTmuxCannotReachSharedHostServer(t *testing.T) {
 	// The interactive shell inherits the post-bootstrap environment. Prove TMUX
 	// stayed absent and plain tmux still resolves only under private scratch.
 	envProof := filepath.Join(h.root, "provider-env.txt")
-	probe := `printf '%s|%s' "${TMUX-unset}" "$TMUX_TMPDIR" > ` + shellQuote(envProof) + `; tmux kill-server >/dev/null 2>&1; printf 'SECOND_KILL_%s\n' CONTAINED`
+	probe := `printf '%s|%s' "${TMUX-unset}" "$TMUX_TMPDIR" > ` + shellquote.Quote(envProof) + `; tmux kill-server >/dev/null 2>&1; printf 'SECOND_KILL_%s\n' CONTAINED`
 	if out, err := tmuxHarnessCommand(h.selected, "send-keys", "-t", target, probe, "Enter").CombinedOutput(); err != nil {
 		t.Fatalf("send containment probe: %v: %s", err, out)
 	}

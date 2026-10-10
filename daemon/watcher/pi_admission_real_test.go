@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // TestRealPiStartupReadinessAdmission exercises the production CreateSession
@@ -19,7 +21,7 @@ func TestRealPiStartupReadinessAdmission(t *testing.T) {
 	h := newSharedTmuxHarness(t, false)
 	cwd := t.TempDir()
 	sessionPath := filepath.Join(cwd, "pi-session.jsonl")
-	command := "pi --session " + shellQuoteForLaunch(sessionPath) + " --no-extensions"
+	command := "pi --session " + shellquote.Word(sessionPath) + " --no-extensions"
 	target, err := h.w.CreateSession("", CreateSessionOptions{
 		Cwd: cwd, Command: command, Name: "pi-admission", Detached: true,
 	})
