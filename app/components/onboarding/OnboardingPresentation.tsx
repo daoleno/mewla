@@ -12,8 +12,8 @@ import { Icon } from "../icons/Icon";
 const GUIDE = "https://github.com/daoleno/mewla/blob/main/docs/";
 export const COMPUTER_SETUP_STEPS = [
   { title: "Check your computer", command: "mewla doctor" },
-  { title: "Start on trusted Wi-Fi", command: "mewla --lan" },
-  { title: "Run the pairing command printed by Mewla" },
+  { title: "Start Mewla on trusted Wi-Fi", command: "mewla --lan" },
+  { title: "Run mewla pair, then scan its code" },
 ] as const;
 
 export function OnboardingPresentation({ serverName, connection, error, onPair, onRetry, onSettings, onContinue }: {
@@ -87,7 +87,7 @@ export function OnboardingPresentation({ serverName, connection, error, onPair, 
                 <AnimatedPressable accessibilityRole="link" accessibilityLabel="Remote HTTPS connection guide"
                   onPress={() => void Linking.openURL(GUIDE + "connect-and-pair.md")} style={styles.link}>
                   <Icon name="open-external" size={18} color={colors.accent} />
-                  <Text style={[styles.linkText, { color: colors.accent }]}>Remote connection options</Text>
+                  <Text style={[styles.linkText, { color: colors.accent }]}>Reach your computer from anywhere</Text>
                 </AnimatedPressable>
               </View> : null}
             </View>

@@ -36,7 +36,7 @@ describe("server address", () => {
   });
 
   test("names what is wrong", () => {
-    expect(serverAddressProblem("  ")).toContain("Enter the server address");
+    expect(serverAddressProblem("  ")).toContain("Enter the computer's address");
     expect(serverAddressProblem("mewla.example.com")).toContain("Start the address with https://");
     expect(serverAddressProblem("ftp://mewla.example.com")).toContain("ftp:");
     for (const typed of ["", "mewla.example.com", "ftp://x.example", "https://"]) {

@@ -310,7 +310,7 @@ export default function SettingsScreen() {
     const normalizedEndpoint = draftEndpoint.trim();
     const addressProblem = Storage.serverAddressProblem(normalizedEndpoint);
     if (addressProblem) {
-      Alert.alert("Check the server address", addressProblem);
+      Alert.alert("Check the address", addressProblem);
       return;
     }
 
@@ -336,7 +336,7 @@ export default function SettingsScreen() {
       });
     } catch (error: any) {
       Alert.alert(
-        "Check the server address",
+        "Check the address",
         error?.message || "Use an address like https://mewla.example.com.",
       );
       return;
@@ -361,8 +361,8 @@ export default function SettingsScreen() {
 
       if (!savedServer) {
         Alert.alert(
-          "Invalid import",
-          "Could not parse the pairing link. Import the HTTPS or mewla:// pairing link or QR printed by mewla.",
+          "Not a pairing link",
+          "Paste the link printed by mewla pair, or scan its QR code.",
         );
         return false;
       }
@@ -418,7 +418,7 @@ export default function SettingsScreen() {
     if (!rawValue) {
       Alert.alert(
         "Pairing link required",
-        "Paste the pairing link printed by mewla, or scan its QR code.",
+        "Paste the link printed by mewla pair, or scan its QR code.",
       );
       return;
     }
@@ -544,9 +544,9 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.contentInner}>
-          <SettingsSectionHeader>Servers</SettingsSectionHeader>
+          <SettingsSectionHeader>Computers</SettingsSectionHeader>
           <ListSection
-            footer={servers.length === 0 ? "Pair this phone with a computer running mewla." : null}
+            footer={servers.length === 0 ? "Pair this phone with a computer running Mewla. On the computer, run mewla pair." : null}
           >
             {servers.map((server) => {
               const current = server.id === currentServerId;
@@ -612,9 +612,9 @@ export default function SettingsScreen() {
               );
             })}
             <ListRow
-              title="Pair a server"
+              title="Pair a computer"
               icon="add"
-              accessibilityLabel="Pair a server"
+              accessibilityLabel="Pair a computer"
               accessory="chevron"
               onPress={() => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -880,7 +880,7 @@ export default function SettingsScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.modalTitle} accessibilityRole="header">
-              {editingServerId ? "Edit Server" : "Pair Server"}
+              {editingServerId ? "Edit Computer" : "Pair a Computer"}
             </Text>
 
             {editingServer ? (
@@ -901,19 +901,19 @@ export default function SettingsScreen() {
 
                 {editingServer.transportKind === "link" ? (
                   <View style={styles.identityCard}>
-                    <Text style={styles.identityLabel}>Connection path</Text>
+                    <Text style={styles.identityLabel}>Address</Text>
                     <Text style={styles.fieldHint}>Mewla Link</Text>
                   </View>
                 ) : (
                   <>
                     <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
-                      Server address
+                      Address
                     </Text>
                     <TextInput
                       style={styles.input}
                       value={draftEndpoint}
                       onChangeText={setDraftEndpoint}
-                      accessibilityLabel="Server address"
+                      accessibilityLabel="Address"
                       placeholder="https://mewla.example.com"
                       placeholderTextColor={colors.textSecondary}
                       selectionColor={colors.selectionBackground}
@@ -922,6 +922,9 @@ export default function SettingsScreen() {
                       autoCorrect={false}
                       keyboardType="url"
                     />
+                    <Text style={styles.fieldHint}>
+                      Where this phone reaches the computer. Run mewla address list on the computer to see every address.
+                    </Text>
                   </>
                 )}
 
@@ -947,7 +950,7 @@ export default function SettingsScreen() {
             ) : (
               <>
                 <Text style={styles.importLead}>
-                  Scan the one-time QR from mewla pair, or paste its pairing link.
+                  On the computer, run mewla pair. Scan its QR code or paste the link it prints.
                 </Text>
 
                 <Text style={styles.fieldLabel}>Pairing Link</Text>
@@ -956,7 +959,7 @@ export default function SettingsScreen() {
                   value={draftImportValue}
                   onChangeText={setDraftImportValue}
                   accessibilityLabel="Pairing link"
-                  placeholder="https://your-mewla-address/#pair=…"
+                  placeholder="mewla://settings?p=… or https://…/#pair=…"
                   placeholderTextColor={colors.textSecondary}
                   selectionColor={colors.selectionBackground}
                   cursorColor={colors.accentStrong}
@@ -968,7 +971,7 @@ export default function SettingsScreen() {
                 <View style={styles.modalActions}>
                   <Button label="Cancel" variant="plain" style={styles.modalAction} onPress={closeEditor} />
                   <Button
-                    label="Import"
+                    label="Pair"
                     variant="filled"
                     style={styles.modalAction}
                     onPress={() => {

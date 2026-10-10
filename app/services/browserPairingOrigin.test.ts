@@ -50,7 +50,7 @@ describe("resolveBrowserPairingURL", () => {
     const result = resolveBrowserPairingURL(link, "https://manjaro.tail7e23.ts.net");
     await expect(result).rejects.toThrow("zen.daoleno.com, a different Mewla daemon");
     await expect(result).rejects.toThrow("Open https://zen.daoleno.com/");
-    await expect(result).rejects.toThrow("`mewla web`");
+    await expect(result).rejects.toThrow("`mewla pair`");
   });
 
   test("rejects a matching key with a different daemon id", async () => {

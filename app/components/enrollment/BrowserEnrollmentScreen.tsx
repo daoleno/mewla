@@ -84,7 +84,7 @@ export function BrowserEnrollmentScreen() {
         {waiting && prompt ? <AppText variant="display" accessibilityLabel={`Verification number ${prompt.verificationNumber}`} style={styles.number}>{prompt.verificationNumber}</AppText> : null}
         {waiting ? <ActivityIndicator color={colors.accent} /> : <Button label="Try again" variant="filled" onPress={() => { try { sessionStorage.removeItem("mewla:enrollment:v1"); } catch {} setAttempt((value) => value + 1); }} />}
         {waiting && error ? <AppText tone="secondary" accessibilityLiveRegion="polite">{error}</AppText> : null}
-        <AppText variant="caption" tone="secondary">First device? Run mewla on your computer, then use its pairing QR or link.</AppText>
+        <AppText variant="caption" tone="secondary">First device? Run mewla pair on your computer and open its browser link.</AppText>
         <Button label="Use pairing link or QR" variant="plain" onPress={() => router.push({ pathname: "/settings", params: { addServer: Date.now().toString(), pairingRequired: "1", pairMode: "import" } })} />
       </View>
     </View>
