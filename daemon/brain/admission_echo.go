@@ -111,8 +111,10 @@ func admissionEchoSessionID(item TimelineItem) string {
 // lifecycle admissions in causal order. Unconsumed admissions receive
 // AdmissionEchoEventID for durable idempotence.
 //
-// Already-durable provider-native rows are excluded unless the exact Host
-// binding proves a unique stranded echo for a formerly unbound admission.
+// Already-durable provider-native rows are claimed only when exactly one of
+// them proves the admission's echo in its causal window. A row materialized
+// before its admission was projected has a display-cleaned Body, so the proof
+// uses its stored native digests, or the live event's for older rows.
 func claimProviderUserEchoes(
 	items []TimelineItem,
 	providerEvents []work.CodexConversationEvent,
@@ -126,7 +128,22 @@ func claimProviderUserEchoes(
 		return suppress, items, false
 	}
 
+	liveDigests := map[string][]string{}
+	for _, event := range providerEvents {
+		if strings.TrimSpace(event.Kind) == timelineKindUserMessage {
+			liveDigests[strings.TrimSpace(event.ID)] = providerEventInputDigests(event)
+		}
+	}
+	claimedEchoIDs := map[string]bool{}
+	for _, item := range items {
+		if IsBrainInputAdmission(item) {
+			if echoID := strings.TrimSpace(item.AdmissionEchoEventID); echoID != "" {
+				claimedEchoIDs[echoID] = true
+			}
+		}
+	}
 	knownProviderUserIDs := map[string]bool{}
+	var durableEchoes []TimelineItem
 	for _, item := range items {
 		if strings.TrimSpace(item.Kind) != timelineKindUserMessage {
 			continue
@@ -134,9 +151,18 @@ func claimProviderUserEchoes(
 		if IsBrainInputAdmission(item) {
 			continue
 		}
-		if id := strings.TrimSpace(item.ID); id != "" {
-			knownProviderUserIDs[id] = true
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
 		}
+		knownProviderUserIDs[id] = true
+		if claimedEchoIDs[id] {
+			continue
+		}
+		if len(item.ProviderInputSHA256) == 0 {
+			item.ProviderInputSHA256 = liveDigests[id]
+		}
+		durableEchoes = append(durableEchoes, item)
 	}
 
 	type credit struct {
@@ -165,23 +191,22 @@ func claimProviderUserEchoes(
 			// A send can precede discovery of the native transcript. Only the
 			// exact recorded Host can prove that formerly unbound Session;
 			// an explicitly bound admission must never follow a replacement.
-			knownEchoID := ""
 			if admission.SessionID == admission.HostSessionID &&
 				admission.HostSessionID == strings.TrimSpace(host.ID) &&
 				providerSessionID != "" && providerSessionID == strings.TrimSpace(host.ProviderSessionID) {
 				admission.SessionID = providerSessionID
-				// Repair a previously materialized echo only when this binding
-				// proves exactly one candidate in the admission's causal window.
-				matches := 0
-				for _, prior := range items {
-					if providerRowMatchesAdmissionWindow(prior, admission) {
-						matches++
-						knownEchoID = prior.ID
-					}
+			}
+			// Repair a previously materialized echo only when exactly one
+			// candidate proves it in the admission's causal window.
+			knownEchoID, matches := "", 0
+			for _, prior := range durableEchoes {
+				if providerRowMatchesAdmissionWindow(prior, admission) {
+					matches++
+					knownEchoID = prior.ID
 				}
-				if matches != 1 {
-					knownEchoID = ""
-				}
+			}
+			if matches != 1 {
+				knownEchoID = ""
 			}
 			credits = append(credits, credit{index: index, admission: admission, knownEchoID: knownEchoID})
 			break

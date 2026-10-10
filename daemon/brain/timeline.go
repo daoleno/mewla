@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -89,11 +90,11 @@ func providerRowMatchesAdmissionWindow(item TimelineItem, admission BrainInputAd
 		!strings.EqualFold(strings.TrimSpace(item.Role), "user") {
 		return false
 	}
-	var legacyDigests []string
+	nativeDigests := append([]string(nil), item.ProviderInputSHA256...)
 	if inner, ok := work.UnwrapClaudePasteDisplay(strings.TrimSpace(item.Body)); ok {
 		// Rows materialized before paste unwrapping kept Claude's envelope, so
 		// their echo never matched and showed as a second bubble.
-		legacyDigests = append(legacyDigests, AdmissionDigest(strings.TrimSpace(inner)))
+		nativeDigests = append(nativeDigests, AdmissionDigest(strings.TrimSpace(inner)))
 	}
 	return providerEchoMatchesAdmission(
 		admission,
@@ -101,7 +102,7 @@ func providerRowMatchesAdmissionWindow(item TimelineItem, admission BrainInputAd
 		item.SessionID,
 		item.Body,
 		item.CreatedAt,
-		legacyDigests...,
+		nativeDigests...,
 	)
 }
 
@@ -259,6 +260,13 @@ type TimelineItem struct {
 	// identity and must not appear on provider-native durable rows.
 	AdmissionSHA256 string `json:"admission_sha256,omitempty"`
 
+	// ProviderInputSHA256 is correlation data for provider-native user rows
+	// only: the provider's exact native input digests (raw bytes, and the
+	// payload inside a recognized transport envelope). Display cleaning changes
+	// Body, so an echo that becomes durable before its admission is projected
+	// can be proven only by these. Never provenance, never on the wire.
+	ProviderInputSHA256 []string `json:"provider_input_sha256,omitempty"`
+
 	// AdmissionEchoEventID records the provider event id that consumed this
 	// admission's single echo credit. Empty means unmatched.
 	AdmissionEchoEventID string `json:"admission_echo_event_id,omitempty"`
@@ -316,6 +324,7 @@ func (s *Store) appendTimelineItemLocked(item TimelineItem) (TimelineItem, error
 	item.Status = strings.TrimSpace(item.Status)
 	item.Title = strings.TrimSpace(item.Title)
 	item.AdmissionSHA256 = strings.TrimSpace(item.AdmissionSHA256)
+	item.ProviderInputSHA256 = providerInputDigests(item.ProviderInputSHA256...)
 	item.AdmissionEchoEventID = strings.TrimSpace(item.AdmissionEchoEventID)
 	item.WorkID = strings.TrimSpace(item.WorkID)
 	item.EventKind = strings.TrimSpace(item.EventKind)
@@ -669,7 +678,7 @@ func timelineItemFromProviderEvent(threadID, sessionID string, event work.CodexC
 			createdAt = parsed.UTC()
 		}
 	}
-	return TimelineItem{
+	item := TimelineItem{
 		ID:        id,
 		ThreadID:  threadID,
 		SessionID: sessionID,
@@ -679,10 +688,28 @@ func timelineItemFromProviderEvent(threadID, sessionID string, event work.CodexC
 		Kind:      kind,
 		Title:     strings.TrimSpace(event.Title),
 		Status:    strings.TrimSpace(event.Status),
-		// Provider-native rows never receive Brain admission provenance or
-		// correlation digests. Echo matching uses live provider event digests
-		// against BrainAdmission rows only.
-	}, true
+		// Provider-native rows never receive Brain admission provenance.
+	}
+	if kind == timelineKindUserMessage {
+		// Keep the native input digests so a projection that races this row
+		// can still prove the echo after display cleaning changed Body.
+		item.ProviderInputSHA256 = providerEventInputDigests(event)
+	}
+	return item, true
+}
+
+func providerEventInputDigests(event work.CodexConversationEvent) []string {
+	return providerInputDigests(event.AdmissionSHA256, event.AdmissionUnwrappedSHA256)
+}
+
+func providerInputDigests(digests ...string) []string {
+	var out []string
+	for _, digest := range digests {
+		if digest = strings.TrimSpace(digest); digest != "" && !slices.Contains(out, digest) {
+			out = append(out, digest)
+		}
+	}
+	return out
 }
 
 func (s *Store) timelineIDsLocked(threadID string) (map[string]bool, error) {
