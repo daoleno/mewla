@@ -332,9 +332,20 @@ jobs:
         run: ./scripts/verify-libghostty.sh --contract
 
   release-identity:
-    name: Release identity
+    name: Release identity and scripts
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Verify package / version / versionCode sources
         run: ./scripts/verify-release-identity.sh
+      - name: Test release and verification scripts
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          TMPDIR: ${{ runner.temp }}
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          set -euo pipefail
+          mkdir -p "$MEWLA_BUILD_TMPDIR"
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+          bash scripts/tests/test_verify_mewla_orchestration.sh

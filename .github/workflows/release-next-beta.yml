@@ -60,7 +60,7 @@ jobs:
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
         run: |
           mkdir -p "$MEWLA_BUILD_TMPDIR"
-          python3 -m unittest discover -s scripts/tests -p 'test_prepare_release.py'
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
       - name: Prepare deterministic release identity and notes
         id: release

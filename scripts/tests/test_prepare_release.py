@@ -349,7 +349,6 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 "docs/install-daemon.md",
                 "docs/ios-ci-release.md",
                 next_notes_path,
-                "scripts/verify-release-identity.sh",
             )
         )
         self.assertEqual(output["changed_paths"], expected_paths)
@@ -363,7 +362,6 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                     " M daemon/cmd/mewla/version.go",
                     " M docs/install-daemon.md",
                     " M docs/ios-ci-release.md",
-                    " M scripts/verify-release-identity.sh",
                     f"?? {next_notes_path}",
                 ]
             ),
@@ -385,17 +383,13 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             (root / "daemon/cmd/mewla/version.go").read_text(encoding="utf-8"),
         )
 
+        # The verifier derives the identity from the files above, so a
+        # release never rewrites it.
         verifier = (root / "scripts/verify-release-identity.sh").read_text(
             encoding="utf-8"
         )
         self.assertNotIn(CURRENT_VERSION, verifier)
-        self.assertEqual(verifier.count(NEXT_VERSION), 3)
-        self.assertIn(
-            f'EXPECTED_VERSION_CODE="{CURRENT_VERSION_CODE + 1}"', verifier
-        )
-        self.assertIn(
-            f'EXPECTED_IOS_BUILD_NUMBER="{CURRENT_IOS_BUILD + 1}"', verifier
-        )
+        self.assertNotIn(NEXT_VERSION, verifier)
         self.assertIn(
             f"MEWLA_VERSION={NEXT_TAG}",
             (root / "docs/install-daemon.md").read_text(encoding="utf-8"),

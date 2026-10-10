@@ -80,7 +80,7 @@ Release notes leave out maintainer identity. It lives in tracked files instead:
 | Android ABI | `arm64-v8a` only (`app/package.json` `build:apk`, `app/modules/terminal-vt/native.lock.json`) |
 | iOS Preview bundle, marketing version and build number | See [iOS CI](ios-ci-release.md#signed-release-and-testflight) |
 
-`scripts/verify-release-identity.sh` checks all of them against the tracked version.
+`scripts/verify-release-identity.sh` reads the version, `versionCode` and iOS build number from `app/app.base.json` and `app/ios-build.json`, and checks that `version.go`, the resolved app config, the tag, the release notes and any stage agree with them. Preparation does not edit the verifier. The Android certificate fingerprint stays pinned in it.
 
 ## workflow_dispatch inputs
 
