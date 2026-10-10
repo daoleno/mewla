@@ -597,6 +597,28 @@ class ServerSocket {
   }
 }
 
+/** One correlated request: the reply that settles it and how it can fail. */
+interface RequestOptions<T> {
+  /** The reply type that resolves the request. */
+  responseType: string;
+  timeoutMs: number;
+  /** Maps the reply to the result; a throw rejects the request. */
+  parse: (payload: any) => T;
+  /** The rejection for a timeout, or its message. */
+  timeout: string | (() => Error);
+  /** The rejection for an error reply, or its fallback message. */
+  error?: string | ((payload: any) => Error);
+  /** Error reply types. Defaults to the generic `error` channel. */
+  errorTypes?: readonly string[];
+  requestId?: string;
+  /** A further reply check beyond the server and the request id. */
+  matchesReply?: (payload: any) => boolean;
+  /** Rejects with this message when the server disconnects first. */
+  disconnectMessage?: string;
+  signal?: AbortSignal;
+  abortMessage?: string;
+}
+
 export class MultiServerWebSocketClient {
   private readonly handlers = new Map<string, MessageHandler[]>();
   private readonly connections = new Map<string, ServerSocket>();
@@ -667,20 +689,94 @@ export class MultiServerWebSocketClient {
     return this.connections.get(serverId)?.trySendNow(msg) ?? false;
   }
 
-  private sendRequestNow(
+  /**
+   * Sends `{type, request_id, ...body}` now and settles on the first reply
+   * correlated to this server and request id, an error reply, the timeout,
+   * or (when asked) a disconnect or abort. Every path releases its listeners
+   * and timer exactly once.
+   */
+  private request<T>(
     serverId: string,
-    msg: object,
-    cleanup: () => void,
-    reject: (reason?: unknown) => void,
-  ) {
-    try {
-      this.send(serverId, msg);
-    } catch (error) {
-      cleanup();
-      reject(
-        error instanceof Error ? error : new Error("Daemon is not connected."),
-      );
-    }
+    type: string,
+    body: Record<string, unknown>,
+    options: RequestOptions<T>,
+  ): Promise<T> {
+    const requestId = options.requestId ?? newRequestId();
+    const errorTypes = options.errorTypes ?? ["error"];
+    return new Promise<T>((resolve, reject) => {
+      const correlated = (payload: any) =>
+        payload.serverId === serverId && payload.request_id === requestId;
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off(options.responseType, handleReply);
+        for (const errorType of errorTypes) {
+          this.off(errorType, handleError);
+        }
+        if (options.disconnectMessage) {
+          this.off("disconnected", handleDisconnect);
+        }
+        options.signal?.removeEventListener("abort", handleAbort);
+      };
+      const handleReply = (payload: any) => {
+        if (!correlated(payload)) return;
+        if (options.matchesReply && !options.matchesReply(payload)) return;
+        cleanup();
+        try {
+          resolve(options.parse(payload));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      const handleError = (payload: any) => {
+        if (!correlated(payload)) return;
+        cleanup();
+        reject(
+          typeof options.error === "function"
+            ? options.error(payload)
+            : new Error(payload.message || options.error),
+        );
+      };
+      const handleDisconnect = (payload: any) => {
+        if (payload.serverId !== serverId) return;
+        cleanup();
+        reject(new Error(options.disconnectMessage));
+      };
+      const handleAbort = () => {
+        cleanup();
+        reject(new Error(options.abortMessage));
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(
+          typeof options.timeout === "function"
+            ? options.timeout()
+            : new Error(options.timeout),
+        );
+      }, options.timeoutMs);
+
+      this.on(options.responseType, handleReply);
+      for (const errorType of errorTypes) {
+        this.on(errorType, handleError);
+      }
+      if (options.disconnectMessage) {
+        this.on("disconnected", handleDisconnect);
+      }
+      if (options.signal) {
+        options.signal.addEventListener("abort", handleAbort, { once: true });
+        if (options.signal.aborted) {
+          handleAbort();
+          return;
+        }
+      }
+      try {
+        this.send(serverId, { type, request_id: requestId, ...body });
+      } catch (error) {
+        cleanup();
+        reject(
+          error instanceof Error ? error : new Error("Daemon is not connected."),
+        );
+      }
+    });
   }
 
   createSession(
@@ -697,118 +793,72 @@ export class MultiServerWebSocketClient {
       modelId?: string;
     },
   ) {
-    const requestId = newProviderRequestId();
-    return new Promise<CreateSessionResult>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("session_created", handleCreated);
-        this.off("error", handleError);
-      };
-      const handleCreated = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        if (
-          payload.worker_session &&
-          typeof payload.worker_session === "object"
-        ) {
-          this.emit("worker_session_created", serverId, {
-            worker_session: payload.worker_session,
-          });
-        }
-        if (typeof payload.worker_id !== "string" || !payload.worker_id) {
-          reject(new Error("Daemon returned an invalid session id."));
-          return;
-        }
-        try {
-          const persistence = parseOptionalMutationPersistence(payload);
-          if (persistence) {
-            const classification = classifyMutationPersistence(persistence);
-            if (classification === "ambiguous") {
-              reject(ambiguousProviderMutation(persistence.warning));
-              return;
-            }
-            if (classification === "not_applied") {
-              reject(
-                providerErrorFromPayload({
+    return this.request<CreateSessionResult>(
+      serverId,
+      "create_session",
+      {
+        ...(options?.browserId ? { browser_id: options.browserId } : {}),
+        target_id: options?.targetId,
+        cwd: options?.cwd,
+        command: options?.command,
+        name: options?.name,
+        ...(options?.connectionId?.trim()
+          ? { connection_id: options.connectionId.trim() }
+          : {}),
+        ...(options?.modelId?.trim()
+          ? { model_id: options.modelId.trim() }
+          : {}),
+      },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "session_created",
+        timeoutMs: 10000,
+        timeout: providerTimeout("Timed out while creating a new terminal."),
+        error: (payload) =>
+          payload.code
+            ? providerErrorFromPayload(payload)
+            : new Error(payload.message || "Failed to create terminal."),
+        parse: (payload) => {
+          if (
+            payload.worker_session &&
+            typeof payload.worker_session === "object"
+          ) {
+            this.emit("worker_session_created", serverId, {
+              worker_session: payload.worker_session,
+            });
+          }
+          if (typeof payload.worker_id !== "string" || !payload.worker_id) {
+            throw new Error("Daemon returned an invalid session id.");
+          }
+          return parseProviderReply(() => {
+            const persistence = parseOptionalMutationPersistence(payload);
+            if (persistence) {
+              const classification = classifyMutationPersistence(persistence);
+              if (classification === "ambiguous") {
+                throw ambiguousProviderMutation(persistence.warning);
+              }
+              if (classification === "not_applied") {
+                throw providerErrorFromPayload({
                   code: payload.code || PROVIDER_ERROR_CODES.invalid,
                   message:
                     payload.persistence_warning ||
                     payload.message ||
                     "Session was not created.",
-                }),
-              );
-              return;
+                });
+              }
             }
-          }
-          resolve({
-            workerId: payload.worker_id,
-            persistence,
-          });
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid create_session payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        if (payload.code) {
-          reject(providerErrorFromPayload(payload));
-          return;
-        }
-        reject(new Error(payload.message || "Failed to create terminal."));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Timed out while creating a new terminal.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 10000);
-      this.on("session_created", handleCreated);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "create_session",
-          request_id: requestId,
-          ...(options?.browserId ? { browser_id: options.browserId } : {}),
-          target_id: options?.targetId,
-          cwd: options?.cwd,
-          command: options?.command,
-          name: options?.name,
-          ...(options?.connectionId?.trim()
-            ? { connection_id: options.connectionId.trim() }
-            : {}),
-          ...(options?.modelId?.trim()
-            ? { model_id: options.modelId.trim() }
-            : {}),
+            return { workerId: payload.worker_id, persistence };
+          }, "Invalid create_session payload.");
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
   listProviders(serverId: string): Promise<ProvidersSnapshot> {
     return this.requestProvidersCatalog(
       serverId,
-      { type: "list_providers" },
+      "list_providers",
+      {},
       "Timed out while loading Providers.",
       true,
     ).then((result) => result.snapshot);
@@ -830,7 +880,6 @@ export class MultiServerWebSocketClient {
   ): Promise<ProvidersMutationResult> {
     let transientCredential = input.credential?.trim() ?? "";
     const body: Record<string, unknown> = {
-      type: "upsert_provider_connection",
       provider_connection: input.connection,
       revision: input.revision,
       operation: input.operation ?? "update",
@@ -840,6 +889,7 @@ export class MultiServerWebSocketClient {
     }
     return this.requestProvidersCatalog(
       serverId,
+      "upsert_provider_connection",
       body,
       "Timed out while saving Provider connection.",
       false,
@@ -855,11 +905,8 @@ export class MultiServerWebSocketClient {
   ): Promise<ProvidersMutationResult> {
     return this.requestProvidersCatalog(
       serverId,
-      {
-        type: "delete_provider_connection",
-        connection_id: connectionId,
-        revision,
-      },
+      "delete_provider_connection",
+      { connection_id: connectionId, revision },
       "Timed out while deleting Provider connection.",
       false,
     );
@@ -871,8 +918,8 @@ export class MultiServerWebSocketClient {
   ): Promise<ProvidersMutationResult> {
     return this.requestProvidersCatalog(
       serverId,
+      "set_provider_connection",
       {
-        type: "set_provider_connection",
         client: input.client,
         executor_id: input.client,
         connection_id: input.connectionId,
@@ -889,8 +936,8 @@ export class MultiServerWebSocketClient {
   ): Promise<ProvidersMutationResult> {
     return this.requestProvidersCatalog(
       serverId,
+      "switch_provider",
       {
-        type: "switch_provider",
         client: input.client,
         executor_id: input.client,
         connection_id: input.connectionId,
@@ -912,11 +959,8 @@ export class MultiServerWebSocketClient {
   ): Promise<ProvidersMutationResult> {
     return this.requestProvidersCatalog(
       serverId,
-      {
-        type: "set_provider_models",
-        connection_id: input.connectionId,
-        model_ids: input.modelIds,
-      },
+      "set_provider_models",
+      { connection_id: input.connectionId, model_ids: input.modelIds },
       "Timed out while updating model support.",
       false,
     );
@@ -926,95 +970,53 @@ export class MultiServerWebSocketClient {
     serverId: string,
     connectionId: string,
   ): Promise<ProviderModelsResult> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("provider_models", handleModels);
-        this.off("error", handleError);
-      };
-      const handleModels = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const parsed = parseProviderModelsResult(payload, connectionId);
-          if (!parsed) {
-            reject(
-              invalidProviderReply("Daemon returned invalid provider models."),
-            );
-            return;
-          }
-          resolve(parsed);
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid models payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Timed out while discovering models.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 20000);
-      this.on("provider_models", handleModels);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "discover_provider_models",
-          request_id: requestId,
-          connection_id: connectionId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "discover_provider_models",
+      { connection_id: connectionId },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "provider_models",
+        timeoutMs: 20000,
+        timeout: providerTimeout("Timed out while discovering models."),
+        error: (payload) => providerErrorFromPayload(payload),
+        parse: (payload) =>
+          parseProviderReply(() => {
+            const parsed = parseProviderModelsResult(payload, connectionId);
+            if (!parsed) {
+              throw invalidProviderReply(
+                "Daemon returned invalid provider models.",
+              );
+            }
+            return parsed;
+          }, "Invalid models payload."),
+      },
+    );
   }
 
   refreshModelsDevMetadata(serverId: string): Promise<void> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("models_dev_metadata_refresh", handleResult);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        if (payload.ok === true) resolve();
-        else reject(new ProviderError(PROVIDER_ERROR_CODES.invalid, payload.error || "Metadata refresh failed.", "invalid", true));
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup(); reject(providerErrorFromPayload(payload));
-      };
-      const timer = setTimeout(() => { cleanup(); reject(new ProviderError(PROVIDER_ERROR_CODES.timeout, "Timed out while refreshing model metadata.", "timeout", true)); }, 20000);
-      this.on("models_dev_metadata_refresh", handleResult);
-      this.on("error", handleError);
-      this.sendRequestNow(serverId, { type: "refresh_models_dev_metadata", request_id: requestId }, cleanup, reject);
-    });
+    return this.request(
+      serverId,
+      "refresh_models_dev_metadata",
+      {},
+      {
+        requestId: newProviderRequestId(),
+        responseType: "models_dev_metadata_refresh",
+        timeoutMs: 20000,
+        timeout: providerTimeout("Timed out while refreshing model metadata."),
+        error: (payload) => providerErrorFromPayload(payload),
+        parse: (payload) => {
+          if (payload.ok !== true) {
+            throw new ProviderError(
+              PROVIDER_ERROR_CODES.invalid,
+              payload.error || "Metadata refresh failed.",
+              "invalid",
+              true,
+            );
+          }
+        },
+      },
+    );
   }
 
   testProviderConnection(
@@ -1033,82 +1035,22 @@ export class MultiServerWebSocketClient {
         ),
       );
     }
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("provider_connection_test", handleResult);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const parsed = parseProviderConnectionTestResult(
-            payload,
-            input.client,
-          );
-          if (!parsed) {
-            reject(
-              invalidProviderReply(
-                "Daemon returned an invalid connection test result.",
-              ),
-            );
-            return;
-          }
-          resolve(parsed);
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid connection test payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload, { credentialWrite: true }));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Connection test timed out.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 20000);
-      this.on("provider_connection_test", handleResult);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "test_provider_connection",
-          request_id: requestId,
-          provider_connection: {
-            preset_id: "custom",
-            client: input.client,
-            base_url: baseUrl,
-            advanced: true,
-          },
-          credential: transientCredential,
+    const pending = this.requestProviderConnectionTest(
+      serverId,
+      {
+        provider_connection: {
+          preset_id: "custom",
+          client: input.client,
+          base_url: baseUrl,
+          advanced: true,
         },
-        cleanup,
-        reject,
-      );
-      transientCredential = "";
-    });
+        credential: transientCredential,
+      },
+      input.client,
+      true,
+    );
+    transientCredential = "";
+    return pending;
   }
 
   /**
@@ -1132,71 +1074,36 @@ export class MultiServerWebSocketClient {
         ),
       );
     }
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("provider_connection_test", handleResult);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
+    return this.requestProviderConnectionTest(
+      serverId,
+      { connection_id: id },
+      client,
+      false,
+    );
+  }
+
+  private requestProviderConnectionTest(
+    serverId: string,
+    body: Record<string, unknown>,
+    client: string,
+    credentialWrite: boolean,
+  ): Promise<ProviderConnectionTestResult> {
+    return this.request(serverId, "test_provider_connection", body, {
+      requestId: newProviderRequestId(),
+      responseType: "provider_connection_test",
+      timeoutMs: 20000,
+      timeout: providerTimeout("Connection test timed out."),
+      error: (payload) => providerErrorFromPayload(payload, { credentialWrite }),
+      parse: (payload) =>
+        parseProviderReply(() => {
           const parsed = parseProviderConnectionTestResult(payload, client);
           if (!parsed) {
-            reject(
-              invalidProviderReply(
-                "Daemon returned an invalid connection test result.",
-              ),
+            throw invalidProviderReply(
+              "Daemon returned an invalid connection test result.",
             );
-            return;
           }
-          resolve(parsed);
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid connection test payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload, { credentialWrite: false }));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Connection test timed out.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 20000);
-      this.on("provider_connection_test", handleResult);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "test_provider_connection",
-          request_id: requestId,
-          connection_id: id,
-        },
-        cleanup,
-        reject,
-      );
+          return parsed;
+        }, "Invalid connection test payload."),
     });
   }
 
@@ -1204,75 +1111,31 @@ export class MultiServerWebSocketClient {
     serverId: string,
     workerId: string,
   ): Promise<ThreadRuntimeSelection> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("thread_runtime", handleSelection);
-        this.off("error", handleError);
-      };
-      const handleSelection = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const selection = parseThreadRuntimeSelection(
-            payload.runtime,
-            workerId,
-          );
-          if (!selection) {
-            reject(
-              invalidProviderReply(
-                "Daemon returned an invalid session provider selection.",
-              ),
+    return this.request(
+      serverId,
+      "get_thread_runtime",
+      { worker_id: workerId },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "thread_runtime",
+        timeoutMs: 15000,
+        timeout: providerTimeout("Timed out while loading session provider."),
+        error: (payload) => providerErrorFromPayload(payload),
+        parse: (payload) =>
+          parseProviderReply(() => {
+            const selection = parseThreadRuntimeSelection(
+              payload.runtime,
+              workerId,
             );
-            return;
-          }
-          resolve(selection);
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid session provider payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Timed out while loading session provider.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 15000);
-      this.on("thread_runtime", handleSelection);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "get_thread_runtime",
-          request_id: requestId,
-          worker_id: workerId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+            if (!selection) {
+              throw invalidProviderReply(
+                "Daemon returned an invalid session provider selection.",
+              );
+            }
+            return selection;
+          }, "Invalid session provider payload."),
+      },
+    );
   }
 
   setThreadRuntime(
@@ -1282,86 +1145,44 @@ export class MultiServerWebSocketClient {
       runtime: import("./providers").ThreadRuntimeChoice;
     },
   ): Promise<ThreadRuntimeMutationResult> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("thread_runtime_set", handleActivated);
-        this.off("error", handleError);
-      };
-      const handleActivated = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const persistence = requireAppliedPersistence(payload);
-          const selection = parseThreadRuntimeSelection(
-            payload.runtime,
-            input.workerId,
-          );
-          if (!selection || !assertThreadRuntimeMatches(selection, input)) {
-            reject(
-              invalidProviderReply(
-                "Daemon returned an invalid activation selection.",
-              ),
-            );
-            return;
-          }
-          resolve({ runtime: selection, persistence });
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid activation payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Timed out while switching model.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 20000);
-      this.on("thread_runtime_set", handleActivated);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "set_thread_runtime",
-          request_id: requestId,
-          worker_id: input.workerId,
-          runtime: {
-            connection_id: input.runtime.connectionId,
-            model_id: input.runtime.modelId,
-            ...(input.runtime.effect?.trim()
-              ? { effect: input.runtime.effect.trim() }
-              : {}),
-            ...(input.runtime.useDefaultEffect
-              ? { use_default_effect: true }
-              : {}),
-          },
+    return this.request(
+      serverId,
+      "set_thread_runtime",
+      {
+        worker_id: input.workerId,
+        runtime: {
+          connection_id: input.runtime.connectionId,
+          model_id: input.runtime.modelId,
+          ...(input.runtime.effect?.trim()
+            ? { effect: input.runtime.effect.trim() }
+            : {}),
+          ...(input.runtime.useDefaultEffect
+            ? { use_default_effect: true }
+            : {}),
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "thread_runtime_set",
+        timeoutMs: 20000,
+        timeout: providerTimeout("Timed out while switching model."),
+        error: (payload) => providerErrorFromPayload(payload),
+        parse: (payload) =>
+          parseProviderReply(() => {
+            const persistence = requireAppliedPersistence(payload);
+            const selection = parseThreadRuntimeSelection(
+              payload.runtime,
+              input.workerId,
+            );
+            if (!selection || !assertThreadRuntimeMatches(selection, input)) {
+              throw invalidProviderReply(
+                "Daemon returned an invalid activation selection.",
+              );
+            }
+            return { runtime: selection, persistence };
+          }, "Invalid activation payload."),
+      },
+    );
   }
 
   setProviderCredential(
@@ -1380,78 +1201,36 @@ export class MultiServerWebSocketClient {
         ),
       );
     }
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("provider_credential", handleResult);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const parsed = parseProviderCredentialResult(payload, connectionId);
-          if (!parsed) {
-            reject(
-              invalidProviderReply(
+    const pending = this.request<ProviderCredentialResult>(
+      serverId,
+      "set_provider_credential",
+      { connection_id: connectionId, credential: transientCredential },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "provider_credential",
+        timeoutMs: 15000,
+        timeout: providerTimeout("Timed out while saving API key."),
+        error: (payload) =>
+          providerErrorFromPayload(payload, { credentialWrite: true }),
+        parse: (payload) =>
+          parseProviderReply(() => {
+            const parsed = parseProviderCredentialResult(payload, connectionId);
+            if (!parsed) {
+              throw invalidProviderReply(
                 "Daemon returned an invalid credential result.",
-              ),
-            );
-            return;
-          }
-          resolve(parsed);
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Invalid credential payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload, { credentialWrite: true }));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            "Timed out while saving API key.",
-            "timeout",
-            true,
-          ),
-        );
-      }, 15000);
-      this.on("provider_credential", handleResult);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "set_provider_credential",
-          request_id: requestId,
-          connection_id: connectionId,
-          credential: transientCredential,
-        },
-        cleanup,
-        reject,
-      );
-      transientCredential = "";
-    });
+              );
+            }
+            return parsed;
+          }, "Invalid credential payload."),
+      },
+    );
+    transientCredential = "";
+    return pending;
   }
 
   private requestProvidersCatalog(
     serverId: string,
+    type: string,
     body: Record<string, unknown>,
     timeoutMessage: string,
     isList: boolean,
@@ -1459,27 +1238,19 @@ export class MultiServerWebSocketClient {
     if (!this.connections.get(serverId)) {
       return Promise.reject(offlineProviderError());
     }
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("providers", handleCatalog);
-        this.off("error", handleError);
-      };
-      const handleCatalog = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
+    return this.request(serverId, type, body, {
+      requestId: newProviderRequestId(),
+      responseType: "providers",
+      timeoutMs: 15000,
+      timeout: providerTimeout(timeoutMessage),
+      error: (payload) => providerErrorFromPayload(payload),
+      parse: (payload) =>
+        parseProviderReply(() => {
           const snapshot = parseProvidersSnapshot(payload);
           if (!snapshot) {
-            reject(
-              invalidProviderReply(
-                "Daemon returned an invalid Providers catalog.",
-              ),
+            throw invalidProviderReply(
+              "Daemon returned an invalid Providers catalog.",
             );
-            return;
           }
           const persistence = isList
             ? (parseOptionalMutationPersistence(payload) ?? {
@@ -1488,102 +1259,33 @@ export class MultiServerWebSocketClient {
                 outcome: "applied",
               })
             : requireAppliedPersistence(payload);
-          if (!isList) {
-            // requireApplied already validated
-          } else if (persistence.ambiguous) {
-            reject(ambiguousProviderMutation(persistence.warning));
-            return;
+          if (isList && persistence.ambiguous) {
+            throw ambiguousProviderMutation(persistence.warning);
           }
-          resolve({ snapshot, catalog: snapshot, persistence });
-        } catch (error) {
-          reject(
-            error instanceof ProviderError
-              ? error
-              : invalidProviderReply(
-                  error instanceof Error
-                    ? error.message
-                    : "Daemon returned an invalid Providers payload.",
-                ),
-          );
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(providerErrorFromPayload(payload));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
-          new ProviderError(
-            PROVIDER_ERROR_CODES.timeout,
-            timeoutMessage,
-            "timeout",
-            true,
-          ),
-        );
-      }, 15000);
-      this.on("providers", handleCatalog);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          ...body,
-          request_id: requestId,
-        },
-        cleanup,
-        reject,
-      );
+          return { snapshot, catalog: snapshot, persistence };
+        }, "Daemon returned an invalid Providers payload."),
     });
   }
 
   listDir(serverId: string, path?: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<{
+    return this.request<{
       path: string;
       entries: { name: string; path: string }[];
-    }>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("dir_list", handleList);
-        this.off("error", handleError);
-      };
-
-      const handleList = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId)
-          return;
-        cleanup();
-        resolve({ path: payload.path, entries: payload.entries ?? [] });
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId)
-          return;
-        cleanup();
-        reject(new Error(payload.message || "Failed to list directory."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while listing directory."));
-      }, 10000);
-
-      this.on("dir_list", handleList);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "list_dir",
-          request_id: requestId,
-          cwd: path ?? "",
-        },
-        cleanup,
-        reject,
-      );
-    });
+    }>(
+      serverId,
+      "list_dir",
+      { cwd: path ?? "" },
+      {
+        responseType: "dir_list",
+        timeoutMs: 10000,
+        timeout: "Timed out while listing directory.",
+        error: "Failed to list directory.",
+        parse: (payload) => ({
+          path: payload.path,
+          entries: payload.entries ?? [],
+        }),
+      },
+    );
   }
 
   getGitDiffStatus(
@@ -1593,21 +1295,16 @@ export class MultiServerWebSocketClient {
       cwd?: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<GitDiffStatusSnapshot>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("git_diff_status", handleStatus);
-        this.off("error", handleError);
-      };
-
-      const handleStatus = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(
+    return this.request<GitDiffStatusSnapshot>(
+      serverId,
+      "git_diff_status",
+      { target_id: options?.targetId, cwd: options?.cwd },
+      {
+        responseType: "git_diff_status",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading git diff status.",
+        error: "Failed to load git diff status.",
+        parse: (payload) =>
           (payload.status ?? {
             available: false,
             clean: true,
@@ -1619,36 +1316,8 @@ export class MultiServerWebSocketClient {
             deletions: 0,
             files: [],
           }) as GitDiffStatusSnapshot,
-        );
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load git diff status."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading git diff status."));
-      }, 10000);
-
-      this.on("git_diff_status", handleStatus);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "git_diff_status",
-          request_id: requestId,
-          target_id: options?.targetId,
-          cwd: options?.cwd,
-        },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
   getGitDiffPatch(
@@ -1659,86 +1328,47 @@ export class MultiServerWebSocketClient {
       path: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<GitDiffPatchPayload>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("git_diff_patch", handlePatch);
-        this.off("error", handleError);
-      };
-
-      const handlePatch = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.patch as GitDiffPatchPayload);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load git diff patch."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading git diff patch."));
-      }, 10000);
-
-      this.on("git_diff_patch", handlePatch);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "git_diff_patch",
-          request_id: requestId,
-          target_id: options.targetId,
-          cwd: options.cwd,
-          path: options.path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<GitDiffPatchPayload>(
+      serverId,
+      "git_diff_patch",
+      { target_id: options.targetId, cwd: options.cwd, path: options.path },
+      {
+        responseType: "git_diff_patch",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading git diff patch.",
+        error: "Failed to load git diff patch.",
+        parse: (payload) => payload.patch as GitDiffPatchPayload,
+      },
+    );
   }
 
   getGitDiffPage(
     serverId: string,
-    options: import("./gitDiff").GitDiffPageRequest & { targetId: string; cwd: string },
+    options: import("./gitDiff").GitDiffPageRequest & {
+      targetId: string;
+      cwd: string;
+    },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<import("./gitDiff").GitDiffPage>((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("git_diff_page", handlePage);
-        this.off("error", handleError);
-      };
-      const handlePage = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        resolve(payload.page);
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        reject(new Error(payload.message || "Could not load diff page."));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading diff page."));
-      }, 10000);
-      this.on("git_diff_page", handlePage);
-      this.on("error", handleError);
-      this.sendRequestNow(serverId, {
-        type: "git_diff_page", request_id: requestId, target_id: options.targetId,
-        cwd: options.cwd, path: options.path, scope: options.scope, row: options.row,
-        file_generation: options.version, query: options.query,
-      }, cleanup, reject);
-    });
+    return this.request<import("./gitDiff").GitDiffPage>(
+      serverId,
+      "git_diff_page",
+      {
+        target_id: options.targetId,
+        cwd: options.cwd,
+        path: options.path,
+        scope: options.scope,
+        row: options.row,
+        file_generation: options.version,
+        query: options.query,
+      },
+      {
+        responseType: "git_diff_page",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading diff page.",
+        error: "Could not load diff page.",
+        parse: (payload) => payload.page,
+      },
+    );
   }
 
   getGitDiffFileContent(
@@ -1749,53 +1379,18 @@ export class MultiServerWebSocketClient {
       path: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<GitDiffFileContentPayload>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("git_diff_file_content", handleContent);
-        this.off("error", handleError);
-      };
-
-      const handleContent = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.content as GitDiffFileContentPayload);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to load git diff file content."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading git diff file content."));
-      }, 10000);
-
-      this.on("git_diff_file_content", handleContent);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "git_diff_file_content",
-          request_id: requestId,
-          target_id: options.targetId,
-          cwd: options.cwd,
-          path: options.path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<GitDiffFileContentPayload>(
+      serverId,
+      "git_diff_file_content",
+      { target_id: options.targetId, cwd: options.cwd, path: options.path },
+      {
+        responseType: "git_diff_file_content",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading git diff file content.",
+        error: "Failed to load git diff file content.",
+        parse: (payload) => payload.content as GitDiffFileContentPayload,
+      },
+    );
   }
 
   getGitRepoEntries(
@@ -1806,53 +1401,18 @@ export class MultiServerWebSocketClient {
       path?: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<GitRepoBrowserPayload>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("git_repo_entries", handleEntries);
-        this.off("error", handleError);
-      };
-
-      const handleEntries = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.browser as GitRepoBrowserPayload);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to load repository files."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading repository files."));
-      }, 10000);
-
-      this.on("git_repo_entries", handleEntries);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "git_repo_entries",
-          request_id: requestId,
-          target_id: options?.targetId,
-          cwd: options?.cwd,
-          path: options?.path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<GitRepoBrowserPayload>(
+      serverId,
+      "git_repo_entries",
+      { target_id: options?.targetId, cwd: options?.cwd, path: options?.path },
+      {
+        responseType: "git_repo_entries",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading repository files.",
+        error: "Failed to load repository files.",
+        parse: (payload) => payload.browser as GitRepoBrowserPayload,
+      },
+    );
   }
 
   getGitRepoFileContent(
@@ -1863,51 +1423,18 @@ export class MultiServerWebSocketClient {
       path: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<GitRepoFileContentPayload>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("git_repo_file_content", handleContent);
-        this.off("error", handleError);
-      };
-
-      const handleContent = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.content as GitRepoFileContentPayload);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load repository file."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading repository file."));
-      }, 10000);
-
-      this.on("git_repo_file_content", handleContent);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "git_repo_file_content",
-          request_id: requestId,
-          target_id: options.targetId,
-          cwd: options.cwd,
-          path: options.path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<GitRepoFileContentPayload>(
+      serverId,
+      "git_repo_file_content",
+      { target_id: options.targetId, cwd: options.cwd, path: options.path },
+      {
+        responseType: "git_repo_file_content",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading repository file.",
+        error: "Failed to load repository file.",
+        parse: (payload) => payload.content as GitRepoFileContentPayload,
+      },
+    );
   }
 
   subscribeCodexConversation(
@@ -1915,7 +1442,7 @@ export class MultiServerWebSocketClient {
     options: CodexConversationSubscriptionOptions,
     handlers: CodexConversationSubscriptionHandlers,
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const requestId = newRequestId();
 
     const handleSnapshot = (payload: any) => {
       if (payload.serverId !== serverId || payload.request_id !== requestId) {
@@ -1993,94 +1520,67 @@ export class MultiServerWebSocketClient {
   }
 
   getCodexSlashCommands(serverId: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<CodexSlashCommandSnapshot>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("codex_slash_commands", handleCommands);
-        this.off("error", handleError);
-      };
-
-      const handleCommands = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        const commands = Array.isArray(payload.commands)
-          ? payload.commands
-              .map((command: any) => ({
-                value: typeof command.value === "string" ? command.value : "",
-                name: typeof command.name === "string" ? command.name : "",
-                title: typeof command.title === "string" ? command.title : "",
-                description:
-                  typeof command.description === "string"
-                    ? command.description
-                    : "",
-                source:
-                  typeof command.source === "string"
-                    ? command.source
-                    : undefined,
-                category:
-                  typeof command.category === "string" && command.category
-                    ? command.category
-                    : "",
-                execution:
-                  typeof command.execution === "string" && command.execution
-                    ? command.execution
-                    : "",
-                input: normalizeCodexSlashCommandInput(command.input),
-                output: normalizeCodexSlashCommandOutput(command.output),
-                interactive: Boolean(command.interactive),
-                chat_supported: Boolean(command.chat_supported),
-                terminal_supported:
-                  typeof command.terminal_supported === "boolean"
-                    ? command.terminal_supported
-                    : command.execution !== "unsupported",
-              }))
-              .filter(
-                (command: CodexSlashCommand) =>
-                  command.value.startsWith("/") && command.name.length > 0,
-              )
-          : [];
-        resolve({
-          generated_at:
-            typeof payload.generated_at === "string"
-              ? payload.generated_at
-              : undefined,
-          source:
-            typeof payload.source === "string" ? payload.source : undefined,
-          version:
-            typeof payload.version === "string" ? payload.version : undefined,
-          commands,
-        });
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load Codex commands."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Codex commands."));
-      }, 10000);
-
-      this.on("codex_slash_commands", handleCommands);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "codex_slash_commands",
-          request_id: requestId,
+    return this.request<CodexSlashCommandSnapshot>(
+      serverId,
+      "codex_slash_commands",
+      {},
+      {
+        responseType: "codex_slash_commands",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading Codex commands.",
+        error: "Failed to load Codex commands.",
+        parse: (payload) => {
+          const commands = Array.isArray(payload.commands)
+            ? payload.commands
+                .map((command: any) => ({
+                  value: typeof command.value === "string" ? command.value : "",
+                  name: typeof command.name === "string" ? command.name : "",
+                  title:
+                    typeof command.title === "string" ? command.title : "",
+                  description:
+                    typeof command.description === "string"
+                      ? command.description
+                      : "",
+                  source:
+                    typeof command.source === "string"
+                      ? command.source
+                      : undefined,
+                  category:
+                    typeof command.category === "string" && command.category
+                      ? command.category
+                      : "",
+                  execution:
+                    typeof command.execution === "string" && command.execution
+                      ? command.execution
+                      : "",
+                  input: normalizeCodexSlashCommandInput(command.input),
+                  output: normalizeCodexSlashCommandOutput(command.output),
+                  interactive: Boolean(command.interactive),
+                  chat_supported: Boolean(command.chat_supported),
+                  terminal_supported:
+                    typeof command.terminal_supported === "boolean"
+                      ? command.terminal_supported
+                      : command.execution !== "unsupported",
+                }))
+                .filter(
+                  (command: CodexSlashCommand) =>
+                    command.value.startsWith("/") && command.name.length > 0,
+                )
+            : [];
+          return {
+            generated_at:
+              typeof payload.generated_at === "string"
+                ? payload.generated_at
+                : undefined,
+            source:
+              typeof payload.source === "string" ? payload.source : undefined,
+            version:
+              typeof payload.version === "string" ? payload.version : undefined,
+            commands,
+          };
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
   getCodexSkills(
@@ -2089,260 +1589,117 @@ export class MultiServerWebSocketClient {
       cwd?: string;
     } = {},
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<CodexSkillsSnapshot>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("codex_skills", handleSkills);
-        this.off("error", handleError);
-      };
-
-      const handleSkills = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        const skills = Array.isArray(payload.skills)
-          ? payload.skills
-              .map((skill: any) => ({
-                name: typeof skill.name === "string" ? skill.name : "",
-                description:
-                  typeof skill.description === "string"
-                    ? skill.description
-                    : undefined,
-                path: typeof skill.path === "string" ? skill.path : "",
-                scope:
-                  typeof skill.scope === "string" && skill.scope
-                    ? skill.scope
-                    : "user",
-                enabled:
-                  typeof skill.enabled === "boolean" ? skill.enabled : true,
-              }))
-              .filter(
-                (skill: CodexSkill) =>
-                  skill.name.length > 0 && skill.path.length > 0,
-              )
-          : [];
-        resolve({
-          cwd: typeof payload.cwd === "string" ? payload.cwd : options.cwd,
-          skills,
-        });
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load Codex skills."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Codex skills."));
-      }, 10000);
-
-      this.on("codex_skills", handleSkills);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "codex_skills",
-          request_id: requestId,
-          cwd: options.cwd,
+    return this.request<CodexSkillsSnapshot>(
+      serverId,
+      "codex_skills",
+      { cwd: options.cwd },
+      {
+        responseType: "codex_skills",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading Codex skills.",
+        error: "Failed to load Codex skills.",
+        parse: (payload) => {
+          const skills = Array.isArray(payload.skills)
+            ? payload.skills
+                .map((skill: any) => ({
+                  name: typeof skill.name === "string" ? skill.name : "",
+                  description:
+                    typeof skill.description === "string"
+                      ? skill.description
+                      : undefined,
+                  path: typeof skill.path === "string" ? skill.path : "",
+                  scope:
+                    typeof skill.scope === "string" && skill.scope
+                      ? skill.scope
+                      : "user",
+                  enabled:
+                    typeof skill.enabled === "boolean" ? skill.enabled : true,
+                }))
+                .filter(
+                  (skill: CodexSkill) =>
+                    skill.name.length > 0 && skill.path.length > 0,
+                )
+            : [];
+          return {
+            cwd: typeof payload.cwd === "string" ? payload.cwd : options.cwd,
+            skills,
+          };
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
   getSkillsInventory(
     serverId: string,
     options: { cwd?: string; generation: number },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<{ generation: number; inventory: SkillsInventory }>(
-      (resolve, reject) => {
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          this.off("skills_inventory", handleInventory);
-          this.off("skills_inventory_error", handleError);
-        };
-        const handleInventory = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
+    return this.request<{ generation: number; inventory: SkillsInventory }>(
+      serverId,
+      "skills_inventory",
+      { generation: options.generation, cwd: options.cwd },
+      {
+        responseType: "skills_inventory",
+        errorTypes: ["skills_inventory_error"],
+        timeoutMs: 15000,
+        timeout: "Timed out while loading installed Skills.",
+        error: "Failed to load installed Skills.",
+        parse: (payload) => {
           if (payload.generation !== options.generation) {
-            reject(
-              new Error("Daemon returned a stale Skills inventory generation."),
+            throw new Error(
+              "Daemon returned a stale Skills inventory generation.",
             );
-            return;
           }
-          try {
-            resolve({
-              generation: options.generation,
-              inventory: normalizeSkillsInventory(payload.inventory),
-            });
-          } catch (error) {
-            reject(error);
-          }
-        };
-        const handleError = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
-          reject(
-            new Error(payload.message || "Failed to load installed Skills."),
-          );
-        };
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("Timed out while loading installed Skills."));
-        }, 15000);
-        this.on("skills_inventory", handleInventory);
-        this.on("skills_inventory_error", handleError);
-        this.sendRequestNow(
-          serverId,
-          {
-            type: "skills_inventory",
-            request_id: requestId,
+          return {
             generation: options.generation,
-            cwd: options.cwd,
-          },
-          cleanup,
-          reject,
-        );
+            inventory: normalizeSkillsInventory(payload.inventory),
+          };
+        },
       },
     );
   }
 
-  buildSkillsCommand(
-    serverId: string,
-    options: SkillDeleteIdentity,
-  ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<SkillsMutationCommand>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("skills_command", handleCommand);
-        this.off("skills_command_error", handleError);
-      };
-      const handleCommand = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
+  buildSkillsCommand(serverId: string, options: SkillDeleteIdentity) {
+    return this.request<SkillsMutationCommand>(
+      serverId,
+      "skills_command",
+      skillIdentityFields(options),
+      {
+        responseType: "skills_command",
+        errorTypes: ["skills_command_error"],
+        timeoutMs: 15000,
+        timeout: "Timed out while validating the Skills command.",
+        error: "Skills command was rejected.",
+        parse: (payload) => {
           const command = normalizeSkillsMutationCommand(payload.command);
           assertSkillsCommandMatchesRequest(command, options);
-          resolve(command);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Skills command was rejected."));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while validating the Skills command."));
-      }, 15000);
-      this.on("skills_command", handleCommand);
-      this.on("skills_command_error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "skills_command",
-          request_id: requestId,
-          operation: options.operation,
-          cwd: options.cwd,
-          skill_id: options.skillId,
-          skill_name: options.skillName,
-          root_path: options.rootPath,
-          canonical_path: options.canonicalPath,
-          allowed_root: options.allowedRoot,
+          return command;
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
-  executeSkillsMutation(
-    serverId: string,
-    options: SkillDeleteIdentity,
-  ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<SkillsMutationResult>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("skills_mutation_result", handleResult);
-        this.off("skills_mutation_error", handleError);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const result = normalizeSkillsMutationResult(payload);
-          assertSkillsMutationMatchesRequest(result, options);
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
+  executeSkillsMutation(serverId: string, options: SkillDeleteIdentity) {
+    return this.request<SkillsMutationResult>(
+      serverId,
+      "skills_mutation",
+      skillIdentityFields(options),
+      {
+        responseType: "skills_mutation_result",
+        errorTypes: ["skills_mutation_error", "error"],
+        timeoutMs: SKILLS_MUTATION_TIMEOUT_MS,
+        timeout: "Timed out while running the Skills mutation.",
+        error: (payload) =>
           daemonRequestError(
             payload.message || "The Skills mutation failed.",
             payload.code,
           ),
-        );
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while running the Skills mutation."));
-      }, SKILLS_MUTATION_TIMEOUT_MS);
-      this.on("skills_mutation_result", handleResult);
-      this.on("skills_mutation_error", handleError);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "skills_mutation",
-          request_id: requestId,
-          operation: options.operation,
-          cwd: options.cwd,
-          skill_id: options.skillId,
-          skill_name: options.skillName,
-          root_path: options.rootPath,
-          canonical_path: options.canonicalPath,
-          allowed_root: options.allowedRoot,
+        parse: (payload) => {
+          const result = normalizeSkillsMutationResult(payload);
+          assertSkillsMutationMatchesRequest(result, options);
+          return result;
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
   getSkillsInspect(
@@ -2355,374 +1712,146 @@ export class MultiServerWebSocketClient {
       path?: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<{ generation: number; detail: PackageDetail }>(
-      (resolve, reject) => {
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          this.off("skills_inspect_result", handleDetail);
-          this.off("skills_inspect_error", handleError);
-        };
-        const handleDetail = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
+    return this.request<{ generation: number; detail: PackageDetail }>(
+      serverId,
+      "skills_inspect",
+      {
+        generation: options.generation,
+        skill_name: options.skillName,
+        skill_id: options.skillId,
+        cwd: options.cwd,
+        path: options.path,
+      },
+      {
+        responseType: "skills_inspect_result",
+        errorTypes: ["skills_inspect_error"],
+        timeoutMs: 15000,
+        timeout: "Timed out while inspecting the Skill.",
+        error: (payload) =>
+          daemonRequestError(
+            payload.message || "Could not inspect this Skill.",
+            payload.code,
+          ),
+        parse: (payload) => {
           if (payload.generation !== options.generation) {
-            reject(
-              new Error("Daemon returned a stale Skills inspect generation."),
+            throw new Error(
+              "Daemon returned a stale Skills inspect generation.",
             );
-            return;
           }
-          try {
-            const detail = normalizeSkillsInspectDetail(payload.detail);
-            if (
-              detail.skillName !== options.skillName ||
-              (options.skillId != null && detail.copyId !== options.skillId)
-            ) {
-              throw new Error(
-                "Daemon returned details for a different Skill copy.",
-              );
-            }
-            resolve({
-              generation: options.generation,
-              detail,
-            });
-          } catch (error) {
-            reject(error);
-          }
-        };
-        const handleError = (payload: any) => {
+          const detail = normalizeSkillsInspectDetail(payload.detail);
           if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
+            detail.skillName !== options.skillName ||
+            (options.skillId != null && detail.copyId !== options.skillId)
           ) {
-            return;
+            throw new Error(
+              "Daemon returned details for a different Skill copy.",
+            );
           }
-          cleanup();
-          reject(
-            daemonRequestError(
-              payload.message || "Could not inspect this Skill.",
-              payload.code,
-            ),
-          );
-        };
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("Timed out while inspecting the Skill."));
-        }, 15000);
-        this.on("skills_inspect_result", handleDetail);
-        this.on("skills_inspect_error", handleError);
-        this.sendRequestNow(
-          serverId,
-          {
-            type: "skills_inspect",
-            request_id: requestId,
-            generation: options.generation,
-            skill_name: options.skillName,
-            skill_id: options.skillId,
-            cwd: options.cwd,
-            path: options.path,
-          },
-          cleanup,
-          reject,
-        );
+          return { generation: options.generation, detail };
+        },
       },
     );
   }
 
   getPluginsInventory(serverId: string, options: { generation: number }) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<{ generation: number; inventory: PluginInventory }>(
-      (resolve, reject) => {
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          this.off("plugins_inventory", handleInventory);
-          this.off("plugins_inventory_error", handleError);
-          this.off("error", handleGenericError);
-        };
-        const handleInventory = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
-          if (payload.generation !== options.generation) {
-            reject(
-              new Error(
-                "Daemon returned a stale Plugins inventory generation.",
-              ),
-            );
-            return;
-          }
-          try {
-            resolve({
-              generation: options.generation,
-              inventory: normalizePluginsInventory(payload.inventory),
-            });
-          } catch (error) {
-            reject(error);
-          }
-        };
-        const handleError = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
-          reject(
-            daemonRequestError(
-              payload.message || "Failed to load Plugins.",
-              payload.code,
-            ),
-          );
-        };
-        // Unknown request types arrive on the generic error channel; preserve
+    return this.request<{ generation: number; inventory: PluginInventory }>(
+      serverId,
+      "plugins_inventory",
+      { generation: options.generation },
+      {
+        responseType: "plugins_inventory",
+        // Unknown request types arrive on the generic error channel; keep
         // their code so the caller can expose the daemon capability error.
-        const handleGenericError = handleError;
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(
-            daemonRequestError("Timed out while loading Plugins.", "timeout"),
-          );
-        }, PLUGINS_INVENTORY_TIMEOUT_MS);
-        this.on("plugins_inventory", handleInventory);
-        this.on("plugins_inventory_error", handleError);
-        this.on("error", handleGenericError);
-        this.sendRequestNow(
-          serverId,
-          {
-            type: "plugins_inventory",
-            request_id: requestId,
+        errorTypes: ["plugins_inventory_error", "error"],
+        timeoutMs: PLUGINS_INVENTORY_TIMEOUT_MS,
+        timeout: () =>
+          daemonRequestError("Timed out while loading Plugins.", "timeout"),
+        error: (payload) =>
+          daemonRequestError(
+            payload.message || "Failed to load Plugins.",
+            payload.code,
+          ),
+        parse: (payload) => {
+          if (payload.generation !== options.generation) {
+            throw new Error(
+              "Daemon returned a stale Plugins inventory generation.",
+            );
+          }
+          return {
             generation: options.generation,
-          },
-          cleanup,
-          reject,
-        );
+            inventory: normalizePluginsInventory(payload.inventory),
+          };
+        },
       },
     );
   }
 
-  buildPluginCommand(
-    serverId: string,
-    options: PluginMutationInput,
-  ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<PluginMutationCommand>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("plugin_command", handleCommand);
-        this.off("plugin_command_error", handleError);
-      };
-      const handleCommand = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const command = normalizePluginMutationCommand(payload.command);
-          assertPluginCommandMatchesRequest(command, options);
-          resolve(command);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          daemonRequestError(
-            payload.message || "Plugin command was rejected.",
-            payload.code,
-          ),
-        );
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(
+  buildPluginCommand(serverId: string, options: PluginMutationInput) {
+    return this.request<PluginMutationCommand>(
+      serverId,
+      "plugin_command",
+      pluginMutationFields(options),
+      {
+        responseType: "plugin_command",
+        errorTypes: ["plugin_command_error"],
+        timeoutMs: PLUGIN_COMMAND_TIMEOUT_MS,
+        timeout: () =>
           daemonRequestError(
             "Timed out while validating the plugin command.",
             "timeout",
           ),
-        );
-      }, PLUGIN_COMMAND_TIMEOUT_MS);
-      this.on("plugin_command", handleCommand);
-      this.on("plugin_command_error", handleError);
-      this.sendRequestNow(
-        serverId,
-          {
-            type: "plugin_command",
-            request_id: requestId,
-            operation: options.operation,
-            plugin_id: options.pluginId,
-            plugin_host: options.host,
-            plugin_source:
-              options.operation === "uninstall" ? options.source : undefined,
-            plugin_version:
-              options.operation === "uninstall" ? options.version : undefined,
-            agents:
-              options.operation === "uninstall" ? options.agents : undefined,
-            scope: options.scope,
-            plugin_copy_id:
-              options.operation === "uninstall" ? options.copyId : undefined,
-            plugin_name:
-              options.operation === "uninstall" ? options.name : undefined,
-            root_path:
-              options.operation === "uninstall" ? options.rootPath : undefined,
-            canonical_path:
-              options.operation === "uninstall"
-                ? options.canonicalPath
-                : undefined,
-            allowed_root:
-              options.operation === "uninstall"
-                ? options.allowedRoot
-                : undefined,
-            plugin_revision:
-              options.operation === "uninstall" ? options.revision : undefined,
-          },
-        cleanup,
-        reject,
-      );
-    });
+        error: (payload) =>
+          daemonRequestError(
+            payload.message || "Plugin command was rejected.",
+            payload.code,
+          ),
+        parse: (payload) => {
+          const command = normalizePluginMutationCommand(payload.command);
+          assertPluginCommandMatchesRequest(command, options);
+          return command;
+        },
+      },
+    );
   }
 
-  executePluginMutation(
-    serverId: string,
-    options: PluginMutationInput,
-  ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise<PluginMutationResult>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("plugin_mutation_result", handleResult);
-        this.off("plugin_mutation_error", handleError);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          const result = normalizePluginMutationResult(payload);
-          assertPluginMutationMatchesRequest(result, options);
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
+  executePluginMutation(serverId: string, options: PluginMutationInput) {
+    return this.request<PluginMutationResult>(
+      serverId,
+      "plugin_mutation",
+      pluginMutationFields(options),
+      {
+        responseType: "plugin_mutation_result",
+        errorTypes: ["plugin_mutation_error", "error"],
+        timeoutMs: PLUGIN_MUTATION_TIMEOUT_MS,
+        timeout: "Timed out while running the Plugin mutation.",
+        error: (payload) =>
           daemonRequestError(
             payload.message || "The Plugin mutation failed.",
             payload.code,
           ),
-        );
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while running the Plugin mutation."));
-      }, PLUGIN_MUTATION_TIMEOUT_MS);
-      this.on("plugin_mutation_result", handleResult);
-      this.on("plugin_mutation_error", handleError);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-          {
-            type: "plugin_mutation",
-            request_id: requestId,
-            operation: options.operation,
-            plugin_id: options.pluginId,
-            plugin_host: options.host,
-            plugin_source:
-              options.operation === "uninstall" ? options.source : undefined,
-            plugin_version:
-              options.operation === "uninstall" ? options.version : undefined,
-            agents:
-              options.operation === "uninstall" ? options.agents : undefined,
-            scope: options.scope,
-            plugin_copy_id:
-              options.operation === "uninstall" ? options.copyId : undefined,
-            plugin_name:
-              options.operation === "uninstall" ? options.name : undefined,
-            root_path:
-              options.operation === "uninstall" ? options.rootPath : undefined,
-            canonical_path:
-              options.operation === "uninstall"
-                ? options.canonicalPath
-                : undefined,
-            allowed_root:
-              options.operation === "uninstall"
-                ? options.allowedRoot
-                : undefined,
-            plugin_revision:
-              options.operation === "uninstall" ? options.revision : undefined,
-          },
-        cleanup,
-        reject,
-      );
-    });
+        parse: (payload) => {
+          const result = normalizePluginMutationResult(payload);
+          assertPluginMutationMatchesRequest(result, options);
+          return result;
+        },
+      },
+    );
   }
 
   getCodexTerminalSnapshot(serverId: string, targetId: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<string>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("codex_terminal_snapshot", handleSnapshot);
-        this.off("error", handleError);
-      };
-
-      const handleSnapshot = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(typeof payload.text === "string" ? payload.text : "");
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to load Codex terminal output."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Codex terminal output."));
-      }, 10000);
-
-      this.on("codex_terminal_snapshot", handleSnapshot);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "codex_terminal_snapshot",
-          request_id: requestId,
-          target_id: targetId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<string>(
+      serverId,
+      "codex_terminal_snapshot",
+      { target_id: targetId },
+      {
+        responseType: "codex_terminal_snapshot",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading Codex terminal output.",
+        error: "Failed to load Codex terminal output.",
+        parse: (payload) =>
+          typeof payload.text === "string" ? payload.text : "",
+      },
+    );
   }
 
   getCodexAsset(
@@ -2732,21 +1861,16 @@ export class MultiServerWebSocketClient {
       cwd?: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<CodexAssetPreview>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("codex_asset", handleAsset);
-        this.off("error", handleError);
-      };
-
-      const handleAsset = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve({
+    return this.request<CodexAssetPreview>(
+      serverId,
+      "codex_asset",
+      { path: options.path, cwd: options.cwd },
+      {
+        responseType: "codex_asset",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading Codex asset.",
+        error: "Failed to load Codex asset.",
+        parse: (payload) => ({
           path: typeof payload.path === "string" ? payload.path : options.path,
           content_type:
             typeof payload.content_type === "string"
@@ -2754,182 +1878,127 @@ export class MultiServerWebSocketClient {
               : "image/*",
           data_url:
             typeof payload.data_url === "string" ? payload.data_url : "",
-        });
-      };
+        }),
+      },
+    );
+  }
 
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load Codex asset."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Codex asset."));
-      }, 10000);
-
-      this.on("codex_asset", handleAsset);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "codex_asset",
-          request_id: requestId,
-          path: options.path,
-          cwd: options.cwd,
+  dshInteraction(
+    serverId: string,
+    request: SessionFileRequest,
+    answer?: import("./dshInteractions").DSHAnswer,
+  ): Promise<
+    | import("./dshInteractions").DSHInteractionSnapshot
+    | { accepted: boolean }
+  > {
+    return this.request(
+      serverId,
+      "dsh_interaction",
+      {
+        worker_id: request.workerId,
+        process_id: request.processId,
+        started_at: request.startedAt,
+        dsh_answer: answer,
+      },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "dsh_interaction",
+        timeoutMs: 15000,
+        timeout: "DSH interaction timed out",
+        error: "DSH interaction unavailable",
+        parse: (payload) => {
+          const result = payload.result;
+          const valid = answer
+            ? result?.accepted === true
+            : typeof result?.epoch === "string" &&
+              typeof result.connected === "boolean" &&
+              Array.isArray(result.items);
+          if (!valid) {
+            throw new Error("Invalid DSH interaction response");
+          }
+          return result;
         },
-        cleanup,
-        reject,
-      );
-    });
+      },
+    );
   }
 
-  dshInteraction(serverId: string, request: SessionFileRequest, answer?: import("./dshInteractions").DSHAnswer): Promise<import("./dshInteractions").DSHInteractionSnapshot | { accepted: boolean }> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => { clearTimeout(timer); this.off("dsh_interaction", success); this.off("error", failure); };
-      const success = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        const result = payload.result;
-        if (answer ? result?.accepted === true : typeof result?.epoch === "string" && typeof result.connected === "boolean" && Array.isArray(result.items)) resolve(result);
-        else reject(new Error("Invalid DSH interaction response"));
-      };
-      const failure = (payload: any) => { if (payload.serverId === serverId && payload.request_id === requestId) { cleanup(); reject(new Error(payload.message || "DSH interaction unavailable")); } };
-      const timer = setTimeout(() => { cleanup(); reject(new Error("DSH interaction timed out")); }, 15000);
-      this.on("dsh_interaction", success); this.on("error", failure);
-      this.sendRequestNow(serverId, { type: "dsh_interaction", request_id: requestId, worker_id: request.workerId, process_id: request.processId, started_at: request.startedAt, dsh_answer: answer }, cleanup, reject);
-    });
-  }
-
-  getSessionImage(serverId: string, request: SessionFileRequest): Promise<string> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => { clearTimeout(timer); this.off("session_image", success); this.off("error", failure); };
-      const success = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        if (typeof payload.data_url !== "string" || !payload.data_url.startsWith("data:image/")) reject(new Error("Invalid Session image"));
-        else resolve(payload.data_url);
-      };
-      const failure = (payload: any) => { if (payload.serverId === serverId && payload.request_id === requestId) { cleanup(); reject(new Error(payload.message || "Image unavailable")); } };
-      const timer = setTimeout(() => { cleanup(); reject(new Error("Image request timed out")); }, 15000);
-      this.on("session_image", success); this.on("error", failure);
-      this.sendRequestNow(serverId, { type: "session_image", request_id: requestId, worker_id: request.workerId, process_id: request.processId, started_at: request.startedAt, path: request.path }, cleanup, reject);
-    });
+  getSessionImage(
+    serverId: string,
+    request: SessionFileRequest,
+  ): Promise<string> {
+    return this.request(
+      serverId,
+      "session_image",
+      {
+        worker_id: request.workerId,
+        process_id: request.processId,
+        started_at: request.startedAt,
+        path: request.path,
+      },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "session_image",
+        timeoutMs: 15000,
+        timeout: "Image request timed out",
+        error: "Image unavailable",
+        parse: (payload) => {
+          if (
+            typeof payload.data_url !== "string" ||
+            !payload.data_url.startsWith("data:image/")
+          ) {
+            throw new Error("Invalid Session image");
+          }
+          return payload.data_url;
+        },
+      },
+    );
   }
 
   getSessionFileMetadata(
     serverId: string,
     request: SessionFileRequest,
   ): Promise<SessionFileMetadata> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("session_file_metadata", handleMetadata);
-        this.off("error", handleError);
-      };
-      const handleMetadata = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          resolve(normalizeSessionFileMetadata(payload.metadata));
-        } catch (error) {
-          reject(error);
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        const error = new Error(
-          payload.message || "Failed to inspect the Session file.",
-        );
-        (error as Error & { code?: string }).code = payload.code;
-        reject(error);
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while inspecting the Session file."));
-      }, 10000);
-      this.on("session_file_metadata", handleMetadata);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "session_file_metadata",
-          request_id: requestId,
-          worker_id: request.workerId,
-          process_id: request.processId,
-          started_at: request.startedAt,
-          path: request.path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "session_file_metadata",
+      {
+        worker_id: request.workerId,
+        process_id: request.processId,
+        started_at: request.startedAt,
+        path: request.path,
+      },
+      {
+        responseType: "session_file_metadata",
+        timeoutMs: 10000,
+        timeout: "Timed out while inspecting the Session file.",
+        error: errorWithCode("Failed to inspect the Session file."),
+        parse: (payload) => normalizeSessionFileMetadata(payload.metadata),
+      },
+    );
   }
 
   getSessionFileText(
     serverId: string,
     request: SessionFileRequest & { generation: string },
   ): Promise<SessionFileTextPreview> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("session_file_text", handleText);
-        this.off("error", handleError);
-      };
-      const handleText = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        try {
-          resolve(normalizeSessionFileText(payload.text));
-        } catch (error) {
-          reject(error);
-        }
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        const error = new Error(
-          payload.message || "Failed to read the Session file.",
-        );
-        (error as Error & { code?: string }).code = payload.code;
-        reject(error);
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while reading the Session file."));
-      }, 10000);
-      this.on("session_file_text", handleText);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "session_file_text",
-          request_id: requestId,
-          worker_id: request.workerId,
-          process_id: request.processId,
-          started_at: request.startedAt,
-          path: request.path,
-          file_generation: request.generation,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "session_file_text",
+      {
+        worker_id: request.workerId,
+        process_id: request.processId,
+        started_at: request.startedAt,
+        path: request.path,
+        file_generation: request.generation,
+      },
+      {
+        responseType: "session_file_text",
+        timeoutMs: 10000,
+        timeout: "Timed out while reading the Session file.",
+        error: errorWithCode("Failed to read the Session file."),
+        parse: (payload) => normalizeSessionFileText(payload.text),
+      },
+    );
   }
 
   openTerminal(
@@ -3012,7 +2081,7 @@ export class MultiServerWebSocketClient {
     if (!socket?.isConnected) {
       throw new Error("Daemon is not connected.");
     }
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const requestId = newRequestId();
     return dispatchStructuredCommand({
       requestId,
       eventSource: this,
@@ -3051,9 +2120,7 @@ export class MultiServerWebSocketClient {
     // Retries of the exact same logical input reuse its stable request id so
     // the daemon's durable receipt ledger stays idempotent; a new or edited
     // input omits requestId and receives a fresh identity.
-    const requestId =
-      options?.requestId ||
-      `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const requestId = options?.requestId || newRequestId();
     return dispatchStructuredCommand({
       requestId,
       eventSource: this,
@@ -3077,124 +2144,44 @@ export class MultiServerWebSocketClient {
     });
   }
 
+
   getTerminalSnapshot(serverId: string, targetId: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<{ text: string; target_id?: string }>(
-      (resolve, reject) => {
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          this.off("terminal_snapshot", handleSnapshot);
-          this.off("error", handleError);
-        };
-
-        const handleSnapshot = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
-          resolve({
-            text: typeof payload.text === "string" ? payload.text : "",
-            target_id:
-              typeof payload.target_id === "string"
-                ? payload.target_id
-                : undefined,
-          });
-        };
-
-        const handleError = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
-          reject(
-            new Error(payload.message || "Failed to load terminal snapshot."),
-          );
-        };
-
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("Timed out while loading terminal snapshot."));
-        }, 10000);
-
-        this.on("terminal_snapshot", handleSnapshot);
-        this.on("error", handleError);
-        this.sendRequestNow(
-          serverId,
-          {
-            type: "terminal_snapshot",
-            request_id: requestId,
-            target_id: targetId,
-          },
-          cleanup,
-          reject,
-        );
+    return this.request<{ text: string; target_id?: string }>(
+      serverId,
+      "terminal_snapshot",
+      { target_id: targetId },
+      {
+        responseType: "terminal_snapshot",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading terminal snapshot.",
+        error: "Failed to load terminal snapshot.",
+        parse: (payload) => ({
+          text: typeof payload.text === "string" ? payload.text : "",
+          target_id:
+            typeof payload.target_id === "string"
+              ? payload.target_id
+              : undefined,
+        }),
       },
     );
   }
 
   getTerminalHistory(serverId: string, sessionId: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<import("./terminalHistory").TerminalHistorySnapshot>(
-      (resolve, reject) => {
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          this.off("terminal_history", handleSnapshot);
-          this.off("error", handleError);
-        };
-
-        const handleSnapshot = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
+    return this.request<import("./terminalHistory").TerminalHistorySnapshot>(
+      serverId,
+      "terminal_history",
+      { session_id: sessionId },
+      {
+        responseType: "terminal_history",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading terminal snapshot.",
+        error: "Failed to load terminal snapshot.",
+        parse: (payload) => {
           if (payload.session_id !== sessionId || !payload.history) {
-            reject(new Error("Invalid terminal history response."));
-            return;
+            throw new Error("Invalid terminal history response.");
           }
-          resolve(payload.history);
-        };
-
-        const handleError = (payload: any) => {
-          if (
-            payload.serverId !== serverId ||
-            payload.request_id !== requestId
-          ) {
-            return;
-          }
-          cleanup();
-          reject(
-            new Error(payload.message || "Failed to load terminal snapshot."),
-          );
-        };
-
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("Timed out while loading terminal snapshot."));
-        }, 10000);
-
-        this.on("terminal_history", handleSnapshot);
-        this.on("error", handleError);
-        this.sendRequestNow(
-          serverId,
-          {
-            type: "terminal_history",
-            request_id: requestId,
-            session_id: sessionId,
-          },
-          cleanup,
-          reject,
-        );
+          return payload.history;
+        },
       },
     );
   }
@@ -3207,99 +2194,39 @@ export class MultiServerWebSocketClient {
   answerChoice(
     serverId: string,
     workerId: string,
-    answer: { call_id: string; answers: Array<{ selected: number[]; other?: string }> },
+    answer: {
+      call_id: string;
+      answers: Array<{ selected: number[]; other?: string }>;
+    },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<string[]>((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("choice_answered", handleAnswered);
-        this.off("error", handleError);
-      };
-
-      const handleAnswered = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(Array.isArray(payload.answers) ? payload.answers : []);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Could not send the answer."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while answering. Check the Terminal."));
-      }, 30000);
-
-      this.on("choice_answered", handleAnswered);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "answer_choice",
-          request_id: requestId,
-          worker_id: workerId,
-          choice_answer: answer,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<string[]>(
+      serverId,
+      "answer_choice",
+      { worker_id: workerId, choice_answer: answer },
+      {
+        responseType: "choice_answered",
+        timeoutMs: 30000,
+        timeout: "Timed out while answering. Check the Terminal.",
+        error: "Could not send the answer.",
+        parse: (payload) =>
+          Array.isArray(payload.answers) ? payload.answers : [],
+      },
+    );
   }
 
   sendKey(serverId: string, workerId: string, key: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("key_sent", handleSent);
-        this.off("error", handleError);
-      };
-
-      const handleSent = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve();
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to send terminal key."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while sending terminal key."));
-      }, 5000);
-
-      this.on("key_sent", handleSent);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "send_key",
-          request_id: requestId,
-          worker_id: workerId,
-          key,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<void>(
+      serverId,
+      "send_key",
+      { worker_id: workerId, key },
+      {
+        responseType: "key_sent",
+        timeoutMs: 5000,
+        timeout: "Timed out while sending terminal key.",
+        error: "Failed to send terminal key.",
+        parse: () => undefined,
+      },
+    );
   }
 
   setActiveWorker(serverId: string, workerId: string | null) {
@@ -3322,105 +2249,50 @@ export class MultiServerWebSocketClient {
   }
 
   getStats(serverId: string): Promise<StatsPayload> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("stats_data", handleStats);
-      };
-
-      const handleStats = (payload: any) => {
-        if (payload.serverId !== serverId) return;
-        if (payload.request_id !== requestId) return;
-        cleanup();
-        resolve(payload);
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Stats request timed out."));
-      }, 15000);
-
-      this.on("stats_data", handleStats);
-      this.sendRequestNow(
-        serverId,
-        { type: "get_stats", request_id: requestId },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "get_stats",
+      {},
+      {
+        responseType: "stats_data",
+        errorTypes: [],
+        timeoutMs: 15000,
+        timeout: "Stats request timed out.",
+        parse: (payload) => payload,
+      },
+    );
   }
 
-  getResourceTelemetry(serverId: string, signal?: AbortSignal): Promise<ResourceTelemetry> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("resource_telemetry", handleTelemetry);
-        this.off("error", handleError);
-        this.off("disconnected", handleDisconnect);
-        signal?.removeEventListener("abort", handleAbort);
-      };
-
-      const handleAbort = () => {
-        cleanup();
-        reject(new Error("Resource telemetry cancelled."));
-      };
-      const handleDisconnect = (payload: { serverId: string }) => {
-        if (payload.serverId !== serverId) return;
-        cleanup();
-        reject(new Error("Daemon is not connected."));
-      };
-
-      const handleTelemetry = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        const telemetry = normalizeResourceTelemetry(payload);
-        cleanup();
-        if (!telemetry) {
-          reject(new Error("Invalid resource telemetry."));
-          return;
-        }
-        resolve(telemetry);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
+  getResourceTelemetry(
+    serverId: string,
+    signal?: AbortSignal,
+  ): Promise<ResourceTelemetry> {
+    return this.request(
+      serverId,
+      "get_resource_telemetry",
+      {},
+      {
+        responseType: "resource_telemetry",
+        timeoutMs: 10000,
+        timeout: "Resource telemetry timed out.",
+        error: (payload) =>
           new Error(
             typeof payload.message === "string" && payload.message
               ? payload.message
               : "Resource telemetry failed.",
           ),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Resource telemetry timed out."));
-      }, 10000);
-
-      this.on("resource_telemetry", handleTelemetry);
-      this.on("error", handleError);
-      this.on("disconnected", handleDisconnect);
-      signal?.addEventListener("abort", handleAbort, { once: true });
-      if (signal?.aborted) {
-        handleAbort();
-        return;
-      }
-      this.sendRequestNow(
-        serverId,
-        { type: "get_resource_telemetry", request_id: requestId },
-        cleanup,
-        reject,
-      );
-    });
+        disconnectMessage: "Daemon is not connected.",
+        signal,
+        abortMessage: "Resource telemetry cancelled.",
+        parse: (payload) => {
+          const telemetry = normalizeResourceTelemetry(payload);
+          if (!telemetry) {
+            throw new Error("Invalid resource telemetry.");
+          }
+          return telemetry;
+        },
+      },
+    );
   }
 
   /**
@@ -3462,219 +2334,103 @@ export class MultiServerWebSocketClient {
     action: BrainWorkUserActionKind,
     options: { text?: string; snoozeUntil?: string } = {},
   ): Promise<{ status?: string; admission?: string }> {
-    const requestId = `work_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("brain_work_action", handleResult);
-        this.off("error", handleError);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        resolve({ status: payload.status, admission: payload.admission || undefined });
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        reject(new Error(payload.message || "Brain could not take that action."));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out. The action may still have reached Brain."));
-      }, 30000);
-      this.on("brain_work_action", handleResult);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "brain_work_action",
-          request_id: requestId,
-          id: workId,
-          action,
-          ...(options.text ? { text: options.text } : {}),
-          ...(options.snoozeUntil ? { snooze_until: options.snoozeUntil } : {}),
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "brain_work_action",
+      {
+        id: workId,
+        action,
+        ...(options.text ? { text: options.text } : {}),
+        ...(options.snoozeUntil ? { snooze_until: options.snoozeUntil } : {}),
+      },
+      {
+        requestId: newRequestId("work_"),
+        responseType: "brain_work_action",
+        timeoutMs: 30000,
+        timeout: "Timed out. The action may still have reached Brain.",
+        error: "Brain could not take that action.",
+        parse: (payload) => ({
+          status: payload.status,
+          admission: payload.admission || undefined,
+        }),
+      },
+    );
   }
 
   getBrainContext(serverId: string): Promise<BrainContextPayload> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("brain_context", handleContext);
-        this.off("error", handleError);
-      };
-
-      const handleContext = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve((payload.context || {}) as BrainContextPayload);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load Brain context."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Brain context."));
-      }, 15000);
-
-      this.on("brain_context", handleContext);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "brain_context",
-          request_id: requestId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "brain_context",
+      {},
+      {
+        responseType: "brain_context",
+        timeoutMs: 15000,
+        timeout: "Timed out while loading Brain context.",
+        error: "Failed to load Brain context.",
+        parse: (payload) => (payload.context || {}) as BrainContextPayload,
+      },
+    );
   }
 
   runBrainGC(serverId: string): Promise<BrainHousekeepingPayload> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("brain_gc", handleGC);
-        this.off("error", handleError);
-      };
-
-      const handleGC = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve((payload.housekeeping || {}) as BrainHousekeepingPayload);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to run Brain housekeeping."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while running Brain housekeeping."));
-      }, 15000);
-
-      this.on("brain_gc", handleGC);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "brain_gc",
-          request_id: requestId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "brain_gc",
+      {},
+      {
+        responseType: "brain_gc",
+        timeoutMs: 15000,
+        timeout: "Timed out while running Brain housekeeping.",
+        error: "Failed to run Brain housekeeping.",
+        parse: (payload) =>
+          (payload.housekeeping || {}) as BrainHousekeepingPayload,
+      },
+    );
   }
 
   startNewBrainChat(serverId: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<any>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("brain_snapshot", handleSnapshot);
-        this.off("error", handleError);
-      };
-
-      const handleSnapshot = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.brain || {});
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to start a new Brain chat."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while starting a new Brain chat."));
-      }, 30000);
-
-      this.on("brain_snapshot", handleSnapshot);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "brain_chat_new",
-          request_id: requestId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<any>(
+      serverId,
+      "brain_chat_new",
+      {},
+      {
+        responseType: "brain_snapshot",
+        timeoutMs: 30000,
+        timeout: "Timed out while starting a new Brain chat.",
+        error: "Failed to start a new Brain chat.",
+        parse: (payload) => payload.brain || {},
+      },
+    );
   }
 
-  requestConnections(serverId: string, request: ConnectionRequest): Promise<ConnectionResponse> {
-    const requestId = `plugins_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off("connections_result", handleResult);
-        this.off("error", handleError);
-        this.off("disconnected", handleDisconnect);
-      };
-      const handleResult = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        cleanup();
-        if (!payload.connections || typeof payload.connections !== "object") {
-          reject(new Error("Invalid plugin response."));
-          return;
-        }
-        resolve(payload.connections as ConnectionResponse);
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) return;
-        // The code tells a refusal by the server from a request that never got there.
-        cleanup(); reject(Object.assign(new Error(payload.message || "Plugin request failed."), { code: payload.code as string | undefined }));
-      };
-      const handleDisconnect = (payload: any) => {
-        if (payload.serverId !== serverId) return;
-        cleanup(); reject(new Error("Server disconnected. Reconnect to check the result."));
-      };
-      const timer = setTimeout(() => {
-        cleanup(); reject(new Error("Plugin request timed out. Refresh to check the result."));
-      }, 25000);
-      this.on("connections_result", handleResult);
-      this.on("error", handleError);
-      this.on("disconnected", handleDisconnect);
-      this.sendRequestNow(serverId, { type: "connections", request_id: requestId, connection_request: request }, cleanup, reject);
-    });
+  requestConnections(
+    serverId: string,
+    request: ConnectionRequest,
+  ): Promise<ConnectionResponse> {
+    return this.request(
+      serverId,
+      "connections",
+      { connection_request: request },
+      {
+        requestId: `plugins_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`,
+        responseType: "connections_result",
+        timeoutMs: 25000,
+        timeout: "Plugin request timed out. Refresh to check the result.",
+        // The code tells a refusal by the server from a request that never
+        // got there.
+        error: (payload) =>
+          Object.assign(new Error(payload.message || "Plugin request failed."), {
+            code: payload.code as string | undefined,
+          }),
+        disconnectMessage: "Server disconnected. Reconnect to check the result.",
+        parse: (payload) => {
+          if (!payload.connections || typeof payload.connections !== "object") {
+            throw new Error("Invalid plugin response.");
+          }
+          return payload.connections as ConnectionResponse;
+        },
+      },
+    );
   }
 
   getTelegramConnectionStatus(serverId: string) {
@@ -3704,49 +2460,31 @@ export class MultiServerWebSocketClient {
   }
 
   beginTelegramBinding(serverId: string): Promise<TelegramBindingChallenge> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("telegram_binding_challenge", handleChallenge);
-        this.off("error", handleError);
-      };
-      const handleChallenge = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        const challenge = payload.challenge;
-        if (
-          !challenge ||
-          typeof challenge.url !== "string" ||
-          typeof challenge.expires_at !== "string"
-        ) {
-          reject(new Error("The daemon returned an invalid Telegram binding challenge."));
-          return;
-        }
-        resolve(challenge as TelegramBindingChallenge);
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Could not start Telegram owner binding."));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Telegram owner binding timed out."));
-      }, 20000);
-      this.on("telegram_binding_challenge", handleChallenge);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        { type: "telegram_connection_bind", request_id: requestId },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "telegram_connection_bind",
+      {},
+      {
+        requestId: newProviderRequestId(),
+        responseType: "telegram_binding_challenge",
+        timeoutMs: 20000,
+        timeout: "Telegram owner binding timed out.",
+        error: "Could not start Telegram owner binding.",
+        parse: (payload) => {
+          const challenge = payload.challenge;
+          if (
+            !challenge ||
+            typeof challenge.url !== "string" ||
+            typeof challenge.expires_at !== "string"
+          ) {
+            throw new Error(
+              "The daemon returned an invalid Telegram binding challenge.",
+            );
+          }
+          return challenge as TelegramBindingChallenge;
+        },
+      },
+    );
   }
 
   private requestTelegramStatus(
@@ -3760,247 +2498,121 @@ export class MultiServerWebSocketClient {
       | "telegram_connection_remove",
     fields: Record<string, unknown> = {},
   ): Promise<TelegramConnectionStatus> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("telegram_connection_status", handleStatus);
-        this.off("error", handleError);
-      };
-      const handleStatus = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
+    return this.request(serverId, type, fields, {
+      requestId: newProviderRequestId(),
+      responseType: "telegram_connection_status",
+      timeoutMs: 20000,
+      timeout: "Telegram connection request timed out.",
+      error: "Telegram connection request failed.",
+      parse: (payload) => {
         const connection = payload.connection;
         if (
           !connection ||
           typeof connection.state !== "string" ||
           typeof connection.enabled !== "boolean"
         ) {
-          reject(new Error("The daemon returned an invalid Telegram connection status."));
-          return;
+          throw new Error(
+            "The daemon returned an invalid Telegram connection status.",
+          );
         }
-        resolve(connection as TelegramConnectionStatus);
-      };
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Telegram connection request failed."));
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Telegram connection request timed out."));
-      }, 20000);
-      this.on("telegram_connection_status", handleStatus);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        { type, request_id: requestId, ...fields },
-        cleanup,
-        reject,
-      );
+        return connection as TelegramConnectionStatus;
+      },
     });
   }
 
   setBrainExecutor(serverId: string, executorId: string) {
-    return this.setExecutorByOperation(
+    return this.request<any>(
       serverId,
-      executorId,
       "brain_set_executor",
-      "Brain executor",
+      { executor_id: executorId, adapter_id: executorId },
+      {
+        responseType: "brain_snapshot",
+        timeoutMs: 15000,
+        timeout: "Timed out while switching Brain executor.",
+        error: "Failed to switch Brain executor.",
+        parse: (payload) => payload.brain || {},
+      },
     );
-  }
-
-  private setExecutorByOperation(
-    serverId: string,
-    executorId: string,
-    type: "brain_set_executor",
-    failureLabel: string,
-  ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<any>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("brain_snapshot", handleSnapshot);
-        this.off("error", handleError);
-      };
-
-      const handleSnapshot = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.brain || {});
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || `Failed to switch ${failureLabel}.`),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error(`Timed out while switching ${failureLabel}.`));
-      }, 15000);
-
-      this.on("brain_snapshot", handleSnapshot);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type,
-          request_id: requestId,
-          executor_id: executorId,
-          adapter_id: executorId,
-        },
-        cleanup,
-        reject,
-      );
-    });
   }
 
   getBrainWorkspaceTree(
     serverId: string,
     path = "",
   ): Promise<BrainWorkspaceTree> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("brain_workspace_tree", handleTree);
-        this.off("error", handleError);
-      };
-
-      const handleTree = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(normalizeBrainWorkspaceTree(payload.workspace_tree));
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to load Brain workspace."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Brain workspace."));
-      }, 15000);
-
-      this.on("brain_workspace_tree", handleTree);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "brain_workspace_tree",
-          request_id: requestId,
-          path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "brain_workspace_tree",
+      { path },
+      {
+        responseType: "brain_workspace_tree",
+        timeoutMs: 15000,
+        timeout: "Timed out while loading Brain workspace.",
+        error: "Failed to load Brain workspace.",
+        parse: (payload) => normalizeBrainWorkspaceTree(payload.workspace_tree),
+      },
+    );
   }
 
   getBrainWorkspaceFile(
     serverId: string,
     path: string,
   ): Promise<BrainWorkspaceFile> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("brain_workspace_file", handleFile);
-        this.off("error", handleError);
-      };
-
-      const handleFile = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(normalizeBrainWorkspaceFile(payload.file));
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to load Brain workspace file."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading Brain workspace file."));
-      }, 15000);
-
-      this.on("brain_workspace_file", handleFile);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "brain_workspace_file",
-          request_id: requestId,
-          path,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request(
+      serverId,
+      "brain_workspace_file",
+      { path },
+      {
+        responseType: "brain_workspace_file",
+        timeoutMs: 15000,
+        timeout: "Timed out while loading Brain workspace file.",
+        error: "Failed to load Brain workspace file.",
+        parse: (payload) => normalizeBrainWorkspaceFile(payload.file),
+      },
+    );
   }
 
-  serviceTunnel(serverId: string, serviceId: string, generation: string, action: "start" | "stop" | "status"): Promise<import("./sessionServices").ServiceTunnel> {
-    const requestId = newProviderRequestId();
-    return new Promise((resolve, reject) => {
-      const cleanup = () => { clearTimeout(timer); this.off("service_tunnel", success); this.off("error", failure); };
-      const success = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId || payload.service_id !== serviceId) return;
-        cleanup();
-        if (!payload.tunnel || payload.tunnel.generation !== generation) reject(new Error("Service changed. Refresh Services."));
-        else resolve(payload.tunnel);
-      };
-      const failure = (payload: any) => { if (payload.serverId === serverId && payload.request_id === requestId) { cleanup(); reject(new Error(payload.message || "Tunnel request failed")); } };
-      const timer = setTimeout(() => { cleanup(); reject(new Error("Tunnel request timed out")); }, 10000);
-      this.on("service_tunnel", success); this.on("error", failure);
-      this.sendRequestNow(serverId, { type: "service_tunnel", request_id: requestId, service_id: serviceId, service_generation: generation, tunnel_action: action }, cleanup, reject);
-    });
+  serviceTunnel(
+    serverId: string,
+    serviceId: string,
+    generation: string,
+    action: "start" | "stop" | "status",
+  ): Promise<import("./sessionServices").ServiceTunnel> {
+    return this.request(
+      serverId,
+      "service_tunnel",
+      {
+        service_id: serviceId,
+        service_generation: generation,
+        tunnel_action: action,
+      },
+      {
+        requestId: newProviderRequestId(),
+        responseType: "service_tunnel",
+        matchesReply: (payload) => payload.service_id === serviceId,
+        timeoutMs: 10000,
+        timeout: "Tunnel request timed out",
+        error: "Tunnel request failed",
+        parse: (payload) => {
+          if (!payload.tunnel || payload.tunnel.generation !== generation) {
+            throw new Error("Service changed. Refresh Services.");
+          }
+          return payload.tunnel;
+        },
+      },
+    );
   }
 
   listSessionServices(serverId: string): Promise<SessionServiceSnapshot> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("session_service_list", handleList);
-        this.off("error", handleError);
-      };
-
-      const handleList = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve({
+    return this.request(
+      serverId,
+      "list_session_services",
+      {},
+      {
+        responseType: "session_service_list",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading session services.",
+        error: "Failed to load session services.",
+        parse: (payload) => ({
           generated_at: payload.generated_at,
           interfaces: Array.isArray(payload.interfaces)
             ? payload.interfaces
@@ -4008,36 +2620,9 @@ export class MultiServerWebSocketClient {
           services: Array.isArray(payload.services)
             ? payload.services.map(normalizeSessionService)
             : [],
-        });
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(
-          new Error(payload.message || "Failed to load session services."),
-        );
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while loading session services."));
-      }, 10000);
-
-      this.on("session_service_list", handleList);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "list_session_services",
-          request_id: requestId,
-        },
-        cleanup,
-        reject,
-      );
-    });
+        }),
+      },
+    );
   }
 
   // ── Calendar ─────────────────────────────────────────────────────────────
@@ -4103,37 +2688,12 @@ export class MultiServerWebSocketClient {
     payload: Record<string, unknown>,
     fallback: string,
   ): Promise<CalendarItem> {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        this.off(responseType, onResponse);
-        this.off("error", onError);
-      };
-      const onResponse = (data: any) => {
-        if (data.serverId !== serverId || data.request_id !== requestId) return;
-        cleanup();
-        resolve(data.calendar_item as CalendarItem);
-      };
-      const onError = (data: any) => {
-        if (data.serverId !== serverId || data.request_id !== requestId) return;
-        cleanup();
-        const error = new Error(data.message || fallback);
-        (error as Error & { code?: string }).code = data.code;
-        reject(error);
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Calendar request timed out."));
-      }, 15000);
-      this.on(responseType, onResponse);
-      this.on("error", onError);
-      this.sendRequestNow(
-        serverId,
-        { type, request_id: requestId, ...payload },
-        cleanup,
-        reject,
-      );
+    return this.request(serverId, type, payload, {
+      responseType,
+      timeoutMs: 15000,
+      timeout: "Calendar request timed out.",
+      error: errorWithCode(fallback),
+      parse: (data) => data.calendar_item as CalendarItem,
     });
   }
 
@@ -4154,106 +2714,44 @@ export class MultiServerWebSocketClient {
       baseMtime?: string;
     },
   ) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<any>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("work_item_written", handleWritten);
-        this.off("error", handleError);
-      };
-
-      const handleWritten = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve(payload.work_item);
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        const error = new Error(
-          payload.message || "Failed to write work item.",
-        );
-        (error as Error & { code?: string; current?: any }).code = payload.code;
-        (error as Error & { code?: string; current?: any }).current =
-          payload.current;
-        reject(error);
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while writing work item."));
-      }, 10000);
-
-      this.on("work_item_written", handleWritten);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "write_work_item",
-          request_id: requestId,
-          id: options.id ?? "",
-          project: options.project,
-          path: options.path ?? "",
-          body: options.body,
-          frontmatter: options.frontmatter ?? {},
-          base_mtime: options.baseMtime ?? "",
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<any>(
+      serverId,
+      "write_work_item",
+      {
+        id: options.id ?? "",
+        project: options.project,
+        path: options.path ?? "",
+        body: options.body,
+        frontmatter: options.frontmatter ?? {},
+        base_mtime: options.baseMtime ?? "",
+      },
+      {
+        responseType: "work_item_written",
+        timeoutMs: 10000,
+        timeout: "Timed out while writing work item.",
+        error: (payload) =>
+          Object.assign(
+            new Error(payload.message || "Failed to write work item."),
+            { code: payload.code, current: payload.current },
+          ),
+        parse: (payload) => payload.work_item,
+      },
+    );
   }
 
   deleteWorkItem(serverId: string, id: string) {
-    const requestId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        this.off("work_item_deleted_ack", handleDeleted);
-        this.off("error", handleError);
-      };
-
-      const handleDeleted = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        resolve();
-      };
-
-      const handleError = (payload: any) => {
-        if (payload.serverId !== serverId || payload.request_id !== requestId) {
-          return;
-        }
-        cleanup();
-        reject(new Error(payload.message || "Failed to delete work item."));
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out while deleting work item."));
-      }, 10000);
-
-      this.on("work_item_deleted_ack", handleDeleted);
-      this.on("error", handleError);
-      this.sendRequestNow(
-        serverId,
-        {
-          type: "delete_work_item",
-          request_id: requestId,
-          id,
-        },
-        cleanup,
-        reject,
-      );
-    });
+    return this.request<void>(
+      serverId,
+      "delete_work_item",
+      { id },
+      {
+        responseType: "work_item_deleted_ack",
+        timeoutMs: 10000,
+        timeout: "Timed out while deleting work item.",
+        error: "Failed to delete work item.",
+        parse: () => undefined,
+      },
+    );
   }
 
   isConnected(serverId: string) {
@@ -4279,6 +2777,67 @@ export class MultiServerWebSocketClient {
     const handlers = this.handlers.get(type) || [];
     handlers.forEach((handler) => handler(data));
   }
+}
+
+function newRequestId(prefix = ""): string {
+  return `${prefix}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function providerTimeout(message: string): () => ProviderError {
+  return () =>
+    new ProviderError(PROVIDER_ERROR_CODES.timeout, message, "timeout", true);
+}
+
+/** Provider replies reject with a ProviderError, never a raw parse failure. */
+function parseProviderReply<T>(parse: () => T, fallbackMessage: string): T {
+  try {
+    return parse();
+  } catch (error) {
+    throw error instanceof ProviderError
+      ? error
+      : invalidProviderReply(
+          error instanceof Error ? error.message : fallbackMessage,
+        );
+  }
+}
+
+/** An error reply that keeps the daemon's code for the caller. */
+function errorWithCode(fallback: string): (payload: any) => Error {
+  return (payload) =>
+    Object.assign(new Error(payload.message || fallback), {
+      code: payload.code as string | undefined,
+    });
+}
+
+function skillIdentityFields(options: SkillDeleteIdentity) {
+  return {
+    operation: options.operation,
+    cwd: options.cwd,
+    skill_id: options.skillId,
+    skill_name: options.skillName,
+    root_path: options.rootPath,
+    canonical_path: options.canonicalPath,
+    allowed_root: options.allowedRoot,
+  };
+}
+
+function pluginMutationFields(options: PluginMutationInput) {
+  const uninstall = options.operation === "uninstall";
+  return {
+    operation: options.operation,
+    plugin_id: options.pluginId,
+    plugin_host: options.host,
+    plugin_source: uninstall ? options.source : undefined,
+    plugin_version: uninstall ? options.version : undefined,
+    agents: uninstall ? options.agents : undefined,
+    scope: options.scope,
+    plugin_copy_id: uninstall ? options.copyId : undefined,
+    plugin_name: uninstall ? options.name : undefined,
+    root_path: uninstall ? options.rootPath : undefined,
+    canonical_path: uninstall ? options.canonicalPath : undefined,
+    allowed_root: uninstall ? options.allowedRoot : undefined,
+    plugin_revision: uninstall ? options.revision : undefined,
+  };
 }
 
 function normalizeSessionService(value: any): SessionService {
