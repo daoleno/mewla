@@ -22,10 +22,11 @@ export interface PetPack {
 }
 
 /**
- * Where each state leaves the pet: in or behind the seal (asleep, greyed,
- * peeking over it, or gone), or out on its feet. waking ends on its feet.
+ * Where each state leaves the pet: in the seal (asleep, greyed, or gone), or
+ * out on its feet (attention waits on its feet, perched on Work). waking ends
+ * on its feet.
  */
-const IN_SEAL = new Set<BrainCatState>(["homeless", "offline", "idle", "attention"]);
+const IN_SEAL = new Set<BrainCatState>(["homeless", "offline", "idle"]);
 
 export function petInSeal(state: BrainCatState): boolean {
   return IN_SEAL.has(state);

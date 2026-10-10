@@ -13,27 +13,27 @@ const STATES: BrainCatState[] = [
 describe("pet transitions", () => {
   test("hops out of the seal on the way to its feet", () => {
     expect(petTransition("idle", "working")).toBe("waking");
-    expect(petTransition("attention", "delivered")).toBe("waking");
+    expect(petTransition("idle", "attention")).toBe("waking");
     expect(petTransition("offline", "delegating")).toBe("waking");
   });
 
   test("hops back in on the way down", () => {
     expect(petTransition("working", "idle")).toBe("going_back");
-    expect(petTransition("delivered", "attention")).toBe("going_back");
+    expect(petTransition("attention", "idle")).toBe("going_back");
     // Connected after waking with nothing to do: back to bed.
     expect(petTransition("waking", "idle")).toBe("going_back");
   });
 
   test("cuts straight when it stays on one side, or the new clip is the hop", () => {
     expect(petTransition("working", "delegating")).toBeNull();
-    expect(petTransition("idle", "attention")).toBeNull();
+    expect(petTransition("delegating", "attention")).toBeNull();
     expect(petTransition("idle", "waking")).toBeNull();
     expect(petTransition("homeless", "working")).toBeNull();
     for (const state of STATES) expect(petTransition(state, state)).toBeNull();
   });
 
-  test("the seal holds the sleeping, greyed, peeking and empty states", () => {
-    expect(STATES.filter(petInSeal)).toEqual(["homeless", "offline", "idle", "attention"]);
+  test("the seal holds the sleeping, greyed and empty states", () => {
+    expect(STATES.filter(petInSeal)).toEqual(["homeless", "offline", "idle"]);
   });
 });
 
