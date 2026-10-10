@@ -457,7 +457,7 @@ function normalizeKind(value: unknown): CodexConversationEventKind | null {
     case "plan":
     case "status":
       return value;
-    // Legacy provider-adaptive daemon kinds (Pi/OpenCode adapters) map onto
+    // The OpenCode, Pi and DSH adapters still emit these kinds; they map onto
     // the canonical projection vocabulary at this single wire boundary, so
     // Interface tool/reasoning cards render without a per-provider UI fork.
     case "tool_call":

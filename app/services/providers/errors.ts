@@ -178,9 +178,6 @@ export function providerMutationRequiresRefresh(error: unknown): boolean {
   );
 }
 
-export const mutationAmbiguityRequiresRefresh =
-  providerMutationRequiresRefresh;
-
 export function activationBusyAllowsRetryWithoutRefresh(
   error: unknown,
 ): boolean {

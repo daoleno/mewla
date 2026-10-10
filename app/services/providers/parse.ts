@@ -381,8 +381,6 @@ export function parseProviderConnectionTestResult(
   return { client, modelCount, latencyMs };
 }
 
-export const parseProviderCatalogProjection = parseProvidersSnapshot;
-
 export function parseProviderModelsDiscovery(
   raw: unknown,
 ): ProviderModelsResult | null {
