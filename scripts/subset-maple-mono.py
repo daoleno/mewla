@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Subset Maple Mono CN for the native app.
+"""Subset Maple Mono CN to the glyphs the native terminal must own.
 
-Keeps every glyph of the upstream font except Han ideographs outside GB2312
-and Big5 level 1, the common simplified and traditional sets. Everything a
-terminal draws (Latin, box drawing, blocks, braille, arrows, dingbats,
-Powerline/Nerd icons, CJK punctuation, kana, fullwidth forms) stays, as do
-the name table, metrics, hinting and layout features, so the face keeps its
-PostScript name and 2:1 cell width.
+Drops every CJK-script codepoint (Han, kana, Hangul, bopomofo, CJK
+punctuation, fullwidth forms) and keeps the rest: Latin, box drawing,
+blocks, braille, arrows, dingbats, Powerline/Nerd icons. CJK text comes from
+the OS face (PingFang on iOS, Noto Sans CJK on Android); the terminal
+formatter pins those cells to two columns, so the grid never depends on the
+fallback face's advance. The name table, metrics, hinting and layout
+features are unchanged, so the face keeps its PostScript name and 0.6em cell.
 
 Usage (from the repository root, with fontTools installed):
 
-  python3 scripts/subset-maple-mono-cn.py <dir with upstream TTFs> app/assets/fonts
+  python3 scripts/subset-maple-mono.py <dir with upstream TTFs> app/assets/fonts
 
 The input is the upstream Maple Mono CN v7.900 release files
 `MapleMono-CN-{Regular,SemiBold}.ttf`, pinned by SHA-256 below. Git history
-before the subset commit holds the same files.
+before commit 9d6be668 holds the same files.
 """
 
 import hashlib
@@ -29,39 +30,39 @@ SOURCES = {
     "MapleMono-CN-SemiBold.ttf": "320c87dc4134f0bc88ad878255af1f1957c9e7898e76638efc9a3cdf3868574e",
 }
 
-
-def is_han(codepoint: int) -> bool:
-    return (
-        0x3400 <= codepoint <= 0x4DBF
-        or 0x4E00 <= codepoint <= 0x9FFF
-        or 0xF900 <= codepoint <= 0xFAFF
-        or 0x20000 <= codepoint <= 0x3FFFF
-    )
-
-
-def double_byte_charset(codec: str, leads: range, trails: list[int]) -> set[int]:
-    chars: set[int] = set()
-    for lead in leads:
-        for trail in trails:
-            try:
-                text = bytes([lead, trail]).decode(codec)
-            except UnicodeDecodeError:
-                continue
-            chars.update(ord(ch) for ch in text)
-    return chars
+CJK_RANGES = (
+    (0x1100, 0x11FF),  # Hangul Jamo
+    (0x2E80, 0x2FFF),  # radicals, Kangxi, ideographic description
+    (0x3000, 0x33FF),  # CJK punctuation, kana, bopomofo, enclosed and compatibility
+    (0x3400, 0x4DBF),  # Han extension A
+    (0x4E00, 0x9FFF),  # Han
+    (0xA960, 0xA97F),  # Hangul Jamo extended A
+    (0xAC00, 0xD7FF),  # Hangul syllables and Jamo extended B
+    (0xF900, 0xFAFF),  # Han compatibility
+    (0xFE10, 0xFE1F),  # vertical forms
+    (0xFE30, 0xFE4F),  # CJK compatibility forms
+    (0xFF00, 0xFFEF),  # halfwidth and fullwidth forms
+    (0x20000, 0x3FFFF),  # Han extensions B and later
+)
 
 
-def kept_han() -> set[int]:
-    gb2312 = double_byte_charset("gb2312", range(0xA1, 0xF8), list(range(0xA1, 0xFF)))
-    big5_level1 = double_byte_charset(
-        "big5", range(0xA4, 0xC7), list(range(0x40, 0x7F)) + list(range(0xA1, 0xFF))
-    )
-    return {c for c in gb2312 | big5_level1 if is_han(c)}
+# The terminal formatter (pinnedCellClass in jni_bridge.cpp) draws these as
+# plain text runs, so every codepoint here must come from this face.
+PLAIN_RANGES = (
+    (0x2500, 0x259F),  # box drawing, blocks
+    (0x2800, 0x28FF),  # braille
+    (0xE0A0, 0xE0A2),  # Powerline branch, line number, lock
+    (0xE0B0, 0xE0B7),  # Powerline arrows and semicircles
+)
 
 
-def subset_font(source: Path, output: Path, keep_han: set[int]) -> None:
+def is_cjk(codepoint: int) -> bool:
+    return any(low <= codepoint <= high for low, high in CJK_RANGES)
+
+
+def subset_font(source: Path, output: Path) -> None:
     font = TTFont(source)
-    unicodes = [c for c in font.getBestCmap() if not is_han(c) or c in keep_han]
+    unicodes = [c for c in font.getBestCmap() if not is_cjk(c)]
     options = subset.Options()
     options.layout_features = ["*"]
     options.name_IDs = ["*"]
@@ -89,15 +90,13 @@ def verify(source: Path, output: Path) -> None:
             after["name"].getName(name_id, 3, 1, 0x409)
         ), name_id
     old_cmap, new_cmap = before.getBestCmap(), after.getBestCmap()
-    dropped = set(old_cmap) - set(new_cmap)
-    assert all(is_han(c) for c in dropped), "dropped a non-Han codepoint"
-    cell = after["hmtx"][new_cmap[ord("a")]][0]
+    assert set(new_cmap) == {c for c in old_cmap if not is_cjk(c)}, "kept set is not upstream minus CJK"
     for codepoint, glyph in new_cmap.items():
-        advance = after["hmtx"][glyph][0]
-        assert advance == before["hmtx"][old_cmap[codepoint]][0], hex(codepoint)
-        if is_han(codepoint) or 0xFF01 <= codepoint <= 0xFF5E:
-            assert advance == 2 * cell, (hex(codepoint), advance, cell)
-    for codepoint in (0x2500, 0x2588, 0x23BF, 0x2800, 0x28FF, 0xE0B0, 0x3001, 0x4E2D):
+        assert after["hmtx"][glyph][0] == before["hmtx"][old_cmap[codepoint]][0], hex(codepoint)
+    for low, high in PLAIN_RANGES:
+        for codepoint in range(low, high + 1):
+            assert codepoint in new_cmap, hex(codepoint)
+    for codepoint in (0x23BF, 0x25CF, 0x276F):
         assert codepoint in new_cmap, hex(codepoint)
     print(
         f"{output.name}: {len(old_cmap)} -> {len(new_cmap)} codepoints, "
@@ -109,14 +108,13 @@ def main() -> None:
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     source_dir, output_dir = Path(sys.argv[1]), Path(sys.argv[2])
-    keep_han = kept_han()
     for name, expected in SOURCES.items():
         source = source_dir / name
         actual = hashlib.sha256(source.read_bytes()).hexdigest()
         if actual != expected:
             sys.exit(f"{source}: SHA-256 {actual} is not the pinned upstream v7.900 file")
         output = output_dir / name
-        subset_font(source, output, keep_han)
+        subset_font(source, output)
         verify(source, output)
 
 

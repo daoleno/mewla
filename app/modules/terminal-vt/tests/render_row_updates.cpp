@@ -64,6 +64,16 @@ int main() {
         write(data);
         consume();
     }
+    // Cells a fallback face may draw are pinned to their grid width; box
+    // drawing, braille and Latin stay plain text from the bundled face.
+    write("\x1b[2J\x1b[H中a⏺─⠿\xee\x82\xb0\xef\x80\x8c");
+    {
+        auto pinned = consume();
+        assert(pinned.indices.size() == 1 && pinned.html[0].find(
+            "<w>中</w>a<n>⏺</n>─⠿\xee\x82\xb0<n>\xef\x80\x8c</n></div>") != std::string::npos);
+    }
+    write("\x1b[2J\x1b[H");
+    consume();
     // An application may clear/redraw everything while only a few rows differ.
     write("same"); consume();
     write("\x1b[2J\x1b[Hsame");

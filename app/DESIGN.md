@@ -263,7 +263,7 @@ chats keep every row). The composer says "Tell Brain…".
 | `body`, `compact` | Inter Regular | 15/24, 14/22 | everything read at length |
 | `label`, `micro` | Inter Medium | 13/18, 11/15 | controls, chips |
 | `caption` | Inter Regular | 12/17 | metadata |
-| `mono`, terminal | Maple Mono CN | 13/20 | code, terminal grid |
+| `mono`, terminal | Maple Mono (CN build, CJK removed) | 13/20 | code, terminal grid |
 
 - **CJK on web.** Each family is a stack: Inter, then Source Han Sans SC,
   Noto Sans CJK SC, PingFang SC, Microsoft YaHei. Only the Latin faces are
@@ -273,12 +273,25 @@ chats keep every row). The composer says "Tell Brain…".
   which is Source Han's design); no CJK UI face is bundled. Line heights are
   fixed per role, so fallback glyphs never change a row's height. **Native
   CJK rendering is not yet verified on a device.**
-- **Mono.** JetBrains Mono is the landing's mono, but the app keeps Maple Mono
-  CN: it has CJK at a 2:1 cell width, and xterm and ghostty size cells from
-  the first family. The bundled files are subset to the common Han set
-  (GB2312 and Big5 level 1) by `scripts/subset-maple-mono-cn.py`; rarer
-  ideographs fall back to the OS face. The terminal grid still places them
-  per cell, but chat mono text uses the fallback face's advance.
+- **Mono.** JetBrains Mono is the landing's mono, but the app keeps Maple Mono:
+  its 0.6em cell, box drawing, braille and Powerline glyphs set the terminal
+  grid. The bundled files are the Maple Mono CN build with every CJK
+  codepoint removed by `scripts/subset-maple-mono.py` (about 340 KB per
+  weight). CJK comes from the OS face, as in the rest of the UI.
+- **CJK in the terminal.** Rows are text runs, so a fallback glyph advances by
+  its own width (1em for PingFang or Noto Sans CJK, against a 1.2em double
+  cell). The native formatter therefore wraps each wide cell in a 2ch box
+  (`<w>`), and each narrow symbol that is not box drawing, a block, braille
+  or Powerline (✻, ⏺, arrows, Nerd icons) in a 1ch box (`<n>`), so every
+  column stays on the grid whatever face draws it. Underlines on fallback Han
+  show small gaps, since the glyph is 1em inside a 1.2em box. The
+  system `monospace` alone is not enough: Android's Droid Sans Mono has no box
+  drawing, blocks, braille or Powerline glyphs.
+- **CJK in chat mono.** Highlighted code blocks and inline code are RN
+  `Text`, which falls back to the OS CJK face, so Han there takes that face's
+  advance instead of exactly two cells. Plain and ASCII-art blocks already
+  render in a WebView with the system monospace stack
+  (`PreformattedCodeWebView`); neither keeps Chinese columns at 2:1.
 - **Web weights.** expo-font declares every face at weight 400, and each
   weight here is its own family. Web therefore sets
   `font-synthesis-weight: none` (in `appFontAssets.web.ts`) so browsers don't
