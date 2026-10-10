@@ -174,6 +174,9 @@ function choiceAnswerLines(choice: ConversationChoice): string[] {
   if (choice.state === "declined") {
     return ["Dismissed"];
   }
+  if (choice.state === "unanswered") {
+    return ["Not answered"];
+  }
   const answers = choice.answers ?? [];
   return choice.questions
     .map((question, index) => {

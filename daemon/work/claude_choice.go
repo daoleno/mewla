@@ -16,6 +16,9 @@ const (
 	ConversationChoicePending  = "pending"
 	ConversationChoiceAnswered = "answered"
 	ConversationChoiceDeclined = "declined"
+	// Unanswered: the conversation moved on (interrupt, restart) without a
+	// result, so the prompt can no longer be on screen.
+	ConversationChoiceUnanswered = "unanswered"
 
 	maxConversationChoiceText    = 1000
 	maxConversationChoicePreview = 2000
@@ -126,6 +129,23 @@ func settleClaudeChoice(choice *ConversationChoice, toolUseResult json.RawMessag
 	for index, question := range choice.Questions {
 		choice.Answers[index] = truncateRunes(result.Answers[question.Question], maxConversationChoiceText)
 	}
+}
+
+// abandonPendingChoices settles every still-pending choice as unanswered once
+// a visible message follows it: Claude cannot be showing that prompt anymore.
+func (b *claudeConversationBuilder) abandonPendingChoices() {
+	for _, callID := range b.pendingChoiceCalls {
+		eventIndex, exists := b.eventByCall[callID]
+		if !exists || eventIndex < 0 || eventIndex >= len(b.events) {
+			continue
+		}
+		if choice := b.events[eventIndex].Choice; choice != nil && choice.State == ConversationChoicePending {
+			abandoned := *choice
+			abandoned.State = ConversationChoiceUnanswered
+			b.events[eventIndex].Choice = &abandoned
+		}
+	}
+	b.pendingChoiceCalls = nil
 }
 
 // claudeToolUseResults maps tool_use ids to the record-level toolUseResult.

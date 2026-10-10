@@ -53,7 +53,8 @@ export interface CodexConversationFileChange {
   deletions?: number;
 }
 
-export type ConversationChoiceState = "pending" | "answered" | "declined";
+/** "unanswered": the conversation moved on without a result (interrupt, restart). */
+export type ConversationChoiceState = "pending" | "answered" | "declined" | "unanswered";
 
 export interface ConversationChoiceOption {
   label: string;
@@ -508,7 +509,7 @@ function normalizeConversationChoice(value: unknown): ConversationChoice | undef
   }
   const raw = value as Record<string, unknown>;
   const state = raw.state;
-  if (state !== "pending" && state !== "answered" && state !== "declined") {
+  if (state !== "pending" && state !== "answered" && state !== "declined" && state !== "unanswered") {
     return undefined;
   }
   if (!Array.isArray(raw.questions) || raw.questions.length === 0) {

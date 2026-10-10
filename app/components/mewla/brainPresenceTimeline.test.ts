@@ -104,4 +104,10 @@ describe("Brain's tool rows", () => {
     const items = [tool("a"), reply, tool("b"), tool("c", "running"), working];
     expect(foldBrainToolRows(items)).toBe(items);
   });
+
+  test("an answered question stays its own line between folded steps", () => {
+    const answered = { ...tool("q"), title: "Answered", statusKey: "choice:answered" } as TimelineItem;
+    const folded = foldBrainToolRows([tool("a"), tool("b"), answered, tool("c"), tool("d")]);
+    expect(folded.map((item) => item.id)).toEqual([`${BRAIN_STEPS_ITEM_PREFIX}a`, "q", `${BRAIN_STEPS_ITEM_PREFIX}c`]);
+  });
 });

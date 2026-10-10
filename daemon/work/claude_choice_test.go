@@ -126,3 +126,31 @@ func TestPendingConversationChoice_OnlyNewestChoiceIsLive(t *testing.T) {
 		t.Fatalf("live = %+v %v", event, ok)
 	}
 }
+
+func TestParseClaudeConversation_ChoiceAbandonedWhenConversationMovesOn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	lines := []string{
+		`{"type":"user","uuid":"u1","sessionId":"s","timestamp":"2026-10-10T15:00:00Z","message":{"role":"user","content":"ask me"}}`,
+		`{"type":"assistant","uuid":"a1","sessionId":"s","timestamp":"2026-10-10T15:00:01Z","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"toolu_lost","name":"AskUserQuestion","input":{"questions":[{"question":"Lost?","options":[{"label":"A"},{"label":"B"}]}]}}]}}`,
+		`{"type":"user","uuid":"u2","sessionId":"s","timestamp":"2026-10-10T15:05:00Z","message":{"role":"user","content":"never mind, do something else"}}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := parseClaudeConversation(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range got.Events {
+		if event.CallID == "toolu_lost" {
+			if event.Choice == nil || event.Choice.State != ConversationChoiceUnanswered {
+				t.Fatalf("choice = %+v", event.Choice)
+			}
+			if _, ok := PendingConversationChoice(got, "toolu_lost"); ok {
+				t.Fatal("an abandoned choice must not be answerable")
+			}
+			return
+		}
+	}
+	t.Fatal("choice event missing")
+}

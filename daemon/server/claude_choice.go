@@ -38,7 +38,15 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 	}
 	reader := work.NewProviderConversationReader()
 	load := func() (work.CodexConversation, error) {
-		return s.loadProviderConversation(reader, resolved, time.Now())
+		conversation, err := s.loadProviderConversation(reader, resolved, time.Now())
+		if err != nil || s.brain == nil || s.brain.CurrentHostSessionID() != resolved.targetID {
+			return conversation, err
+		}
+		// Brain chat shows the host-bound transcript; answer against that same source.
+		if bound, boundErr := s.brain.HostBoundProviderConversation(); boundErr == nil && bound.Available {
+			conversation = work.PreferHostBoundConversation(conversation, bound)
+		}
+		return conversation, nil
 	}
 	answers, err := s.answerChoice(resolved.targetID, request, load)
 	if err != nil {

@@ -510,11 +510,13 @@ export function useInterfaceChatSurfaceState({
     modelControl: composerModelControl,
   });
   const pendingChoice = useMemo(() => latestPendingChoice(events), [events]);
+  // A listed Session proves the prompt is on screen with status "blocked". The
+  // hidden Brain host carries no live status, so a pending (not abandoned)
+  // choice counts as live there; the daemon re-checks the screen before any key.
   const pendingChoiceLive =
     Boolean(pendingChoice) &&
-    workerSessionListFresh &&
     connectionState === "connected" &&
-    workerInfo?.status === "blocked";
+    (workerInfo?.status === undefined || (workerSessionListFresh && workerInfo.status === "blocked"));
   const answerPendingChoice = useCallback(
     async (payload: ChoiceAnswerPayload) => {
       if (connectionState !== "connected" || !serverId || !workerId) {
@@ -656,7 +658,7 @@ export function useInterfaceChatSurfaceState({
     turnFocusAnchorAliases,
     // While Claude waits on a choice the card says so; a Working row would
     // read as stuck.
-    runningActivity: choicePrompt ? undefined : runningActivity,
+    runningActivity: pendingChoiceLive ? undefined : runningActivity,
     onBrainWorkEventActivate,
     openSessionIds,
     brainCurrentWork,
