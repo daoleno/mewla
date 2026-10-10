@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/daoleno/mewla/daemon/attachment"
 	"io"
 	"mime"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/daoleno/mewla/daemon/attachment"
 )
 
 // PackageFile is one entry of the bounded file listing used by inspect.
@@ -54,12 +55,6 @@ type PackageDetail struct {
 	Risk          []RiskSignal     `json:"risk,omitempty"`
 	Warnings      []string         `json:"warnings,omitempty"`
 	Capability    DeleteCapability `json:"capability"`
-}
-
-// InspectPackageFile extends package detail with one bounded, read-only text
-// file. Traversal and symlinks are rejected before content is read.
-func InspectPackageFile(options InventoryOptions, name, relative string) (PackageDetail, error) {
-	return inspectPackageFile(options, name, "", relative)
 }
 
 // InspectPackageCopyFile reads a file from one exact inventory copy. Copy IDs

@@ -599,11 +599,6 @@ func applyDiscoveryAuth(req *http.Request, profile Profile, store CredentialStor
 	}
 }
 
-func parseModelsResponse(body []byte) ([]string, error) {
-	ids, _, err := parseModelsCatalogResponse(body)
-	return ids, err
-}
-
 func parseModelsCatalogResponse(body []byte) ([]string, map[string]modelPresentationMetadata, error) {
 	type modelRecord struct {
 		ID                       string                       `json:"id"`

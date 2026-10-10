@@ -134,9 +134,6 @@ func (c *Collector) collectPiStats(home string) map[string]*dateAgg {
 	return byDate
 }
 
-func scanPiSessionDir(dirPath, fallbackProject string, byDate map[string]*dateAgg) {
-	scanPiSessionDirCached(dirPath, fallbackProject, byDate, "")
-}
 func scanPiSessionDirCached(dirPath, fallbackProject string, byDate map[string]*dateAgg, cacheDir string) {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -150,14 +147,6 @@ func scanPiSessionDirCached(dirPath, fallbackProject string, byDate map[string]*
 	}
 }
 
-// scanPiSessionFile reads one Pi session JSONL ledger. Every distinct entry
-// with usage is counted once (dedupe by entry id); malformed or partially
-// written lines are skipped without aborting the scan. Usage is attributed
-// to the entry's own local date/hour, the file's project, and the recorded
-// model (or the model in effect for entries that carry usage but no model).
-func scanPiSessionFile(path, fallbackProject string, byDate map[string]*dateAgg) {
-	scanPiSessionFileCached(path, fallbackProject, byDate, "")
-}
 func scanPiSessionFileCached(path, fallbackProject string, byDate map[string]*dateAgg, cacheDir string) {
 	lines, err := cachedUsageFile(cacheDir, "pi", path, func() ([]piSessionLine, error) {
 		f, err := os.Open(path)

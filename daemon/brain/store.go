@@ -755,17 +755,6 @@ func (s *Store) ensureWorklog() error {
 	return ensureFile(s.worklogReadmePath(), []byte(defaultWorklogReadme))
 }
 
-func readTextFile(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
 const defaultProfileNotes = `# Brain Profile
 
 Record user-authored preferences, background, and working style here.

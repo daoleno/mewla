@@ -598,27 +598,6 @@ func (b RouteBinding) ToWire() WireBinding {
 	return wire
 }
 
-// WireHistory projects internal activation history without generation/degradation.
-func WireHistory(history []RouteActivationEvent) []WireActivationEvent {
-	if len(history) == 0 {
-		return nil
-	}
-	out := make([]WireActivationEvent, 0, len(history))
-	for _, event := range history {
-		item := WireActivationEvent{
-			Activation: event.Activation,
-			To:         event.To.ToWire(),
-		}
-		if event.Activation != ActivationLaunch &&
-			(event.From.SessionID != "" || event.From.ProfileID != "" || event.From.Generation != 0 || event.From.RouteID != "") {
-			from := event.From.ToWire()
-			item.From = &from
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
 // ToWire projects SessionRouteState to App/control DTO.
 func (s SessionRouteState) ToWire() WireSessionState {
 	return WireSessionState{

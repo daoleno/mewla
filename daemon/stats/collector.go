@@ -1942,10 +1942,6 @@ func dateFromTimestamp(ts string) string {
 	return fallbackDateFromTimestamp(ts)
 }
 
-func dateFromUnixTimestamp(sec int64) string {
-	return localDateFromUnixTimestamp(sec, time.Local)
-}
-
 func localDateHourFromTimestamp(ts string, loc *time.Location) (string, int, bool) {
 	if loc == nil {
 		loc = time.Local

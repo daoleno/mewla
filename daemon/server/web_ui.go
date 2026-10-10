@@ -42,8 +42,6 @@ func (s *Server) SetWebOrigins(origins []string) {
 // address book. The existing -web-origin values remain valid seeds.
 func (s *Server) SetAddressBook(book *addressbook.Store) { s.addresses = book }
 
-func (s *Server) AddressBook() *addressbook.Store { return s.addresses }
-
 func (s *Server) SetEnrollmentManager(manager *enrollment.Manager) { s.enrollments = manager }
 
 // appRoute shares a path between a daemon API and a web app route, such as

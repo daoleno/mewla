@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -70,21 +69,6 @@ var Adapters = map[Agent]Adapter{
 }
 
 var supportedAgents = []Agent{AgentCodex, AgentClaudeCode, AgentCursor, AgentGrok, AgentOpenCode, AgentPi}
-
-func agentName(agent Agent) string {
-	if adapter, ok := Adapters[agent]; ok {
-		return adapter.Name
-	}
-	return string(agent)
-}
-
-func adapterFor(agent Agent) (Adapter, error) {
-	adapter, ok := Adapters[agent]
-	if !ok {
-		return Adapter{}, fmt.Errorf("unsupported Skill target %q", agent)
-	}
-	return adapter, nil
-}
 
 func globalSkillsDir(adapter Adapter, home string, env EnvResolver) string {
 	return filepath.Clean(adapter.Global(home, env))

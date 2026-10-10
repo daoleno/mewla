@@ -349,18 +349,6 @@ func typeName(v any) string {
 	}
 }
 
-func compactJSON(body []byte, max int) string {
-	var v any
-	if json.Unmarshal(body, &v) != nil {
-		return trimTail(string(body), max)
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return trimTail(string(body), max)
-	}
-	return trimTail(string(b), max)
-}
-
 func extractFieldJSON(body []byte, field string, max int) string {
 	var obj map[string]json.RawMessage
 	if json.Unmarshal(body, &obj) != nil {

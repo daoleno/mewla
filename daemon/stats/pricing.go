@@ -216,14 +216,6 @@ func loadPricingCache(home string) {
 	prices.mu.Unlock()
 }
 
-func mergePricingMaps(base map[string]modelPricing, override map[string]modelPricing) map[string]modelPricing {
-	out := clonePricingMap(base)
-	for k, v := range override {
-		out[k] = v
-	}
-	return out
-}
-
 func mergeProviderPricing(base, override map[string]map[string]modelPricing) map[string]map[string]modelPricing {
 	out := cloneProviderPricing(base)
 	for provider, models := range override {
@@ -436,17 +428,6 @@ func meaningfulTier(raw json.RawMessage) bool {
 	default:
 		return true
 	}
-}
-
-// Only the curated built-in table uses these provider families, not arbitrary IDs.
-func builtinPricingProvider(id string) string {
-	if strings.HasPrefix(id, "claude-") {
-		return "anthropic"
-	}
-	if strings.HasPrefix(id, "grok-") {
-		return "xai"
-	}
-	return "openai"
 }
 
 const (

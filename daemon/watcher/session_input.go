@@ -224,7 +224,6 @@ type sessionInputIO interface {
 	runQueue(socket string, args []string, beforeStart func() error) (started bool, err error)
 	receiptLedger(socket, target string) (sessionInputReceiptLedger, error)
 	writeReceiptLedger(socket, target string, ledger sessionInputReceiptLedger) error
-	paneContent(socket, target string) (string, error)
 }
 
 // realSessionInputIO executes every tmux mutation on the one host server
@@ -358,14 +357,6 @@ func (io realSessionInputIO) writeReceiptLedger(socket, target string, ledger se
 		return fmt.Errorf("write Session input receipt ledger: %w%s", err, commandOutputSuffix(out))
 	}
 	return nil
-}
-
-func (io realSessionInputIO) paneContent(socket, target string) (string, error) {
-	out, err := tmuxCommand(socket, "capture-pane", "-t", target, "-p", "-S", "-200").Output()
-	if err != nil {
-		return "", fmt.Errorf("capture post-dispatch pane baseline: %w", err)
-	}
-	return string(out), nil
 }
 
 type sessionInputSession struct {
@@ -1468,21 +1459,6 @@ func (owner *sessionInputOwner) persistReceiptLedger(
 		return fmt.Errorf("Session input receipt %q was not confirmed as %s", receipt, outcome)
 	}
 	return nil
-}
-
-func (owner *sessionInputOwner) rollbackReceiptMarker(
-	socket, target string,
-	original sessionInputReceiptLedger,
-	receipt string,
-	cause error,
-) error {
-	if err := owner.writeAndConfirmReceiptLedger(socket, target, original); err != nil {
-		return definitelyNotSubmitted(
-			receipt,
-			fmt.Errorf("%v; durable ambiguity rollback could not be confirmed: %w", cause, err),
-		)
-	}
-	return definitelyNotSubmitted(receipt, cause)
 }
 
 func sessionInputReceiptLedgersEqual(left, right sessionInputReceiptLedger) bool {

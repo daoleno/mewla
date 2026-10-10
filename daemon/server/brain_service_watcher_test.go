@@ -2,15 +2,12 @@ package server
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
-	"github.com/gorilla/websocket"
 )
 
 type brainServiceTestWatcher struct {
@@ -194,23 +191,4 @@ func (w *killTrackingWatcher) KillSession(sessionID string) error {
 	w.killed = append(w.killed, sessionID)
 	delete(w.sessions, sessionID)
 	return nil
-}
-
-func writeAndReadJSON(t *testing.T, conn *websocket.Conn, request clientMessage) map[string]any {
-	t.Helper()
-	if err := conn.WriteJSON(request); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	_, raw, err := conn.ReadMessage()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		t.Fatal(err)
-	}
-	return payload
 }

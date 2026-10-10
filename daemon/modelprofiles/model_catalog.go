@@ -383,22 +383,6 @@ func codexEffortAdmitted(model, effort string) bool {
 	return isCodexReasoningEffortValue(effort)
 }
 
-// codexEffortDefault returns the model's documented default effort ("" when
-// the model has no effort contract).
-func codexEffortDefault(model string) string {
-	entry, ok := lookupCodexModelMetadata(model)
-	if !ok || entry.Effort == nil {
-		return ""
-	}
-	return entry.Effort.defaultEffort
-}
-
-// codexModelKnown reports whether the exact slug has daemon-owned metadata.
-func codexModelKnown(model string) bool {
-	_, ok := lookupCodexModelMetadata(model)
-	return ok
-}
-
 // opaqueCodexPassthroughEnvelope is deliberately conservative metadata for an
 // unknown model identity. It authorizes transport of the exact slug without
 // claiming model-specific context, reasoning, image, or tool capabilities.
@@ -483,18 +467,6 @@ func codexEffortPresetDescription(effort string) string {
 	default:
 		return ""
 	}
-}
-
-// codexWireEntryForModel projects any valid model slug into the Codex wire
-// shape. Known models receive their pinned metadata; unknown models receive a
-// minimal generic entry so model_catalog_json cannot become an identity
-// allowlist that prevents the CLI from sending the selected slug.
-// Values mirror the Codex CLI 0.147 reference catalog: supported_in_api=true,
-// tokens-mode truncation at 10k, parallel tool calls for these models, no
-// experimental tools, and no verbosity surface (Mewla does not route it).
-func codexWireEntryForModel(model string) (CodexModelCatalogWireEntry, bool) {
-	_, installed, _ := loadInstalledCodexModelCatalog()
-	return codexWireEntryForModelMetadata(model, modelPresentationMetadata{}, installed)
 }
 
 // CodexModelsResponseForModels projects the exact known-model subset.

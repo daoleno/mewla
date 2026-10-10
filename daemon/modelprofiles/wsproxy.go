@@ -394,8 +394,7 @@ func wsClientUpgrader() websocket.Upgrader {
 func wsProxyClose(conn *websocket.Conn, code int, reason string) {
 	_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason), time.Now().Add(2*time.Second))
 }
-func closeCode(err error) int        { code, _, _ := wsCloseDetails(err); return code }
-func closeCategory(err error) string { _, _, category := wsCloseDetails(err); return category }
+func closeCode(err error) int { code, _, _ := wsCloseDetails(err); return code }
 func wsCloseDetails(err error) (int, string, string) {
 	var closeErr *websocket.CloseError
 	if errors.As(err, &closeErr) {

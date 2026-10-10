@@ -97,18 +97,6 @@ func (m *portableDelegatedResourceManager) UnitForTarget(target string) string {
 	return m.byTarget[strings.TrimSpace(target)]
 }
 
-func (m *portableDelegatedResourceManager) reservedUnits() map[string]bool {
-	now := m.now()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.expireReservationsLocked(now)
-	units := make(map[string]bool, len(m.reserved))
-	for unit := range m.reserved {
-		units[unit] = true
-	}
-	return units
-}
-
 // Re-observation never kills: live legacy scopes and their processes survive
 // daemon replacement. Only explicit Worker/Work cleanup calls Release.
 func (m *portableDelegatedResourceManager) Reconcile(windows []tmuxPane) {
@@ -296,14 +284,6 @@ func (m *portableDelegatedResourceManager) forgetUnit(unit string) {
 		}
 	}
 	m.mu.Unlock()
-}
-
-func (m *portableDelegatedResourceManager) expireReservationsLocked(now time.Time) {
-	for unit, deadline := range m.reserved {
-		if !deadline.After(now) {
-			delete(m.reserved, unit)
-		}
-	}
 }
 
 func (m *portableDelegatedResourceManager) CaptureOwnership(unit string) error {

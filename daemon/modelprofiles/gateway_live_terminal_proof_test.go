@@ -25,7 +25,6 @@ package modelprofiles_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -36,7 +35,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -57,7 +55,6 @@ func gatewayPortFree() bool {
 // proofUpstream records every POST /v1/responses body and answers with an SSE
 // completion whose text marks which upstream served the turn.
 type proofUpstream struct {
-	mu       sync.Mutex
 	bodyChan chan []byte
 	marker   string
 	server   *httptest.Server
@@ -102,32 +99,6 @@ func newProofUpstream(t *testing.T, marker string) *proofUpstream {
 	}))
 	t.Cleanup(up.server.Close)
 	return up
-}
-
-func waitBody(t *testing.T, up *proofUpstream, want string) []byte {
-	t.Helper()
-	select {
-	case body := <-up.bodyChan:
-		t.Logf("upstream %s received body (%d bytes)", up.marker, len(body))
-		if !bytes.Contains(body, []byte(want)) {
-			t.Fatalf("upstream %s request missing %q: %s", up.marker, want, body)
-		}
-		// Exact model bytes preserved end-to-end (the machine-level contract).
-		var doc map[string]any
-		if err := json.Unmarshal(body, &doc); err != nil {
-			t.Fatalf("upstream %s body not JSON: %v", up.marker, err)
-		}
-		if doc["model"] != "gpt-5.6-sol" {
-			t.Fatalf("upstream %s model = %v, want gpt-5.6-sol", up.marker, doc["model"])
-		}
-		return body
-	case <-time.After(60 * time.Second):
-		up.mu.Lock()
-		frames := len(up.bodyChan)
-		up.mu.Unlock()
-		t.Fatalf("timed out waiting for upstream %s (buffered %d)", up.marker, frames)
-		return nil
-	}
 }
 
 // dumpProofState writes the isolated pane + daemon log for failure diagnosis.

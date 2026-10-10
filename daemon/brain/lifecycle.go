@@ -983,45 +983,6 @@ type workProgressState struct {
 	LiveCanonicalTurn bool
 }
 
-// reviewDeliveryState is the derived delivery stage of the canonical review
-// obligation: pending (claimable), leased (claimed, delivery in flight),
-// delivered (awaiting the exact typed disposition), or quarantined (mutation
-// evidence while the lease Host is gone; explicit actor resolution only).
-type reviewDeliveryState uint8
-
-const (
-	reviewNone reviewDeliveryState = iota
-	reviewPending
-	reviewLeased
-	reviewDelivered
-	reviewQuarantined
-)
-
-func reduceWorkReviewState(database presentationDatabase, workID string) reviewDeliveryState {
-	itemIndex := workIndex(database.BrainWork, workID)
-	if itemIndex < 0 {
-		return reviewNone
-	}
-	review := database.BrainWork[itemIndex].Review
-	if review == nil {
-		return reviewNone
-	}
-	lease := review.Lease
-	if lease == nil {
-		return reviewPending
-	}
-	if lease.AmbiguousDelivery {
-		return reviewQuarantined
-	}
-	if lease.HandlingEndedAt != nil {
-		return reviewQuarantined
-	}
-	if lease.DeliveredAt != nil {
-		return reviewDelivered
-	}
-	return reviewLeased
-}
-
 func workHasActiveCanonicalAttempt(database presentationDatabase, item Work) bool {
 	attemptSessionID := strings.TrimSpace(item.AttemptSessionID)
 	if attemptSessionID == "" {
@@ -1719,17 +1680,6 @@ func (s *Store) WorkByAttemptSession(sessionID string) (Work, bool, error) {
 		}
 	}
 	return Work{}, false, nil
-}
-
-func databaseActiveWorkIDForExecutionSession(database presentationDatabase, sessionID string) string {
-	sessionID = strings.TrimSpace(sessionID)
-	for _, item := range database.BrainWork {
-		if item.AttemptSessionID == sessionID && item.Status != WorkDone && item.Status != WorkCancelled &&
-			workHasActiveCanonicalAttempt(database, item) {
-			return item.ID
-		}
-	}
-	return ""
 }
 
 func (s *Store) WorkByContextRef(contextRef string) (Work, bool, error) {
@@ -3127,25 +3077,6 @@ func (s *Store) ResolveWorkReview(request WorkReviewDispositionRequest) (WorkEve
 	s.mu.Unlock()
 	s.broadcastWorkChange(item.ID)
 	return resolvedEvent, item, nil
-}
-
-// turnHasAdmissionAuthority accepts either provider correlation or a Control
-// fact that could only have been written after matching the random identity
-// carried by this Turn's delegated prompt. SignalProtocol alone is only a
-// marker and never sufficient authority.
-func turnHasAdmissionAuthority(turn TurnRecord) bool {
-	if !turn.Admission.Empty() {
-		return true
-	}
-	if !turn.SignalProtocol {
-		return false
-	}
-	for _, fact := range turn.Facts {
-		if fact.Class == watcher.EvidenceControl {
-			return true
-		}
-	}
-	return false
 }
 
 func workEventIndex(events []WorkEvent, eventID string) int {

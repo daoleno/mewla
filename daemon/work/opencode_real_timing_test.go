@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -102,12 +101,4 @@ func TestRealOpenCodeTiming(t *testing.T) {
 		t.Logf("real-session idle-poll: %d us (version unchanged=%v)", idleMs, true)
 	}
 	_ = again
-}
-
-func joinSessionIDs(sessions []realSession) string {
-	parts := make([]string, 0, len(sessions))
-	for _, session := range sessions {
-		parts = append(parts, sqliteStringLiteral(session.ID))
-	}
-	return strings.Join(parts, ",")
 }

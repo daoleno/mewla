@@ -712,18 +712,6 @@ func providerInputDigests(digests ...string) []string {
 	return out
 }
 
-func (s *Store) timelineIDsLocked(threadID string) (map[string]bool, error) {
-	items, err := s.threadTimelineLocked(threadID, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]bool, len(items))
-	for _, item := range items {
-		out[item.ID] = true
-	}
-	return out, nil
-}
-
 func workCardTimelineItem(workItem Work, event WorkEvent, unread bool) TimelineItem {
 	threadID := strings.TrimSpace(workItem.SourceThreadID)
 	sessionID := strings.TrimSpace(workItem.AttemptSessionID)

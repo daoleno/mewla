@@ -76,10 +76,6 @@ type Manager struct {
 	typingDeadline time.Duration
 }
 
-func NewManager(root string, owner *brain.Service) (*Manager, error) {
-	return NewManagerWithOptions(root, owner, Options{})
-}
-
 func NewManagerWithOptions(root string, owner brainOwner, options Options) (*Manager, error) {
 	state, err := openStore(root)
 	if err != nil {

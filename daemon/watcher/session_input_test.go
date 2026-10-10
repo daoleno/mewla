@@ -43,7 +43,6 @@ type fakeSessionInputIO struct {
 	afterLedgerWrite    func()
 	activeQueues        int
 	maxQueues           int
-	paneContentValue    string
 }
 
 type transportAdmissionProbe struct {
@@ -219,12 +218,6 @@ func (io *fakeSessionInputIO) writeReceiptLedger(socket, _ string, ledger sessio
 		afterLedgerWrite()
 	}
 	return nil
-}
-
-func (io *fakeSessionInputIO) paneContent(socket, target string) (string, error) {
-	io.mu.Lock()
-	defer io.mu.Unlock()
-	return io.paneContentValue, nil
 }
 
 func cloneSessionInputReceiptLedger(ledger sessionInputReceiptLedger) sessionInputReceiptLedger {
@@ -2019,7 +2012,6 @@ func TestWatcherDelegatedAdmissionIgnoresStaleActivityAndPaneRunning(t *testing.
 	}
 	w := watcherWithAdmissionProbe(probe)
 	w.activityProbe = classifier.NewActivityProbe(classifier.NewCursorActivityAdapter())
-	io.paneContentValue = "Cursor Agent\n→ Add a follow-up\nctrl+c to stop\n"
 	identity := testSessionInputIdentity("cursor-agent --force")
 	turn := testTurnDraft("ignored-submit", time.Now().UTC(), identity)
 	result, err := newLedgerSessionInputOwner(io, newFakeTurnLedger()).submitDelegated(
@@ -2078,7 +2070,6 @@ func TestWatcherDelegatedAdmissionSerializesConcurrentSamePayloadBaselines(t *te
 
 func TestSessionInputCursorFollowUpIsNotAcceptedWithoutProviderStart(t *testing.T) {
 	io := newFakeSessionInputIO()
-	io.paneContentValue = "Cursor Agent\n→ Add a follow-up\nRun Everything\n"
 	ledger := newFakeTurnLedger()
 	identity := testSessionInputIdentity("cursor-agent --force")
 	turn := delegatedTurnDraft{

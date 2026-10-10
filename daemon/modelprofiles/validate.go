@@ -380,11 +380,6 @@ func connectionAuthReady(profile Profile, store CredentialStore, lookup func(str
 	}
 }
 
-// RequireAuth fails closed when the auth mode needs an env that is missing/empty.
-func RequireAuth(authMode, envName string, lookup func(string) (string, bool)) error {
-	return requireAuthReady(Profile{AuthMode: authMode, CredentialEnv: envName}, nil, lookup)
-}
-
 func requireAuthReady(profile Profile, store CredentialStore, lookup func(string) (string, bool)) error {
 	authMode := normalizeID(profile.AuthMode)
 	if authMode == "" {

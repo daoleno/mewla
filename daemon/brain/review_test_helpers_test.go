@@ -41,21 +41,6 @@ func requireReviewDelivered(t *testing.T, store *Store, workID string) *WorkRevi
 	return lease
 }
 
-func requireReviewPending(t *testing.T, store *Store, workID string) {
-	t.Helper()
-	lease := reviewLeaseOf(t, store, workID)
-	if lease != nil {
-		t.Fatalf("Work %s review lease is not pending: %+v", workID, lease)
-	}
-	item, err := store.Work(workID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if item.Review == nil {
-		t.Fatalf("Work %s has no review obligation", workID)
-	}
-}
-
 // claimAndDeliverTestReview claims the next review action for the Host,
 // prepares+resolves the exact Host submission, and consumes the delivery.
 func claimAndDeliverTestReview(t *testing.T, store *Store, hostID string) (WorkReviewAction, Work) {
@@ -104,19 +89,6 @@ func storeWorkID(t *testing.T, store *Store, sessionID string) string {
 		t.Fatal(err)
 	}
 	return item.ID
-}
-
-// factIDOf returns the current review fact ID of a Work, fatal on absence.
-func factIDOf(t *testing.T, store *Store, workID string) string {
-	t.Helper()
-	item, err := store.Work(workID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if item.Review == nil {
-		t.Fatalf("Work %s has no review", workID)
-	}
-	return item.Review.EventID
 }
 
 func createSignalTestWork(t *testing.T, store *Store, title, owner string) Work {
@@ -349,14 +321,4 @@ func turnEvent(t *testing.T, store *Store, workID, dedupeKey string) (WorkEvent,
 		}
 	}
 	return WorkEvent{}, false
-}
-
-func countUnhandledEventKind(events []WorkEvent, kind string) int {
-	count := 0
-	for _, event := range events {
-		if event.Kind == kind && event.HandledAt == nil && event.DiscardedAt == nil {
-			count++
-		}
-	}
-	return count
 }

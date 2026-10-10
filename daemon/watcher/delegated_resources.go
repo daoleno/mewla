@@ -111,15 +111,6 @@ func validDelegatedResourceUnit(owner, unit string) bool {
 	return delegatedResourceUnit(owner, token) == unit
 }
 
-func shellExecCommand(args []string) string {
-	quoted := make([]string, 0, len(args)+1)
-	quoted = append(quoted, "exec")
-	for _, arg := range args {
-		quoted = append(quoted, shellQuote(arg))
-	}
-	return strings.Join(quoted, " ")
-}
-
 func cloneEnvironment(values map[string]string) map[string]string {
 	copy := make(map[string]string, len(values)+3)
 	for key, value := range values {

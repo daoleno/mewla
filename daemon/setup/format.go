@@ -2,25 +2,9 @@ package setup
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/daoleno/mewla/daemon/doctor"
 )
-
-// WriteHuman renders a setup Result for terminals without secrets.
-func WriteHuman(w io.Writer, result Result) error {
-	if result.OK {
-		writeLines(w, successLines(result)...)
-		return nil
-	}
-	if result.Message != "" {
-		fmt.Fprintf(w, "mewla setup stopped: %s\n", result.Message)
-	}
-	for _, step := range result.NextSteps {
-		fmt.Fprintf(w, "  - %s\n", step)
-	}
-	return nil
-}
 
 func successLines(result Result) []string {
 	lines := []string{
