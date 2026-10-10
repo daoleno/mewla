@@ -176,7 +176,7 @@ fields must be avoided. Example (partial overrides are supported):
   "cpu_some": { "elevated": 20, "critical": 60 },
   "memory_some": { "elevated": 2, "critical": 10 },
   "memory_full": { "elevated": 1, "critical": 5 },
-  "io_full": { "elevated": 5, "critical": 20 },
+  "io_full": { "elevated": 15, "critical": 40 },
   "disk_free_percent": { "elevated": 10, "critical": 3 },
   "sustain_seconds": 20,
   "recovery_seconds": 30,
