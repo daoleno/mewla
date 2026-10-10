@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"golang.org/x/sys/unix"
@@ -475,19 +476,7 @@ func writeBootMetadata(path string, metadata bootMetadata) error {
 }
 
 func bootWriteFileAtomic(path string, data []byte, perm os.FileMode) error {
-	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, data, perm); err != nil {
-		return err
-	}
-	if err := os.Chmod(temporary, perm); err != nil {
-		_ = os.Remove(temporary)
-		return err
-	}
-	if err := os.Rename(temporary, path); err != nil {
-		_ = os.Remove(temporary)
-		return err
-	}
-	return nil
+	return atomicfile.Write(path, data, perm)
 }
 
 // bootValidateLocalContext proves the installing user can actually run the

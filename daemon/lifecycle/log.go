@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 const lifecycleStoreSchema = 2
@@ -96,39 +98,10 @@ func writeLifecycleDatabase(path string, database lifecycleDatabase) error {
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(raw); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	return syncDir(dir)
-}
-
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
+	return atomicfile.Write(path, raw, 0o600)
 }
 
 // Protocol timing constants. Fixed so lifecycle decisions are deterministic.

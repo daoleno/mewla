@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 // ListenerFile persists the loopback Router listen address (host:port only).
@@ -151,86 +153,14 @@ func (f *ListenerFile) readBytes() ([]byte, error) {
 }
 
 func (f *ListenerFile) atomicWrite(data []byte) error {
-	dir := filepath.Dir(f.path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	if f.hook != nil {
-		if err := f.hook("before_write"); err != nil {
-			return err
-		}
-	}
-	tmp, err := os.CreateTemp(dir, ".route-listener-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if f.hook != nil {
-		if err := f.hook("after_write"); err != nil {
-			return err
-		}
-	}
-	if f.hook != nil {
-		if err := f.hook("before_rename"); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(tmpName, f.path); err != nil {
-		return err
-	}
-	cleanup = false
-	if f.hook != nil {
-		if err := f.hook("after_rename"); err != nil {
-			return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-		}
-	}
-	if f.hook != nil {
-		if err := f.hook("before_dirsync"); err != nil {
-			return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-		}
-	}
-	if err := f.syncParentDir(dir); err != nil {
-		return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-	}
-	if f.hook != nil {
-		if err := f.hook("after_dirsync"); err != nil {
-			return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-		}
-	}
-	return nil
+	return writeAtomicFileWithSeams(f.path, data, 0o600, f.hook, f.dirSync)
 }
 
 func (f *ListenerFile) syncParentDir(dir string) error {
 	if f != nil && f.dirSync != nil {
 		return f.dirSync(dir)
 	}
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer dirFile.Close()
-	return dirFile.Sync()
+	return atomicfile.SyncDir(dir)
 }
 
 func splitHostPortStrict(addr string) (host, port string, err error) {

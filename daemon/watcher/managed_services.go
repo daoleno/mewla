@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 // Managed service discovery covers Agent-retained user services that outlive
@@ -294,26 +296,7 @@ func storeManagedServices(path string, services []ManagedServiceDescriptor) erro
 	if err != nil {
 		return fmt.Errorf("encode managed services registry: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".managed-services-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create managed services registry temp: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(append(raw, '\n')); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("write managed services registry: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("close managed services registry: %w", err)
-	}
-	if err := os.Chmod(tmpName, 0o600); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("protect managed services registry: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+	if err := atomicfile.Write(path, append(raw, '\n'), 0o600); err != nil {
 		return fmt.Errorf("replace managed services registry: %w", err)
 	}
 	return nil

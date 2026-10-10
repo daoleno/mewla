@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 const (
@@ -417,24 +419,7 @@ func WriteCache(path string, cache Cache) error {
 	if err != nil {
 		return err
 	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".update-cache-*")
-	if err != nil {
-		return err
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if err := temp.Chmod(0o600); err != nil {
-		_ = temp.Close()
-		return err
-	}
-	if _, err := temp.Write(append(raw, '\n')); err != nil {
-		_ = temp.Close()
-		return err
-	}
-	if err := temp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tempPath, path)
+	return atomicfile.Write(path, append(raw, '\n'), 0o600)
 }
 
 func NoticeLine(current, latest string) string {

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -670,86 +669,10 @@ func (s *Store) SetLookup(lookup func(string) (string, bool)) {
 }
 
 func (s *Store) atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	if s != nil && s.hook != nil {
-		if err := s.hook("before_write"); err != nil {
-			return err
-		}
-	}
-	tmp, err := os.CreateTemp(dir, ".model-profiles-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if s != nil && s.hook != nil {
-		if err := s.hook("after_write"); err != nil {
-			return err
-		}
-	}
-	if s != nil && s.hook != nil {
-		if err := s.hook("before_rename"); err != nil {
-			return err
-		}
-	}
 	// Rename is the commit point: on success the new bytes are the durable file
 	// content. Parent-directory sync is best-effort durability of the dir entry.
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
+	if s == nil {
+		return writeAtomicFile(path, data, perm)
 	}
-	cleanup = false
-	if s != nil && s.hook != nil {
-		if err := s.hook("after_rename"); err != nil {
-			return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-		}
-	}
-	if s != nil && s.hook != nil {
-		if err := s.hook("before_dirsync"); err != nil {
-			return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-		}
-	}
-	if err := s.syncParentDir(dir); err != nil {
-		return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-	}
-	if s != nil && s.hook != nil {
-		if err := s.hook("after_dirsync"); err != nil {
-			return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-		}
-	}
-	return nil
-}
-
-func (s *Store) syncParentDir(dir string) error {
-	if s != nil && s.dirSync != nil {
-		return s.dirSync(dir)
-	}
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer dirFile.Close()
-	return dirFile.Sync()
+	return writeAtomicFileWithSeams(path, data, perm, s.hook, s.dirSync)
 }

@@ -1,55 +1,37 @@
 package modelprofiles
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
-// writeAtomicFile persists data to path with the same rename+dirsync pattern
-// used by the catalog and route-state owners, but without test hooks.
+// writeAtomicFile persists data to path through atomicfile, creating the
+// parent directory.
 func writeAtomicFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".mewla-atomic-*.tmp")
-	if err != nil {
+	return persistError(atomicfile.Write(path, data, perm))
+}
+
+// writeAtomicFileWithSeams is writeAtomicFile with an owner's test failpoint
+// hook and directory-sync seam.
+func writeAtomicFileWithSeams(path string, data []byte, perm os.FileMode, hook func(string) error, dirSync func(string) error) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmpName := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
-	}
-	cleanup = false
-	dirFile, err := os.Open(dir)
-	if err != nil {
+	return persistError(atomicfile.WriteOptions(path, data, perm, atomicfile.Options{Hook: hook, SyncDir: dirSync}))
+}
+
+// persistError reports a failure after the rename as ErrPersistDirSync: the
+// write is applied, but its durability is unconfirmed.
+func persistError(err error) error {
+	if errors.Is(err, atomicfile.ErrDirSync) {
 		return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
 	}
-	defer dirFile.Close()
-	if err := dirFile.Sync(); err != nil {
-		return fmt.Errorf("%w: %v", ErrPersistDirSync, err)
-	}
-	return nil
+	return err
 }

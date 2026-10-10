@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 const stateSchema = 4
@@ -320,40 +322,8 @@ func (s *store) removeToken() error {
 }
 
 func atomicPrivateWrite(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	file, err := os.CreateTemp(dir, ".telegram-*.partial")
-	if err != nil {
+	if err := atomicfile.Write(path, data, 0o600); err != nil && !errors.Is(err, atomicfile.ErrDirSync) {
 		return err
-	}
-	partial := file.Name()
-	keep := true
-	defer func() {
-		if keep {
-			_ = os.Remove(partial)
-		}
-	}()
-	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(partial, path); err != nil {
-		return err
-	}
-	keep = false
-	if directory, err := os.Open(dir); err == nil {
-		_ = directory.Sync()
-		_ = directory.Close()
 	}
 	return nil
 }

@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 const (
@@ -313,16 +315,7 @@ func writePrivateFileAtomic(path string, raw []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create Link state directory: %w", err)
 	}
-	temp := path + ".tmp"
-	if err := os.WriteFile(temp, raw, 0o600); err != nil {
-		return fmt.Errorf("write Link transport identity: %w", err)
-	}
-	if err := os.Chmod(temp, 0o600); err != nil {
-		_ = os.Remove(temp)
-		return fmt.Errorf("protect Link transport identity: %w", err)
-	}
-	if err := os.Rename(temp, path); err != nil {
-		_ = os.Remove(temp)
+	if err := atomicfile.Write(path, raw, 0o600); err != nil {
 		return fmt.Errorf("install Link transport identity: %w", err)
 	}
 	return nil

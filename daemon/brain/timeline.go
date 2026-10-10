@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -854,36 +856,18 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 	if err := os.MkdirAll(filepath.Dir(s.messagesPath()), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.messagesPath()), "messages-*.jsonl")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() {
-		_ = os.Remove(tmpName)
-	}()
-	for _, item := range items {
-		raw, err := json.Marshal(item)
-		if err != nil {
-			_ = tmp.Close()
-			return err
+	if err := atomicfile.WriteStream(s.messagesPath(), 0o600, func(w io.Writer) error {
+		for _, item := range items {
+			raw, err := json.Marshal(item)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(append(raw, '\n')); err != nil {
+				return err
+			}
 		}
-		if _, err := tmp.Write(append(raw, '\n')); err != nil {
-			_ = tmp.Close()
-			return err
-		}
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, s.messagesPath()); err != nil {
-		return err
-	}
-	if err := syncDirectory(filepath.Dir(s.messagesPath())); err != nil {
+		return nil
+	}); err != nil {
 		return err
 	}
 	s.timelineCache = timelineReadCache{}

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 // CredentialStore is the daemon secret vault for Provider API keys.
@@ -245,47 +247,15 @@ func (s *FileCredentialStore) saveLocked() error {
 	if err != nil {
 		return fmt.Errorf("%w: encode credential file: %v", ErrCredentialStoreFailed, err)
 	}
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return fmt.Errorf("%w: create credential directory: %v", ErrCredentialStoreFailed, err)
 	}
-	tmp, err := os.CreateTemp(dir, ".provider-credentials-*.tmp")
-	if err != nil {
-		return fmt.Errorf("%w: create credential file: %v", ErrCredentialStoreFailed, err)
-	}
-	tmpPath := tmp.Name()
-	removeTemp := true
-	defer func() {
-		if removeTemp {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("%w: secure credential file: %v", ErrCredentialStoreFailed, err)
-	}
-	if _, err := tmp.Write(raw); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("%w: write credential file: %v", ErrCredentialStoreFailed, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("%w: sync credential file: %v", ErrCredentialStoreFailed, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("%w: close credential file: %v", ErrCredentialStoreFailed, err)
-	}
-	if err := os.Rename(tmpPath, s.path); err != nil {
-		return fmt.Errorf("%w: commit credential file: %v", ErrCredentialStoreFailed, err)
-	}
-	removeTemp = false
-	// After Rename the new credential set is authoritative. Directory sync is
-	// best-effort because the CredentialStore contract has no applied-with-
+	// After the rename the new credential set is authoritative. Directory sync
+	// is best-effort because the CredentialStore contract has no applied-with-
 	// warning state; returning an error here would make memory disagree with the
 	// file that callers will read on restart.
-	if parent, openErr := os.Open(dir); openErr == nil {
-		_ = parent.Sync()
-		_ = parent.Close()
+	if err := atomicfile.Write(s.path, raw, 0o600); err != nil && !errors.Is(err, atomicfile.ErrDirSync) {
+		return fmt.Errorf("%w: commit credential file: %v", ErrCredentialStoreFailed, err)
 	}
 	return nil
 }
