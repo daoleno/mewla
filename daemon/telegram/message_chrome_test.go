@@ -23,7 +23,7 @@ func chromeWire(t *testing.T, m *Manager) *fakeBotAPIServer {
 
 func deliverChrome(t *testing.T, m *Manager) {
 	t.Helper()
-	if err := m.deliverPending(t.Context(), "fixture-token", maxOutboxRows); err != nil {
+	if err := m.deliverPending(t.Context(), maxOutboxRows); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -155,7 +155,7 @@ func TestExplicitInteractionPayloadsRetainExactTopicButtons(t *testing.T) {
 	}
 	for i, id := range []string{"command:10:0", "command:11:0", "callback:12"} {
 		row := navigationRow(t, m, id)
-		if err := m.deliverOne(t.Context(), "fixture-token"); err != nil {
+		if err := m.deliverOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 		encoded, _ := json.Marshal(row.ReplyMarkup)

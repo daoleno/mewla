@@ -51,7 +51,7 @@ func TestPresentSessionTopicIsNeverDeleted(t *testing.T) {
 			if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 				t.Fatal(err)
 			}
-			if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+			if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 				t.Fatal(err)
 			}
 			if len(api.deletedTopics) != 0 {
@@ -72,7 +72,7 @@ func TestUncertainAndErroredAbsencePreserveTopic(t *testing.T) {
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -128,7 +128,7 @@ func TestReappearanceBeforeDispatchCancelsDelete(t *testing.T) {
 	if _, found := deleteOpFor(state, "sess-a"); found {
 		t.Fatalf("pending delete survived revival: %+v", state.TopicOps)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != 0 || len(api.editedTopics) != 0 {
@@ -152,7 +152,7 @@ func TestDeleteRefusesWrongBindingOrMissingMapping(t *testing.T) {
 	}
 	deliver := func() {
 		t.Helper()
-		if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+		if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -212,7 +212,7 @@ func TestDeleteRefusesWrongBindingOrMissingMapping(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager2.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager2.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api2.deletedTopics) != 0 {
@@ -231,7 +231,7 @@ func TestDeleteRetryableAndAmbiguousOutcomesRetainRecoverableState(t *testing.T)
 	// A definite flood wait returns to pending with a bounded retry and never
 	// removes the tombstone.
 	api.topicOpErrs = map[string]error{"delete": &APIError{Code: 429, Retryable: true, RetryAfter: 3 * time.Second, description: "Too Many Requests: retry after 3"}}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -246,7 +246,7 @@ func TestDeleteRetryableAndAmbiguousOutcomesRetainRecoverableState(t *testing.T)
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != 1 {
@@ -257,7 +257,7 @@ func TestDeleteRetryableAndAmbiguousOutcomesRetainRecoverableState(t *testing.T)
 	// ambiguous: never replayed, mapping retained, status truthful.
 	manager.now = func() time.Time { return time.Date(2026, 8, 24, 12, 0, 5, 0, time.UTC) }
 	api.topicOpErrs = map[string]error{"delete": errors.New("connection closed after request write")}
-	if err := manager.deliverTopicOpOne(context.Background(), "token"); err == nil {
+	if err := manager.deliverTopicOpOne(context.Background()); err == nil {
 		t.Fatal("ambiguous delete returned success")
 	}
 	state = manager.store.snapshot()
@@ -272,7 +272,7 @@ func TestDeleteRetryableAndAmbiguousOutcomesRetainRecoverableState(t *testing.T)
 	if err := manager.projectSessionTopics(context.Background(), "token"); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.deletedTopics) != attempts {
@@ -301,7 +301,7 @@ func TestDeleteAlreadyMissingConvergesAndDefiniteFailureRetainsTombstone(t *test
 		t.Fatal(err)
 	}
 	api.topicOpErrs = map[string]error{"delete": &APIError{Code: 400, description: "Bad Request: TOPIC_ID_INVALID"}}
-	if err := manager.deliverTopicOps(context.Background(), "token", 8); err != nil {
+	if err := manager.deliverTopicOps(context.Background(), 8); err != nil {
 		t.Fatal(err)
 	}
 	state := manager.store.snapshot()
@@ -321,7 +321,7 @@ func TestDeleteAlreadyMissingConvergesAndDefiniteFailureRetainsTombstone(t *test
 		t.Fatal(err)
 	}
 	api2.topicOpErrs = map[string]error{"delete": &APIError{Code: 400, description: "Bad Request: not enough rights to delete the topic"}}
-	if err := manager2.deliverTopicOps(context.Background(), "token", 8); err == nil {
+	if err := manager2.deliverTopicOps(context.Background(), 8); err == nil {
 		t.Fatal("definite delete rejection returned success")
 	}
 	state = manager2.store.snapshot()
@@ -347,7 +347,7 @@ func TestLegacyUnboundDeleteIsCancelledButBoundDeleteProceeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	for manager.hasDeliverableTopicOp() {
-		if err := manager.deliverTopicOpOne(t.Context(), "token"); err != nil {
+		if err := manager.deliverTopicOpOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}

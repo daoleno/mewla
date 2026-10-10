@@ -104,7 +104,7 @@ func waitForFakeSent(t *testing.T, api *fakeAPI, body string, timeout time.Durat
 func flushTopicOps(t *testing.T, m *Manager) {
 	t.Helper()
 	for m.hasDeliverableTopicOp() {
-		if err := m.deliverTopicOpOne(t.Context(), "fixture-token"); err != nil {
+		if err := m.deliverTopicOpOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -113,7 +113,7 @@ func flushTopicOps(t *testing.T, m *Manager) {
 func flushOutbox(t *testing.T, m *Manager) {
 	t.Helper()
 	for m.hasDeliverableOutbox() {
-		if err := m.deliverOne(t.Context(), "fixture-token"); err != nil {
+		if err := m.deliverOne(t.Context()); err != nil {
 			t.Fatal(err)
 		}
 	}

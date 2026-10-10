@@ -184,12 +184,12 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 	flush := func() {
 		t.Helper()
 		for m.hasDeliverableTopicOp() {
-			if err := m.deliverTopicOpOne(t.Context(), token); err != nil {
+			if err := m.deliverTopicOpOne(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 		}
 		for m.hasDeliverableOutbox() {
-			if err := m.deliverOne(t.Context(), token); err != nil {
+			if err := m.deliverOne(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -538,7 +538,7 @@ func TestBindingStartsOutboundProjectionWithoutHistoricalReplay(t *testing.T) {
 			t.Fatalf("pre-binding timeline row entered outbox: %+v", row)
 		}
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -550,7 +550,7 @@ func TestBindingStartsOutboundProjectionWithoutHistoricalReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		if err := manager.deliverOne(context.Background(), "token"); err != nil {
+		if err := manager.deliverOne(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -562,7 +562,7 @@ func TestBindingStartsOutboundProjectionWithoutHistoricalReplay(t *testing.T) {
 func TestDeliveryBoundarySurvivesRestart(t *testing.T) {
 	manager, owner, api, root := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	boundary := manager.store.snapshot().DeliveryStartedAt
@@ -578,7 +578,7 @@ func TestDeliveryBoundarySurvivesRestart(t *testing.T) {
 	if err := reopened.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.deliverOne(context.Background(), "token"); err != nil {
+	if err := reopened.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != 2 || api.sent[1].Text != "new" {
@@ -652,7 +652,7 @@ func TestOutboxProjectionRetryAmbiguityAndWorkEdit(t *testing.T) {
 	manager, owner, api, root := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
 	// Deliver binding confirmation first.
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	owner.timeline = []brain.TimelineItem{
@@ -663,12 +663,12 @@ func TestOutboxProjectionRetryAmbiguityAndWorkEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.nextSendErr = &APIError{Code: 429, Retryable: true, RetryAfter: time.Millisecond}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	manager.now = func() time.Time { return time.Date(2026, 8, 24, 12, 0, 1, 0, time.UTC) }
 	for i := 0; i < 3; i++ {
-		if err := manager.deliverOne(context.Background(), "token"); err != nil {
+		if err := manager.deliverOne(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -680,7 +680,7 @@ func TestOutboxProjectionRetryAmbiguityAndWorkEdit(t *testing.T) {
 	if err := manager.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.edited) != 1 || api.edited[0].MessageID == 0 {
@@ -708,7 +708,7 @@ func TestOutboxProjectionRetryAmbiguityAndWorkEdit(t *testing.T) {
 func TestWorkProjectionCoalescesBeforeInitialSend(t *testing.T) {
 	manager, owner, api, _ := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	owner.timeline = []brain.TimelineItem{{
@@ -738,7 +738,7 @@ func TestWorkProjectionCoalescesBeforeInitialSend(t *testing.T) {
 	if pending != 1 {
 		t.Fatalf("pending Work rows=%d, want 1", pending)
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != 2 || !strings.Contains(api.sent[1].Text, "Latest revision") {
@@ -749,7 +749,7 @@ func TestWorkProjectionCoalescesBeforeInitialSend(t *testing.T) {
 func TestAmbiguousWorkSendNeverReplaysOrCreatesRevision(t *testing.T) {
 	manager, owner, api, root := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	owner.timeline = []brain.TimelineItem{{
@@ -760,7 +760,7 @@ func TestAmbiguousWorkSendNeverReplaysOrCreatesRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.nextSendErr = errors.New("connection closed after request write")
-	if err := manager.deliverOne(context.Background(), "token"); err == nil {
+	if err := manager.deliverOne(context.Background()); err == nil {
 		t.Fatal("ambiguous transport send succeeded")
 	}
 	if manager.Status().AmbiguousDelivery != 1 {
@@ -774,7 +774,7 @@ func TestAmbiguousWorkSendNeverReplaysOrCreatesRevision(t *testing.T) {
 	if err := manager.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != sendsAfterAmbiguity || len(api.edited) != 0 {
@@ -785,7 +785,7 @@ func TestAmbiguousWorkSendNeverReplaysOrCreatesRevision(t *testing.T) {
 	if err := reopened.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.deliverOne(context.Background(), "token"); err != nil {
+	if err := reopened.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if reopened.Status().AmbiguousDelivery != 1 || len(api.sent) != sendsAfterAmbiguity || len(api.edited) != 0 {
@@ -976,7 +976,7 @@ func TestRunStopsBlockedLongPoll(t *testing.T) {
 func TestFormattedDeliveryAndSameRowPlainFallback(t *testing.T) {
 	manager, owner, api, _ := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	owner.timeline = []brain.TimelineItem{{
@@ -992,14 +992,14 @@ func TestFormattedDeliveryAndSameRowPlainFallback(t *testing.T) {
 		t.Fatalf("formatted row=%+v", row)
 	}
 	api.nextSendErr = &APIError{Code: 400, description: "Bad Request: can't parse entities: fixture"}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	fallback := manager.store.snapshot().Outbox[len(state.Outbox)-1]
 	if fallback.ID != row.ID || fallback.State != "pending" || fallback.Variant != plainVariant || fallback.Text != fallback.PlainText {
 		t.Fatalf("fallback row=%+v original=%+v", fallback, row)
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != 2 || len(api.sent[1].Entities) != 0 || api.sent[1].Text != "bold and italic" {
@@ -1014,7 +1014,7 @@ func TestFormattedDeliveryAndSameRowPlainFallback(t *testing.T) {
 func TestFormattedWorkEditFallsBackWithoutReplacement(t *testing.T) {
 	manager, owner, api, _ := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	owner.timeline = []brain.TimelineItem{{
@@ -1024,7 +1024,7 @@ func TestFormattedWorkEditFallsBackWithoutReplacement(t *testing.T) {
 	if err := manager.projectTimeline(); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != 2 || len(api.sent[1].Entities) == 0 {
@@ -1037,7 +1037,7 @@ func TestFormattedWorkEditFallsBackWithoutReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.nextEditErr = &APIError{Code: 400, description: "Bad Request: failed to parse entities"}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	rows := manager.store.snapshot().Outbox
@@ -1045,7 +1045,7 @@ func TestFormattedWorkEditFallsBackWithoutReplacement(t *testing.T) {
 	if pending.Kind != "edit" || pending.MessageID != messageID || pending.State != "pending" || pending.Variant != plainVariant {
 		t.Fatalf("edit fallback=%+v", pending)
 	}
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.edited) != 1 || len(api.edited[0].Entities) != 0 || len(api.sent) != 2 {
@@ -1056,7 +1056,7 @@ func TestFormattedWorkEditFallsBackWithoutReplacement(t *testing.T) {
 func TestFormattedTransportAmbiguityNeverFallsBack(t *testing.T) {
 	manager, owner, api, root := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	if err := manager.deliverOne(context.Background(), "token"); err != nil {
+	if err := manager.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	owner.timeline = []brain.TimelineItem{{
@@ -1067,7 +1067,7 @@ func TestFormattedTransportAmbiguityNeverFallsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.nextSendErr = errors.New("malformed result envelope after remote commit")
-	if err := manager.deliverOne(context.Background(), "token"); err == nil {
+	if err := manager.deliverOne(context.Background()); err == nil {
 		t.Fatal("ambiguous formatted mutation succeeded")
 	}
 	row := manager.store.snapshot().Outbox[1]
@@ -1075,7 +1075,7 @@ func TestFormattedTransportAmbiguityNeverFallsBack(t *testing.T) {
 		t.Fatalf("ambiguous row fell back: %+v", row)
 	}
 	reopened := newTestManager(t, root, owner, api)
-	if err := reopened.deliverOne(context.Background(), "token"); err != nil {
+	if err := reopened.deliverOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if len(api.sent) != 1 || reopened.store.snapshot().Outbox[1].State != "ambiguous" {
@@ -1195,7 +1195,7 @@ func TestTypingFailureDoesNotFailAcceptedInputAndMutationsSerialize(t *testing.T
 	api.blockSend = make(chan struct{})
 	api.sendStarted = make(chan struct{})
 	delivered := make(chan error, 1)
-	go func() { delivered <- manager.deliverOne(context.Background(), "token") }()
+	go func() { delivered <- manager.deliverOne(context.Background()) }()
 	<-api.sendStarted
 	manager.startTyping(context.Background(), "token")
 	time.Sleep(2 * manager.typingInterval)

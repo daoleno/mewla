@@ -324,7 +324,7 @@ func TestMediaBDDFrozenRecipientsAndSourceTopic(t *testing.T) {
 	if !found {
 		t.Fatal("ack left its source topic")
 	}
-	if err := f.m.deliverPending(t.Context(), "fixture-token", 8); err != nil {
+	if err := f.m.deliverPending(t.Context(), 8); err != nil {
 		t.Fatal(err)
 	}
 	for _, row := range f.m.store.snapshot().Outbox {

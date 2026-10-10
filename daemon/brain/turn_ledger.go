@@ -1800,7 +1800,7 @@ func (s *Store) applyTurnFact(fact watcher.TurnFact, delegatedSignal bool) (watc
 // review obligation (the review event itself is the queue item; the lease
 // quarantine is expressed in Work state). Returns the existing row on
 // duplicate.
-func (s *Store) AppendDeliveryNote(workID, eventID, kind, dedupeKey, summary string, actionable bool) (WorkEvent, bool, error) {
+func (s *Store) AppendDeliveryNote(workID, eventID, kind, dedupeKey, summary string) (WorkEvent, bool, error) {
 	if s == nil {
 		return WorkEvent{}, false, fmt.Errorf("brain store is not configured")
 	}
@@ -1808,8 +1808,6 @@ func (s *Store) AppendDeliveryNote(workID, eventID, kind, dedupeKey, summary str
 	if workID == "" || eventID == "" || kind == "" || dedupeKey == "" {
 		return WorkEvent{}, false, fmt.Errorf("delivery note requires work_id, event_id, kind, and dedupe_key")
 	}
-	// Delivery notes are audit rows; a note must never become a queue item.
-	actionable = false
 	now := s.nowUTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1829,7 +1827,7 @@ func (s *Store) AppendDeliveryNote(workID, eventID, kind, dedupeKey, summary str
 		DedupeKey:  dedupeKey,
 		PayloadRef: "delivery:" + eventID,
 		Summary:    summary,
-		Actionable: actionable,
+		Actionable: false, // a delivery note is an audit row, never a queue item
 		CreatedAt:  now,
 	}
 	itemIndex := workIndex(database.BrainWork, workID)

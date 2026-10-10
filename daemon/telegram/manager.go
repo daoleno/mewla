@@ -511,10 +511,10 @@ func (m *Manager) Run(ctx context.Context) error {
 			if err := m.projectSessionTopics(ctx, token); err != nil {
 				m.recordError("Session topic projection is temporarily unavailable.")
 			}
-			if err := m.deliverPending(ctx, token, 8); err != nil && ctx.Err() == nil {
+			if err := m.deliverPending(ctx, 8); err != nil && ctx.Err() == nil {
 				m.recordError("Telegram delivery is degraded.")
 			}
-			if err := m.deliverTopicOps(ctx, token, 8); err != nil && ctx.Err() == nil {
+			if err := m.deliverTopicOps(ctx, 8); err != nil && ctx.Err() == nil {
 				m.recordError("Telegram topic operations are degraded.")
 			}
 		}
@@ -581,12 +581,12 @@ func (m *Manager) refreshWebhookState(ctx context.Context, token string) error {
 	})
 }
 
-func (m *Manager) deliverPending(ctx context.Context, token string, limit int) error {
+func (m *Manager) deliverPending(ctx context.Context, limit int) error {
 	for delivered := 0; delivered < limit; delivered++ {
 		if !m.hasDeliverableOutbox() {
 			return nil
 		}
-		if err := m.deliverOne(ctx, token); err != nil {
+		if err := m.deliverOne(ctx); err != nil {
 			return err
 		}
 		if !m.hasDeliverableOutbox() {
@@ -1456,18 +1456,17 @@ func coalescePendingWork(state *durableState, item brain.TimelineItem, content r
 	return false
 }
 
-func (m *Manager) deliverOne(ctx context.Context, token string) error {
+func (m *Manager) deliverOne(ctx context.Context) error {
 	m.outboundMu.Lock()
 	defer m.outboundMu.Unlock()
 	state := m.store.snapshot()
 	if !state.Enabled || state.ChatID == 0 || m.now().Before(state.RetryAt) {
 		return nil
 	}
-	currentToken, tokenErr := m.store.readToken()
-	if tokenErr != nil || currentToken == "" {
+	token, tokenErr := m.store.readToken()
+	if tokenErr != nil || token == "" {
 		return fmt.Errorf("Telegram credential is unavailable")
 	}
-	token = currentToken
 	index := -1
 	for i, row := range state.Outbox {
 		if row.State == "pending" && (row.AttemptAt.IsZero() || !m.now().Before(row.AttemptAt)) {
