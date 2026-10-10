@@ -20,6 +20,10 @@ const FRONT = new Set(['homeless', 'offline', 'waking', 'idle', 'working', 'dele
 // Canvas px the pet moves per cycle frame when the drawings don't say: an
 // in-place drawing (no paw slides back) spreads this by contact instead.
 const STRIDE = { walk: 12, run: 17, stalk: 5 };
+// Where the swat row's paw strikes, as a fraction of the drawn size from the feet.
+const REACH_PAT = [0.3, -0.31];
+// The idle row's frame with its eyes shut: purring. Page px per ms² for a drop.
+const PURR = 3, GRAVITY = 0.0026;
 // Canvas px a gait lifts at its passing frames, less what the drawings bob.
 const BOB = 4;
 // ms: the pause on a front-facing frame before a turn, and the settle into and
@@ -53,10 +57,10 @@ export async function startPet(homeImg, strip) {
   function view(canvas) {
     canvas.width = canvas.height = SIDE;
     const ctx = canvas.getContext('2d');
-    const v = { canvas, clip: null, frame: 0, flip: false, fade: null };
+    const v = { canvas, clip: null, frame: 0, flip: false, fade: null, alpha: 1 };
     v.draw = (now) => {
       ctx.clearRect(0, 0, SIDE, SIDE);
-      paint(ctx, v.clip, v.frame, v.flip, 1);
+      paint(ctx, v.clip, v.frame, v.flip, v.alpha);
       // the clip it left fades out over the new one (the seal behind a hop)
       if (v.fade) {
         const u = (now - v.fade.t0) / 260;
@@ -125,8 +129,10 @@ export async function startPet(homeImg, strip) {
   out.canvas.setAttribute('aria-hidden', 'true');
   document.body.append(out.canvas);
   const awaySize = () => (innerWidth < 600 ? 92 : 116);
-  // x, y: the feet in page px; z: drawn size; dir: 1 faces right
-  const pet = { x: 0, y: 0, z: 116, dir: 1, lift: 0, bob: 0, away: false, perch: null, frac: null };
+  // x, y: the feet in page px; z: drawn size; dir: 1 faces right; rot: radians
+  // about pivot (canvas px, the feet when null); held: in your hand; placed:
+  // where you put it down, kept until it scrolls out of view
+  const pet = { x: 0, y: 0, z: 116, dir: 1, lift: 0, bob: 0, rot: 0, pivot: null, away: false, perch: null, frac: null, held: false, placed: null };
   // what it shows: a clip on its own clock, or a frame chosen by the action
   let shown = { name: 'delegating', t0: 0, frame: null };
   function show(name, frame = null, restart = false) {
@@ -182,11 +188,11 @@ export async function startPet(homeImg, strip) {
     if (ms == null) this.ms = ready[name]?.total ?? 400;
   });
   // hold a clip until something else comes up, keeping to the perch
-  const rest = (name) => act(1e9, () => {
+  const rest = (name) => Object.assign(act(1e9, () => {
     if (!pet.perch || api.game) return;
     const s = spot(pet.perch);
     pet.x = s.x; pet.y = s.y; pet.z = s.z;
-  }, () => show(name));
+  }, () => show(name)), { rest: true });
 
   // A leap to wherever getTo() says (x, y, z), along an arc. The pounce clip
   // for a leap across, the jump clip for one mostly up or down; its frames
@@ -226,6 +232,21 @@ export async function startPet(homeImg, strip) {
       show(clip, clamp(f, 0, n - 1));
       onStep?.(u, fly);
     }, () => { y0 = pet.y; });
+  }
+  // a pat of the paw (the swat row, quicker): raise, reach, the strike held as
+  // onHit stamps, back down
+  const PAT = [[0.16, 1], [0.34, 2], [0.66, 3], [0.86, 4], [1, 0]];
+  function pat(onHit) {
+    let hit = false;
+    return act(470, (u) => {
+      show('swat', PAT.find(([end]) => u < end)?.[1] ?? 0);
+      if (!hit && u >= 0.34) {
+        hit = true;
+        onHit();
+        const r = REACH_PAT;
+        api.fx?.('ring', pet.x + r[0] * pet.z * pet.dir, pet.y + r[1] * pet.z);
+      }
+    });
   }
   // walk (or creep, or dash) along the floor to x: a pause facing out before a
   // turn, a settle on the first step, speed easing in over about a step and
@@ -306,7 +327,7 @@ export async function startPet(homeImg, strip) {
     for (let vy = Math.max(70, y - scrollY); vy < innerHeight - 4; vy += 6) {
       let solid = null;
       for (const dx of [0, -22, 22]) {
-        const n = document.elementsFromPoint(x - scrollX + dx, vy).find((m) => !m.closest('canvas.pet, .cat-fx, .toy, .bar'));
+        const n = document.elementsFromPoint(x - scrollX + dx, vy).find((m) => !m.closest('canvas.pet, .pet-hit, .cat-fx, .toy, .bar'));
         if ((solid = n?.closest(SOLID))) break;
       }
       if (!solid) continue;
@@ -350,14 +371,10 @@ export async function startPet(homeImg, strip) {
   function arrive(node) {
     const job = node.dataset.act;
     if (job === 'stamp') {
-      // the happy hop lands as the stamp does
+      // one pat of the paw per mark, in order, each stamping as the paw comes down
       const marks = [...node.querySelectorAll(node.dataset.stamp)];
-      let stamped = false;
-      return [play('delivered', null, (u) => {
-        if (stamped || u < 0.5) return;
-        stamped = true;
-        for (const target of marks) { target.classList.remove('stamped'); void target.offsetWidth; target.classList.add('stamped'); }
-      }), rest('delegating')];
+      const mark = (target) => () => { target.classList.remove('stamped'); void target.offsetWidth; target.classList.add('stamped'); };
+      return [call(() => marks.forEach((m) => m.classList.remove('stamped'))), wait(220), ...marks.map((m) => pat(mark(m))), wait(180), rest('delegating')];
     }
     if (job === 'patrol') {
       const edge = (f) => () => { const r = node.getBoundingClientRect(); return r.left + scrollX + r.width * f; };
@@ -400,8 +417,14 @@ export async function startPet(homeImg, strip) {
   const busy = () => current?.leap || queue.some((a) => a.leap);
   // false while a leap is under way: ask again once it lands
   function follow() {
-    if (api.game) return true;
+    if (api.game || pet.held) return true;
     if (busy()) return false;
+    // where you put it stays put while you can still see it
+    if (pet.placed) {
+      const r = pet.placed.getBoundingClientRect();
+      if (r.bottom > 60 && r.top < innerHeight) return true;
+      pet.placed = null;
+    }
     const next = pick();
     if (!next) { if (pet.away) run(comeHome()); }
     else if (next !== pet.perch) run(travel(next));
@@ -410,6 +433,178 @@ export async function startPet(homeImg, strip) {
   let scrolled = true;
   addEventListener('scroll', () => { scrolled = true; }, { passive: true });
   addEventListener('resize', () => { scrolled = true; });
+
+  // ---- your hands: pick it up, pet it -------------------------------------------------------
+  // Out in the page a small box over its body takes the pointer (the canvas
+  // never does, so links around it stay clickable). Press and move to pick it
+  // up: it hangs by its raised paws and swings, and when you let go it drops
+  // onto whatever is under it (a card, a heading, the hero floor, or back into
+  // the seal) with a landing hop. A click is a pat on the head: a hop and a
+  // heart. Rubbing it with the mouse makes it purr; the mouse coming over it
+  // gets a wave. At home a drag (a long press on touch) lifts it out of the seal.
+  const hands = (() => {
+    const hit = document.createElement('div');
+    hit.className = 'pet-hit';
+    hit.setAttribute('aria-hidden', 'true');
+    document.body.append(hit);
+    let press = null, swing = { a: 0, w: 0, vx: 0 }, grip = [ax, ay], noClick = false;
+    let rub = 0, rubT = 0, lastHeart = 0, waveAt = 0, over = false;
+    const idle = () => !api.game && !pet.held && current?.rest && !queue.length;
+    // the frame it hangs from, and where its paws are: the top of its drawing
+    const HANG = ['rear', 3];
+    function hang() {
+      const c = ready[HANG[0]];
+      const frame = Math.min(HANG[1], (c?.frames ?? 1) - 1);
+      c.grip ??= [];
+      c.grip[frame] ??= topOfFrame(c, frame);
+      return [c, frame, c.grip[frame]];
+    }
+    function pickUp(e) {
+      press.drag = true;
+      pet.held = true;
+      pet.placed = null;
+      if (!pet.away) leaveHome();
+      run([act(1e9, () => {})]);
+      const [c, frame, g] = hang();
+      show(HANG[0], frame);
+      grip = [ax + (g[0] - ax) * (pet.dir < 0 && !FRONT.has(c.name) ? -1 : 1), g[1]];
+      pet.pivot = grip;
+      swing = { a: 0, w: 0, vx: 0, x: e.pageX, t: performance.now() };
+      document.documentElement.classList.add('pet-carrying');
+      move(e);
+    }
+    // the paws follow the pointer; the body swings below them
+    function move(e) {
+      const now = performance.now(), dt = Math.max(8, now - swing.t);
+      swing.vx = lerp(swing.vx, (e.pageX - swing.x) / dt, 0.35);
+      swing.x = e.pageX; swing.t = now;
+      const s = pet.z / SIDE;
+      pet.x = e.pageX - (grip[0] - ax) * s;
+      pet.y = e.pageY - (grip[1] - ay) * s;
+    }
+    function drop(e) {
+      pet.held = false;
+      document.documentElement.classList.remove('pet-carrying');
+      pet.pivot = null;
+      const sr = home.canvas.getBoundingClientRect();
+      if (e.clientX > sr.left && e.clientX < sr.right && e.clientY > sr.top && e.clientY < sr.bottom) {
+        pet.placed = null;
+        run([fall(() => homeSpot()), ...comeHome().slice(1)]);
+        return;
+      }
+      const x = column(pet.x + clamp(swing.vx, -1.5, 1.5) * 140);
+      const under = surfaceUnder(x, pet.y - 10);
+      let node = under?.node ?? nearest(), to;
+      if (under) {
+        const r = node.getBoundingClientRect();
+        pet.perch = node;
+        pet.frac = node === stage ? (x - r.left - scrollX) / r.width : clamp((x - r.left - scrollX) / r.width, 0.06, 0.94);
+        to = () => spot(node);
+      } else {
+        pet.perch = node; pet.frac = null;
+        to = () => spot(node);
+      }
+      pet.placed = node;
+      const then = api.game ? [] : node.dataset.act && node.hasAttribute('data-perch') ? arrive(node) : [rest('delegating')];
+      run([fall(to), hop(0.16 * pet.z, 380, 'jump'), ...then]);
+    }
+    // falling under gravity onto to(), leaning back upright on the way
+    function fall(getTo) {
+      let x0, y0, z0, r0, to;
+      return act(400, (u) => {
+        to = getTo();
+        pet.x = lerp(x0, to.x, u);
+        pet.y = lerp(y0, to.y, u * u);
+        pet.z = lerp(z0, to.z, u);
+        pet.rot = r0 * (1 - ease(Math.min(1, u * 2)));
+        show('jump', u < 0.7 ? 2 : 3);
+      }, function () {
+        x0 = pet.x; y0 = pet.y; z0 = pet.z; r0 = pet.rot; to = getTo();
+        this.ms = clamp(Math.sqrt(2 * Math.max(16, to.y - y0) / GRAVITY), 220, 720);
+      });
+    }
+    function poke() {
+      const h = headAt(pet, shown.name);
+      api.fx?.('heart', h.x, h.y - 0.12 * pet.z);
+      if (idle()) run([hop(0.2 * pet.z, 460, 'jump'), rest('delegating')]);
+    }
+    function purr(now) {
+      if (now - lastHeart > 300) {
+        lastHeart = now;
+        const h = headAt(pet, shown.name);
+        api.fx?.('heart', h.x + (Math.random() - 0.5) * 0.2 * pet.z, h.y - 0.1 * pet.z);
+      }
+      if (idle() || current?.purr) {
+        const a = act(900, () => show('delegating', PURR), null);
+        a.purr = true;
+        run([a, rest('delegating')]);
+      }
+    }
+    function wave(now) {
+      if (now - waveAt < 6000 || !idle()) return;
+      waveAt = now;
+      run([play(ready.wave ? 'wave' : 'attention', 1100), rest('delegating')]);
+    }
+
+    function down(e, from) {
+      if (e.button > 0) return;
+      press = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, type: e.pointerType, from, drag: false };
+      // at home a finger holds still a moment to lift it, so the hero still scrolls
+      if (from === 'home' && e.pointerType !== 'mouse') press.timer = setTimeout(() => { if (press && !press.moved) pickUp(e); }, 380);
+    }
+    hit.addEventListener('pointerdown', (e) => { e.preventDefault(); down(e, 'hit'); });
+    home.canvas.addEventListener('pointerdown', (e) => down(e, 'home'));
+    addEventListener('pointermove', (e) => {
+      if (!press || e.pointerId !== press.id) return;
+      if (press.drag) { move(e); return; }
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < 7) return;
+      press.moved = true;
+      if (press.from === 'hit' || press.type === 'mouse') { clearTimeout(press.timer); pickUp(e); }
+      else { clearTimeout(press.timer); press = null; } // a scroll
+    }, { passive: true });
+    const up = (e) => {
+      if (!press || e.pointerId !== press.id) return;
+      clearTimeout(press.timer);
+      if (press.drag) { noClick = true; setTimeout(() => { noClick = false; }, 0); drop(e); }
+      else if (press.from === 'hit' && e.type === 'pointerup') poke();
+      press = null;
+    };
+    addEventListener('pointerup', up);
+    addEventListener('pointercancel', up);
+    // the click that ends a drag is not a tap on the seal
+    home.canvas.addEventListener('click', (e) => { if (noClick) e.stopImmediatePropagation(); }, true);
+    // a finger that lifted it doesn't scroll the page while carrying it
+    addEventListener('touchmove', (e) => { if (pet.held) e.preventDefault(); }, { passive: false });
+    hit.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || press) return;
+      const now = performance.now();
+      rub = rub * Math.exp(-(now - rubT) / 500) + Math.min(40, Math.abs(e.movementX) + Math.abs(e.movementY));
+      rubT = now;
+      if (rub > 120) purr(now);
+    });
+    hit.addEventListener('pointerenter', (e) => { over = true; if (e.pointerType === 'mouse' && !press) wave(performance.now()); });
+    hit.addEventListener('pointerleave', () => { over = false; });
+
+    return {
+      tick(now, dt) {
+        // the swing: a spring towards a lean against the motion, under-damped
+        if (pet.held) {
+          const k = dt / 1000, target = clamp(swing.vx * 0.9, -0.7, 0.7);
+          swing.w += (90 * (target - pet.rot) - 7 * swing.w) * k;
+          pet.rot = clamp(pet.rot + swing.w * k, -1, 1);
+          swing.vx *= Math.exp(-dt / 120);
+          pet.z = lerp(pet.z, awaySize(), Math.min(1, dt / 120));
+        }
+        const on = pet.away && pet.z > 0;
+        hit.hidden = !on;
+        if (!on) return;
+        const w = 0.44 * pet.z, h = 0.46 * pet.z;
+        hit.style.transform = `translate3d(${(pet.x - w / 2).toFixed(1)}px, ${(pet.y - pet.lift - pet.bob - h).toFixed(1)}px, 0)`;
+        hit.style.width = `${w.toFixed(1)}px`;
+        hit.style.height = `${h.toFixed(1)}px`;
+      },
+    };
+  })();
 
   // ---- the loop ------------------------------------------------------------------------
   let last = performance.now();
@@ -431,14 +626,16 @@ export async function startPet(homeImg, strip) {
       out.frame = shown.frame ?? frameAt(clip, now - shown.t0);
       out.flip = pet.dir < 0 && !FRONT.has(clip.name);
       out.draw(now);
-      const s = pet.z / SIDE;
-      out.canvas.style.transform = `translate3d(${(pet.x - ax * s).toFixed(1)}px, ${(pet.y - pet.lift - pet.bob - ay * s).toFixed(1)}px, 0) scale(${s.toFixed(4)})`;
+      const s = pet.z / SIDE, [cx, cy] = pet.pivot ?? [ax, ay];
+      const px = pet.x + (cx - ax) * s, py = pet.y - pet.lift - pet.bob + (cy - ay) * s;
+      out.canvas.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) rotate(${pet.rot.toFixed(3)}rad) scale(${s.toFixed(4)}) translate(${-cx}px, ${-cy}px)`;
     }
+    hands.tick(now, dt);
     api.after?.(now, dt);
     requestAnimationFrame(tick);
   }
   const api = {
-    pet, ready, need, home: home.canvas, stage, game: null, onHomeTap: null, after: null,
+    pet, ready, need, home: home.canvas, stage, game: null, onHomeTap: null, after: null, fx: null,
     show, stride, strideFor, run, queue: () => queue, busy: () => !!current || queue.length > 0,
     push: (...steps) => queue.push(...steps), unshift: (...steps) => queue.unshift(...steps),
     act, call, wait, play, rest, leap, hop, walkTo, leaveHome, comeHome, travel,
@@ -449,6 +646,22 @@ export async function startPet(homeImg, strip) {
   };
   requestAnimationFrame(tick);
   return api;
+}
+
+// The top of a frame's drawing in canvas px (x at the middle of its top rows):
+// where a pet hangs from when you pick it up by its raised paws.
+function topOfFrame(clip, frame) {
+  const c = document.createElement('canvas');
+  c.width = c.height = SIDE;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(clip.img, frame * SIDE, 0, SIDE, SIDE, 0, 0, SIDE, SIDE);
+  const a = ctx.getImageData(0, 0, SIDE, SIDE).data;
+  for (let y = 0; y < SIDE; y++) {
+    let sx = 0, n = 0;
+    for (let yy = y; yy < Math.min(SIDE, y + 10); yy++) for (let x = 0; x < SIDE; x++) if (a[(yy * SIDE + x) * 4 + 3] > 60) { sx += x; n++; }
+    if (n > 12) return [sx / n, y + 6];
+  }
+  return [SIDE / 2, SIDE / 2];
 }
 
 // Where the head is in each clip, as a fraction of the drawn size from the

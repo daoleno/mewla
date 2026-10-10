@@ -304,8 +304,8 @@ img { max-width: 100%; }
 .ico svg { width: 24px; height: 24px; fill: none; stroke: var(--red); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .trust h3 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .trust p { margin-top: 6px; font-size: 15px; color: var(--soft); }
-.warn { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: #fff6e6; border: 1px solid #f0dcb4; color: #6a4a12; font-size: 15px; }
-.links { margin-top: 16px; font-size: 14px; color: var(--soft); }
+.safe { margin: 20px 0 0; font-size: 13.5px; color: var(--soft); }
+.safe a { color: inherit; }
 
 /* close */
 .end { padding: 0 0 clamp(70px, 9vw, 120px); }
@@ -328,6 +328,8 @@ img { max-width: 100%; }
 /* the pet: one in the hero seal, one walking the story in page coordinates */
 .pet { position: absolute; left: 0; top: 0; z-index: 4; width: 256px; height: 256px; transform-origin: 0 0; pointer-events: none; opacity: 0; transition: opacity .22s; will-change: transform; }
 .pet.out { opacity: 1; }
+.pet-hit { position: absolute; left: 0; top: 0; z-index: 5; border-radius: 40% 40% 30% 30%; cursor: grab; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.pet-carrying, .pet-carrying * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 .pets { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 8px; }
 .pets p { margin: 0; font-size: 13px; color: var(--soft); }
 .pet-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; margin: 0; padding: 0; list-style: none; }
