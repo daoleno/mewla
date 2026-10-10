@@ -190,10 +190,6 @@ func (f *openCodePerfFixture) nextRowID(prefix string) string {
 	return fmt.Sprintf("%s_%08d", prefix, f.nextID[prefix])
 }
 
-func (f *openCodePerfFixture) worker() classifier.Worker {
-	return classifier.Worker{Cwd: f.directory, Command: "opencode", StartedAt: f.startedAt}
-}
-
 // appendStreamingRows simulates one OpenCode incremental write burst: a new
 // user message with text parts, an assistant message, and one tool state
 // update to an existing part (streaming text growth + tool output update).

@@ -16,23 +16,6 @@ import (
 // lifecycle transition is an engine command; presentation.json rows are a
 // derived projection refreshed after each commit.
 
-func lifecycleStatusFromWork(status WorkStatus) lifecycle.Status {
-	switch status {
-	case WorkRunning:
-		return lifecycle.StatusRunning
-	case WorkWaiting:
-		return lifecycle.StatusWaiting
-	case WorkNeedsInput:
-		return lifecycle.StatusBlocked
-	case WorkDone:
-		return lifecycle.StatusDone
-	case WorkCancelled:
-		return lifecycle.StatusCancelled
-	default:
-		return lifecycle.StatusQueued
-	}
-}
-
 func workStatusFromLifecycle(status lifecycle.Status) WorkStatus {
 	switch status {
 	case lifecycle.StatusRunning:
@@ -644,14 +627,6 @@ func (s *Store) fsmResolveReview(workID string, disposition lifecycle.Dispositio
 	}
 	_, err = s.fsm.ResolveReview(lifecycle.WorkID(workID), st.Review.EventID, in)
 	return err
-}
-
-// fsmEventID returns the canonical event ID behind a projected review row.
-func fsmEventID(item Work) string {
-	if item.Review == nil {
-		return ""
-	}
-	return strings.TrimSpace(item.Review.EventID)
 }
 
 // fsmWakeFromState projects the typed wait into Brain's read shape.

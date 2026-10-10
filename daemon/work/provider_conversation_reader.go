@@ -79,11 +79,8 @@ type providerConversationBinding struct {
 type providerConversationSource struct {
 	provider     string
 	path         string
-	sessionID    string
 	size         int64
 	modTime      time.Time
-	walSize      int64
-	walModTime   time.Time
 	fileInfo     os.FileInfo
 	conversation CodexConversation
 

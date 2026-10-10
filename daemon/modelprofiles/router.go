@@ -51,15 +51,6 @@ type RouteModelCatalog struct {
 // RouterOption configures Router construction.
 type RouterOption func(*Router)
 
-// WithRouterClient overrides the upstream HTTP client (tests).
-func WithRouterClient(client *http.Client) RouterOption {
-	return func(r *Router) {
-		if client != nil {
-			r.client = client
-		}
-	}
-}
-
 // WithRouterLookup overrides credential resolution (tests).
 func WithRouterLookup(lookup func(string) (string, bool)) RouterOption {
 	return func(r *Router) {
@@ -598,19 +589,6 @@ func (r *Router) serveLocalModels(w http.ResponseWriter, binding RouteBinding) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(payload)
-}
-
-// openAIModelList is the standard OpenAI GET /v1/models response shape that
-// Codex's native /model switch reads (data[].id).
-type openAIModelList struct {
-	Object string           `json:"object"`
-	Data   []openAIModelObj `json:"data"`
-}
-
-type openAIModelObj struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	OwnedBy string `json:"owned_by"`
 }
 
 func isWebSocketUpgrade(req *http.Request) bool {

@@ -267,10 +267,3 @@ func TestResolveDelegatedControlIsReadOnlyAcrossProviderActivityChanges(t *testi
 		t.Fatalf("read-only control consumed provider activity observation: %d", consumed)
 	}
 }
-
-func workerStateForTurnStatus(status TurnStatus) classifier.WorkerState {
-	if status == TurnDone {
-		return classifier.StateDone
-	}
-	return classifier.StateRunning
-}

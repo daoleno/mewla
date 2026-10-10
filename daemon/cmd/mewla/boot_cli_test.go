@@ -270,34 +270,6 @@ func bootWriteInstalledUnit(t *testing.T, config bootConfig) (string, string) {
 	return path, metadataPath
 }
 
-// bootInstallEnvironment returns a config whose state is owned by a live
-// identity/health/state-lock fixture and a fake runner that reports the unit as
-// active with this test process as MainPID, so install verification succeeds.
-func bootInstallEnvironment(t *testing.T) (bootConfig, *fakeBootRunner) {
-	t.Helper()
-	config, _ := newBootTestEnvironment(t)
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.Binary = executable
-	daemonID := bootWriteIdentity(t, config.StateDir)
-	config.Addr = bootStartHealthServer(t, daemonID)
-	bootHoldStateLock(t, config.StateDir)
-	runner := bootTestRunner()
-	runner.set(bootIsActive, "active")
-	runner.set(bootMainPID, strconv.Itoa(os.Getpid()))
-	runner.set(bootIsEnabled, "enabled")
-	path, err := bootUnitPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	runner.set(bootFragment, path)
-	runner.set(bootControlGroup, bootCurrentCgroup(t))
-	runner.set("loginctl show-user "+currentUserName()+" -p Linger --value", "yes")
-	return config, runner
-}
-
 // bootFreshInstallEnvironment models a first install: the unit is inactive and
 // nothing owns the state until `systemctl --user enable --now` starts the
 // daemon (the fake lock acquisition stands in for that daemon).

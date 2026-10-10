@@ -91,11 +91,6 @@ func delegatedTurnIdentity(identity targetProcessIdentity) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
-func delegatedTurnPaneIdentity(content string) string {
-	sum := sha256.Sum256([]byte(content))
-	return fmt.Sprintf("%x", sum[:])
-}
-
 // providerFactSourceID derives the stable provider source identity for the
 // frozen deterministic FactID formula (C.3.1): the adapter's native durable
 // event/message identity plus its monotone cursor. No wall-clock observation

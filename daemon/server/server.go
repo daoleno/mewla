@@ -109,7 +109,6 @@ type Server struct {
 	sendInputWithReceiptOverride func(workerID, text, receipt string) error
 	sendActionOverride           func(workerID, action string) error
 	killSessionOverride          func(workerID string) error
-	hasSessionOverride           func(workerID string) bool
 	probeSessionOverride         func(workerID string) (watcher.SessionPresence, error)
 	getWorkerOverride            func(workerID string) *classifier.Worker
 	// skillsMutationExecuteOverride / pluginMutationExecuteOverride replace the
@@ -397,11 +396,6 @@ type clientMessage struct {
 	Runtime              *modelprofiles.ThreadRuntimeChoice     `json:"runtime"`
 	Credential           string                                 `json:"credential"`
 	ProviderConnection   *modelprofiles.ProviderConnectionInput `json:"provider_connection"`
-}
-
-// Run starts the HTTP server and event broadcaster.
-func (s *Server) Run(ctx context.Context, addr string) error {
-	return s.RunWithReady(ctx, addr, nil)
 }
 
 // Handler exposes the daemon's complete origin as one transport boundary.
@@ -1621,16 +1615,6 @@ func (s *Server) resolveCodexConversationWorker(raw clientMessage) resolvedCodex
 		fromWatcher: workerFromWatcher,
 		ready:       true,
 	}
-}
-
-func (s *Server) sendInput(workerID, text string) error {
-	if s != nil && s.sendInputOverride != nil {
-		return s.sendInputOverride(strings.TrimSpace(workerID), text)
-	}
-	if s == nil || s.watcher == nil {
-		return fmt.Errorf("executor watcher unavailable")
-	}
-	return s.watcher.SendInput(strings.TrimSpace(workerID), text)
 }
 
 func (s *Server) sendInputWithReceipt(workerID, text, receipt string) error {
@@ -3057,10 +3041,6 @@ func (s *Server) sendJSONQueued(conn *websocket.Conn, v any, waitForRoom bool) {
 	if err := s.queueMessage(conn, websocket.TextMessage, data, waitForRoom); err != nil {
 		log.Printf("sendJSON write error: %v", err)
 	}
-}
-
-func (s *Server) sendError(conn *websocket.Conn, code, message string) {
-	s.sendJSON(conn, map[string]any{"type": "error", "code": code, "message": message})
 }
 
 func (s *Server) sendErrorWithRequestID(conn *websocket.Conn, requestID, code, message string) {

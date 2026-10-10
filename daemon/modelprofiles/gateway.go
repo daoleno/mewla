@@ -89,15 +89,6 @@ type Gateway struct {
 // GatewayOption configures Gateway construction (tests).
 type GatewayOption func(*Gateway)
 
-// WithGatewayLookup overrides credential env resolution (tests).
-func WithGatewayLookup(lookup func(string) (string, bool)) GatewayOption {
-	return func(g *Gateway) {
-		if lookup != nil {
-			g.lookup = lookup
-		}
-	}
-}
-
 // WithGatewayClient overrides the upstream HTTP client (tests).
 func WithGatewayClient(client *http.Client) GatewayOption {
 	return func(g *Gateway) {
@@ -611,11 +602,6 @@ func writeGatewayResolutionError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	}
 	writeRouteError(w, status, err)
-}
-
-func isRequestBodyTooLarge(err error) bool {
-	var tooLarge *http.MaxBytesError
-	return errors.As(err, &tooLarge)
 }
 
 // applyGatewayAuth injects the upstream credential per AuthMode. It mirrors the

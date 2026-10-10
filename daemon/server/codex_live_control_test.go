@@ -86,12 +86,6 @@ func (f *fakeLiveControl) Close() error {
 	return nil
 }
 
-func (f *fakeLiveControl) appliedCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.applied)
-}
-
 func (f *fakeLiveControl) lastApplied() nativeApply {
 	f.mu.Lock()
 	defer f.mu.Unlock()

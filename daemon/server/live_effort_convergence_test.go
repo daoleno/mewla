@@ -458,13 +458,6 @@ func waitSocketErrLive(socketPath string, d time.Duration) error {
 	return fmt.Errorf("socket %s missing", socketPath)
 }
 
-func waitSocketLive(t *testing.T, socketPath string) {
-	t.Helper()
-	if err := waitSocketErrLive(socketPath, 30*time.Second); err != nil {
-		t.Fatalf("app-server control socket never appeared: %v", err)
-	}
-}
-
 func waitCodexTUIReadyLive(t *testing.T, sess, model string) {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)

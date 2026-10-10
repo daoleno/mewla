@@ -385,10 +385,6 @@ func inlineArgs(placeholder string) CodexSlashCommandInput {
 	return CodexSlashCommandInput{Kind: "inline-args", Placeholder: placeholder}
 }
 
-func freeformInput(placeholder string) CodexSlashCommandInput {
-	return CodexSlashCommandInput{Kind: "freeform", Placeholder: placeholder}
-}
-
 func optionalFreeformInput(placeholder string) CodexSlashCommandInput {
 	required := false
 	return CodexSlashCommandInput{Kind: "freeform", Placeholder: placeholder, Required: &required}

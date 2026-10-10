@@ -242,10 +242,6 @@ func PreferHostBoundConversation(live, bound CodexConversation) CodexConversatio
 	return live
 }
 
-func lookupCodexThreadByID(sessionID string) (codexThreadRow, bool, error) {
-	return lookupCodexThreadByIDInRoot(sessionID, "")
-}
-
 func lookupCodexThreadByIDInRoot(sessionID, dataRoot string) (codexThreadRow, bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -262,37 +258,6 @@ func lookupCodexThreadByIDInRoot(sessionID, dataRoot string) (codexThreadRow, bo
 	query := fmt.Sprintf(
 		`SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE id = %s LIMIT 1`,
 		sqlString(sessionID),
-	)
-	rows, err := queryCodexThreadRows(sqlite3, dbPath, query)
-	if err != nil {
-		return codexThreadRow{}, false, err
-	}
-	if len(rows) == 0 {
-		return codexThreadRow{}, false, nil
-	}
-	return rows[0], true, nil
-}
-
-func lookupCodexThreadByRolloutPath(path string) (codexThreadRow, bool, error) {
-	return lookupCodexThreadByRolloutPathInRoot(path, dataRootForPath(path, nil))
-}
-
-func lookupCodexThreadByRolloutPathInRoot(path, dataRoot string) (codexThreadRow, bool, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return codexThreadRow{}, false, nil
-	}
-	dbPath, ok, err := codexStateDBPath(dataRoot)
-	if err != nil || !ok {
-		return codexThreadRow{}, false, err
-	}
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		return codexThreadRow{}, false, nil
-	}
-	query := fmt.Sprintf(
-		`SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE rollout_path = %s LIMIT 1`,
-		sqlString(path),
 	)
 	rows, err := queryCodexThreadRows(sqlite3, dbPath, query)
 	if err != nil {

@@ -459,17 +459,6 @@ func (w *Watcher) SocketPathFor(target string) string {
 	return w.tmuxSocketPath
 }
 
-func (w *Watcher) ownsTarget(target string) bool {
-	if w == nil {
-		return false
-	}
-	target = strings.TrimSpace(target)
-	w.mu.RLock()
-	_, owned := w.workers[target]
-	w.mu.RUnlock()
-	return owned
-}
-
 // targetIsDurablyOwned requires both an existing target and Mewla's pane-local
 // ownership marker. A global tmux option with the same name is deliberately
 // insufficient: ambient panes must never inherit ownership from server
@@ -2601,13 +2590,6 @@ func probeTmuxTargetOwnershipOn(socket, target string, requireServer bool) (pres
 	return true, tmuxBoolOption(string(out)), nil
 }
 
-// tmuxTargetPresent reports whether the selected server still has the exact
-// pane target. list-panes does not fall back to another window
-// when the requested pane is gone.
-func tmuxTargetPresent(socket, target string) (bool, error) {
-	return tmuxTargetPresentOn(socket, target, false)
-}
-
 func tmuxTargetPresentOn(socket, target string, requireServer bool) (bool, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
@@ -4123,10 +4105,6 @@ func inputReadyTimeout(command string) time.Duration {
 		return openCodeInputReadyTimeout
 	}
 	return initialInputReadyTimeout
-}
-
-func sendLiteralTmuxInput(socket, sessionID, body string) error {
-	return sendLiteralTmuxInputGuarded(socket, sessionID, body, nil)
 }
 
 func sendLiteralTmuxInputGuarded(socket, sessionID, body string, guard func() error) error {
@@ -5814,15 +5792,6 @@ func normalizeCommand(value string) string {
 		value = value[idx+1:]
 	}
 	return value
-}
-
-func commandHasArg(command string, arg string) bool {
-	for _, field := range strings.Fields(command) {
-		if strings.Trim(field, `"'`) == arg {
-			return true
-		}
-	}
-	return false
 }
 
 func commandResumeArg(command string) (bool, string) {

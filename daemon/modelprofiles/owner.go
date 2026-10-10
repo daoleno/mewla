@@ -1281,19 +1281,6 @@ func (o *Owner) ActivateSession(sessionID, profileID string, expectedGeneration 
 	return o.activateCompiledProfileLocked(sessionID, profile, expectedGeneration)
 }
 
-// activateCompiledProfile activates an already-compiled Profile without catalog mutation.
-func (o *Owner) activateCompiledProfile(sessionID string, profile Profile, expectedGeneration int64) (SessionRouteState, WireSessionSnapshot, PersistResult, error) {
-	if o == nil || !o.started {
-		return SessionRouteState{}, WireSessionSnapshot{}, PersistResult{}, fmt.Errorf("%w: owner not started", ErrInvalid)
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if err := o.ensureProviderSwitchJournalClearedLocked(); err != nil {
-		return SessionRouteState{}, WireSessionSnapshot{}, PersistResult{}, fmt.Errorf("%w: resolve prior provider switch: %v", ErrInvalid, err)
-	}
-	return o.activateCompiledProfileLocked(sessionID, profile, expectedGeneration)
-}
-
 func (o *Owner) activateCompiledProfileLocked(sessionID string, profile Profile, expectedGeneration int64) (SessionRouteState, WireSessionSnapshot, PersistResult, error) {
 	var state SessionRouteState
 	persist, err := o.mutateAndPersistLocked(func() error {

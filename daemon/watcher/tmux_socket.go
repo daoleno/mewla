@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"strings"
@@ -32,13 +31,6 @@ func tmuxSocketArgs(socketPath string) []string {
 // Empty socketPath targets the user's default server.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
 	cmd := exec.Command("tmux", append(tmuxSocketArgs(socketPath), args...)...)
-	cmd.Env = tmuxHostEnvironment()
-	return cmd
-}
-
-// tmuxCommandContext is the context-bound variant.
-func tmuxCommandContext(ctx context.Context, socketPath string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "tmux", append(tmuxSocketArgs(socketPath), args...)...)
 	cmd.Env = tmuxHostEnvironment()
 	return cmd
 }

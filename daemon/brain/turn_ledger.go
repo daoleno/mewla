@@ -678,26 +678,6 @@ func projectAcceptedAdmission(database *presentationDatabase, st *lifecycle.Stat
 	return nil
 }
 
-func databaseWorkIDForTurnAdmission(database presentationDatabase, sessionID string) string {
-	if workID := databaseActiveWorkIDForExecutionSession(database, sessionID); workID != "" {
-		return workID
-	}
-	// A terminal or attention-relinquished Turn remains exact lifecycle
-	// evidence for a same-Session correction, but it does not restore progress
-	// ownership.
-	if current, found := currentTurnForSession(database, sessionID); found {
-		if index := workIndex(database.BrainWork, current.WorkID); index >= 0 {
-			item := database.BrainWork[index]
-			if item.Status != WorkDone && item.Status != WorkCancelled &&
-				(item.AttemptSessionID == sessionID ||
-					(strings.TrimSpace(item.AttemptSessionID) == "" && (workHasReviewObligation(database, item.ID) || item.Wake != nil))) {
-				return item.ID
-			}
-		}
-	}
-	return ""
-}
-
 // Turn returns the canonical snapshot for the current turn of the session.
 func (s *Store) Turn(sessionID string) (watcher.TurnSnapshot, bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
@@ -845,15 +825,6 @@ func currentTurnForSession(database presentationDatabase, sessionID string) (Tur
 		}
 	}
 	return best, bestSet
-}
-
-func exactTurnForSession(database presentationDatabase, sessionID, turnID string) (TurnRecord, bool) {
-	for _, turn := range database.BrainTurns {
-		if turn.SessionID == sessionID && turn.TurnID == turnID {
-			return turn, true
-		}
-	}
-	return TurnRecord{}, false
 }
 
 // turnMutation is the pure decision of the single reducer for one fact.
@@ -1368,17 +1339,6 @@ func derivedWorkUpdate(status watcher.TurnStatus, sessionID, eventKind string) W
 		return WorkUpdate{Status: &needsInput, NextAction: &next, WaitFor: &sessionWait, Wake: &noWake}
 	}
 	return WorkUpdate{Status: &waiting}
-}
-
-func boundedTerminalWorkUpdate() WorkUpdate {
-	status := WorkDone
-	empty := ""
-	var noWake *WorkWake
-	var noAttempt string
-	return WorkUpdate{
-		Status: &status, AttemptSessionID: &noAttempt,
-		NextAction: &empty, WaitFor: &empty, Wake: &noWake,
-	}
 }
 
 // ReassertLiveTurnOwnership renews only the exact current nonterminal Turn

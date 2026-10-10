@@ -181,13 +181,6 @@ func isBrainCodexWorker(worker classifier.Worker) bool {
 	return strings.HasPrefix(sessionName, "mewla-worker-brain-")
 }
 
-func matchCodexTranscriptToWorkerProcess(candidates []codexTranscriptCandidate, processID int) (codexTranscriptCandidate, bool) {
-	if processID <= 0 {
-		return codexTranscriptCandidate{}, false
-	}
-	return matchCodexTranscriptToOpenRollouts(candidates, openCodexRolloutPathsForProcess(processID))
-}
-
 func matchCodexTranscriptToOpenRollouts(candidates []codexTranscriptCandidate, paths []string) (codexTranscriptCandidate, bool) {
 	if len(candidates) == 0 || len(paths) == 0 {
 		return codexTranscriptCandidate{}, false

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/lifecycle"
-	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // Delivery bookkeeping is internal to the runtime. Brain receives facts and
@@ -250,27 +249,6 @@ func validateWorkReview(database presentationDatabase, item Work) error {
 		}
 	}
 	return nil
-}
-
-// databaseHasExactReviewLease matches a Host submission transaction against
-// the canonical review lease. The provider Turn ID is the transport receipt;
-// the claim token, Work, Host Session, and provider Turn together are the
-// admission authority. The Event identity stays solely on the review fact.
-func databaseHasExactReviewLease(database presentationDatabase, submission watcher.InputAdmission) bool {
-	itemIndex := workIndex(database.BrainWork, submission.WorkID)
-	if itemIndex < 0 {
-		return false
-	}
-	review := database.BrainWork[itemIndex].Review
-	if review == nil || review.Lease == nil {
-		return false
-	}
-	lease := review.Lease
-	return lease.HandlingID == submission.ClaimToken &&
-		lease.ProviderTurnID == submission.ProposedTurnID &&
-		lease.HostSessionID == submission.SessionID &&
-		submission.Receipt == submission.ProposedTurnID &&
-		lease.DeliveredAt == nil && lease.HandlingEndedAt == nil
 }
 
 // reviewDeliveredInFlightIndex returns the Work index whose review lease is

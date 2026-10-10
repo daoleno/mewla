@@ -57,13 +57,6 @@ func New(stateDir string) (*Store, error) {
 	return &Store{path: filepath.Join(stateDir, fileName)}, nil
 }
 
-func (s *Store) Path() string {
-	if s == nil {
-		return ""
-	}
-	return s.path
-}
-
 func Normalize(raw string) (string, error) {
 	p, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {

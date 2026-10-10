@@ -575,12 +575,6 @@ func (server *Server) acceptConnectors(ctx context.Context, listener net.Listene
 	}
 }
 
-func (server *Server) handleConnector(ctx context.Context, conn net.Conn) {
-	outcome := &connectionOutcome{server: server}
-	defer outcome.reject(rejectionProtocol)
-	server.handleConnectorWithRelease(ctx, conn, func() {}, outcome)
-}
-
 func (server *Server) handleConnectorWithRelease(
 	ctx context.Context,
 	conn net.Conn,

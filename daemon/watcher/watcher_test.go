@@ -1488,28 +1488,6 @@ func TestUnknownCommandDoesNotWaitForInputReady(t *testing.T) {
 	}
 }
 
-func readFileWithMinSize(t *testing.T, path string, minSize int, timeout time.Duration) string {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	var data []byte
-	for {
-		current, err := os.ReadFile(path)
-		if err == nil {
-			data = current
-			if len(data) >= minSize {
-				return string(data)
-			}
-		}
-		if time.Now().After(deadline) {
-			if len(data) > 0 {
-				return string(data)
-			}
-			t.Fatalf("timed out waiting for %s to reach %d bytes", path, minSize)
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-}
-
 func TestChangedPaneLinesReturnsTailWhenContentRepaintsSameLine(t *testing.T) {
 	got := changedPaneLines("› hello\nThinking", "› hello\nThinking longer")
 	want := []string{"› hello", "Thinking longer"}
