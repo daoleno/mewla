@@ -66,7 +66,7 @@ it, and verifies that close removes its detached descendant.
 Brain and server tests cover the event envelope and authenticated API. The lever's
 Worker inventory read alone does not prove these mutation or pressure flows.
 
-## Pane ownership and restart migration
+## Pane ownership
 
 Worker identity is the owned `%pane_id` on the canonical server. A window is
 presentation metadata; changing focus or splitting a window cannot change its
@@ -74,17 +74,8 @@ Worker. Ownership markers, input receipts, provider capture and process probes
 belong to that pane. Closing it removes only that pane.
 
 `daemon/watcher/pane_identity_real_test.go` reproduces the split/focus delivery
-case on an isolated socket, then proves removal refuses input, pane-local launch
-environment does not leak to a user split, and migration never selects focus.
-`daemon/brain/pane_migration_test.go` reopens a running canonical turn twice after
-migration, including provider route bindings and Telegram reply/deduplication
-references. `daemon/terminal/tmux_integration_test.go` covers resolving a Worker
+case on an isolated socket, then proves removal refuses input and pane-local launch
+environment does not leak to a user split.
+`daemon/terminal/tmux_integration_test.go` covers resolving a Worker
 pane to its display window and refusing a removed pane. These inert fixtures
 provide mutation evidence; `worker_list` alone does not.
-
-Legacy `session:window_id` references are resolved once during startup using
-recorded pane-generation evidence (or an unambiguous single-pane window). The
-alias journal commits before metadata and state migration, so an interrupted
-load resumes the same binding. An ambiguous split fails migration instead of
-adopting its active pane. Old launch shells may report their legacy ID through
-the control API only while the pinned pane retains that exact legacy marker.

@@ -62,8 +62,7 @@
         "daemon/workerproc/ownership_unix.go",
         "daemon/brain/resource_pressure.go",
         "daemon/cmd/mewla/worker_release.go",
-        "daemon/watcher/pane_identity.go",
-        "daemon/brain/pane_migration.go"
+        "daemon/watcher/pane_identity.go"
       ],
       "test_paths": [
         "daemon/cmd/mewla/control_app_test.go",
@@ -82,7 +81,6 @@
         "daemon/server/resource_telemetry_test.go",
         "daemon/brain/resource_pressure_test.go",
         "daemon/watcher/pane_identity_real_test.go",
-        "daemon/brain/pane_migration_test.go",
         "daemon/terminal/tmux_integration_test.go"
       ]
     },
