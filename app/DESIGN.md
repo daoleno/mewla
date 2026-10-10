@@ -482,7 +482,7 @@ native then holds the clip's first frame, while browsers keep playing it.
 | Brain idle | `idle`: asleep in the seal | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
 | App start, connecting, loading history | `waking`: hops out of the seal, then stands | App start (`CatSplash`), the Brain chat while it connects or loads history (tail row "Waking up" under the still outline), Sessions loading/connecting | "Still waking up…" |
 | Brain's turn running | `working`: walking | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
-| Work needs your input | `attention`: peeking over the seal | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
+| Work needs your input | `attention`: waiting on its feet, ears up | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
 | Delegated Work on Workers | `delegating`: sitting, tail and blink | Tail row, "Waiting on 3 Workers" | The status line |
 | Unread result | `delivered`: a happy hop | Tail row, "Brought 2 things back" | The status line |
 | Offline | `offline`: asleep in a grey seal | Brain status screen, Sessions' offline empty state; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
