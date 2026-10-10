@@ -39,6 +39,7 @@ import (
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/tmuxsocket"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"golang.org/x/term"
@@ -1118,12 +1119,9 @@ func currentWorkerID() string {
 	if pane == "" {
 		return ""
 	}
-	args := []string{"display-message", "-p", "-t", pane, "#{pane_id}"}
-	if socket := tmuxClientSocket(); socket != "" {
-		// -N keeps this read-only query from starting a server when the
-		// caller's server is gone; a missing server yields no worker ID.
-		args = append([]string{"-S", socket, "-N"}, args...)
-	}
+	// -N keeps this read-only query from starting a server when the caller's
+	// server is gone; a missing server yields no worker ID.
+	args := append(tmuxsocket.Args(tmuxClientSocket()), "display-message", "-p", "-t", pane, "#{pane_id}")
 	out, err := exec.Command("tmux", args...).Output()
 	if err != nil {
 		return ""

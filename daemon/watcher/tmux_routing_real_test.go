@@ -14,6 +14,7 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
 type sharedTmuxHarness struct {
@@ -229,7 +230,7 @@ exec "$real" "$@"
 }
 
 func tmuxHarnessCommand(socket string, args ...string) *exec.Cmd {
-	return exec.Command("tmux", append(tmuxSocketArgs(socket), args...)...)
+	return exec.Command("tmux", append(tmuxsocket.Args(socket), args...)...)
 }
 
 func createHarnessPane(t *testing.T, socket, session, command string) string {

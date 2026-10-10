@@ -588,7 +588,7 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 	runtime := normalizeWorkerRuntime(executor.Runtime)
 	return WorkerExecutor{
 		ID:           id,
-		Name:         firstNonEmptyString(strings.TrimSpace(executor.Name), id),
+		Name:         firstNonEmpty(strings.TrimSpace(executor.Name), id),
 		Provider:     provider,
 		Command:      command,
 		Runtime:      runtime,
@@ -715,13 +715,4 @@ func workerCapabilities(provider, runtime string) WorkerCapabilities {
 		caps.NativeFork = true
 	}
 	return caps
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
