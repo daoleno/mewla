@@ -26,13 +26,7 @@ func TestTmuxNewViewSessionCommandCreatesIndependentWindowSelector(t *testing.T)
 }
 
 func TestExplicitSocketPinsClientWithoutServerAutostart(t *testing.T) {
-	if got := tmuxSocketArgs(""); got != nil {
-		t.Fatalf("empty tmux socket args = %#v, want nil (default server)", got)
-	}
 	socket := "/run/user/1000/control.sock"
-	if got := tmuxSocketArgs(socket); !reflect.DeepEqual(got, []string{"-S", socket, "-N"}) {
-		t.Fatalf("explicit tmux socket args = %#v, want [-S socket -N]", got)
-	}
 	cmd := tmuxNewViewSessionCommand(context.Background(), socket, "mewla-view")
 	want := []string{
 		"tmux",

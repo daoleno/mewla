@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
 // tmux server layout:
@@ -15,22 +17,10 @@ import (
 // is unset and TMUX_TMPDIR points at private scratch, so their later unscoped
 // tmux commands cannot reach the shared host server.
 
-// tmuxSocketArgs returns the global flags binding an invocation to an
-// externally owned server: -S selects the exact socket, -N forbids the
-// client from starting a server when that socket is absent or dead, so a
-// missing server fails instead of forking a fallback into our own cgroup.
-// An empty socketPath means the user's default server (unchanged behavior).
-func tmuxSocketArgs(socketPath string) []string {
-	if socketPath == "" {
-		return nil
-	}
-	return []string{"-S", socketPath, "-N"}
-}
-
 // tmuxCommand builds a tmux invocation bound to the given server socket.
 // Empty socketPath targets the user's default server.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
-	cmd := exec.Command("tmux", append(tmuxSocketArgs(socketPath), args...)...)
+	cmd := exec.Command("tmux", append(tmuxsocket.Args(socketPath), args...)...)
 	cmd.Env = tmuxHostEnvironment()
 	return cmd
 }

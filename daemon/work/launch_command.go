@@ -76,7 +76,7 @@ func withLaunchModel(provider, command, model, reasoning string) (string, error)
 	}
 	flags, ok := launchModelFlagsByProvider[provider]
 	if !ok {
-		return "", fmt.Errorf("client %q has no per-launch model/reasoning option; omit -model and -reasoning to use its native selection", firstNonEmptyString(provider, WorkerProviderCustom))
+		return "", fmt.Errorf("client %q has no per-launch model/reasoning option; omit -model and -reasoning to use its native selection", firstNonEmpty(provider, WorkerProviderCustom))
 	}
 	if reasoning != "" {
 		if len(flags.reasoning) == 0 {

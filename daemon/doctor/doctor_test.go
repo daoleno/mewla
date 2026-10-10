@@ -400,7 +400,7 @@ command = "codex"
 	}
 }
 
-func TestPortInUseByNonZen(t *testing.T) {
+func TestPortInUseByNonMewla(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeTmux(t, binDir)

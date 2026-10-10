@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/creack/pty"
+	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
 var sessionCounter atomic.Int64
@@ -25,21 +26,11 @@ var terminalIDCounter atomic.Int64
 // Sessions). Mewla-owned Brain/delegated Sessions live on the daemon-namespaced
 // server, so their linked view sessions are created there too.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
-	return exec.Command("tmux", append(tmuxSocketArgs(socketPath), args...)...)
+	return exec.Command("tmux", append(tmuxsocket.Args(socketPath), args...)...)
 }
 
 func tmuxCommandContext(ctx context.Context, socketPath string, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, "tmux", append(tmuxSocketArgs(socketPath), args...)...)
-}
-
-func tmuxSocketArgs(socketPath string) []string {
-	socketPath = strings.TrimSpace(socketPath)
-	if socketPath == "" {
-		return nil
-	}
-	// -N pins the client to the externally owned server: a missing server
-	// fails instead of forking a fallback into our own cgroup.
-	return []string{"-S", socketPath, "-N"}
+	return exec.CommandContext(ctx, "tmux", append(tmuxsocket.Args(socketPath), args...)...)
 }
 
 // TmuxBackend attaches a dedicated tmux client to an existing tmux session
