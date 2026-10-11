@@ -76,6 +76,64 @@ fact is recorded it schedules the loss-grace deadline, not the expired timer.
 Normal Worker check-ins remain useful when a long tool call emits no structured
 provider activity. Silence remains uncertain until the existing loss boundary.
 
+### Provider Interruptions And Automatic Resume
+
+A delegated signal Turn is settled only by the Worker's own progress report.
+When the provider's turn ends first, the Session sits idle at its prompt while
+its Work stays running. Causes include a dropped stream, an overloaded or 5xx
+upstream, a rate limit, or a daemon reload that cut the local model route.
+The watcher supervises exactly that shape after every complete poll. The
+canonical Turn is live (or, for a drop before the first progress report, the
+delegated prompt is still prepared), the provider Activity has settled, and
+the Session shows no approval prompt.
+
+The reason comes from the provider's own structured record, not the screen:
+
+- **Claude Code:** an assistant record with `isApiErrorMessage`, its `error`
+  category and `apiErrorStatus`. It can follow a partial `end_turn` flush and
+  still ends that Activity.
+- **Codex:** an `event_msg` of type `error` with `codex_error_info`.
+
+The record is carried as `ProviderActivity.error`.
+
+| Shape | Action |
+| --- | --- |
+| Transient error: connection lost or reset, ECONNREFUSED, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
+| Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
+| Persistent error: login, billing, unknown model, invalid or oversized request | One stall escalation after 30 s (`provider_error`); never resumed |
+| Stopped with no error and no terminal report | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease, and not while the footer shows background shells or agents |
+
+**Continuation.**
+- The continuation is "The previous response was cut off by a provider error.
+  Continue the task from where you stopped; don't redo finished steps." with a
+  fresh turn contract.
+- It goes through the normal delegated admission path (`worker send`
+  semantics, one in flight per Session).
+- Each delivered or possibly delivered continuation is a durable
+  `session.auto_resumed` Work Event. Its details record the attempt, the
+  stalled and new Turn identities, and the classified error.
+- The budget is derived from those Events, so it survives daemon reloads.
+  Resumes more than 30 minutes apart start a new episode.
+- After a dev reload the first complete poll re-reads every Session and resumes
+  any whose provider turn died, once its backoff has elapsed.
+
+**Escalation.**
+- Escalation records one `session.stale` evidence row with the reason, the
+  error and the last pane lines.
+- It then releases the exact Attempt as lost (`worker_stalled: <reason>`),
+  which opens the usual `turn_lost` review. A drop before the first progress
+  report opens `submission_ambiguous` instead.
+- Brain receives that review with the stall summary. A repeated escalation of
+  the same Turn changes nothing.
+- A later exact terminal report can still upgrade the loss.
+
+**Stale prompt fence.** A delivered delegated prompt whose progress signal
+never arrives stays `prepared` and would fence every later prompt ("admission …
+is still prepared") as well as Brain delivery. Once the provider has settled
+after that preparation and stayed idle for 45 s, the next send (or a stall
+escalation) marks it `ambiguous`. Delivery is unknown, never replayed, and no
+longer blocks. A prompt queued behind a running provider turn keeps its fence.
+
 For an owned wait, the reference is `session:<session-id>:turn:<turn-token>`.
 Bare Session names and another producer's Turn do not authorize changing the
 active Attempt. Without an Attempt, wait retains its usual typed external Wake.

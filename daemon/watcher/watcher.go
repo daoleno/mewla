@@ -278,6 +278,8 @@ type Watcher struct {
 	appliedFactIDs        map[string]string         // session -> last applied provider FactID (skip identical applies)
 	ledgerTurnReadAt      map[string]time.Time      // TTL for authoritative ledger re-reads
 	probeLossSince        map[string]probeLossState // session -> current turn loss streak
+	recovery              *turnRecoverySupervisor
+	recoveryOnce          sync.Once
 	providerSignals       map[string]providerActivitySignal
 	// tmuxSocketPath is the one caller-visible tmux server selected when the
 	// daemon starts ("" = the Unix user's ordinary default server).
@@ -410,6 +412,7 @@ type probedPollWorker struct {
 	turn     TurnSnapshot
 	hasTurn  bool
 	turnErr  error
+	pending  []InputAdmission
 }
 
 func observePanes(
@@ -1333,6 +1336,9 @@ func (w *Watcher) poll() {
 	events := w.projectPollResultsLocked(results)
 	events = append(events, w.projectMissingWorkersLocked(missing)...)
 	w.compactWorkerOrderLocked()
+	// Recovery acts only on a poll that follows a complete published
+	// inventory, never on the first observation after startup.
+	supervise := w.snapshotReady
 	if !w.snapshotReady {
 		w.snapshotReady = true
 		if w.snapshotReadyCh != nil {
@@ -1341,6 +1347,9 @@ func (w *Watcher) poll() {
 	}
 	w.mu.Unlock()
 	w.publish(events...)
+	if supervise {
+		w.superviseDelegatedTurns(results)
+	}
 }
 
 type missingPollWorker struct {
@@ -1678,7 +1687,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		if providerProbe != nil && !item.workerSnap.Hidden && !hasPending && (!hasTurn || turnErr != nil || TurnImmutable(turn.Status)) {
 			providerProbe.ForgetProviderActivity(item.id)
 		}
-		results = append(results, probedPollWorker{preparedPollWorker: item, activity: activity, provider: provider, turn: turn, hasTurn: hasTurn, turnErr: turnErr})
+		results = append(results, probedPollWorker{preparedPollWorker: item, activity: activity, provider: provider, turn: turn, hasTurn: hasTurn, turnErr: turnErr, pending: pendingList})
 	}
 	return results
 }

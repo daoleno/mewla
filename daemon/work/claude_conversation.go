@@ -474,7 +474,13 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		} `json:"origin"`
 		Attachment    json.RawMessage `json:"attachment"`
 		ToolUseResult json.RawMessage `json:"toolUseResult"`
-		Message       struct {
+		// Claude Code writes a provider/transport failure as a synthetic
+		// assistant record: isApiErrorMessage, an error category and, when
+		// known, the upstream status.
+		IsAPIErrorMessage bool   `json:"isApiErrorMessage"`
+		Error             string `json:"error"`
+		APIErrorStatus    int    `json:"apiErrorStatus"`
+		Message           struct {
 			Role       string          `json:"role"`
 			Content    json.RawMessage `json:"content"`
 			StopReason string          `json:"stop_reason"`
@@ -526,7 +532,15 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 			}
 		}
 		b.consumeAssistantContent(lineNumber, recordID, timestamp, envelope.Message.Content)
-		if !claudeAssistantRecordContinuesTurn(
+		if envelope.IsAPIErrorMessage {
+			// The error record ends Claude's turn whatever its stop reason.
+			b.activityLifecycle.settle("", ProviderActivityCompleted, timestamp)
+			b.activityLifecycle.recordError(timestamp, ProviderActivityError{
+				Code:       envelope.Error,
+				HTTPStatus: envelope.APIErrorStatus,
+				Message:    claudeAPIErrorText(envelope.Message.Content),
+			}, true)
+		} else if !claudeAssistantRecordContinuesTurn(
 			envelope.Message.StopReason,
 			envelope.Message.Content,
 		) {
@@ -540,6 +554,14 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		// Skip system/permission-mode/file-history-snapshot and other
 		// provider-internal records from the shared conversation surface.
 	}
+}
+
+// claudeAPIErrorText is the first line of the error record's own text.
+func claudeAPIErrorText(raw json.RawMessage) string {
+	if text, ok := claudeUserPlainText(raw); ok {
+		return firstLine(text)
+	}
+	return ""
 }
 
 func claudeAssistantRecordContinuesTurn(stopReason string, raw json.RawMessage) bool {

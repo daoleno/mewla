@@ -719,6 +719,13 @@ func cardEventForCanonicalReview(database presentationDatabase, canonical WorkEv
 			!strings.Contains(evidence.DedupeKey, ":turn:"+canonical.PayloadRef+":") {
 			continue
 		}
+		if lost && evidence.Kind == "session.stale" {
+			// A recovery stall keeps the loss presentation and names why.
+			canonical.PayloadRef = evidence.PayloadRef
+			canonical.SourceName = evidence.SourceName
+			canonical.Summary = firstNonEmpty(evidence.Summary, canonical.Summary)
+			break
+		}
 		if lost && evidence.Kind != "session.uncertain" {
 			continue
 		}

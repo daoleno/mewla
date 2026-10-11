@@ -58,6 +58,19 @@ type ProviderActivity struct {
 	Status    ProviderActivityStatus `json:"status"`
 	StartedAt string                 `json:"started_at"`
 	SettledAt string                 `json:"settled_at,omitempty"`
+	// Error is the provider's own structured error record that ended this
+	// Activity (a Claude API error message, a Codex error event). A transport
+	// drop can end an Activity as completed; Error keeps that distinguishable.
+	Error *ProviderActivityError `json:"error,omitempty"`
+}
+
+// ProviderActivityError is the provider-native error that settled an
+// Activity. Code is the provider's error category, HTTPStatus its upstream
+// status when recorded, and Message the provider's own one-line text.
+type ProviderActivityError struct {
+	Code       string `json:"code,omitempty"`
+	HTTPStatus int    `json:"http_status,omitempty"`
+	Message    string `json:"message,omitempty"`
 }
 
 // providerActivityLifecycle keeps only the provider's current Activity. A
@@ -115,6 +128,30 @@ func (l *providerActivityLifecycle) settle(id string, status ProviderActivitySta
 	l.activity.SettledAt = settledAt
 }
 
+// recordError attaches the provider error record that settled the current
+// Activity at settledAt. With trailing, the record may follow the settlement
+// (Claude flushes partial text as end_turn before writing its error record);
+// it then ends the same Activity at its own time. A later Activity starts
+// without an error.
+func (l *providerActivityLifecycle) recordError(settledAt string, err ProviderActivityError, trailing bool) {
+	settledAt = normalizeProviderActivityTimestamp(settledAt)
+	if l == nil || l.activity == nil || l.activity.Status == ProviderActivityRunning || settledAt == "" {
+		return
+	}
+	if l.activity.SettledAt != settledAt {
+		if !trailing || parseNormalizedCodexTimestamp(settledAt).Before(parseNormalizedCodexTimestamp(l.activity.SettledAt)) {
+			return
+		}
+		l.activity.SettledAt = settledAt
+	}
+	err.Code = strings.TrimSpace(err.Code)
+	err.Message = truncateRunes(strings.TrimSpace(err.Message), 400)
+	if err.Code == "" && err.Message == "" && err.HTTPStatus == 0 {
+		return
+	}
+	l.activity.Error = &err
+}
+
 func normalizeProviderActivityTimestamp(value string) string {
 	value = normalizeCodexTimestamp(value)
 	if parseNormalizedCodexTimestamp(value).IsZero() {
@@ -132,6 +169,10 @@ func (l *providerActivityLifecycle) snapshot() *ProviderActivity {
 		return nil
 	}
 	activity := *l.activity
+	if l.activity.Error != nil {
+		err := *l.activity.Error
+		activity.Error = &err
+	}
 	return &activity
 }
 
@@ -659,6 +700,10 @@ func (b *codexConversationBuilder) consumeEvent(lineNumber int, timestamp string
 	case "error":
 		if codexErrorAffectsTurnStatus(payload.CodexErrorInfo) {
 			b.settleActivity(payload.TurnID, ProviderActivityFailed, timestamp, lineNumber)
+			b.activityLifecycle.recordError(timestamp, ProviderActivityError{
+				Code:    codexErrorInfoCode(payload.CodexErrorInfo),
+				Message: firstLine(payload.Message),
+			}, false)
 			b.finishPendingReasoning()
 		}
 		message := cleanConversationText(payload.Message)
@@ -1741,6 +1786,32 @@ func codexErrorAffectsTurnStatus(raw json.RawMessage) bool {
 		return true
 	}
 	return !codexErrorInfoContainsNonTurnFatal(value)
+}
+
+// codexErrorInfoCode names a codex_error_info value: the string itself, or
+// the single key of its object form ({"response_too_many_failed_attempts":…}).
+func codexErrorInfoCode(raw json.RawMessage) string {
+	var value any
+	if json.Unmarshal(bytes.TrimSpace(raw), &value) != nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case map[string]any:
+		for key := range typed {
+			return key
+		}
+	}
+	return ""
+}
+
+func firstLine(text string) string {
+	text = strings.TrimSpace(text)
+	if index := strings.IndexByte(text, '\n'); index >= 0 {
+		text = strings.TrimSpace(text[:index])
+	}
+	return text
 }
 
 func codexErrorInfoContainsNonTurnFatal(value any) bool {

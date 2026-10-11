@@ -1089,7 +1089,7 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 			return control.ErrorResponse("missing_text", "Work input requires submitted prompt text.")
 		}
 		turnID := "turn:" + uuid.NewString()
-		result, err := a.watcher.SubmitDelegatedWorkInput(workerID, delegatedLifecyclePayload(payload, turnID), req.WorkID, turnID, "", "", time.Now().UTC())
+		result, err := a.watcher.SubmitDelegatedWorkInput(workerID, watcher.DelegatedLifecyclePayload(payload, turnID), req.WorkID, turnID, "", "", time.Now().UTC())
 		if err != nil {
 			return control.ErrorResponse("send_failed", err.Error())
 		}
@@ -1127,7 +1127,7 @@ func (a *controlApp) submitWorkerHandoff(workerID, command, payload, workID stri
 	// One prompt, one aggregate identity. Provider adapters may implement a
 	// follow-up as in-place steering, but that transport detail cannot replace
 	// the newly prepared Turn token with a previous prompt's identity.
-	payload = delegatedLifecyclePayload(payload, turnID)
+	payload = watcher.DelegatedLifecyclePayload(payload, turnID)
 	var result watcher.InputResult
 	var err error
 	if initial {
@@ -1166,17 +1166,6 @@ func (a *controlApp) submitWorkerHandoff(workerID, command, payload, workID stri
 		log.Printf("delegated Session %s projection rebind failed after accepted input: %v", workerID, rebindErr)
 	}
 	return turnID, nil
-}
-
-// delegatedLifecyclePayload exposes the pending submission's sole random
-// identity to the Worker in the prompt that identity owns. The literal flag is
-// intentionally turn-scoped rather than process environment: a reusable
-// Session receives a different identity with every admitted prompt.
-func delegatedLifecyclePayload(payload, turnID string) string {
-	contract := fmt.Sprintf(`Mewla delegated turn contract:
-Use this turn's identity for every progress command; never reuse an earlier turn's identity:
-  "$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id %s --status running --phase working --attention none --summary "Current work" --lease 300`, strings.TrimSpace(turnID))
-	return payload + "\n\n" + contract
 }
 
 // recordSubmissionFailure rebinds the Session projection from the canonical
