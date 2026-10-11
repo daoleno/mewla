@@ -92,6 +92,11 @@ func (p *workProviderActivityProbe) ObserveProviderActivity(
 		observation.Status = string(conversation.Activity.Status)
 		observation.StartedAt = parseProviderActivityTime(conversation.Activity.StartedAt)
 		observation.SettledAt = parseProviderActivityTime(conversation.Activity.SettledAt)
+		if failure := conversation.Activity.Error; failure != nil {
+			observation.Error = &watcher.ProviderActivityError{
+				Code: failure.Code, HTTPStatus: failure.HTTPStatus, Message: failure.Message,
+			}
+		}
 	}
 	for _, activity := range conversation.ProviderActivities {
 		status := strings.TrimSpace(string(activity.Status))

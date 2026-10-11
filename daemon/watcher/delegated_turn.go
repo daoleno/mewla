@@ -62,6 +62,17 @@ type ProviderActivityObservation struct {
 	// provider session has advanced to a later native activity. No transcript
 	// text is carried here.
 	TerminalActivities []ProviderTerminalActivity
+	// Error is the provider's own structured error record that settled the
+	// current Activity, if any. A transport drop can settle as completed.
+	Error *ProviderActivityError
+}
+
+// ProviderActivityError mirrors the provider-native error record: category
+// code, upstream HTTP status when recorded, and the one-line message.
+type ProviderActivityError struct {
+	Code       string
+	HTTPStatus int
+	Message    string
 }
 
 type ProviderTerminalActivity struct {

@@ -75,7 +75,7 @@ func assertDelegatedLifecyclePayload(t *testing.T, payload, original string) str
 
 func TestDelegatedLifecyclePayloadNeverSubstitutesAnOlderTurn(t *testing.T) {
 	const candidate = "turn:nextAttempt"
-	payload := delegatedLifecyclePayload("follow-up", candidate)
+	payload := watcher.DelegatedLifecyclePayload("follow-up", candidate)
 	if assertDelegatedLifecyclePayload(t, payload, "follow-up") != candidate {
 		t.Fatalf("follow-up payload lost exact candidate token: %q", payload)
 	}

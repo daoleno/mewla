@@ -9,6 +9,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -18,7 +19,7 @@ func TestWorkerPromptKeepsPayloadAndOneExactTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := delegatedLifecyclePayload(prompt, "turn:exact-current")
+	result := watcher.DelegatedLifecyclePayload(prompt, "turn:exact-current")
 	if !strings.HasPrefix(result, user+"\n\n") {
 		t.Fatal("user bytes changed")
 	}
@@ -134,7 +135,7 @@ func TestGeneratedWorkerPromptDirectRepositoryAndDelivery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result := delegatedLifecyclePayload(prompt, "turn:direct-repo")
+			result := watcher.DelegatedLifecyclePayload(prompt, "turn:direct-repo")
 			for _, required := range []string{
 				"Edit the supplied repository and cwd directly",
 				"preserve unrelated changes",

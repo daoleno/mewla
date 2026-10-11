@@ -750,7 +750,9 @@ func (owner *sessionInputOwner) submitWithTurn(
 		// the transport marker is written. Only a new explicit submission may
 		// retire that exact unmarked preparation, under this Session input lock.
 		if turn != nil && turn.SignalProtocol && turn.WorkID != "" && turn.ClaimToken == "" && turn.Purpose == "" {
-			if repair, ok := owner.ledger.(UnmarkedInputAdmissionLedger); ok {
+			repair, canRepair := owner.ledger.(UnmarkedInputAdmissionLedger)
+			_, canRelease := owner.ledger.(InputAdmissionAmbiguityLedger)
+			if canRepair || canRelease {
 				admissions, err := owner.admissionLedger()
 				if err != nil {
 					return definitelyNotSubmitted(result.Receipt, err)
@@ -764,6 +766,21 @@ func (owner *sessionInputOwner) submitWithTurn(
 						continue
 					}
 					if _, marked := ledger.entry(prior.Receipt); marked {
+						// A delivered prompt whose progress signal never came
+						// would fence every later prompt. Once the provider has
+						// taken its turn over it and stayed idle, its delivery is
+						// unknown: keep it as evidence, release the fence.
+						if staleSignalAdmission(prior, providerBaseline, owner.nowUTC()) {
+							if ambiguity, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
+								if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, prior.ProposedTurnID,
+									"provider settled and stayed idle without this prompt's progress signal"); err != nil {
+									return definitelyNotSubmitted(result.Receipt, fmt.Errorf("release stale preparation: %w", err))
+								}
+							}
+						}
+						continue
+					}
+					if !canRepair {
 						continue
 					}
 					// A full receipt ring may have evicted an accepted transport
