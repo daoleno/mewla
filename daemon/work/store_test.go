@@ -1,8 +1,11 @@
 package work
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -42,6 +45,130 @@ func TestStore_Scan(t *testing.T) {
 	if len(all) != 3 {
 		t.Fatalf("len = %d, want 3", len(all))
 	}
+}
+
+func TestStore_ScanSkipsNonWorkMarkdownSilently(t *testing.T) {
+	root := t.TempDir()
+	writeWorkItem(t, filepath.Join(root, "mewla", "a.md"), "A")
+	plain := filepath.Join(root, "calendar", "hn-2026-10-01", "briefing.md")
+	writeFile(t, plain, "# Briefing\n\nPlain deliverable written by a job.\n")
+
+	out := captureStderr(t, func() {
+		store, err := NewStore(root)
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		defer store.Close()
+
+		all := store.List()
+		if len(all) != 1 || all[0].ID != "A" {
+			t.Fatalf("items = %#v, want only A", all)
+		}
+		if _, ok := store.GetByIDFromPath(plain); ok {
+			t.Fatal("plain markdown must not be indexed")
+		}
+	})
+	if out != "" {
+		t.Fatalf("stderr = %q, want no output", out)
+	}
+}
+
+func TestStore_ScanWarnsOnMalformedFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	// Starts with the frontmatter delimiter but the YAML cannot be decoded.
+	badType := filepath.Join(root, "mewla", "bad-type.md")
+	writeFile(t, badType, "---\nid: [1, 2]\n---\n# Broken\n")
+	// Starts with the frontmatter delimiter but never closes it.
+	unclosed := filepath.Join(root, "mewla", "unclosed.md")
+	writeFile(t, unclosed, "---\nid: X\n# Broken\n")
+
+	out := captureStderr(t, func() {
+		store, err := NewStore(root)
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		defer store.Close()
+		if all := store.List(); len(all) != 0 {
+			t.Fatalf("items = %#v, want none", all)
+		}
+	})
+	for _, path := range []string{badType, unclosed} {
+		if !strings.Contains(out, "work: skip "+path) {
+			t.Fatalf("stderr = %q, want skip warning for %s", out, path)
+		}
+	}
+}
+
+func TestStore_ScanKeepsValidItem(t *testing.T) {
+	root := t.TempDir()
+	writeWorkItem(t, filepath.Join(root, "mewla", "a.md"), "A")
+
+	out := captureStderr(t, func() {
+		store, err := NewStore(root)
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		defer store.Close()
+		if _, ok := store.GetByID("A"); !ok {
+			t.Fatal("valid item A not indexed")
+		}
+	})
+	if out != "" {
+		t.Fatalf("stderr = %q, want no output", out)
+	}
+}
+
+func TestStore_ReloadPathSkipsNonWorkMarkdown(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "mewla", "deliverable.md")
+	writeFile(t, path, "# Deliverable\n")
+
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.reloadPath(path); !errors.Is(err, ErrMissingFrontmatter) {
+		t.Fatalf("reloadPath err = %v, want ErrMissingFrontmatter", err)
+	}
+	if _, ok := store.GetByIDFromPath(path); ok {
+		t.Fatal("non-work markdown must not be indexed by reloadPath")
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+}
+
+// captureStderr runs fn with os.Stderr redirected to a pipe and returns what it wrote.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe: %v", err)
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read pipe: %v", err)
+	}
+	_ = r.Close()
+	return string(data)
 }
 
 func TestStore_GetByID(t *testing.T) {
