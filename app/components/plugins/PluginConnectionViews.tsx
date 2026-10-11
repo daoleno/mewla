@@ -163,8 +163,9 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
     // A custom service needs its address first, on its own page.
     trailing = <Button label={custom ? "Add" : "Connect"} size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={form ? onOpen : onConnect} accessibilityLabel={`${custom ? "Add" : "Connect"} ${plugin.name}`} />;
   } else if (state.kind === "reconnect") {
-    label = `${plugin.name}, ${state.account.name} needs sign-in again`;
-    trailing = <Button label="Reconnect" size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={() => onReconnect(state.account)} accessibilityLabel={`Reconnect ${state.account.name}`} />;
+    const key = state.account.auth_method === "api_key";
+    label = `${plugin.name}, ${state.account.name} needs ${key ? "an API key" : "sign-in again"}`;
+    trailing = <Button label={key ? "Enter key" : "Reconnect"} size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={() => onReconnect(state.account)} accessibilityLabel={`${key ? "Enter key for" : "Reconnect"} ${state.account.name}`} />;
   } else if (state.kind === "status") {
     label = `${plugin.name}, ${names}, ${state.label}`;
     trailing = connecting ? <ActivityIndicator /> : <StatusPill label={state.label} tone={state.tone} />;
