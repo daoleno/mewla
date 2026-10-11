@@ -328,9 +328,10 @@ func falSchemas(doc map[string]any) (any, any) {
 	if doc == nil {
 		return nil, nil
 	}
-	expanded := any(doc)
-	if inlined, err := expandRefs(doc, doc, 0); err == nil {
-		expanded = inlined
+	expanded, err := expandRefs(doc, doc, 0)
+	inlined := err == nil
+	if !inlined {
+		expanded = doc
 	}
 	root, _ := expanded.(map[string]any)
 	paths, _ := root["paths"].(map[string]any)
@@ -351,7 +352,7 @@ func falSchemas(doc map[string]any) (any, any) {
 			out = dig(item, "get", "responses", "200", "content", "application/json", "schema")
 		}
 	}
-	if expanded == any(doc) {
+	if !inlined {
 		// Recursive schemas stay as references; ship the definitions with them.
 		components := dig(doc, "components", "schemas")
 		in = map[string]any{"schema": in, "components": components}
