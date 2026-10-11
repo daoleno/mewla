@@ -293,7 +293,12 @@ func paneTail(pane string, lines int) string {
 		}
 		out = append([]string{line}, out...)
 	}
-	return truncateRecoveryText(strings.Join(out, " ⏎ "), 600)
+	// The newest lines say why the Worker stopped; keep the end.
+	runes := []rune(strings.Join(out, " ⏎ "))
+	if len(runes) > 600 {
+		return "…" + string(runes[len(runes)-599:])
+	}
+	return string(runes)
 }
 
 func truncateRecoveryText(value string, limit int) string {
@@ -560,7 +565,7 @@ func stallSummary(decision turnRecoveryDecision, failure *ProviderActivityError,
 	if failure != nil {
 		head += " (" + ProviderErrorSummary(*failure) + ")"
 	}
-	if tail := paneTail(pane, 8); tail != "" {
+	if tail := paneTail(pane, 12); tail != "" {
 		head += ". Last output: " + tail
 	}
 	return head

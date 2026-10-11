@@ -339,3 +339,13 @@ func TestSuperviseDelegatedTurnsResumesPromptThatNeverGainedAnAttempt(t *testing
 		t.Fatalf("resumed a Session without a delegated prompt: %d", len(submits))
 	}
 }
+
+func TestPaneTailKeepsTheNewestLines(t *testing.T) {
+	pane := strings.Repeat("  turn contract line that fills the excerpt with older text\n", 7) +
+		"● API Error: Connection lost mid-response. The response above may be\n  incomplete.\n✻ Baked for 5s · done 1:54\n" +
+		"────\n❯ \n────\n  ⏵⏵ bypass permissions on"
+	got := paneTail(pane, 12)
+	if !strings.HasSuffix(got, "incomplete. ⏎ ✻ Baked for 5s · done 1:54") || !strings.Contains(got, "API Error: Connection lost") || len([]rune(got)) > 600 {
+		t.Fatalf("paneTail = %q", got)
+	}
+}
