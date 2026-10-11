@@ -26,6 +26,8 @@ func Catalog() []Integration {
 		{ID: "google", Name: "Google Workspace", Available: true, SetupURL: "https://developers.google.com/workspace/guides/configure-oauth-consent", Description: "Files, email and calendar events"},
 		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
 		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
+		{ID: "fal", Name: "fal", Available: true, SetupURL: "https://fal.ai/dashboard/keys", Description: "Image, video and audio models"},
+		{ID: "image", Name: "Image generation", Available: true, Description: "Any OpenAI-compatible images endpoint"},
 		{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},
 		{ID: "openapi", Name: "OpenAPI", Available: true, SetupURL: "https://spec.openapis.org/oas/v3.0.3", Description: "Discover operations from an OpenAPI 3 document"},
 	}
@@ -51,13 +53,15 @@ type Event struct {
 }
 
 type Account struct {
-	ID                       string     `json:"id"`
-	Integration              string     `json:"integration"`
-	Name                     string     `json:"name"`
-	Identity                 string     `json:"identity"`
-	Endpoint                 string     `json:"endpoint,omitempty"`
-	TrustedNetworks          []string   `json:"trusted_networks,omitempty"`
-	AuthMethod               string     `json:"auth_method,omitempty"`
+	ID              string   `json:"id"`
+	Integration     string   `json:"integration"`
+	Name            string   `json:"name"`
+	Identity        string   `json:"identity"`
+	Endpoint        string   `json:"endpoint,omitempty"`
+	TrustedNetworks []string `json:"trusted_networks,omitempty"`
+	AuthMethod      string   `json:"auth_method,omitempty"`
+	// Model is an Image generation account's default model.
+	Model                    string     `json:"model,omitempty"`
 	Scopes                   []string   `json:"scopes,omitempty"`
 	Enabled                  bool       `json:"enabled"`
 	CredentialRemovalPending bool       `json:"credential_removal_pending,omitempty"`
@@ -88,6 +92,7 @@ type Input struct {
 	Endpoint        string             `json:"endpoint,omitempty"`
 	TrustedNetworks []string           `json:"trusted_networks,omitempty"`
 	Credential      string             `json:"credential,omitempty"`
+	Model           string             `json:"model,omitempty"`
 	Spec            json.RawMessage    `json:"spec,omitempty"`
 	OAuthClient     *OAuthClientConfig `json:"oauth_client,omitempty"`
 	Mobile          bool               `json:"mobile,omitempty"`
@@ -109,6 +114,8 @@ type Request struct {
 	Tool      string          `json:"tool,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Allowed   bool            `json:"allowed,omitempty"`
+	// Cwd resolves relative file paths; honored only from the local CLI.
+	Cwd string `json:"cwd,omitempty"`
 }
 
 type Match struct {

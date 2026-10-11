@@ -124,6 +124,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			in.Mobile = false
 			in.callback = callback
 		}
+		if mediaKind(in.Integration) {
+			return Response{}, errors.New(serviceName(in.Integration) + " uses an API key. Enter it on its Extensions page.")
+		}
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
 		}

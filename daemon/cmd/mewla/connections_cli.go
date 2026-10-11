@@ -19,11 +19,14 @@ import (
 
 func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|enable|disable|disconnect|policy> [flags]
+		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|set-key|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name.
 Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination.
-Add: --integration github|notion|google|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
+Add: --integration github|notion|google|slack|linear|fal|image|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
+Image generation: --integration image --endpoint https://host/v1 --model name; the API key is read like any credential.
+fal: --integration fal; an empty key keeps only its free model search. set-key --id account replaces an API key.
+Media tools write output files to --args output_dir (relative to this directory) or the daemon's media folder and return paths, never file bytes.
 Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|google|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
 Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account).
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
@@ -49,6 +52,7 @@ Never send messages or make updates without task-specific user authorization, ev
 	fs.StringVar(&in.Integration, "integration", "", "plugin ID")
 	fs.StringVar(&in.Name, "name", "", "account name")
 	fs.StringVar(&in.Endpoint, "endpoint", "", "remote HTTPS endpoint")
+	fs.StringVar(&in.Model, "model", "", "Image generation default model")
 	fs.StringVar(&argsJSON, "args", "{}", "tool arguments JSON")
 	fs.StringVar(&argsFile, "args-file", "", "tool arguments file")
 	fs.StringVar(&specFile, "spec-file", "", "OpenAPI JSON document")
@@ -63,7 +67,7 @@ Never send messages or make updates without task-specific user authorization, ev
 		return errors.New("unexpected positional arguments")
 	}
 	switch action {
-	case "list", "add", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy":
+	case "list", "add", "set-key", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy":
 	default:
 		return errors.New("unknown plugin command")
 	}
@@ -97,8 +101,10 @@ Never send messages or make updates without task-specific user authorization, ev
 		if !json.Valid(q.Arguments) {
 			return errors.New("arguments must be JSON")
 		}
+		// Media tools resolve relative file paths against this directory.
+		q.Cwd, _ = os.Getwd()
 	}
-	if action == "add" || action == "import-gh" {
+	if action == "add" || action == "import-gh" || action == "set-key" {
 		if action == "import-gh" {
 			in.Integration = "github"
 			if in.Name == "" {
@@ -123,7 +129,11 @@ Never send messages or make updates without task-specific user authorization, ev
 				if !term.IsTerminal(int(os.Stdin.Fd())) {
 					return errors.New("use --credential-stdin for a secure pipe (empty input for a public endpoint)")
 				}
-				fmt.Fprint(stderr, "Account token (empty for public endpoint): ")
+				if action == "set-key" {
+					fmt.Fprint(stderr, "API key: ")
+				} else {
+					fmt.Fprint(stderr, "Account token (empty for public endpoint): ")
+				}
 				raw, err := term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Fprintln(stderr)
 				if err != nil {
@@ -140,9 +150,21 @@ Never send messages or make updates without task-specific user authorization, ev
 			in.Spec = raw
 		}
 		q.Action = "add"
+		if action == "set-key" {
+			q.Action = "set_key"
+		}
 		q.Input = &in
 	}
-	response, err := callControl(cfg, control.Request{Type: "connections", ConnectionRequest: &q})
+	timeout := 30 * time.Second
+	if action == "invoke" {
+		// A video can take minutes; the daemon bounds each call itself.
+		timeout = connections.MediaCallTimeout + time.Minute
+	}
+	socketPath, err := control.DefaultSocketPath(cfg.stateDir)
+	if err != nil {
+		return err
+	}
+	response, err := control.CallWithTimeout(socketPath, control.Request{Type: "connections", ConnectionRequest: &q}, timeout)
 	in.Credential = ""
 	if err != nil {
 		return err

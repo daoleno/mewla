@@ -42,6 +42,8 @@ func toolGroup(r *record, t Tool) string {
 		for _, op := range googleOperations() {
 			reviewed = append(reviewed, op.tool)
 		}
+	} else if mediaKind(r.Account.Integration) {
+		reviewed = mediaTools(r.Account.Integration)
 	} else {
 		reviewed = builtinTools(r.Account.Integration)
 	}
