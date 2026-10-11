@@ -32,7 +32,6 @@ const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"
 const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
-  fal: "flash",
   image: "image",
 };
 
