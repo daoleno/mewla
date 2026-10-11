@@ -40,6 +40,7 @@ Thumbs.db
 app/android/
 app/ios/
 app/modules/file-upload/android/build/
+app/modules/app-update/android/build/
 app/modules/keyboard-lifecycle/android/build/
 app/modules/link-transport/android/build/
 

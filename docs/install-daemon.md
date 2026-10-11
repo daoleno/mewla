@@ -160,6 +160,21 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD
 ```
 
+#### Update the app
+
+From v0.2.9, **Settings → About** checks the latest release when you open
+Settings (at most every six hours). Tap the Mewla row to check again. When a
+newer release exists, the row reads **Update available · v<version>**. Tap it
+to download the APK. Mewla checks the release's signed manifest and the APK's
+SHA-256 before it opens the Android installer. The first time, Android asks you
+to let Mewla install apps. Allow it, come back, and the installer opens. If a
+download fails, tap the row to retry. Versions before v0.2.9 need one manual
+install as above.
+
+Builds take their update channel from `MEWLA_ANDROID_DISTRIBUTION` at build
+time: `github-apk` (default), `play-store` (the row opens the store listing),
+or `none`. iOS builds show the version only.
+
 ### iOS
 
 Mewla Preview `0.2.4 (42)` is uploaded and awaiting Apple Beta App Review as of
