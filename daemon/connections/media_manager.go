@@ -102,11 +102,19 @@ func (m *Manager) invokeMedia(parent context.Context, q Request) (response Respo
 	ctx, cancel := context.WithTimeout(parent, mediaTimeout(tool))
 	defer cancel()
 	var result []byte
-	if call.account.Integration == "fal" {
-		result, err = call.invokeFal(ctx, tool, args)
-	} else {
-		result, err = call.invokeImage(ctx, tool, args)
-	}
+	func() {
+		// Vendor output is untrusted: a reading bug fails the call, never the daemon.
+		defer func() {
+			if recover() != nil {
+				result, err = nil, errors.New(call.service+" returned output Mewla could not read")
+			}
+		}()
+		if call.account.Integration == "fal" {
+			result, err = call.invokeFal(ctx, tool, args)
+		} else {
+			result, err = call.invokeImage(ctx, tool, args)
+		}
+	}()
 	if ctx.Err() != nil {
 		err = safeError(ctx.Err())
 	}

@@ -199,3 +199,42 @@ func TestMediaCallReleasesManagerLock(t *testing.T) {
 		t.Fatalf("after a rejected input: %s %+v", got.Status, got.History[0])
 	}
 }
+
+func TestFalDescribeModelReadsOpenAPISchemas(t *testing.T) {
+	model := "bytedance/seedance-2.5/text-to-video"
+	doc := func(recursive bool) string {
+		input := `{"type":"object","properties":{"prompt":{"type":"string"},"duration":{"$ref":"#/components/schemas/Duration"}},"required":["prompt"]}`
+		if recursive {
+			input = `{"type":"object","properties":{"prompt":{"type":"string"},"next":{"$ref":"#/components/schemas/Input"}}}`
+		}
+		return `{"openapi":"3.0.4","components":{"schemas":{"Input":` + input + `,"Duration":{"type":"integer","enum":[5,10]},"Output":{"type":"object","properties":{"video":{"type":"object"}}}}},
+		"paths":{"/` + model + `":{"post":{"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Input"}}}}}},
+		"/bytedance/seedance-2.5/requests/{request_id}":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Output"}}}}}}}}}`
+	}
+	recursive := false
+	m := testManager(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/v1/models" || r.URL.Query().Get("expand") != "openapi-3.0" || r.Header.Get("Authorization") != "" {
+			return reply(404, `{}`), nil
+		}
+		return reply(200, `{"models":[{"endpoint_id":"`+model+`","metadata":{"display_name":"Seedance 2.5"},"openapi":`+doc(recursive)+`}]}`), nil
+	})
+	account := mustHandle(t, m, Request{Action: "add", Input: &Input{Integration: "fal", Name: "fal"}}).Account
+	describe := func() map[string]any {
+		var out map[string]any
+		raw := mustHandle(t, m, Request{Action: "invoke", ID: account.ID, Tool: "describe_model", Arguments: json.RawMessage(`{"model":"` + model + `"}`)}).Result
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	inlined := describe()["input_schema"].(map[string]any)
+	if inlined["properties"].(map[string]any)["duration"].(map[string]any)["type"] != "integer" {
+		t.Fatalf("inlined input: %v", inlined)
+	}
+	recursive = true
+	// A recursive schema keeps its references and ships their definitions.
+	kept := describe()["input_schema"].(map[string]any)
+	if kept["schema"].(map[string]any)["$ref"] != "#/components/schemas/Input" || kept["components"] == nil {
+		t.Fatalf("recursive input: %v", kept)
+	}
+}
