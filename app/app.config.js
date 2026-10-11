@@ -31,6 +31,10 @@ module.exports = () => {
   if (projectId) {
     extra.eas = { projectId };
   }
+  extra.distribution = resolveDistribution(
+    readEnv("ANDROID_DISTRIBUTION"),
+    readEnv("IOS_DISTRIBUTION"),
+  );
 
   return {
     ...baseConfig,
@@ -75,10 +79,32 @@ module.exports = () => {
       "./plugins/withAndroidRelease",
       // Resolve duplicate BouncyCastle metadata in the Android resource merge.
       "./plugins/withAndroidPackaging",
+      // GitHub APK builds may install their own signed, verified update.
+      [
+        "./plugins/withAndroidAppUpdate",
+        { channel: extra.distribution.android },
+      ],
     ],
     extra,
   };
 };
+
+// Build-time distribution channel per platform; see services/appUpdate.ts.
+function resolveDistribution(android, ios) {
+  const resolved = {
+    android: android || "github-apk",
+    ios: ios || "none",
+  };
+  if (!["github-apk", "play-store", "none"].includes(resolved.android)) {
+    throw new Error(
+      "MEWLA_ANDROID_DISTRIBUTION must be github-apk, play-store or none",
+    );
+  }
+  if (!["app-store", "none"].includes(resolved.ios)) {
+    throw new Error("MEWLA_IOS_DISTRIBUTION must be app-store or none");
+  }
+  return resolved;
+}
 
 function resolveIOSBuildNumber(value, fallback) {
   const candidate =
@@ -101,6 +127,7 @@ function resolveIOSMarketingVersion(value) {
   return candidate;
 }
 
+module.exports.resolveDistribution = resolveDistribution;
 module.exports.resolveIOSBuildNumber = resolveIOSBuildNumber;
 module.exports.resolveIOSMarketingVersion = resolveIOSMarketingVersion;
 module.exports.resolveIOSIdentity = resolveIOSIdentity;

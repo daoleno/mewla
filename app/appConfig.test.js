@@ -9,8 +9,10 @@ const {
 } = createConfig;
 
 const IDENTITY_ENV_KEYS = [
+  "MEWLA_ANDROID_DISTRIBUTION",
   "MEWLA_IOS_APP_VARIANT",
   "MEWLA_IOS_BUILD_NUMBER",
+  "MEWLA_IOS_DISTRIBUTION",
 ];
 
 // Shell or CI identity variables must not leak into these assertions.
@@ -47,6 +49,28 @@ describe("native platform config", () => {
     );
     expect(config.ios.infoPlist.CFBundleVersion).toBe(expectedBuildNumber);
     expect(config.ios.buildNumber).toBe(expectedBuildNumber);
+  });
+
+  it("ships Android as a GitHub APK that can install its own update", () => {
+    expect(config.extra.distribution).toEqual({ android: "github-apk", ios: "none" });
+    expect(config.plugins).toContainEqual([
+      "./plugins/withAndroidAppUpdate",
+      { channel: "github-apk" },
+    ]);
+  });
+
+  it("takes a store distribution channel from the build environment", () => {
+    const store = withIdentityEnv(
+      { MEWLA_ANDROID_DISTRIBUTION: "play-store", MEWLA_IOS_DISTRIBUTION: "app-store" },
+      () => createConfig(),
+    );
+    expect(store.extra.distribution).toEqual({ android: "play-store", ios: "app-store" });
+    expect(() =>
+      withIdentityEnv({ MEWLA_ANDROID_DISTRIBUTION: "app-store" }, () => createConfig()),
+    ).toThrow("MEWLA_ANDROID_DISTRIBUTION");
+    expect(() =>
+      withIdentityEnv({ MEWLA_IOS_DISTRIBUTION: "github-apk" }, () => createConfig()),
+    ).toThrow("MEWLA_IOS_DISTRIBUTION");
   });
 
   it("registers only the mewla scheme", () => {

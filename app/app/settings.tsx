@@ -46,6 +46,8 @@ import {
 import { useThemeContext, type ResolvedTheme } from "../theme";
 import { DARK_APP_COLORS } from "../theme/primitives";
 import { appVersion } from "../constants/appVersion";
+import { appUpdateStatus } from "../services/appUpdate";
+import { useAppUpdate } from "../services/useAppUpdate";
 import { importConnection } from "../services/importConnection";
 import { PairingCancelledError } from "../services/pairingScope";
 import {
@@ -676,11 +678,7 @@ export default function SettingsScreen() {
 
           <SettingsSectionHeader>About</SettingsSectionHeader>
           <ListSection>
-            <ListRow
-              title="Mewla"
-              value={`Version ${appVersion}`}
-              leading={<MewlaMark size={28} />}
-            />
+            <AboutAppRow />
           </ListSection>
         </View>
       </ScrollView>
@@ -994,6 +992,26 @@ export default function SettingsScreen() {
         )}
       </RisingSheet>
     </SafeAreaView>
+  );
+}
+
+/** About: the app's version, and its update when this build can take one. */
+function AboutAppRow() {
+  const { state, press, checkIfDue } = useAppUpdate();
+  useFocusEffect(checkIfDue);
+  const status = appUpdateStatus(state);
+  const offersUpdate = ["store", "available", "needsPermission", "ready", "failed"].includes(state.kind);
+  return (
+    <ListRow
+      title="Mewla"
+      subtitle={status.text}
+      value={`Version ${appVersion}`}
+      leading={<MewlaMark size={28} />}
+      accessory={offersUpdate ? "chevron" : "none"}
+      loading={state.kind === "checking" || state.kind === "downloading"}
+      onPress={status.actionable ? press : undefined}
+      accessibilityLabel={["Mewla", `Version ${appVersion}`, status.text].filter(Boolean).join(", ")}
+    />
   );
 }
 

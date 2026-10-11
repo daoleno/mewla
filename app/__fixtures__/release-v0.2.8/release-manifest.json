@@ -1,0 +1,66 @@
+{
+  "schema_version": 2,
+  "product": "mewla",
+  "version": "0.2.8",
+  "android": {
+    "package": "com.daoleno.mewla",
+    "version_name": "0.2.8",
+    "version_code": 48,
+    "canonical_config": "app/app.base.json",
+    "certificate_sha256_fingerprint": "C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD"
+  },
+  "daemon": {
+    "module": "github.com/daoleno/mewla/daemon",
+    "targets": [
+      "linux/amd64",
+      "linux/arm64",
+      "darwin/arm64"
+    ],
+    "cgo": {
+      "linux/amd64": false,
+      "linux/arm64": false,
+      "darwin/arm64": false
+    },
+    "artifact_layout": "platform_archives"
+  },
+  "artifacts": [
+    {
+      "path": "mewla-linux-amd64.tar.gz",
+      "role": "daemon_archive",
+      "sha256": "b53690318086b8d305573bee6f0f4b22546041234c1f0f475521fa82ce4bbf8e",
+      "size": 19746880,
+      "goos": "linux",
+      "goarch": "amd64"
+    },
+    {
+      "path": "mewla-linux-arm64.tar.gz",
+      "role": "daemon_archive",
+      "sha256": "0c5930ab8173dd18ec91ff9d578ab9c95004300922d39acee1d002ff8dd93ca6",
+      "size": 18990232,
+      "goos": "linux",
+      "goarch": "arm64"
+    },
+    {
+      "path": "mewla-darwin-arm64.tar.gz",
+      "role": "daemon_archive",
+      "sha256": "1e49ce3a50ab8ca9dec6a9e07c3c0e4d369072a7b020559b1f26ea15c74bb39f",
+      "size": 19304489,
+      "goos": "darwin",
+      "goarch": "arm64"
+    },
+    {
+      "path": "mewla-android-arm64-v0.2.8.apk",
+      "role": "android_sideload_apk",
+      "sha256": "594dc0b61766f5209ccbaadbafaf419c0559e9e64747e5c828ba809223f7b42b",
+      "size": 60525709,
+      "abi": "arm64-v8a",
+      "status": "staged_not_published"
+    }
+  ],
+  "notes": {
+    "release_status": "staged",
+    "github_release": "publication_is_separate",
+    "release_notes_source": "docs/releases/v0.2.8.md",
+    "signed_apk": "requires_maintainer_keystore_via_env_not_in_repo"
+  }
+}
