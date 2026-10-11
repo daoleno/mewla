@@ -43,6 +43,16 @@ export function pluginCatalogRows(
   return { services: rows.filter((row) => Boolean(reviewed[row.plugin.id])), custom: rows.filter((row) => !reviewed[row.plugin.id]) };
 }
 
+/** Services that connect with a pasted API key on their own page, not a sign-in. */
+export function usesApiKey(serviceId: string): boolean {
+  return serviceId === "fal" || serviceId === "image";
+}
+
+/** Services whose page holds a form: a custom service's address or an API key. */
+export function connectsWithForm(serviceId: string): boolean {
+  return usesApiKey(serviceId) || serviceId === "mcp" || serviceId === "openapi";
+}
+
 export function serviceState(plugin: PluginIntegration, accounts: readonly PluginAccount[]): ServiceState {
   if (!accounts.length) return plugin.available ? { kind: "connect" } : { kind: "unavailable", label: "Not yet available" };
   const expired = accounts.find((account) => account.enabled && account.status === "authorization_required");
@@ -113,6 +123,9 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   }
   if (!account.enabled) {
     return { title: "Off", detail: "Brain and Workers can't use this account until you turn it on.", action: "enable", actionLabel: "Turn on", tone: "neutral" };
+  }
+  if (account.status === "authorization_required" && account.auth_method === "api_key") {
+    return { title: "Needs an API key", detail: `Enter a ${serviceName} API key. Brain can't run anything billed until then.`, action: "reconnect", actionLabel: "Enter key", tone: "warning" };
   }
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };

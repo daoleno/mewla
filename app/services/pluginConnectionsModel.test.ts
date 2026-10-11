@@ -8,6 +8,7 @@ import {
   isConnecting,
   pluginCatalogRows,
   reconnectsWithWrites,
+  usesApiKey,
 } from "./pluginConnectionsModel";
 
 const plugin = (id: string, name: string): PluginIntegration => ({ id, name, available: true, setup_url: "", description: `${name} service` });
@@ -78,6 +79,14 @@ describe("account status and capability boundaries", () => {
     expect(accountRecovery(account({ enabled: false, status: "error" }), "GitHub")?.action).toBe("enable");
     expect(accountRecovery(account({ status: "authorization_required" }), "GitHub")?.action).toBe("reconnect");
     expect(accountRecovery(account({ status: "error" }), "GitHub")?.action).toBe("refresh");
+  });
+
+  test("an API-key account asks for a key, not a sign-in", () => {
+    expect(usesApiKey("fal") && usesApiKey("image") && !usesApiKey("github")).toBe(true);
+    const recovery = accountRecovery(account({ status: "authorization_required", auth_method: "api_key" }), "fal");
+    expect(recovery?.action).toBe("reconnect");
+    expect(recovery?.actionLabel).toBe("Enter key");
+    expect(recovery?.title).toBe("Needs an API key");
   });
 });
 

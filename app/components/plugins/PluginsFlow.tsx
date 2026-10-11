@@ -10,7 +10,7 @@ import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { pluginCatalogRows, reconnectsWithWrites, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { connectsWithForm, pluginCatalogRows, reconnectsWithWrites, usesApiKey, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -246,6 +246,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
    */
   const connect = async (serviceId: string, options: ConnectOptions = {}) => {
     if (mutation.current || starting.current || !valid()) return;
+    // A form service connects from its page, which brings the details.
+    if (!options.input && connectsWithForm(serviceId)) { router.push(pluginServicePath(serviceId)); return; }
     starting.current = true;
     try {
       if (pending.current) await cancel();
@@ -308,7 +310,13 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
     else if (action === "enable") void send({ action: "enable", id: account.id }, `recover:${account.id}`);
     else if (action === "disconnect") void disconnect(account);
+    // An API-key account takes its new key on its service page.
+    else if (usesApiKey(account.integration)) router.push(pluginServicePath(account.integration));
     else void connect(account.integration, { writes: reconnectsWithWrites(account) });
+  };
+  /** Replaces an API-key account's key; the server checks it first. */
+  const setKey = (account: PluginAccount, key: string) => {
+    void send({ action: "set_key", id: account.id, input: { integration: account.integration, credential: key } }, `recover:${account.id}`);
   };
   /** Loads one account's tools and history, for its Tools page. */
   const load = useCallback((id: string) => send({ action: "get", id }, `load:${id}`), [send]);
@@ -324,7 +332,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
     plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
-    setAccess, disconnect, recover, load, toggleTool,
+    setAccess, disconnect, recover, setKey, load, toggleTool,
   };
 }
 
@@ -353,7 +361,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
         onRetry={() => {
           if (!flow.service) { flow.dismiss(); return; }
           // A custom service starts again from its form.
-          if (flow.service === "mcp" || flow.service === "openapi") { flow.dismiss(); router.push(pluginServicePath(flow.service)); }
+          if (connectsWithForm(flow.service)) { flow.dismiss(); router.push(pluginServicePath(flow.service)); }
           else void flow.connect(flow.service);
         }}
         onDismiss={flow.dismiss}

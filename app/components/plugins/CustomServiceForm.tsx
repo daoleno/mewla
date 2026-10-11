@@ -50,7 +50,7 @@ export function CustomServiceForm({ plugin, connecting, serverName, onConnect }:
   </View>;
 }
 
-function Field({ label, multiline, ...props }: TextInputProps & { label: string }) {
+export function Field({ label, multiline, ...props }: TextInputProps & { label: string }) {
   const colors = useAppColors();
   return <View style={styles.field}>
     <AppText variant="caption" tone="tertiary">{label}</AppText>

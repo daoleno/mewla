@@ -1,7 +1,8 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Google Workspace, and custom MCP or OpenAPI services. Plugins
+GitHub, Slack, Google Workspace, fal and Image generation for media, and custom
+MCP or OpenAPI services. Plugins
 are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
@@ -32,7 +33,8 @@ login on this server**, which imports the account the GitHub CLI (`gh`) is
 signed in to on your computer. Mewla shows the identity first and copies it only
 after you confirm.
 
-There are no tokens, client IDs or callback URLs to type for built-in services.
+There are no tokens, client IDs or callback URLs to type for sign-in services.
+The two media plugins take an API key instead; see [Media](#media).
 
 ## Sign-in availability
 
@@ -47,6 +49,8 @@ Mewla's own app registration with the provider:
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Shows **Not yet available** until Mewla's Slack app registration ships | Slack's app returns only to the Mewla app: connect Slack from the phone |
 | Google Workspace | Shows **Not yet available** unless your daemon already has Google sign-in configured | Google opens in a new tab; Extensions updates when you're done |
+| fal | API key, pasted on its page | Same as the app |
+| Image generation | Base URL, API key and default model, on its page | Same as the app |
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
@@ -77,6 +81,41 @@ expired, **Turn on** when it is off, **Check again** after a failed call, or
 
 To add a second account, use **Add another account** at the bottom of the
 service's page. It is the same sign-in as Connect.
+
+## Media
+
+Two plugins let Brain and Workers make images, video and audio. Both cost
+money per call, so generating sits under **Make changes when asked** and stays
+off until you allow it.
+
+- **fal** reaches fal's whole model catalogue, video models such as Seedance
+  included. Tap **fal**, paste a key from fal's dashboard
+  (**Get a fal key**) and tap **Connect fal**. Brain can search models, read a
+  model's inputs and price, run short jobs, queue long ones (submit, then
+  status and result) and upload a local file for image or video inputs.
+- **Image generation** reaches any OpenAI-compatible images endpoint. Enter its
+  base URL (the address before `/images/generations`), an API key and a default
+  model. Add one account per endpoint. Tools: generate, and edit where the
+  endpoint supports `/images/edits`.
+
+A key is checked before it is saved and is never shown again. When a key is
+missing or rejected, the account shows **Needs an API key**; paste a new one
+there and tap **Save key**. A fal account added from the CLI without a key can
+still search models; anything billed asks for the key.
+
+Output files never pass through Brain's context. Each call saves its images,
+video or audio to files and returns their paths, types and sizes, plus seed,
+usage or price when the service reports them. From the CLI, pass `output_dir`
+in `--args` (relative to the current directory); otherwise files go to
+`media/<plugin>/<date>/` in the daemon's state directory, and the result says
+where.
+
+```sh
+mewla connections invoke --id ACCOUNT_ID --tool generate \
+  --args '{"prompt":"a sleeping cat, ink drawing","output_dir":"art"}' --json
+mewla connections invoke --id FAL_ID --tool submit \
+  --args '{"model":"bytedance/seedance-2.5/text-to-video","input":{"prompt":"..."}}' --json
+```
 
 ## Custom services
 

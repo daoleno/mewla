@@ -21,6 +21,8 @@ export type PluginAccount = {
   endpoint?: string;
   trusted_networks?: string[];
   auth_method?: string;
+  /** An Image generation account's default model. */
+  model?: string;
   scopes?: string[];
   enabled: boolean;
   credential_removal_pending?: boolean;
@@ -45,11 +47,11 @@ export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
   group?: "read" | "write";
-  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
+  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "set_key" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
   id?: string;
   tool?: string;
   allowed?: boolean;
-  input?: { integration: string; name?: string; endpoint?: string; credential?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; name?: string; endpoint?: string; credential?: string; model?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
   id: string;
