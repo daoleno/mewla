@@ -244,16 +244,7 @@ func (s *Store) StartWatcher() error {
 
 		st, err := os.Stat(path)
 		if errors.Is(err, os.ErrNotExist) {
-			s.mu.Lock()
-			removed, ok := s.byPath[path]
-			if ok {
-				delete(s.byPath, path)
-				delete(s.byID, removed.ID)
-			}
-			s.mu.Unlock()
-			if ok {
-				s.broadcast(Event{Type: EventDeleted, ID: removed.ID, Path: path})
-			}
+			s.evictPath(path)
 			return
 		}
 		if err != nil {
@@ -264,6 +255,12 @@ func (s *Store) StartWatcher() error {
 			return
 		}
 		if err := s.reloadPath(path); err != nil {
+			if errors.Is(err, ErrMissingFrontmatter) {
+				// Plain Markdown deliverables live under the Work root without being Work
+				// items; drop any stale index entry but stay quiet.
+				s.evictPath(path)
+				return
+			}
 			fmt.Fprintf(os.Stderr, "work: reload %s: %v\n", path, err)
 			return
 		}
@@ -326,10 +323,29 @@ func (s *Store) scanAll() error {
 			return nil
 		}
 		if err := s.reloadPath(path); err != nil {
+			if errors.Is(err, ErrMissingFrontmatter) {
+				// Not every Markdown file under the Work root is a Work item; job
+				// deliverables and scratch notes are skipped without noise.
+				return nil
+			}
 			fmt.Fprintf(os.Stderr, "work: skip %s: %v\n", path, err)
 		}
 		return nil
 	})
+}
+
+// evictPath removes any indexed item at path and broadcasts its deletion.
+func (s *Store) evictPath(path string) {
+	s.mu.Lock()
+	removed, ok := s.byPath[path]
+	if ok {
+		delete(s.byPath, path)
+		delete(s.byID, removed.ID)
+	}
+	s.mu.Unlock()
+	if ok {
+		s.broadcast(Event{Type: EventDeleted, ID: removed.ID, Path: path})
+	}
 }
 
 func (s *Store) reloadPath(path string) error {

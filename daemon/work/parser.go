@@ -2,6 +2,7 @@ package work
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,12 @@ import (
 )
 
 var frontmatterDelim = []byte("---")
+
+// ErrMissingFrontmatter reports a Markdown file that is not a Work item because
+// it does not begin with the --- frontmatter delimiter. Callers can use
+// errors.Is to skip such files silently instead of treating them as corrupted
+// Work items.
+var ErrMissingFrontmatter = errors.New("missing --- frontmatter delimiter")
 
 // ParseFile parses a Markdown file's bytes into an Item.
 func ParseFile(path string, data []byte, mtime time.Time) (*Item, error) {
@@ -44,7 +51,7 @@ func splitFrontmatter(data []byte) (fm, body string, err error) {
 	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 
 	if !bytes.HasPrefix(data, append(frontmatterDelim, '\n')) {
-		return "", "", fmt.Errorf("missing --- frontmatter delimiter")
+		return "", "", ErrMissingFrontmatter
 	}
 
 	rest := data[len(frontmatterDelim)+1:]
