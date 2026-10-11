@@ -99,8 +99,8 @@ off until you allow it.
   endpoint supports `/images/edits`.
 
 A key is checked before it is saved and is never shown again. When a key is
-missing or rejected, the account shows **Needs an API key**; paste a new one
-there and tap **Save key**. A fal account added from the CLI without a key can
+missing or rejected, its row on Extensions shows **Enter key**: tap it, paste
+the key under **Needs an API key** and tap **Save key**. A fal account added from the CLI without a key can
 still search models; anything billed asks for the key.
 
 Output files never pass through Brain's context. Each call saves its images,
