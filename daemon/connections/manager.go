@@ -121,6 +121,12 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	if len(raw) > 2<<20 {
 		return Response{}, errors.New("plugin request is too large")
 	}
+	if q.Action == "invoke" {
+		// A media call can take minutes; it runs outside the manager lock.
+		if response, handled, err := m.invokeMedia(parent, q); handled {
+			return response, err
+		}
+	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	m.mu.Lock()
@@ -234,6 +240,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if !found {
 			return Response{}, errors.New("tool not found")
 		}
+	case "set_key":
+		if err := m.setKey(ctx, r, q.Input); err != nil {
+			return Response{}, err
+		}
 	case "refresh":
 		if r.Account.Status == "disconnected" {
 			return Response{}, errors.New("connect this account again")
@@ -313,11 +323,21 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 		endpoint = "https://slack.com/api"
 	case "linear":
 		endpoint = "https://mcp.linear.app/mcp"
+	case "fal":
+		endpoint = falAPI
+	case "image":
+		endpoint = strings.TrimRight(strings.TrimSpace(in.Endpoint), "/")
+		if model := strings.TrimSpace(in.Model); model == "" || len(model) > 200 {
+			return Response{}, errors.New("enter the default model (up to 200 characters)")
+		}
+		if strings.TrimSpace(in.Credential) == "" {
+			return Response{}, errors.New("enter the API key")
+		}
 	case "mcp", "openapi":
 	default:
 		return Response{}, errors.New("unknown plugin")
 	}
-	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" && in.Integration != "openapi" {
+	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" && in.Integration != "openapi" && in.Integration != "image" {
 		return Response{}, errors.New("internal network trust is only supported for custom plugins")
 	}
 	if _, err := trustedEndpointURL(endpoint, in.TrustedNetworks); err != nil {
@@ -327,6 +347,10 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 		return Response{}, errors.New("connect an authorized account first")
 	}
 	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: name, Endpoint: endpoint, TrustedNetworks: append([]string(nil), in.TrustedNetworks...), Enabled: true, History: []Event{}}, Spec: in.Spec, Grants: map[string]string{}}
+	if in.Integration == "image" {
+		r.Account.Model = strings.TrimSpace(in.Model)
+	}
+	in.Credential = strings.TrimSpace(in.Credential)
 	if err := m.discover(ctx, r, in.Credential); err != nil {
 		return Response{}, err
 	}
@@ -355,6 +379,21 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 	return Response{Account: &a}, nil
 }
 
+// redactValues removes credentials from a result, raw or JSON-escaped.
+func redactValues(result []byte, values []string) []byte {
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		result = bytes.ReplaceAll(result, []byte(value), []byte("[REDACTED]"))
+		escaped, _ := json.Marshal(value)
+		if len(escaped) > 2 {
+			result = bytes.ReplaceAll(result, escaped[1:len(escaped)-1], []byte("[REDACTED]"))
+		}
+	}
+	return result
+}
+
 func (m *Manager) event(r *record, tool string, err error) {
 	e := Event{At: time.Now().UTC(), Tool: tool, Status: "success"}
 	if err != nil {
@@ -366,15 +405,17 @@ func (m *Manager) event(r *record, tool string, err error) {
 		r.Account.History = r.Account.History[:20]
 	}
 }
-func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, error) {
+
+// checkInvoke validates a call against the account's granted, discovered tool.
+func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 	if !r.Account.Enabled || r.Account.Status == "disconnected" {
-		return Response{}, errors.New("plugin account is disabled or disconnected")
+		return Tool{}, nil, errors.New("plugin account is disabled or disconnected")
 	}
 	if len(q.Arguments) == 0 {
 		q.Arguments = json.RawMessage(`{}`)
 	}
 	if len(q.Arguments) > MaxInputBytes {
-		return Response{}, errors.New("tool input exceeds 64 KiB")
+		return Tool{}, nil, errors.New("tool input exceeds 64 KiB")
 	}
 	var t *Tool
 	for _, tool := range r.Account.Tools {
@@ -385,25 +426,33 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 		}
 	}
 	if t == nil {
-		return Response{}, errors.New("tool not found")
+		return Tool{}, nil, errors.New("tool not found")
 	}
 	if r.Grants[t.Name] != fingerprint(*t) {
-		return Response{}, errors.New("tool is not authorized; enable this tool for this account in Plugins")
+		return Tool{}, nil, errors.New("tool is not authorized; enable this tool for this account in Plugins")
 	}
 	var schema jsonschema.Schema
 	if json.Unmarshal(t.InputSchema, &schema) != nil {
-		return Response{}, errors.New("tool schema is invalid")
+		return Tool{}, nil, errors.New("tool schema is invalid")
 	}
 	resolved, err := schema.Resolve(nil)
 	if err != nil {
-		return Response{}, errors.New("tool schema cannot be resolved")
+		return Tool{}, nil, errors.New("tool schema cannot be resolved")
 	}
 	var args map[string]any
 	if json.Unmarshal(q.Arguments, &args) != nil || args == nil {
-		return Response{}, errors.New("tool arguments must be a JSON object")
+		return Tool{}, nil, errors.New("tool arguments must be a JSON object")
 	}
 	if err = resolved.Validate(args); err != nil {
-		return Response{}, errors.New("arguments do not match the tool schema; describe the tool first")
+		return Tool{}, nil, errors.New("arguments do not match the tool schema; describe the tool first")
+	}
+	return *t, args, nil
+}
+
+func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, error) {
+	t, args, err := checkInvoke(r, q)
+	if err != nil {
+		return Response{}, err
 	}
 	secret, err := m.accountToken(ctx, r)
 	ok := secret != ""
@@ -415,12 +464,12 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 	}
 	var result []byte
 	if r.Account.Integration == "mcp" || r.Account.Integration == "linear" || r.Account.AuthMethod == "mcp_oauth" {
-		result, err = m.invokeMCP(ctx, r, secret, *t, args)
+		result, err = m.invokeMCP(ctx, r, secret, t, args)
 	} else {
 		if r.Account.Integration == "google" {
-			result, err = m.invokeGoogle(ctx, r, secret, *t, args)
+			result, err = m.invokeGoogle(ctx, r, secret, t, args)
 		} else {
-			result, err = m.invokeHTTP(ctx, r, secret, *t, args)
+			result, err = m.invokeHTTP(ctx, r, secret, t, args)
 		}
 	}
 	if ctx.Err() != nil {
@@ -433,16 +482,7 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 		err = errors.New("integration result exceeds 1 MiB")
 	}
 	if err == nil {
-		for _, value := range m.sensitiveValues(r, secret) {
-			if value == "" {
-				continue
-			}
-			result = bytes.ReplaceAll(result, []byte(value), []byte("[REDACTED]"))
-			escaped, _ := json.Marshal(value)
-			if len(escaped) > 2 {
-				result = bytes.ReplaceAll(result, escaped[1:len(escaped)-1], []byte("[REDACTED]"))
-			}
-		}
+		result = redactValues(result, m.sensitiveValues(r, secret))
 	}
 	if errors.Is(err, errAuth) {
 		r.Account.Status = "authorization_required"

@@ -90,7 +90,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if req.ConnectionRequest == nil {
 			return control.ErrorResponse("invalid_request", "Plugin request is required")
 		}
-		result, err := a.connections.Handle(context.Background(), *req.ConnectionRequest)
+		// The private socket is this computer's user: it may name local files.
+		result, err := a.connections.Handle(connections.WithLocalCaller(context.Background()), *req.ConnectionRequest)
 		if err != nil {
 			return control.ErrorResponse("plugin_request_failed", err.Error())
 		}
