@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
-import { ContinuousCorners, Radii, useAppTheme } from "../../constants/tokens";
+import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
@@ -547,35 +547,50 @@ function callTone(status: string): StatusTone {
   return "neutral";
 }
 
+type ToolInput = { name: string; type: string; required: boolean; description?: string };
+
+/** The schema's top-level properties, in declared order, as one line each. */
+function toolInputs(schema: Record<string, unknown> | undefined): ToolInput[] {
+  const properties = schema?.properties;
+  if (!properties || typeof properties !== "object") return [];
+  const required = new Set(Array.isArray(schema?.required) ? (schema.required as string[]) : []);
+  return Object.entries(properties as Record<string, Record<string, unknown>>).map(([name, prop]) => {
+    const type = Array.isArray(prop?.enum) ? (prop.enum as unknown[]).map(String).join(" | ") : Array.isArray(prop?.type) ? (prop.type as string[]).join(" | ") : typeof prop?.type === "string" ? prop.type : "any";
+    return { name, type, required: required.has(name), description: typeof prop?.description === "string" ? prop.description : undefined };
+  });
+}
+
+// The row itself discloses its inputs; the switch stays the only control on it.
 function ToolRow({ tool, busy, pending, onToggle }: { tool: NonNullable<PluginAccount["tools"]>[number]; busy: boolean; pending: boolean; onToggle(allowed: boolean): void }) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
+  const inputs = toolInputs(tool.input_schema);
   return (
     <View>
       <ListRow
         title={tool.name}
         subtitle={tool.description}
         numberOfLines={2}
+        leading={inputs.length ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={15} color={colors.textTertiary} /> : <View style={styles.disclosureSpace} />}
+        onPress={inputs.length ? () => setExpanded(!expanded) : undefined}
+        accessibilityLabel={inputs.length ? `${tool.name}, ${inputs.length} input${inputs.length === 1 ? "" : "s"}` : undefined}
+        accessibilityHint={inputs.length ? (expanded ? "Hides inputs" : "Shows inputs") : undefined}
         trailing={pending ? <ActivityIndicator /> : <InkSwitch accessibilityLabel={`Allow ${tool.name}`} value={tool.allowed} disabled={busy} onValueChange={onToggle} />}
       />
-      <View style={styles.schema}>
-        <Button
-          label={expanded ? "Hide inputs" : "Inspect inputs"}
-          accessibilityLabel={`${expanded ? "Hide" : "Inspect"} inputs for ${tool.name}`}
-          accessibilityState={{ expanded }}
-          size="sm"
-          variant="plain"
-          icon={expanded ? "chevron-up" : "chevron-down"}
-          onPress={() => setExpanded(!expanded)}
-        />
-        {expanded ? (
-          <View style={[styles.schemaBody, { backgroundColor: colors.surfaceSubtle }]}>
-            <AppText variant="mono" selectable>
-              {JSON.stringify(tool.input_schema ?? {}, null, 2)}
-            </AppText>
-          </View>
-        ) : null}
-      </View>
+      {expanded ? (
+        <View style={[styles.inputs, { borderColor: colors.borderSubtle }]}>
+          {inputs.map((input) => (
+            <View key={input.name} style={styles.input}>
+              <View style={styles.inputHead}>
+                <AppText variant="monoStrong" selectable>{input.name}</AppText>
+                <AppText variant="mono" tone="tertiary" numberOfLines={1} style={styles.flexShrink}>{input.type}</AppText>
+                {input.required ? <AppText variant="caption" tone="secondary">required</AppText> : null}
+              </View>
+              {input.description ? <AppText variant="caption" tone="tertiary" selectable>{input.description}</AppText> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -594,6 +609,8 @@ const styles = StyleSheet.create({
   actions: { gap: 6, marginBottom: 26 },
   confirm: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   confirmActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
-  schema: { paddingHorizontal: 8, paddingBottom: 8 },
-  schemaBody: { marginHorizontal: 8, padding: 12, borderRadius: Radii.xs, ...ContinuousCorners },
+  disclosureSpace: { width: 15 },
+  inputs: { marginLeft: 43, marginRight: 16, marginBottom: 12, paddingLeft: 12, gap: 10, borderLeftWidth: StyleSheet.hairlineWidth },
+  input: { gap: 2 },
+  inputHead: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
 });
