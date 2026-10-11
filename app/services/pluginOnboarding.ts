@@ -80,4 +80,6 @@ export const pluginJobs: Record<string, { read: string; write: string; example: 
   linear: { read: "Read issues, projects and team activity", write: "Create and update issues, projects and comments", example: "Ask Brain to summarize the issues assigned to you." },
   google: { read: "Find files, read email and check calendars", write: "Send email, update files and manage events", example: "Ask Brain to summarize your upcoming calendar events." },
   slack: { read: "Find conversations and read channel messages", write: "Send and update messages", example: "Ask Brain to summarize a channel’s recent discussion." },
+  fal: { read: "Search models and check queued jobs", write: "Generate images, video and audio, and upload reference files. fal bills these", example: "Ask Brain to make a short video clip with Seedance." },
+  image: { read: "", write: "Generate and edit images. The endpoint bills these", example: "Ask Brain to generate a cover image." },
 };

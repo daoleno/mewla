@@ -11,12 +11,14 @@ import {
   accountRecovery,
   accountTone,
   allowedToolCount,
+  connectsWithForm,
   type AccountRecoveryAction,
   type PluginCatalogRows,
   type ServiceRow,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ServiceMark, hasServiceMark } from "./ServiceMarks";
+import { AccountKeyEntry } from "./ApiKeyForm";
 
 type Job = { read: string; write: string; example: string } | undefined;
 
@@ -30,6 +32,8 @@ const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"
 const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
+  fal: "flash",
+  image: "image",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
@@ -150,13 +154,14 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
 }) {
   const { plugin, accounts, state } = row;
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
+  const form = connectsWithForm(plugin.id);
   const names = accounts.map((account) => account.name).join(" · ");
   const subtitle = state.kind === "unavailable" ? plugin.unavailable_reason || "Sign-in is not set up yet." : names || plugin.description;
   let trailing: React.ReactNode;
   let label = plugin.name;
   if (state.kind === "connect") {
     // A custom service needs its address first, on its own page.
-    trailing = <Button label={custom ? "Add" : "Connect"} size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={custom ? onOpen : onConnect} accessibilityLabel={`${custom ? "Add" : "Connect"} ${plugin.name}`} />;
+    trailing = <Button label={custom ? "Add" : "Connect"} size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={form ? onOpen : onConnect} accessibilityLabel={`${custom ? "Add" : "Connect"} ${plugin.name}`} />;
   } else if (state.kind === "reconnect") {
     label = `${plugin.name}, ${state.account.name} needs sign-in again`;
     trailing = <Button label="Reconnect" size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={() => onReconnect(state.account)} accessibilityLabel={`Reconnect ${state.account.name}`} />;
@@ -287,7 +292,7 @@ export function ConnectStatusCard({
       </StatusCard>
     );
   }
-  if (phase === "connected" && connected && connected.access?.read === "none") {
+  if (phase === "connected" && connected && connected.access?.read === "none" && connected.access.write === "none") {
     // A custom service: nothing is allowed until its tools are chosen.
     return (
       <StatusCard glyph="check-circle-fill" glyphColor={colors.success} title={`${connected.name} connected`} detail="Choose which of its tools Brain may use. None are allowed yet.">
@@ -300,7 +305,7 @@ export function ConnectStatusCard({
     const changes = accessControl(connected, "write");
     const changesOn = changes.kind === "switch" && changes.on;
     return (
-      <StatusCard glyph="check-circle-fill" glyphColor={colors.success} title={`${serviceName} connected`} detail={`Brain can read and search ${connected.name}.${changes.kind === "consent" ? ` To let it make changes too, ${serviceName} asks you once more.` : ""}`}>
+      <StatusCard glyph="check-circle-fill" glyphColor={colors.success} title={`${serviceName} connected`} detail={`${connected.access?.read === "none" ? `Brain can use ${connected.name} once you allow changes.` : `Brain can read and search ${connected.name}.`}${changes.kind === "consent" ? ` To let it make changes too, ${serviceName} asks you once more.` : ""}`}>
         {changes.kind !== "none" && !changesOn ? (
           <Button label="Allow changes too" variant="tinted" block loading={allowing} onPress={() => onAllowChanges(connected)} accessibilityHint={job?.write} />
         ) : null}
@@ -386,12 +391,15 @@ export function AccountCard({
   onRecover,
   onDisconnect,
   onOpenTools,
+  onSetKey,
 }: {
   plugin: PluginIntegration;
   account: PluginAccount;
   job: Job;
   running: string | null;
   onAccess(group: "read" | "write", allowed: boolean): void;
+  /** An API-key account takes its new key right here instead of a sign-in. */
+  onSetKey?(key: string): void;
   onRecover(action: AccountRecoveryAction): void;
   onDisconnect(): Promise<boolean>;
   onOpenTools(): void;
@@ -427,7 +435,12 @@ export function AccountCard({
         // A fix row below names the state itself; the pill would repeat it.
         trailing={recovery ? undefined : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
       />
-      {recovery ? (
+      {recovery?.action === "reconnect" && account.auth_method === "api_key" && onSetKey ? (
+        <>
+          <ListRow icon="key" title={recovery.title} subtitle={recovery.detail} numberOfLines={3} />
+          <AccountKeyEntry account={account} serviceName={plugin.name} saving={running === `recover:${account.id}`} disabled={busy} onSave={onSetKey} />
+        </>
+      ) : recovery ? (
         <ListRow
           icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
           iconColor={undefined}
