@@ -272,7 +272,7 @@ func startupAddresses(listenAddr string, detected []privateNetworkAddress) []str
 	return addresses
 }
 
-func printStartupInfo(w io.Writer, listenAddr, stateDir string, linkEnabled bool, entries []addressbook.Entry) {
+func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEnabled bool, entries []addressbook.Entry) {
 	host, _, err := net.SplitHostPort(listenAddr)
 	listening := listenAddr
 	switch {
@@ -284,6 +284,9 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir string, linkEnabled bool
 		listening = "all networks, port " + port
 	}
 	fmt.Fprintf(w, "\n  Mewla %s · listening on %s\n", Version, listening)
+	if strings.TrimSpace(dataDir) != "" {
+		fmt.Fprintf(w, "  %-11s %s\n", "Data", dataDir)
+	}
 	if linkEnabled {
 		fmt.Fprintf(w, "  %-11s %s\n", "Mewla Link", "connecting outbound")
 	}

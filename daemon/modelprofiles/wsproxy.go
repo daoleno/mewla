@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/gorilla/websocket"
 )
 
@@ -409,6 +410,13 @@ func wsCloseDetails(err error) (int, string, string) {
 	}
 	return websocket.CloseInternalServerErr, "proxy connection error", "transport_error"
 }
+
+// wsProxyLog records how a proxied Codex websocket leg ended. A clean close
+// frame is routine and only appears with MEWLA_LOG_VERBOSE.
 func wsProxyLog(connectionID, leg string, code int, category string, completed bool) {
-	log.Printf("codex websocket connection=%s leg=%s close_code=%d close_category=%s response_completed_forwarded=%t", connectionID, leg, code, category, completed)
+	logf := log.Printf
+	if category == "close_frame" && (code == websocket.CloseNormalClosure || code == websocket.CloseGoingAway) {
+		logf = debuglog.Printf
+	}
+	logf("codex websocket connection=%s leg=%s close_code=%d close_category=%s response_completed_forwarded=%t", connectionID, leg, code, category, completed)
 }

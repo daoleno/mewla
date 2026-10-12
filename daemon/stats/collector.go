@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
@@ -40,6 +41,24 @@ type Collector struct {
 	now                      func() time.Time
 	lastCodexSubscription    *CodexSubscriptionUsage
 	lastCodexAuthFingerprint string
+	warningsMu               sync.Mutex
+	warnings                 map[string]string
+}
+
+// warnf logs a degraded-state warning once per change. Refreshes repeat every
+// few minutes; an unchanged problem would otherwise fill the terminal.
+func (c *Collector) warnf(key, format string, args ...any) {
+	message := fmt.Sprintf(format, args...)
+	c.warningsMu.Lock()
+	defer c.warningsMu.Unlock()
+	if c.warnings == nil {
+		c.warnings = make(map[string]string)
+	}
+	if c.warnings[key] == message {
+		return
+	}
+	c.warnings[key] = message
+	log.Print(message)
 }
 
 // NewCollector creates a stats collector.
@@ -428,7 +447,7 @@ func (c *Collector) refresh() {
 	c.mu.Unlock()
 
 	c.saveSummary()
-	log.Printf("[stats] refresh complete: %d days of data", len(dailyMap))
+	debuglog.Printf("[stats] refresh complete: %d days of data", len(dailyMap))
 }
 
 // ── dailyEntry holds per-date aggregated data ──────────────
@@ -1112,14 +1131,14 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 	// Check if sqlite3 is available
 	sqlite3, err := exec.LookPath("sqlite3")
 	if err != nil {
-		log.Printf("[stats] sqlite3 not found, skipping Codex stats")
+		c.warnf("codex-sqlite3", "[stats] sqlite3 not found, skipping Codex stats")
 		return daily, modelsByDate, projectsByDate
 	}
 
 	out, err := exec.Command(sqlite3, "-json", dbPath,
 		"SELECT id, cwd, model, rollout_path FROM threads WHERE tokens_used > 0").Output()
 	if err != nil {
-		log.Printf("[stats] sqlite3 query failed: %v", err)
+		c.warnf("codex-query", "[stats] Codex sqlite3 query failed: %v", err)
 		return daily, modelsByDate, projectsByDate
 	}
 
@@ -1130,7 +1149,7 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 		RolloutPath string `json:"rollout_path"`
 	}
 	if err := json.Unmarshal(out, &threads); err != nil {
-		log.Printf("[stats] failed to parse sqlite3 output: %v", err)
+		c.warnf("codex-parse", "[stats] failed to parse Codex sqlite3 output: %v", err)
 		return daily, modelsByDate, projectsByDate
 	}
 
@@ -1231,7 +1250,7 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 		if len(skippedExamples) > 0 {
 			detail = ": " + strings.Join(skippedExamples, "; ")
 		}
-		log.Printf("[stats] skipped %d Codex threads without parsable token_count rollout%s", skipped, detail)
+		c.warnf("codex-skipped", "[stats] skipped %d Codex threads without parsable token_count rollout%s", skipped, detail)
 	}
 
 	return daily, modelsByDate, projectsByDate

@@ -2,7 +2,6 @@ package stats
 
 import (
 	"encoding/json"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,19 +73,19 @@ func (c *Collector) collectOpenCodeStats(home string) map[string]*dateAgg {
 
 	sqlite3, err := exec.LookPath("sqlite3")
 	if err != nil {
-		log.Printf("[stats] sqlite3 not found, skipping OpenCode stats")
+		c.warnf("opencode-sqlite3", "[stats] sqlite3 not found, skipping OpenCode stats")
 		return byDate
 	}
 
 	out, err := exec.Command(sqlite3, "-readonly", "-json", dbPath, openCodeUsageQuery).Output()
 	if err != nil {
-		log.Printf("[stats] OpenCode stats query failed: %v", err)
+		c.warnf("opencode-query", "[stats] OpenCode stats query failed: %v", err)
 		return byDate
 	}
 
 	var rows []openCodeMessageUsageRow
 	if err := json.Unmarshal(out, &rows); err != nil {
-		log.Printf("[stats] failed to parse OpenCode stats rows: %v", err)
+		c.warnf("opencode-parse", "[stats] failed to parse OpenCode stats rows: %v", err)
 		return byDate
 	}
 
