@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -39,6 +41,9 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 	for page := 0; page < 10; page++ {
 		result, err := s.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
 		if err != nil {
+			if strings.Contains(err.Error(), "exceeds size limit") {
+				return nil, errors.New("MCP tool list exceeds 1 MB")
+			}
 			return nil, errors.New("MCP discovery failed")
 		}
 		for _, t := range result.Tools {
@@ -48,7 +53,7 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 			seen[t.Name] = true
 			schema, err := json.Marshal(t.InputSchema)
 			if err != nil || len(schema) > 32<<10 {
-				return nil, errors.New("MCP tool schema exceeds limits")
+				return nil, fmt.Errorf("MCP tool %q schema is %d KB, over the 32 KB limit", t.Name, len(schema)>>10)
 			}
 			desc := t.Description
 			if len(desc) > 1000 {

@@ -10,5 +10,11 @@ test("the web build sends its origin; native builds don't", () => {
 
 test("every web return outcome says what to do", () => {
   expect(pluginReturnError(undefined)).toBeNull();
-  for (const code of ["expired", "denied", "cancelled", "failed", "unknown"]) expect(pluginReturnError(code)).toMatch(/start again|connect again/i);
+  for (const code of ["expired", "denied", "cancelled", "provider", "issuer", "token", "tools", "storage", "failed", "unknown"]) expect(pluginReturnError(code)).toMatch(/start again|connect again/i);
+});
+
+test("each failed step reads differently from the generic failure", () => {
+  const generic = pluginReturnError("failed");
+  const steps = ["provider", "issuer", "token", "tools", "storage"].map(pluginReturnError);
+  expect(new Set([generic, ...steps]).size).toBe(steps.length + 1);
 });

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -287,52 +288,91 @@ func pluginsReturn(w http.ResponseWriter, req *http.Request, integration string,
 	http.Redirect(w, req, "/plugins?"+query.Encode(), http.StatusSeeOther)
 }
 
-func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) {
+// signInFailures name the step a sign-in return failed at. Web returns carry
+// the key as plugin_error; native connect_finish shows the message.
+var signInFailures = map[string]string{
+	"denied":   "Access was not granted. You can connect again whenever you’re ready.",
+	"provider": "The service didn’t complete sign-in. Connect again.",
+	"issuer":   "Sign-in came back from an unexpected service. Connect again.",
+	"token":    "The service didn’t accept the sign-in. Connect again.",
+	"tools":    "Signed in, but the service’s tools couldn’t be loaded. Connect again.",
+	"storage":  "Signed in, but this server couldn’t save the account. Connect again.",
+}
+
+// signInDetail is the log detail for a failed step. Vendor bodies can hold
+// credentials, so a token endpoint error contributes only its status and code.
+func signInDetail(err error) string {
+	var retrieve *oauth2.RetrieveError
+	var transport *url.Error
+	switch {
+	case err == nil:
+		return "invalid response"
+	case errors.As(err, &retrieve):
+		status := 0
+		if retrieve.Response != nil {
+			status = retrieve.Response.StatusCode
+		}
+		return fmt.Sprintf("HTTP %d %s", status, oauthCode(retrieve.ErrorCode))
+	case errors.As(err, &transport):
+		return transport.Err.Error()
+	}
+	return err.Error()
+}
+
+// oauthCode keeps a vendor-supplied OAuth error code loggable.
+func oauthCode(code string) string {
+	if len(code) > 64 || strings.Trim(code, "abcdefghijklmnopqrstuvwxyz_") != "" {
+		return "unrecognized error"
+	}
+	return code
+}
+
+// finishOAuth completes a returned authorization. It returns "" on success
+// or the signInFailures key for the step that failed.
+func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) string {
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
 	if !ok || flow.Mobile != mobile || time.Now().After(flow.Expires) {
 		if webUI && !mobile {
 			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
-			return
+			return "expired"
 		}
 		http.Error(w, "Authorization expired. Return to Plugins and connect again.", 400)
-		return
+		return "expired"
 	}
 	delete(m.pending, state)
 	r, ok := m.records[flow.ID]
 	if !ok || !r.Account.Enabled || r.Account.Status == "disconnected" {
 		if flow.Web {
 			pluginsReturn(w, req, "", url.Values{"plugin_error": {"cancelled"}})
-			return
+			return "cancelled"
 		}
 		http.Error(w, "Account authorization cancelled", 400)
-		return
+		return "cancelled"
 	}
 	pendingID := r.Account.ID
-	fail := func() {
+	fail := func(cause, detail string) string {
 		// Never remove an established account if a verified reconnect reused its ID.
 		if r.Account.ID == pendingID {
 			delete(m.records, pendingID)
 			_ = m.vault.Delete("integration:" + pendingID)
 		}
 		_ = m.save()
+		log.Printf("plugins: %s sign-in failed at %s: %s", r.Account.Integration, cause, detail)
 		if flow.Web {
-			outcome := "failed"
-			if req.URL.Query().Get("error") == "access_denied" {
-				outcome = "denied"
-			}
-			pluginsReturn(w, req, r.Account.Integration, url.Values{"plugin_error": {outcome}})
-			return
+			pluginsReturn(w, req, r.Account.Integration, url.Values{"plugin_error": {cause}})
+			return cause
 		}
-		http.Error(w, "Authorization failed. Return to Plugins and connect again.", 400)
+		http.Error(w, signInFailures[cause], 400)
+		return cause
 	}
-	if req.URL.Query().Get("error") != "" || req.URL.Query().Get("code") == "" {
-		fail()
-		return
+	if code := req.URL.Query().Get("error"); code == "access_denied" {
+		return fail("denied", code)
+	} else if code != "" || req.URL.Query().Get("code") == "" {
+		return fail("provider", "returned "+oauthCode(code))
 	}
 	if issuer := req.URL.Query().Get("iss"); issuer != "" && issuer != r.OAuth.Issuer {
-		fail()
-		return
+		return fail("issuer", "iss does not match the discovered issuer")
 	}
 	config := oauthConfig(r, flow.ClientSecret)
 	options := []oauth2.AuthCodeOption{oauth2.VerifierOption(flow.Verifier)}
@@ -347,8 +387,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		token, err = config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)), req.URL.Query().Get("code"), options...)
 	}
 	if err != nil || token == nil || token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
-		fail()
-		return
+		return fail("token", signInDetail(err))
 	}
 	if scope, ok := token.Extra("scope").(string); ok {
 		r.Account.Scopes = strings.Fields(scope)
@@ -356,12 +395,10 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	secret := oauthSecret{Token: token, ClientSecret: flow.ClientSecret}
 	raw, _ := json.Marshal(secret)
 	if err = m.vault.Set("integration:"+r.Account.ID, string(raw)); err != nil {
-		fail()
-		return
+		return fail("storage", "credential could not be stored")
 	}
 	if err = m.discover(ctx, r, token.AccessToken); err != nil {
-		fail()
-		return
+		return fail("tools", signInDetail(err))
 	}
 	m.setGroup(r, "read", true)
 	if flow.AllowWrites {
@@ -370,15 +407,15 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	m.nameAndDeduplicate(r)
 	m.event(r, "authorize", nil)
 	if err = m.save(); err != nil {
-		fail()
-		return
+		return fail("storage", err.Error())
 	}
 	if flow.Web {
 		pluginsReturn(w, req, r.Account.Integration, url.Values{"connected": {r.Account.ID}})
-		return
+		return ""
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Mewla Plugins</title><h1>Account connected</h1><p>You can return to Mewla.</p><a href="mewla://plugins">Open Plugins</a>`)
+	return ""
 }
 func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	raw, ok, err := m.vault.Get("integration:" + r.Account.ID)
