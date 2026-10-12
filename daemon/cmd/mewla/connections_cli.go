@@ -32,7 +32,7 @@ Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account)
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
 import-gh explicitly copies the current github.com gh login into this daemon's private vault.
 policy --id account --tool name --allow grants future calls to that tool; only change on explicit user consent.
-policy --id account --tools a,b,c [--allow] sets every listed tool at once: all of them or none.
+policy --id account --tools a,b,c [--allow] sets every listed tool at once, all or none; same explicit consent.
 Never send messages or make updates without task-specific user authorization, even when a tool is enabled.`)
 		return flag.ErrHelp
 	}
