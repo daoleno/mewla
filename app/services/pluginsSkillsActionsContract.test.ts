@@ -266,10 +266,14 @@ describe("Plugins connection route contract", () => {
       expect(source).not.toContain("headerLeft");
     }
   });
-  test("disconnect confirms once inline, and a single tool shows what it does first", () => {
+  test("disconnect confirms once inline; tool switches take effect with no confirm", () => {
     expect(views).toContain("Brain loses access right away");
     expect(views).not.toContain("Alert.alert");
-    expect(flow).toContain("Allow this tool?");
+    expect(flow).not.toContain("Alert");
+    // One request for one tool or many, never a call per tool.
+    expect(flow).toContain("send(toolPolicyRequest(target, names, allowed)");
+    expect(views).toContain('label="Allow all"');
+    expect(views).toContain('label="Turn all off"');
   });
   test("every way to connect is the one connect action", () => {
     const service = routes[1]!;

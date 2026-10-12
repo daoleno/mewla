@@ -32,6 +32,7 @@ Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account)
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
 import-gh explicitly copies the current github.com gh login into this daemon's private vault.
 policy --id account --tool name --allow grants future calls to that tool; only change on explicit user consent.
+policy --id account --tools a,b,c [--allow] sets every listed tool at once: all of them or none.
 Never send messages or make updates without task-specific user authorization, even when a tool is enabled.`)
 		return flag.ErrHelp
 	}
@@ -41,13 +42,14 @@ Never send messages or make updates without task-specific user authorization, ev
 	cfg := cliConfig{}
 	q := connections.Request{Action: action}
 	in := connections.Input{}
-	var argsJSON, argsFile, specFile, oauthFile, trustRanges string
+	var argsJSON, argsFile, specFile, oauthFile, trustRanges, toolList string
 	var stdinSecret bool
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "daemon state directory")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON")
 	fs.StringVar(&q.ID, "id", "", "account ID")
 	fs.StringVar(&q.Query, "query", "", "search text")
 	fs.StringVar(&q.Tool, "tool", "", "tool name")
+	fs.StringVar(&toolList, "tools", "", "policy: tool names, comma separated")
 	fs.BoolVar(&q.Allowed, "allow", false, "allow future calls (explicit user consent required)")
 	fs.StringVar(&in.Integration, "integration", "", "plugin ID")
 	fs.StringVar(&in.Name, "name", "", "account name")
@@ -70,6 +72,13 @@ Never send messages or make updates without task-specific user authorization, ev
 	case "list", "add", "set-key", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy":
 	default:
 		return errors.New("unknown plugin command")
+	}
+	if toolList != "" {
+		for _, name := range strings.Split(toolList, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				q.Tools = append(q.Tools, name)
+			}
+		}
 	}
 	if trustRanges != "" {
 		for _, cidr := range strings.Split(trustRanges, ",") {

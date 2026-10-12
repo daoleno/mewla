@@ -1,5 +1,10 @@
 package connections
 
+import (
+	"errors"
+	"fmt"
+)
+
 // Reviewed names for fixed, official resources. Remote readOnlyHint annotations
 // never grant anything. Grants still fingerprint the discovered full definition,
 // and invocation rechecks it. Unknown/new tools require individual review.
@@ -74,6 +79,42 @@ func (m *Manager) setGroup(r *record, group string, allowed bool) bool {
 		}
 	}
 	return true
+}
+
+// setPolicy allows or blocks one tool, or every tool in a batch. A batch names
+// the tools the user saw, so a tool discovered later is never granted by it,
+// and it applies all of them or none.
+func setPolicy(r *record, q Request) error {
+	names := q.Tools
+	if q.Tool != "" {
+		if len(names) != 0 {
+			return errors.New("name one tool or a list of tools, not both")
+		}
+		names = []string{q.Tool}
+	}
+	if len(names) == 0 {
+		return errors.New("tool not found")
+	}
+	tools := map[string]Tool{}
+	for _, t := range r.Account.Tools {
+		tools[t.Name] = t
+	}
+	for _, name := range names {
+		if _, ok := tools[name]; !ok {
+			return fmt.Errorf("tool not found: %s", name)
+		}
+	}
+	if r.Grants == nil {
+		r.Grants = map[string]string{}
+	}
+	for _, name := range names {
+		if q.Allowed {
+			r.Grants[name] = fingerprint(tools[name])
+		} else {
+			delete(r.Grants, name)
+		}
+	}
+	return nil
 }
 
 func groupState(tools []Tool, group string) string {

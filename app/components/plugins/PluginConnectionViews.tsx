@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
@@ -11,8 +11,10 @@ import {
   accountRecovery,
   accountTone,
   allowedToolCount,
+  bulkToolNames,
   connectsWithForm,
   serviceOff,
+  toolSections,
   type AccountRecoveryAction,
   type PluginCatalogRows,
   type ServiceRow,
@@ -491,21 +493,36 @@ export function AccountCard({
   );
 }
 
+/**
+ * An account's tools: its on/off switch, one row to allow or turn off every
+ * tool, then each group with its own pair, and a switch per tool. Every
+ * switch takes effect on the tap, with no confirm.
+ */
 export function ToolsView({
   account,
   running,
   onToggleEnabled,
   onRefresh,
-  onToggleTool,
+  onSetTools,
+  onAllowChanges,
 }: {
   account: PluginAccount;
   running: string | null;
   onToggleEnabled(enabled: boolean): void;
   onRefresh(): void;
-  onToggleTool(tool: NonNullable<PluginAccount["tools"]>[number], allowed: boolean): void;
+  /** One request for one tool or many; the server applies all of them or none. */
+  onSetTools(names: string[], allowed: boolean): void;
+  /** Changes the service has to approve go through its sign-in. */
+  onAllowChanges(): void;
 }) {
   const tools = account.tools ?? [];
   const busy = running !== null;
+  // A tool request in flight already shows its result, so it doesn't grey the switches out.
+  const locked = busy && running !== `tools:${account.id}`;
+  const sections = toolSections(account);
+  const allowed = tools.filter((tool) => tool.allowed).length;
+  const allowAll = bulkToolNames(account, tools, true);
+  const allOff = bulkToolNames(account, tools, false);
   return (
     <>
       <ListSection title={account.name}>
@@ -524,13 +541,54 @@ export function ToolsView({
           onPress={onRefresh}
         />
       </ListSection>
-      <ListSection title={`Tools (${tools.length})`} footer="A tool that changes needs permission again.">
-        {tools.length ? (
-          tools.map((tool) => <ToolRow key={tool.name} tool={tool} busy={busy} pending={running === `tool:${account.id}:${tool.name}`} onToggle={(allowed) => onToggleTool(tool, allowed)} />)
-        ) : (
+      {tools.length ? (
+        <ListSection
+          title={`Tools (${tools.length})`}
+          footer={sections.some((section) => section.consent) ? "Allow all leaves changes off until the service approves them." : "A tool that changes needs permission again."}
+        >
+          <ListRow
+            icon="list"
+            title="All tools"
+            subtitle={`${allowed} of ${tools.length} allowed`}
+            trailing={
+              <View style={styles.bulk}>
+                <Button label="Allow all" size="sm" variant="tinted" disabled={locked || !allowAll.length} onPress={() => onSetTools(allowAll, true)} accessibilityLabel={`Allow all ${tools.length} tools`} />
+                <Button label="Turn all off" size="sm" variant="plain" disabled={locked || !allOff.length} onPress={() => onSetTools(allOff, false)} accessibilityLabel={`Turn all ${tools.length} tools off`} />
+              </View>
+            }
+          />
+        </ListSection>
+      ) : (
+        <ListSection title="Tools">
           <ListRow title="No tools reported" />
-        )}
-      </ListSection>
+        </ListSection>
+      )}
+      {sections.map((section) => {
+        const on = bulkToolNames(account, section.tools, true);
+        const off = bulkToolNames(account, section.tools, false);
+        // A single group is the whole list; the All tools row already covers it.
+        const accessory = sections.length > 1 ? (
+          <View style={styles.sectionBulk}>
+            <BulkLink
+              label="Allow all"
+              accessibilityLabel={`Allow all ${section.title}`}
+              disabled={locked || (section.consent ? section.allowed === section.tools.length : !on.length)}
+              onPress={() => (section.consent ? onAllowChanges() : onSetTools(on, true))}
+            />
+            <BulkLink label="Turn off" accessibilityLabel={`Turn off all ${section.title}`} disabled={locked || !off.length} onPress={() => onSetTools(off, false)} />
+          </View>
+        ) : undefined;
+        return (
+          <ListSection
+            key={section.key}
+            title={sections.length > 1 ? `${section.title} · ${section.allowed}/${section.tools.length}` : undefined}
+            accessory={accessory}
+            footer={section.consent ? "Allow all asks the service to approve changes once." : section.footer}
+          >
+            {section.tools.map((tool) => <ToolRow key={tool.name} tool={tool} busy={locked} onToggle={(value) => onSetTools([tool.name], value)} />)}
+          </ListSection>
+        );
+      })}
       <ListSection title="Recent calls">
         {account.history.length ? (
           account.history.map((event, index) => (
@@ -547,6 +605,24 @@ export function ToolsView({
         )}
       </ListSection>
     </>
+  );
+}
+
+/** A section header's quiet text action: ink, with a 44 pt reach. */
+function BulkLink({ label, accessibilityLabel, disabled, onPress }: { label: string; accessibilityLabel: string; disabled: boolean; onPress(): void }) {
+  const { colors } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={12}
+      onPress={onPress}
+      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+    >
+      <AppText variant="label" style={{ color: disabled ? colors.textTertiary : colors.accent }}>{label}</AppText>
+    </Pressable>
   );
 }
 
@@ -576,7 +652,7 @@ function toolInputs(schema: Record<string, unknown> | undefined): ToolInput[] {
 }
 
 // The row itself discloses its inputs; the switch stays the only control on it.
-function ToolRow({ tool, busy, pending, onToggle }: { tool: NonNullable<PluginAccount["tools"]>[number]; busy: boolean; pending: boolean; onToggle(allowed: boolean): void }) {
+function ToolRow({ tool, busy, onToggle }: { tool: NonNullable<PluginAccount["tools"]>[number]; busy: boolean; onToggle(allowed: boolean): void }) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
   const inputs = toolInputs(tool.input_schema);
@@ -584,13 +660,14 @@ function ToolRow({ tool, busy, pending, onToggle }: { tool: NonNullable<PluginAc
     <View>
       <ListRow
         title={tool.name}
-        subtitle={tool.description}
+        // One paragraph, so a description's own line breaks don't grow the row.
+        subtitle={tool.description.replace(/\s+/g, " ").trim()}
         numberOfLines={2}
         leading={inputs.length ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={15} color={colors.textTertiary} /> : <View style={styles.disclosureSpace} />}
         onPress={inputs.length ? () => setExpanded(!expanded) : undefined}
         accessibilityLabel={inputs.length ? `${tool.name}, ${inputs.length} input${inputs.length === 1 ? "" : "s"}` : undefined}
         accessibilityHint={inputs.length ? (expanded ? "Hides inputs" : "Shows inputs") : undefined}
-        trailing={pending ? <ActivityIndicator /> : <InkSwitch accessibilityLabel={`Allow ${tool.name}`} value={tool.allowed} disabled={busy} onValueChange={onToggle} />}
+        trailing={<InkSwitch accessibilityLabel={`Allow ${tool.name}`} value={tool.allowed} disabled={busy} onValueChange={onToggle} />}
       />
       {expanded ? (
         <View style={[styles.inputs, { borderColor: colors.borderSubtle }]}>
@@ -627,6 +704,8 @@ const styles = StyleSheet.create({
   confirm: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   confirmActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
   disclosureSpace: { width: 15 },
+  bulk: { flexDirection: "row", alignItems: "center", gap: 2, marginRight: -8 },
+  sectionBulk: { flexDirection: "row", alignItems: "center", gap: 16 },
   inputs: { marginLeft: 43, marginRight: 16, marginBottom: 12, paddingLeft: 12, gap: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   input: { gap: 2 },
   inputHead: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },

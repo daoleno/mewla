@@ -395,3 +395,54 @@ func TestSlackDiscoveryUsesActualScopesAndDoesNotAssumeBotSearch(t *testing.T) {
 		}
 	}
 }
+
+func TestBatchPolicyAppliesEveryListedToolOrNone(t *testing.T) {
+	m := testManager(t, func(r *http.Request) (*http.Response, error) {
+		return reply(200, `{"id":1,"login":"alice"}`), nil
+	})
+	a := addGitHub(t, m, "personal", "secret-a")
+	allowed := func(acc *Account) map[string]bool {
+		out := map[string]bool{}
+		for _, tool := range acc.Tools {
+			out[tool.Name] = tool.Allowed
+		}
+		return out
+	}
+	start := mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account
+	var names []string
+	for _, tool := range start.Tools {
+		names = append(names, tool.Name)
+	}
+	if len(names) < 3 {
+		t.Fatalf("want several GitHub tools, got %v", names)
+	}
+	all := mustHandle(t, m, Request{Action: "policy", ID: a.ID, Tools: names, Allowed: true}).Account
+	if all.Access.Allowed != len(names) {
+		t.Fatalf("allow all: %d of %d allowed", all.Access.Allowed, len(names))
+	}
+	// One unknown name refuses the whole batch and changes nothing, in memory or on disk.
+	before, _ := os.ReadFile(m.path)
+	if _, err := m.Handle(context.Background(), Request{Action: "policy", ID: a.ID, Tools: []string{names[0], "not_a_tool"}, Allowed: false}); err == nil {
+		t.Fatal("batch with an unknown tool was accepted")
+	}
+	after, _ := os.ReadFile(m.path)
+	if !bytes.Equal(before, after) {
+		t.Fatal("refused batch changed the saved policy")
+	}
+	if got := mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account; got.Access.Allowed != len(names) {
+		t.Fatalf("refused batch changed grants: %v", allowed(got))
+	}
+	off := mustHandle(t, m, Request{Action: "policy", ID: a.ID, Tools: names[:2], Allowed: false}).Account
+	state := allowed(off)
+	if state[names[0]] || state[names[1]] || !state[names[2]] {
+		t.Fatalf("batch off touched the wrong tools: %v", state)
+	}
+	for _, q := range []Request{
+		{Action: "policy", ID: a.ID, Allowed: true},
+		{Action: "policy", ID: a.ID, Tool: names[0], Tools: names[1:2], Allowed: true},
+	} {
+		if _, err := m.Handle(context.Background(), q); err == nil {
+			t.Fatalf("policy accepted %+v", q)
+		}
+	}
+}
