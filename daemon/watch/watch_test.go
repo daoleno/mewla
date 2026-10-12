@@ -466,7 +466,9 @@ func (f *fakeExternal) ReadAccounts(integration string) []connections.ReadAccoun
 func (f *fakeExternal) ReadTool(_ context.Context, accountID, tool string, args map[string]any) (connections.ReadResult, error) {
 	if strings.HasPrefix(accountID, "linear") {
 		f.calls = append(f.calls, "linear:"+tool)
-		return connections.ReadResult{Body: []byte(f.linear[tool]), RateRemaining: -1}, nil
+		// Plugin reads return the MCP result: JSON text inside a content list.
+		body, _ := json.Marshal(map[string]any{"content": []any{map[string]any{"type": "text", "text": f.linear[tool]}}})
+		return connections.ReadResult{Body: body, RateRemaining: -1}, nil
 	}
 	path := args["path"].(map[string]any)
 	key := "/repos/" + path["owner"].(string) + "/" + path["repo"].(string) + githubToolPaths[tool]
