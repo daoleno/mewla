@@ -192,6 +192,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return Response{Account: &a}, nil
 	}
 	if q.Action == "describe" {
+		// Search hides an account that is off; its tools stay hidden here too.
+		if !r.Account.Enabled || r.Account.Status == "disconnected" {
+			return Response{}, errors.New("plugin account is disabled or disconnected")
+		}
 		for _, t := range m.projection(r).Tools {
 			if t.Name == q.Tool {
 				return Response{Tool: &t}, nil

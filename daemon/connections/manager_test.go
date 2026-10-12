@@ -121,6 +121,41 @@ func TestAccountIsolationPolicyPersistenceAndRevocation(t *testing.T) {
 	}
 }
 
+func TestDisabledAccountHidesToolsAndKeepsChoices(t *testing.T) {
+	m := testManager(t, func(r *http.Request) (*http.Response, error) {
+		return reply(200, `{"id":1,"login":"alice"}`), nil
+	})
+	a := addGitHub(t, m, "personal", "secret-a")
+	mustHandle(t, m, Request{Action: "policy", ID: a.ID, Tool: "get_me", Allowed: true})
+	search := Request{Action: "search", Query: "get_me"}
+	if len(mustHandle(t, m, search).Matches) != 1 {
+		t.Fatal("enabled account tool not found")
+	}
+	off := mustHandle(t, m, Request{Action: "disable", ID: a.ID}).Account
+	if off.Enabled || off.Status != "connected" || off.Access.Allowed == 0 {
+		t.Fatalf("disable must keep the connection and tool choices: %+v", off)
+	}
+	if len(mustHandle(t, m, search).Matches) != 0 {
+		t.Fatal("disabled account tool listed")
+	}
+	for _, q := range []Request{
+		{Action: "describe", ID: a.ID, Tool: "get_me"},
+		{Action: "invoke", ID: a.ID, Tool: "get_me", Arguments: json.RawMessage(`{}`)},
+	} {
+		if _, err := m.Handle(context.Background(), q); err == nil {
+			t.Fatalf("%s reached a disabled account", q.Action)
+		}
+	}
+	on := mustHandle(t, m, Request{Action: "enable", ID: a.ID}).Account
+	if !on.Enabled || on.Access.Allowed != off.Access.Allowed {
+		t.Fatalf("enable must restore the same tools: %+v", on)
+	}
+	if mustHandle(t, m, search).Matches[0].Allowed != true {
+		t.Fatal("tool choice lost across disable")
+	}
+	mustHandle(t, m, Request{Action: "describe", ID: a.ID, Tool: "get_me"})
+}
+
 func TestInvocationRedactionErrorsAndTimeout(t *testing.T) {
 	m := testManager(t, func(r *http.Request) (*http.Response, error) { return reply(200, `{"id":1,"login":"alice"}`), nil })
 	a := addGitHub(t, m, "personal", "credential-secret")
