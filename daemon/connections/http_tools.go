@@ -210,10 +210,15 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 	if len(tools) > MaxTools {
 		return errors.New("plugin exposes more than 200 tools; use a narrower endpoint")
 	}
+	total := 0
 	for _, t := range tools {
-		if len(t.InputSchema) > 32<<10 {
-			return errors.New("tool schema exceeds 32 KiB")
+		if len(t.InputSchema) > MaxToolSchemaBytes {
+			return fmt.Errorf("tool schema exceeds %d KiB", MaxToolSchemaBytes>>10)
 		}
+		total += len(t.InputSchema)
+	}
+	if total > MaxToolSchemasBytes {
+		return fmt.Errorf("plugin tool schemas exceed %d MiB together; use a narrower endpoint", MaxToolSchemasBytes>>20)
 	}
 	r.Account.Tools = tools
 	r.Account.Status = "connected"
@@ -300,8 +305,8 @@ func openAPITools(spec json.RawMessage) ([]Tool, error) {
 			}
 			sort.Strings(required)
 			schema, _ := json.Marshal(object(fields, required...))
-			if len(schema) > 32<<10 {
-				return nil, errors.New("OpenAPI tool schema exceeds 32 KiB")
+			if len(schema) > MaxToolSchemaBytes {
+				return nil, fmt.Errorf("OpenAPI tool schema exceeds %d KiB", MaxToolSchemaBytes>>10)
 			}
 			desc := op.Summary
 			if desc == "" {

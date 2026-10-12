@@ -195,7 +195,9 @@ func TestWebConnectNamesFailedStep(t *testing.T) {
 		{name: "provider error", want: "provider", query: "&vendor_error=server_error"},
 		{name: "issuer mismatch", want: "issuer", iss: "https://other.example"},
 		{name: "token rejected", want: "token", tokenStatus: http.StatusBadRequest},
-		{name: "oversized tool schema", want: "tools", schemaBytes: 40 << 10},
+		{name: "oversized tool schema", want: "tools", schemaBytes: MaxToolSchemaBytes + 1},
+		// Notion's notion-query-data-sources schema is 76 KiB; it connects.
+		{name: "notion-sized tool schema", want: "", schemaBytes: 76 << 10},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -277,6 +279,13 @@ func TestWebConnectNamesFailedStep(t *testing.T) {
 			if back.Path != "/plugins" || back.Query().Get("plugin_error") != c.want || back.Query().Get("service") != "mcp" {
 				t.Fatalf("returned to %v, want plugin_error=%s", back, c.want)
 			}
+			if c.want == "" {
+				account := m.records[back.Query().Get("connected")]
+				if account == nil || account.Account.Status != "connected" || len(account.Account.Tools) != 1 || len(account.Account.Tools[0].InputSchema) < 76<<10 {
+					t.Fatal("a large tool schema did not connect intact")
+				}
+				return
+			}
 			if len(m.records) != 0 {
 				t.Fatal("failed sign-in left an account")
 			}
@@ -287,7 +296,7 @@ func TestWebConnectNamesFailedStep(t *testing.T) {
 			if c.want == "token" && !strings.Contains(line, "HTTP 400 invalid_grant") {
 				t.Fatalf("token failure log %q does not name the vendor code", line)
 			}
-			if c.want == "tools" && !strings.Contains(line, `"read_fixture" schema is 40 KB`) {
+			if c.want == "tools" && !strings.Contains(line, `"read_fixture" schema is 256 KB, over the 256 KB limit`) {
 				t.Fatalf("tools failure log %q does not name the tool", line)
 			}
 		})

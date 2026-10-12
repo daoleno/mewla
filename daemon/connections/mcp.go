@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -24,6 +25,8 @@ func (m *Manager) mcpSession(ctx context.Context, r *record, secret string) (*mc
 	c := mcp.NewClient(&mcp.Implementation{Name: "Mewla", Version: "1"}, nil)
 	session, err := c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: r.Account.Endpoint, HTTPClient: &client, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
+		// SDK errors carry status and JSON-RPC text, never the bearer header.
+		log.Printf("plugins: %s MCP connect failed: %.300s", r.Account.Integration, err)
 		if errors.Is(err, errAuth) {
 			return nil, errAuth
 		}
@@ -41,6 +44,7 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 	for page := 0; page < 10; page++ {
 		result, err := s.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
 		if err != nil {
+			log.Printf("plugins: MCP tools/list failed on page %d: %.300s", page+1, err)
 			if strings.Contains(err.Error(), "exceeds size limit") {
 				return nil, errors.New("MCP tool list exceeds 1 MB")
 			}
@@ -52,8 +56,8 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 			}
 			seen[t.Name] = true
 			schema, err := json.Marshal(t.InputSchema)
-			if err != nil || len(schema) > 32<<10 {
-				return nil, fmt.Errorf("MCP tool %q schema is %d KB, over the 32 KB limit", t.Name, len(schema)>>10)
+			if err != nil || len(schema) > MaxToolSchemaBytes {
+				return nil, fmt.Errorf("MCP tool %q schema is %d KB, over the %d KB limit", t.Name, len(schema)>>10, MaxToolSchemaBytes>>10)
 			}
 			desc := t.Description
 			if len(desc) > 1000 {

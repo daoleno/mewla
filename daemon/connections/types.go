@@ -10,6 +10,11 @@ const MaxResultBytes = 1 << 20
 const MaxInputBytes = 64 << 10
 const MaxTools = 200
 
+// One tool's input schema, and all of an account's schemas together. Notion's
+// notion-query-data-sources alone is 76 KiB.
+const MaxToolSchemaBytes = 256 << 10
+const MaxToolSchemasBytes = 2 << 20
+
 type Integration struct {
 	ID                string `json:"id"`
 	Name              string `json:"name"`
