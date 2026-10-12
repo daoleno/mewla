@@ -36,7 +36,7 @@ const (
 	judgeMinBatchChars = 12_000
 	judgeBatchSignals  = 300
 	judgeRunTimeout    = 15 * time.Minute
-	judgeIdleEvery     = 30 * time.Minute // a partial batch waits this long
+	judgeIdleEvery     = 2 * time.Hour // a partial batch waits this long; rules flag severe problems at once
 	judgeBacklogEvery  = time.Minute      // a full batch runs at once
 	judgeFailureWait   = 10 * time.Minute
 	judgeMaxRunsPerDay = 60
