@@ -594,14 +594,6 @@ func (c *Collector) collectLinearTeam(ctx context.Context, projectID string, tea
 	}
 	var issues []linearIssueRecord
 	collectRecords(result.Body, &issues, func(r linearIssueRecord) bool { return r.identifier() != "" && r.Title != "" })
-	// An issue filed under a Linear project named like one of the user's
-	// projects belongs to that project rather than the team's.
-	byName := map[string]string{}
-	for _, project := range c.store.Projects() {
-		if !project.Builtin {
-			byName[strings.ToLower(project.Name)] = project.ID
-		}
-	}
 	var signals []Signal
 	for index, issue := range issues {
 		identifier := issue.identifier()
@@ -609,20 +601,18 @@ func (c *Collector) collectLinearTeam(ctx context.Context, projectID string, tea
 		if updated.IsZero() {
 			updated = pollStarted
 		}
-		owner := projectID
 		refs := map[string]string{"issue": identifier, "team": team.Key, "url": issue.URL}
 		if state, ok := issue.Status.(string); ok {
 			refs["state"] = state
 		}
+		// The Linear project is kept as evidence; the issue belongs to the
+		// project the user confirmed for its team.
 		if name, ok := issue.Project.(string); ok && name != "" {
 			refs["linear_project"] = name
-			if id := byName[strings.ToLower(name)]; id != "" {
-				owner = id
-			}
 		}
 		signals = append(signals, Signal{
 			ID:     signalID(SourceExternal, "linear-issue|"+identifier+"|"+issue.UpdatedAt),
-			Source: SourceExternal, ProjectID: owner, Time: updated, Kind: kindLinearIssue,
+			Source: SourceExternal, ProjectID: projectID, Time: updated, Kind: kindLinearIssue,
 			Excerpt: excerpt(identifier+" "+issue.Title, 300), Refs: refs, Pointer: issue.URL,
 		})
 		if index >= linearCommentIssues || !reads["list_comments"] {
@@ -645,7 +635,7 @@ func (c *Collector) collectLinearTeam(ctx context.Context, projectID string, tea
 			}
 			signals = append(signals, Signal{
 				ID:     signalID(SourceExternal, "linear-comment|"+comment.ID+"|"+comment.UpdatedAt),
-				Source: SourceExternal, ProjectID: owner, Time: at, Kind: kindLinearComment,
+				Source: SourceExternal, ProjectID: projectID, Time: at, Kind: kindLinearComment,
 				Excerpt: excerpt(identifier+": "+comment.Body, 400), Refs: commentRefs, Pointer: issue.URL,
 			})
 		}

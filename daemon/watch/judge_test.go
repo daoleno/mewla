@@ -261,3 +261,32 @@ func TestPlaybookWritesInThePersonsLanguage(t *testing.T) {
 		t.Fatal("playbook ignores the person's language")
 	}
 }
+
+func TestJudgmentPacingSurvivesRestart(t *testing.T) {
+	home := t.TempDir()
+	collector, store := newTestCollector(t, home)
+	if _, err := store.SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for index := range judgeMaxRunsPerDay {
+		at := now.Add(-time.Duration(judgeMaxRunsPerDay-index) * time.Minute)
+		if err := store.AppendRun(JudgeRun{ID: "r" + string(rune('A'+index%26)) + string(rune('a'+index/26)), StartedAt: at, FinishedAt: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: "log_error", Time: now, Excerpt: "boom"}}); err != nil {
+		t.Fatal(err)
+	}
+	// A new daemon reads the run log: a partial batch still waits, and the
+	// daily cap still holds, also for an explicit judge request.
+	restarted := newJudge(store, home)
+	restarted.execute, _ = fakeJudge(`{"attributions":[],"authors":[],"problems":[]}`)
+	if restarted.due(store.Unjudged()) {
+		t.Fatal("a restart ran a partial batch early")
+	}
+	collector.judge = restarted
+	if _, err := collector.Handle(context.Background(), Request{Action: "judge"}); err == nil || !strings.Contains(err.Error(), "times in the last 24 hours") {
+		t.Fatalf("judge past the daily cap: %v", err)
+	}
+}

@@ -70,8 +70,9 @@ and on again).
 
 Watch suggests Linear teams for a project. A suggestion comes from a team
 whose name matches the project's, or from Linear issue links in the project's
-conversations. Confirm a suggestion once to start collecting that team. An issue filed under
-a Linear project named like one of your projects goes to that project instead:
+conversations. Confirm a suggestion once to start collecting that team. Its issues and
+comments go to the project you confirmed; the Linear project an issue is filed
+under is kept with it:
 
 ```sh
 mewla watch projects --project <id>      # shows linear.suggested

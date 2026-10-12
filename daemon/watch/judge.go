@@ -74,7 +74,28 @@ type judge struct {
 func newJudge(store *Store, home string) *judge {
 	j := &judge{store: store, home: home, workdir: filepath.Join(store.dir, "judge"), now: func() time.Time { return time.Now().UTC() }, batchChars: judgeBatchChars}
 	j.execute = j.claude
+	j.resume()
 	return j
+}
+
+// resume restores the pacing from the run log, so a daemon restart neither
+// runs a partial batch early nor resets the daily cap.
+func (j *judge) resume() {
+	runs, err := j.store.Runs()
+	if err != nil || len(runs) == 0 {
+		return
+	}
+	now := j.now()
+	for _, run := range runs {
+		if now.Sub(run.FinishedAt) < 24*time.Hour {
+			j.recent = append(j.recent, run.FinishedAt)
+		}
+	}
+	last := runs[len(runs)-1]
+	j.lastRun = last.FinishedAt
+	if last.Error != "" {
+		j.failedAt, j.lastError = last.FinishedAt, last.Error
+	}
 }
 
 // JudgeStatus summarizes judgment for the CLI.
@@ -175,6 +196,12 @@ func (j *judge) runBatches(ctx context.Context, n int) ([]JudgeRun, error) {
 	}
 	var runs []JudgeRun
 	for index := 0; index < max(n, 1); index++ {
+		j.mu.Lock()
+		capped := j.runsToday(j.now()) >= judgeMaxRunsPerDay
+		j.mu.Unlock()
+		if capped {
+			return runs, fmt.Errorf("judgment already ran %d times in the last 24 hours", judgeMaxRunsPerDay)
+		}
 		run, err := j.batch(ctx)
 		if run.ID != "" {
 			runs = append(runs, run)
