@@ -5,9 +5,11 @@ import {
   accountRecovery,
   accountTone,
   connectSteps,
+  enabledRequest,
   isConnecting,
   pluginCatalogRows,
   reconnectsWithWrites,
+  serviceOff,
   usesApiKey,
 } from "./pluginConnectionsModel";
 
@@ -45,6 +47,27 @@ describe("Plugins list rows", () => {
     expect(state("linear")).toMatchObject({ kind: "reconnect", account: { id: "l1" } });
     expect(state("github")).toMatchObject({ kind: "status", label: "Last call failed", tone: "danger" });
   });
+
+  test("a service reads Off, muted, only when every account is off", () => {
+    const rows = pluginCatalogRows(catalog, [
+      account({ id: "g1", enabled: false }),
+      account({ id: "g2" }),
+      account({ id: "l1", integration: "linear", enabled: false, status: "error" }),
+    ], reviewed);
+    const row = (id: string) => rows.services.find((item) => item.plugin.id === id)!;
+    expect(row("github").state).toMatchObject({ kind: "status", label: "Connected", tone: "success" });
+    expect(serviceOff(row("github").accounts)).toBe(false);
+    expect(row("linear").state).toEqual({ kind: "status", label: "Off", tone: "neutral" });
+    expect(serviceOff(row("linear").accounts)).toBe(true);
+    expect(serviceOff([])).toBe(false);
+  });
+});
+
+describe("plugin on/off switch", () => {
+  test("the switch asks the server to enable or disable that one account", () => {
+    expect(enabledRequest(account({ id: "a9" }), false)).toEqual({ action: "disable", id: "a9" });
+    expect(enabledRequest(account({ id: "a9", enabled: false }), true)).toEqual({ action: "enable", id: "a9" });
+  });
 });
 
 describe("account status and capability boundaries", () => {
@@ -76,7 +99,9 @@ describe("account status and capability boundaries", () => {
   test("recovery names one action, credential removal first", () => {
     expect(accountRecovery(account({}), "GitHub")).toBeNull();
     expect(accountRecovery(account({ credential_removal_pending: true, enabled: false }), "GitHub")?.action).toBe("disconnect");
-    expect(accountRecovery(account({ enabled: false, status: "error" }), "GitHub")?.action).toBe("enable");
+    // Off is the switch's state, never a fault to fix.
+    expect(accountRecovery(account({ enabled: false, status: "error" }), "GitHub")).toBeNull();
+    expect(accountRecovery(account({ enabled: false, status: "authorization_required" }), "GitHub")).toBeNull();
     expect(accountRecovery(account({ status: "authorization_required" }), "GitHub")?.action).toBe("reconnect");
     expect(accountRecovery(account({ status: "error" }), "GitHub")?.action).toBe("refresh");
   });

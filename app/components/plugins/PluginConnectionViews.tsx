@@ -12,6 +12,7 @@ import {
   accountTone,
   allowedToolCount,
   connectsWithForm,
+  serviceOff,
   type AccountRecoveryAction,
   type PluginCatalogRows,
   type ServiceRow,
@@ -155,6 +156,8 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
   const form = connectsWithForm(plugin.id);
   const names = accounts.map((account) => account.name).join(" · ");
+  // Every account turned off: the row stays open, only quieter.
+  const off = serviceOff(accounts);
   const subtitle = state.kind === "unavailable" ? plugin.unavailable_reason || "Sign-in is not set up yet." : names || plugin.description;
   let trailing: React.ReactNode;
   let label = plugin.name;
@@ -174,7 +177,7 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
   }
   return (
     <ListRow
-      leading={<ServiceGlyph id={plugin.id} />}
+      leading={<View style={off ? styles.muted : undefined}><ServiceGlyph id={plugin.id} /></View>}
       title={plugin.name}
       subtitle={subtitle}
       trailing={trailing}
@@ -379,8 +382,9 @@ export function ConnectOffer({ plugin, job, serverName, connecting, disabled, on
 }
 
 /**
- * One connected account: its state and the one fix if it needs one, what
- * Brain may do, its tools, and Disconnect with a single inline confirm.
+ * One connected account: its state and on/off switch, the one fix if it
+ * needs one, what Brain may do, its tools, and Disconnect with a single
+ * inline confirm.
  */
 export function AccountCard({
   plugin,
@@ -389,6 +393,7 @@ export function AccountCard({
   running,
   onAccess,
   onRecover,
+  onSetEnabled,
   onDisconnect,
   onOpenTools,
   onSetKey,
@@ -401,6 +406,8 @@ export function AccountCard({
   /** An API-key account takes its new key right here instead of a sign-in. */
   onSetKey?(key: string): void;
   onRecover(action: AccountRecoveryAction): void;
+  /** Off hides every tool from Brain and Workers; the sign-in and tool choices stay. */
+  onSetEnabled(on: boolean): void;
   onDisconnect(): Promise<boolean>;
   onOpenTools(): void;
 }) {
@@ -432,8 +439,16 @@ export function AccountCard({
         title={account.name}
         subtitle={[custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${new Date(account.verified_at).toLocaleString()}` : ""].filter(Boolean).join(" · ") || undefined}
         numberOfLines={2}
-        // A fix row below names the state itself; the pill would repeat it.
-        trailing={recovery ? undefined : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
+        disabled={!account.enabled}
+        trailing={
+          <View style={styles.accountControls}>
+            {/* A fix row below names the state itself; the pill would repeat it. */}
+            {recovery ? null : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
+            {running === `enabled:${account.id}` ? <ActivityIndicator /> : (
+              <InkSwitch accessibilityLabel={`${plugin.name} ${account.name} on`} value={account.enabled} disabled={busy} onValueChange={onSetEnabled} />
+            )}
+          </View>
+        }
       />
       {recovery?.action === "reconnect" && account.auth_method === "api_key" && onSetKey ? (
         <>
@@ -498,7 +513,7 @@ export function ToolsView({
           icon="power"
           title="On"
           subtitle="Brain and Workers can use this account."
-          trailing={running === `recover:${account.id}` ? <ActivityIndicator /> : <InkSwitch accessibilityLabel="Account on" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />}
+          trailing={running === `enabled:${account.id}` ? <ActivityIndicator /> : <InkSwitch accessibilityLabel="Account on" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />}
         />
         <ListRow
           icon="pulse"
@@ -602,6 +617,8 @@ const styles = StyleSheet.create({
   serviceCopy: { flex: 1, minWidth: 0, gap: 4 },
   serviceTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   flexShrink: { flexShrink: 1 },
+  muted: { opacity: 0.45 },
+  accountControls: { flexDirection: "row", alignItems: "center", gap: 10 },
   card: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
   cardTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardActions: { gap: 4, paddingTop: 4 },

@@ -1,5 +1,5 @@
 import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
-import { accountStatus, type AccessState, type PluginAccount, type PluginIntegration } from "./connections";
+import { accountStatus, type AccessState, type ConnectionRequest, type PluginAccount, type PluginIntegration } from "./connections";
 
 export type ConnectionTone = "success" | "warning" | "danger" | "neutral" | "accent";
 
@@ -57,9 +57,21 @@ export function serviceState(plugin: PluginIntegration, accounts: readonly Plugi
   if (!accounts.length) return plugin.available ? { kind: "connect" } : { kind: "unavailable", label: "Not yet available" };
   const expired = accounts.find((account) => account.enabled && account.status === "authorization_required");
   if (expired && plugin.available) return { kind: "reconnect", account: expired };
+  // An account that is off reads Off only when every account is off.
+  const on = accounts.filter((account) => account.enabled);
   const rank = (account: PluginAccount) => ({ danger: 0, warning: 1, neutral: 2, accent: 3, success: 4 })[accountTone(account)];
-  const worst = [...accounts].sort((a, b) => rank(a) - rank(b))[0]!;
+  const worst = [...(on.length ? on : accounts)].sort((a, b) => rank(a) - rank(b))[0]!;
   return { kind: "status", label: accountStatus(worst), tone: accountTone(worst) };
+}
+
+/** True when a service has accounts and every one of them is turned off. */
+export function serviceOff(accounts: readonly PluginAccount[]): boolean {
+  return accounts.length > 0 && accounts.every((account) => !account.enabled);
+}
+
+/** The plugin-level switch: off hides every tool from Brain and Workers and keeps the sign-in and tool choices. */
+export function enabledRequest(account: PluginAccount, on: boolean): ConnectionRequest {
+  return { action: on ? "enable" : "disable", id: account.id };
 }
 
 export function accountTone(account: PluginAccount): ConnectionTone {
@@ -103,7 +115,7 @@ export function allowedToolCount(account: PluginAccount): { allowed: number; tot
   return { allowed: tools.filter((tool) => tool.allowed).length, total: tools.length };
 }
 
-export type AccountRecoveryAction = "refresh" | "reconnect" | "enable" | "disconnect";
+export type AccountRecoveryAction = "refresh" | "reconnect" | "disconnect";
 
 export interface AccountRecovery {
   title: string;
@@ -115,15 +127,14 @@ export interface AccountRecovery {
 
 /**
  * The single most useful recovery for an account that is not working.
- * Returns null when the account is connected and enabled.
+ * Returns null when the account is connected, or turned off.
  */
 export function accountRecovery(account: PluginAccount, serviceName: string): AccountRecovery | null {
   if (account.credential_removal_pending) {
     return { title: "Removal didn't finish", detail: "Brain can't use this account. Mewla still has to remove its saved sign-in.", action: "disconnect", actionLabel: "Retry", tone: "danger" };
   }
-  if (!account.enabled) {
-    return { title: "Off", detail: "Brain and Workers can't use this account until you turn it on.", action: "enable", actionLabel: "Turn on", tone: "neutral" };
-  }
+  // Off is a choice, not a fault: the account's own switch turns it back on.
+  if (!account.enabled) return null;
   if (account.status === "authorization_required" && account.auth_method === "api_key") {
     return { title: "Needs an API key", detail: `Enter a ${serviceName} API key. Brain can't run anything billed until then.`, action: "reconnect", actionLabel: "Enter key", tone: "warning" };
   }

@@ -42,6 +42,7 @@ export default function PluginServiceScreen() {
       running={flow.running}
       onAccess={(group, allowed) => flow.setAccess(account, group, allowed)}
       onRecover={(action) => flow.recover(account, action)}
+      onSetEnabled={(on) => flow.setEnabled(account, on)}
       onDisconnect={() => flow.disconnect(account)}
       onSetKey={keyed ? (key) => flow.setKey(account, key) : undefined}
       onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
