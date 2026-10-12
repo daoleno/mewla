@@ -16,7 +16,7 @@ export default function PluginToolsScreen() {
     {account ? <ToolsView
       account={account}
       running={flow.running}
-      onToggleEnabled={(enabled) => void flow.send({ action: enabled ? "enable" : "disable", id: account.id }, `recover:${account.id}`)}
+      onToggleEnabled={(enabled) => flow.setEnabled(account, enabled)}
       onRefresh={() => void flow.send({ action: "refresh", id: account.id }, `recover:${account.id}`)}
       onToggleTool={(tool, allowed) => flow.toggleTool(account, tool, allowed)}
     /> : flow.running === `load:${id}` || !flow.loaded ? <EmptyState busy title="Loading tools" /> : null}

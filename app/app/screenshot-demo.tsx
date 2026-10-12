@@ -1671,6 +1671,7 @@ function PluginsDemo() {
               running={null}
               onAccess={NOOP}
               onRecover={NOOP}
+              onSetEnabled={NOOP}
               onDisconnect={async () => false}
               onOpenTools={NOOP}
             />

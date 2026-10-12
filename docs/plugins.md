@@ -125,6 +125,15 @@ a service on your own network, grant that account an explicit address range;
 cloud metadata and link-local addresses are always refused. Custom services get
 no automatic permissions: after connecting one, choose its tools.
 
+## Turn a plugin off
+
+Each account on a service's page has an on/off switch next to its status. Off
+hides every tool of that account from Brain and Workers: `mewla connections
+search` skips it, and `describe` and `invoke` refuse it. The sign-in, Read and
+search, Make changes and per-tool choices stay as they were, so turning it back
+on restores the same tools. Extensions shows the service as **Off** when every
+account on it is off.
+
 ## Disconnect
 
 On the service's page, tap **Disconnect** on the account and confirm on the same
