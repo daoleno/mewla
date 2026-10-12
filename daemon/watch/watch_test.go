@@ -427,31 +427,58 @@ func TestRuntimeCollectorFollowsRotationAndFlagsRepeats(t *testing.T) {
 	}
 }
 
+type fakeResponse struct {
+	Status int
+	Body   []byte
+}
+
 type fakeExternal struct {
-	responses map[string]connections.WatchResponse
+	responses map[string]fakeResponse
 	linear    map[string]string
+	accounts  map[string][]connections.ReadAccount
 	calls     []string
 }
 
-func (f *fakeExternal) WatchAccounts(integration string) []connections.Account {
-	return []connections.Account{{ID: integration + "-1", Name: integration + " account", Integration: integration}}
+var githubToolPaths = map[string]string{
+	"get_repository": "", "list_workflow_runs": "/actions/runs", "list_updated_issues": "/issues",
+	"list_dependabot_alerts": "/dependabot/alerts", "list_code_scanning_alerts": "/code-scanning/alerts",
 }
 
-func (f *fakeExternal) WatchGitHub(_ context.Context, _ string, path string, _ url.Values) (connections.WatchResponse, error) {
-	f.calls = append(f.calls, path)
-	response, ok := f.responses[path]
+func allReads(tools ...string) map[string]bool {
+	reads := map[string]bool{}
+	for _, tool := range tools {
+		reads[tool] = true
+	}
+	return reads
+}
+
+func (f *fakeExternal) ReadAccounts(integration string) []connections.ReadAccount {
+	if accounts, ok := f.accounts[integration]; ok {
+		return accounts
+	}
+	reads := allReads("list_teams", "list_issues", "list_comments")
+	if integration == "github" {
+		reads = allReads("get_repository", "list_workflow_runs", "list_updated_issues", "list_dependabot_alerts", "list_code_scanning_alerts")
+	}
+	return []connections.ReadAccount{{ID: integration + "-1", Name: integration + " account", Integration: integration, Enabled: true, Reads: reads}}
+}
+
+func (f *fakeExternal) ReadTool(_ context.Context, accountID, tool string, args map[string]any) (connections.ReadResult, error) {
+	if strings.HasPrefix(accountID, "linear") {
+		f.calls = append(f.calls, "linear:"+tool)
+		return connections.ReadResult{Body: []byte(f.linear[tool]), RateRemaining: -1}, nil
+	}
+	path := args["path"].(map[string]any)
+	key := "/repos/" + path["owner"].(string) + "/" + path["repo"].(string) + githubToolPaths[tool]
+	f.calls = append(f.calls, key)
+	response, ok := f.responses[key]
 	if !ok {
-		return connections.WatchResponse{Status: 404, RateRemaining: -1}, fmt.Errorf("GitHub returned HTTP 404")
+		return connections.ReadResult{RateRemaining: -1}, connections.StatusError{Status: 404}
 	}
 	if response.Status >= 300 {
-		return response, fmt.Errorf("GitHub returned HTTP %d", response.Status)
+		return connections.ReadResult{RateRemaining: 4000}, connections.StatusError{Status: response.Status}
 	}
-	return response, nil
-}
-
-func (f *fakeExternal) WatchLinear(_ context.Context, _ string, tool string, args map[string]any) ([]byte, error) {
-	f.calls = append(f.calls, "linear:"+tool)
-	return []byte(f.linear[tool]), nil
+	return connections.ReadResult{Body: response.Body, RateRemaining: 4000}, nil
 }
 
 func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
@@ -469,14 +496,14 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	}
 	body := func(value any) []byte { raw, _ := json.Marshal(value); return raw }
 	external := &fakeExternal{
-		responses: map[string]connections.WatchResponse{
-			"/repos/acme/perpetuo":              {Status: 200, RateRemaining: 4000, Body: body(map[string]any{"default_branch": "main"})},
-			"/repos/acme/perpetuo/actions/runs": {Status: 200, RateRemaining: 4000, Body: body(map[string]any{"workflow_runs": []any{run(1, "success", 5*time.Hour), run(2, "failure", 3*time.Hour), run(3, "failure", time.Hour)}})},
-			"/repos/acme/perpetuo/issues": {Status: 200, RateRemaining: 4000, Body: body([]any{
+		responses: map[string]fakeResponse{
+			"/repos/acme/perpetuo":              {Status: 200, Body: body(map[string]any{"default_branch": "main"})},
+			"/repos/acme/perpetuo/actions/runs": {Status: 200, Body: body(map[string]any{"workflow_runs": []any{run(1, "success", 5*time.Hour), run(2, "failure", 3*time.Hour), run(3, "failure", time.Hour)}})},
+			"/repos/acme/perpetuo/issues": {Status: 200, Body: body([]any{
 				map[string]any{"number": 7, "title": "Login broken", "body": "steps…", "updated_at": now.Add(-time.Hour).Format(time.RFC3339), "user": map[string]any{"login": "teammate"}},
 				map[string]any{"number": 8, "title": "Add invoices", "updated_at": now.Add(-time.Hour).Format(time.RFC3339), "pull_request": map[string]any{}},
 			})},
-			"/repos/acme/perpetuo/dependabot/alerts": {Status: 403, RateRemaining: 4000},
+			"/repos/acme/perpetuo/dependabot/alerts": {Status: 403},
 		},
 		linear: map[string]string{"list_teams": `{"teams":[{"id":"t1","key":"PER","name":"Perpetuo"},{"id":"t2","key":"OPS","name":"Operations"}]}`},
 	}
@@ -503,7 +530,7 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	}
 
 	// CI goes green: the problem becomes inactive.
-	external.responses["/repos/acme/perpetuo/actions/runs"] = connections.WatchResponse{Status: 200, RateRemaining: 4000,
+	external.responses["/repos/acme/perpetuo/actions/runs"] = fakeResponse{Status: 200,
 		Body: body(map[string]any{"workflow_runs": []any{run(3, "failure", time.Hour), run(4, "success", time.Minute)}})}
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || problems[0].Active {
@@ -517,7 +544,8 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	if _, err := collector.Handle(context.Background(), Request{Action: "link_linear", ProjectID: project.ID, TeamKey: "per"}); err != nil {
 		t.Fatal(err)
 	}
-	external.linear["list_issues"] = `[{"id":"i1","identifier":"PER-12","title":"Invoice totals wrong","url":"https://linear.app/x/issue/PER-12","updatedAt":"` + now.Add(-time.Hour).Format(time.RFC3339) + `"}]`
+	// Linear's list_issues returns the identifier as id and names for status and project.
+	external.linear["list_issues"] = `{"issues":[{"id":"PER-12","uuid":"u1","title":"Invoice totals wrong","url":"https://linear.app/x/issue/PER-12","status":"Backlog","project":"Elsewhere","updatedAt":"` + now.Add(-time.Hour).Format(time.RFC3339) + `"}],"hasNextPage":false}`
 	external.linear["list_comments"] = `{"comments":[{"id":"c1","body":"Still broken for EUR","updatedAt":"` + now.Add(-30*time.Minute).Format(time.RFC3339) + `"}]}`
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	if got := store.Signals(Filter{Kind: kindLinearIssue}); len(got) != 1 || got[0].ProjectID != project.ID {
@@ -594,14 +622,14 @@ func TestCIRedIsJudgedPerWorkflowAndSurvivesOutOfOrderRuns(t *testing.T) {
 		return map[string]any{"id": id, "name": name, "head_branch": "main", "status": "completed",
 			"conclusion": conclusion, "run_attempt": 1, "updated_at": now.Add(-ago).Format(time.RFC3339)}
 	}
-	runs := func(items ...any) connections.WatchResponse {
+	runs := func(items ...any) fakeResponse {
 		raw, _ := json.Marshal(map[string]any{"workflow_runs": items})
-		return connections.WatchResponse{Status: 200, RateRemaining: 4000, Body: raw}
+		return fakeResponse{Status: 200, Body: raw}
 	}
 	repoMeta, _ := json.Marshal(map[string]any{"default_branch": "main"})
-	external := &fakeExternal{responses: map[string]connections.WatchResponse{
-		"/repos/acme/zeta":              {Status: 200, RateRemaining: 4000, Body: repoMeta},
-		"/repos/acme/zeta/issues":       {Status: 200, RateRemaining: 4000, Body: []byte("[]")},
+	external := &fakeExternal{responses: map[string]fakeResponse{
+		"/repos/acme/zeta":              {Status: 200, Body: repoMeta},
+		"/repos/acme/zeta/issues":       {Status: 200, Body: []byte("[]")},
 		"/repos/acme/zeta/actions/runs": runs(run(10, "CI", "success", 3*time.Hour), run(11, "Pages", "success", 3*time.Hour)),
 	}, linear: map[string]string{}}
 	collector.external = external
@@ -626,5 +654,78 @@ func TestCIRedIsJudgedPerWorkflowAndSurvivesOutOfOrderRuns(t *testing.T) {
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || problems[0].Active {
 		t.Fatalf("after CI recovers: %+v", problems)
+	}
+}
+
+func TestExternalCoverageFollowsThePluginSwitchAndGrants(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "theta")
+	gitRepo(t, repo, "git@github.com:acme/theta.git")
+	collector, store := newTestCollector(t, home)
+	if _, ok := store.ProjectForCWD(repo, time.Now()); !ok {
+		t.Fatal("no project")
+	}
+	now := time.Now().UTC()
+	meta, _ := json.Marshal(map[string]any{"default_branch": "main"})
+	runs, _ := json.Marshal(map[string]any{"workflow_runs": []any{map[string]any{"id": 5, "name": "CI", "head_branch": "main",
+		"status": "completed", "conclusion": "failure", "run_attempt": 1, "updated_at": now.Add(-time.Hour).Format(time.RFC3339)}}})
+	external := &fakeExternal{responses: map[string]fakeResponse{
+		"/repos/acme/theta":              {Status: 200, Body: meta},
+		"/repos/acme/theta/actions/runs": {Status: 200, Body: runs},
+		"/repos/acme/theta/issues":       {Status: 200, Body: []byte("[]")},
+	}, linear: map[string]string{}, accounts: map[string][]connections.ReadAccount{"linear": nil}}
+	collector.external = external
+	coverage := func() *GitHub {
+		t.Helper()
+		project := store.Projects()[0]
+		if project.GitHub == nil {
+			t.Fatal("no GitHub coverage recorded")
+		}
+		return project.GitHub
+	}
+	collect := func() int {
+		return collector.Collect(context.Background(), []string{SourceExternal}, true).Added[SourceExternal]
+	}
+
+	external.accounts["github"] = nil
+	if added := collect(); added != 0 || coverage().Coverage != CoverageNotConnected {
+		t.Fatalf("no account: added %d, %+v", added, coverage())
+	}
+	off := connections.ReadAccount{ID: "gh-1", Name: "work", Enabled: false, Reads: allReads("get_repository", "list_workflow_runs")}
+	external.accounts["github"] = []connections.ReadAccount{off}
+	if added := collect(); added != 0 || coverage().Coverage != CoverageDisabled {
+		t.Fatalf("switched off: added %d, %+v", added, coverage())
+	}
+	on := off
+	on.Enabled, on.Reads = true, allReads("list_workflow_runs")
+	external.accounts["github"] = []connections.ReadAccount{on}
+	if added := collect(); added != 0 || coverage().Coverage != CoverageNotAllowed {
+		t.Fatalf("repository read not allowed: added %d, %+v", added, coverage())
+	}
+	on.Reads = allReads("get_repository", "list_updated_issues")
+	external.accounts["github"] = []connections.ReadAccount{on}
+	if added := collect(); added != 0 || coverage().Coverage != CoverageCollecting || coverage().Endpoints["actions"] != "not allowed (list_workflow_runs)" {
+		t.Fatalf("CI read not allowed: added %d, %+v", added, coverage())
+	}
+	on.Reads = allReads("get_repository", "list_updated_issues", "list_workflow_runs")
+	external.accounts["github"] = []connections.ReadAccount{on}
+	if added := collect(); added != 1 {
+		t.Fatalf("allowed: added %d, %+v", added, coverage())
+	}
+	// Switching the plugin off stops reads; switching it back adds nothing twice.
+	external.accounts["github"] = []connections.ReadAccount{off}
+	external.calls = nil
+	if added := collect(); added != 0 || len(external.calls) != 0 || coverage().Coverage != CoverageDisabled {
+		t.Fatalf("switched off again: added %d, calls %v", added, external.calls)
+	}
+	external.accounts["github"] = []connections.ReadAccount{on}
+	if added := collect(); added != 0 || coverage().Coverage != CoverageCollecting {
+		t.Fatalf("switched back on: added %d, %+v", added, coverage())
+	}
+	// A repository no account can read says why.
+	delete(external.responses, "/repos/acme/theta")
+	_, _ = store.UpdateProject(store.Projects()[0].ID, func(p *Project) error { p.GitHub.CheckedAt = time.Time{}; return nil })
+	if collect(); coverage().Coverage != CoverageUnreachable || !strings.Contains(coverage().Reason, "HTTP 404") {
+		t.Fatalf("unreachable: %+v", coverage())
 	}
 }

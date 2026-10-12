@@ -14,7 +14,8 @@ const (
 	SourceExternal = "external"
 )
 
-// Problem statuses. Step 1 only creates "new"; later steps move them.
+// Problem statuses. Rules create "new"; judgment marks problems fixed or
+// recurred; the user's label confirms or dismisses them.
 const (
 	StatusNew       = "new"
 	StatusConfirmed = "confirmed"
@@ -22,6 +23,27 @@ const (
 	StatusWatching  = "watching"
 	StatusFixed     = "fixed"
 	StatusRecurred  = "recurred"
+	StatusDismissed = "dismissed"
+)
+
+// User labels on a problem.
+const (
+	LabelReal  = "real"
+	LabelNot   = "not"
+	LabelLater = "later"
+)
+
+// Judged authors of an ambiguous user message in a Worker session.
+const (
+	AuthorHuman   = "human"
+	AuthorBrain   = "brain_followup"
+	AuthorRoutine = "routine"
+)
+
+// How an unplaced signal got its project after collection.
+const (
+	PlacedByIndex    = "index"
+	PlacedByJudgment = "judgment"
 )
 
 // Project is one repository root, inferred from Work and Session working
@@ -54,12 +76,19 @@ type GitHub struct {
 	Branch    string            `json:"default_branch,omitempty"`
 	Endpoints map[string]string `json:"endpoints,omitempty"` // endpoint -> "ok" or the failure
 	CheckedAt time.Time         `json:"checked_at,omitzero"`
+	// Coverage says whether Watch collects from the repository (collecting,
+	// not_connected, disabled, not_allowed, unreachable); Reason says why not.
+	Coverage string `json:"coverage,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 // Linear holds suggested team mappings and the one the user confirmed.
 type Linear struct {
 	Suggested []LinearTeam `json:"suggested,omitempty"`
 	Confirmed *LinearTeam  `json:"confirmed,omitempty"`
+	// Coverage and Reason report the confirmed team's collection, as for GitHub.
+	Coverage string `json:"coverage,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 // LinearTeam is one Linear team reachable through a connected account.
@@ -83,10 +112,30 @@ type Signal struct {
 	Refs        map[string]string `json:"refs,omitempty"`
 	Pointer     string            `json:"pointer,omitempty"`
 	CollectedAt time.Time         `json:"collected_at"`
+
+	// Set from the annotation overlay, never written to the signal log.
+	PlacedBy     string `json:"placed_by,omitempty"`
+	PlaceReason  string `json:"place_reason,omitempty"`
+	Author       string `json:"judged_author,omitempty"`
+	AuthorReason string `json:"author_reason,omitempty"`
 }
 
-// Problem is a provisional record raised by a rule. Its ID is stable for the
-// rule and subject, so re-evaluation updates the same record.
+// Annotation is what Watch learned about a signal after collecting it: a
+// project for an unplaced signal, a judged author, and whether judgment has
+// seen it. Annotations live beside the append-only signal log.
+type Annotation struct {
+	ProjectID    string `json:"project_id,omitempty"`
+	PlacedBy     string `json:"placed_by,omitempty"`
+	PlaceReason  string `json:"place_reason,omitempty"`
+	Author       string `json:"author,omitempty"`
+	AuthorReason string `json:"author_reason,omitempty"`
+	// Run is the judgment run that saw the signal; empty until judged.
+	Run string `json:"run,omitempty"`
+}
+
+// Problem is raised by a rule or by judgment. A rule problem's ID is stable
+// for the rule and subject, so re-evaluation updates the same record; a
+// judged problem keeps its ID as later runs add evidence.
 type Problem struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"project_id,omitempty"`
@@ -102,6 +151,31 @@ type Problem struct {
 	FirstSeen time.Time `json:"first_seen"`
 	LastSeen  time.Time `json:"last_seen"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// Judgment fields.
+	Reason      string   `json:"reason,omitempty"`
+	Cost        *Cost    `json:"cost,omitempty"`
+	Sources     []string `json:"sources,omitempty"`
+	MergedFrom  []string `json:"merged_from,omitempty"`
+	MergedInto  string   `json:"merged_into,omitempty"`
+	FixedReason string   `json:"fixed_reason,omitempty"`
+	Run         string   `json:"run,omitempty"`
+	Label       *Label   `json:"label,omitempty"`
+}
+
+// Cost estimates what a problem costs: the user's attention (corrections,
+// waiting, chasing) or impact on the project. Score ranks problems, 1–100.
+type Cost struct {
+	Score    int    `json:"score"`
+	Kind     string `json:"kind"`
+	Estimate string `json:"estimate"`
+}
+
+// Label is the user's verdict on a problem.
+type Label struct {
+	Value string    `json:"value"`
+	Note  string    `json:"note,omitempty"`
+	At    time.Time `json:"at"`
 }
 
 // Config is the user's Watch setting. Collection runs regardless; Enabled

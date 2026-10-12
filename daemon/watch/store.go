@@ -34,6 +34,9 @@ type Store struct {
 	problems  map[string]*Problem
 	index     placeIndex
 	dirtyMeta bool
+
+	byID        map[string]int // signal ID -> position in signals
+	annotations map[string]Annotation
 }
 
 // placeIndex remembers where turns, Sessions and Work ran.
@@ -67,6 +70,9 @@ func OpenStore(dir string) (*Store, error) {
 		cursors:  map[string]json.RawMessage{},
 		problems: map[string]*Problem{},
 		index:    placeIndex{Turns: map[string]string{}, Sessions: map[string]string{}, Works: map[string]string{}},
+
+		byID:        map[string]int{},
+		annotations: map[string]Annotation{},
 	}
 	if err := readJSON(filepath.Join(dir, configFile), &s.config); err != nil {
 		return nil, err
@@ -104,6 +110,15 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	if err := s.loadSignals(); err != nil {
 		return nil, err
+	}
+	if err := readJSON(filepath.Join(dir, annotationsFile), &s.annotations); err != nil {
+		return nil, err
+	}
+	if s.annotations == nil {
+		s.annotations = map[string]Annotation{}
+	}
+	for id, annotation := range s.annotations {
+		s.applyAnnotationLocked(id, annotation)
 	}
 	return s, nil
 }
@@ -149,6 +164,7 @@ func (s *Store) loadSignals() error {
 			if json.Unmarshal(line, &signal) == nil && signal.ID != "" {
 				if _, dup := s.seen[signal.ID]; !dup {
 					s.seen[signal.ID] = struct{}{}
+					s.byID[signal.ID] = len(s.signals)
 					s.signals = append(s.signals, signal)
 				}
 			}
@@ -343,7 +359,10 @@ func (s *Store) Append(signals []Signal) (int, error) {
 		}
 		return 0, err
 	}
-	s.signals = append(s.signals, added...)
+	for _, signal := range added {
+		s.byID[signal.ID] = len(s.signals)
+		s.signals = append(s.signals, signal)
+	}
 	for _, signal := range added {
 		if signal.ProjectID != "" {
 			s.touchLocked(signal.ProjectID, signal.Time)
@@ -465,13 +484,14 @@ func (s *Store) Problems(filter Filter) []Problem {
 		if filter.Kind != "" && filter.Kind != problem.Rule {
 			continue
 		}
-		copied := *problem
-		copied.Evidence = append([]string(nil), problem.Evidence...)
-		out = append(out, copied)
+		out = append(out, cloneProblem(problem))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Active != out[j].Active {
 			return out[i].Active
+		}
+		if left, right := costScore(out[i]), costScore(out[j]); left != right {
+			return left > right
 		}
 		if !out[i].LastSeen.Equal(out[j].LastSeen) {
 			return out[i].LastSeen.After(out[j].LastSeen)
@@ -482,6 +502,29 @@ func (s *Store) Problems(filter Filter) []Problem {
 		out = out[:filter.Limit]
 	}
 	return out
+}
+
+func cloneProblem(problem *Problem) Problem {
+	copied := *problem
+	copied.Evidence = append([]string(nil), problem.Evidence...)
+	copied.Sources = append([]string(nil), problem.Sources...)
+	copied.MergedFrom = append([]string(nil), problem.MergedFrom...)
+	if problem.Cost != nil {
+		cost := *problem.Cost
+		copied.Cost = &cost
+	}
+	if problem.Label != nil {
+		label := *problem.Label
+		copied.Label = &label
+	}
+	return copied
+}
+
+func costScore(problem Problem) int {
+	if problem.Cost == nil {
+		return 0
+	}
+	return problem.Cost.Score
 }
 
 // RecordProblems merges rule results into the registry. A problem keeps its
@@ -527,12 +570,7 @@ func (s *Store) RecordProblems(rule string, flagged []Problem) (int, error) {
 	if changed == 0 {
 		return 0, nil
 	}
-	list := make([]*Problem, 0, len(s.problems))
-	for _, problem := range s.problems {
-		list = append(list, problem)
-	}
-	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
-	return changed, writeJSON(filepath.Join(s.dir, problemsFile), list)
+	return changed, s.saveProblemsLocked()
 }
 
 // Flush saves projects and the place index when they changed.

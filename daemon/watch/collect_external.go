@@ -3,8 +3,8 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -30,12 +30,22 @@ const (
 	githubRateFloor = 100
 )
 
-// ExternalReader is the read-only Plugin boundary Watch uses.
+// ExternalReader is the Plugin boundary Watch reads through. Reads honor the
+// account switch and the person's per-tool grants, exactly as Brain's calls do.
 type ExternalReader interface {
-	WatchAccounts(integration string) []connections.Account
-	WatchGitHub(ctx context.Context, accountID, path string, query url.Values) (connections.WatchResponse, error)
-	WatchLinear(ctx context.Context, accountID, tool string, args map[string]any) ([]byte, error)
+	ReadAccounts(integration string) []connections.ReadAccount
+	ReadTool(ctx context.Context, accountID, tool string, args map[string]any) (connections.ReadResult, error)
 }
+
+// Coverage states for a project's external source; see Coverage.
+const (
+	CoverageCollecting   = "collecting"
+	CoverageNotConnected = "not_connected"
+	CoverageDisabled     = "disabled"
+	CoverageNotAllowed   = "not_allowed"
+	CoverageUnreachable  = "unreachable"
+	CoverageUnlinked     = "unlinked"
+)
 
 type githubCursor struct {
 	Since       time.Time `json:"since"`
@@ -110,78 +120,143 @@ func (c *Collector) collectExternal(ctx context.Context) (int, error) {
 }
 
 func (c *Collector) collectGitHub(ctx context.Context) (int, error) {
-	accounts := c.external.WatchAccounts("github")
+	accounts := c.external.ReadAccounts("github")
 	since := c.horizon()
 	hostName := sshHostNames(c.home)
 	total := 0
 	for _, project := range c.store.Projects() {
-		if ctx.Err() != nil || time.Now().Before(c.githubPausedUntil) {
+		if ctx.Err() != nil || c.now().Before(c.githubPausedUntil) {
 			break
 		}
 		owner, repo, ok := githubRemoteSlug(project.Remotes, hostName)
 		if !ok || project.LastSeen.Before(since) {
 			continue
 		}
-		link, err := c.githubLink(ctx, project, owner, repo, accounts)
-		if err != nil || link.AccountID == "" {
-			continue
+		link, reads := c.githubLink(ctx, project, owner, repo, accounts)
+		if link.Coverage == CoverageCollecting {
+			added, err := c.collectGitHubProject(ctx, project.ID, &link, reads)
+			total += added
+			c.noteError("external:github:"+project.Name, err)
 		}
-		added, err := c.collectGitHubProject(ctx, project.ID, link)
-		total += added
-		c.noteError("external:github:"+project.Name, err)
+		if _, err := c.store.UpdateProject(project.ID, func(p *Project) error {
+			p.GitHub = &link
+			return nil
+		}); err != nil {
+			return total, err
+		}
 	}
 	return total, nil
 }
 
-// githubLink finds and records the connected account that can read the
-// repository, rechecking once a day.
-func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo string, accounts []connections.Account) (GitHub, error) {
-	if link := project.GitHub; link != nil && link.Owner == owner && link.Repo == repo &&
-		time.Since(link.CheckedAt) < githubRecheck {
-		return *link, nil
+// githubLink decides, every pass, whether and through which account the
+// project's repository is read, and records why when it is not. A working
+// account is kept while it stays switched on and allowed, rechecked daily.
+func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo string, accounts []connections.ReadAccount) (GitHub, map[string]bool) {
+	link := GitHub{Owner: owner, Repo: repo, Endpoints: map[string]string{}}
+	if previous := project.GitHub; previous != nil && previous.Owner == owner && previous.Repo == repo {
+		link.AccountID, link.Branch, link.CheckedAt = previous.AccountID, previous.Branch, previous.CheckedAt
 	}
-	link := GitHub{Owner: owner, Repo: repo, Endpoints: map[string]string{}, CheckedAt: time.Now().UTC()}
-	if len(accounts) == 0 {
-		link.Endpoints["repo"] = "no connected GitHub account"
-	}
-	var failures []string
+	var usable []connections.ReadAccount
 	for _, account := range accounts {
-		response, err := c.external.WatchGitHub(ctx, account.ID, "/repos/"+owner+"/"+repo, nil)
-		c.noteRate(response)
+		if account.Enabled {
+			usable = append(usable, account)
+		}
+	}
+	switch {
+	case len(accounts) == 0:
+		link.AccountID, link.Coverage, link.Reason = "", CoverageNotConnected, "no GitHub plugin is connected"
+		return link, nil
+	case len(usable) == 0:
+		link.AccountID, link.Coverage, link.Reason = "", CoverageDisabled, "the GitHub plugin is switched off"
+		return link, nil
+	}
+	if link.AccountID != "" && c.now().Sub(link.CheckedAt) < githubRecheck {
+		for _, account := range usable {
+			if account.ID == link.AccountID && account.Reads["get_repository"] {
+				link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
+				return link, account.Reads
+			}
+		}
+	}
+	link.AccountID, link.Branch, link.CheckedAt = "", "", c.now()
+	var failures []string
+	allowed := false
+	for _, account := range usable {
+		if !account.Reads["get_repository"] {
+			failures = append(failures, account.Name+": get_repository is not allowed")
+			continue
+		}
+		allowed = true
+		result, err := c.external.ReadTool(ctx, account.ID, "get_repository", githubArgs(owner, repo, nil))
+		c.noteRate(result)
 		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %s", account.Name, statusText(response.Status, err)))
-			link.Endpoints["repo"] = strings.Join(failures, "; ")
+			failures = append(failures, account.Name+": "+readFailure(err))
 			continue
 		}
 		var meta struct {
 			DefaultBranch string `json:"default_branch"`
 		}
-		_ = json.Unmarshal(response.Body, &meta)
+		_ = json.Unmarshal(result.Body, &meta)
 		link.AccountID, link.Branch = account.ID, meta.DefaultBranch
-		link.Endpoints["repo"] = "ok via " + account.Name
-		break
+		link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
+		return link, account.Reads
 	}
-	_, err := c.store.UpdateProject(project.ID, func(p *Project) error {
-		p.GitHub = &link
-		return nil
-	})
-	return link, err
+	link.Coverage = CoverageUnreachable
+	if !allowed {
+		link.Coverage = CoverageNotAllowed
+	}
+	link.Reason = strings.Join(failures, "; ")
+	return link, nil
 }
 
-func statusText(status int, err error) string {
-	if status > 0 {
-		return "HTTP " + strconv.Itoa(status)
+func githubArgs(owner, repo string, query map[string]any) map[string]any {
+	args := map[string]any{"path": map[string]any{"owner": owner, "repo": repo}}
+	if len(query) > 0 {
+		args["query"] = query
+	}
+	return args
+}
+
+// readFailure says briefly why a read did not happen.
+func readFailure(err error) string {
+	var status connections.StatusError
+	switch {
+	case errors.As(err, &status):
+		return "HTTP " + strconv.Itoa(status.Status)
+	case errors.Is(err, connections.ErrReadNotAllowed):
+		return "not allowed"
+	case errors.Is(err, connections.ErrAccountOff):
+		return "switched off"
 	}
 	return err.Error()
 }
 
-func (c *Collector) noteRate(response connections.WatchResponse) {
-	if response.RateRemaining >= 0 && response.RateRemaining < githubRateFloor && !response.RateReset.IsZero() {
-		c.githubPausedUntil = response.RateReset
+func (c *Collector) noteRate(result connections.ReadResult) {
+	if result.RateRemaining >= 0 && result.RateRemaining < githubRateFloor && !result.RateReset.IsZero() {
+		c.githubPausedUntil = result.RateReset
 	}
 }
 
-func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, link GitHub) (int, error) {
+// readGitHub runs one read for the project and records the endpoint's state.
+// answered is true when the service gave a definite answer (data or a
+// refusal), so a cursor may move past it.
+func (c *Collector) readGitHub(ctx context.Context, link *GitHub, reads map[string]bool, endpoint, tool string, query map[string]any) (body []byte, answered bool) {
+	if !reads[tool] {
+		link.Endpoints[endpoint] = "not allowed (" + tool + ")"
+		return nil, false
+	}
+	result, err := c.external.ReadTool(ctx, link.AccountID, tool, githubArgs(link.Owner, link.Repo, query))
+	c.noteRate(result)
+	if err != nil {
+		link.Endpoints[endpoint] = readFailure(err)
+		var status connections.StatusError
+		return nil, errors.As(err, &status)
+	}
+	link.Endpoints[endpoint] = "ok"
+	return result.Body, true
+}
+
+func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, link *GitHub, reads map[string]bool) (int, error) {
 	key := "external:github:" + projectID
 	var cursor githubCursor
 	c.store.Cursor(key, &cursor)
@@ -192,14 +267,14 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	if cursor.AlertsSince.Before(horizon) {
 		cursor.AlertsSince = horizon
 	}
-	base := "/repos/" + link.Owner + "/" + link.Repo
+	slug := link.Owner + "/" + link.Repo
 	refs := func(extra map[string]string) map[string]string {
-		extra["repo"] = link.Owner + "/" + link.Repo
+		extra["repo"] = slug
 		return extra
 	}
-	endpoints := map[string]string{}
 	var signals []Signal
-	pollStarted := time.Now().UTC()
+	var body []byte
+	pollStarted := c.now()
 
 	// Default-branch CI: each failed run, and each workflow's first pass
 	// after it failed.
@@ -207,15 +282,13 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 		if cursor.Failing == nil {
 			cursor.Failing = map[string]bool{}
 		}
-		query := url.Values{"branch": {link.Branch}, "status": {"completed"}, "per_page": {"50"}}
-		response, err := c.external.WatchGitHub(ctx, link.AccountID, base+"/actions/runs", query)
-		c.noteRate(response)
-		endpoints["actions"] = endpointState(response, err)
-		if err == nil {
+		body, _ = c.readGitHub(ctx, link, reads, "actions", "list_workflow_runs",
+			map[string]any{"branch": link.Branch, "status": "completed", "per_page": 50})
+		if body != nil {
 			var page struct {
 				Runs []githubRun `json:"workflow_runs"`
 			}
-			_ = json.Unmarshal(response.Body, &page)
+			_ = json.Unmarshal(body, &page)
 			sort.Slice(page.Runs, func(i, j int) bool { return page.Runs[i].UpdatedAt.Before(page.Runs[j].UpdatedAt) })
 			readFrom := cursor.RunsSince.Add(-runOverlap)
 			for _, run := range page.Runs {
@@ -239,7 +312,7 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 					continue
 				}
 				signals = append(signals, Signal{
-					ID:     signalID(SourceExternal, "github-run|"+link.Owner+"/"+link.Repo+"|"+strconv.FormatInt(run.ID, 10)+"|"+strconv.Itoa(run.RunAttempt)),
+					ID:     signalID(SourceExternal, "github-run|"+slug+"|"+strconv.FormatInt(run.ID, 10)+"|"+strconv.Itoa(run.RunAttempt)),
 					Source: SourceExternal, ProjectID: projectID, Time: run.UpdatedAt, Kind: kind,
 					Excerpt: excerpt(summary, 300),
 					Refs: refs(map[string]string{
@@ -253,22 +326,19 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	}
 
 	// Open issues and pull requests with activity since the cursor.
-	query := url.Values{"state": {"open"}, "sort": {"updated"}, "direction": {"desc"}, "per_page": {"50"},
-		"since": {cursor.Since.Format(time.RFC3339)}}
-	response, err := c.external.WatchGitHub(ctx, link.AccountID, base+"/issues", query)
-	c.noteRate(response)
-	endpoints["issues"] = endpointState(response, err)
-	issuesRead := err == nil
+	body, _ = c.readGitHub(ctx, link, reads, "issues", "list_updated_issues", map[string]any{
+		"state": "open", "sort": "updated", "direction": "desc", "per_page": 50, "since": cursor.Since.Format(time.RFC3339)})
+	issuesRead := body != nil
 	if issuesRead {
 		var issues []githubIssue
-		_ = json.Unmarshal(response.Body, &issues)
+		_ = json.Unmarshal(body, &issues)
 		for _, issue := range issues {
 			kind := kindIssueActivity
 			if issue.PullRequest != nil {
 				kind = kindPRActivity
 			}
 			signals = append(signals, Signal{
-				ID:     signalID(SourceExternal, "github-issue|"+link.Owner+"/"+link.Repo+"|"+strconv.Itoa(issue.Number)+"|"+issue.UpdatedAt.Format(time.RFC3339)),
+				ID:     signalID(SourceExternal, "github-issue|"+slug+"|"+strconv.Itoa(issue.Number)+"|"+issue.UpdatedAt.Format(time.RFC3339)),
 				Source: SourceExternal, ProjectID: projectID, Time: issue.UpdatedAt, Kind: kind,
 				Excerpt: excerpt(fmt.Sprintf("#%d %s — %s", issue.Number, issue.Title, issue.Body), 400),
 				Refs: refs(map[string]string{"number": strconv.Itoa(issue.Number), "author": issue.User.Login,
@@ -280,17 +350,16 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 
 	// Security alerts, where the account's grant allows reading them.
 	alertsRead := true
-	for _, endpoint := range []string{"dependabot", "code-scanning"} {
-		response, err := c.external.WatchGitHub(ctx, link.AccountID, base+"/"+endpoint+"/alerts",
-			url.Values{"state": {"open"}, "per_page": {"50"}})
-		c.noteRate(response)
-		endpoints[endpoint] = endpointState(response, err)
-		if err != nil {
-			alertsRead = alertsRead && response.Status != 0
+	for _, alertKind := range []struct{ endpoint, tool string }{
+		{"dependabot", "list_dependabot_alerts"}, {"code-scanning", "list_code_scanning_alerts"},
+	} {
+		body, answered := c.readGitHub(ctx, link, reads, alertKind.endpoint, alertKind.tool, map[string]any{"state": "open", "per_page": 50})
+		alertsRead = alertsRead && answered
+		if body == nil {
 			continue
 		}
 		var alerts []githubAlert
-		_ = json.Unmarshal(response.Body, &alerts)
+		_ = json.Unmarshal(body, &alerts)
 		for _, alert := range alerts {
 			if alert.UpdatedAt.Before(cursor.AlertsSince) {
 				continue
@@ -298,10 +367,10 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 			summary := firstNonEmpty(alert.SecurityAdvisory.Summary, alert.Rule.Description)
 			severity := firstNonEmpty(alert.SecurityAdvisory.Severity, alert.Rule.Severity)
 			signals = append(signals, Signal{
-				ID:     signalID(SourceExternal, "github-alert|"+endpoint+"|"+link.Owner+"/"+link.Repo+"|"+strconv.Itoa(alert.Number)+"|"+alert.UpdatedAt.Format(time.RFC3339)),
+				ID:     signalID(SourceExternal, "github-alert|"+alertKind.endpoint+"|"+slug+"|"+strconv.Itoa(alert.Number)+"|"+alert.UpdatedAt.Format(time.RFC3339)),
 				Source: SourceExternal, ProjectID: projectID, Time: alert.UpdatedAt, Kind: kindSecurityAlert,
-				Excerpt: excerpt(fmt.Sprintf("%s alert #%d (%s): %s %s", endpoint, alert.Number, severity, alert.Dependency.Package.Name, summary), 300),
-				Refs:    refs(map[string]string{"alert": strconv.Itoa(alert.Number), "kind": endpoint, "severity": severity, "url": alert.HTMLURL}),
+				Excerpt: excerpt(fmt.Sprintf("%s alert #%d (%s): %s %s", alertKind.endpoint, alert.Number, severity, alert.Dependency.Package.Name, summary), 300),
+				Refs:    refs(map[string]string{"alert": strconv.Itoa(alert.Number), "kind": alertKind.endpoint, "severity": severity, "url": alert.HTMLURL}),
 				Pointer: alert.HTMLURL,
 			})
 		}
@@ -317,22 +386,7 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	if alertsRead {
 		cursor.AlertsSince = pollStarted.Add(-time.Minute)
 	}
-	_, _ = c.store.UpdateProject(projectID, func(p *Project) error {
-		if p.GitHub != nil {
-			for name, state := range endpoints {
-				p.GitHub.Endpoints[name] = state
-			}
-		}
-		return nil
-	})
 	return added, c.store.SetCursor(key, cursor)
-}
-
-func endpointState(response connections.WatchResponse, err error) string {
-	if err == nil {
-		return "ok"
-	}
-	return statusText(response.Status, err)
 }
 
 // Linear: teams are matched to projects as suggestions that the user confirms
@@ -344,13 +398,28 @@ type linearTeamRecord struct {
 	Name string `json:"name"`
 }
 
+// linearIssueRecord matches Linear's list_issues entries, whose id is the
+// human identifier (FRE-12) and whose project and status are names.
 type linearIssueRecord struct {
 	ID         string `json:"id"`
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
 	URL        string `json:"url"`
-	State      any    `json:"status"`
+	Status     any    `json:"status"`
+	Project    any    `json:"project"`
 	UpdatedAt  string `json:"updatedAt"`
+}
+
+var linearIdentifier = regexp.MustCompile(`^[A-Z][A-Z0-9]{0,9}-\d+$`)
+
+func (r linearIssueRecord) identifier() string {
+	if r.Identifier != "" {
+		return r.Identifier
+	}
+	if linearIdentifier.MatchString(r.ID) {
+		return r.ID
+	}
+	return ""
 }
 
 type linearCommentRecord struct {
@@ -358,43 +427,80 @@ type linearCommentRecord struct {
 	Body      string `json:"body"`
 	UpdatedAt string `json:"updatedAt"`
 	CreatedAt string `json:"createdAt"`
+	Author    struct {
+		Name string `json:"name"`
+	} `json:"author"`
 }
 
 var linearIssueLink = regexp.MustCompile(`linear\.app/[A-Za-z0-9_-]+/issue/([A-Z][A-Z0-9]{0,9})-\d+`)
 
+const linearCommentIssues = 20
+
 func (c *Collector) collectLinear(ctx context.Context) (int, error) {
-	accounts := c.external.WatchAccounts("linear")
-	if len(accounts) == 0 {
-		return 0, nil
-	}
+	accounts := c.external.ReadAccounts("linear")
 	teams := map[string]LinearTeam{}
+	reads := map[string]map[string]bool{}
 	var lastErr error
+	usable, teamsAllowed := 0, 0
 	for _, account := range accounts {
-		raw, err := c.external.WatchLinear(ctx, account.ID, "list_teams", map[string]any{"limit": 100})
+		if !account.Enabled {
+			continue
+		}
+		usable++
+		reads[account.ID] = account.Reads
+		if !account.Reads["list_teams"] {
+			continue
+		}
+		teamsAllowed++
+		result, err := c.external.ReadTool(ctx, account.ID, "list_teams", map[string]any{"limit": 100})
 		if err != nil {
-			lastErr = fmt.Errorf("%s: %w", account.Name, err)
+			lastErr = fmt.Errorf("%s: %s", account.Name, readFailure(err))
 			continue
 		}
 		var records []linearTeamRecord
-		collectRecords(raw, &records, func(r linearTeamRecord) bool { return r.Key != "" && r.ID != "" })
+		collectRecords(result.Body, &records, func(r linearTeamRecord) bool { return r.Key != "" && r.ID != "" })
 		for _, record := range records {
 			teams[record.Key] = LinearTeam{AccountID: account.ID, TeamID: record.ID, Key: record.Key, Name: record.Name}
 		}
 	}
 	c.linearTeams = len(teams)
-	if len(teams) == 0 {
-		return 0, lastErr
+	if len(teams) > 0 {
+		c.suggestLinear(teams)
 	}
-	c.suggestLinear(teams)
 	total := 0
 	for _, project := range c.store.Projects() {
 		if project.Linear == nil || project.Linear.Confirmed == nil {
 			continue
 		}
-		added, err := c.collectLinearTeam(ctx, project.ID, *project.Linear.Confirmed)
-		total += added
-		if err != nil {
-			lastErr = err
+		key := project.Linear.Confirmed.Key
+		team, seen := teams[key]
+		coverage, reason := CoverageCollecting, ""
+		switch {
+		case len(accounts) == 0:
+			coverage, reason = CoverageNotConnected, "no Linear plugin is connected"
+		case usable == 0:
+			coverage, reason = CoverageDisabled, "the Linear plugin is switched off"
+		case teamsAllowed == 0:
+			coverage, reason = CoverageNotAllowed, "list_teams is not allowed"
+		case !seen:
+			coverage, reason = CoverageUnreachable, "no connected Linear account sees team "+key
+		case !reads[team.AccountID]["list_issues"]:
+			coverage, reason = CoverageNotAllowed, "list_issues is not allowed"
+		default:
+			added, err := c.collectLinearTeam(ctx, project.ID, team, reads[team.AccountID])
+			total += added
+			if err != nil {
+				lastErr = err
+				coverage, reason = CoverageUnreachable, err.Error()
+			}
+		}
+		if _, err := c.store.UpdateProject(project.ID, func(p *Project) error {
+			if p.Linear != nil {
+				p.Linear.Coverage, p.Linear.Reason = coverage, reason
+			}
+			return nil
+		}); err != nil {
+			return total, err
 		}
 	}
 	return total, lastErr
@@ -470,57 +576,75 @@ type linearCursor struct {
 	Since time.Time `json:"since"`
 }
 
-func (c *Collector) collectLinearTeam(ctx context.Context, projectID string, team LinearTeam) (int, error) {
+func (c *Collector) collectLinearTeam(ctx context.Context, projectID string, team LinearTeam, reads map[string]bool) (int, error) {
 	key := "external:linear:" + projectID + ":" + team.Key
 	var cursor linearCursor
 	c.store.Cursor(key, &cursor)
 	if horizon := c.horizon(); cursor.Since.Before(horizon) {
 		cursor.Since = horizon
 	}
-	pollStarted := time.Now().UTC()
-	raw, err := c.external.WatchLinear(ctx, team.AccountID, "list_issues", map[string]any{
-		"team": team.TeamID, "updatedAt": cursor.Since.Format(time.RFC3339), "orderBy": "updatedAt", "limit": 50,
+	pollStarted := c.now()
+	result, err := c.external.ReadTool(ctx, team.AccountID, "list_issues", map[string]any{
+		"team": team.TeamID, "updatedAt": cursor.Since.Format(time.RFC3339), "orderBy": "updatedAt", "limit": 100,
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("list_issues: %s", readFailure(err))
 	}
 	var issues []linearIssueRecord
-	collectRecords(raw, &issues, func(r linearIssueRecord) bool { return r.Identifier != "" })
+	collectRecords(result.Body, &issues, func(r linearIssueRecord) bool { return r.identifier() != "" && r.Title != "" })
+	// An issue filed under a Linear project named like one of the user's
+	// projects belongs to that project rather than the team's.
+	byName := map[string]string{}
+	for _, project := range c.store.Projects() {
+		if !project.Builtin {
+			byName[strings.ToLower(project.Name)] = project.ID
+		}
+	}
 	var signals []Signal
 	for index, issue := range issues {
+		identifier := issue.identifier()
 		updated, _ := time.Parse(time.RFC3339, issue.UpdatedAt)
 		if updated.IsZero() {
 			updated = pollStarted
 		}
-		refs := map[string]string{"issue": issue.Identifier, "team": team.Key, "url": issue.URL}
-		if state, ok := issue.State.(string); ok {
+		owner := projectID
+		refs := map[string]string{"issue": identifier, "team": team.Key, "url": issue.URL}
+		if state, ok := issue.Status.(string); ok {
 			refs["state"] = state
 		}
+		if name, ok := issue.Project.(string); ok && name != "" {
+			refs["linear_project"] = name
+			if id := byName[strings.ToLower(name)]; id != "" {
+				owner = id
+			}
+		}
 		signals = append(signals, Signal{
-			ID:     signalID(SourceExternal, "linear-issue|"+issue.Identifier+"|"+issue.UpdatedAt),
-			Source: SourceExternal, ProjectID: projectID, Time: updated, Kind: kindLinearIssue,
-			Excerpt: excerpt(issue.Identifier+" "+issue.Title, 300), Refs: refs, Pointer: issue.URL,
+			ID:     signalID(SourceExternal, "linear-issue|"+identifier+"|"+issue.UpdatedAt),
+			Source: SourceExternal, ProjectID: owner, Time: updated, Kind: kindLinearIssue,
+			Excerpt: excerpt(identifier+" "+issue.Title, 300), Refs: refs, Pointer: issue.URL,
 		})
-		if index >= 20 {
+		if index >= linearCommentIssues || !reads["list_comments"] {
 			continue
 		}
-		rawComments, err := c.external.WatchLinear(ctx, team.AccountID, "list_comments", map[string]any{"issueId": issue.Identifier, "limit": 20})
+		comments, err := c.external.ReadTool(ctx, team.AccountID, "list_comments", map[string]any{"issueId": identifier, "limit": 20})
 		if err != nil {
 			continue
 		}
-		var comments []linearCommentRecord
-		collectRecords(rawComments, &comments, func(r linearCommentRecord) bool { return r.ID != "" && r.Body != "" })
-		for _, comment := range comments {
+		var records []linearCommentRecord
+		collectRecords(comments.Body, &records, func(r linearCommentRecord) bool { return r.ID != "" && r.Body != "" })
+		for _, comment := range records {
 			at, _ := time.Parse(time.RFC3339, firstNonEmpty(comment.UpdatedAt, comment.CreatedAt))
 			if at.Before(cursor.Since) {
 				continue
 			}
+			commentRefs := map[string]string{"issue": identifier, "team": team.Key, "comment": comment.ID, "author": comment.Author.Name}
+			if name := refs["linear_project"]; name != "" {
+				commentRefs["linear_project"] = name
+			}
 			signals = append(signals, Signal{
 				ID:     signalID(SourceExternal, "linear-comment|"+comment.ID+"|"+comment.UpdatedAt),
-				Source: SourceExternal, ProjectID: projectID, Time: at, Kind: kindLinearComment,
-				Excerpt: excerpt(issue.Identifier+": "+comment.Body, 400),
-				Refs:    map[string]string{"issue": issue.Identifier, "team": team.Key, "comment": comment.ID},
-				Pointer: issue.URL,
+				Source: SourceExternal, ProjectID: owner, Time: at, Kind: kindLinearComment,
+				Excerpt: excerpt(identifier+": "+comment.Body, 400), Refs: commentRefs, Pointer: issue.URL,
 			})
 		}
 	}
