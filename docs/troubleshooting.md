@@ -9,6 +9,21 @@ mewla doctor
 It checks `tmux`, the state directory, the listen port, your agent CLIs and the
 network, and says what to fix.
 
+## Reading the daemon's terminal output
+
+After the startup summary (version, listen address, data directory, pairing
+addresses), a healthy daemon prints nothing. Every later line reports a
+problem: a failure, a retry, a degraded state or a rejected request. Each line
+names its subsystem and the ids involved, such as `worker=`, `request=` or
+`remote=`, so you can paste it into an issue or hand it to an agent.
+
+To also see routine events (clients connecting, stats refreshes, uploads,
+skipped pushes), start the daemon with verbose logging:
+
+```sh
+MEWLA_LOG_VERBOSE=1 mewla
+```
+
 ## The daemon will not start
 
 - **`mewla: command not found`**: the install directory is not on `PATH`. Open a

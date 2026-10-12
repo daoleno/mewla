@@ -145,10 +145,11 @@ func testEntries(urls ...string) []addressbook.Entry {
 
 func TestPrintStartupInfoForLoopbackWithoutPhoneAddress(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", false, testEntries("http://127.0.0.1:9876"))
+	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", "/tmp/mewla-state", false, testEntries("http://127.0.0.1:9876"))
 
 	rendered := output.String()
 	for _, want := range []string{
+		"Data        /tmp/mewla-state\n",
 		"listening on 127.0.0.1:9876 (this computer only)",
 		"mewla pair -state-dir /tmp/mewla-state, then open the browser link",
 		"restart with mewla --lan, or add an HTTPS address (mewla address add)",
@@ -166,7 +167,7 @@ func TestPrintStartupInfoForLoopbackWithoutPhoneAddress(t *testing.T) {
 
 func TestPrintStartupInfoForLoopbackBehindHTTPS(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "127.0.0.1:9876", "", false, testEntries("http://127.0.0.1:9876", "https://mewla.example.com"))
+	printStartupInfo(&output, "127.0.0.1:9876", "", "", false, testEntries("http://127.0.0.1:9876", "https://mewla.example.com"))
 	rendered := output.String()
 	if !strings.Contains(rendered, "HTTPS       https://mewla.example.com") ||
 		!strings.Contains(rendered, "Pair        mewla pair\n") ||
@@ -177,7 +178,7 @@ func TestPrintStartupInfoForLoopbackBehindHTTPS(t *testing.T) {
 
 func TestPrintStartupInfoWithLink(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", true, testEntries("http://127.0.0.1:9876"))
+	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", "/tmp/mewla-state", true, testEntries("http://127.0.0.1:9876"))
 	rendered := output.String()
 	for _, expected := range []string{
 		"Mewla Link  connecting outbound",
@@ -191,7 +192,7 @@ func TestPrintStartupInfoWithLink(t *testing.T) {
 
 func TestPrintStartupInfoForLANListsAddressesAndOnePairCommand(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "0.0.0.0:9876", "", false, testEntries(
+	printStartupInfo(&output, "0.0.0.0:9876", "", "", false, testEntries(
 		"http://127.0.0.1:9876",
 		"http://192.168.1.42:9876",
 		"http://100.101.102.103:9876",
@@ -220,7 +221,7 @@ func TestPrintStartupInfoForLANListsAddressesAndOnePairCommand(t *testing.T) {
 
 func TestStartupWithoutPrivateAddressIsActionable(t *testing.T) {
 	var output bytes.Buffer
-	printStartupInfo(&output, "[::]:9876", "", false, nil)
+	printStartupInfo(&output, "[::]:9876", "", "", false, nil)
 	if !strings.Contains(output.String(), "No Wi-Fi/LAN or Tailscale address found") ||
 		!strings.Contains(output.String(), "add an HTTPS address") {
 		t.Fatalf("invalid no-address startup: %q", output.String())

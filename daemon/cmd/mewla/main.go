@@ -545,7 +545,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 					if listErr != nil {
 						fmt.Fprintf(stderr, "Could not read this computer's addresses: %v\n", listErr)
 					}
-					printStartupInfo(stderr, cfg.addr, cfg.stateDir, linkEnabled, entries)
+					printStartupInfo(stderr, cfg.addr, cfg.stateDir, authManager.StorageDir(), linkEnabled, entries)
 				})
 			},
 		},

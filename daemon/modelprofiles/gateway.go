@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/debuglog"
 )
 
 // DefaultGatewayListenAddr is the stable machine-level Codex gateway
@@ -467,7 +469,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	if protocol == GatewayProtocolCodexTools && isCodexImageModelPath(req.URL.Path) {
 		contentType := req.Header.Get("Content-Type")
 		if upstream.ImageModel == "" {
-			log.Printf("gateway: codex image %s (%s) model unchanged", req.URL.Path, contentType)
+			debuglog.Printf("gateway: codex image %s (%s) model unchanged", req.URL.Path, contentType)
 		} else {
 			splice, spliceErr := imageModelSplice(bodyBytes, req.Header, upstream.ImageModel)
 			if spliceErr != nil {
@@ -475,7 +477,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 				writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
 				return
 			}
-			log.Printf("gateway: codex image %s (%s) model %s -> %s", req.URL.Path, contentType, firstNonEmpty(splice.from, "(none)"), upstream.ImageModel)
+			debuglog.Printf("gateway: codex image %s (%s) model %s -> %s", req.URL.Path, contentType, firstNonEmpty(splice.from, "(none)"), upstream.ImageModel)
 			body = splice.reader(bodyBytes)
 			req.ContentLength = splice.length(bodyBytes)
 		}

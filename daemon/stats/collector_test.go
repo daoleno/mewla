@@ -808,3 +808,18 @@ func TestComputeCostDoesNotDoubleCountReasoning(t *testing.T) {
 		t.Fatalf("o3-mini cache read cost = %v, want %v", got, want)
 	}
 }
+
+func TestCollectorWarnsOncePerChangedProblem(t *testing.T) {
+	c := &Collector{}
+	var logs bytes.Buffer
+	previousLogWriter := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousLogWriter) })
+
+	c.warnf("codex-query", "[stats] query failed: %v", "locked")
+	c.warnf("codex-query", "[stats] query failed: %v", "locked")
+	c.warnf("codex-query", "[stats] query failed: %v", "corrupt")
+	if got := strings.Count(logs.String(), "query failed"); got != 2 {
+		t.Fatalf("want one line per distinct problem, got %d: %s", got, logs.String())
+	}
+}

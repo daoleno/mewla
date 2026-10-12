@@ -35,6 +35,7 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/codexctl"
 	"github.com/daoleno/mewla/daemon/connections"
+	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
@@ -508,7 +509,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("websocket upgrade: %v", err)
+		log.Printf("websocket: upgrade failed remote=%s device=%s: %v", r.RemoteAddr, device.ID, err)
 		return
 	}
 	owner := &authenticatedClient{
@@ -521,7 +522,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer s.terminal.ForgetOwner(clientID(conn))
 	defer s.detachAuthenticatedClient(conn, owner)
 
-	log.Printf("client connected (%d total)", s.clientCount())
+	debuglog.Printf("websocket: client connected remote=%s device=%s clients=%d", r.RemoteAddr, device.ID, s.clientCount())
 	s.sendWorkerSessionList(conn)
 	if s.work != nil {
 		s.sendJSON(conn, map[string]any{
@@ -547,7 +548,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		s.handleClientMessage(conn, msg)
 	}
 
-	log.Printf("client disconnected (%d remaining)", s.clientCount())
+	debuglog.Printf("websocket: client disconnected remote=%s device=%s clients=%d", r.RemoteAddr, device.ID, s.clientCount())
 }
 
 func (s *Server) bindAuthenticatedClient(
@@ -856,7 +857,7 @@ func writeDeviceAPIError(
 func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 	var raw clientMessage
 	if err := json.Unmarshal(msg, &raw); err != nil {
-		log.Printf("invalid message: %v", err)
+		log.Printf("websocket: rejected malformed message remote=%s bytes=%d: %v", conn.RemoteAddr(), len(msg), err)
 		return
 	}
 
@@ -999,7 +1000,7 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 	case "get_resource_telemetry":
 		s.handleGetResourceTelemetry(conn, raw)
 	default:
-		log.Printf("unknown message type: %s", raw.Type)
+		log.Printf("websocket: rejected unknown message type=%q remote=%s request=%s", raw.Type, conn.RemoteAddr(), raw.RequestID)
 		if raw.RequestID != "" {
 			s.sendErrorWithRequestID(conn, raw.RequestID, "unknown_message_type", fmt.Sprintf("Unknown message type: %s", raw.Type))
 		}
@@ -1082,7 +1083,7 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 	case "kill_worker":
 		teardown := s.teardownWorkerSession(raw.WorkerID)
 		if teardown.Err != nil {
-			log.Printf("kill_worker error: %v", teardown.Err)
+			log.Printf("kill_worker failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, teardown.Err)
 			code := modelprofiles.ControlErrorCode(teardown.Err)
 			if code == "" || code == modelprofiles.CodeProfilesUnavailable || code == "close_failed" {
 				code = "kill_failed"
@@ -1188,7 +1189,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 			)
 			if prepareErr != nil {
 				s.brain.CancelUserSteering(raw.WorkerID)
-				log.Printf("brain prepare user input error: %v", prepareErr)
+				log.Printf("brain prepare user input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, prepareErr)
 				s.sendJSON(conn, map[string]any{
 					"type":       "input_failed",
 					"request_id": raw.RequestID,
@@ -1242,7 +1243,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				// the same logical input once with a fresh identity.
 				if brainSteering {
 					if abortErr := s.brain.AbortHostUserInput(brainAdmission.RequestID, brainAdmission.ThreadID); abortErr != nil {
-						log.Printf("brain abort stale user input error: %v", abortErr)
+						log.Printf("brain abort stale user input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, abortErr)
 						s.brain.CancelUserSteering(raw.WorkerID)
 						s.sendJSON(conn, map[string]any{
 							"type":       "input_pending",
@@ -1263,7 +1264,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 			if inputOutcome == watcher.InputAmbiguous {
 				if brainSteering {
 					if releaseErr := s.brain.ReleaseHostUserInputAttempt(brainAdmission.RequestID, brainAdmission.ThreadID); releaseErr != nil {
-						log.Printf("brain release ambiguous user input error: %v", releaseErr)
+						log.Printf("brain release ambiguous user input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, releaseErr)
 					}
 				}
 				s.sendJSON(conn, map[string]any{
@@ -1278,7 +1279,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				if abortErr := s.brain.AbortHostUserInput(brainAdmission.RequestID, brainAdmission.ThreadID); abortErr != nil {
 					// The provider proved non-submission, but failure to durably
 					// remove the intent must remain a no-replay pending outcome.
-					log.Printf("brain abort user input error: %v", abortErr)
+					log.Printf("brain abort user input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, abortErr)
 					s.brain.CancelUserSteering(raw.WorkerID)
 					s.sendJSON(conn, map[string]any{"type": "input_pending", "request_id": raw.RequestID})
 					break
@@ -1292,7 +1293,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				})
 				break
 			}
-			log.Printf("send_input error: %v", err)
+			log.Printf("send_input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, err)
 			s.sendJSON(conn, map[string]any{
 				"type":       "input_failed",
 				"request_id": raw.RequestID,
@@ -1305,7 +1306,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 					// Provider already accepted. Canonical Brain persistence failed,
 					// so do not falsely ack input_sent. Pending preserves the local
 					// row for transcript recovery without encouraging a duplicate retry.
-					log.Printf("brain admit user input error: %v", admitErr)
+					log.Printf("brain admit user input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, admitErr)
 					s.sendJSON(conn, map[string]any{
 						"type":       "input_pending",
 						"request_id": raw.RequestID,
@@ -1320,7 +1321,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 		}
 	case "send_key":
 		if err := s.watcher.SendKey(raw.WorkerID, raw.Key); err != nil {
-			log.Printf("send_key error: %v", err)
+			log.Printf("send_key failed worker=%s request=%s key=%q: %v", raw.WorkerID, raw.RequestID, raw.Key, err)
 			s.sendErrorWithRequestID(conn, raw.RequestID, "send_key_failed", err.Error())
 		} else if raw.RequestID != "" {
 			s.sendJSON(conn, map[string]any{
@@ -1333,7 +1334,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 	case "send_action":
 		err := s.sendAction(raw.WorkerID, raw.Action)
 		if err != nil {
-			log.Printf("send_action error: %v", err)
+			log.Printf("send_action failed worker=%s request=%s action=%q: %v", raw.WorkerID, raw.RequestID, raw.Action, err)
 			s.sendJSON(conn, map[string]any{
 				"type":       "action_failed",
 				"request_id": raw.RequestID,
@@ -3045,7 +3046,13 @@ func (s *Server) sendJSONQueued(conn *websocket.Conn, v any, waitForRoom bool) {
 		return
 	}
 	if err := s.queueMessage(conn, websocket.TextMessage, data, waitForRoom); err != nil {
-		log.Printf("sendJSON write error: %v", err)
+		// A closed outbox is the normal end of a client; failLocked already
+		// logged any abnormal drop with its remote address.
+		if errors.Is(err, errOutboxClosed) {
+			debuglog.Printf("websocket: send to closed client remote=%s: %v", conn.RemoteAddr(), err)
+			return
+		}
+		log.Printf("websocket: send failed remote=%s: %v", conn.RemoteAddr(), err)
 	}
 }
 
@@ -3147,7 +3154,7 @@ func (s *Server) handleCalendarEvent(event calendar.Event) {
 	}
 	result := event.ScheduledResult
 	if err := s.pusher.NotifyScheduledResult(result.Title, string(result.Status), result.ThreadID, result.ID); err != nil {
-		log.Printf("scheduled-result push failed: %v", err)
+		logPushFailure("scheduled-result", "result="+result.ID, err)
 	}
 }
 
@@ -3284,8 +3291,19 @@ func (s *Server) routeSessionEventToBrain(ev watcher.SessionEvent) {
 		return
 	}
 	if woke {
-		log.Printf("brain Work event dispatched for %s", ev.WorkerID)
+		debuglog.Printf("brain Work event dispatched for %s", ev.WorkerID)
 	}
+}
+
+// logPushFailure reports a push that could not be delivered. No registered
+// device is the normal state until a phone enables notifications, so it only
+// appears with MEWLA_LOG_VERBOSE.
+func logPushFailure(kind, target string, err error) {
+	if errors.Is(err, push.ErrNoRegistration) {
+		debuglog.Printf("push: %s %s skipped: %v", kind, target, err)
+		return
+	}
+	log.Printf("push: %s %s failed: %v", kind, target, err)
 }
 
 func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
@@ -3317,15 +3335,15 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 	switch state {
 	case "blocked":
 		if err := s.pusher.NotifyWorkerBlocked(ev.WorkerID, ev.Worker.Name, ev.Worker.Summary); err != nil {
-			log.Printf("blocked-agent push failed: %v", err)
+			logPushFailure("blocked-agent", "worker="+ev.WorkerID, err)
 		}
 	case "failed":
 		if err := s.pusher.NotifyWorkerFailed(ev.WorkerID, ev.Worker.Name, ev.Worker.Summary); err != nil {
-			log.Printf("failed-agent push failed: %v", err)
+			logPushFailure("failed-agent", "worker="+ev.WorkerID, err)
 		}
 	case "done":
 		if err := s.pusher.NotifyWorkerDone(ev.WorkerID, ev.Worker.Name, ev.Worker.Summary); err != nil {
-			log.Printf("done-agent push failed: %v", err)
+			logPushFailure("done-agent", "worker="+ev.WorkerID, err)
 		}
 	}
 }
@@ -3374,29 +3392,38 @@ func (s *Server) handleUploadWithLimits(w http.ResponseWriter, r *http.Request, 
 	}
 	originalName, err := decodeUploadNameHeader(r.Header.Values(uploadNameHeader))
 	if err != nil {
+		logUploadRejected(r, "", http.StatusBadRequest, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if strings.TrimSpace(r.Header.Get("Content-Type")) == "" {
+		logUploadRejected(r, originalName, http.StatusBadRequest, errors.New("missing Content-Type"))
 		http.Error(w, "Content-Type header is required", http.StatusBadRequest)
 		return
 	}
 	if r.ContentLength > limits.fileBytes {
+		logUploadRejected(r, originalName, http.StatusRequestEntityTooLarge, fmt.Errorf("declared size exceeds %d byte limit", limits.fileBytes))
 		writeUploadTooLarge(w, limits)
 		return
 	}
 	if s.uploadDir == "" {
+		logUploadRejected(r, originalName, http.StatusServiceUnavailable, errors.New("upload storage unavailable"))
 		http.Error(w, "upload storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limits.fileBytes)
 	started := time.Now()
-	log.Printf("upload start remote=%q content_length=%d transport=%q user_agent=%q name=%q",
+	debuglog.Printf("upload start remote=%q content_length=%d transport=%q user_agent=%q name=%q",
 		r.RemoteAddr, r.ContentLength, r.Header.Get("X-Mewla-Upload-Transport"), r.UserAgent(), originalName)
 	file, err := s.uploadStore.Save(r.Context(), r.Body, attachment.File{
 		Name: originalName, ContentType: r.Header.Get("Content-Type"), Size: r.ContentLength,
 	}, attachment.Limits{FileBytes: limits.fileBytes, StoreBytes: limits.storeBytes, Retention: limits.retention})
 	if err != nil {
+		status := &uploadStatusWriter{ResponseWriter: w}
+		w := http.ResponseWriter(status)
+		defer func() {
+			logUploadRejected(r, originalName, status.code, fmt.Errorf("save after %dms: %w", time.Since(started).Milliseconds(), err))
+		}()
 		switch {
 		case errors.Is(err, attachment.ErrCapacity):
 			http.Error(w, err.Error(), http.StatusInsufficientStorage)
@@ -3417,7 +3444,7 @@ func (s *Server) handleUploadWithLimits(w http.ResponseWriter, r *http.Request, 
 	if duration > 0 {
 		rateMiB = float64(file.Size) / (1024 * 1024) / duration.Seconds()
 	}
-	log.Printf("upload complete remote=%q bytes=%d duration_ms=%d rate_mib_s=%.2f transport=%q",
+	debuglog.Printf("upload complete remote=%q bytes=%d duration_ms=%d rate_mib_s=%.2f transport=%q",
 		r.RemoteAddr, file.Size, duration.Milliseconds(), rateMiB, r.Header.Get("X-Mewla-Upload-Transport"))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"path": file.Path, "name": originalName})
@@ -3465,6 +3492,23 @@ func decodeUploadNameHeader(values []string) (string, error) {
 		}
 	}
 	return decoded, nil
+}
+
+// uploadStatusWriter remembers the status a failed upload was answered with.
+type uploadStatusWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *uploadStatusWriter) WriteHeader(code int) {
+	w.code = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// logUploadRejected records one failed upload with the status it was sent.
+func logUploadRejected(r *http.Request, name string, status int, err error) {
+	log.Printf("upload failed remote=%q name=%q content_length=%d transport=%q status=%d: %v",
+		r.RemoteAddr, name, r.ContentLength, r.Header.Get("X-Mewla-Upload-Transport"), status, err)
 }
 
 func writeUploadReadError(w http.ResponseWriter, err error, limits uploadLimits) {
