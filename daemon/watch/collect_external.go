@@ -577,7 +577,9 @@ type linearCursor struct {
 }
 
 func (c *Collector) collectLinearTeam(ctx context.Context, projectID string, team LinearTeam, reads map[string]bool) (int, error) {
-	key := "external:linear:" + projectID + ":" + team.Key
+	// Step 1 read issues under "external:linear:" but could not parse them,
+	// so that cursor moved past issues it never stored.
+	key := "external:linear-issues:" + projectID + ":" + team.Key
 	var cursor linearCursor
 	c.store.Cursor(key, &cursor)
 	if horizon := c.horizon(); cursor.Since.Before(horizon) {
@@ -686,7 +688,7 @@ func collectRecords[T any](raw []byte, out *[]T, keep func(T) bool) {
 		case string:
 			// Some MCP servers return JSON as text content.
 			trimmed := strings.TrimSpace(typed)
-			if depth < 3 && (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) {
+			if depth < 5 && (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) {
 				var inner any
 				if json.Unmarshal([]byte(trimmed), &inner) == nil {
 					walk(inner, depth+1)
