@@ -239,3 +239,25 @@ func TestPlaceFromIndexPlacesLateTurns(t *testing.T) {
 		t.Fatalf("placement counts = %+v", status.Placed)
 	}
 }
+
+func TestPlaybookWritesInThePersonsLanguage(t *testing.T) {
+	collector, store := newTestCollector(t, t.TempDir())
+	if strings.Contains(collector.judge.playbook(), "mostly in Chinese") {
+		t.Fatal("assumed a language without evidence")
+	}
+	var signals []Signal
+	for index := range 12 {
+		text := "按这个方案改吧"
+		if index%4 == 0 {
+			text = "ship it"
+		}
+		signals = append(signals, Signal{ID: "h" + string(rune('a'+index)), Source: SourceHuman, Kind: kindUserMessage, Time: time.Now(),
+			Excerpt: text, Refs: map[string]string{"author": "user", "session_role": "direct"}})
+	}
+	if _, err := store.Append(signals); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(collector.judge.playbook(), "Write every title, cost and reason in Chinese") {
+		t.Fatal("playbook ignores the person's language")
+	}
+}
