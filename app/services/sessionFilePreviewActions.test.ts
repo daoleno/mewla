@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createSessionFileCopyFeedback,
   createSessionFileCopyLifecycleOwner,
+  resolveSessionFileCopyContent,
   SESSION_FILE_COPIED_RESET_MS,
 } from "./sessionFilePreviewCopy";
 import {
@@ -147,6 +148,49 @@ describe("Session file preview copy feedback", () => {
 
   test("keeps a human-visible Check duration; icon swap has no motion to reduce", () => {
     expect(SESSION_FILE_COPIED_RESET_MS).toBeGreaterThanOrEqual(1_000);
+  });
+});
+
+describe("Session file preview copy content", () => {
+  test("an untruncated preview copies without loading the file again", async () => {
+    let loaded = 0;
+    const content = await resolveSessionFileCopyContent(
+      {
+        content: "full text",
+        bytesRead: 9,
+        truncated: false,
+        generation: "generation-1",
+      },
+      async () => {
+        loaded += 1;
+        return "whole file";
+      },
+    );
+    expect(content).toBe("full text");
+    expect(loaded).toBe(0);
+  });
+
+  test("a truncated preview copies the full text fetched the download way", async () => {
+    const content = await resolveSessionFileCopyContent(
+      {
+        content: "partial",
+        bytesRead: 7,
+        truncated: true,
+        generation: "generation-1",
+      },
+      async () => "whole file",
+    );
+    expect(content).toBe("whole file");
+  });
+
+  test("no text preview has nothing to copy", async () => {
+    let loaded = 0;
+    const content = await resolveSessionFileCopyContent(null, async () => {
+      loaded += 1;
+      return "whole file";
+    });
+    expect(content).toBeNull();
+    expect(loaded).toBe(0);
   });
 });
 

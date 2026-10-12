@@ -56,13 +56,16 @@ function createNativeAndroidDownloadBackend(): SessionFileDownloadBackend {
 }
 
 /**
- * Production Expo wiring for Android SAF.
+ * Production Expo wiring for Android SAF and iOS document directories.
  *
  * A picked directory returns `content://` files. Android's Expo relocation API
  * cannot reliably copy a private cache file into those handles, so the
  * authenticated response is streamed directly into the owned SAF file.
+ *
+ * Browsers have neither API; `sessionFilePreviewDownloadBackend.web.ts`
+ * replaces this module for the web bundle.
  */
-export function createExpoSessionFileDownloadBackend(): SessionFileDownloadBackend {
+export function createSessionFileDownloadBackend(): SessionFileDownloadBackend {
   if (Platform.OS === "android") {
     return createNativeAndroidDownloadBackend();
   }

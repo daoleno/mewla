@@ -35,8 +35,8 @@ if (!process.env.MEWLA_PREVIEW_HOOK_CHILD) {
   mock.module("expo-clipboard", () => ({ setStringAsync: async () => {} }));
   mock.module("../../constants/tokens", () => ({ Typography: {} }));
   mock.module("../../services/websocket", () => ({ wsClient: {} }));
-  mock.module("../../services/sessionFilePreviewDownload.expo", () => ({
-    createExpoSessionFileDownloadBackend: () => ({}),
+  mock.module("../../services/sessionFilePreviewDownloadBackend", () => ({
+    createSessionFileDownloadBackend: () => ({}),
   }));
   mock.module("../ui", () => ({
     BottomSheetFrame: ({ visible, children }: any) =>

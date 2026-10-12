@@ -1,3 +1,5 @@
+import type { SessionFileTextPreview } from "./sessionFilePreview";
+
 export const SESSION_FILE_COPIED_RESET_MS = 1_600;
 
 interface SessionFileCopyFeedbackOptions<Timer> {
@@ -64,6 +66,22 @@ export function createSessionFileCopyFeedback<Timer>({
       clearReset();
     },
   };
+}
+
+/**
+ * Resolve the clipboard text for a previewed Session file.
+ *
+ * A truncated preview never copies a partial file: the caller supplies the
+ * full-text loader, which reads the complete authenticated response the same
+ * way Download does. Returns null when there is nothing copyable.
+ */
+export async function resolveSessionFileCopyContent(
+  preview: SessionFileTextPreview | null,
+  loadFullText: () => Promise<string>,
+): Promise<string | null> {
+  if (!preview) return null;
+  if (!preview.truncated) return preview.content;
+  return loadFullText();
 }
 
 export interface SessionFileCopyLifecycleOwner {
