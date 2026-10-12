@@ -48,7 +48,7 @@ describe("structured chat keyboard overlay", () => {
     );
     expect(inset).not.toMatch(/height:\s*effectiveClearance\.value/);
     expect(timeline).toContain(
-      'Platform.OS === "ios" ? "interactive" : "on-drag"',
+      "keyboardDismissMode={timelineKeyboardDismissMode(Platform.OS)}",
     );
   });
 
