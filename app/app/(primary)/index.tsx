@@ -51,7 +51,11 @@ import { useAppTheme } from "../../constants/tokens";
 import { wsClient } from "../../services/websocket";
 import { terminalRouteParams } from "../../services/workerRouteId";
 import { brainScreenSurface } from "../../services/connectionLifecycle";
-import { isTargetedBrainThreadReadOnly } from "../../services/brainThreadRouting";
+import {
+  isTargetedBrainThreadReadOnly,
+  nextBrainChatMount,
+  type BrainChatMount,
+} from "../../services/brainThreadRouting";
 import { useWorkers, type ConnectionState } from "../../store/workers";
 import {
   useBrain,
@@ -181,6 +185,12 @@ export default function BrainScreen() {
   const brainChatScopeKey = displayedThreadId
     ? `brain-thread:${displayedThreadId}`
     : undefined;
+  const brainChatMountRef = useRef<BrainChatMount | null>(null);
+  brainChatMountRef.current = nextBrainChatMount(
+    brainChatMountRef.current,
+    activeServer?.id ?? "",
+    brainChatScopeKey,
+  );
 
   const ready = Boolean(activeServer && activeBrain?.hydrated && hostWorker?.id);
   const { width: windowWidth } = useWindowDimensions();
@@ -706,7 +716,7 @@ export default function BrainScreen() {
           <BrainCompanionContext.Provider value={brainCompanion}>
             {canUseStructuredBrainInterface || brainWaking ? (
               <InterfaceChatSurface
-                key={`brain-chat:${activeServer?.id}:${brainChatScopeKey ?? ""}`}
+                key={brainChatMountRef.current.key}
                 visible
                 serverId={activeServer?.id ?? ""}
                 serverUrl={activeServer?.url ?? ""}

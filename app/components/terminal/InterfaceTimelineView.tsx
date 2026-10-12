@@ -432,8 +432,8 @@ export function InterfaceTimelineView({
   );
 
   // Loading draws over the list, so it can fade over the history that
-  // replaces it; a fast load draws nothing. Brain's chat remounts when its
-  // first snapshot names the thread, so its load carries across that.
+  // replaces it; a fast load draws nothing. Brain's chat remounts when it
+  // switches threads, so its load carries across that.
   const loadingVeil = useLoadingVeil(
     interfaceTimelinePhase({
       itemCount: items.length,
