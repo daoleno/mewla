@@ -43,7 +43,7 @@ type Options struct {
 	External   ExternalReader
 }
 
-// Collector runs the collectors, then the rules. Passes never overlap.
+// Collector runs the collectors and then the rules. Passes never overlap.
 type Collector struct {
 	store       *Store
 	home        string
@@ -180,16 +180,17 @@ func (c *Collector) Collect(ctx context.Context, sources []string, force bool) (
 		result.Added[source] += added
 		c.noteError(source, err)
 	}
-	// Human runs before Process: it learns where each turn ran, which places
-	// Work in its project.
+	// Runtime goes first so a long transcript read never delays daemon log
+	// lines. Human runs before Process: it learns where each turn ran, which
+	// places Work in its project.
+	if due(SourceRuntime, runtimeEvery) {
+		run(SourceRuntime, c.collectRuntime)
+	}
 	if due(SourceHuman, localEvery) {
 		run(SourceHuman, c.collectHuman)
 	}
 	if due(SourceProcess, localEvery) {
 		run(SourceProcess, c.collectProcess)
-	}
-	if due(SourceRuntime, runtimeEvery) {
-		run(SourceRuntime, c.collectRuntime)
 	}
 	if due(SourceExternal, externalEvery) {
 		run(SourceExternal, c.collectExternal)

@@ -547,3 +547,84 @@ func TestCancelledPassRunsNoLaterSource(t *testing.T) {
 		t.Fatalf("a cancelled pass stored %d signals", count)
 	}
 }
+
+func TestHumanCollectorKeepsGrokIdentityAcrossGrowth(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "epsilon")
+	gitRepo(t, repo, "")
+	collector, store := newTestCollector(t, home)
+	sessionDir := filepath.Join(home, ".grok", "sessions", url.PathEscape(repo), "grok-1")
+	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	summary, _ := json.Marshal(map[string]any{"info": map[string]any{"id": "grok-1", "cwd": repo}})
+	_ = os.WriteFile(filepath.Join(sessionDir, "summary.json"), summary, 0o600)
+	history := filepath.Join(sessionDir, "chat_history.jsonl")
+	writeLines(t, history, []claudeLine{
+		{"type": "user", "content": "make the header sticky"},
+		{"type": "assistant", "content": "Done: the header is sticky now."},
+	}, "")
+	first := time.Now().Add(-2 * time.Hour)
+	_ = os.Chtimes(history, first, first)
+	if pass := collector.Collect(context.Background(), []string{SourceHuman}, true); pass.Added[SourceHuman] != 1 {
+		t.Fatalf("first pass added %d", pass.Added[SourceHuman])
+	}
+	writeLines(t, history, []claudeLine{{"type": "user", "content": "不对，滚动时不要遮住标题"}}, "")
+	later := time.Now().Add(-time.Hour)
+	_ = os.Chtimes(history, later, later)
+	if pass := collector.Collect(context.Background(), []string{SourceHuman}, true); pass.Added[SourceHuman] != 1 {
+		t.Fatalf("growing the session added %d, want only the new message", pass.Added[SourceHuman])
+	}
+	signals := store.Signals(Filter{Source: SourceHuman})
+	if len(signals) != 2 || signals[0].Time.Equal(signals[1].Time) {
+		t.Fatalf("grok signals = %+v", signals)
+	}
+}
+
+func TestCIRedIsJudgedPerWorkflowAndSurvivesOutOfOrderRuns(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "zeta")
+	gitRepo(t, repo, "git@github.com:acme/zeta.git")
+	collector, store := newTestCollector(t, home)
+	if _, ok := store.ProjectForCWD(repo, time.Now()); !ok {
+		t.Fatal("no project")
+	}
+	now := time.Now().UTC()
+	run := func(id int, name, conclusion string, ago time.Duration) map[string]any {
+		return map[string]any{"id": id, "name": name, "head_branch": "main", "status": "completed",
+			"conclusion": conclusion, "run_attempt": 1, "updated_at": now.Add(-ago).Format(time.RFC3339)}
+	}
+	runs := func(items ...any) connections.WatchResponse {
+		raw, _ := json.Marshal(map[string]any{"workflow_runs": items})
+		return connections.WatchResponse{Status: 200, RateRemaining: 4000, Body: raw}
+	}
+	repoMeta, _ := json.Marshal(map[string]any{"default_branch": "main"})
+	external := &fakeExternal{responses: map[string]connections.WatchResponse{
+		"/repos/acme/zeta":              {Status: 200, RateRemaining: 4000, Body: repoMeta},
+		"/repos/acme/zeta/issues":       {Status: 200, RateRemaining: 4000, Body: []byte("[]")},
+		"/repos/acme/zeta/actions/runs": runs(run(10, "CI", "success", 3*time.Hour), run(11, "Pages", "success", 3*time.Hour)),
+	}, linear: map[string]string{}}
+	collector.external = external
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+
+	// Push 2: Pages (higher ID) finishes first and is polled alone.
+	external.responses["/repos/acme/zeta/actions/runs"] = runs(run(21, "Pages", "success", 20*time.Minute))
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+	// CI (lower ID) fails later; a later Pages success must not clear it.
+	external.responses["/repos/acme/zeta/actions/runs"] = runs(
+		run(21, "Pages", "success", 20*time.Minute), run(20, "CI", "failure", 10*time.Minute), run(31, "Pages", "success", 5*time.Minute))
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+
+	problems := store.Problems(Filter{Kind: RuleCIRed})
+	if len(problems) != 1 || !problems[0].Active || !strings.Contains(problems[0].Title, "CI") {
+		t.Fatalf("ci problems = %+v", problems)
+	}
+	if passed := store.Signals(Filter{Kind: kindCIPassed}); len(passed) != 0 {
+		t.Fatalf("a passing Pages run was recorded as CI recovering: %+v", passed)
+	}
+	external.responses["/repos/acme/zeta/actions/runs"] = runs(run(40, "CI", "success", time.Minute))
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || problems[0].Active {
+		t.Fatalf("after CI recovers: %+v", problems)
+	}
+}

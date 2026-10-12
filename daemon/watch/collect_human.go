@@ -185,6 +185,8 @@ func (c *Collector) collectTranscript(source work.TranscriptSource, since time.T
 		}
 		at := message.Timestamp
 		if at.IsZero() {
+			// No native time: the transcript's last change is when this
+			// message was first seen. Identity never depends on it.
 			at = source.ModTime
 		}
 		if at.Before(since) {

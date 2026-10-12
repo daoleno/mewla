@@ -39,10 +39,15 @@ type ExternalReader interface {
 
 type githubCursor struct {
 	Since       time.Time `json:"since"`
-	CIRunID     int64     `json:"ci_run_id,omitempty"`
-	CIFailing   bool      `json:"ci_failing,omitempty"`
 	AlertsSince time.Time `json:"alerts_since"`
+	// RunsSince is the latest completion seen. Runs finish out of ID order
+	// (a long CI run after a short Pages run), so reads overlap it and rely on
+	// signal-ID dedupe. Failing is tracked per workflow.
+	RunsSince time.Time       `json:"runs_since"`
+	Failing   map[string]bool `json:"failing,omitempty"`
 }
+
+const runOverlap = 15 * time.Minute
 
 type githubRun struct {
 	ID           int64     `json:"id"`
@@ -196,9 +201,13 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	var signals []Signal
 	pollStarted := time.Now().UTC()
 
-	// Default-branch CI: each failed run, and the first pass after failures.
+	// Default-branch CI: each failed run, and each workflow's first pass
+	// after it failed.
 	if link.Branch != "" {
-		query := url.Values{"branch": {link.Branch}, "status": {"completed"}, "per_page": {"30"}}
+		if cursor.Failing == nil {
+			cursor.Failing = map[string]bool{}
+		}
+		query := url.Values{"branch": {link.Branch}, "status": {"completed"}, "per_page": {"50"}}
 		response, err := c.external.WatchGitHub(ctx, link.AccountID, base+"/actions/runs", query)
 		c.noteRate(response)
 		endpoints["actions"] = endpointState(response, err)
@@ -208,40 +217,37 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 			}
 			_ = json.Unmarshal(response.Body, &page)
 			sort.Slice(page.Runs, func(i, j int) bool { return page.Runs[i].UpdatedAt.Before(page.Runs[j].UpdatedAt) })
+			readFrom := cursor.RunsSince.Add(-runOverlap)
 			for _, run := range page.Runs {
-				if run.ID <= cursor.CIRunID && run.RunAttempt <= 1 || run.UpdatedAt.Before(horizon) {
-					if run.ID > cursor.CIRunID {
-						cursor.CIRunID = run.ID
-					}
+				if run.UpdatedAt.Before(horizon) || run.UpdatedAt.Before(readFrom) {
 					continue
+				}
+				if run.UpdatedAt.After(cursor.RunsSince) {
+					cursor.RunsSince = run.UpdatedAt
 				}
 				failed := run.Conclusion == "failure" || run.Conclusion == "timed_out" || run.Conclusion == "startup_failure"
 				passed := run.Conclusion == "success"
-				runRefs := refs(map[string]string{
-					"run": strconv.FormatInt(run.ID, 10), "workflow": run.Name, "branch": run.HeadBranch,
-					"sha": run.HeadSHA, "conclusion": run.Conclusion, "url": run.HTMLURL,
-				})
+				kind, summary := "", ""
 				switch {
 				case failed:
-					signals = append(signals, Signal{
-						ID:     signalID(SourceExternal, "github-run|"+link.Owner+"/"+link.Repo+"|"+strconv.FormatInt(run.ID, 10)+"|"+strconv.Itoa(run.RunAttempt)),
-						Source: SourceExternal, ProjectID: projectID, Time: run.UpdatedAt, Kind: kindCIFailed,
-						Excerpt: excerpt(fmt.Sprintf("%s %s on %s: %s", run.Name, run.Conclusion, run.HeadBranch, run.DisplayTitle), 300),
-						Refs:    runRefs, Pointer: run.HTMLURL,
-					})
-					cursor.CIFailing = true
-				case passed && cursor.CIFailing:
-					signals = append(signals, Signal{
-						ID:     signalID(SourceExternal, "github-run|"+link.Owner+"/"+link.Repo+"|"+strconv.FormatInt(run.ID, 10)+"|"+strconv.Itoa(run.RunAttempt)),
-						Source: SourceExternal, ProjectID: projectID, Time: run.UpdatedAt, Kind: kindCIPassed,
-						Excerpt: excerpt(fmt.Sprintf("%s passed on %s again: %s", run.Name, run.HeadBranch, run.DisplayTitle), 300),
-						Refs:    runRefs, Pointer: run.HTMLURL,
-					})
-					cursor.CIFailing = false
+					kind, summary = kindCIFailed, fmt.Sprintf("%s %s on %s: %s", run.Name, run.Conclusion, run.HeadBranch, run.DisplayTitle)
+					cursor.Failing[run.Name] = true
+				case passed && cursor.Failing[run.Name]:
+					kind, summary = kindCIPassed, fmt.Sprintf("%s passed on %s again: %s", run.Name, run.HeadBranch, run.DisplayTitle)
+					delete(cursor.Failing, run.Name)
+				default:
+					continue
 				}
-				if run.ID > cursor.CIRunID {
-					cursor.CIRunID = run.ID
-				}
+				signals = append(signals, Signal{
+					ID:     signalID(SourceExternal, "github-run|"+link.Owner+"/"+link.Repo+"|"+strconv.FormatInt(run.ID, 10)+"|"+strconv.Itoa(run.RunAttempt)),
+					Source: SourceExternal, ProjectID: projectID, Time: run.UpdatedAt, Kind: kind,
+					Excerpt: excerpt(summary, 300),
+					Refs: refs(map[string]string{
+						"run": strconv.FormatInt(run.ID, 10), "workflow": run.Name, "branch": run.HeadBranch,
+						"sha": run.HeadSHA, "conclusion": run.Conclusion, "url": run.HTMLURL,
+					}),
+					Pointer: run.HTMLURL,
+				})
 			}
 		}
 	}
