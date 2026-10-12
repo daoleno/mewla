@@ -550,7 +550,7 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	external.linear["list_issues"] = `{"issues":[{"id":"PER-12","uuid":"u1","title":"Invoice totals wrong","url":"https://linear.app/x/issue/PER-12","status":"Backlog","project":"Elsewhere","updatedAt":"` + now.Add(-time.Hour).Format(time.RFC3339) + `"}],"hasNextPage":false}`
 	external.linear["list_comments"] = `{"comments":[{"id":"c1","body":"Still broken for EUR","updatedAt":"` + now.Add(-30*time.Minute).Format(time.RFC3339) + `"}]}`
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
-	if got := store.Signals(Filter{Kind: kindLinearIssue}); len(got) != 1 || got[0].ProjectID != project.ID {
+	if got := store.Signals(Filter{Kind: kindLinearIssue}); len(got) != 1 || got[0].ProjectID != project.ID || got[0].Refs["linear_project"] != "Elsewhere" {
 		t.Fatalf("linear issues = %+v", got)
 	}
 	if got := store.Signals(Filter{Kind: kindLinearComment}); len(got) != 1 {
