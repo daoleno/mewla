@@ -297,12 +297,8 @@ func parseWholeTranscript(source TranscriptSource, visit func(TranscriptMessage)
 	default:
 		return scan, fmt.Errorf("unsupported transcript provider %q", source.Provider)
 	}
-	fallback := source.ModTime
-	for index := range events {
-		if events[index].Timestamp == "" && !fallback.IsZero() {
-			events[index].Timestamp = fallback.UTC().Format(time.RFC3339Nano)
-		}
-	}
+	// Messages without a native timestamp (Grok chat history) keep a zero
+	// Timestamp; callers must not derive identity from the file's clock.
 	emitTranscriptMessages(events, visit)
 	return scan, nil
 }

@@ -55,17 +55,19 @@ func evaluateRules(store *Store, now time.Time) (int, error) {
 	return changed, nil
 }
 
-// ruleCIRed flags a project whose latest default-branch CI result is a
-// failure, with how long it has been red.
+// ruleCIRed flags each default-branch workflow whose latest result is a
+// failure, with how long it has been red. Workflows are judged separately: a
+// passing Pages deploy does not clear a failing test workflow.
 func ruleCIRed(store *Store, now time.Time) []Problem {
-	byProject := map[string][]Signal{}
+	byWorkflow := map[string][]Signal{}
 	for _, kind := range []string{kindCIFailed, kindCIPassed} {
 		for _, signal := range store.Signals(Filter{Source: SourceExternal, Kind: kind}) {
-			byProject[signal.ProjectID] = append(byProject[signal.ProjectID], signal)
+			key := signal.ProjectID + "|" + signal.Refs["workflow"]
+			byWorkflow[key] = append(byWorkflow[key], signal)
 		}
 	}
 	var out []Problem
-	for projectID, signals := range byProject {
+	for key, signals := range byWorkflow {
 		sort.Slice(signals, func(i, j int) bool { return signals[i].Time.Before(signals[j].Time) })
 		latest := signals[len(signals)-1]
 		if latest.Kind != kindCIFailed {
@@ -79,10 +81,9 @@ func ruleCIRed(store *Store, now time.Time) []Problem {
 			}
 		}
 		since := streak[0].Time
-		branch := latest.Refs["branch"]
 		out = append(out, Problem{
-			ID: problemID(RuleCIRed, projectID), ProjectID: projectID, Rule: RuleCIRed, Subject: projectID,
-			Title:    fmt.Sprintf("CI is red on %s", branch),
+			ID: problemID(RuleCIRed, key), ProjectID: latest.ProjectID, Rule: RuleCIRed, Subject: key,
+			Title:    fmt.Sprintf("CI is red on %s: %s", latest.Refs["branch"], latest.Refs["workflow"]),
 			Detail:   fmt.Sprintf("%d failed runs since %s (red for %s); latest: %s", len(streak), since.Format(time.RFC3339), now.Sub(since).Round(time.Minute), latest.Excerpt),
 			Severe:   true,
 			Count:    len(streak),

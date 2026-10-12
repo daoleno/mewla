@@ -125,7 +125,7 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 // resolveWatchProject accepts a project name as well as its ID.
 func resolveWatchProject(cfg cliConfig, value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if value == "" || strings.HasPrefix(value, "p_") || value == watch.RuntimeProjectID {
+	if value == "" || strings.HasPrefix(value, "p_") {
 		return value, nil
 	}
 	socketPath, err := control.DefaultSocketPath(cfg.stateDir)
