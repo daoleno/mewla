@@ -27,6 +27,12 @@ it and allow changes later on the service's page.
 From the web UI, the service returns your browser tab to the web UI's own
 Extensions page. From the phone app it returns to the app.
 
+If a sign-in comes back without connecting, the card names the step that
+failed: the service didn't complete sign-in, didn't accept it, its tools
+couldn't be loaded, or this server couldn't save the account. The daemon log
+has a matching `plugins:` line with the cause, never a credential. Connect again
+after fixing the cause.
+
 For GitHub, Mewla shows a device code in large type; tap **Copy code and open
 GitHub** and enter it on GitHub's page. You can also choose **Use the GitHub
 login on this server**, which imports the account the GitHub CLI (`gh`) is
