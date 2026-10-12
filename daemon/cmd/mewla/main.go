@@ -30,6 +30,7 @@ import (
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/link"
+	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/selfupdate"
@@ -39,6 +40,7 @@ import (
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
+	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"golang.org/x/term"
@@ -115,6 +117,8 @@ func run(args []string, stderr io.Writer) error {
 			return runBrowserCommand(args[1:], stderr)
 		case "connections":
 			return runConnectionsCommand(args[1:], stderr)
+		case "watch":
+			return runWatchCommand(args[1:], stderr)
 		case "providers":
 			return runProvidersCommand(args[1:], stderr)
 		case "telegram":
@@ -200,6 +204,17 @@ func runDaemon(args []string, stderr io.Writer) error {
 	defer brainOwner.Close()
 
 	stateDir := authManager.StorageDir()
+	// Problem lines also go to a size-rotated file so they outlive the
+	// terminal; Watch reads it as the runtime source.
+	if logWriter, logErr := logfile.Open(logfile.Path(stateDir), logfile.DefaultMaxBytes); logErr != nil {
+		log.Printf("WARN daemon log file unavailable: %v", logErr)
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stderr, logWriter))
+		defer func() {
+			log.SetOutput(os.Stderr)
+			_ = logWriter.Close()
+		}()
+	}
 	startUpdateNotice(stderr, stateDir)
 	for _, name := range []string{"tasks.json", "runs.json", "meta.json"} {
 		_ = os.Remove(filepath.Join(stateDir, name))
@@ -430,6 +445,21 @@ func runDaemon(args []string, stderr io.Writer) error {
 		Path:    controlPath,
 		Handler: controlHandler,
 	}
+	var watchCollector *watch.Collector
+	if watchStore, watchErr := watch.OpenStore(filepath.Join(stateDir, "watch")); watchErr != nil {
+		log.Printf("WARN Watch unavailable: %v", watchErr)
+	} else {
+		watchCollector = watch.NewCollector(watch.Options{
+			Store:      watchStore,
+			Home:       home,
+			LogPath:    logfile.Path(stateDir),
+			Works:      brainStore,
+			Admissions: brainStore.FSM(),
+			Sessions:   w,
+			External:   connectionManager,
+		})
+		controlHandler.watch = watchCollector
+	}
 	runtimeOwners := []runtimeOwner{
 		{
 			name: "Brain lifecycle scheduler",
@@ -476,6 +506,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 			name: "control server",
 			run:  controlServer.Run,
 		},
+	}
+	if watchCollector != nil {
+		runtimeOwners = append(runtimeOwners, runtimeOwner{name: "Watch", run: watchCollector.Run})
 	}
 
 	linkConfig, linkConfigPath, linkEnabled, err := loadOptionalLinkConfig(
@@ -2046,6 +2079,7 @@ Agents and tools
   providers    Set the image model behind Codex image_gen
   connections  Plugins shared by Brain and Workers
   calendar     List, create, update, cancel or run scheduled Brain work
+  watch        Inspect what Watch collects about your projects
   browser      Give a Worker the Browser as an MCP server
   telegram     Set up the Telegram channel to Brain
   service      List or register services Workers can see

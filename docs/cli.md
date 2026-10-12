@@ -69,7 +69,7 @@ mewla worker close -id <session>
 `close`, `event`, `resolve`) are what Brain and its Workers call. You can run
 them, but you rarely need to.
 
-## Services, Calendar, Telegram, Plugins, Resources
+## Services, Calendar, Telegram, Plugins, Resources, Watch
 
 ```sh
 mewla service list --json
@@ -89,8 +89,15 @@ mewla connections list --json
 mewla connections import-gh   # copy your current gh login into the daemon's vault
 
 mewla resources               # one resource sample as JSON
+
+mewla watch status            # signals per source and project, last pass, errors
+mewla watch projects
+mewla watch signals --project mewla --source human --since 24h
+mewla watch problems
+mewla watch project rename --project <id> --name "New name"
+mewla watch project link-linear --project <id> --team KEY --confirm
 ```
 
 Details: [Services](sessions.md#services), [Calendar](calendar.md),
 [Telegram](notifications.md#telegram), [Plugins](plugins.md),
-[Resources](usage-and-resources.md#resources).
+[Resources](usage-and-resources.md#resources), [Watch](watch.md).

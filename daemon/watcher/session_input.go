@@ -1499,6 +1499,10 @@ func validateSessionInputPane(pane sessionInputPane) error {
 	}
 }
 
+// DelegatedInputPrefix is typed before a delegated Worker input is pasted, so
+// the input reads as an instruction to carry out.
+const DelegatedInputPrefix = "Execute: "
+
 func sessionInputSubmitQueue(
 	paneID string,
 	buffer string,
@@ -1514,7 +1518,7 @@ func sessionInputSubmitQueue(
 		)
 	}
 	if adapter.delegatedIntent {
-		args = append(args, ";", "send-keys", "-l", "-t", paneID, "Execute: ",
+		args = append(args, ";", "send-keys", "-l", "-t", paneID, DelegatedInputPrefix,
 			";", "run-shell", "sleep 0.050")
 	}
 	args = append(args,

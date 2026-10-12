@@ -15,6 +15,7 @@ import (
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
@@ -24,6 +25,7 @@ type Request struct {
 	BrowserID            string                                 `json:"browser_id,omitempty"`
 	BrowserRequest       *browser.Request                       `json:"browser_request,omitempty"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
+	WatchRequest         *watch.Request                         `json:"watch_request,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`
@@ -102,6 +104,7 @@ type PairingInfo struct {
 type Response struct {
 	Browser            *browser.Response                        `json:"browser,omitempty"`
 	Connections        *connections.Response                    `json:"connections,omitempty"`
+	Watch              *watch.Response                          `json:"watch,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	OK                 bool                                     `json:"ok"`
 	Error              *Error                                   `json:"error,omitempty"`
