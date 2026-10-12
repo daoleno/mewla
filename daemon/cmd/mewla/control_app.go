@@ -21,6 +21,7 @@ import (
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/google/uuid"
@@ -70,6 +71,7 @@ type controlApp struct {
 	telegram          telegramControlManager
 	threadRuntimeSet  func(string, modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error)
 	stateDir          string
+	watch             *watch.Collector
 }
 
 type telegramControlManager interface {
@@ -96,6 +98,18 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("plugin_request_failed", err.Error())
 		}
 		return control.Response{OK: true, Connections: &result}
+	case "watch":
+		if req.WatchRequest == nil {
+			return control.ErrorResponse("invalid_request", "Watch request is required")
+		}
+		if a.watch == nil {
+			return control.ErrorResponse("watch_unavailable", "Watch is not running")
+		}
+		result, err := a.watch.Handle(context.Background(), *req.WatchRequest)
+		if err != nil {
+			return control.ErrorResponse("watch_request_failed", err.Error())
+		}
+		return control.Response{OK: true, Watch: &result}
 	case "resource_telemetry":
 		if a.resourceSampler == nil {
 			return control.ErrorResponse("resource_telemetry_unavailable", "Resource sampler not ready")

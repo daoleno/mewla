@@ -16,7 +16,8 @@
         { "source": "docs/brain-and-work.md", "slug": "brain-and-work", "title": "Brain and Work" },
         { "source": "docs/notifications.md", "slug": "notifications", "title": "Notifications and Telegram" },
         { "source": "docs/calendar.md", "slug": "calendar", "title": "Calendar" },
-        { "source": "docs/plugins.md", "slug": "plugins", "title": "Plugins" }
+        { "source": "docs/plugins.md", "slug": "plugins", "title": "Plugins" },
+        { "source": "docs/watch.md", "slug": "watch", "title": "Watch" }
       ]
     },
     {

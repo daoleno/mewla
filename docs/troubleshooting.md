@@ -24,6 +24,16 @@ skipped pushes), start the daemon with verbose logging:
 MEWLA_LOG_VERBOSE=1 mewla
 ```
 
+Every line the daemon logs is also appended to `~/.mewla/logs/daemon.log`
+(under `--state-dir` when you set one), so it is still there after the terminal is
+closed or the daemon restarts as a login service. The file rotates at 10 MB
+into `daemon.log.1`, keeping at most two files. Startup details and pairing
+links go only to the terminal, never to the file.
+
+```sh
+tail -n 50 ~/.mewla/logs/daemon.log
+```
+
 ## The daemon will not start
 
 - **`mewla: command not found`**: the install directory is not on `PATH`. Open a
