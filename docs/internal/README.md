@@ -32,7 +32,6 @@ and [third-party assets](../third-party-assets.md).
 - [Brain engineering](brain-engineering.md) and [engineering evaluation](brain-engineering-evaluation.md)
 - [Prompt design](prompting.md)
 - [Worker pane identity](worker-pane-identity.md)
-- [Control-plane verification](verification.md)
 
 ## App and terminal
 
