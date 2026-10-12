@@ -486,7 +486,7 @@ You have three jobs.
    - Rule candidates were raised by fixed rules. If one is the same problem, list its id in merges; if it is noise, ignore it.
    - cost_score 1-100 ranks problems by what they cost: 80+ means the person lost hours or a release was blocked, 50 means repeated corrections or a day of red CI, 20 means a minor recurring annoyance. cost_kind is attention or impact. cost says concretely what it cost, e.g. "corrected the same layout 4 times over 2 days".
    - status looks_fixed when the signals show it was fixed (a passing run after failures, the person confirming, a closed issue) and nothing has recurred; otherwise open.
-   - reason is one paragraph: what the problem is, which evidence shows it, and why it matters. Do not quote secrets.
+   - reason is one paragraph: what the problem is, which evidence shows it, and why it matters. Signal numbers mean nothing outside this batch: never cite them in a title, cost or reason; describe the evidence by date and content instead. Do not quote secrets.
    - evidence lists the signal numbers that support the problem, most telling first.
 
 Titles are short and specific; they name the problem, not the evidence.`
