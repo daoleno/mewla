@@ -110,7 +110,8 @@ repository are placed without a model.
 
 Judgment uses Claude Code (`claude -p`) with Sonnet, signed in the way your
 own Claude Code is, without tools, hooks, MCP servers or a saved session. A run takes at most 300 signals or about
-60,000 characters. A full batch runs at once; a partial one waits 30 minutes.
+60,000 characters. A full batch runs at once; a partial one waits two hours, since the rules
+above already flag severe problems at once.
 There are at most 60 runs a day, and a failed run waits 10 minutes and retries
 with a smaller batch. Nothing runs when there are no new signals. Signal text
 is treated as data, never as instructions, and secrets are removed again
