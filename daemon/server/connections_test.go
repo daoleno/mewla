@@ -65,8 +65,17 @@ func TestPluginsRequirePairedDeviceAndPreserveRequestIdentity(t *testing.T) {
 			t.Fatal("request identity lost")
 		}
 		var resultBody connections.Response
-		if json.Unmarshal(result["connections"], &resultBody) != nil || len(resultBody.Catalog) != 7 {
+		if json.Unmarshal(result["connections"], &resultBody) != nil {
 			t.Fatal("missing plugin catalog")
+		}
+		want := connections.Catalog()
+		if len(resultBody.Catalog) != len(want) {
+			t.Fatalf("plugin catalog has %d entries, want %d", len(resultBody.Catalog), len(want))
+		}
+		for i := range want {
+			if resultBody.Catalog[i].ID != want[i].ID {
+				t.Fatalf("plugin catalog[%d] = %q, want %q", i, resultBody.Catalog[i].ID, want[i].ID)
+			}
 		}
 		break
 	}
