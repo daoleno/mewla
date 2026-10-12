@@ -162,18 +162,19 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 
 #### Update the app
 
-From version 0.2.9, **Settings → About** checks the latest release when you open
-Settings (at most every six hours). Tap the Mewla row to check again. When a
-newer release exists, the row reads **Update available · v<version>**. Tap it
-to download the APK. Mewla checks the release's signed manifest and the APK's
-SHA-256 before it opens the Android installer. The first time, Android asks you
-to let Mewla install apps. Allow it, come back, and the installer opens. If a
-download fails, tap the row to retry. Versions before 0.2.9 need one manual
-install as above.
+Mewla looks for a newer release on its own, at launch and when you come back to
+it (at most every six hours). Nothing shows while you're up to date. When a
+newer release exists, a small dot appears on the menu and on **Settings**, and
+**Settings → About** reads **Update to v<version>**. Tap that row to download
+the APK. Mewla checks the release's signed manifest and the APK's SHA-256
+before it opens the Android installer. The first time, Android asks you to let
+Mewla install apps. Allow it, come back, and the installer opens. If a download
+fails, tap the row to retry. Versions before 0.2.9 need one manual install as
+above; 0.2.9 and 0.2.10 show the update in **Settings → About** only.
 
 Builds take their update channel from `MEWLA_ANDROID_DISTRIBUTION` at build
-time: `github-apk` (default), `play-store` (the row opens the store listing),
-or `none`. iOS builds show the version only.
+time: `github-apk` (default), `play-store` or `none`. Store and `none` builds,
+and iOS, leave updates to the store and show the version only.
 
 ### iOS
 

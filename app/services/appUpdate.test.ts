@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import nacl from "tweetnacl";
 import {
+  appUpdatePending,
   appUpdateStatus,
   compareVersions,
   isNewerVersion,
@@ -169,12 +170,16 @@ describe("distribution channel", () => {
 describe("About row status", () => {
   const update = parseAndroidUpdateManifest(manifestText())!;
 
-  test("reads short and plain for every state", () => {
-    expect(appUpdateStatus({ kind: "hidden" })).toEqual({ text: null, actionable: false });
-    expect(appUpdateStatus({ kind: "current" })).toEqual({ text: "Up to date", actionable: true });
-    expect(appUpdateStatus({ kind: "checking" }).actionable).toBe(false);
+  test("stays silent until a newer release exists", () => {
+    for (const kind of ["hidden", "idle", "checking", "current", "checkFailed"] as const) {
+      expect(appUpdateStatus({ kind })).toEqual({ text: null, actionable: false });
+      expect(appUpdatePending({ kind })).toBe(false);
+    }
+  });
+
+  test("reads short and plain once an update is waiting", () => {
     expect(appUpdateStatus({ kind: "available", update })).toEqual({
-      text: "Update available · v0.2.9",
+      text: "Update to v0.2.9",
       actionable: true,
     });
     expect(appUpdateStatus({ kind: "downloading", update, progress: 0.426 })).toEqual({
@@ -183,5 +188,7 @@ describe("About row status", () => {
     });
     expect(appUpdateStatus({ kind: "ready", update, fileName: update.fileName }).text).toBe("Install v0.2.9");
     expect(appUpdateStatus({ kind: "failed", update, message: "x" }).text).toBe("Couldn't update · Tap to retry");
+    expect(appUpdatePending({ kind: "available", update })).toBe(true);
+    expect(appUpdatePending({ kind: "downloading", update, progress: 0 })).toBe(true);
   });
 });

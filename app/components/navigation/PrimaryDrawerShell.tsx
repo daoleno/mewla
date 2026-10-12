@@ -41,6 +41,7 @@ import { useDrawerFocusContainment } from "./useDrawerFocusContainment";
 import { usePrimaryDrawerBack } from "./usePrimaryDrawerBack";
 import { useDesktopWebShellHosted } from "./useDesktopWeb";
 import { useConnectionAttention } from "./useConnectionAttention";
+import { useAppUpdatePending } from "../../services/useAppUpdate";
 
 export {
   PRIMARY_APP_BAR_HEIGHT,
@@ -85,15 +86,19 @@ function PrimaryAppBar({
   const geometry = resolvePrimaryAppBarGeometry(topInset);
   const showBrainCanvas = activePrimaryRoute === "brain";
   // The dot on ☰ is the connection signal on phones; healthy and a short
-  // reconnect stay quiet (see connectionAttention).
+  // reconnect stay quiet (see connectionAttention). A waiting app update
+  // shows the seal dot when the connection has nothing to say.
   const attention = useConnectionAttention();
-  const connectionBadge =
+  const updatePending = useAppUpdatePending();
+  const menuBadge =
     attention.badge === "issue"
       ? colors.statusFailed
       : attention.badge === "offline"
         ? colors.warning
-        : null;
-  const menuLabel = attention.menuLabel;
+        : updatePending
+          ? colors.seal
+          : null;
+  const menuLabel = updatePending ? `${attention.menuLabel}, update available` : attention.menuLabel;
   const selectionBar = usePrimarySelectionBarContent();
   if (selectionBar != null) {
     return (
@@ -143,7 +148,7 @@ function PrimaryAppBar({
         accessibilityRole="button"
         accessibilityLabel={menuLabel}
         tabIndex={drawerVisible ? -1 : 0}
-        badgeColor={connectionBadge}
+        badgeColor={menuBadge}
       >
         <Icon name="menu" color={colors.textPrimary} size={20} />
       </PrimaryChromeButton>

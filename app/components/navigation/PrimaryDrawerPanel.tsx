@@ -24,6 +24,7 @@ import {
 import { brainNeedsYou, sessionsNeedYou } from "./primarySessionsAttention";
 import { useBrain } from "../../store/brain";
 import { useConnectionAttention } from "./useConnectionAttention";
+import { useAppUpdatePending } from "../../services/useAppUpdate";
 import type { DesktopSidebarKey } from "./desktopWeb";
 import { desktopShortcutTooltip } from "./desktopShortcuts";
 import { useWebTooltip } from "../ui/useWebTooltip";
@@ -52,6 +53,8 @@ interface DrawerRowProps {
   icon: IconName;
   label: string;
   selected?: boolean;
+  /** The seal dot: what behind this row needs you, read as the row's hint. */
+  attention?: string | null;
   tooltip?: string;
   onPress(): void;
 }
@@ -61,7 +64,7 @@ interface DrawerRowProps {
  * selected state; the desktop web sidebar selects the row you are on.
  * Seal & Slip: a bare soft-ink glyph and the label, no tile.
  */
-function DrawerRow({ drawerVisible, icon, label, selected = false, tooltip, onPress }: DrawerRowProps) {
+function DrawerRow({ drawerVisible, icon, label, selected = false, attention, tooltip, onPress }: DrawerRowProps) {
   const { colors, theme } = useAppTheme();
   const rowRef = useRef<ViewInstance>(null);
   useWebTooltip(rowRef, tooltip);
@@ -71,6 +74,7 @@ function DrawerRow({ drawerVisible, icon, label, selected = false, tooltip, onPr
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={attention ?? undefined}
       accessibilityState={selected ? { selected } : undefined}
       aria-current={selected ? "page" : undefined}
       tabIndex={drawerVisible ? 0 : -1}
@@ -103,6 +107,7 @@ function DrawerRow({ drawerVisible, icon, label, selected = false, tooltip, onPr
       >
         {label}
       </Text>
+      {attention ? <View style={[styles.sealDot, { backgroundColor: colors.seal }]} /> : null}
     </Pressable>
   );
 }
@@ -185,6 +190,7 @@ export function PrimaryDrawerPanel({
   const { state: workersState } = useWorkers();
   const { currentServer } = useCurrentServer();
   const attention = useConnectionAttention();
+  const updatePending = useAppUpdatePending();
   const connectionSummary = currentServer?.name || "No current server";
   const connectionDetail = attention.detail;
   const sessionsAttention = sessionsNeedYou(workersState.workers, currentServer?.id);
@@ -300,6 +306,8 @@ export function PrimaryDrawerPanel({
           icon={PRIMARY_DRAWER_SETTINGS.icon}
           label={PRIMARY_DRAWER_SETTINGS.label}
           selected={selectedKey === PRIMARY_DRAWER_SETTINGS.key}
+          // A newer Mewla waits in Settings → About.
+          attention={updatePending ? "Update available" : null}
           tooltip={shortcutTip(PRIMARY_DRAWER_SETTINGS.label, PRIMARY_DRAWER_SETTINGS.key)}
           onPress={() => openRoute(PRIMARY_DRAWER_SETTINGS.pathname)}
         />
