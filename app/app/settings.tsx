@@ -997,18 +997,16 @@ export default function SettingsScreen() {
 
 /** About: the app's version, and its update when this build can take one. */
 function AboutAppRow() {
-  const { state, press, checkIfDue } = useAppUpdate();
-  useFocusEffect(checkIfDue);
+  const { state, press } = useAppUpdate();
   const status = appUpdateStatus(state);
-  const offersUpdate = ["store", "available", "needsPermission", "ready", "failed"].includes(state.kind);
   return (
     <ListRow
       title="Mewla"
       subtitle={status.text}
       value={`Version ${appVersion}`}
       leading={<MewlaMark size={28} />}
-      accessory={offersUpdate ? "chevron" : "none"}
-      loading={state.kind === "checking" || state.kind === "downloading"}
+      accessory={status.actionable ? "chevron" : "none"}
+      loading={state.kind === "downloading"}
       onPress={status.actionable ? press : undefined}
       accessibilityLabel={["Mewla", `Version ${appVersion}`, status.text].filter(Boolean).join(", ")}
     />

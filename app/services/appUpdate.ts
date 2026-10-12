@@ -3,8 +3,8 @@ import nacl from "tweetnacl";
 
 /**
  * Build-time distribution channel. GitHub APK builds update themselves from
- * the signed release manifest; store builds defer to their store listing;
- * "none" (iOS today, local builds) shows nothing actionable.
+ * the signed release manifest; store builds and "none" (iOS today, local
+ * builds) leave updates to the store and show nothing.
  */
 export type DistributionChannel = "github-apk" | "play-store" | "app-store" | "none";
 
@@ -15,7 +15,6 @@ export const ANDROID_UPDATE_ABI = "arm64-v8a";
 export const RELEASES_URL = "https://github.com/daoleno/mewla/releases";
 export const LATEST_MANIFEST_URL = `${RELEASES_URL}/latest/download/release-manifest.json`;
 export const LATEST_SIGNATURE_URL = `${LATEST_MANIFEST_URL}.sig`;
-export const PLAY_STORE_URL = `market://details?id=${ANDROID_PACKAGE}`;
 // The same Ed25519 key the daemon's selfupdate trusts (PKIX, base64).
 export const UPDATE_PUBLIC_KEY_PKIX = "MCowBQYDK2VwAyEAD+GvALNRsWlmuB8FL5nwWchsLuXI7tasTGYSqkdabzw=";
 const ED25519_PKIX_PREFIX = [0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00];
@@ -177,7 +176,6 @@ function isRecord(value: unknown): value is Record<string, any> {
 
 export type AppUpdateState =
   | { kind: "hidden" }
-  | { kind: "store" }
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "current" }
@@ -188,23 +186,26 @@ export type AppUpdateState =
   | { kind: "ready"; update: AndroidUpdateArtifact; fileName: string }
   | { kind: "failed"; update: AndroidUpdateArtifact; message: string };
 
-/** The About row's status line, and whether tapping the row does something. */
+/** A newer signed release is waiting for the user: Settings carries the dot. */
+export function appUpdatePending(state: AppUpdateState): boolean {
+  return "update" in state;
+}
+
+/**
+ * The About row's status line, and whether tapping the row does something.
+ * Checking is silent: until a newer release exists the row is just the
+ * version.
+ */
 export function appUpdateStatus(state: AppUpdateState): { text: string | null; actionable: boolean } {
   switch (state.kind) {
     case "hidden":
-      return { text: null, actionable: false };
-    case "store":
-      return { text: "Updates come from Google Play", actionable: true };
     case "idle":
-      return { text: "Tap to check for updates", actionable: true };
     case "checking":
-      return { text: "Checking for updates…", actionable: false };
     case "current":
-      return { text: "Up to date", actionable: true };
     case "checkFailed":
-      return { text: "Couldn't check · Tap to retry", actionable: true };
+      return { text: null, actionable: false };
     case "available":
-      return { text: `Update available · v${state.update.version}`, actionable: true };
+      return { text: `Update to v${state.update.version}`, actionable: true };
     case "downloading":
       return { text: `Downloading ${Math.floor(state.progress * 100)}%`, actionable: false };
     case "needsPermission":

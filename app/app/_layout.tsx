@@ -65,6 +65,7 @@ import {
 import { CatSplash } from "../components/mewla/CatSplash";
 import { consumeUnfinishedNativeTerminalBreadcrumb } from "../services/nativeTerminalDiagnosticsObserver";
 import { measureServerLatency } from "../services/serverLatency";
+import { startAppUpdateChecks } from "../services/useAppUpdate";
 import {
   foregroundNotificationPresentation,
   resolveNotificationDestination,
@@ -704,6 +705,11 @@ export default function RootLayout() {
       console.log("Failed to load fonts:", fontError);
     }
   }, [fontError]);
+
+  // App updates are found on their own; Settings only shows one that exists.
+  useEffect(() => {
+    startAppUpdateChecks();
+  }, []);
 
   if (!fontsLoaded && !fontError) {
     return null;
