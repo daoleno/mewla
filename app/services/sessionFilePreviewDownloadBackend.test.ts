@@ -76,13 +76,13 @@ if (!process.env.MEWLA_FILE_DOWNLOAD_TEST_CHILD) {
     },
   }));
 
-  const { createExpoSessionFileDownloadBackend } = await import(
-    "./sessionFilePreviewDownload.expo"
+  const { createSessionFileDownloadBackend } = await import(
+    "./sessionFilePreviewDownloadBackend"
   );
 
   describe("Expo Session file download backend", () => {
     function createDestination() {
-      const backend = createExpoSessionFileDownloadBackend();
+      const backend = createSessionFileDownloadBackend();
       return backend.pickDirectory().then((directory) => ({
         backend,
         destination: directory.reserve("notes.md", "text/plain"),
@@ -131,7 +131,7 @@ if (!process.env.MEWLA_FILE_DOWNLOAD_TEST_CHILD) {
       calls.length = 0;
       platformOS = "android";
       nativeAvailable = false;
-      const backend = createExpoSessionFileDownloadBackend();
+      const backend = createSessionFileDownloadBackend();
 
       await expect(backend.pickDirectory()).rejects.toThrow(
         "does not include the native Android download transport",

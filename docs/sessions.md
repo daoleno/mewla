@@ -72,8 +72,9 @@ zoomed, and PDFs open on the phone. Video (mp4, m4v, mov, webm) and audio
 (mp3, m4a, wav, ogg, opus, flac) play right there with play/pause, a
 scrubber you can drag to seek, the time, mute and, for video, full screen.
 Playback streams from the computer, so a long recording starts at once and
-seeking does not download the whole file. Download and Copy path sit in the
-header as for any file.
+seeking does not download the whole file. The header offers Download for any
+file; text files (Markdown, code, txt, JSON) also offer Copy, which copies the
+whole file content. Images and binaries have no Copy — download them instead.
 
 A file that is not really what its name says (an `.mp4` that is not an MP4
 container, say) is not played. A codec the device can't decode, such as HEVC

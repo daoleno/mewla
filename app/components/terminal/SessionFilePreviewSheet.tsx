@@ -24,6 +24,7 @@ import type {
 import { Typography } from "../../constants/tokens";
 import {
   createSessionFileCopyLifecycleOwner,
+  resolveSessionFileCopyContent,
   SESSION_FILE_COPIED_RESET_MS,
 } from "../../services/sessionFilePreviewCopy";
 import {
@@ -53,7 +54,7 @@ import {
   sessionFileDownloadErrorMessage,
   type SessionFileDownloadFeedback,
 } from "../../services/sessionFilePreviewDownload";
-import { createExpoSessionFileDownloadBackend } from "../../services/sessionFilePreviewDownload.expo";
+import { createSessionFileDownloadBackend } from "../../services/sessionFilePreviewDownloadBackend";
 import { wsClient } from "../../services/websocket";
 import { BottomSheetFrame } from "../ui";
 import { MessageBody } from "./InterfaceMessageBody";
@@ -287,12 +288,12 @@ export function SessionFilePreviewSheet({
       ),
     );
   }, [daemonId, loader, metadata, processId, serverId, startedAt, workerId]);
-  const [pathCopied, setPathCopied] = useState(false);
+  const [contentCopied, setContentCopied] = useState(false);
   const [downloadFeedback, setDownloadFeedback] =
     useState<SessionFileDownloadFeedback>("idle");
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const downloadBackend = useMemo(
-    () => createExpoSessionFileDownloadBackend(),
+    () => createSessionFileDownloadBackend(),
     [],
   );
   const downloadOwner = useMemo(
@@ -313,7 +314,7 @@ export function SessionFilePreviewSheet({
     () =>
       createSessionFileCopyLifecycleOwner({
         copyText: Clipboard.setStringAsync,
-        onCopiedChange: setPathCopied,
+        onCopiedChange: setContentCopied,
         scheduleReset: setTimeout,
         cancelReset: clearTimeout,
         resetDelayMs: SESSION_FILE_COPIED_RESET_MS,
@@ -334,10 +335,51 @@ export function SessionFilePreviewSheet({
     };
   }, [copyOwner, downloadOwner]);
 
-  const copyPath = useCallback(() => {
-    const path = state.metadata?.path || state.reference;
-    if (path) void copyOwner.copy(path);
-  }, [copyOwner, state.metadata?.path, state.reference]);
+  const copyContent = useCallback(async () => {
+    const preview = state.text;
+    const metadata = state.metadata;
+    if (!preview || !metadata || !processId || !startedAt) return;
+    try {
+      const content = await resolveSessionFileCopyContent(preview, async () => {
+        // A truncated preview must never copy a partial file: read the whole
+        // authenticated response the same way Download does.
+        const source = await buildSessionFileBinarySource(
+          serverId,
+          daemonId,
+          bindSessionFileRequestToGeneration(
+            { workerId, processId, startedAt, path: metadata.path },
+            metadata,
+          ),
+        );
+        const response = await fetch(source.uri, { headers: source.headers });
+        if (!response.ok) {
+          throw new Error(
+            `Session file copy failed (HTTP ${response.status}).`,
+          );
+        }
+        return response.text();
+      });
+      if (content !== null) await copyOwner.copy(content);
+    } catch {
+      // Copy failures stay quiet, matching the clipboard write behavior.
+    }
+  }, [
+    copyOwner,
+    daemonId,
+    processId,
+    serverId,
+    startedAt,
+    state.metadata,
+    state.text,
+    workerId,
+  ]);
+
+  const textPreview = state.text;
+  // Text is the only copyable content. A truncated preview is copyable only
+  // when the full text is still fetchable inside the binary download bound.
+  const canCopy =
+    textPreview !== null &&
+    (!textPreview.truncated || sessionFileCanDownload(state.metadata));
 
   const downloadFile = useCallback(() => {
     const metadata = state.metadata;
@@ -390,10 +432,11 @@ export function SessionFilePreviewSheet({
       <SessionFilePreviewHeader
         state={state}
         chrome={chrome}
-        pathCopied={pathCopied}
+        contentCopied={contentCopied}
+        canCopy={canCopy}
         downloadFeedback={downloadFeedback}
         downloadError={downloadError}
-        onCopyPath={copyPath}
+        onCopyContent={copyContent}
         onDownload={downloadFile}
         onRefresh={retry}
         onClose={close}
@@ -416,20 +459,22 @@ export function SessionFilePreviewSheet({
 function SessionFilePreviewHeader({
   state,
   chrome,
-  pathCopied,
+  contentCopied,
+  canCopy,
   downloadFeedback,
   downloadError,
-  onCopyPath,
+  onCopyContent,
   onDownload,
   onRefresh,
   onClose,
 }: {
   state: SessionFilePreviewState;
   chrome: TerminalThemeChrome;
-  pathCopied: boolean;
+  contentCopied: boolean;
+  canCopy: boolean;
   downloadFeedback: SessionFileDownloadFeedback;
   downloadError: string | null;
-  onCopyPath(): void;
+  onCopyContent(): void;
   onDownload(): void;
   onRefresh(): void;
   onClose(): void;
@@ -506,14 +551,16 @@ function SessionFilePreviewHeader({
         disabled={!canDownload || downloadBusy}
         busy={downloadBusy}
       />
-      <HeaderAction
-        label={pathCopied ? "File path copied" : "Copy file path"}
-        icon={pathCopied ? "check" : "copy"}
-        chrome={chrome}
-        onPress={onCopyPath}
-        selected={pathCopied}
-        accent={pathCopied}
-      />
+      {canCopy ? (
+        <HeaderAction
+          label={contentCopied ? "Copied" : "Copy"}
+          icon={contentCopied ? "check" : "copy"}
+          chrome={chrome}
+          onPress={onCopyContent}
+          selected={contentCopied}
+          accent={contentCopied}
+        />
+      ) : null}
       <HeaderAction
         label="Close file preview"
         icon="close"
