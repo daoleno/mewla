@@ -8,6 +8,14 @@ export function interfaceChatSessionCacheKey(
     : `${serverId}:agent:${workerId}`;
 }
 
+/** A chat whose owner is not known yet, such as Brain before its first snapshot. */
+export function isUnboundInterfaceChatSessionCacheKey(
+  serverId: string,
+  cacheKey: string,
+) {
+  return cacheKey === interfaceChatSessionCacheKey(serverId, "");
+}
+
 export interface InterfaceReadingIdentity {
   owner: string;
   key: string;

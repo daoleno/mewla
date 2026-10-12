@@ -36,7 +36,10 @@ import {
   type ConversationStreamCursor,
 } from "./interfaceConversationReconciliation";
 import { shouldDropStructuredChatEvent } from "./interfaceConversationVisibility";
-import { interfaceChatSessionCacheKey } from "./interfaceChatSessionIdentity";
+import {
+  interfaceChatSessionCacheKey,
+  isUnboundInterfaceChatSessionCacheKey,
+} from "./interfaceChatSessionIdentity";
 
 const INSTRUCTION_CONTEXT_ATTACHMENT_TAG_RE =
   /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
@@ -901,10 +904,18 @@ export function useInterfaceChatSession({
   const loading =
     threadState.cacheKey === cacheKey ? threadState.loading : true;
   const error = threadState.cacheKey === cacheKey ? threadState.error : null;
+  // A draft typed before the chat's owner was known moves to that owner.
+  const carriedDraft =
+    draftState.cacheKey !== composerCacheKey &&
+    isUnboundInterfaceChatSessionCacheKey(serverId, draftState.cacheKey)
+      ? draftState.value
+      : "";
   const draft =
     draftState.cacheKey === composerCacheKey
       ? draftState.value
-      : (draftCache.get(composerCacheKey) ?? "");
+      : carriedDraft || (draftCache.get(composerCacheKey) ?? "");
+  const carriedDraftRef = useRef(carriedDraft);
+  carriedDraftRef.current = carriedDraft;
   const attachments =
     attachmentsState.cacheKey === composerCacheKey
       ? attachmentsState.value
@@ -1099,15 +1110,20 @@ export function useInterfaceChatSession({
   ]);
 
   useEffect(() => {
+    const carried = carriedDraftRef.current;
+    if (carried) {
+      draftCache.delete(interfaceChatSessionCacheKey(serverId, ""));
+      draftCache.set(composerCacheKey, carried);
+    }
     setDraftState({
       cacheKey: composerCacheKey,
-      value: draftCache.get(composerCacheKey) ?? "",
+      value: carried || (draftCache.get(composerCacheKey) ?? ""),
     });
     setAttachmentsState({
       cacheKey: composerCacheKey,
       value: attachmentCache.get(composerCacheKey) ?? [],
     });
-  }, [composerCacheKey]);
+  }, [composerCacheKey, serverId]);
 
   return {
     cacheKey: presentationCacheKey,
