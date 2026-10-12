@@ -6,11 +6,19 @@ import {
   reduceTimelineScrollPosition,
   returnTimelineToBottom,
   timelineDragContinuesWithMomentum,
+  timelineKeyboardDismissMode,
   timelineListStabilityProps,
   timelineDistanceFromLatest,
 } from "./timelineScrollPolicy";
 
 describe("timeline scroll policy", () => {
+  test("only native platforms dismiss the keyboard from timeline scrolling", () => {
+    expect(timelineKeyboardDismissMode("ios")).toBe("interactive");
+    expect(timelineKeyboardDismissMode("android")).toBe("on-drag");
+    // react-native-web blurs the focused Composer on any scroll event.
+    expect(timelineKeyboardDismissMode("web")).toBe("none");
+  });
+
   test("layout movement never changes follow intent", () => {
     expect(
       reduceTimelineScrollPosition(INITIAL_TIMELINE_SCROLL_STATE, 320, false),

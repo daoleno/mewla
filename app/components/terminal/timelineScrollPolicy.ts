@@ -16,6 +16,21 @@ export function timelineListStabilityProps() {
   } as const;
 }
 
+/**
+ * react-native-web treats "on-drag" as "dismiss on every scroll event",
+ * including the offset adjustment after the Composer expands on focus, so a
+ * scrolled-up timeline blurs the Composer the moment it is clicked. Web has no
+ * software keyboard to dismiss; the browser owns focus.
+ */
+export function timelineKeyboardDismissMode(
+  platform: string,
+): "interactive" | "on-drag" | "none" {
+  if (platform === "ios") {
+    return "interactive";
+  }
+  return platform === "web" ? "none" : "on-drag";
+}
+
 export interface TimelineScrollState {
   mode: "attached" | "detached";
 }

@@ -51,7 +51,10 @@ import {
   type TimelineRenderProjectionCache,
 } from "./InterfaceTimelineGrouping";
 import type { PatchFileSummary } from "./InterfaceTimelineActivityTypes";
-import { timelineListStabilityProps } from "./timelineScrollPolicy";
+import {
+  timelineKeyboardDismissMode,
+  timelineListStabilityProps,
+} from "./timelineScrollPolicy";
 import {
   initialTimelineReadingWindow,
   type TimelineReadingPosition,
@@ -521,9 +524,7 @@ export function InterfaceTimelineView({
             initialNumToRender={resolvedWindow.initialCount}
             onStartReached={revealNewerRows}
             onStartReachedThreshold={1}
-            keyboardDismissMode={
-              Platform.OS === "ios" ? "interactive" : "on-drag"
-            }
+            keyboardDismissMode={timelineKeyboardDismissMode(Platform.OS)}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             scrollEventThrottle={32}
