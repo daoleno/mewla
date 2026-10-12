@@ -75,8 +75,14 @@ each with its status and two switches:
 only read tools you allow, and its reads don't show up as recent calls.
 
 **Tools & activity** lets you allow or block single tools, inspect a tool's
-schema, run a status check and see recent calls. New tools a service adds later
-need your review before use; until then, **Read and search** says so.
+schema, run a status check and see recent calls. Every switch takes effect on
+the tap, with no confirm. **All tools** at the top allows or turns off every
+tool of the account at once, and each group (Read and search, Make changes,
+and Other tools that Mewla hasn't reviewed) has its own **Allow all** and
+**Turn off**. When the service still has to approve changes, Allow all leaves
+them off, and the Make changes group's Allow all asks the service first. New
+tools a service adds later need your review before use; until then, **Read
+and search** says so.
 
 Permission is not an instruction. Even with changes allowed, Brain should send
 messages or update records only when the task you gave it calls for that.
@@ -159,7 +165,11 @@ mewla connections list --json
 mewla connections search --query github --json
 mewla connections describe --id ACCOUNT_ID --tool get_me --json
 mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
+mewla connections policy --id ACCOUNT_ID --tools get_me,list_issues --allow
 ```
+
+`policy --tools` sets every listed tool in one change: all of them, or none
+if any name is unknown. Leave out `--allow` to turn them off.
 
 Each call is one bounded request; nothing pages automatically.
 

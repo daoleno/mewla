@@ -4,13 +4,17 @@ import {
   accessControl,
   accountRecovery,
   accountTone,
+  bulkToolNames,
   connectSteps,
   enabledRequest,
   isConnecting,
   pluginCatalogRows,
   reconnectsWithWrites,
   serviceOff,
+  toolPolicyRequest,
+  toolSections,
   usesApiKey,
+  withToolsAllowed,
 } from "./pluginConnectionsModel";
 
 const plugin = (id: string, name: string): PluginIntegration => ({ id, name, available: true, setup_url: "", description: `${name} service` });
@@ -131,5 +135,52 @@ describe("authorization progress", () => {
     expect(connectSteps("waiting", { serverId: "s", flow: { ...flow, user_code: "ABCD-1234" } })[0]!.label).toContain("code");
     expect(isConnecting("waiting")).toBe(true);
     expect(isConnecting("failed")).toBe(false);
+  });
+});
+
+describe("tool switches", () => {
+  const tool = (name: string, group: "read" | "write" | undefined, allowed: boolean) => ({ name, description: `${name} does a thing`, group, allowed });
+  const tools = [tool("search", "read", true), tool("fetch", "read", false), tool("create", "write", false), tool("update", "write", true), tool("export", undefined, false), tool("archive", undefined, false)];
+  const access = { read: "partial" as const, write: "partial" as const, allowed: 2, tools: 6 };
+
+  test("tools group into Read and search, Make changes and unreviewed, each with its own count", () => {
+    const sections = toolSections(account({ integration: "notion", tools, access }));
+    expect(sections.map((section) => [section.key, section.tools.map((item) => item.name), section.allowed])).toEqual([
+      ["read", ["search", "fetch"], 1],
+      ["write", ["create", "update"], 1],
+      ["other", ["export", "archive"], 0],
+    ]);
+    expect(sections[2].footer).toMatch(/hasn't reviewed/);
+    expect(toolSections(account({ integration: "notion", tools: tools.slice(0, 2), access })).map((section) => section.key)).toEqual(["read"]);
+  });
+
+  test("a custom service's tools are one list; no tools, no sections", () => {
+    const custom = toolSections(account({ integration: "mcp", tools: [tool("a", undefined, true), tool("b", undefined, false)] }));
+    expect(custom.map((section) => [section.key, section.title, section.allowed])).toEqual([["all", "Tools", 1]]);
+    expect(toolSections(account({ tools: [] }))).toEqual([]);
+  });
+
+  test("a bulk switch changes only tools not already in that state", () => {
+    const target = account({ tools, access });
+    expect(bulkToolNames(target, tools, true)).toEqual(["fetch", "create", "export", "archive"]);
+    expect(bulkToolNames(target, tools, false)).toEqual(["search", "update"]);
+    expect(bulkToolNames(target, tools.slice(0, 1), true)).toEqual([]);
+  });
+
+  test("allowing all leaves changes the service must approve to its sign-in", () => {
+    const target = account({ tools, access: { ...access, write_consent: true } });
+    expect(bulkToolNames(target, tools, true)).toEqual(["fetch", "export", "archive"]);
+    // Turning off never needs approval.
+    expect(bulkToolNames(target, tools, false)).toEqual(["search", "update"]);
+    expect(toolSections(target).find((section) => section.key === "write")?.consent).toBe(true);
+  });
+
+  test("one tool or many is one request, and the page shows it at once", () => {
+    const target = account({ tools, access });
+    expect(toolPolicyRequest(target, ["fetch"], true)).toEqual({ action: "policy", id: "a1", tool: "fetch", allowed: true });
+    expect(toolPolicyRequest(target, ["fetch", "export"], false)).toEqual({ action: "policy", id: "a1", tools: ["fetch", "export"], allowed: false });
+    const next = withToolsAllowed(target, ["fetch", "export"], true);
+    expect(next.tools?.filter((item) => item.allowed).map((item) => item.name)).toEqual(["search", "fetch", "update", "export"]);
+    expect(target.tools?.[1].allowed).toBe(false);
   });
 });

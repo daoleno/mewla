@@ -1,5 +1,5 @@
 import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
-import { accountStatus, type AccessState, type ConnectionRequest, type PluginAccount, type PluginIntegration } from "./connections";
+import { accountStatus, type AccessState, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
 
 export type ConnectionTone = "success" | "warning" | "danger" | "neutral" | "accent";
 
@@ -113,6 +113,58 @@ export function allowedToolCount(account: PluginAccount): { allowed: number; tot
   if (account.access) return { allowed: account.access.allowed, total: account.access.tools };
   const tools = account.tools ?? [];
   return { allowed: tools.filter((tool) => tool.allowed).length, total: tools.length };
+}
+
+/** One group of an account's tools on its Tools page, with its own bulk switches. */
+export interface ToolSection {
+  key: "read" | "write" | "other" | "all";
+  title: string;
+  footer?: string;
+  tools: ConnectionTool[];
+  allowed: number;
+  /** Allowing these needs the service to ask again (its sign-in lacks write access). */
+  consent: boolean;
+}
+
+/**
+ * The Tools page's groups: Read and search, Make changes, then tools Mewla
+ * has not reviewed. A custom service has no reviewed tools, so one list.
+ */
+export function toolSections(account: PluginAccount): ToolSection[] {
+  const tools = account.tools ?? [];
+  const section = (key: ToolSection["key"], title: string, list: ConnectionTool[], footer?: string): ToolSection => ({
+    key, title, footer, tools: list, allowed: list.filter((tool) => tool.allowed).length,
+    consent: key === "write" && !!account.access?.write_consent,
+  });
+  if (!tools.some((tool) => tool.group)) return tools.length ? [section("all", "Tools", tools)] : [];
+  return [
+    section("read", "Read and search", tools.filter((tool) => tool.group === "read")),
+    section("write", "Make changes", tools.filter((tool) => tool.group === "write")),
+    section("other", "Other tools", tools.filter((tool) => !tool.group), "Mewla hasn't reviewed these. Read what each one does before allowing it."),
+  ].filter((entry) => entry.tools.length);
+}
+
+/**
+ * The tools a bulk switch changes: those not already in the wanted state.
+ * Allowing all leaves out changes the service still has to approve; those
+ * go through its sign-in instead.
+ */
+export function bulkToolNames(account: PluginAccount, tools: readonly ConnectionTool[], allowed: boolean): string[] {
+  const consent = allowed && !!account.access?.write_consent;
+  return tools.filter((tool) => tool.allowed !== allowed && !(consent && tool.group === "write")).map((tool) => tool.name);
+}
+
+/** One policy request for one tool or many: the server applies all of them or none. */
+export function toolPolicyRequest(account: PluginAccount, names: readonly string[], allowed: boolean): ConnectionRequest {
+  return names.length === 1
+    ? { action: "policy", id: account.id, tool: names[0], allowed }
+    : { action: "policy", id: account.id, tools: [...names], allowed };
+}
+
+/** The account as the page shows it right away, before the server answers. */
+export function withToolsAllowed(account: PluginAccount, names: readonly string[], allowed: boolean): PluginAccount {
+  const changed = new Set(names);
+  return { ...account, tools: account.tools?.map((tool) => (changed.has(tool.name) ? { ...tool, allowed } : tool)) };
 }
 
 export type AccountRecoveryAction = "refresh" | "reconnect" | "disconnect";

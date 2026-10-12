@@ -109,14 +109,16 @@ type Input struct {
 }
 
 type Request struct {
-	FlowID    string          `json:"flow_id,omitempty"`
-	Callback  string          `json:"callback,omitempty"`
-	Group     string          `json:"group,omitempty"`
-	Action    string          `json:"action"`
-	ID        string          `json:"id,omitempty"`
-	Input     *Input          `json:"input,omitempty"`
-	Query     string          `json:"query,omitempty"`
-	Tool      string          `json:"tool,omitempty"`
+	FlowID   string `json:"flow_id,omitempty"`
+	Callback string `json:"callback,omitempty"`
+	Group    string `json:"group,omitempty"`
+	Action   string `json:"action"`
+	ID       string `json:"id,omitempty"`
+	Input    *Input `json:"input,omitempty"`
+	Query    string `json:"query,omitempty"`
+	Tool     string `json:"tool,omitempty"`
+	// Tools sets one policy for several tools at once (the policy action).
+	Tools     []string        `json:"tools,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Allowed   bool            `json:"allowed,omitempty"`
 	// Cwd resolves relative file paths; honored only from the local CLI.

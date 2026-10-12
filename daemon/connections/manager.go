@@ -227,22 +227,8 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("this permission group is not available")
 		}
 	case "policy":
-		found := false
-		for _, t := range r.Account.Tools {
-			if t.Name == q.Tool {
-				found = true
-				if r.Grants == nil {
-					r.Grants = map[string]string{}
-				}
-				if q.Allowed {
-					r.Grants[t.Name] = fingerprint(t)
-				} else {
-					delete(r.Grants, t.Name)
-				}
-			}
-		}
-		if !found {
-			return Response{}, errors.New("tool not found")
+		if err := setPolicy(r, q); err != nil {
+			return Response{}, err
 		}
 	case "set_key":
 		if err := m.setKey(ctx, r, q.Input); err != nil {

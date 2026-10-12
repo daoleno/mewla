@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, AppState, Linking, Platform, StyleSheet, View } from "react-native";
+import { AppState, Linking, Platform, StyleSheet, View } from "react-native";
 import { Stack, useGlobalSearchParams, useRouter } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as Clipboard from "expo-clipboard";
@@ -10,7 +10,7 @@ import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, usesApiKey, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, usesApiKey, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -321,10 +321,18 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   };
   /** Loads one account's tools and history, for its Tools page. */
   const load = useCallback((id: string) => send({ action: "get", id }, `load:${id}`), [send]);
-  /** One tool by name. A tool outside the reviewed groups shows what it does before it is allowed. */
-  const toggleTool = (target: PluginAccount, tool: NonNullable<PluginAccount["tools"]>[number], allowed: boolean) => {
-    const commit = () => { if (valid()) void send({ action: "policy", id: target.id, tool: tool.name, allowed }, `tool:${target.id}:${tool.name}`); };
-    if (!allowed) commit(); else Alert.alert("Allow this tool?", `${tool.description}\n\nAvailable to Brain and Workers for this account.`, [{ text: "Cancel", style: "cancel" }, { text: "Allow", onPress: commit }]);
+  /**
+   * Allows or blocks one tool or many in one request, with no confirm: each
+   * row already says what its tool does. The switches move at once and go
+   * back if the server refuses; its answer replaces them either way.
+   */
+  const setTools = (target: PluginAccount, names: readonly string[], allowed: boolean) => {
+    if (!names.length || mutation.current || !valid()) return;
+    const previous = details[target.id];
+    setDetails((old) => ({ ...old, [target.id]: withToolsAllowed(old[target.id] ?? target, names, allowed) }));
+    void send(toolPolicyRequest(target, names, allowed), `tools:${target.id}`).then((result) => {
+      if (!result && valid() && previous) setDetails((old) => ({ ...old, [target.id]: previous }));
+    });
   };
   const plugin = (id: string | null) => catalog.find((item) => item.id === id) ?? null;
   return {
@@ -333,7 +341,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
     plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
-    setAccess, disconnect, recover, setEnabled, setKey, load, toggleTool,
+    setAccess, disconnect, recover, setEnabled, setKey, load, setTools,
   };
 }
 
