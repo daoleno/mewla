@@ -71,6 +71,9 @@ each with its status and two switches:
   granted read access, the switch is an **Allow** button instead: the service
   asks you once more, then the switch is on.
 
+[Watch](watch.md) reads GitHub and Linear through these same switches: it uses
+only read tools you allow, and its reads don't show up as recent calls.
+
 **Tools & activity** lets you allow or block single tools, inspect a tool's
 schema, run a status check and see recent calls. New tools a service adds later
 need your review before use; until then, **Read and search** says so.

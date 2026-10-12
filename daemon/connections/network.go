@@ -16,6 +16,11 @@ import (
 
 var errAuth = errors.New("authorization expired or revoked; reconnect this account")
 
+// StatusError is a service's non-2xx HTTP answer other than 401.
+type StatusError struct{ Status int }
+
+func (e StatusError) Error() string { return fmt.Sprintf("integration returned HTTP %d", e.Status) }
+
 func trustedIP(ip net.IP, networks []string) bool {
 	a, ok := netip.AddrFromSlice(ip)
 	if !ok {
@@ -222,7 +227,7 @@ func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, meth
 		return nil, errAuth
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("integration returned HTTP %d", resp.StatusCode)
+		return nil, StatusError{Status: resp.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, MaxResultBytes+1))
 	if err != nil {

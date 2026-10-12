@@ -93,7 +93,9 @@ mewla resources               # one resource sample as JSON
 mewla watch status            # signals per source and project, last pass, errors
 mewla watch projects
 mewla watch signals --project mewla --source human --since 24h
-mewla watch problems
+mewla watch problems --rule judgment
+mewla watch enable && mewla watch judge   # agent judgment; costs tokens
+mewla watch problem label <id> real|not|later --note "why"
 mewla watch project rename --project <id> --name "New name"
 mewla watch project link-linear --project <id> --team KEY --confirm
 ```

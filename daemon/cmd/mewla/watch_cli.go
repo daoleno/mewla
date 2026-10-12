@@ -21,9 +21,12 @@ Watch looks over your projects and records what needs you.
   status                           Signal counts per source and project, last pass, errors
   projects [--project id]          Inferred projects, their remotes and linked sources
   signals [--project id] [--source human|process|runtime|external] [--kind k] [--since 24h] [--limit n]
-  problems [--project id] [--rule ci_red|repeated_error|worker_stalls]
+  problems [--project id] [--rule judgment|ci_red|repeated_error|worker_stalls]
+  problem label <id> real|not|later [--note "why"]
+                                   Tell Watch whether a problem was real; later runs learn from it
   collect [--source s]             Run a collection pass now and print what it added
-  enable | disable                 Turn the Watch setting on or off
+  judge [--batches n]              Judge pending signals now (Watch must be enabled; costs tokens)
+  enable | disable                 Turn Watch on or off; judgment runs only while it is on
   project rename --project id --name "New name"
   project link-linear --project id --team KEY --confirm
   project unlink-linear --project id
@@ -37,6 +40,14 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	}
 	action := args[0]
 	rest := args[1:]
+	var positional []string
+	if action == "problem" {
+		if len(rest) < 3 || rest[0] != "label" || isHelpArg(rest[1]) {
+			fmt.Fprintln(stderr, watchUsage)
+			return flag.ErrHelp
+		}
+		action, positional, rest = "problem label", rest[1:3], rest[3:]
+	}
 	if action == "project" {
 		if len(rest) == 0 || isHelpArg(rest[0]) {
 			fmt.Fprintln(stderr, watchUsage)
@@ -61,6 +72,8 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	fs.StringVar(&request.Name, "name", "", "new project name")
 	fs.StringVar(&request.TeamKey, "team", "", "Linear team key")
 	fs.BoolVar(&confirm, "confirm", false, "confirm the suggested Linear team")
+	fs.StringVar(&request.Note, "note", "", "why, in your words")
+	fs.IntVar(&request.Batches, "batches", 1, "judgment batches to run")
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
@@ -86,6 +99,11 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 		}
 		// The first collection reads three weeks of transcripts.
 		timeout = 20 * time.Minute
+	case "judge":
+		request.Action = "judge"
+		timeout = time.Duration(max(request.Batches, 1)) * 16 * time.Minute
+	case "problem label":
+		request.Action, request.ProblemID, request.Label = "label", positional[0], positional[1]
 	case "enable", "disable":
 		request.Action, request.Enabled = "set_enabled", action == "enable"
 	case "project rename":
@@ -154,7 +172,14 @@ func writeWatchText(w io.Writer, response watch.Response) error {
 		fmt.Fprintln(table, string(raw))
 	case response.Projects != nil:
 		for _, project := range response.Projects {
-			fmt.Fprintf(table, "%s\t%s\t%s\t%s\n", project.ID, project.Name, project.LastSeen.Local().Format("2006-01-02 15:04"), project.Root)
+			github, linear := "-", "-"
+			if project.GitHub != nil {
+				github = strings.TrimSpace("github " + project.GitHub.Coverage + " " + project.GitHub.Reason)
+			}
+			if project.Linear != nil && project.Linear.Confirmed != nil {
+				linear = strings.TrimSpace("linear " + project.Linear.Coverage + " " + project.Linear.Reason)
+			}
+			fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n", project.ID, project.Name, project.LastSeen.Local().Format("2006-01-02 15:04"), project.Root, github, linear)
 		}
 	case response.Signals != nil:
 		for _, signal := range response.Signals {
@@ -162,7 +187,17 @@ func writeWatchText(w io.Writer, response watch.Response) error {
 		}
 	case response.Problems != nil:
 		for _, problem := range response.Problems {
-			fmt.Fprintf(table, "%s\t%s\t%v\t%d\t%s\n", problem.ID, problem.Status, problem.Active, problem.Count, problem.Title)
+			cost := 0
+			if problem.Cost != nil {
+				cost = problem.Cost.Score
+			}
+			fmt.Fprintf(table, "%s\t%s\t%s\t%v\t%d\t%d\t%s\n", problem.ID, problem.Rule, problem.Status, problem.Active, cost, problem.Count, problem.Title)
+		}
+	case response.Problem != nil:
+		fmt.Fprintf(table, "%s\t%s\t%s\n", response.Problem.ID, response.Problem.Status, response.Problem.Title)
+	case response.Runs != nil:
+		for _, run := range response.Runs {
+			fmt.Fprintf(table, "%s\t%d signals\t%d placed\t%d new\t%d updated\t$%.3f\t%s\n", run.ID, run.Signals, run.Placed, run.ProblemsNew, run.ProblemsUpdated, run.Usage.CostUSD, run.Error)
 		}
 	case response.Project != nil:
 		fmt.Fprintf(table, "%s\t%s\n", response.Project.ID, response.Project.Name)

@@ -65,12 +65,26 @@ func builtinTools(kind string) []Tool {
 	page := object(map[string]any{"id": str()}, "id")
 	pagination := object(map[string]any{"per_page": pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000}})
 	if kind == "github" {
+		alertQuery := object(map[string]any{"state": str(), "per_page": pageSize()})
 		return []Tool{
 			builtin("get_me", "Read the authenticated GitHub account", "GET", "/user", true, nil, nil, nil),
 			builtin("list_repositories", "List repositories visible to this account (one page)", "GET", "/user/repos", true, nil, pagination, nil),
 			builtin("get_repository", "Read repository details", "GET", "/repos/{owner}/{repo}", true, repo, nil, nil),
 			builtin("list_issues", "List repository issues and pull requests (one page)", "GET", "/repos/{owner}/{repo}/issues", true, repo, pagination, nil),
 			builtin("get_issue", "Read an issue or pull request", "GET", "/repos/{owner}/{repo}/issues/{number}", true, issue, nil, nil),
+			builtin("list_updated_issues", "List issues and pull requests updated since a time, most recently updated first (one page)", "GET", "/repos/{owner}/{repo}/issues", true, repo, object(map[string]any{
+				"state": map[string]any{"type": "string", "enum": []string{"open", "closed", "all"}}, "since": str(),
+				"sort":      map[string]any{"type": "string", "enum": []string{"created", "updated", "comments"}},
+				"direction": map[string]any{"type": "string", "enum": []string{"asc", "desc"}},
+				"per_page":  pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000},
+			}), nil),
+			builtin("list_workflow_runs", "List a repository's GitHub Actions workflow runs, newest first (one page)", "GET", "/repos/{owner}/{repo}/actions/runs", true, repo, object(map[string]any{
+				"branch": str(), "event": str(),
+				"status":   map[string]any{"type": "string", "enum": []string{"completed", "success", "failure", "in_progress", "queued"}},
+				"per_page": pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000},
+			}), nil),
+			builtin("list_dependabot_alerts", "List a repository's Dependabot alerts (one page)", "GET", "/repos/{owner}/{repo}/dependabot/alerts", true, repo, alertQuery, nil),
+			builtin("list_code_scanning_alerts", "List a repository's code scanning alerts (one page)", "GET", "/repos/{owner}/{repo}/code-scanning/alerts", true, repo, alertQuery, nil),
 			builtin("create_issue", "Create a repository issue", "POST", "/repos/{owner}/{repo}/issues", false, repo, nil, object(map[string]any{"title": str(), "body": str()}, "title")),
 			builtin("comment_on_issue", "Post a comment on an issue or pull request", "POST", "/repos/{owner}/{repo}/issues/{number}/comments", false, issue, nil, object(map[string]any{"body": str()}, "body")),
 		}
@@ -380,7 +394,7 @@ func expandRefBudget(value, root any, depth int, budget *int) (any, error) {
 	}
 }
 
-func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool Tool, args map[string]any) ([]byte, error) {
+func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool Tool, args map[string]any, capture ...*http.Header) ([]byte, error) {
 	tools := builtinTools(r.Account.Integration)
 	if r.Account.Integration == "openapi" {
 		var err error
@@ -399,10 +413,10 @@ func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool
 	if t == nil || fingerprint(*t) != fingerprint(tool) {
 		return nil, errors.New("tool definition changed; refresh and review authorization")
 	}
-	return m.dispatchHTTP(ctx, r, r.Account.Endpoint, secret, *t, args)
+	return m.dispatchHTTP(ctx, r, r.Account.Endpoint, secret, *t, args, capture...)
 }
 
-func (m *Manager) dispatchHTTP(ctx context.Context, r *record, endpoint, secret string, t Tool, args map[string]any) ([]byte, error) {
+func (m *Manager) dispatchHTTP(ctx context.Context, r *record, endpoint, secret string, t Tool, args map[string]any, capture ...*http.Header) ([]byte, error) {
 	path := t.Path
 	if params, ok := args["path"].(map[string]any); ok {
 		for k, v := range params {
@@ -435,5 +449,5 @@ func (m *Manager) dispatchHTTP(ctx context.Context, r *record, endpoint, secret 
 	if b, ok := args["body"]; ok {
 		body, _ = json.Marshal(b)
 	}
-	return m.request(ctx, r, endpoint, secret, t.Method, path, bytes.NewReader(body))
+	return m.request(ctx, r, endpoint, secret, t.Method, path, bytes.NewReader(body), capture...)
 }

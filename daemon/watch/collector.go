@@ -53,6 +53,7 @@ type Collector struct {
 	sessions    SessionLister
 	external    ExternalReader
 	transcripts transcriptSource
+	judge       *judge
 	now         func() time.Time
 	pause       func()
 
@@ -78,6 +79,7 @@ func NewCollector(options Options) *Collector {
 		sessions:    options.Sessions,
 		external:    options.External,
 		transcripts: defaultTranscripts,
+		judge:       newJudge(options.Store, options.Home),
 		now:         func() time.Time { return time.Now().UTC() },
 		pause:       func() { time.Sleep(2 * time.Millisecond) },
 		errors:      map[string]string{},
@@ -110,9 +112,11 @@ func (c *Collector) noteError(source string, err error) {
 	log.Printf("WARN watch: %s collection failed: %s", source, message)
 }
 
-// Run collects until ctx ends. It never returns an error: a failing source is
-// recorded and retried on its next interval.
+// Run collects until ctx ends, and judges in the background while Watch is
+// enabled. It never returns an error: a failing source is recorded and
+// retried on its next interval.
 func (c *Collector) Run(ctx context.Context) error {
+	go c.judge.loop(ctx)
 	timer := time.NewTimer(startupDelay)
 	defer timer.Stop()
 	for {
@@ -195,6 +199,9 @@ func (c *Collector) Collect(ctx context.Context, sources []string, force bool) (
 	if due(SourceExternal, externalEvery) {
 		run(SourceExternal, c.collectExternal)
 	}
+	if ctx.Err() == nil {
+		c.noteError("placement", c.placeFromIndex())
+	}
 	if err := c.store.Flush(); err != nil {
 		c.noteError("store", err)
 	}
@@ -210,6 +217,8 @@ type Status struct {
 	Signals     int                       `json:"signals"`
 	BySource    map[string]map[string]int `json:"by_source"`
 	Problems    int                       `json:"problems"`
+	Placed      map[string]Placement      `json:"placed"`
+	Judgment    JudgeStatus               `json:"judgment"`
 	LinearTeams int                       `json:"linear_teams"`
 	LastPass    *PassResult               `json:"last_pass,omitempty"`
 	Errors      map[string]string         `json:"errors,omitempty"`
@@ -217,19 +226,32 @@ type Status struct {
 
 // Status reports counts per source and project and the last pass.
 func (c *Collector) Status() Status {
-	status := Status{Config: c.store.Config(), BySource: map[string]map[string]int{}}
+	status := Status{Config: c.store.Config(), BySource: map[string]map[string]int{}, Placed: map[string]Placement{}}
 	for _, signal := range c.store.Signals(Filter{}) {
 		status.Signals++
+		placed := status.Placed[signal.Source]
+		placed.Total++
+		switch {
+		case signal.ProjectID == "":
+		case signal.PlacedBy == PlacedByIndex:
+			placed.ByIndex++
+		case signal.PlacedBy == PlacedByJudgment:
+			placed.ByJudgment++
+		default:
+			placed.AtCollection++
+		}
+		status.Placed[signal.Source] = placed
 		if status.BySource[signal.Source] == nil {
 			status.BySource[signal.Source] = map[string]int{}
 		}
 		status.BySource[signal.Source][firstNonEmpty(signal.ProjectID, "(none)")]++
 	}
 	for _, problem := range c.store.Problems(Filter{}) {
-		if problem.Active {
+		if problem.Active && problem.MergedInto == "" {
 			status.Problems++
 		}
 	}
+	status.Judgment = c.judge.status()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	status.LastPass = c.lastPass
@@ -243,6 +265,15 @@ func (c *Collector) Status() Status {
 	return status
 }
 
+// Placement counts how many of a source's signals have a project, and how
+// they got it.
+type Placement struct {
+	Total        int `json:"total"`
+	AtCollection int `json:"at_collection"`
+	ByIndex      int `json:"by_index"`
+	ByJudgment   int `json:"by_judgment"`
+}
+
 // Request is one control-socket call from the CLI.
 type Request struct {
 	Action    string   `json:"action"`
@@ -252,6 +283,10 @@ type Request struct {
 	TeamKey   string   `json:"team_key,omitempty"`
 	Sources   []string `json:"sources,omitempty"`
 	Enabled   bool     `json:"enabled,omitempty"`
+	ProblemID string   `json:"problem_id,omitempty"`
+	Label     string   `json:"label,omitempty"`
+	Note      string   `json:"note,omitempty"`
+	Batches   int      `json:"batches,omitempty"`
 }
 
 // Response answers a Request.
@@ -263,6 +298,8 @@ type Response struct {
 	Problems []Problem   `json:"problems,omitempty"`
 	Pass     *PassResult `json:"pass,omitempty"`
 	Config   *Config     `json:"config,omitempty"`
+	Problem  *Problem    `json:"problem,omitempty"`
+	Runs     []JudgeRun  `json:"runs,omitempty"`
 }
 
 // Handle serves a CLI request.
@@ -287,6 +324,12 @@ func (c *Collector) Handle(ctx context.Context, request Request) (Response, erro
 	case "collect":
 		pass := c.Collect(ctx, request.Sources, true)
 		return Response{Pass: &pass}, nil
+	case "judge":
+		runs, err := c.judge.runBatches(ctx, request.Batches)
+		return Response{Runs: runs}, err
+	case "label":
+		problem, err := c.store.LabelProblem(request.ProblemID, request.Label, request.Note)
+		return Response{Problem: &problem}, err
 	case "set_enabled":
 		config, err := c.store.SetEnabled(request.Enabled)
 		return Response{Config: &config}, err
@@ -340,4 +383,29 @@ func filterProjects(projects []Project, id string) []Project {
 		}
 	}
 	return nil
+}
+
+// placeFromIndex places signals collected before Watch knew where their
+// turn, Session or Work ran. It is deterministic and free; judgment places
+// what remains by content.
+func (c *Collector) placeFromIndex() error {
+	changes := map[string]Annotation{}
+	for _, signal := range c.store.Unplaced() {
+		for _, place := range []struct{ kind, key string }{
+			{"turn", signal.Refs["turn"]}, {"work", signal.Refs["work"]}, {"session", signal.Refs["session"]},
+		} {
+			if place.key == "" {
+				continue
+			}
+			cwd := c.store.PlaceOf(place.kind, place.key)
+			if cwd == "" || cwd == signal.Refs["cwd"] {
+				continue
+			}
+			if projectID, ok := c.store.ProjectForCWD(cwd, signal.Time); ok {
+				changes[signal.ID] = Annotation{ProjectID: projectID, PlacedBy: PlacedByIndex, PlaceReason: "its " + place.kind + " ran in " + cwd}
+				break
+			}
+		}
+	}
+	return c.store.Annotate(changes)
 }
