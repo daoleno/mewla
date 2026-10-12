@@ -238,12 +238,11 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		}
 		req := httptest.NewRequest(http.MethodGet, "https://native.invalid/?"+callback.RawQuery, nil)
 		w := httptest.NewRecorder()
-		m.finishOAuth(w, req, ctx, true, false)
-		if w.Code != http.StatusOK {
+		if cause := m.finishOAuth(w, req, ctx, true, false); cause != "" {
 			f.Status = "failed"
-			f.Message = "Authorization was declined or could not be verified. Connect again."
-			if callback.Query().Get("error") == "access_denied" {
-				f.Message = "Access was not granted. You can connect again whenever you’re ready."
+			f.Message = signInFailures[cause]
+			if f.Message == "" {
+				f.Message = "Authorization was declined or could not be verified. Connect again."
 			}
 			return flowResult(f), nil
 		}

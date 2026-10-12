@@ -1,11 +1,14 @@
 package connections
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -178,5 +181,115 @@ func TestWebConnectRefusesAppOnlyReturn(t *testing.T) {
 	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
 	if native == nil || !strings.Contains(native.AuthorizationURL, url.QueryEscape(NativeCallback)) {
 		t.Fatal("the app's Slack sign-in changed")
+	}
+}
+
+// A failed web sign-in returns naming the step that failed, so the next
+// failure says what broke instead of a generic "couldn't be verified".
+func TestWebConnectNamesFailedStep(t *testing.T) {
+	cases := []struct {
+		name, want, query, iss string
+		tokenStatus            int
+		schemaBytes            int
+	}{
+		{name: "provider error", want: "provider", query: "&vendor_error=server_error"},
+		{name: "issuer mismatch", want: "issuer", iss: "https://other.example"},
+		{name: "token rejected", want: "token", tokenStatus: http.StatusBadRequest},
+		{name: "oversized tool schema", want: "tools", schemaBytes: 40 << 10},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, err := New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := mcp.NewServer(&mcp.Implementation{Name: "Failing fixture", Version: "1"}, nil)
+			schema := map[string]any{}
+			if c.schemaBytes > 0 {
+				schema["note"] = map[string]any{"type": "string", "description": strings.Repeat("x", c.schemaBytes)}
+			}
+			server.AddTool(&mcp.Tool{Name: "read_fixture", InputSchema: object(schema)}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return &mcp.CallToolResult{}, nil
+			})
+			protocol := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+			var base string
+			mux := http.NewServeMux()
+			mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"resource": base + "/mcp", "authorization_servers": []string{base}})
+			})
+			mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(oauthMetadata{Issuer: base, AuthorizationEndpoint: base + "/authorize", TokenEndpoint: base + "/token", RegistrationEndpoint: base + "/register", CodeChallengeMethods: []string{"S256"}})
+			})
+			mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"client_id": "web-client", "token_endpoint_auth_method": "none"})
+			})
+			mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query()
+				callback, _ := url.Parse(q.Get("redirect_uri"))
+				values := url.Values{"state": {q.Get("state")}, "code": {"web-code"}}
+				if e := q.Get("vendor_error"); e != "" {
+					values = url.Values{"state": {q.Get("state")}, "error": {e}}
+				}
+				if c.iss != "" {
+					values.Set("iss", c.iss)
+				}
+				callback.RawQuery = values.Encode()
+				http.Redirect(w, r, callback.String(), http.StatusFound)
+			})
+			mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if c.tokenStatus != 0 {
+					w.WriteHeader(c.tokenStatus)
+					_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant", "error_description": "web-code-secret-detail"})
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "web-access-secret", "token_type": "Bearer", "expires_in": 3600})
+			})
+			mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer web-access-secret" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				protocol.ServeHTTP(w, r)
+			})
+			mux.HandleFunc("/plugins/oauth/callback", func(w http.ResponseWriter, r *http.Request) { m.BrowserOAuthCallback(w, r, true) })
+			fixture := httptest.NewServer(mux)
+			defer fixture.Close()
+			base = fixture.URL
+			m.SetWebOrigins(func(origin string) bool { return origin == base })
+			var logged bytes.Buffer
+			log.SetOutput(&logged)
+			defer log.SetOutput(os.Stderr)
+
+			start := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "mcp", Endpoint: base + "/mcp", TrustedNetworks: []string{"127.0.0.1/32"}, WebOrigin: base}}).Flow
+			browser := &http.Client{CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+				if req.URL.Path != "/plugins/oauth/callback" {
+					return http.ErrUseLastResponse
+				}
+				return nil
+			}}
+			response, err := browser.Get(start.AuthorizationURL + c.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			back, _ := url.Parse(response.Header.Get("Location"))
+			if back.Path != "/plugins" || back.Query().Get("plugin_error") != c.want || back.Query().Get("service") != "mcp" {
+				t.Fatalf("returned to %v, want plugin_error=%s", back, c.want)
+			}
+			if len(m.records) != 0 {
+				t.Fatal("failed sign-in left an account")
+			}
+			line := logged.String()
+			if !strings.Contains(line, "sign-in failed at "+c.want) || strings.Contains(line, "secret") {
+				t.Fatalf("log line %q", line)
+			}
+			if c.want == "token" && !strings.Contains(line, "HTTP 400 invalid_grant") {
+				t.Fatalf("token failure log %q does not name the vendor code", line)
+			}
+			if c.want == "tools" && !strings.Contains(line, `"read_fixture" schema is 40 KB`) {
+				t.Fatalf("tools failure log %q does not name the tool", line)
+			}
+		})
 	}
 }
