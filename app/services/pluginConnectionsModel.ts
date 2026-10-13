@@ -115,7 +115,7 @@ export function allowedToolCount(account: PluginAccount): { allowed: number; tot
   return { allowed: tools.filter((tool) => tool.allowed).length, total: tools.length };
 }
 
-/** One group of an account's tools on its Tools page, with its own bulk switches. */
+/** One group of an account's tools on its Tools page, with its own master switch. */
 export interface ToolSection {
   key: "read" | "write" | "other" | "all";
   title: string;
@@ -152,6 +152,32 @@ export function toolSections(account: PluginAccount): ToolSection[] {
 export function bulkToolNames(account: PluginAccount, tools: readonly ConnectionTool[], allowed: boolean): string[] {
   const consent = allowed && !!account.access?.write_consent;
   return tools.filter((tool) => tool.allowed !== allowed && !(consent && tool.group === "write")).map((tool) => tool.name);
+}
+
+/** What a master switch over some tools shows, and what one tap does. */
+export type ToolsSwitch =
+  | { on: boolean; tap: "set"; names: string[] }
+  | { on: false; tap: "consent" }
+  | { on: false; tap: "none" };
+
+/**
+ * One switch for many tools. Off reads as partly allowed too, so a tap allows
+ * the rest; on, a tap turns every tool off. Changes the service still has to
+ * approve are left to its sign-in: a section of only those (`consent`) taps
+ * into it, and a wider switch reads on once everything else is allowed, since
+ * it could never allow more.
+ */
+export function toolsSwitch(account: PluginAccount, tools: readonly ConnectionTool[], consent = false): ToolsSwitch {
+  const off = bulkToolNames(account, tools, false);
+  if (consent) return tools.every((tool) => tool.allowed) && off.length ? { on: true, tap: "set", names: off } : { on: false, tap: "consent" };
+  const allow = bulkToolNames(account, tools, true);
+  if (allow.length) return { on: false, tap: "set", names: allow };
+  return off.length ? { on: true, tap: "set", names: off } : { on: false, tap: "none" };
+}
+
+/** Changes the service has yet to approve, kept off by the All tools switch. */
+export function awaitingApproval(account: PluginAccount, tools: readonly ConnectionTool[]): number {
+  return account.access?.write_consent ? tools.filter((tool) => tool.group === "write" && !tool.allowed).length : 0;
 }
 
 /** One policy request for one tool or many: the server applies all of them or none. */

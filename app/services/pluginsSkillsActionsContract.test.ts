@@ -272,8 +272,10 @@ describe("Plugins connection route contract", () => {
     expect(flow).not.toContain("Alert");
     // One request for one tool or many, never a call per tool.
     expect(flow).toContain("send(toolPolicyRequest(target, names, allowed)");
-    expect(views).toContain('label="Allow all"');
-    expect(views).toContain('label="Turn all off"');
+    // Many tools flip under one switch, like each tool's own.
+    expect(views).toContain('<InkSwitch accessibilityLabel="All tools"');
+    expect(views).not.toContain('label="Allow all"');
+    expect(views).not.toContain('label="Turn all off"');
   });
   test("every way to connect is the one connect action", () => {
     const service = routes[1]!;

@@ -76,11 +76,13 @@ only read tools you allow, and its reads don't show up as recent calls.
 
 **Tools & activity** lets you allow or block single tools, inspect a tool's
 schema, run a status check and see recent calls. Every switch takes effect on
-the tap, with no confirm. **All tools** at the top allows or turns off every
-tool of the account at once, and each group (Read and search, Make changes,
-and Other tools that Mewla hasn't reviewed) has its own **Allow all** and
-**Turn off**. When the service still has to approve changes, Allow all leaves
-them off, and the Make changes group's Allow all asks the service first. New
+the tap, with no confirm. The **All tools** switch at the top covers every
+tool of the account, and each group (Read and search, Make changes, and Other
+tools that Mewla hasn't reviewed) has its own switch. A partly allowed list
+reads off, with its count beside it: a tap allows the rest, and once all are
+on a tap turns them all off. When the service still has to approve changes,
+All tools leaves them off and says so, reading on once everything else is
+allowed; turning on Make changes asks the service first. New
 tools a service adds later need your review before use; until then, **Read
 and search** says so.
 

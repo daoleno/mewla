@@ -4,6 +4,7 @@ import {
   accessControl,
   accountRecovery,
   accountTone,
+  awaitingApproval,
   bulkToolNames,
   connectSteps,
   enabledRequest,
@@ -13,6 +14,7 @@ import {
   serviceOff,
   toolPolicyRequest,
   toolSections,
+  toolsSwitch,
   usesApiKey,
   withToolsAllowed,
 } from "./pluginConnectionsModel";
@@ -173,6 +175,32 @@ describe("tool switches", () => {
     // Turning off never needs approval.
     expect(bulkToolNames(target, tools, false)).toEqual(["search", "update"]);
     expect(toolSections(target).find((section) => section.key === "write")?.consent).toBe(true);
+  });
+
+  test("a master switch allows the rest when partly on, and turns all off when on", () => {
+    const partial = account({ tools, access });
+    expect(toolsSwitch(partial, tools)).toEqual({ on: false, tap: "set", names: ["fetch", "create", "export", "archive"] });
+    const full = withToolsAllowed(partial, tools.map((item) => item.name), true);
+    expect(toolsSwitch(full, full.tools!)).toEqual({ on: true, tap: "set", names: tools.map((item) => item.name) });
+    const none = withToolsAllowed(partial, tools.map((item) => item.name), false);
+    expect(toolsSwitch(none, none.tools!)).toEqual({ on: false, tap: "set", names: tools.map((item) => item.name) });
+    expect(toolsSwitch(partial, [])).toEqual({ on: false, tap: "none" });
+  });
+
+  test("changes awaiting approval: All tools reads on without them, Make changes asks the service", () => {
+    const pending = { ...access, write_consent: true };
+    // Everything but the changes is allowed; update was allowed before.
+    const target = withToolsAllowed(account({ tools, access: pending }), ["fetch", "export", "archive"], true);
+    expect(awaitingApproval(target, target.tools!)).toBe(1);
+    expect(toolsSwitch(target, target.tools!)).toEqual({ on: true, tap: "set", names: ["search", "fetch", "update", "export", "archive"] });
+    const writes = toolSections(target).find((section) => section.key === "write")!;
+    expect(toolsSwitch(target, writes.tools, writes.consent)).toEqual({ on: false, tap: "consent" });
+    const approved = withToolsAllowed(target, ["create"], true);
+    expect(toolsSwitch(approved, approved.tools!.filter((item) => item.group === "write"), true)).toEqual({ on: true, tap: "set", names: ["create", "update"] });
+    expect(awaitingApproval(account({ tools, access }), tools)).toBe(0);
+    // Nothing it may allow and nothing on: the switch has no tap.
+    const only = account({ tools: [tool("create", "write", false)], access: pending });
+    expect(toolsSwitch(only, only.tools!)).toEqual({ on: false, tap: "none" });
   });
 
   test("one tool or many is one request, and the page shows it at once", () => {
