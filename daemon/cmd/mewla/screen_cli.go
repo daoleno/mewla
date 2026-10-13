@@ -118,7 +118,7 @@ func printScreenStatus(dir string, outputJSON bool) error {
 	if err != nil {
 		return err
 	}
-	status := screen.NewService(dir).Status(ctx)
+	status := screen.NewService(dir).Status(ctx, true)
 	if outputJSON {
 		return json.NewEncoder(os.Stdout).Encode(status)
 	}

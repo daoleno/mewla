@@ -96,3 +96,12 @@ export function connectionQuality(rttMs: number | null): "good" | "fair" | "poor
   if (rttMs < 200) return "fair";
   return "poor";
 }
+
+/**
+ * While a viewer is attached the daemon reports status without signing in to
+ * Screen Sharing again, so the name and size come from the earlier probe.
+ */
+export function keepScreenIdentity(prev: ScreenStatus | null, next: ScreenStatus): ScreenStatus {
+  if (next.name || !prev) return next;
+  return { ...next, name: prev.name, width: prev.width, height: prev.height };
+}

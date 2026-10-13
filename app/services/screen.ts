@@ -58,7 +58,11 @@ export async function screenRequest(
   const body = await response.text();
   let result: (ScreenStatus & { error?: string }) | undefined;
   try { result = body ? JSON.parse(body) : undefined; } catch { result = undefined; }
-  if (response.status === 404) throw new ScreenRequestError("This server's Mewla is too old for Screen. Update it on that computer.", 404);
+  // An older daemon answers 404, or its web UI answers with HTML.
+  const isJSON = (response.headers.get("content-type") || "").includes("application/json");
+  if (response.status === 404 || (response.ok && !isJSON)) {
+    throw new ScreenRequestError("This server's Mewla is too old for Screen. Update it on that computer.", response.status);
+  }
   if (!response.ok || !result) {
     throw new ScreenRequestError(result?.error || body.trim().slice(0, 300) || "Screen request failed", response.status);
   }

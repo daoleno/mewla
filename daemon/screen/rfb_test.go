@@ -113,7 +113,7 @@ func TestVNCAuthKnownAnswer(t *testing.T) {
 
 func TestStatusSignsInWithStoredPassword(t *testing.T) {
 	server := startFakeServer(t, "s3cret", []byte{30, 33, 36, 35, securityVNCAuth})
-	status := enabledService(t, server.Listener.Addr().String(), "s3cret").Status(context.Background())
+	status := enabledService(t, server.Listener.Addr().String(), "s3cret").Status(context.Background(), true)
 	if !status.Available || status.Width != 1512 || status.Height != 982 || status.Name != "Fixture Mac" {
 		t.Fatalf("status = %+v", status)
 	}
@@ -121,16 +121,16 @@ func TestStatusSignsInWithStoredPassword(t *testing.T) {
 
 func TestStatusExplainsWrongPasswordAndMissingPassword(t *testing.T) {
 	server := startFakeServer(t, "s3cret", []byte{30, securityVNCAuth})
-	status := enabledService(t, server.Listener.Addr().String(), "wrong").Status(context.Background())
+	status := enabledService(t, server.Listener.Addr().String(), "wrong").Status(context.Background(), true)
 	if status.Available || !strings.Contains(status.Reason, "Authentication failed") {
 		t.Fatalf("wrong password status = %+v", status)
 	}
-	status = enabledService(t, server.Listener.Addr().String(), "").Status(context.Background())
+	status = enabledService(t, server.Listener.Addr().String(), "").Status(context.Background(), true)
 	if status.Available || !strings.Contains(status.Reason, "mewla screen enable") {
 		t.Fatalf("missing password status = %+v", status)
 	}
 	appleOnly := startFakeServer(t, "", []byte{30, 33})
-	status = enabledService(t, appleOnly.Listener.Addr().String(), "x").Status(context.Background())
+	status = enabledService(t, appleOnly.Listener.Addr().String(), "x").Status(context.Background(), true)
 	if status.Available || !strings.Contains(status.Reason, "VNC viewers may control screen with password") {
 		t.Fatalf("apple-only status = %+v", status)
 	}

@@ -46,6 +46,12 @@ func (c *screenControllers) take(cancel context.CancelCauseFunc) *screenControll
 	return c.current
 }
 
+func (c *screenControllers) attached() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.current != nil
+}
+
 func (c *screenControllers) release(owner *screenController) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -89,7 +95,7 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_ = json.NewEncoder(w).Encode(s.screen.Status(r.Context()))
+	_ = json.NewEncoder(w).Encode(s.screen.Status(r.Context(), !s.screenControllers.attached()))
 }
 
 // handleScreenViewer bridges an authenticated WebSocket to the loopback RFB
