@@ -11,15 +11,16 @@ import (
 var officialReads = map[string]map[string]bool{
 	"notion": names("notion-search", "notion-fetch", "notion-get-comments", "notion-get-users", "notion-get-self", "notion-get-teams"),
 	"linear": names("get_user", "list_users", "get_issue", "list_issues", "get_project", "list_projects", "list_teams", "get_team", "list_comments", "list_cycles", "list_issue_statuses", "get_issue_status", "list_issue_labels", "get_document", "list_documents", "get_project_status", "list_project_statuses", "list_milestones", "get_milestone", "list_project_labels", "get_status_updates"),
-	"onlora": names("list_projects", "get_project", "list_files", "read_file", "search_library", "get_asset", "get_job", "get_round", "get_quota"),
+	"onlora": names("list_projects", "get_project", "list_files", "read_file", "search_library", "get_asset", "get_job", "get_round", "get_quota", "search_shared"),
 }
 var officialWrites = map[string]map[string]bool{
 	"notion": names("notion-create-pages", "notion-update-page", "notion-create-comment", "notion-move-pages", "notion-duplicate-page"),
 	// Linear's MCP server now saves (creates or updates) through save_* tools.
 	"linear": names("create_issue", "update_issue", "create_comment", "update_comment", "create_project", "update_project", "create_document", "update_document", "save_issue", "save_comment", "save_project", "save_document", "save_milestone", "save_status_update"),
-	// get_feedback marks what it returns as read. generate_image and edit_image
-	// spend the account's image quota; unpublish takes a story page down.
-	"onlora": names("get_feedback", "create_project", "update_project", "write_file", "add_asset", "create_upload", "pin", "unpin", "generate_image", "edit_image", "render", "propose_drafts", "record_feedback", "publish", "unpublish"),
+	// get_feedback marks what it returns as read. The generate_* tools and
+	// edit_image spend the account's quota; share makes an asset public, and
+	// unpublish and unshare take public things down.
+	"onlora": names("get_feedback", "create_project", "update_project", "write_file", "add_asset", "create_upload", "pin", "unpin", "pin_shared", "share", "unshare", "generate_image", "edit_image", "generate_music", "generate_voice", "generate_video", "render", "propose_drafts", "record_feedback", "publish", "unpublish"),
 }
 
 func names(values ...string) map[string]bool {
