@@ -29,6 +29,7 @@
     "native:build:ios": "./scripts/build-libghostty-ios.sh",
     "native:verify:ios": "./scripts/verify-libghostty-ios.sh",
     "mermaid:generate": "bun scripts/generate-mermaid-runtime.mjs",
+    "screen:generate": "bun scripts/generate-screen-viewer.mjs",
     "ios:verify-artifact": "./scripts/verify-ios-artifact.sh",
     "android:release-apk": "./scripts/android-release-apk.sh",
     "android:verify-apk-notice": "./scripts/verify-apk-notice.sh",

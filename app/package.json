@@ -46,6 +46,7 @@
     "expo-modules-core": "~57.0.16",
     "expo-notifications": "~57.0.17",
     "expo-router": "~57.0.19",
+    "expo-screen-orientation": "~57.0.3",
     "expo-secure-store": "~57.0.3",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
@@ -74,6 +75,7 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@novnc/novnc": "1.7.0",
     "@types/bun": "^1.3.14",
     "@types/react": "~19.2.15",
     "@types/react-test-renderer": "^19.1.0",

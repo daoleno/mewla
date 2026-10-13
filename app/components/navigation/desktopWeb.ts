@@ -26,6 +26,7 @@ export type DesktopSidebarKey =
   | "sessions"
   | "calendar"
   | "plugins"
+  | "screen"
   | "stats"
   | "resources"
   | "settings";
@@ -59,6 +60,8 @@ export function desktopSidebarKey(pathname: string): DesktopSidebarKey | null {
       return "calendar";
     case "plugins":
       return "plugins";
+    case "screen":
+      return "screen";
     case "stats":
       return "stats";
     case "resources":
@@ -77,6 +80,7 @@ const PAGE_TITLES: Record<string, string> = {
   work: "Work",
   calendar: "Calendar",
   plugins: "Extensions",
+  screen: "Screen",
   stats: "Stats",
   resources: "Resources",
   settings: "Settings",
@@ -105,6 +109,7 @@ export function isDesktopTopLevelRoute(routeName: string): boolean {
   switch (routeName) {
     case "calendar":
     case "index":
+    case "screen":
     case "stats":
     case "resources":
     case "settings":
