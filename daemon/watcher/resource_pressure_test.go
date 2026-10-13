@@ -50,12 +50,63 @@ func TestPressureBriefSpikeAndMissingMetricsDoNotAlert(t *testing.T) {
 }
 func TestPressureUsesPSICPUAndDisk(t *testing.T) {
 	cpu := 99.0
-	s := MachineResourceSnapshot{CPU: &CPUResource{UtilizationPercent: &cpu}, PSI: &PressureSnapshot{Memory: PressureResource{Full: &PressureAverages{Avg10: 6}}}, Disks: []DiskResource{{Mount: "/", TotalBytes: 1000, FreeBytes: 10}}}
+	s := MachineResourceSnapshot{CPU: &CPUResource{UtilizationPercent: &cpu}, Memory: &MemoryResource{TotalBytes: 1000, AvailableBytes: 50}, PSI: &PressureSnapshot{Memory: PressureResource{Full: &PressureAverages{Avg60: 6}}}, Disks: []DiskResource{{Mount: "/", TotalBytes: 1000, FreeBytes: 10}}}
 	m := NewPressureMachine(DefaultResourceThresholds())
 	now := time.Now()
 	m.Step(s, now)
 	state, signals, notify := m.Step(s, now.Add(20*time.Second))
-	if state != "critical" || !notify || len(signals) != 3 {
+	if state != "critical" || !notify || len(signals) != 4 {
 		t.Fatal(state, signals, notify)
+	}
+}
+
+// An hourly container that hits its own cgroup limit stalls reclaim for a few
+// seconds while the host keeps over half of 30.5 GiB available. Those readings
+// crossed the memory PSI thresholds overnight and must stay quiet now.
+func TestMemoryPSIIdleContainerStallDoesNotAlert(t *testing.T) {
+	m := NewPressureMachine(DefaultResourceThresholds())
+	now := time.Now()
+	idleStall := func() MachineResourceSnapshot {
+		return MachineResourceSnapshot{
+			Memory: &MemoryResource{TotalBytes: 30500 << 20, AvailableBytes: 16500 << 20},
+			PSI: &PressureSnapshot{Memory: PressureResource{
+				Some: &PressureAverages{Avg10: 9.6, Avg60: 8.9, Avg300: 4.2},
+				Full: &PressureAverages{Avg10: 9.1, Avg60: 8.4, Avg300: 3.9},
+			}},
+		}
+	}
+	m.Step(idleStall(), now)
+	state, signals, notify := m.Step(idleStall(), now.Add(20*time.Second))
+	if state != "normal" || notify || len(signals) != 0 {
+		t.Fatalf("idle container stall alerted: state=%s notify=%v signals=%v", state, notify, signals)
+	}
+}
+
+// Sustained host memory pressure with little memory left still alerts.
+func TestMemoryPSIRealPressureAlerts(t *testing.T) {
+	m := NewPressureMachine(DefaultResourceThresholds())
+	now := time.Now()
+	realPressure := func() MachineResourceSnapshot {
+		return MachineResourceSnapshot{
+			Memory: &MemoryResource{TotalBytes: 30500 << 20, AvailableBytes: 900 << 20},
+			PSI: &PressureSnapshot{Memory: PressureResource{
+				Some: &PressureAverages{Avg10: 30, Avg60: 25, Avg300: 12},
+				Full: &PressureAverages{Avg10: 28, Avg60: 22, Avg300: 10},
+			}},
+		}
+	}
+	m.Step(realPressure(), now)
+	state, signals, notify := m.Step(realPressure(), now.Add(20*time.Second))
+	if state != "critical" || !notify {
+		t.Fatalf("real pressure stayed quiet: state=%s notify=%v signals=%v", state, notify, signals)
+	}
+	found := map[string]bool{}
+	for _, signal := range signals {
+		found[signal.Name] = true
+	}
+	for _, name := range []string{"memory.available_percent", "psi.memory.some.avg60", "psi.memory.full.avg60"} {
+		if !found[name] {
+			t.Fatalf("missing %s in %v", name, signals)
+		}
 	}
 }

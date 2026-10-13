@@ -248,6 +248,12 @@ type ResourceThresholds struct {
 	CooldownSeconds        int           `json:"cooldown_seconds"`
 }
 
+// Memory PSI counts as pressure only while host memory is actually scarce.
+// A container confined by its own cgroup limit stalls on reclaim and raises
+// host memory PSI while the host keeps most of its memory available, so the
+// stall reading needs an availability gate to stay meaningful.
+const memoryPressureAvailableFloorBytes = 4 << 30
+
 func DefaultResourceThresholds() ResourceThresholds {
 	return ResourceThresholds{ThresholdPair{15, 7}, ThresholdPair{90, 98}, ThresholdPair{20, 60}, ThresholdPair{2, 10}, ThresholdPair{3, 15}, ThresholdPair{15, 40}, ThresholdPair{10, 3}, 20, 30, 60}
 }
@@ -380,14 +386,28 @@ func (m *PressureMachine) signals(s MachineResourceSnapshot) []PressureSignal {
 		check("cpu.busy_percent", *s.CPU.UtilizationPercent, c.CPUBusyPercent, false)
 	}
 	if s.PSI != nil {
+		// Memory PSI is evaluated on the one-minute average and only while
+		// memory is scarce: one avg10 sample spikes on transient reclaim from
+		// a cgroup limit, which is not host memory pressure.
+		memoryConstrained := false
+		if s.Memory != nil && s.Memory.TotalBytes > 0 {
+			availablePercent := 100 * float64(s.Memory.AvailableBytes) / float64(s.Memory.TotalBytes)
+			memoryConstrained = availablePercent <= c.AvailableMemoryPercent.Elevated || s.Memory.AvailableBytes <= memoryPressureAvailableFloorBytes
+		}
 		for _, x := range []struct {
-			name string
-			a    *PressureAverages
-			p    ThresholdPair
-		}{{"psi.cpu.some.avg10", s.PSI.CPU.Some, c.CPUSome}, {"psi.memory.some.avg10", s.PSI.Memory.Some, c.MemorySome}, {"psi.memory.full.avg10", s.PSI.Memory.Full, c.MemoryFull}, {"psi.io.full.avg10", s.PSI.IO.Full, c.IOFull}} {
-			if x.a != nil {
-				check(x.name, x.a.Avg10, x.p, false)
+			name       string
+			a          *PressureAverages
+			p          ThresholdPair
+			memoryOnly bool
+		}{{"psi.cpu.some.avg10", s.PSI.CPU.Some, c.CPUSome, false}, {"psi.memory.some.avg60", s.PSI.Memory.Some, c.MemorySome, true}, {"psi.memory.full.avg60", s.PSI.Memory.Full, c.MemoryFull, true}, {"psi.io.full.avg10", s.PSI.IO.Full, c.IOFull, false}} {
+			if x.a == nil || (x.memoryOnly && !memoryConstrained) {
+				continue
 			}
+			value := x.a.Avg10
+			if x.memoryOnly {
+				value = x.a.Avg60
+			}
+			check(x.name, value, x.p, false)
 		}
 	}
 	for _, d := range s.Disks {
