@@ -19,7 +19,7 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 	assertAvailability := func(expected map[string]bool) {
 		t.Helper()
 		result := mustHandle(t, m, Request{Action: "list"})
-		if len(result.Catalog) != 9 {
+		if len(result.Catalog) != 10 {
 			t.Fatalf("catalog count: %d", len(result.Catalog))
 		}
 		for _, item := range result.Catalog {
@@ -28,7 +28,7 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 			}
 		}
 	}
-	expected := map[string]bool{"github": false, "slack": false, "google": false, "notion": true, "linear": true, "fal": true, "image": true, "mcp": true, "openapi": true}
+	expected := map[string]bool{"github": false, "slack": false, "google": false, "notion": true, "linear": true, "onlora": true, "fal": true, "image": true, "mcp": true, "openapi": true}
 	assertAvailability(expected)
 	for _, kind := range []string{"github", "slack", "google"} {
 		_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: kind}})

@@ -37,6 +37,7 @@ const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
   image: "image",
+  onlora: "book",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {

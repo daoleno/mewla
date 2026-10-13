@@ -355,3 +355,63 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 		t.Fatal("disconnected device account reached the provider")
 	}
 }
+
+// Onlora connects with one tap: discovery and dynamic registration against its
+// published metadata, asking for its own scopes rather than read and write.
+func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
+	var registered struct {
+		RedirectURIs []string `json:"redirect_uris"`
+		AuthMethod   string   `json:"token_endpoint_auth_method"`
+	}
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var body string
+		switch req.Method + " " + req.URL.String() {
+		case "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp":
+			body = `{"resource":"https://api.onlora.ai/mcp","authorization_servers":["https://onlora.ai/api/auth"],"scopes_supported":["projects","generate","publish"]}`
+		case "GET https://onlora.ai/.well-known/oauth-authorization-server/api/auth":
+			body = `{"issuer":"https://onlora.ai/api/auth","authorization_endpoint":"https://onlora.ai/api/auth/oauth2/authorize","token_endpoint":"https://onlora.ai/api/auth/oauth2/token","registration_endpoint":"https://onlora.ai/api/auth/oauth2/register","revocation_endpoint":"https://onlora.ai/api/auth/oauth2/revoke","scopes_supported":["openid","profile","email","offline_access","projects","generate","publish"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none","client_secret_basic"]}`
+		case "POST https://onlora.ai/api/auth/oauth2/register":
+			_ = json.NewDecoder(req.Body).Decode(&registered)
+			body = `{"client_id":"onlora-client","token_endpoint_auth_method":"none"}`
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	start := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "onlora", WebOrigin: "https://mewla.example"}}).Flow
+	callback := "https://mewla.example/plugins/oauth/callback"
+	if len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != callback || registered.AuthMethod != "none" {
+		t.Fatalf("registered %+v", registered)
+	}
+	authorize, _ := url.Parse(start.AuthorizationURL)
+	q := authorize.Query()
+	if authorize.Host != "onlora.ai" || authorize.Path != "/api/auth/oauth2/authorize" || q.Get("client_id") != "onlora-client" || q.Get("redirect_uri") != callback {
+		t.Fatalf("authorization URL %s", start.AuthorizationURL)
+	}
+	if q.Get("scope") != "projects generate publish offline_access" || q.Get("resource") != "https://api.onlora.ai/mcp" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
+		t.Fatalf("authorization asks for %v", q)
+	}
+	r := m.records[start.AccountID]
+	if r.Account.Name != "Onlora" || r.Account.Endpoint != "https://api.onlora.ai/mcp" || r.Account.AuthMethod != "mcp_oauth" || writeConsent(r) {
+		t.Fatalf("pending account %+v", r.Account)
+	}
+	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "onlora", Name: "Pasted", Credential: "token"}}); err == nil {
+		t.Fatal("Onlora accepted a pasted credential")
+	}
+}
+
+func TestOnloraToolGroupsOnlyOnItsEndpoint(t *testing.T) {
+	r := &record{Account: Account{Integration: "onlora", AuthMethod: "mcp_oauth", Endpoint: "https://api.onlora.ai/mcp"}}
+	for name, group := range map[string]string{"search_library": "read", "list_projects": "read", "get_feedback": "write", "generate_image": "write", "publish": "write", "unpublish": "write", "new_tool": ""} {
+		if got := toolGroup(r, Tool{Name: name}); got != group {
+			t.Fatalf("%s is %q, not %q", name, got, group)
+		}
+	}
+	r.Account.Endpoint = "https://onlora.example/mcp"
+	if toolGroup(r, Tool{Name: "search_library"}) != "" {
+		t.Fatal("another endpoint inherited Onlora's reviewed tools")
+	}
+}
