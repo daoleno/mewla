@@ -51,7 +51,7 @@ Mewla's own app registration with the provider:
 | --- | --- | --- |
 | Linear | Official browser sign-in | Returns to the web UI's Extensions page |
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
-| Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code. Onlora doesn't accept the phone app's return address yet: connect it from the web UI | Works when the web UI is on an `https://` address, and returns to its Extensions page |
+| Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code. Onlora doesn't accept the phone app's return address yet: connect it from the web UI | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Shows **Not yet available** until Mewla's Slack app registration ships | Slack's app returns only to the Mewla app: connect Slack from the phone |

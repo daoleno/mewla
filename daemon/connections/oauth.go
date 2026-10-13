@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -68,6 +69,24 @@ type oauthMetadata struct {
 const onloraMCP = "https://api.onlora.ai/mcp"
 
 var onloraScopes = []string{"projects", "generate", "publish", "offline_access"}
+
+// nativeRedirect reports a return address that OpenID Connect registration
+// calls native: an app scheme or an http loopback address. Servers that follow
+// it, such as Onlora's, refuse those addresses for the default web type.
+func nativeRedirect(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" {
+		return false
+	}
+	if u.Scheme == "https" {
+		return false
+	}
+	if u.Scheme == "http" {
+		ip := net.ParseIP(u.Hostname())
+		return u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
+	}
+	return true
+}
 
 func validCallback(raw string) bool {
 	u, err := url.Parse(raw)
@@ -216,6 +235,9 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 			return Response{}, errors.New("Mewla's authorization for this service is not ready. No account was connected.")
 		}
 		registration := map[string]any{"client_name": "Mewla Plugins", "redirect_uris": []string{client.RedirectURL}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}
+		if nativeRedirect(client.RedirectURL) {
+			registration["application_type"] = "native"
+		}
 		body, _ := json.Marshal(registration)
 		var registered struct {
 			ClientID     string `json:"client_id"`
