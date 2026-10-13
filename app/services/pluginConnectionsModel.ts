@@ -119,7 +119,6 @@ export function allowedToolCount(account: PluginAccount): { allowed: number; tot
 export interface ToolSection {
   key: "read" | "write" | "other" | "all";
   title: string;
-  footer?: string;
   tools: ConnectionTool[];
   allowed: number;
   /** Allowing these needs the service to ask again (its sign-in lacks write access). */
@@ -132,15 +131,15 @@ export interface ToolSection {
  */
 export function toolSections(account: PluginAccount): ToolSection[] {
   const tools = account.tools ?? [];
-  const section = (key: ToolSection["key"], title: string, list: ConnectionTool[], footer?: string): ToolSection => ({
-    key, title, footer, tools: list, allowed: list.filter((tool) => tool.allowed).length,
+  const section = (key: ToolSection["key"], title: string, list: ConnectionTool[]): ToolSection => ({
+    key, title, tools: list, allowed: list.filter((tool) => tool.allowed).length,
     consent: key === "write" && !!account.access?.write_consent,
   });
   if (!tools.some((tool) => tool.group)) return tools.length ? [section("all", "Tools", tools)] : [];
   return [
     section("read", "Read and search", tools.filter((tool) => tool.group === "read")),
     section("write", "Make changes", tools.filter((tool) => tool.group === "write")),
-    section("other", "Other tools", tools.filter((tool) => !tool.group), "Mewla hasn't reviewed these. Read what each one does before allowing it."),
+    section("other", "Other tools", tools.filter((tool) => !tool.group)),
   ].filter((entry) => entry.tools.length);
 }
 
@@ -173,11 +172,6 @@ export function toolsSwitch(account: PluginAccount, tools: readonly ConnectionTo
   const allow = bulkToolNames(account, tools, true);
   if (allow.length) return { on: false, tap: "set", names: allow };
   return off.length ? { on: true, tap: "set", names: off } : { on: false, tap: "none" };
-}
-
-/** Changes the service has yet to approve, kept off by the All tools switch. */
-export function awaitingApproval(account: PluginAccount, tools: readonly ConnectionTool[]): number {
-  return account.access?.write_consent ? tools.filter((tool) => tool.group === "write" && !tool.allowed).length : 0;
 }
 
 /** One policy request for one tool or many: the server applies all of them or none. */
