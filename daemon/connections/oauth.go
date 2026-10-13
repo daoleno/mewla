@@ -64,9 +64,11 @@ type oauthMetadata struct {
 	AuthMethods           []string `json:"token_endpoint_auth_methods_supported"`
 }
 
-// Onlora's remote MCP server. Its authorization server registers Mewla on the
-// first connect, so it needs no client ID.
+// Onlora's remote MCP server. Onlora registers Mewla's app as the public
+// client "mewla", returning to mewla://plugins; a web UI return registers a
+// client of its own on connect.
 const onloraMCP = "https://api.onlora.ai/mcp"
+const onloraAppClientID = "mewla"
 
 var onloraScopes = []string{"projects", "generate", "publish", "offline_access"}
 
@@ -158,6 +160,9 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	if callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora") {
 		client = OAuthClientConfig{RedirectURL: callback}
+	}
+	if in.Integration == "onlora" && callback == NativeCallback {
+		client.ClientID = onloraAppClientID
 	}
 	// A registered app that returns only to the Mewla app (Slack's publisher
 	// app) can't bring a web UI sign-in back; say so before the browser leaves.

@@ -400,10 +400,16 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 	if r.Account.Name != "Onlora" || r.Account.Endpoint != "https://api.onlora.ai/mcp" || r.Account.AuthMethod != "mcp_oauth" || writeConsent(r) {
 		t.Fatalf("pending account %+v", r.Account)
 	}
-	// The phone app's return is an app scheme: registered as a native client.
-	mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "onlora"}})
-	if len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != NativeCallback || registered.Application != "native" {
-		t.Fatalf("app registration %+v", registered)
+	// The phone app uses the client Onlora registered for it, with no registration.
+	registered.RedirectURIs = nil
+	app := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "onlora"}}).Flow
+	appURL, _ := url.Parse(app.AuthorizationURL)
+	aq := appURL.Query()
+	if registered.RedirectURIs != nil || aq.Get("client_id") != "mewla" || aq.Get("redirect_uri") != NativeCallback || aq.Get("code_challenge_method") != "S256" || aq.Get("scope") != "projects generate publish offline_access" || aq.Get("resource") != "https://api.onlora.ai/mcp" {
+		t.Fatalf("app authorization %s, registered %+v", app.AuthorizationURL, registered)
+	}
+	if flow := m.pending[m.connectFlows[app.ID].state]; flow == nil || !flow.Mobile || flow.ClientSecret != "" || m.records[app.AccountID].OAuth.ClientID != "mewla" {
+		t.Fatal("app flow is not a public mobile flow on the mewla client")
 	}
 	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "onlora", Name: "Pasted", Credential: "token"}}); err == nil {
 		t.Fatal("Onlora accepted a pasted credential")
