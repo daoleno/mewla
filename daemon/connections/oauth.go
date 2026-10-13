@@ -63,6 +63,12 @@ type oauthMetadata struct {
 	AuthMethods           []string `json:"token_endpoint_auth_methods_supported"`
 }
 
+// Onlora's remote MCP server. Its authorization server registers Mewla on the
+// first connect, so it needs no client ID.
+const onloraMCP = "https://api.onlora.ai/mcp"
+
+var onloraScopes = []string{"projects", "generate", "publish", "offline_access"}
+
 func validCallback(raw string) bool {
 	u, err := url.Parse(raw)
 	return len(raw) <= 4096 && err == nil && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/plugins/oauth/callback" && (u.Scheme == "https" && u.Hostname() != "" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))
@@ -126,12 +132,12 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if callback == "" && in.Mobile {
 		callback = NativeCallback
 	}
-	if !ok && callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "mcp") {
+	if !ok && callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora" || in.Integration == "mcp") {
 		client.RedirectURL = callback
 	} else if !ok {
 		return Response{}, errors.New("Sign-in is not set up for this service yet.")
 	}
-	if callback != "" && (in.Integration == "notion" || in.Integration == "linear") {
+	if callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora") {
 		client = OAuthClientConfig{RedirectURL: callback}
 	}
 	// A registered app that returns only to the Mewla app (Slack's publisher
@@ -150,6 +156,8 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		endpoint = "https://mcp.notion.com/mcp"
 	case "linear":
 		endpoint = "https://mcp.linear.app/mcp"
+	case "onlora":
+		endpoint = onloraMCP
 	case "mcp":
 	default:
 		return Response{}, errors.New("OAuth is not supported for this plugin")
@@ -181,11 +189,18 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
-		// Ask the provider for its normal read scope. Writes require a separate
-		// connect action requesting them, then the usual per-tool grant.
-		for _, scope := range meta.ScopesSupported {
-			if scope == "read" || scope == "openid" || scope == "email" || in.AllowWrites && scope == "write" {
-				r.Account.Scopes = append(r.Account.Scopes, scope)
+		if in.Integration == "onlora" {
+			// Onlora's scopes are areas, not read and write: every tool needs
+			// one of them, and offline_access keeps the sign-in past the hour.
+			// What Brain may change is still each tool's own grant.
+			r.Account.Scopes = append([]string(nil), onloraScopes...)
+		} else {
+			// Ask the provider for its normal read scope. Writes require a separate
+			// connect action requesting them, then the usual per-tool grant.
+			for _, scope := range meta.ScopesSupported {
+				if scope == "read" || scope == "openid" || scope == "email" || in.AllowWrites && scope == "write" {
+					r.Account.Scopes = append(r.Account.Scopes, scope)
+				}
 			}
 		}
 	}

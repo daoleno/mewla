@@ -305,6 +305,8 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 	switch in.Integration {
 	case "google":
 		return Response{}, errors.New("Google uses browser authorization; start OAuth for this account")
+	case "onlora":
+		return Response{}, errors.New("Onlora uses browser authorization; connect it from Extensions")
 	case "github":
 		endpoint = "https://api.github.com"
 	case "notion":
