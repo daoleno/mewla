@@ -4,6 +4,7 @@ import {
   connectionQuality,
   formatStats,
   KEYBOARD_SENTINEL,
+  keepScreenIdentity,
   keyboardEdit,
   NO_MODIFIERS,
   powerSummary,
@@ -85,5 +86,14 @@ describe("viewer messages", () => {
     expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "<script>" }))).toBeNull();
     expect(parseScreenViewerMessage(JSON.stringify({ type: "navigate", url: "https://x" }))).toBeNull();
     expect(parseScreenViewerMessage("not json")).toBeNull();
+  });
+});
+
+describe("status refresh", () => {
+  test("an unprobed refresh keeps the screen's name and size", () => {
+    const base = { enabled: true, available: true, platform: "darwin", keep_awake: true };
+    const probed = { ...base, name: "Studio Mac", width: 3024, height: 1964 };
+    expect(keepScreenIdentity(probed, base)).toEqual({ ...base, name: "Studio Mac", width: 3024, height: 1964 });
+    expect(keepScreenIdentity(null, base)).toEqual(base);
   });
 });

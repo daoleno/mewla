@@ -191,6 +191,20 @@ func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
 		t.Fatalf("pong %+v", pong)
 	}
 
+	// While a viewer is attached, status does not open a second sign-in.
+	statusReq, _ = http.NewRequest(http.MethodGet, h.URL+"/screen", nil)
+	statusReq.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
+	resp, err = http.DefaultClient.Do(statusReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status = screen.Status{}
+	_ = json.NewDecoder(resp.Body).Decode(&status)
+	resp.Body.Close()
+	if !status.Available || status.Width != 0 {
+		t.Fatalf("attached status probed Screen Sharing: %+v", status)
+	}
+
 	// A second viewer takes over; the first is closed with the reason.
 	second := open()
 	defer second.conn.Close()

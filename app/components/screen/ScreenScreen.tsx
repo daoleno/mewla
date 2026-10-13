@@ -26,6 +26,7 @@ import {
   connectionQuality,
   formatStats,
   KEYBOARD_SENTINEL,
+  keepScreenIdentity,
   keyboardEdit,
   NO_MODIFIERS,
   powerSummary,
@@ -219,7 +220,7 @@ export function ScreenScreen() {
     if (phase !== "live" || !currentServer) return;
     const server = currentServer;
     const timer = setInterval(() => {
-      void screenRequest(server).then((next) => { if (isCurrentServer(server.id)) setStatus(next); }).catch(() => {});
+      void screenRequest(server).then((next) => { if (isCurrentServer(server.id)) setStatus((prev) => keepScreenIdentity(prev, next)); }).catch(() => {});
     }, 30000);
     return () => clearInterval(timer);
   }, [currentServer, isCurrentServer, phase]);
@@ -272,7 +273,7 @@ export function ScreenScreen() {
     setBusy(true);
     try {
       const next = await screenRequest(server, keep);
-      if (isCurrentServer(server.id)) setStatus(next);
+      if (isCurrentServer(server.id)) setStatus((prev) => keepScreenIdentity(prev, next));
     } catch (error) {
       if (isCurrentServer(server.id)) setReason(error instanceof Error ? error.message : String(error));
     } finally { setBusy(false); }

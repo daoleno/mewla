@@ -201,8 +201,11 @@ func (s *Service) Dial(ctx context.Context) (*Upstream, error) {
 	return &Upstream{Conn: conn}, nil
 }
 
-// Status signs in and reads ServerInit without keeping the session.
-func (s *Service) Status(ctx context.Context) Status {
+// Status reports the opt-in and power state. With probe it also signs in and
+// reads ServerInit without keeping the session; without it, as while a
+// viewer is attached, an enabled screen is reported available unprobed so
+// Screen Sharing never sees a second client alongside the live one.
+func (s *Service) Status(ctx context.Context, probe bool) Status {
 	status := Status{Platform: runtime.GOOS}
 	cfg, err := LoadConfig(s.stateDir)
 	if err != nil {
@@ -217,6 +220,10 @@ func (s *Service) Status(ctx context.Context) Status {
 	}
 	if !cfg.Enabled {
 		status.Reason = ErrDisabled.Error()
+		return status
+	}
+	if !probe {
+		status.Available = true
 		return status
 	}
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
