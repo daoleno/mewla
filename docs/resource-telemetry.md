@@ -93,6 +93,14 @@ to `normal`; sustained pressure and cooldowns prevent spam. The daemon never
 kills or throttles a process in response to this event. Brain decides whether
 to dispatch, ask a Worker to release resources, or close a Worker.
 
+Memory PSI uses the one-minute average (`avg60`) and counts only while host
+memory is scarce: available memory at or below the elevated availability
+threshold, or at most 4 GiB. A container confined by its own cgroup limit
+stalls reclaim and raises host memory PSI while the host keeps most of its
+memory available, so that stall alone is not an alert. CPU and IO PSI keep
+their 10-second averages; CPU utilization, disk capacity and available memory
+keep their existing thresholds.
+
 Defaults require 20 seconds of sustained pressure and use a 60 second
 notification cooldown. See the threshold configuration below.
 
@@ -137,7 +145,7 @@ temperature and GPU metrics are outside this version. macOS currently returns
 compile; the app must render these as unavailable, never zero.
 
 `signals` contains active threshold conditions as
-`{ "name": "psi.memory.some.avg10", "value": 3, "threshold": 2, "state": "elevated" }`.
+`{ "name": "psi.memory.some.avg60", "value": 3, "threshold": 2, "state": "elevated" }`.
 A transient crossed signal can appear while the sustained `state` remains normal.
 
 ## Threshold configuration
@@ -150,10 +158,14 @@ trigger at or above the value; low-water signals trigger at or below it.
 | Available memory (% total, low) | 15 | 7 |
 | Total CPU utilization (%) | 90 | 98 |
 | CPU PSI some avg10 (%) | 20 | 60 |
-| Memory PSI some avg10 (%) | 2 | 10 |
-| Memory PSI full avg10 (%) | 3 | 15 |
-| IO PSI full avg10 (%) | 5 | 20 |
+| Memory PSI some avg60 (%) | 2 | 10 |
+| Memory PSI full avg60 (%) | 3 | 15 |
+| IO PSI full avg10 (%) | 15 | 40 |
 | Free disk (% capacity, low) | 10 | 3 |
+
+Memory PSI signals are reported under their `avg60` names and are skipped
+unless available memory is at or below the elevated availability threshold or
+at most 4 GiB.
 
 A higher state requires 20 seconds of continuous pressure. Recovery/downgrade
 requires 30 seconds and 20% headroom beyond the active threshold. Re-entry into
