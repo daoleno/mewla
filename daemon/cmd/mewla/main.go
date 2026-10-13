@@ -33,6 +33,7 @@ import (
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
+	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
 	"github.com/daoleno/mewla/daemon/setup"
@@ -125,6 +126,8 @@ func run(args []string, stderr io.Writer) error {
 			return runTelegramCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
+		case "screen":
+			return runScreenCommand(args[1:], stderr)
 		case "address":
 			return runAddressCommand(args[1:], stderr)
 		case "boot":
@@ -428,6 +431,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	defer browserManager.Close()
 	srv.SetBrowser(browserManager)
+	screenService := screen.NewService(authManager.StorageDir())
+	go screenService.Run(ctx)
+	srv.SetScreen(screenService)
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager

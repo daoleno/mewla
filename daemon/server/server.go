@@ -39,6 +39,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
+	"github.com/daoleno/mewla/daemon/screen"
 	skillmgmt "github.com/daoleno/mewla/daemon/skills"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
@@ -91,6 +92,8 @@ type notificationPusher interface {
 // Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
 	browsers                     *browser.Manager
+	screen                       *screen.Service
+	screenControllers            screenControllers
 	connections                  *connections.Manager
 	auth                         *auth.Manager
 	watcher                      *watcher.Watcher
@@ -409,6 +412,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.Handle("/browser", s.appRoute(webUI, http.HandlerFunc(s.handleBrowser)))
 	mux.HandleFunc("/browser/viewer", s.handleBrowserViewer)
+	mux.Handle("/screen", s.appRoute(webUI, http.HandlerFunc(s.handleScreen)))
+	mux.HandleFunc("/screen/viewer", s.handleScreenViewer)
 	mux.HandleFunc("/plugins/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		if s.connections == nil {
 			http.Error(w, "Plugins unavailable", http.StatusServiceUnavailable)
