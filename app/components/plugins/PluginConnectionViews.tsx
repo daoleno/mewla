@@ -11,7 +11,6 @@ import {
   accountRecovery,
   accountTone,
   allowedToolCount,
-  awaitingApproval,
   connectsWithForm,
   serviceOff,
   toolSections,
@@ -496,9 +495,9 @@ export function AccountCard({
 }
 
 /**
- * An account's tools: its on/off switch, one switch over every tool, then
- * each group under its own switch, and a switch per tool. Every switch takes
- * effect on the tap, with no confirm.
+ * An account's tools: its on/off switch, then one list of the tools led by a
+ * switch over all of them, each group under a row with its own switch. Every
+ * switch sits in one column and takes effect on the tap, with no confirm.
  */
 export function ToolsView({
   account,
@@ -524,7 +523,6 @@ export function ToolsView({
   const sections = toolSections(account);
   const allowed = tools.filter((tool) => tool.allowed).length;
   const all = toolsSwitch(account, tools);
-  const waiting = awaitingApproval(account, tools);
   const flip = (state: ToolsSwitch) => {
     if (state.tap === "set") onSetTools(state.names, !state.on);
     else if (state.tap === "consent") onAllowChanges();
@@ -548,41 +546,30 @@ export function ToolsView({
         />
       </ListSection>
       {tools.length ? (
-        <ListSection
-          title={`Tools (${tools.length})`}
-          footer={waiting ? "Turn on Make changes to ask the service to approve them." : "A tool that changes needs permission again."}
-        >
+        <ListSection title="Tools">
           <ListRow
-            icon="list"
             title="All tools"
-            // On with changes still off: say why it can't allow more.
-            subtitle={`${allowed} of ${tools.length} allowed${waiting ? " · Make changes waits for the service's approval" : ""}`}
-            numberOfLines={2}
+            subtitle={`${allowed} of ${tools.length} allowed`}
+            leading={<View style={styles.disclosureSpace} />}
             trailing={<InkSwitch accessibilityLabel="All tools" value={all.on} disabled={locked || all.tap === "none"} onValueChange={() => flip(all)} />}
           />
+          {sections.flatMap((section) => {
+            const state = toolsSwitch(account, section.tools, section.consent);
+            const rows = section.tools.map((tool) => <ToolRow key={tool.name} tool={tool} busy={locked} onToggle={(value) => onSetTools([tool.name], value)} />);
+            // A single group is the whole list; All tools already covers it.
+            return sections.length > 1 ? [
+              <GroupRow key={section.key} title={section.title} count={`${section.allowed}/${section.tools.length}`}>
+                <InkSwitch accessibilityLabel={`All of ${section.title}`} value={state.on} disabled={locked || state.tap === "none"} onValueChange={() => flip(state)} />
+              </GroupRow>,
+              ...rows,
+            ] : rows;
+          })}
         </ListSection>
       ) : (
         <ListSection title="Tools">
           <ListRow title="No tools reported" />
         </ListSection>
       )}
-      {sections.map((section) => {
-        const state = toolsSwitch(account, section.tools, section.consent);
-        // A single group is the whole list; the All tools switch already covers it.
-        const accessory = sections.length > 1 ? (
-          <InkSwitch accessibilityLabel={`All of ${section.title}`} value={state.on} disabled={locked || state.tap === "none"} onValueChange={() => flip(state)} />
-        ) : undefined;
-        return (
-          <ListSection
-            key={section.key}
-            title={sections.length > 1 ? `${section.title} · ${section.allowed}/${section.tools.length}` : undefined}
-            accessory={accessory}
-            footer={section.consent ? "Turning these on asks the service to approve changes once." : section.footer}
-          >
-            {section.tools.map((tool) => <ToolRow key={tool.name} tool={tool} busy={locked} onToggle={(value) => onSetTools([tool.name], value)} />)}
-          </ListSection>
-        );
-      })}
       <ListSection title="Recent calls">
         {account.history.length ? (
           account.history.map((event, index) => (
@@ -599,6 +586,17 @@ export function ToolsView({
         )}
       </ListSection>
     </>
+  );
+}
+
+/** A group's head inside the tools list: its name, count and switch, in the tools' column. */
+function GroupRow({ title, count, children }: { title: string; count: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.groupRow} accessible={false}>
+      <View style={styles.disclosureSpace} />
+      <AppText variant="label" tone="tertiary" accessibilityRole="header" numberOfLines={1} style={styles.flex}>{`${title} · ${count}`}</AppText>
+      {children}
+    </View>
   );
 }
 
@@ -680,6 +678,8 @@ const styles = StyleSheet.create({
   confirm: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   confirmActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
   disclosureSpace: { width: 15 },
+  flex: { flex: 1, minWidth: 0 },
+  groupRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
   inputs: { marginLeft: 43, marginRight: 16, marginBottom: 12, paddingLeft: 12, gap: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   input: { gap: 2 },
   inputHead: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },

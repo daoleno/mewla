@@ -4,7 +4,6 @@ import {
   accessControl,
   accountRecovery,
   accountTone,
-  awaitingApproval,
   bulkToolNames,
   connectSteps,
   enabledRequest,
@@ -152,7 +151,6 @@ describe("tool switches", () => {
       ["write", ["create", "update"], 1],
       ["other", ["export", "archive"], 0],
     ]);
-    expect(sections[2].footer).toMatch(/hasn't reviewed/);
     expect(toolSections(account({ integration: "notion", tools: tools.slice(0, 2), access })).map((section) => section.key)).toEqual(["read"]);
   });
 
@@ -191,13 +189,11 @@ describe("tool switches", () => {
     const pending = { ...access, write_consent: true };
     // Everything but the changes is allowed; update was allowed before.
     const target = withToolsAllowed(account({ tools, access: pending }), ["fetch", "export", "archive"], true);
-    expect(awaitingApproval(target, target.tools!)).toBe(1);
     expect(toolsSwitch(target, target.tools!)).toEqual({ on: true, tap: "set", names: ["search", "fetch", "update", "export", "archive"] });
     const writes = toolSections(target).find((section) => section.key === "write")!;
     expect(toolsSwitch(target, writes.tools, writes.consent)).toEqual({ on: false, tap: "consent" });
     const approved = withToolsAllowed(target, ["create"], true);
     expect(toolsSwitch(approved, approved.tools!.filter((item) => item.group === "write"), true)).toEqual({ on: true, tap: "set", names: ["create", "update"] });
-    expect(awaitingApproval(account({ tools, access }), tools)).toBe(0);
     // Nothing it may allow and nothing on: the switch has no tap.
     const only = account({ tools: [tool("create", "write", false)], access: pending });
     expect(toolsSwitch(only, only.tools!)).toEqual({ on: false, tap: "none" });

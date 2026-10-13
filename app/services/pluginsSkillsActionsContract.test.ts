@@ -276,6 +276,11 @@ describe("Plugins connection route contract", () => {
     expect(views).toContain('<InkSwitch accessibilityLabel="All tools"');
     expect(views).not.toContain('label="Allow all"');
     expect(views).not.toContain('label="Turn all off"');
+    // The switches are rows of the tools list, with no copy explaining them.
+    expect(views).toContain("<GroupRow key={section.key}");
+    expect(views).not.toContain("needs permission again");
+    expect(views).not.toContain("waits for the service's approval");
+    expect(views).not.toContain("ask the service to approve");
   });
   test("every way to connect is the one connect action", () => {
     const service = routes[1]!;
