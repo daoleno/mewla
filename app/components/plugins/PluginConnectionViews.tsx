@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type SwitchProps } from "react-native";
+import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
@@ -11,13 +11,15 @@ import {
   accountRecovery,
   accountTone,
   allowedToolCount,
-  bulkToolNames,
+  awaitingApproval,
   connectsWithForm,
   serviceOff,
   toolSections,
+  toolsSwitch,
   type AccountRecoveryAction,
   type PluginCatalogRows,
   type ServiceRow,
+  type ToolsSwitch,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ServiceMark, hasServiceMark } from "./ServiceMarks";
@@ -494,9 +496,9 @@ export function AccountCard({
 }
 
 /**
- * An account's tools: its on/off switch, one row to allow or turn off every
- * tool, then each group with its own pair, and a switch per tool. Every
- * switch takes effect on the tap, with no confirm.
+ * An account's tools: its on/off switch, one switch over every tool, then
+ * each group under its own switch, and a switch per tool. Every switch takes
+ * effect on the tap, with no confirm.
  */
 export function ToolsView({
   account,
@@ -521,8 +523,12 @@ export function ToolsView({
   const locked = busy && running !== `tools:${account.id}`;
   const sections = toolSections(account);
   const allowed = tools.filter((tool) => tool.allowed).length;
-  const allowAll = bulkToolNames(account, tools, true);
-  const allOff = bulkToolNames(account, tools, false);
+  const all = toolsSwitch(account, tools);
+  const waiting = awaitingApproval(account, tools);
+  const flip = (state: ToolsSwitch) => {
+    if (state.tap === "set") onSetTools(state.names, !state.on);
+    else if (state.tap === "consent") onAllowChanges();
+  };
   return (
     <>
       <ListSection title={account.name}>
@@ -544,18 +550,15 @@ export function ToolsView({
       {tools.length ? (
         <ListSection
           title={`Tools (${tools.length})`}
-          footer={sections.some((section) => section.consent) ? "Allow all leaves changes off until the service approves them." : "A tool that changes needs permission again."}
+          footer={waiting ? "Turn on Make changes to ask the service to approve them." : "A tool that changes needs permission again."}
         >
           <ListRow
             icon="list"
             title="All tools"
-            subtitle={`${allowed} of ${tools.length} allowed`}
-            trailing={
-              <View style={styles.bulk}>
-                <Button label="Allow all" size="sm" variant="tinted" disabled={locked || !allowAll.length} onPress={() => onSetTools(allowAll, true)} accessibilityLabel={`Allow all ${tools.length} tools`} />
-                <Button label="Turn all off" size="sm" variant="plain" disabled={locked || !allOff.length} onPress={() => onSetTools(allOff, false)} accessibilityLabel={`Turn all ${tools.length} tools off`} />
-              </View>
-            }
+            // On with changes still off: say why it can't allow more.
+            subtitle={`${allowed} of ${tools.length} allowed${waiting ? " · Make changes waits for the service's approval" : ""}`}
+            numberOfLines={2}
+            trailing={<InkSwitch accessibilityLabel="All tools" value={all.on} disabled={locked || all.tap === "none"} onValueChange={() => flip(all)} />}
           />
         </ListSection>
       ) : (
@@ -564,26 +567,17 @@ export function ToolsView({
         </ListSection>
       )}
       {sections.map((section) => {
-        const on = bulkToolNames(account, section.tools, true);
-        const off = bulkToolNames(account, section.tools, false);
-        // A single group is the whole list; the All tools row already covers it.
+        const state = toolsSwitch(account, section.tools, section.consent);
+        // A single group is the whole list; the All tools switch already covers it.
         const accessory = sections.length > 1 ? (
-          <View style={styles.sectionBulk}>
-            <BulkLink
-              label="Allow all"
-              accessibilityLabel={`Allow all ${section.title}`}
-              disabled={locked || (section.consent ? section.allowed === section.tools.length : !on.length)}
-              onPress={() => (section.consent ? onAllowChanges() : onSetTools(on, true))}
-            />
-            <BulkLink label="Turn off" accessibilityLabel={`Turn off all ${section.title}`} disabled={locked || !off.length} onPress={() => onSetTools(off, false)} />
-          </View>
+          <InkSwitch accessibilityLabel={`All of ${section.title}`} value={state.on} disabled={locked || state.tap === "none"} onValueChange={() => flip(state)} />
         ) : undefined;
         return (
           <ListSection
             key={section.key}
             title={sections.length > 1 ? `${section.title} · ${section.allowed}/${section.tools.length}` : undefined}
             accessory={accessory}
-            footer={section.consent ? "Allow all asks the service to approve changes once." : section.footer}
+            footer={section.consent ? "Turning these on asks the service to approve changes once." : section.footer}
           >
             {section.tools.map((tool) => <ToolRow key={tool.name} tool={tool} busy={locked} onToggle={(value) => onSetTools([tool.name], value)} />)}
           </ListSection>
@@ -605,24 +599,6 @@ export function ToolsView({
         )}
       </ListSection>
     </>
-  );
-}
-
-/** A section header's quiet text action: ink, with a 44 pt reach. */
-function BulkLink({ label, accessibilityLabel, disabled, onPress }: { label: string; accessibilityLabel: string; disabled: boolean; onPress(): void }) {
-  const { colors } = useAppTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      hitSlop={12}
-      onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-    >
-      <AppText variant="label" style={{ color: disabled ? colors.textTertiary : colors.accent }}>{label}</AppText>
-    </Pressable>
   );
 }
 
@@ -704,8 +680,6 @@ const styles = StyleSheet.create({
   confirm: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
   confirmActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
   disclosureSpace: { width: 15 },
-  bulk: { flexDirection: "row", alignItems: "center", gap: 2, marginRight: -8 },
-  sectionBulk: { flexDirection: "row", alignItems: "center", gap: 16 },
   inputs: { marginLeft: 43, marginRight: 16, marginBottom: 12, paddingLeft: 12, gap: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   input: { gap: 2 },
   inputHead: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
