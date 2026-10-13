@@ -37,6 +37,7 @@
         "expo-modules-core": "~57.0.16",
         "expo-notifications": "~57.0.17",
         "expo-router": "~57.0.19",
+        "expo-screen-orientation": "~57.0.3",
         "expo-secure-store": "~57.0.3",
         "expo-splash-screen": "~57.0.9",
         "expo-status-bar": "~57.0.1",
@@ -65,6 +66,7 @@
         "tweetnacl": "^1.0.3",
       },
       "devDependencies": {
+        "@novnc/novnc": "1.7.0",
         "@types/bun": "^1.3.14",
         "@types/react": "~19.2.15",
         "@types/react-test-renderer": "^19.1.0",
@@ -352,6 +354,8 @@
     "@lobehub/icons-rn": ["@lobehub/icons-rn@2.7.1", "https://registry.npmmirror.com/@lobehub/icons-rn/-/icons-rn-2.7.1.tgz", { "dependencies": { "es-toolkit": "^1.43.0" }, "peerDependencies": { "expo-linear-gradient": ">=14.1.5", "react": "^19.0.0", "react-native": ">=0.76.9", "react-native-svg": ">=15.8.0" } }, "sha512-MdysYZvXsRtGwvG0KazZIEnq8GrLC7NcrMRxB+gYNEkKObNq6Rp1smP5FgWB/qvuoOOACu7TFn3Yg+1fpMcJlA=="],
 
     "@mermaid-js/parser": ["@mermaid-js/parser@0.4.0", "https://registry.npmmirror.com/@mermaid-js/parser/-/parser-0.4.0.tgz", { "dependencies": { "langium": "3.3.1" } }, "sha512-wla8XOWvQAwuqy+gxiZqY+c7FokraOTHRWMsbB4AgRx9Sy7zKslNyejy7E+a77qHfey5GXw/ik3IXv/NHMJgaA=="],
+
+    "@novnc/novnc": ["@novnc/novnc@1.7.0", "https://registry.npmmirror.com/@novnc/novnc/-/novnc-1.7.0.tgz", {}, "sha512-ucEJOx4T2avIRCleodk7YobZj5O2Ga2AeLfQ69A/yjG9HHba2+PDgwSkN3FttrmG+70ZGx21sElNFouK13RzyA=="],
 
     "@radix-ui/primitive": ["@radix-ui/primitive@1.1.3", "https://registry.npmmirror.com/@radix-ui/primitive/-/primitive-1.1.3.tgz", {}, "sha512-JTF99U/6XIjCBo0wqkU5sK10glYe27MRRsfwoiq5zzOEZLHU3A3KCMa5X/azekYRCJ0HlwI0crAXS/5dEHTzDg=="],
 
@@ -840,6 +844,8 @@
     "expo-notifications": ["expo-notifications@57.0.17", "https://registry.npmmirror.com/expo-notifications/-/expo-notifications-57.0.17.tgz", { "dependencies": { "@expo/image-utils": "^0.11.5", "abort-controller": "^3.0.0", "badgin": "^1.1.5", "expo-application": "~57.0.2", "expo-constants": "~57.0.17" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-P/9ZqBOlFBVCZK3T5bhqORtWJhtVBcXQXe/MY1YWuKaxWgKvoGeEvD9ItWuo87jg2nD+eloVmFYqwdhhVCxPlA=="],
 
     "expo-router": ["expo-router@57.0.19", "https://registry.npmmirror.com/expo-router/-/expo-router-57.0.19.tgz", { "dependencies": { "@expo/log-box": "^57.0.4", "@expo/metro-runtime": "^57.0.15", "@expo/schema-utils": "^57.0.2", "@expo/ui": "^57.0.16", "@radix-ui/react-slot": "^1.2.0", "@radix-ui/react-tabs": "^1.1.12", "@react-native-masked-view/masked-view": "^0.3.2", "client-only": "^0.0.1", "color": "^4.2.3", "debug": "^4.3.4", "escape-string-regexp": "^4.0.0", "expo-glass-effect": "^57.0.1", "expo-server": "^57.0.3", "expo-symbols": "^57.0.2", "fast-deep-equal": "^3.1.3", "invariant": "^2.2.4", "nanoid": "^3.3.8", "query-string": "^7.1.3", "react-fast-compare": "^3.2.2", "react-is": "^19.1.0", "react-native-drawer-layout": "^4.2.2", "react-native-screens": "^4.26.0", "server-only": "^0.0.1", "sf-symbols-typescript": "^2.1.0", "shallowequal": "^1.1.0", "standard-navigation": "^0.0.5", "vaul": "^1.1.2" }, "peerDependencies": { "@testing-library/react-native": ">= 13.2.0", "expo": "*", "expo-constants": "^57.0.17", "expo-linking": "^57.0.9", "react": "*", "react-dom": "*", "react-native": "*", "react-native-gesture-handler": "*", "react-native-reanimated": "*", "react-native-safe-area-context": ">= 5.4.0", "react-native-web": "*", "react-server-dom-webpack": "~19.0.4 || ~19.1.5 || ~19.2.4" }, "optionalPeers": ["@testing-library/react-native", "react-dom", "react-native-gesture-handler", "react-native-reanimated", "react-native-web", "react-server-dom-webpack"] }, "sha512-JovzZ066+qhykyJLC4hSEJpM8ToVWnJqbxmTN7USzARM0HgRR/g05a75f/EIsY4S//hbPGm6wGl/ObcCVtAX+A=="],
+
+    "expo-screen-orientation": ["expo-screen-orientation@57.0.3", "https://registry.npmmirror.com/expo-screen-orientation/-/expo-screen-orientation-57.0.3.tgz", { "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-hKtTKAoinahalc5nzMmGfVtj1NfVj4pFJycJGy/HUzrBlu+1rOnHdGUKgaSKkMhr5Mr9GxAxcuLvuM+oyFNFLA=="],
 
     "expo-secure-store": ["expo-secure-store@57.0.3", "https://registry.npmmirror.com/expo-secure-store/-/expo-secure-store-57.0.3.tgz", { "peerDependencies": { "expo": "*" } }, "sha512-w7XkSQeUiYXPoKXo1jSrQqql7pyCSyIzOp2k0apsZZBE+RkoLTQIMjcbqc181y6KgupfNnYxkaKe+4MEg94+SA=="],
 

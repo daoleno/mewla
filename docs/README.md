@@ -19,6 +19,7 @@ New here? [Get started](get-started.md) is one path from install to your first g
 - [Notifications and Telegram](notifications.md): when Mewla interrupts you, and Brain from Telegram.
 - [Calendar](calendar.md): reminders and scheduled actions that run as Work.
 - [Plugins](plugins.md): let Brain read Linear, Notion, GitHub and more, and change them with your consent.
+- [Screen](screen.md): see and control your Mac's screen from the phone.
 
 ## Configure it
 

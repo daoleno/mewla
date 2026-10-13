@@ -6,6 +6,7 @@ export type PrimaryDrawerPathname =
   | "/plugins"
   | "/stats"
   | "/browser"
+  | "/screen"
   | "/resources"
   | "/settings";
 
@@ -38,6 +39,7 @@ export const PRIMARY_DRAWER_PLACES: readonly PrimaryDrawerPlace[] = [
 export const PRIMARY_DRAWER_DESTINATIONS: readonly PrimaryDrawerDestination[] = [
   { key: "calendar", label: "Calendar", pathname: "/calendar", icon: "calendar" },
   { key: "plugins", label: "Extensions", pathname: "/plugins", icon: "plugins" },
+  { key: "screen", label: "Screen", pathname: "/screen", icon: "desktop" },
   { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
   { key: "resources", label: "Resources", pathname: "/resources", icon: "resources" },
 ];

@@ -69,6 +69,13 @@ Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and
 
 **Redistribution:** APKs and iOS app bundles/IPAs must embed the MIT notice (paths above). Prebuilt `.so` / XCFramework archives should include an adjacent `GHOSTTY-MIT.txt` (written by the platform build scripts).
 
+## Bundled JavaScript: noVNC
+
+| Artifact | Upstream | License | Notes |
+| --- | --- | --- | --- |
+| `app/components/screen/screenViewerSource.js`, `app/components/screen/screenViewerRuntime.js` | [novnc/noVNC](https://github.com/novnc/noVNC) `1.7.0` (includes pako) | MPL-2.0 (pako: MIT) | The Screen viewer's RFB client, bundled with `app/components/screen/runtime/` by `bun run screen:generate` (`scripts/generate-screen-viewer.mjs`; `--check` reports stale output). The only change to noVNC source is that script's rewrite of one top-level `await` in `core/util/browser.js`; the unmodified source is the pinned `@novnc/novnc` package. SHA-256 in `screenViewerMeta.ts`. Opens no connection of its own. |
+| Notice source | same | MPL-2.0, MIT | `app/assets/notices/NOVNC-MPL-2.0.txt`. |
+
 ## npm / Go dependencies
 
 Application and daemon library licenses are those of their respective packages (`bun.lock`, `daemon/go.mod`). This document focuses on **bundled fonts and vendored native binaries**, which are easy to miss in automated SCA.
