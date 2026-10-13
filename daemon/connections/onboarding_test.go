@@ -365,6 +365,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 	var registered struct {
 		RedirectURIs []string `json:"redirect_uris"`
 		AuthMethod   string   `json:"token_endpoint_auth_method"`
+		Application  string   `json:"application_type"`
 	}
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		var body string
@@ -374,6 +375,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 		case "GET https://onlora.ai/.well-known/oauth-authorization-server/api/auth":
 			body = `{"issuer":"https://onlora.ai/api/auth","authorization_endpoint":"https://onlora.ai/api/auth/oauth2/authorize","token_endpoint":"https://onlora.ai/api/auth/oauth2/token","registration_endpoint":"https://onlora.ai/api/auth/oauth2/register","revocation_endpoint":"https://onlora.ai/api/auth/oauth2/revoke","scopes_supported":["openid","profile","email","offline_access","projects","generate","publish"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none","client_secret_basic"]}`
 		case "POST https://onlora.ai/api/auth/oauth2/register":
+			registered.Application = ""
 			_ = json.NewDecoder(req.Body).Decode(&registered)
 			body = `{"client_id":"onlora-client","token_endpoint_auth_method":"none"}`
 		default:
@@ -383,7 +385,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 	})}
 	start := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "onlora", WebOrigin: "https://mewla.example"}}).Flow
 	callback := "https://mewla.example/plugins/oauth/callback"
-	if len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != callback || registered.AuthMethod != "none" {
+	if len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != callback || registered.AuthMethod != "none" || registered.Application != "" {
 		t.Fatalf("registered %+v", registered)
 	}
 	authorize, _ := url.Parse(start.AuthorizationURL)
@@ -397,6 +399,11 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 	r := m.records[start.AccountID]
 	if r.Account.Name != "Onlora" || r.Account.Endpoint != "https://api.onlora.ai/mcp" || r.Account.AuthMethod != "mcp_oauth" || writeConsent(r) {
 		t.Fatalf("pending account %+v", r.Account)
+	}
+	// The phone app's return is an app scheme: registered as a native client.
+	mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "onlora"}})
+	if len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != NativeCallback || registered.Application != "native" {
+		t.Fatalf("app registration %+v", registered)
 	}
 	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "onlora", Name: "Pasted", Credential: "token"}}); err == nil {
 		t.Fatal("Onlora accepted a pasted credential")
@@ -413,5 +420,22 @@ func TestOnloraToolGroupsOnlyOnItsEndpoint(t *testing.T) {
 	r.Account.Endpoint = "https://onlora.example/mcp"
 	if toolGroup(r, Tool{Name: "search_library"}) != "" {
 		t.Fatal("another endpoint inherited Onlora's reviewed tools")
+	}
+}
+
+func TestNativeRedirectForAppSchemesAndLoopback(t *testing.T) {
+	for raw, native := range map[string]bool{
+		"mewla://plugins": true,
+		"http://127.0.0.1:9876/plugins/oauth/callback":    true,
+		"http://[::1]:9876/plugins/oauth/callback":        true,
+		"http://localhost:9876/plugins/oauth/callback":    true,
+		"https://mewla.invalid/plugins/oauth/callback":    false,
+		"https://127.0.0.1/plugins/oauth/callback":        false,
+		"http://192.168.1.20:9876/plugins/oauth/callback": false,
+		"": false,
+	} {
+		if nativeRedirect(raw) != native {
+			t.Fatalf("%q native = %v", raw, !native)
+		}
 	}
 }
