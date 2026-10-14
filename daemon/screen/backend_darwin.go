@@ -4,11 +4,14 @@ package screen
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
 	"log"
+	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -22,9 +25,14 @@ import (
 // injects input with CGEvent, through purego so release builds stay
 // cross-compiled without cgo. It needs Screen Recording and Accessibility.
 
-func newBackend() Backend { return &macBackend{} }
+func newBackend() Backend { return &macBackend{stale: map[string]bool{}} }
 
-type macBackend struct{}
+// macBackend tracks permissions granted while Mewla runs that this process
+// still can't use: macOS applies some grants only to a new process.
+type macBackend struct {
+	mu    sync.Mutex
+	stale map[string]bool
+}
 
 const (
 	permScreenRecording = "screen_recording"
@@ -47,6 +55,7 @@ var mac struct {
 	CGEventCreateKeyboardEvent      func(source uintptr, code uint16, down bool) uintptr
 	CGEventCreateScrollWheelEvent2  func(source uintptr, units uint32, count uint32, wheel1, wheel2, wheel3 int32) uintptr
 	CGEventSetFlags                 func(event uintptr, flags uint64)
+	CGEventSetLocation              func(event uintptr, at cgPoint)
 	CGEventSetIntegerValueField     func(event uintptr, field uint32, value int64)
 	CGEventKeyboardSetUnicodeString func(event uintptr, length uint64, text *uint16)
 	CGEventPost                     func(tap uint32, event uintptr)
@@ -126,6 +135,7 @@ func loadMacFunctions() error {
 	bind(&mac.CGEventCreateKeyboardEvent, "CoreGraphics", "CGEventCreateKeyboardEvent")
 	bind(&mac.CGEventCreateScrollWheelEvent2, "CoreGraphics", "CGEventCreateScrollWheelEvent2")
 	bind(&mac.CGEventSetFlags, "CoreGraphics", "CGEventSetFlags")
+	bind(&mac.CGEventSetLocation, "CoreGraphics", "CGEventSetLocation")
 	bind(&mac.CGEventSetIntegerValueField, "CoreGraphics", "CGEventSetIntegerValueField")
 	bind(&mac.CGEventKeyboardSetUnicodeString, "CoreGraphics", "CGEventKeyboardSetUnicodeString")
 	bind(&mac.CGEventPost, "CoreGraphics", "CGEventPost")
@@ -157,8 +167,11 @@ func loadMacFunctions() error {
 }
 
 // withPool runs fn inside an autorelease pool, for Objective-C calls made
-// from Go threads.
+// from Go threads. A pool must be popped on the thread that pushed it, so the
+// goroutine stays on one thread throughout.
 func withPool(fn func()) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	pool := mac.poolPush()
 	defer mac.poolPop(pool)
 	fn()
@@ -185,19 +198,66 @@ func nsErrorText(err objc.ID) string {
 	return objc.Send[string](desc, objc.RegisterName("UTF8String"))
 }
 
-func (b *macBackend) Capability(context.Context) Capability {
+// ProcessPermissions reports this process's own view of each permission;
+// `mewla screen preflight` prints it for the daemon.
+func ProcessPermissions() map[string]bool {
+	if loadMac() != nil {
+		return nil
+	}
+	return map[string]bool{
+		permScreenRecording: mac.CGPreflightScreenCaptureAccess(),
+		permAccessibility:   mac.AXIsProcessTrusted(),
+	}
+}
+
+// livePermissions asks a fresh child process when this one sees a permission
+// as missing: macOS keeps answering from the state the process started with.
+func livePermissions(ctx context.Context) (own, live map[string]bool) {
+	own = ProcessPermissions()
+	if own[permScreenRecording] && own[permAccessibility] {
+		return own, own
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return own, own
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, exe, "screen", "preflight").Output()
+	if err != nil || json.Unmarshal(out, &live) != nil {
+		return own, own
+	}
+	for id, granted := range live {
+		if granted && !own[id] {
+			log.Printf("screen: %s is granted but not yet effective in this process", id)
+		}
+	}
+	return own, live
+}
+
+func (b *macBackend) Capability(ctx context.Context) Capability {
 	if err := loadMac(); err != nil {
 		return Capability{Reason: "Screen needs macOS 13 or later (" + err.Error() + ")"}
 	}
+	own, live := livePermissions(ctx)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	permission := func(id, name, guidance string) Permission {
+		p := Permission{ID: id, Name: name, Granted: live[id], CanOpen: true, Guidance: guidance}
+		// Input posted by a process that isn't trusted yet is dropped
+		// silently, so a stale Accessibility grant always needs a restart.
+		// Capture reports its own failure; see Start.
+		if b.stale[id] || (id == permAccessibility && live[id] && !own[id]) {
+			p.Granted, p.RestartRequired = false, true
+			p.Guidance = "Allowed. Restart Mewla on this computer to apply it."
+		}
+		return p
+	}
 	return Capability{Supported: true, Permissions: []Permission{
-		{
-			ID: permScreenRecording, Name: "Screen Recording", Granted: mac.CGPreflightScreenCaptureAccess(), CanOpen: true,
-			Guidance: "In System Settings → Privacy & Security → Screen & System Audio Recording, turn on mewla (or the terminal app that runs it). If it is already on, restart Mewla.",
-		},
-		{
-			ID: permAccessibility, Name: "Accessibility", Granted: mac.AXIsProcessTrusted(), CanOpen: true,
-			Guidance: "In System Settings → Privacy & Security → Accessibility, turn on mewla (or the terminal app that runs it).",
-		},
+		permission(permScreenRecording, "Screen Recording",
+			"In System Settings → Privacy & Security → Screen & System Audio Recording, turn on mewla (or the terminal app that runs it)."),
+		permission(permAccessibility, "Accessibility",
+			"In System Settings → Privacy & Security → Accessibility, turn on mewla (or the terminal app that runs it)."),
 	}}
 }
 
@@ -296,7 +356,7 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 	if err := loadMac(); err != nil {
 		return nil, ErrUnsupported
 	}
-	if !mac.CGPreflightScreenCaptureAccess() || !mac.AXIsProcessTrusted() {
+	if !b.Capability(ctx).Ready() {
 		return nil, ErrPermissions
 	}
 	if err := registerOutputClass(); err != nil {
@@ -321,7 +381,16 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 		return nil, ctx.Err()
 	}
 	if result.content == 0 {
-		return nil, fmt.Errorf("list displays: %s", nsErrorText(result.err))
+		reason := nsErrorText(result.err)
+		if !mac.CGPreflightScreenCaptureAccess() {
+			// Granted for a new process, refused to this one.
+			b.mu.Lock()
+			b.stale[permScreenRecording] = true
+			b.mu.Unlock()
+			log.Printf("screen: capture refused until restart: %s", reason)
+			return nil, ErrPermissions
+		}
+		return nil, fmt.Errorf("list displays: %s", reason)
 	}
 	defer result.content.Send(selRelease)
 
@@ -529,8 +598,21 @@ func (s *macSession) post(events []macEvent) {
 			}
 		case macScroll:
 			event = mac.CGEventCreateScrollWheelEvent2(s.source0, cgScrollUnitLine, 2, e.Lines[0], e.Lines[1], 0)
+			if event != 0 {
+				mac.CGEventSetLocation(event, cgPoint{e.X, e.Y})
+			}
 		case macKey:
 			event = mac.CGEventCreateKeyboardEvent(s.source0, e.KeyCode, e.Down)
+			if event != 0 && e.Text != 0 {
+				// The character itself, so the computer's input source can't
+				// turn ASCII punctuation into another form.
+				text := utf16Units(e.Text)
+				mac.CGEventKeyboardSetUnicodeString(event, uint64(len(text)), &text[0])
+			}
+			if event != 0 {
+				// Keys always carry the modifier state, including none.
+				mac.CGEventSetFlags(event, e.Flags)
+			}
 		case macText:
 			text := utf16Units(e.Text)
 			for _, down := range []bool{true, false} {
@@ -546,7 +628,9 @@ func (s *macSession) post(events []macEvent) {
 		if event == 0 {
 			continue
 		}
-		mac.CGEventSetFlags(event, e.Flags)
+		if e.Kind != macKey && e.Flags != 0 {
+			mac.CGEventSetFlags(event, e.Flags)
+		}
 		mac.CGEventPost(cgHIDEventTap, event)
 		mac.CFRelease(event)
 	}

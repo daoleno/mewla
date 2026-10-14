@@ -100,6 +100,9 @@ type Status struct {
 	// KeepAwake is the owner's setting; Power.KeepingAwake is what holds now.
 	KeepAwake bool   `json:"keep_awake"`
 	Power     *Power `json:"power,omitempty"`
+	// CanRestart means a service manager restarts Mewla, so Restart may be
+	// offered for a permission that needs it.
+	CanRestart bool `json:"can_restart,omitempty"`
 }
 
 // Service reads its config on every use, so `mewla screen enable|disable`
@@ -112,6 +115,8 @@ type Service struct {
 	confirm sync.Mutex
 	// write serializes config changes; reads go straight to disk.
 	write sync.Mutex
+	// restart, when set, stops Mewla so its service manager starts it again.
+	restart func()
 }
 
 func NewService(stateDir string) *Service { return NewServiceWith(stateDir, newBackend()) }
@@ -185,7 +190,27 @@ func (s *Service) Status(ctx context.Context, deviceID string) Status {
 		}
 	}
 	status.Ready = capability.Ready() && status.Approved
+	status.CanRestart = s.restart != nil
 	return status
+}
+
+// SetRestart lets an allowed device restart Mewla to apply a permission;
+// only set it when a service manager starts Mewla again.
+func (s *Service) SetRestart(restart func()) { s.restart = restart }
+
+// ErrNoRestart means nothing would start Mewla again after it stops.
+var ErrNoRestart = errors.New("Mewla isn't running as a service on this computer; restart it there")
+
+// Restart stops Mewla shortly after returning, for an allowed device.
+func (s *Service) Restart(deviceID string) error {
+	if err := s.allowed(deviceID); err != nil {
+		return err
+	}
+	if s.restart == nil {
+		return ErrNoRestart
+	}
+	time.AfterFunc(300*time.Millisecond, s.restart)
+	return nil
 }
 
 // Enable asks the person at this computer to allow a device, once, and then

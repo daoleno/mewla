@@ -18,6 +18,8 @@ export interface ScreenPermission {
   guidance?: string;
   /** The daemon can open this permission's settings page on the computer. */
   can_open?: boolean;
+  /** Granted, but takes effect only after Mewla restarts on the computer. */
+  restart_required?: boolean;
 }
 
 /** One computer's Screen state, as the asking device sees it. */
@@ -35,11 +37,14 @@ export interface ScreenStatus {
   ready: boolean;
   keep_awake: boolean;
   power?: ScreenPower;
+  /** A service manager restarts Mewla, so the app may ask it to restart. */
+  can_restart?: boolean;
 }
 
 export type ScreenAction =
   | { action: "enable" }
   | { action: "open_settings"; permission: string }
+  | { action: "restart" }
   | { keep_awake: boolean };
 
 /** HTTP failure with the status kept apart from any body text. */

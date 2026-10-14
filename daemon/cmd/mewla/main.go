@@ -190,6 +190,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 		syscall.SIGTERM,
 	)
 	defer stopSignals()
+	ctx, restartDaemon := context.WithCancelCause(ctx)
+	defer restartDaemon(nil)
 
 	brainRoot, err := brain.DefaultRoot()
 	if err != nil {
@@ -433,7 +435,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetBrowser(browserManager)
 	screenService := screen.NewService(authManager.StorageDir())
 	go screenService.Run(ctx)
+	if daemonSupervised() {
+		// Exiting with an error makes launchd or systemd start Mewla again,
+		// the only way some operating-system permissions take effect.
+		screenService.SetRestart(func() { restartDaemon(errDaemonRestart) })
+	}
 	srv.SetScreen(screenService)
+	controlHandler.screen = screenService
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager
@@ -589,7 +597,23 @@ func runDaemon(args []string, stderr io.Writer) error {
 			},
 		},
 	)
-	return runJoinedRuntime(ctx, runtimeOwners)
+	if err := runJoinedRuntime(ctx, runtimeOwners); err != nil {
+		return err
+	}
+	if errors.Is(context.Cause(ctx), errDaemonRestart) {
+		return errDaemonRestart
+	}
+	return nil
+}
+
+// errDaemonRestart ends the daemon with a failure so its service manager
+// starts it again.
+var errDaemonRestart = errors.New("restarting Mewla to apply Screen permissions")
+
+// daemonSupervised reports whether launchd (mewla boot) or a systemd unit
+// restarts this daemon after it exits with an error.
+func daemonSupervised() bool {
+	return os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel || os.Getenv("INVOCATION_ID") != ""
 }
 
 func acquireDaemonAuthOwner(

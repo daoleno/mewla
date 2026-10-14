@@ -67,7 +67,7 @@ func TestMacInputKeysAndModifiers(t *testing.T) {
 		t.Fatalf("command down = %+v", events)
 	}
 	events := m.key('c', true)
-	if len(events) != 1 || events[0].KeyCode != 8 || !events[0].Down || events[0].Flags != macFlagCommand {
+	if len(events) != 1 || events[0].KeyCode != 8 || !events[0].Down || events[0].Flags != macFlagCommand || events[0].Text != 0 {
 		t.Fatalf("c down = %+v", events)
 	}
 	if events = m.key('c', false); events[0].KeyCode != 8 || events[0].Down {
@@ -78,7 +78,7 @@ func TestMacInputKeysAndModifiers(t *testing.T) {
 	}
 
 	// Shifted characters imply Shift; the release uses the pressed key code.
-	if events = m.key('?', true); events[0].KeyCode != 44 || events[0].Flags != macFlagShift {
+	if events = m.key('?', true); events[0].KeyCode != 44 || events[0].Flags != macFlagShift || events[0].Text != '?' {
 		t.Fatalf("? = %+v", events)
 	}
 	if events = m.key('?', false); events[0].KeyCode != 44 || events[0].Down {

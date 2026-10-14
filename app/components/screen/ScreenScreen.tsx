@@ -301,6 +301,28 @@ export function ScreenScreen() {
       setReason(error instanceof Error ? error.message : String(error));
     }
   };
+  // Restarting drops this connection; keep checking until Mewla answers.
+  const restartMewla = async () => {
+    if (!currentServer) return;
+    const server = currentServer;
+    setBusy(true);
+    setReason(null);
+    try {
+      await screenRequest(server, { action: "restart" });
+      for (let attempt = 0; attempt < 30 && isCurrentServer(server.id); attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+          const next = await screenRequest(server);
+          if (!isCurrentServer(server.id)) return;
+          setStatus(next);
+          if (!next.permissions?.some((p) => p.restart_required)) break;
+        } catch { /* still restarting */ }
+      }
+    } catch (error) {
+      if (isCurrentServer(server.id)) setReason(error instanceof Error ? error.message : String(error));
+    } finally { setBusy(false); }
+    if (isCurrentServer(server.id)) void connect();
+  };
   const changeMode = (next: ScreenPointerMode) => {
     setMode(next);
     toViewer({ type: "mode", mode: next });
@@ -359,7 +381,8 @@ export function ScreenScreen() {
       {phase === "setup" && status ? (
         <ScrollView contentContainerStyle={[styles.center, styles.setup]}>
           <ScreenSetup status={status} name={title} busy={busy} reason={reason}
-            onEnable={() => void enable()} onOpenSettings={(id) => void openSettings(id)} onCheck={() => void connect()} />
+            onEnable={() => void enable()} onOpenSettings={(id) => void openSettings(id)}
+            onRestart={() => void restartMewla()} onCheck={() => void connect()} />
         </ScrollView>
       ) : null}
       {phase === "checking" && !status ? (
@@ -435,13 +458,14 @@ export function ScreenScreen() {
  * unsupported, turned off at the computer, not yet allowed, or waiting for
  * operating-system permissions.
  */
-function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onCheck }: {
+function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onRestart, onCheck }: {
   status: ScreenStatus;
   name: string;
   busy: boolean;
   reason: string | null;
   onEnable(): void;
   onOpenSettings(permission: string): void;
+  onRestart(): void;
   onCheck(): void;
 }) {
   const { colors } = useAppTheme();
@@ -467,6 +491,8 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onC
     );
   }
   const missing = (status.permissions ?? []).filter((p) => !p.granted);
+  // Some grants apply only to a new Mewla process on the computer.
+  const restart = missing.some((p) => p.restart_required) && status.can_restart;
   return (
     <View style={styles.setupBlock}>
       <EmptyState icon="shield-check" title={`Allow Screen on ${name}`}
@@ -477,10 +503,13 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onC
             <AppText variant="label" style={{ color: colors.textPrimary }}>{p.name}</AppText>
             {p.guidance ? <AppText variant="caption" style={{ color: colors.textSecondary }}>{p.guidance}</AppText> : null}
           </View>
-          {p.can_open ? <Button label="Open settings" size="sm" variant="tinted" onPress={() => onOpenSettings(p.id)} /> : null}
+          {p.can_open && !p.restart_required
+            ? <Button label="Open settings" size="sm" variant="tinted" onPress={() => onOpenSettings(p.id)} /> : null}
         </View>
       ))}
-      <Button label="Check again" icon="refresh" variant="outlined" onPress={onCheck} />
+      {restart
+        ? <Button label={busy ? "Restarting Mewla…" : "Restart Mewla"} icon="refresh" loading={busy} onPress={onRestart} />
+        : <Button label="Check again" icon="refresh" variant="outlined" onPress={onCheck} />}
       {reason ? <InlineNotice tone="warning" title="Something went wrong" detail={reason} /> : null}
     </View>
   );

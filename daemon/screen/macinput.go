@@ -266,7 +266,12 @@ func (m *macInput) key(keysym uint32, down bool) []macEvent {
 			flags |= macFlagShift
 		}
 		m.pressed[keysym] = key.code
-		return []macEvent{{Kind: macKey, KeyCode: key.code, Down: true, Flags: flags}}
+		event := macEvent{Kind: macKey, KeyCode: key.code, Down: true, Flags: flags}
+		// Typed characters carry their text; shortcuts stay plain key codes.
+		if flags&(macFlagCommand|macFlagControl|macFlagOption) == 0 {
+			event.Text = r
+		}
+		return []macEvent{event}
 	}
 	// Anything else is typed as text; a press is the whole keystroke.
 	return []macEvent{{Kind: macText, Text: r, Flags: m.flags()}}
