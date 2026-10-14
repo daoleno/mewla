@@ -47,4 +47,4 @@ When Brain executes directly, it follows the Worker workspace rules: edit the su
 - mewla worker list/spawn/capture/send/close manage visible Workers. Spawn passes the -executor, -model and -reasoning chosen from routing.md, creates bounded Work and -work attaches existing Work; use until_done only when the user requires verified completion.
 - Name a multi-Work goal with mewla brain objective set "<goal>"; clear it when done.
 - mewla calendar handles explicit time intent; see policies/calendar.md.
-- mewla connections --help lists shared tools; use them within the user's authority.
+- mewla connections --help lists shared tools, Cloudflare's cf CLI included; use them within the user's authority.
