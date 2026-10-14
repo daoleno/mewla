@@ -27,6 +27,8 @@ const (
 	TypeAdmissionResponse = "admission_response"
 	TypeAdmissionConsume  = "admission_consume"
 	TypeAdmissionConsumed = "admission_consumed"
+	TypeRenewGrant        = "renew_grant"
+	TypeGrantRenewed      = "grant_renewed"
 	TypeError             = "error"
 )
 
@@ -41,6 +43,10 @@ type Message struct {
 	TimestampMS     int64  `json:"timestamp_ms,omitempty"`
 	Nonce           string `json:"nonce,omitempty"`
 	Signature       string `json:"signature,omitempty"`
+
+	// Grant is a hosted route grant (see RouteGrant). Hosted relays require
+	// it on register, admission and renew_grant instead of ConnectorToken.
+	Grant string `json:"grant,omitempty"`
 
 	StreamID     string `json:"stream_id,omitempty"`
 	StreamTicket string `json:"stream_ticket,omitempty"`
