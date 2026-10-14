@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/macapp"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // On macOS `mewla boot` installs a LaunchAgent in the user's GUI session
@@ -538,15 +539,31 @@ func bootLaunchdStatus(runner bootRunner, out io.Writer) error {
 	return nil
 }
 
-// bootLaunchdInstalled reports whether `mewla boot install` manages a
-// LaunchAgent for this user.
-func bootLaunchdInstalled() bool {
+// bootLaunchdReinstallCommand is the `boot install` command that moves the
+// installed LaunchAgent to binary while keeping its state directory, address,
+// working directory and PATH; plain `mewla boot install` would take those
+// from the current shell. ok is false when no managed LaunchAgent exists.
+func bootLaunchdReinstallCommand(binary string) (command string, ok bool) {
 	path, err := bootLaunchdPlistPath()
 	if err != nil {
-		return false
+		return "", false
 	}
 	data, err := os.ReadFile(path)
-	return err == nil && strings.Contains(string(data), bootLaunchdMarker)
+	if err != nil || !strings.Contains(string(data), bootLaunchdMarker) {
+		return "", false
+	}
+	metadata, err := readBootMetadata(bootMetadataPath(path))
+	if err != nil {
+		return shellquote.Word(binary) + " boot install", true
+	}
+	args := []string{shellquote.Word(binary), "boot", "install", "-state-dir", shellquote.Word(metadata.StateDir)}
+	if metadata.LAN {
+		args = append(args, "-lan")
+	} else {
+		args = append(args, "-addr", shellquote.Word(metadata.Addr))
+	}
+	args = append(args, "-work-dir", shellquote.Word(metadata.WorkDir), "-path-env", shellquote.Word(metadata.PathEnv))
+	return strings.Join(args, " "), true
 }
 
 func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {

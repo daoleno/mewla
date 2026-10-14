@@ -100,9 +100,9 @@ mewla update          # verify and install it
 
 `mewla update` checks the release's signed manifest and the archive checksum
 before it replaces the binary. It does not restart a running daemon; stop and
-start `mewla` when convenient. On macOS with the service installed, run
-`mewla boot install` again: it copies the new binary into `Mewla.app` and
-restarts the service.
+start `mewla` when convenient. On macOS with the service installed, it prints
+a `mewla boot install` command with your installed address, directories and
+`PATH`; run it to copy the new binary into `Mewla.app` and restart the service.
 
 ## Keep it running
 
