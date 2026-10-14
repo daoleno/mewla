@@ -46,6 +46,8 @@ const (
 	acmeChallengePrefix   = "_acme-challenge."
 	acmeValueLength       = 43
 	identityCallTimeout   = 20 * time.Second
+	// txtVisibleTimeout stays under the daemon's 30-second request timeout.
+	txtVisibleTimeout = 20 * time.Second
 )
 
 // Relay is one relay advertised to machines.
@@ -74,6 +76,10 @@ type Config struct {
 	MaxMachinesPerAccount int
 	// ACMEOpsPerHour limits TXT set and clear calls per machine; default 20 each.
 	ACMEOpsPerHour int
+	// WaitTXT, when set, runs after a TXT record is set and returns once the
+	// zone's nameservers serve it, so the daemon does not ask the CA to
+	// validate too early. It is bounded by txtVisibleTimeout.
+	WaitTXT func(ctx context.Context, fqdn, value string) error
 	// DeviceHandler, when set, is served at /device (the fake provider).
 	DeviceHandler http.Handler
 	Now           func() time.Time
@@ -620,6 +626,15 @@ func (s *Service) handleACMEChallenge(w http.ResponseWriter, r *http.Request) {
 		s.config.Logf("account: ACME TXT %s failed: machine=%s fqdn=%s error=%v", operation, machine.ID, fqdn, err)
 		writeError(w, http.StatusBadGateway, "DNS provider failed")
 		return
+	}
+	if set && s.config.WaitTXT != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), txtVisibleTimeout)
+		err := s.config.WaitTXT(ctx, fqdn, request.Value)
+		cancel()
+		if err != nil {
+			// Answer anyway: the CA may still see it, and the daemon retries.
+			s.config.Logf("account: ACME TXT not visible yet: machine=%s fqdn=%s error=%v", machine.ID, fqdn, err)
+		}
 	}
 	s.config.Logf("account: ACME TXT %s: machine=%s fqdn=%s", operation, machine.ID, fqdn)
 	w.WriteHeader(http.StatusNoContent)
