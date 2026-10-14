@@ -1,8 +1,9 @@
 # Security engineering notes
 
 Transport, relay, mobile-bridge and device-administration details behind
-[Security and privacy](../security-and-privacy.md). Mewla Link is optional and
-no hosted relay is operated; see [Mewla Link Relay operations](mewla-link-relay.md).
+[Security and privacy](../security-and-privacy.md). Mewla Link is optional.
+Mewla operates one hosted relay for remote access (`mewla login`); see
+[Mewla Link Relay operations](mewla-link-relay.md).
 
 ## Trust model with Mewla Link
 

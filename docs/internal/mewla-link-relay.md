@@ -1,10 +1,11 @@
 # Mewla Link Relay operations
 
-This runbook describes an optional single-region MVP. All Link source and
-deployment examples are inert until an operator explicitly supplies
-configuration, credentials, certificates, DNS, and starts them. This
-repository does not deploy or start a relay and does not claim that a
-production endpoint, global SLO, or backbone exists.
+This runbook describes a single-region MVP. Mewla operates one hosted relay
+and account service for remote access (`connect.mewla.ai`, computers under
+`*.m.mewla.ai`), deployed from this repository with Kamal; see
+[Hosted remote access](#hosted-remote-access). There is no global SLO or
+backbone. Self-hosted Link examples stay inert until an operator supplies
+configuration, credentials, certificates and DNS.
 
 The relay runs in two modes, and one relay may accept both:
 
@@ -243,13 +244,21 @@ for this MVP.
 
 ## Hosted remote access
 
-`deploy/mewla-link/compose.yaml` runs the hosted service on one VPS:
+`config/deploy.yml` deploys the hosted service with Kamal on one host
+(OVH `167.114.116.27`, shared with Onlora):
 
-| Service | Role |
+| Name and port | Served by |
 | --- | --- |
-| `relay` | Public `:443` (clients, SNI passthrough) and `:8443` (daemon control). `-sni-route` hands the service hostname to Caddy; every other hostname is a computer. |
-| `account` | Device-code login (GitHub), machine registry (SQLite), route grants, DNS-01 TXT records for each computer's certificate, quotas. |
-| `caddy` | HTTPS for the account service, behind the relay's SNI route; port 80 for redirects and HTTP-01. |
+| `connect.mewla.ai:443` | The relay passes the TLS stream, by SNI, to the account service (`-sni-route`), with a PROXY protocol v1 header carrying the client's address (`-sni-route-proxy-protocol`). The account service holds its own Let's Encrypt certificate (`-tls-addr`, TLS-ALPN-01 through the relay) and reads the header (`-proxy-protocol`). |
+| `connect.mewla.ai:8443` | The relay's control plane for daemons. Self-signed certificate that the account service hands to each computer, which pins it. |
+| `*.m.mewla.ai:443` | The relay, by SNI label, to that computer. The computer holds the certificate; the relay sees only encrypted bytes. |
+
+| Kamal piece | Role |
+| --- | --- |
+| `account` role (`mewla-link-account-<version>`) | Device-code login (GitHub, shown as `https://connect.mewla.ai/device`), machine registry (SQLite), route grants, DNS-01 TXT records for each computer's certificate, quotas, 10 sign-in attempts per client address an hour. Not published; network alias `mewla-account` on the `kamal` network. |
+| `relay` accessory (`mewla-link-relay`) | Publishes host `:443` and `:8443` (IPv4) and its operator listener on `127.0.0.1:9180`. |
+
+Both run from one image (`daemon/Dockerfile.link`). Nothing uses kamal-proxy.
 
 Trust boundaries:
 
@@ -284,7 +293,9 @@ Trust boundaries:
   read an earlier browser's stored device key.
 
 Relay flags for hosted mode: `-grant-public-key-file` (hex Ed25519 keys, one
-per line), `-sni-route host=addr` (repeatable), `-max-client-handshakes-per-ip`
+per line), `-sni-route host=addr` (repeatable), `-sni-route-proxy-protocol`
+(PROXY v1 header on static routes; the target must accept only the relay),
+`-max-client-handshakes-per-ip`
 (64), `-max-clients-per-ip` (64), `-max-connector-handshakes-per-ip` (32),
 `-max-route-bindings` (65536, token mode). The relay logs route events with
 an 8-hex hash prefix, never route IDs, labels, SNI or IP addresses.
@@ -309,9 +320,11 @@ In order of preference:
    (https://isrg.formstack.com/forms/rate_limit_adjustment_request) for the
    client domain. It also takes weeks.
 3. While both are pending, count `account: machine created` and
-   `account: machine renamed` log lines per 7 days; past ~40, pause new
-   sign-ups (e.g. disable the GitHub OAuth app) before new computers start
-   getting no browser certificate. Renewals keep working either way.
+   `account: machine renamed` log lines per 7 days (`kamal logs`); past ~40,
+   pause new sign-ups before new computers start getting no browser
+   certificate. Renewals keep working either way. There is no switch for
+   that yet, and the GitHub OAuth app is shared with the GitHub plugin, so
+   disabling it would break that too; add a flag to `mewla-account` first.
 
 Not an option: a wildcard certificate. The operator would hold its key, which
 ends "the certificate key never leaves the computer" and lets the operator
@@ -345,50 +358,134 @@ Before switching CA, publish CAA for the client domain that allows it:
 `0 issue "letsencrypt.org"` plus `0 issue "sectigo.com"` (ZeroSSL) or
 `0 issue "pki.goog"` (Google Trust Services), and `0 issuewild ";"`.
 
-### Launch checklist
+### Operations (Kamal)
 
-1. Buy the domain. Use one zone for the service and relay
-   (`account.<domain>`, `relay.<domain>`) and one wildcard for computers
-   (`*.<client domain>`).
-2. Apply for the client domain's inclusion in the Public Suffix List (private
-   section), or request a Let's Encrypt rate limit adjustment. Without it the
-   whole client domain gets 50 new certificates per 7 days. Both take weeks.
-3. Create the VPS. Open TCP 80, 443 and 8443.
-4. DNS: `A account.<domain>`, `A relay.<domain>` and `A *.<client domain>` to
-   the VPS. Move the client zone to Cloudflare and create an API token with
-   DNS edit on that zone only; note the zone ID.
-5. Create a GitHub OAuth App (Settings → Developer settings → OAuth Apps),
-   enable Device Flow, and note its client ID. No client secret is needed.
-6. On the VPS, in `deploy/mewla-link/`:
+Run everything from the repository root with Kamal 2.12
+(`gem install kamal -v 2.12.0`, or `BUNDLE_GEMFILE=~/workspace/onlora/Gemfile
+bundle exec kamal`). Local inputs, never committed:
+
+| Path | Contents |
+| --- | --- |
+| `.kamal/secrets` | Copy of `.kamal/secrets.example`; reads the Cloudflare token from `~/.config/mewla-remote/cloudflare-dns-token` (0600) when Kamal loads secrets. The token is limited to DNS edit on the `mewla.ai` zone. |
+| `.kamal/files/relay.crt`, `relay.key` | The relay's self-signed control certificate (P-256, `CN=connect.mewla.ai`). |
+| `.kamal/files/grant.pub` | Hex grant public keys the relay accepts, one per line. |
+| `~/.config/mewla-remote/backup/` (0700) | Copies of the three files above and volume backups (0600). |
+
+The host limits SSH to six new connections per 30 seconds per address and
+then drops it for minutes. Each Kamal command opens at least one; leave about
+30 seconds between commands.
+
+Images are tagged with the full commit SHA. Pass it explicitly, because a
+dirty working tree makes Kamal append `_uncommitted_…`:
+
+```sh
+V=$(git rev-parse HEAD)
+```
+
+**First deploy** (already done; repeat only on a new host):
+
+1. DNS, unproxied: `A connect.mewla.ai` and `A *.m.mewla.ai` to the host.
+2. Control certificate:
    ```sh
-   export MEWLA_SERVICE_HOST=account.<domain> MEWLA_RELAY_HOST=relay.<domain> \
-     MEWLA_CLIENT_DOMAIN=<client domain> MEWLA_GITHUB_CLIENT_ID=… \
-     MEWLA_CLOUDFLARE_TOKEN=… MEWLA_CLOUDFLARE_ZONE_ID=…
-   mkdir -p secrets
-   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 \
-     -keyout secrets/relay.key -out secrets/relay.crt -subj /CN=$MEWLA_RELAY_HOST \
-     -addext subjectAltName=DNS:$MEWLA_RELAY_HOST
-   docker compose run --rm account -grant-key-file=/var/lib/mewla-account/grant-key.pem \
-     -print-public-key > secrets/grant.pub
-   docker compose up -d --build
+   (umask 077; mkdir -p .kamal/files && cd .kamal/files &&
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 \
+      -keyout relay.key -out relay.crt -subj /CN=connect.mewla.ai \
+      -addext subjectAltName=DNS:connect.mewla.ai && chmod 644 relay.crt)
    ```
-   The relay control certificate is self-signed; the account service hands it
-   to each computer, which pins it.
+3. `kamal build deliver --version $V`
+4. Grant key, created inside the account volume:
+   ```sh
+   ssh ubuntu@167.114.116.27 "docker run --rm -v mewla-link-account:/var/lib/mewla-account \
+     localhost:5555/daoleno/mewla-link:$V /usr/local/bin/mewla-account \
+     -grant-key-file=/var/lib/mewla-account/grant-key.pem -print-public-key" > .kamal/files/grant.pub
+   ```
+5. `MEWLA_LINK_VERSION=$V kamal accessory boot relay`
+6. `kamal deploy --skip-push --version $V`. The account service obtains its
+   certificate on the first HTTPS handshake.
 
-   The relay's per-IP limits need real client addresses. Docker's userland
-   proxy (IPv6, and some setups) shows every client as one gateway address;
-   check `mewla_link_capacity_used{resource="clients_per_ip"}` after launch,
-   and run the relay with `network_mode: host` if it does. The address also
-   reaches daemons as `client_addr`: behind such a proxy every computer's
-   enrollment limit, stream fairness and per-IP route share collapse into
-   one bucket that a single client exhausts for everyone.
-7. Build release daemons with
-   `-ldflags "-X github.com/daoleno/mewla/daemon/remote.DefaultServiceURL=https://account.<domain>"`.
-   Until then, `MEWLA_REMOTE_SERVICE_URL` or `mewla login -service` selects it.
-8. Smoke test from a fresh machine: `mewla` → 1 → GitHub → `mewla pair`, then a
-   browser on another network and a phone on cellular.
-9. Back up the `account-data` volume (SQLite database and grant key). Losing
-   the grant key signs every computer out until they log in again.
+The host's `DOCKER-USER` guard (`/etc/ufw/after.rules`, "SRT DOCKER GUARD")
+matches container ports after DNAT and allows 22, 80, 443 and 8443, which is
+why the relay listens on 443 and 8443 inside its container. Onlora's
+kamal-proxy publishes only `:80` (`proxy.run` in Onlora's
+`config/deploy*.yml`). A `kamal proxy reboot` from an Onlora checkout without
+that setting would try to bind `:443`, fail, and take Onlora down; a normal
+`kamal deploy` restarts the existing proxy container and is safe.
+
+**Deploy the account service:** commit, then `kamal deploy --version $V`.
+The new container starts before the old one stops; both share the SQLite
+volume for a few seconds.
+
+**Upgrade the relay** (drops every stream; daemons reconnect within seconds):
+
+```sh
+export MEWLA_LINK_VERSION=$V   # an image already on the host
+kamal accessory stop relay
+kamal accessory remove_container relay
+kamal accessory boot relay
+```
+
+`kamal accessory reboot relay` does not work: it pulls the image from the
+local registry, which is only tunnelled to the host during builds.
+
+**Roll back:** `kamal app containers` and
+`ssh ubuntu@167.114.116.27 docker images localhost:5555/daoleno/mewla-link`
+list the retained versions (the last five). The account service:
+`kamal rollback <version>`. The relay: the upgrade sequence with the old
+version.
+
+**Logs and metrics:**
+
+```sh
+kamal logs                     # account service
+kamal relay-logs               # relay
+ssh ubuntu@167.114.116.27 curl -fsS http://127.0.0.1:9180/readyz
+ssh ubuntu@167.114.116.27 curl -fsS http://127.0.0.1:9180/metrics
+kamal app exec --reuse "/usr/local/bin/mewla-account -check=http://127.0.0.1:8080/healthz"
+```
+
+The relay's operator listener is published only on the host's loopback; the
+account service's `/healthz` is only on its internal `:8080` and returns 404
+over HTTPS.
+
+**Rotate the grant key** (no sign-out):
+
+1. Create the new key next to the old one and add its public key:
+   ```sh
+   ssh ubuntu@167.114.116.27 "docker run --rm -v mewla-link-account:/var/lib/mewla-account \
+     localhost:5555/daoleno/mewla-link:$V /usr/local/bin/mewla-account \
+     -grant-key-file=/var/lib/mewla-account/grant-key-2.pem -print-public-key" >> .kamal/files/grant.pub
+   ```
+2. Upgrade the relay (same version) so it accepts both keys.
+3. Point `-grant-key-file` in `config/deploy.yml` at `grant-key-2.pem`,
+   commit and deploy the account service.
+4. After one grant lifetime (1 hour), delete the old line from
+   `.kamal/files/grant.pub`, upgrade the relay again, remove the old key file
+   from the volume, and take a backup.
+
+**Back up** the account volume (SQLite database, grant key, certificate
+cache). The database is in WAL mode, so stop the service for a consistent
+copy; computers keep working on their current grant meanwhile:
+
+```sh
+kamal app stop
+ssh ubuntu@167.114.116.27 "docker run --rm -v mewla-link-account:/d:ro alpine:3.20 tar -C /d -cf - ." \
+  > ~/.config/mewla-remote/backup/account-$(date +%Y%m%d-%H%M%S).tar
+kamal app start
+chmod 600 ~/.config/mewla-remote/backup/*.tar
+```
+
+**Restore** onto an empty or damaged volume:
+
+```sh
+kamal app stop
+ssh ubuntu@167.114.116.27 "docker run --rm -i -v mewla-link-account:/d alpine:3.20 \
+  sh -c 'find /d -mindepth 1 -delete && tar -C /d -xpf -'" < ~/.config/mewla-remote/backup/account-<stamp>.tar
+kamal app start
+```
+
+If the grant key is lost, generate a new one (first deploy, step 4), replace
+`grant.pub`, upgrade the relay and deploy; every computer must then sign in
+again.
 
 ### Local end-to-end environment
 
