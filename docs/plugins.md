@@ -115,8 +115,8 @@ service's page. It is the same sign-in as Connect.
 Cloudflare's MCP server covers the whole Cloudflare API with a few tools:
 **search** finds an API endpoint, **docs** searches Cloudflare's docs, and
 **execute** calls the API. Read and search covers search and docs. Execute sits
-under **Make changes when asked**, and can only do what you granted on
-Cloudflare's page; to grant more, disconnect and connect again, choosing more
+under **Make changes when asked**, so turn that on before Brain reads anything
+from your account, and it can only do what you granted on Cloudflare's page; to grant more, disconnect and connect again, choosing more
 permissions there.
 
 ## Media
