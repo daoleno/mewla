@@ -1,9 +1,9 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Google Workspace, Onlora for making comics, fal and Image
-generation for media, and custom MCP or OpenAPI services. Plugins
-are a **preview**.
+GitHub, Slack, Google Workspace, Cloudflare, Onlora for making comics, fal and
+Image generation for media, and custom MCP or OpenAPI services. Plugins are a
+**preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
 shows that server's accounts and never moves an account between servers.
@@ -52,6 +52,7 @@ Mewla's own app registration with the provider:
 | Linear | Official browser sign-in | Returns to the web UI's Extensions page |
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
+| Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare doesn't accept the phone app's return address yet: connect it from the web UI | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Shows **Not yet available** until Mewla's Slack app registration ships | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -108,6 +109,15 @@ expired, **Turn on** when it is off, **Check again** after a failed call, or
 
 To add a second account, use **Add another account** at the bottom of the
 service's page. It is the same sign-in as Connect.
+
+## Cloudflare
+
+Cloudflare's MCP server covers the whole Cloudflare API with a few tools:
+**search** finds an API endpoint, **docs** searches Cloudflare's docs, and
+**execute** calls the API. Read and search covers search and docs. Execute sits
+under **Make changes when asked**, and can only do what you granted on
+Cloudflare's page; to grant more, disconnect and connect again, choosing more
+permissions there.
 
 ## Media
 

@@ -31,6 +31,8 @@ Add: --integration github|notion|google|slack|linear|fal|image|mcp|openapi --nam
 Image generation: --integration image --endpoint https://host/v1 --model name; the API key is read like any credential.
 fal: --integration fal; an empty key keeps only its free model search. set-key --id account replaces an API key.
 Media tools write output files to --args output_dir (relative to this directory) or the daemon's media folder and return paths, never file bytes.
+Cloudflare (connected in Extensions) covers the whole Cloudflare API: find the endpoint with its search tool, then call it with execute; docs searches Cloudflare's docs.
+Deleting Cloudflare resources, changing DNS, or creating or revoking tokens needs the user's authorization for that task.
 Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|google|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
 Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account).
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
