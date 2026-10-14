@@ -11,12 +11,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
+	"github.com/daoleno/mewla/daemon/macapp"
 	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
 )
@@ -268,11 +270,17 @@ func (b *macBackend) Capability(ctx context.Context) Capability {
 		}
 		return p
 	}
+	// macOS lists the daemon under Mewla.app when boot install runs it from
+	// there, otherwise under the executable or the terminal that started it.
+	entry := "mewla (or the terminal app that runs it)"
+	if bundleIcon() != "" {
+		entry = "Mewla"
+	}
 	return Capability{Supported: true, Permissions: []Permission{
 		permission(permScreenRecording, "Screen Recording",
-			"In System Settings → Privacy & Security → Screen & System Audio Recording, turn on mewla (or the terminal app that runs it)."),
+			"In System Settings → Privacy & Security → Screen & System Audio Recording, turn on "+entry+"."),
 		permission(permAccessibility, "Accessibility",
-			"In System Settings → Privacy & Security → Accessibility, turn on mewla (or the terminal app that runs it)."),
+			"In System Settings → Privacy & Security → Accessibility, turn on "+entry+"."),
 	}}
 }
 
@@ -408,10 +416,14 @@ func (b *macBackend) OpenSettings(ctx context.Context, permission string) error 
 // as AppleScript source.
 func (b *macBackend) Confirm(ctx context.Context, device string) (bool, error) {
 	text := fmt.Sprintf("Allow “%s” to see and control this Mac with Mewla Screen?", device)
-	out, err := exec.CommandContext(ctx, "osascript",
+	icon, args := "caution", []string{text}
+	if path := bundleIcon(); path != "" {
+		icon, args = "(POSIX file (item 2 of argv))", append(args, path)
+	}
+	out, err := exec.CommandContext(ctx, "osascript", append([]string{
 		"-e", "on run argv",
-		"-e", `display dialog (item 1 of argv) with title "Mewla Screen" buttons {"Don't Allow", "Allow"} default button "Don't Allow" cancel button "Don't Allow" with icon caution giving up after 120`,
-		"-e", "end run", text).Output()
+		"-e", `display dialog (item 1 of argv) with title "Mewla Screen" buttons {"Don't Allow", "Allow"} default button "Don't Allow" cancel button "Don't Allow" with icon ` + icon + ` giving up after 120`,
+		"-e", "end run"}, args...)...).Output()
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && ctx.Err() == nil {
@@ -420,6 +432,23 @@ func (b *macBackend) Confirm(ctx context.Context, device string) (bool, error) {
 		return false, err
 	}
 	return strings.Contains(string(out), "button returned:Allow") && !strings.Contains(string(out), "gave up:true"), nil
+}
+
+// bundleIcon is Mewla.app's icon when this process runs from the bundle, and
+// empty otherwise.
+func bundleIcon() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	bundle := filepath.Dir(filepath.Dir(filepath.Dir(executable)))
+	if !strings.HasSuffix(bundle, ".app") || !macapp.Managed(bundle) {
+		return ""
+	}
+	if _, err := os.Stat(macapp.IconPath(bundle)); err != nil {
+		return ""
+	}
+	return macapp.IconPath(bundle)
 }
 
 // The stream output class, registered once; outputs maps each instance to

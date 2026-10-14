@@ -157,7 +157,10 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "On Linux the unit starts before an interactive login only when the user")
 	fmt.Fprintln(w, "manager lingers (loginctl enable-linger). On macOS the LaunchAgent starts")
-	fmt.Fprintln(w, "when you log in, in the session that owns the screen.")
+	fmt.Fprintln(w, "when you log in, in the session that owns the screen, and runs a copy of")
+	fmt.Fprintln(w, "the binary in ~/Applications/Mewla.app; run install again after mewla update.")
+	fmt.Fprintln(w, "MEWLA_CODESIGN_IDENTITY and MEWLA_CODESIGN_KEYCHAIN pick the signing identity")
+	fmt.Fprintln(w, "(default: ad hoc).")
 	fmt.Fprintln(w, "`mewla boot status` always reads the installed unit configuration.")
 }
 

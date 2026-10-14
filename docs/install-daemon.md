@@ -100,7 +100,9 @@ mewla update          # verify and install it
 
 `mewla update` checks the release's signed manifest and the archive checksum
 before it replaces the binary. It does not restart a running daemon; stop and
-start `mewla` when convenient.
+start `mewla` when convenient. On macOS with the service installed, run
+`mewla boot install` again: it copies the new binary into `Mewla.app` and
+restarts the service.
 
 ## Keep it running
 
@@ -125,6 +127,9 @@ Restarting the service never stops your `tmux` sessions or agents.
 - **macOS**: it starts when you log in and runs in your login session, the one
   that owns the screen and the privacy permissions. After a restart, log in
   once for Mewla to start. Output goes to `~/.mewla/logs/launchd.log`.
+  The service runs a copy of the binary in `~/Applications/Mewla.app`, so
+  System Settings and permission prompts show Mewla's name and icon. The
+  command you type stays where you installed it.
 
 Do not run the daemon as root.
 
@@ -233,6 +238,7 @@ A source build serves a placeholder instead of the web UI unless you first run
 ## Uninstall
 
 1. Run `mewla boot uninstall` if you installed the service, and stop `mewla`.
+   On macOS this also removes `~/Applications/Mewla.app`.
 2. Delete the binary (`command -v mewla` shows where it is).
 3. Optionally delete `~/.mewla`. It holds the daemon's identity, paired devices,
    Work and Brain data; deleting it unpairs every phone.
