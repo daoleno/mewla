@@ -46,20 +46,27 @@ func IconPath(bundle string) string {
 
 // Signer signs the assembled bundle with codesign. An empty Identity signs
 // ad hoc, which macOS ties to this exact build; a fixed certificate keeps
-// privacy grants across updates.
+// privacy grants across updates. Password unlocks Keychain first.
 type Signer struct {
 	Identity string
 	Keychain string
-	Run      func(name string, args ...string) ([]byte, error)
+	Password string
+	Run      Runner
 }
 
-// SignerFromEnv reads MEWLA_CODESIGN_IDENTITY and MEWLA_CODESIGN_KEYCHAIN.
-func SignerFromEnv(run func(name string, args ...string) ([]byte, error)) Signer {
-	return Signer{
+// ErrSign marks a failure of codesign itself, after which an ad hoc
+// signature may still work.
+var ErrSign = errors.New("signing failed")
+
+// SignerFromEnv reads MEWLA_CODESIGN_IDENTITY and MEWLA_CODESIGN_KEYCHAIN;
+// ok is false when no identity is set.
+func SignerFromEnv(run Runner) (signer Signer, ok bool) {
+	signer = Signer{
 		Identity: strings.TrimSpace(os.Getenv("MEWLA_CODESIGN_IDENTITY")),
 		Keychain: strings.TrimSpace(os.Getenv("MEWLA_CODESIGN_KEYCHAIN")),
 		Run:      run,
 	}
+	return signer, signer.Identity != ""
 }
 
 func (s Signer) sign(bundle string) error {
@@ -67,13 +74,19 @@ func (s Signer) sign(bundle string) error {
 	if identity == "" {
 		identity = "-"
 	}
+	if s.Password != "" {
+		// The keychain locks again at logout.
+		if err := security(s.Run, "unlock-keychain", "-p", s.Password, s.Keychain); err != nil {
+			return fmt.Errorf("%w: %v", ErrSign, err)
+		}
+	}
 	args := []string{"--force", "--sign", identity, "--identifier", BundleID}
 	if s.Keychain != "" {
 		args = append(args, "--keychain", s.Keychain)
 	}
 	args = append(args, bundle)
 	if output, err := s.Run("codesign", args...); err != nil {
-		return fmt.Errorf("codesign %s: %v: %s", bundle, err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("%w: codesign %s: %v: %s", ErrSign, bundle, err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

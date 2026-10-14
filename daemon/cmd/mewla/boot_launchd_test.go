@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,19 +203,107 @@ func TestBootLaunchdInstallIsIdempotentAndUninstalls(t *testing.T) {
 	}
 }
 
-func TestBootLaunchdReinstallCommandKeepsInstalledConfiguration(t *testing.T) {
+func TestBootLaunchdUpdateReinstallsWithInstalledConfiguration(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
-	if _, ok := bootLaunchdReinstallCommand("/usr/local/bin/mewla"); ok {
-		t.Fatal("reinstall command offered without an installed LaunchAgent")
+	var ran []string
+	previous := bootUpdateRun
+	bootUpdateRun = func(command *exec.Cmd) error {
+		ran = command.Args
+		return nil
+	}
+	defer func() { bootUpdateRun = previous }()
+
+	if ok, err := bootLaunchdApplyUpdate("/usr/local/bin/mewla", io.Discard, io.Discard); ok || err != nil || ran != nil {
+		t.Fatalf("update without a LaunchAgent = %v, %v, ran %q", ok, err, ran)
 	}
 	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	command, ok := bootLaunchdReinstallCommand("/Users/me/.local/bin/mewla")
-	want := "/Users/me/.local/bin/mewla boot install -state-dir " + config.StateDir +
-		" -addr " + config.Addr + " -work-dir '" + config.WorkDir + "' -path-env " + config.PathEnv
-	if !ok || command != want {
-		t.Fatalf("command = %q, want %q", command, want)
+	if ok, err := bootLaunchdApplyUpdate("/Users/me/.local/bin/mewla", io.Discard, io.Discard); !ok || err != nil {
+		t.Fatalf("update = %v, %v", ok, err)
+	}
+	want := []string{"/Users/me/.local/bin/mewla", "boot", "install", "-state-dir", config.StateDir,
+		"-addr", config.Addr, "-work-dir", config.WorkDir, "-path-env", config.PathEnv}
+	if strings.Join(ran, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+
+	bootUpdateRun = func(*exec.Cmd) error { return errors.New("exit status 1") }
+	_, err := bootLaunchdApplyUpdate("/Users/me/.local/bin/mewla", io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "-work-dir '"+config.WorkDir+"'") {
+		t.Fatalf("failed update should name the retry command: %v", err)
+	}
+}
+
+// launchdLocalIdentity makes the fake `security` report an existing local
+// identity.
+func launchdLocalIdentity(runner *fakeBootRunner, config bootConfig) string {
+	hash := "6BDB705C42A0A3258558E5D2F5BA0E7629A5B750"
+	keychain := macapp.IdentityKeychain(config.Home)
+	runner.set("security find-certificate -c "+macapp.IdentityName+" -Z "+keychain, "SHA-1 hash: "+hash+"\n")
+	return hash
+}
+
+func TestBootLaunchdInstallSignsWithTheLocalIdentity(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	hash := launchdLocalIdentity(runner, config)
+	keychain := macapp.IdentityKeychain(config.Home)
+	if err := os.MkdirAll(strings.TrimSuffix(keychain, "/mewla-signing.keychain-db"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keychain, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := bootLaunchdInstall(config, runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	bundle := macapp.Path(config.Home)
+	if !runner.called("codesign --force --sign " + hash + " --identifier com.daoleno.mewla --keychain " + keychain + " " + bundle + ".new") {
+		t.Fatalf("bundle not signed with the local identity: %q", runner.calls)
+	}
+	if !strings.Contains(out.String(), "Signing: "+bootSigningLocal) {
+		t.Fatalf("install output: %s", out.String())
+	}
+	out.Reset()
+	if err := bootLaunchdStatus(runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "signing: "+bootSigningLocal) {
+		t.Fatalf("status: %s", out.String())
+	}
+
+	// A lost identity is reported, not hidden.
+	if err := os.Remove(keychain); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := bootLaunchdStatus(runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "signing: local identity missing") {
+		t.Fatalf("status with a lost identity: %s", out.String())
+	}
+}
+
+func TestBootLaunchdInstallFallsBackToAdHoc(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	hash := launchdLocalIdentity(runner, config)
+	bundle := macapp.Path(config.Home)
+	runner.fail("codesign --force --sign "+hash+" --identifier com.daoleno.mewla --keychain "+macapp.IdentityKeychain(config.Home)+" "+bundle+".new", "errSecInternalComponent")
+	var out bytes.Buffer
+	if err := bootLaunchdInstall(config, runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !runner.called("codesign --force --sign - --identifier com.daoleno.mewla " + bundle + ".new") {
+		t.Fatal("no ad hoc fallback")
+	}
+	if !strings.Contains(out.String(), "Signing: "+bootSigningAdHoc+" (") || !strings.Contains(out.String(), "errSecInternalComponent") {
+		t.Fatalf("install output: %s", out.String())
+	}
+	path, _ := bootLaunchdPlistPath()
+	if metadata, _ := readBootMetadata(bootMetadataPath(path)); !strings.HasPrefix(metadata.Signing, bootSigningAdHoc) {
+		t.Fatalf("metadata signing = %q", metadata.Signing)
 	}
 }
 

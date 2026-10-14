@@ -17,6 +17,9 @@ type fakeCodesign struct {
 
 func (f *fakeCodesign) run(name string, args ...string) ([]byte, error) {
 	f.calls = append(f.calls, name+" "+strings.Join(args, " "))
+	if name != "codesign" {
+		return nil, nil
+	}
 	bundle := args[len(args)-1]
 	if args[0] == "--verify" {
 		if f.signed[bundle] {

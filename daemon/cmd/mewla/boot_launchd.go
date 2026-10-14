@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,6 +54,25 @@ func bootLaunchdTarget() string { return bootLaunchdDomain() + "/" + bootLaunchd
 
 func bootLaunchdLogPath(config bootConfig) string {
 	return filepath.Join(config.StateDir, "logs", "launchd.log")
+}
+
+const (
+	bootSigningLocal = "local identity \"" + macapp.IdentityName + "\"; permissions stay granted across updates"
+	bootSigningAdHoc = "ad hoc; macOS asks for the permissions again after each update"
+)
+
+// bootLaunchdSigner picks how Mewla.app is signed: the identity in
+// MEWLA_CODESIGN_IDENTITY, else this Mac's local identity (created on first
+// use), else ad hoc. The description goes into boot status.
+func bootLaunchdSigner(home string, runner bootRunner) (macapp.Signer, string) {
+	if signer, ok := macapp.SignerFromEnv(runner.run); ok {
+		return signer, "MEWLA_CODESIGN_IDENTITY " + signer.Identity
+	}
+	signer, err := macapp.LocalSigner(home, runner.run)
+	if err != nil {
+		return macapp.Signer{Run: runner.run}, bootSigningAdHoc + " (local identity unavailable: " + err.Error() + ")"
+	}
+	return signer, bootSigningLocal
 }
 
 // bootLaunchdDaemonConfig is config with the binary launchd runs: the copy
@@ -414,7 +434,12 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	}
 	// The running daemon keeps its files: a changed bundle is swapped in
 	// whole and the job restarted below.
-	bundleChanged, err := macapp.Install(bundle, source, Version, macapp.Icon, macapp.SignerFromEnv(runner.run))
+	signer, signing := bootLaunchdSigner(config.Home, runner)
+	bundleChanged, err := macapp.Install(bundle, source, Version, macapp.Icon, signer)
+	if errors.Is(err, macapp.ErrSign) && signer.Identity != "" {
+		signing = bootSigningAdHoc + " (" + err.Error() + ")"
+		bundleChanged, err = macapp.Install(bundle, source, Version, macapp.Icon, macapp.Signer{Run: runner.run})
+	}
 	if err != nil {
 		return fmt.Errorf("install %s: %w", bundle, err)
 	}
@@ -427,8 +452,10 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 			return fmt.Errorf("write LaunchAgent: %w", err)
 		}
 	}
-	if writePlist || changed {
-		if err := writeBootMetadata(metadataPath, bootMetadataFor(config)); err != nil {
+	if writePlist || changed || previous.Signing != signing {
+		metadata := bootMetadataFor(config)
+		metadata.Signing = signing
+		if err := writeBootMetadata(metadataPath, metadata); err != nil {
 			return fmt.Errorf("write boot metadata: %w", err)
 		}
 	}
@@ -470,6 +497,7 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 
 	fmt.Fprintf(out, "%s %s\n", action, path)
 	fmt.Fprintf(out, "App: %s (copied from %s)\n", bundle, source)
+	fmt.Fprintf(out, "Signing: %s\n", signing)
 	fmt.Fprintf(out, "State directory: %s\n", config.StateDir)
 	fmt.Fprintf(out, "Address: %s\n", config.Addr)
 	fmt.Fprintf(out, "Working directory: %s\n", config.WorkDir)
@@ -525,6 +553,7 @@ func bootLaunchdStatus(runner bootRunner, out io.Writer) error {
 	fmt.Fprintf(out, "address: %s\n", metadata.Addr)
 	fmt.Fprintf(out, "working directory: %s\n", metadata.WorkDir)
 	fmt.Fprintf(out, "PATH: %s\n", metadata.PathEnv)
+	fmt.Fprintf(out, "signing: %s\n", bootLaunchdDescribeSigning(metadata))
 	fmt.Fprintf(out, "ownership: %s\n", snapshot.describeOwner())
 	switch {
 	case snapshot.HealthErr != nil:
@@ -539,31 +568,67 @@ func bootLaunchdStatus(runner bootRunner, out io.Writer) error {
 	return nil
 }
 
-// bootLaunchdReinstallCommand is the `boot install` command that moves the
-// installed LaunchAgent to binary while keeping its state directory, address,
-// working directory and PATH; plain `mewla boot install` would take those
-// from the current shell. ok is false when no managed LaunchAgent exists.
-func bootLaunchdReinstallCommand(binary string) (command string, ok bool) {
+func bootLaunchdDescribeSigning(metadata bootMetadata) string {
+	switch {
+	case metadata.Signing == "":
+		return "unknown (installed by an older mewla; run `mewla boot install`)"
+	case metadata.Signing == bootSigningLocal:
+		if _, err := os.Stat(macapp.IdentityKeychain(metadata.Home)); err != nil {
+			return "local identity missing (" + macapp.IdentityKeychain(metadata.Home) + "); the next `mewla boot install` creates a new one and macOS asks for the permissions once more"
+		}
+	}
+	return metadata.Signing
+}
+
+// bootLaunchdReinstallArgs are the `boot install` arguments that move the
+// installed LaunchAgent to a new binary while keeping its state directory,
+// address, working directory and PATH; plain `mewla boot install` would take
+// those from the current shell. ok is false when no managed LaunchAgent
+// exists.
+func bootLaunchdReinstallArgs() (args []string, ok bool) {
 	path, err := bootLaunchdPlistPath()
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	data, err := os.ReadFile(path)
 	if err != nil || !strings.Contains(string(data), bootLaunchdMarker) {
-		return "", false
+		return nil, false
 	}
+	args = []string{"boot", "install"}
 	metadata, err := readBootMetadata(bootMetadataPath(path))
 	if err != nil {
-		return shellquote.Word(binary) + " boot install", true
+		return args, true
 	}
-	args := []string{shellquote.Word(binary), "boot", "install", "-state-dir", shellquote.Word(metadata.StateDir)}
+	args = append(args, "-state-dir", metadata.StateDir)
 	if metadata.LAN {
 		args = append(args, "-lan")
 	} else {
-		args = append(args, "-addr", shellquote.Word(metadata.Addr))
+		args = append(args, "-addr", metadata.Addr)
 	}
-	args = append(args, "-work-dir", shellquote.Word(metadata.WorkDir), "-path-env", shellquote.Word(metadata.PathEnv))
-	return strings.Join(args, " "), true
+	return append(args, "-work-dir", metadata.WorkDir, "-path-env", metadata.PathEnv), true
+}
+
+// bootUpdateRun runs the updated binary; tests replace it.
+var bootUpdateRun = func(command *exec.Cmd) error { return command.Run() }
+
+// bootLaunchdApplyUpdate moves the installed LaunchAgent to the updated
+// binary by running its own `boot install`, which replaces Mewla.app and
+// restarts the service. ok is false when no LaunchAgent is installed.
+func bootLaunchdApplyUpdate(binary string, out, errOut io.Writer) (ok bool, err error) {
+	args, ok := bootLaunchdReinstallArgs()
+	if !ok {
+		return false, nil
+	}
+	command := exec.Command(binary, args...)
+	command.Stdout, command.Stderr = out, errOut
+	if err := bootUpdateRun(command); err != nil {
+		words := []string{shellquote.Word(binary)}
+		for _, arg := range args {
+			words = append(words, shellquote.Word(arg))
+		}
+		return true, fmt.Errorf("restart Mewla with the update: %w; run `%s` to retry", err, strings.Join(words, " "))
+	}
+	return true, nil
 }
 
 func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {

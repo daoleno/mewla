@@ -100,9 +100,9 @@ mewla update          # verify and install it
 
 `mewla update` checks the release's signed manifest and the archive checksum
 before it replaces the binary. It does not restart a running daemon; stop and
-start `mewla` when convenient. On macOS with the service installed, it prints
-a `mewla boot install` command with your installed address, directories and
-`PATH`; run it to copy the new binary into `Mewla.app` and restart the service.
+start `mewla` when convenient. On macOS with the service installed, it also
+replaces `Mewla.app` and restarts the service, keeping your address,
+directories and `PATH`. Your `tmux` sessions and agents keep running.
 
 ## Keep it running
 
@@ -130,6 +130,16 @@ Restarting the service never stops your `tmux` sessions or agents.
   The service runs a copy of the binary in `~/Applications/Mewla.app`, so
   System Settings and permission prompts show Mewla's name and icon. The
   command you type stays where you installed it.
+
+  `mewla boot install` signs `Mewla.app` with a code-signing identity that it
+  creates on this Mac the first time, so you grant Screen Recording and
+  Accessibility once and they stay granted after updates. No Apple account
+  is involved, and nothing asks you anything. The private key never leaves
+  this Mac: it lives in its own keychain,
+  `~/Library/Keychains/mewla-signing.keychain-db`, with a random password in
+  `~/Library/Application Support/Mewla/signing/`. `mewla boot status` shows
+  how `Mewla.app` is signed. If the identity can't be used, Mewla signs ad hoc
+  instead, and macOS asks for the permissions again after each update.
 
 Do not run the daemon as root.
 
@@ -238,7 +248,13 @@ A source build serves a placeholder instead of the web UI unless you first run
 ## Uninstall
 
 1. Run `mewla boot uninstall` if you installed the service, and stop `mewla`.
-   On macOS this also removes `~/Applications/Mewla.app`.
+   On macOS this also removes `~/Applications/Mewla.app`. It keeps the signing
+   identity, so a later install keeps your permissions. To remove the identity
+   too, run
+   `security delete-keychain ~/Library/Keychains/mewla-signing.keychain-db`
+   and `rm -r ~/Library/Application\ Support/Mewla/signing`, then remove
+   **Mewla** from **Screen & System Audio Recording** and **Accessibility** in
+   **System Settings → Privacy & Security**.
 2. Delete the binary (`command -v mewla` shows where it is).
 3. Optionally delete `~/.mewla`. It holds the daemon's identity, paired devices,
    Work and Brain data; deleting it unpairs every phone.
