@@ -48,6 +48,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 	relayConfig := relay.DefaultConfig(testConnectorToken)
 	relayConfig.MaxClients = 8
 	relayConfig.MaxClientsPerRoute = 4
+	relayConfig.MaxClientsPerRouteIP = 4 // every test client dials from loopback
 	relayConfig.HandshakeTimeout = time.Second
 	relayConfig.AttachTimeout = time.Second
 	relayConfig.IdleTimeout = 5 * time.Second
@@ -920,6 +921,7 @@ func startRelayFixture(
 	relayConfig := relay.DefaultConfig(testConnectorToken)
 	relayConfig.MaxClients = 8
 	relayConfig.MaxClientsPerRoute = 4
+	relayConfig.MaxClientsPerRouteIP = 4 // every test client dials from loopback
 	relayConfig.HandshakeTimeout = time.Second
 	relayConfig.AttachTimeout = time.Second
 	relayConfig.IdleTimeout = 5 * time.Second
