@@ -220,6 +220,9 @@ func ProcessPermissions() map[string]bool {
 	}
 }
 
+// loggedStale notes each permission logged as not yet effective.
+var loggedStale sync.Map
+
 // livePermissions asks a fresh child process when this one sees a permission
 // as missing: macOS keeps answering from the state the process started with.
 func livePermissions(ctx context.Context) (own, live map[string]bool) {
@@ -239,7 +242,9 @@ func livePermissions(ctx context.Context) (own, live map[string]bool) {
 	}
 	for id, granted := range live {
 		if granted && !own[id] {
-			log.Printf("screen: %s is granted but not yet effective in this process", id)
+			if _, logged := loggedStale.LoadOrStore(id, true); !logged {
+				log.Printf("screen: %s is granted but not yet effective in this process", id)
+			}
 		}
 	}
 	return own, live
