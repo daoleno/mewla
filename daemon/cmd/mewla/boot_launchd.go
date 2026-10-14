@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/macapp"
 )
 
 // On macOS `mewla boot` installs a LaunchAgent in the user's GUI session
@@ -23,6 +25,11 @@ import (
 //
 // AbandonProcessGroup keeps the user's tmux server and Worker sessions alive
 // when launchd stops or restarts the daemon, like KillMode=process.
+//
+// The job runs a copy of the binary inside ~/Applications/Mewla.app, so
+// privacy settings, permission prompts and dialogs show Mewla's name and icon
+// and grant permissions to com.daoleno.mewla. Install refreshes the copy from
+// the installing binary and restarts the job when it changed.
 
 const (
 	bootLaunchdLabel  = "com.daoleno.mewla.daemon"
@@ -45,6 +52,13 @@ func bootLaunchdTarget() string { return bootLaunchdDomain() + "/" + bootLaunchd
 
 func bootLaunchdLogPath(config bootConfig) string {
 	return filepath.Join(config.StateDir, "logs", "launchd.log")
+}
+
+// bootLaunchdDaemonConfig is config with the binary launchd runs: the copy
+// inside Mewla.app.
+func bootLaunchdDaemonConfig(config bootConfig) bootConfig {
+	config.Binary = macapp.Executable(macapp.Path(config.Home))
+	return config
 }
 
 func plistString(value string) string {
@@ -86,6 +100,8 @@ func renderLaunchdPlist(config bootConfig) (string, error) {
 	// Only the GUI session can capture the screen and show permission prompts.
 	b.WriteString("\t<key>LimitLoadToSessionType</key>\n\t" + plistString("Aqua") + "\n")
 	b.WriteString("\t<key>ProcessType</key>\n\t" + plistString("Interactive") + "\n")
+	// Login Items settings list the job under the app instead of a bare label.
+	b.WriteString("\t<key>AssociatedBundleIdentifiers</key>\n\t" + plistString(macapp.BundleID) + "\n")
 	b.WriteString("\t<key>AbandonProcessGroup</key>\n\t<true/>\n")
 	b.WriteString("\t<key>StandardOutPath</key>\n\t" + plistString(bootLaunchdLogPath(config)) + "\n")
 	b.WriteString("\t<key>StandardErrorPath</key>\n\t" + plistString(bootLaunchdLogPath(config)) + "\n")
@@ -340,11 +356,13 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	if bootEffectiveUID() == 0 {
 		return errors.New("mewla boot install must run as the unprivileged user that owns the daemon state; refusing root")
 	}
-	plist, err := renderLaunchdPlist(config)
-	if err != nil {
+	if err := bootValidateLocalContext(config); err != nil {
 		return err
 	}
-	if err := bootValidateLocalContext(config); err != nil {
+	source, bundle := config.Binary, macapp.Path(config.Home)
+	config = bootLaunchdDaemonConfig(config)
+	plist, err := renderLaunchdPlist(config)
+	if err != nil {
 		return err
 	}
 	path, err := bootLaunchdPlistPath()
@@ -360,8 +378,12 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 		return fmt.Errorf("read existing LaunchAgent: %w", readErr)
 	}
 	if config.DryRun {
+		fmt.Fprintf(out, "<!-- %s is copied to %s -->\n", source, config.Binary)
 		fmt.Fprint(out, plist)
 		return nil
+	}
+	if _, err := os.Stat(bundle); err == nil && !macapp.Managed(bundle) {
+		return fmt.Errorf("refusing to replace %s, which mewla boot did not create", bundle)
 	}
 
 	// The state must be free or owned by this job; any other owner is refused,
@@ -389,6 +411,13 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	if err := os.MkdirAll(filepath.Dir(bootLaunchdLogPath(config)), 0o700); err != nil {
 		return fmt.Errorf("create log directory: %w", err)
 	}
+	// The running daemon keeps its files: a changed bundle is swapped in
+	// whole and the job restarted below.
+	bundleChanged, err := macapp.Install(bundle, source, Version, macapp.Icon, macapp.SignerFromEnv(runner.run))
+	if err != nil {
+		return fmt.Errorf("install %s: %w", bundle, err)
+	}
+	changed = changed || bundleChanged
 	if writePlist {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("create LaunchAgents directory: %w", err)
@@ -439,7 +468,7 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	}
 
 	fmt.Fprintf(out, "%s %s\n", action, path)
-	fmt.Fprintf(out, "Binary: %s\n", config.Binary)
+	fmt.Fprintf(out, "App: %s (copied from %s)\n", bundle, source)
 	fmt.Fprintf(out, "State directory: %s\n", config.StateDir)
 	fmt.Fprintf(out, "Address: %s\n", config.Addr)
 	fmt.Fprintf(out, "Working directory: %s\n", config.WorkDir)
@@ -509,6 +538,17 @@ func bootLaunchdStatus(runner bootRunner, out io.Writer) error {
 	return nil
 }
 
+// bootLaunchdInstalled reports whether `mewla boot install` manages a
+// LaunchAgent for this user.
+func bootLaunchdInstalled() bool {
+	path, err := bootLaunchdPlistPath()
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), bootLaunchdMarker)
+}
+
 func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 	path, err := bootLaunchdPlistPath()
 	if err != nil {
@@ -558,6 +598,13 @@ func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 		return fmt.Errorf("remove boot metadata: %w", err)
 	}
 	fmt.Fprintf(out, "Removed %s; daemon state and pairing are untouched\n", path)
+	if bundle := macapp.Path(metadata.Home); metadata.Binary == macapp.Executable(bundle) {
+		if err := macapp.Remove(bundle); err != nil {
+			fmt.Fprintf(out, "Note: %s was not removed: %v\n", bundle, err)
+		} else {
+			fmt.Fprintf(out, "Removed %s\n", bundle)
+		}
+	}
 	if len(holders) > 0 {
 		fmt.Fprintf(out, "Note: state directory %s is owned by another process (PIDs %v); it was not stopped or modified\n", metadata.StateDir, holders)
 	}

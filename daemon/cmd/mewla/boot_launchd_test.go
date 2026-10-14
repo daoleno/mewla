@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/macapp"
 )
 
 func launchdKeys(t *testing.T, config bootConfig) (print, bootstrap, bootout, ps, lsof string) {
@@ -45,22 +46,18 @@ func (f *fakeBootRunner) succeed(key, value string) {
 }
 
 // launchdFreshInstall models a Mac with nothing loaded: bootstrap starts a
-// daemon (this test process) that takes the state lock and serves /health.
+// daemon (this test process, standing in for Mewla.app) that takes the state
+// lock and serves /health.
 func launchdFreshInstall(t *testing.T) (bootConfig, *fakeBootRunner) {
 	t.Helper()
 	config, _ := newBootTestEnvironment(t)
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.Binary = executable
 	daemonID := bootWriteIdentity(t, config.StateDir)
 	config.Addr = bootFreeLoopbackAddr(t)
 	print, bootstrap, bootout, ps, lsof := launchdKeys(t, config)
 
 	runner := bootTestRunner()
 	runner.fail(print, "Could not find service \""+bootLaunchdLabel+"\" in domain for user gui: 501")
-	runner.set(ps, executable)
+	runner.set(ps, bootLaunchdDaemonConfig(config).Binary)
 	runner.set(lsof, strconv.Itoa(os.Getpid()))
 	var lock *control.LifecycleLock
 	var health sync.Once
@@ -109,6 +106,7 @@ func TestRenderLaunchdPlistIsWellFormedAndEscaped(t *testing.T) {
 		"&amp; &lt;more&gt;",
 		"<key>AbandonProcessGroup</key>\n\t<true/>",
 		"<string>Aqua</string>",
+		"<key>AssociatedBundleIdentifiers</key>\n\t<string>com.daoleno.mewla</string>",
 		"<key>SuccessfulExit</key>\n\t\t<false/>",
 	} {
 		if !strings.Contains(plist, want) {
@@ -152,11 +150,19 @@ func TestBootLaunchdInstallIsIdempotentAndUninstalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want, _ := renderLaunchdPlist(config); string(data) != want {
+	daemon := bootLaunchdDaemonConfig(config)
+	if want, _ := renderLaunchdPlist(daemon); string(data) != want || !strings.Contains(want, "Mewla.app/Contents/MacOS/mewla") {
 		t.Fatalf("installed plist differs:\n%s", data)
 	}
-	if metadata, err := readBootMetadata(bootMetadataPath(path)); err != nil || !metadata.same(config) {
+	if metadata, err := readBootMetadata(bootMetadataPath(path)); err != nil || !metadata.same(daemon) {
 		t.Fatalf("metadata = %+v, %v", metadata, err)
+	}
+	bundle := macapp.Path(config.Home)
+	if program, _ := os.ReadFile(daemon.Binary); string(program) != "#!/bin/sh\n" || !macapp.Managed(bundle) {
+		t.Fatalf("bundle executable = %q", program)
+	}
+	if !runner.called("codesign --force --sign - --identifier com.daoleno.mewla " + bundle + ".new") {
+		t.Fatal("bundle was not signed")
 	}
 
 	runner.reset()
@@ -190,6 +196,48 @@ func TestBootLaunchdInstallIsIdempotentAndUninstalls(t *testing.T) {
 	}
 	if _, err := os.Stat(bootMetadataPath(path)); !os.IsNotExist(err) {
 		t.Fatalf("metadata remains: %v", err)
+	}
+	if _, err := os.Stat(bundle); !os.IsNotExist(err) {
+		t.Fatalf("Mewla.app remains: %v", err)
+	}
+}
+
+func TestBootLaunchdInstallNewBinaryRestarts(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	_, bootstrap, bootout, _, _ := launchdKeys(t, config)
+	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	runner.reset()
+	if err := os.WriteFile(config.Binary, []byte("#!/bin/sh\n# update\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := bootLaunchdInstall(config, runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !runner.called(bootout) || !runner.called(bootstrap) || !strings.Contains(out.String(), "Updated and restarted") {
+		t.Fatalf("new binary did not restart: %s", out.String())
+	}
+	if program, _ := os.ReadFile(bootLaunchdDaemonConfig(config).Binary); !strings.Contains(string(program), "update") {
+		t.Fatalf("bundle executable = %q", program)
+	}
+}
+
+func TestBootLaunchdInstallRefusesForeignBundle(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	info := macapp.Path(config.Home) + "/Contents/Info.plist"
+	if err := os.MkdirAll(strings.TrimSuffix(info, "/Info.plist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(info, []byte("<plist><dict/></plist>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := bootLaunchdInstall(config, runner, io.Discard); err == nil || !strings.Contains(err.Error(), "did not create") {
+		t.Fatalf("install over a foreign Mewla.app = %v", err)
+	}
+	if data, _ := os.ReadFile(info); string(data) != "<plist><dict/></plist>" {
+		t.Fatal("foreign Mewla.app was modified")
 	}
 }
 
