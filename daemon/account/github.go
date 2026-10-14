@@ -17,12 +17,18 @@ const (
 	gitHubDeviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 	gitHubDefaultBaseURL  = "https://github.com"
 	gitHubDefaultAPIURL   = "https://api.github.com"
-	maxIdentityBodyBytes  = 1 << 20
+	// GitHubDeviceURL is where people enter a device code on github.com.
+	GitHubDeviceURL      = gitHubDefaultBaseURL + "/login/device"
+	maxIdentityBodyBytes = 1 << 20
 )
 
 // GitHubProvider implements the GitHub OAuth device flow.
 type GitHubProvider struct {
 	ClientID string
+	// VerificationURI, when set, replaces GitHub's in what users are shown,
+	// so they see the service's own address; it should redirect to
+	// GitHubDeviceURL.
+	VerificationURI string
 	// BaseURL defaults to https://github.com; APIURL to https://api.github.com.
 	BaseURL string
 	APIURL  string
@@ -57,6 +63,9 @@ func (p *GitHubProvider) StartDevice(ctx context.Context) (DeviceStart, error) {
 	interval := time.Duration(response.Interval) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Second
+	}
+	if p.VerificationURI != "" {
+		response.VerificationURI, response.VerificationURIComplete = p.VerificationURI, ""
 	}
 	expiresIn := time.Duration(response.ExpiresIn) * time.Second
 	if expiresIn <= 0 {
