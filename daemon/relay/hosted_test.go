@@ -20,6 +20,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/linkproto"
+	"github.com/daoleno/mewla/daemon/proxyproto"
 )
 
 const testRelayToken = "abcdef0123456789abcdef0123456789"
@@ -659,6 +660,55 @@ func TestStaticSNIRoutePipesTLSToBackend(t *testing.T) {
 	}
 	// A subdomain of the static host does not match.
 	requireClosed(t, fixture.dialClient(t, "x."+host), 2*time.Second)
+}
+
+func TestStaticSNIRouteSendsTheClientAddress(t *testing.T) {
+	const host = "accounts.example.test"
+	raw, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	backend := tls.NewListener(&proxyproto.Listener{Listener: raw, Timeout: 2 * time.Second}, &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{selfSignedCertificate(t, host)},
+	})
+	remotes := make(chan string, 1)
+	go func() {
+		conn, err := backend.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+		request := make([]byte, 4)
+		if _, err := io.ReadFull(conn, request); err == nil {
+			remotes <- conn.RemoteAddr().String()
+			_, _ = conn.Write([]byte("done"))
+		}
+	}()
+	fixture := startRelayFixture(t, func(config *Config) {
+		config.StaticRoutes = map[string]string{host: raw.Addr().String()}
+		config.StaticRouteProxyProtocol = true
+	})
+
+	conn, err := net.Dial("tcp", fixture.clientAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tls.Client(conn, &tls.Config{MinVersion: tls.VersionTLS13, ServerName: host, InsecureSkipVerify: true})
+	defer client.Close()
+	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
+	if _, err := client.Write([]byte("ping")); err != nil {
+		t.Fatalf("handshake/write through the PROXY header: %v", err)
+	}
+	response := make([]byte, 4)
+	if _, err := io.ReadFull(client, response); err != nil || string(response) != "done" {
+		t.Fatalf("response=%q err=%v", response, err)
+	}
+	if got, want := <-remotes, conn.LocalAddr().String(); got != want {
+		t.Fatalf("backend saw %s, want the client %s", got, want)
+	}
 }
 
 func TestRequestPathsDoNotSweepButRejectExpiredState(t *testing.T) {
