@@ -53,7 +53,9 @@ fi
 "$ROOT/scripts/build-web-ui.sh"
 
 PUBLISHER_FLAGS="$(python3 "$ROOT/scripts/plugin-publisher-flags.py")"
-LDFLAGS="-s -w -buildid= -X main.Version=${VERSION} ${PUBLISHER_FLAGS}"
+# The hosted remote access service a plain `mewla login` uses (daemon/remote).
+REMOTE_SERVICE_URL="${MEWLA_REMOTE_SERVICE_URL:-https://connect.mewla.ai}"
+LDFLAGS="-s -w -buildid= -X main.Version=${VERSION} -X github.com/daoleno/mewla/daemon/remote.DefaultServiceURL=${REMOTE_SERVICE_URL} ${PUBLISHER_FLAGS}"
 
 build_one() {
   local goos="$1"
