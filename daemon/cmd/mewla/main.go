@@ -735,10 +735,12 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 	if err := selfupdate.ReplaceExecutable(executable, binary); err != nil {
 		return err
 	}
-	if bootGOOS == "darwin" && bootLaunchdInstalled() {
+	if bootGOOS == "darwin" {
 		// The boot daemon runs its own copy inside Mewla.app.
-		fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Run `mewla boot install` to move Mewla.app to it.\n", Version, candidate.Version)
-		return nil
+		if command, ok := bootLaunchdReinstallCommand(executable); ok {
+			fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. To move Mewla.app to it and restart, run:\n  %s\n", Version, candidate.Version, command)
+			return nil
+		}
 	}
 	fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Stop and start mewla to use it.\n", Version, candidate.Version)
 	return nil

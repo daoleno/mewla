@@ -202,6 +202,22 @@ func TestBootLaunchdInstallIsIdempotentAndUninstalls(t *testing.T) {
 	}
 }
 
+func TestBootLaunchdReinstallCommandKeepsInstalledConfiguration(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	if _, ok := bootLaunchdReinstallCommand("/usr/local/bin/mewla"); ok {
+		t.Fatal("reinstall command offered without an installed LaunchAgent")
+	}
+	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	command, ok := bootLaunchdReinstallCommand("/Users/me/.local/bin/mewla")
+	want := "/Users/me/.local/bin/mewla boot install -state-dir " + config.StateDir +
+		" -addr " + config.Addr + " -work-dir '" + config.WorkDir + "' -path-env " + config.PathEnv
+	if !ok || command != want {
+		t.Fatalf("command = %q, want %q", command, want)
+	}
+}
+
 func TestBootLaunchdInstallNewBinaryRestarts(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
 	_, bootstrap, bootout, _, _ := launchdKeys(t, config)
