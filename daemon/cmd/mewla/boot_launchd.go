@@ -178,6 +178,44 @@ func bootLaunchdLockHolders(runner bootRunner, stateDir string) ([]int, error) {
 	return pids, nil
 }
 
+// bootLaunchdBootout removes the job and waits until launchd no longer lists
+// it: bootout returns before the job is fully torn down, and an immediate
+// bootstrap of the same label fails with an I/O error.
+func bootLaunchdBootout(runner bootRunner) error {
+	if output, err := runner.run("launchctl", "bootout", bootLaunchdTarget()); err != nil {
+		return fmt.Errorf("launchctl bootout %s: %v: %s", bootLaunchdTarget(), err, strings.TrimSpace(string(output)))
+	}
+	deadline := time.Now().Add(bootVerifyTimeout)
+	for {
+		job, err := bootLaunchdInspect(runner)
+		if err != nil {
+			return err
+		}
+		if !job.Loaded {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s is still %s after bootout", bootLaunchdLabel, job.describe())
+		}
+		time.Sleep(bootVerifyInterval)
+	}
+}
+
+// bootLaunchdBootstrap loads the plist, retrying briefly while launchd
+// finishes removing a previous instance.
+func bootLaunchdBootstrap(runner bootRunner, path string) error {
+	var last error
+	for attempt := 0; attempt < 5; attempt++ {
+		output, err := runner.run("launchctl", "bootstrap", bootLaunchdDomain(), path)
+		if err == nil {
+			return nil
+		}
+		last = fmt.Errorf("launchctl bootstrap %s %s: %v: %s", bootLaunchdDomain(), path, err, strings.TrimSpace(string(output)))
+		time.Sleep(bootVerifyInterval)
+	}
+	return last
+}
+
 func bootLaunchdProcessBinary(runner bootRunner, pid int) (string, error) {
 	output, err := runner.run("ps", "-o", "comm=", "-p", strconv.Itoa(pid))
 	if err != nil {
@@ -369,20 +407,15 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	if output, err := runner.run("launchctl", "enable", bootLaunchdTarget()); err != nil {
 		return fmt.Errorf("launchctl enable %s: %v: %s", bootLaunchdTarget(), err, strings.TrimSpace(string(output)))
 	}
-	bootstrap := func() error {
-		if output, err := runner.run("launchctl", "bootstrap", bootLaunchdDomain(), path); err != nil {
-			return fmt.Errorf("launchctl bootstrap %s %s: %v: %s", bootLaunchdDomain(), path, err, strings.TrimSpace(string(output)))
-		}
-		return nil
-	}
+	bootstrap := func() error { return bootLaunchdBootstrap(runner, path) }
 	action := "Installed and started"
 	switch {
 	case running && !changed && !writePlist:
 		action = "Already installed and running"
 	case preflight.Job.Loaded && (changed || writePlist):
 		action = "Updated and restarted"
-		if output, err := runner.run("launchctl", "bootout", bootLaunchdTarget()); err != nil {
-			return fmt.Errorf("launchctl bootout %s: %v: %s", bootLaunchdTarget(), err, strings.TrimSpace(string(output)))
+		if err := bootLaunchdBootout(runner); err != nil {
+			return err
 		}
 		if err := bootstrap(); err != nil {
 			return err
@@ -400,7 +433,7 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 
 	if err := bootLaunchdVerify(config, runner); err != nil {
 		if action != "Already installed and running" {
-			_, _ = runner.run("launchctl", "bootout", bootLaunchdTarget())
+			_ = bootLaunchdBootout(runner)
 		}
 		return fmt.Errorf("%s did not become the verified owner (%s): %w; see %s", bootLaunchdLabel, config.StateDir, err, bootLaunchdLogPath(config))
 	}
@@ -504,13 +537,8 @@ func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 		return fmt.Errorf("%w (LaunchAgent and configuration retained)", err)
 	}
 	if job.Loaded {
-		if output, err := runner.run("launchctl", "bootout", bootLaunchdTarget()); err != nil {
-			return fmt.Errorf("launchctl bootout %s: %v: %s (LaunchAgent and configuration retained; retry `mewla boot uninstall`)", bootLaunchdTarget(), err, strings.TrimSpace(string(output)))
-		}
-		if job, err := bootLaunchdInspect(runner); err != nil {
-			return fmt.Errorf("confirm %s stopped: %w (LaunchAgent and configuration retained)", bootLaunchdLabel, err)
-		} else if job.Loaded {
-			return fmt.Errorf("%s is still %s after bootout (LaunchAgent and configuration retained)", bootLaunchdLabel, job.describe())
+		if err := bootLaunchdBootout(runner); err != nil {
+			return fmt.Errorf("%w (LaunchAgent and configuration retained; retry `mewla boot uninstall`)", err)
 		}
 	}
 

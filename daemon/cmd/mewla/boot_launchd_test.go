@@ -200,6 +200,15 @@ func TestBootLaunchdInstallChangedConfigRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner.reset()
+	// launchd keeps listing the job briefly after bootout returns.
+	print, _, _, _, _ := launchdKeys(t, config)
+	runner.mu.Lock()
+	unload := runner.handlers[bootout]
+	runner.mu.Unlock()
+	runner.on(bootout, func() {
+		unload()
+		runner.push(print, launchdRunning())
+	})
 	config.PathEnv = "/opt/homebrew/bin:/usr/bin:/bin"
 	var out bytes.Buffer
 	if err := bootLaunchdInstall(config, runner, &out); err != nil {
