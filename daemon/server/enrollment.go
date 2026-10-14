@@ -2,21 +2,24 @@ package server
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/gorilla/websocket"
 )
 
 const enrollmentDecisionPurpose = "mewla-enrollment:decision:POST:/enrollment/decision"
 
+// allowEnrollmentRequest limits each client to 5 requests a minute. Through
+// Link every request comes from the relay, so the key is the client address
+// the relay reported; one client cannot spend another's allowance.
 func (s *Server) allowEnrollmentRequest(r *http.Request) bool {
-	key, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
+	key := clientaddr.Key(clientaddr.IP(r))
+	if key == "" {
 		key = r.RemoteAddr
 	}
 	now := time.Now()

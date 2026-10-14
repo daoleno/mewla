@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/linkproto"
 )
 
@@ -392,7 +393,10 @@ func (connector *Connector) serveStream(
 	}
 	_ = conn.SetDeadline(time.Time{})
 
-	gated := connector.gate.admit(conn)
+	// A missing or malformed client address only loses fair sharing; the
+	// stream still serves, keyed like every other relay stream.
+	client := clientaddr.Parse(open.ClientAddr)
+	gated := connector.gate.admit(conn, clientaddr.Key(client))
 	defer gated.close()
 	inner := tls.Server(conn, connector.serverTLSConfig())
 	handshakeCtx, cancel := context.WithTimeout(ctx, connector.config.ControlTimeout)
@@ -404,8 +408,17 @@ func (connector *Connector) serveStream(
 	if open.Alias != "" {
 		handler = connector.pairingAdmissionHandler(ctx, candidate, open)
 	}
+	if client != nil {
+		handler = withClientAddr(handler, client)
+	}
 	keep = true
 	return serveSingleConnection(ctx, inner, gated.handler(handler), connector.config.HTTPIdleTimeout)
+}
+
+func withClientAddr(next http.Handler, client net.IP) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		next.ServeHTTP(writer, request.WithContext(clientaddr.With(request.Context(), client)))
+	})
 }
 
 func (connector *Connector) serverTLSConfig() *tls.Config {

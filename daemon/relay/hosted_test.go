@@ -294,6 +294,9 @@ func TestHostedRelayRequiresGrantBoundToRouteAndKey(t *testing.T) {
 	// Label SNI resolves to the hosted route; route ID SNI still works.
 	fixture.dialClient(t, label+".link.test")
 	open := readControl(t, control, linkproto.TypeOpenStream)
+	if open.ClientAddr != "127.0.0.1" {
+		t.Fatalf("open_stream client_addr = %q, want the client's IP", open.ClientAddr)
+	}
 	requireClientHello(t, fixture.attach(t, open))
 	fixture.dialClient(t, routeID+".link.test")
 	readControl(t, control, linkproto.TypeOpenStream)
@@ -807,5 +810,37 @@ func TestRelayLogsAreAnonymousAndRateLimited(t *testing.T) {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("relay log leaked %q:\n%s", forbidden, joined)
 		}
+	}
+}
+
+func TestOneSourceIPHoldsAtMostItsShareOfARoute(t *testing.T) {
+	server, err := New(DefaultConfig(strings.Repeat("a", 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := &routeSession{}
+	limit := server.routeSourceLimit()
+	if limit != server.config.MaxClientsPerRoute/2 {
+		t.Fatalf("default share = %d", limit)
+	}
+	for range limit {
+		if !server.reserveRouteSource(session, "203.0.113.9") {
+			t.Fatal("source refused within its share")
+		}
+	}
+	if server.reserveRouteSource(session, "203.0.113.9") {
+		t.Fatal("one source exceeded its share of the route")
+	}
+	if !server.reserveRouteSource(session, "198.51.100.7") {
+		t.Fatal("another source was locked out of the route")
+	}
+	server.releaseRouteSource(session, "203.0.113.9")
+	if !server.reserveRouteSource(session, "203.0.113.9") {
+		t.Fatal("released share was not returned")
+	}
+	config := DefaultConfig(strings.Repeat("a", 32))
+	config.MaxClientsPerRouteIP = config.MaxClientsPerRoute + 1
+	if _, err := New(config); err == nil || !strings.Contains(err.Error(), "max-clients-per-route-ip") {
+		t.Fatalf("a share above the route cap: err=%v", err)
 	}
 }

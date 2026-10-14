@@ -17,9 +17,10 @@ const (
 // streamGate bounds streams that have not yet carried an authenticated
 // request. Anyone who knows a route's hostname can open a stream, so without
 // this a few slow unauthenticated requests hold every stream slot. When the
-// unproven slots are full the oldest unproven stream is closed: a paired
-// device proves its stream with its first request, so holding slots open
-// gains an attacker nothing.
+// unproven slots are full the oldest unproven stream of the client holding
+// the most is closed: a paired device proves its stream with its first
+// request, and a browser waiting for enrollment keeps its streams while
+// another client churns, so holding slots open gains an attacker nothing.
 type streamGate struct {
 	mu       sync.Mutex
 	max      int
@@ -31,15 +32,16 @@ func newStreamGate(maxUnproven int, lifetime time.Duration) *streamGate {
 	return &streamGate{max: maxUnproven, lifetime: lifetime}
 }
 
-// admit tracks conn as unproven, closing it after the unproven lifetime unless
+// admit tracks conn from client (a clientaddr key) as unproven, closing it after the unproven lifetime unless
 // a request on it proves a paired device.
-func (gate *streamGate) admit(conn net.Conn) *gatedStream {
-	stream := &gatedStream{gate: gate, conn: conn}
+func (gate *streamGate) admit(conn net.Conn, client string) *gatedStream {
+	stream := &gatedStream{gate: gate, conn: conn, client: client}
 	gate.mu.Lock()
 	var evicted *gatedStream
 	if len(gate.unproven) >= gate.max {
-		evicted = gate.unproven[0]
-		gate.unproven = gate.unproven[1:]
+		index := gate.evictionIndexLocked(client)
+		evicted = gate.unproven[index]
+		gate.unproven = append(gate.unproven[:index], gate.unproven[index+1:]...)
 		evicted.released = true
 	}
 	gate.unproven = append(gate.unproven, stream)
@@ -58,9 +60,29 @@ func (gate *streamGate) admit(conn net.Conn) *gatedStream {
 	return stream
 }
 
+// evictionIndexLocked picks the oldest unproven stream of the client with the
+// most unproven streams, counting the arriving stream for its client.
+func (gate *streamGate) evictionIndexLocked(arriving string) int {
+	counts := map[string]int{arriving: 1}
+	for _, stream := range gate.unproven {
+		counts[stream.client]++
+	}
+	most := 0
+	for _, count := range counts {
+		most = max(most, count)
+	}
+	for index, stream := range gate.unproven {
+		if counts[stream.client] == most {
+			return index
+		}
+	}
+	return 0
+}
+
 type gatedStream struct {
 	gate     *streamGate
 	conn     net.Conn
+	client   string
 	timer    *time.Timer
 	proven   bool
 	released bool

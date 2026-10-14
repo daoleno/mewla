@@ -150,6 +150,9 @@ Important flags:
 
 - `-max-clients`
 - `-max-clients-per-route`
+- `-max-clients-per-route-ip` (default half of the route cap: one source IP
+  never holds every slot of a computer, even with streams the daemon already
+  closed but the client keeps half-open)
 - `-max-client-handshakes`
 - `-max-connector-handshakes`
 - `-handshake-timeout`
@@ -272,7 +275,16 @@ Trust boundaries:
   are not exposed to that. Say so in user-facing docs; monitor CT logs.
 - Hostnames appear in Certificate Transparency logs. They are addresses, not
   secrets; daemons limit unauthenticated streams per route and the relay
-  limits handshakes and streams per source IP. So a label never comes from
+  limits handshakes and streams per source IP.
+- The relay reports each client's IP in `open_stream` (`client_addr`). The
+  daemon uses it only to share limits between clients: the enrollment rate
+  limit (5 a minute per IPv4 address or IPv6 /64) and which unproven stream
+  to close first (the oldest of the client holding the most). It never grants
+  trust; loopback checks keep using the connection's own address. A relay
+  that lies about it can only spend its own clients' allowance. Two or more
+  addresses together can still fill the daemon's 32 pending enrollments for
+  their 5-minute lifetime; the person approving sees the flood in the
+  terminal. So a label never comes from
   the computer: without a name the service picks `adjective-noun-<4 hex>`;
   `mewla login -name <word>` (`PUT /v1/machine/name`) sets `<word>-<6 hex>`
   and keeps the machine and route, so phones are unaffected.

@@ -50,6 +50,9 @@ type Message struct {
 
 	StreamID     string `json:"stream_id,omitempty"`
 	StreamTicket string `json:"stream_ticket,omitempty"`
+	// ClientAddr is the client's IP as the relay saw it, on open_stream. The
+	// daemon only uses it to share limits fairly between clients.
+	ClientAddr string `json:"client_addr,omitempty"`
 
 	Alias       string `json:"alias,omitempty"`
 	ExpiresAtMS int64  `json:"expires_at_ms,omitempty"`
