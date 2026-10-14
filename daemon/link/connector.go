@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -23,7 +24,12 @@ const (
 	defaultControlTimeout = 5 * time.Second
 	defaultReconnectMax   = 30 * time.Second
 	defaultMaxStreams     = 32
+	minGrantRenewal       = 30 * time.Second
 )
+
+// GrantSource supplies the current hosted route grant. A hosted connector
+// authenticates to relays with it instead of a shared connector token.
+type GrantSource func(ctx context.Context) (string, error)
 
 type RelayCandidate struct {
 	Name              string
@@ -36,7 +42,18 @@ type RelayCandidate struct {
 }
 
 type ConnectorConfig struct {
-	ConnectorToken    string
+	ConnectorToken string
+	// Grant, when set, authenticates every relay request with a hosted route
+	// grant; ConnectorToken may then be empty.
+	Grant GrantSource
+	// HostLabel is the hosted hostname label. Stable addresses use it
+	// instead of the route ID when set.
+	HostLabel string
+	// TLSConfig overrides the transport identity's TLS configuration, for
+	// example to serve a WebPKI certificate for the hosted hostname.
+	TLSConfig         *tls.Config
+	MaxUnproven       int
+	UnprovenLifetime  time.Duration
 	Candidates        []RelayCandidate
 	ControlTimeout    time.Duration
 	ReconnectMax      time.Duration
@@ -69,6 +86,7 @@ type Connector struct {
 	identity *TransportIdentity
 	handler  http.Handler
 	streams  chan struct{}
+	gate     *streamGate
 
 	stateMu sync.RWMutex
 	state   ConnectorState
@@ -77,6 +95,7 @@ type Connector struct {
 type registeredRelay struct {
 	candidate RelayCandidate
 	conn      *tls.Conn
+	grant     string
 	rtt       time.Duration
 	writeMu   sync.Mutex
 }
@@ -106,6 +125,7 @@ func NewConnector(
 		identity: identity,
 		handler:  handler,
 		streams:  make(chan struct{}, normalized.MaxStreams),
+		gate:     newStreamGate(normalized.MaxUnproven, normalized.UnprovenLifetime),
 		state: ConnectorState{
 			Phase:     "connecting",
 			ChangedAt: time.Now().UTC(),
@@ -142,7 +162,9 @@ func (connector *Connector) Run(ctx context.Context) error {
 		}
 		connector.setState("offline", "", 0, userFacingConnectorError(err))
 
-		timer := time.NewTimer(backoff)
+		// Full jitter keeps daemons from reconnecting in lockstep after a
+		// relay restart.
+		timer := time.NewTimer(backoff/2 + rand.N(backoff/2+1))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -216,8 +238,23 @@ func (connector *Connector) runRegisteredRelay(
 	go func() {
 		ticker := time.NewTicker(connector.config.KeepAliveInterval)
 		defer ticker.Stop()
+		var renewals <-chan time.Time
+		if connector.config.Grant != nil {
+			renewals = time.After(grantRenewalDelay(selected.grant))
+		}
 		for {
 			select {
+			case <-renewals:
+				grant, err := connector.renewGrant(ctx, selected)
+				if err != nil {
+					select {
+					case pingErrors <- err:
+					default:
+					}
+					_ = selected.conn.Close()
+					return
+				}
+				renewals = time.After(grantRenewalDelay(grant))
 			case <-ticker.C:
 				if err := selected.write(linkproto.Message{
 					Type:        linkproto.TypePing,
@@ -276,7 +313,7 @@ func (connector *Connector) runRegisteredRelay(
 			}); err != nil {
 				return err
 			}
-		case linkproto.TypePong:
+		case linkproto.TypePong, linkproto.TypeGrantRenewed:
 		case linkproto.TypeError:
 			return fmt.Errorf("Link relay rejected the route: %s", message.Message)
 		default:
@@ -288,6 +325,30 @@ func (connector *Connector) runRegisteredRelay(
 		default:
 		}
 	}
+}
+
+// grantRenewalDelay renews halfway through the grant's remaining lifetime.
+func grantRenewalDelay(grant string) time.Duration {
+	_, expires, ok := linkproto.RouteGrantTimes(grant)
+	if !ok {
+		return minGrantRenewal
+	}
+	return max(time.Until(expires)/2, minGrantRenewal)
+}
+
+func (connector *Connector) renewGrant(ctx context.Context, selected *registeredRelay) (string, error) {
+	message, err := signedRequest(
+		ctx,
+		connector.auth,
+		connector.identity.RouteID,
+		connector.config,
+		linkproto.TypeRenewGrant,
+		0,
+	)
+	if err != nil {
+		return "", fmt.Errorf("renew remote access grant: %w", err)
+	}
+	return message.Grant, selected.write(message)
 }
 
 func (relay *registeredRelay) write(message linkproto.Message) error {
@@ -331,7 +392,9 @@ func (connector *Connector) serveStream(
 	}
 	_ = conn.SetDeadline(time.Time{})
 
-	inner := tls.Server(conn, connector.identity.ServerTLSConfig())
+	gated := connector.gate.admit(conn)
+	defer gated.close()
+	inner := tls.Server(conn, connector.serverTLSConfig())
 	handshakeCtx, cancel := context.WithTimeout(ctx, connector.config.ControlTimeout)
 	defer cancel()
 	if err := inner.HandshakeContext(handshakeCtx); err != nil {
@@ -342,7 +405,14 @@ func (connector *Connector) serveStream(
 		handler = connector.pairingAdmissionHandler(ctx, candidate, open)
 	}
 	keep = true
-	return serveSingleConnection(ctx, inner, handler, connector.config.HTTPIdleTimeout)
+	return serveSingleConnection(ctx, inner, gated.handler(handler), connector.config.HTTPIdleTimeout)
+}
+
+func (connector *Connector) serverTLSConfig() *tls.Config {
+	if connector.config.TLSConfig != nil {
+		return connector.config.TLSConfig
+	}
+	return connector.identity.ServerTLSConfig()
 }
 
 func (connector *Connector) pairingAdmissionHandler(
@@ -389,9 +459,10 @@ func (connector *Connector) consumeAdmission(
 	}
 	defer conn.Close()
 	message, err := signedRequest(
+		ctx,
 		connector.auth,
 		connector.identity.RouteID,
-		connector.config.ConnectorToken,
+		connector.config,
 		linkproto.TypeAdmissionConsume,
 		0,
 	)
@@ -449,9 +520,10 @@ func IssueAdmissions(
 			continue
 		}
 		message, messageErr := signedRequest(
+			ctx,
 			authManager,
 			identity.RouteID,
-			normalized.ConnectorToken,
+			normalized,
 			linkproto.TypeAdmissionRequest,
 			ttl,
 		)
@@ -477,7 +549,7 @@ func IssueAdmissions(
 			continue
 		}
 		admissionHost := response.Alias + "." + candidate.ClientDomain
-		stableHost := identity.RouteID + "." + candidate.ClientDomain
+		stableHost := StableHost(normalized, identity, candidate)
 		offers = append(offers, AdmissionOffer{
 			RelayName:     candidate.Name,
 			AdmissionHost: admissionHost,
@@ -510,9 +582,10 @@ func registerRelay(
 		return nil, fmt.Errorf("%s: %w", candidate.Name, err)
 	}
 	message, err := signedRequest(
+		ctx,
 		authManager,
 		identity.RouteID,
-		config.ConnectorToken,
+		config,
 		linkproto.TypeRegister,
 		0,
 	)
@@ -540,14 +613,25 @@ func registerRelay(
 	return &registeredRelay{
 		candidate: candidate,
 		conn:      conn,
+		grant:     message.Grant,
 		rtt:       time.Since(startedAt),
 	}, nil
 }
 
+// StableHost is the long-lived hostname phones store for this relay: the
+// hosted label when the service assigned one, else the route ID.
+func StableHost(config ConnectorConfig, identity *TransportIdentity, candidate RelayCandidate) string {
+	if label := strings.TrimSpace(config.HostLabel); label != "" {
+		return label + "." + candidate.ClientDomain
+	}
+	return identity.RouteID + "." + candidate.ClientDomain
+}
+
 func signedRequest(
+	ctx context.Context,
 	authManager *auth.Manager,
 	routeID string,
-	connectorToken string,
+	config ConnectorConfig,
 	messageType string,
 	ttl time.Duration,
 ) (linkproto.Message, error) {
@@ -555,9 +639,17 @@ func signedRequest(
 	if err != nil {
 		return linkproto.Message{}, err
 	}
+	grant := ""
+	if config.Grant != nil {
+		grant, err = config.Grant(ctx)
+		if err != nil {
+			return linkproto.Message{}, err
+		}
+	}
 	message := linkproto.Message{
 		Type:            messageType,
-		ConnectorToken:  connectorToken,
+		ConnectorToken:  config.ConnectorToken,
+		Grant:           grant,
 		RouteID:         routeID,
 		DaemonID:        authManager.DaemonID(),
 		DaemonPublicKey: authManager.PublicKeyHex(),
@@ -622,11 +714,14 @@ func candidateTLSConfig(candidate RelayCandidate) (*tls.Config, error) {
 
 func normalizeConnectorConfig(config ConnectorConfig) (ConnectorConfig, error) {
 	config.ConnectorToken = strings.TrimSpace(config.ConnectorToken)
-	if config.ConnectorToken == "" {
+	config.HostLabel = strings.ToLower(strings.TrimSpace(config.HostLabel))
+	switch {
+	case config.ConnectorToken == "" && config.Grant == nil:
 		return ConnectorConfig{}, errors.New("Link connector token is required")
-	}
-	if len(config.ConnectorToken) < 32 {
+	case config.ConnectorToken != "" && len(config.ConnectorToken) < 32:
 		return ConnectorConfig{}, errors.New("Link connector token must contain at least 32 characters")
+	case config.HostLabel != "" && !linkproto.IsHostLabel(config.HostLabel):
+		return ConnectorConfig{}, errors.New("Link host label is invalid")
 	}
 	if len(config.Candidates) == 0 {
 		return ConnectorConfig{}, errors.New("at least one Link relay candidate is required")
@@ -648,6 +743,12 @@ func normalizeConnectorConfig(config ConnectorConfig) (ConnectorConfig, error) {
 	}
 	if config.KeepAliveInterval <= 0 {
 		config.KeepAliveInterval = 15 * time.Second
+	}
+	if config.MaxUnproven <= 0 {
+		config.MaxUnproven = defaultMaxUnprovenStreams
+	}
+	if config.UnprovenLifetime <= 0 {
+		config.UnprovenLifetime = defaultUnprovenLifetime
 	}
 	seen := make(map[string]struct{})
 	for index := range config.Candidates {

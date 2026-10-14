@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/attachment"
+	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/gorilla/websocket"
 )
@@ -823,11 +824,15 @@ func (s *Server) verifySessionFileCapability(
 	if err != nil {
 		return err
 	}
-	return s.auth.VerifySessionFileCapabilitySignature(
+	if err := s.auth.VerifySessionFileCapabilitySignature(
 		deviceID,
 		payload,
 		signature,
-	)
+	); err != nil {
+		return err
+	}
+	auth.NotifyAuthenticated(r.Context())
+	return nil
 }
 
 func (s *Server) sessionFileCapabilityPayload(

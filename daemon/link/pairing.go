@@ -49,7 +49,7 @@ func BuildPairingLink(
 	}
 	candidates := make([]PairingCandidate, 0, len(config.Candidates))
 	for _, candidate := range config.Candidates {
-		stableHost := identity.RouteID + "." + candidate.ClientDomain
+		stableHost := StableHost(config, identity, candidate)
 		entry := PairingCandidate{
 			Name:      candidate.Name,
 			StableURL: candidateURL(stableHost, candidate.ClientPort),
