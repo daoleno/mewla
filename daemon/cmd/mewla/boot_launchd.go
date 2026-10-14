@@ -580,6 +580,32 @@ func bootLaunchdDescribeSigning(metadata bootMetadata) string {
 	return metadata.Signing
 }
 
+// bootLaunchdHandOff starts the LaunchAgent instead of a second daemon when
+// macOS itself opens Mewla.app: a double-click, or "Quit & Reopen" after a
+// privacy permission changes. Those launches carry no arguments, so they
+// would serve an unmanaged daemon on the default loopback address that the
+// phone can't reach and launchd can't replace. kickstart leaves a running
+// job alone. handed reports whether the launch was handed off.
+func bootLaunchdHandOff(args []string, executable string, runner bootRunner) (handed bool, err error) {
+	if bootGOOS != "darwin" || len(args) > 0 || os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel {
+		return false, nil
+	}
+	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
+		executable = resolved
+	}
+	bundle := filepath.Dir(filepath.Dir(filepath.Dir(executable)))
+	if executable != macapp.Executable(bundle) || !macapp.Managed(bundle) {
+		return false, nil
+	}
+	if _, ok := bootLaunchdReinstallArgs(); !ok {
+		return false, nil
+	}
+	if output, err := runner.run("launchctl", "kickstart", bootLaunchdTarget()); err != nil {
+		return true, fmt.Errorf("launchctl kickstart %s: %v: %s", bootLaunchdTarget(), err, strings.TrimSpace(string(output)))
+	}
+	return true, nil
+}
+
 // bootLaunchdReinstallArgs are the `boot install` arguments that move the
 // installed LaunchAgent to a new binary while keeping its state directory,
 // address, working directory and PATH; plain `mewla boot install` would take

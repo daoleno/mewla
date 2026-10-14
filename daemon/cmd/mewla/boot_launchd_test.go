@@ -235,6 +235,50 @@ func TestBootLaunchdUpdateReinstallsWithInstalledConfiguration(t *testing.T) {
 	}
 }
 
+func TestOpeningMewlaAppStartsTheLaunchAgent(t *testing.T) {
+	previous := bootGOOS
+	bootGOOS = "darwin"
+	defer func() { bootGOOS = previous }()
+	config, runner := launchdFreshInstall(t)
+	kickstart := "launchctl kickstart " + bootLaunchdTarget()
+	bundleExecutable := bootLaunchdDaemonConfig(config).Binary
+
+	if handed, err := bootLaunchdHandOff(nil, bundleExecutable, runner); handed || err != nil {
+		t.Fatalf("handed off before install: %v %v", handed, err)
+	}
+	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	runner.reset()
+	for _, launch := range []struct {
+		name       string
+		args       []string
+		executable string
+		xpc        string
+	}{
+		{"the CLI binary", nil, config.Binary, ""},
+		{"a command line with flags", []string{"-lan"}, bundleExecutable, ""},
+		{"launchd's own start", nil, bundleExecutable, bootLaunchdLabel},
+	} {
+		t.Setenv("XPC_SERVICE_NAME", launch.xpc)
+		if handed, err := bootLaunchdHandOff(launch.args, launch.executable, runner); handed || err != nil {
+			t.Fatalf("%s was handed off: %v %v", launch.name, handed, err)
+		}
+	}
+	if runner.called(kickstart) {
+		t.Fatal("kickstarted for a launch that should serve")
+	}
+
+	// LaunchServices opening the app: no arguments, its own XPC service name.
+	t.Setenv("XPC_SERVICE_NAME", "application.com.daoleno.mewla.1234")
+	if handed, err := bootLaunchdHandOff(nil, bundleExecutable, runner); !handed || err != nil {
+		t.Fatalf("open Mewla.app: %v %v", handed, err)
+	}
+	if !runner.called(kickstart) {
+		t.Fatal("open Mewla.app did not start the LaunchAgent")
+	}
+}
+
 // launchdLocalIdentity makes the fake `security` report an existing local
 // identity.
 func launchdLocalIdentity(runner *fakeBootRunner, config bootConfig) string {
