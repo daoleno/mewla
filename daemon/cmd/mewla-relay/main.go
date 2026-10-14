@@ -51,6 +51,7 @@ func run(args []string) error {
 	var maxConnectorHandshakesPerIP int
 	var grantKeyFile string
 	staticRoutes := sniRoutes{}
+	var staticRouteProxyProtocol bool
 	var handshakeTimeout time.Duration
 	var attachTimeout time.Duration
 	var idleTimeout time.Duration
@@ -66,6 +67,7 @@ func run(args []string) error {
 	flags.StringVar(&tokenEnvironment, "connector-token-env", "MEWLA_LINK_CONNECTOR_TOKEN", "environment variable containing the shared connector token (optional with -grant-public-key-file)")
 	flags.StringVar(&grantKeyFile, "grant-public-key-file", "", "file of hex Ed25519 account service keys, one per line, that sign hosted route grants")
 	flags.Var(staticRoutes, "sni-route", "host=addr: pipe clients whose SNI is exactly host to the TCP address (repeatable)")
+	flags.BoolVar(&staticRouteProxyProtocol, "sni-route-proxy-protocol", false, "send a PROXY protocol v1 header with the client address on -sni-route connections")
 	flags.IntVar(&maxRoutes, "max-routes", defaults.MaxRoutes, "maximum concurrently registered routes")
 	flags.IntVar(&maxClients, "max-clients", defaults.MaxClients, "maximum concurrent client streams")
 	flags.IntVar(&maxClientsPerRoute, "max-clients-per-route", defaults.MaxClientsPerRoute, "maximum concurrent streams for one route")
@@ -120,21 +122,22 @@ func run(args []string) error {
 		)
 	}
 	server, err := relay.New(relay.Config{
-		ConnectorToken:         connectorToken,
-		GrantKeys:              grantKeys,
-		StaticRoutes:           staticRoutes,
-		Logf:                   log.Printf,
-		MaxRoutes:              maxRoutes,
-		MaxClients:             maxClients,
-		MaxClientsPerRoute:     maxClientsPerRoute,
-		MaxClientsPerRouteIP:   maxClientsPerRouteIP,
-		MaxClientHandshakes:    maxClientHandshakes,
-		MaxConnectorHandshakes: maxConnectorHandshakes,
-		MaxAdmissions:          maxAdmissions,
-		MaxAdmissionsPerRoute:  maxAdmissionsPerRoute,
-		MaxNonces:              maxNonces,
-		MaxPendingStreams:      maxPendingStreams,
-		MaxRouteBindings:       maxRouteBindings,
+		ConnectorToken:           connectorToken,
+		GrantKeys:                grantKeys,
+		StaticRoutes:             staticRoutes,
+		StaticRouteProxyProtocol: staticRouteProxyProtocol,
+		Logf:                     log.Printf,
+		MaxRoutes:                maxRoutes,
+		MaxClients:               maxClients,
+		MaxClientsPerRoute:       maxClientsPerRoute,
+		MaxClientsPerRouteIP:     maxClientsPerRouteIP,
+		MaxClientHandshakes:      maxClientHandshakes,
+		MaxConnectorHandshakes:   maxConnectorHandshakes,
+		MaxAdmissions:            maxAdmissions,
+		MaxAdmissionsPerRoute:    maxAdmissionsPerRoute,
+		MaxNonces:                maxNonces,
+		MaxPendingStreams:        maxPendingStreams,
+		MaxRouteBindings:         maxRouteBindings,
 
 		MaxClientHandshakesPerIP:    maxClientHandshakesPerIP,
 		MaxClientsPerIP:             maxClientsPerIP,

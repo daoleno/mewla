@@ -20,6 +20,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/linkproto"
+	"github.com/daoleno/mewla/daemon/proxyproto"
 )
 
 const (
@@ -60,6 +61,9 @@ type Config struct {
 	// StaticRoutes pipes client connections whose full SNI equals a key to
 	// the TCP address value, letting another TLS service share the port.
 	StaticRoutes map[string]string
+	// StaticRouteProxyProtocol sends a PROXY protocol v1 header with the
+	// client's address before its bytes on every static route.
+	StaticRouteProxyProtocol bool
 	// Logf receives anonymous operational events. Nil disables logging.
 	Logf func(format string, args ...any)
 
@@ -1543,6 +1547,9 @@ func (server *Server) serveStaticRoute(
 	}
 	defer upstream.Close()
 	_ = upstream.SetWriteDeadline(time.Now().Add(server.config.HandshakeTimeout))
+	if server.config.StaticRouteProxyProtocol {
+		prefix = append(proxyproto.Header(client.RemoteAddr(), client.LocalAddr()), prefix...)
+	}
 	if err := writeAll(upstream, prefix); err != nil {
 		outcome.reject(server.contextRejection(ctx, rejectionProtocol))
 		return
