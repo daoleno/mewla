@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -15,6 +16,10 @@ import (
 )
 
 var errAuth = errors.New("authorization expired or revoked; reconnect this account")
+
+// errNetwork is a request that never got an HTTP answer. The cause is logged,
+// not returned: transport errors carry URLs.
+var errNetwork = errors.New("integration network request failed")
 
 // StatusError is a service's non-2xx HTTP answer other than 401.
 type StatusError struct{ Status int }
@@ -108,6 +113,17 @@ func publicIP(ip net.IP) bool {
 func newHTTPClient() *http.Client { return newHTTPClientFor("", nil) }
 
 func newHTTPClientFor(origin string, networks []string) *http.Client {
+	return &http.Client{Transport: checkedTransport(origin, networks), Timeout: 20 * time.Second, CheckRedirect: noRedirects}
+}
+
+func noRedirects(*http.Request, []*http.Request) error {
+	return errors.New("redirects are not allowed")
+}
+
+// checkedTransport dials only addresses that pass the network check, trying
+// each one in turn: a host behind a CDN often answers on one address while
+// another times out.
+func checkedTransport(origin string, networks []string) *http.Transport {
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 8 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
@@ -118,17 +134,42 @@ func newHTTPClientFor(origin string, networks []string) *http.Client {
 		if err != nil {
 			return nil, errors.New("endpoint DNS failed")
 		}
+		addresses := make([]net.IP, 0, len(ips))
 		for _, ip := range ips {
 			if !publicIP(ip.IP) && !(address == origin && trustedIP(ip.IP, networks)) {
 				return nil, errors.New("private network endpoints are not supported")
 			}
+			addresses = append(addresses, ip.IP)
 		}
-		if len(ips) == 0 {
-			return nil, errors.New("endpoint DNS returned no addresses")
-		}
-		return (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+		return dialEach(ctx, network, port, addresses, (&net.Dialer{}).DialContext)
 	}
-	return &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirects are not allowed") }}
+	return transport
+}
+
+// dialEach dials checked addresses in order until one answers. Each attempt
+// gets a share of the time, so one silent address cannot use it all.
+func dialEach(ctx context.Context, network, port string, addresses []net.IP, dial func(context.Context, string, string) (net.Conn, error)) (net.Conn, error) {
+	if len(addresses) == 0 {
+		return nil, errors.New("endpoint DNS returned no addresses")
+	}
+	each := 8 * time.Second
+	if len(addresses) > 1 {
+		each = 5 * time.Second
+	}
+	var last error
+	for _, ip := range addresses {
+		attempt, cancel := context.WithTimeout(ctx, each)
+		conn, err := dial(attempt, network, net.JoinHostPort(ip.String(), port))
+		cancel()
+		if err == nil {
+			return conn, nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, last
 }
 
 type limitedBody struct {
@@ -165,7 +206,10 @@ func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	resp, err := t.base.RoundTrip(c)
 	if err != nil {
-		return nil, errors.New("integration network request failed")
+		if r.Context().Err() == nil {
+			log.Printf("plugins: request to %s failed: %.300s", t.origin, err)
+		}
+		return nil, errNetwork
 	}
 	if resp.StatusCode == 401 {
 		resp.Body.Close()
@@ -217,7 +261,7 @@ func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, meth
 		if ctx.Err() != nil {
 			return nil, safeError(ctx.Err())
 		}
-		return nil, errors.New("integration network request failed")
+		return nil, errNetwork
 	}
 	defer resp.Body.Close()
 	if len(capture) > 0 {

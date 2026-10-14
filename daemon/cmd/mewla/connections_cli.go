@@ -19,10 +19,14 @@ import (
 
 func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|set-key|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|enable|disable|disconnect|policy> [flags]
+		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|set-key|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name.
-Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination.
+Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination, never retried.
+A call that times out may already have run; check its state with a read tool before calling it again.
+MCP resources: resources --id account [--cursor c] lists documents and URI templates; read-resource --id account --uri onlora://docs/forms reads one.
+Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
+updates --id account shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 Add: --integration github|notion|google|slack|linear|fal|image|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Image generation: --integration image --endpoint https://host/v1 --model name; the API key is read like any credential.
 fal: --integration fal; an empty key keeps only its free model search. set-key --id account replaces an API key.
@@ -49,6 +53,8 @@ Never send messages or make updates without task-specific user authorization, ev
 	fs.StringVar(&q.ID, "id", "", "account ID")
 	fs.StringVar(&q.Query, "query", "", "search text")
 	fs.StringVar(&q.Tool, "tool", "", "tool name")
+	fs.StringVar(&q.URI, "uri", "", "read-resource: resource URI")
+	fs.StringVar(&q.Cursor, "cursor", "", "resources: continue a listing")
 	fs.StringVar(&toolList, "tools", "", "policy: tool names, comma separated")
 	fs.BoolVar(&q.Allowed, "allow", false, "allow future calls (explicit user consent required)")
 	fs.StringVar(&in.Integration, "integration", "", "plugin ID")
@@ -69,9 +75,15 @@ Never send messages or make updates without task-specific user authorization, ev
 		return errors.New("unexpected positional arguments")
 	}
 	switch action {
-	case "list", "add", "set-key", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy":
+	case "list", "add", "set-key", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy", "resources", "updates":
+	case "read-resource", "confirm-updates", "dismiss-updates":
+		q.Action = strings.ReplaceAll(action, "-", "_")
 	default:
 		return errors.New("unknown plugin command")
+	}
+	if action == "updates" {
+		// The account, cut to the tools that wait for the person's confirmation.
+		q.Action = "get"
 	}
 	if toolList != "" {
 		for _, name := range strings.Split(toolList, ",") {
@@ -178,7 +190,27 @@ Never send messages or make updates without task-specific user authorization, ev
 	if err != nil {
 		return err
 	}
+	if action == "updates" {
+		response = pendingUpdates(response)
+	}
 	return writeControlResponse(os.Stdout, response, true)
+}
+
+// pendingUpdates keeps only an account's tools that wait for confirmation.
+func pendingUpdates(response control.Response) control.Response {
+	if response.Connections == nil || response.Connections.Account == nil {
+		return response
+	}
+	account := *response.Connections.Account
+	tools := []connections.Tool{}
+	for _, tool := range account.Tools {
+		if tool.Updated {
+			tools = append(tools, tool)
+		}
+	}
+	account.Tools, account.History, account.Access = tools, nil, nil
+	response.Connections = &connections.Response{Account: &account}
+	return response
 }
 func readBoundedFile(path string, limit int) ([]byte, error) {
 	f, err := os.Open(path)

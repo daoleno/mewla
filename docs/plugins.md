@@ -84,9 +84,17 @@ switch, in the same column as the tools' switches. A partly allowed list reads
 off, with its count beside it: a tap allows the rest, and once all are on a
 tap turns them all off. When the service still has to approve changes, All
 tools leaves them off and reads on once everything else is allowed; turning on
-Make changes asks the service first. New
-tools a service adds later need your review before use; until then, **Read
-and search** says so.
+Make changes asks the service first.
+
+A service can add or change its tools at any time. Mewla picks up the new list
+on the next call (or when an MCP server announces it), and tools that did not
+change keep working. A new tool, or a new version of a tool you had allowed,
+waits for you: Extensions and the service's page show **<Service> updated N
+tools** with the tool names, and one **Confirm** allows exactly those. Until
+then Brain gets "this tool was updated and needs confirmation", never a
+sign-in error, and the account stays **Connected**. A changed tool you had
+blocked stays blocked without asking. A tool the service removes loses its
+permission.
 
 Permission is not an instruction. Even with changes allowed, Brain should send
 messages or update records only when the task you gave it calls for that.
@@ -170,12 +178,31 @@ mewla connections search --query github --json
 mewla connections describe --id ACCOUNT_ID --tool get_me --json
 mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
 mewla connections policy --id ACCOUNT_ID --tools get_me,list_issues --allow
+mewla connections resources --id ACCOUNT_ID
+mewla connections read-resource --id ACCOUNT_ID --uri onlora://docs/forms
+mewla connections updates --id ACCOUNT_ID
+mewla connections confirm-updates --id ACCOUNT_ID --tools pick_draft,propose_drafts
 ```
 
 `policy --tools` sets every listed tool in one change: all of them, or none
 if any name is unknown. Leave out `--allow` to turn them off.
 
 Each call is one bounded request; nothing pages automatically.
+
+- **Resources.** An MCP server can publish documents next to its tools, such as
+  Onlora's format guides. `resources` lists them and their URI templates;
+  `read-resource` reads one. Reading needs the account on and at least one read
+  tool allowed (any allowed tool for a custom service).
+- **Errors.** When a service rejects a call, its own message comes back,
+  shortened to 2,000 bytes with credentials removed.
+- **Time.** A call may take two minutes, or longer when its arguments ask the
+  service to wait (`wait_s` and similar), up to ten minutes. If time runs out,
+  the call may already have run: Mewla never retries it, and you should check
+  its state with a read tool before calling again. Calls on the same account
+  run side by side.
+- **Updates.** `updates` shows tools waiting for confirmation;
+  `confirm-updates` and `dismiss-updates` act on the listed tools, all or
+  none, and only with the person's consent.
 
 ## Where credentials live
 

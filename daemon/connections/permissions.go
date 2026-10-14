@@ -17,11 +17,11 @@ var officialWrites = map[string]map[string]bool{
 	"notion": names("notion-create-pages", "notion-update-page", "notion-create-comment", "notion-move-pages", "notion-duplicate-page"),
 	// Linear's MCP server now saves (creates or updates) through save_* tools.
 	"linear": names("create_issue", "update_issue", "create_comment", "update_comment", "create_project", "update_project", "create_document", "update_document", "save_issue", "save_comment", "save_project", "save_document", "save_milestone", "save_status_update"),
-	// get_feedback marks what it returns as read. generate_image, edit_image
+	// get_feedback marks what it returns as read; pick_draft chooses a round's draft. generate_image, edit_image
 	// and the paid generate_* tools spend the account's quota (generate_voice is
 	// free unless a paid model is named); share makes an asset public, and
 	// unpublish, unshare and delete_file take things down.
-	"onlora": names("get_feedback", "create_project", "update_project", "write_file", "delete_file", "add_asset", "create_upload", "pin", "unpin", "pin_shared", "share", "unshare", "generate_image", "edit_image", "generate_music", "generate_voice", "generate_video", "render", "propose_drafts", "record_feedback", "publish", "unpublish"),
+	"onlora": names("get_feedback", "pick_draft", "create_project", "update_project", "write_file", "delete_file", "add_asset", "create_upload", "pin", "unpin", "pin_shared", "share", "unshare", "generate_image", "edit_image", "generate_music", "generate_voice", "generate_video", "render", "propose_drafts", "record_feedback", "publish", "unpublish"),
 }
 
 func names(values ...string) map[string]bool {
@@ -82,6 +82,7 @@ func (m *Manager) setGroup(r *record, group string, allowed bool) bool {
 			} else {
 				delete(r.Grants, t.Name)
 			}
+			clearUpdates(r, t.Name)
 		}
 	}
 	return true
@@ -119,6 +120,7 @@ func setPolicy(r *record, q Request) error {
 		} else {
 			delete(r.Grants, name)
 		}
+		clearUpdates(r, name)
 	}
 	return nil
 }
