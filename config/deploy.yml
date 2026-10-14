@@ -1,0 +1,132 @@
+# Hosted remote access (Kamal 2), on the host shared with Onlora.
+# Runbook: docs/internal/mewla-link-relay.md, "Hosted remote access".
+#
+#   connect.mewla.ai:443   relay -> SNI route -> caddy -> account service
+#   connect.mewla.ai:8443  relay control plane (daemons)
+#   *.m.mewla.ai:443       relay -> a computer, TLS passed through untouched
+#
+# Nothing here uses kamal-proxy: SNI passthrough cannot go through it, and
+# Onlora owns its configuration. Host :443 is free because Onlora's proxy
+# publishes only :80.
+minimum_version: 2.12.0
+
+service: mewla-link
+image: daoleno/mewla-link
+
+primary_role: account
+
+servers:
+  account:
+    hosts:
+      - 167.114.116.27
+    proxy: false
+    cmd: >-
+      /usr/local/bin/mewla-account
+      -addr=:8080
+      -db=/var/lib/mewla-account/account.db
+      -grant-key-file=/var/lib/mewla-account/grant-key.pem
+      -public-url=https://connect.mewla.ai
+      -client-domain=m.mewla.ai
+      -relay=name=main,control=connect.mewla.ai:8443,server-name=connect.mewla.ai,ca-file=/run/mewla-link/relay.crt
+      -dns-provider=cloudflare
+      -cloudflare-zone-id=338037db978d5f7b2ae75f151022ad66
+    options:
+      # Caddy's upstream; app container names change with every version.
+      network-alias: mewla-account
+
+env:
+  clear:
+    # Public OAuth client ID (release/plugin-publishers.json), Device Flow on.
+    MEWLA_ACCOUNT_GITHUB_CLIENT_ID: Ov23liBbGJrVUAJyzDHg
+  secret:
+    - MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
+
+volumes:
+  # SQLite database and the grant signing key. Back it up (see the runbook).
+  - mewla-link-account:/var/lib/mewla-account
+  # The relay's self-signed control certificate, uploaded with the relay.
+  - /home/ubuntu/mewla-link-relay/run/mewla-link/relay.crt:/run/mewla-link/relay.crt:ro
+
+# Same local registry pattern as Onlora: Kamal pushes to a registry on the
+# deploying machine and tunnels it to the host for the pull.
+registry:
+  server: localhost:5555
+
+builder:
+  arch: amd64
+  dockerfile: daemon/Dockerfile.link
+
+ssh:
+  user: ubuntu
+  keys:
+    - ~/.ssh/id_ed25519_lenscan
+  keys_only: true
+
+accessories:
+  # Owns host :443 and :8443. An accessory, not a role, because a role boots
+  # the new container before stopping the old one and two cannot hold the
+  # same host ports. The image is a version this config built; `kamal
+  # accessory reboot` cannot pull from the local registry, so upgrade with
+  # the stop / remove_container / boot sequence in the runbook.
+  relay:
+    image: localhost:5555/daoleno/mewla-link:<%= ENV.fetch("MEWLA_LINK_VERSION", "latest") %>
+    host: 167.114.116.27
+    cmd: >-
+      /usr/local/bin/mewla-relay
+      -client-addr=:9443
+      -control-addr=:8443
+      -operator-addr=:8080
+      -tls-cert=/run/mewla-link/relay.crt
+      -tls-key=/run/mewla-link/relay.key
+      -grant-public-key-file=/run/mewla-link/grant.pub
+      -sni-route=connect.mewla.ai=mewla-link-caddy:443
+      -max-clients=4096
+      -max-clients-per-route=32
+      -max-client-handshakes=8192
+      -max-connector-handshakes=1024
+    files:
+      # Written by the runbook into .kamal/files/ (gitignored), mode 0600.
+      - local: .kamal/files/relay.crt
+        remote: /run/mewla-link/relay.crt
+        mode: "0644"
+      - local: .kamal/files/relay.key
+        remote: /run/mewla-link/relay.key
+        mode: "0600"
+      - local: .kamal/files/grant.pub
+        remote: /run/mewla-link/grant.pub
+        mode: "0644"
+    options:
+      # The uploaded files belong to the host's ubuntu user.
+      user: "1000:1000"
+      # Published through Docker's DNAT, so the relay sees real IPv4 client
+      # addresses (no AAAA records). Metrics only on the host's loopback.
+      publish:
+        - "443:9443"
+        - "8443:8443"
+        - "127.0.0.1:9180:8080"
+
+  # HTTPS for the account service behind the relay's SNI route.
+  caddy:
+    image: caddy:2.8.4
+    host: 167.114.116.27
+    env:
+      clear:
+        MEWLA_SERVICE_HOST: connect.mewla.ai
+    files:
+      - deploy/mewla-link/Caddyfile:/etc/caddy/Caddyfile
+    directories:
+      # Certificates and the ACME account.
+      - data:/data
+
+deploy_timeout: 60
+drain_timeout: 10
+retain_containers: 5
+
+aliases:
+  logs: app logs -f --timestamps
+  relay-logs: accessory logs relay -f --timestamps
+
+logging:
+  options:
+    max-size: 20m
+    max-file: "5"
