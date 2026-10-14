@@ -221,7 +221,8 @@ The address starts with two random words, never your computer's hostname,
 because every certificate is published (see below). Rename it with
 `mewla login -name <word>`; a short random suffix keeps it unique. Paired
 phones keep working after a rename. A browser pairs again at the new address,
-because its key belongs to the address it paired at.
+because its key belongs to the address it paired at. The old name stays in the
+public certificate logs, and you can rename three times a day.
 
 - **The account finds the computer; it does not unlock it.** Every phone or
   browser still pairs once. A browser shows a number and the computer's

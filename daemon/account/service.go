@@ -34,6 +34,7 @@ const (
 	defaultGrantTTL       = time.Hour
 	defaultMaxMachines    = 10
 	defaultACMEOpsPerHour = 20
+	renamesPerDay         = 3
 	maxPendingLoginsByKey = 5
 	maxMachineNameLength  = 64
 	maxLabelPrefixLength  = 20
@@ -80,6 +81,9 @@ type Service struct {
 	config Config
 	nonces nonceCache
 	acme   rateLimiter
+	// renames limits address changes per account: every new label costs a
+	// certificate from the domain's shared weekly issuance budget.
+	renames rateLimiter
 }
 
 // MachineInfo is the daemon's view of its machine.
@@ -190,6 +194,7 @@ func New(config Config) (*Service, error) {
 	}
 	service := &Service{config: config}
 	service.acme = rateLimiter{limit: config.ACMEOpsPerHour, window: time.Hour}
+	service.renames = rateLimiter{limit: renamesPerDay, window: 24 * time.Hour}
 	return service, nil
 }
 
@@ -513,7 +518,12 @@ func (s *Service) handleRenameMachine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid name")
 		return
 	}
-	if _, _, ok := s.currentMachine(w, r); !ok {
+	current, _, ok := s.currentMachine(w, r)
+	if !ok {
+		return
+	}
+	if !s.renames.allow(current.AccountID, s.now()) {
+		writeError(w, http.StatusTooManyRequests, "too many renames today; try again tomorrow")
 		return
 	}
 	machine, err := s.config.Store.renameMachine(r.Context(), daemonKey(r), name, newLabel)

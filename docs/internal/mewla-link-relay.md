@@ -295,6 +295,62 @@ per line), `-sni-route host=addr` (repeatable), `-max-client-handshakes-per-ip`
 `-max-route-bindings` (65536, token mode). The relay logs route events with
 an 8-hex hash prefix, never route IDs, labels, SNI or IP addresses.
 
+### Certificate issuance budget
+
+Let's Encrypt allows 50 new certificates per registered domain every 7 days,
+counted across all accounts (refilling one every 202 minutes). Until the
+client domain is on the Public Suffix List, every computer's hostname shares
+that one budget. Renewals with the same hostname are exempt (they only count
+against 5 per exact name per 7 days), so the budget is spent by new labels:
+a first sign-in, a sign-in after `mewla logout`, and `mewla login -name`
+(limited to 3 renames per account per day for this reason). That is about
+50 new computers a week at launch.
+
+In order of preference:
+
+1. Submit the client domain to the Public Suffix List (private section) on
+   day one. Once it lands, each label is its own registered domain with its
+   own 50/week. Inclusion takes weeks to months and reaches clients slowly.
+2. File the Let's Encrypt rate limit adjustment request
+   (https://isrg.formstack.com/forms/rate_limit_adjustment_request) for the
+   client domain. It also takes weeks.
+3. While both are pending, count `account: machine created` and
+   `account: machine renamed` log lines per 7 days; past ~40, pause new
+   sign-ups (e.g. disable the GitHub OAuth app) before new computers start
+   getting no browser certificate. Renewals keep working either way.
+
+Not an option: a wildcard certificate. The operator would hold its key, which
+ends "the certificate key never leaves the computer" and lets the operator
+read browser traffic without leaving a CT trace per computer.
+
+A second CA is not a flag flip. `-acme-directory` switches the CA, but
+ZeroSSL and Google Trust Services, the free alternatives, require External
+Account Binding (EAB): a key ID and HMAC from the operator's CA account
+that binds each new ACME account to it. Every computer registers its own
+ACME account, so each one would need a binding:
+
+- Shared ZeroSSL EAB (reusable since March 2022): hand the same KID and HMAC
+  to every computer in `MachineInfo.acme`. Small, but anyone who signs in
+  gets the operator's credential and can open ACME accounts under the
+  operator's ZeroSSL user until it is rotated. Not built; acceptable only as
+  a short emergency measure, with the credential rotated afterwards.
+- Service-computed binding (the right design): the computer sends its ACME
+  account public key, the account service returns the EAB JWS (HMAC over
+  that key and the newAccount URL), and the HMAC never leaves the service.
+  `golang.org/x/crypto/acme` only computes EAB from the raw HMAC, so the
+  daemon must send its own newAccount request. A few hundred lines with
+  tests; build it if the PSL entry is still pending when sign-ups approach
+  the budget. Configure it with `-acme-directory` plus an EAB KID flag and
+  the HMAC from the environment.
+- Google Trust Services EAB keys are single-use: each registers one ACME
+  account. The service would mint one per computer through the Public CA
+  API (`gcloud publicca external-account-keys create`); a leaked key is
+  worth at most one account. More moving parts than ZeroSSL.
+
+Before switching CA, publish CAA for the client domain that allows it:
+`0 issue "letsencrypt.org"` plus `0 issue "sectigo.com"` (ZeroSSL) or
+`0 issue "pki.goog"` (Google Trust Services), and `0 issuewild ";"`.
+
 ### Launch checklist
 
 1. Buy the domain. Use one zone for the service and relay
