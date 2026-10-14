@@ -1,46 +1,41 @@
 # Screen
 
-See and control your Mac's screen from the phone or a browser. Screen uses the
-Mac's own Screen Sharing; Mewla carries it over the same signed connection as
-everything else, so nothing new is exposed to the network.
+See and control a computer's screen from the phone or a browser. Screen shows
+the current server: the computer the Mewla daemon runs on. The picture and your
+input travel over the same signed connection as everything else, so Screen
+opens no new port and needs no extra password.
 
-Screen is off until you turn it on at the Mac.
+## Which computers
+
+Screen works where Mewla has a screen backend for the operating system.
+Elsewhere the Screen page says **Screen isn't available on this computer yet**,
+and nothing else changes.
+
+| Computer | Status |
+| --- | --- |
+| macOS | In development |
+| Linux, Windows | Not yet |
 
 ## Turn it on
 
-On the Mac:
+1. Open **Screen** from the menu and tap **Turn on Screen**.
+2. At the computer, allow your device in the dialog that appears. Each device
+   asks once; someone has to be at the computer to answer.
+3. If the computer needs permissions, the Screen page lists them, and the
+   operating system shows its own prompts. Grant them at the computer, or tap
+   **Open settings** to show the right settings page there, then tap **Check
+   again**.
 
-1. **System Settings → General → Sharing → Screen Sharing**: on.
-2. Click ⓘ next to it, then **Computer Settings…**: tick **VNC viewers may
-   control screen with password** and set a password (up to 8 characters).
-3. Keep Screen Sharing reachable only from the Mac itself:
+On macOS the permissions are **Screen Recording** (to see the screen) and
+**Accessibility** (to click and type), both under **System Settings → Privacy
+& Security**.
 
-   ```sh
-   sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCOnlyLocalConnections -bool yes
-   ```
-
-   Then turn Screen Sharing off and on again. From another computer,
-   `nc -w 3 <mac-address> 5900` should now print nothing.
-4. Run:
-
-   ```sh
-   mewla screen enable
-   ```
-
-   It asks for the VNC password from step 2 and checks that it works.
-
-`mewla screen status` shows whether a paired device can open the screen, and
-`mewla screen disable` turns it off and forgets the password. Open viewers
-close within seconds of `disable`.
-
-Mewla needs no Screen Recording or Accessibility permission: Screen Sharing
-captures the screen and applies input.
+To start Mewla when the computer starts, so Screen is there after a restart,
+see [Keep it running](install-daemon.md#keep-it-running).
 
 ## Use it
 
-Open **Screen** from the menu. It shows the current server's screen.
-
-| Gesture | On the Mac |
+| Gesture | On the computer |
 | --- | --- |
 | Tap | Click |
 | Tap twice | Double-click |
@@ -48,7 +43,7 @@ Open **Screen** from the menu. It shows the current server's screen.
 | Press and hold, then drag | Drag with the button held |
 | Two-finger tap | Right-click |
 | Two-finger swipe | Scroll |
-| Pinch | Zoom the view on your phone (the Mac doesn't change) |
+| Pinch | Zoom the view on your phone (the computer doesn't change) |
 | One-finger drag while zoomed in | Move around the zoomed view |
 
 **Use as trackpad** in the options menu switches to a pointer you push with
@@ -58,24 +53,27 @@ press and drag, drags.
 The bar under the screen has the keyboard, the ⌘ ⌃ ⌥ ⇧ modifiers, Esc, Tab,
 the arrows, Delete and Return, then common shortcuts. Tap a modifier once to
 apply it to the next key, tap it twice to hold it, and a third time to release
-it. To type Chinese or another language, switch the Mac's input source with
-⌃ Space; the phone sends keys, not composed text.
+it. To type Chinese or another language, switch the computer's input source
+(⌃ Space on macOS); the phone sends keys, not composed text.
 
 The view rotates to landscape on this page only. The badge in the corner shows
 the network round trip, the time from your tap until the screen redraws,
-frames per second and bandwidth, with the Mac's power state below. Tap it to
-hide it.
+frames per second and bandwidth, with the computer's power state below. Tap it
+to hide it. Screen sends only the parts of the screen that changed and never
+queues more than two frames, so the picture keeps up with your input on slow
+connections.
 
-## Keep the Mac reachable
+## Keep the computer reachable
 
-While Screen is on, Mewla keeps the Mac awake (`caffeinate -i -s`, the same as
-macOS's own tool) so you can still reach it when you're away. The display may
-still sleep; connecting wakes it, and a locked Mac shows its login window,
-where you can type the password. **Let this Mac sleep** in the options menu,
-or `mewla screen enable -allow-sleep`, turns this off. The hold ends when
-Mewla stops.
+While a device is allowed, Mewla keeps the computer awake so you can still
+reach it when you're away. The display may still sleep; connecting wakes it,
+and a locked computer shows its login window, where you can type the password.
+**Let this computer sleep** in the options menu, or
+`mewla screen enable -allow-sleep` at the computer, turns this off. The hold
+ends when Mewla stops.
 
-macOS still sleeps when:
+On macOS Mewla holds the same assertion as `caffeinate -i -s`. macOS still
+sleeps when:
 
 - a MacBook's lid is closed and no external display is connected. Keep the lid
   open; Screen warns you when it is closed.
@@ -86,10 +84,15 @@ cannot be woken through it.
 
 ## Who can use it
 
-Only devices you paired. A newer viewer takes over from an older one, and the
-older one is told why. Every time a device connects or leaves, the Mac shows a
-notification, and macOS shows its Screen Sharing icon in the menu bar while
-anyone is connected. Revoking a device ends its session within seconds.
+Only paired devices that someone allowed at the computer. A newer viewer takes
+over from an older one, and the older one is told why. The computer shows a
+notification every time a device connects or leaves. Revoking a device ends its
+session within seconds.
 
-Screen is available on macOS hosts. The daemon talks only to `127.0.0.1`;
-`mewla screen enable -address` accepts loopback addresses only.
+At the computer:
+
+```sh
+mewla screen status     # support, permissions, allowed devices, keep-awake
+mewla screen disable    # turn Screen off: viewers close and every device must be allowed again
+mewla screen enable     # allow devices to ask again
+```

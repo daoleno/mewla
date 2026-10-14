@@ -11,17 +11,36 @@ export interface ScreenPower {
   keeping_awake: boolean;
 }
 
+export interface ScreenPermission {
+  id: string;
+  name: string;
+  granted: boolean;
+  guidance?: string;
+  /** The daemon can open this permission's settings page on the computer. */
+  can_open?: boolean;
+}
+
+/** One computer's Screen state, as the asking device sees it. */
 export interface ScreenStatus {
-  enabled: boolean;
-  available: boolean;
+  supported: boolean;
   platform: string;
   reason?: string;
+  /** The computer's own name. */
   name?: string;
-  width?: number;
-  height?: number;
+  /** Turned off at the computer with `mewla screen disable`. */
+  disabled: boolean;
+  /** This device was allowed at the computer. */
+  approved: boolean;
+  permissions?: ScreenPermission[];
+  ready: boolean;
   keep_awake: boolean;
   power?: ScreenPower;
 }
+
+export type ScreenAction =
+  | { action: "enable" }
+  | { action: "open_settings"; permission: string }
+  | { keep_awake: boolean };
 
 /** HTTP failure with the status kept apart from any body text. */
 export class ScreenRequestError extends Error {
@@ -38,22 +57,21 @@ async function endpoint(server: StoredServer, path: string) {
   return url;
 }
 
-/** Reads screen status, or changes keep-awake when `keepAwake` is given. */
+/** Reads Screen status, or runs one action and returns the new status. */
 export async function screenRequest(
   server: StoredServer,
-  keepAwake?: boolean,
+  action?: ScreenAction,
   signal?: AbortSignal,
 ): Promise<ScreenStatus> {
   const url = await endpoint(server, "/screen");
   url.protocol = url.protocol === "wss:" ? "https:" : url.protocol === "ws:" ? "http:" : url.protocol;
   const authorization = await buildAuthorizationHeader({ daemonId: server.daemonId, purpose: "mewla-screen" });
   if (signal?.aborted) throw new Error("Screen request cancelled");
-  const post = keepAwake !== undefined;
   const response = await fetch(url.toString(), {
-    method: post ? "POST" : "GET",
+    method: action ? "POST" : "GET",
     signal,
-    headers: { Authorization: authorization, Accept: "application/json", ...(post ? { "Content-Type": "application/json" } : {}) },
-    body: post ? JSON.stringify({ keep_awake: keepAwake }) : undefined,
+    headers: { Authorization: authorization, Accept: "application/json", ...(action ? { "Content-Type": "application/json" } : {}) },
+    body: action ? JSON.stringify(action) : undefined,
   });
   const body = await response.text();
   let result: (ScreenStatus & { error?: string }) | undefined;

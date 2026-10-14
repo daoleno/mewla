@@ -1,10 +1,10 @@
-// Package screen lets paired devices view and control this computer's screen
-// through the host's own RFB (VNC) server, such as macOS Screen Sharing.
+// Package screen lets paired devices view and control this computer's screen.
 //
-// The daemon is the only RFB client of that server. It dials a loopback
-// address, completes the server's sign-in with a password kept on this
-// computer, and then offers the phone an RFB session that needs no further
-// sign-in: device signatures on the WebSocket already authenticated it.
+// A platform Backend captures the display and injects input; the daemon
+// serves it as an RFB (VNC) session over the device-authenticated WebSocket,
+// so the phone's viewer is the same on every platform. Each device needs the
+// owner's one-time approval on this computer, and the operating system's own
+// permissions where it has them.
 package screen
 
 import (
@@ -16,71 +16,47 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
-const (
-	configFile = "screen.json"
-	// DefaultAddress is where macOS Screen Sharing listens.
-	DefaultAddress = "127.0.0.1:5900"
-	// MaxPasswordLength is the VNC password limit; longer passwords are truncated by every server.
-	MaxPasswordLength = 8
+const configFile = "screen.json"
+
+var (
+	// ErrDisabled is the owner's local kill switch.
+	ErrDisabled = errors.New("Screen is turned off on this computer. Run `mewla screen enable` there to allow it again")
+	// ErrNotApproved means this device has not been allowed on this computer.
+	ErrNotApproved = errors.New("This device isn't allowed to use Screen on this computer yet")
+	// ErrDenied means the person at the computer declined or didn't answer.
+	ErrDenied = errors.New("Screen wasn't allowed on the computer. Someone there has to click Allow")
 )
 
-var ErrDisabled = errors.New("Screen control is off on this computer. Run `mewla screen enable` on it to turn it on")
+// Approval records that the owner allowed one device, at the computer.
+type Approval struct {
+	Name       string    `json:"name"`
+	ApprovedAt time.Time `json:"approved_at"`
+}
 
-// Config is the owner's explicit opt-in, stored 0600 in the daemon state dir.
+// Config is stored 0600 in the daemon state dir.
 type Config struct {
-	Enabled  bool   `json:"enabled"`
-	Address  string `json:"address,omitempty"`
-	Password string `json:"password,omitempty"`
-	// AllowSleep turns off the default keep-awake while screen control is on.
+	// Disabled is set by `mewla screen disable` and blocks every device.
+	Disabled bool                `json:"disabled,omitempty"`
+	Devices  map[string]Approval `json:"devices,omitempty"`
+	// AllowSleep turns off the default keep-awake.
 	AllowSleep bool `json:"allow_sleep,omitempty"`
 }
 
-// KeepAwake reports whether this computer should stay awake for viewers.
-func (c Config) KeepAwake() bool { return c.Enabled && !c.AllowSleep }
-
-func (c Config) address() string {
-	if strings.TrimSpace(c.Address) == "" {
-		return DefaultAddress
-	}
-	return c.Address
+// Approved reports whether a device may open the screen.
+func (c Config) Approved(deviceID string) bool {
+	_, ok := c.Devices[deviceID]
+	return !c.Disabled && ok
 }
 
-// Status is what a paired device sees before it opens a viewer.
-type Status struct {
-	Enabled   bool   `json:"enabled"`
-	Available bool   `json:"available"`
-	Platform  string `json:"platform"`
-	Reason    string `json:"reason,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Width     int    `json:"width,omitempty"`
-	Height    int    `json:"height,omitempty"`
-	// KeepAwake is the owner's setting; Power.KeepingAwake is what holds now.
-	KeepAwake bool   `json:"keep_awake"`
-	Power     *Power `json:"power,omitempty"`
-}
-
-// ValidateAddress admits only loopback hosts, so the daemon can never be
-// turned into a relay to another machine's RFB port.
-func ValidateAddress(address string) error {
-	host, port, err := net.SplitHostPort(strings.TrimSpace(address))
-	if err != nil || port == "" {
-		return fmt.Errorf("screen address %q must be host:port", address)
-	}
-	if host == "localhost" {
-		return nil
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("screen address %q must be on this computer (127.0.0.1 or ::1)", address)
-	}
-	return nil
-}
+// KeepAwake reports whether this computer should stay awake for viewers:
+// once any device is allowed, unless the owner turned it off.
+func (c Config) KeepAwake() bool { return !c.Disabled && len(c.Devices) > 0 && !c.AllowSleep }
 
 func LoadConfig(stateDir string) (Config, error) {
 	raw, err := os.ReadFile(filepath.Join(stateDir, configFile))
@@ -98,12 +74,6 @@ func LoadConfig(stateDir string) (Config, error) {
 }
 
 func SaveConfig(stateDir string, cfg Config) error {
-	if err := ValidateAddress(cfg.address()); err != nil {
-		return err
-	}
-	if len(cfg.Password) > MaxPasswordLength {
-		return fmt.Errorf("VNC passwords are at most %d characters", MaxPasswordLength)
-	}
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -114,21 +84,46 @@ func SaveConfig(stateDir string, cfg Config) error {
 	return atomicfile.Write(filepath.Join(stateDir, configFile), append(raw, '\n'), 0o600)
 }
 
-// Service reads the opt-in on every use, so `mewla screen enable|disable`
+// Status is what a paired device sees before it opens a viewer.
+type Status struct {
+	Supported bool   `json:"supported"`
+	Platform  string `json:"platform"`
+	Reason    string `json:"reason,omitempty"`
+	// Name is this computer's name.
+	Name     string `json:"name,omitempty"`
+	Disabled bool   `json:"disabled"`
+	// Approved is about the device that asked.
+	Approved    bool         `json:"approved"`
+	Permissions []Permission `json:"permissions,omitempty"`
+	// Ready means the device can open a viewer now.
+	Ready bool `json:"ready"`
+	// KeepAwake is the owner's setting; Power.KeepingAwake is what holds now.
+	KeepAwake bool   `json:"keep_awake"`
+	Power     *Power `json:"power,omitempty"`
+}
+
+// Service reads its config on every use, so `mewla screen enable|disable`
 // takes effect without restarting the daemon.
 type Service struct {
 	stateDir string
-	dialer   net.Dialer
+	backend  Backend
 	awake    keeper
+	// confirm serializes approval prompts: one question on screen at a time.
+	confirm sync.Mutex
+	// write serializes config changes; reads go straight to disk.
+	write sync.Mutex
 }
 
-func NewService(stateDir string) *Service {
-	return &Service{stateDir: stateDir, dialer: net.Dialer{Timeout: 5 * time.Second}}
+func NewService(stateDir string) *Service { return NewServiceWith(stateDir, newBackend()) }
+
+// NewServiceWith uses an explicit backend, for tests.
+func NewServiceWith(stateDir string, backend Backend) *Service {
+	return &Service{stateDir: stateDir, backend: backend}
 }
 
-// Run holds this computer awake while screen control is on and keep-awake is
-// not turned off, re-reading the opt-in so the CLI takes effect within
-// seconds. The hold ends with ctx and, on macOS, with the daemon process.
+// Run holds this computer awake while Screen is allowed and keep-awake is
+// on, re-reading the config so the CLI takes effect within seconds. The hold
+// ends with ctx and, on macOS, with the daemon process.
 func (s *Service) Run(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -148,14 +143,16 @@ func (s *Service) syncAwake() {
 	s.awake.set(err == nil && cfg.KeepAwake())
 }
 
-// SetKeepAwake changes the keep-awake setting from a paired device. It never
-// turns screen control itself on.
-func (s *Service) SetKeepAwake(keep bool) error {
-	cfg, err := s.config()
+func (s *Service) update(change func(*Config) error) error {
+	s.write.Lock()
+	defer s.write.Unlock()
+	cfg, err := LoadConfig(s.stateDir)
 	if err != nil {
 		return err
 	}
-	cfg.AllowSleep = !keep
+	if err := change(&cfg); err != nil {
+		return err
+	}
 	if err := SaveConfig(s.stateDir, cfg); err != nil {
 		return err
 	}
@@ -163,115 +160,156 @@ func (s *Service) SetKeepAwake(keep bool) error {
 	return nil
 }
 
-func (s *Service) config() (Config, error) {
-	cfg, err := LoadConfig(s.stateDir)
-	if err != nil {
-		return Config{}, err
+// Status reports support, permissions and this device's approval.
+func (s *Service) Status(ctx context.Context, deviceID string) Status {
+	capability := s.backend.Capability(ctx)
+	status := Status{
+		Supported:   capability.Supported,
+		Platform:    runtime.GOOS,
+		Reason:      capability.Reason,
+		Name:        computerName(),
+		Permissions: capability.Permissions,
 	}
-	if !cfg.Enabled {
-		return Config{}, ErrDisabled
-	}
-	if err := ValidateAddress(cfg.address()); err != nil {
-		return Config{}, err
-	}
-	return cfg, nil
-}
-
-// Dial connects to the RFB server and completes its sign-in. The returned
-// session is positioned right before ClientInit.
-func (s *Service) Dial(ctx context.Context) (*Upstream, error) {
-	cfg, err := s.config()
-	if err != nil {
-		return nil, err
-	}
-	conn, err := s.dialer.DialContext(ctx, "tcp", cfg.address())
-	if err != nil {
-		return nil, fmt.Errorf("%s is not reachable at %s. %s", serverName(), cfg.address(), enableHint())
-	}
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(10 * time.Second)
-	}
-	_ = conn.SetDeadline(deadline)
-	if err := clientHandshake(conn, cfg.Password); err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
-	_ = conn.SetDeadline(time.Time{})
-	return &Upstream{Conn: conn}, nil
-}
-
-// Status reports the opt-in and power state. With probe it also signs in and
-// reads ServerInit without keeping the session; without it, as while a
-// viewer is attached, an enabled screen is reported available unprobed so
-// Screen Sharing never sees a second client alongside the live one.
-func (s *Service) Status(ctx context.Context, probe bool) Status {
-	status := Status{Platform: runtime.GOOS}
 	cfg, err := LoadConfig(s.stateDir)
 	if err != nil {
 		status.Reason = err.Error()
 		return status
 	}
-	status.Enabled = cfg.Enabled
+	status.Disabled = cfg.Disabled
+	status.Approved = cfg.Approved(deviceID)
 	status.KeepAwake = cfg.KeepAwake()
-	status.Power = readPower()
-	if status.Power != nil {
-		status.Power.KeepingAwake = s.awake.holding()
+	if capability.Supported {
+		status.Power = readPower()
+		if status.Power != nil {
+			status.Power.KeepingAwake = s.awake.holding()
+		}
 	}
-	if !cfg.Enabled {
-		status.Reason = ErrDisabled.Error()
-		return status
-	}
-	if !probe {
-		status.Available = true
-		return status
-	}
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
-	upstream, err := s.Dial(ctx)
-	if err != nil {
-		status.Reason = err.Error()
-		return status
-	}
-	defer upstream.Conn.Close()
-	_ = upstream.Conn.SetDeadline(time.Now().Add(5 * time.Second))
-	// Shared flag: never disconnect another viewer just to probe.
-	if _, err := upstream.Conn.Write([]byte{1}); err != nil {
-		status.Reason = err.Error()
-		return status
-	}
-	init, err := readServerInit(upstream.Conn)
-	if err != nil {
-		status.Reason = err.Error()
-		return status
-	}
-	status.Available = true
-	status.Name, status.Width, status.Height = init.name, init.width, init.height
+	status.Ready = capability.Ready() && status.Approved
 	return status
 }
 
-// Upstream is a signed-in RFB connection awaiting ClientInit.
-type Upstream struct {
-	Conn net.Conn
-}
-
-func serverName() string {
-	if runtime.GOOS == "darwin" {
-		return "Screen Sharing"
+// Enable asks the person at this computer to allow a device, once, and then
+// asks the operating system for any missing permission while they are there.
+func (s *Service) Enable(ctx context.Context, deviceID, deviceName string) error {
+	if !s.backend.Capability(ctx).Supported {
+		return ErrUnsupported
 	}
-	return "The screen's VNC server"
-}
-
-func enableHint() string {
-	if runtime.GOOS == "darwin" {
-		return "Turn on System Settings → General → Sharing → Screen Sharing on this Mac."
+	cfg, err := LoadConfig(s.stateDir)
+	if err != nil {
+		return err
 	}
-	return "Start a VNC server for this screen on that loopback address."
+	if cfg.Disabled {
+		return ErrDisabled
+	}
+	if !cfg.Approved(deviceID) {
+		s.confirm.Lock()
+		allowed, err := s.backend.Confirm(ctx, deviceName)
+		s.confirm.Unlock()
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return ErrDenied
+		}
+		err = s.update(func(cfg *Config) error {
+			if cfg.Disabled {
+				return ErrDisabled
+			}
+			if cfg.Devices == nil {
+				cfg.Devices = map[string]Approval{}
+			}
+			cfg.Devices[deviceID] = Approval{Name: deviceName, ApprovedAt: time.Now().UTC()}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	s.backend.RequestPermissions(ctx)
+	return nil
 }
 
-// Enabled reports the current opt-in, so open viewers end soon after
-// `mewla screen disable`.
-func (s *Service) Enabled() bool {
-	_, err := s.config()
-	return err == nil
+// OpenSettings shows the settings page for a permission on this computer.
+func (s *Service) OpenSettings(ctx context.Context, deviceID, permission string) error {
+	if err := s.allowed(deviceID); err != nil {
+		return err
+	}
+	return s.backend.OpenSettings(ctx, permission)
 }
+
+// SetKeepAwake changes keep-awake for an allowed device.
+func (s *Service) SetKeepAwake(deviceID string, keep bool) error {
+	if err := s.allowed(deviceID); err != nil {
+		return err
+	}
+	return s.update(func(cfg *Config) error {
+		cfg.AllowSleep = !keep
+		return nil
+	})
+}
+
+// Allowed reports whether a device may keep its viewer open.
+func (s *Service) Allowed(deviceID string) bool { return s.allowed(deviceID) == nil }
+
+func (s *Service) allowed(deviceID string) error {
+	cfg, err := LoadConfig(s.stateDir)
+	if err != nil {
+		return err
+	}
+	if cfg.Disabled {
+		return ErrDisabled
+	}
+	if !cfg.Approved(deviceID) {
+		return ErrNotApproved
+	}
+	return nil
+}
+
+// Open starts a capture for an allowed device and returns the viewer's end
+// of an in-process RFB session, positioned right before ClientInit: the
+// caller has already done the version and security handshake.
+func (s *Service) Open(ctx context.Context, deviceID string) (net.Conn, error) {
+	if err := s.allowed(deviceID); err != nil {
+		return nil, err
+	}
+	capability := s.backend.Capability(ctx)
+	if !capability.Supported {
+		return nil, ErrUnsupported
+	}
+	if !capability.Ready() {
+		return nil, ErrPermissions
+	}
+	session, err := s.backend.Start(ctx)
+	if err != nil {
+		return nil, err
+	}
+	viewer, server := net.Pipe()
+	go func() {
+		defer session.Close()
+		defer server.Close()
+		_ = serveRFB(ctx, server, session, computerName())
+	}()
+	return viewer, nil
+}
+
+// Disable is the local kill switch: it blocks every device and forgets their
+// approvals, so each must be allowed again at this computer.
+func (s *Service) Disable() error {
+	return s.update(func(cfg *Config) error {
+		cfg.Disabled = true
+		cfg.Devices = nil
+		return nil
+	})
+}
+
+// EnableLocally lifts the kill switch. Devices still need approval.
+func (s *Service) EnableLocally(allowSleep bool) error {
+	return s.update(func(cfg *Config) error {
+		cfg.Disabled = false
+		cfg.AllowSleep = allowSleep
+		return nil
+	})
+}
+
+// Capability exposes the backend's state for the local CLI.
+func (s *Service) Capability(ctx context.Context) Capability { return s.backend.Capability(ctx) }

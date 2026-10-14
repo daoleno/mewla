@@ -1,55 +1,45 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/screen"
-	"golang.org/x/term"
 )
 
 func runScreenCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprint(stderr, `Usage: mewla screen <enable|disable|status> [flags]
+		fmt.Fprint(stderr, `Usage: mewla screen <status|disable|enable> [flags]
 
-Lets paired phones and browsers view and control this computer's screen.
-Off until you turn it on here. On a Mac it uses Screen Sharing, which must be
-on, with "VNC viewers may control screen with password" set in its Computer
-Settings. Mewla signs in to it on 127.0.0.1 with that password, which stays
-in this computer's Mewla state directory.
+Screen lets paired phones and browsers view and control this computer. A
+device turns it on from the app; this computer then asks once whether to
+allow that device, and the operating system asks for its own permissions.
 
-  enable               Turn screen control on; asks for the VNC password
-  disable              Turn screen control off and forget the password
-  status               Show whether a paired device can open the screen
+  status               Show support, permissions and allowed devices
+  disable              Turn Screen off for every device and forget them
+  enable               Allow devices to ask again after disable
 
 Flags for enable:
-  -password-stdin      Read the VNC password from standard input
-  -address host:port   Loopback RFB address (default 127.0.0.1:5900)
   -allow-sleep         Let this computer sleep; by default it stays awake
-                       (display may sleep) while screen control is on
-
-A Mac laptop still sleeps when its lid is closed without an external display.
-Keep the lid open and the charger connected while you are away.
+                       (the display may sleep) while any device is allowed
 `)
 		return flag.ErrHelp
 	}
 	fs := flag.NewFlagSet("mewla screen "+args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var stateDir, address string
-	var passwordStdin, outputJSON, allowSleep bool
+	var stateDir string
+	var outputJSON, allowSleep bool
 	fs.StringVar(&stateDir, "state-dir", "", "state directory (default: ~/.mewla)")
 	fs.BoolVar(&outputJSON, "json", false, "print JSON")
 	if args[0] == "enable" {
-		fs.BoolVar(&passwordStdin, "password-stdin", false, "read the VNC password from standard input")
-		fs.StringVar(&address, "address", screen.DefaultAddress, "loopback RFB address")
-		fs.BoolVar(&allowSleep, "allow-sleep", false, "let this computer sleep while screen control is on")
+		fs.BoolVar(&allowSleep, "allow-sleep", false, "let this computer sleep while Screen is allowed")
 	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -57,89 +47,72 @@ Keep the lid open and the charger connected while you are away.
 	if fs.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
-	dir := resolveCLIStateDir(stateDir)
+	service := screen.NewService(resolveCLIStateDir(stateDir))
 	switch args[0] {
 	case "enable":
-		if err := screen.ValidateAddress(address); err != nil {
+		if err := service.EnableLocally(allowSleep); err != nil {
 			return err
 		}
-		password, err := readScreenPassword(passwordStdin, stderr)
-		if err != nil {
-			return err
-		}
-		cfg := screen.Config{Enabled: true, Password: password, AllowSleep: allowSleep}
-		if address != screen.DefaultAddress {
-			cfg.Address = address
-		}
-		if err := screen.SaveConfig(dir, cfg); err != nil {
-			return err
-		}
-		fmt.Fprintln(stderr, "Screen control is on for paired devices.")
-		return printScreenStatus(dir, outputJSON)
+		fmt.Fprintln(stderr, "Screen is on. Each device still asks once on this computer.")
+		return printScreenStatus(service, resolveCLIStateDir(stateDir), outputJSON)
 	case "disable":
-		if err := screen.SaveConfig(dir, screen.Config{}); err != nil {
+		if err := service.Disable(); err != nil {
 			return err
 		}
-		fmt.Fprintln(stderr, "Screen control is off.")
+		fmt.Fprintln(stderr, "Screen is off. Open viewers close within seconds, and every device must be allowed again.")
 		return nil
 	case "status":
-		return printScreenStatus(dir, outputJSON)
+		return printScreenStatus(service, resolveCLIStateDir(stateDir), outputJSON)
 	}
 	return fmt.Errorf("unknown screen command %q; see mewla screen --help", args[0])
 }
 
-func readScreenPassword(fromStdin bool, stderr io.Writer) (string, error) {
-	var password string
-	if fromStdin || !term.IsTerminal(int(os.Stdin.Fd())) {
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil && err != io.EOF {
-			return "", err
-		}
-		password = strings.TrimRight(line, "\r\n")
-	} else {
-		fmt.Fprint(stderr, "VNC password from Screen Sharing → Computer Settings (empty if none): ")
-		raw, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Fprintln(stderr)
-		if err != nil {
-			return "", err
-		}
-		password = string(raw)
-	}
-	if len(password) > screen.MaxPasswordLength {
-		return "", fmt.Errorf("VNC passwords are at most %d characters; Screen Sharing ignores the rest", screen.MaxPasswordLength)
-	}
-	return password, nil
-}
-
-func printScreenStatus(dir string, outputJSON bool) error {
+func printScreenStatus(service *screen.Service, dir string, outputJSON bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cfg, err := screen.LoadConfig(dir)
 	if err != nil {
 		return err
 	}
-	status := screen.NewService(dir).Status(ctx, true)
+	capability := service.Capability(ctx)
 	if outputJSON {
-		return json.NewEncoder(os.Stdout).Encode(status)
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"capability": capability, "config": map[string]any{
+			"disabled": cfg.Disabled, "devices": cfg.Devices, "keep_awake": cfg.KeepAwake(),
+		}})
 	}
-	if !status.Enabled {
-		fmt.Fprintln(os.Stdout, "disabled")
+	if !capability.Supported {
+		fmt.Fprintf(os.Stdout, "unsupported: %s\n", capability.Reason)
 		return nil
 	}
-	address := cfg.Address
-	if address == "" {
-		address = screen.DefaultAddress
+	switch {
+	case cfg.Disabled:
+		fmt.Fprintln(os.Stdout, "off (mewla screen enable to allow devices again)")
+	case len(cfg.Devices) == 0:
+		fmt.Fprintln(os.Stdout, "on; no device allowed yet (turn Screen on from the app)")
+	default:
+		fmt.Fprintln(os.Stdout, "on")
 	}
-	fmt.Fprintln(os.Stdout, "enabled")
-	if status.KeepAwake {
-		fmt.Fprintln(os.Stdout, "Keeping this computer awake while screen control is on (display may sleep)")
-	} else {
-		fmt.Fprintln(os.Stdout, "This computer may sleep; viewers cannot reach it while it sleeps")
+	for _, p := range capability.Permissions {
+		state := "granted"
+		if !p.Granted {
+			state = "missing"
+			if p.Guidance != "" {
+				state += ": " + p.Guidance
+			}
+		}
+		fmt.Fprintf(os.Stdout, "  %-20s %s\n", p.Name, state)
 	}
-	if status.Available {
-		fmt.Fprintf(os.Stdout, "Screen Sharing reachable on %s: %q %dx%d\n", address, status.Name, status.Width, status.Height)
-	} else {
-		fmt.Fprintf(os.Stdout, "Not reachable on %s: %s\n", address, status.Reason)
+	ids := make([]string, 0, len(cfg.Devices))
+	for id := range cfg.Devices {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		d := cfg.Devices[id]
+		fmt.Fprintf(os.Stdout, "  allowed: %s (%s, since %s)\n", d.Name, id, d.ApprovedAt.Local().Format("2006-01-02 15:04"))
+	}
+	if cfg.KeepAwake() {
+		fmt.Fprintln(os.Stdout, "  keeping this computer awake (the display may sleep)")
 	}
 	return nil
 }

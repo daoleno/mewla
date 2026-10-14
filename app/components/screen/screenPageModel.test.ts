@@ -4,7 +4,6 @@ import {
   connectionQuality,
   formatStats,
   KEYBOARD_SENTINEL,
-  keepScreenIdentity,
   keyboardEdit,
   NO_MODIFIERS,
   powerSummary,
@@ -50,14 +49,15 @@ describe("sticky modifiers", () => {
 
 describe("power", () => {
   const status = (patch: Partial<ScreenStatus>): ScreenStatus => ({
-    enabled: true, available: true, platform: "darwin", keep_awake: true,
+    supported: true, platform: "darwin", disabled: false, approved: true, ready: true, keep_awake: true,
     power: { source: "ac", percent: 90, keeping_awake: true }, ...patch,
   });
   test("a closed lid outranks every other warning", () => {
     expect(powerWarning(status({ power: { source: "battery", lid_closed: true, keeping_awake: true } }))?.title).toBe("The lid is closed");
   });
   test("sleep allowed, then battery, then nothing", () => {
-    expect(powerWarning(status({ keep_awake: false }))?.title).toBe("This Mac may sleep");
+    expect(powerWarning(status({ keep_awake: false }))?.title).toBe("This computer may sleep");
+    expect(powerWarning(status({ keep_awake: false, approved: false }))).toBeNull();
     expect(powerWarning(status({ power: { source: "battery", percent: 40, keeping_awake: true } }))?.title).toBe("On battery");
     expect(powerWarning(status({}))).toBeNull();
     expect(powerWarning(status({ power: undefined }))).toBeNull();
@@ -86,14 +86,5 @@ describe("viewer messages", () => {
     expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "<script>" }))).toBeNull();
     expect(parseScreenViewerMessage(JSON.stringify({ type: "navigate", url: "https://x" }))).toBeNull();
     expect(parseScreenViewerMessage("not json")).toBeNull();
-  });
-});
-
-describe("status refresh", () => {
-  test("an unprobed refresh keeps the screen's name and size", () => {
-    const base = { enabled: true, available: true, platform: "darwin", keep_awake: true };
-    const probed = { ...base, name: "Studio Mac", width: 3024, height: 1964 };
-    expect(keepScreenIdentity(probed, base)).toEqual({ ...base, name: "Studio Mac", width: 3024, height: 1964 });
-    expect(keepScreenIdentity(null, base)).toEqual(base);
   });
 });
