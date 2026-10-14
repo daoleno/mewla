@@ -30,6 +30,7 @@ import {
   NO_MODIFIERS,
   powerSummary,
   powerWarning,
+  unsupportedScreen,
   spendModifiers,
   tapModifier,
   type ModifierState,
@@ -398,7 +399,8 @@ export function ScreenScreen() {
         <ScrollView contentContainerStyle={[styles.center, styles.setup]}>
           <ScreenSetup status={status} name={title} busy={busy} reason={reason}
             onEnable={() => void enable()} onOpenSettings={(id) => void openSettings(id)}
-            onRestart={() => void restartMewla()} onCheck={() => void connect()} />
+            onRestart={() => void restartMewla()} onCheck={() => void connect()}
+            onChooseComputer={() => router.push("/settings")} />
         </ScrollView>
       ) : null}
       {phase === "checking" && !status ? (
@@ -474,7 +476,7 @@ export function ScreenScreen() {
  * unsupported, turned off at the computer, not yet allowed, or waiting for
  * operating-system permissions.
  */
-function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onRestart, onCheck }: {
+function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onRestart, onCheck, onChooseComputer }: {
   status: ScreenStatus;
   name: string;
   busy: boolean;
@@ -483,11 +485,13 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
   onOpenSettings(permission: string): void;
   onRestart(): void;
   onCheck(): void;
+  onChooseComputer(): void;
 }) {
   const { colors } = useAppTheme();
   if (!status.supported) {
-    return <EmptyState icon="desktop" title="Screen isn't available for this computer yet"
-      detail={status.reason || `${name} can't share its screen with Mewla yet.`} />;
+    const unsupported = unsupportedScreen(status, name, Platform.OS !== "web");
+    return <EmptyState icon="desktop" title={unsupported.title} detail={unsupported.detail}
+      action={unsupported.canChooseComputer ? { label: "Choose a computer", icon: "swap-horizontal", onPress: onChooseComputer } : undefined} />;
   }
   if (status.disabled) {
     return <EmptyState icon="lock" title="Screen is turned off on this computer"

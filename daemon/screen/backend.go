@@ -81,7 +81,7 @@ type Frame struct {
 
 var (
 	// ErrUnsupported means this computer has no Screen backend yet.
-	ErrUnsupported = errors.New("Screen isn't available on this computer yet")
+	ErrUnsupported = errors.New("Screen works only on Macs for now")
 	// ErrPermissions means a required operating-system permission is missing.
 	ErrPermissions = errors.New("Screen needs permissions on this computer")
 )

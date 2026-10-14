@@ -7,13 +7,13 @@ opens no new port and needs no extra password.
 
 ## Which computers
 
-Screen works where Mewla has a screen backend for the operating system.
-Elsewhere the Screen page says **Screen isn't available on this computer yet**,
-and nothing else changes.
+Screen works on Macs for now. On another computer the Screen page says
+**Screen works on Macs for now**; in the app, **Choose a computer** opens
+Settings, where you add the Mewla running on your Mac and switch to it.
 
 | Computer | Status |
 | --- | --- |
-| macOS | In development |
+| macOS 13 or later (Apple Silicon) | Supported |
 | Linux, Windows | Not yet |
 
 ## Turn it on

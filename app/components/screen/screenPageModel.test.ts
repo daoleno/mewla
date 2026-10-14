@@ -10,6 +10,7 @@ import {
   powerWarning,
   spendModifiers,
   tapModifier,
+  unsupportedScreen,
 } from "./screenPageModel";
 import { parseScreenViewerMessage } from "./screenViewerProtocol";
 import type { ScreenStatus } from "../../services/screen";
@@ -66,6 +67,28 @@ describe("power", () => {
     expect(powerSummary({ source: "ac", percent: 90, keeping_awake: true }, true)).toBe("Charger · 90% · Staying awake");
     expect(powerSummary({ source: "battery", percent: 40, keeping_awake: false }, false)).toBe("Battery · 40% · May sleep");
     expect(powerSummary(undefined, true)).toBeNull();
+  });
+});
+
+describe("unsupported computers", () => {
+  const status = (platform: string, reason?: string): ScreenStatus => ({
+    supported: false, platform, reason, disabled: false, approved: false, ready: false, keep_awake: false,
+  });
+  test("away from a Mac, the app points to switching computers", () => {
+    const linux = unsupportedScreen(status("linux", "Screen works only on Macs for now"), "manjaro", true);
+    expect(linux.title).toBe("Screen works on Macs for now");
+    expect(linux.detail).toContain("switch to that computer");
+    expect(linux.canChooseComputer).toBe(true);
+  });
+  test("a browser can't switch, so it says where to go instead", () => {
+    const web = unsupportedScreen(status("linux"), "manjaro", false);
+    expect(web.canChooseComputer).toBe(false);
+    expect(web.detail).toContain("open Mewla on your phone");
+  });
+  test("a Mac that can't start keeps its own reason", () => {
+    const mac = unsupportedScreen(status("darwin", "Screen needs macOS 13 or later"), "MacBook", true);
+    expect(mac.detail).toBe("Screen needs macOS 13 or later");
+    expect(mac.canChooseComputer).toBe(false);
   });
 });
 
