@@ -40,7 +40,6 @@ type Manager struct {
 	connectFlows map[string]*connectFlow
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool
-	cloudflare   *cloudflareCLI
 }
 
 // SetWebOrigins admits web UI origins for browser sign-in returns. Without it,
@@ -59,7 +58,7 @@ func New(dir string) (*Manager, error) {
 	return m, err
 }
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
-	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, cloudflare: newCloudflareCLI(filepath.Join(filepath.Dir(path), "cloudflare"))}
+	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken}
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -139,12 +138,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	}
 	if q.Action == "resources" || q.Action == "read_resource" {
 		return m.mcpResources(parent, q)
-	}
-	// cf installs and signs in on its own time, outside the manager lock.
-	if strings.HasPrefix(q.Action, "cloudflare_") {
-		ctx, cancel := context.WithTimeout(parent, 30*time.Second)
-		defer cancel()
-		return m.cloudflare.handle(ctx, q)
 	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()

@@ -1735,7 +1735,7 @@ Edit the supplied repository and cwd directly; preserve unrelated changes. Use a
 Scratch goes in TMPDIR/TMP/TEMP, large builds in $MEWLA_BUILD_TMPDIR. Keep processes and resources inside this Session, reuse named resources, report resource limits rather than bypassing them, and clean up owned scratch and children before completion.
 Return the report in the Worker result. Persist it only where the brief names a path; Brain reports go in the Brain worklog/, never in the project repository.
 Run risk-proportionate checks and the required repository gates; rerun only after edits, failures or open concerns, and report what stays unverified.
-Shared tools: mewla connections --help (plugins; Cloudflare via cf).
+Shared tools: mewla connections --help.
 Progress: run "$MEWLA_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; MEWLA_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
   --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
   optional: --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease <seconds> (running status lapses to unknown after the lease; renew it during long quiet steps)
