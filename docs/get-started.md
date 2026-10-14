@@ -9,8 +9,8 @@ cover the alternatives.
 ![Six Sessions in tmux on your computer (codex, claude, grok, pi, opencode and a shell), each landing in the phone's Sessions list](assets/hero.svg)
 
 - **The daemon** (`mewla`) runs on your computer next to your repositories,
-  `tmux` and agent CLIs. It owns Sessions, Brain, Work and pairing. One binary,
-  no cloud service.
+  `tmux` and agent CLIs. It owns Sessions, Brain, Work and pairing. One binary;
+  no cloud service is required, and remote access is an opt-in sign-in.
 - **The app** on Android or iOS connects to one daemon at a time. The daemon
   also serves it as a web page.
 - **Your agent CLIs** (Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode)
