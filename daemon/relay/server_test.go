@@ -107,8 +107,8 @@ func TestAdmissionAndStreamTicketsAreOneTimeAndBounded(t *testing.T) {
 	defer conflictPeer.Close()
 	if _, err := server.registerRoute(conflictControl, linkproto.Message{
 		RouteID:         route.routeID,
-		DaemonPublicKey: route.daemonPublicKey,
-	}); err == nil || !strings.Contains(err.Error(), "already connected") {
+		DaemonPublicKey: strings.Repeat("e", 64),
+	}, nil); err == nil || !strings.Contains(err.Error(), "already connected") {
 		t.Fatalf("route conflict error=%v", err)
 	}
 	alias := strings.Repeat("3", 32)
