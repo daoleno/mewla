@@ -158,10 +158,10 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "On Linux the unit starts before an interactive login only when the user")
 	fmt.Fprintln(w, "manager lingers (loginctl enable-linger). On macOS the LaunchAgent starts")
 	fmt.Fprintln(w, "when you log in, in the session that owns the screen, and runs a copy of")
-	fmt.Fprintln(w, "the binary in ~/Applications/Mewla.app; after mewla update, run the install")
-	fmt.Fprintln(w, "command it prints.")
-	fmt.Fprintln(w, "MEWLA_CODESIGN_IDENTITY and MEWLA_CODESIGN_KEYCHAIN pick the signing identity")
-	fmt.Fprintln(w, "(default: ad hoc).")
+	fmt.Fprintln(w, "the binary in ~/Applications/Mewla.app, which mewla update refreshes. The app")
+	fmt.Fprintln(w, "is signed with an identity made on this Mac (keychain mewla-signing), so")
+	fmt.Fprintln(w, "privacy permissions survive updates; MEWLA_CODESIGN_IDENTITY and")
+	fmt.Fprintln(w, "MEWLA_CODESIGN_KEYCHAIN pick another identity. Uninstall keeps the identity.")
 	fmt.Fprintln(w, "`mewla boot status` always reads the installed unit configuration.")
 }
 
@@ -436,6 +436,8 @@ type bootMetadata struct {
 	WorkDir  string `json:"working_dir"`
 	PathEnv  string `json:"path"`
 	Home     string `json:"home"`
+	// Signing says how macOS Mewla.app was signed, for boot status.
+	Signing string `json:"signing,omitempty"`
 }
 
 func bootMetadataFor(config bootConfig) bootMetadata {

@@ -737,9 +737,10 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 	}
 	if bootGOOS == "darwin" {
 		// The boot daemon runs its own copy inside Mewla.app.
-		if command, ok := bootLaunchdReinstallCommand(executable); ok {
-			fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. To move Mewla.app to it and restart, run:\n  %s\n", Version, candidate.Version, command)
-			return nil
+		if _, ok := bootLaunchdReinstallArgs(); ok {
+			fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Restarting Mewla now to apply it: Mewla.app is replaced and its background service restarts; tmux and Worker sessions keep running.\n", Version, candidate.Version)
+			_, err := bootLaunchdApplyUpdate(executable, os.Stdout, stderr)
+			return err
 		}
 	}
 	fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Stop and start mewla to use it.\n", Version, candidate.Version)

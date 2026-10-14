@@ -31,8 +31,10 @@ On macOS the permissions are **Screen Recording** (to see the screen) and
 **Accessibility** (to click and type), both under **System Settings → Privacy
 & Security**. When `mewla boot install` runs Mewla, both lists show **Mewla**
 with its icon. Without it they show `mewla` or the terminal app that started
-it. macOS ties the permissions to the exact Mewla build: after an update, turn
-**Mewla** off and on again in both lists.
+it. You grant them once: Mewla signs itself with an identity kept on this Mac,
+so they stay granted after updates. If `mewla boot status` reports an ad hoc
+signature, macOS asks again after each update; turn **Mewla** off and on in
+both lists.
 
 To start Mewla when the computer starts, so Screen is there after a restart,
 see [Keep it running](install-daemon.md#keep-it-running).
