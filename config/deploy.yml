@@ -73,7 +73,7 @@ accessories:
     host: 167.114.116.27
     cmd: >-
       /usr/local/bin/mewla-relay
-      -client-addr=:9443
+      -client-addr=:443
       -control-addr=:8443
       -operator-addr=:8080
       -tls-cert=/run/mewla-link/relay.crt
@@ -98,11 +98,16 @@ accessories:
     options:
       # The uploaded files belong to the host's ubuntu user.
       user: "1000:1000"
-      # Published through Docker's DNAT, so the relay sees real IPv4 client
-      # addresses (no AAAA records). Metrics only on the host's loopback.
+      # Container ports equal host ports because the host's DOCKER-USER
+      # guard (/etc/ufw/after.rules) matches ports after DNAT and allows
+      # only 22, 80, 443 and 8443; Docker lets non-root bind low ports in
+      # the container. IPv4 only, through Docker's DNAT, so the relay sees
+      # real client addresses; IPv6 would go through docker-proxy and show
+      # one gateway address (there are no AAAA records). Metrics only on
+      # the host's loopback.
       publish:
-        - "443:9443"
-        - "8443:8443"
+        - "0.0.0.0:443:443"
+        - "0.0.0.0:8443:8443"
         - "127.0.0.1:9180:8080"
 
   # HTTPS for the account service behind the relay's SNI route.
