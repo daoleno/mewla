@@ -26,7 +26,7 @@ func runLoginCommand(args []string, stderr io.Writer) error {
 	stateDir := fs.String("state-dir", "", "state directory for daemon identity and trusted devices")
 	service := fs.String("service", "", "remote access service URL (default: the built-in service)")
 	serviceCA := fs.String("service-ca", "", "extra CA certificate file for the service's HTTPS (development only)")
-	name := fs.String("name", "", "name for this computer in its address (default: its hostname)")
+	name := fs.String("name", "", "word for this computer's address; renames it when already signed in (default: random words)")
 	noBrowser := fs.Bool("no-browser", false, "do not open the sign-in page automatically")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla login [flags]")
@@ -48,6 +48,13 @@ func runLoginCommand(args []string, stderr io.Writer) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if strings.TrimSpace(*name) != "" && strings.TrimSpace(*service) == "" {
+		if current, ok, err := remote.LoadConfig(resolvedStateDir); err != nil {
+			return err
+		} else if ok {
+			return remoteRename(ctx, stderr, resolvedStateDir, current, *name)
+		}
+	}
 	if _, err := remoteLogin(ctx, stderr, resolvedStateDir, remoteLoginOptions{
 		serviceURL:    *service,
 		serviceCAFile: *serviceCA,
@@ -106,11 +113,9 @@ func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remo
 	if err != nil {
 		return remote.Config{}, err
 	}
-	machineName := strings.TrimSpace(options.machineName)
-	if machineName == "" {
-		machineName, _ = os.Hostname()
-	}
-	start, err := client.StartLogin(ctx, machineName, identity.RouteID)
+	// An empty name lets the service pick random words: the address lands in
+	// public certificate logs, so it never defaults to the hostname.
+	start, err := client.StartLogin(ctx, strings.TrimSpace(options.machineName), identity.RouteID)
 	if err != nil {
 		return remote.Config{}, fmt.Errorf("start sign-in: %w", err)
 	}
@@ -161,6 +166,41 @@ func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remo
 		fmt.Fprintf(w, "This computer's address: %s\n", config.URL())
 		return config, nil
 	}
+}
+
+// remoteRename moves a signed-in computer to a new address. Paired phones
+// keep working; a browser pairs again at the new address because its key
+// belongs to the old one.
+func remoteRename(ctx context.Context, w io.Writer, stateDir string, config remote.Config, name string) error {
+	authManager, err := auth.NewManager(stateDir)
+	if err != nil {
+		return fmt.Errorf("initialize auth manager: %w", err)
+	}
+	client, err := remote.NewClient(config.ServiceURL, config.ServiceCAPEM, authManager)
+	if err != nil {
+		return err
+	}
+	machine, err := client.Rename(ctx, strings.TrimSpace(name))
+	if errors.Is(err, remote.ErrSignedOut) {
+		return errors.New("this computer is no longer signed in; run mewla login without -name first")
+	}
+	if err != nil {
+		return fmt.Errorf("rename at the service: %w", err)
+	}
+	previous := config.URL()
+	config.Machine = machine
+	if err := remote.SaveConfig(stateDir, config); err != nil {
+		return fmt.Errorf("save remote access sign-in: %w", err)
+	}
+	if book, err := addressbook.New(stateDir); err == nil && previous != config.URL() {
+		_ = book.Remove(previous)
+		_, _ = book.Add(config.URL(), addressbook.SourceRemote)
+	}
+	fmt.Fprintf(w, "This computer's address: %s\n", config.URL())
+	if previous != config.URL() {
+		fmt.Fprintf(w, "%s no longer reaches it. Paired phones keep working; browsers pair again at the new address.\n", previous)
+	}
+	return nil
 }
 
 func runLogoutCommand(args []string, stderr io.Writer) error {

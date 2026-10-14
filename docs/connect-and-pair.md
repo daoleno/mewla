@@ -205,7 +205,7 @@ app's Settings only forgets it on that phone; it does not revoke the key.
 ## Remote access
 
 `mewla login` gives this computer an HTTPS address such as
-`https://studio-3f9a2c.<service domain>`. Your phone and any browser reach it
+`https://quiet-otter-3f9a.<service domain>`. Your phone and any browser reach it
 from any network; the computer only connects outward, so there is no port to
 open, no VPN and no domain to buy. The first time you start `mewla` by hand it
 offers the same choice.
@@ -213,8 +213,15 @@ offers the same choice.
 ```sh
 mewla login     # shows a page and a code; sign in with GitHub there
 mewla pair      # the phone QR now uses remote access
+mewla login -name studio   # rename the address, e.g. https://studio-c0ffee.<service domain>
 mewla logout    # turn it off
 ```
+
+The address starts with two random words, never your computer's hostname,
+because every certificate is published (see below). Rename it with
+`mewla login -name <word>`; a short random suffix keeps it unique. Paired
+phones keep working after a rename. A browser pairs again at the new address,
+because its key belongs to the address it paired at.
 
 - **The account finds the computer; it does not unlock it.** Every phone or
   browser still pairs once. A browser shows a number and the computer's
@@ -227,7 +234,8 @@ mewla logout    # turn it off
   key, not the certificate authority, so it stays private even from the
   service operator. Browsers rely on the public certificate system like any
   website; certificates for every hostname are public in Certificate
-  Transparency logs, so the hostname is not a secret.
+  Transparency logs, so the hostname is not a secret. Pick a name you are
+  happy to publish.
 - `mewla address list` and `mewla doctor` show the address, the relay
   connection and the certificate.
 

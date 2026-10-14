@@ -272,7 +272,10 @@ Trust boundaries:
   are not exposed to that. Say so in user-facing docs; monitor CT logs.
 - Hostnames appear in Certificate Transparency logs. They are addresses, not
   secrets; daemons limit unauthenticated streams per route and the relay
-  limits handshakes and streams per source IP.
+  limits handshakes and streams per source IP. So a label never comes from
+  the computer: without a name the service picks `adjective-noun-<4 hex>`;
+  `mewla login -name <word>` (`PUT /v1/machine/name`) sets `<word>-<6 hex>`
+  and keeps the machine and route, so phones are unaffected.
 
 Relay flags for hosted mode: `-grant-public-key-file` (hex Ed25519 keys, one
 per line), `-sni-route host=addr` (repeatable), `-max-client-handshakes-per-ip`

@@ -209,6 +209,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/login/poll", s.requireSignature(s.handleLoginPoll))
 	mux.HandleFunc("GET /v1/machine", s.requireSignature(s.handleGetMachine))
 	mux.HandleFunc("DELETE /v1/machine", s.requireSignature(s.handleDeleteMachine))
+	mux.HandleFunc("PUT /v1/machine/name", s.requireSignature(s.handleRenameMachine))
 	mux.HandleFunc("PUT /v1/machine/acme-challenge", s.requireSignature(s.handleACMEChallenge))
 	mux.HandleFunc("DELETE /v1/machine/acme-challenge", s.requireSignature(s.handleACMEChallenge))
 	if s.config.DeviceHandler != nil {
@@ -498,6 +499,41 @@ func (s *Service) handleGetMachine(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
+// handleRenameMachine gives the machine a new hostname label: from the
+// requested name, or a fresh random one when the name is empty.
+func (s *Service) handleRenameMachine(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Name string `json:"name"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	name, ok := cleanMachineName(request.Name)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid name")
+		return
+	}
+	if _, _, ok := s.currentMachine(w, r); !ok {
+		return
+	}
+	machine, err := s.config.Store.renameMachine(r.Context(), daemonKey(r), name, newLabel)
+	if err != nil {
+		s.internalError(w, "rename machine", err)
+		return
+	}
+	machine, account, ok := s.currentMachine(w, r)
+	if !ok {
+		return
+	}
+	s.config.Logf("account: machine renamed: machine=%s label=%s", machine.ID, machine.Label)
+	info, err := s.machineInfo(machine, account)
+	if err != nil {
+		s.internalError(w, "sign grant", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
 func (s *Service) handleDeleteMachine(w http.ResponseWriter, r *http.Request) {
 	machine, err := s.config.Store.deleteMachine(r.Context(), daemonKey(r))
 	if errors.Is(err, errNotFound) {
@@ -656,11 +692,12 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-// cleanMachineName trims a display name; empty becomes "mewla".
+// cleanMachineName trims a display name. Empty means "pick a random
+// label": the computer's own hostname must never reach CT logs by default.
 func cleanMachineName(name string) (string, bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "mewla", true
+		return "", true
 	}
 	if len(name) > maxMachineNameLength {
 		return "", false
@@ -673,8 +710,12 @@ func cleanMachineName(name string) (string, bool) {
 	return name, true
 }
 
-// newLabel builds "<sanitized name, <=20 chars>-<6 random hex>".
+// newLabel builds "<sanitized name, <=20 chars>-<6 random hex>" for a chosen
+// name, and "<word>-<word>-<4 random hex>" when no name was chosen.
 func newLabel(name string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return randomLabel()
+	}
 	var builder strings.Builder
 	lastHyphen := true
 	for _, character := range strings.ToLower(name) {
