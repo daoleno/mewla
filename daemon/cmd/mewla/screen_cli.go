@@ -11,10 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/screen"
 )
 
 func runScreenCommand(args []string, stderr io.Writer) error {
+	if len(args) == 1 && args[0] == "preflight" {
+		// Internal: the daemon asks a fresh process for permission state,
+		// since macOS keeps answering a running process from its start.
+		return json.NewEncoder(os.Stdout).Encode(screen.ProcessPermissions())
+	}
 	if len(args) == 0 || isHelpArg(args[0]) {
 		fmt.Fprint(stderr, `Usage: mewla screen <status|disable|enable> [flags]
 
@@ -74,7 +80,13 @@ func printScreenStatus(service *screen.Service, dir string, outputJSON bool) err
 	if err != nil {
 		return err
 	}
-	capability := service.Capability(ctx)
+	// Permissions belong to the daemon's process, not this command's (which
+	// may run over SSH or in another terminal app), so ask the daemon.
+	capability, live := daemonScreenCapability(dir)
+	if !live {
+		capability = service.Capability(ctx)
+		capability.Permissions = nil
+	}
 	if outputJSON {
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{"capability": capability, "config": map[string]any{
 			"disabled": cfg.Disabled, "devices": cfg.Devices, "keep_awake": cfg.KeepAwake(),
@@ -92,11 +104,16 @@ func printScreenStatus(service *screen.Service, dir string, outputJSON bool) err
 	default:
 		fmt.Fprintln(os.Stdout, "on")
 	}
+	if !live {
+		fmt.Fprintln(os.Stdout, "  permissions: unknown (Mewla isn't running)")
+	}
 	for _, p := range capability.Permissions {
 		state := "granted"
 		if !p.Granted {
 			state = "missing"
-			if p.Guidance != "" {
+			if p.RestartRequired {
+				state = "granted; restart Mewla to apply"
+			} else if p.Guidance != "" {
 				state += ": " + p.Guidance
 			}
 		}
@@ -115,4 +132,17 @@ func printScreenStatus(service *screen.Service, dir string, outputJSON bool) err
 		fmt.Fprintln(os.Stdout, "  keeping this computer awake (the display may sleep)")
 	}
 	return nil
+}
+
+// daemonScreenCapability asks the running daemon for its Screen capability.
+func daemonScreenCapability(stateDir string) (screen.Capability, bool) {
+	socketPath, err := control.DefaultSocketPath(stateDir)
+	if err != nil {
+		return screen.Capability{}, false
+	}
+	response, err := control.CallWithTimeout(socketPath, control.Request{Type: "screen_capability"}, 15*time.Second)
+	if err != nil || !response.OK || response.ScreenCapability == nil {
+		return screen.Capability{}, false
+	}
+	return *response.ScreenCapability, true
 }

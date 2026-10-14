@@ -62,6 +62,7 @@ func (s *Server) SetScreen(service *screen.Service) { s.screen = service }
 //	{"action":"enable"}                              ask the person at the computer to allow this device
 //	{"action":"open_settings","permission":"<id>"}   show a permission's settings page on the computer
 //	{"keep_awake":true|false}                        change keep-awake
+//	{"action":"restart"}                             restart Mewla to apply a permission (202)
 //
 // Enable waits for the answer on the computer, up to a few minutes.
 func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +106,12 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 			err = s.screen.OpenSettings(ctx, device.ID, body.Permission)
 		case body.Action == "" && body.KeepAwake != nil:
 			err = s.screen.SetKeepAwake(device.ID, *body.KeepAwake)
+		case body.Action == "restart":
+			if err = s.screen.Restart(device.ID); err == nil {
+				w.WriteHeader(http.StatusAccepted)
+				_ = json.NewEncoder(w).Encode(map[string]bool{"restarting": true})
+				return
+			}
 		default:
 			http.Error(w, "Invalid screen request", http.StatusBadRequest)
 			return

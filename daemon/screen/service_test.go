@@ -4,7 +4,38 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
+
+func TestRestartOnlyForAllowedDevicesWhenSupervised(t *testing.T) {
+	ctx := context.Background()
+	service := NewServiceWith(t.TempDir(), NewFakeBackend(64, 48))
+	if err := service.Enable(ctx, "phone", "Pixel"); err != nil {
+		t.Fatal(err)
+	}
+	if service.Status(ctx, "phone").CanRestart {
+		t.Fatal("an unsupervised daemon offered restart")
+	}
+	if err := service.Restart("phone"); !errors.Is(err, ErrNoRestart) {
+		t.Fatalf("unsupervised restart = %v", err)
+	}
+	restarted := make(chan struct{})
+	service.SetRestart(func() { close(restarted) })
+	if !service.Status(ctx, "phone").CanRestart {
+		t.Fatal("a supervised daemon did not offer restart")
+	}
+	if err := service.Restart("stranger"); !errors.Is(err, ErrNotApproved) {
+		t.Fatalf("an unapproved device restarted Mewla: %v", err)
+	}
+	if err := service.Restart("phone"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-restarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("restart never ran")
+	}
+}
 
 func TestApprovalIsPerDeviceAndAskedAtTheComputer(t *testing.T) {
 	ctx := context.Background()

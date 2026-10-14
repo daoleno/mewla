@@ -13,6 +13,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/watch"
@@ -114,6 +115,7 @@ type Response struct {
 	Executor           *Executor                                `json:"executor,omitempty"`
 	Executors          []Executor                               `json:"executors,omitempty"`
 	Context            any                                      `json:"context,omitempty"`
+	ScreenCapability   *screen.Capability                       `json:"screen_capability,omitempty"`
 	Housekeeping       any                                      `json:"housekeeping,omitempty"`
 	Playbooks          any                                      `json:"playbooks,omitempty"`
 	Text               string                                   `json:"text,omitempty"`

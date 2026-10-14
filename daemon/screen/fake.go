@@ -21,6 +21,7 @@ type FakeBackend struct {
 	version   uint64
 	pointer   image.Point
 	clicks    []image.Point
+	wheels    int
 	keys      []uint32
 	Pointers  []FakePointer
 	Keys      []FakeKey
@@ -144,6 +145,9 @@ func (s *fakeSession) draw() {
 		p := image.Pt(20+(i%40)*18, 20+(i/40)*18)
 		square(p, 7, color.RGBA{R: uint8(k * 37), G: 255, B: uint8(k * 91), A: 255})
 	}
+	for i := 0; i < f.wheels && i < 60; i++ {
+		square(image.Pt(f.Width-12, 12+i*12), 5, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+	}
 	square(f.pointer, 4, color.RGBA{A: 255})
 }
 
@@ -155,6 +159,9 @@ func (s *fakeSession) Pointer(x, y int, buttons uint8) error {
 	f.pointer = image.Pt(x, y)
 	if buttons&1 != 0 {
 		f.clicks = append(f.clicks, f.pointer)
+	}
+	if buttons&(8|16|32|64) != 0 {
+		f.wheels++
 	}
 	f.bump()
 	return nil

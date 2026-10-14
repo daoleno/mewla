@@ -31,3 +31,6 @@ func (g grantingFake) OpenSettings(ctx context.Context, permission string) error
 }
 
 func computerName() string { return "Fake screen" }
+
+// ProcessPermissions has nothing to report without a permission model.
+func ProcessPermissions() map[string]bool { return nil }

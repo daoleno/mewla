@@ -10,3 +10,6 @@ func computerName() string {
 	name, _ := os.Hostname()
 	return name
 }
+
+// ProcessPermissions has nothing to report without a permission model.
+func ProcessPermissions() map[string]bool { return nil }

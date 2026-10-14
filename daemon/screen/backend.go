@@ -53,6 +53,9 @@ type Permission struct {
 	Guidance string `json:"guidance,omitempty"`
 	// CanOpen means OpenSettings can show the right settings page.
 	CanOpen bool `json:"can_open,omitempty"`
+	// RestartRequired means the grant exists but takes effect only after
+	// Mewla restarts.
+	RestartRequired bool `json:"restart_required,omitempty"`
 }
 
 // Session is one live capture of a display.

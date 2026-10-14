@@ -20,6 +20,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/screen"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -67,6 +68,7 @@ type controlApp struct {
 	brainService      *brain.Service
 	calendarStore     *calendar.Store
 	calendarScheduler *calendar.Scheduler
+	screen            *screen.Service
 	profiles          *modelprofiles.Owner
 	telegram          telegramControlManager
 	threadRuntimeSet  func(string, modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error)
@@ -187,6 +189,14 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
 		}
 		return control.Response{OK: true, Workspace: a.brainStore.WorkspacePath()}
+	case "screen_capability":
+		if a == nil || a.screen == nil {
+			return control.ErrorResponse("screen_unavailable", "Screen is not running.")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		capability := a.screen.Capability(ctx)
+		return control.Response{OK: true, ScreenCapability: &capability}
 	case "calendar_list":
 		if a == nil || a.calendarStore == nil {
 			return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")

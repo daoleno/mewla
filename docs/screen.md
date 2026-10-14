@@ -24,11 +24,13 @@ and nothing else changes.
 3. If the computer needs permissions, the Screen page lists them, and the
    operating system shows its own prompts. Grant them at the computer, or tap
    **Open settings** to show the right settings page there, then tap **Check
-   again**.
+   again**. Some permissions apply only after Mewla restarts; the page then
+   shows **Restart Mewla**, which restarts it on the computer and reconnects.
 
 On macOS the permissions are **Screen Recording** (to see the screen) and
 **Accessibility** (to click and type), both under **System Settings → Privacy
-& Security**.
+& Security**. macOS ties them to the exact Mewla build: after an update, turn
+`mewla` off and on again in both lists.
 
 To start Mewla when the computer starts, so Screen is there after a restart,
 see [Keep it running](install-daemon.md#keep-it-running).
@@ -53,8 +55,9 @@ press and drag, drags.
 The bar under the screen has the keyboard, the ⌘ ⌃ ⌥ ⇧ modifiers, Esc, Tab,
 the arrows, Delete and Return, then common shortcuts. Tap a modifier once to
 apply it to the next key, tap it twice to hold it, and a third time to release
-it. To type Chinese or another language, switch the computer's input source
-(⌃ Space on macOS); the phone sends keys, not composed text.
+it. Text you type with the phone's keyboard, including Chinese and accented
+letters, arrives as typed, whatever input source the computer uses. Keys
+pressed with ⌘, ⌃ or ⌥ arrive as shortcuts.
 
 The view rotates to landscape on this page only. The badge in the corner shows
 the network round trip, the time from your tap until the screen redraws,
