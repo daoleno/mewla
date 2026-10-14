@@ -609,6 +609,7 @@ func (s *Server) revokeAuthenticatedDevice(deviceID string) {
 	for _, work := range revoked {
 		s.completeClientDetach(work)
 	}
+	s.forgetUnpairedScreenDevices()
 }
 
 func (s *Server) shutdownAuthenticatedClients() {

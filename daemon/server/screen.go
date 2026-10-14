@@ -54,7 +54,22 @@ func (c *screenControllers) release(owner *screenController) {
 	}
 }
 
-func (s *Server) SetScreen(service *screen.Service) { s.screen = service }
+func (s *Server) SetScreen(service *screen.Service) {
+	s.screen = service
+	// Devices revoked while Mewla was stopped.
+	s.forgetUnpairedScreenDevices()
+}
+
+// forgetUnpairedScreenDevices drops Screen approvals of devices that are no
+// longer paired.
+func (s *Server) forgetUnpairedScreenDevices() {
+	if s.screen == nil || s.auth == nil {
+		return
+	}
+	if err := s.screen.Forget(s.auth.IsDeviceTrusted); err != nil {
+		log.Printf("screen: forget revoked devices: %v", err)
+	}
+}
 
 // handleScreen reports this computer's Screen support, permissions and the
 // asking device's approval (GET), or runs one action (POST):
