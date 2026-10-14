@@ -37,7 +37,11 @@ Credentials are read from a hidden terminal prompt; --credential-stdin supports 
 import-gh explicitly copies the current github.com gh login into this daemon's private vault.
 policy --id account --tool name --allow grants future calls to that tool; only change on explicit user consent.
 policy --id account --tools a,b,c [--allow] sets every listed tool at once, all or none; same explicit consent.
-Never send messages or make updates without task-specific user authorization, even when a tool is enabled.`)
+Never send messages or make updates without task-specific user authorization, even when a tool is enabled.
+Cloudflare: use the cf CLI in the shell once Extensions > Cloudflare has signed this machine in (cf auth whoami shows the account).
+Find a command first with cf cli search "<task>", keeping the query anonymous (no names, domains or IDs); check cf schema <command> or --dry-run, then run it. Output is JSON.
+The sign-in is shared by every agent on this machine, with no per-command approval: deleting resources, changing DNS, or creating or revoking tokens needs the user's task-specific authorization. Never pass --force without it; without it a delete prints Aborted. and exits 0.
+cf saves the chosen account in .cloudflare/ in the working directory: keep it out of commits, or set CLOUDFLARE_ACCOUNT_ID.`)
 		return flag.ErrHelp
 	}
 	action := args[0]
