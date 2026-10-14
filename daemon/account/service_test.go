@@ -759,7 +759,7 @@ func TestRenameMachine(t *testing.T) {
 	if !strings.HasPrefix(after.Label, "studio-") || after.RouteID != route || after.MachineID != before.MachineID {
 		t.Fatalf("renamed machine = %#v", after)
 	}
-	grant, err := linkproto.VerifyRouteGrant([]ed25519.PublicKey{h.public}, after.Grant, time.Now())
+	grant, err := linkproto.VerifyRouteGrant([]ed25519.PublicKey{h.public}, after.Grant, h.clock.Now())
 	if err != nil || grant.Label != after.Label || after.Hostname != after.Label+".link.example.com" {
 		t.Fatalf("grant=%#v err=%v hostname=%s", grant, err, after.Hostname)
 	}
@@ -779,5 +779,40 @@ func TestRenameMachine(t *testing.T) {
 	h.clock.Advance(25 * time.Hour)
 	if status, raw := h.call(daemon, http.MethodPut, "/v1/machine/name", map[string]string{"name": "studio"}); status != http.StatusOK {
 		t.Fatalf("rename the next day status=%d body=%s", status, raw)
+	}
+}
+
+func TestLabelsAreNeverHandedOutAgain(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	renamed := newDaemon(t)
+	old := h.login(renamed, "", newRouteID(t)).Label
+	attempts := []string{old, "fresh-000001"}
+	machine, err := h.store.renameMachine(ctx, renamed.PublicKeyHex(), "fresh", func(string) (string, error) {
+		next := attempts[0]
+		attempts = attempts[1:]
+		return next, nil
+	})
+	if err != nil || machine.Label != "fresh-000001" {
+		t.Fatalf("rename got %q err=%v; it must skip its own previous label", machine.Label, err)
+	}
+	if _, err := h.store.renameMachine(ctx, renamed.PublicKeyHex(), "again", func(string) (string, error) { return old, nil }); err == nil {
+		t.Fatalf("label %s was handed out again after a rename", old)
+	}
+
+	signedOut := newDaemon(t)
+	gone := h.login(signedOut, "", newRouteID(t)).Label
+	if status, raw := h.call(signedOut, http.MethodDelete, "/v1/machine", nil); status != http.StatusOK && status != http.StatusNoContent {
+		t.Fatalf("logout status=%d body=%s", status, raw)
+	}
+	tx, err := h.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for _, label := range []string{old, gone} {
+		if taken, err := labelTaken(ctx, tx, label); err != nil || !taken {
+			t.Fatalf("retired label %s taken=%v err=%v", label, taken, err)
+		}
 	}
 }

@@ -287,7 +287,10 @@ Trust boundaries:
   terminal. So a label never comes from
   the computer: without a name the service picks `adjective-noun-<4 hex>`;
   `mewla login -name <word>` (`PUT /v1/machine/name`) sets `<word>-<6 hex>`
-  and keeps the machine and route, so phones are unaffected.
+  and keeps the machine and route, so phones are unaffected. A label is a
+  browser origin, so labels released by a rename or logout are kept in
+  `retired_labels` and never assigned again: the next holder could otherwise
+  read an earlier browser's stored device key.
 
 Relay flags for hosted mode: `-grant-public-key-file` (hex Ed25519 keys, one
 per line), `-sni-route host=addr` (repeatable), `-max-client-handshakes-per-ip`
@@ -384,7 +387,10 @@ Before switching CA, publish CAA for the client domain that allows it:
    The relay's per-IP limits need real client addresses. Docker's userland
    proxy (IPv6, and some setups) shows every client as one gateway address;
    check `mewla_link_capacity_used{resource="clients_per_ip"}` after launch,
-   and run the relay with `network_mode: host` if it does.
+   and run the relay with `network_mode: host` if it does. The address also
+   reaches daemons as `client_addr`: behind such a proxy every computer's
+   enrollment limit, stream fairness and per-IP route share collapse into
+   one bucket that a single client exhausts for everyone.
 7. Build release daemons with
    `-ldflags "-X github.com/daoleno/mewla/daemon/remote.DefaultServiceURL=https://account.<domain>"`.
    Until then, `MEWLA_REMOTE_SERVICE_URL` or `mewla login -service` selects it.
