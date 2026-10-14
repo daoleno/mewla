@@ -72,6 +72,14 @@ const onloraAppClientID = "mewla"
 
 var onloraScopes = []string{"projects", "generate", "publish", "offline_access"}
 
+// Cloudflare's official remote MCP server: search, execute and docs over the
+// whole Cloudflare API. It registers Mewla on the first connect. Mewla asks
+// only for the scopes every grant needs; Cloudflare's consent page picks the
+// rest, read-only unless the person chooses more.
+const cloudflareMCP = "https://mcp.cloudflare.com/mcp"
+
+var cloudflareScopes = []string{"user:read", "account:read", "offline_access"}
+
 // nativeRedirect reports a return address that OpenID Connect registration
 // calls native: an app scheme or an http loopback address. Servers that follow
 // it, such as Onlora's, refuse those addresses for the default web type.
@@ -153,16 +161,20 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if callback == "" && in.Mobile {
 		callback = NativeCallback
 	}
-	if !ok && callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora" || in.Integration == "mcp") {
+	if !ok && callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora" || in.Integration == "cloudflare" || in.Integration == "mcp") {
 		client.RedirectURL = callback
 	} else if !ok {
 		return Response{}, errors.New("Sign-in is not set up for this service yet.")
 	}
-	if callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora") {
+	if callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora" || in.Integration == "cloudflare") {
 		client = OAuthClientConfig{RedirectURL: callback}
 	}
 	if in.Integration == "onlora" && callback == NativeCallback {
 		client.ClientID = onloraAppClientID
+	}
+	// Cloudflare registers only https and loopback returns, never mewla://.
+	if in.Integration == "cloudflare" && client.RedirectURL == NativeCallback {
+		return Response{}, errors.New("Cloudflare doesn't accept the Mewla app's return address yet. Connect Cloudflare from Mewla's web UI on this server.")
 	}
 	// A registered app that returns only to the Mewla app (Slack's publisher
 	// app) can't bring a web UI sign-in back; say so before the browser leaves.
@@ -182,6 +194,8 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		endpoint = "https://mcp.linear.app/mcp"
 	case "onlora":
 		endpoint = onloraMCP
+	case "cloudflare":
+		endpoint = cloudflareMCP
 	case "mcp":
 	default:
 		return Response{}, errors.New("OAuth is not supported for this plugin")
@@ -218,6 +232,8 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 			// one of them, and offline_access keeps the sign-in past the hour.
 			// What Brain may change is still each tool's own grant.
 			r.Account.Scopes = append([]string(nil), onloraScopes...)
+		} else if in.Integration == "cloudflare" {
+			r.Account.Scopes = append([]string(nil), cloudflareScopes...)
 		} else {
 			// Ask the provider for its normal read scope. Writes require a separate
 			// connect action requesting them, then the usual per-tool grant.

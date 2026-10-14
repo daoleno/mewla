@@ -9,14 +9,17 @@ import (
 // never grant anything. Grants still fingerprint the discovered full definition,
 // and invocation rechecks it. Unknown/new tools require individual review.
 var officialReads = map[string]map[string]bool{
-	"notion": names("notion-search", "notion-fetch", "notion-get-comments", "notion-get-users", "notion-get-self", "notion-get-teams"),
-	"linear": names("get_user", "list_users", "get_issue", "list_issues", "get_project", "list_projects", "list_teams", "get_team", "list_comments", "list_cycles", "list_issue_statuses", "get_issue_status", "list_issue_labels", "get_document", "list_documents", "get_project_status", "list_project_statuses", "list_milestones", "get_milestone", "list_project_labels", "get_status_updates"),
-	"onlora": names("list_projects", "get_project", "list_files", "read_file", "search_library", "get_asset", "get_job", "get_round", "get_quota", "search_shared", "list_models"),
+	"notion":     names("notion-search", "notion-fetch", "notion-get-comments", "notion-get-users", "notion-get-self", "notion-get-teams"),
+	"linear":     names("get_user", "list_users", "get_issue", "list_issues", "get_project", "list_projects", "list_teams", "get_team", "list_comments", "list_cycles", "list_issue_statuses", "get_issue_status", "list_issue_labels", "get_document", "list_documents", "get_project_status", "list_project_statuses", "list_milestones", "get_milestone", "list_project_labels", "get_status_updates"),
+	"cloudflare": names("search", "docs", "whoami"),
+	"onlora":     names("list_projects", "get_project", "list_files", "read_file", "search_library", "get_asset", "get_job", "get_round", "get_quota", "search_shared", "list_models"),
 }
 var officialWrites = map[string]map[string]bool{
 	"notion": names("notion-create-pages", "notion-update-page", "notion-create-comment", "notion-move-pages", "notion-duplicate-page"),
 	// Linear's MCP server now saves (creates or updates) through save_* tools.
 	"linear": names("create_issue", "update_issue", "create_comment", "update_comment", "create_project", "update_project", "create_document", "update_document", "save_issue", "save_comment", "save_project", "save_document", "save_milestone", "save_status_update"),
+	// execute runs any Cloudflare API call the grant allows, changes included.
+	"cloudflare": names("execute"),
 	// get_feedback marks what it returns as read; pick_draft chooses a round's draft. generate_image, edit_image
 	// and the paid generate_* tools spend the account's quota (generate_voice is
 	// free unless a paid model is named); share makes an asset public, and
@@ -36,7 +39,7 @@ func toolGroup(r *record, t Tool) string {
 		return ""
 	}
 	if r.Account.AuthMethod == "mcp_oauth" || r.Account.Integration == "linear" {
-		expected := map[string]string{"notion": "https://mcp.notion.com/mcp", "linear": "https://mcp.linear.app/mcp", "onlora": onloraMCP}[r.Account.Integration]
+		expected := map[string]string{"notion": "https://mcp.notion.com/mcp", "linear": "https://mcp.linear.app/mcp", "onlora": onloraMCP, "cloudflare": cloudflareMCP}[r.Account.Integration]
 		if expected == "" || r.Account.Endpoint != expected {
 			return ""
 		}

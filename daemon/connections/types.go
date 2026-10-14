@@ -32,6 +32,7 @@ func Catalog() []Integration {
 		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
 		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
 		{ID: "onlora", Name: "Onlora", Available: true, SetupURL: "https://onlora.ai", Description: "Make comics: library search, image generation, drafts and publishing"},
+		{ID: "cloudflare", Name: "Cloudflare", Available: true, SetupURL: "https://github.com/cloudflare/mcp", Description: "The whole Cloudflare API: Workers, R2, D1, DNS and more"},
 		{ID: "fal", Name: "fal", Available: true, SetupURL: "https://fal.ai/dashboard/keys", Description: "Image, video and audio models"},
 		{ID: "image", Name: "Image generation", Available: true, Description: "Any OpenAI-compatible images endpoint"},
 		{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},
