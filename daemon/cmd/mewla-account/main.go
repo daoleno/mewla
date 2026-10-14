@@ -143,6 +143,7 @@ func run(args []string) error {
 	}
 
 	var dnsClient dns.Provider
+	var waitTXT func(context.Context, string, string) error
 	switch dnsProvider {
 	case "challtestsrv":
 		dnsClient = &dns.Challtestsrv{BaseURL: challtestsrvURL}
@@ -152,6 +153,7 @@ func run(args []string) error {
 			return errors.New("cloudflare needs -cloudflare-zone-id and $MEWLA_ACCOUNT_CLOUDFLARE_TOKEN")
 		}
 		dnsClient = &dns.Cloudflare{ZoneID: strings.TrimSpace(cloudflareZoneID), Token: token}
+		waitTXT = (&dns.TXTWaiter{Zone: zoneOf(clientDomain)}).Wait
 	default:
 		return errors.New("-dns-provider must be challtestsrv or cloudflare")
 	}
@@ -179,6 +181,7 @@ func run(args []string) error {
 		MaxMachinesPerAccount: maxMachines,
 		ACMEOpsPerHour:        acmeOpsPerHour,
 		DeviceHandler:         deviceHandler,
+		WaitTXT:               waitTXT,
 	})
 	if err != nil {
 		return err
@@ -294,6 +297,16 @@ func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, ha
 		ErrorLog:          log.New(io.Discard, "", 0),
 	}
 	return server, tls.NewListener(listener, tlsConfig), nil
+}
+
+// zoneOf returns the registered zone of a client domain such as m.mewla.ai:
+// its last two labels. Nameserver checks query that zone's NS records.
+func zoneOf(domain string) string {
+	labels := strings.Split(strings.Trim(domain, "."), ".")
+	if len(labels) > 2 {
+		labels = labels[len(labels)-2:]
+	}
+	return strings.Join(labels, ".")
 }
 
 func checkHealth(checkURL string) error {
