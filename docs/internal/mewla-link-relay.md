@@ -296,19 +296,24 @@ an 8-hex hash prefix, never route IDs, labels, SNI or IP addresses.
    enable Device Flow, and note its client ID. No client secret is needed.
 6. On the VPS, in `deploy/mewla-link/`:
    ```sh
-   mkdir -p secrets
-   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 \
-     -keyout secrets/relay.key -out secrets/relay.crt -subj /CN=relay.<domain> \
-     -addext subjectAltName=DNS:relay.<domain>
-   docker compose run --rm account -grant-key-file=/var/lib/mewla-account/grant-key.pem \
-     -print-public-key > secrets/grant.pub
    export MEWLA_SERVICE_HOST=account.<domain> MEWLA_RELAY_HOST=relay.<domain> \
      MEWLA_CLIENT_DOMAIN=<client domain> MEWLA_GITHUB_CLIENT_ID=… \
      MEWLA_CLOUDFLARE_TOKEN=… MEWLA_CLOUDFLARE_ZONE_ID=…
+   mkdir -p secrets
+   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 \
+     -keyout secrets/relay.key -out secrets/relay.crt -subj /CN=$MEWLA_RELAY_HOST \
+     -addext subjectAltName=DNS:$MEWLA_RELAY_HOST
+   docker compose run --rm account -grant-key-file=/var/lib/mewla-account/grant-key.pem \
+     -print-public-key > secrets/grant.pub
    docker compose up -d --build
    ```
    The relay control certificate is self-signed; the account service hands it
    to each computer, which pins it.
+
+   The relay's per-IP limits need real client addresses. Docker's userland
+   proxy (IPv6, and some setups) shows every client as one gateway address;
+   check `mewla_link_capacity_used{resource="clients_per_ip"}` after launch,
+   and run the relay with `network_mode: host` if it does.
 7. Build release daemons with
    `-ldflags "-X github.com/daoleno/mewla/daemon/remote.DefaultServiceURL=https://account.<domain>"`.
    Until then, `MEWLA_REMOTE_SERVICE_URL` or `mewla login -service` selects it.
