@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -167,5 +168,28 @@ func TestPinnedClientTLSConfigRejectsWrongPin(t *testing.T) {
 		PeerCertificates: identity.LeafCertificates(),
 	}); err == nil {
 		t.Fatal("wrong pin was accepted")
+	}
+}
+
+// The iOS transport rebuilds the SPKI from SecKey's raw point using this
+// header (app/modules/link-transport/ios/LinkTransportModule.swift). It must
+// hash to the same pin the daemon publishes.
+func TestP256RawKeyPrefixMatchesPublishedPin(t *testing.T) {
+	identity, err := LoadOrCreateTransportIdentity(t.TempDir(), []string{"link.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, ok := identity.Certificate.Leaf.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		t.Fatalf("transport key is %T, want P-256", identity.Certificate.Leaf.PublicKey)
+	}
+	raw, err := public.ECDH()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix, _ := hex.DecodeString("3059301306072a8648ce3d020106082a8648ce3d030107034200")
+	sum := sha256.Sum256(append(prefix, raw.Bytes()...))
+	if got := hex.EncodeToString(sum[:]); got != identity.SPKISHA256 {
+		t.Fatalf("iOS pin %s != daemon pin %s", got, identity.SPKISHA256)
 	}
 }
