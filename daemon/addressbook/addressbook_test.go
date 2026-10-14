@@ -118,3 +118,20 @@ func TestTailscaleAddressesAreDiscoveredAndPublicHTTPIsSkipped(t *testing.T) {
 		t.Fatal("accepted an address outside 100.64.0.0/10")
 	}
 }
+
+func TestLearningKeepsTheRemoteAddressLabel(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Add("https://studio-3f9a2c.mewla.test", SourceRemote); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Learn("studio-3f9a2c.mewla.test"); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := store.List()
+	if len(entries) != 1 || entries[0].Source != SourceRemote {
+		t.Fatalf("entries = %#v", entries)
+	}
+}

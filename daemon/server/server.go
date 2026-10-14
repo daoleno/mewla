@@ -137,6 +137,7 @@ type Server struct {
 	tlsConfig                  *tls.Config
 	addresses                  *addressbook.Store
 	enrollments                *enrollment.Manager
+	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
 
 	workSubID                   int

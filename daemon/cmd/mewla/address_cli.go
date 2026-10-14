@@ -87,7 +87,11 @@ it starts, and learns an HTTPS address the first time a paired device uses it.
 				linkRow += " (" + domains + ")"
 			}
 		}
-		return writeAddressList(os.Stdout, entries, linkRow)
+		if err := writeAddressList(os.Stdout, entries, linkRow); err != nil {
+			return err
+		}
+		writeRemoteStatus(os.Stdout, resolvedStateDir)
+		return nil
 	default:
 		return fmt.Errorf("unknown address command: %s", args[0])
 	}
@@ -107,6 +111,8 @@ func addressSourceLabel(source addressbook.Source) string {
 		return "added"
 	case addressbook.SourceVerified:
 		return "seen"
+	case addressbook.SourceRemote:
+		return "mewla login"
 	}
 	return string(source)
 }
@@ -134,7 +140,7 @@ func writeAddressList(w io.Writer, entries []addressbook.Entry, linkRow string) 
 			table,
 			"%s\t%s\t%s\t%s\n",
 			entry.URL,
-			classifyAddress(entry.URL).label(),
+			entryLabel(entry),
 			addressSourceLabel(entry.Source),
 			entry.LastSeenAt.Local().Format("2006-01-02 15:04"),
 		)

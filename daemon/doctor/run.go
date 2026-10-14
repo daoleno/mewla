@@ -19,6 +19,7 @@ import (
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/work"
 )
@@ -82,6 +83,7 @@ func Run(opts Options) (Report, error) {
 	report.Listen = e.checkListen(report.StateDir.Path)
 	report.Executors = e.checkExecutors()
 	report.Addresses = e.checkAddresses(report.StateDir.Path)
+	report.Remote = e.checkRemote(report.StateDir.Path)
 	report.Network = e.checkNetwork()
 
 	report.Checks = []NamedCheck{
@@ -213,6 +215,37 @@ func (e env) checkAddresses(stateDir string) []AddressCheck {
 		checks = append(checks, check)
 	}
 	return checks
+}
+
+// checkRemote never blocks readiness: remote access is optional.
+func (e env) checkRemote(stateDir string) RemoteCheck {
+	config, ok, err := remote.LoadConfig(stateDir)
+	switch {
+	case err != nil:
+		return RemoteCheck{Status: StatusWarn, Summary: "remote access config is unreadable: " + err.Error()}
+	case !ok:
+		return RemoteCheck{Status: StatusOK, Summary: "off (turn on with mewla login)"}
+	}
+	check := RemoteCheck{SignedIn: true, URL: config.URL(), Account: config.Machine.AccountLogin}
+	status, running := remote.LoadStatus(stateDir)
+	check.Phase, check.Relay, check.CertNotAfter = status.Phase, status.Relay, status.CertNotAfter
+	switch {
+	case !running:
+		check.Status, check.Summary = StatusWarn, config.URL()+": Mewla is not running"
+	case status.Phase != "connected":
+		check.Status, check.Summary = StatusWarn, config.URL()+": relay "+status.Phase+" "+status.LastError
+	case status.CertError != "":
+		check.Status, check.Summary = StatusWarn, config.URL()+": certificate: "+status.CertError
+	case status.CertNotAfter.IsZero():
+		check.Status, check.Summary = StatusWarn, config.URL()+": connected, certificate not issued yet"
+	case time.Until(status.CertNotAfter) < 14*24*time.Hour:
+		check.Status, check.Summary = StatusWarn, config.URL()+": certificate expires "+status.CertNotAfter.Format("2006-01-02")
+	default:
+		check.Status = StatusOK
+		check.Summary = fmt.Sprintf("%s via relay %s, certificate until %s", config.URL(), status.Relay, status.CertNotAfter.Format("2006-01-02"))
+	}
+	check.Summary = strings.TrimSpace(check.Summary)
+	return check
 }
 
 func isReady(report Report) bool {

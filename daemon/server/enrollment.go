@@ -67,6 +67,9 @@ func (s *Server) handleEnrollmentRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.broadcastEnrollmentRequest(request)
+	if s.enrollmentObserver != nil {
+		s.enrollmentObserver(request)
+	}
 	s.writeJSONWithAssertion(w, http.StatusCreated, "mewla-enrollment-request", map[string]any{"request_id": request.ID, "secret": secret, "verification_number": request.Number, "expires_at": request.ExpiresAt})
 }
 

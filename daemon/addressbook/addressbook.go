@@ -29,6 +29,8 @@ const (
 	SourceDiscovered Source = "discovered"
 	SourceManual     Source = "manual"
 	SourceVerified   Source = "verified"
+	// SourceRemote is this computer's hosted remote access address.
+	SourceRemote Source = "remote"
 )
 
 type Entry struct {
@@ -130,7 +132,11 @@ func (s *Store) Add(raw string, source Source) (Entry, error) {
 	now := time.Now().UTC()
 	for i := range entries {
 		if entries[i].URL == value {
-			entries[i].Source = source
+			// Seeing the remote address in a request must not relabel it;
+			// only mewla logout removes it.
+			if entries[i].Source != SourceRemote || source == SourceRemote {
+				entries[i].Source = source
+			}
 			entries[i].LastSeenAt = now
 			if err := s.saveLocked(entries); err != nil {
 				return Entry{}, err

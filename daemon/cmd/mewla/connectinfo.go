@@ -295,7 +295,10 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEna
 		return classifyAddress(phone[i].URL).phoneRank() > classifyAddress(phone[j].URL).phoneRank()
 	})
 	for _, entry := range phone {
-		fmt.Fprintf(w, "  %-11s %s\n", classifyAddress(entry.URL).label(), entry.URL)
+		fmt.Fprintf(w, "  %-11s %s\n", entryLabel(entry), entry.URL)
+	}
+	if hint := remoteHint(dataDir); hint != "" && !linkEnabled {
+		fmt.Fprintf(w, "  %-11s %s\n", "Anywhere", "mewla login")
 	}
 	if linkEnabled || len(phone) > 0 {
 		fmt.Fprintf(w, "  %-11s %s\n\n", "Pair", pairCommand(stateDir))
@@ -306,6 +309,14 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEna
 	}
 	fmt.Fprintf(w, "  %-11s %s, then open the browser link\n", "Browser", pairCommand(stateDir))
 	fmt.Fprintf(w, "  %-11s restart with mewla --lan, or add an HTTPS address (mewla address add)\n\n", "Phone")
+}
+
+// entryLabel names an address for people; the hosted address is "Remote".
+func entryLabel(entry addressbook.Entry) string {
+	if entry.Source == addressbook.SourceRemote {
+		return "Remote"
+	}
+	return classifyAddress(entry.URL).label()
 }
 
 func pairCommand(stateDir string) string {
