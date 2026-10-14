@@ -15,7 +15,7 @@ mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Ta
 mewla doctor [--json]         # is this machine ready? tmux, state, port, agents
 mewla setup                   # guided first run: Brain's agent and the safe profile
 mewla update [--check]        # verify and install the latest release
-mewla boot install|status|uninstall   # run as a user systemd service (Linux)
+mewla boot install|status|uninstall   # start at login: systemd user service (Linux), LaunchAgent (macOS)
 ```
 
 `-state-dir DIR` selects a state directory other than `~/.mewla`. Pass the same
