@@ -1,5 +1,3 @@
-import type { CloudflareAction, CloudflareStatus } from "./cloudflareCli";
-
 export type PluginIntegration = {
   id: string;
   name: string;
@@ -53,14 +51,12 @@ export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
   group?: "read" | "write";
-  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "set_key" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | CloudflareAction;
+  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "set_key" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates";
   id?: string;
   tool?: string;
   /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */
   tools?: string[];
   allowed?: boolean;
-  /** cloudflare_status: ask cf again instead of the server's last answer. */
-  refresh?: boolean;
   input?: { integration: string; name?: string; endpoint?: string; credential?: string; model?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
@@ -83,8 +79,6 @@ export type ConnectionResponse = {
   catalog?: PluginIntegration[];
   accounts?: PluginAccount[];
   account?: PluginAccount;
-  /** The server machine's cf CLI, for the cloudflare_* actions. */
-  cloudflare?: CloudflareStatus;
 };
 export function accountStatus(account: PluginAccount): string {
   if (account.status === "disconnected") return "Disconnected";

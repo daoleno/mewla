@@ -13,7 +13,6 @@ import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, usesApiKey, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import { cloudflareNeedsPoll, type CloudflareAction, type CloudflareStatus } from "../../services/cloudflareCli";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 
 /** Route of one service page; its Tools page lives below it. */
@@ -76,12 +75,6 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const [connectedId, setConnectedId] = useState<string | null>(null);
   const [flow, setFlow] = useState<PendingConnection | null>(null);
   const [details, setDetails] = useState<Record<string, PluginAccount>>({});
-  /** The server machine's cf CLI. Unsupported: the server doesn't offer it. */
-  const [cloudflare, setCloudflare] = useState<CloudflareStatus | null>(null);
-  const [cloudflareUnsupported, setCloudflareUnsupported] = useState(false);
-  const [cloudflareRunning, setCloudflareRunning] = useState<CloudflareAction | null>(null);
-  const [cloudflareError, setCloudflareError] = useState("");
-  const cloudflareKnown = useRef(false);
   const alive = useRef(true);
   const mutation = useRef(false);
   const completion = useRef(false);
@@ -117,25 +110,6 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     }
     finally { mutation.current = false; if (valid()) setRunning(null); }
   }, [apply, serverId, valid]);
-  /**
-   * Asks the server's cf CLI, or tells it to install, sign in or out. Its own
-   * requests, so a slow cf never holds up the plugin controls.
-   */
-  const cloudflareRequest = useCallback(async (action: CloudflareAction, refresh = false) => {
-    if (!serverId || !valid()) return;
-    const status = action === "cloudflare_status";
-    if (!status) { setCloudflareRunning(action); setCloudflareError(""); }
-    try {
-      const result = await wsClient.requestConnections(serverId, { action, refresh });
-      if (valid() && result.cloudflare) { cloudflareKnown.current = true; setCloudflare(result.cloudflare); setCloudflareUnsupported(false); }
-    } catch (failure) {
-      if (!valid()) return;
-      // A server without cf support refuses status: no row then. A request
-      // that never got there is asked again on reconnect.
-      if (status) setCloudflareUnsupported(!cloudflareKnown.current && (failure as { code?: string }).code === "plugin_request_failed");
-      else setCloudflareError(failure instanceof Error ? failure.message : "Could not reach this server. Try again.");
-    } finally { if (!status && valid()) setCloudflareRunning(null); }
-  }, [serverId, valid]);
   const fail = useCallback((message: string, status: "failed" | "cancelled" = "failed") => {
     if (!valid()) return;
     setPhase(status); setConnectError(message);
@@ -188,12 +162,6 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (pending.current?.callback && valid()) void finish(pending.current.callback);
     }
   }, [fail, finish, remember, settle, valid]);
-  useEffect(() => { void cloudflareRequest("cloudflare_status"); }, [cloudflareRequest]);
-  useEffect(() => {
-    if (!cloudflareNeedsPoll(cloudflare)) return;
-    const timer = setInterval(() => { if (AppState.currentState === "active") void cloudflareRequest("cloudflare_status"); }, 2500);
-    return () => clearInterval(timer);
-  }, [cloudflare, cloudflareRequest]);
   useEffect(() => {
     void send({ action: "list" });
     // A web sign-in returned through the daemon's callback. The outcome is
@@ -221,7 +189,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
         if (initial && matchesPluginReturn(initial, stored.flow)) await finish(initial); else await check();
       } catch { if (valid()) { fail("The previous sign-in could not be restored. Start again."); await remember(null); } }
     });
-    const connectedEvent = (event: { serverId: string }) => { if (event.serverId === serverId) { void send({ action: "list" }); void cloudflareRequest("cloudflare_status"); void check(); } };
+    const connectedEvent = (event: { serverId: string }) => { if (event.serverId === serverId) { void send({ action: "list" }); void check(); } };
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void check(); });
     const links = Linking.addEventListener("url", (event) => void finish(event.url));
     // A web tab coming back into view checks the sign-in it left waiting.
@@ -232,7 +200,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       subscription.remove(); links.remove(); wsClient.off("connected", connectedEvent);
       globalThis.document?.removeEventListener?.("visibilitychange", visible);
     };
-  }, [check, cloudflareRequest, fail, finish, remember, router, send, serverId, valid]);
+  }, [check, fail, finish, remember, router, send, serverId, valid]);
   useEffect(() => {
     if (phase !== "waiting" || !flow) return;
     const timer = setInterval(() => { if (AppState.currentState === "active") void check(); }, 3000);
@@ -381,7 +349,6 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
     plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
     setAccess, disconnect, recover, setEnabled, setKey, load, setTools, confirmUpdates, serviceLabel,
-    cloudflare, cloudflareUnsupported, cloudflareRunning, cloudflareError, cloudflareRequest,
   };
 }
 

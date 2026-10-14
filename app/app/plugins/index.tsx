@@ -4,7 +4,6 @@ import { CatalogView, MewlaPluginsHeading, ToolUpdatesNotice } from "../../compo
 import { pluginServicePath, PluginsPage, usePluginsFlow } from "../../components/plugins/PluginsFlow";
 import { AgentToolsSection } from "../../components/extensions/AgentToolsSection";
 import { useAgentExtensions } from "../../components/extensions/AgentExtensionsProvider";
-import { CloudflareRow } from "../../components/plugins/CloudflareViews";
 import { isConnecting } from "../../services/pluginConnectionsModel";
 
 /**
@@ -36,7 +35,6 @@ export default function ExtensionsScreen() {
       onOpen={(plugin) => router.push(pluginServicePath(plugin.id))}
       onConnect={(plugin) => void flow.connect(plugin.id)}
       onReconnect={(account) => flow.recover(account, "reconnect")}
-      extra={flow.cloudflareUnsupported ? null : <CloudflareRow status={flow.cloudflare} onOpen={() => router.push("/plugins/cloudflare")} />}
     />
     <AgentToolsSection agent={agent} onOpen={(scope) => router.push(`/plugins/agents/${scope}`)} />
   </PluginsPage>;
