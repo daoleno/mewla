@@ -138,6 +138,11 @@ func run(args []string, stderr io.Writer) error {
 			return fmt.Errorf("unknown command %q; see mewla --help", args[0])
 		}
 	}
+	if executable, err := os.Executable(); err == nil {
+		if handed, err := bootLaunchdHandOff(args, executable, execBootRunner{}); handed || err != nil {
+			return err
+		}
+	}
 	return runDaemon(args, stderr)
 }
 
