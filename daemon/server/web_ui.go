@@ -38,6 +38,12 @@ func (s *Server) SetAddressBook(book *addressbook.Store) { s.addresses = book }
 
 func (s *Server) SetEnrollmentManager(manager *enrollment.Manager) { s.enrollments = manager }
 
+// SetEnrollmentObserver is told about each new browser join request, so the
+// daemon can show its number on this computer's terminal.
+func (s *Server) SetEnrollmentObserver(observe func(enrollment.Request)) {
+	s.enrollmentObserver = observe
+}
+
 // appRoute shares a path between a daemon API and a web app route, such as
 // /resources and /browser. A browser loading the page (a GET that prefers
 // HTML) on a web UI origin gets the app, so reload and deep links reopen it.

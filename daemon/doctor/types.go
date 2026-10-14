@@ -78,10 +78,24 @@ type Report struct {
 	Listen       ListenCheck    `json:"listen"`
 	Executors    ExecutorsCheck `json:"executors"`
 	Addresses    []AddressCheck `json:"addresses,omitempty"`
+	Remote       RemoteCheck    `json:"remote"`
 	Network      NetworkCheck   `json:"network"`
 	Checks       []NamedCheck   `json:"checks"`
 	Warnings     []string       `json:"warnings,omitempty"`
 	Remediations []Remediation  `json:"remediations"`
+}
+
+// RemoteCheck reports hosted remote access: sign-in, relay connection and
+// the hostname certificate, as last written by the running daemon.
+type RemoteCheck struct {
+	SignedIn     bool      `json:"signed_in"`
+	URL          string    `json:"url,omitempty"`
+	Account      string    `json:"account,omitempty"`
+	Relay        string    `json:"relay,omitempty"`
+	Phase        string    `json:"phase,omitempty"`
+	CertNotAfter time.Time `json:"cert_not_after,omitempty"`
+	Status       Status    `json:"status"`
+	Summary      string    `json:"summary"`
 }
 
 type AddressCheck struct {
@@ -146,13 +160,13 @@ type StateDirCheck struct {
 
 // ListenCheck reports daemon listen readiness.
 type ListenCheck struct {
-	Addr        string      `json:"addr"`
-	Available   bool        `json:"available"`
-	DaemonRunning  bool        `json:"daemon_running"`
-	DaemonID    string      `json:"daemon_id,omitempty"`
-	Status      Status      `json:"status"`
-	Remediation Remediation `json:"remediation,omitempty"`
-	Summary     string      `json:"summary"`
+	Addr          string      `json:"addr"`
+	Available     bool        `json:"available"`
+	DaemonRunning bool        `json:"daemon_running"`
+	DaemonID      string      `json:"daemon_id,omitempty"`
+	Status        Status      `json:"status"`
+	Remediation   Remediation `json:"remediation,omitempty"`
+	Summary       string      `json:"summary"`
 }
 
 // ExecutorsCheck summarizes configured executors and recommendations.

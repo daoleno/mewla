@@ -33,6 +33,7 @@ import (
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/push"
+	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
@@ -132,6 +133,10 @@ func run(args []string, stderr io.Writer) error {
 			return runScreenCommand(args[1:], stderr)
 		case "address":
 			return runAddressCommand(args[1:], stderr)
+		case "login":
+			return runLoginCommand(args[1:], stderr)
+		case "logout":
+			return runLogoutCommand(args[1:], stderr)
 		case "boot":
 			return runBootCommand(args[1:], stderr)
 		case "help":
@@ -180,6 +185,9 @@ func daemonTmuxRuntime(home, daemonID, tmuxEnv string) (socketPath, scratchDir s
 func runDaemon(args []string, stderr io.Writer) error {
 	cfg, err := parseDaemonConfig(args, stderr)
 	if err != nil {
+		return err
+	}
+	if err := applyStartupChoice(&cfg, args, stderr); err != nil {
 		return err
 	}
 	lifecycleLock, authManager, err := acquireDaemonAuthOwner(cfg.stateDir)
@@ -422,12 +430,22 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := book.ReplaceDiscovered(startupAddresses(cfg.addr, detectPrivateNetworkAddresses())); err != nil {
 		log.Printf("WARN could not record this start's addresses: %v", err)
 	}
+	// Record the remote address before the first-device pairing prints, so
+	// its QR can use it; the remote runtime keeps it current afterwards.
+	if remoteConfig, signedIn, _ := remote.LoadConfig(authManager.StorageDir()); signedIn {
+		if _, err := book.Add(remoteConfig.URL(), addressbook.SourceRemote); err != nil {
+			log.Printf("WARN could not record the remote access address: %v", err)
+		}
+	}
 	srv.SetAddressBook(book)
 	enrollmentManager, err := enrollment.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize enrollment manager: %w", err)
 	}
 	srv.SetEnrollmentManager(enrollmentManager)
+	srv.SetEnrollmentObserver(func(request enrollment.Request) {
+		printEnrollmentRequest(stderr, cfg.stateDir, request)
+	})
 	controlHandler.enrollments = enrollmentManager
 	telegramManager, err := telegramchannel.NewManagerWithOptions(authManager.StorageDir(), brainService, telegramchannel.Options{Attachments: srv.AttachmentStore()})
 	if err != nil {
@@ -589,6 +607,18 @@ func runDaemon(args []string, stderr io.Writer) error {
 			linkConfigPath,
 		)
 	}
+
+	runtimeOwners = append(runtimeOwners, runtimeOwner{
+		name: "remote access",
+		run: (&remote.Runtime{
+			StateDir:    authManager.StorageDir(),
+			Auth:        authManager,
+			Identity:    transportIdentity,
+			Handler:     srv.Handler(),
+			AddressBook: book,
+			Logf:        log.Printf,
+		}).Run,
+	})
 
 	runtimeOwners = append(runtimeOwners,
 		runtimeOwner{
@@ -1997,6 +2027,14 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		return fmt.Errorf("build pairing links: %w", err)
 	}
 	if phoneAddress == "" {
+		if connectLink, address, err := buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing); err != nil {
+			fmt.Fprintf(stderr, "Remote access pairing unavailable: %v\n", err)
+		} else if connectLink != "" {
+			links.phoneAddress, links.phoneLink = address, connectLink
+			phoneAddress = address
+		}
+	}
+	if phoneAddress == "" {
 		linkConfig, linkConfigPath, linkEnabled, err := loadOptionalLinkConfig(stateDir, cfg.linkConfigPath)
 		if err != nil {
 			return err
@@ -2111,6 +2149,8 @@ Start
   mewla --lan           Start Mewla for this computer, your Wi-Fi/LAN and Tailscale
 
 Connect a phone or browser
+  login     Sign in so your phone and any browser reach this computer from anywhere
+  logout    Turn remote access off for this computer
   pair      Show a one-time QR code and links to pair a new phone or browser
   address   List, add or remove the addresses phones and browsers use
   devices   List paired phones and browsers; approve, deny or revoke them
