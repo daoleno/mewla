@@ -411,7 +411,7 @@ func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool
 		}
 	}
 	if t == nil || fingerprint(*t) != fingerprint(tool) {
-		return nil, errors.New("tool definition changed; refresh and review authorization")
+		return nil, errors.New("tool definition changed; refresh this account, then confirm the update in Extensions")
 	}
 	return m.dispatchHTTP(ctx, r, r.Account.Endpoint, secret, *t, args, capture...)
 }

@@ -89,7 +89,7 @@ func (m *Manager) mcpResources(parent context.Context, q Request) (Response, err
 	case !r.Account.Enabled || r.Account.Status == "disconnected":
 		err = ErrAccountOff
 	case !resourcesAllowed(r):
-		err = errors.New("reading resources needs this account's reading allowed in Mewla Connections")
+		err = errors.New("reading resources needs this account's reading allowed in Extensions")
 	case q.Action == "read_resource" && !validResourceURI(q.URI):
 		err = errors.New("name the resource with --uri, as listed by resources (up to 2048 characters)")
 	case len(q.Cursor) > 4096:

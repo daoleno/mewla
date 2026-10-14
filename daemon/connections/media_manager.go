@@ -146,7 +146,7 @@ func (m *Manager) prepareMedia(ctx context.Context, r *record, q Request) (*medi
 		reviewed = reviewed || fingerprint(candidate) == fingerprint(t)
 	}
 	if !reviewed {
-		return nil, "", nil, errors.New("tool definition changed; refresh and review authorization")
+		return nil, "", nil, errors.New("tool definition changed; refresh this account, then confirm the update in Extensions")
 	}
 	cwd := ""
 	if isLocalCaller(ctx) {
