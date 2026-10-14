@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ApiKeyForm } from "../../../components/plugins/ApiKeyForm";
 import { CustomServiceForm } from "../../../components/plugins/CustomServiceForm";
-import { AccountCard, ConnectOffer, ServiceHeader } from "../../../components/plugins/PluginConnectionViews";
+import { AccountCard, ConnectOffer, ServiceHeader, ToolUpdatesNotice } from "../../../components/plugins/PluginConnectionViews";
 import { pluginServicePath, PluginsPage, usePluginsFlow } from "../../../components/plugins/PluginsFlow";
 import { Button, InlineNotice } from "../../../components/ui";
 import { isConnecting, usesApiKey } from "../../../services/pluginConnectionsModel";
@@ -34,6 +34,13 @@ export default function PluginServiceScreen() {
     : <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
   return <PluginsPage title={plugin.name}>
     <ServiceHeader plugin={plugin} />
+    {accounts.map((account) => <ToolUpdatesNotice
+      key={`updates:${account.id}`}
+      account={account}
+      serviceName={flow.serviceLabel(account)}
+      running={flow.running}
+      onConfirm={(names) => flow.confirmUpdates(account, names)}
+    />)}
     {accounts.map((account) => <AccountCard
       key={account.id}
       plugin={plugin}
