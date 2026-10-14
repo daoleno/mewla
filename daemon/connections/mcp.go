@@ -54,7 +54,7 @@ func (e serviceError) Error() string {
 type toolUpdatedError struct{ service, tool string }
 
 func (e toolUpdatedError) Error() string {
-	return fmt.Sprintf("%s updated the tool %q; it runs again once the person confirms the update in Mewla Connections", e.service, e.tool)
+	return fmt.Sprintf("%s updated the tool %q; it runs again once the person confirms the update in Extensions", e.service, e.tool)
 }
 
 // timeoutError is a call that ran out of time after it was sent. The service
