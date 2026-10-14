@@ -196,7 +196,12 @@ func (s *Service) Status(ctx context.Context, deviceID string) Status {
 
 // SetRestart lets an allowed device restart Mewla to apply a permission;
 // only set it when a service manager starts Mewla again.
-func (s *Service) SetRestart(restart func()) { s.restart = restart }
+func (s *Service) SetRestart(restart func()) {
+	s.restart = restart
+	if b, ok := s.backend.(interface{ SetRestart(func()) }); ok {
+		b.SetRestart(restart)
+	}
+}
 
 // ErrNoRestart means nothing would start Mewla again after it stops.
 var ErrNoRestart = errors.New("Mewla isn't running as a service on this computer; restart it there")

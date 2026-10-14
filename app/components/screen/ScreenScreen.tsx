@@ -216,6 +216,22 @@ export function ScreenScreen() {
     return () => { void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}); };
   }, []);
 
+  // While an allowed device waits for permissions, follow the computer: the
+  // person there turns switches on, and Mewla may restart to apply them.
+  const waitingForPermissions = phase === "setup" && !!status?.supported && !status.disabled && status.approved && !status.ready;
+  useEffect(() => {
+    if (!waitingForPermissions || !currentServer) return;
+    const server = currentServer;
+    const timer = setInterval(() => {
+      void screenRequest(server).then((next) => {
+        if (!isCurrentServer(server.id)) return;
+        setStatus(next);
+        if (next.ready) void connect();
+      }).catch(() => { /* restarting */ });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [connect, currentServer, isCurrentServer, waitingForPermissions]);
+
   // Power state changes slowly; refresh it while the viewer is open.
   useEffect(() => {
     if (phase !== "live" || !currentServer) return;
@@ -496,7 +512,8 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
   return (
     <View style={styles.setupBlock}>
       <EmptyState icon="shield-check" title={`Allow Screen on ${name}`}
-        detail={`${name} still needs these permissions. Approve its prompts, or open the settings there and turn Mewla on.`} />
+        detail={`${name} still needs these permissions. Turn Mewla on in the settings it shows; this page follows along.`}
+        action={restart ? undefined : { label: `Ask on ${name}`, icon: "desktop", onPress: onEnable, loading: busy }} />
       {missing.map((p) => (
         <View key={p.id} style={[styles.permission, { borderColor: colors.borderSubtle, backgroundColor: colors.bgSurface }]}>
           <View style={styles.permissionText}>
