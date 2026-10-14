@@ -2,8 +2,9 @@
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
 GitHub, Slack, Google Workspace, Onlora for making comics, fal and Image
-generation for media, and custom MCP or OpenAPI services. Plugins
-are a **preview**.
+generation for media, and custom MCP or OpenAPI services. Extensions also sets
+up Cloudflare's `cf` CLI on the server for agents to use in their shells.
+Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
 shows that server's accounts and never moves an account between servers.
@@ -151,6 +152,42 @@ endpoint or document. Custom endpoints must be public HTTPS by default. To reach
 a service on your own network, grant that account an explicit address range;
 cloud metadata and link-local addresses are always refused. Custom services get
 no automatic permissions: after connecting one, choose its tools.
+
+## Cloudflare
+
+Cloudflare isn't a plugin account. Its row on Extensions sets up Cloudflare's
+own [`cf` CLI](https://developers.cloudflare.com/cf/) on the current server, and
+Brain and every Worker on that server then run `cf` in their shells. cf covers
+the whole Cloudflare API (Workers, R2, D1, KV, DNS and more) and Workers
+projects.
+
+1. Open **Extensions** and tap **Cloudflare**.
+2. Tap **Install cf**. Mewla installs the release it was tested with
+   (`npm install --global cf@1.0.0-beta.16`). This needs Node.js 22.18 or later
+   and npm on the server; cf doesn't run on Bun.
+3. Tap **Sign in to Cloudflare**. Mewla shows a code and Cloudflare's link. Open
+   the link on any device, sign in, enter the code and approve within five
+   minutes. The page then shows the Cloudflare account.
+4. **Sign out** on the same page runs `cf auth logout`.
+
+Mewla reads the sign-in from `cf auth whoami` each time. It doesn't keep a copy,
+so signing in or out with `cf` in a shell shows on the page too. cf stores its
+sign-in in its own config folder on the server. If `CLOUDFLARE_API_TOKEN` is set
+in the server's environment, cf uses that token instead, and Mewla can't sign it
+out.
+
+What to know before signing in:
+
+- **One sign-in for every agent.** There are no per-tool switches. Any Brain or
+  Worker session on the server can run any `cf` command the sign-in allows.
+- **Permissions.** cf asks Cloudflare for its full default set, which includes
+  creating API tokens. To ask for less, sign in on the server yourself with
+  `cf auth login --scopes ...`.
+- **Changes need your go-ahead.** Agents are told to find commands with
+  `cf cli search` and preview them with `--dry-run`. They may delete resources,
+  change DNS, or create or revoke tokens only when your task asks for it. When
+  no one can confirm, cf refuses a delete without `--force` (it prints
+  `Aborted.`), and agents never add `--force` on their own.
 
 ## Turn a plugin off
 
