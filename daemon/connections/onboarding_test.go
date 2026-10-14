@@ -371,9 +371,9 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 		var body string
 		switch req.Method + " " + req.URL.String() {
 		case "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp":
-			body = `{"resource":"https://api.onlora.ai/mcp","authorization_servers":["https://onlora.ai/api/auth"],"scopes_supported":["projects","generate","publish"]}`
+			body = `{"resource":"https://api.onlora.ai/mcp","authorization_servers":["https://onlora.ai/api/auth"],"scopes_supported":["projects","generate"]}`
 		case "GET https://onlora.ai/.well-known/oauth-authorization-server/api/auth":
-			body = `{"issuer":"https://onlora.ai/api/auth","authorization_endpoint":"https://onlora.ai/api/auth/oauth2/authorize","token_endpoint":"https://onlora.ai/api/auth/oauth2/token","registration_endpoint":"https://onlora.ai/api/auth/oauth2/register","revocation_endpoint":"https://onlora.ai/api/auth/oauth2/revoke","scopes_supported":["openid","profile","email","offline_access","projects","generate","publish"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none","client_secret_basic"]}`
+			body = `{"issuer":"https://onlora.ai/api/auth","authorization_endpoint":"https://onlora.ai/api/auth/oauth2/authorize","token_endpoint":"https://onlora.ai/api/auth/oauth2/token","registration_endpoint":"https://onlora.ai/api/auth/oauth2/register","revocation_endpoint":"https://onlora.ai/api/auth/oauth2/revoke","scopes_supported":["openid","profile","email","offline_access","projects","generate"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none","client_secret_basic"]}`
 		case "POST https://onlora.ai/api/auth/oauth2/register":
 			registered.Application = ""
 			_ = json.NewDecoder(req.Body).Decode(&registered)
@@ -393,7 +393,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 	if authorize.Host != "onlora.ai" || authorize.Path != "/api/auth/oauth2/authorize" || q.Get("client_id") != "onlora-client" || q.Get("redirect_uri") != callback {
 		t.Fatalf("authorization URL %s", start.AuthorizationURL)
 	}
-	if q.Get("scope") != "projects generate publish offline_access" || q.Get("resource") != "https://api.onlora.ai/mcp" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
+	if q.Get("scope") != "projects generate offline_access" || q.Get("resource") != "https://api.onlora.ai/mcp" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
 		t.Fatalf("authorization asks for %v", q)
 	}
 	r := m.records[start.AccountID]
@@ -405,7 +405,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 	app := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "onlora"}}).Flow
 	appURL, _ := url.Parse(app.AuthorizationURL)
 	aq := appURL.Query()
-	if registered.RedirectURIs != nil || aq.Get("client_id") != "mewla" || aq.Get("redirect_uri") != NativeCallback || aq.Get("code_challenge_method") != "S256" || aq.Get("scope") != "projects generate publish offline_access" || aq.Get("resource") != "https://api.onlora.ai/mcp" {
+	if registered.RedirectURIs != nil || aq.Get("client_id") != "mewla" || aq.Get("redirect_uri") != NativeCallback || aq.Get("code_challenge_method") != "S256" || aq.Get("scope") != "projects generate offline_access" || aq.Get("resource") != "https://api.onlora.ai/mcp" {
 		t.Fatalf("app authorization %s, registered %+v", app.AuthorizationURL, registered)
 	}
 	if flow := m.pending[m.connectFlows[app.ID].state]; flow == nil || !flow.Mobile || flow.ClientSecret != "" || m.records[app.AccountID].OAuth.ClientID != "mewla" {
@@ -418,7 +418,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 
 func TestOnloraToolGroupsOnlyOnItsEndpoint(t *testing.T) {
 	r := &record{Account: Account{Integration: "onlora", AuthMethod: "mcp_oauth", Endpoint: "https://api.onlora.ai/mcp"}}
-	for name, group := range map[string]string{"search_library": "read", "list_projects": "read", "get_feedback": "write", "generate_image": "write", "publish": "write", "unpublish": "write", "search_shared": "read", "pin_shared": "write", "share": "write", "unshare": "write", "generate_music": "write", "generate_voice": "write", "generate_video": "write", "list_models": "read", "delete_file": "write", "new_tool": ""} {
+	for name, group := range map[string]string{"search_library": "read", "list_projects": "read", "get_asset": "read", "read_file": "read", "generate_image": "write", "edit_image": "write", "add_asset": "write", "write_file": "write", "generate_music": "write", "generate_voice": "write", "generate_video": "write", "list_models": "read", "delete_file": "write", "publish": "", "propose_drafts": "", "new_tool": ""} {
 		if got := toolGroup(r, Tool{Name: name}); got != group {
 			t.Fatalf("%s is %q, not %q", name, got, group)
 		}

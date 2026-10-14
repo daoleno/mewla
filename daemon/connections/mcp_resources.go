@@ -13,7 +13,7 @@ import (
 )
 
 // MCP resources are documents a service publishes next to its tools, such as
-// the format guides Onlora's tool descriptions point to. Reading one is a
+// an Onlora project's snapshot. Reading one is a
 // read: it needs the account switched on and its reading allowed, which for a
 // reviewed service means at least one allowed read tool, and for a custom
 // service at least one allowed tool. Tool grants never cover writes here

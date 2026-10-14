@@ -70,7 +70,7 @@ type oauthMetadata struct {
 const onloraMCP = "https://api.onlora.ai/mcp"
 const onloraAppClientID = "mewla"
 
-var onloraScopes = []string{"projects", "generate", "publish", "offline_access"}
+var onloraScopes = []string{"projects", "generate", "offline_access"}
 
 // Cloudflare's official remote MCP server: search, execute and docs over the
 // whole Cloudflare API. It registers Mewla on the first connect. Mewla asks

@@ -213,13 +213,13 @@ describe("tool switches", () => {
 
 describe("tool updates from a service", () => {
   test("one notice names what changed and confirms exactly those tools", () => {
-    const target = account({ integration: "onlora", updates: ["pick_draft", "propose_drafts"] });
+    const target = account({ integration: "onlora", updates: ["edit_image", "generate_image"] });
     const notice = toolUpdates(target, "Onlora");
     expect(notice?.title).toBe("Onlora updated 2 tools");
-    expect(notice?.detail).toContain("pick_draft, propose_drafts");
+    expect(notice?.detail).toContain("edit_image, generate_image");
     expect(notice?.detail).not.toMatch(/authori/i);
-    expect(toolUpdatesRequest(target, notice!.names, true)).toEqual({ action: "confirm_updates", id: "a1", tools: ["pick_draft", "propose_drafts"] });
-    expect(toolUpdatesRequest(target, ["pick_draft"], false)).toEqual({ action: "dismiss_updates", id: "a1", tools: ["pick_draft"] });
+    expect(toolUpdatesRequest(target, notice!.names, true)).toEqual({ action: "confirm_updates", id: "a1", tools: ["edit_image", "generate_image"] });
+    expect(toolUpdatesRequest(target, ["edit_image"], false)).toEqual({ action: "dismiss_updates", id: "a1", tools: ["edit_image"] });
   });
   test("a single tool and long lists read naturally", () => {
     expect(toolUpdates(account({ updates: ["a"] }), "Linear")?.title).toBe("Linear updated 1 tool");

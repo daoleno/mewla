@@ -31,7 +31,7 @@ func Catalog() []Integration {
 		{ID: "google", Name: "Google Workspace", Available: true, SetupURL: "https://developers.google.com/workspace/guides/configure-oauth-consent", Description: "Files, email and calendar events"},
 		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
 		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
-		{ID: "onlora", Name: "Onlora", Available: true, SetupURL: "https://onlora.ai", Description: "Make comics: library search, image generation, drafts and publishing"},
+		{ID: "onlora", Name: "Onlora", Available: true, SetupURL: "https://onlora.ai", Description: "Asset generation and search: images, speech and openly licensed media, kept in projects"},
 		{ID: "cloudflare", Name: "Cloudflare", Available: true, SetupURL: "https://github.com/cloudflare/mcp", Description: "The whole Cloudflare API: Workers, R2, D1, DNS and more"},
 		{ID: "fal", Name: "fal", Available: true, SetupURL: "https://fal.ai/dashboard/keys", Description: "Image, video and audio models"},
 		{ID: "image", Name: "Image generation", Available: true, Description: "Any OpenAI-compatible images endpoint"},

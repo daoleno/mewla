@@ -1,7 +1,7 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Google Workspace, Cloudflare, Onlora for making comics, fal and
+GitHub, Slack, Google Workspace, Cloudflare, Onlora for generating and finding assets, fal and
 Image generation for media, and custom MCP or OpenAPI services. Plugins are a
 **preview**.
 
@@ -189,9 +189,9 @@ mewla connections describe --id ACCOUNT_ID --tool get_me --json
 mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
 mewla connections policy --id ACCOUNT_ID --tools get_me,list_issues --allow
 mewla connections resources --id ACCOUNT_ID
-mewla connections read-resource --id ACCOUNT_ID --uri onlora://docs/forms
+mewla connections read-resource --id ACCOUNT_ID --uri onlora://projects/PROJECT_ID
 mewla connections updates --id ACCOUNT_ID
-mewla connections confirm-updates --id ACCOUNT_ID --tools pick_draft,propose_drafts
+mewla connections confirm-updates --id ACCOUNT_ID --tools generate_image,write_file
 ```
 
 `policy --tools` sets every listed tool in one change: all of them, or none
@@ -200,7 +200,7 @@ if any name is unknown. Leave out `--allow` to turn them off.
 Each call is one bounded request; nothing pages automatically.
 
 - **Resources.** An MCP server can publish documents next to its tools, such as
-  Onlora's format guides. `resources` lists them and their URI templates;
+  an Onlora project. `resources` lists them and their URI templates;
   `read-resource` reads one. Reading needs the account on and at least one read
   tool allowed (any allowed tool for a custom service).
 - **Errors.** When a service rejects a call, its own message comes back,

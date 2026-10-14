@@ -24,7 +24,7 @@ Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name.
 Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination, never retried.
 A call that times out may already have run; check its state with a read tool before calling it again.
-MCP resources: resources --id account [--cursor c] lists documents and URI templates; read-resource --id account --uri onlora://docs/forms reads one.
+MCP resources: resources --id account [--cursor c] lists documents and URI templates; read-resource --id account --uri onlora://projects/<id> reads one.
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
 updates --id account shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 Add: --integration github|notion|google|slack|linear|fal|image|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
