@@ -133,6 +133,8 @@ type Request struct {
 	Cursor string `json:"cursor,omitempty"`
 	// Cwd resolves relative file paths; honored only from the local CLI.
 	Cwd string `json:"cwd,omitempty"`
+	// Refresh asks cloudflare_status to ask cf again instead of its last answer.
+	Refresh bool `json:"refresh,omitempty"`
 }
 
 type Match struct {
@@ -153,4 +155,6 @@ type Response struct {
 	Result           json.RawMessage `json:"result,omitempty"`
 	AuthorizationURL string          `json:"authorization_url,omitempty"`
 	OAuthConfigured  []string        `json:"oauth_configured"`
+	// Cloudflare is this machine's cf CLI, for the cloudflare_* actions.
+	Cloudflare *CloudflareStatus `json:"cloudflare,omitempty"`
 }
