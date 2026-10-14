@@ -82,8 +82,9 @@ mewla calendar create -title "Review plan" -kind reminder -date 2026-10-09 -time
 mewla calendar run -id <item> --json
 mewla calendar cancel -id <item> -revision <revision> --json
 
-mewla screen enable           # Mac: let paired devices control this screen; asks for the Screen Sharing VNC password
-mewla screen status|disable
+mewla screen status           # support, permissions, allowed devices, keep-awake
+mewla screen disable          # turn Screen off; every device must be allowed again
+mewla screen enable [-allow-sleep]
 
 mewla telegram setup          # asks for the bot token, prints a one-time link to bind your chat
 mewla telegram status|enable|disable

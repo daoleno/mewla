@@ -46,12 +46,6 @@ func (c *screenControllers) take(cancel context.CancelCauseFunc) *screenControll
 	return c.current
 }
 
-func (c *screenControllers) attached() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.current != nil
-}
-
 func (c *screenControllers) release(owner *screenController) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -62,46 +56,72 @@ func (c *screenControllers) release(owner *screenController) {
 
 func (s *Server) SetScreen(service *screen.Service) { s.screen = service }
 
-// handleScreen reports whether this computer's screen can be opened, with
-// its power state. POST changes only keep-awake; turning screen control on
-// stays an action on the computer itself.
+// handleScreen reports this computer's Screen support, permissions and the
+// asking device's approval (GET), or runs one action (POST):
+//
+//	{"action":"enable"}                              ask the person at the computer to allow this device
+//	{"action":"open_settings","permission":"<id>"}   show a permission's settings page on the computer
+//	{"keep_awake":true|false}                        change keep-awake
+//
+// Enable waits for the answer on the computer, up to a few minutes.
 func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := s.authenticateRequest(w, r, "mewla-screen"); !ok {
+	device, ok := s.authenticateRequest(w, r, "mewla-screen")
+	if !ok {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	if s.screen == nil {
-		_ = json.NewEncoder(w).Encode(screen.Status{Reason: "This Mewla daemon has no screen control"})
+		_ = json.NewEncoder(w).Encode(screen.Status{Reason: screen.ErrUnsupported.Error()})
 		return
 	}
 	if r.Method == http.MethodPost {
 		var body struct {
-			KeepAwake *bool `json:"keep_awake"`
+			Action     string `json:"action"`
+			Permission string `json:"permission"`
+			KeepAwake  *bool  `json:"keep_awake"`
 		}
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
 		dec.DisallowUnknownFields()
-		if dec.Decode(&body) != nil || body.KeepAwake == nil {
+		if dec.Decode(&body) != nil {
 			http.Error(w, "Invalid screen request", http.StatusBadRequest)
 			return
 		}
-		if err := s.screen.SetKeepAwake(*body.KeepAwake); err != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+		defer cancel()
+		var err error
+		switch {
+		case body.Action == "enable":
+			name := device.Name
+			if name == "" {
+				name = "A paired device"
+			}
+			err = s.screen.Enable(ctx, device.ID, name)
+		case body.Action == "open_settings" && body.Permission != "":
+			err = s.screen.OpenSettings(ctx, device.ID, body.Permission)
+		case body.Action == "" && body.KeepAwake != nil:
+			err = s.screen.SetKeepAwake(device.ID, *body.KeepAwake)
+		default:
+			http.Error(w, "Invalid screen request", http.StatusBadRequest)
+			return
+		}
+		if err != nil {
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 	}
-	_ = json.NewEncoder(w).Encode(s.screen.Status(r.Context(), !s.screenControllers.attached()))
+	_ = json.NewEncoder(w).Encode(s.screen.Status(r.Context(), device.ID))
 }
 
-// handleScreenViewer bridges an authenticated WebSocket to the loopback RFB
-// server. Binary messages carry RFB bytes; text messages carry JSON control
-// (ping/pong, error). The daemon signs in to the RFB server itself and offers
-// the viewer security type None.
+// handleScreenViewer bridges an authenticated WebSocket to an in-process RFB
+// session of this computer's screen. Binary messages carry RFB bytes; text
+// messages carry JSON control (ping/pong, error). The viewer is offered
+// security type None: its device signature and approval already admit it.
 func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	device, ok := s.authenticateRequest(w, r, "mewla-screen-view")
 	if !ok {
@@ -167,14 +187,12 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		return send(websocket.TextMessage, raw)
 	}
 
-	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
-	upstream, err := s.screen.Dial(dialCtx)
-	dialCancel()
+	upstream, err := s.screen.Open(ctx, device.ID)
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
-	defer upstream.Conn.Close()
+	defer upstream.Close()
 	controller := s.screenControllers.take(cancel)
 	defer s.screenControllers.release(controller)
 	name := device.Name
@@ -182,11 +200,11 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		name = "A paired device"
 	}
 	screen.WakeDisplay()
-	screen.Notify("Mewla screen control", name+" is viewing and controlling this screen.")
+	screen.Notify("Mewla Screen", name+" is viewing and controlling this computer.")
 	started := time.Now()
 	var fromScreen, toScreen atomic.Int64
 	defer func() {
-		screen.Notify("Mewla screen control", name+" stopped controlling this screen.")
+		screen.Notify("Mewla Screen", name+" stopped controlling this computer.")
 		log.Printf("screen: device %s session ended after %s, %d bytes to viewer, %d bytes from viewer",
 			device.ID, time.Since(started).Round(time.Second), fromScreen.Load(), toScreen.Load())
 	}()
@@ -206,15 +224,15 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 				cancel(err)
 				return
 			}
-			// Revoking the device or turning screen control off ends control within seconds.
+			// Revoking the device or turning Screen off ends control within seconds.
 			if time.Since(trusted) > 2*time.Second {
 				if !s.auth.IsDeviceTrusted(device.ID) {
 					cancel(errors.New("device revoked"))
 					return
 				}
-				if !s.screen.Enabled() {
-					sendJSON(map[string]string{"type": "error", "error": screen.ErrDisabled.Error()})
-					cancel(screen.ErrDisabled)
+				if !s.screen.Allowed(device.ID) {
+					sendJSON(map[string]string{"type": "error", "error": screen.ErrNotApproved.Error()})
+					cancel(screen.ErrNotApproved)
 					return
 				}
 				trusted = time.Now()
@@ -238,7 +256,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	}()
 	go func() {
 		<-ctx.Done()
-		_ = upstream.Conn.Close()
+		_ = upstream.Close()
 		_ = viewerReader.CloseWithError(context.Cause(ctx))
 	}()
 
@@ -249,13 +267,13 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	}
 	sendJSON(map[string]string{"type": "ready"})
 	go func() {
-		n, err := io.Copy(upstream.Conn, viewerReader)
+		n, err := io.Copy(upstream, viewerReader)
 		toScreen.Add(n)
 		cancel(err)
 	}()
 	buf := make([]byte, 256<<10)
 	for {
-		n, err := upstream.Conn.Read(buf)
+		n, err := upstream.Read(buf)
 		if n > 0 {
 			fromScreen.Add(int64(n))
 			chunk := append([]byte(nil), buf[:n]...)
@@ -265,7 +283,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			if ctx.Err() == nil {
-				sendJSON(map[string]string{"type": "error", "error": "The screen server closed the connection"})
+				sendJSON(map[string]string{"type": "error", "error": "The screen session ended"})
 			}
 			return
 		}

@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,47 +13,6 @@ import (
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/gorilla/websocket"
 )
-
-// startNoAuthRFB is a loopback RFB 3.8 server with no sign-in that echoes
-// every byte after ServerInit.
-func startNoAuthRFB(t *testing.T) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer conn.Close()
-				_, _ = io.WriteString(conn, "RFB 003.008\n")
-				buf := make([]byte, 12)
-				if _, err := io.ReadFull(conn, buf); err != nil {
-					return
-				}
-				_, _ = conn.Write([]byte{1, 1})
-				if _, err := io.ReadFull(conn, buf[:1]); err != nil {
-					return
-				}
-				_, _ = conn.Write([]byte{0, 0, 0, 0})
-				if _, err := io.ReadFull(conn, buf[:1]); err != nil {
-					return
-				}
-				init := make([]byte, 24)
-				binary.BigEndian.PutUint16(init[0:], 800)
-				binary.BigEndian.PutUint16(init[2:], 600)
-				_, _ = conn.Write(init) // empty name
-				_, _ = io.Copy(conn, conn)
-			}()
-		}
-	}()
-	return ln.Addr().String()
-}
 
 type screenViewerClient struct {
 	t    *testing.T
@@ -87,11 +45,13 @@ func (c *screenViewerClient) write(data []byte) {
 	}
 }
 
-func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
+func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	a, priv, device := sessionFileAuthFixture(t)
 	stateDir := t.TempDir()
+	fake := screen.NewFakeBackend(320, 200)
+	service := screen.NewServiceWith(stateDir, fake)
 	s := New(a, nil, nil, nil, nil, nil, nil)
-	s.SetScreen(screen.NewService(stateDir))
+	s.SetScreen(service)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	wsURL := "ws" + strings.TrimPrefix(h.URL, "http") + "/screen/viewer"
@@ -102,6 +62,21 @@ func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
 		}
 		return websocket.DefaultDialer.Dial(wsURL, header)
 	}
+	call := func(method, body string) (screen.Status, int, string) {
+		req, _ := http.NewRequest(method, h.URL+"/screen", strings.NewReader(body))
+		req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
+		req.Header.Set("Accept", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		var status screen.Status
+		_ = json.Unmarshal(raw, &status)
+		return status, resp.StatusCode, string(raw)
+	}
+
 	for _, purpose := range []string{"", "mewla-connect", "mewla-screen"} {
 		if c, resp, err := dial(purpose); err == nil {
 			c.Close()
@@ -110,39 +85,41 @@ func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
 			t.Fatalf("purpose %q: %v", purpose, err)
 		}
 	}
+	unsigned, _ := http.NewRequest(http.MethodGet, h.URL+"/screen", nil)
+	unsigned.Header.Set("Accept", "application/json")
+	if resp, err := http.DefaultClient.Do(unsigned); err != nil || resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unsigned status: %v %v", resp, err)
+	}
 
-	// Off by default: the viewer is told why and closed.
+	status, code, _ := call(http.MethodGet, "")
+	if code != 200 || !status.Supported || status.Approved || status.Ready {
+		t.Fatalf("status before approval: %d %+v", code, status)
+	}
+	// A device that was never allowed is told so and closed.
 	c, _, err := dial("mewla-screen-view")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var msg struct{ Type, Error string }
 	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if err := c.ReadJSON(&msg); err != nil || msg.Type != "error" || !strings.Contains(msg.Error, "mewla screen enable") {
-		t.Fatalf("disabled: %+v %v", msg, err)
+	if err := c.ReadJSON(&msg); err != nil || msg.Type != "error" || !strings.Contains(msg.Error, "isn't allowed") {
+		t.Fatalf("unapproved viewer: %+v %v", msg, err)
 	}
 	c.Close()
-
-	// Status needs its own signed purpose.
-	statusReq, _ := http.NewRequest(http.MethodGet, h.URL+"/screen", nil)
-	if resp, err := http.DefaultClient.Do(statusReq); err != nil || resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unsigned status: %v %v", resp, err)
+	if _, code, body := call(http.MethodPost, `{"keep_awake":false}`); code != http.StatusConflict {
+		t.Fatalf("unapproved keep-awake: %d %s", code, body)
+	}
+	if _, code, _ := call(http.MethodPost, `{"action":"remote_enable_everything"}`); code != http.StatusBadRequest {
+		t.Fatalf("unknown action: %d", code)
 	}
 
-	if err := screen.SaveConfig(stateDir, screen.Config{Enabled: true, Address: startNoAuthRFB(t)}); err != nil {
-		t.Fatal(err)
+	// Enabling asks the computer once, then the device is ready.
+	status, code, body := call(http.MethodPost, `{"action":"enable"}`)
+	if code != 200 || !status.Approved || !status.Ready || len(fake.Confirmed) != 1 {
+		t.Fatalf("enable: %d %s %v", code, body, fake.Confirmed)
 	}
-	statusReq, _ = http.NewRequest(http.MethodGet, h.URL+"/screen", nil)
-	statusReq.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
-	resp, err := http.DefaultClient.Do(statusReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var status screen.Status
-	_ = json.NewDecoder(resp.Body).Decode(&status)
-	resp.Body.Close()
-	if !status.Available || status.Width != 800 || status.Height != 600 {
-		t.Fatalf("status = %+v", status)
+	if _, code, _ := call(http.MethodPost, `{"action":"open_settings","permission":"accessibility"}`); code != 200 || fake.Opened[0] != "accessibility" {
+		t.Fatalf("open settings: %d %v", code, fake.Opened)
 	}
 
 	open := func() *screenViewerClient {
@@ -164,16 +141,14 @@ func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
 		}
 		v.write([]byte{1}) // ClientInit
 		init := v.read(24)
-		if binary.BigEndian.Uint16(init[0:]) != 800 {
+		if binary.BigEndian.Uint16(init[0:]) != 320 || binary.BigEndian.Uint16(init[2:]) != 200 {
 			t.Fatalf("ServerInit %v", init)
 		}
+		v.read(int(binary.BigEndian.Uint32(init[20:])))
 		return v
 	}
 	first := open()
-	first.write([]byte("hello"))
-	if got := string(first.read(5)); got != "hello" {
-		t.Fatalf("echo %q", got)
-	}
+	first.write([]byte{5, 1, 0, 10, 0, 20}) // pointer press at (10, 20)
 	if err := first.conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"ping","t":42}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -190,19 +165,8 @@ func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
 	if pong.T != 42 {
 		t.Fatalf("pong %+v", pong)
 	}
-
-	// While a viewer is attached, status does not open a second sign-in.
-	statusReq, _ = http.NewRequest(http.MethodGet, h.URL+"/screen", nil)
-	statusReq.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
-	resp, err = http.DefaultClient.Do(statusReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	status = screen.Status{}
-	_ = json.NewDecoder(resp.Body).Decode(&status)
-	resp.Body.Close()
-	if !status.Available || status.Width != 0 {
-		t.Fatalf("attached status probed Screen Sharing: %+v", status)
+	if pointers, _ := fake.Snapshot(); len(pointers) != 1 || pointers[0] != (screen.FakePointer{X: 10, Y: 20, Buttons: 1}) {
+		t.Fatalf("pointer did not reach the backend: %+v", pointers)
 	}
 
 	// A second viewer takes over; the first is closed with the reason.
@@ -220,19 +184,19 @@ func TestScreenViewerRequiresDeviceAuthAndBridgesRFB(t *testing.T) {
 		break
 	}
 
-	// Turning screen control off ends the open session.
-	if err := screen.SaveConfig(stateDir, screen.Config{}); err != nil {
+	// The local kill switch ends the open session.
+	if err := service.Disable(); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2100 * time.Millisecond)
-	second.write([]byte("x"))
+	second.write([]byte{5, 0, 0, 1, 0, 1})
 	_ = second.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	for {
 		kind, data, err := second.conn.ReadMessage()
 		if err != nil {
-			t.Fatal("closed without saying screen control is off")
+			t.Fatal("closed without saying why")
 		}
-		if kind == websocket.TextMessage && strings.Contains(string(data), "mewla screen enable") {
+		if kind == websocket.TextMessage && strings.Contains(string(data), "isn't allowed") {
 			break
 		}
 	}

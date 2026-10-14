@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
-import { ActionMenu, EmptyState, IconButton, InlineNotice } from "../ui";
+import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
@@ -26,7 +26,6 @@ import {
   connectionQuality,
   formatStats,
   KEYBOARD_SENTINEL,
-  keepScreenIdentity,
   keyboardEdit,
   NO_MODIFIERS,
   powerSummary,
@@ -44,7 +43,7 @@ import {
   type ScreenViewerHostHandle,
 } from "./screenViewerProtocol";
 
-type Phase = "checking" | "unavailable" | "connecting" | "live" | "lost";
+type Phase = "checking" | "setup" | "connecting" | "live" | "lost";
 
 const MODIFIERS: { key: ScreenModifier; label: string; name: string }[] = [
   { key: "Command", label: "⌘", name: "Command" },
@@ -168,9 +167,11 @@ export function ScreenScreen() {
     }
     if (!active()) return;
     setStatus(next);
-    if (!next.enabled || !next.available) {
-      setReason(next.reason || "Screen control isn't available on this computer.");
-      setPhase("unavailable");
+    // Unsupported, off at the computer, not yet allowed, or missing
+    // permissions: the setup view explains the one next step.
+    if (!next.ready) {
+      setReason(next.reason || null);
+      setPhase("setup");
       return;
     }
     setPhase("connecting");
@@ -220,7 +221,7 @@ export function ScreenScreen() {
     if (phase !== "live" || !currentServer) return;
     const server = currentServer;
     const timer = setInterval(() => {
-      void screenRequest(server).then((next) => { if (isCurrentServer(server.id)) setStatus((prev) => keepScreenIdentity(prev, next)); }).catch(() => {});
+      void screenRequest(server).then((next) => { if (isCurrentServer(server.id)) setStatus(next); }).catch(() => {});
     }, 30000);
     return () => clearInterval(timer);
   }, [currentServer, isCurrentServer, phase]);
@@ -272,11 +273,33 @@ export function ScreenScreen() {
     const server = currentServer;
     setBusy(true);
     try {
-      const next = await screenRequest(server, keep);
-      if (isCurrentServer(server.id)) setStatus((prev) => keepScreenIdentity(prev, next));
+      const next = await screenRequest(server, { keep_awake: keep });
+      if (isCurrentServer(server.id)) setStatus(next);
     } catch (error) {
       if (isCurrentServer(server.id)) setReason(error instanceof Error ? error.message : String(error));
     } finally { setBusy(false); }
+  };
+  // Turning Screen on waits for someone at the computer to click Allow; the
+  // operating system then asks for its own permissions there.
+  const enable = async () => {
+    if (!currentServer) return;
+    const server = currentServer;
+    setBusy(true);
+    setReason(null);
+    try {
+      const next = await screenRequest(server, { action: "enable" });
+      if (!isCurrentServer(server.id)) return;
+      setStatus(next);
+      if (next.ready) void connect();
+    } catch (error) {
+      if (isCurrentServer(server.id)) setReason(error instanceof Error ? error.message : String(error));
+    } finally { setBusy(false); }
+  };
+  const openSettings = async (permission: string) => {
+    if (!currentServer) return;
+    try { await screenRequest(currentServer, { action: "open_settings", permission }); } catch (error) {
+      setReason(error instanceof Error ? error.message : String(error));
+    }
   };
   const changeMode = (next: ScreenPointerMode) => {
     setMode(next);
@@ -284,7 +307,6 @@ export function ScreenScreen() {
   };
 
   const title = status?.name || serverName;
-  const machine = status?.platform === "darwin" ? "Mac" : "computer";
   const menuItems: ActionMenuItem[] = [
     {
       key: "mode", icon: mode === "touch" ? "hand" : "navigate",
@@ -293,9 +315,9 @@ export function ScreenScreen() {
       onPress: () => changeMode(mode === "touch" ? "trackpad" : "touch"),
     },
     { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
-    ...(status?.enabled ? [{
+    ...(status?.approved ? [{
       key: "awake", icon: "power", disabled: busy,
-      label: status.keep_awake ? `Let this ${machine} sleep` : `Keep this ${machine} awake`,
+      label: status.keep_awake ? "Let this computer sleep" : "Keep this computer awake",
       detail: status.keep_awake ? "It can't be reached while asleep" : "The display may still sleep",
       onPress: () => void setKeepAwake(!status.keep_awake),
     } satisfies ActionMenuItem] : []),
@@ -334,12 +356,11 @@ export function ScreenScreen() {
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingLeft: landscape ? insets.left : 0, paddingRight: landscape ? insets.right : 0 }]}>
       {header}
       {sheet}
-      {phase === "unavailable" ? (
-        <View style={[styles.root, styles.center]}>
-          <EmptyState icon="desktop" title={status?.enabled ? "Can't open this screen" : "Screen control is off"}
-            detail={reason ?? undefined}
-            action={{ label: "Check again", icon: "refresh", onPress: () => void connect() }} />
-        </View>
+      {phase === "setup" && status ? (
+        <ScrollView contentContainerStyle={[styles.center, styles.setup]}>
+          <ScreenSetup status={status} name={title} busy={busy} reason={reason}
+            onEnable={() => void enable()} onOpenSettings={(id) => void openSettings(id)} onCheck={() => void connect()} />
+        </ScrollView>
       ) : null}
       {phase === "checking" && !status ? (
         <View style={[styles.root, styles.center]}><EmptyState busy title={`Opening ${serverName}'s screen…`} /></View>
@@ -350,7 +371,7 @@ export function ScreenScreen() {
             action={{ label: "Reconnect", onPress: () => void connect() }} />
         </View>
       ) : null}
-      {warning && phase !== "unavailable" ? (
+      {warning && phase !== "setup" ? (
         <View style={styles.notice}>
           <InlineNotice tone="warning" icon="power" title={warning.title} detail={warning.detail}
             action={status && !status.keep_awake ? { label: "Keep awake", onPress: () => void setKeepAwake(true), disabled: busy } : undefined} />
@@ -409,6 +430,62 @@ export function ScreenScreen() {
   );
 }
 
+/**
+ * The one next step before a viewer can open, the same on every platform:
+ * unsupported, turned off at the computer, not yet allowed, or waiting for
+ * operating-system permissions.
+ */
+function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onCheck }: {
+  status: ScreenStatus;
+  name: string;
+  busy: boolean;
+  reason: string | null;
+  onEnable(): void;
+  onOpenSettings(permission: string): void;
+  onCheck(): void;
+}) {
+  const { colors } = useAppTheme();
+  if (!status.supported) {
+    return <EmptyState icon="desktop" title="Screen isn't available for this computer yet"
+      detail={status.reason || `${name} can't share its screen with Mewla yet.`} />;
+  }
+  if (status.disabled) {
+    return <EmptyState icon="lock" title="Screen is turned off on this computer"
+      detail={`To allow devices again, run mewla screen enable on ${name}.`}
+      action={{ label: "Check again", icon: "refresh", onPress: onCheck }} />;
+  }
+  if (!status.approved) {
+    return (
+      <View style={styles.setupBlock}>
+        <EmptyState icon="desktop" title={busy ? `Waiting for Allow on ${name}…` : "Turn on Screen"}
+          detail={busy
+            ? "Someone at the computer has to click Allow. It also asks for the system permissions Screen needs."
+            : `See and control ${name} from here. ${name} asks once whether to allow this device, so someone has to be at it.`}
+          action={{ label: busy ? "Waiting…" : "Turn on Screen", icon: "desktop", onPress: onEnable, loading: busy }} />
+        {reason && !busy ? <InlineNotice tone="warning" title="Not turned on" detail={reason} /> : null}
+      </View>
+    );
+  }
+  const missing = (status.permissions ?? []).filter((p) => !p.granted);
+  return (
+    <View style={styles.setupBlock}>
+      <EmptyState icon="shield-check" title={`Allow Screen on ${name}`}
+        detail={`${name} still needs these permissions. Approve its prompts, or open the settings there and turn Mewla on.`} />
+      {missing.map((p) => (
+        <View key={p.id} style={[styles.permission, { borderColor: colors.borderSubtle, backgroundColor: colors.bgSurface }]}>
+          <View style={styles.permissionText}>
+            <AppText variant="label" style={{ color: colors.textPrimary }}>{p.name}</AppText>
+            {p.guidance ? <AppText variant="caption" style={{ color: colors.textSecondary }}>{p.guidance}</AppText> : null}
+          </View>
+          {p.can_open ? <Button label="Open settings" size="sm" variant="tinted" onPress={() => onOpenSettings(p.id)} /> : null}
+        </View>
+      ))}
+      <Button label="Check again" icon="refresh" variant="outlined" onPress={onCheck} />
+      {reason ? <InlineNotice tone="warning" title="Something went wrong" detail={reason} /> : null}
+    </View>
+  );
+}
+
 function KeyButton({ label, name, icon, active, locked, wide, onPress }: {
   label: string;
   name: string;
@@ -449,5 +526,12 @@ const styles = StyleSheet.create({
   keys: { gap: Spacing.xs, paddingHorizontal: Spacing.sm, alignItems: "center" },
   key: { minWidth: TouchTarget, height: TouchTarget, paddingHorizontal: Spacing.sm, alignItems: "center", justifyContent: "center", borderRadius: Radii.sm, ...ContinuousCorners },
   wideKey: { paddingHorizontal: Spacing.md },
+  setup: { flexGrow: 1 },
+  setupBlock: { width: "100%", maxWidth: 440, gap: Spacing.md, alignItems: "stretch" },
+  permission: {
+    flexDirection: "row", alignItems: "center", gap: Spacing.md, padding: Spacing.md,
+    borderWidth: StyleSheet.hairlineWidth, borderRadius: Radii.md, ...ContinuousCorners,
+  },
+  permissionText: { flex: 1, gap: 2 },
   hiddenInput: { position: "absolute", width: 1, height: 1, opacity: 0, left: -100, bottom: 0 },
 });

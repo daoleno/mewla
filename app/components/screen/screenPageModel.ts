@@ -64,15 +64,15 @@ export function powerSummary(power: ScreenPower | undefined, keepAwake: boolean)
 /** The one power risk worth interrupting the user for, if any. */
 export function powerWarning(status: ScreenStatus | null): { title: string; detail: string } | null {
   const power = status?.power;
-  if (!status || !power) return null;
+  if (!status || !power || !status.approved) return null;
   if (power.lid_closed) {
     return {
       title: "The lid is closed",
-      detail: "A closed MacBook sleeps unless an external display is connected. Keep the lid open while you're away.",
+      detail: "A laptop with its lid closed sleeps unless an external display is connected. Keep the lid open while you're away.",
     };
   }
   if (!status.keep_awake) {
-    return { title: "This Mac may sleep", detail: "Once it sleeps you can't reach it until someone wakes it. Turn on Keep awake." };
+    return { title: "This computer may sleep", detail: "Once it sleeps you can't reach it until someone wakes it. Turn on Keep awake." };
   }
   if (power.source === "battery") {
     return { title: "On battery", detail: "It stays awake while idle, but connect the charger before you leave so it can't run down." };
@@ -95,13 +95,4 @@ export function connectionQuality(rttMs: number | null): "good" | "fair" | "poor
   if (rttMs < 80) return "good";
   if (rttMs < 200) return "fair";
   return "poor";
-}
-
-/**
- * While a viewer is attached the daemon reports status without signing in to
- * Screen Sharing again, so the name and size come from the earlier probe.
- */
-export function keepScreenIdentity(prev: ScreenStatus | null, next: ScreenStatus): ScreenStatus {
-  if (next.name || !prev) return next;
-  return { ...next, name: prev.name, width: prev.width, height: prev.height };
 }

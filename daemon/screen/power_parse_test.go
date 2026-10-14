@@ -27,24 +27,3 @@ func TestParseClamshell(t *testing.T) {
 		t.Fatal("desktop has no lid")
 	}
 }
-
-func TestKeepAwakeFollowsOptIn(t *testing.T) {
-	dir := t.TempDir()
-	service := NewService(dir)
-	if err := service.SetKeepAwake(true); err != ErrDisabled {
-		t.Fatalf("keep-awake must not turn screen control on: %v", err)
-	}
-	if err := SaveConfig(dir, Config{Enabled: true}); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _ := LoadConfig(dir)
-	if !cfg.KeepAwake() {
-		t.Fatal("keep-awake is on by default once screen control is enabled")
-	}
-	if err := service.SetKeepAwake(false); err != nil {
-		t.Fatal(err)
-	}
-	if cfg, _ = LoadConfig(dir); cfg.KeepAwake() || !cfg.Enabled {
-		t.Fatalf("after turning keep-awake off: %+v", cfg)
-	}
-}

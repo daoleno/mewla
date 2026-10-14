@@ -24,12 +24,11 @@ over your computer as those Sessions. File preview is read-only, but it is not
 a sandbox: it can open files anywhere the daemon's user can read. **Pair only
 devices you trust with a terminal on that computer.**
 
-When you turn on [Screen](screen.md) on a Mac, a paired device can also see
-and control that Mac's screen. The daemon signs in to Screen Sharing on
-`127.0.0.1` with the VNC password stored `0600` in `~/.mewla/screen.json`; the
-password never leaves the Mac, and devices need only their signature. Restrict
-Screen Sharing to local connections as [Screen](screen.md#turn-it-on) shows, so
-port 5900 itself is not reachable from the network.
+[Screen](screen.md) lets a paired device see and control the computer's
+screen, but only after someone at the computer allows that device. The daemon
+captures the screen itself and serves it over the device's signed connection;
+no screen-sharing port is opened. `mewla screen disable` at the computer closes
+every viewer and forgets every allowed device.
 
 ## What to expose
 
