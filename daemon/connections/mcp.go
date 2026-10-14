@@ -473,6 +473,7 @@ func (m *Manager) officialMCPIdentity(ctx context.Context, r *record, secret str
 	for _, tool := range tools {
 		args := map[string]any{}
 		if r.Account.Integration == "notion" && tool.Name == "notion-get-self" && toolGroup(r, tool) == "read" {
+		} else if r.Account.Integration == "cloudflare" && tool.Name == "whoami" && toolGroup(r, tool) == "read" {
 		} else if r.Account.Integration == "linear" && tool.Name == "get_user" && toolGroup(r, tool) == "read" {
 			var schema struct {
 				Properties map[string]json.RawMessage `json:"properties"`

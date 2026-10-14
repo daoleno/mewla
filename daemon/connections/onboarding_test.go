@@ -429,6 +429,73 @@ func TestOnloraToolGroupsOnlyOnItsEndpoint(t *testing.T) {
 	}
 }
 
+// Cloudflare connects with one tap from the web UI: discovery and dynamic
+// registration against its published metadata, asking only for the scopes
+// every grant needs so its consent page picks the rest. Cloudflare refuses
+// the app's mewla:// return, so the app is told before anything registers.
+func TestCloudflareConnectRegistersFromTheWebUIOnly(t *testing.T) {
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
+	var registered struct {
+		RedirectURIs []string `json:"redirect_uris"`
+		AuthMethod   string   `json:"token_endpoint_auth_method"`
+	}
+	registrations := 0
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var body string
+		switch req.Method + " " + req.URL.String() {
+		case "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp":
+			body = `{"resource":"https://mcp.cloudflare.com/mcp","authorization_servers":["https://mcp.cloudflare.com"],"scopes_supported":["user:read","account:read"]}`
+		case "GET https://mcp.cloudflare.com/.well-known/oauth-authorization-server":
+			body = `{"issuer":"https://mcp.cloudflare.com","authorization_endpoint":"https://mcp.cloudflare.com/authorize","token_endpoint":"https://mcp.cloudflare.com/token","registration_endpoint":"https://mcp.cloudflare.com/register","revocation_endpoint":"https://mcp.cloudflare.com/token","scopes_supported":["offline_access","user:read","account:read","workers.write"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["client_secret_basic","client_secret_post","none"]}`
+		case "POST https://mcp.cloudflare.com/register":
+			registrations++
+			_ = json.NewDecoder(req.Body).Decode(&registered)
+			body = `{"client_id":"cloudflare-client","token_endpoint_auth_method":"none"}`
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	start := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "cloudflare", WebOrigin: "https://mewla.example"}}).Flow
+	callback := "https://mewla.example/plugins/oauth/callback"
+	if len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != callback || registered.AuthMethod != "none" {
+		t.Fatalf("registered %+v", registered)
+	}
+	authorize, _ := url.Parse(start.AuthorizationURL)
+	q := authorize.Query()
+	if authorize.Host != "mcp.cloudflare.com" || authorize.Path != "/authorize" || q.Get("client_id") != "cloudflare-client" || q.Get("redirect_uri") != callback {
+		t.Fatalf("authorization URL %s", start.AuthorizationURL)
+	}
+	if q.Get("scope") != "user:read account:read offline_access" || q.Get("resource") != "https://mcp.cloudflare.com/mcp" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
+		t.Fatalf("authorization asks for %v", q)
+	}
+	r := m.records[start.AccountID]
+	if r.Account.Name != "Cloudflare" || r.Account.Endpoint != "https://mcp.cloudflare.com/mcp" || r.Account.AuthMethod != "mcp_oauth" || writeConsent(r) {
+		t.Fatalf("pending account %+v", r.Account)
+	}
+	if _, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: "cloudflare"}}); err == nil || !strings.Contains(err.Error(), "web UI") || registrations != 1 {
+		t.Fatalf("app connect: %v after %d registrations", err, registrations)
+	}
+	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "cloudflare", Name: "Pasted", Credential: "token"}}); err == nil {
+		t.Fatal("Cloudflare accepted a pasted credential")
+	}
+}
+
+func TestCloudflareToolGroupsOnlyOnItsEndpoint(t *testing.T) {
+	r := &record{Account: Account{Integration: "cloudflare", AuthMethod: "mcp_oauth", Endpoint: "https://mcp.cloudflare.com/mcp"}}
+	for name, group := range map[string]string{"search": "read", "docs": "read", "whoami": "read", "execute": "write", "new_tool": ""} {
+		if got := toolGroup(r, Tool{Name: name}); got != group {
+			t.Fatalf("%s is %q, not %q", name, got, group)
+		}
+	}
+	r.Account.Endpoint = "https://cloudflare.example/mcp"
+	if toolGroup(r, Tool{Name: "search"}) != "" {
+		t.Fatal("another endpoint inherited Cloudflare's reviewed tools")
+	}
+}
+
 func TestNativeRedirectForAppSchemesAndLoopback(t *testing.T) {
 	for raw, native := range map[string]bool{
 		"mewla://plugins": true,
