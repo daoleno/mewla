@@ -10,7 +10,7 @@ import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, usesApiKey, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, usesApiKey, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -334,14 +334,21 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (!result && valid() && previous) setDetails((old) => ({ ...old, [target.id]: previous }));
     });
   };
+  /** Confirms the updated tools the notice showed, all of them in one request. */
+  const confirmUpdates = (account: PluginAccount, names: readonly string[]) => {
+    if (!names.length) return;
+    void send(toolUpdatesRequest(account, names, true), `updates:${account.id}`);
+  };
   const plugin = (id: string | null) => catalog.find((item) => item.id === id) ?? null;
+  /** How a notice names an account's service: a custom service by its own name. */
+  const serviceLabel = (account: PluginAccount) => account.integration === "mcp" || account.integration === "openapi" ? account.name : plugin(account.integration)?.name ?? account.name;
   return {
     serverId, serverName, connection, deferredName,
     catalog, accounts, details, loaded, running, busy: running !== null, error, phase, flow, service, connectError,
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
     plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
-    setAccess, disconnect, recover, setEnabled, setKey, load, setTools,
+    setAccess, disconnect, recover, setEnabled, setKey, load, setTools, confirmUpdates, serviceLabel,
   };
 }
 

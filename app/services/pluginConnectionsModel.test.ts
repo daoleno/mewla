@@ -14,6 +14,8 @@ import {
   toolPolicyRequest,
   toolSections,
   toolsSwitch,
+  toolUpdates,
+  toolUpdatesRequest,
   usesApiKey,
   withToolsAllowed,
 } from "./pluginConnectionsModel";
@@ -206,5 +208,26 @@ describe("tool switches", () => {
     const next = withToolsAllowed(target, ["fetch", "export"], true);
     expect(next.tools?.filter((item) => item.allowed).map((item) => item.name)).toEqual(["search", "fetch", "update", "export"]);
     expect(target.tools?.[1].allowed).toBe(false);
+  });
+});
+
+describe("tool updates from a service", () => {
+  test("one notice names what changed and confirms exactly those tools", () => {
+    const target = account({ integration: "onlora", updates: ["pick_draft", "propose_drafts"] });
+    const notice = toolUpdates(target, "Onlora");
+    expect(notice?.title).toBe("Onlora updated 2 tools");
+    expect(notice?.detail).toContain("pick_draft, propose_drafts");
+    expect(notice?.detail).not.toMatch(/authori/i);
+    expect(toolUpdatesRequest(target, notice!.names, true)).toEqual({ action: "confirm_updates", id: "a1", tools: ["pick_draft", "propose_drafts"] });
+    expect(toolUpdatesRequest(target, ["pick_draft"], false)).toEqual({ action: "dismiss_updates", id: "a1", tools: ["pick_draft"] });
+  });
+  test("a single tool and long lists read naturally", () => {
+    expect(toolUpdates(account({ updates: ["a"] }), "Linear")?.title).toBe("Linear updated 1 tool");
+    expect(toolUpdates(account({ updates: ["a", "b", "c", "d", "e", "f"] }), "Linear")?.detail).toContain("a, b, c, d and 2 more");
+  });
+  test("nothing to confirm, or an account that is off, asks nothing", () => {
+    expect(toolUpdates(account({}), "Onlora")).toBeNull();
+    expect(toolUpdates(account({ updates: ["a"], enabled: false }), "Onlora")).toBeNull();
+    expect(toolUpdates(account({ updates: ["a"], status: "disconnected" }), "Onlora")).toBeNull();
   });
 });

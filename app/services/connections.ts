@@ -12,6 +12,8 @@ export type ConnectionTool = {
   input_schema?: Record<string, unknown>;
   allowed: boolean;
   group?: "read" | "write";
+  /** The service added or changed this tool; it waits for confirmation before Brain can use it. */
+  updated?: boolean;
 };
 export type PluginAccount = {
   id: string;
@@ -32,6 +34,8 @@ export type PluginAccount = {
   history: { at: string; tool: string; status: string; message?: string }[];
   /** What Brain may do with this account, summarized by the server. */
   access?: PluginAccess;
+  /** Tools the service added or changed that wait for confirmation. */
+  updates?: string[];
 };
 /** A permission group: every reviewed tool allowed, some, none, or the account has no such tools. */
 export type AccessState = "allowed" | "partial" | "off" | "none";
@@ -47,10 +51,10 @@ export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
   group?: "read" | "write";
-  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "set_key" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy";
+  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "set_key" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates";
   id?: string;
   tool?: string;
-  /** policy: several tools at once, all of them or none. */
+  /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */
   tools?: string[];
   allowed?: boolean;
   input?: { integration: string; name?: string; endpoint?: string; credential?: string; model?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };

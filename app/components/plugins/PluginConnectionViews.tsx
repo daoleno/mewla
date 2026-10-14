@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
-import { AppText, Button, EmptyState, ListRow, ListSection, StatusPill } from "../ui";
+import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import type { ConnectPhase, PendingConnection } from "../../services/pluginOnboarding";
 import {
   accessControl,
   accountRecovery,
+  toolUpdates,
   accountTone,
   allowedToolCount,
   connectsWithForm,
@@ -191,6 +192,31 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
       accessibilityLabel={label}
       accessibilityHint={state.kind === "unavailable" ? undefined : "Opens the service"}
       onPress={state.kind === "unavailable" ? undefined : onOpen}
+    />
+  );
+}
+
+/**
+ * A service changed its tools: one notice per account, confirmed with one
+ * tap. Unchanged tools keep working meanwhile.
+ */
+export function ToolUpdatesNotice({ account, serviceName, running, onConfirm }: {
+  account: PluginAccount;
+  serviceName: string;
+  running: string | null;
+  onConfirm(names: string[]): void;
+}) {
+  const updates = toolUpdates(account, serviceName);
+  if (!updates) return null;
+  const confirming = running === `updates:${account.id}`;
+  return (
+    <InlineNotice
+      tone="accent"
+      icon="sync"
+      busy={confirming}
+      title={updates.title}
+      detail={updates.detail}
+      action={{ label: "Confirm", disabled: running !== null, onPress: () => onConfirm(updates.names) }}
     />
   );
 }
@@ -636,7 +662,7 @@ function ToolRow({ tool, busy, onToggle }: { tool: NonNullable<PluginAccount["to
       <ListRow
         title={tool.name}
         // One paragraph, so a description's own line breaks don't grow the row.
-        subtitle={tool.description.replace(/\s+/g, " ").trim()}
+        subtitle={`${tool.updated ? "Updated, waits for your confirmation · " : ""}${tool.description.replace(/\s+/g, " ").trim()}`}
         numberOfLines={2}
         leading={inputs.length ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={15} color={colors.textTertiary} /> : <View style={styles.disclosureSpace} />}
         onPress={inputs.length ? () => setExpanded(!expanded) : undefined}

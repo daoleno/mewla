@@ -187,6 +187,34 @@ export function withToolsAllowed(account: PluginAccount, names: readonly string[
   return { ...account, tools: account.tools?.map((tool) => (changed.has(tool.name) ? { ...tool, allowed } : tool)) };
 }
 
+/** A service's tool update waiting for the person: one notice, one tap. */
+export interface ToolUpdates {
+  title: string;
+  detail: string;
+  names: string[];
+}
+
+/**
+ * When a service adds or changes tools, the unchanged ones keep working and
+ * the rest wait here. Confirming allows exactly the tools named, the way the
+ * server recorded them. An account that is off or disconnected asks nothing.
+ */
+export function toolUpdates(account: PluginAccount, serviceName: string): ToolUpdates | null {
+  const names = account.updates ?? [];
+  if (!names.length || !account.enabled || account.status === "disconnected") return null;
+  const count = names.length === 1 ? "1 tool" : `${names.length} tools`;
+  const shown = names.length > 4 ? `${names.slice(0, 4).join(", ")} and ${names.length - 4} more` : names.join(", ");
+  return {
+    title: `${serviceName} updated ${count}`,
+    detail: `${shown}. Brain can use ${names.length === 1 ? "it" : "them"} once you confirm.`,
+    names: [...names],
+  };
+}
+
+export function toolUpdatesRequest(account: PluginAccount, names: readonly string[], confirm: boolean): ConnectionRequest {
+  return { action: confirm ? "confirm_updates" : "dismiss_updates", id: account.id, tools: [...names] };
+}
+
 export type AccountRecoveryAction = "refresh" | "reconnect" | "disconnect";
 
 export interface AccountRecovery {
