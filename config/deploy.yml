@@ -1,7 +1,8 @@
 # Hosted remote access (Kamal 2), on the host shared with Onlora.
 # Runbook: docs/internal/mewla-link-relay.md, "Hosted remote access".
 #
-#   connect.mewla.ai:443   relay -> SNI route -> caddy -> account service
+#   connect.mewla.ai:443   relay -> SNI route (PROXY header) -> account
+#                          service, which holds its own certificate
 #   connect.mewla.ai:8443  relay control plane (daemons)
 #   *.m.mewla.ai:443       relay -> a computer, TLS passed through untouched
 #
@@ -28,10 +29,14 @@ servers:
       -public-url=https://connect.mewla.ai
       -client-domain=m.mewla.ai
       -relay=name=main,control=connect.mewla.ai:8443,server-name=connect.mewla.ai,ca-file=/run/mewla-link/relay.crt
+      -tls-addr=:8443
+      -proxy-protocol
       -dns-provider=cloudflare
       -cloudflare-zone-id=338037db978d5f7b2ae75f151022ad66
     options:
-      # Caddy's upstream; app container names change with every version.
+      # The relay's SNI route target; app container names change with
+      # every version. Not published: only the relay can reach it, which is
+      # what makes its PROXY header trustworthy.
       network-alias: mewla-account
 
 env:
@@ -79,7 +84,8 @@ accessories:
       -tls-cert=/run/mewla-link/relay.crt
       -tls-key=/run/mewla-link/relay.key
       -grant-public-key-file=/run/mewla-link/grant.pub
-      -sni-route=connect.mewla.ai=mewla-link-caddy:443
+      -sni-route=connect.mewla.ai=mewla-account:8443
+      -sni-route-proxy-protocol
       -max-clients=4096
       -max-clients-per-route=32
       -max-client-handshakes=8192
@@ -109,19 +115,6 @@ accessories:
         - "0.0.0.0:443:443"
         - "0.0.0.0:8443:8443"
         - "127.0.0.1:9180:8080"
-
-  # HTTPS for the account service behind the relay's SNI route.
-  caddy:
-    image: caddy:2.8.4
-    host: 167.114.116.27
-    env:
-      clear:
-        MEWLA_SERVICE_HOST: connect.mewla.ai
-    files:
-      - deploy/mewla-link/Caddyfile:/etc/caddy/Caddyfile
-    directories:
-      # Certificates and the ACME account.
-      - data:/data
 
 deploy_timeout: 60
 drain_timeout: 10
