@@ -30,8 +30,18 @@ func newBackend() Backend { return &macBackend{stale: map[string]bool{}} }
 // macBackend tracks permissions granted while Mewla runs that this process
 // still can't use: macOS applies some grants only to a new process.
 type macBackend struct {
-	mu    sync.Mutex
-	stale map[string]bool
+	mu      sync.Mutex
+	stale   map[string]bool
+	guiding bool
+	restart func()
+}
+
+// SetRestart lets the backend restart Mewla once every grant is in place but
+// this process can't use one yet.
+func (b *macBackend) SetRestart(restart func()) {
+	b.mu.Lock()
+	b.restart = restart
+	b.mu.Unlock()
 }
 
 const (
@@ -261,6 +271,8 @@ func (b *macBackend) Capability(ctx context.Context) Capability {
 	}}
 }
 
+// RequestPermissions shows macOS's own prompts, then guides the person at the
+// computer through whatever is still missing.
 func (b *macBackend) RequestPermissions(context.Context) {
 	if loadMac() != nil {
 		return
@@ -274,6 +286,108 @@ func (b *macBackend) RequestPermissions(context.Context) {
 			options := objc.ID(objc.GetClass("NSDictionary")).Send(objc.RegisterName("dictionaryWithObject:forKey:"), yes, nsString("AXTrustedCheckOptionPrompt"))
 			mac.AXIsProcessTrustedWithOptions(options)
 		})
+	}
+	b.mu.Lock()
+	if b.guiding {
+		b.mu.Unlock()
+		return
+	}
+	b.guiding = true
+	b.mu.Unlock()
+	go b.guide()
+}
+
+const (
+	// guidePrompt is how long macOS's own prompt gets before Mewla opens the
+	// settings page itself; macOS prompts only once and may just list Mewla.
+	guidePrompt   = 8 * time.Second
+	guideInterval = 2 * time.Second
+	guideLimit    = 10 * time.Minute
+)
+
+// guide opens the settings page of each missing permission in turn, so the
+// person at the computer only turns switches on, and restarts Mewla when the
+// grants are in place but this process still can't use them.
+func (b *macBackend) guide() {
+	defer func() {
+		b.mu.Lock()
+		b.guiding = false
+		b.mu.Unlock()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), guideLimit)
+	defer cancel()
+	started := time.Now()
+	opened := map[string]bool{}
+	for {
+		own, live := livePermissions(ctx)
+		missing := ""
+		for _, id := range []string{permScreenRecording, permAccessibility} {
+			if !live[id] {
+				missing = id
+				break
+			}
+		}
+		if missing == "" {
+			if own[permAccessibility] && (own[permScreenRecording] || b.captureAllowed(ctx)) {
+				return
+			}
+			b.mu.Lock()
+			restart := b.restart
+			if restart == nil && !own[permScreenRecording] {
+				b.stale[permScreenRecording] = true
+			}
+			b.mu.Unlock()
+			if restart != nil {
+				log.Printf("screen: permissions granted; restarting Mewla to apply them")
+				restart()
+			}
+			return
+		}
+		if !opened[missing] && time.Since(started) >= guidePrompt {
+			opened[missing] = true
+			if err := b.OpenSettings(ctx, missing); err != nil {
+				log.Printf("screen: open %s settings: %v", missing, err)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(guideInterval):
+		}
+	}
+}
+
+// captureAllowed reports whether this process may list the displays, the
+// first thing capture needs.
+func (b *macBackend) captureAllowed(ctx context.Context) bool {
+	content, err := shareableContent(ctx)
+	if err != nil {
+		return false
+	}
+	content.Send(selRelease)
+	return true
+}
+
+// shareableContent returns the retained SCShareableContent.
+func shareableContent(ctx context.Context) (objc.ID, error) {
+	type shareable struct{ content, err objc.ID }
+	got := make(chan shareable, 1)
+	handler := objc.NewBlock(func(_ objc.Block, content, err objc.ID) {
+		if content != 0 {
+			content.Send(selRetain)
+		}
+		got <- shareable{content, err}
+	})
+	defer handler.Release()
+	objc.ID(objc.GetClass("SCShareableContent")).Send(objc.RegisterName("getShareableContentWithCompletionHandler:"), handler)
+	select {
+	case result := <-got:
+		if result.content == 0 {
+			return 0, errors.New(nsErrorText(result.err))
+		}
+		return result.content, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	}
 }
 
@@ -364,24 +478,12 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 	}
 	WakeDisplay()
 
-	type shareable struct{ content, err objc.ID }
-	got := make(chan shareable, 1)
-	handler := objc.NewBlock(func(_ objc.Block, content, err objc.ID) {
-		if content != 0 {
-			content.Send(selRetain)
+	content, err := shareableContent(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
-		got <- shareable{content, err}
-	})
-	defer handler.Release()
-	objc.ID(objc.GetClass("SCShareableContent")).Send(objc.RegisterName("getShareableContentWithCompletionHandler:"), handler)
-	var result shareable
-	select {
-	case result = <-got:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-	if result.content == 0 {
-		reason := nsErrorText(result.err)
+		reason := err.Error()
 		if !mac.CGPreflightScreenCaptureAccess() {
 			// Granted for a new process, refused to this one.
 			b.mu.Lock()
@@ -392,11 +494,11 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 		}
 		return nil, fmt.Errorf("list displays: %s", reason)
 	}
-	defer result.content.Send(selRelease)
+	defer content.Send(selRelease)
 
 	s := &macSession{changed: make(chan struct{}), done: make(chan struct{})}
 	var startErr error
-	withPool(func() { startErr = s.start(ctx, result.content) })
+	withPool(func() { startErr = s.start(ctx, content) })
 	if startErr != nil {
 		s.Close()
 		return nil, startErr
