@@ -125,8 +125,16 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 	out := ReadResult{RateRemaining: -1}
 	var headers http.Header
 	var body []byte
-	if snapshot.Account.Integration == "mcp" || snapshot.Account.Integration == "linear" || snapshot.Account.AuthMethod == "mcp_oauth" {
-		body, err = m.invokeMCP(ctx, &snapshot, secret, t, checked)
+	if usesMCP(&snapshot) {
+		timeout := mcpTimeout(t, checked)
+		call, cancel := context.WithTimeout(ctx, timeout)
+		outcome := m.callMCP(call, &snapshot, secret, t, checked, timeout)
+		cancel()
+		// A routine read leaves status and history alone, but a tool list it
+		// brought back is adopted like any other.
+		m.mu.Lock()
+		body, err = m.finishMCP(accountID, tool, sensitive, outcome, false)
+		m.mu.Unlock()
 	} else if snapshot.Account.Integration == "google" {
 		body, err = m.invokeGoogle(ctx, &snapshot, secret, t, checked)
 	} else {

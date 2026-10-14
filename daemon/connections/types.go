@@ -45,6 +45,9 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"input_schema,omitempty"`
 	Allowed     bool            `json:"allowed"`
 	Group       string          `json:"group,omitempty"`
+	// Updated: the service added or changed this tool and the new definition
+	// waits for the person's confirmation. Projected, never stored.
+	Updated bool `json:"updated,omitempty"`
 	// HTTP routing is private; never accepted from an execution request.
 	Method string `json:"-"`
 	Path   string `json:"-"`
@@ -77,6 +80,9 @@ type Account struct {
 	History                  []Event    `json:"history"`
 	// Access is projected for clients and never stored.
 	Access *Access `json:"access,omitempty"`
+	// Updates names the tools the service added or changed that wait for
+	// confirmation. Projected, never stored.
+	Updates []string `json:"updates,omitempty"`
 }
 
 // Access summarizes what Brain may do with an account, so a client can show
@@ -122,6 +128,9 @@ type Request struct {
 	Tools     []string        `json:"tools,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Allowed   bool            `json:"allowed,omitempty"`
+	// URI names one resource for read_resource; Cursor continues a listing.
+	URI    string `json:"uri,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
 	// Cwd resolves relative file paths; honored only from the local CLI.
 	Cwd string `json:"cwd,omitempty"`
 }

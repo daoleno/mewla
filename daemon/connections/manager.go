@@ -24,6 +24,9 @@ type record struct {
 	Spec    json.RawMessage   `json:"spec,omitempty"`
 	OAuth   *oauthAccount     `json:"oauth,omitempty"`
 	Grants  map[string]string `json:"grants"` // grant is bound to the full discovered tool definition
+	// Updates holds tools the service added or changed that wait for the
+	// person's confirmation, with the definition they would allow.
+	Updates map[string]string `json:"updates,omitempty"`
 }
 
 type Manager struct {
@@ -100,7 +103,9 @@ func (m *Manager) projection(r *record) Account {
 	for i := range a.Tools {
 		a.Tools[i].Group = toolGroup(r, a.Tools[i])
 		a.Tools[i].Allowed = r.Grants[a.Tools[i].Name] == fingerprint(a.Tools[i])
+		_, a.Tools[i].Updated = r.Updates[a.Tools[i].Name]
 	}
+	a.Updates = updatedNames(r)
 	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), Tools: len(a.Tools)}
 	for _, t := range a.Tools {
 		if t.Allowed {
@@ -126,6 +131,13 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if response, handled, err := m.invokeMedia(parent, q); handled {
 			return response, err
 		}
+		// So can a remote MCP tool that waits for its work (Onlora's wait_s).
+		if response, handled, err := m.invokeMCPAccount(parent, q); handled {
+			return response, err
+		}
+	}
+	if q.Action == "resources" || q.Action == "read_resource" {
+		return m.mcpResources(parent, q)
 	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
@@ -230,6 +242,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if err := setPolicy(r, q); err != nil {
 			return Response{}, err
 		}
+	case "confirm_updates", "dismiss_updates":
+		if err := reviewUpdates(r, q.Tools, q.Action == "confirm_updates"); err != nil {
+			return Response{}, err
+		}
 	case "set_key":
 		if err := m.setKey(ctx, r, q.Input); err != nil {
 			return Response{}, err
@@ -242,6 +258,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
+		previous := r.Account.Tools
 		err = m.discover(ctx, r, secret)
 		if err != nil {
 			r.Account.Status = "error"
@@ -249,6 +266,9 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 			_ = m.save()
 			return Response{}, err
 		}
+		current := r.Account.Tools
+		r.Account.Tools = previous
+		syncTools(r, current)
 	default:
 		return Response{}, errors.New("unknown plugin operation")
 	}
@@ -420,6 +440,9 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 	if t == nil {
 		return Tool{}, nil, errors.New("tool not found")
 	}
+	if _, updated := r.Updates[t.Name]; updated && r.Grants[t.Name] != fingerprint(*t) {
+		return Tool{}, nil, toolUpdatedError{accountService(r), t.Name}
+	}
 	if r.Grants[t.Name] != fingerprint(*t) {
 		return Tool{}, nil, errors.New("tool is not authorized; enable this tool for this account in Plugins")
 	}
@@ -455,14 +478,10 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 		return Response{}, errAuth
 	}
 	var result []byte
-	if r.Account.Integration == "mcp" || r.Account.Integration == "linear" || r.Account.AuthMethod == "mcp_oauth" {
-		result, err = m.invokeMCP(ctx, r, secret, t, args)
+	if r.Account.Integration == "google" {
+		result, err = m.invokeGoogle(ctx, r, secret, t, args)
 	} else {
-		if r.Account.Integration == "google" {
-			result, err = m.invokeGoogle(ctx, r, secret, t, args)
-		} else {
-			result, err = m.invokeHTTP(ctx, r, secret, t, args)
-		}
+		result, err = m.invokeHTTP(ctx, r, secret, t, args)
 	}
 	if ctx.Err() != nil {
 		err = safeError(ctx.Err())
