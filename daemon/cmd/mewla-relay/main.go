@@ -38,6 +38,7 @@ func run(args []string) error {
 	var maxRoutes int
 	var maxClients int
 	var maxClientsPerRoute int
+	var maxClientsPerRouteIP int
 	var maxClientHandshakes int
 	var maxConnectorHandshakes int
 	var maxAdmissions int
@@ -68,6 +69,7 @@ func run(args []string) error {
 	flags.IntVar(&maxRoutes, "max-routes", defaults.MaxRoutes, "maximum concurrently registered routes")
 	flags.IntVar(&maxClients, "max-clients", defaults.MaxClients, "maximum concurrent client streams")
 	flags.IntVar(&maxClientsPerRoute, "max-clients-per-route", defaults.MaxClientsPerRoute, "maximum concurrent streams for one route")
+	flags.IntVar(&maxClientsPerRouteIP, "max-clients-per-route-ip", 0, "maximum concurrent streams one source IP holds on one route (0: half of -max-clients-per-route)")
 	flags.IntVar(&maxClientHandshakes, "max-client-handshakes", defaults.MaxClientHandshakes, "maximum concurrent client routing handshakes")
 	flags.IntVar(&maxConnectorHandshakes, "max-connector-handshakes", defaults.MaxConnectorHandshakes, "maximum concurrent connector TLS/auth handshakes")
 	flags.IntVar(&maxAdmissions, "max-admissions", defaults.MaxAdmissions, "maximum unexpired one-time admissions")
@@ -125,6 +127,7 @@ func run(args []string) error {
 		MaxRoutes:              maxRoutes,
 		MaxClients:             maxClients,
 		MaxClientsPerRoute:     maxClientsPerRoute,
+		MaxClientsPerRouteIP:   maxClientsPerRouteIP,
 		MaxClientHandshakes:    maxClientHandshakes,
 		MaxConnectorHandshakes: maxConnectorHandshakes,
 		MaxAdmissions:          maxAdmissions,

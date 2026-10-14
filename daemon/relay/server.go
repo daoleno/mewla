@@ -63,9 +63,13 @@ type Config struct {
 	// Logf receives anonymous operational events. Nil disables logging.
 	Logf func(format string, args ...any)
 
-	MaxRoutes              int
-	MaxClients             int
-	MaxClientsPerRoute     int
+	MaxRoutes          int
+	MaxClients         int
+	MaxClientsPerRoute int
+	// MaxClientsPerRouteIP caps one source IP's share of a route's clients,
+	// so one address cannot fill a computer's slots and lock out its own
+	// browsers and phones. Zero means half of MaxClientsPerRoute.
+	MaxClientsPerRouteIP   int
 	MaxClientHandshakes    int
 	MaxConnectorHandshakes int
 	MaxAdmissions          int
@@ -139,6 +143,8 @@ type routeSession struct {
 	conn            net.Conn
 	writeMu         sync.Mutex
 	activeClients   int
+	// clientsBySource counts active clients per source IP key.
+	clientsBySource map[string]int
 
 	// Hosted sessions carry the label and expiry of their route grant.
 	hosted      bool
@@ -173,6 +179,7 @@ var capacityReasons = []string{
 	"routes",
 	"clients",
 	"clients_per_route",
+	"clients_per_route_ip",
 	"client_handshakes",
 	"connector_handshakes",
 	"admissions",
@@ -284,6 +291,9 @@ func New(config Config) (*Server, error) {
 	config.StaticRoutes = staticRoutes
 	if err := validateConfigBounds(config); err != nil {
 		return nil, err
+	}
+	if config.MaxClientsPerRouteIP < 0 || config.MaxClientsPerRouteIP > config.MaxClientsPerRoute {
+		return nil, errors.New("max-clients-per-route-ip must be between 0 and max-clients-per-route")
 	}
 	capacityRejects := make(map[string]*atomic.Uint64, len(capacityReasons))
 	for _, reason := range capacityReasons {
@@ -1428,6 +1438,12 @@ func (server *Server) handleClientWithRelease(
 		return
 	}
 	defer server.releaseIP(source, ipClients)
+	if !server.reserveRouteSource(session, source) {
+		server.releaseAdmissionReservation(admissionAlias, streamID)
+		outcome.reject(server.contextRejection(ctx, rejectionCapacity))
+		return
+	}
+	defer server.releaseRouteSource(session, source)
 	if !server.reserveClient(session) {
 		server.releaseAdmissionReservation(admissionAlias, streamID)
 		outcome.reject(server.contextRejection(ctx, rejectionCapacity))
@@ -1461,6 +1477,7 @@ func (server *Server) handleClientWithRelease(
 		StreamID:     streamID,
 		StreamTicket: ticket,
 		Alias:        admissionAlias,
+		ClientAddr:   clientIP(client.RemoteAddr()),
 	}); err != nil {
 		outcome.reject(server.contextRejection(ctx, rejectionProtocol))
 		return
@@ -1617,6 +1634,40 @@ func (server *Server) reserveClient(session *routeSession) bool {
 	session.activeClients++
 	server.activeClients.Add(1)
 	return true
+}
+
+func (server *Server) routeSourceLimit() int {
+	if server.config.MaxClientsPerRouteIP > 0 {
+		return server.config.MaxClientsPerRouteIP
+	}
+	return max(1, server.config.MaxClientsPerRoute/2)
+}
+
+// reserveRouteSource holds one of source's share of the route's clients.
+// Streams the daemon closed stay counted until the client closes its side
+// too, so without this share one address could hold every slot.
+func (server *Server) reserveRouteSource(session *routeSession, source string) bool {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if session.clientsBySource[source] >= server.routeSourceLimit() {
+		server.recordCapacityRejection("clients_per_route_ip")
+		return false
+	}
+	if session.clientsBySource == nil {
+		session.clientsBySource = make(map[string]int)
+	}
+	session.clientsBySource[source]++
+	return true
+}
+
+func (server *Server) releaseRouteSource(session *routeSession, source string) {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if session.clientsBySource[source] <= 1 {
+		delete(session.clientsBySource, source)
+		return
+	}
+	session.clientsBySource[source]--
 }
 
 func (server *Server) reserveStaticClient() bool {
@@ -2000,6 +2051,15 @@ func (server *Server) releaseIP(source string, kind ipLimit) {
 
 // sourceIPKey groups IPv6 sources by /64, the block one subscriber usually
 // controls; IPv4 sources are keyed by address.
+// clientIP is the client's bare IP for open_stream, or "" when the address
+// is not TCP.
+func clientIP(address net.Addr) string {
+	if tcp, ok := address.(*net.TCPAddr); ok && tcp.IP != nil {
+		return tcp.IP.String()
+	}
+	return ""
+}
+
 func sourceIPKey(address net.Addr) string {
 	if address == nil {
 		return ""
@@ -2108,9 +2168,13 @@ func (server *Server) capacitySnapshot() (
 ) {
 	server.mu.Lock()
 	maxClientsForRoute := 0
+	maxClientsForRouteIP := 0
 	for _, route := range server.routes {
 		if route.activeClients > maxClientsForRoute {
 			maxClientsForRoute = route.activeClients
+		}
+		for _, count := range route.clientsBySource {
+			maxClientsForRouteIP = max(maxClientsForRouteIP, count)
 		}
 	}
 	maxAdmissionsForRoute := 0
@@ -2121,6 +2185,7 @@ func (server *Server) capacitySnapshot() (
 		"routes":               int64(len(server.routes)),
 		"clients":              server.activeClients.Load(),
 		"clients_per_route":    int64(maxClientsForRoute),
+		"clients_per_route_ip": int64(maxClientsForRouteIP),
 		"client_handshakes":    int64(len(server.clientHandshakes)),
 		"connector_handshakes": int64(len(server.connectorHandshakes)),
 		"admissions":           int64(len(server.admissions)),
@@ -2145,6 +2210,7 @@ func (server *Server) capacitySnapshot() (
 		"routes":               int64(server.config.MaxRoutes),
 		"clients":              int64(server.config.MaxClients),
 		"clients_per_route":    int64(server.config.MaxClientsPerRoute),
+		"clients_per_route_ip": int64(server.routeSourceLimit()),
 		"client_handshakes":    int64(server.config.MaxClientHandshakes),
 		"connector_handshakes": int64(server.config.MaxConnectorHandshakes),
 		"admissions":           int64(server.config.MaxAdmissions),

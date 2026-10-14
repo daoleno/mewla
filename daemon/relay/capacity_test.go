@@ -290,6 +290,7 @@ func TestConnectorAndClientHandshakePermitsReleaseAfterRouting(t *testing.T) {
 		server.config.MaxClientHandshakes = 1
 		server.config.MaxClients = 2
 		server.config.MaxClientsPerRoute = 2
+		server.config.MaxClientsPerRouteIP = 2 // both clients dial from loopback
 		server.config.MaxPendingStreams = 2
 		server.clientHandshakes = make(chan struct{}, 1)
 		control, controlPeer := net.Pipe()

@@ -14,17 +14,17 @@ func TestStreamGateClosesUnprovenStreamsAndEvictsTheOldest(t *testing.T) {
 	gate := newStreamGate(2, 50*time.Millisecond)
 	local, remote := net.Pipe()
 	defer remote.Close()
-	gate.admit(local)
+	gate.admit(local, "")
 	oldest := &closeCounter{}
 	gate = newStreamGate(2, time.Hour)
-	gate.admit(oldest)
-	second := gate.admit(&closeCounter{})
-	gate.admit(&closeCounter{})
+	gate.admit(oldest, "")
+	second := gate.admit(&closeCounter{}, "")
+	gate.admit(&closeCounter{}, "")
 	if oldest.closed != 1 {
 		t.Fatal("a third unproven stream did not evict the oldest")
 	}
 	second.prove()
-	gate.admit(&closeCounter{})
+	gate.admit(&closeCounter{}, "")
 	if len(gate.unproven) != 2 {
 		t.Fatalf("unproven = %d, want 2 after a proven stream left", len(gate.unproven))
 	}
@@ -44,7 +44,7 @@ func (conn *closeCounter) Close() error { conn.closed++; return nil }
 func TestStreamGateProvesOnlyServerVerifiedRequests(t *testing.T) {
 	for _, verified := range []bool{false, true} {
 		gate := newStreamGate(1, time.Hour)
-		stream := gate.admit(&nopConn{})
+		stream := gate.admit(&nopConn{}, "")
 		handler := stream.handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// A junk Authorization header on an open endpoint gets a 200
 			// without the server verifying anything.
@@ -68,3 +68,36 @@ func TestStreamGateProvesOnlyServerVerifiedRequests(t *testing.T) {
 type nopConn struct{ net.Conn }
 
 func (*nopConn) Close() error { return nil }
+
+func TestStreamGateEvictsFromTheClientHoldingTheMost(t *testing.T) {
+	gate := newStreamGate(8, time.Hour)
+	victim := []*closeCounter{{}, {}}
+	for _, conn := range victim {
+		gate.admit(conn, "198.51.100.7")
+	}
+	var attacker []*closeCounter
+	for range 50 {
+		conn := &closeCounter{}
+		attacker = append(attacker, conn)
+		gate.admit(conn, "203.0.113.9")
+	}
+	for index, conn := range victim {
+		if conn.closed != 0 {
+			t.Fatalf("victim stream %d was evicted while another client churned", index)
+		}
+	}
+	open := 0
+	for _, conn := range attacker {
+		if conn.closed == 0 {
+			open++
+		}
+	}
+	if open != 6 {
+		t.Fatalf("attacker keeps %d unproven streams, want 6", open)
+	}
+	// A stream without a relay-reported client is its own client.
+	gate.admit(&closeCounter{}, "")
+	if victim[0].closed != 0 || len(gate.unproven) != 8 {
+		t.Fatalf("victim closed=%d unproven=%d", victim[0].closed, len(gate.unproven))
+	}
+}
