@@ -338,8 +338,12 @@ private final class PinnedProxy {
           complete(false)
           return
         }
-        // RFC 8410 SubjectPublicKeyInfo prefix for a 32-byte Ed25519 key.
-        let prefix = Data([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00])
+        // The daemon pins SHA-256 of the certificate's DER SubjectPublicKeyInfo.
+        // Security returns only the raw key, so rebuild the SPKI header for it.
+        guard let prefix = subjectPublicKeyInfoPrefix(forRawKeyCount: rawKey.count) else {
+          complete(false)
+          return
+        }
         let spki = prefix + rawKey
         let actualPin = Data(SHA256.hash(data: spki))
         complete(actualPin == expectedPin)
@@ -352,6 +356,23 @@ private final class PinnedProxy {
       port: NWEndpoint.Port(rawValue: port)!,
       using: parameters
     )
+  }
+}
+
+// SubjectPublicKeyInfo DER headers for the raw keys SecKeyCopyExternalRepresentation
+// returns: the daemon's P-256 transport key (uncompressed 65-byte point) and the
+// RFC 8410 Ed25519 key older daemons used.
+fileprivate func subjectPublicKeyInfoPrefix(forRawKeyCount count: Int) -> Data? {
+  switch count {
+  case 65:
+    return Data([
+      0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
+      0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
+    ])
+  case 32:
+    return Data([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00])
+  default:
+    return nil
   }
 }
 

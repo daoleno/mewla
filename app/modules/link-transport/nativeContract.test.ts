@@ -62,6 +62,10 @@ describe("Mewla Link native pin contract", () => {
     expect(android).toContain('MessageDigest.getInstance("SHA-256")');
     expect(ios).toContain("SubjectPublicKeyInfo");
     expect(ios).toContain("SHA256.hash(data: spki)");
+    // P-256 SPKI header; daemon/link/identity_test.go pins the same bytes.
+    expect(ios).toContain(
+      "0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,\n      0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,",
+    );
     expect(ios).toContain("sec_protocol_options_set_verify_block");
   });
 
