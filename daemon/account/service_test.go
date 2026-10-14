@@ -767,4 +767,17 @@ func TestRenameMachine(t *testing.T) {
 	if status, _ := h.call(stranger, http.MethodPut, "/v1/machine/name", map[string]string{"name": "x"}); status != http.StatusNotFound {
 		t.Fatalf("unknown machine rename status=%d", status)
 	}
+	// Each label costs a certificate from the domain's weekly budget.
+	for range renamesPerDay - 1 {
+		if status, raw := h.call(daemon, http.MethodPut, "/v1/machine/name", map[string]string{"name": "studio"}); status != http.StatusOK {
+			t.Fatalf("rename within the daily limit status=%d body=%s", status, raw)
+		}
+	}
+	if status, _ := h.call(daemon, http.MethodPut, "/v1/machine/name", map[string]string{"name": "studio"}); status != http.StatusTooManyRequests {
+		t.Fatalf("rename past the daily limit status=%d", status)
+	}
+	h.clock.Advance(25 * time.Hour)
+	if status, raw := h.call(daemon, http.MethodPut, "/v1/machine/name", map[string]string{"name": "studio"}); status != http.StatusOK {
+		t.Fatalf("rename the next day status=%d body=%s", status, raw)
+	}
 }
