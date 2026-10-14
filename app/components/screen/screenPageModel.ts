@@ -61,6 +61,29 @@ export function powerSummary(power: ScreenPower | undefined, keepAwake: boolean)
   return parts.join(" · ");
 }
 
+/**
+ * What to say when this computer can't share its screen. Screen works only
+ * on Macs for now, so anywhere else the way forward is the Mewla on a Mac,
+ * which the app can switch to; a browser stays bound to the computer that
+ * served it.
+ */
+export function unsupportedScreen(
+  status: ScreenStatus,
+  name: string,
+  canSwitchComputer: boolean,
+): { title: string; detail: string; canChooseComputer: boolean } {
+  if (status.platform === "darwin") {
+    return { title: "Screen can't start on this Mac", detail: status.reason || `${name} can't share its screen with Mewla.`, canChooseComputer: false };
+  }
+  return {
+    title: "Screen works on Macs for now",
+    detail: canSwitchComputer
+      ? `${name} isn't a Mac. To see and control a Mac, add the Mewla running on it and switch to that computer.`
+      : `${name} isn't a Mac. To see and control a Mac, open Mewla on your phone and switch to the Mewla running on that Mac.`,
+    canChooseComputer: canSwitchComputer,
+  };
+}
+
 /** The one power risk worth interrupting the user for, if any. */
 export function powerWarning(status: ScreenStatus | null): { title: string; detail: string } | null {
   const power = status?.power;
