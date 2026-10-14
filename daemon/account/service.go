@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/account/dns"
+	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/linkproto"
 )
 
@@ -35,6 +36,9 @@ const (
 	defaultMaxMachines    = 10
 	defaultACMEOpsPerHour = 20
 	renamesPerDay         = 3
+	// loginStartsPerIPHour bounds sign-in attempts from one client address
+	// (IPv4 address or IPv6 /64), counted before the signature is checked.
+	loginStartsPerIPHour  = 10
 	maxPendingLoginsByKey = 5
 	maxMachineNameLength  = 64
 	maxLabelPrefixLength  = 20
@@ -84,6 +88,8 @@ type Service struct {
 	// renames limits address changes per account: every new label costs a
 	// certificate from the domain's shared weekly issuance budget.
 	renames rateLimiter
+	// loginStarts limits sign-in attempts per client address.
+	loginStarts rateLimiter
 }
 
 // MachineInfo is the daemon's view of its machine.
@@ -195,6 +201,7 @@ func New(config Config) (*Service, error) {
 	service := &Service{config: config}
 	service.acme = rateLimiter{limit: config.ACMEOpsPerHour, window: time.Hour}
 	service.renames = rateLimiter{limit: renamesPerDay, window: 24 * time.Hour}
+	service.loginStarts = rateLimiter{limit: loginStartsPerIPHour, window: time.Hour}
 	return service, nil
 }
 
@@ -210,7 +217,7 @@ func (s *Service) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
 	})
-	mux.HandleFunc("POST /v1/login/start", s.requireSignature(s.handleLoginStart))
+	mux.HandleFunc("POST /v1/login/start", s.limitLoginStarts(s.requireSignature(s.handleLoginStart)))
 	mux.HandleFunc("POST /v1/login/poll", s.requireSignature(s.handleLoginPoll))
 	mux.HandleFunc("GET /v1/machine", s.requireSignature(s.handleGetMachine))
 	mux.HandleFunc("DELETE /v1/machine", s.requireSignature(s.handleDeleteMachine))
@@ -221,6 +228,18 @@ func (s *Service) Handler() http.Handler {
 		mux.Handle("/device", s.config.DeviceHandler)
 	}
 	return mux
+}
+
+// limitLoginStarts counts every attempt from a client address, signed or
+// not. Behind the relay, the address comes from its PROXY header.
+func (s *Service) limitLoginStarts(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.loginStarts.allow("ip:"+clientaddr.Key(clientaddr.IP(r)), s.now()) {
+			writeError(w, http.StatusTooManyRequests, "too many sign-ins from this address; try again later")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request) {
