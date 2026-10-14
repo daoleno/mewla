@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 SITE = ROOT / "site"
 DOCS = ROOT / "docs"
+SITE_URL = "https://mewla.ai/"
 
 ALERT_KINDS = ("NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION")
 ALERT_RE = re.compile(
@@ -299,6 +300,7 @@ TEMPLATE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content="{description}">
+<link rel="canonical" href="{canonical}">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#fbfaf7">
 {icon}<link rel="preconnect" href="https://fonts.googleapis.com">
@@ -346,6 +348,7 @@ def write_page(out: Path, page: Page, pages: list[Page], nav_pages: list[Page], 
     doc = TEMPLATE.format(
         title=html.escape(title),
         description=html.escape(description(page)),
+        canonical=f"{SITE_URL}{page.dir.as_posix()}/",
         icon=icon_tag,
         docs_root=page.docs_root,
         site_root=page.site_root or "./",
