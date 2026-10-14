@@ -68,6 +68,8 @@ var (
 	bootVerifyTimeout  = 60 * time.Second
 	bootVerifyInterval = 500 * time.Millisecond
 	bootHTTPClient     = &http.Client{Timeout: 3 * time.Second}
+	// bootGOOS picks systemd (linux) or launchd (darwin); tests override it.
+	bootGOOS = runtime.GOOS
 )
 
 type bootConfig struct {
@@ -102,6 +104,9 @@ func runBootCommand(args []string, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if bootGOOS == "darwin" {
+			return bootLaunchdInstall(config, execBootRunner{}, os.Stdout)
+		}
 		return bootInstall(config, execBootRunner{}, os.Stdout)
 	case "status":
 		if len(args[1:]) > 0 {
@@ -111,6 +116,9 @@ func runBootCommand(args []string, stderr io.Writer) error {
 			printBootUsage(stderr)
 			return flag.ErrHelp
 		}
+		if bootGOOS == "darwin" {
+			return bootLaunchdStatus(execBootRunner{}, os.Stdout)
+		}
 		return bootStatus(execBootRunner{}, os.Stdout)
 	case "uninstall":
 		if len(args[1:]) > 0 {
@@ -119,6 +127,9 @@ func runBootCommand(args []string, stderr io.Writer) error {
 			}
 			printBootUsage(stderr)
 			return flag.ErrHelp
+		}
+		if bootGOOS == "darwin" {
+			return bootLaunchdUninstall(execBootRunner{}, os.Stdout)
 		}
 		return bootUninstall(execBootRunner{}, os.Stdout)
 	default:
@@ -130,7 +141,8 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: mewla boot <install|status|uninstall> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  install    Render and enable a systemd user unit for this same mewla runtime")
+	fmt.Fprintln(w, "  install    Start this same mewla runtime at boot: a systemd user unit on Linux,")
+	fmt.Fprintln(w, "             a LaunchAgent on macOS")
 	fmt.Fprintln(w, "  status     Report the installed unit, its configuration, owner and /health")
 	fmt.Fprintln(w, "  uninstall  Stop, disable and remove only the unit this command installed")
 	fmt.Fprintln(w, "")
@@ -141,10 +153,11 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -work-dir <path>    daemon working directory (default: current directory)")
 	fmt.Fprintln(w, "  -path-env <dirs>    executable search PATH stored in the unit (default: current PATH)")
 	fmt.Fprintln(w, "  -lan                bind 0.0.0.0:9876 like `mewla --lan`")
-	fmt.Fprintln(w, "  -dry-run            print the unit without writing or enabling")
+	fmt.Fprintln(w, "  -dry-run            print the unit or LaunchAgent without writing or enabling")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "The unit starts the same unprivileged runtime before an interactive")
-	fmt.Fprintln(w, "login only when the user manager lingers (loginctl enable-linger).")
+	fmt.Fprintln(w, "On Linux the unit starts before an interactive login only when the user")
+	fmt.Fprintln(w, "manager lingers (loginctl enable-linger). On macOS the LaunchAgent starts")
+	fmt.Fprintln(w, "when you log in, in the session that owns the screen.")
 	fmt.Fprintln(w, "`mewla boot status` always reads the installed unit configuration.")
 }
 
@@ -1110,8 +1123,8 @@ func bootVerifyOwner(config bootConfig, runner bootRunner) error {
 }
 
 func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
-	if runtime.GOOS != "linux" {
-		return errors.New("mewla boot install requires Linux user systemd")
+	if bootGOOS != "linux" {
+		return errors.New("mewla boot install requires Linux user systemd or macOS launchd")
 	}
 	if bootEffectiveUID() == 0 {
 		return errors.New("mewla boot install must run as the unprivileged user that owns the daemon state; refusing root")

@@ -104,22 +104,27 @@ start `mewla` when convenient.
 
 ## Keep it running
 
-`mewla` is the whole runtime. Run it in a terminal or a `tmux` window, or, on
-Linux with systemd, let Mewla install a user service for you:
+`mewla` is the whole runtime. Run it in a terminal or a `tmux` window, or let
+Mewla start it for you: a user service on Linux with systemd, a LaunchAgent on
+macOS.
 
 ```sh
 mewla boot install          # this binary, default state and address
 mewla boot install -lan     # same, listening on the private network
-mewla boot install -dry-run # print the unit without installing it
+mewla boot install -dry-run # print the service without installing it
 mewla boot status
 mewla boot uninstall
 ```
 
 `mewla boot install` refuses to run as root and refuses to start a second daemon
 on a state directory that is already in use; stop the running `mewla` first.
-Restarting the service never stops your `tmux` sessions or agents. To start it
-before you log in, enable lingering with `loginctl enable-linger` (the command
-tells you when this is needed).
+Restarting the service never stops your `tmux` sessions or agents.
+
+- **Linux**: to start it before you log in, enable lingering with
+  `loginctl enable-linger` (the command tells you when this is needed).
+- **macOS**: it starts when you log in and runs in your login session, the one
+  that owns the screen and the privacy permissions. After a restart, log in
+  once for Mewla to start. Output goes to `~/.mewla/logs/launchd.log`.
 
 Do not run the daemon as root.
 
