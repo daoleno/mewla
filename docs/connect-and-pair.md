@@ -205,15 +205,15 @@ app's Settings only forgets it on that phone; it does not revoke the key.
 ## Remote access
 
 `mewla login` gives this computer an HTTPS address such as
-`https://quiet-otter-3f9a.<service domain>`. Your phone and any browser reach it
+`https://quiet-otter-3f9a.m.mewla.ai`. Your phone and any browser reach it
 from any network; the computer only connects outward, so there is no port to
 open, no VPN and no domain to buy. The first time you start `mewla` by hand it
 offers the same choice.
 
 ```sh
-mewla login     # shows a page and a code; sign in with GitHub there
+mewla login     # shows https://connect.mewla.ai/device and a code; sign in with GitHub there
 mewla pair      # the phone QR now uses remote access
-mewla login -name studio   # rename the address, e.g. https://studio-c0ffee.<service domain>
+mewla login -name studio   # rename the address, e.g. https://studio-c0ffee.m.mewla.ai
 mewla logout    # turn it off
 ```
 
