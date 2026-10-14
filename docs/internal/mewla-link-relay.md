@@ -4,7 +4,16 @@ This runbook describes an optional single-region MVP. All Link source and
 deployment examples are inert until an operator explicitly supplies
 configuration, credentials, certificates, DNS, and starts them. This
 repository does not deploy or start a relay and does not claim that a
-production endpoint, account system, global SLO, or backbone exists.
+production endpoint, global SLO, or backbone exists.
+
+The relay runs in two modes, and one relay may accept both:
+
+- **Hosted remote access** (`mewla login`): the account service
+  (`cmd/mewla-account`) signs a short-lived route grant per machine; the relay
+  verifies it with `-grant-public-key-file`. See
+  [Hosted remote access](#hosted-remote-access).
+- **Self-hosted**: daemons share one connector token
+  (`MEWLA_LINK_CONNECTOR_TOKEN`) and a `link.json`, described below.
 
 ## Ports and prerequisites
 
@@ -237,3 +246,96 @@ GeoDNS/Anycast may steer a region hostname to its regional process, with
 `/healthz` and `/readyz` as probes. Keep each candidate hostname explicit in
 Pairing V2. Do not build a custom backbone, SD-WAN, or P2P/NAT traversal layer
 for this MVP.
+
+## Hosted remote access
+
+`deploy/mewla-link/compose.yaml` runs the hosted service on one VPS:
+
+| Service | Role |
+| --- | --- |
+| `relay` | Public `:443` (clients, SNI passthrough) and `:8443` (daemon control). `-sni-route` hands the service hostname to Caddy; every other hostname is a computer. |
+| `account` | Device-code login (GitHub), machine registry (SQLite), route grants, DNS-01 TXT records for each computer's certificate, quotas. |
+| `caddy` | HTTPS for the account service, behind the relay's SNI route; port 80 for redirects and HTTP-01. |
+
+Trust boundaries:
+
+- A grant binds account, machine, route ID, hostname label and the daemon's
+  Ed25519 key, and lives `-grant-ttl` (1h). The relay rejects a register,
+  admission or renewal whose grant does not match the signing daemon key and
+  route, and closes a route when its grant expires. Disabling an account or
+  `mewla logout` stops new grants, so the computer drops off within one TTL.
+- A computer's certificate key never leaves it. The account service only
+  writes `_acme-challenge.<that computer's hostname>` TXT records, and only
+  for requests signed by that computer's key.
+- The operator controls DNS, so it could obtain a certificate for any
+  hostname and intercept browser traffic. Phones pin the computer's key and
+  are not exposed to that. Say so in user-facing docs; monitor CT logs.
+- Hostnames appear in Certificate Transparency logs. They are addresses, not
+  secrets; daemons limit unauthenticated streams per route and the relay
+  limits handshakes and streams per source IP.
+
+Relay flags for hosted mode: `-grant-public-key-file` (hex Ed25519 keys, one
+per line), `-sni-route host=addr` (repeatable), `-max-client-handshakes-per-ip`
+(64), `-max-clients-per-ip` (64), `-max-connector-handshakes-per-ip` (32),
+`-max-route-bindings` (65536, token mode). The relay logs route events with
+an 8-hex hash prefix, never route IDs, labels, SNI or IP addresses.
+
+### Launch checklist
+
+1. Buy the domain. Use one zone for the service and relay
+   (`account.<domain>`, `relay.<domain>`) and one wildcard for computers
+   (`*.<client domain>`).
+2. Apply for the client domain's inclusion in the Public Suffix List (private
+   section), or request a Let's Encrypt rate limit adjustment. Without it the
+   whole client domain gets 50 new certificates per 7 days. Both take weeks.
+3. Create the VPS. Open TCP 80, 443 and 8443.
+4. DNS: `A account.<domain>`, `A relay.<domain>` and `A *.<client domain>` to
+   the VPS. Move the client zone to Cloudflare and create an API token with
+   DNS edit on that zone only; note the zone ID.
+5. Create a GitHub OAuth App (Settings → Developer settings → OAuth Apps),
+   enable Device Flow, and note its client ID. No client secret is needed.
+6. On the VPS, in `deploy/mewla-link/`:
+   ```sh
+   mkdir -p secrets
+   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 825 \
+     -keyout secrets/relay.key -out secrets/relay.crt -subj /CN=relay.<domain> \
+     -addext subjectAltName=DNS:relay.<domain>
+   docker compose run --rm account -grant-key-file=/var/lib/mewla-account/grant-key.pem \
+     -print-public-key > secrets/grant.pub
+   export MEWLA_SERVICE_HOST=account.<domain> MEWLA_RELAY_HOST=relay.<domain> \
+     MEWLA_CLIENT_DOMAIN=<client domain> MEWLA_GITHUB_CLIENT_ID=… \
+     MEWLA_CLOUDFLARE_TOKEN=… MEWLA_CLOUDFLARE_ZONE_ID=…
+   docker compose up -d --build
+   ```
+   The relay control certificate is self-signed; the account service hands it
+   to each computer, which pins it.
+7. Build release daemons with
+   `-ldflags "-X github.com/daoleno/mewla/daemon/remote.DefaultServiceURL=https://account.<domain>"`.
+   Until then, `MEWLA_REMOTE_SERVICE_URL` or `mewla login -service` selects it.
+8. Smoke test from a fresh machine: `mewla` → 1 → GitHub → `mewla pair`, then a
+   browser on another network and a phone on cellular.
+9. Back up the `account-data` volume (SQLite database and grant key). Losing
+   the grant key signs every computer out until they log in again.
+
+### Local end-to-end environment
+
+Pebble and `pebble-challtestsrv` stand in for Let's Encrypt and DNS:
+
+```sh
+pebble-challtestsrv -dnsserver 127.0.0.1:8053 -management 127.0.0.1:8055 \
+  -http01 "" -https01 "" -tlsalpn01 "" -doh ""
+PEBBLE_VA_NOSLEEP=1 pebble -config pebble.json -dnsserver 127.0.0.1:8053
+mewla-account -addr 127.0.0.1:18090 -db account.db -grant-key-file grant.pem \
+  -public-url http://127.0.0.1:18090 -client-domain mewla.test -client-port 19443 \
+  -relay name=local,control=127.0.0.1:18443,server-name=relay.mewla.test,ca-file=relay.crt \
+  -acme-directory https://127.0.0.1:14000/dir -acme-ca-file pebble-ca.pem \
+  -dev-fake-login -dns-provider challtestsrv -challtestsrv-url http://127.0.0.1:8055
+mewla-relay -client-addr 127.0.0.1:19443 -control-addr 127.0.0.1:18443 \
+  -operator-addr 127.0.0.1:18081 -tls-cert relay.crt -tls-key relay.key \
+  -grant-public-key-file grant.pub
+MEWLA_REMOTE_SERVICE_URL=http://127.0.0.1:18090 mewla
+```
+
+`-dev-fake-login` lets anyone sign in as anyone at `/device`; never use it on
+a reachable host. Browsers need the Pebble root
+(`https://127.0.0.1:15000/roots/0`) and a resolver rule for `*.mewla.test`.

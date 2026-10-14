@@ -1,0 +1,5 @@
+# HTTPS for the account service. Port 443 reaches Caddy only through the
+# relay's SNI route for this hostname.
+{$MEWLA_SERVICE_HOST} {
+	reverse_proxy account:8080
+}
