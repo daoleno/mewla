@@ -104,6 +104,8 @@ func run(args []string, stderr io.Writer) error {
 			return runSetupCommand(args[1:], stderr)
 		case "update":
 			return runUpdateCommand(args[1:], stderr)
+		case "version":
+			return runVersionCommand(args[1:], stderr)
 		case "resources":
 			return runResources(args[1:], stderr)
 		case "worker":
@@ -137,6 +139,9 @@ func run(args []string, stderr io.Writer) error {
 		default:
 			return fmt.Errorf("unknown command %q; see mewla --help", args[0])
 		}
+	}
+	if len(args) > 0 && (args[0] == "--version" || args[0] == "-v") {
+		return runVersionCommand(args[1:], stderr)
 	}
 	if executable, err := os.Executable(); err == nil {
 		if handed, err := bootLaunchdHandOff(args, executable, execBootRunner{}); handed || err != nil {
@@ -2115,6 +2120,7 @@ Set up and maintain
   setup     Guided first-run setup (uses doctor)
   boot      Start Mewla when you log in (systemd user unit)
   update    Verify and install the latest Mewla release
+  version   Print the Mewla version, commit and platform
 
 Agents and tools
   brain        Inspect Brain workspace and host executor configuration
@@ -2133,6 +2139,7 @@ Flags
   -addr host:port       listen on host:port instead of 127.0.0.1:9876
   -state-dir dir        state directory (default ~/.mewla)
   -link-config path     Mewla Link relay config, for self-hosted Link (default <state-dir>/link.json)
+  -v, --version         print the Mewla version and exit
 `)
 }
 
