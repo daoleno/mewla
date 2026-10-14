@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS machines (
 	last_seen_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS machines_account ON machines(account_id);
+CREATE TABLE IF NOT EXISTS retired_labels (
+	label TEXT PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS logins (
 	id TEXT PRIMARY KEY,
 	daemon_public_key TEXT NOT NULL,
@@ -219,10 +222,32 @@ func (s *Store) deleteMachine(ctx context.Context, key string) (machineRecord, e
 	if _, err := tx.ExecContext(ctx, `DELETE FROM machines WHERE id = ?`, machine.ID); err != nil {
 		return machineRecord{}, err
 	}
+	if err := retireLabel(ctx, tx, machine.Label); err != nil {
+		return machineRecord{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM logins WHERE daemon_public_key = ?`, key); err != nil {
 		return machineRecord{}, err
 	}
 	return machine, tx.Commit()
+}
+
+// A label is a browser origin: whoever holds it next could read what an
+// earlier browser stored there, such as its paired device key. Labels are
+// therefore never handed out again once a machine renames or signs out.
+func retireLabel(ctx context.Context, tx *sql.Tx, label string) error {
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO retired_labels (label) VALUES (?)`, label)
+	return err
+}
+
+func labelTaken(ctx context.Context, tx *sql.Tx, label string) (bool, error) {
+	var taken int
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT (SELECT COUNT(*) FROM machines WHERE label = ?) + (SELECT COUNT(*) FROM retired_labels WHERE label = ?)`,
+		label,
+		label,
+	).Scan(&taken)
+	return taken != 0, err
 }
 
 // renameMachine replaces the label of the machine for key with a unique
@@ -242,14 +267,17 @@ func (s *Store) renameMachine(ctx context.Context, key, name string, newLabel fu
 		if err != nil {
 			return machineRecord{}, err
 		}
-		var taken int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM machines WHERE label = ?`, label).Scan(&taken); err != nil {
+		taken, err := labelTaken(ctx, tx, label)
+		if err != nil {
 			return machineRecord{}, err
 		}
-		if taken != 0 {
+		if taken {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE machines SET label = ?, name = ? WHERE id = ?`, label, name, machine.ID); err != nil {
+			return machineRecord{}, err
+		}
+		if err := retireLabel(ctx, tx, machine.Label); err != nil {
 			return machineRecord{}, err
 		}
 		machine.Label, machine.Name = label, name
@@ -560,15 +588,11 @@ func insertMachine(ctx context.Context, tx *sql.Tx, p completeLoginParams, accou
 		if err != nil {
 			return machineRecord{}, err
 		}
-		var taken int
-		if err := tx.QueryRowContext(
-			ctx,
-			`SELECT COUNT(*) FROM machines WHERE label = ?`,
-			label,
-		).Scan(&taken); err != nil {
+		taken, err := labelTaken(ctx, tx, label)
+		if err != nil {
 			return machineRecord{}, err
 		}
-		if taken != 0 {
+		if taken {
 			continue
 		}
 		machine := machineRecord{
