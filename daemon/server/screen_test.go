@@ -201,3 +201,48 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 		}
 	}
 }
+
+func TestRevokingADeviceForgetsItsScreenApproval(t *testing.T) {
+	a, priv, device := sessionFileAuthFixture(t)
+	stateDir := t.TempDir()
+	service := screen.NewServiceWith(stateDir, screen.NewFakeBackend(320, 200))
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(service)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	req, _ := http.NewRequest(http.MethodPost, h.URL+"/screen", strings.NewReader(`{"action":"enable"}`))
+	req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("enable: %v %v", resp, err)
+	}
+	resp.Body.Close()
+	if cfg, _ := screen.LoadConfig(stateDir); !cfg.Approved(device) || !cfg.KeepAwake() {
+		t.Fatalf("config after enable = %+v", cfg)
+	}
+
+	if _, err := a.RevokeDevice(device); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := screen.LoadConfig(stateDir); cfg.Approved(device) || cfg.KeepAwake() {
+		t.Fatalf("revoked device still approved: %+v", cfg)
+	}
+}
+
+func TestStaleScreenApprovalIsForgottenAtStartup(t *testing.T) {
+	a, _, device := sessionFileAuthFixture(t)
+	stateDir := t.TempDir()
+	if err := screen.SaveConfig(stateDir, screen.Config{Devices: map[string]screen.Approval{
+		device:    {Name: "Pixel"},
+		"revoked": {Name: "Old phone"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(screen.NewServiceWith(stateDir, screen.NewFakeBackend(32, 32)))
+	cfg, _ := screen.LoadConfig(stateDir)
+	if !cfg.Approved(device) || cfg.Approved("revoked") {
+		t.Fatalf("config after startup = %+v", cfg)
+	}
+}

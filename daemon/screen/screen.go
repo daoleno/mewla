@@ -332,6 +332,32 @@ func (s *Service) Disable() error {
 	})
 }
 
+// Forget drops the approvals of devices that are no longer paired, so a
+// revoked device stops keeping this computer awake.
+func (s *Service) Forget(paired func(deviceID string) bool) error {
+	s.write.Lock()
+	defer s.write.Unlock()
+	cfg, err := LoadConfig(s.stateDir)
+	if err != nil {
+		return err
+	}
+	forgotten := false
+	for id := range cfg.Devices {
+		if !paired(id) {
+			delete(cfg.Devices, id)
+			forgotten = true
+		}
+	}
+	if !forgotten {
+		return nil
+	}
+	if err := SaveConfig(s.stateDir, cfg); err != nil {
+		return err
+	}
+	s.syncAwake()
+	return nil
+}
+
 // EnableLocally lifts the kill switch. Devices still need approval.
 func (s *Service) EnableLocally(allowSleep bool) error {
 	return s.update(func(cfg *Config) error {
