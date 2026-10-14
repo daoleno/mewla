@@ -58,21 +58,12 @@ MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' \
   -tls-key=/secure/path/control.key
 ```
 
-Compose:
-
-```bash
-cd deploy/mewla-link
-MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' docker compose up --build
-```
-
-The Compose file maps public TCP `443` to unprivileged container port `9443`;
-the distroless process remains non-root. The direct binary defaults to `:443`,
-so a bare-host operator should either set `-client-addr` behind a load balancer
-or grant only the platform's narrow low-port binding capability.
-
-Place `tls.crt` and `tls.key` under `deploy/mewla-link/secrets/` only for local
-operator testing; that directory must remain untracked. In production mount
-from a secret manager instead.
+The image runs as non-root, so map public TCP `443` to an unprivileged
+container port (the hosted deployment uses `9443`). The direct binary defaults
+to `:443`, so a bare-host operator should either set `-client-addr` behind a
+load balancer or grant only the platform's narrow low-port binding capability.
+Keep the control certificate and key out of the repository; mount them from a
+secret manager.
 
 ## Daemon configuration
 

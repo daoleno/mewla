@@ -1,5 +1,17 @@
-# HTTPS for the account service. Port 443 reaches Caddy only through the
-# relay's SNI route for this hostname.
+# HTTPS for the account service. Clients reach Caddy only through the relay's
+# SNI route for this hostname, so the certificate comes from TLS-ALPN-01 on
+# :443; host :80 belongs to another app's proxy, so HTTP-01 is off.
+{
+	auto_https disable_redirects
+}
+
 {$MEWLA_SERVICE_HOST} {
-	reverse_proxy account:8080
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	# Health stays inside the Docker network.
+	respond /healthz 404
+	reverse_proxy mewla-account:8080
 }
