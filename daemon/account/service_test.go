@@ -816,3 +816,30 @@ func TestLabelsAreNeverHandedOutAgain(t *testing.T) {
 		}
 	}
 }
+
+func TestLoginStartsAreLimitedPerClientAddress(t *testing.T) {
+	h := newHarness(t, nil)
+	handler := h.service.Handler()
+	start := func(remote string) int {
+		request := httptest.NewRequest(http.MethodPost, "/v1/login/start", strings.NewReader("{}"))
+		request.RemoteAddr = remote
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	for attempt := range loginStartsPerIPHour {
+		if code := start("203.0.113.7:4000"); code == http.StatusTooManyRequests {
+			t.Fatalf("attempt %d limited", attempt)
+		}
+	}
+	if code := start("203.0.113.7:4001"); code != http.StatusTooManyRequests {
+		t.Fatalf("attempt past the limit = %d", code)
+	}
+	if code := start("[2001:db8:1:2::1]:1"); code == http.StatusTooManyRequests {
+		t.Fatal("another address shares the limit")
+	}
+	h.clock.Advance(time.Hour + time.Second)
+	if code := start("203.0.113.7:4002"); code == http.StatusTooManyRequests {
+		t.Fatal("limit did not reset after an hour")
+	}
+}
