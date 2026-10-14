@@ -28,7 +28,7 @@ The agents are the CLIs you already use (Claude Code, Codex, Cursor, Grok, Pi,
 OpenCode), each in a real `tmux` session on your machine. Mewla gives them a
 lead and gives you a remote. Open source, self-hosted, in beta.
 
-[Homepage](https://daoleno.github.io/mewla/) · [Docs](https://daoleno.github.io/mewla/docs/) · [Releases](https://github.com/daoleno/mewla/releases)
+[Homepage](https://mewla.ai/) · [Docs](https://mewla.ai/docs/) · [Releases](https://github.com/daoleno/mewla/releases)
 
 ## How it works
 

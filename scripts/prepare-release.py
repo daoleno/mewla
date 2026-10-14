@@ -39,7 +39,7 @@ Canonical release notes live under [`docs/releases/`](docs/releases/). This file
 """
 REPOSITORY_URL = "https://github.com/daoleno/mewla"
 INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/daoleno/mewla/main/install.sh"
-INSTALL_DOCS_URL = "https://daoleno.github.io/mewla/docs/install/"
+INSTALL_DOCS_URL = "https://mewla.ai/docs/install/"
 USER_NOTE_SECTIONS = ("New", "Fixed")
 USER_NOTES_SHAPE = """<one plain sentence: what this release is about, for a user>
 
