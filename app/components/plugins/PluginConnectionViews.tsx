@@ -106,6 +106,7 @@ export function CatalogView({
   onOpen,
   onConnect,
   onReconnect,
+  extra,
 }: {
   rows: PluginCatalogRows;
   loading: boolean;
@@ -116,6 +117,8 @@ export function CatalogView({
   onOpen(plugin: PluginIntegration): void;
   onConnect(plugin: PluginIntegration): void;
   onReconnect(account: PluginAccount): void;
+  /** Rows after the services that aren't plugin accounts, such as Cloudflare's cf. */
+  extra?: React.ReactNode;
 }) {
   if (!rows.services.length && !rows.custom.length) {
     return error ? (
@@ -139,7 +142,7 @@ export function CatalogView({
   );
   return (
     <>
-      <ListSection>{rows.services.map(row)}</ListSection>
+      <ListSection>{rows.services.map(row)}{extra}</ListSection>
       {rows.custom.length ? (
         <ListSection title="Your own services" footer="Any MCP server or OpenAPI service, by its address.">
           {rows.custom.map(row)}
@@ -357,7 +360,7 @@ export function ConnectStatusCard({
   return null;
 }
 
-function StatusCard({ title, detail, busy, glyph, glyphColor, children }: {
+export function StatusCard({ title, detail, busy, glyph, glyphColor, children }: {
   title: string;
   detail?: string;
   busy?: boolean;
