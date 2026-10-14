@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -42,6 +44,12 @@ func run(args []string) error {
 	var maxAdmissionsPerRoute int
 	var maxNonces int
 	var maxPendingStreams int
+	var maxRouteBindings int
+	var maxClientHandshakesPerIP int
+	var maxClientsPerIP int
+	var maxConnectorHandshakesPerIP int
+	var grantKeyFile string
+	staticRoutes := sniRoutes{}
 	var handshakeTimeout time.Duration
 	var attachTimeout time.Duration
 	var idleTimeout time.Duration
@@ -54,7 +62,9 @@ func run(args []string) error {
 	flags.StringVar(&operatorAddress, "operator-addr", "127.0.0.1:8080", "health and metrics listen address")
 	flags.StringVar(&certificateFile, "tls-cert", "", "PEM certificate for the connector control listener")
 	flags.StringVar(&keyFile, "tls-key", "", "PEM private key for the connector control listener")
-	flags.StringVar(&tokenEnvironment, "connector-token-env", "MEWLA_LINK_CONNECTOR_TOKEN", "environment variable containing the connector token")
+	flags.StringVar(&tokenEnvironment, "connector-token-env", "MEWLA_LINK_CONNECTOR_TOKEN", "environment variable containing the shared connector token (optional with -grant-public-key-file)")
+	flags.StringVar(&grantKeyFile, "grant-public-key-file", "", "file of hex Ed25519 account service keys, one per line, that sign hosted route grants")
+	flags.Var(staticRoutes, "sni-route", "host=addr: pipe clients whose SNI is exactly host to the TCP address (repeatable)")
 	flags.IntVar(&maxRoutes, "max-routes", defaults.MaxRoutes, "maximum concurrently registered routes")
 	flags.IntVar(&maxClients, "max-clients", defaults.MaxClients, "maximum concurrent client streams")
 	flags.IntVar(&maxClientsPerRoute, "max-clients-per-route", defaults.MaxClientsPerRoute, "maximum concurrent streams for one route")
@@ -64,6 +74,10 @@ func run(args []string) error {
 	flags.IntVar(&maxAdmissionsPerRoute, "max-admissions-per-route", defaults.MaxAdmissionsPerRoute, "maximum unexpired admissions for one route")
 	flags.IntVar(&maxNonces, "max-nonces", defaults.MaxNonces, "maximum retained connector replay nonces")
 	flags.IntVar(&maxPendingStreams, "max-pending-streams", defaults.MaxPendingStreams, "maximum streams awaiting connector attachment")
+	flags.IntVar(&maxRouteBindings, "max-route-bindings", defaults.MaxRouteBindings, "maximum remembered route to daemon key bindings")
+	flags.IntVar(&maxClientHandshakesPerIP, "max-client-handshakes-per-ip", defaults.MaxClientHandshakesPerIP, "maximum concurrent client routing handshakes from one source IP (IPv6 /64)")
+	flags.IntVar(&maxClientsPerIP, "max-clients-per-ip", defaults.MaxClientsPerIP, "maximum concurrent client streams from one source IP (IPv6 /64)")
+	flags.IntVar(&maxConnectorHandshakesPerIP, "max-connector-handshakes-per-ip", defaults.MaxConnectorHandshakesPerIP, "maximum concurrent connector handshakes from one source IP (IPv6 /64)")
 	flags.DurationVar(&handshakeTimeout, "handshake-timeout", defaults.HandshakeTimeout, "maximum time to receive routing SNI or connector auth")
 	flags.DurationVar(&attachTimeout, "attach-timeout", defaults.AttachTimeout, "maximum time for a connector to attach a stream")
 	flags.DurationVar(&idleTimeout, "idle-timeout", defaults.IdleTimeout, "idle timeout only when neither stream direction makes progress")
@@ -88,12 +102,26 @@ func run(args []string) error {
 		}
 		return nil
 	}
+	var grantKeys []ed25519.PublicKey
+	if strings.TrimSpace(grantKeyFile) != "" {
+		keys, err := loadGrantKeys(grantKeyFile)
+		if err != nil {
+			return err
+		}
+		grantKeys = keys
+	}
 	connectorToken := strings.TrimSpace(os.Getenv(strings.TrimSpace(tokenEnvironment)))
-	if connectorToken == "" {
-		return fmt.Errorf("connector token environment variable %s is empty", tokenEnvironment)
+	if connectorToken == "" && len(grantKeys) == 0 {
+		return fmt.Errorf(
+			"connector token environment variable %s is empty and no -grant-public-key-file is set",
+			tokenEnvironment,
+		)
 	}
 	server, err := relay.New(relay.Config{
 		ConnectorToken:         connectorToken,
+		GrantKeys:              grantKeys,
+		StaticRoutes:           staticRoutes,
+		Logf:                   log.Printf,
 		MaxRoutes:              maxRoutes,
 		MaxClients:             maxClients,
 		MaxClientsPerRoute:     maxClientsPerRoute,
@@ -103,12 +131,18 @@ func run(args []string) error {
 		MaxAdmissionsPerRoute:  maxAdmissionsPerRoute,
 		MaxNonces:              maxNonces,
 		MaxPendingStreams:      maxPendingStreams,
-		HandshakeTimeout:       handshakeTimeout,
-		AttachTimeout:          attachTimeout,
-		IdleTimeout:            idleTimeout,
-		AuthMaxAge:             defaults.AuthMaxAge,
-		MaxAdmissionTTL:        defaults.MaxAdmissionTTL,
-		SweepInterval:          sweepInterval,
+		MaxRouteBindings:       maxRouteBindings,
+
+		MaxClientHandshakesPerIP:    maxClientHandshakesPerIP,
+		MaxClientsPerIP:             maxClientsPerIP,
+		MaxConnectorHandshakesPerIP: maxConnectorHandshakesPerIP,
+
+		HandshakeTimeout: handshakeTimeout,
+		AttachTimeout:    attachTimeout,
+		IdleTimeout:      idleTimeout,
+		AuthMaxAge:       defaults.AuthMaxAge,
+		MaxAdmissionTTL:  defaults.MaxAdmissionTTL,
+		SweepInterval:    sweepInterval,
 	})
 	if err != nil {
 		return err
@@ -158,12 +192,22 @@ func run(args []string) error {
 		errorsCh <- operatorServer.Serve(operatorListener)
 	}()
 
+	authModes := make([]string, 0, 2)
+	if connectorToken != "" {
+		authModes = append(authModes, "token")
+	}
+	if len(grantKeys) > 0 {
+		authModes = append(authModes, "hosted")
+	}
 	log.Printf(
-		"mewla-relay ready: client=%s control=%s operator=%s protocol=%d",
+		"mewla-relay ready: client=%s control=%s operator=%s protocol=%d auth=%s grant_keys=%d sni_routes=%d",
 		clientListener.Addr(),
 		controlTCP.Addr(),
 		operatorListener.Addr(),
-		1,
+		linkproto.CurrentVersion,
+		strings.Join(authModes, "+"),
+		len(grantKeys),
+		len(staticRoutes),
 	)
 	select {
 	case <-ctx.Done():
@@ -180,4 +224,51 @@ func run(args []string) error {
 	defer cancel()
 	_ = operatorServer.Shutdown(shutdownContext)
 	return nil
+}
+
+// sniRoutes collects repeatable -sni-route host=addr flags.
+type sniRoutes map[string]string
+
+func (routes sniRoutes) String() string {
+	return fmt.Sprintf("%d routes", len(routes))
+}
+
+func (routes sniRoutes) Set(value string) error {
+	host, address, ok := strings.Cut(value, "=")
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	address = strings.TrimSpace(address)
+	if !ok || host == "" || address == "" {
+		return errors.New("want host=addr")
+	}
+	if _, exists := routes[host]; exists {
+		return fmt.Errorf("duplicate SNI route for %s", host)
+	}
+	routes[host] = address
+	return nil
+}
+
+func loadGrantKeys(path string) ([]ed25519.PublicKey, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read grant public key file: %w", err)
+	}
+	var keys []ed25519.PublicKey
+	for number, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, err := hex.DecodeString(line)
+		if err != nil || len(key) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf(
+				"grant public key file line %d is not a hex Ed25519 public key",
+				number+1,
+			)
+		}
+		keys = append(keys, ed25519.PublicKey(key))
+	}
+	if len(keys) == 0 {
+		return nil, errors.New("grant public key file has no keys")
+	}
+	return keys, nil
 }

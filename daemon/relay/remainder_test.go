@@ -283,6 +283,18 @@ func TestRelayConfigRejectsInvalidAndOverflowingValuesWithoutPanic(
 		{"MaxPendingStreams", maxConfiguredPendingStreams, func(config *Config, value int) {
 			config.MaxPendingStreams = value
 		}},
+		{"MaxRouteBindings", maxConfiguredRouteBindings, func(config *Config, value int) {
+			config.MaxRouteBindings = value
+		}},
+		{"MaxClientHandshakesPerIP", maxConfiguredPerIP, func(config *Config, value int) {
+			config.MaxClientHandshakesPerIP = value
+		}},
+		{"MaxClientsPerIP", maxConfiguredPerIP, func(config *Config, value int) {
+			config.MaxClientsPerIP = value
+		}},
+		{"MaxConnectorHandshakesPerIP", maxConfiguredPerIP, func(config *Config, value int) {
+			config.MaxConnectorHandshakesPerIP = value
+		}},
 	}
 	for _, field := range fields {
 		for _, value := range []int{0, -1, field.limit + 1, math.MaxInt} {
@@ -479,22 +491,26 @@ func scrapeRelayMetrics(t *testing.T, server *Server) string {
 
 func validRelayConfig() Config {
 	return Config{
-		ConnectorToken:         "abcdef0123456789abcdef0123456789",
-		MaxRoutes:              4,
-		MaxClients:             4,
-		MaxClientsPerRoute:     2,
-		MaxClientHandshakes:    2,
-		MaxConnectorHandshakes: 2,
-		MaxAdmissions:          4,
-		MaxAdmissionsPerRoute:  2,
-		MaxNonces:              8,
-		MaxPendingStreams:      4,
-		HandshakeTimeout:       time.Second,
-		AttachTimeout:          time.Second,
-		IdleTimeout:            time.Minute,
-		AuthMaxAge:             time.Minute,
-		MaxAdmissionTTL:        time.Minute,
-		SweepInterval:          time.Second,
+		ConnectorToken:              "abcdef0123456789abcdef0123456789",
+		MaxRoutes:                   4,
+		MaxClients:                  4,
+		MaxClientsPerRoute:          2,
+		MaxClientHandshakes:         2,
+		MaxConnectorHandshakes:      2,
+		MaxAdmissions:               4,
+		MaxAdmissionsPerRoute:       2,
+		MaxNonces:                   8,
+		MaxPendingStreams:           4,
+		MaxRouteBindings:            8,
+		MaxClientHandshakesPerIP:    8,
+		MaxClientsPerIP:             8,
+		MaxConnectorHandshakesPerIP: 8,
+		HandshakeTimeout:            time.Second,
+		AttachTimeout:               time.Second,
+		IdleTimeout:                 time.Minute,
+		AuthMaxAge:                  time.Minute,
+		MaxAdmissionTTL:             time.Minute,
+		SweepInterval:               time.Second,
 	}
 }
 

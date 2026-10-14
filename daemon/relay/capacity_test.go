@@ -26,7 +26,7 @@ func TestRelayStateCapacityLimitsRejectAndRecover(t *testing.T) {
 			RouteID:         strings.Repeat("1", 32),
 			DaemonPublicKey: strings.Repeat("a", 64),
 		}
-		firstRoute, err := server.registerRoute(first, firstMessage)
+		firstRoute, err := server.registerRoute(first, firstMessage, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,7 +34,7 @@ func TestRelayStateCapacityLimitsRejectAndRecover(t *testing.T) {
 			RouteID:         strings.Repeat("2", 32),
 			DaemonPublicKey: strings.Repeat("b", 64),
 		}
-		if _, err := server.registerRoute(second, secondMessage); err == nil ||
+		if _, err := server.registerRoute(second, secondMessage, nil); err == nil ||
 			!strings.Contains(err.Error(), "route capacity") {
 			t.Fatalf("route saturation error=%v", err)
 		}
@@ -67,7 +67,7 @@ func TestRelayStateCapacityLimitsRejectAndRecover(t *testing.T) {
 			t.Fatalf("route saturation starved stream attachment: %v", err)
 		}
 		server.unregisterRoute(firstRoute)
-		if _, err := server.registerRoute(second, secondMessage); err != nil {
+		if _, err := server.registerRoute(second, secondMessage, nil); err != nil {
 			t.Fatalf("route capacity did not recover: %v", err)
 		}
 	})
@@ -556,7 +556,7 @@ func TestCapacityMetricsExposeCountsAndFixedReasonsOnly(t *testing.T) {
 	_, _ = server.registerRoute(overflow, linkproto.Message{
 		RouteID:         strings.Repeat("3", 32),
 		DaemonPublicKey: strings.Repeat("4", 64),
-	})
+	}, nil)
 	_, _, _ = server.createAdmission(linkproto.Message{
 		RouteID:         routeID,
 		DaemonPublicKey: daemonKey,
@@ -651,22 +651,26 @@ func TestCapacityMetricsExposeCountsAndFixedReasonsOnly(t *testing.T) {
 func limitedRelay(t *testing.T) *Server {
 	t.Helper()
 	server, err := New(Config{
-		ConnectorToken:         "abcdef0123456789abcdef0123456789",
-		MaxRoutes:              4,
-		MaxClients:             4,
-		MaxClientsPerRoute:     2,
-		MaxClientHandshakes:    2,
-		MaxConnectorHandshakes: 2,
-		MaxAdmissions:          4,
-		MaxAdmissionsPerRoute:  2,
-		MaxNonces:              8,
-		MaxPendingStreams:      4,
-		HandshakeTimeout:       100 * time.Millisecond,
-		AttachTimeout:          100 * time.Millisecond,
-		IdleTimeout:            time.Second,
-		AuthMaxAge:             time.Minute,
-		MaxAdmissionTTL:        time.Minute,
-		SweepInterval:          10 * time.Millisecond,
+		ConnectorToken:              "abcdef0123456789abcdef0123456789",
+		MaxRoutes:                   4,
+		MaxClients:                  4,
+		MaxClientsPerRoute:          2,
+		MaxClientHandshakes:         2,
+		MaxConnectorHandshakes:      2,
+		MaxAdmissions:               4,
+		MaxAdmissionsPerRoute:       2,
+		MaxNonces:                   8,
+		MaxPendingStreams:           4,
+		MaxRouteBindings:            8,
+		MaxClientHandshakesPerIP:    8,
+		MaxClientsPerIP:             8,
+		MaxConnectorHandshakesPerIP: 8,
+		HandshakeTimeout:            100 * time.Millisecond,
+		AttachTimeout:               100 * time.Millisecond,
+		IdleTimeout:                 time.Second,
+		AuthMaxAge:                  time.Minute,
+		MaxAdmissionTTL:             time.Minute,
+		SweepInterval:               10 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatal(err)
