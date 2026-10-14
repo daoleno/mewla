@@ -84,6 +84,18 @@ func newGitHubTest(t *testing.T, responses ...map[string]any) (*GitHubProvider, 
 	}, fake
 }
 
+func TestGitHubDeviceShowsServiceURI(t *testing.T) {
+	provider, _ := newGitHubTest(t)
+	provider.VerificationURI = "https://connect.example/device"
+	start, err := provider.StartDevice(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if start.VerificationURI != "https://connect.example/device" || start.VerificationURIComplete != "" || start.UserCode != "WDJB-MJHT" {
+		t.Fatalf("start = %+v", start)
+	}
+}
+
 func TestGitHubDeviceFlow(t *testing.T) {
 	provider, fake := newGitHubTest(t,
 		map[string]any{"error": "authorization_pending"},

@@ -125,7 +125,8 @@ func run(args []string) error {
 		deviceHandler = fake
 		log.Printf("WARNING: -dev-fake-login is enabled: ANYONE who can reach %s/device can sign in as ANY username. Never use this in production.", publicURL)
 	case gitHubClientID != "":
-		identity = &account.GitHubProvider{ClientID: gitHubClientID}
+		identity = &account.GitHubProvider{ClientID: gitHubClientID, VerificationURI: publicURL + "/device"}
+		deviceHandler = http.RedirectHandler(account.GitHubDeviceURL, http.StatusFound)
 	default:
 		return errors.New("an identity provider is required: -github-client-id (or $MEWLA_ACCOUNT_GITHUB_CLIENT_ID) or -dev-fake-login")
 	}
