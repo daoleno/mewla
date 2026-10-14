@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -23,6 +25,9 @@ import (
 
 	"github.com/daoleno/mewla/daemon/account"
 	"github.com/daoleno/mewla/daemon/account/dns"
+	"github.com/daoleno/mewla/daemon/proxyproto"
+	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 const letsEncryptDirectory = "https://acme-v02.api.letsencrypt.org/directory"
@@ -53,6 +58,9 @@ func run(args []string) error {
 	var challtestsrvURL string
 	var cloudflareZoneID string
 	var checkURL string
+	var tlsAddress string
+	var tlsCacheDir string
+	var proxyProtocol bool
 
 	flags := flag.NewFlagSet("mewla-account", flag.ContinueOnError)
 	flags.StringVar(&address, "addr", ":8080", "HTTP listen address")
@@ -74,6 +82,9 @@ func run(args []string) error {
 	flags.StringVar(&challtestsrvURL, "challtestsrv-url", "http://127.0.0.1:8055", "pebble-challtestsrv management API URL")
 	flags.StringVar(&cloudflareZoneID, "cloudflare-zone-id", "", "Cloudflare zone id of -client-domain (token in $MEWLA_ACCOUNT_CLOUDFLARE_TOKEN)")
 	flags.StringVar(&checkURL, "check", "", "check an existing service health URL and exit")
+	flags.StringVar(&tlsAddress, "tls-addr", "", "HTTPS listen address for -public-url's host, certificate from Let's Encrypt by TLS-ALPN-01 (off when empty; /healthz stays on -addr)")
+	flags.StringVar(&tlsCacheDir, "tls-cache", "", "certificate cache directory for -tls-addr (default: acme/ next to -db)")
+	flags.BoolVar(&proxyProtocol, "proxy-protocol", false, "require a PROXY protocol v1 header on -tls-addr connections (only behind the relay's -sni-route-proxy-protocol)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -187,12 +198,31 @@ func run(args []string) error {
 		MaxHeaderBytes:    16 << 10,
 	}
 
+	var publicServer *http.Server
+	var publicListener net.Listener
+	if tlsAddress != "" {
+		if tlsCacheDir == "" {
+			tlsCacheDir = filepath.Join(filepath.Dir(databasePath), "acme")
+		}
+		publicServer, publicListener, err = listenPublicTLS(tlsAddress, publicURL, tlsCacheDir, proxyProtocol, service.Handler())
+		if err != nil {
+			return err
+		}
+		defer publicListener.Close()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	errorsCh := make(chan error, 1)
+	errorsCh := make(chan error, 2)
 	go func() {
 		errorsCh <- server.Serve(listener)
 	}()
+	if publicServer != nil {
+		go func() {
+			errorsCh <- publicServer.Serve(publicListener)
+		}()
+		log.Printf("mewla-account https: addr=%s proxy_protocol=%t cache=%s", publicListener.Addr(), proxyProtocol, tlsCacheDir)
+	}
 	log.Printf(
 		"mewla-account ready: addr=%s public_url=%s client_domain=%s relays=%d identity=%s dns=%s grant_public_key=%s",
 		listener.Addr(),
@@ -215,7 +245,55 @@ func run(args []string) error {
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdownContext)
+	if publicServer != nil {
+		_ = publicServer.Shutdown(shutdownContext)
+	}
 	return nil
+}
+
+// listenPublicTLS serves handler over HTTPS for publicURL's host, with a
+// Let's Encrypt certificate by TLS-ALPN-01. Behind the relay that is the
+// only challenge that reaches it: the relay passes the TLS stream through.
+// Health checks are not served here.
+func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, handler http.Handler) (*http.Server, net.Listener, error) {
+	parsed, err := url.Parse(publicURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Port() != "" {
+		return nil, nil, errors.New("-tls-addr needs an https -public-url without a port")
+	}
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		return nil, nil, fmt.Errorf("create -tls-cache: %w", err)
+	}
+	manager := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(parsed.Hostname()),
+		Cache:      autocert.DirCache(cacheDir),
+	}
+	tlsConfig := &tls.Config{
+		MinVersion:     tls.VersionTLS12,
+		GetCertificate: manager.GetCertificate,
+		NextProtos:     []string{"http/1.1", acme.ALPNProto},
+	}
+	raw, err := net.Listen("tcp", address)
+	if err != nil {
+		return nil, nil, fmt.Errorf("listen -tls-addr: %w", err)
+	}
+	listener := raw
+	if proxyProtocol {
+		listener = &proxyproto.Listener{Listener: raw, Timeout: 5 * time.Second}
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/healthz", http.NotFoundHandler())
+	mux.Handle("/", handler)
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
+		ErrorLog:          log.New(io.Discard, "", 0),
+	}
+	return server, tls.NewListener(listener, tlsConfig), nil
 }
 
 func checkHealth(checkURL string) error {
