@@ -19,6 +19,7 @@ no shared password.
 | This computer (`http://127.0.0.1:9876`) | A browser on the same computer | `mewla` |
 | [Wi-Fi/LAN](#wi-fi-or-lan) | Phone and computer share a trusted network | `mewla --lan` |
 | [Tailscale](#tailscale) | Private access from anywhere | `mewla --lan`, or `mewla -addr "$(tailscale ip -4):9876"` |
+| [Remote access](#remote-access) | Phone and browsers on any network, nothing to set up | `mewla login` |
 | [HTTPS tunnel or reverse proxy](#https-tunnel-or-reverse-proxy) | A stable HTTPS address without a VPN app | `mewla`, then `mewla address add https://…` |
 | [Mewla Link](#mewla-link) | You run your own relay | `mewla` with a `link.json` |
 
@@ -201,12 +202,40 @@ Revoking removes the device's key, closes its live connections and rejects its
 later requests. Browsers appear as `Mewla Web (...)`. Removing a computer in the
 app's Settings only forgets it on that phone; it does not revoke the key.
 
+## Remote access
+
+`mewla login` gives this computer an HTTPS address such as
+`https://studio-3f9a2c.<service domain>`. Your phone and any browser reach it
+from any network; the computer only connects outward, so there is no port to
+open, no VPN and no domain to buy. The first time you start `mewla` by hand it
+offers the same choice.
+
+```sh
+mewla login     # shows a page and a code; sign in with GitHub there
+mewla pair      # the phone QR now uses remote access
+mewla logout    # turn it off
+```
+
+- **The account finds the computer; it does not unlock it.** Every phone or
+  browser still pairs once. A browser shows a number and the computer's
+  terminal prints the same number with the command that approves it, so a
+  stolen account alone cannot use your computer.
+- **The relay cannot read your traffic.** It forwards encrypted bytes by
+  hostname. The computer holds the only private key for its certificate; it
+  gets the certificate from Let's Encrypt through the service.
+- **Phones pin this computer's key.** The phone app checks the computer's own
+  key, not the certificate authority, so it stays private even from the
+  service operator. Browsers rely on the public certificate system like any
+  website; certificates for every hostname are public in Certificate
+  Transparency logs, so the hostname is not a secret.
+- `mewla address list` and `mewla doctor` show the address, the relay
+  connection and the certificate.
+
 ## Mewla Link
 
-Mewla Link is an optional relay that keeps the daemon on loopback and connects
-outward. It works only after an operator configures relay infrastructure and a
-`link.json` file in the state directory. No hosted Mewla Link service is
-operated, so most people should use one of the addresses above.
+Mewla Link is the relay remote access runs on. You can also run your own
+relay: configure relay infrastructure and a `link.json` file in the state
+directory. See the operator guide in `docs/internal/mewla-link-relay.md`.
 
 If something does not connect, see
 [Troubleshooting](troubleshooting.md#the-phone-cannot-connect).
