@@ -719,3 +719,52 @@ func TestNewLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestUnnamedMachinesGetRandomWordLabels(t *testing.T) {
+	seen := map[string]bool{}
+	for range 20 {
+		label, err := newLabel("  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		parts := strings.Split(label, "-")
+		if !linkproto.IsHostLabel(label) || len(parts) != 3 || len(parts[2]) != 4 {
+			t.Fatalf("random label %q", label)
+		}
+		seen[label] = true
+	}
+	if len(seen) < 15 {
+		t.Fatalf("random labels repeat too often: %d distinct of 20", len(seen))
+	}
+	h := newHarness(t, nil)
+	info := h.login(newDaemon(t), "", newRouteID(t))
+	if strings.HasPrefix(info.Label, "mewla-") || len(strings.Split(info.Label, "-")) != 3 {
+		t.Fatalf("unnamed login label = %q", info.Label)
+	}
+}
+
+func TestRenameMachine(t *testing.T) {
+	h := newHarness(t, nil)
+	daemon := newDaemon(t)
+	route := newRouteID(t)
+	before := h.login(daemon, "", route)
+	status, raw := h.call(daemon, http.MethodPut, "/v1/machine/name", map[string]string{"name": "Studio"})
+	if status != http.StatusOK {
+		t.Fatalf("rename status=%d body=%s", status, raw)
+	}
+	var after MachineInfo
+	if err := json.Unmarshal(raw, &after); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(after.Label, "studio-") || after.RouteID != route || after.MachineID != before.MachineID {
+		t.Fatalf("renamed machine = %#v", after)
+	}
+	grant, err := linkproto.VerifyRouteGrant([]ed25519.PublicKey{h.public}, after.Grant, time.Now())
+	if err != nil || grant.Label != after.Label || after.Hostname != after.Label+".link.example.com" {
+		t.Fatalf("grant=%#v err=%v hostname=%s", grant, err, after.Hostname)
+	}
+	stranger := newDaemon(t)
+	if status, _ := h.call(stranger, http.MethodPut, "/v1/machine/name", map[string]string{"name": "x"}); status != http.StatusNotFound {
+		t.Fatalf("unknown machine rename status=%d", status)
+	}
+}

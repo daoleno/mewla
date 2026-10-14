@@ -92,6 +92,14 @@ func (client *Client) Machine(ctx context.Context) (Machine, error) {
 	return machine, err
 }
 
+// Rename gives this computer a new address label. The route and pairings
+// stay; only the browser address changes.
+func (client *Client) Rename(ctx context.Context, name string) (Machine, error) {
+	var machine Machine
+	_, err := client.do(ctx, http.MethodPut, "/v1/machine/name", map[string]string{"name": name}, &machine)
+	return machine, err
+}
+
 func (client *Client) SetACMEChallenge(ctx context.Context, fqdn, value string) error {
 	_, err := client.do(ctx, http.MethodPut, "/v1/machine/acme-challenge", map[string]string{"fqdn": fqdn, "value": value}, nil)
 	return err

@@ -225,6 +225,39 @@ func (s *Store) deleteMachine(ctx context.Context, key string) (machineRecord, e
 	return machine, tx.Commit()
 }
 
+// renameMachine replaces the label of the machine for key with a unique
+// label built from name.
+func (s *Store) renameMachine(ctx context.Context, key, name string, newLabel func(string) (string, error)) (machineRecord, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return machineRecord{}, err
+	}
+	defer tx.Rollback()
+	machine, err := getMachine(ctx, tx, `daemon_public_key = ?`, key)
+	if err != nil {
+		return machineRecord{}, err
+	}
+	for attempt := 0; attempt < 8; attempt++ {
+		label, err := newLabel(name)
+		if err != nil {
+			return machineRecord{}, err
+		}
+		var taken int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM machines WHERE label = ?`, label).Scan(&taken); err != nil {
+			return machineRecord{}, err
+		}
+		if taken != 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE machines SET label = ?, name = ? WHERE id = ?`, label, name, machine.ID); err != nil {
+			return machineRecord{}, err
+		}
+		machine.Label, machine.Name = label, name
+		return machine, tx.Commit()
+	}
+	return machineRecord{}, errors.New("could not allocate a unique hostname label")
+}
+
 // routeOwner returns the daemon key bound to routeID, or "" when unbound.
 func (s *Store) routeOwner(ctx context.Context, routeID string) (string, error) {
 	machine, err := getMachine(ctx, s.db, `route_id = ?`, routeID)
