@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -112,6 +113,7 @@ type Server struct {
 	calendarScheduler            *calendar.Scheduler
 	telegram                     *telegramchannel.Manager
 	computers                    *computers.Manager
+	agentUse                     *agentuse.Service
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 	sendInputOverride            func(workerID, text string) error
@@ -438,6 +440,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/computer", s.handleComputer)
 	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
 	mux.HandleFunc("/computers", s.handleComputers)
+	mux.HandleFunc("/agent-use", s.handleAgentUse)
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)

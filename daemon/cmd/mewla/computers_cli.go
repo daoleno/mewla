@@ -111,6 +111,9 @@ func printComputersResult(w io.Writer, action string, result computers.Result) {
 				if len(peer.Caps.Agents) > 0 {
 					line += "\tagents: " + strings.Join(peer.Caps.Agents, ", ")
 				}
+				if peer.Caps.BrowserUse {
+					line += "\tagents can use its Chrome"
+				}
 			}
 			if peer.Queued > 0 {
 				line += fmt.Sprintf("\t%d waiting", peer.Queued)
