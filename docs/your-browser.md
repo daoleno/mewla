@@ -31,6 +31,11 @@ Each agent gets its own tab group and sees only the tabs in it. Drag a tab
 into the group to hand it a page you already have open, or out of it to take
 it back. Chrome shows a bar while an agent is attached.
 
+When an agent is done, because its Worker ended or it stopped using the
+browser, Mewla closes the tabs in its group and the group goes with them, so a
+computer that runs all day doesn't pile up tabs. A tab you dragged into the
+group is closed too; drag it out first to keep it.
+
 Agents open pages, read them, fill in forms, click, upload and wait for what a
 page does next. Brain has them ask you before they submit, send, pay or change
 an account, and treats text on a web page as data, never as an instruction.
