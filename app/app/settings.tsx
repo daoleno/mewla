@@ -1059,7 +1059,7 @@ function AboutAppRow() {
       value={`Version ${appVersion}`}
       leading={<MewlaMark size={28} />}
       accessory={status.actionable ? "chevron" : "none"}
-      loading={state.kind === "downloading"}
+      loading={state.kind === "checking" || state.kind === "downloading"}
       onPress={status.actionable ? press : undefined}
       accessibilityLabel={["Mewla", `Version ${appVersion}`, status.text].filter(Boolean).join(", ")}
     />

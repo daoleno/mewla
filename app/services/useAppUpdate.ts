@@ -13,13 +13,13 @@ import {
   LATEST_MANIFEST_URL,
   LATEST_SIGNATURE_URL,
   resolveDistributionChannel,
+  shouldCheckForUpdate,
   verifyAndroidUpdateManifest,
 } from "./appUpdate";
 
 // One owner for the whole app, so a download keeps going while Settings is closed.
-// Checks run on their own (launch, return to foreground) and stay silent; only
-// a newer release is ever shown.
-const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Checks run on their own (launch, return to foreground) and on a tap of the
+// About row; only a newer release puts the dot on Settings.
 let state: AppUpdateState = initialState();
 let lastCheckAt = 0;
 const listeners = new Set<() => void>();
@@ -58,10 +58,9 @@ async function fetchLatestAndroidUpdate(): Promise<AndroidUpdateArtifact | null>
   return verifyAndroidUpdateManifest(manifest, signature);
 }
 
-async function check() {
-  if (!["idle", "current", "checkFailed"].includes(state.kind)) return;
-  // A failed check waits for the next scheduled one, like a successful one.
-  if (state.kind !== "idle" && Date.now() - lastCheckAt < AUTO_CHECK_INTERVAL_MS) return;
+async function check(manual = false) {
+  // A failed automatic check waits for the next scheduled one, like a successful one.
+  if (!shouldCheckForUpdate(state, lastCheckAt, Date.now(), manual)) return;
   lastCheckAt = Date.now();
   setState({ kind: "checking" });
   try {
@@ -133,6 +132,10 @@ export function startAppUpdateChecks() {
 
 function press() {
   switch (state.kind) {
+    case "current":
+    case "checkFailed":
+      void check(true);
+      return;
     case "available":
     case "failed":
       void download(state.update);
