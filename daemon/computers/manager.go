@@ -60,6 +60,9 @@ type Manager struct {
 	loops    map[string]context.CancelFunc
 	runCtx   context.Context
 	inflight map[string]bool
+	// running tracks every live channel and outbound loop so Run returns
+	// only after they stop touching the state file.
+	running sync.WaitGroup
 
 	unsubscribe func()
 }
@@ -127,6 +130,11 @@ func (m *Manager) Run(ctx context.Context) {
 	if m.unsubscribe != nil {
 		m.unsubscribe()
 	}
+	// Channels are added under mu only while ctx is live, so none can start
+	// after this point.
+	m.mu.Lock()
+	m.mu.Unlock()
+	m.running.Wait()
 }
 
 func outboundKey(daemonID string) string { return "out:" + daemonID }
@@ -142,7 +150,11 @@ func (m *Manager) startLoopLocked(peer outboundPeer) {
 	}
 	ctx, cancel := context.WithCancel(m.runCtx)
 	m.loops[key] = cancel
-	go m.outboundLoop(ctx, peer.DaemonID)
+	m.running.Add(1)
+	go func() {
+		defer m.running.Done()
+		m.outboundLoop(ctx, peer.DaemonID)
+	}()
 }
 
 func (m *Manager) outboundLoop(ctx context.Context, daemonID string) {
@@ -225,7 +237,23 @@ func (m *Manager) ServeInbound(w http.ResponseWriter, r *http.Request, device *a
 		ws.Close()
 		return
 	}
-	m.serve(r.Context(), inboundKey(device.ID), conn, *first.Hello)
+	// A hijacked connection outlives the HTTP server, so the channel also
+	// ends with Run.
+	m.mu.Lock()
+	runCtx := m.runCtx
+	if runCtx == nil || runCtx.Err() != nil {
+		m.mu.Unlock()
+		ws.Close()
+		return
+	}
+	m.running.Add(1)
+	m.mu.Unlock()
+	defer m.running.Done()
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	stop := context.AfterFunc(runCtx, cancel)
+	defer stop()
+	m.serve(ctx, inboundKey(device.ID), conn, *first.Hello)
 }
 
 func (m *Manager) hello() Hello {
@@ -263,9 +291,14 @@ func (m *Manager) serve(ctx context.Context, key string, conn *peerConn, remote 
 	m.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
+	// Closing the socket is what unblocks the read below.
+	stopClose := context.AfterFunc(ctx, func() { conn.ws.Close() })
+	defer stopClose()
+	var workers sync.WaitGroup
 	defer func() {
 		cancel()
 		conn.ws.Close()
+		workers.Wait()
 		m.mu.Lock()
 		if m.conns[key] == conn {
 			delete(m.conns, key)
@@ -275,13 +308,18 @@ func (m *Manager) serve(ctx context.Context, key string, conn *peerConn, remote 
 		m.mu.Unlock()
 	}()
 
-	go m.sendLoop(ctx, key, conn)
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		m.sendLoop(ctx, key, conn)
+	}()
 	conn.ws.SetPongHandler(func(string) error {
 		_ = conn.ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return nil
 	})
 	inbox := make(chan Message, 32)
 	go func() {
+		defer workers.Done()
 		for {
 			select {
 			case <-ctx.Done():
