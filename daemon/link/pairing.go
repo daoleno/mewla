@@ -15,6 +15,19 @@ import (
 
 const PairingVersion = 2
 
+// CompactPairingVersion carries the same signed fields as PairingVersion in
+// fixed binary, base32 encoded, so a terminal QR code holds it in
+// alphanumeric mode at about half the size. The daemon ID is left out: it is
+// the SHA-256 of the signed public key, and enrollment checks that key.
+const CompactPairingVersion = 3
+
+// PairingLinks is one Link pairing code as links. Link is version 3 for the
+// QR code and current apps; Legacy is version 2 for apps that predate it.
+type PairingLinks struct {
+	Link   string
+	Legacy string
+}
+
 type PairingCandidate struct {
 	Name         string `json:"n"`
 	AdmissionURL string `json:"a,omitempty"`
@@ -39,9 +52,9 @@ func BuildPairingLink(
 	config ConnectorConfig,
 	pairing auth.PairingToken,
 	admissions []AdmissionOffer,
-) (string, PairingPayload, error) {
+) (PairingLinks, PairingPayload, error) {
 	if authManager == nil || identity == nil {
-		return "", PairingPayload{}, errors.New("daemon auth and Link transport identity are required")
+		return PairingLinks{}, PairingPayload{}, errors.New("daemon auth and Link transport identity are required")
 	}
 	admissionByRelay := make(map[string]AdmissionOffer, len(admissions))
 	for _, admission := range admissions {
@@ -73,9 +86,9 @@ func BuildPairingLink(
 		}
 	}
 	if !hasAdmission {
-		return "", PairingPayload{}, errors.New("no connected Link relay issued a pairing admission")
+		return PairingLinks{}, PairingPayload{}, errors.New("no connected Link relay issued a pairing admission")
 	}
-	payload := PairingPayload{
+	legacy := PairingPayload{
 		Version:         PairingVersion,
 		DaemonID:        authManager.DaemonID(),
 		DaemonPublicKey: authManager.PublicKeyHex(),
@@ -85,17 +98,37 @@ func BuildPairingLink(
 		Candidates:      candidates,
 		ExpiresAtMS:     pairing.ExpiresAt.UnixMilli(),
 	}
-	payload.Signature = authManager.CreateLinkPairingSignature(
-		PairingBindingPayload(payload),
+	legacy.Signature = authManager.CreateLinkPairingSignature(
+		PairingBindingPayload(legacy),
 	)
-	raw, err := json.Marshal(payload)
+	raw, err := json.Marshal(legacy)
 	if err != nil {
-		return "", PairingPayload{}, fmt.Errorf("encode Link pairing payload: %w", err)
+		return PairingLinks{}, PairingPayload{}, fmt.Errorf("encode Link pairing payload: %w", err)
 	}
 	values := url.Values{}
 	values.Set("v", fmt.Sprintf("%d", PairingVersion))
 	values.Set(connectPayloadParameter, base64.RawURLEncoding.EncodeToString(raw))
-	return "mewla://settings?" + values.Encode(), payload, nil
+	legacyLink := "mewla://settings?" + values.Encode()
+
+	compact := legacy
+	compact.Version = CompactPairingVersion
+	compact.DaemonID = ""
+	compact.Signature = authManager.CreateLinkPairingSignature(
+		PairingBindingPayload(compact),
+	)
+	encoded, err := EncodeCompactPairing(compact)
+	if err != nil {
+		// A relay shape version 3 cannot express keeps the version 2 link.
+		return PairingLinks{Link: legacyLink}, legacy, nil
+	}
+	return PairingLinks{Link: CompactPairingLink(encoded), Legacy: legacyLink}, compact, nil
+}
+
+// CompactPairingLink is the version 3 connect link for an encoded payload.
+// The payload comes last, so a QR encoder can put it in one alphanumeric
+// segment.
+func CompactPairingLink(encoded string) string {
+	return fmt.Sprintf("mewla://settings?v=%d&%s=%s", CompactPairingVersion, connectPayloadParameter, encoded)
 }
 
 const connectPayloadParameter = "p"
@@ -121,7 +154,7 @@ func PairingBindingPayload(payload PairingPayload) []byte {
 }
 
 func ValidatePairingPayload(payload PairingPayload, now time.Time) error {
-	if payload.Version != PairingVersion ||
+	if (payload.Version != PairingVersion && payload.Version != CompactPairingVersion) ||
 		!linkID(payload.RouteID, 16) ||
 		len(strings.TrimSpace(payload.TransportPin)) != 64 ||
 		len(payload.Candidates) == 0 {

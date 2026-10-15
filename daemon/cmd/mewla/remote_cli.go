@@ -339,25 +339,25 @@ func openURL(target string) error {
 
 // buildRemotePairingLink pairs a phone through this computer's remote access
 // relay with the pinned transport, or returns "" when signed out.
-func buildRemotePairingLink(stateDir, daemonID, daemonPublicKey string, pairing auth.PairingToken) (string, string, error) {
+func buildRemotePairingLink(stateDir, daemonID, daemonPublicKey string, pairing auth.PairingToken) (link.PairingLinks, string, error) {
 	config, ok, err := remote.LoadConfig(stateDir)
 	if err != nil || !ok {
-		return "", "", err
+		return link.PairingLinks{}, "", err
 	}
 	authManager, err := auth.NewManager(stateDir)
 	if err != nil {
-		return "", "", fmt.Errorf("initialize auth manager: %w", err)
+		return link.PairingLinks{}, "", fmt.Errorf("initialize auth manager: %w", err)
 	}
 	if authManager.DaemonID() != daemonID || authManager.PublicKeyHex() != daemonPublicKey {
-		return "", "", errors.New("runtime owner pairing identity changed")
+		return link.PairingLinks{}, "", errors.New("runtime owner pairing identity changed")
 	}
 	linkConfig, err := remote.ConnectorConfig(stateDir, config, authManager)
 	if err != nil {
-		return "", "", err
+		return link.PairingLinks{}, "", err
 	}
 	connectLink, err := buildLinkPairingLink(authManager, linkConfig, "remote access", pairing)
 	if err != nil {
-		return "", "", errors.New(remote.UserText(err.Error()))
+		return link.PairingLinks{}, "", errors.New(remote.UserText(err.Error()))
 	}
 	return connectLink, "Remote access, " + config.URL(), nil
 }

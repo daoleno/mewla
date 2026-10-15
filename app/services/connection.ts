@@ -72,7 +72,11 @@ export function parseConnectLink(
       .get(CONNECT_PARAM_PAYLOAD)
       ?.trim();
     if (compactPayload) {
-      if (parsed.searchParams.get("v")?.trim() === "2") {
+      const version = parsed.searchParams.get("v")?.trim();
+      if (version === "3") {
+        return parseCompactLinkPairingPayload(compactPayload);
+      }
+      if (version === "2") {
         return parseLinkPairingPayload(compactPayload);
       }
       return parseCompactConnectPayload(compactPayload);
@@ -181,49 +185,197 @@ function parseLinkPairingPayload(
         typeof candidate.s === "string" ? candidate.s.trim() : "",
       );
     }
-    const admissionCandidate = candidates.find(
-      (candidate) => candidate.admissionUrl,
-    );
-    if (!admissionCandidate?.admissionUrl) {
-      return null;
-    }
-    const bindingPayload = new TextEncoder().encode(
-      [
-        "2",
-        daemonId,
-        daemonPublicKey,
-        enrollmentToken,
-        routeId,
-        transportPin,
-        raw.x.toString(),
-        ...bindingCandidateValues,
-      ].join("\n"),
-    );
-    if (
-      !verifyLinkPairingSignature({
-        daemonPublicKey,
-        bindingPayload,
-        signatureHex: signature,
-      })
-    ) {
-      return null;
-    }
-
-    return {
-      url: admissionCandidate.admissionUrl,
+    return verifiedLinkPairing({
+      version: "2",
       daemonId,
       daemonPublicKey,
       enrollmentToken,
-      link: {
-        kind: "link",
-        routeId,
-        transportPin,
-        candidates,
-      },
-    };
+      routeId,
+      transportPin,
+      expiresAtMs: raw.x,
+      signature,
+      candidates,
+      bindingCandidateValues,
+    });
   } catch {
     return null;
   }
+}
+
+// verifiedLinkPairing checks the daemon's signature over a Link pairing
+// payload, as daemon/link PairingBindingPayload builds it.
+function verifiedLinkPairing(input: {
+  version: "2" | "3";
+  daemonId?: string;
+  daemonPublicKey: string;
+  enrollmentToken: string;
+  routeId: string;
+  transportPin: string;
+  expiresAtMs: number;
+  signature: string;
+  candidates: LinkTransportCandidate[];
+  bindingCandidateValues: string[];
+}): ConnectionImportPayload | null {
+  const admissionCandidate = input.candidates.find(
+    (candidate) => candidate.admissionUrl,
+  );
+  if (!admissionCandidate?.admissionUrl) {
+    return null;
+  }
+  const bindingPayload = new TextEncoder().encode(
+    [
+      input.version,
+      input.daemonId ?? "",
+      input.daemonPublicKey,
+      input.enrollmentToken,
+      input.routeId,
+      input.transportPin,
+      input.expiresAtMs.toString(),
+      ...input.bindingCandidateValues,
+    ].join("\n"),
+  );
+  if (
+    !verifyLinkPairingSignature({
+      daemonPublicKey: input.daemonPublicKey,
+      bindingPayload,
+      signatureHex: input.signature,
+    })
+  ) {
+    return null;
+  }
+
+  return {
+    url: admissionCandidate.admissionUrl,
+    daemonId: input.daemonId,
+    daemonPublicKey: input.daemonPublicKey,
+    enrollmentToken: input.enrollmentToken,
+    link: {
+      kind: "link",
+      routeId: input.routeId,
+      transportPin: input.transportPin,
+      candidates: input.candidates,
+    },
+  };
+}
+
+// parseCompactLinkPairingPayload reads version 3: the version 2 fields in
+// fixed binary, base32 so the terminal QR code stays small. Layout (see
+// daemon/link/pairing_compact.go): version, public key 32, token 32, route 16,
+// pin 32, expiry ms 6, signature 64, stable label, candidate count, then per
+// candidate name, domain, port 2, flags, admission alias 16.
+function parseCompactLinkPairingPayload(
+  encodedPayload: string,
+): ConnectionImportPayload | null {
+  try {
+    const bytes = decodeBase32(encodedPayload);
+    let offset = 0;
+    const take = (length: number) => {
+      if (offset + length > bytes.length) {
+        throw new Error("Short Link pairing payload.");
+      }
+      const value = bytes.subarray(offset, offset + length);
+      offset += length;
+      return value;
+    };
+    const takeText = () => new TextDecoder().decode(take(take(1)[0]));
+    if (take(1)[0] !== 3) {
+      return null;
+    }
+    const daemonPublicKey = bytesToHex(take(32));
+    const enrollmentToken = bytesToHex(take(32));
+    const routeId = bytesToHex(take(16));
+    const transportPin = bytesToHex(take(32));
+    const expiry = take(6);
+    const expiresAtMs =
+      ((expiry[0] << 8) | expiry[1]) * 2 ** 32 +
+      new DataView(expiry.buffer, expiry.byteOffset + 2, 4).getUint32(0);
+    const signature = bytesToHex(take(64));
+    const label = takeText() || routeId;
+    const count = take(1)[0];
+    if (count === 0 || count > MAX_LINK_CANDIDATES || expiresAtMs <= Date.now()) {
+      return null;
+    }
+    const candidates: LinkTransportCandidate[] = [];
+    const bindingCandidateValues: string[] = [];
+    for (let index = 0; index < count; index++) {
+      const name = takeText().trim();
+      const domain = takeText();
+      const portBytes = take(2);
+      const port = (portBytes[0] << 8) | portBytes[1];
+      const flags = take(1)[0];
+      if (!name || !domain || port === 0 || (flags & ~1) !== 0) {
+        return null;
+      }
+      const stable = linkCandidateURL(`${label}.${domain}`, port);
+      const admission =
+        flags & 1 ? linkCandidateURL(`${bytesToHex(take(16))}.${domain}`, port) : "";
+      const url = normalizeServerURL(stable);
+      if (!url) {
+        return null;
+      }
+      candidates.push({
+        name,
+        admissionUrl: admission ? normalizeServerURL(admission) || undefined : undefined,
+        url,
+      });
+      bindingCandidateValues.push(name, admission, stable);
+    }
+    if (offset !== bytes.length) {
+      return null;
+    }
+    return verifiedLinkPairing({
+      version: "3",
+      daemonPublicKey,
+      enrollmentToken,
+      routeId,
+      transportPin,
+      expiresAtMs,
+      signature,
+      candidates,
+      bindingCandidateValues,
+    });
+  } catch {
+    return null;
+  }
+}
+
+// linkCandidateURL matches daemon/link candidateURL.
+function linkCandidateURL(host: string, port: number): string {
+  return port === 443 ? `wss://${host}/ws` : `wss://${host}:${port}/ws`;
+}
+
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+// decodeBase32 reads RFC 4648 base32 without padding and rejects anything
+// that would not encode back to the same text.
+function decodeBase32(value: string): Uint8Array {
+  if (
+    !value ||
+    value.length > MAX_CONNECT_PAYLOAD_CHARACTERS ||
+    [1, 3, 6].includes(value.length % 8)
+  ) {
+    throw new Error("Invalid base32 payload.");
+  }
+  const output = new Uint8Array(Math.floor((value.length * 5) / 8));
+  let buffer = 0;
+  let bits = 0;
+  let outputOffset = 0;
+  for (const character of value) {
+    const digit = BASE32_ALPHABET.indexOf(character);
+    if (digit < 0) {
+      throw new Error("Invalid base32 payload.");
+    }
+    buffer = ((buffer << 5) | digit) & 0xffff;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      output[outputOffset++] = (buffer >> bits) & 0xff;
+    }
+  }
+  if (buffer & ((1 << bits) - 1)) {
+    throw new Error("Invalid base32 padding bits.");
+  }
+  return output;
 }
 
 function parseCompactConnectPayload(

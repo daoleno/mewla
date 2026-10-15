@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/term"
-	"rsc.io/qr"
+	"rsc.io/qr/coding"
 )
 
 // termStyle renders the few emphases Mewla's terminal screens use: bold
@@ -81,19 +82,65 @@ const qrQuietModules = 2
 
 // qrColumns is how many terminal columns renderQR needs for text.
 func qrColumns(text string) int {
-	code, err := qr.Encode(text, qr.L)
+	code, err := encodeQR(text)
 	if err != nil {
 		return 0
 	}
 	return code.Size + 2*qrQuietModules + 2
 }
 
+// qrAlphaRun is the shortest run worth its own alphanumeric segment: it
+// saves 2.5 bits a character and costs a segment header.
+const qrAlphaRun = 16
+
+// encodeQR encodes text at the lowest error correction level in the smallest
+// version, with long runs of QR alphanumeric characters (such as a base32
+// payload) in alphanumeric segments and everything else as bytes.
+func encodeQR(text string) (*coding.Code, error) {
+	var segments []coding.Encoding
+	start := 0
+	for index := 0; index < len(text); {
+		end := index
+		for end < len(text) && strings.IndexByte(qrAlphanumeric, text[end]) >= 0 {
+			end++
+		}
+		if end-index >= qrAlphaRun {
+			if start < index {
+				segments = append(segments, coding.String(text[start:index]))
+			}
+			segments = append(segments, coding.Alpha(text[index:end]))
+			start = end
+		}
+		index = max(end, index+1)
+	}
+	if start < len(text) {
+		segments = append(segments, coding.String(text[start:]))
+	}
+	for version := coding.Version(coding.MinVersion); version <= coding.MaxVersion; version++ {
+		bits := 0
+		for _, segment := range segments {
+			bits += segment.Bits(version)
+		}
+		if bits > version.DataBytes(coding.L)*8 {
+			continue
+		}
+		plan, err := coding.NewPlan(version, coding.L, 0)
+		if err != nil {
+			return nil, err
+		}
+		return plan.Encode(segments...)
+	}
+	return nil, errors.New("text too long for a QR code")
+}
+
+const qrAlphanumeric = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+
 // renderQR draws text as a QR code, two modules per character row, indented
 // two columns. In color it paints exact black on white, so the code scans the
 // same on light and dark backgrounds; in plain text it draws dark modules
 // with block characters, which reads correctly on a light background.
 func renderQR(w io.Writer, s termStyle, text string) error {
-	code, err := qr.Encode(text, qr.L)
+	code, err := encodeQR(text)
 	if err != nil {
 		return err
 	}
