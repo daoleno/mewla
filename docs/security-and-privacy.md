@@ -47,6 +47,19 @@ or installing software it asks you through the Brain you are talking to.
 `mewla computers remove` or `mewla devices revoke` ends the access at once.
 See [Your other computers](computers.md).
 
+## Agents on the screen
+
+On a Mac with Screen permissions, agents Mewla starts can see the screen and
+use the keyboard and pointer while **Agents can use this computer** is on. The
+daemon acts for them, so their own processes never hold the permissions. Each
+request must name a running Mewla Worker, and one agent uses the screen at a
+time. The request travels over the daemon's private socket, which any process
+of your user on that computer can reach, as with the rest of `mewla`. Agents
+don't need a phone's Screen approval: the switch is the approval. A person
+viewing the screen always takes over from an agent, the app's switch stops
+agents at once (`mewla screen disable` and `mewla agent-use off` within
+seconds), and each action is logged without what was typed. See [Screen](screen.md#agents-on-the-screen).
+
 ## Agents in your browser
 
 When **Agents can use this computer** is on and the Playwright extension is in
