@@ -60,13 +60,16 @@ func runShownCommand(command string) error {
 	return cmd.Run()
 }
 
+// style is how this prompt's writer renders emphasis.
+func (d *depsPrompt) style() termStyle { return styleForWriter(d.w) }
+
 // ask reads a Y/n answer; Enter means yes, closed input means no.
 func (d *depsPrompt) ask(question string) bool {
 	if !d.interactive {
 		return false
 	}
 	for {
-		fmt.Fprintf(d.w, "%s [Y/n]: ", question)
+		fmt.Fprintf(d.w, "%s %s ", d.style().bold(question), d.style().dim("[Y/n]:"))
 		line, err := d.in.ReadString('\n')
 		if err != nil && line == "" {
 			fmt.Fprintln(d.w)
@@ -84,7 +87,7 @@ func (d *depsPrompt) ask(question string) bool {
 
 func (d *depsPrompt) runPlan(plan hostdeps.Plan) bool {
 	for _, step := range plan.Steps {
-		fmt.Fprintf(d.w, "\n$ %s\n", step)
+		fmt.Fprintf(d.w, "\n%s %s\n", d.style().dim("$"), d.style().cmd(step))
 		if err := d.run(step); err != nil {
 			fmt.Fprintf(d.w, "\nThat command failed (%v).\n", err)
 			return false
@@ -92,6 +95,63 @@ func (d *depsPrompt) runPlan(plan hostdeps.Plan) bool {
 	}
 	fmt.Fprintln(d.w)
 	return true
+}
+
+// agentNames are the display names of the executors first run reports.
+var agentNames = map[string]string{
+	"claude": "Claude Code", "codex": "Codex", "agent": "Cursor Agent",
+	"grok": "Grok", "pi": "Pi", "opencode": "OpenCode",
+}
+
+func agentName(id string) string {
+	if name, ok := agentNames[id]; ok {
+		return name
+	}
+	return id
+}
+
+// checkAll shows tmux and the agent CLI as aligned status rows, then offers
+// whatever is missing, tmux first.
+func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool) {
+	style := d.style()
+	tmux, agents := d.tmux(), d.agents()
+	tmuxReady = tmux.Status == doctor.StatusOK
+	agentReady = readyAgent(agents) != ""
+	tmuxValue := "missing"
+	if tmuxReady {
+		tmuxValue = strings.TrimSpace("tmux " + tmux.Version)
+	} else if tmux.Found {
+		tmuxValue = "found, but it does not work"
+	}
+	agentValue := "none installed"
+	switch {
+	case agentReady:
+		agentValue = agentName(agents.RecommendedHost) + style.dim(" · Brain uses it")
+	case anyInstalledAgent(agents) != "":
+		agentValue = agentName(anyInstalledAgent(agents)) + " · not signed in"
+	}
+	fmt.Fprintln(d.w)
+	fmt.Fprintln(d.w, style.bold("This computer"))
+	fmt.Fprintln(d.w, style.check(tmuxReady, "tmux", tmuxValue))
+	fmt.Fprintln(d.w, style.check(agentReady, "Agent CLI", agentValue))
+	if !tmuxReady {
+		fmt.Fprintln(d.w)
+		tmuxReady = d.ensureTmux()
+	}
+	if !agentReady {
+		fmt.Fprintln(d.w)
+		agentReady = d.ensureAgent()
+	}
+	return tmuxReady, agentReady
+}
+
+func anyInstalledAgent(check doctor.ExecutorsCheck) string {
+	for _, item := range check.Items {
+		if item.BinaryFound {
+			return item.ID
+		}
+	}
+	return ""
 }
 
 // ensureTmux reports whether tmux works, after offering to install it.
@@ -111,7 +171,7 @@ func (d *depsPrompt) ensureTmux() bool {
 		fmt.Fprintf(d.w, "Install tmux for %s: %s\n", d.platform.Name(), plan.Doc)
 		return false
 	}
-	fmt.Fprintf(d.w, "Install it on %s with:\n  %s\n", d.platform.Name(), plan.Command())
+	fmt.Fprintf(d.w, "Install it on %s with:\n  %s\n", d.platform.Name(), d.style().cmd(plan.Command()))
 	if plan.Blocked != "" {
 		fmt.Fprintf(d.w, "(%s)\n", plan.Blocked)
 		return false
@@ -126,7 +186,7 @@ func (d *depsPrompt) ensureTmux() bool {
 		return false
 	}
 	addToolDirToPath(check.Path)
-	fmt.Fprintf(d.w, "%s is ready.\n", strings.TrimSpace("tmux "+check.Version))
+	fmt.Fprintf(d.w, "✓ %s is ready.\n", strings.TrimSpace("tmux "+check.Version))
 	return true
 }
 
@@ -155,35 +215,13 @@ func (d *depsPrompt) ensureAgent() bool {
 	}
 	fmt.Fprintln(d.w, "Install one:")
 	fmt.Fprintln(d.w)
-	for index, agent := range agents {
-		fmt.Fprintf(d.w, "  %d. %-12s %s\n", index+1, agent.Name, agent.Install.Command())
+	options := make([]menuOption, 0, len(agents)+1)
+	for _, agent := range agents {
+		options = append(options, menuOption{label: agent.Name, note: agent.Install.Command()})
 	}
-	skip := len(agents) + 1
-	fmt.Fprintf(d.w, "  %d. Skip for now\n", skip)
-	fmt.Fprintln(d.w)
-	choice := 0
-	for choice == 0 {
-		fmt.Fprintf(d.w, "Choose 1-%d [1]: ", skip)
-		line, err := d.in.ReadString('\n')
-		if err != nil && line == "" {
-			fmt.Fprintln(d.w)
-			choice = skip
-			break
-		}
-		answer := strings.TrimSpace(line)
-		if answer == "" {
-			answer = "1"
-		}
-		for number := 1; number <= skip; number++ {
-			if answer == fmt.Sprint(number) {
-				choice = number
-			}
-		}
-		if choice == 0 {
-			fmt.Fprintf(d.w, "Type a number from 1 to %d.\n", skip)
-		}
-	}
-	if choice == skip {
+	options = append(options, menuOption{label: "Skip for now"})
+	choice := chooseOption(d.in, d.w, options) + 1
+	if choice <= 0 || choice == len(options) {
 		fmt.Fprintln(d.w, "Brain starts working once one is installed and signed in.")
 		return false
 	}
@@ -200,18 +238,18 @@ func (d *depsPrompt) ensureAgent() bool {
 	}
 	addToolDirToPath(item.BinaryPath)
 	if item.Usable && item.Auth == doctor.AuthAuthenticated {
-		fmt.Fprintf(d.w, "%s is ready. Brain will use it.\n", agent.Name)
+		fmt.Fprintf(d.w, "✓ %s is ready. Brain will use it.\n", agent.Name)
 		return true
 	}
 	return d.signIn(agent)
 }
 
 func (d *depsPrompt) signIn(agent hostdeps.Agent) bool {
-	fmt.Fprintf(d.w, "%s is installed. Sign in to it:\n  %s\n", agent.Name, agent.Login)
+	fmt.Fprintf(d.w, "%s is installed. Sign in to it:\n  %s\n", agent.Name, d.style().cmd(agent.Login))
 	if !d.ask("Sign in now?") {
 		return false
 	}
-	fmt.Fprintf(d.w, "\n$ %s\n", agent.Login)
+	fmt.Fprintf(d.w, "\n%s %s\n", d.style().dim("$"), d.style().cmd(agent.Login))
 	if err := d.run(agent.Login); err != nil {
 		fmt.Fprintf(d.w, "\nSign-in did not finish (%v). Later: %s\n", err, agent.Login)
 		return false
@@ -222,7 +260,7 @@ func (d *depsPrompt) signIn(agent hostdeps.Agent) bool {
 		return false
 	}
 	addToolDirToPath(item.BinaryPath)
-	fmt.Fprintf(d.w, "\n%s is ready. Brain will use it.\n", agent.Name)
+	fmt.Fprintf(d.w, "\n✓ %s is ready. Brain will use it.\n", agent.Name)
 	return true
 }
 
@@ -302,10 +340,13 @@ func quickDepsCheck(stderr io.Writer) {
 // offerBoot asks to keep Mewla running in the background with the existing
 // `mewla boot install`, right after the connect choice.
 func offerBoot(d *depsPrompt, stateDir string, choice startupChoice) {
+	if bootServiceInstalled() {
+		return
+	}
 	switch bootGOOS {
 	case "linux":
 		if _, err := (execBootRunner{}).run("systemctl", "--user", "show-environment"); err != nil {
-			fmt.Fprintln(d.w, "\nThis system has no systemd user services, so Mewla runs while this terminal is open.")
+			fmt.Fprintln(d.w, "\nNo systemd user services here, so Mewla runs while this terminal is open.")
 			return
 		}
 	case "darwin":
@@ -341,6 +382,27 @@ func offerBoot(d *depsPrompt, stateDir string, choice startupChoice) {
 	default:
 		fmt.Fprintf(d.w, "Could not start Mewla in the background: %v\nMewla runs in this terminal instead. Later: mewla boot install\n", err)
 	}
+}
+
+// bootServiceInstalled reports whether mewla boot install already set up a
+// systemd unit or LaunchAgent, so first run does not ask again.
+func bootServiceInstalled() bool {
+	path, marker := "", bootManagedMarker
+	var err error
+	switch bootGOOS {
+	case "linux":
+		path, err = bootUnitPath()
+	case "darwin":
+		path, err = bootLaunchdPlistPath()
+		marker = bootLaunchdMarker
+	default:
+		return false
+	}
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), marker)
 }
 
 // runDepsCommand is `mewla deps`: check tmux and an agent CLI, offering to

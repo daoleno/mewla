@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -193,5 +194,30 @@ func TestEnsureAgentSkipAndNonInteractive(t *testing.T) {
 		if !strings.Contains(out.String(), line) {
 			t.Fatalf("output missing %q:\n%s", line, out)
 		}
+	}
+}
+
+func TestOfferBootSkipsWhenABootServiceIsInstalled(t *testing.T) {
+	previous := bootGOOS
+	bootGOOS = "linux"
+	defer func() { bootGOOS = previous }()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if bootServiceInstalled() {
+		t.Fatal("no unit yet")
+	}
+	unit, err := bootUnitPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(unit), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(unit, []byte(bootManagedMarker+"\n[Unit]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	offerBoot(&depsPrompt{in: bufio.NewReader(strings.NewReader("y\n")), w: &out, interactive: true}, "", choiceRemote)
+	if out.Len() != 0 {
+		t.Fatalf("asked again: %q", out.String())
 	}
 }

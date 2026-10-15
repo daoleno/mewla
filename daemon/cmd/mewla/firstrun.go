@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -61,9 +60,10 @@ func saveStartupChoice(stateDir string, choice startupChoice) error {
 	return atomicfile.Write(filepath.Join(stateDir, startupChoiceFile), raw, 0o600)
 }
 
-// firstRunPromptAllowed asks only when a person starts a brand-new Mewla by
-// hand: no listen flags, a terminal on both ends, not CI or a service
-// manager, and no daemon identity yet in the state directory.
+// firstRunPromptAllowed asks once when a person starts Mewla by hand: no
+// listen flags, a terminal on both ends, not CI or a service manager, no saved
+// answer yet and not signed in to remote access. It asks existing installs
+// too, including when a background Mewla already runs.
 func firstRunPromptAllowed(args []string, stateDir string, interactive bool) bool {
 	if !interactive || os.Getenv("CI") != "" || daemonSupervised() {
 		return false
@@ -71,10 +71,10 @@ func firstRunPromptAllowed(args []string, stateDir string, interactive bool) boo
 	if !onlyStateDirArgs(args) {
 		return false
 	}
-	if _, err := os.Stat(filepath.Join(stateDir, "identity.json")); !errors.Is(err, os.ErrNotExist) {
+	if _, chosen := loadStartupChoice(stateDir); chosen {
 		return false
 	}
-	if _, chosen := loadStartupChoice(stateDir); chosen {
+	if _, signedIn, _ := remote.LoadConfig(stateDir); signedIn {
 		return false
 	}
 	return true
@@ -100,49 +100,36 @@ func stdioIsTerminal() bool {
 // runFirstRunChoice asks how phones and browsers should reach this computer
 // and remembers the answer, so it is asked once.
 func runFirstRunChoice(ctx context.Context, reader *bufio.Reader, w io.Writer, stateDir string) (startupChoice, error) {
+	style := styleForWriter(w)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "How should your phone and browsers reach this computer?")
+	fmt.Fprintln(w, style.bold("How should your phone and browsers reach this computer?"))
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  1. Sign in, reach it from anywhere (recommended)")
-	fmt.Fprintln(w, "  2. Only on the same Wi-Fi")
-	fmt.Fprintln(w, "  3. I'll set up Tailscale or HTTPS myself")
-	fmt.Fprintln(w, "  4. Decide later")
-	fmt.Fprintln(w)
-	choice := startupChoice("")
-	for choice == "" {
-		fmt.Fprint(w, "Choose 1-4 [1]: ")
-		line, err := reader.ReadString('\n')
-		if err != nil && line == "" {
-			return choiceLater, nil
-		}
-		switch strings.TrimSpace(line) {
-		case "", "1":
-			choice = choiceRemote
-		case "2":
-			choice = choiceLAN
-		case "3":
-			choice = choiceOwn
-		case "4":
-			choice = choiceLater
-		default:
-			fmt.Fprintln(w, "Type 1, 2, 3 or 4.")
-		}
+	choices := []startupChoice{choiceRemote, choiceLAN, choiceOwn, choiceLater}
+	index := chooseOption(reader, w, []menuOption{
+		{label: "Sign in, reach it from anywhere", note: "(recommended)"},
+		{label: "Only on the same Wi-Fi"},
+		{label: "I'll set up Tailscale or HTTPS myself"},
+		{label: "Decide later"},
+	})
+	choice := choiceLater
+	if index >= 0 {
+		choice = choices[index]
 	}
 	switch choice {
 	case choiceRemote:
 		if _, err := remoteLogin(ctx, w, stateDir, remoteLoginOptions{openBrowser: true}); err != nil {
 			fmt.Fprintf(w, "\nRemote access is not on: %v\n", err)
-			fmt.Fprintln(w, "Mewla starts for this computer only. Try again any time: mewla login")
-			return choiceLater, nil
+			fmt.Fprintln(w, "Mewla starts for this computer only. Try again any time: "+style.cmd("mewla login"))
+			return choiceLater, saveStartupChoice(stateDir, choiceLater)
 		}
 	case choiceLAN:
 		fmt.Fprintln(w, "\nMewla listens on your Wi-Fi/LAN (plain HTTP; use trusted networks only).")
-		fmt.Fprintln(w, "It keeps doing so when you start it with plain mewla.")
+		fmt.Fprintln(w, "It keeps doing so when you start it with plain "+style.cmd("mewla")+".")
 	case choiceOwn:
-		fmt.Fprintln(w, "\nStart with mewla -addr \"$(tailscale ip -4):9876\" for Tailscale, or put HTTPS in front")
-		fmt.Fprintln(w, "of 127.0.0.1:9876 and run mewla address add https://…  Guide: docs/connect-and-pair.md")
+		fmt.Fprintln(w, "\nStart with "+style.cmd(`mewla -addr "$(tailscale ip -4):9876"`)+" for Tailscale, or put HTTPS in front")
+		fmt.Fprintln(w, "of 127.0.0.1:9876 and run "+style.cmd("mewla address add https://…")+"  Guide: docs/connect-and-pair.md")
 	case choiceLater:
-		fmt.Fprintln(w, "\nMewla starts for this computer only. Reach it from anywhere later: mewla login")
+		fmt.Fprintln(w, "\nMewla starts for this computer only. Reach it from anywhere later: "+style.cmd("mewla login"))
 	}
 	if err := saveStartupChoice(stateDir, choice); err != nil {
 		return choice, err
@@ -175,22 +162,36 @@ func applyStartupChoice(cfg *daemonConfig, args []string, stderr io.Writer) erro
 	choice, chosen := loadStartupChoice(stateDir)
 	if !chosen && firstRunPromptAllowed(args, stateDir, stdioIsTerminal()) {
 		reader := bufio.NewReader(os.Stdin)
+		style := styleForWriter(stderr)
+		running, _ := bootStateLockHeld(stateDir)
 		fmt.Fprintln(stderr)
-		fmt.Fprintln(stderr, "Welcome to Mewla.")
+		fmt.Fprintln(stderr, style.title("Welcome to Mewla"))
 		deps := newDepsPrompt(reader, stderr, true)
-		tmuxReady := deps.ensureTmux()
-		agentReady := deps.ensureAgent()
-		if tmuxReady && agentReady {
-			fmt.Fprintln(stderr, "This computer is ready for Brain.")
-		}
+		deps.checkAll()
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		choice, err = runFirstRunChoice(ctx, reader, stderr, stateDir)
 		stop()
 		if err != nil {
 			return err
 		}
-		offerBoot(deps, cfg.stateDir, choice)
+		switch {
+		case running && choice == choiceLAN:
+			restart := "stop it, then run " + style.cmd("mewla")
+			if bootServiceInstalled() {
+				restart = "run " + style.cmd("mewla boot install -lan")
+			}
+			fmt.Fprintln(stderr, "The Mewla already running keeps its current address until it restarts.")
+			fmt.Fprintln(stderr, "To restart it on Wi-Fi now, "+restart+".")
+		case running:
+		default:
+			offerBoot(deps, cfg.stateDir, choice)
+		}
 	} else {
+		if !chosen {
+			if _, signedIn, _ := remote.LoadConfig(stateDir); signedIn {
+				_ = saveStartupChoice(stateDir, choiceRemote)
+			}
+		}
 		quickDepsCheck(stderr)
 	}
 	if choice == choiceLAN {

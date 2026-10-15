@@ -113,27 +113,42 @@ With the daemon running:
 mewla pair
 ```
 
-It prints one code, usable once by whichever device uses it first, in every
-form you might need:
+It prints one code, usable once by whichever device uses it first, on one
+screen: whether remote access is on and how many devices are paired, a QR code
+for the phone with the time it expires, and a short link for a browser on this
+computer (`http://127.0.0.1:9876/p/…`, which opens the pairing page and works
+only from this computer).
 
-- **Phone:** a QR code and a `mewla://` link. The QR uses Mewla Link when it is
-  configured; otherwise the best address in the list: HTTPS, then Tailscale,
-  then Wi-Fi/LAN. A phone can't reach `127.0.0.1`, so that address is never
-  in the QR. To use one particular address, pass it:
-  `mewla pair https://mewla.example.com`.
-- **Browser on this computer:** an `http://127.0.0.1:9876/#pair=…` link.
+The QR uses Mewla Link when it is configured; otherwise the best address in
+the list: HTTPS, then Tailscale, then Wi-Fi/LAN. A phone can't reach
+`127.0.0.1`, so that address is never in the QR. To use one particular address,
+pass it: `mewla pair https://mewla.example.com`. When the terminal is too narrow
+for the QR, it says how wide it needs to be instead of drawing a broken code.
+
+`mewla pair --details` prints the same code in every other form:
+
+- **Phone:** the `mewla://` link to paste into the app.
+- **Browser on this computer:** the full `http://127.0.0.1:9876/#pair=…` link.
 - **Browser anywhere:** an `https://…/#pair=…` link for each HTTPS address.
+- How to revoke a device.
 
 If no phone can reach the computer yet, `mewla pair` says so and still prints
 the browser link. A code expires after 15 minutes. If you use a custom state
 directory, pass the same `-state-dir` to `mewla pair`.
 
 The first time the daemon starts with no paired device, it prints the same
-block by itself.
+screen by itself. Running `mewla` while Mewla is already running does the
+same when nothing is paired yet; otherwise it shows the status lines and
+points to `mewla pair`.
+
+Colors and the arrow-key menu appear only in an interactive terminal. With
+`NO_COLOR` set, `TERM=dumb`, in CI or when the output goes to a file or a log,
+the screens are plain text and menus take a number.
 
 ### On the phone
 
-Open **Settings > Pair a computer** in the app, then scan the QR code, import a
+On the app's welcome screen tap **Mewla already running? Scan its code**, or
+open **Settings > Pair a computer** in the app, then scan the QR code, import a
 screenshot or photo of it, or paste the printed link. Opening a `mewla://` link
 on the phone works too.
 

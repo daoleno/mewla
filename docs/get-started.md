@@ -43,7 +43,9 @@ cannot find it yet.
 mewla
 ```
 
-The first time, it checks this computer before anything else. Without
+The first time, it checks this computer before anything else. An existing
+install that never made these choices asks once, the next time you run
+`mewla` in a terminal, even while Mewla is already running in the background. Without
 `tmux`, it offers your system's install command. Without a signed-in agent
 CLI, it offers Claude Code or Codex with their official installers, then their
 sign-in (`claude auth login` or `codex login`). One ready agent is enough.
@@ -54,10 +56,13 @@ and sign in with GitHub: the computer gets its own address, such as
 asks whether to start Mewla automatically with the computer, using
 [`mewla boot install`](install-daemon.md#keep-it-running).
 
-With no device paired yet, it prints a QR code and a pairing link. Install the
-app (the Android APK from [Releases](https://github.com/daoleno/mewla/releases),
-or [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)), open it and scan the code. The
-code works once and expires; `mewla pair` prints a fresh one. Android asks you
+With no device paired yet, it shows one screen: whether remote access is on,
+a QR code for your phone, when the code expires, and a short link for a browser
+on this computer. Install the app (the Android APK from
+[Releases](https://github.com/daoleno/mewla/releases), or
+[iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)), open it, tap
+**Mewla already running? Scan its code** and scan. The code works once and
+expires; `mewla pair` prints a fresh one. Android asks you
 to allow installs from your browser or file manager the first time you open
 the APK; allow it for that app, then install.
 

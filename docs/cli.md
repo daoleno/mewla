@@ -26,7 +26,8 @@ value to every command that should use it.
 ## Pair and manage devices
 
 ```sh
-mewla pair [address]          # one-time code: phone QR and link, plus browser links
+mewla pair [address]          # one-time code: phone QR and a short link for this computer's browser
+mewla pair --details          # the same code as paste links for phone and every browser address
 mewla address list [--json]   # every address phones and browsers can use
 mewla address add <https-url> # an HTTPS tunnel or proxy in front of this computer
 mewla address remove <address>
