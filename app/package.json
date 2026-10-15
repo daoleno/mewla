@@ -11,6 +11,7 @@
     "android:release": "expo run:android --variant release",
     "build:apk": "cd android && env NODE_ENV=production ./gradlew --no-daemon --build-cache assembleRelease -PreactNativeArchitectures=arm64-v8a -Pexpo.useLegacyPackaging=true && ln -f app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/app-release-arm64.apk && echo '\n✅ APK: android/app/build/outputs/apk/release/app-release-arm64.apk'",
     "build:apk:arm64": "bun run build:apk",
+    "build:aab": "cd android && env NODE_ENV=production ./gradlew --no-daemon --build-cache bundleRelease -PreactNativeArchitectures=arm64-v8a && echo '\n✅ AAB: android/app/build/outputs/bundle/release/app-release.aab'",
     "build:apk:universal": "cd android && ./gradlew --no-daemon assembleRelease && echo '\n✅ APK: android/app/build/outputs/apk/release/app-release.apk'",
     "build:apk:debug": "sh -c 'bunx expo prebuild --platform android --no-install --no-clean && cd android && ./gradlew --no-daemon assembleDebug -PreactNativeArchitectures=arm64-v8a -PmewlaStandalone=false && cp -f app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mewla-debug-arm64.apk && sha256sum app/build/outputs/apk/debug/mewla-debug-arm64.apk && echo APK: android/app/build/outputs/apk/debug/mewla-debug-arm64.apk'",
     "serve:apk": "cd android/app/build/outputs/apk/release && python3 -m http.server 8899",

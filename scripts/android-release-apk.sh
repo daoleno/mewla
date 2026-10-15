@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build an arm64-v8a sideload release APK with native terminal libs verified.
+# Build an arm64-v8a sideload release APK with native terminal libs verified,
+# or with --aab the Google Play App Bundle (play-store channel: no self-update).
 #
 # Prerequisites:
 #   - JDK 17, Android SDK (ANDROID_HOME), bun install
@@ -20,6 +21,7 @@
 # Usage:
 #   ./scripts/android-release-apk.sh
 #   ./scripts/android-release-apk.sh --skip-prebuild
+#   ./scripts/android-release-apk.sh --aab   # Play AAB; then scripts/verify-aab-play.sh
 
 set -euo pipefail
 
@@ -27,13 +29,28 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SKIP_PREBUILD=0
+AAB=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-prebuild) SKIP_PREBUILD=1; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    --aab) AAB=1; shift ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "error: unknown arg $1" >&2; exit 2 ;;
   esac
 done
+
+# The channel is read by app.config.js at prebuild (manifest) and again when
+# Gradle embeds the Expo config (runtime update check), so export it for both.
+if [[ $AAB -eq 1 ]]; then
+  if [[ -n "${MEWLA_ANDROID_DISTRIBUTION:-}" && "$MEWLA_ANDROID_DISTRIBUTION" != "play-store" ]]; then
+    echo "error: --aab builds the play-store channel; got MEWLA_ANDROID_DISTRIBUTION=$MEWLA_ANDROID_DISTRIBUTION" >&2
+    exit 2
+  fi
+  export MEWLA_ANDROID_DISTRIBUTION=play-store
+elif [[ -n "${MEWLA_ANDROID_DISTRIBUTION:-}" && "$MEWLA_ANDROID_DISTRIBUTION" != "github-apk" ]]; then
+  echo "error: the sideload APK is the github-apk channel; got MEWLA_ANDROID_DISTRIBUTION=$MEWLA_ANDROID_DISTRIBUTION" >&2
+  exit 2
+fi
 
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk}"
 export PATH="$JAVA_HOME/bin:$PATH"
@@ -131,6 +148,30 @@ if errs:
 print(f"ok: generated identity package={exp_pkg} versionName={exp_ver} versionCode={exp_vc}")
 PY
 
+APP_VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
+
+if [[ $AAB -eq 1 ]]; then
+  (
+    cd "$ROOT/app"
+    bun run build:aab
+  )
+  BUNDLE="$ROOT/app/android/app/build/outputs/bundle/release/app-release.aab"
+  if [[ ! -f "$BUNDLE" ]]; then
+    echo "error: AAB not found after build" >&2
+    exit 1
+  fi
+  OUT_DIR="$ROOT/dist-download/android-play"
+  mkdir -p "$OUT_DIR"
+  COPY="$OUT_DIR/mewla-android-v${APP_VERSION}-${EXPECTED_VERSION_CODE}.aab"
+  cp -f "$BUNDLE" "$COPY"
+  (cd "$OUT_DIR" && sha256sum "$(basename "$COPY")" | tee "$(basename "$COPY").sha256")
+  echo ""
+  echo "AAB:  $COPY"
+  echo "Next: ./scripts/verify-aab-play.sh $COPY"
+  echo "Done (no upload)."
+  exit 0
+fi
+
 (
   cd "$ROOT/app"
   bun run build:apk
@@ -152,7 +193,6 @@ fi
 OUT_DIR="$ROOT/dist-download/android-native"
 mkdir -p "$OUT_DIR"
 # Name from canonical app identity + pin short + content hash (not a formal release).
-APP_VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
 PIN_SHORT="$(python3 -c "import json;print(json.load(open('app/modules/terminal-vt/native.lock.json'))['ghostty']['commit'][:12])")"
 APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
 COPY="$OUT_DIR/mewla-android-arm64-v${APP_VERSION}-${PIN_SHORT}-${APK_SHA:0:12}.apk"
