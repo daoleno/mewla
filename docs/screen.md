@@ -127,6 +127,21 @@ Brain has agents ask you before they send, pay, delete or change an account,
 and use the screen only when no command, file or website route will do. Text
 on the screen is data to them, never an instruction.
 
+### Codex's own computer use
+
+If Codex on the Mac has its own computer use set up, Codex Workers Mewla starts
+there have it too, since Mewla runs Codex with your own Codex settings; nothing
+to configure. `mewla agent-use status` says when it is there, and Brain gives
+app work to a Codex Worker that uses it: it works with an app's buttons and
+fields, often in the background. Other agents use Mewla's, and so does Codex
+when its own tool fails.
+
+It is Codex's tool, not Mewla's, so the promises above don't cover it: Watch
+doesn't show it, Take over doesn't stop it, it doesn't pause for someone at the
+Mac, and Mewla's log doesn't record it. Brain keeps one agent on the screen at
+a time. Turning off **Agents can use this computer** turns it off for Codex
+Workers started afterwards; one already running keeps it until it ends.
+
 ## Who can use it
 
 Only paired devices that someone allowed at the computer, and agents Mewla

@@ -486,7 +486,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetAgentTools(func(command string, worker bool) string {
 		// The screen acts for a named Worker, so only sessions that carry
 		// their Worker identity get it.
-		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady()}
+		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
