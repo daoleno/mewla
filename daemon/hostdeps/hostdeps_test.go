@@ -1,6 +1,7 @@
 package hostdeps
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -119,5 +120,15 @@ func TestAgentsUseOfficialInstallersOnMacAndLinux(t *testing.T) {
 	}
 	if Agents(Platform{GOOS: "windows"}) != nil {
 		t.Fatal("windows has no supported agent plan")
+	}
+}
+
+func TestAddToPathAppendsOnce(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	if !AddToPath("/home/u/.local/bin") || AddToPath("/home/u/.local/bin") || AddToPath("/bin") {
+		t.Fatal("AddToPath added an existing entry or skipped a new one")
+	}
+	if got := os.Getenv("PATH"); got != "/usr/bin:/bin:/home/u/.local/bin" {
+		t.Fatalf("PATH = %q, want the new dir last", got)
 	}
 }

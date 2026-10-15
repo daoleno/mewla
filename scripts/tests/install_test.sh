@@ -387,10 +387,26 @@ test_tmux_check_and_next_step() {
 
   new_case deps-unsupported
   make_archive
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_NO_DEPS=1 FAKE_DOCTOR_STATUS=1
-  assert_contains "$CASE_DIR/output" "Check this computer: $HOME_DIR/install/mewla doctor"
-  assert_not_contains "$CASE_DIR/output" "fixture doctor"
+  local tool_bin="$CASE_DIR/tools" command_name
+  mkdir -p "$tool_bin"
+  for command_name in uname dirname stat id grep awk sed mktemp tr mkdir rm cp chmod mv tar gzip sha256sum env; do
+    ln -s "$(command -v "$command_name")" "$tool_bin/$command_name"
+  done
+  ln -s "$FAKE_BIN/curl" "$tool_bin/curl"
+  ln -s "$FAKE_BIN/uname" "$tool_bin/uname" 2>/dev/null || true
+  RUN_PATH_OVERRIDE=$tool_bin
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_NO_DEPS=1 || fail "installer failed without tmux on PATH"
+  unset RUN_PATH_OVERRIDE
+  assert_contains "$CASE_DIR/output" "tmux is missing. Mewla runs every agent inside tmux; see how to install it: $HOME_DIR/install/mewla doctor"
+  assert_not_contains "$CASE_DIR/output" "fixture deps"
   [[ $(tail -n 1 "$CASE_DIR/output") == "  $HOME_DIR/install/mewla" ]] || fail "last line is not the runnable full path"
+
+  new_case deps-unsupported-tmux-present
+  make_archive
+  printf '#!/bin/sh\nexit 0\n' > "$FAKE_BIN/tmux"
+  chmod +x "$FAKE_BIN/tmux"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_NO_DEPS=1
+  assert_not_contains "$CASE_DIR/output" "tmux is missing"
   pass "checks tmux through mewla deps, falls back for older releases, and ends with the start command"
 }
 
