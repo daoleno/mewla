@@ -1,7 +1,10 @@
 package watcher
 
 import (
+	"errors"
+	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,13 +24,82 @@ type processInfo struct {
 }
 
 func snapshotProcesses() map[int]processInfo {
-	command := exec.Command("ps", "-eo", "pid=,ppid=,pgid=,tpgid=,lstart=,comm=,args=")
+	processes, _ := snapshotProcessesErr()
+	return processes
+}
+
+// snapshotProcessesErr is snapshotProcesses with the failing ps detail kept for
+// ownership-probe diagnostics.
+func snapshotProcessesErr() (map[int]processInfo, error) {
+	// ucomm is the executable's accounting name on every platform. macOS
+	// comm is argv[0] cut to the 16-column field ("/Users/me/.local/"), so
+	// provider checks on the process name would never match there.
+	command := exec.Command("ps", "-eo", "pid=,ppid=,pgid=,tpgid=,lstart=,ucomm=,args=")
 	command.Env = append(command.Environ(), "LC_ALL=C")
 	out, err := command.Output()
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("ps process snapshot: %w%s", err, commandStderr(err))
 	}
-	return parseProcessSnapshot(out, time.Local)
+	processes := parseProcessSnapshot(out, time.Local)
+	if len(processes) == 0 {
+		return nil, fmt.Errorf("ps process snapshot parsed no processes from %d bytes", len(out))
+	}
+	return processes, nil
+}
+
+// commandStderr returns ": <stderr>" for a failed exec.Cmd.Output, truncated
+// for logs.
+func commandStderr(err error) string {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return ""
+	}
+	stderr := strings.TrimSpace(string(exitErr.Stderr))
+	if stderr == "" {
+		return ""
+	}
+	return ": " + truncateDiagnostic(stderr)
+}
+
+func truncateDiagnostic(value string) string {
+	const limit = 200
+	if len(value) > limit {
+		return value[:limit] + "…"
+	}
+	return value
+}
+
+// describeForegroundGroup summarizes why foreground authority was not proven:
+// the pane's foreground group and each member's command name and detected
+// provider family. Process arguments are never included because they can
+// carry credentials.
+func describeForegroundGroup(panePID int, processes map[int]processInfo) string {
+	pane, ok := processes[panePID]
+	if !ok {
+		return fmt.Sprintf("pane pid %d is absent from the process snapshot", panePID)
+	}
+	members := make([]string, 0, 4)
+	for _, process := range processes {
+		if pane.tpgid <= 0 || process.pgid != pane.tpgid {
+			continue
+		}
+		family := ""
+		if detected := workerCommandFromProcess(process); detected != "" {
+			family = workerProviderFamily(detected)
+			if family == "" {
+				family = "unknown-provider"
+			}
+		}
+		members = append(members, fmt.Sprintf("%d(ppid=%d comm=%s provider=%s)",
+			process.pid, process.ppid, normalizeCommand(process.comm), family))
+		if len(members) == 8 {
+			members = append(members, "…")
+			break
+		}
+	}
+	sort.Strings(members)
+	return fmt.Sprintf("pane pid %d pgid=%d tpgid=%d foreground group [%s]",
+		panePID, pane.pgid, pane.tpgid, strings.Join(members, " "))
 }
 
 func parseProcessSnapshot(out []byte, location *time.Location) map[int]processInfo {
