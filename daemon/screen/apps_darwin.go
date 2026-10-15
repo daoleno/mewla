@@ -6,8 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"log"
+	"math"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -29,11 +32,14 @@ var appsLib struct {
 	createApplication func(pid int32) uintptr
 	getPid            func(element uintptr, pid *int32) int32
 	copyActionNames   func(element uintptr, names *uintptr) int32
+	rectFromDict      func(dict uintptr, rect *cgRect) bool
 	performAction     func(element, action uintptr) int32
 	setAttribute      func(element, attribute, value uintptr) int32
 
 	keys map[string]uintptr
 }
+
+type cgRect struct{ X, Y, W, H float64 }
 
 const (
 	cgWindowListExcludeDesktop = 1 << 4
@@ -66,6 +72,7 @@ func loadApps() bool {
 			{&appsLib.createApplication, "ApplicationServices", "AXUIElementCreateApplication"},
 			{&appsLib.getPid, "ApplicationServices", "AXUIElementGetPid"},
 			{&appsLib.copyActionNames, "ApplicationServices", "AXUIElementCopyActionNames"},
+			{&appsLib.rectFromDict, "CoreGraphics", "CGRectMakeWithDictionaryRepresentation"},
 			{&appsLib.performAction, "ApplicationServices", "AXUIElementPerformAction"},
 			{&appsLib.setAttribute, "ApplicationServices", "AXUIElementSetAttributeValue"},
 		} {
@@ -77,7 +84,7 @@ func loadApps() bool {
 		}
 		// The window list's keys are strings equal to their names.
 		appsLib.keys = map[string]uintptr{}
-		for _, name := range []string{"kCGWindowOwnerPID", "kCGWindowOwnerName", "kCGWindowLayer", "kCGWindowIsOnscreen"} {
+		for _, name := range []string{"kCGWindowOwnerPID", "kCGWindowOwnerName", "kCGWindowLayer", "kCGWindowIsOnscreen", "kCGWindowBounds"} {
 			ref := axLib.createString(0, name, cfStringEncodingUTF8)
 			if ref == 0 {
 				return
@@ -117,6 +124,12 @@ func runningApps() ([]App, error) {
 	}
 	byPID := map[int]int{}
 	var apps []App
+	// Windows on the screen so far; the list runs from front to back.
+	type shown struct {
+		pid    int
+		bounds image.Rectangle
+	}
+	var above []shown
 	for i, n := int64(0), axLib.arrayCount(list); i < n; i++ {
 		info := axLib.arrayAt(list, i)
 		// Layer 0 holds apps' own windows; menus, the Dock and the menu bar
@@ -138,11 +151,34 @@ func runningApps() ([]App, error) {
 			byPID[int(pid)] = index
 			apps = append(apps, App{Name: name, PID: int(pid), Active: int(pid) == front, Hidden: true})
 		}
-		if dictBool(info, "kCGWindowIsOnscreen") {
-			apps[index].Hidden = false
+		if !dictBool(info, "kCGWindowIsOnscreen") {
+			continue
 		}
+		app := &apps[index]
+		app.Hidden = false
+		bounds := dictRect(info)
+		if app.Window.Empty() && !bounds.Empty() {
+			app.Window = bounds
+			for _, w := range above {
+				if w.pid != app.PID && w.bounds.Overlaps(bounds) && !slices.Contains(app.CoveredBy, apps[byPID[w.pid]].Name) {
+					app.CoveredBy = append(app.CoveredBy, apps[byPID[w.pid]].Name)
+				}
+			}
+		}
+		above = append(above, shown{app.PID, bounds})
 	}
 	return apps, nil
+}
+
+// dictRect is a window's bounds, in global points, which are the main
+// display's framebuffer pixels.
+func dictRect(dict uintptr) image.Rectangle {
+	value := appsLib.dictValue(dict, appsLib.keys["kCGWindowBounds"])
+	var r cgRect
+	if value == 0 || !appsLib.rectFromDict(value, &r) {
+		return image.Rectangle{}
+	}
+	return image.Rect(int(math.Round(r.X)), int(math.Round(r.Y)), int(math.Round(r.X+r.W)), int(math.Round(r.Y+r.H)))
 }
 
 func dictInt(dict uintptr, key string) (int64, bool) {

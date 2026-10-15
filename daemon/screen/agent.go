@@ -603,6 +603,9 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 
 	switch action.Action {
 	case "screenshot":
+		if action.App != "" {
+			return a.windowShot(ctx, action.App)
+		}
 		return a.screenshot(ctx)
 	case "elements":
 		return a.elements(ctx)
@@ -906,6 +909,55 @@ func (a *agentSession) screenshot(ctx context.Context) (AgentResult, error) {
 		Image: out.Bytes(), Width: w, Height: h,
 		Text: fmt.Sprintf("Screenshot %dx%d. Give coordinates on this image.", w, h),
 	}, nil
+}
+
+// windowShot is one app's front window, cut from the screen at the scale
+// of a full screenshot, so a point on it is a point on the screen plus the
+// window's corner.
+func (a *agentSession) windowShot(ctx context.Context, name string) (AgentResult, error) {
+	if a.apps == nil {
+		return AgentResult{}, ErrNoApps
+	}
+	apps, err := a.apps.Apps(ctx)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	app, err := resolveApp(apps, name)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	a.mu.Lock()
+	settle := agentSettle - time.Since(a.lastAct)
+	a.mu.Unlock()
+	if settle > 0 {
+		select {
+		case <-time.After(settle):
+		case <-ctx.Done():
+			return AgentResult{}, ctx.Err()
+		}
+	}
+	a.mu.Lock()
+	src := a.latest
+	r := app.Window.Intersect(src.Rect)
+	if r.Empty() {
+		a.mu.Unlock()
+		return AgentResult{}, fmt.Errorf("%s has no window on the screen (hidden, minimized or elsewhere); read it with app_state", app.Name)
+	}
+	x0, y0 := a.toAgent(r.Min)
+	x1, y1 := a.toAgent(r.Max)
+	w, h := max(1, x1-x0), max(1, y1-y0)
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	xdraw.ApproxBiLinear.Scale(dst, dst.Rect, src, r, xdraw.Src, nil)
+	a.mu.Unlock()
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 70}); err != nil {
+		return AgentResult{}, err
+	}
+	text := fmt.Sprintf("%s's window, %dx%d. Its top left is (%d, %d) on a full screenshot: add that to a point here to click it.", oneLine(app.Name), w, h, x0, y0)
+	if len(app.CoveredBy) > 0 {
+		text += " Part of it is under " + strings.Join(app.CoveredBy, ", ") + ", which this picture shows instead; app_state reads it whole."
+	}
+	return AgentResult{Image: out.Bytes(), Width: w, Height: h, Text: text}, nil
 }
 
 // agentSize is the screenshot size; callers hold a.mu.

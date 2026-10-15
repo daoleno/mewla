@@ -17,6 +17,10 @@ type App struct {
 	// Active is the app in front; Hidden has no window on screen.
 	Active bool `json:"active,omitempty"`
 	Hidden bool `json:"hidden,omitempty"`
+	// Window is its front window on the screen, in framebuffer pixels;
+	// CoveredBy names the apps whose windows lie over part of it.
+	Window    image.Rectangle `json:"-"`
+	CoveredBy []string        `json:"-"`
 }
 
 // appReader is a backend that can list apps and read any one app's windows
