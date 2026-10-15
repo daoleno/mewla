@@ -63,15 +63,17 @@ EOF
 set -eu
 output=
 url=
+write_out=
 while [ "$#" -gt 0 ]; do
   case $1 in
-    --proto|--proto-redir|--header|--output)
+    --proto|--proto-redir|--header|--output|--write-out)
       option=$1
       value=$2
       shift 2
       [ "$option" = --output ] && output=$value
+      [ "$option" = --write-out ] && write_out=$value
       ;;
-    --fail|--silent|--show-error|--location)
+    --fail|--silent|--show-error|--location|--head)
       shift
       ;;
     *)
@@ -82,8 +84,10 @@ while [ "$#" -gt 0 ]; do
 done
 printf '%s\n' "$url" >> "$FAKE_CURL_LOG"
 case $url in
-  https://api.github.com/repos/daoleno/mewla/releases\?per_page=100)
-    /bin/cp "$FAKE_RELEASES_JSON" "$output"
+  https://github.com/daoleno/mewla/releases/latest)
+    [ "$write_out" = '%{url_effective}' ] || exit 91
+    [ -n "${FAKE_LATEST_URL:-}" ] || exit 22
+    printf '%s' "$FAKE_LATEST_URL"
     ;;
   https://github.com/daoleno/mewla/releases/download/*)
     /bin/cp "$FAKE_ASSETS/${url##*/}" "$output"
@@ -95,8 +99,6 @@ case $url in
 esac
 EOF
   chmod +x "$FAKE_BIN/uname" "$FAKE_BIN/curl"
-  RELEASES_JSON="$CASE_DIR/releases.json"
-  printf '[]\n' > "$RELEASES_JSON"
 }
 
 make_archive() {
@@ -109,6 +111,12 @@ make_archive() {
 case ${1:-} in
   --help) printf 'Mewla fixture help\n'; exit "${FAKE_HELP_STATUS:-0}" ;;
   doctor) printf 'fixture doctor\n'; exit "${FAKE_DOCTOR_STATUS:-0}" ;;
+  deps)
+    [ -z "${FAKE_NO_DEPS:-}" ] || exit 1
+    [ "${2:-}" = --help ] && exit 0
+    printf 'fixture deps %s\n' "$*"
+    exit "${FAKE_DEPS_STATUS:-0}"
+    ;;
   update) printf 'fixture update\n'; exit 0 ;;
   *) exit 2 ;;
 esac
@@ -162,7 +170,6 @@ run_installer() {
     TMPDIR="$CASE_DIR/tmp" \
     FAKE_CURL_LOG="$CASE_DIR/curl.log" \
     FAKE_ASSETS="$ASSETS" \
-    FAKE_RELEASES_JSON="$RELEASES_JSON" \
     "$@" "$INSTALLER" > "$CASE_DIR/output" 2>&1
 }
 
@@ -196,55 +203,38 @@ test_unsupported_platforms() {
 }
 
 test_unconfigured_version_is_dynamic() {
-  new_case dynamic-version-first-run
+  new_case latest-redirect
   make_archive
-  cat > "$RELEASES_JSON" <<'EOF'
-[
- {"tag_name":"not-a-version","draft":false,"prerelease":true},
- {"tag_name":"v9.0.0","draft":true,"prerelease":false},
- {"tag_name":"v8.0.0-beta.1","draft":true,"prerelease":true},
- {"tag_name":"v3.4.5","draft":false,"prerelease":false},
- {"tag_name":"v3.4.5-beta.10","draft":false,"prerelease":true},
- {"tag_name":"v4.0.0-beta.1","draft":false,"prerelease":true}
-]
-EOF
-  run_installer MEWLA_INSTALL_DIR="$HOME_DIR/install"
+  run_installer MEWLA_INSTALL_DIR="$HOME_DIR/install" \
+    FAKE_LATEST_URL=https://github.com/daoleno/mewla/releases/tag/v4.5.6
   [[ -x "$HOME_DIR/install/mewla" ]] || fail "latest release was not installed"
-  assert_contains "$CASE_DIR/output" "Installed Mewla v4.0.0-beta.1"
-  assert_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v4.0.0-beta.1/mewla-linux-amd64.tar.gz"
-  assert_not_contains "$CASE_DIR/curl.log" "/download/v9.0.0/"
-
-  new_case dynamic-version-later-run
-  make_archive
-  cat > "$RELEASES_JSON" <<'EOF'
-[
- {"tag_name":"v4.0.0-beta.1","draft":false,"prerelease":true},
- {"tag_name":"v5.0.0","draft":false,"prerelease":false}
-]
-EOF
-  run_installer MEWLA_INSTALL_DIR="$HOME_DIR/install"
-  assert_contains "$CASE_DIR/output" "Installed Mewla v5.0.0"
-  assert_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v5.0.0/mewla-linux-amd64.tar.gz"
-  assert_not_contains "$CASE_DIR/curl.log" "/download/v4.0.0-beta.1/"
-  pass "ignores drafts and invalid tags, then dynamically selects the SemVer-highest public release on every unpinned fresh run"
+  assert_contains "$CASE_DIR/output" "Installed Mewla v4.5.6"
+  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/latest"
+  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v4.5.6/mewla-linux-amd64.tar.gz"
+  assert_not_contains "$CASE_DIR/curl.log" "api.github.com"
+  pass "follows the releases/latest redirect without the GitHub API"
 }
 
-test_stable_release_precedence() {
-  new_case stable-release-precedence
+test_latest_redirect_failures() {
+  new_case latest-unreachable
   make_archive
-  cat > "$RELEASES_JSON" <<'EOF'
-[
- {"tag_name":"v3.4.5-beta.10","draft":false,"prerelease":true},
- {"tag_name":"v3.4.5","draft":false,"prerelease":false}
-]
-EOF
-  run_installer MEWLA_INSTALL_DIR="$HOME_DIR/install"
-  assert_contains "$CASE_DIR/output" "Installed Mewla v3.4.5"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v3.4.5/mewla-linux-amd64.tar.gz"
-  assert_contains "$CASE_DIR/curl.log" "https://github.com/daoleno/mewla/releases/download/v3.4.5/SHA256SUMS"
-  pass "includes stable public releases and ranks stable above beta at the same core"
+  expect_failure MEWLA_INSTALL_DIR="$HOME_DIR/install"
+  assert_contains "$CASE_DIR/output" "could not reach https://github.com/daoleno/mewla/releases/latest"
+  assert_not_exists "$HOME_DIR/install/mewla"
+
+  new_case latest-not-a-tag
+  make_archive
+  expect_failure MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_LATEST_URL=https://github.com/daoleno/mewla/releases
+  assert_contains "$CASE_DIR/output" "did not lead to a release tag"
+  assert_contains "$CASE_DIR/output" "MEWLA_VERSION"
+
+  new_case latest-bad-tag
+  make_archive
+  expect_failure MEWLA_INSTALL_DIR="$HOME_DIR/install" \
+    FAKE_LATEST_URL='https://github.com/daoleno/mewla/releases/tag/v01.2.3'
+  assert_contains "$CASE_DIR/output" "invalid release version"
+  assert_not_exists "$HOME_DIR/install/mewla"
+  pass "fails clearly when the latest redirect is unreachable or names no valid tag"
 }
 
 test_fixed_version_and_atomic_replacement() {
@@ -257,7 +247,7 @@ test_fixed_version_and_atomic_replacement() {
   [[ $(stat -c '%a' "$HOME_DIR/install/mewla") == 755 ]] || fail "installed mode is not 0755"
   [[ -z $(find "$HOME_DIR/install" -name '.mewla-install.*' -print -quit) ]] || fail "atomic temp file remained"
   assert_contains "$CASE_DIR/curl.log" "/download/v3.4.5/mewla-linux-amd64.tar.gz"
-  assert_not_contains "$CASE_DIR/curl.log" "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
+  assert_not_contains "$CASE_DIR/curl.log" "releases/latest"
   pass "pins exact release URLs and atomically replaces the target with mode 0755"
 }
 
@@ -339,16 +329,16 @@ test_profile_idempotency_and_no_mutation() {
   new_case profile-idempotent
   make_archive
   run_installer MEWLA_VERSION=v1.2.3-beta.1
+  assert_contains "$CASE_DIR/output" "for new terminals"
   run_installer MEWLA_VERSION=v1.2.3-beta.1
   [[ $(grep -Fc '# >>> mewla installer PATH >>>' "$HOME_DIR/.zshrc") == 1 ]] || fail "profile marker was duplicated"
-  assert_contains "$CASE_DIR/output" "This installer cannot change your current shell"
-  assert_contains "$CASE_DIR/output" "export PATH=\"$HOME_DIR/.local/bin:\$PATH\""
+  [[ $(tail -n 1 "$CASE_DIR/output") == "  $HOME_DIR/.local/bin/mewla" ]] || fail "last line is not the runnable full path"
 
   new_case no-path-mutation
   make_archive
   run_installer MEWLA_VERSION=v1.2.3-beta.1 MEWLA_NO_PATH_UPDATE=1
   assert_not_exists "$HOME_DIR/.zshrc"
-  assert_contains "$CASE_DIR/output" "This installer cannot change your current shell"
+  [[ $(tail -n 1 "$CASE_DIR/output") == "  $HOME_DIR/.local/bin/mewla" ]] || fail "last line is not the runnable full path"
 
   new_case unsafe-fish-profile
   make_archive
@@ -385,13 +375,23 @@ test_missing_tools() {
   pass "reports missing curl, tar, and SHA-256 tools without network access"
 }
 
-test_doctor_failure_is_not_corruption() {
-  new_case doctor-nonfatal
+test_tmux_check_and_next_step() {
+  new_case deps-tmux
   make_archive
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_DOCTOR_STATUS=1
-  assert_contains "$CASE_DIR/output" "Mewla is installed correctly"
-  [[ -x "$HOME_DIR/install/mewla" ]] || fail "doctor failure removed the installed binary"
-  pass "treats doctor dependency failures as host guidance, not installer corruption"
+  mkdir -p "$HOME_DIR/install"
+  FAKE_BIN="$FAKE_BIN:$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_DEPS_STATUS=1
+  assert_contains "$CASE_DIR/output" "fixture deps deps -only tmux"
+  [[ -x "$HOME_DIR/install/mewla" ]] || fail "a missing dependency removed the installed binary"
+  [[ $(tail -n 1 "$CASE_DIR/output") == "  mewla" ]] || fail "last line is not mewla when the install dir is on PATH"
+
+  new_case deps-unsupported
+  make_archive
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_NO_DEPS=1 FAKE_DOCTOR_STATUS=1
+  assert_contains "$CASE_DIR/output" "Check this computer: $HOME_DIR/install/mewla doctor"
+  assert_not_contains "$CASE_DIR/output" "fixture doctor"
+  [[ $(tail -n 1 "$CASE_DIR/output") == "  $HOME_DIR/install/mewla" ]] || fail "last line is not the runnable full path"
+  pass "checks tmux through mewla deps, falls back for older releases, and ends with the start command"
 }
 
 test_executable_failure_keeps_previous_install() {
@@ -417,7 +417,7 @@ printf 'TAP version 13\n'
 test_platform_mapping
 test_unsupported_platforms
 test_unconfigured_version_is_dynamic
-test_stable_release_precedence
+test_latest_redirect_failures
 test_fixed_version_and_atomic_replacement
 test_checksum_failures
 test_unsafe_archives
@@ -425,6 +425,6 @@ test_existing_update_preference
 test_install_dir_selection
 test_profile_idempotency_and_no_mutation
 test_missing_tools
-test_doctor_failure_is_not_corruption
+test_tmux_check_and_next_step
 test_executable_failure_keeps_previous_install
 printf '1..%d\n' "$PASS"

@@ -6,7 +6,6 @@ set -f
 
 REPOSITORY="daoleno/mewla"
 GITHUB_WEB="https://github.com/$REPOSITORY"
-GITHUB_API="https://api.github.com/repos/$REPOSITORY"
 PATH_MARKER="# >>> mewla installer PATH >>>"
 DRY_RUN=${MEWLA_DRY_RUN:-0}
 NO_PATH_UPDATE=${MEWLA_NO_PATH_UPDATE:-0}
@@ -42,9 +41,9 @@ Options:
 The same settings may be supplied as MEWLA_VERSION, MEWLA_INSTALL_DIR,
 MEWLA_NO_PATH_UPDATE=1, and MEWLA_DRY_RUN=1.
 
-Without MEWLA_VERSION, each fresh bootstrap dynamically selects the SemVer-highest
-public nondraft GitHub Release with a supported tag, whether stable or beta.
-MEWLA_VERSION is optional exact-version pinning; no release version is embedded.
+Without MEWLA_VERSION, the installer follows GitHub's releases/latest redirect to
+the newest stable release (no GitHub API call, so API rate limits do not apply).
+MEWLA_VERSION pins an exact release, including a beta; no version is embedded.
 EOF
 }
 
@@ -180,73 +179,16 @@ safe_existing_mewla() {
 }
 
 latest_release() {
-  releases_file=$WORK_DIR/releases.json
-  compact_file=$WORK_DIR/releases.compact
-  candidates_file=$WORK_DIR/release-tags
-  curl_https "$GITHUB_API/releases?per_page=100" "$releases_file" "application/vnd.github+json"
-  tr '\r\n' '  ' < "$releases_file" > "$compact_file"
-  sed 's/"tag_name"[[:space:]]*:[[:space:]]*"/\
-/g' "$compact_file" | awk '
-    /^v/ {
-      tag = $0
-      sub(/".*/, "", tag)
-      if ($0 ~ /"draft"[[:space:]]*:[[:space:]]*false/) {
-        print tag
-      }
-    }
-  ' > "$candidates_file"
-
-  found=$(
-    while IFS= read -r candidate; do
-      if valid_version "$candidate"; then
-        printf '%s\n' "$candidate"
-      fi
-    done < "$candidates_file" | awk '
-      function number_compare(left, right, i, left_digit, right_digit) {
-        if (length(left) != length(right)) {
-          return length(left) > length(right) ? 1 : -1
-        }
-        for (i = 1; i <= length(left); i++) {
-          left_digit = substr(left, i, 1) + 0
-          right_digit = substr(right, i, 1) + 0
-          if (left_digit != right_digit) {
-            return left_digit > right_digit ? 1 : -1
-          }
-        }
-        return 0
-      }
-      {
-        version = substr($0, 2)
-        beta = ""
-        beta_pos = index(version, "-beta.")
-        if (beta_pos) {
-          beta = substr(version, beta_pos + 6)
-          version = substr(version, 1, beta_pos - 1)
-        }
-        split(version, core, ".")
-
-        core_order = number_compare(core[1], best_major)
-        if (core_order == 0) core_order = number_compare(core[2], best_minor)
-        if (core_order == 0) core_order = number_compare(core[3], best_patch)
-
-        better = best == "" || core_order > 0
-        if (best != "" && core_order == 0) {
-          better = (beta == "" && best_beta != "") ||
-                   (beta != "" && best_beta != "" && number_compare(beta, best_beta) > 0)
-        }
-        if (better) {
-          best = $0
-          best_major = core[1]
-          best_minor = core[2]
-          best_patch = core[3]
-          best_beta = beta
-        }
-      }
-      END { if (best != "") print best }
-    '
-  )
-  [ -n "$found" ] || die "GitHub returned no public nondraft Mewla Release with a supported vX.Y.Z or vX.Y.Z-beta.N tag"
-  VERSION=$found
+  # releases/latest is a web redirect to /releases/tag/<newest stable tag>;
+  # unlike the REST API it has no unauthenticated rate limit.
+  latest_url=$GITHUB_WEB/releases/latest
+  effective=$(curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location \
+    --head --output /dev/null --write-out '%{url_effective}' "$latest_url") ||
+    die "could not reach $latest_url to find the newest Mewla release"
+  case $effective in
+    "$GITHUB_WEB/releases/tag/"*) VERSION=${effective##*/} ;;
+    *) die "$latest_url did not lead to a release tag (got $effective); set MEWLA_VERSION=vX.Y.Z to pin one" ;;
+  esac
 }
 
 curl_https() {
@@ -254,12 +196,12 @@ curl_https() {
   output=$2
   accept=${3:-application/octet-stream}
   case $url in
-    https://api.github.com/repos/daoleno/mewla/*|https://github.com/daoleno/mewla/releases/download/*) ;;
+    https://github.com/daoleno/mewla/releases/download/*) ;;
     *) die "refusing non-official download URL: $url" ;;
   esac
   curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location \
-    --header "Accept: $accept" --header 'X-GitHub-Api-Version: 2022-11-28' \
-    --output "$output" "$url"
+    --header "Accept: $accept" --output "$output" "$url" ||
+    die "could not download $url; check the network and run the same command again"
 }
 
 checksum_archive() {
@@ -395,7 +337,6 @@ validate_install_dir_request() {
 append_profile_path() {
   [ "$INSTALL_DIR" = "$HOME/.local/bin" ] || return 0
   path_has_dir "$INSTALL_DIR" && return 0
-  IMMEDIATE_PATH_COMMAND="export PATH=\"$INSTALL_DIR:\$PATH\""
   [ "$NO_PATH_UPDATE" -eq 0 ] || return 0
 
   case ${SHELL:-} in
@@ -410,7 +351,6 @@ append_profile_path() {
     */fish)
       profile=$HOME/.config/fish/config.fish
       path_line='fish_add_path -g "$HOME/.local/bin"'
-      IMMEDIATE_PATH_COMMAND="fish_add_path \"$INSTALL_DIR\""
       ;;
     *)
       return 0
@@ -485,6 +425,22 @@ append_profile_path() {
   PROFILE_UPDATED=$profile
 }
 
+# check_tmux lets the new binary find this computer's official tmux command
+# and, in a terminal, offer to run it. Releases before `mewla deps` only get
+# a pointer to `mewla doctor`.
+check_tmux() {
+  binary=$1
+  if ! "$binary" deps --help >/dev/null 2>&1; then
+    "$binary" doctor >/dev/null 2>&1 || say "Check this computer: $binary doctor"
+    return 0
+  fi
+  if [ -t 1 ] && (: </dev/tty) 2>/dev/null; then
+    "$binary" deps -only tmux </dev/tty || true
+  else
+    "$binary" deps -only tmux </dev/null || true
+  fi
+}
+
 platform_archive
 
 current_uid=$(id -u)
@@ -515,7 +471,7 @@ if [ -n "$VERSION" ]; then
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  requested_version=${VERSION:-latest-public-release}
+  requested_version=${VERSION:-latest-stable-release}
   say "Would install $requested_version ($ARCHIVE) from $GITHUB_WEB/releases into $SELECTED_DIR/mewla"
   say "No files were changed."
   exit 0
@@ -538,7 +494,7 @@ WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/mewla-install.XXXXXX") || die "could not c
 if [ -z "$VERSION" ]; then
   latest_release
 fi
-valid_version "$VERSION" || die "invalid release version returned by GitHub: $VERSION"
+valid_version "$VERSION" || die "invalid release version from GitHub: $VERSION"
 
 release_base="$GITHUB_WEB/releases/download/$VERSION"
 archive_path=$WORK_DIR/$ARCHIVE
@@ -561,20 +517,19 @@ fi
 mv -f "$INSTALL_TEMP" "$target" || die "could not atomically install $target"
 INSTALL_TEMP=
 
-IMMEDIATE_PATH_COMMAND=
 PROFILE_UPDATED=
 append_profile_path
 
 say "Installed Mewla $VERSION at $target"
 if [ -n "$PROFILE_UPDATED" ]; then
-  say "Added $HOME/.local/bin to $PROFILE_UPDATED (marker: $PATH_MARKER)."
+  say "Added $HOME/.local/bin to $PROFILE_UPDATED for new terminals (marker: $PATH_MARKER)."
 fi
-say "Checking host dependencies with: $target doctor"
-if ! "$target" doctor; then
-  say "Mewla is installed correctly, but mewla doctor found missing or incomplete host dependencies."
-  say "Follow its guidance; this installer does not install tmux, package managers, AI CLIs, or credentials."
-fi
-if [ -n "$IMMEDIATE_PATH_COMMAND" ]; then
-  say "This installer cannot change your current shell. Run now:"
-  say "  $IMMEDIATE_PATH_COMMAND"
+check_tmux "$target"
+
+say ""
+say "Next, start Mewla:"
+if path_has_dir "$INSTALL_DIR"; then
+  say "  mewla"
+else
+  say "  $target"
 fi

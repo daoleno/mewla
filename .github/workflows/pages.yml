@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'install.sh'
       - 'docs/**'
       - 'scripts/site-docs/**'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'site/**'
+      - 'install.sh'
       - 'docs/**'
       - 'scripts/site-docs/**'
       - '.github/workflows/pages.yml'

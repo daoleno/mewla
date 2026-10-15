@@ -7,21 +7,45 @@ running as a service, updates, the app builds and uninstalling.
 
 - Linux `amd64`/`arm64`, WSL2, or an Apple Silicon Mac
 - `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS)
-- `tmux` on `PATH`
+- `tmux` on `PATH`; the installer and `mewla` offer to install it
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
-  `cursor-agent`, `grok`, `pi` or `opencode`. One is enough.
+  `cursor-agent`, `grok`, `pi` or `opencode`. One is enough; `mewla` offers
+  Claude Code and Codex when none is ready.
 
 ## Install the daemon
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/daoleno/mewla/main/install.sh | sh
+curl -fsSL https://mewla.ai/install.sh | sh
 ```
 
-The installer picks the newest release for your platform, downloads the archive
-and its `SHA256SUMS`, verifies the checksum, and installs `mewla` into a
-user-owned directory on your `PATH` (or `~/.local/bin`). It never uses `sudo`,
-installs packages, installs agent CLIs, signs in anywhere or sends telemetry.
-When it finishes, it runs `mewla doctor`.
+`https://mewla.ai/install.sh` serves the same file as
+`https://raw.githubusercontent.com/daoleno/mewla/main/install.sh`, which keeps working.
+
+The installer follows GitHub's `releases/latest` redirect to the newest stable
+release (no GitHub API call, so API rate limits don't apply), downloads the
+archive for your platform and its `SHA256SUMS`, verifies the checksum, and
+installs `mewla` into a user-owned directory on your `PATH` (or
+`~/.local/bin`). It sends no telemetry and installs `mewla` without `sudo`.
+
+Then it runs `mewla deps -only tmux`. When `tmux` is missing, that prints the
+one official command for this system and, in a terminal, asks
+`Install tmux now? [Y/n]`. It runs exactly that command; `sudo` asks for your
+password. Without a terminal it only prints the command:
+
+| System | Command |
+| --- | --- |
+| Debian, Ubuntu, WSL | `sudo apt update && sudo apt install -y tmux` |
+| Fedora, RHEL family | `sudo dnf install -y tmux` (`yum` without `dnf`) |
+| Arch family | `sudo pacman -S --needed --noconfirm tmux` |
+| openSUSE | `sudo zypper install -y tmux` |
+| Alpine | `sudo apk add tmux` |
+| macOS with Homebrew | `brew install tmux` |
+| macOS without Homebrew | The [Homebrew installer](https://brew.sh), then `/opt/homebrew/bin/brew install tmux` |
+| Anything else | A link to the [tmux install page](https://github.com/tmux/tmux/wiki/Installing) |
+
+The last line is the command that starts Mewla: `mewla`, or its full path
+when the current shell cannot find it yet. New terminals find `mewla` once the
+installer has added its directory to your shell profile.
 
 If `mewla` is already installed, the same command runs `mewla update` instead,
 unless you set `MEWLA_VERSION` or `MEWLA_INSTALL_DIR`.
@@ -30,17 +54,14 @@ Options, set as environment variables on `sh`:
 
 | Variable | Effect |
 | --- | --- |
-| `MEWLA_VERSION=v0.2.15` | Install this exact release tag instead of the newest |
+| `MEWLA_VERSION=v0.2.15` | Install this exact release tag, beta included, instead of the newest stable |
 | `MEWLA_INSTALL_DIR="$HOME/bin"` | Install into this user-owned directory |
 | `MEWLA_NO_PATH_UPDATE=1` | Do not add the install directory to your shell profile |
 | `MEWLA_DRY_RUN=1` | Print the platform, version and destination; change nothing |
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/daoleno/mewla/main/install.sh | MEWLA_INSTALL_DIR="$HOME/bin" sh
+curl -fsSL https://mewla.ai/install.sh | MEWLA_INSTALL_DIR="$HOME/bin" sh
 ```
-
-If the installer added a directory to your shell profile, open a new terminal
-or run the `export PATH=...` line it printed.
 
 ### Manual download
 
@@ -117,6 +138,12 @@ mewla boot install -dry-run # print the service without installing it
 mewla boot status
 mewla boot uninstall
 ```
+
+The first `mewla` asks `Start Mewla automatically when this computer starts?`
+after the connect choice and runs `mewla boot install` (with `-lan` if you
+chose the same Wi-Fi) when you press Enter. Without systemd user services, as
+in many containers and WSL setups, it says so and keeps running in the
+terminal.
 
 `mewla boot install` refuses to run as root and refuses to start a second daemon
 on a state directory that is already in use; stop the running `mewla` first.

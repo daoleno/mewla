@@ -21,19 +21,21 @@ Your code, keys and agent state stay on your computer.
 ## What you need
 
 - Linux (`amd64` or `arm64`), WSL2, or an Apple Silicon Mac
-- `tmux`
-- One agent CLI on `PATH`, already signed in
+- `tmux` and one signed-in agent CLI; `mewla` offers to install both
 - An arm64 Android phone, an iPhone, or a browser
 
 ## 1. Install the daemon
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/daoleno/mewla/main/install.sh | sh
+curl -fsSL https://mewla.ai/install.sh | sh
 ```
 
-It verifies the release checksum, installs `mewla` without `sudo`, sends no
-telemetry and finishes by running `mewla doctor`. Fix anything `doctor`
-reports before you go on.
+It verifies the release checksum, installs `mewla` without `sudo` and sends no
+telemetry. If `tmux` is missing, it shows the one command for your system
+(`apt`, `dnf`, `pacman`, `zypper`, `apk`, or Homebrew on a Mac) and asks
+whether to run it; `sudo` asks for your own password. The last line is the
+command that starts Mewla: `mewla`, or its full path when your current shell
+cannot find it yet.
 
 ## 2. Start it and pair your phone
 
@@ -41,14 +43,23 @@ reports before you go on.
 mewla
 ```
 
-The first time, it asks how your phone and browsers should reach this
-computer. Pick 1 and sign in with GitHub: the computer gets its own address,
-such as `https://quiet-otter-3f9a.m.mewla.ai`, that works from any network.
+The first time, it checks this computer before anything else. Without
+`tmux`, it offers your system's install command. Without a signed-in agent
+CLI, it offers Claude Code or Codex with their official installers, then their
+sign-in (`claude auth login` or `codex login`). One ready agent is enough.
+
+Then it asks how your phone and browsers should reach this computer. Pick 1
+and sign in with GitHub: the computer gets its own address, such as
+`https://quiet-otter-3f9a.m.mewla.ai`, that works from any network. Last, it
+asks whether to start Mewla automatically with the computer, using
+[`mewla boot install`](install-daemon.md#keep-it-running).
 
 With no device paired yet, it prints a QR code and a pairing link. Install the
 app (the Android APK from [Releases](https://github.com/daoleno/mewla/releases),
 or [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)), open it and scan the code. The
-code works once and expires; `mewla pair` prints a fresh one.
+code works once and expires; `mewla pair` prints a fresh one. Android asks you
+to allow installs from your browser or file manager the first time you open
+the APK; allow it for that app, then install.
 
 Other ways to connect, such as the same Wi-Fi only, Tailscale or your own
 HTTPS address, are in [Connect and pair](connect-and-pair.md#choose-an-address).
