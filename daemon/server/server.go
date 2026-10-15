@@ -35,6 +35,7 @@ import (
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/enrollment"
@@ -110,6 +111,7 @@ type Server struct {
 	calendar                     *calendar.Store
 	calendarScheduler            *calendar.Scheduler
 	telegram                     *telegramchannel.Manager
+	computers                    *computers.Manager
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 	sendInputOverride            func(workerID, text string) error
@@ -433,6 +435,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/enrollment/decision", s.handleEnrollmentDecision)
 	mux.HandleFunc("/auth-check", s.handleAuthCheck)
 	mux.HandleFunc("/devices", s.handleDevices)
+	mux.HandleFunc("/computer", s.handleComputer)
+	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
+	mux.HandleFunc("/computers", s.handleComputers)
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)

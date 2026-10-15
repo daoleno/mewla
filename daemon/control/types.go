@@ -9,6 +9,7 @@ import (
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/daoleno/mewla/daemon/calendar"
+	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
@@ -27,6 +28,7 @@ type Request struct {
 	BrowserRequest       *browser.Request                       `json:"browser_request,omitempty"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
 	WatchRequest         *watch.Request                         `json:"watch_request,omitempty"`
+	ComputersRequest     *computers.Request                     `json:"computers_request,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`
@@ -108,6 +110,7 @@ type Response struct {
 	Browser            *browser.Response                        `json:"browser,omitempty"`
 	Connections        *connections.Response                    `json:"connections,omitempty"`
 	Watch              *watch.Response                          `json:"watch,omitempty"`
+	Computers          *computers.Result                        `json:"computers,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	OK                 bool                                     `json:"ok"`
 	Error              *Error                                   `json:"error,omitempty"`

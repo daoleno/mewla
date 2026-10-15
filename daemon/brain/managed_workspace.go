@@ -14,6 +14,7 @@ const (
 	executorManagedID        = "policy-executor"
 	handoffManagedID         = "policy-handoff"
 	calendarManagedID        = "policy-calendar"
+	computersManagedID       = "policy-computers"
 	managedMarkerPrefix      = "<!-- mewla:brain-managed:"
 	managedMarkerStartSuffix = ":start -->"
 	managedMarkerEndSuffix   = ":end -->"
@@ -44,6 +45,7 @@ func (s *Store) managedMarkdownSpecs() []managedMarkdownSpec {
 		{path: s.policyPath("engine.md"), relativePath: "policies/engine.md", managedID: executorManagedID, canonical: productEnginePolicy},
 		{path: s.policyPath("handoff.md"), relativePath: "policies/handoff.md", managedID: handoffManagedID, canonical: productHandoffPolicy},
 		{path: s.policyPath("calendar.md"), relativePath: "policies/calendar.md", managedID: calendarManagedID, canonical: productCalendarPolicy},
+		{path: s.policyPath("computers.md"), relativePath: "policies/computers.md", managedID: computersManagedID, canonical: productComputersPolicy},
 	}
 }
 
@@ -220,6 +222,7 @@ func standardWorkspaceRelativePaths() []string {
 		"policies/engine.md",
 		"policies/handoff.md",
 		"policies/calendar.md",
+		"policies/computers.md",
 		"worklog/README.md",
 	}
 	paths = append(paths, seedPlaybookPaths()...)
