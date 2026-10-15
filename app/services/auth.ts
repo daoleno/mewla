@@ -69,6 +69,18 @@ export async function getOrCreateLocalDeviceIdentity(): Promise<LocalDeviceIdent
     };
   }
 
+  // Mint once per process: racing first calls, or a secure store that does
+  // not hand the key back, must not pair one key and sign with another.
+  mintedIdentity ??= mintLocalDeviceIdentity().catch((error) => {
+    mintedIdentity = null;
+    throw error;
+  });
+  return mintedIdentity;
+}
+
+let mintedIdentity: Promise<LocalDeviceIdentity> | null = null;
+
+async function mintLocalDeviceIdentity(): Promise<LocalDeviceIdentity> {
   const seed = Crypto.getRandomBytes(32);
   const keyPair = nacl.sign.keyPair.fromSeed(seed);
   const nextIdentity: LocalDeviceIdentity = {

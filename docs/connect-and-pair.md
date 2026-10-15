@@ -122,7 +122,11 @@ only from this computer).
 
 The QR uses Mewla Link when it is configured; otherwise the best address in
 the list: HTTPS, then Tailscale, then Wi-Fi/LAN. A phone can't reach
-`127.0.0.1`, so that address is never in the QR. To use one particular address,
+`127.0.0.1`, so a loopback address (`http` or `https`) is never in the QR.
+When remote access is on but the relay does not issue a pairing admission,
+`mewla pair` says why (for example that the relay closed the connection
+without answering, and after how long) before falling back to those
+addresses. To use one particular address,
 pass it: `mewla pair https://mewla.example.com`. When the terminal is too narrow
 for the QR, it says how wide it needs to be instead of drawing a broken code.
 
@@ -239,7 +243,9 @@ HTTPS or Mewla Link) and how Mewla knows it:
 - **detected**: found when the daemon started. Detected addresses are refreshed
   at each start, so an old network's address disappears.
 - **added**: added with `mewla address add`.
-- **seen**: an HTTPS address a paired device used.
+- **seen**: an HTTPS address a paired device used. Loopback hosts are never
+  learned: a phone on Mewla Link reaches the computer through a `127.0.0.1`
+  port inside the app, which names the phone, not this computer.
 
 Changes take effect without a restart.
 
@@ -252,7 +258,15 @@ mewla devices revoke -id <device-id>
 
 Revoking removes the device's key, closes its live connections and rejects its
 later requests. Browsers appear as `Mewla Web (...)`. Removing a computer in the
-app's Settings only forgets it on that phone; it does not revoke the key.
+app's Settings first asks that computer to revoke the phone, for up to three
+seconds; if the computer is offline the phone forgets it anyway and the key
+stays trusted until you revoke it here.
+
+Pairing is idempotent for one phone: if a pairing answer is lost on the way
+back (a dropped connection, or the same QR scanned twice), the phone checks
+with its own key whether the computer already trusts it and finishes
+connecting instead of reporting a failure. The daemon also answers a repeat of
+a used code from the same device key, until the code would have expired.
 
 ## Remote access
 

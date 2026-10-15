@@ -133,8 +133,14 @@ mock.module("./auth", () => ({
   verifyDaemonAssertion: () => true,
 }));
 
+// Bun shares module mocks across test files; keep the storage surface that
+// importConnection links against.
 mock.module("./storage", () => ({
   getServerById: async () => storedServer,
+  getServers: async () => [],
+  markOnboarded: async () => undefined,
+  saveServer: async (input: Record<string, unknown>) => ({ id: "uploads-server", ...input }),
+  setServerAutoConnect: async () => undefined,
 }));
 
 mock.module("../modules/link-transport/src", () => ({
