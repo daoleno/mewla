@@ -56,9 +56,11 @@ request must name a running Mewla Worker, and one agent uses the screen at a
 time. The request travels over the daemon's private socket, which any process
 of your user on that computer can reach, as with the rest of `mewla`. Agents
 don't need a phone's Screen approval: the switch is the approval. A person
-viewing the screen always takes over from an agent, the app's switch stops
-agents at once (`mewla screen disable` and `mewla agent-use off` within
-seconds), and each action is logged without what was typed. See [Screen](screen.md#agents-on-the-screen).
+viewing the screen always takes over from an agent, someone using the Mac's own
+keyboard or trackpad pauses it, agents can't use a locked Mac, the app's switch
+stops agents at once (`mewla screen disable` and `mewla agent-use off` within
+seconds), and each action is logged without what was typed. See
+[Screen](screen.md#agents-on-the-screen).
 
 ## Agents in your browser
 
