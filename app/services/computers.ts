@@ -80,3 +80,38 @@ export async function connectComputers(
   );
   if (!addResponse.ok) throw await failure(current, addResponse);
 }
+
+// forgetComputer ends working together between `current` and the computer
+// whose daemon is `otherDaemonId`, in both directions. Each computer forgets
+// what it holds: `current` here, and `other` too when this phone knows it.
+// Returns the reason `other` could not be told, if it could not.
+export async function forgetComputer(
+  current: StoredServer,
+  otherDaemonId: string,
+  other: StoredServer | null,
+  loadIdentity: () => Promise<LocalDeviceIdentity> = getOrCreateLocalDeviceIdentity,
+): Promise<string | null> {
+  const identity = await loadIdentity();
+  await forgetOn(current, otherDaemonId, identity);
+  if (!other) return null;
+  try {
+    await forgetOn(other, current.daemonId, identity);
+    return null;
+  } catch (reason) {
+    return reason instanceof Error ? reason.message : String(reason);
+  }
+}
+
+async function forgetOn(server: StoredServer, daemonId: string, identity: LocalDeviceIdentity): Promise<void> {
+  const body = JSON.stringify({ expected_daemon_id: daemonId });
+  const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, body);
+  const response = await signedFetch(
+    server,
+    "DELETE",
+    "/computers",
+    `mewla-computer-admin:remove:DELETE:/computers:sha256=${digest.toLowerCase()}`,
+    body,
+    identity,
+  );
+  if (!response.ok) throw await failure(server, response);
+}

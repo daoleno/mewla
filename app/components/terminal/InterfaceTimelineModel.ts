@@ -36,6 +36,7 @@ import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
 import { isImageAttachment } from "../../services/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
+import { computerMessageTimelineItem } from "./computerMessageCardModel";
 import { pathBasename } from "../../services/pathDisplay";
 import { choiceAnswerDetails, choiceAnsweredSummary } from "./claudeChoiceModel";
 
@@ -171,6 +172,11 @@ export function buildTimelineFromSortedEvents(
       const taskCard = taskNotificationTimelineItem(event);
       if (taskCard) {
         items.push(taskCard);
+        continue;
+      }
+      const computerCard = computerMessageTimelineItem(event);
+      if (computerCard) {
+        items.push(computerCard);
         continue;
       }
       const workCard = brainWorkEventTimelineItemFromConversationEvent(event);

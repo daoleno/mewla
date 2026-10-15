@@ -75,6 +75,15 @@ export function timelineItemsSemanticEqual(
   ) {
     return taskNotificationItemsEqual(left, right);
   }
+  if (left.type === "computer-message" && right.type === "computer-message") {
+    return (
+      left.kindLabel === right.kindLabel &&
+      left.statusLabel === right.statusLabel &&
+      left.daemonId === right.daemonId &&
+      left.userSaid === right.userSaid &&
+      left.body === right.body
+    );
+  }
   return false;
 }
 

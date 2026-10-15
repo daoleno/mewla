@@ -119,6 +119,22 @@ export interface CodexConversationEvent {
   task_tokens?: number;
   task_tool_uses?: number;
   task_duration_ms?: number;
+  /** Set only for source "computer_message" status events. */
+  computer?: ComputerConversationMessage;
+}
+
+/** A message between this computer's Brain and another of the user's computers. */
+export interface ComputerConversationMessage {
+  direction: "to" | "from";
+  computer: string;
+  /** The other computer's daemon id, or its start when only that is known. */
+  daemon_id?: string;
+  message_id: string;
+  kind: string;
+  reply_to?: string;
+  user_said?: string;
+  /** Delivery of a message this computer sent. */
+  state?: string;
 }
 
 export interface CodexConversation {
@@ -334,6 +350,7 @@ function normalizeCodexConversationEvent(
     task_tokens: finiteCount(event.task_tokens),
     task_tool_uses: finiteCount(event.task_tool_uses),
     task_duration_ms: finiteCount(event.task_duration_ms),
+    computer: normalizeComputerMessage(event.computer),
   };
   if (
     (normalized.kind === "user_message" ||
@@ -548,5 +565,25 @@ function normalizeConversationChoice(value: unknown): ConversationChoice | undef
     answers: Array.isArray(raw.answers)
       ? raw.answers.map((answer) => (typeof answer === "string" ? answer : ""))
       : undefined,
+  };
+}
+
+function normalizeComputerMessage(value: unknown): ComputerConversationMessage | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const text = (key: string) => (typeof raw[key] === "string" ? (raw[key] as string) : undefined);
+  const direction = text("direction");
+  const computer = text("computer");
+  const messageId = text("message_id");
+  if ((direction !== "to" && direction !== "from") || !computer || !messageId) return undefined;
+  return {
+    direction,
+    computer,
+    daemon_id: text("daemon_id"),
+    message_id: messageId,
+    kind: text("kind") ?? "",
+    reply_to: text("reply_to"),
+    user_said: text("user_said"),
+    state: text("state"),
   };
 }
