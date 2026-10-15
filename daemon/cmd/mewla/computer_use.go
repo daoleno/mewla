@@ -90,7 +90,8 @@ const computerToolDescription = `Use this computer's screen, keyboard and pointe
 	`left_click_drag (start_coordinate to coordinate), left_mouse_down, left_mouse_up, scroll (scroll_direction, scroll_amount), ` +
 	`type (text), key (text such as "cmd+c" or "Return"), hold_key (text, duration), wait (duration seconds), cursor_position, ` +
 	`elements (the focused window's buttons, fields and text, each with the point to click). ` +
-	`With app (a name or pid), type, key and hold_key go to that app alone, in the background, and screenshot shows its window. ` +
+	`With app (a name or pid), type, key and hold_key go to that app alone, in the background; a click goes to its window behind others when this Mac allows, ` +
+	`and otherwise brings the app forward first (the answer says which); screenshot shows its window. ` +
 	`Take a screenshot after acting to see the result. A person comes first: if they take over, stop and report; ` +
 	`if someone uses this computer's own keyboard or pointer, you are paused: wait about 10 seconds and try again ` +
 	`(work in an app behind theirs, with the app tools or keys sent with app, goes on); ` +
@@ -120,7 +121,7 @@ type computerInput struct {
 	ScrollDirection string  `json:"scroll_direction,omitempty"`
 	ScrollAmount    int     `json:"scroll_amount,omitempty"`
 	Duration        float64 `json:"duration,omitempty"`
-	App             string  `json:"app,omitempty" jsonschema:"an app's name or pid: type, key and hold_key go to it alone, in the background; screenshot shows its window"`
+	App             string  `json:"app,omitempty" jsonschema:"an app's name or pid: clicks, type, key and hold_key go to it alone, behind other windows where possible; screenshot shows its window"`
 }
 
 func (in computerInput) action() screen.AgentAction {

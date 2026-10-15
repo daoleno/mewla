@@ -444,6 +444,10 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 		}
 	case "app_state", "wait_for", "type", "key", "hold_key", "screenshot":
 	default:
+		if _, click := appClicks[action.Action]; click && name != "" {
+			_, background, _, err := a.clickPath(ctx, name)
+			return err == nil && background
+		}
 		return false
 	}
 	if name == "" {
@@ -455,6 +459,106 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 	}
 	app, err := resolveApp(apps, name)
 	return err == nil && !app.Active
+}
+
+// appClicks are the clicks that can name an app: its button and count.
+var appClicks = map[string]struct{ button, count int }{
+	"left_click": {0, 1}, "right_click": {1, 1}, "middle_click": {2, 1}, "double_click": {0, 2}, "triple_click": {0, 3},
+}
+
+// clickPath says whether a click in the app named reaches it behind other
+// windows, and if not, why it goes on the screen instead.
+func (a *agentSession) clickPath(ctx context.Context, name string) (App, bool, string, error) {
+	if a.apps == nil {
+		return App{}, false, "", ErrNoApps
+	}
+	apps, err := a.apps.Apps(ctx)
+	if err != nil {
+		return App{}, false, "", err
+	}
+	app, err := resolveApp(apps, name)
+	if err != nil {
+		return App{}, false, "", err
+	}
+	clicker, ok := a.session.(appClicker)
+	switch {
+	case app.Active:
+		return app, false, oneLine(app.Name) + " is in front", nil
+	case app.Chromium:
+		return app, false, oneLine(app.Name) + " is built on Chromium, which ignores clicks from behind", nil
+	case !ok:
+		return app, false, "this computer can't click behind other windows", nil
+	}
+	if can, why := clicker.BackgroundClicks(); !can {
+		return app, false, why, nil
+	}
+	return app, true, "", nil
+}
+
+// clickInApp clicks a point of an app's window: behind other windows when
+// it can, which leaves the pointer and the app in front alone; otherwise on
+// the screen, bringing the app forward first. The answer names the path.
+func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (AgentResult, error) {
+	click := appClicks[action.Action]
+	app, background, why, err := a.clickPath(ctx, action.App)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	c := action.Coordinate
+	if len(c) != 2 {
+		return AgentResult{}, fmt.Errorf("%s needs coordinate [x, y] on the screenshot", action.Action)
+	}
+	a.mu.Lock()
+	p := image.Pt(int(float64(c[0])*a.scale+0.5), int(float64(c[1])*a.scale+0.5))
+	inside := p.In(a.latest.Rect)
+	a.mu.Unlock()
+	if !inside {
+		return AgentResult{}, fmt.Errorf("[%d, %d] is outside the screenshot", c[0], c[1])
+	}
+	if background {
+		var window uint32
+		for _, w := range app.Windows {
+			if p.In(w.Bounds) {
+				window = w.ID
+				break
+			}
+		}
+		if window == 0 {
+			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", c[0], c[1], oneLine(app.Name))
+		}
+		if err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count); err != nil {
+			return AgentResult{}, err
+		}
+		a.mu.Lock()
+		a.lastAct = time.Now()
+		a.mu.Unlock()
+		return AgentResult{Text: fmt.Sprintf("Clicked in %s behind other windows (path: SkyLight); it and the pointer stayed where they were. Read it with app_state to see the result.", oneLine(app.Name))}, nil
+	}
+	text := "Clicked on the screen (path: screen pointer"
+	if !app.Active {
+		raiser, ok := a.apps.(appRaiser)
+		if !ok {
+			return AgentResult{}, ErrNoApps
+		}
+		if err := raiser.RaiseApp(ctx, app.PID); err != nil {
+			return AgentResult{}, err
+		}
+		select {
+		case <-time.After(elementSettle):
+		case <-ctx.Done():
+			return AgentResult{}, ctx.Err()
+		}
+		text += ", after bringing " + oneLine(app.Name) + " to the front"
+	}
+	screen := action
+	screen.App = ""
+	if err := a.input(screen, 0, false); err != nil {
+		return AgentResult{}, err
+	}
+	a.mu.Lock()
+	a.lastAct = time.Now()
+	a.mu.Unlock()
+	return AgentResult{Text: text + "; not behind other windows: " + why + "). Take a screenshot to see the result."}, nil
 }
 
 // listApps lists the apps an agent can read and act on.
@@ -697,13 +801,16 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		}
 		return a.screenshot(ctx)
 	}
+	if _, click := appClicks[action.Action]; click && action.App != "" {
+		return a.clickInApp(ctx, action)
+	}
 	// Keys can go to one app, which stays where it is.
 	pid := 0
 	if action.App != "" {
 		switch action.Action {
 		case "type", "key", "hold_key":
 		default:
-			return AgentResult{}, fmt.Errorf("%s works on the screen; only type, key and hold_key take an app", action.Action)
+			return AgentResult{}, fmt.Errorf("%s works on the screen; only clicks, type, key and hold_key take an app", action.Action)
 		}
 		if _, ok := a.session.(appKeyer); !ok || a.apps == nil {
 			return AgentResult{}, ErrNoApps

@@ -97,8 +97,10 @@ the app's own controls: they list the Mac's apps, read one app's windows as its
 buttons, fields and text, even an app behind others, and press, fill in or
 open those by name, without moving the pointer or bringing the app forward
 (some actions bring it forward themselves). They can type into one app the
-same way, and run a short list of such steps in one go, such as find, press,
-type and check. Apps built on web pages, such as Electron apps, show little
+same way, and click a point in its window behind others; that uses a part of
+macOS Apple doesn't document, so where it isn't available, and for apps built
+on Chromium, the app comes to the front for the click. They can run a short
+list of such steps in one go, such as find, press, type and check. Apps built on web pages, such as Electron apps, show little
 this way; there agents take a screenshot and click, type and scroll on what
 they see, as a person would. It needs nothing beyond what Screen
 already has: **Agents can use this computer** on (Settings → **Agents on**
@@ -112,8 +114,9 @@ opens the right settings page.
   Someone using the Mac's own keyboard or trackpad pauses the agent at once,
   letting go of any key or button it holds; it carries on 10 seconds after
   their last input. Work in an app behind the one in front goes on meanwhile:
-  reading it, pressing or filling in its controls and typing into it alone
-  don't touch the pointer or keyboard in use. Anything on the screen itself,
+  reading it, pressing or filling in its controls, typing into it alone and
+  clicking its window behind yours don't touch the pointer or keyboard in
+  use. Anything on the screen itself,
   or in the app in front, waits. **Take over**, **Stop**, the switch and a
   locked screen stop all of it.
 - **Not while locked.** Agents can't use a locked Mac, and Settings says so.

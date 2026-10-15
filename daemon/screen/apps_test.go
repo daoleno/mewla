@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func fakeApps() []FakeApp {
@@ -147,7 +148,7 @@ func TestAgentTypesIntoAnAppBehindOthers(t *testing.T) {
 			t.Fatalf("a key went elsewhere: %+v", keys)
 		}
 	}
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{1, 1}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "only type, key and hold_key") {
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "mouse_move", Coordinate: []int{1, 1}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "only clicks, type, key and hold_key") {
 		t.Fatalf("click in an app: %v", err)
 	}
 	// The agent's own keys to the app are not a person at the computer.
@@ -229,5 +230,63 @@ func TestAPersonPausesOnlyWhatTheyUse(t *testing.T) {
 	backend.SetLocked(true)
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: 2, ElementAction: "press"}); !errors.Is(err, ErrScreenLocked) {
 		t.Fatalf("locked: %v", err)
+	}
+}
+
+// A click names an app: behind other windows when SkyLight can, which
+// leaves the pointer alone and goes on while someone works; otherwise on the
+// screen, after bringing the app forward, and paused for a person. The
+// answer says which.
+func TestClicksReachAnAppBehindOthers(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[1].Hidden = false
+	apps[1].Windows = []AppWindow{{ID: 7, Bounds: image.Rect(0, 0, 400, 300)}}
+	apps = append(apps, FakeApp{App: App{Name: "Slack", PID: 404, Chromium: true, Windows: []AppWindow{{ID: 9, Bounds: image.Rect(1000, 0, 1400, 300)}}}})
+	backend.RunningApps = apps
+	backend.SkyLight = true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	pointers, _ := backend.Snapshot()
+
+	backend.PersonInput()
+	if got := act(t, s, "%7", AgentAction{Action: "double_click", Coordinate: []int{100, 100}, App: "Safari"}).Text; !strings.Contains(got, "path: SkyLight") {
+		t.Fatalf("behind: %s", got)
+	}
+	if c := backend.AppClicks; len(c) != 1 || c[0] != (FakeAppClick{202, 7, 200, 200, 0, 2}) {
+		t.Fatalf("clicks %+v", c)
+	}
+	if after, _ := backend.Snapshot(); len(after) != len(pointers) || len(backend.Raised) != 0 {
+		t.Fatal("the pointer moved or the app came forward")
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{300, 300}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "not on a window of Safari") {
+		t.Fatalf("off its window: %v", err)
+	}
+
+	// Chromium, or no SkyLight: on the screen, so the person comes first.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{600, 100}, App: "Slack"}); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("on the screen while someone works: %v", err)
+	}
+	backend.mu.Lock()
+	backend.lastInput = time.Time{}
+	backend.mu.Unlock()
+	s.StopAgent()
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{600, 100}, App: "Slack"}).Text
+	if !strings.Contains(got, "path: screen pointer, after bringing Slack to the front") || !strings.Contains(got, "Chromium") {
+		t.Fatalf("chromium: %s", got)
+	}
+	if after, _ := backend.Snapshot(); len(after) == len(pointers) || after[len(after)-1] != (FakePointer{1200, 200, 0}) || backend.Raised[0] != 404 {
+		t.Fatalf("screen click %v raised %v", after[len(pointers):], backend.Raised)
+	}
+
+	backend.mu.Lock()
+	backend.SkyLight = false
+	backend.mu.Unlock()
+	if got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"}).Text; !strings.Contains(got, "SkyLight isn't available") || len(backend.AppClicks) != 1 {
+		t.Fatalf("no SkyLight: %s", got)
+	}
+	// Safari is in front now: a click there is a plain screen click.
+	if got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"}).Text; !strings.Contains(got, "Safari is in front") || len(backend.Raised) != 2 {
+		t.Fatalf("in front: %s %v", got, backend.Raised)
 	}
 }

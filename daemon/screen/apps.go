@@ -21,6 +21,31 @@ type App struct {
 	// CoveredBy names the apps whose windows lie over part of it.
 	Window    image.Rectangle `json:"-"`
 	CoveredBy []string        `json:"-"`
+	// Windows are its windows on the screen, front to back.
+	Windows []AppWindow `json:"-"`
+	// Chromium apps (Chrome, Edge, Electron apps) ignore input they can't
+	// trust, so they are only clicked on the screen.
+	Chromium bool `json:"-"`
+}
+
+// AppWindow is one window on the screen, in framebuffer pixels.
+type AppWindow struct {
+	ID     uint32
+	Bounds image.Rectangle
+}
+
+// appClicker is a session that can click in an app's window behind others,
+// without the pointer.
+type appClicker interface {
+	// BackgroundClicks says whether it can on this computer, and if not,
+	// why not.
+	BackgroundClicks() (bool, string)
+	ClickTo(pid int, window uint32, x, y, button, clicks int) error
+}
+
+// appRaiser is a backend that can bring an app to the front.
+type appRaiser interface {
+	RaiseApp(ctx context.Context, pid int) error
 }
 
 // appReader is a backend that can list apps and read any one app's windows
