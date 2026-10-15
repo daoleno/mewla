@@ -8,6 +8,7 @@ import {
 } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
+import * as SplashScreen from "expo-splash-screen";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
@@ -63,6 +64,8 @@ import {
   getNativeTerminalCrashBreadcrumb,
 } from "../services/nativeTerminalDiagnostics";
 import { CatSplash } from "../components/mewla/CatSplash";
+import { LaunchVeil } from "../components/mewla/LaunchVeil";
+import type { LaunchDestination } from "../components/mewla/launchTiming";
 import { consumeUnfinishedNativeTerminalBreadcrumb } from "../services/nativeTerminalDiagnosticsObserver";
 import { measureServerLatency } from "../services/serverLatency";
 import { startAppUpdateChecks } from "../services/useAppUpdate";
@@ -143,10 +146,13 @@ function AppRuntime() {
 }
 
 function LiveAppRuntime() {
-  const [bootstrapResolved, setBootstrapResolved] = useState(false);
-  const handleBootstrapResolved = useCallback((resolved: boolean) => {
-    setBootstrapResolved(resolved);
+  const [destination, setDestination] = useState<LaunchDestination | null>(null);
+  // Only a cold start has a native splash to take over from; web has none.
+  const [launched, setLaunched] = useState(Platform.OS === "web");
+  const handleBootstrapResolved = useCallback((next: LaunchDestination | null) => {
+    setDestination(next);
   }, []);
+  const handleLaunched = useCallback(() => setLaunched(true), []);
 
   return (
     <>
@@ -156,12 +162,14 @@ function LiveAppRuntime() {
       <LatencySampler />
       <NotificationObserver />
       <EnrollmentApprovalHost />
-      <AppNavigator bootstrapResolved={bootstrapResolved} />
+      <AppNavigator bootstrapResolved={destination !== null} />
+      {launched ? null : <LaunchVeil destination={destination} onDone={handleLaunched} />}
     </>
   );
 }
 
 function ScreenshotDemoRuntime() {
+  useEffect(() => SplashScreen.hide(), []);
   return <AppNavigator bootstrapResolved />;
 }
 
@@ -182,7 +190,8 @@ const NativeTerminalDiagnosticsObserver = memo(
 );
 
 interface ConnectionLifecycleProps {
-  onBootstrapResolved(resolved: boolean): void;
+  /** Null while the app starts; then where it went: pairing, or the app. */
+  onBootstrapResolved(destination: LaunchDestination | null): void;
 }
 
 const ConnectionLifecycle = memo(function ConnectionLifecycle({
@@ -243,7 +252,8 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
 
   // Auto-connect on app start.
   useEffect(() => {
-    onBootstrapResolved(false);
+    onBootstrapResolved(null);
+    let destination: LaunchDestination = "app";
 
     const onWorkerSessionList = (data: any) =>
       dispatch({
@@ -403,6 +413,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
           getServers(),
         ]);
         if (servers.length === 0) {
+          destination = "onboarding";
           routerRef.current.replace("/onboarding");
           return;
         }
@@ -416,7 +427,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
         console.log("Failed to bootstrap app:", error);
       } finally {
         wsClient.clearActiveWorkersExcept(null);
-        onBootstrapResolved(true);
+        onBootstrapResolved(destination);
       }
     })();
 
@@ -684,7 +695,7 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="work/[id]" options={{ title: "" }} />
       <Stack.Screen
         name="onboarding"
-        options={{ headerShown: false, presentation: "modal" }}
+        options={{ headerShown: false, animation: "fade", gestureEnabled: false }}
       />
       <Stack.Screen name="screenshot-demo" options={{ headerShown: false }} />
     </Stack>
@@ -699,8 +710,19 @@ function ThemedStatusBar() {
   return <StatusBar style={isLight ? "dark" : "light"} />;
 }
 
+// LaunchVeil hides the native splash once it draws the same picture in the
+// same place, so the splash must neither go on its own nor fade.
+void SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ fade: false, duration: 0 });
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(appFontAssets);
+
+  // Whatever happens below, the native splash never stays up for good.
+  useEffect(() => {
+    const timer = setTimeout(() => SplashScreen.hide(), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (fontError) {

@@ -185,13 +185,18 @@ function OnboardingDemo() {
   const params = useLocalSearchParams<{ fixture?: string }>();
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
-  const connection = retrying ? "connecting" : params.fixture;
+  const [paired, setPaired] = useState(false);
+  const connection = retrying ? "connecting" : paired ? "connected" : params.fixture;
+  const step = params.fixture === "install" || params.fixture === "scan" ? params.fixture : "welcome";
   return <OnboardingPresentation serverName="Studio computer"
     connection={["connected", "connecting", "offline"].includes(connection ?? "") ? connection : undefined}
+    pairing={false}
+    initialStep={step}
+    onCode={() => setPaired(true)}
+    onPaste={() => setPaired(true)}
     onRetry={() => setRetrying(true)}
     onContinue={() => router.replace({ pathname: "/screenshot-demo", params: { demo: "1", state: "brain", fixture: "empty" } })}
     onSettings={() => router.push("/settings")}
-    onPair={(mode) => router.push({ pathname: "/settings", params: { addServer: Date.now().toString(), pairMode: mode } })}
   />;
 }
 
