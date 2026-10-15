@@ -80,7 +80,7 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		if errors.Is(err, doctor.ErrNotReady) {
+		if errors.Is(err, doctor.ErrNotReady) || errors.Is(err, errDepsMissing) {
 			os.Exit(1)
 		}
 		if isSetupUserError(err) {
@@ -101,6 +101,8 @@ func run(args []string, stderr io.Writer) error {
 			return runPairCommand(args[1:], stderr)
 		case "doctor":
 			return runDoctorCommand(args[1:], stderr)
+		case "deps":
+			return runDepsCommand(args[1:], stderr)
 		case "setup":
 			return runSetupCommand(args[1:], stderr)
 		case "update":
@@ -2173,6 +2175,7 @@ Connect a phone or browser
 
 Set up and maintain
   doctor    Check this computer is ready for Mewla
+  deps      Offer to install tmux and an agent CLI with this system's official commands
   setup     Guided first-run setup (uses doctor)
   boot      Start Mewla when you log in (systemd user unit)
   update    Verify and install the latest Mewla release

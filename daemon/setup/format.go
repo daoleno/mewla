@@ -60,10 +60,10 @@ func machineBlockedLines(report doctor.Report) []string {
 	if report.Tmux.Status == doctor.StatusFail {
 		lines = append(lines, "  - tmux: "+report.Tmux.Summary)
 		if report.Tmux.Remediation == doctor.RemediationInstallTmux {
-			lines = append(lines, "    Install tmux (Mewla will not run sudo for you):")
 			for _, hint := range report.Tmux.InstallHints {
-				lines = append(lines, fmt.Sprintf("      - %s: %s", hint.OS, hint.Command))
+				lines = append(lines, fmt.Sprintf("    Install tmux on %s: %s", hint.OS, hint.Command))
 			}
+			lines = append(lines, "    Or let Mewla offer it: mewla deps -only tmux")
 		}
 	}
 	if report.StateDir.Status == doctor.StatusFail {

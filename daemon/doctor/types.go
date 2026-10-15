@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -212,12 +213,25 @@ type ExecutorCheck struct {
 	DBPathStatus Status `json:"db_path_status,omitempty"`
 }
 
-// TmuxInstallHints returns OS-specific install commands. Doctor never runs them.
+// TmuxInstallHints returns the one official tmux install command for this
+// machine (or the tmux install page when no package manager is known).
+// Doctor never runs it.
 func TmuxInstallHints() []InstallHint {
-	return []InstallHint{
-		{ID: "debian", OS: "ubuntu/debian", Command: "sudo apt install tmux"},
-		{ID: "fedora", OS: "fedora", Command: "sudo dnf install tmux"},
-		{ID: "arch", OS: "arch", Command: "sudo pacman -S tmux"},
-		{ID: "macos", OS: "macos", Command: "brew install tmux"},
+	return tmuxInstallHints(hostdeps.Detect())
+}
+
+func tmuxInstallHints(platform hostdeps.Platform) []InstallHint {
+	plan := hostdeps.TmuxPlan(platform)
+	command := plan.Command()
+	if command == "" {
+		command = "see " + plan.Doc
 	}
+	id := platform.Manager
+	if platform.GOOS == "darwin" {
+		id = "brew"
+	}
+	if id == "" {
+		id = "manual"
+	}
+	return []InstallHint{{ID: id, OS: platform.Name(), Command: command}}
 }

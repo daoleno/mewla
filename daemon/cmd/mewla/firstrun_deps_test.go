@@ -1,0 +1,197 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"errors"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/daoleno/mewla/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/hostdeps"
+)
+
+type fakeHost struct {
+	ran        []string
+	tmuxOK     bool
+	agentState map[string]doctor.AuthState // id -> auth; missing = not installed
+	failRun    bool
+}
+
+func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Platform) (*depsPrompt, *bytes.Buffer) {
+	var out bytes.Buffer
+	return &depsPrompt{
+		in:          bufio.NewReader(strings.NewReader(input)),
+		w:           &out,
+		interactive: interactive,
+		platform:    platform,
+		run: func(command string) error {
+			h.ran = append(h.ran, command)
+			if h.failRun {
+				return errors.New("exit status 1")
+			}
+			switch {
+			case strings.Contains(command, "tmux"):
+				h.tmuxOK = true
+			case strings.Contains(command, "claude.ai/install.sh"):
+				h.agentState["claude"] = doctor.AuthUnauthenticated
+			case command == "claude auth login":
+				h.agentState["claude"] = doctor.AuthAuthenticated
+			}
+			return nil
+		},
+		tmux: func() doctor.TmuxCheck {
+			if h.tmuxOK {
+				return doctor.TmuxCheck{Found: true, Path: "/usr/bin/tmux", Version: "3.4", Status: doctor.StatusOK}
+			}
+			return doctor.TmuxCheck{Status: doctor.StatusFail}
+		},
+		agents: func() doctor.ExecutorsCheck {
+			check := doctor.ExecutorsCheck{}
+			for _, id := range []string{"claude", "codex"} {
+				auth, installed := h.agentState[id]
+				item := doctor.ExecutorCheck{ID: id, BinaryFound: installed, Auth: auth}
+				if installed {
+					item.BinaryPath = "/home/u/.local/bin/" + id
+					item.Usable = auth != doctor.AuthUnauthenticated
+				}
+				if item.Usable {
+					check.UsableCount++
+					check.RecommendedHost = id
+				}
+				check.Items = append(check.Items, item)
+			}
+			return check
+		},
+	}, &out
+}
+
+var (
+	ubuntuHost = hostdeps.Platform{GOOS: "linux", Pretty: "Ubuntu 24.04 LTS", Manager: "apt", HasSudo: true}
+	macHost    = hostdeps.Platform{GOOS: "darwin", Pretty: "macOS"}
+)
+
+func TestEnsureTmuxRunsExactlyTheShownCommandAndRechecks(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	d, out := host.prompt("\n", true, ubuntuHost)
+	if !d.ensureTmux() {
+		t.Fatalf("tmux not ready:\n%s", out)
+	}
+	want := []string{"sudo apt update", "sudo apt install -y tmux"}
+	if strings.Join(host.ran, "|") != strings.Join(want, "|") {
+		t.Fatalf("ran %q, want %q", host.ran, want)
+	}
+	text := out.String()
+	for _, line := range []string{"Install it on Ubuntu 24.04 LTS with:\n  sudo apt update && sudo apt install -y tmux", "Install tmux now? [Y/n]", "tmux 3.4 is ready."} {
+		if !strings.Contains(text, line) {
+			t.Fatalf("output missing %q:\n%s", line, text)
+		}
+	}
+}
+
+func TestEnsureTmuxOnMacWithoutBrewOffersHomebrewFirst(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	d, out := host.prompt("y\n", true, macHost)
+	d.ensureTmux()
+	if len(host.ran) != 2 || host.ran[0] != hostdeps.HomebrewInstall || host.ran[1] != "/opt/homebrew/bin/brew install tmux" {
+		t.Fatalf("ran %q", host.ran)
+	}
+	if strings.Contains(out.String(), "apt") {
+		t.Fatalf("mac output mentions apt:\n%s", out)
+	}
+}
+
+func TestEnsureTmuxWithoutTerminalOnlyPrints(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	d, out := host.prompt("y\n", false, ubuntuHost)
+	if d.ensureTmux() || len(host.ran) != 0 {
+		t.Fatalf("non-interactive ran %q", host.ran)
+	}
+	if !strings.Contains(out.String(), "sudo apt update && sudo apt install -y tmux") || strings.Contains(out.String(), "[Y/n]") {
+		t.Fatalf("output:\n%s", out)
+	}
+}
+
+func TestEnsureTmuxDeclinedOrClosedInputNeverRuns(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	for _, input := range []string{"n\n", ""} {
+		host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+		d, _ := host.prompt(input, true, ubuntuHost)
+		if d.ensureTmux() || len(host.ran) != 0 {
+			t.Fatalf("input %q ran %q", input, host.ran)
+		}
+	}
+}
+
+func TestEnsureTmuxFailedInstallContinues(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}, failRun: true}
+	d, out := host.prompt("\n", true, ubuntuHost)
+	if d.ensureTmux() {
+		t.Fatal("failed install reported ready")
+	}
+	if !strings.Contains(out.String(), "tmux is still missing. Run the command above") {
+		t.Fatalf("output:\n%s", out)
+	}
+}
+
+func TestEnsureAgentInstallsThenSignsIn(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	d, out := host.prompt("\n\n", true, ubuntuHost)
+	if !d.ensureAgent() {
+		t.Fatalf("agent not ready:\n%s", out)
+	}
+	want := []string{"curl -fsSL https://claude.ai/install.sh | bash", "claude auth login"}
+	if strings.Join(host.ran, "|") != strings.Join(want, "|") {
+		t.Fatalf("ran %q, want %q", host.ran, want)
+	}
+	for _, line := range []string{"1. Claude Code", "2. Codex", "3. Skip for now", "Choose 1-3 [1]:", "Sign in now? [Y/n]", "Claude Code is ready. Brain will use it."} {
+		if !strings.Contains(out.String(), line) {
+			t.Fatalf("output missing %q:\n%s", line, out)
+		}
+	}
+}
+
+func TestEnsureAgentSkipsWhenOneIsReady(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated}}
+	d, out := host.prompt("", true, ubuntuHost)
+	if !d.ensureAgent() || len(host.ran) != 0 || out.Len() != 0 {
+		t.Fatalf("ready agent still prompted: ran %q\n%s", host.ran, out)
+	}
+}
+
+func TestEnsureAgentOffersSignInForAnInstalledAgent(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"claude": doctor.AuthUnauthenticated}}
+	d, out := host.prompt("\n", true, ubuntuHost)
+	if !d.ensureAgent() || strings.Join(host.ran, "|") != "claude auth login" {
+		t.Fatalf("ran %q\n%s", host.ran, out)
+	}
+	if strings.Contains(out.String(), "Choose 1-3") {
+		t.Fatalf("installed agent was offered an install menu:\n%s", out)
+	}
+}
+
+func TestEnsureAgentSkipAndNonInteractive(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	d, _ := host.prompt("3\n", true, ubuntuHost)
+	if d.ensureAgent() || len(host.ran) != 0 {
+		t.Fatalf("skip ran %q", host.ran)
+	}
+	d, out := host.prompt("", false, macHost)
+	if d.ensureAgent() || len(host.ran) != 0 {
+		t.Fatalf("non-interactive ran %q", host.ran)
+	}
+	for _, line := range []string{"curl -fsSL https://claude.ai/install.sh | bash   then: claude auth login", "curl -fsSL https://chatgpt.com/codex/install.sh | sh   then: codex login"} {
+		if !strings.Contains(out.String(), line) {
+			t.Fatalf("output missing %q:\n%s", line, out)
+		}
+	}
+}

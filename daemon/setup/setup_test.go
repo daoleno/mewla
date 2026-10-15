@@ -41,7 +41,7 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 	text := out.String()
-	for _, want := range []string{"not ready", "tmux", "sudo apt install tmux", "mewla setup"} {
+	for _, want := range []string{"not ready", "tmux", "Install tmux on ", "mewla deps -only tmux", "mewla setup"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}

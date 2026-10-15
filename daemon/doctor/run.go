@@ -47,8 +47,7 @@ type env struct {
 	opts Options
 }
 
-// Run performs a full non-destructive environment diagnosis.
-func Run(opts Options) (Report, error) {
+func newEnv(opts Options) env {
 	e := env{opts: opts}
 	if e.opts.Now == nil {
 		e.opts.Now = time.Now
@@ -73,7 +72,22 @@ func Run(opts Options) (Report, error) {
 			return net.Listen(network, address)
 		}
 	}
+	return e
+}
 
+// CheckTmux runs only the tmux check.
+func CheckTmux(opts Options) TmuxCheck {
+	return newEnv(opts).checkTmux()
+}
+
+// CheckExecutors runs only the executor checks, including auth probes.
+func CheckExecutors(opts Options) ExecutorsCheck {
+	return newEnv(opts).checkExecutors()
+}
+
+// Run performs a full non-destructive environment diagnosis.
+func Run(opts Options) (Report, error) {
+	e := newEnv(opts)
 	report := Report{
 		GeneratedAt: e.opts.Now().UTC(),
 	}

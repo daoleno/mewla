@@ -99,16 +99,15 @@ func stdioIsTerminal() bool {
 
 // runFirstRunChoice asks how phones and browsers should reach this computer
 // and remembers the answer, so it is asked once.
-func runFirstRunChoice(ctx context.Context, in io.Reader, w io.Writer, stateDir string) (startupChoice, error) {
+func runFirstRunChoice(ctx context.Context, reader *bufio.Reader, w io.Writer, stateDir string) (startupChoice, error) {
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Welcome to Mewla. How should your phone and browsers reach this computer?")
+	fmt.Fprintln(w, "How should your phone and browsers reach this computer?")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  1. Sign in, reach it from anywhere (recommended)")
 	fmt.Fprintln(w, "  2. Only on the same Wi-Fi")
 	fmt.Fprintln(w, "  3. I'll set up Tailscale or HTTPS myself")
 	fmt.Fprintln(w, "  4. Decide later")
 	fmt.Fprintln(w)
-	reader := bufio.NewReader(in)
 	choice := startupChoice("")
 	for choice == "" {
 		fmt.Fprint(w, "Choose 1-4 [1]: ")
@@ -159,10 +158,14 @@ func remoteHint(stateDir string) string {
 	return "Reach this computer from anywhere: mewla login"
 }
 
-// applyStartupChoice asks the first-run question when allowed, and applies a
-// saved "only on the same Wi-Fi" answer when no listen flags were given.
+// applyStartupChoice runs the first-run conversation when allowed (host
+// dependencies, how to connect, start in the background) and otherwise a
+// quick dependency check; then it applies a saved "only on the same Wi-Fi"
+// answer when no listen flags were given.
 func applyStartupChoice(cfg *daemonConfig, args []string, stderr io.Writer) error {
+	prepareToolPath()
 	if !onlyStateDirArgs(args) {
+		quickDepsCheck(stderr)
 		return nil
 	}
 	stateDir, err := auth.ResolveStorageDir(cfg.stateDir)
@@ -171,12 +174,24 @@ func applyStartupChoice(cfg *daemonConfig, args []string, stderr io.Writer) erro
 	}
 	choice, chosen := loadStartupChoice(stateDir)
 	if !chosen && firstRunPromptAllowed(args, stateDir, stdioIsTerminal()) {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Fprintln(stderr)
+		fmt.Fprintln(stderr, "Welcome to Mewla.")
+		deps := newDepsPrompt(reader, stderr, true)
+		tmuxReady := deps.ensureTmux()
+		agentReady := deps.ensureAgent()
+		if tmuxReady && agentReady {
+			fmt.Fprintln(stderr, "This computer is ready for Brain.")
+		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		choice, err = runFirstRunChoice(ctx, os.Stdin, stderr, stateDir)
+		choice, err = runFirstRunChoice(ctx, reader, stderr, stateDir)
 		stop()
 		if err != nil {
 			return err
 		}
+		offerBoot(deps, cfg.stateDir, choice)
+	} else {
+		quickDepsCheck(stderr)
 	}
 	if choice == choiceLAN {
 		cfg.lan, cfg.addr = true, "0.0.0.0:9876"
