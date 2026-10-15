@@ -13,8 +13,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A push cancels the previous push's run, but not a manual dispatch: the
+# native jobs of a dispatch take far longer than the gap between pushes.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
