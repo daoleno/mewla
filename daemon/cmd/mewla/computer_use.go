@@ -108,6 +108,48 @@ const elementToolDescription = `Act on one element from your latest app_state by
 	`or any action the element lists. It answers with the app read again, with new ids. ` +
 	`If the element changed since you read it, read the app again; nothing is guessed.`
 
+// computerInput is one action on the screen, or with app, on one app.
+type computerInput struct {
+	Action          string  `json:"action"`
+	Coordinate      []int   `json:"coordinate,omitempty"`
+	StartCoordinate []int   `json:"start_coordinate,omitempty"`
+	Text            string  `json:"text,omitempty"`
+	ScrollDirection string  `json:"scroll_direction,omitempty"`
+	ScrollAmount    int     `json:"scroll_amount,omitempty"`
+	Duration        float64 `json:"duration,omitempty"`
+	App             string  `json:"app,omitempty" jsonschema:"an app's name or pid: type, key and hold_key go to it alone, in the background; screenshot shows its window"`
+}
+
+func (in computerInput) action() screen.AgentAction {
+	return screen.AgentAction{Action: in.Action, Coordinate: in.Coordinate, StartCoordinate: in.StartCoordinate, Text: in.Text,
+		ScrollDirection: in.ScrollDirection, ScrollAmount: in.ScrollAmount, Duration: in.Duration, App: in.App}
+}
+
+const stepsToolDescription = `Run up to 20 actions in one call, in order, stopping at the first that fails (about 40 seconds in all). ` +
+	`A step is any computer action, or apps, app_state (app), element (id or match, element_action, text for set_value), ` +
+	`wait_for (app, match, duration up to 10 seconds: read the app until an element matching appears), ` +
+	`or expect (match, optionally app to read first: fail unless an element matches). ` +
+	`A match names an element by role, title and value, without case, a whole name before part of one; when acting, several matches are an error. ` +
+	`Use it for a known sequence such as find, click, type, check; read the app again when you need to see more.`
+
+// stepsInput is a batch; a step has no steps of its own.
+type stepsInput struct {
+	Steps []stepInput `json:"steps"`
+}
+
+type stepInput struct {
+	computerInput
+	Element       int                  `json:"element,omitempty" jsonschema:"an id from the latest app_state"`
+	ElementAction string               `json:"element_action,omitempty" jsonschema:"for element: press, focus, set_value and the rest"`
+	Match         *screen.ElementMatch `json:"match,omitempty" jsonschema:"for element, wait_for and expect: the element by role, title, value"`
+}
+
+func (in stepInput) action() screen.AgentAction {
+	action := in.computerInput.action()
+	action.Element, action.ElementAction, action.Match = in.Element, in.ElementAction, in.Match
+	return action
+}
+
 // elementInput is one action on one element of the latest app_state.
 type elementInput struct {
 	ID     int    `json:"id" jsonschema:"the element's id from the latest app_state"`
@@ -169,8 +211,8 @@ func runComputerMCP(args []string, stderr io.Writer) error {
 	}
 	// The output type is any and stays nil: a tool result with structured
 	// content makes Codex drop its image.
-	mcp.AddTool(server, &mcp.Tool{Name: "computer", Description: computerToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in screen.AgentAction) (*mcp.CallToolResult, any, error) {
-		return relay(in)
+	mcp.AddTool(server, &mcp.Tool{Name: "computer", Description: computerToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in computerInput) (*mcp.CallToolResult, any, error) {
+		return relay(in.action())
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "apps", Description: appsToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "apps"})
@@ -180,6 +222,13 @@ func runComputerMCP(args []string, stderr io.Writer) error {
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "element", Description: elementToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in elementInput) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "element", Element: in.ID, ElementAction: in.Action, Text: in.Value})
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: "steps", Description: stepsToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in stepsInput) (*mcp.CallToolResult, any, error) {
+		batch := screen.AgentAction{Action: "steps"}
+		for _, step := range in.Steps {
+			batch.Steps = append(batch.Steps, step.action())
+		}
+		return relay(batch)
 	})
 	return server.Run(ctx, &mcp.StdioTransport{})
 }

@@ -87,7 +87,7 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 4 {
+	if err != nil || len(tools.Tools) != 5 {
 		t.Fatalf("tools %+v %v", tools, err)
 	}
 
@@ -137,6 +137,14 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "element", Arguments: map[string]any{"id": 1, "action": "press"}}); err != nil || r.IsError || len(backend.ElementActions) != 1 || backend.ElementActions[0].Action != "AXPress" {
 		t.Fatalf("element: %+v %v %+v", r, err, backend.ElementActions)
+	}
+	steps := []map[string]any{
+		{"action": "app_state", "app": "Mail"},
+		{"action": "element", "match": map[string]any{"role": "button", "title": "send"}, "element_action": "press"},
+		{"action": "expect", "match": map[string]any{"title": "Send"}},
+	}
+	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "steps", Arguments: map[string]any{"steps": steps}}); err != nil || r.IsError || len(backend.ElementActions) != 2 {
+		t.Fatalf("steps: %+v %v %+v", r, err, backend.ElementActions)
 	}
 
 	// A person opens Screen: the agent is refused until they are done.
