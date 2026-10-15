@@ -109,8 +109,9 @@ service and its relay see and keep.
 
 ## Revoke a device
 
-Removing a server in the app only forgets it on that phone. To revoke a device's
-key, on the computer:
+Removing a server in the app asks that computer to revoke the phone's key when
+it can reach it within a few seconds, then forgets it on the phone. To revoke a
+device's key yourself, on the computer:
 
 ```sh
 mewla devices list

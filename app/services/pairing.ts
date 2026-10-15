@@ -12,7 +12,17 @@ export interface PairingInput {
   daemonId?: string;
   daemonPublicKey: string;
   enrollmentToken: string;
+  // "link" requests run through the app's own pinned Mewla Link tunnel, so
+  // their failures never describe loopback ports or cleartext HTTP.
+  transport?: "link" | "direct";
 }
+
+// The pairing request never got an HTTP answer. Over Mewla Link the daemon
+// may still have trusted this phone, so callers confirm before giving up.
+export class PairingUnreachableError extends Error {}
+
+// The daemon answered and refused the one-time code (used or expired).
+export class PairingCodeRejectedError extends Error {}
 
 export async function enrollWithDaemon(input: PairingInput): Promise<{
   daemonId: string;
@@ -45,11 +55,20 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
       }),
     });
   } catch (error) {
-    throw buildPairingNetworkError(pairURL, error);
+    throw input.transport === "link"
+      ? new PairingUnreachableError(LINK_UNREACHABLE_MESSAGE)
+      : buildPairingNetworkError(pairURL, error);
   }
 
   if (!response.ok) {
     const detail = (await response.text()).trim();
+    if (response.status === 401) {
+      throw new PairingCodeRejectedError(
+        input.transport === "link"
+          ? PAIRING_CODE_USED_MESSAGE
+          : detail || PAIRING_CODE_USED_MESSAGE,
+      );
+    }
     throw new Error(detail || `Pairing failed (${response.status})`);
   }
 
@@ -92,6 +111,75 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   };
 }
 
+export const LINK_UNREACHABLE_MESSAGE =
+  "Mewla couldn't reach this computer. Make sure it's awake and mewla is running there with remote access connected (mewla doctor shows it), then try again. If it is, this phone's network may be blocking Mewla; try Wi-Fi or mobile data instead.";
+export const PAIRING_CODE_USED_MESSAGE =
+  "This pairing code was already used or has expired. Run mewla pair on the computer and scan the new code.";
+
+// confirmPairedDevice asks the daemon, with this phone's device key, whether
+// it already trusts this phone. A /pair response lost on the way back leaves
+// the daemon paired while the app saw only a network error; the signed probe
+// tells the two apart without spending another one-time code.
+export async function confirmPairedDevice(input: {
+  serverUrl: string;
+  daemonId: string;
+  daemonPublicKey: string;
+}): Promise<{ daemonId: string; daemonPublicKey: string } | null> {
+  const daemonId = normalizeDaemonId(input.daemonId);
+  const daemonPublicKey = normalizePublicKeyHex(input.daemonPublicKey);
+  const authCheckURL = buildHTTPURL(input.serverUrl, "/auth-check");
+  if (!daemonId || !daemonPublicKey || !authCheckURL) {
+    return null;
+  }
+
+  const identity = await getOrCreateLocalDeviceIdentity();
+  let response: Response;
+  try {
+    response = await fetch(authCheckURL, {
+      method: "GET",
+      headers: {
+        Authorization: await buildAuthorizationHeader({
+          daemonId,
+          purpose: "mewla-probe",
+        }),
+      },
+    });
+  } catch {
+    throw new PairingUnreachableError(LINK_UNREACHABLE_MESSAGE);
+  }
+  if (response.status === 401) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new PairingUnreachableError(LINK_UNREACHABLE_MESSAGE);
+  }
+  const payload = (await response.json().catch(() => null)) as {
+    device_id?: string;
+    daemon_id?: string;
+    daemon_public_key?: string;
+    assertion_timestamp?: string;
+    assertion_nonce?: string;
+    assertion_signature?: string;
+  } | null;
+  if (
+    !payload ||
+    payload.device_id !== identity.deviceId ||
+    normalizeDaemonId(payload.daemon_id) !== daemonId ||
+    normalizePublicKeyHex(payload.daemon_public_key) !== daemonPublicKey ||
+    !verifyDaemonAssertion({
+      purpose: "mewla-probe",
+      daemonId,
+      daemonPublicKey,
+      timestamp: payload.assertion_timestamp,
+      nonceHex: payload.assertion_nonce,
+      signatureHex: payload.assertion_signature,
+    })
+  ) {
+    throw new Error("Pairing target failed daemon identity proof.");
+  }
+  return { daemonId, daemonPublicKey };
+}
+
 export async function buildSignedRequestHeaders(input: {
   serverUrl: string;
   daemonId: string;
@@ -130,12 +218,20 @@ export function buildHTTPURL(
   }
 }
 
+export const LOOPBACK_PAIRING_MESSAGE =
+  "This pairing code points at 127.0.0.1, which on a phone is the phone itself, not your computer. Run mewla pair on the computer again; with remote access connected it shows a code that works from anywhere.";
+
 function buildPairingNetworkError(pairURL: string, error: unknown): Error {
   const rawMessage = error instanceof Error ? error.message.trim() : "";
   const healthURL = buildHTTPURL(pairURL, "/health");
 
   try {
     const parsed = new URL(pairURL);
+    // A loopback code reaches a phone only through a developer port forward
+    // (adb reverse); when that fails, the code itself is the problem.
+    if (["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)) {
+      return new Error(LOOPBACK_PAIRING_MESSAGE);
+    }
     if (parsed.protocol === "http:") {
       const detail = rawMessage || "Network request failed.";
       return new Error(

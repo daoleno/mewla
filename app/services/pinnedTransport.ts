@@ -125,11 +125,42 @@ export async function resolvePairingLinkURL(input: {
   transportPin: string;
   url: string;
 }): Promise<string> {
+  return resolveOnDemandLinkURL(`pair:${input.routeId}`, input);
+}
+
+export async function releasePairingLinkTransport(
+  routeId: string,
+): Promise<void> {
+  await stopNativePinnedTunnel(`pair:${routeId}`).catch(() => undefined);
+}
+
+// The confirmation tunnel reaches the route's stable URL, never the one-time
+// admission, so it can ask an already-paired daemon about this phone.
+export async function resolvePairingConfirmURL(input: {
+  routeId: string;
+  transportPin: string;
+  url: string;
+}): Promise<string> {
+  return resolveOnDemandLinkURL(`pair-confirm:${input.routeId}`, input);
+}
+
+export async function releasePairingConfirmTransport(
+  routeId: string,
+): Promise<void> {
+  await stopNativePinnedTunnel(`pair-confirm:${routeId}`).catch(
+    () => undefined,
+  );
+}
+
+async function resolveOnDemandLinkURL(
+  key: string,
+  input: { transportPin: string; url: string },
+): Promise<string> {
   const parsed = requireTLSServerURL(input.url);
   let result: Awaited<ReturnType<typeof startNativePinnedTunnel>>;
   try {
     result = await startNativePinnedTunnel(
-      `pair:${input.routeId}`,
+      key,
       parsed.hostname,
       parsed.port ? Number(parsed.port) : 443,
       input.transportPin,
@@ -141,12 +172,6 @@ export async function resolvePairingLinkURL(input: {
     );
   }
   return rewriteURL(input.url, `ws://127.0.0.1:${result.port}`);
-}
-
-export async function releasePairingLinkTransport(
-  routeId: string,
-): Promise<void> {
-  await stopNativePinnedTunnel(`pair:${routeId}`).catch(() => undefined);
 }
 
 async function startNativePinnedTunnel(

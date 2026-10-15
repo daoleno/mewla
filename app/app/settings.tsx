@@ -102,6 +102,7 @@ import {
 } from "../components/navigation/HeaderBackButton";
 import { TelegramConnectionPanel } from "../components/settings/TelegramConnectionPanel";
 import { cancelCalendarNotifications } from "../services/calendarNotifications";
+import { revokeThisDevice } from "../services/deviceRevoke";
 import { useCurrentServer } from "../store/currentServer";
 import {
   telegramSetupMode,
@@ -162,6 +163,7 @@ export default function SettingsScreen() {
   );
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMountError, setCameraMountError] = useState<string | null>(null);
+  const [pairProgress, setPairProgress] = useState<string | null>(null);
   const scanClaimRef = useRef(createPairScanClaim());
 
   const releaseScanClaim = useCallback(() => {
@@ -355,11 +357,15 @@ export default function SettingsScreen() {
   };
 
   const importServer = async (rawValue: string) => {
+    // A failure keeps the scan claim until its alert is dismissed: the live
+    // camera still sees the same QR and would resubmit a spent one-time code.
+    let releaseAfterAlert = false;
     try {
       const savedServer = await importConnection(rawValue, {
         onImported: async (importedServer) => {
           await refreshServers(importedServer.id);
         },
+        onProgress: setPairProgress,
       });
 
       if (!savedServer) {
@@ -387,22 +393,32 @@ export default function SettingsScreen() {
         setPairPresentation((current) => returnToPairEditor(current));
         return false;
       }
+      releaseAfterAlert = true;
       Alert.alert(
         "Pairing failed",
         error?.message || "Could not pair with that daemon.",
+        [{ text: "OK", onPress: releaseScanClaim }],
+        { cancelable: true, onDismiss: releaseScanClaim },
       );
       return false;
     } finally {
-      releaseScanClaim();
+      setPairProgress(null);
+      if (!releaseAfterAlert) {
+        releaseScanClaim();
+      }
     }
   };
 
   const handleDeleteServer = (server: Storage.StoredServer) => {
     confirmDestructive({
       title: `Remove ${server.name}?`,
-      message: "Its Sessions stay on the computer. Pair again to reconnect.",
+      message:
+        "Mewla asks the computer to forget this phone. Its Sessions stay there. Pair again to reconnect.",
       confirmLabel: "Remove",
       onConfirm: async () => {
+        // Before disconnecting, while the transport is still up; bounded so
+        // an offline computer never blocks the removal.
+        await revokeThisDevice(server);
         wsClient.disconnect(server.id);
         dispatch({ type: "REMOVE_SERVER", serverId: server.id });
         await Storage.removeServer(server.id);
@@ -439,6 +455,7 @@ export default function SettingsScreen() {
     // the system picker is open (UI lock + atomic ref owner).
     if (!tryAcquireScanClaim()) return;
 
+    let importing = false;
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ["image/*"],
@@ -463,6 +480,8 @@ export default function SettingsScreen() {
         return;
       }
 
+      // importServer owns the claim from here, including its failure alert.
+      importing = true;
       await importServer(qrMatch.data);
     } catch (error: any) {
       Alert.alert(
@@ -470,7 +489,9 @@ export default function SettingsScreen() {
         error?.message || "Could not read a QR code from that image.",
       );
     } finally {
-      releaseScanClaim();
+      if (!importing) {
+        releaseScanClaim();
+      }
     }
   };
 
@@ -836,6 +857,15 @@ export default function SettingsScreen() {
               </>
             )}
 
+            {pairProgress ? (
+              <Text
+                style={styles.scannerNoticeText}
+                accessibilityLiveRegion="polite"
+              >
+                {pairProgress}
+              </Text>
+            ) : null}
+
             <View style={styles.scannerActions}>
               <AnimatedPressable
                 style={[
@@ -864,9 +894,11 @@ export default function SettingsScreen() {
                       styles.scannerDisabledBtnText,
                   ]}
                 >
-                  {pairPresentation.scannerLocked
-                    ? "Reading Image..."
-                    : "Pick QR Image"}
+                  {pairProgress
+                    ? "Pairing..."
+                    : pairPresentation.scannerLocked
+                      ? "Reading Image..."
+                      : "Pick QR Image"}
                 </Text>
               </AnimatedPressable>
               <AnimatedPressable

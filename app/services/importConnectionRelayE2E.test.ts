@@ -43,6 +43,7 @@ if (!enabled) {
     },
   }));
   mock.module("./storage", () => ({
+    getServers: async () => [],
     markOnboarded: async () => undefined,
     saveServer: async (input: Record<string, unknown>) => {
       savedInputs.push(input);
