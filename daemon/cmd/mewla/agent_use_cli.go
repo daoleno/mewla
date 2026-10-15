@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
+	"github.com/daoleno/mewla/daemon/control"
 )
 
 const agentUseUsage = `Usage: mewla agent-use <status|on|off|fix|key> [flags]
@@ -110,11 +111,26 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	status = daemonAgentUse(resolveCLIStateDir(stateDir), status)
 	if outputJSON {
 		return json.NewEncoder(os.Stdout).Encode(status)
 	}
 	printAgentUse(os.Stdout, status)
 	return nil
+}
+
+// daemonAgentUse is the running daemon's status, which a command's own look
+// can't replace: only the daemon fetches the browser tools, and only it knows
+// the screen. Without the daemon, a status that waits on it says so.
+func daemonAgentUse(stateDir string, local agentuse.Status) agentuse.Status {
+	resp, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "agent_use"})
+	if err == nil && resp.OK && resp.AgentUse != nil {
+		return *resp.AgentUse
+	}
+	if errors.Is(err, errMewlaNotRunning) && local.Browser.State == agentuse.BrowserPreparing {
+		local.Browser.Summary = "Mewla fetches the browser tools. " + err.Error()
+	}
+	return local
 }
 
 func printAgentUse(w io.Writer, status agentuse.Status) {
