@@ -2271,6 +2271,7 @@ func (s *Server) brainScopedConversation(scopeKey string, conversation work.Code
 	for _, result := range results {
 		appendUnique(calendarResultConversationEvent(result))
 	}
+	s.addComputerMessages(threadID, uniqueEvents, appendUnique)
 	if lifecycleErr := s.brain.AnnotateWorkResultEvents(uniqueEvents); lifecycleErr != nil {
 		conversation.Available = false
 		conversation.Reason = "brain_work_lifecycle_unavailable"

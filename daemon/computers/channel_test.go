@@ -459,3 +459,53 @@ func TestRunStopsPromptlyWithLiveChannels(t *testing.T) {
 		}
 	}
 }
+
+// The app's Remove forgets a pair from each side, in both directions, and
+// asking again after either side is done is harmless.
+func TestTheAppForgetsAPairOnBothComputers(t *testing.T) {
+	// Restored after the computers' own cleanup has stopped their loops.
+	t.Cleanup(computers.FastTimings())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	linux := newComputer(t, ctx, "manjaro")
+	mac := newComputer(t, ctx, "studio")
+	p := pairPhone(t, linux, mac)
+	connectWithPhone(t, p, linux, mac)
+	connectWithPhone(t, p, mac, linux) // the Mac can hand work to Linux too
+	eventually(t, "both directions online", func() bool {
+		return linux.peer("mac").Online && mac.peer("mac").Online && len(linux.do(computers.Request{Action: "list"}).Computers) == 2
+	})
+	forget := func(on, other *computer) []computers.PeerView {
+		t.Helper()
+		body, _ := json.Marshal(computers.Request{ExpectedDaemonID: other.auth.DaemonID()})
+		sum := sha256.Sum256(body)
+		status, raw := p.request(t, on, http.MethodDelete, "/computers", "mewla-computer-admin:remove:DELETE:/computers:sha256="+hex.EncodeToString(sum[:]), body)
+		if status != http.StatusOK {
+			t.Fatalf("remove status %d: %s", status, raw)
+		}
+		var result computers.Result
+		_ = json.Unmarshal(raw, &result)
+		return result.Computers
+	}
+	if removed := forget(linux, mac); len(removed) != 2 {
+		t.Fatalf("linux removed %+v", removed)
+	}
+	// Each side holds its own two: the one it dials, and the key the other
+	// uses to reach it.
+	if removed := forget(mac, linux); len(removed) != 2 {
+		t.Fatalf("mac removed %+v", removed)
+	}
+	for _, c := range []*computer{linux, mac} {
+		if left := c.do(computers.Request{Action: "list"}).Computers; len(left) != 0 {
+			t.Fatalf("%s still lists %+v", c.name, left)
+		}
+		for _, device := range c.auth.ListDevices() {
+			if device.Kind == auth.DeviceKindComputer && c.auth.IsDeviceTrusted(device.ID) {
+				t.Fatalf("%s still trusts %s", c.name, device.Name)
+			}
+		}
+	}
+	if removed := forget(linux, mac); len(removed) != 0 {
+		t.Fatalf("second remove: %+v", removed)
+	}
+}

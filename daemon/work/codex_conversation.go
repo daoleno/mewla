@@ -266,6 +266,9 @@ type CodexConversationEvent struct {
 	TaskTokens     *int   `json:"task_tokens,omitempty"`
 	TaskToolUses   *int   `json:"task_tool_uses,omitempty"`
 	TaskDurationMS *int   `json:"task_duration_ms,omitempty"`
+	// Computer is only set for Source=computer_message status items: a task
+	// handed to, or an answer from, another of the user's computers.
+	Computer *ComputerMessage `json:"computer,omitempty"`
 	// AdmissionSHA256 is the exact provider-native user input digest when the
 	// source preserves those bytes separately from its display projection.
 	AdmissionSHA256 string `json:"-"`
@@ -277,6 +280,22 @@ type CodexConversationEvent struct {
 // CodexConversationFileChange is the provider-neutral, display-only summary
 // of one file mutation. Optional line counts distinguish unknown statistics
 // from a known zero without making the raw patch a second state owner.
+// ComputerMessage is one message between this computer's Brain and another
+// computer's. DaemonID identifies the other computer, or starts it when only
+// a prefix is known, so the app can open it.
+type ComputerMessage struct {
+	Direction string `json:"direction"` // "to" or "from"
+	Computer  string `json:"computer"`
+	DaemonID  string `json:"daemon_id,omitempty"`
+	MessageID string `json:"message_id"`
+	Kind      string `json:"kind"`
+	ReplyTo   string `json:"reply_to,omitempty"`
+	UserSaid  string `json:"user_said,omitempty"`
+	// State is the delivery of a message this computer sent: queued, sent,
+	// delivered, uncertain or failed.
+	State string `json:"state,omitempty"`
+}
+
 type CodexConversationFileChange struct {
 	Path      string `json:"path"`
 	MovePath  string `json:"move_path,omitempty"`
