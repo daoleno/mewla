@@ -15,3 +15,13 @@ func Args(socketPath string) []string {
 	}
 	return []string{"-S", socketPath, "-N"}
 }
+
+// ClientArgs returns the global flags for every Mewla tmux client: -u plus
+// Args. tmux treats a client as UTF-8 only when TMUX is set or LC_ALL,
+// LC_CTYPE or LANG names UTF-8; otherwise it rewrites tabs, newlines and
+// non-ASCII in command output (display-message -p, list-* -F) and in the
+// attached client to "_". A launchd/LaunchAgent daemon has no LANG, so without
+// -u every tab-separated format silently collapses into one field.
+func ClientArgs(socketPath string) []string {
+	return append([]string{"-u"}, Args(socketPath)...)
+}

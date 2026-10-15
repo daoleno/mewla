@@ -11,6 +11,7 @@ func TestTmuxNewViewSessionCommandCreatesIndependentWindowSelector(t *testing.T)
 
 	want := []string{
 		"tmux",
+		"-u",
 		"new-session",
 		"-d",
 		"-P",
@@ -30,6 +31,7 @@ func TestExplicitSocketPinsClientWithoutServerAutostart(t *testing.T) {
 	cmd := tmuxNewViewSessionCommand(context.Background(), socket, "mewla-view")
 	want := []string{
 		"tmux",
+		"-u",
 		"-S", socket,
 		"-N",
 		"new-session",
@@ -54,7 +56,7 @@ func TestTmuxLinkViewWindowCommandReplacesOnlyBootstrapWindow(t *testing.T) {
 		"@99",
 	)
 
-	want := []string{"tmux", "link-window", "-k", "-s", "source:@12", "-t", "@99"}
+	want := []string{"tmux", "-u", "link-window", "-k", "-s", "source:@12", "-t", "@99"}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Fatalf("tmuxLinkViewWindowCommand args = %v, want %v", cmd.Args, want)
 	}
@@ -65,6 +67,7 @@ func TestTmuxAttachCommandIsANormalSizingClient(t *testing.T) {
 
 	want := []string{
 		"tmux",
+		"-u",
 		"-T",
 		"RGB,256",
 		"attach-session",

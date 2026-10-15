@@ -69,7 +69,7 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 	// Reject any accidental attempt to reach the caller's tmux socket.
 	bin := filepath.Join(root, "bin")
 	os.MkdirAll(bin, 0700)
-	shim := fmt.Sprintf("#!/bin/sh\n[ \"$1\" = -S ] && [ \"$2\" = '%s' ] || exit 97\nexec '%s' \"$@\"\n", socket, realTmux)
+	shim := fmt.Sprintf("#!/bin/sh\n[ \"$1\" = -u ] && shift\n[ \"$1\" = -S ] && [ \"$2\" = '%s' ] || exit 97\nexec '%s' \"$@\"\n", socket, realTmux)
 	os.WriteFile(filepath.Join(bin, "tmux"), []byte(shim), 0700)
 	for _, name := range []string{"codex", "claude", "pi", "opencode", "cursor-agent", "amp", "grok"} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf blocked > '"+filepath.Join(root, "unexpected-provider")+"'\nexit 98\n"), 0700); err != nil {

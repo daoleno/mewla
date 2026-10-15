@@ -134,6 +134,7 @@ func TestCreateDelegatedSessionPassesOwnedResourceToTmux(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 case "$1" in
   new-session) printf '%%1\n' ;;
@@ -200,6 +201,7 @@ func TestCreateDelegatedSessionRollsBackWhenOwnershipMarkersFail(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 case "$1" in
   new-session) printf '%%7\n' ;;
@@ -623,6 +625,7 @@ func TestKillDelegatedSessionReleasesExactBoundUnit(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 target=
 prev=

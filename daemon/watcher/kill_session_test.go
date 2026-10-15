@@ -13,6 +13,7 @@ func TestKillSessionMissingIsIdempotentSuccess(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 echo "can't find window: %1" >&2
 exit 1
@@ -33,6 +34,7 @@ func TestKillSessionResourceReleaseFailureAfterSuccessfulKill(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 target=
 prev=
@@ -79,6 +81,7 @@ func TestKillSessionMissingStillReleasesBoundUnit(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 echo "can't find window" >&2
 exit 1
@@ -105,6 +108,7 @@ func TestKillSessionRetryAfterResourceFailureConverges(t *testing.T) {
 	logPath := filepath.Join(dir, "tmux.log")
 	tmuxPath := filepath.Join(dir, "tmux")
 	script := `#!/bin/sh
+[ "$1" = -u ] && shift
 printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
 target=
 prev=
@@ -156,7 +160,7 @@ func TestProbeSessionDistinguishesAbsentFromTransportError(t *testing.T) {
 	tmuxPath := filepath.Join(dir, "tmux")
 	writeTmux := func(body string) {
 		t.Helper()
-		if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+		if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\n[ \"$1\" = -u ] && shift\n"+body+"\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}

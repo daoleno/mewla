@@ -416,7 +416,7 @@ exit 1
 func writeFakeTmux(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\n[ \"$1\" = -u ] && shift\n"+body+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	return dir
