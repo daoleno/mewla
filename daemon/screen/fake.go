@@ -257,14 +257,13 @@ func (s *fakeSession) Key(keysym uint32, down bool) error {
 	return nil
 }
 
-// KeyTo sends a key to one app: it counts as input, like any posted event,
-// but leaves the screen as it is.
+// KeyTo sends a key to one app. It goes to the app's own queue, not
+// through the computer's input system, so it is not taken for a person's.
 func (s *fakeSession) KeyTo(pid int, keysym uint32, down bool) error {
 	f := s.backend
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.AppKeys = append(f.AppKeys, FakeAppKey{pid, FakeKey{keysym, down}})
-	f.lastInput = time.Now()
 	return nil
 }
 

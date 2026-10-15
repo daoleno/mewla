@@ -121,13 +121,6 @@ func TestAgentActsOnElementsById(t *testing.T) {
 		t.Fatal("acted on a changed element")
 	}
 
-	// Someone at the computer pauses background actions too.
-	act(t, s, "%7", AgentAction{Action: "app_state", App: "Safari"})
-	backend.PersonInput()
-	if _, err := element(2, "press", ""); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("person: %v", err)
-	}
-
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
 	if strings.Contains(string(audit), "statements 2026") || !strings.Contains(string(audit), `"element":3,"element_action":"set_value","text_length":15`) {
 		t.Fatalf("audit:\n%s", audit)
@@ -180,5 +173,61 @@ func TestAgentSeesOneAppsWindow(t *testing.T) {
 	}
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot", App: "Safari"}); err == nil || !strings.Contains(err.Error(), "no window on the screen") {
 		t.Fatalf("hidden: %v", err)
+	}
+}
+
+// While someone uses the computer, work on an app behind theirs goes on; the
+// screen itself and the app in front wait for them. Stop still ends it all.
+func TestAPersonPausesOnlyWhatTheyUse(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[1].Window = image.Rect(0, 0, 400, 300)
+	backend.RunningApps = apps
+	act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"})
+	backend.PersonInput()
+
+	paused := []AgentAction{
+		{Action: "left_click", Coordinate: []int{10, 10}},
+		{Action: "type", Text: "x"},
+		{Action: "screenshot"},
+		{Action: "app_state"},
+		{Action: "element", Element: 2, ElementAction: "press"},
+		{Action: "type", Text: "x", App: "Notes"},
+	}
+	for _, action := range paused {
+		if _, err := s.Act(context.Background(), "%7", action); !errors.Is(err, ErrPersonAtComputer) {
+			t.Fatalf("%s %s went on while someone used the computer: %v", action.Action, action.App, err)
+		}
+	}
+	if len(backend.ElementActions) != 0 {
+		t.Fatal("pressed in the app in front")
+	}
+
+	act(t, s, "%7", AgentAction{Action: "apps"})
+	act(t, s, "%7", AgentAction{Action: "app_state", App: "Safari"})
+	act(t, s, "%7", AgentAction{Action: "element", Element: 2, ElementAction: "press"})
+	act(t, s, "%7", AgentAction{Action: "type", Text: "rent", App: "Safari"})
+	act(t, s, "%7", AgentAction{Action: "hold_key", Text: "shift", Duration: 0.3, App: "Safari"})
+	act(t, s, "%7", AgentAction{Action: "screenshot", App: "Safari"})
+	if result, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: []AgentAction{
+		{Action: "wait_for", App: "Safari", Match: &ElementMatch{Title: "Statements"}},
+		{Action: "element", Match: &ElementMatch{Title: "Statements"}, ElementAction: "press"},
+	}}); err != nil {
+		t.Fatalf("steps behind: %v\n%s", err, result.Text)
+	}
+	if len(backend.ElementActions) != 2 {
+		t.Fatalf("background presses %+v", backend.ElementActions)
+	}
+
+	// The person is still first: once it waited, the screen still waits.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{10, 10}}); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("after background work: %v", err)
+	}
+	// Stop ends background work too.
+	s.StopAgent()
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	backend.SetLocked(true)
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: 2, ElementAction: "press"}); !errors.Is(err, ErrScreenLocked) {
+		t.Fatalf("locked: %v", err)
 	}
 }

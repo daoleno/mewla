@@ -12,6 +12,7 @@ import (
 	"image/jpeg"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -266,7 +267,11 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	if err != nil {
 		return AgentResult{}, err
 	}
-	if agent.personActive() {
+	// Work on an app behind the person's never fights them for the same
+	// input, so it goes on while they use the computer; anything on the
+	// screen itself, or on the app in front, waits for them.
+	background := agent.inBackground(ctx, action)
+	if !background && agent.personActive() {
 		agent.letGo()
 		s.audit(worker, action, ErrPersonAtComputer)
 		return AgentResult{}, ErrPersonAtComputer
@@ -274,7 +279,7 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	agent.mu.Lock()
 	agent.inflight++
 	agent.mu.Unlock()
-	result, err := agent.act(ctx, action)
+	result, err := agent.act(ctx, action, background)
 	if errors.Is(err, ErrCaptureStopped) {
 		err = ErrDisplayAsleep
 	}
@@ -412,6 +417,46 @@ func (a *agentSession) elements(ctx context.Context) (AgentResult, error) {
 	return AgentResult{Text: formatElements(tree, a.latest.Rect, a.toAgent)}, nil
 }
 
+// inBackground says whether an action works on an app that isn't in front
+// without the computer's own pointer or keyboard: reading it, acting on its
+// elements, or keys sent to it alone.
+func (a *agentSession) inBackground(ctx context.Context, action AgentAction) bool {
+	if a.apps == nil {
+		return false
+	}
+	treeApp := func() string {
+		a.appMu.Lock()
+		defer a.appMu.Unlock()
+		if a.tree == nil {
+			return ""
+		}
+		return strconv.Itoa(a.treeApp.PID)
+	}
+	name := action.App
+	switch action.Action {
+	case "apps":
+		return true
+	case "element":
+		name = treeApp()
+	case "expect":
+		if name == "" {
+			name = treeApp()
+		}
+	case "app_state", "wait_for", "type", "key", "hold_key", "screenshot":
+	default:
+		return false
+	}
+	if name == "" {
+		return false
+	}
+	apps, err := a.apps.Apps(ctx)
+	if err != nil {
+		return false
+	}
+	app, err := resolveApp(apps, name)
+	return err == nil && !app.Active
+}
+
 // listApps lists the apps an agent can read and act on.
 func (a *agentSession) listApps(ctx context.Context) (AgentResult, error) {
 	if a.apps == nil {
@@ -489,12 +534,11 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err != nil {
 		return AgentResult{}, err
 	}
+	// An accessibility action posts no input event, so it leaves the
+	// agent's last event as it was.
 	if err := actor.ActOnElement(ctx, e, name, action.Text); err != nil {
 		return AgentResult{}, err
 	}
-	a.mu.Lock()
-	a.lastPost = time.Now()
-	a.mu.Unlock()
 	select {
 	case <-time.After(elementSettle):
 	case <-ctx.Done():
@@ -593,7 +637,7 @@ func (a *agentSession) capture() {
 	}
 }
 
-func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult, error) {
+func (a *agentSession) act(ctx context.Context, action AgentAction, background bool) (AgentResult, error) {
 	select {
 	case <-a.ready:
 	case <-time.After(agentFirstFrame):
@@ -674,7 +718,7 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 		}
 		pid = app.PID
 	}
-	if err := a.input(action, pid); err != nil {
+	if err := a.input(action, pid, background); err != nil {
 		return AgentResult{}, err
 	}
 	a.mu.Lock()
@@ -687,8 +731,9 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 }
 
 // input performs one action on the screen; a pid sends its keys to that app
-// alone.
-func (a *agentSession) input(action AgentAction, pid int) error {
+// alone. In the background a person's input doesn't interrupt it, and its
+// keys don't count as the agent's own events, which would hide the person's.
+func (a *agentSession) input(action AgentAction, pid int, background bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	send := a.session.Key
@@ -705,7 +750,7 @@ func (a *agentSession) input(action AgentAction, pid int) error {
 	stopped := func() error {
 		if a.ctx.Err() != nil {
 			interrupted = context.Cause(a.ctx)
-		} else if a.personActiveLocked() {
+		} else if !background && a.personActiveLocked() {
 			interrupted = ErrPersonAtComputer
 		}
 		return interrupted
@@ -716,7 +761,9 @@ func (a *agentSession) input(action AgentAction, pid int) error {
 		}
 		for i := len(held) - 1; i >= 0; i-- {
 			_ = send(held[i], false)
-			a.lastPost = time.Now()
+			if !background {
+				a.lastPost = time.Now()
+			}
 		}
 		a.letGoLocked()
 	}()
@@ -725,7 +772,9 @@ func (a *agentSession) input(action AgentAction, pid int) error {
 			return err
 		}
 		err := send(keysym, down)
-		a.lastPost = time.Now()
+		if !background {
+			a.lastPost = time.Now()
+		}
 		if err != nil {
 			return err
 		}
