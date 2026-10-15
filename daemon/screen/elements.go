@@ -23,6 +23,12 @@ type Element struct {
 	Frame   image.Rectangle
 	Enabled bool
 	Focused bool
+	// Actions are the element's own action names, when the backend reads
+	// them.
+	Actions []string
+	// ref is the backend's handle to the live element, valid until the
+	// tree is released.
+	ref uintptr
 }
 
 // ElementTree is the focused app's focused window, flattened in reading
@@ -34,6 +40,8 @@ type ElementTree struct {
 	// Truncated means the backend stopped early: too many elements, or the
 	// app was slow to answer.
 	Truncated bool
+	// PID is the app's process, when read by app.
+	PID int
 }
 
 // elementReader is a backend that can read the focused window's elements.

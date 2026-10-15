@@ -2,6 +2,7 @@ package screen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -38,6 +39,10 @@ type FakeBackend struct {
 	// has stopped, and starting a new capture wakes the display.
 	sleeps      int
 	DisplayHeld bool
+	// RunningApps are the apps an agent can read; Retained counts the
+	// element handles read and not yet released.
+	RunningApps []FakeApp
+	Retained    int
 }
 
 // SleepDisplay turns the display off, which stops every running capture.
@@ -252,3 +257,52 @@ func (f *FakeBackend) Snapshot() ([]FakePointer, []FakeKey) {
 	defer f.mu.Unlock()
 	return append([]FakePointer(nil), f.Pointers...), append([]FakeKey(nil), f.Keys...)
 }
+
+// FakeApp is a running app of the fake: its windows' elements in reading
+// order.
+type FakeApp struct {
+	App
+	Elements []Element
+}
+
+// Apps lists the fake's running apps.
+func (f *FakeBackend) Apps(context.Context) ([]App, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	apps := make([]App, len(f.RunningApps))
+	for i, app := range f.RunningApps {
+		apps[i] = app.App
+	}
+	return apps, nil
+}
+
+// ReadApp reads one fake app; each element's handle is its place in the app.
+func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTree, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, app := range f.RunningApps {
+		if app.PID != pid {
+			continue
+		}
+		tree := ElementTree{App: app.Name, PID: pid}
+		for i, e := range app.Elements {
+			if i == limit {
+				tree.Truncated = true
+				break
+			}
+			e.ref = uintptr(i + 1)
+			tree.Elements = append(tree.Elements, e)
+		}
+		f.Retained += len(tree.Elements)
+		return tree, nil
+	}
+	return ElementTree{}, errors.New("the app quit")
+}
+
+func (f *FakeBackend) Release(tree ElementTree) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Retained -= len(tree.Elements)
+}
+
+var _ appReader = (*FakeBackend)(nil)

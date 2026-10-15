@@ -87,7 +87,7 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 1 || tools.Tools[0].Name != "computer" {
+	if err != nil || len(tools.Tools) != 3 {
 		t.Fatalf("tools %+v %v", tools, err)
 	}
 
@@ -123,6 +123,17 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}}
 	if r, raw := call(session, map[string]any{"action": "elements"}); r.IsError || !strings.Contains(raw, `button \"New Note\" at (100, 30)`) {
 		t.Fatalf("elements: %s", raw[:min(len(raw), 400)])
+	}
+
+	// Any app, by name, without bringing it forward.
+	backend.RunningApps = []screen.FakeApp{{App: screen.App{Name: "Mail", PID: 44}, Elements: []screen.Element{
+		{Role: "AXButton", Title: "Send", Enabled: true, Actions: []string{"AXPress"}},
+	}}}
+	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "apps", Arguments: map[string]any{}}); err != nil || r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, "Mail, pid 44\n") {
+		t.Fatalf("apps: %+v %v", r, err)
+	}
+	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "app_state", Arguments: map[string]any{"app": "mail"}}); err != nil || r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, `[1] Button "Send" {Press}`) {
+		t.Fatalf("app_state: %+v %v", r, err)
 	}
 
 	// A person opens Screen: the agent is refused until they are done.
