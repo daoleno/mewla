@@ -82,6 +82,7 @@ type Manager struct {
 	privateKey   ed25519.PrivateKey
 	devices      map[string]*TrustedDevice
 	pairings     map[string]PairingToken
+	spent        map[string]spentPairing
 	usedNonces   map[string]time.Time
 	identityPath string
 	devicesPath  string
@@ -91,6 +92,15 @@ type Manager struct {
 	revocationMu        sync.Mutex
 	nextRevocationID    uint64
 	revocationListeners map[uint64]func(deviceID string)
+}
+
+// spentPairing remembers which device key consumed a pairing token until the
+// token would have expired, so the same phone retrying a pairing whose
+// response it never received gets the same answer instead of a failure.
+type spentPairing struct {
+	deviceID     string
+	publicKeyHex string
+	expiresAt    time.Time
 }
 
 type persistedIdentity struct {
@@ -137,6 +147,7 @@ func NewManager(storageDir string) (*Manager, error) {
 		storageDir:   dir,
 		devices:      make(map[string]*TrustedDevice),
 		pairings:     make(map[string]PairingToken),
+		spent:        make(map[string]spentPairing),
 		usedNonces:   make(map[string]time.Time),
 		identityPath: filepath.Join(dir, "identity.json"),
 		devicesPath:  filepath.Join(dir, "trusted-devices.json"),
@@ -322,6 +333,9 @@ func (m *Manager) EnrollDevice(token, expectedDaemonID, expectedPublicKeyHex, de
 	defer m.mu.Unlock()
 	pairing, ok := m.pairings[token]
 	if !ok {
+		if device := m.repeatedEnrollmentLocked(token, deviceID, devicePublicKeyHex); device != nil {
+			return device, nil
+		}
 		return nil, ErrInvalidPairingToken
 	}
 	if time.Now().After(pairing.ExpiresAt) {
@@ -370,9 +384,37 @@ func (m *Manager) EnrollDevice(token, expectedDaemonID, expectedPublicKeyHex, de
 	if !persistence.Applied {
 		return nil, errors.New("trusted-device persistence did not apply")
 	}
+	m.spent[token] = spentPairing{
+		deviceID:     deviceID,
+		publicKeyHex: devicePublicKeyHex,
+		expiresAt:    pairing.ExpiresAt,
+	}
 
 	copyDevice := *device
 	return &copyDevice, nil
+}
+
+// repeatedEnrollmentLocked answers a retry of a token this same device key
+// already consumed. Any other key, an expired token, or a device revoked
+// since gets nothing, so /pair never reports trust it did not just grant.
+func (m *Manager) repeatedEnrollmentLocked(token, deviceID, devicePublicKeyHex string) *TrustedDevice {
+	spent, ok := m.spent[token]
+	if !ok {
+		return nil
+	}
+	if time.Now().After(spent.expiresAt) {
+		delete(m.spent, token)
+		return nil
+	}
+	if spent.deviceID != deviceID || spent.publicKeyHex != devicePublicKeyHex {
+		return nil
+	}
+	current, ok := m.devices[deviceID]
+	if !ok || current.PublicKeyHex != devicePublicKeyHex {
+		return nil
+	}
+	copyDevice := *current
+	return &copyDevice
 }
 
 func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.Duration) (*TrustedDevice, error) {
@@ -746,6 +788,11 @@ func (m *Manager) pruneExpiredLocked() {
 	for token, pairing := range m.pairings {
 		if now.After(pairing.ExpiresAt) {
 			delete(m.pairings, token)
+		}
+	}
+	for token, spent := range m.spent {
+		if now.After(spent.expiresAt) {
+			delete(m.spent, token)
 		}
 	}
 	for nonceKey, seenAt := range m.usedNonces {
