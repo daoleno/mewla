@@ -164,7 +164,9 @@ type agentSession struct {
 	// agent's own last event went out.
 	presence func() Presence
 	lastPost time.Time
-	scale    float64 // framebuffer pixels per screenshot pixel
+	// readElements reads the focused window, when the backend can.
+	readElements func(ctx context.Context, limit int) (ElementTree, error)
+	scale        float64 // framebuffer pixels per screenshot pixel
 }
 
 // Agent reports the agent using the screen, if any.
@@ -292,6 +294,9 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence,
 		cancel: cancel, ctx: ctx, ready: make(chan struct{}), changed: make(chan struct{}), lastUse: time.Now(),
 	}
+	if reader, ok := s.backend.(elementReader); ok {
+		agent.readElements = reader.Elements
+	}
 	s.agent = agent
 	go agent.capture()
 	go s.watchAgent(agent)
@@ -340,6 +345,20 @@ func (s *Service) watchAgent(agent *agentSession) {
 	}
 	s.agentMu.Unlock()
 	Notify("Mewla", "The agent ("+agent.label+") stopped using this computer.")
+}
+
+// elements lists what the focused window offers, placed on the screenshot.
+func (a *agentSession) elements(ctx context.Context) (AgentResult, error) {
+	if a.readElements == nil {
+		return AgentResult{}, ErrNoElements
+	}
+	tree, err := a.readElements(ctx, elementsRead)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return AgentResult{Text: formatElements(tree, a.latest.Rect, a.toAgent)}, nil
 }
 
 // personActive says someone used the computer's own keyboard or pointer in
@@ -432,6 +451,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 	switch action.Action {
 	case "screenshot":
 		return a.screenshot(ctx)
+	case "elements":
+		return a.elements(ctx)
 	case "cursor_position":
 		a.mu.Lock()
 		x, y := a.toAgent(a.pointer)

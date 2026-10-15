@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
 	"image/jpeg"
 	"os"
 	"path/filepath"
@@ -359,4 +360,57 @@ func TestALockedScreenStopsAgents(t *testing.T) {
 	}
 	backend.SetLocked(false)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
+}
+
+// An agent reads the focused window as elements it can click, placed on its
+// screenshot: what is off screen, empty or secret stays out.
+func TestAgentReadsTheFocusedWindow(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.Tree = &ElementTree{App: "Notes", Window: "Inbox", Elements: []Element{
+		{Depth: 0, Role: "AXWindow", Title: "Inbox", Frame: image.Rect(0, 0, 2560, 1600), Enabled: true},
+		{Depth: 1, Role: "AXGroup", Frame: image.Rect(0, 0, 2560, 1600), Enabled: true},
+		{Depth: 2, Role: "AXButton", Title: "New Note", Frame: image.Rect(100, 40, 300, 80), Enabled: true},
+		{Depth: 2, Role: "AXTextArea", Value: "明天 10 点\n交周报", Frame: image.Rect(400, 200, 2400, 1500), Enabled: true, Focused: true},
+		{Depth: 2, Role: "AXSecureTextField", Title: "Password", Value: "hunter2", Frame: image.Rect(400, 100, 800, 140), Enabled: true},
+		{Depth: 2, Role: "AXButton", Title: "Share", Frame: image.Rect(3000, 40, 3100, 80), Enabled: true},
+		{Depth: 2, Role: "AXButton", Title: "Delete", Frame: image.Rect(320, 40, 420, 80)},
+		{Depth: 2, Role: "AXStaticText", Title: strings.Repeat("长", 100), Frame: image.Rect(10, 1550, 500, 1590), Enabled: true},
+	}}
+	text := act(t, s, "%7", AgentAction{Action: "elements"}).Text
+	for _, want := range []string{
+		`Focused app: Notes, window "Inbox"`,
+		`  button "New Note" at (100, 30) size 100×20`,
+		`  textarea = "明天 10 点 交周报" at (700, 425) size 1000×650, focused`,
+		`  securetextfield "Password" at (300, 60) size 200×20`,
+		`  button "Delete" at (185, 30) size 50×20, disabled`,
+		`statictext "` + strings.Repeat("长", 79) + `…"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in:\n%s", want, text)
+		}
+	}
+	for _, unwanted := range []string{"hunter2", "Share", "group"} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("%q shown in:\n%s", unwanted, text)
+		}
+	}
+
+	backend.Tree = nil
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "elements"}); !errors.Is(err, ErrNoElements) {
+		t.Fatalf("without accessibility: %v", err)
+	}
+}
+
+func TestALongWindowIsCut(t *testing.T) {
+	tree := ElementTree{App: "Mail"}
+	for i := 0; i < 400; i++ {
+		tree.Elements = append(tree.Elements, Element{Role: "AXButton", Title: "Message", Frame: image.Rect(0, i*2, 100, i*2+2), Enabled: true})
+	}
+	text := formatElements(tree, image.Rect(0, 0, 1000, 1000), func(p image.Point) (int, int) { return p.X, p.Y })
+	if lines := strings.Count(text, "\n"); lines != 2+elementsShown+1 || !strings.Contains(text, "More elements were left out") {
+		t.Fatalf("%d lines:\n%s", lines, text[len(text)-200:])
+	}
+	if empty := formatElements(ElementTree{App: "Electron"}, image.Rect(0, 0, 10, 10), nil); !strings.Contains(empty, "Use a screenshot") {
+		t.Fatalf("empty: %s", empty)
+	}
 }
