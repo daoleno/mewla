@@ -87,7 +87,7 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 3 {
+	if err != nil || len(tools.Tools) != 4 {
 		t.Fatalf("tools %+v %v", tools, err)
 	}
 
@@ -134,6 +134,9 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "app_state", Arguments: map[string]any{"app": "mail"}}); err != nil || r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, `[1] Button "Send" {Press}`) {
 		t.Fatalf("app_state: %+v %v", r, err)
+	}
+	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "element", Arguments: map[string]any{"id": 1, "action": "press"}}); err != nil || r.IsError || len(backend.ElementActions) != 1 || backend.ElementActions[0].Action != "AXPress" {
+		t.Fatalf("element: %+v %v %+v", r, err, backend.ElementActions)
 	}
 
 	// A person opens Screen: the agent is refused until they are done.

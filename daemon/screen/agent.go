@@ -95,6 +95,10 @@ type AgentAction struct {
 	Duration        float64 `json:"duration,omitempty"`
 	// App names the app an app action is for: its name or pid.
 	App string `json:"app,omitempty"`
+	// Element is an id from the latest app_state, and ElementAction what to
+	// do to it; set_value takes Text.
+	Element       int    `json:"element,omitempty"`
+	ElementAction string `json:"element_action,omitempty"`
 }
 
 // AgentResult is what the agent sees: a JPEG screenshot and/or a short line
@@ -428,6 +432,11 @@ func (a *agentSession) appState(ctx context.Context, name string) (AgentResult, 
 	}
 	a.appMu.Lock()
 	defer a.appMu.Unlock()
+	return a.readAppLocked(ctx, app)
+}
+
+// readAppLocked replaces the agent's latest read; callers hold appMu.
+func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult, error) {
 	tree, err := a.apps.ReadApp(ctx, app.PID, elementsRead)
 	if err != nil {
 		return AgentResult{}, err
@@ -439,6 +448,49 @@ func (a *agentSession) appState(ctx context.Context, name string) (AgentResult, 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return AgentResult{Text: formatAppTree(app, tree, a.latest.Rect, a.toAgent)}, nil
+}
+
+// elementSettle lets an app redraw after an element action, before the app
+// is read again for the agent.
+const elementSettle = 300 * time.Millisecond
+
+// actOnElement does one thing to an element of the latest read, in the
+// background, and answers with the app read again.
+func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (AgentResult, error) {
+	actor, ok := a.apps.(appActor)
+	if !ok {
+		return AgentResult{}, ErrNoApps
+	}
+	a.appMu.Lock()
+	defer a.appMu.Unlock()
+	if a.tree == nil {
+		return AgentResult{}, errors.New("read an app with app_state first")
+	}
+	if action.Element < 1 || action.Element > len(a.tree.Elements) {
+		return AgentResult{}, fmt.Errorf("there is no element [%d] in the last app_state", action.Element)
+	}
+	e := a.tree.Elements[action.Element-1]
+	name, err := elementAction(e, action.ElementAction)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	if err := actor.ActOnElement(ctx, e, name, action.Text); err != nil {
+		return AgentResult{}, err
+	}
+	a.mu.Lock()
+	a.lastPost = time.Now()
+	a.mu.Unlock()
+	select {
+	case <-time.After(elementSettle):
+	case <-ctx.Done():
+		return AgentResult{}, ctx.Err()
+	}
+	result, err := a.readAppLocked(ctx, a.treeApp)
+	if err != nil {
+		return AgentResult{Text: "Done; reading the app again failed: " + err.Error()}, nil
+	}
+	result.Text = fmt.Sprintf("Done: %s on [%d]. The app now:\n", strings.TrimPrefix(name, "AX"), action.Element) + result.Text
+	return result, nil
 }
 
 // releaseTree lets go of the latest read's elements, when the agent ends.
@@ -558,6 +610,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 		return a.listApps(ctx)
 	case "app_state":
 		return a.appState(ctx, action.App)
+	case "element":
+		return a.actOnElement(ctx, action)
 	case "cursor_position":
 		a.mu.Lock()
 		x, y := a.toAgent(a.pointer)
@@ -895,6 +949,8 @@ type auditLine struct {
 	Coordinate []int     `json:"coordinate,omitempty"`
 	Start      []int     `json:"start_coordinate,omitempty"`
 	App        string    `json:"app,omitempty"`
+	Element    int       `json:"element,omitempty"`
+	Does       string    `json:"element_action,omitempty"`
 	Keys       string    `json:"keys,omitempty"`
 	TextLength int       `json:"text_length,omitempty"`
 	TextHash   string    `json:"text_sha256,omitempty"`
@@ -903,12 +959,13 @@ type auditLine struct {
 
 // audit records what an agent did, never what it typed or saw.
 func (s *Service) audit(worker string, action AgentAction, actErr error) {
-	line := auditLine{Time: time.Now().UTC(), Worker: worker, Action: action.Action, Coordinate: action.Coordinate, Start: action.StartCoordinate, App: action.App}
-	switch action.Action {
-	case "type":
+	line := auditLine{Time: time.Now().UTC(), Worker: worker, Action: action.Action, Coordinate: action.Coordinate, Start: action.StartCoordinate, App: action.App,
+		Element: action.Element, Does: action.ElementAction}
+	switch {
+	case action.Action == "type", action.Action == "element" && action.Text != "":
 		sum := sha256.Sum256([]byte(action.Text))
 		line.TextLength, line.TextHash = len([]rune(action.Text)), hex.EncodeToString(sum[:8])
-	case "key", "hold_key":
+	case action.Action == "key", action.Action == "hold_key":
 		line.Keys = action.Text
 	}
 	if actErr != nil {

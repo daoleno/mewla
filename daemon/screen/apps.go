@@ -29,6 +29,39 @@ type appReader interface {
 	Release(tree ElementTree)
 }
 
+// appActor is a backend that can act on an element an app read returned.
+type appActor interface {
+	// ActOnElement checks that e is still the element that was read, then
+	// performs action: an accessibility action name, "focus", or
+	// "set_value" with value.
+	ActOnElement(ctx context.Context, e Element, action, value string) error
+}
+
+// ErrStaleElement means an id no longer names what was read.
+var ErrStaleElement = errors.New("That element changed or went away; read the app again with app_state")
+
+// elementActions are the actions an agent names, and what each does.
+var elementActions = map[string]string{
+	"press": "AXPress", "show_menu": "AXShowMenu", "scroll_to_visible": "AXScrollToVisible",
+	"raise": "AXRaise", "confirm": "AXConfirm", "cancel": "AXCancel", "increment": "AXIncrement",
+	"decrement": "AXDecrement", "pick": "AXPick", "focus": "focus", "set_value": "set_value",
+}
+
+// elementAction resolves what an agent asked for on e: a standard action, or
+// one of the element's own actions by name, with or without "AX".
+func elementAction(e Element, asked string) (string, error) {
+	asked = strings.TrimSpace(asked)
+	if action, ok := elementActions[strings.ToLower(asked)]; ok {
+		return action, nil
+	}
+	for _, own := range e.Actions {
+		if strings.EqualFold(own, asked) || strings.EqualFold(strings.TrimPrefix(own, "AX"), asked) {
+			return own, nil
+		}
+	}
+	return "", fmt.Errorf("%q is not something this element does; it offers press, focus, set_value and its own actions", asked)
+}
+
 // ErrNoApps means this computer can't read apps as elements.
 var ErrNoApps = errors.New("Reading apps works on Macs; use screenshots here")
 

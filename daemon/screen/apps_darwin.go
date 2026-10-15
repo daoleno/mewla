@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+	"github.com/ebitengine/purego/objc"
 )
 
 // Reading any app loads apart from the rest: if this macOS lacks a function,
@@ -27,6 +29,8 @@ var appsLib struct {
 	createApplication func(pid int32) uintptr
 	getPid            func(element uintptr, pid *int32) int32
 	copyActionNames   func(element uintptr, names *uintptr) int32
+	performAction     func(element, action uintptr) int32
+	setAttribute      func(element, attribute, value uintptr) int32
 
 	keys map[string]uintptr
 }
@@ -62,6 +66,8 @@ func loadApps() bool {
 			{&appsLib.createApplication, "ApplicationServices", "AXUIElementCreateApplication"},
 			{&appsLib.getPid, "ApplicationServices", "AXUIElementGetPid"},
 			{&appsLib.copyActionNames, "ApplicationServices", "AXUIElementCopyActionNames"},
+			{&appsLib.performAction, "ApplicationServices", "AXUIElementPerformAction"},
+			{&appsLib.setAttribute, "ApplicationServices", "AXUIElementSetAttributeValue"},
 		} {
 			if _, err := purego.Dlsym(libs[fn.lib], fn.name); err != nil {
 				log.Printf("screen: reading apps unavailable: no %s", fn.name)
@@ -232,4 +238,81 @@ func (b *macBackend) Release(tree ElementTree) {
 	}
 }
 
-var _ appReader = (*macBackend)(nil)
+// AX errors an element action can meet.
+const (
+	axErrorInvalidElement       = -25202
+	axErrorAttributeUnsupported = -25205
+	axErrorActionUnsupported    = -25206
+)
+
+// ActOnElement acts on an element of an earlier read, in the background: an
+// accessibility action or attribute never moves the pointer or raises the
+// window unless the action itself does.
+func (b *macBackend) ActOnElement(ctx context.Context, e Element, action, value string) error {
+	if !loadApps() {
+		return ErrNoApps
+	}
+	if e.ref == 0 {
+		return ErrStaleElement
+	}
+	var err error
+	withPool(func() { err = actOnElement(e, action, value) })
+	return err
+}
+
+func actOnElement(e Element, action, value string) error {
+	// Never act on an element that can't be shown to be the one read.
+	role, code := axCopy(e.ref, "AXRole")
+	switch {
+	case code == axErrorInvalidElement || (code == 0 && role == 0):
+		return ErrStaleElement
+	case code != 0:
+		return fmt.Errorf("the app didn't answer (accessibility error %d); read it again", code)
+	}
+	same := axLib.typeID(role) == axLib.stringTypeID() && cfString(role) == e.Role
+	axLib.release(role)
+	title := axString(e.ref, "AXTitle")
+	if title == "" {
+		title = axString(e.ref, "AXDescription")
+	}
+	if !same || title != e.Title {
+		return ErrStaleElement
+	}
+	switch action {
+	case "focus":
+		yes := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), true)
+		code = appsLib.setAttribute(e.ref, axLib.attrs["AXFocused"], uintptr(yes))
+	case "set_value":
+		text := axLib.createString(0, value, cfStringEncodingUTF8)
+		if text == 0 {
+			return errors.New("that value can't be set")
+		}
+		code = appsLib.setAttribute(e.ref, axLib.attrs["AXValue"], text)
+		axLib.release(text)
+	default:
+		name := axLib.createString(0, action, cfStringEncodingUTF8)
+		if name == 0 {
+			return errors.New("unknown action")
+		}
+		code = appsLib.performAction(e.ref, name)
+		axLib.release(name)
+	}
+	switch code {
+	case 0:
+		return nil
+	case axErrorInvalidElement:
+		return ErrStaleElement
+	case axErrorAPIDisabled:
+		return ErrPermissions
+	case axErrorActionUnsupported, axErrorAttributeUnsupported:
+		return fmt.Errorf("this element doesn't allow %s; try another action, or click its point", strings.TrimPrefix(action, "AX"))
+	case axErrorCannotComplete:
+		return errors.New("the app didn't answer in time; it may be busy")
+	}
+	return fmt.Errorf("the app refused it (accessibility error %d)", code)
+}
+
+var (
+	_ appReader = (*macBackend)(nil)
+	_ appActor  = (*macBackend)(nil)
+)

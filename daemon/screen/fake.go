@@ -41,8 +41,9 @@ type FakeBackend struct {
 	DisplayHeld bool
 	// RunningApps are the apps an agent can read; Retained counts the
 	// element handles read and not yet released.
-	RunningApps []FakeApp
-	Retained    int
+	RunningApps    []FakeApp
+	Retained       int
+	ElementActions []FakeElementAction
 }
 
 // SleepDisplay turns the display off, which stops every running capture.
@@ -276,7 +277,7 @@ func (f *FakeBackend) Apps(context.Context) ([]App, error) {
 	return apps, nil
 }
 
-// ReadApp reads one fake app; each element's handle is its place in the app.
+// ReadApp reads one fake app; each element's handle is its app and place.
 func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTree, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -290,7 +291,7 @@ func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTre
 				tree.Truncated = true
 				break
 			}
-			e.ref = uintptr(i + 1)
+			e.ref = uintptr(pid)<<16 | uintptr(i+1)
 			tree.Elements = append(tree.Elements, e)
 		}
 		f.Retained += len(tree.Elements)
@@ -306,3 +307,34 @@ func (f *FakeBackend) Release(tree ElementTree) {
 }
 
 var _ appReader = (*FakeBackend)(nil)
+
+// FakeElementAction is one action an agent took on a fake app's element.
+type FakeElementAction struct {
+	PID, Index    int
+	Action, Value string
+}
+
+// ActOnElement acts on a fake element, refusing one replaced since it was
+// read; set_value changes what the next read shows.
+func (f *FakeBackend) ActOnElement(_ context.Context, e Element, action, value string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	pid, index := int(e.ref>>16), int(e.ref&0xffff)-1
+	for _, app := range f.RunningApps {
+		if app.PID != pid || index < 0 || index >= len(app.Elements) {
+			continue
+		}
+		live := &app.Elements[index]
+		if live.Role != e.Role || live.Title != e.Title {
+			continue
+		}
+		if action == "set_value" {
+			live.Value = value
+		}
+		f.ElementActions = append(f.ElementActions, FakeElementAction{PID: app.PID, Index: index, Action: action, Value: value})
+		return nil
+	}
+	return ErrStaleElement
+}
+
+var _ appActor = (*FakeBackend)(nil)
