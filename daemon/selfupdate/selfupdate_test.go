@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -83,57 +85,98 @@ func TestVerifyManifestSignatureAndSchema(t *testing.T) {
 	}
 }
 
-func TestLatestSelectsHighestUpdaterEligiblePrerelease(t *testing.T) {
+// fakeGitHub serves releases the way github.com does: /releases/latest
+// redirects to /releases/tag/<tag>, and files live under /releases/download.
+func fakeGitHub(t *testing.T, latestLocation string, version string) (*httptest.Server, *[]string, ed25519.PublicKey) {
+	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifests := map[string][]byte{}
-	signatures := map[string][]byte{}
-	for _, version := range []string{"0.1.0-beta.4", "0.1.0-beta.10"} {
-		manifest := Manifest{
-			SchemaVersion: 2,
-			Product:       "mewla",
-			Version:       version,
-			Artifacts: []Artifact{{
-				Path: "mewla-linux-amd64.tar.gz", Role: "daemon_archive", SHA256: strings.Repeat("a", 64), Size: 42, GOOS: "linux", GOARCH: "amd64",
-			}},
-		}
-		raw, err := json.Marshal(manifest)
-		if err != nil {
-			t.Fatal(err)
-		}
-		manifests[version] = raw
-		signatures[version] = ed25519.Sign(privateKey, raw)
+	archive := []byte("archive")
+	digest := sha256.Sum256(archive)
+	manifest, err := json.Marshal(Manifest{
+		SchemaVersion: 2,
+		Product:       "mewla",
+		Version:       version,
+		Artifacts: []Artifact{{
+			Path: "mewla-linux-amd64.tar.gz", Role: "daemon_archive", SHA256: hex.EncodeToString(digest[:]), Size: int64(len(archive)), GOOS: "linux", GOARCH: "amd64",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		base := "http://" + r.Host
+		requests = append(requests, r.Host+r.URL.Path)
+		download := "/daoleno/mewla/releases/download/v" + version + "/"
 		switch r.URL.Path {
-		case "/releases":
-			_ = json.NewEncoder(w).Encode([]release{
-				testRelease("0.1.0-beta.4", true, base),
-				testRelease("0.1.0-beta.10", true, base),
-			})
-		case "/0.1.0-beta.4/manifest":
-			_, _ = w.Write(manifests["0.1.0-beta.4"])
-		case "/0.1.0-beta.4/signature":
-			_, _ = w.Write(signatures["0.1.0-beta.4"])
-		case "/0.1.0-beta.10/manifest":
-			_, _ = w.Write(manifests["0.1.0-beta.10"])
-		case "/0.1.0-beta.10/signature":
-			_, _ = w.Write(signatures["0.1.0-beta.10"])
+		case "/daoleno/mewla/releases/latest":
+			http.Redirect(w, r, latestLocation, http.StatusFound)
+		case "/daoleno/mewla/releases/tag/v" + version:
+			t.Errorf("the release page was fetched; the redirect should not be followed")
+		case download + ManifestAsset:
+			_, _ = w.Write(manifest)
+		case download + ManifestSignature:
+			_, _ = w.Write(ed25519.Sign(privateKey, manifest))
+		case download + "mewla-linux-amd64.tar.gz":
+			_, _ = w.Write(archive)
 		default:
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
-	client := &Client{HTTPClient: server.Client(), APIURL: server.URL + "/releases", PublicKey: publicKey, GOOS: "linux", GOARCH: "amd64"}
-	candidate, err := client.Latest(context.Background(), "0.1.0-beta.3")
+	t.Cleanup(server.Close)
+	return server, &requests, publicKey
+}
+
+func TestLatestFollowsTheLatestReleaseRedirectWithoutTheAPI(t *testing.T) {
+	server, requests, publicKey := fakeGitHub(t, "/daoleno/mewla/releases/tag/v0.2.17", "0.2.17")
+	client := &Client{HTTPClient: server.Client(), ReleasesURL: server.URL + "/daoleno/mewla/releases", PublicKey: publicKey, GOOS: "linux", GOARCH: "amd64"}
+	candidate, err := client.Latest(context.Background(), "0.2.16")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candidate == nil || candidate.Version != "0.1.0-beta.10" || !candidate.Prerelease {
+	if candidate == nil || candidate.Version != "0.2.17" || candidate.Tag != "v0.2.17" ||
+		candidate.ArtifactURL != server.URL+"/daoleno/mewla/releases/download/v0.2.17/mewla-linux-amd64.tar.gz" {
 		t.Fatalf("candidate = %#v", candidate)
+	}
+	if _, err := client.DownloadBinary(context.Background(), *candidate); err == nil || strings.Contains(err.Error(), "checksum") {
+		// The fake archive passes its checksum and then fails to unpack.
+		t.Fatalf("DownloadBinary() error = %v", err)
+	}
+	for _, request := range *requests {
+		if strings.Contains(request, "api.github.com") || strings.Contains(request, "/repos/") {
+			t.Fatalf("API request: %s", request)
+		}
+	}
+
+	if candidate, err := client.Latest(context.Background(), "0.2.17"); err != nil || candidate != nil {
+		t.Fatalf("same version: %#v, %v", candidate, err)
+	}
+	if candidate, err := client.Latest(context.Background(), "0.2.18-beta.1"); err != nil || candidate != nil {
+		t.Fatalf("newer beta: %#v, %v", candidate, err)
+	}
+}
+
+func TestLatestRejectsRedirectsWithoutAReleaseTag(t *testing.T) {
+	for name, location := range map[string]string{
+		"no release yet": "/daoleno/mewla/releases",
+		"not semver":     "/daoleno/mewla/releases/tag/nightly",
+		"no v prefix":    "/daoleno/mewla/releases/tag/0.2.17",
+		"other host":     "https://example.com/daoleno/mewla/releases/tag/v0.2.17",
+	} {
+		server, _, publicKey := fakeGitHub(t, location, "0.2.17")
+		client := &Client{HTTPClient: server.Client(), ReleasesURL: server.URL + "/daoleno/mewla/releases", PublicKey: publicKey, GOOS: "linux", GOARCH: "amd64"}
+		if candidate, err := client.Latest(context.Background(), "0.2.16"); err == nil {
+			t.Fatalf("%s: candidate %#v", name, candidate)
+		}
+	}
+
+	server, _, _ := fakeGitHub(t, "/daoleno/mewla/releases/tag/v0.2.17", "0.2.17")
+	_, otherKey, _ := ed25519.GenerateKey(rand.Reader)
+	client := &Client{HTTPClient: server.Client(), ReleasesURL: server.URL + "/daoleno/mewla/releases", PublicKey: otherKey.Public().(ed25519.PublicKey), GOOS: "linux", GOARCH: "amd64"}
+	if _, err := client.Latest(context.Background(), "0.2.16"); err == nil || !strings.Contains(err.Error(), "verify") {
+		t.Fatalf("manifest signed by another key: %v", err)
 	}
 }
 
@@ -152,18 +195,6 @@ func TestDownloadBinaryRejectsArtifactChecksumMismatch(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("DownloadBinary() error = %v", err)
-	}
-}
-
-func testRelease(version string, prerelease bool, base string) release {
-	prefix := base + "/" + version
-	return release{
-		TagName: "v" + version, Prerelease: prerelease,
-		Assets: []releaseAsset{
-			{Name: ManifestAsset, URL: prefix + "/manifest"},
-			{Name: ManifestSignature, URL: prefix + "/signature"},
-			{Name: "mewla-linux-amd64.tar.gz", URL: prefix + "/archive"},
-		},
 	}
 }
 
