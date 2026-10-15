@@ -99,6 +99,14 @@ The daemon connects out only for features you use:
 
 Mewla sends no telemetry.
 
+## Remote access account
+
+`mewla login` is the only Mewla service that keeps data about you: your
+GitHub id and username, and each signed-in computer's address, name and public
+key. `mewla logout -delete-account` deletes the account and every computer on
+it. The [privacy policy](https://mewla.ai/privacy/) lists everything the
+service and its relay see and keep.
+
 ## Revoke a device
 
 Removing a server in the app only forgets it on that phone. To revoke a device's
