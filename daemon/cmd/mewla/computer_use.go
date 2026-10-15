@@ -128,7 +128,7 @@ func (in computerInput) action() screen.AgentAction {
 }
 
 const stepsToolDescription = `Run up to 20 actions in one call, in order, stopping at the first that fails (about 40 seconds in all). ` +
-	`A step is any computer action, or apps, app_state (app), element (id or match, element_action, text for set_value), ` +
+	`A step is any computer action, or apps, app_state (app), element (id or match, element_action, and value for set_value), ` +
 	`wait_for (app, match, duration up to 10 seconds: read the app until an element matching appears), ` +
 	`or expect (match, optionally app to read first: fail unless an element matches). ` +
 	`A match names an element by role, title and value, without case, a whole name before part of one; when acting, several matches are an error. ` +
@@ -139,16 +139,21 @@ type stepsInput struct {
 	Steps []stepInput `json:"steps"`
 }
 
+// stepInput names an element's id and value as the element tool does.
 type stepInput struct {
 	computerInput
-	Element       int                  `json:"element,omitempty" jsonschema:"an id from the latest app_state"`
+	ID            int                  `json:"id,omitempty" jsonschema:"for element: an id from the latest app_state"`
 	ElementAction string               `json:"element_action,omitempty" jsonschema:"for element: press, focus, set_value and the rest"`
+	Value         string               `json:"value,omitempty" jsonschema:"for element with set_value: the text"`
 	Match         *screen.ElementMatch `json:"match,omitempty" jsonschema:"for element, wait_for and expect: the element by role, title, value"`
 }
 
 func (in stepInput) action() screen.AgentAction {
 	action := in.computerInput.action()
-	action.Element, action.ElementAction, action.Match = in.Element, in.ElementAction, in.Match
+	action.Element, action.ElementAction, action.Match = in.ID, in.ElementAction, in.Match
+	if action.Text == "" {
+		action.Text = in.Value
+	}
 	return action
 }
 

@@ -142,8 +142,10 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 		{"action": "app_state", "app": "Mail"},
 		{"action": "element", "match": map[string]any{"role": "button", "title": "send"}, "element_action": "press"},
 		{"action": "expect", "match": map[string]any{"title": "Send"}},
+		// Named the way the element tool names them.
+		{"action": "element", "id": 1, "element_action": "set_value", "value": "x"},
 	}
-	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "steps", Arguments: map[string]any{"steps": steps}}); err != nil || r.IsError || len(backend.ElementActions) != 2 {
+	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "steps", Arguments: map[string]any{"steps": steps}}); err != nil || r.IsError || len(backend.ElementActions) != 3 || backend.ElementActions[2].Value != "x" {
 		t.Fatalf("steps: %+v %v %+v", r, err, backend.ElementActions)
 	}
 
