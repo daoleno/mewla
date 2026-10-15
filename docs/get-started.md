@@ -23,7 +23,7 @@ Your code, keys and agent state stay on your computer.
 - Linux (`amd64` or `arm64`), WSL2, or an Apple Silicon Mac
 - `tmux`
 - One agent CLI on `PATH`, already signed in
-- An arm64 Android phone, an iPhone with a source build, or a browser
+- An arm64 Android phone, an iPhone, or a browser
 
 ## 1. Install the daemon
 
@@ -47,7 +47,7 @@ such as `https://quiet-otter-3f9a.m.mewla.ai`, that works from any network.
 
 With no device paired yet, it prints a QR code and a pairing link. Install the
 app (the Android APK from [Releases](https://github.com/daoleno/mewla/releases),
-or [iOS from source](install-daemon.md#ios)), open it and scan the code. The
+or [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)), open it and scan the code. The
 code works once and expires; `mewla pair` prints a fresh one.
 
 Other ways to connect, such as the same Wi-Fi only, Tailscale or your own

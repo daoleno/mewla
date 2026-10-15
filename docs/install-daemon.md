@@ -198,10 +198,12 @@ and iOS, leave updates to the store and show the version only.
 
 ### iOS
 
-Mewla Preview `0.2.4 (42)` is uploaded and awaiting Apple Beta App Review as of
-2026-10-10. The new [TestFlight public link](https://testflight.apple.com/join/nMQheDCE)
-will accept testers after Apple approves a build in the group. Until then, build
-the app from source on an Apple Silicon Mac.
+Install **Mewla Preview** from
+[TestFlight](https://testflight.apple.com/join/nMQheDCE): open the link on your
+iPhone, install Apple's TestFlight app if asked, then tap **Accept** and
+**Install**. TestFlight delivers new builds as they're released.
+
+You can also build the app from source on an Apple Silicon Mac.
 
 #### Build the iOS app from source
 

@@ -70,7 +70,8 @@ mewla --lan
 
 3. Install the app: the Android arm64 APK from
    [Releases](https://github.com/daoleno/mewla/releases), or
-   [see iOS TestFlight status and source builds](docs/install-daemon.md#ios).
+   [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)
+   ([or build from source](docs/install-daemon.md#ios)).
 4. Scan the QR code. Open **Sessions** to start an agent, or **Brain** to give
    it a goal. For later phones and browsers, run `mewla pair`.
 
@@ -89,7 +90,7 @@ Away from home, use Tailscale or an HTTPS tunnel instead of `--lan`:
 | --- | --- |
 | Daemon: Linux `amd64`/`arm64`, WSL2, Apple Silicon macOS | Beta |
 | Android app (arm64 APK) | Beta |
-| iOS app | TestFlight 0.2.4 (42) submitted; awaiting Apple Beta App Review |
+| iOS app | Beta on [TestFlight](https://testflight.apple.com/join/nMQheDCE) |
 | Web UI, served by the daemon | Beta; no QR scanning or push |
 | Plugins | Preview; sign-in is not ready for every service |
 
