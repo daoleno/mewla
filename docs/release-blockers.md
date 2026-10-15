@@ -6,14 +6,15 @@ This file records release-readiness blockers and the evidence that resolved them
 
 ## Open blockers
 
-### `ios-distribution-artifacts` (reopened 2026-10-10)
-
-- **Summary:** Mewla `0.2.4 (42)` is waiting for Apple Beta App Review. The release automation has completed successfully; public installability remains an Apple review gate.
-- **Acceptance:** CI verifies the XCFramework and Ghostty notice, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path; an IPA upload alone is insufficient.
-- **Evidence:** [Recovery run 38030080400](https://github.com/daoleno/mewla/actions/runs/38030080400) succeeded: the build is VALID, export compliance is handled, the public `Mewla Preview` group is attached, and Beta App Review is submitted. App Store Connect shows “Waiting for Review”.
-- **Installation:** [Mewla TestFlight](https://testflight.apple.com/join/nMQheDCE) accepts external testers only after Apple approves a build. See [iOS CI](ios-ci-release.md).
+None.
 
 ## Resolved
+
+### `ios-distribution-artifacts` (resolved 2026-10-15)
+
+- **Summary:** Mewla `0.2.4 (42)` was waiting for Apple Beta App Review; the release automation had completed, and public installability remained an Apple review gate.
+- **Acceptance:** CI verifies the XCFramework and Ghostty notice, signs/archives Mewla, and publishes a publicly installable TestFlight/App Store path; an IPA upload alone is insufficient.
+- **Resolution evidence:** Apple approved the Preview build and the public TestFlight path is live. iOS `v0.2.14`, build `52` installs from [Mewla TestFlight](https://testflight.apple.com/join/nMQheDCE); see [iOS CI](ios-ci-release.md) and the [0.2.14 release](releases/v0.2.14.md).
 
 ### `github-plugin-publisher-registration` (resolved 2026-10-04)
 
