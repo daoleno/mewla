@@ -47,6 +47,21 @@ or installing software it asks you through the Brain you are talking to.
 `mewla computers remove` or `mewla devices revoke` ends the access at once.
 See [Your other computers](computers.md).
 
+## Agents in your browser
+
+When **Agents can use this computer** is on and the Playwright extension is in
+Chrome, agents Mewla starts on that computer can use your Chrome with your
+logins, through the extension. Each works in a tab group of its own and sees
+only that group. The switch turns it off for new agents at once.
+
+The extension's key lets anything that has it attach to your Chrome without
+asking. Mewla reads it from the extension's storage in your Chrome profile (or
+keeps the one you pasted, in a file only your user can read) and hands it to
+the browser tools in their environment only: never on a command line, in a log
+or in an agent's prompt. Regenerate it in the extension to cut off every copy.
+Brain has agents ask before they submit, send, pay or change an account on a
+site, and treats page text as data. See [Agents in your browser](your-browser.md).
+
 ## What to expose
 
 - The daemon listens on `127.0.0.1:9876` by default, reachable only from the
