@@ -418,7 +418,7 @@ func TestOnloraConnectRegistersAndAsksForItsScopes(t *testing.T) {
 
 func TestOnloraToolGroupsOnlyOnItsEndpoint(t *testing.T) {
 	r := &record{Account: Account{Integration: "onlora", AuthMethod: "mcp_oauth", Endpoint: "https://api.onlora.ai/mcp"}}
-	for name, group := range map[string]string{"search_library": "read", "list_projects": "read", "get_asset": "read", "read_file": "read", "generate_image": "write", "edit_image": "write", "add_asset": "write", "write_file": "write", "generate_music": "write", "generate_voice": "write", "generate_video": "write", "list_models": "read", "delete_file": "write", "publish": "", "propose_drafts": "", "new_tool": ""} {
+	for name, group := range map[string]string{"search_library": "read", "list_projects": "read", "get_asset": "read", "read_file": "read", "generate_image": "write", "edit_image": "write", "add_asset": "write", "update_asset": "write", "write_file": "write", "generate_voice": "write", "list_models": "read", "delete_file": "write", "publish": "", "propose_drafts": "", "new_tool": ""} {
 		if got := toolGroup(r, Tool{Name: name}); got != group {
 			t.Fatalf("%s is %q, not %q", name, got, group)
 		}
