@@ -16,6 +16,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/shellquote"
@@ -67,6 +68,9 @@ type Service struct {
 	watcher Watcher
 	execs   *work.ExecutorConfig
 	now     func() time.Time
+	// defaultHostLogged logs once which agent Brain picked by default when
+	// more than one is installed and none was chosen.
+	defaultHostLogged sync.Once
 
 	// sessionConversationHook overrides the provider conversation reader for
 	// the Session projection surface. Tests inject sanitized fixtures; nil
@@ -3351,8 +3355,10 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 				return executor
 			}
 		}
-		if executor, ok := s.execs.WorkerExecutor("codex"); ok {
-			return executor
+		for _, id := range hostdeps.AgentOrder() {
+			if executor, ok := s.execs.WorkerExecutor(id); ok {
+				return executor
+			}
 		}
 	}
 	return work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux})
@@ -3361,15 +3367,14 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 // hostLookPath finds executor commands; tests replace it.
 var hostLookPath = exec.LookPath
 
-// hostPreference is the order a first Brain host is picked in, matching
-// mewla doctor's recommendation.
-var hostPreference = []string{"codex", "claude", "agent", "grok", "pi", "opencode"}
-
 // installedHostExecutor picks, before any Brain host has been chosen, the
-// first configured executor whose command is installed, so a computer with
-// only Claude Code installed does not start Brain on a missing codex.
+// first configured executor whose command is installed, in hostdeps'
+// AgentOrder, so a computer with only Claude Code installed does not start
+// Brain on a missing codex. First run asks when more than one is ready; a
+// start without a terminal lands here and logs the pick once.
 func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
-	for _, id := range hostPreference {
+	var installed []work.WorkerExecutor
+	for _, id := range hostdeps.AgentOrder() {
 		executor, ok := s.execs.WorkerExecutor(id)
 		if !ok {
 			continue
@@ -3379,10 +3384,23 @@ func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 			continue
 		}
 		if _, err := hostLookPath(fields[0]); err == nil {
-			return executor, true
+			installed = append(installed, executor)
 		}
 	}
-	return work.WorkerExecutor{}, false
+	if len(installed) == 0 {
+		return work.WorkerExecutor{}, false
+	}
+	if len(installed) > 1 {
+		s.defaultHostLogged.Do(func() {
+			others := make([]string, 0, len(installed)-1)
+			for _, executor := range installed[1:] {
+				others = append(others, executor.ID)
+			}
+			log.Printf("brain host: no agent chosen yet; using %s by default (also installed: %s). Change it: mewla brain use <%s>",
+				installed[0].ID, strings.Join(others, ", "), strings.Join(append([]string{installed[0].ID}, others...), "|"))
+		})
+	}
+	return installed[0], true
 }
 
 // HostExecutorID names the executor running Brain. Launches Brain does not

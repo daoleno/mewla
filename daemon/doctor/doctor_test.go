@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/hostdeps"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
@@ -285,6 +286,60 @@ command = "codex"
 	if codex == nil || codex.Auth != AuthUnauthenticated || codex.Usable || codex.Runnable {
 		t.Fatalf("codex = %+v", codex)
 	}
+}
+
+func TestRecommendedHostFollowsTheInstallMenuOrder(t *testing.T) {
+	home := t.TempDir()
+	binDir := t.TempDir()
+	writeFakeTmux(t, binDir)
+	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
+	writeFakeClaude(t, binDir, `{"loggedIn": true}`)
+	writeExecutorsTOML(t, home, `[[executors]]
+name = "codex"
+command = "codex"
+
+[[executors]]
+name = "claude"
+command = "claude"
+`)
+
+	report := mustRunDoctor(t, home, binDir)
+	if report.Executors.VerifiedCount != 2 {
+		t.Fatalf("executors = %+v", report.Executors)
+	}
+	if report.Executors.RecommendedHost != "claude" {
+		t.Fatalf("recommended host = %q, want claude, first as on the install menu", report.Executors.RecommendedHost)
+	}
+	if order := hostdeps.AgentOrder(); recommendHost([]ExecutorCheck{{ID: "opencode"}, {ID: order[1]}}) != order[1] {
+		t.Fatalf("recommendHost does not follow hostdeps.AgentOrder %v", order)
+	}
+	custom := []ExecutorCheck{{ID: "my-grok", Provider: work.WorkerProviderGrok}, {ID: "my-cursor", Provider: work.WorkerProviderCursor}}
+	if got := recommendHost(custom); got != "my-cursor" {
+		t.Fatalf("custom ids rank by provider: got %q, want my-cursor (Cursor Agent before Grok)", got)
+	}
+	for _, id := range hostdeps.AgentOrder() {
+		if agentProviders[id] == "" {
+			t.Fatalf("no provider for %q", id)
+		}
+	}
+}
+
+func writeFakeClaude(t *testing.T, binDir, authStatus string) {
+	t.Helper()
+	script := fmt.Sprintf(`#!/bin/sh
+set -e
+if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then
+  echo "2.0.0 (Claude Code)"
+  exit 0
+fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  printf '%%s\n' %q
+  exit 0
+fi
+echo "unexpected: $*" >&2
+exit 1
+`, authStatus)
+	writeExec(t, filepath.Join(binDir, "claude"), script)
 }
 
 func TestAuthenticatedPreferredOverUnknown(t *testing.T) {

@@ -10,7 +10,8 @@ running as a service, updates, the app builds and uninstalling.
 - `tmux` on `PATH`; the installer and `mewla` offer to install it
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
   `cursor-agent`, `grok`, `pi` or `opencode`. One is enough; `mewla` offers
-  Claude Code and Codex when none is ready.
+  Claude Code and Codex when none is ready, and asks which one Brain uses
+  when several are.
 
 ## Install the daemon
 

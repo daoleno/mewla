@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -2438,11 +2439,14 @@ func TestServiceSnapshotAuditsProviderMismatchReplacement(t *testing.T) {
 	}
 }
 
-func TestServiceSnapshotFallsBackToCodexHost(t *testing.T) {
+func TestServiceSnapshotFallsBackToTheFirstAgentInOrder(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	previous := hostLookPath
+	hostLookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	t.Cleanup(func() { hostLookPath = previous })
 	fw := &fakeWatcher{}
 	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
@@ -2453,10 +2457,10 @@ func TestServiceSnapshotFallsBackToCodexHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.HostExecutor == nil || snapshot.HostExecutor.ID != "codex" {
+	if snapshot.HostExecutor == nil || snapshot.HostExecutor.ID != "claude" {
 		t.Fatalf("host executor = %#v", snapshot.HostExecutor)
 	}
-	if len(fw.created) != 1 || !strings.HasPrefix(fw.created[0].opts.Command, "codex") {
+	if len(fw.created) != 1 || !strings.HasPrefix(fw.created[0].opts.Command, "claude") {
 		t.Fatalf("created host = %#v", fw.created)
 	}
 }

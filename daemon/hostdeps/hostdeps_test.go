@@ -132,3 +132,22 @@ func TestAddToPathAppendsOnce(t *testing.T) {
 		t.Fatalf("PATH = %q, want the new dir last", got)
 	}
 }
+
+func TestAgentsFollowAgentOrder(t *testing.T) {
+	order := AgentOrder()
+	if order[0] != "claude" || order[1] != "codex" {
+		t.Fatalf("order = %v, want Claude Code first", order)
+	}
+	order[0] = "changed"
+	if AgentOrder()[0] != "claude" {
+		t.Fatal("AgentOrder returned its backing list")
+	}
+	last := -1
+	for _, agent := range Agents(Platform{GOOS: "linux"}) {
+		rank := AgentRank(agent.ID)
+		if rank <= last || rank == len(AgentOrder()) {
+			t.Fatalf("install menu %q out of AgentOrder", agent.ID)
+		}
+		last = rank
+	}
+}

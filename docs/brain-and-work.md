@@ -235,7 +235,11 @@ mewla brain executors --json
 mewla brain use claude
 ```
 
-The thread and its history move with Brain. In the app, Brain's ⋯ menu has
+The thread and its history move with Brain. First run asks which agent Brain
+uses when more than one is ready and keeps that answer. A start without a
+terminal (a service, CI) never asks: Brain takes the first installed agent in
+the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, and the daemon
+log names it and the `mewla brain use` command that changes it. In the app, Brain's ⋯ menu has
 **Switch executor**, **New chat** (a fresh thread), **Open terminal** (Brain's
 own Session) and **Browse workspace**.
 
