@@ -336,14 +336,21 @@ func TestSomeoneAtTheComputerPausesTheAgent(t *testing.T) {
 	if _, ok := s.Agent(); !ok {
 		t.Fatal("a pause ended the agent's control")
 	}
+	// Letting go of the keys doesn't end the pause: a retry right away waits.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "b"}); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("right after the interrupted hold: %v", err)
+	}
 
-	// A button held between actions comes up when the pause starts.
+	// A button held between actions comes up when the pause starts, and
+	// letting go of it doesn't end the pause: a retry right away is refused.
 	time.Sleep(personPause)
 	act(t, s, "%7", AgentAction{Action: "left_mouse_down", Coordinate: []int{10, 10}})
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInput()
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("while someone is at the computer: %v", err)
+	for i := 0; i < 2; i++ {
+		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "mouse_move", Coordinate: []int{20, 20}}); !errors.Is(err, ErrPersonAtComputer) {
+			t.Fatalf("try %d while someone is at the computer: %v", i, err)
+		}
 	}
 	if pointers, _ := backend.Snapshot(); pointers[len(pointers)-1].Buttons != 0 {
 		t.Fatalf("button left down: %v", pointers)
