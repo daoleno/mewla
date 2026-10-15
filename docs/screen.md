@@ -109,8 +109,9 @@ opens the right settings page.
   letting go of any key or button it holds; it carries on 10 seconds after
   their last input.
 - **Not while locked.** Agents can't use a locked Mac, and Settings says so.
-  Only someone at the Mac can unlock it; a Mac left to run agents all day
-  needs its automatic screen lock off (System Settings → Lock Screen).
+  They can use it again once it's unlocked. If agents should keep working on
+  a Mac nobody is at, its automatic screen lock decides how long they can
+  (System Settings → Lock Screen).
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
   tap away. The Mac shows a notification when an agent starts and stops using

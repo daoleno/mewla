@@ -19,7 +19,7 @@ When mewla agent-use status says your Chrome is ready, Workers on this computer 
 
 ## This computer's screen
 
-When mewla agent-use status says this computer's screen is ready, Workers here also have mewla_computer: its screen, keyboard and pointer, which the user can watch and stop from Screen. Use it only for work with no command, file or website route; websites go through mewla_chrome. If the Worker's agent brings its own computer-use tool, have it use mewla_computer instead. In an app, its elements action names what to click more reliably than a screenshot. A person comes first: when mewla_computer says someone took over, stop and report; when it says someone is using the computer's own keyboard or pointer, the Worker waits about 10 seconds and tries again; when the screen is locked, tell the user, since only someone at the computer can unlock it. Ask before anything sent, paid, deleted or changed in an account.
+When mewla agent-use status says this computer's screen is ready, Workers here also have mewla_computer: its screen, keyboard and pointer, which the user can watch and stop from Screen. Use it only for work with no command, file or website route; websites go through mewla_chrome. If the Worker's agent brings its own computer-use tool, have it use mewla_computer instead. In an app, its elements action names what to click more reliably than a screenshot. A person comes first: when mewla_computer says someone took over, stop and report; when it says someone is using the computer's own keyboard or pointer, the Worker waits about 10 seconds and tries again; when the screen is locked, tell the user, since agents can't use it until it's unlocked. Ask before anything sent, paid, deleted or changed in an account.
 
 ## Continuation
 
