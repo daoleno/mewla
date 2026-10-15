@@ -22,8 +22,9 @@ var officialWrites = map[string]map[string]bool{
 	"cloudflare": names("execute"),
 	// generate_image, edit_image and the paid generate_* tools spend the
 	// account's quota (generate_voice is free unless a paid model is named);
-	// delete_file removes a project file.
-	"onlora": names("create_project", "update_project", "write_file", "delete_file", "add_asset", "create_upload", "generate_image", "edit_image", "generate_music", "generate_voice", "generate_video"),
+	// delete_file removes a project file; update_asset changes an asset's
+	// title or note.
+	"onlora": names("create_project", "update_project", "write_file", "delete_file", "add_asset", "update_asset", "create_upload", "generate_image", "edit_image", "generate_voice"),
 }
 
 func names(values ...string) map[string]bool {
