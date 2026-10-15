@@ -101,6 +101,7 @@ import {
   HeaderBackButton,
 } from "../components/navigation/HeaderBackButton";
 import { TelegramConnectionPanel } from "../components/settings/TelegramConnectionPanel";
+import { ComputersTogether } from "../components/settings/ComputersTogether";
 import { cancelCalendarNotifications } from "../services/calendarNotifications";
 import { revokeThisDevice } from "../services/deviceRevoke";
 import { useCurrentServer } from "../store/currentServer";
@@ -655,6 +656,13 @@ export default function SettingsScreen() {
               style={styles.sectionNotice}
             />
           ) : null}
+
+          <ComputersTogether
+            key={currentServerId || "no-current-server"}
+            servers={servers}
+            currentServerId={currentServerId}
+            connected={Boolean(currentServerId) && serverConnections[currentServerId || ""] === "connected"}
+          />
 
           <SettingsSectionHeader>Channels</SettingsSectionHeader>
           {currentServerId ? (
