@@ -1,0 +1,244 @@
+name: Android Google Play
+
+# Signed Android App Bundle for Google Play: the play-store channel, so the
+# bundle has no REQUEST_INSTALL_PACKAGES, no self-update FileProvider and no
+# GitHub update check. It is signed with the existing release key, which is
+# also the Play upload key, so GitHub APK and Play installs share one identity.
+# The GitHub APK in release-artifacts.yml is unchanged.
+#
+# Manual dispatch only. artifact-only builds and verifies the AAB from any ref
+# that has the Play channel; a track upload requires an exact reviewed release
+# tag, so a versionCode is never spent on an unreleased commit. The job that
+# holds the signing key never holds the Play credential, and the reverse.
+#
+# Secrets (never commit values):
+#   ZEN_ANDROID_KEYSTORE_BASE64 / _PASSWORD, ZEN_ANDROID_KEY_ALIAS / _PASSWORD
+#     the release keystore, as in release-artifacts.yml
+#   MEWLA_PLAY_SERVICE_ACCOUNT_JSON (environment google-play)
+#     JSON key of the Play Developer API service account
+#
+# Docs: docs/ci-release.md#google-play
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build; a vX.Y.Z or vX.Y.Z-beta.N tag for a track upload"
+        required: true
+        type: string
+      destination:
+        description: "Build only, or upload the verified AAB to a Play testing track"
+        required: true
+        type: choice
+        default: artifact-only
+        options:
+          - artifact-only
+          - internal
+          - alpha
+      release_status:
+        description: "draft until the first release is rolled out by hand in Play Console"
+        required: true
+        type: choice
+        default: draft
+        options:
+          - draft
+          - completed
+
+concurrency:
+  group: android-play-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BUNDLETOOL_VERSION: "1.18.3"
+  BUNDLETOOL_SHA256: a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
+
+jobs:
+  build:
+    name: Build and verify signed Play AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      package: ${{ steps.identity.outputs.package }}
+      version: ${{ steps.identity.outputs.version }}
+      version_code: ${{ steps.identity.outputs.version_code }}
+      artifact: ${{ steps.identity.outputs.artifact }}
+    steps:
+      - name: Checkout explicit ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Validate invocation and read identity
+        id: identity
+        env:
+          MEWLA_REF: ${{ inputs.ref }}
+          MEWLA_DESTINATION: ${{ inputs.destination }}
+        run: |
+          set -euo pipefail
+          if [[ "$MEWLA_DESTINATION" != "artifact-only" ]]; then
+            git fetch --no-tags origin main
+            ./scripts/verify-release-identity.sh --tag "$MEWLA_REF"
+          fi
+          if ! grep -q -- '--aab' scripts/android-release-apk.sh || [[ ! -x scripts/verify-aab-play.py ]]; then
+            echo "error: $MEWLA_REF predates the Play channel (no --aab build or verify-aab-play.py)" >&2
+            exit 1
+          fi
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          expo = json.load(open("app/app.base.json"))["expo"]
+          print(f"package={expo['android']['package']}")
+          print(f"version={expo['version']}")
+          print(f"version_code={expo['android']['versionCode']}")
+          print(f"artifact=mewla-android-play-v{expo['version']}-{expo['android']['versionCode']}")
+          PY
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Reject Android asset resource-name collisions
+        working-directory: app
+        run: bun test androidAssetNames.test.js
+
+      - name: Android SDK, arm64 Ghostty and Gradle home
+        uses: ./.github/actions/android-native
+
+      - name: Install pinned bundletool
+        run: |
+          set -euo pipefail
+          jar="$RUNNER_TEMP/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          curl -fsSL -o "$jar" \
+            "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          echo "$BUNDLETOOL_SHA256  $jar" | sha256sum -c -
+          echo "BUNDLETOOL_JAR=$jar" >> "$GITHUB_ENV"
+
+      - name: Materialize signing keystore (temp, mode 0600)
+        id: keystore
+        env:
+          MEWLA_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MEWLA_ANDROID_KEYSTORE_BASE64:-}" ]]; then
+            echo "error: repository secret ZEN_ANDROID_KEYSTORE_BASE64 is not set" >&2
+            exit 1
+          fi
+          export MEWLA_ANDROID_KEYSTORE="${{ runner.temp }}/mewla-release.p12"
+          OUT="$(./scripts/materialize-android-keystore.sh)"
+          test -s "$OUT"
+          echo "keystore_path=${OUT}" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed Play AAB (play-store channel)
+        env:
+          MEWLA_ANDROID_DISTRIBUTION: play-store
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
+          MEWLA_ANDROID_KEYSTORE: ${{ steps.keystore.outputs.keystore_path }}
+          MEWLA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ZEN_ANDROID_KEYSTORE_PASSWORD }}
+          MEWLA_ANDROID_KEY_ALIAS: ${{ secrets.ZEN_ANDROID_KEY_ALIAS }}
+          MEWLA_ANDROID_KEY_PASSWORD: ${{ secrets.ZEN_ANDROID_KEY_PASSWORD }}
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+        run: |
+          set -euo pipefail
+          for v in MEWLA_ANDROID_KEYSTORE_PASSWORD MEWLA_ANDROID_KEY_ALIAS MEWLA_ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!v:-}" ]]; then
+              echo "error: repository secret for $v is not set" >&2
+              exit 1
+            fi
+          done
+          ./scripts/android-release-apk.sh --aab
+          AAB="dist-download/android-play/mewla-android-v${{ steps.identity.outputs.version }}-${{ steps.identity.outputs.version_code }}.aab"
+          test -f "$AAB"
+          echo "AAB_PATH=$AAB" >> "$GITHUB_ENV"
+
+      - name: ccache statistics
+        if: always()
+        run: ccache --show-stats || true
+
+      - name: Shred temporary keystore
+        if: always()
+        run: |
+          KS="${{ steps.keystore.outputs.keystore_path }}"
+          if [[ -n "${KS}" && -f "${KS}" ]]; then
+            shred -u "${KS}" 2>/dev/null || rm -f "${KS}"
+          fi
+          rm -f "${{ runner.temp }}/mewla-release.p12" || true
+
+      - name: Verify Play AAB (manifest, channel, 16 KB, ABI, notice, certificate)
+        run: ./scripts/verify-aab-play.py --bundletool "$BUNDLETOOL_JAR" "$AAB_PATH"
+
+      - name: Plan the Play upload (dry run, no credential)
+        run: |
+          ./scripts/google-play-upload.py --dry-run \
+            --aab "$AAB_PATH" \
+            --package "${{ steps.identity.outputs.package }}" \
+            --version-code "${{ steps.identity.outputs.version_code }}" \
+            --track "${{ inputs.destination == 'artifact-only' && 'internal' || inputs.destination }}" \
+            --release-status "${{ inputs.release_status }}" \
+            --release-name "${{ steps.identity.outputs.version }}"
+
+      - name: Upload verified AAB as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.identity.outputs.artifact }}
+          path: |
+            ${{ env.AAB_PATH }}
+            ${{ env.AAB_PATH }}.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  upload:
+    name: Upload to Google Play ${{ inputs.destination }}
+    needs: build
+    if: ${{ inputs.destination != 'artifact-only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: google-play
+    steps:
+      # The uploader comes from the reviewed workflow commit, not the built ref.
+      - name: Checkout reviewed release automation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: scripts/google-play-upload.py
+          sparse-checkout-cone-mode: false
+
+      - name: Download verified AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: aab
+
+      - name: Upload to the Play testing track
+        env:
+          MEWLA_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.MEWLA_PLAY_SERVICE_ACCOUNT_JSON }}
+          KEY_PATH: ${{ runner.temp }}/mewla-play-service-account.json
+        run: |
+          set -euo pipefail
+          if [[ -z "${MEWLA_PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
+            echo "error: environment secret MEWLA_PLAY_SERVICE_ACCOUNT_JSON is not set" >&2
+            exit 1
+          fi
+          (umask 077 && printf '%s' "$MEWLA_PLAY_SERVICE_ACCOUNT_JSON" > "$KEY_PATH")
+          AAB="$(find aab -maxdepth 1 -name '*.aab' -print -quit)"
+          test -n "$AAB"
+          (cd aab && sha256sum -c ./*.sha256)
+          ./scripts/google-play-upload.py \
+            --aab "$AAB" \
+            --package "${{ needs.build.outputs.package }}" \
+            --version-code "${{ needs.build.outputs.version_code }}" \
+            --track "${{ inputs.destination }}" \
+            --release-status "${{ inputs.release_status }}" \
+            --release-name "${{ needs.build.outputs.version }}" \
+            --service-account "$KEY_PATH"
+
+      - name: Remove the service account key
+        if: always()
+        run: rm -f "${{ runner.temp }}/mewla-play-service-account.json"
