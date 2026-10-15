@@ -10,8 +10,9 @@ installer and `mewla update` pick the highest version.
 
 ## Known issues
 
-- **iOS**: the TestFlight preview is awaiting Apple's beta review, so the public
-  link may not let you install yet. Build from source in the meantime; see
+- **iOS**: distributed as a TestFlight beta,
+  [Mewla Preview](https://testflight.apple.com/join/nMQheDCE), not yet on the
+  App Store. You need Apple's TestFlight app; see
   [Install](../install-daemon.md#ios).
 - **Android**: distributed as an APK outside the Play Store. Android asks to
   allow installs from your browser or file manager, and Play Protect may warn.
