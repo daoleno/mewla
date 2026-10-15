@@ -90,6 +90,11 @@ mewla screen status           # support, permissions, allowed devices, keep-awak
 mewla screen disable          # turn Screen off; every device must be allowed again
 mewla screen enable [-allow-sleep]
 
+mewla computers list|status            # other Mewla computers this Brain can hand work to
+mewla computers send mac "…"           # hand a task (or an answer) to that computer's Brain
+mewla computers invite | add <invite>  # connect two computers without the app
+mewla computers remove mac
+
 mewla telegram setup          # asks for the bot token, prints a one-time link to bind your chat
 mewla telegram status|enable|disable
 
