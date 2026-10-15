@@ -132,7 +132,7 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	}
 	response, err := control.CallWithTimeout(socketPath, control.Request{Type: "watch", WatchRequest: &request}, timeout)
 	if err != nil {
-		return err
+		return controlError(cfg.stateDir, err)
 	}
 	if cfg.json || !response.OK || response.Watch == nil {
 		return writeControlResponse(os.Stdout, response, true)
@@ -152,7 +152,7 @@ func resolveWatchProject(cfg cliConfig, value string) (string, error) {
 	}
 	response, err := control.Call(socketPath, control.Request{Type: "watch", WatchRequest: &watch.Request{Action: "projects", ProjectID: value}})
 	if err != nil {
-		return "", err
+		return "", controlError(cfg.stateDir, err)
 	}
 	if response.Watch == nil || len(response.Watch.Projects) != 1 {
 		return "", fmt.Errorf("no project named %q", value)

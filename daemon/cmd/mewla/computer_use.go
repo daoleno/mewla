@@ -117,7 +117,7 @@ func runComputerMCP(args []string, stderr io.Writer) error {
 		// Longer than the daemon's own bound on one action (a wait included).
 		resp, err := control.CallWithTimeout(socket, control.Request{Type: "computer", WorkerID: task, ComputerAction: &in}, 60*time.Second)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, controlError(cfg.stateDir, err)
 		}
 		if !resp.OK || resp.ComputerResult == nil {
 			message := "computer use failed"

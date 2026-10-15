@@ -2,10 +2,16 @@ package control
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"syscall"
 	"time"
 )
+
+// ErrNotRunning means no Mewla answers on the control socket: it was never
+// started, or it stopped and left the socket behind.
+var ErrNotRunning = errors.New("Mewla is not running")
 
 type CallResult struct {
 	Response              Response
@@ -38,6 +44,9 @@ func CallWithTimeoutResult(
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
 	if err != nil {
+		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
+			return CallResult{}, fmt.Errorf("%w (%v)", ErrNotRunning, err)
+		}
 		return CallResult{}, fmt.Errorf("connect to Mewla control socket: %w", err)
 	}
 	defer conn.Close()

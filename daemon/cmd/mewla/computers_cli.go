@@ -83,7 +83,7 @@ func runComputersCommand(args []string, stderr io.Writer) error {
 	cfg := cliConfig{stateDir: resolveCLIStateDir(stateDir)}
 	resp, err := callControl(cfg, control.Request{Type: "computers", ComputersRequest: &req})
 	if err != nil {
-		return fmt.Errorf("Mewla is not running here; start it with mewla: %w", err)
+		return err
 	}
 	if outputJSON || !resp.OK || resp.Computers == nil {
 		return writeControlResponse(os.Stdout, resp, outputJSON)
