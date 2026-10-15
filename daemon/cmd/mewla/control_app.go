@@ -106,6 +106,12 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return control.Response{OK: true, Connections: &result}
 	case "computer":
 		return a.handleComputerControl(req)
+	case "agent_use":
+		if a.agentUse == nil {
+			return control.ErrorResponse("agent_use_unavailable", "Agent use is not running")
+		}
+		status := a.agentUse.Refresh()
+		return control.Response{OK: true, AgentUse: &status}
 	case "computers":
 		if req.ComputersRequest == nil {
 			return control.ErrorResponse("invalid_request", "Computers request is required")

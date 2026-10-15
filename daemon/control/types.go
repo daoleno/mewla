@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/browser"
@@ -112,6 +113,7 @@ type Response struct {
 	Connections        *connections.Response                    `json:"connections,omitempty"`
 	Watch              *watch.Response                          `json:"watch,omitempty"`
 	Computers          *computers.Result                        `json:"computers,omitempty"`
+	AgentUse           *agentuse.Status                         `json:"agent_use,omitempty"`
 	ComputerResult     *screen.AgentResult                      `json:"computer_result,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	OK                 bool                                     `json:"ok"`
