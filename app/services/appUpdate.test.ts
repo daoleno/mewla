@@ -5,11 +5,14 @@ import nacl from "tweetnacl";
 import {
   appUpdatePending,
   appUpdateStatus,
+  AUTO_CHECK_INTERVAL_MS,
+  MANUAL_CHECK_COOLDOWN_MS,
   compareVersions,
   isNewerVersion,
   parseAndroidUpdateManifest,
   publicKeyFromPKIX,
   resolveDistributionChannel,
+  shouldCheckForUpdate,
   UPDATE_PUBLIC_KEY_PKIX,
   verifyAndroidUpdateManifest,
 } from "./appUpdate";
@@ -170,9 +173,17 @@ describe("distribution channel", () => {
 describe("About row status", () => {
   const update = parseAndroidUpdateManifest(manifestText())!;
 
-  test("stays silent until a newer release exists", () => {
+  test("always says where an updatable build stands, and a settled check can be tapped", () => {
+    expect(appUpdateStatus({ kind: "hidden" })).toEqual({ text: null, actionable: false });
+    expect(appUpdateStatus({ kind: "idle" })).toEqual({ text: "Checking for updates…", actionable: false });
+    expect(appUpdateStatus({ kind: "checking" })).toEqual({ text: "Checking for updates…", actionable: false });
+    expect(appUpdateStatus({ kind: "current" })).toEqual({ text: "Up to date · Tap to check", actionable: true });
+    expect(appUpdateStatus({ kind: "checkFailed" })).toEqual({
+      text: "Couldn't check for updates · Tap to retry",
+      actionable: true,
+    });
+    // Only a waiting release dots Settings.
     for (const kind of ["hidden", "idle", "checking", "current", "checkFailed"] as const) {
-      expect(appUpdateStatus({ kind })).toEqual({ text: null, actionable: false });
       expect(appUpdatePending({ kind })).toBe(false);
     }
   });
@@ -187,8 +198,53 @@ describe("About row status", () => {
       actionable: false,
     });
     expect(appUpdateStatus({ kind: "ready", update, fileName: update.fileName }).text).toBe("Install v0.2.9");
-    expect(appUpdateStatus({ kind: "failed", update, message: "x" }).text).toBe("Couldn't update · Tap to retry");
+    expect(appUpdateStatus({ kind: "failed", update, message: "x" })).toEqual({
+      text: "Couldn't update · Tap to retry",
+      actionable: true,
+    });
+    expect(appUpdateStatus({ kind: "needsPermission", update, fileName: update.fileName })).toEqual({
+      text: "Allow Mewla to install apps · Tap to continue",
+      actionable: true,
+    });
     expect(appUpdatePending({ kind: "available", update })).toBe(true);
     expect(appUpdatePending({ kind: "downloading", update, progress: 0 })).toBe(true);
+  });
+});
+
+describe("update check pacing", () => {
+  const update = parseAndroidUpdateManifest(manifestText())!;
+  const last = 1_000_000;
+
+  test("the first check always runs", () => {
+    expect(shouldCheckForUpdate({ kind: "idle" }, 0, last, false)).toBe(true);
+  });
+
+  test("automatic checks wait six hours, after success or failure", () => {
+    for (const kind of ["current", "checkFailed"] as const) {
+      expect(shouldCheckForUpdate({ kind }, last, last + AUTO_CHECK_INTERVAL_MS - 1, false)).toBe(false);
+      expect(shouldCheckForUpdate({ kind }, last, last + AUTO_CHECK_INTERVAL_MS, false)).toBe(true);
+    }
+  });
+
+  test("a tap checks right away but not again within the cooldown", () => {
+    for (const kind of ["current", "checkFailed"] as const) {
+      expect(shouldCheckForUpdate({ kind }, last, last + MANUAL_CHECK_COOLDOWN_MS - 1, true)).toBe(false);
+      expect(shouldCheckForUpdate({ kind }, last, last + MANUAL_CHECK_COOLDOWN_MS, true)).toBe(true);
+    }
+  });
+
+  test("never checks while busy or once an update is waiting", () => {
+    const later = last + AUTO_CHECK_INTERVAL_MS;
+    for (const state of [
+      { kind: "hidden" },
+      { kind: "checking" },
+      { kind: "available", update },
+      { kind: "downloading", update, progress: 0.5 },
+      { kind: "ready", update, fileName: update.fileName },
+      { kind: "failed", update, message: "x" },
+    ] as const) {
+      expect(shouldCheckForUpdate(state, last, later, true)).toBe(false);
+      expect(shouldCheckForUpdate(state, last, later, false)).toBe(false);
+    }
   });
 });

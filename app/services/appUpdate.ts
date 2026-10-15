@@ -191,19 +191,42 @@ export function appUpdatePending(state: AppUpdateState): boolean {
   return "update" in state;
 }
 
+// Automatic checks (launch, return to foreground) run at most this often.
+export const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// A tap checks right away, but not again within this window.
+export const MANUAL_CHECK_COOLDOWN_MS = 3 * 1000;
+
+/**
+ * Whether a check may start now. Only a settled, update-free state checks;
+ * automatic checks keep the six-hour rhythm, a tap only waits out the cooldown.
+ */
+export function shouldCheckForUpdate(
+  state: AppUpdateState,
+  lastCheckAt: number,
+  now: number,
+  manual: boolean,
+): boolean {
+  if (state.kind === "idle") return true;
+  if (state.kind !== "current" && state.kind !== "checkFailed") return false;
+  return now - lastCheckAt >= (manual ? MANUAL_CHECK_COOLDOWN_MS : AUTO_CHECK_INTERVAL_MS);
+}
+
 /**
  * The About row's status line, and whether tapping the row does something.
- * Checking is silent: until a newer release exists the row is just the
- * version.
+ * Builds that can update themselves always say where they stand, and a tap
+ * checks again; builds that can't show the version only.
  */
 export function appUpdateStatus(state: AppUpdateState): { text: string | null; actionable: boolean } {
   switch (state.kind) {
     case "hidden":
+      return { text: null, actionable: false };
     case "idle":
     case "checking":
+      return { text: "Checking for updates…", actionable: false };
     case "current":
+      return { text: "Up to date · Tap to check", actionable: true };
     case "checkFailed":
-      return { text: null, actionable: false };
+      return { text: "Couldn't check for updates · Tap to retry", actionable: true };
     case "available":
       return { text: `Update to v${state.update.version}`, actionable: true };
     case "downloading":
