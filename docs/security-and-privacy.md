@@ -15,7 +15,7 @@ Mewla separates three things:
    Every later request is signed by the device and checked by the daemon.
 
 There is no long-lived shared secret for normal traffic, and no separate admin
-role: every paired device can list and revoke devices, including itself.
+role: every paired phone or browser can list and revoke devices, including itself.
 
 ## What a paired device can do
 
@@ -29,6 +29,23 @@ screen, but only after someone at the computer allows that device. The daemon
 captures the screen itself and serves it over the device's signed connection;
 no screen-sharing port is opened. `mewla screen disable` at the computer closes
 every viewer and forgets every allowed device.
+
+## Your other computers
+
+A computer you connect under **Working together** (or with
+`mewla computers add`) gets its own device key of a separate kind. That key
+opens only the computer channel: it can send messages to this computer's
+Brain and receive the answers, and nothing else. No terminal, files, Screen
+or device management. Each side pins the other's key, and plain HTTP outside
+Tailscale or loopback is refused, because the channel's messages are not
+signed one by one after it opens.
+
+A message from another computer reaches Brain marked as relayed by your other
+Brain, with your own words quoted separately. Brain does not treat it as your
+consent: before payments, messages to other people, deletion, account changes
+or installing software it asks you through the Brain you are talking to.
+`mewla computers remove` or `mewla devices revoke` ends the access at once.
+See [Your other computers](computers.md).
 
 ## What to expose
 

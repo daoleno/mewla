@@ -20,6 +20,7 @@ New here? [Get started](get-started.md) is one path from install to your first g
 - [Calendar](calendar.md): reminders and scheduled actions that run as Work.
 - [Plugins](plugins.md): let Brain read Linear, Notion, GitHub and more, and change them with your consent.
 - [Screen](screen.md): see and control your Mac's screen from the phone.
+- [Your other computers](computers.md): let Brain hand a task to your Mac, Mac mini or another computer running Mewla.
 
 ## Configure it
 
