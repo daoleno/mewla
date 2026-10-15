@@ -108,7 +108,7 @@ func TestRenderLaunchdPlistIsWellFormedAndEscaped(t *testing.T) {
 		"<key>AbandonProcessGroup</key>\n\t<true/>",
 		"<string>Aqua</string>",
 		"<key>AssociatedBundleIdentifiers</key>\n\t<string>com.daoleno.mewla</string>",
-		"<key>SuccessfulExit</key>\n\t\t<false/>",
+		"<key>KeepAlive</key>\n\t<true/>",
 	} {
 		if !strings.Contains(plist, want) {
 			t.Fatalf("plist lacks %q:\n%s", want, plist)
