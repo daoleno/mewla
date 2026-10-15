@@ -56,6 +56,7 @@ import {
   markOnboarded,
 } from "../services/storage";
 import { importConnection } from "../services/importConnection";
+import { confirmPairingScopeFor } from "../services/confirmPairingScope";
 import { readInitialConnectLink } from "../services/initialConnectLink";
 import { EnrollmentApprovalHost } from "../components/enrollment/EnrollmentApprovalHost";
 import { PairingCancelledError } from "../services/pairingScope";
@@ -228,6 +229,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
 
       try {
         const savedServer = await importConnection(trimmed, {
+          confirmScope: () => confirmPairingScopeFor(trimmed),
           onImported: async (importedServer) => {
             await refreshServers(importedServer.id);
             routerRef.current.replace({

@@ -26,6 +26,7 @@ value to every command that should use it.
 ## Pair and manage devices
 
 ```sh
+mewla open [--print]          # open the web UI in this computer's browser, paired; print its addresses (alias: mewla web)
 mewla pair [address]          # one-time code: phone QR and a short link for this computer's browser
 mewla pair --details          # the same code as paste links for phone and every browser address
 mewla address list [--json]   # every address phones and browsers can use

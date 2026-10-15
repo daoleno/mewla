@@ -64,7 +64,8 @@ on this computer. Install the app (the Android APK from
 [Releases](https://github.com/daoleno/mewla/releases), or
 [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)), open it, tap
 **Mewla already running? Scan its code** and scan. The code works once and
-expires; `mewla pair` prints a fresh one. Android asks you
+expires; `mewla pair` prints a fresh one. For the web UI on this computer, run
+`mewla open`: it opens the browser already paired. Android asks you
 to allow installs from your browser or file manager the first time you open
 the APK; allow it for that app, then install.
 

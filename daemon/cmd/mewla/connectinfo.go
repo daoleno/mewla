@@ -268,8 +268,9 @@ func phoneReachLine(address string) string {
 // printPairing is the one-screen pairing view: status, the phone QR with
 // where to scan it, and a short link for this computer's browser. The paste
 // link, other addresses and revoking live in printPairingDetails.
-func printPairing(w io.Writer, status pairingStatus, links pairingLinks, detailsCommand string) {
+func printPairing(w io.Writer, status pairingStatus, links pairingLinks, stateDir string) {
 	style := styleForWriter(w)
+	detailsCommand := pairCommand(stateDir) + " --details"
 	printStatus(w, style, status)
 	fmt.Fprintln(w)
 	if links.phoneLink != "" {
@@ -304,6 +305,7 @@ func printPairing(w io.Writer, status pairingStatus, links pairingLinks, details
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, style.bold("Browser on this computer"))
 		fmt.Fprintln(w, "  "+browser)
+		fmt.Fprintln(w, "  "+style.dim("Or let Mewla open and pair it: ")+style.cmd(openCommand(stateDir)))
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, style.dim("Paste link, other addresses, revoking a device: ")+style.cmd(detailsCommand))
@@ -320,6 +322,7 @@ func printRunningStatus(w io.Writer, stateDir string, devices int) {
 	}
 	printStatus(w, style, pairingStatusFor(resolved, devices))
 	fmt.Fprintln(w)
+	fmt.Fprintln(w, style.dim("Open the web UI here: ")+style.cmd(openCommand(stateDir)))
 	fmt.Fprintln(w, style.dim("Pair another phone or browser: ")+style.cmd(pairCommand(stateDir)))
 	fmt.Fprintln(w)
 }
@@ -388,7 +391,7 @@ func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbo
 	if err != nil {
 		return false, err
 	}
-	printPairing(w, pairingStatusFor(manager.StorageDir(), 0), links, pairCommand(stateDir)+" --details")
+	printPairing(w, pairingStatusFor(manager.StorageDir(), 0), links, stateDir)
 	return true, nil
 }
 
@@ -452,6 +455,9 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEna
 	if hint := remoteHint(dataDir); hint != "" && !linkEnabled {
 		fmt.Fprintf(w, "  %-11s %s\n", "Anywhere", style.cmd("mewla login"))
 	}
+	if err == nil && (isLoopbackHost(host) || isWildcardHost(host)) {
+		fmt.Fprintf(w, "  %-11s %s\n", "Browser", style.cmd(openCommand(stateDir)))
+	}
 	if linkEnabled || len(phone) > 0 {
 		fmt.Fprintf(w, "  %-11s %s\n\n", "Pair", style.cmd(pairCommand(stateDir)))
 		return
@@ -459,7 +465,6 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEna
 	if err == nil && isWildcardHost(host) {
 		fmt.Fprintln(w, "  No Wi-Fi/LAN or Tailscale address found.")
 	}
-	fmt.Fprintf(w, "  %-11s %s, then open the browser link\n", "Browser", style.cmd(pairCommand(stateDir)))
 	fmt.Fprintf(w, "  %-11s restart with %s, or add an HTTPS address (%s)\n\n", "Phone", style.cmd("mewla --lan"), style.cmd("mewla address add"))
 }
 

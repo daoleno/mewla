@@ -81,7 +81,7 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		if errors.Is(err, doctor.ErrNotReady) || errors.Is(err, errDepsMissing) {
+		if errors.Is(err, doctor.ErrNotReady) || errors.Is(err, errDepsMissing) || errors.Is(err, errMewlaNotRunning) {
 			os.Exit(1)
 		}
 		if isSetupUserError(err) {
@@ -100,6 +100,8 @@ func run(args []string, stderr io.Writer) error {
 			return runDaemon(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
+		case "open", "web":
+			return runOpenCommand(args[1:], stderr)
 		case "doctor":
 			return runDoctorCommand(args[1:], stderr)
 		case "deps":
@@ -2093,7 +2095,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		return nil
 	}
 	devices, _ := listDevices(cfg.stateDir)
-	printPairing(stderr, pairingStatusFor(stateDir, len(devices)), links, pairCommand(cfg.stateDir)+" --details")
+	printPairing(stderr, pairingStatusFor(stateDir, len(devices)), links, cfg.stateDir)
 	return nil
 }
 
@@ -2186,6 +2188,7 @@ Start
 Connect a phone or browser
   login     Sign in so your phone and any browser reach this computer from anywhere
   logout    Turn remote access off for this computer
+  open      Open the web UI in this computer's browser (alias: web)
   pair      Show a one-time QR code and links to pair a new phone or browser
   address   List, add or remove the addresses phones and browsers use
   devices   List paired phones and browsers; approve, deny or revoke them
