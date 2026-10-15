@@ -111,7 +111,11 @@ opens the right settings page.
   agent is done, the screen opens by itself. While you view it, agents wait.
   Someone using the Mac's own keyboard or trackpad pauses the agent at once,
   letting go of any key or button it holds; it carries on 10 seconds after
-  their last input.
+  their last input. Work in an app behind the one in front goes on meanwhile:
+  reading it, pressing or filling in its controls and typing into it alone
+  don't touch the pointer or keyboard in use. Anything on the screen itself,
+  or in the app in front, waits. **Take over**, **Stop**, the switch and a
+  locked screen stop all of it.
 - **Not while locked.** Agents can't use a locked Mac, and Settings says so.
   They can use it again once it's unlocked. If agents should keep working on
   a Mac nobody is at, its automatic screen lock decides how long they can

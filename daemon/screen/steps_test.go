@@ -64,9 +64,10 @@ func TestAgentRunsStepsInOneCall(t *testing.T) {
 		t.Fatal("nested steps")
 	}
 
-	// Someone at the computer stops the batch at the next step.
+	// Someone at the computer stops the batch at the next step on the app
+	// in front.
 	backend.PersonInput()
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: []AgentAction{{Action: "app_state", App: "Safari"}}}); err == nil || !strings.Contains(err.Error(), ErrPersonAtComputer.Error()) {
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: []AgentAction{{Action: "app_state", App: "Notes"}}}); err == nil || !strings.Contains(err.Error(), ErrPersonAtComputer.Error()) {
 		t.Fatalf("person: %v", err)
 	}
 
