@@ -87,15 +87,19 @@ tap turns them all off. When the service still has to approve changes, All
 tools leaves them off and reads on once everything else is allowed; turning on
 Make changes asks the service first.
 
-A service can add or change its tools at any time. Mewla picks up the new list
-on the next call (or when an MCP server announces it), and tools that did not
-change keep working. A new tool, or a new version of a tool you had allowed,
-waits for you: Extensions and the service's page show **<Service> updated N
-tools** with the tool names, and one **Confirm** allows exactly those. Until
-then Brain gets "this tool was updated and needs confirmation", never a
-sign-in error, and the account stays **Connected**. A changed tool you had
-blocked stays blocked without asking. A tool the service removes loses its
-permission.
+A service can add or change its tools at any time. For an MCP service, Mewla
+reads the list again on every call, when it announces a change, when you open
+the service's page or Brain describes a tool (at most once a minute), and
+whenever Brain asks for updates. Tools that did not change keep working. A new
+tool, or a new version of a tool you had allowed, waits for you: Extensions and
+the service's page show **<Service> updated N tools** with the tool names, and
+one **Confirm** allows exactly those. A new version counts even when only the
+description changed, because the description is what Brain follows. Until then
+Brain gets "this tool was updated", with the `confirm-updates` command that
+clears every waiting update on the account, never a sign-in error, and the
+account stays **Connected**. A changed tool you had blocked stays blocked
+without asking, and a tool that changes back to the version you allowed needs
+nothing. A tool the service removes leaves the list and loses its permission.
 
 Permission is not an instruction. Even with changes allowed, Brain should send
 messages or update records only when the task you gave it calls for that.
@@ -210,9 +214,9 @@ Each call is one bounded request; nothing pages automatically.
   the call may already have run: Mewla never retries it, and you should check
   its state with a read tool before calling again. Calls on the same account
   run side by side.
-- **Updates.** `updates` shows tools waiting for confirmation;
-  `confirm-updates` and `dismiss-updates` act on the listed tools, all or
-  none, and only with the person's consent.
+- **Updates.** `updates` asks the service for its current tools and shows
+  those waiting for confirmation; `confirm-updates` and `dismiss-updates` act
+  on the listed tools, all or none, and only with the person's consent.
 
 ## Where credentials live
 
