@@ -47,6 +47,7 @@ import { useThemeContext, type ResolvedTheme } from "../theme";
 import { DARK_APP_COLORS } from "../theme/primitives";
 import { appVersion } from "../constants/appVersion";
 import { appUpdateStatus } from "../services/appUpdate";
+import { PRIVACY_POLICY_URL, SUPPORT_URL, openAboutPage } from "../services/aboutPages";
 import { useAppUpdate } from "../services/useAppUpdate";
 import { importConnection } from "../services/importConnection";
 import { PairingCancelledError } from "../services/pairingScope";
@@ -679,6 +680,26 @@ export default function SettingsScreen() {
           <SettingsSectionHeader>About</SettingsSectionHeader>
           <ListSection>
             <AboutAppRow />
+            <ListRow
+              title="Privacy Policy"
+              icon="shield-check"
+              accessory="chevron"
+              accessibilityRole="link"
+              onPress={() => void openAboutPage(PRIVACY_POLICY_URL)}
+            />
+            <ListRow
+              title="Support"
+              icon="help"
+              accessory="chevron"
+              accessibilityRole="link"
+              onPress={() => void openAboutPage(SUPPORT_URL)}
+            />
+            <ListRow
+              title="Open-source Licenses"
+              icon="document-text"
+              accessory="chevron"
+              onPress={() => router.push("/settings/licenses")}
+            />
           </ListSection>
         </View>
       </ScrollView>
