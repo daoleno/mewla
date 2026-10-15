@@ -894,3 +894,51 @@ func TestOneSourceIPHoldsAtMostItsShareOfARoute(t *testing.T) {
 		t.Fatalf("a share above the route cap: err=%v", err)
 	}
 }
+
+// The connector sees only EOF when the relay drops a control connection, and
+// admission rejections were not logged at all; both must leave a line that
+// names the cause without aliases, tickets or the route ID itself.
+func TestRelayLogsUnansweredControlAndAdmissionRejections(t *testing.T) {
+	var mu sync.Mutex
+	var lines []string
+	fixture := startRelayFixture(t, func(config *Config) {
+		config.Logf = func(format string, args ...any) {
+			mu.Lock()
+			lines = append(lines, fmt.Sprintf(format, args...))
+			mu.Unlock()
+		}
+	})
+	logged := func(prefix string) string {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, line := range lines {
+			if strings.HasPrefix(line, prefix) {
+				return line
+			}
+		}
+		return ""
+	}
+
+	conn, err := net.Dial("tcp", fixture.connectorAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for logged("relay control_unanswered") == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if line := logged("relay control_unanswered"); !strings.Contains(line, "cause=closed_by_connector") {
+		t.Fatalf("unanswered control line = %q", line)
+	}
+
+	manager := newDaemonKey(t)
+	routeID := strings.Repeat("ab", 16)
+	fixture.requireRejected(t, linkRequest(t, manager, linkproto.TypeAdmissionRequest, routeID, "", func(message *linkproto.Message) {
+		message.TTLSeconds = 60
+	}), "")
+	line := logged("relay admission_rejected")
+	if !strings.Contains(line, "step=request route=") || strings.Contains(line, routeID) {
+		t.Fatalf("admission rejection line = %q", line)
+	}
+}

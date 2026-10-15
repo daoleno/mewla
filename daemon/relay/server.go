@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -132,6 +133,8 @@ type Server struct {
 	sweptEntries    map[string]*atomic.Uint64
 	capacityLogged  map[string]*atomic.Int64
 	rejectionLogged atomic.Int64
+	admissionLogged atomic.Int64
+	unansweredLog   atomic.Int64
 
 	listenersMu sync.Mutex
 	listeners   []net.Listener
@@ -737,10 +740,12 @@ func (server *Server) handleConnectorWithRelease(
 			_ = conn.Close()
 		}
 	}()
-	_ = conn.SetDeadline(time.Now().Add(server.config.HandshakeTimeout))
+	acceptedAt := time.Now()
+	_ = conn.SetDeadline(acceptedAt.Add(server.config.HandshakeTimeout))
 	message, err := linkproto.ReadMessage(conn)
 	if err != nil {
 		outcome.reject(server.contextRejection(ctx, rejectionProtocol))
+		server.logControlUnanswered(err, time.Since(acceptedAt))
 		return
 	}
 
@@ -781,13 +786,17 @@ func (server *Server) handleConnectorWithRelease(
 		server.runRouteSession(ctx, session)
 	case linkproto.TypeAdmissionRequest:
 		if err := server.verifySignedRequest(message); err != nil {
-			outcome.reject(rejectionReasonForError(err, rejectionAuth))
+			reason := rejectionReasonForError(err, rejectionAuth)
+			outcome.reject(reason)
+			server.logAdmissionRejected("request", message.RouteID, reason)
 			_ = writeProtocolError(conn, "admission_rejected", err.Error())
 			return
 		}
 		alias, expiresAt, err := server.createAdmission(message)
 		if err != nil {
-			outcome.reject(rejectionReasonForError(err, rejectionTicket))
+			reason := rejectionReasonForError(err, rejectionTicket)
+			outcome.reject(reason)
+			server.logAdmissionRejected("request", message.RouteID, reason)
 			_ = writeProtocolError(conn, "admission_rejected", err.Error())
 			return
 		}
@@ -804,12 +813,16 @@ func (server *Server) handleConnectorWithRelease(
 		outcome.succeed()
 	case linkproto.TypeAdmissionConsume:
 		if err := server.verifySignedRequest(message); err != nil {
-			outcome.reject(rejectionReasonForError(err, rejectionAuth))
+			reason := rejectionReasonForError(err, rejectionAuth)
+			outcome.reject(reason)
+			server.logAdmissionRejected("consume", message.RouteID, reason)
 			_ = writeProtocolError(conn, "admission_rejected", err.Error())
 			return
 		}
 		if err := server.consumeAdmission(message); err != nil {
-			outcome.reject(rejectionReasonForError(err, rejectionTicket))
+			reason := rejectionReasonForError(err, rejectionTicket)
+			outcome.reject(reason)
+			server.logAdmissionRejected("consume", message.RouteID, reason)
 			_ = writeProtocolError(conn, "admission_rejected", err.Error())
 			return
 		}
@@ -1989,6 +2002,39 @@ func (server *Server) logRouteRejected(routeID, reason string) {
 	if server.logAllowed(&server.rejectionLogged) {
 		server.logf("route_rejected route=%s reason=%s", routeTag(routeID), reason)
 	}
+}
+
+// logAdmissionRejected names the route only by its hash tag; aliases,
+// tickets and grants never reach the log.
+func (server *Server) logAdmissionRejected(step, routeID, reason string) {
+	if server.logAllowed(&server.admissionLogged) {
+		server.logf("admission_rejected step=%s route=%s reason=%s", step, routeTag(routeID), reason)
+	}
+}
+
+// logControlUnanswered records a control connection closed before it sent a
+// request. The connector then sees only EOF, so this is the relay's side of
+// that story: how long it waited and why reading stopped.
+func (server *Server) logControlUnanswered(err error, waited time.Duration) {
+	if !server.logAllowed(&server.unansweredLog) {
+		return
+	}
+	cause := "protocol"
+	switch {
+	case isTimeout(err):
+		cause = "handshake_timeout"
+	case errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF):
+		cause = "closed_by_connector"
+	case isTLSError(err):
+		cause = "tls"
+	}
+	server.logf("control_unanswered cause=%s waited=%s", cause, waited.Round(10*time.Millisecond))
+}
+
+func isTLSError(err error) bool {
+	var record tls.RecordHeaderError
+	var alert tls.AlertError
+	return errors.As(err, &record) || errors.As(err, &alert) || strings.Contains(err.Error(), "tls:")
 }
 
 // logAllowed rate-limits one log stream so a flood of rejections cannot turn

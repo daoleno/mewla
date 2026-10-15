@@ -6,6 +6,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -301,7 +303,12 @@ func (connector *Connector) runRegisteredRelay(
 			case connector.streams <- struct{}{}:
 				go func() {
 					defer func() { <-connector.streams }()
-					_ = connector.serveStream(ctx, selected.candidate, message)
+					err := connector.serveStream(ctx, selected.candidate, message)
+					// A pairing that the phone reports as failed is otherwise
+					// invisible here: say what happened to its one-time stream.
+					if err != nil && message.Alias != "" {
+						log.Printf("Mewla Link pairing stream via %s ended early: %v", selected.candidate.Name, err)
+					}
 				}()
 			default:
 				// The relay enforces a short attach deadline and returns a
@@ -448,6 +455,9 @@ func (connector *Connector) pairingAdmissionHandler(
 		}
 		consumeOnce.Do(func() {
 			consumeErr = connector.consumeAdmission(ctx, candidate, open)
+			if consumeErr != nil {
+				log.Printf("Mewla Link pairing admission via %s was not committed: %v", candidate.Name, consumeErr)
+			}
 		})
 		if consumeErr != nil {
 			http.Error(
@@ -466,11 +476,6 @@ func (connector *Connector) consumeAdmission(
 	candidate RelayCandidate,
 	open linkproto.Message,
 ) error {
-	conn, err := dialControl(ctx, connector.config, candidate)
-	if err != nil {
-		return fmt.Errorf("dial relay admission commit: %w", err)
-	}
-	defer conn.Close()
 	message, err := signedRequest(
 		ctx,
 		connector.auth,
@@ -487,12 +492,9 @@ func (connector *Connector) consumeAdmission(
 	message.Signature = connector.auth.CreateLinkSignature(
 		linkproto.SignaturePayload(message),
 	)
-	if err := linkproto.WriteMessage(conn, message); err != nil {
-		return err
-	}
-	response, err := linkproto.ReadMessage(conn)
+	response, err := controlExchange(ctx, connector.config, candidate, message)
 	if err != nil {
-		return err
+		return fmt.Errorf("relay admission commit: %w", err)
 	}
 	if response.Type == linkproto.TypeError {
 		return errors.New(response.Message)
@@ -527,11 +529,6 @@ func IssueAdmissions(
 	offers := make([]AdmissionOffer, 0, len(normalized.Candidates))
 	var failures []string
 	for _, candidate := range normalized.Candidates {
-		conn, dialErr := dialControl(ctx, normalized, candidate)
-		if dialErr != nil {
-			failures = append(failures, candidate.Name+": "+dialErr.Error())
-			continue
-		}
 		message, messageErr := signedRequest(
 			ctx,
 			authManager,
@@ -540,14 +537,10 @@ func IssueAdmissions(
 			linkproto.TypeAdmissionRequest,
 			ttl,
 		)
-		if messageErr == nil {
-			messageErr = linkproto.WriteMessage(conn, message)
-		}
 		var response linkproto.Message
 		if messageErr == nil {
-			response, messageErr = linkproto.ReadMessage(conn)
+			response, messageErr = controlExchange(ctx, normalized, candidate, message)
 		}
-		_ = conn.Close()
 		if messageErr != nil {
 			failures = append(failures, candidate.Name+": "+messageErr.Error())
 			continue
@@ -589,11 +582,9 @@ func registerRelay(
 	authManager *auth.Manager,
 	identity *TransportIdentity,
 ) (*registeredRelay, error) {
-	startedAt := time.Now()
-	conn, err := dialControl(ctx, config, candidate)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", candidate.Name, err)
-	}
+	// Sign, which may refresh the hosted grant from the account service,
+	// before dialing: the relay closes a control connection that has not
+	// sent its request within its handshake timeout.
 	message, err := signedRequest(
 		ctx,
 		authManager,
@@ -602,9 +593,15 @@ func registerRelay(
 		linkproto.TypeRegister,
 		0,
 	)
-	if err == nil {
-		err = linkproto.WriteMessage(conn, message)
+	if err != nil {
+		return nil, fmt.Errorf("%s registration: %w", candidate.Name, err)
 	}
+	startedAt := time.Now()
+	conn, err := dialControl(ctx, config, candidate)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", candidate.Name, err)
+	}
+	err = linkproto.WriteMessage(conn, message)
 	var response linkproto.Message
 	if err == nil {
 		response, err = linkproto.ReadMessage(conn)
@@ -674,6 +671,40 @@ func signedRequest(
 		linkproto.SignaturePayload(message),
 	)
 	return message, nil
+}
+
+// controlExchange sends one signed request on a fresh control connection
+// and reads the relay's answer. The request is signed before dialing so a
+// slow grant refresh never eats the relay's handshake timeout, and a failure
+// names the step and time it took: a relay that closes without an answer
+// otherwise surfaces as a bare EOF.
+func controlExchange(
+	ctx context.Context,
+	config ConnectorConfig,
+	candidate RelayCandidate,
+	message linkproto.Message,
+) (linkproto.Message, error) {
+	startedAt := time.Now()
+	conn, err := dialControl(ctx, config, candidate)
+	if err != nil {
+		return linkproto.Message{}, fmt.Errorf("connect to relay %s: %w", candidate.ControlAddress, err)
+	}
+	defer conn.Close()
+	if err := linkproto.WriteMessage(conn, message); err != nil {
+		return linkproto.Message{}, fmt.Errorf("send request to relay after %s: %w", elapsedSince(startedAt), err)
+	}
+	response, err := linkproto.ReadMessage(conn)
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return linkproto.Message{}, fmt.Errorf("relay closed the connection without answering after %s (%w)", elapsedSince(startedAt), err)
+	}
+	if err != nil {
+		return linkproto.Message{}, fmt.Errorf("read relay answer after %s: %w", elapsedSince(startedAt), err)
+	}
+	return response, nil
+}
+
+func elapsedSince(startedAt time.Time) time.Duration {
+	return time.Since(startedAt).Round(10 * time.Millisecond)
 }
 
 func dialControl(
