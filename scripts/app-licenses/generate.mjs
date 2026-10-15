@@ -371,10 +371,16 @@ function checkMaven(depsPath) {
     problems.push(`Maven group ${group} is not in scripts/app-licenses/components.json`);
   }
   const listed = listedPackages();
+  const gradleNames = new Set(
+    [...listed].filter((name) => name.startsWith("@")).flatMap((name) => {
+      const [scope, bare] = name.slice(1).split("/");
+      return [`${scope}_${bare}`, `${scope}-${bare}`];
+    }),
+  );
   for (const match of text.matchAll(/[+\\]--- project :([\w@/.-]+)/g)) {
     const project = match[1];
-    // Gradle names a scoped package "@scope/name" as "scope_name".
-    if (project === "app" || listed.has(project) || listed.has("@" + project.replace("_", "/"))) continue;
+    // Gradle names a scoped package "@scope/name" as "scope_name" or "scope-name".
+    if (project === "app" || listed.has(project) || gradleNames.has(project)) continue;
     if (existsSync(join(root, "app", "modules", project))) continue;
     problems.push(`Gradle project ${project} is not a listed package`);
   }
