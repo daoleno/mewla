@@ -20,6 +20,9 @@ type Power struct {
 
 // keeper owns one keep-awake child process.
 type keeper struct {
+	// command makes the hold; keepAwakeCommand when nil.
+	command func() *exec.Cmd
+
 	mu  sync.Mutex
 	cmd *exec.Cmd
 }
@@ -35,7 +38,11 @@ func (k *keeper) set(on bool) {
 		k.cmd = nil
 		return
 	}
-	cmd := keepAwakeCommand()
+	start := keepAwakeCommand
+	if k.command != nil {
+		start = k.command
+	}
+	cmd := start()
 	if cmd == nil {
 		return
 	}

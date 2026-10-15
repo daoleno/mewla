@@ -421,3 +421,50 @@ func TestALongWindowIsCut(t *testing.T) {
 		t.Fatalf("empty: %s", empty)
 	}
 }
+
+// A MacBook on battery turns its display off after two minutes, which ends
+// the capture. The agent keeps the display on while it works; if it goes off
+// anyway, the agent hears why, and its next action wakes it.
+func TestASleepingDisplayDoesNotStrandTheAgent(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	backend.mu.Lock()
+	held := backend.DisplayHeld
+	backend.mu.Unlock()
+	if !held {
+		t.Fatal("the display may sleep while an agent works")
+	}
+
+	backend.SleepDisplay()
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	pointers, _ := backend.Snapshot()
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{10, 10}}); err != nil {
+		t.Fatalf("after the display slept: %v", err)
+	}
+	presses := 0
+	after, _ := backend.Snapshot()
+	for _, p := range after[len(pointers):] {
+		if p.Buttons == 1 {
+			presses++
+		}
+	}
+	if presses != 1 {
+		t.Fatalf("one click expected, got %v", after[len(pointers):])
+	}
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+
+	// Lost in the middle of an action: said plainly, and not repeated.
+	backend.SleepDisplay()
+	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait", Duration: 1})
+	if !errors.Is(err, ErrDisplayAsleep) {
+		t.Fatalf("lost during an action: %v", err)
+	}
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+
+	s.StopAgent()
+	waitFor(t, func() bool {
+		backend.mu.Lock()
+		defer backend.mu.Unlock()
+		return !backend.DisplayHeld
+	})
+}

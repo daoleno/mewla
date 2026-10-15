@@ -27,6 +27,7 @@ var (
 	ErrAgentStopped      = errors.New("A person took over this computer's screen; the agent's control ended")
 	ErrScreenReplaced    = errors.New("Another device took over this screen")
 	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once it's unlocked")
+	ErrDisplayAsleep     = errors.New("This computer's display went to sleep or off, so the agent lost its view; try again and Mewla wakes it (a closed lid with no external display stays off)")
 	ErrPersonAtComputer  = errors.New("Someone is using this computer's keyboard or pointer, so the agent paused; wait about 10 seconds and try again")
 )
 
@@ -252,6 +253,9 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	agent.inflight++
 	agent.mu.Unlock()
 	result, err := agent.act(ctx, action)
+	if errors.Is(err, ErrCaptureStopped) {
+		err = ErrDisplayAsleep
+	}
 	agent.mu.Lock()
 	agent.inflight--
 	agent.lastUse = time.Now()
@@ -268,6 +272,16 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 			return nil, fmt.Errorf("Another agent (%s) is using this computer's screen", s.agent.worker)
 		}
 		return s.agent, nil
+	}
+	// What an agent posted last is not a person's input for the next
+	// session either, as when a display that slept ends one.
+	lastPost := s.agentPosted
+	if old := s.agent; old != nil {
+		old.mu.Lock()
+		if old.lastPost.After(lastPost) {
+			lastPost = old.lastPost
+		}
+		old.mu.Unlock()
 	}
 	s.control.Lock()
 	if s.current != nil && !s.current.agent {
@@ -292,11 +306,14 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		}
 	}
 	agent := &agentSession{
-		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence,
+		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence, lastPost: lastPost,
 		cancel: cancel, ctx: ctx, ready: make(chan struct{}), changed: make(chan struct{}), lastUse: time.Now(),
 	}
 	if reader, ok := s.backend.(elementReader); ok {
 		agent.readElements = reader.Elements
+	}
+	if holder, ok := s.backend.(displayHolder); ok {
+		holder.HoldDisplay(true)
 	}
 	s.agent = agent
 	go agent.capture()
@@ -338,11 +355,18 @@ func (s *Service) watchAgent(agent *agentSession) {
 	agent.mu.Lock()
 	agent.letGoLocked()
 	_ = agent.session.Close()
+	posted := agent.lastPost
 	agent.mu.Unlock()
 	s.ReleaseControl(agent.control)
 	s.agentMu.Lock()
+	if posted.After(s.agentPosted) {
+		s.agentPosted = posted
+	}
 	if s.agent == agent {
 		s.agent = nil
+		if holder, ok := s.backend.(displayHolder); ok {
+			holder.HoldDisplay(false)
+		}
 	}
 	s.agentMu.Unlock()
 	Notify("Mewla", "The agent ("+agent.label+") stopped using this computer.")
@@ -408,6 +432,11 @@ func (a *agentSession) capture() {
 		frame, err := a.session.Frame(a.ctx, seq)
 		a.mu.Lock()
 		if err != nil {
+			// A dead capture ends the agent's control at once, so its next
+			// action starts a new one, which wakes the display.
+			if a.ctx.Err() == nil {
+				a.cancel(err)
+			}
 			a.frameErr = err
 			if first {
 				close(a.ready)
