@@ -868,7 +868,7 @@ func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
 	_, _ = book.Add("http://127.0.0.1:9876", addressbook.SourceDiscovered)
 	_, _ = book.Add("https://mewla.example", addressbook.SourceManual)
 	var output bytes.Buffer
-	printed, err := printFirstDevicePairing(&output, manager, book, "")
+	printed, err := printFirstDevicePairing(&output, manager, book, "", true)
 	if err != nil || !printed {
 		t.Fatalf("printed = %v, err = %v", printed, err)
 	}
@@ -955,5 +955,67 @@ func TestTailscaleOnlyListenIsOfferedToPhones(t *testing.T) {
 		if len(ranked) == 0 || ranked[0].URL != "http://100.92.174.90:9876" {
 			t.Fatalf("listen %s: phone addresses = %v", listen, ranked)
 		}
+	}
+}
+
+// An https loopback address is this computer's, never a phone's: ranking it
+// as HTTPS once put https://127.0.0.1:<port> in the phone QR.
+func TestHTTPSLoopbackIsNeverAPhoneAddress(t *testing.T) {
+	entries := []addressbook.Entry{
+		{URL: "https://127.0.0.1:42091", Source: addressbook.SourceManual},
+		{URL: "https://localhost:7443", Source: addressbook.SourceManual},
+		{URL: "http://192.168.1.42:9876", Source: addressbook.SourceDiscovered},
+	}
+	if kind := classifyAddress("https://127.0.0.1:42091"); kind != kindThisComputer {
+		t.Fatalf("classifyAddress(https loopback) = %s", kind)
+	}
+	ranked := rankedPhoneAddresses(entries)
+	if len(ranked) != 1 || ranked[0].URL != "http://192.168.1.42:9876" {
+		t.Fatalf("phone addresses = %v", ranked)
+	}
+}
+
+// A service log is not a person: the first-device screen there must name the
+// command, never a pairing link or QR that would stay readable in the file.
+func TestFirstDevicePairingKeepsCredentialsOutOfServiceLogs(t *testing.T) {
+	manager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := addressbook.New(manager.StorageDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = book.Add("http://127.0.0.1:9876", addressbook.SourceDiscovered)
+	var output bytes.Buffer
+	printed, err := printFirstDevicePairing(&output, manager, book, "", false)
+	if err != nil || printed {
+		t.Fatalf("printed = %v, err = %v", printed, err)
+	}
+	text := output.String()
+	if !strings.Contains(text, "mewla pair") {
+		t.Fatalf("service log line = %q, want the pair command", text)
+	}
+	for _, secret := range []string{"mewla://", "/p/", "#pair=", "█"} {
+		if strings.Contains(text, secret) {
+			t.Fatalf("service log contains %q:\n%s", secret, text)
+		}
+	}
+}
+
+func TestPrivateLogFileTightensAnExistingLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "launchd.log")
+	if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := privateLogFile(path); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
 	}
 }

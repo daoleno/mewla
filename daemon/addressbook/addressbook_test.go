@@ -1,7 +1,9 @@
 package addressbook
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -133,5 +135,53 @@ func TestLearningKeepsTheRemoteAddressLabel(t *testing.T) {
 	entries, _ := store.List()
 	if len(entries) != 1 || entries[0].Source != SourceRemote {
 		t.Fatalf("entries = %#v", entries)
+	}
+}
+
+// A phone on Mewla Link sends Host 127.0.0.1:<its tunnel port>. Learning it
+// made mewla pair offer the phone's own loopback port as this computer's
+// HTTPS address whenever remote access pairing was unavailable.
+func TestLearnIgnoresLoopbackHostsAndDropsOnesLearnedBefore(t *testing.T) {
+	dir := t.TempDir()
+	book, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range []string{"127.0.0.1:42091", "localhost:8443", "[::1]:9000"} {
+		if err := book.Learn(host); err != nil {
+			t.Fatalf("Learn(%q) = %v", host, err)
+		}
+	}
+	if err := book.Learn("swift-hill-a9de.m.mewla.ai"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := book.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].URL != "https://swift-hill-a9de.m.mewla.ai" {
+		t.Fatalf("entries = %+v, want only the remote host", entries)
+	}
+
+	// An address book written by an earlier version keeps manual loopback
+	// entries but loses learned ones.
+	polluted := `{"entries":[
+		{"url":"https://127.0.0.1:42091","source":"verified"},
+		{"url":"https://127.0.0.1:44303","source":"verified"},
+		{"url":"https://127.0.0.1:7443","source":"manual"},
+		{"url":"https://swift-hill-a9de.m.mewla.ai","source":"remote"}]}`
+	if err := os.WriteFile(filepath.Join(dir, fileName), []byte(polluted), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = book.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var urls []string
+	for _, entry := range entries {
+		urls = append(urls, entry.URL)
+	}
+	if strings.Join(urls, " ") != "https://127.0.0.1:7443 https://swift-hill-a9de.m.mewla.ai" {
+		t.Fatalf("entries = %v", urls)
 	}
 }

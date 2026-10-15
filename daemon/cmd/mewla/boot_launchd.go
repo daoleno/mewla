@@ -435,6 +435,10 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	if err := os.MkdirAll(filepath.Dir(bootLaunchdLogPath(config)), 0o700); err != nil {
 		return fmt.Errorf("create log directory: %w", err)
 	}
+	// launchd appends to an existing log and creates a missing one 0644.
+	if err := privateLogFile(bootLaunchdLogPath(config)); err != nil {
+		return fmt.Errorf("create log file: %w", err)
+	}
 	// The running daemon keeps its files: a changed bundle is swapped in
 	// whole and the job restarted below.
 	signer, signing := bootLaunchdSigner(config.Home, runner)
@@ -720,4 +724,14 @@ func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 		fmt.Fprintf(out, "Note: state directory %s is owned by another process (PIDs %v); it was not stopped or modified\n", metadata.StateDir, holders)
 	}
 	return nil
+}
+
+// privateLogFile creates path 0600, or makes an existing one 0600.
+func privateLogFile(path string) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return file.Chmod(0o600)
 }

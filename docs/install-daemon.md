@@ -157,7 +157,9 @@ Restarting the service never stops your `tmux` sessions or agents.
   `loginctl enable-linger` (the command tells you when this is needed).
 - **macOS**: it starts when you log in and runs in your login session, the one
   that owns the screen and the privacy permissions. After a restart, log in
-  once for Mewla to start. Output goes to `~/.mewla/logs/launchd.log`.
+  once for Mewla to start. Output goes to `~/.mewla/logs/launchd.log`, readable
+  only by you. A service never writes a pairing code there; run `mewla pair` to
+  show one.
   The service runs a copy of the binary in `~/Applications/Mewla.app`, so
   System Settings and permission prompts show Mewla's name and icon. The
   command you type stays where you installed it.

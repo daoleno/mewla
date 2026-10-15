@@ -98,7 +98,8 @@ func isPrivateNetwork(host string) bool {
 }
 
 func isLoopback(host string) bool {
-	return host == "localhost" || net.ParseIP(strings.Trim(host, "[]")).IsLoopback()
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	return host == "localhost" || net.ParseIP(host).IsLoopback()
 }
 
 func (s *Store) List() ([]Entry, error) {
@@ -214,9 +215,15 @@ func (s *Store) ReplaceDiscovered(raws []string) error {
 
 // Learn records a host only after the caller has verified the device
 // signature. It accepts HTTPS hosts and deliberately ignores HTTP/LAN Hosts.
+// A loopback Host names the requester's own machine, never this one: a phone
+// on Mewla Link sends its in-app tunnel's 127.0.0.1 port, which no other
+// device can reach, so it is never learned.
 func (s *Store) Learn(rawHost string) error {
 	if strings.TrimSpace(rawHost) == "" {
 		return ErrInvalidAddress
+	}
+	if isLoopback(hostOnly(rawHost)) {
+		return nil
 	}
 	return func() error {
 		_, err := s.Add("https://"+strings.TrimSuffix(rawHost, ":443"), SourceVerified)
@@ -253,7 +260,28 @@ func (s *Store) loadLocked() ([]Entry, error) {
 	if err := json.Unmarshal(value, &data); err != nil {
 		return nil, fmt.Errorf("decode address book: %w", err)
 	}
-	return data.Entries, nil
+	// Earlier versions learned phones' Link tunnel ports as addresses of this
+	// computer; drop them so pairing never offers one.
+	entries := data.Entries[:0]
+	for _, entry := range data.Entries {
+		if entry.Source == SourceVerified && isLoopbackURL(entry.URL) {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+func hostOnly(rawHost string) string {
+	if host, _, err := net.SplitHostPort(rawHost); err == nil {
+		return host
+	}
+	return rawHost
+}
+
+func isLoopbackURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	return err == nil && isLoopback(strings.ToLower(parsed.Hostname()))
 }
 
 func (s *Store) saveLocked(entries []Entry) error {

@@ -213,6 +213,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return err
 	}
 	defer lifecycleLock.Close()
+	restrictLogOutputs()
 
 	ctx, stopSignals := signal.NotifyContext(
 		context.Background(),
@@ -638,7 +639,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 			name: "HTTP server",
 			run: func(ctx context.Context) error {
 				return srv.RunWithReady(ctx, cfg.addr, func() {
-					paired, err := printFirstDevicePairing(stderr, authManager, book, cfg.stateDir)
+					paired, err := printFirstDevicePairing(stderr, authManager, book, cfg.stateDir, stderrIsPersonsTerminal())
 					if err != nil {
 						fmt.Fprintf(stderr, "Could not create first-device pairing link: %v\n", err)
 					}
@@ -679,6 +680,23 @@ func logStopSignal(ctx context.Context) {
 		case <-ctx.Done():
 		}
 	}()
+}
+
+// stderrIsPersonsTerminal reports whether daemon output reaches a person
+// rather than a service log file, where a pairing code would persist.
+func stderrIsPersonsTerminal() bool {
+	return !daemonSupervised() && term.IsTerminal(int(os.Stderr.Fd()))
+}
+
+// restrictLogOutputs makes a regular file behind stdout or stderr private.
+// launchd creates its StandardErrorPath 0644; daemon logs name devices,
+// addresses and sessions, so other local users must not read them.
+func restrictLogOutputs() {
+	for _, file := range []*os.File{os.Stdout, os.Stderr} {
+		if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o077 != 0 {
+			_ = file.Chmod(0o600)
+		}
+	}
 }
 
 func daemonSupervised() bool {

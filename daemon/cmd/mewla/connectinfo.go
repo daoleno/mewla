@@ -101,11 +101,13 @@ func classifyAddress(raw string) addressKind {
 	if err != nil {
 		return kindLAN
 	}
-	if parsed.Scheme == "https" {
-		return kindHTTPS
-	}
+	// Loopback first: https://127.0.0.1:<port> is still unreachable from a
+	// phone, and must never outrank a real address in the phone QR.
 	if isLoopbackHost(parsed.Hostname()) {
 		return kindThisComputer
+	}
+	if parsed.Scheme == "https" {
+		return kindHTTPS
 	}
 	if ip := net.ParseIP(parsed.Hostname()); ip != nil && isTailscaleAddress("", ip) {
 		return kindTailscale
@@ -371,9 +373,15 @@ func printPairingDetails(w io.Writer, title string, links pairingLinks) {
 }
 
 // printFirstDevicePairing shows the pairing screen when no device is trusted
-// yet, and reports whether it did.
-func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbook.Store, stateDir string) (bool, error) {
+// yet, and reports whether it did. A pairing code is a credential, so output
+// that is not a person's terminal (a launchd or systemd log file) only gets
+// the command that shows one.
+func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbook.Store, stateDir string, interactive bool) (bool, error) {
 	if len(manager.ListDevices()) != 0 {
+		return false, nil
+	}
+	if !interactive {
+		fmt.Fprintf(w, "No phone or browser is paired yet. Run %s to show a pairing code.\n", pairCommand(stateDir))
 		return false, nil
 	}
 	entries, err := book.List()

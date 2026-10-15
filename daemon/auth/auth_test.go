@@ -435,3 +435,70 @@ func buildTestAuthorizationHeader(t *testing.T, privateKey ed25519.PrivateKey, d
 	signature := ed25519.Sign(privateKey, BuildSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex))
 	return AuthorizationHeaderPrefix + "v1:" + deviceID + ":" + daemonID + ":" + timestamp + ":" + nonceHex + ":" + hex.EncodeToString(signature)
 }
+
+func TestManagerEnrollDeviceRepeatsForSameDeviceKeyOnly(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewManager returned error: %v", err)
+	}
+	pairing, err := manager.IssuePairingToken(time.Minute)
+	if err != nil {
+		t.Fatalf("IssuePairingToken returned error: %v", err)
+	}
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey returned error: %v", err)
+	}
+	otherKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey returned error: %v", err)
+	}
+	enroll := func(deviceID string, key ed25519.PublicKey) (*TrustedDevice, error) {
+		return manager.EnrollDevice(
+			pairing.Value,
+			manager.DaemonID(),
+			manager.PublicKeyHex(),
+			deviceID,
+			"phone",
+			hex.EncodeToString(key),
+		)
+	}
+
+	first, err := enroll("device-1", publicKey)
+	if err != nil {
+		t.Fatalf("first EnrollDevice returned error: %v", err)
+	}
+	// The phone never saw the first response and retries the spent token.
+	again, err := enroll("device-1", publicKey)
+	if err != nil {
+		t.Fatalf("repeated EnrollDevice returned error: %v", err)
+	}
+	if again.ID != first.ID || again.PublicKeyHex != first.PublicKeyHex {
+		t.Fatalf("repeated enrollment = %+v, want %+v", again, first)
+	}
+
+	if _, err := enroll("device-2", otherKey); !errors.Is(err, ErrInvalidPairingToken) {
+		t.Fatalf("other device on spent token error=%v, want ErrInvalidPairingToken", err)
+	}
+	if _, err := enroll("device-1", otherKey); !errors.Is(err, ErrInvalidPairingToken) {
+		t.Fatalf("other key on spent token error=%v, want ErrInvalidPairingToken", err)
+	}
+
+	if _, err := manager.RevokeDevice("device-1"); err != nil {
+		t.Fatalf("RevokeDevice returned error: %v", err)
+	}
+	if _, err := enroll("device-1", publicKey); !errors.Is(err, ErrInvalidPairingToken) {
+		t.Fatalf("revoked device on spent token error=%v, want ErrInvalidPairingToken", err)
+	}
+
+	manager.mu.Lock()
+	manager.spent[pairing.Value] = spentPairing{
+		deviceID:     "device-1",
+		publicKeyHex: hex.EncodeToString(publicKey),
+		expiresAt:    time.Now().Add(-time.Second),
+	}
+	manager.mu.Unlock()
+	if _, err := enroll("device-1", publicKey); !errors.Is(err, ErrInvalidPairingToken) {
+		t.Fatalf("expired spent token error=%v, want ErrInvalidPairingToken", err)
+	}
+}
