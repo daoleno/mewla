@@ -29,7 +29,7 @@ with its own agents, files and logged-in apps; only messages cross.
   add <invite> [-name NAME]    Pair with the computer that made the invite
   remove <computer>            Stop working with a computer
 
-The app does invite and add in one tap: Settings → Computers.
+The app does invite and add in one tap: Settings → Working together.
 `
 
 func runComputersCommand(args []string, stderr io.Writer) error {
@@ -96,7 +96,7 @@ func printComputersResult(w io.Writer, action string, result computers.Result) {
 	switch action {
 	case "list":
 		if len(result.Computers) == 0 {
-			fmt.Fprintln(w, "No other computers yet. In the app: Settings → Computers.")
+			fmt.Fprintln(w, "No other computers yet. In the app: Settings → Working together.")
 		}
 		for _, peer := range result.Computers {
 			state := "offline"
