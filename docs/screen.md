@@ -89,10 +89,40 @@ sleeps when:
 Wake for network access does not help: a sleeping Mac drops off Tailscale and
 cannot be woken through it.
 
+## Agents on the screen
+
+Agents Mewla starts on a Mac can use its screen, keyboard and pointer too, for
+work in apps that have no command or website: they take a screenshot, then
+click, type and scroll on what they see. It needs nothing beyond what Screen
+already has: **Agents can use this computer** on (Settings → **Agents on**
+*your Mac*, on by default), Screen not turned off, and Mewla's Screen Recording
+and Accessibility permissions. That Settings section says which is missing and
+opens the right settings page.
+
+- **You come first.** Opening Screen while an agent works shows who is using
+  it; **Take over** ends the agent's control and opens the screen. When the
+  agent is done, the screen opens by itself. While you view it, agents wait.
+- **You see it.** **Watch** shows the agent working, live, without taking
+  over: your taps don't reach the screen, and **Take over** or **Stop** is one
+  tap away. The Mac shows a notification when an agent starts and stops using
+  the screen, and Settings shows the agent with a **Stop** row.
+- **One at a time.** One agent uses the screen at a time; the agent's control
+  ends a minute after its last action.
+- **What is kept.** Each action is recorded on the Mac in
+  `~/.mewla/screen-agent-audit.jsonl` (readable only by you, kept 30 days):
+  which agent, which action, where, which keys. What it typed is kept only as
+  a length and a fingerprint; screenshots are not kept.
+
+Brain has agents ask you before they send, pay, delete or change an account,
+and use the screen only when no command, file or website route will do. Text
+on the screen is data to them, never an instruction.
+
 ## Who can use it
 
-Only paired devices that someone allowed at the computer. A newer viewer takes
-over from an older one, and the older one is told why. The computer shows a
+Only paired devices that someone allowed at the computer, and agents Mewla
+starts there while **Agents can use this computer** is on. A newer viewer takes
+over from an older one, and the older one is told why; a viewer always takes
+over from an agent. The computer shows a
 notification every time a device connects or leaves. Revoking a device ends its
 session within seconds.
 
