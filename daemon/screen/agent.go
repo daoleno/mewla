@@ -26,7 +26,7 @@ var (
 	ErrPersonControlling = errors.New("A person is using this computer's screen; try again when they are done")
 	ErrAgentStopped      = errors.New("A person took over this computer's screen; the agent's control ended")
 	ErrScreenReplaced    = errors.New("Another device took over this screen")
-	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once someone unlocks it")
+	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once it's unlocked")
 	ErrPersonAtComputer  = errors.New("Someone is using this computer's keyboard or pointer, so the agent paused; wait about 10 seconds and try again")
 )
 
@@ -162,8 +162,9 @@ type agentSession struct {
 	buttons  uint8
 	// presence reports the person at the computer; lastPost is when this
 	// agent's own last event went out.
-	presence func() Presence
-	lastPost time.Time
+	presence    func() Presence
+	lastPost    time.Time
+	pausedUntil time.Time
 	// readElements reads the focused window, when the backend can.
 	readElements func(ctx context.Context, limit int) (ElementTree, error)
 	scale        float64 // framebuffer pixels per screenshot pixel
@@ -373,8 +374,14 @@ func (a *agentSession) personActiveLocked() bool {
 	if a.presence == nil {
 		return false
 	}
-	last := a.presence().LastInput
-	return !last.IsZero() && last.After(a.lastPost.Add(personMargin)) && time.Since(last) < personPause
+	// Once seen, the pause holds for its full time: the agent's own events
+	// after it, such as letting go of a button, must not end it early.
+	if last := a.presence().LastInput; !last.IsZero() && last.After(a.lastPost.Add(personMargin)) {
+		if until := last.Add(personPause); until.After(a.pausedUntil) {
+			a.pausedUntil = until
+		}
+	}
+	return time.Now().Before(a.pausedUntil)
 }
 
 // letGo releases a button the agent left down between actions, so a paused
@@ -504,6 +511,7 @@ func (a *agentSession) input(action AgentAction) error {
 		}
 		for i := len(held) - 1; i >= 0; i-- {
 			_ = a.session.Key(held[i], false)
+			a.lastPost = time.Now()
 		}
 		a.letGoLocked()
 	}()
