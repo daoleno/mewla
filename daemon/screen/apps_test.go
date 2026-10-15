@@ -160,3 +160,25 @@ func TestAgentTypesIntoAnAppBehindOthers(t *testing.T) {
 	// The agent's own keys to the app are not a person at the computer.
 	act(t, s, "%7", AgentAction{Action: "type", Text: "more", App: "Safari"})
 }
+
+// One app's window, at the scale of a full screenshot and placed on it; a
+// window under another says so, and a hidden one can't be pictured.
+func TestAgentSeesOneAppsWindow(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Window = image.Rect(0, 0, 1000, 800)
+	apps[2].Window = image.Rect(400, 300, 1400, 1100)
+	apps[2].CoveredBy = []string{"Notes"}
+	backend.RunningApps = apps
+	shot := act(t, s, "%7", AgentAction{Action: "screenshot", App: "301"})
+	if shot.Width != 500 || shot.Height != 400 || len(shot.Image) == 0 ||
+		!strings.Contains(shot.Text, "Its top left is (200, 150)") || !strings.Contains(shot.Text, "under Notes") {
+		t.Fatalf("window %dx%d: %s", shot.Width, shot.Height, shot.Text)
+	}
+	if shot := act(t, s, "%7", AgentAction{Action: "screenshot", App: "Notes"}); strings.Contains(shot.Text, "under") {
+		t.Fatalf("front window: %s", shot.Text)
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot", App: "Safari"}); err == nil || !strings.Contains(err.Error(), "no window on the screen") {
+		t.Fatalf("hidden: %v", err)
+	}
+}
