@@ -112,6 +112,11 @@ opens the right settings page.
   They can use it again once it's unlocked. If agents should keep working on
   a Mac nobody is at, its automatic screen lock decides how long they can
   (System Settings → Lock Screen).
+- **The display stays on while an agent works**, also on battery, since a
+  sleeping display stops what the agent sees; the Mac's display sleep, and a
+  lock that follows it, wait until a minute after the agent's last action. If
+  the display goes off anyway, the agent is told, and its next action wakes
+  it. A MacBook with its lid closed and no external display can't be woken.
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
   tap away. The Mac shows a notification when an agent starts and stops using
