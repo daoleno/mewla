@@ -20,6 +20,11 @@ Then, with the computer you talk to in use:
 No terminal, no copying links, no visit to the other computer. The row then
 reads *can hand it work* and shows whether that computer is online.
 
+To stop, tap the row again and choose **Stop working together**. Both
+computers forget each other, in both directions, and messages still waiting
+are dropped. A computer this phone doesn't know is listed too, so you can stop
+it the same way.
+
 From a terminal instead:
 
 ```sh
@@ -56,9 +61,12 @@ back to you through the Brain you are talking to. Before paying, sending
 messages to other people, deleting, changing accounts or installing software,
 it asks first.
 
-To watch, switch to that computer in the app: its Brain shows the request
-marked as coming from your other computer, and its Workers, terminals and
-[Screen](screen.md) are there as usual.
+The conversation shows each handover as a card, such as *Handed to Mac* with
+*Delivered*, *Waiting* or *May not have arrived*, and each answer as *Reply
+from Mac*. Tap a card to read all of it. **Open on Mac** switches the app to
+that computer: its Brain shows the request marked as coming from your other
+computer, and its Workers, terminals and [Screen](screen.md) are there as
+usual.
 
 ## When a computer is offline
 
@@ -81,8 +89,8 @@ mewla computers remove mac               # stop working with a computer
 A computer you connect gets its own key, with less access than your phone: it
 can only send messages to this computer's Brain and receive its answers. It
 cannot open terminals or files, see the screen, or manage devices. It shows up
-in `mewla devices list` as *(computer)*; `mewla computers remove` or
-`mewla devices revoke` ends it at once.
+in `mewla devices list` as *(computer)*; **Stop working together** in the
+app, `mewla computers remove` or `mewla devices revoke` ends it at once.
 
 Because the other Brain can do anything you could ask it to do, a request from
 another computer is treated as relayed, not as your own words: the receiving
