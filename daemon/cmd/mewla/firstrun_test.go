@@ -79,6 +79,21 @@ func TestFirstRunChoiceRemembersWiFi(t *testing.T) {
 	}
 }
 
+func TestFirstRunChoiceWithoutAnAnswerAsksAgain(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	choice, err := runFirstRunChoice(context.Background(), bufio.NewReader(strings.NewReader("")), &out, dir)
+	if err != nil || choice != choiceLater {
+		t.Fatalf("choice = %q, %v", choice, err)
+	}
+	if _, ok := loadStartupChoice(dir); ok {
+		t.Fatal("closed input saved a choice")
+	}
+	if !firstRunPromptAllowed(nil, dir, true) {
+		t.Fatal("the question does not come back")
+	}
+}
+
 func TestEnrollmentRequestPrintKeepsControlSequencesOut(t *testing.T) {
 	var out bytes.Buffer
 	printEnrollmentRequest(&out, "", enrollment.Request{

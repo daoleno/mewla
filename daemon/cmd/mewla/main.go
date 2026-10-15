@@ -195,7 +195,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	lifecycleLock, authManager, err := acquireDaemonAuthOwner(cfg.stateDir)
 	if err != nil {
-		if onlyStateDirArgs(args) && strings.Contains(err.Error(), "another Mewla daemon owns") {
+		// A person at a terminal gets status or a pairing code; a supervisor
+		// launch with flags still fails as before.
+		interactive := stdioIsTerminal() && !daemonSupervised()
+		if (len(args) == 0 || interactive && onlyStateDirArgs(args)) && strings.Contains(err.Error(), "another Mewla daemon owns") {
 			devices, listErr := listDevices(cfg.stateDir)
 			if listErr == nil && len(devices) == 0 {
 				return runPairCommand(stateDirArgs(cfg.stateDir), stderr)
