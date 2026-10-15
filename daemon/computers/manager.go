@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -360,6 +361,17 @@ func (m *Manager) serve(ctx context.Context, key string, conn *peerConn, remote 
 				m.applyResult(key, *incoming.Result)
 				conn.poke()
 			}
+		case "hello":
+			// A later hello only brings new caps; who is at the other end
+			// was settled by the first.
+			if incoming.Hello != nil {
+				m.mu.Lock()
+				if hello, ok := m.hellos[key]; ok {
+					hello.Caps = incoming.Hello.Caps
+					m.hellos[key] = hello
+				}
+				m.mu.Unlock()
+			}
 		}
 	}
 }
@@ -368,6 +380,10 @@ func (m *Manager) sendLoop(ctx context.Context, key string, conn *peerConn) {
 	ticker := time.NewTicker(sendTick)
 	defer ticker.Stop()
 	pings := 0
+	// What this computer offers changes while the channel is up (Chrome gets
+	// ready, the screen is turned off), so the other Brain is told again;
+	// once early too, in case they changed while the channel opened.
+	var sentCaps Caps
 	for {
 		for _, message := range m.claimDue(key) {
 			if err := conn.write(frame{Type: "message", Message: &message}); err != nil {
@@ -382,6 +398,13 @@ func (m *Manager) sendLoop(ctx context.Context, key string, conn *peerConn) {
 		case <-ticker.C:
 			pings++
 			if pings%6 == 0 {
+				if hello := m.hello(); !reflect.DeepEqual(hello.Caps, sentCaps) {
+					if err := conn.write(frame{Type: "hello", Hello: &hello}); err != nil {
+						conn.ws.Close()
+						return
+					}
+					sentCaps = hello.Caps
+				}
 				conn.writeMu.Lock()
 				err := conn.ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second))
 				conn.writeMu.Unlock()
