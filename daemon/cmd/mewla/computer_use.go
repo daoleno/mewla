@@ -84,11 +84,13 @@ func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerSta
 }
 
 const computerToolDescription = `Use this computer's screen, keyboard and pointer, the way a person at it would. ` +
-	`Start with action "screenshot"; give every coordinate in that screenshot's pixels. ` +
+	`In a Mac app, prefer the app tools (apps, app_state, element, steps): they act on the app's own controls in the background; ` +
+	`use this tool for what they can't reach. Start with action "screenshot"; give every coordinate in that screenshot's pixels. ` +
 	`Actions: screenshot, left_click, right_click, middle_click, double_click, triple_click, mouse_move, ` +
 	`left_click_drag (start_coordinate to coordinate), left_mouse_down, left_mouse_up, scroll (scroll_direction, scroll_amount), ` +
 	`type (text), key (text such as "cmd+c" or "Return"), hold_key (text, duration), wait (duration seconds), cursor_position, ` +
-	`elements (the focused window's buttons, fields and text, each with the point to click; prefer it to reading pixels in a Mac app). ` +
+	`elements (the focused window's buttons, fields and text, each with the point to click). ` +
+	`With app (a name or pid), type, key and hold_key go to that app alone, in the background, and screenshot shows its window. ` +
 	`Take a screenshot after acting to see the result. A person comes first: if they take over, stop and report; ` +
 	`if someone uses this computer's own keyboard or pointer, you are paused: wait about 10 seconds and try again; ` +
 	`if the screen is locked, stop and report, since agents can't use it until it's unlocked. ` +
