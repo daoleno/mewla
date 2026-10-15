@@ -157,10 +157,17 @@ type menuOption struct {
 	note  string // dim text after the label, e.g. "recommended" or a command
 }
 
+// menuClosed and menuCancelled are chooseOption's answers when input ended
+// or the person pressed Ctrl-C.
+const (
+	menuClosed    = -1
+	menuCancelled = -2
+)
+
 // chooseOption asks for one option; the first is the default. On a real
 // terminal it is an arrow-key menu (numbers still jump); otherwise it prints
 // a numbered list and reads "Choose 1-N [1]:". It returns the 0-based index,
-// or -1 when the input closed or was interrupted.
+// menuClosed or menuCancelled.
 func chooseOption(in *bufio.Reader, w io.Writer, options []menuOption) int {
 	if stdin, ok := menuTerminal(w); ok {
 		if choice, err := arrowMenu(stdin, in, w, options); err == nil {
@@ -195,7 +202,7 @@ func numberMenu(in *bufio.Reader, w io.Writer, options []menuOption) int {
 		line, err := in.ReadString('\n')
 		if err != nil && line == "" {
 			fmt.Fprintln(w)
-			return -1
+			return menuClosed
 		}
 		answer := strings.TrimSpace(line)
 		if answer == "" {
@@ -215,7 +222,7 @@ func numberMenu(in *bufio.Reader, w io.Writer, options []menuOption) int {
 }
 
 // arrowMenu draws the options with a pointer, redraws in place on ↑/↓ (or
-// k/j, or a number), and confirms with Enter. Ctrl-C or Esc cancels.
+// k/j, or a number), and confirms with Enter. Ctrl-C cancels.
 func arrowMenu(stdin *os.File, in *bufio.Reader, w io.Writer, options []menuOption) (int, error) {
 	state, err := term.MakeRaw(int(stdin.Fd()))
 	if err != nil {
@@ -252,24 +259,25 @@ func arrowMenu(stdin *os.File, in *bufio.Reader, w io.Writer, options []menuOpti
 	for {
 		key, err := in.ReadByte()
 		if err != nil {
-			return -1, nil
+			return menuClosed, nil
 		}
 		switch key {
 		case '\r', '\n':
 			fmt.Fprintf(w, "\x1b[1A\r\x1b[2K")
 			return selected, nil
-		case 3, 4: // Ctrl-C, Ctrl-D
+		case 3: // Ctrl-C
 			fmt.Fprint(w, "\r\n")
-			return -1, nil
+			return menuCancelled, nil
+		case 4: // Ctrl-D
+			fmt.Fprint(w, "\r\n")
+			return menuClosed, nil
 		case 'k':
 			selected = (selected + len(options) - 1) % len(options)
 		case 'j':
 			selected = (selected + 1) % len(options)
 		case 0x1b:
-			next, _ := in.ReadByte()
-			if next != '[' && next != 'O' {
-				fmt.Fprint(w, "\r\n")
-				return -1, nil
+			if next, _ := in.ReadByte(); next != '[' && next != 'O' {
+				continue
 			}
 			switch arrow, _ := in.ReadByte(); arrow {
 			case 'A':

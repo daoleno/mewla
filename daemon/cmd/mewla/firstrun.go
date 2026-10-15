@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -99,6 +100,10 @@ func stdioIsTerminal() bool {
 
 // runFirstRunChoice asks how phones and browsers should reach this computer
 // and remembers the answer, so it is asked once.
+// errStartupCancelled stops mewla when the person presses Ctrl-C at the
+// startup question; nothing is saved, so it is asked again next time.
+var errStartupCancelled = errors.New("startup cancelled")
+
 func runFirstRunChoice(ctx context.Context, reader *bufio.Reader, w io.Writer, stateDir string) (startupChoice, error) {
 	style := styleForWriter(w)
 	fmt.Fprintln(w)
@@ -111,16 +116,20 @@ func runFirstRunChoice(ctx context.Context, reader *bufio.Reader, w io.Writer, s
 		{label: "I'll set up Tailscale or HTTPS myself"},
 		{label: "Decide later"},
 	})
-	choice := choiceLater
-	if index >= 0 {
-		choice = choices[index]
+	switch index {
+	case menuCancelled:
+		return choiceLater, errStartupCancelled
+	case menuClosed:
+		// Nothing was chosen, so the question comes back next time.
+		return choiceLater, nil
 	}
+	choice := choices[index]
 	switch choice {
 	case choiceRemote:
 		if _, err := remoteLogin(ctx, w, stateDir, remoteLoginOptions{openBrowser: true}); err != nil {
 			fmt.Fprintf(w, "\nRemote access is not on: %v\n", err)
 			fmt.Fprintln(w, "Mewla starts for this computer only. Try again any time: "+style.cmd("mewla login"))
-			return choiceLater, saveStartupChoice(stateDir, choiceLater)
+			return choiceLater, nil
 		}
 	case choiceLAN:
 		fmt.Fprintln(w, "\nMewla listens on your Wi-Fi/LAN (plain HTTP; use trusted networks only).")
