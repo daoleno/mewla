@@ -208,6 +208,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		syscall.SIGTERM,
 	)
 	defer stopSignals()
+	logStopSignal(ctx)
 	ctx, restartDaemon := context.WithCancelCause(ctx)
 	defer restartDaemon(nil)
 
@@ -652,6 +653,21 @@ var errDaemonRestart = errors.New("restarting Mewla to apply Screen permissions"
 
 // daemonSupervised reports whether launchd (mewla boot) or a systemd unit
 // restarts this daemon after it exits with an error.
+// logStopSignal records which signal stops the daemon, so an unexpected
+// stop can be traced from the log.
+func logStopSignal(ctx context.Context) {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		defer signal.Stop(signals)
+		select {
+		case received := <-signals:
+			log.Printf("mewla: stopping on %v", received)
+		case <-ctx.Done():
+		}
+	}()
+}
+
 func daemonSupervised() bool {
 	return os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel || os.Getenv("INVOCATION_ID") != ""
 }

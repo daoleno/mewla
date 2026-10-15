@@ -18,7 +18,9 @@ import (
 
 // On macOS `mewla boot` installs a LaunchAgent in the user's GUI session
 // (gui/<uid>), the session that owns the screen, notifications and privacy
-// permissions. launchd starts it at login and restarts it if it fails.
+// permissions. launchd starts it at login and restarts it whenever it stops,
+// so it is always reachable from the phone; only `mewla boot uninstall` and
+// the bootout of an update stop it for good.
 //
 // Ownership: launchd reports the job's PID. The job owns the state when that
 // PID runs the installed binary, holds the state lifecycle lock (lsof names
@@ -115,8 +117,9 @@ func renderLaunchdPlist(config bootConfig) (string, error) {
 	b.WriteString("\t\t<key>PATH</key>\n\t\t" + plistString(config.PathEnv) + "\n")
 	b.WriteString("\t</dict>\n")
 	b.WriteString("\t<key>RunAtLoad</key>\n\t<true/>\n")
-	// Restart after a failure, not after a clean exit.
-	b.WriteString("\t<key>KeepAlive</key>\n\t<dict>\n\t\t<key>SuccessfulExit</key>\n\t\t<false/>\n\t</dict>\n")
+	// Restart after any exit: a clean one too, since nothing on this Mac
+	// should leave the phone without Mewla. ThrottleInterval spaces retries.
+	b.WriteString("\t<key>KeepAlive</key>\n\t<true/>\n")
 	b.WriteString("\t<key>ThrottleInterval</key>\n\t<integer>5</integer>\n")
 	// Only the GUI session can capture the screen and show permission prompts.
 	b.WriteString("\t<key>LimitLoadToSessionType</key>\n\t" + plistString("Aqua") + "\n")
