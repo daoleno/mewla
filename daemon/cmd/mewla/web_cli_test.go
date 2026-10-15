@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -13,9 +14,9 @@ import (
 	"github.com/daoleno/mewla/daemon/remote"
 )
 
-const openTestToken = "0707070707070707070707070707070707070707070707070707070707070707"
+const webTestToken = "0707070707070707070707070707070707070707070707070707070707070707"
 
-type fakeOpenEnv struct {
+type fakeWebEnv struct {
 	running bool
 	desktop bool
 	reason  string
@@ -24,13 +25,13 @@ type fakeOpenEnv struct {
 	pairs   int
 }
 
-func (f *fakeOpenEnv) env() openEnv {
-	return openEnv{
+func (f *fakeWebEnv) env() webEnv {
+	return webEnv{
 		running: func(string) (bool, error) { return f.running, nil },
 		pair: func(string) (*control.PairingInfo, error) {
 			f.pairs++
 			return &control.PairingInfo{
-				Token:           openTestToken,
+				Token:           webTestToken,
 				ExpiresAt:       time.Now().Add(15 * time.Minute),
 				DaemonID:        strings.Repeat("d", 64),
 				DaemonPublicKey: strings.Repeat("a", 64),
@@ -45,7 +46,7 @@ func (f *fakeOpenEnv) env() openEnv {
 	}
 }
 
-func openTestState(t *testing.T, signedIn bool, addresses ...string) string {
+func webTestState(t *testing.T, signedIn bool, addresses ...string) string {
 	t.Helper()
 	stateDir := t.TempDir()
 	book, err := addressbook.New(stateDir)
@@ -85,10 +86,10 @@ func wantLines(t *testing.T, text string, want []string, unwanted []string) {
 	}
 }
 
-func TestOpenWithoutMewlaRunningSaysHowToStartIt(t *testing.T) {
-	fake := &fakeOpenEnv{desktop: true}
+func TestWebWithoutMewlaRunningSaysHowToStartIt(t *testing.T) {
+	fake := &fakeWebEnv{desktop: true}
 	var out bytes.Buffer
-	err := runOpen(openConfig{stateDir: t.TempDir()}, &out, fake.env())
+	err := runWeb(webConfig{stateDir: t.TempDir()}, &out, fake.env())
 	if !errors.Is(err, errMewlaNotRunning) {
 		t.Fatalf("err = %v", err)
 	}
@@ -100,11 +101,11 @@ func TestOpenWithoutMewlaRunningSaysHowToStartIt(t *testing.T) {
 	}
 }
 
-func TestOpenOpensThisComputersShortLinkAndListsAddresses(t *testing.T) {
-	stateDir := openTestState(t, false, "http://127.0.0.1:9876", "http://192.168.1.20:9876", "http://100.101.102.103:9876")
-	fake := &fakeOpenEnv{running: true, desktop: true}
+func TestWebOpensThisComputersShortLinkAndListsAddresses(t *testing.T) {
+	stateDir := webTestState(t, false, "http://127.0.0.1:9876", "http://192.168.1.20:9876", "http://100.101.102.103:9876")
+	fake := &fakeWebEnv{running: true, desktop: true}
 	var out bytes.Buffer
-	if err := runOpen(openConfig{stateDir: stateDir}, &out, fake.env()); err != nil {
+	if err := runWeb(webConfig{stateDir: stateDir}, &out, fake.env()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.opened) != 1 || !strings.HasPrefix(fake.opened[0], "http://127.0.0.1:9876/p/") {
@@ -122,15 +123,15 @@ func TestOpenOpensThisComputersShortLinkAndListsAddresses(t *testing.T) {
 	}
 }
 
-func TestOpenSignedInNamesTheRemoteAddressOnce(t *testing.T) {
-	stateDir := openTestState(t, true, "http://127.0.0.1:9876")
+func TestWebSignedInNamesTheRemoteAddressOnce(t *testing.T) {
+	stateDir := webTestState(t, true, "http://127.0.0.1:9876")
 	book, _ := addressbook.New(stateDir)
 	if _, err := book.Add("https://mewla.example.com", addressbook.SourceManual); err != nil {
 		t.Fatal(err)
 	}
-	fake := &fakeOpenEnv{running: true, desktop: true}
+	fake := &fakeWebEnv{running: true, desktop: true}
 	var out bytes.Buffer
-	if err := runOpen(openConfig{stateDir: stateDir}, &out, fake.env()); err != nil {
+	if err := runWeb(webConfig{stateDir: stateDir}, &out, fake.env()); err != nil {
 		t.Fatal(err)
 	}
 	text := out.String()
@@ -145,27 +146,27 @@ func TestOpenSignedInNamesTheRemoteAddressOnce(t *testing.T) {
 	}
 }
 
-func TestOpenWithoutADesktopOnlyPrints(t *testing.T) {
+func TestWebWithoutADesktopOnlyPrints(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		cfg      openConfig
-		fake     fakeOpenEnv
+		cfg      webConfig
+		fake     fakeWebEnv
 		header   string
 		ssh      bool
 		unwanted string
 	}{
-		{name: "ssh", fake: fakeOpenEnv{running: true, reason: "over SSH"}, header: "Not opened: this is an SSH session\n", ssh: true},
-		{name: "no display", fake: fakeOpenEnv{running: true, reason: "no desktop session"}, header: "Not opened: no desktop session\n", unwanted: "ssh -L"},
-		{name: "print", cfg: openConfig{print: true}, fake: fakeOpenEnv{running: true, desktop: true}, header: "Open on this computer\n", unwanted: "ssh -L"},
-		{name: "browser fails", fake: fakeOpenEnv{running: true, desktop: true, openErr: errors.New("xdg-open: not found")}, header: "Not opened: could not start a browser: xdg-open: not found\n", unwanted: "ssh -L"},
+		{name: "ssh", fake: fakeWebEnv{running: true, reason: "over SSH"}, header: "Not opened: this is an SSH session\n", ssh: true},
+		{name: "no display", fake: fakeWebEnv{running: true, reason: "no desktop session"}, header: "Not opened: no desktop session\n", unwanted: "ssh -L"},
+		{name: "print", cfg: webConfig{print: true}, fake: fakeWebEnv{running: true, desktop: true}, header: "Open on this computer\n", unwanted: "ssh -L"},
+		{name: "browser fails", fake: fakeWebEnv{running: true, desktop: true, openErr: errors.New("xdg-open: not found")}, header: "Not opened: could not start a browser: xdg-open: not found\n", unwanted: "ssh -L"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			stateDir := openTestState(t, true, "http://127.0.0.1:9876")
+			stateDir := webTestState(t, true, "http://127.0.0.1:9876")
 			fake := tc.fake
 			cfg := tc.cfg
 			cfg.stateDir = stateDir
 			var out bytes.Buffer
-			if err := runOpen(cfg, &out, fake.env()); err != nil {
+			if err := runWeb(cfg, &out, fake.env()); err != nil {
 				t.Fatal(err)
 			}
 			if tc.name != "browser fails" && len(fake.opened) != 0 {
@@ -190,11 +191,11 @@ func TestOpenWithoutADesktopOnlyPrints(t *testing.T) {
 	}
 }
 
-func TestOpenWithoutLoopbackDoesNotOpen(t *testing.T) {
-	stateDir := openTestState(t, false, "http://100.101.102.103:9876")
-	fake := &fakeOpenEnv{running: true, desktop: true}
+func TestWebWithoutLoopbackDoesNotOpen(t *testing.T) {
+	stateDir := webTestState(t, false, "http://100.101.102.103:9876")
+	fake := &fakeWebEnv{running: true, desktop: true}
 	var out bytes.Buffer
-	if err := runOpen(openConfig{stateDir: stateDir}, &out, fake.env()); err != nil {
+	if err := runWeb(webConfig{stateDir: stateDir}, &out, fake.env()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.opened) != 0 {
@@ -203,20 +204,22 @@ func TestOpenWithoutLoopbackDoesNotOpen(t *testing.T) {
 	wantLines(t, out.String(), []string{"not served here: Mewla does not listen on 127.0.0.1"}, []string{"Not opened"})
 }
 
-func TestOpenAndWebAreTheSameCommand(t *testing.T) {
-	for _, name := range []string{"open", "web"} {
-		var out bytes.Buffer
-		if err := run([]string{name, "-h"}, &out); !errors.Is(err, flag.ErrHelp) {
-			t.Fatalf("%s -h: err = %v", name, err)
-		}
-		if !strings.Contains(out.String(), "Usage: mewla open [flags]   (also: mewla web)") || !strings.Contains(out.String(), "-print") {
-			t.Fatalf("%s help = %q", name, out.String())
-		}
+func TestWebIsTheCommandAndOpenIsNot(t *testing.T) {
+	var out bytes.Buffer
+	if err := run([]string{"web", "-h"}, &out); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("web -h: err = %v", err)
+	}
+	if !strings.Contains(out.String(), "Usage: mewla web [flags]\n") || !strings.Contains(out.String(), "-print") {
+		t.Fatalf("web help = %q", out.String())
+	}
+	if err := run([]string{"open"}, io.Discard); err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("run(open) = %v", err)
 	}
 	var usage bytes.Buffer
 	printTopLevelUsage(&usage)
 	if !strings.Contains(usage.String(), "Connect a phone or browser\n  login") ||
-		!strings.Contains(usage.String(), "  open      Open the web UI in this computer's browser (alias: web)\n") {
+		!strings.Contains(usage.String(), "  web       Open the web UI in this computer's browser and print its addresses\n") ||
+		strings.Contains(usage.String(), "  open ") {
 		t.Fatalf("usage = %s", usage.String())
 	}
 }

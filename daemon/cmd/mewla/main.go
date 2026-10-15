@@ -100,8 +100,8 @@ func run(args []string, stderr io.Writer) error {
 			return runDaemon(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
-		case "open", "web":
-			return runOpenCommand(args[1:], stderr)
+		case "web":
+			return runWebCommand(args[1:], stderr)
 		case "doctor":
 			return runDoctorCommand(args[1:], stderr)
 		case "deps":
@@ -2206,7 +2206,7 @@ Start
 Connect a phone or browser
   login     Sign in so your phone and any browser reach this computer from anywhere
   logout    Turn remote access off for this computer
-  open      Open the web UI in this computer's browser (alias: web)
+  web       Open the web UI in this computer's browser and print its addresses
   pair      Show a one-time QR code and links to pair a new phone or browser
   address   List, add or remove the addresses phones and browsers use
   devices   List paired phones and browsers; approve, deny or revoke them
