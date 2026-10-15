@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -573,9 +574,9 @@ func (w *Watcher) targetForSessionProbe(sessionID string) (targetProcessIdentity
 		return identity, true, nil
 	}
 	if resolver == nil {
-		identity, known := w.resolveTargetProcessIdentity(sessionID)
-		if !known {
-			return targetProcessIdentity{}, false, ErrOwnershipProbeUnavailable
+		identity, err := w.resolveTargetProcessIdentity(sessionID)
+		if err != nil {
+			return targetProcessIdentity{}, false, fmt.Errorf("%w: %v", ErrOwnershipProbeUnavailable, err)
 		}
 		return identity, true, nil
 	}
@@ -712,35 +713,38 @@ func (w *Watcher) deprojectOwnershipLoss(sessionID string) error {
 // resolveTargetProcessIdentity resolves the exact pane/process identity on
 // the one selected host server. The owned agent projection gates calls into
 // this resolver, so ambient panes never become mutation candidates.
-func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIdentity, bool) {
+func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIdentity, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
-		return targetProcessIdentity{}, false
+		return targetProcessIdentity{}, fmt.Errorf("empty tmux target")
 	}
 	out, err := tmuxCommand(w.socketPathFor(target), "display-message", "-p", "-t", target, "#{pane_dead}\t#{pane_pid}").Output()
 	if err != nil {
-		return targetProcessIdentity{}, false
+		return targetProcessIdentity{}, fmt.Errorf("tmux display-message for %s: %w%s", target, err, commandStderr(err))
 	}
 	fields := strings.Split(strings.TrimSuffix(string(out), "\n"), "\t")
-	if len(fields) != 2 || fields[0] == "1" {
-		return targetProcessIdentity{}, false
+	if len(fields) != 2 {
+		return targetProcessIdentity{}, fmt.Errorf("tmux display-message for %s returned %q, want pane_dead<TAB>pane_pid", target, truncateDiagnostic(string(out)))
+	}
+	if fields[0] == "1" {
+		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s is dead", target)
 	}
 	panePID, err := strconv.Atoi(strings.TrimSpace(fields[1]))
 	if err != nil || panePID <= 0 {
-		return targetProcessIdentity{}, false
+		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s reported pane_pid %q", target, fields[1])
 	}
-	processes := snapshotProcesses()
-	if len(processes) == 0 {
-		return targetProcessIdentity{}, false
+	processes, err := snapshotProcessesErr()
+	if err != nil {
+		return targetProcessIdentity{}, err
 	}
 	paneProcess, ok := processes[panePID]
 	if !ok || paneProcess.startedAt.IsZero() {
-		return targetProcessIdentity{}, false
+		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s pid %d has no process start in the ps snapshot", target, panePID)
 	}
 	authority, ok := resolveForegroundTargetProcess(panePID, processes)
 	authority.command = strings.TrimSpace(authority.command)
 	if !ok || authority.command == "" {
-		return targetProcessIdentity{}, false
+		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s foreground process is indeterminate: %s", target, describeForegroundGroup(panePID, processes))
 	}
 	identity := targetProcessIdentity{
 		Command:         authority.command,
@@ -751,7 +755,10 @@ func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIden
 		ProcessID:       authority.provider.pid,
 		ProcessStart:    authority.provider.startedAt.UnixNano(),
 	}
-	return identity, identity.valid()
+	if !identity.valid() {
+		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s process identity is incomplete: %s", target, describeForegroundGroup(panePID, processes))
+	}
+	return identity, nil
 }
 
 // ConfigureDelegatedResources enables the platform resource backend for
@@ -2475,6 +2482,10 @@ func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
 	return windows, nil
 }
 
+// malformedPaneInventoryLogged keeps one diagnostic per daemon run for a pane
+// inventory whose separators did not survive tmux output.
+var malformedPaneInventoryLogged atomic.Bool
+
 func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{session_name}")
 	out, err := cmd.CombinedOutput()
@@ -2489,6 +2500,9 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 			continue
 		}
 		parts := strings.SplitN(line, "\t", 10)
+		if len(parts) != 10 && malformedPaneInventoryLogged.CompareAndSwap(false, true) {
+			log.Printf("watcher: tmux list-panes line has %d of 10 tab-separated fields (non-UTF-8 tmux client?): %q", len(parts), truncateDiagnostic(line))
+		}
 		target := parts[0]
 		// Terminal views link an owned window but are not execution Sessions.
 		sessionName := ""
@@ -4483,8 +4497,8 @@ func (w *Watcher) completedTargetIdentity(sessionID string) (targetProcessIdenti
 		identity, known := targetIdentityResolverFromCommandResolver(resolver)(sessionID)
 		return identity, known, nil
 	}
-	identity, known := w.resolveTargetProcessIdentity(sessionID)
-	return identity, known, nil
+	identity, err := w.resolveTargetProcessIdentity(sessionID)
+	return identity, err == nil, nil
 }
 
 // KillSession terminates only the owned pane and releases its delegated
