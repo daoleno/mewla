@@ -1,0 +1,72 @@
+{
+  "$comment": "Third-party code in the app that is not a JavaScript package of the Metro bundle. Native platforms follow pods (iOS) and maven (Android) unless platforms names them, as for the C++ libraries that React Native compiles in on Android. scripts/app-licenses/generate.mjs reads this file; --pods and --maven check that it covers every CocoaPod and Maven artifact of a native build. Texts live in texts/ (fetched from the upstream tag named in url) or app/assets/notices/.",
+  "bundled": [
+    { "name": "Ghostty (libghostty-vt)", "license": "MIT", "url": "https://github.com/ghostty-org/ghostty", "platforms": ["android", "ios"], "text": "app/assets/notices/GHOSTTY-MIT.txt" },
+    { "name": "noVNC", "version": "1.7.0", "license": "MPL-2.0", "url": "https://github.com/novnc/noVNC", "platforms": ["android", "ios"], "text": "app/assets/notices/NOVNC-MPL-2.0.txt" },
+    { "name": "Mermaid", "version": "11.6.0", "license": "MIT", "url": "https://github.com/mermaid-js/mermaid", "platforms": ["android", "ios"], "text": "app/assets/notices/MERMAID-MIT.txt", "npmDependenciesOf": "mermaid" },
+    { "name": "Pi Coding Agent mark", "license": "MIT", "url": "https://pi.dev", "platforms": ["android", "ios"], "text": "app/assets/notices/PI-MARK-MIT.txt" }
+  ],
+  "fonts": [
+    { "name": "Inter", "license": "OFL-1.1", "url": "https://github.com/rsms/inter", "text": "texts/inter-ofl.txt" },
+    { "name": "Bricolage Grotesque", "license": "OFL-1.1", "url": "https://github.com/ateliertriay/bricolage", "text": "texts/bricolage-ofl.txt" },
+    { "name": "Maple Mono", "license": "OFL-1.1", "url": "https://github.com/subframe7536/maple-font", "text": "texts/maple-ofl.txt" }
+  ],
+  "native": [
+    { "name": "Hermes", "license": "MIT", "url": "https://github.com/facebook/hermes", "text": "texts/hermes.txt", "pods": ["hermes-engine"], "maven": ["com.facebook.hermes"] },
+    { "name": "Folly", "license": "Apache-2.0", "url": "https://github.com/facebook/folly/tree/v2024.11.18.00", "text": "texts/folly.txt", "platforms": ["android", "ios"], "pods": ["ReactNativeDependencies", "RCT-Folly"] },
+    { "name": "Boost", "license": "BSL-1.0", "url": "https://www.boost.org", "text": "texts/boost.txt", "platforms": ["android", "ios"], "pods": ["ReactNativeDependencies", "boost"] },
+    { "name": "glog", "license": "BSD-3-Clause", "url": "https://github.com/google/glog/tree/v0.3.5", "text": "texts/glog.txt", "platforms": ["android", "ios"], "pods": ["ReactNativeDependencies", "glog"] },
+    { "name": "double-conversion", "license": "BSD-3-Clause", "url": "https://github.com/google/double-conversion/tree/v1.1.6", "text": "texts/double-conversion.txt", "platforms": ["android", "ios"], "pods": ["ReactNativeDependencies", "DoubleConversion"] },
+    { "name": "{fmt}", "license": "MIT", "url": "https://github.com/fmtlib/fmt/tree/12.1.0", "text": "texts/fmt.txt", "platforms": ["android", "ios"], "pods": ["ReactNativeDependencies", "fmt"] },
+    { "name": "fast_float", "license": "MIT", "url": "https://github.com/fastfloat/fast_float/tree/v8.0.0", "text": "texts/fast-float.txt", "platforms": ["android", "ios"], "pods": ["ReactNativeDependencies", "fast_float"] },
+    { "name": "SocketRocket", "license": "BSD-3-Clause", "url": "https://github.com/facebookincubator/SocketRocket/tree/0.7.1", "text": "texts/socketrocket.txt", "pods": ["ReactNativeDependencies", "SocketRocket"] },
+    { "name": "SDWebImage", "license": "MIT", "url": "https://github.com/SDWebImage/SDWebImage/tree/5.21.7", "text": "texts/sdwebimage.txt", "pods": ["SDWebImage"] },
+    { "name": "SDWebImageAVIFCoder", "license": "MIT", "url": "https://github.com/SDWebImage/SDWebImageAVIFCoder/tree/0.11.1", "text": "texts/sdwebimage-avif-coder.txt", "pods": ["SDWebImageAVIFCoder"] },
+    { "name": "SDWebImageSVGCoder", "license": "MIT", "url": "https://github.com/SDWebImage/SDWebImageSVGCoder/tree/1.7.0", "text": "texts/sdwebimage-svg-coder.txt", "pods": ["SDWebImageSVGCoder"] },
+    { "name": "SDWebImageWebPCoder", "license": "MIT", "url": "https://github.com/SDWebImage/SDWebImageWebPCoder/tree/0.14.6", "text": "texts/sdwebimage-webp-coder.txt", "pods": ["SDWebImageWebPCoder"] },
+    { "name": "libavif", "license": "BSD-2-Clause", "url": "https://github.com/AOMediaCodec/libavif/tree/v1.0.0", "text": "texts/libavif.txt", "pods": ["libavif"], "maven": ["org.aomedia.avif.android"] },
+    { "name": "dav1d", "license": "BSD-2-Clause", "url": "https://code.videolan.org/videolan/dav1d/-/tree/1.2.0", "text": "texts/dav1d.txt", "pods": ["libdav1d"] },
+    { "name": "libwebp", "license": "BSD-3-Clause", "url": "https://github.com/webmproject/libwebp/tree/v1.6.0", "text": "texts/libwebp.txt", "pods": ["libwebp"] },
+    { "name": "iosMath", "license": "MIT", "url": "https://github.com/kostub/iosMath/tree/0.9.4", "text": "texts/iosmath.txt", "pods": ["iosMath"] },
+    { "name": "AndroidMath", "license": "MIT", "url": "https://github.com/gregcockroft/AndroidMath", "text": "texts/androidmath.txt", "maven": ["com.github.gregcockroft"] },
+    { "name": "SwiftUI Introspect", "license": "MIT", "url": "https://github.com/siteline/swiftui-introspect/tree/1.3.0", "text": "texts/swiftui-introspect.txt", "pods": ["SwiftUIIntrospect"] },
+    { "name": "ZXingObjC", "license": "Apache-2.0", "url": "https://github.com/zxingify/zxingify-objc/tree/3.6.9", "text": "texts/zxingobjc.txt", "pods": ["ZXingObjC"] },
+    { "name": "fbjni and SoLoader", "license": "Apache-2.0", "url": "https://github.com/facebookincubator/fbjni", "text": "texts/apache-2.0.txt", "maven": ["com.facebook.fbjni", "com.facebook.soloader"] },
+    { "name": "Fresco", "license": "MIT", "url": "https://github.com/facebook/fresco/tree/v3.6.0", "text": "texts/fresco.txt", "maven": ["com.facebook.fresco"] },
+    { "name": "Infer annotations", "license": "MIT", "url": "https://github.com/facebook/infer", "text": "texts/infer-annotation.txt", "maven": ["com.facebook.infer.annotation"] },
+    { "name": "Device Year Class", "license": "BSD-3-Clause", "url": "https://github.com/facebook/device-year-class", "text": "texts/yearclass.txt", "maven": ["com.facebook.device.yearclass"] },
+    { "name": "Bolts", "license": "MIT", "url": "https://github.com/BoltsFramework/Bolts-Android", "text": "texts/bolts.txt", "maven": ["com.parse.bolts"] },
+    { "name": "AndroidX and Material Components", "license": "Apache-2.0", "url": "https://developer.android.com/jetpack/androidx", "text": "texts/apache-2.0.txt", "maven": ["androidx", "com.google.android.material"] },
+    { "name": "Kotlin and kotlinx", "license": "Apache-2.0", "url": "https://github.com/JetBrains/kotlin", "text": "texts/apache-2.0.txt", "maven": ["org.jetbrains", "org.jetbrains.kotlin", "org.jetbrains.kotlinx"] },
+    { "name": "Firebase and Google Data Transport", "license": "Apache-2.0", "url": "https://github.com/firebase/firebase-android-sdk", "text": "texts/apache-2.0.txt", "maven": ["com.google.firebase", "com.google.android.datatransport"] },
+    { "name": "Guava, Gson, Dagger, AutoValue, Error Prone and J2ObjC annotations", "license": "Apache-2.0", "url": "https://github.com/google/guava", "text": "texts/apache-2.0.txt", "maven": ["com.google.guava", "com.google.code.gson", "com.google.dagger", "com.google.auto.value", "com.google.errorprone", "com.google.j2objc"] },
+    { "name": "JSR 305 annotations", "license": "BSD-3-Clause", "url": "https://github.com/amaembo/jsr-305", "text": "texts/jsr305.txt", "maven": ["com.google.code.findbugs"] },
+    { "name": "Checker Framework qualifiers", "license": "MIT", "url": "https://github.com/typetools/checker-framework", "text": "texts/checker-framework.txt", "maven": ["org.checkerframework"] },
+    { "name": "JSpecify, javax.inject and Jakarta Inject", "license": "Apache-2.0", "url": "https://jspecify.dev", "text": "texts/apache-2.0.txt", "maven": ["org.jspecify", "javax.inject", "jakarta.inject"] },
+    { "name": "Apache Commons Codec and IO", "license": "Apache-2.0", "url": "https://commons.apache.org", "text": "texts/apache-2.0.txt", "maven": ["commons-codec", "commons-io"] },
+    { "name": "OkHttp, Okio and zstd-kmp", "license": "Apache-2.0", "url": "https://github.com/square/okhttp", "text": "texts/apache-2.0.txt", "maven": ["com.squareup.okhttp3", "com.squareup.okio", "com.squareup.zstd"] },
+    { "name": "Glide", "license": "BSD-2-Clause, MIT, Apache-2.0", "url": "https://github.com/bumptech/glide", "text": "texts/glide.txt", "maven": ["com.github.bumptech.glide"] },
+    { "name": "APNG4Android", "license": "Apache-2.0", "url": "https://github.com/penfeizhou/APNG4Android", "text": "texts/apache-2.0.txt", "maven": ["com.github.penfeizhou.android.animation"] },
+    { "name": "AndroidSVG", "license": "Apache-2.0", "url": "https://github.com/BigBadaboom/androidsvg", "text": "texts/apache-2.0.txt", "maven": ["com.caverock"] },
+    { "name": "Glide Transformations", "license": "Apache-2.0", "url": "https://github.com/wasabeef/glide-transformations", "text": "texts/apache-2.0.txt", "maven": ["jp.wasabeef"] },
+    { "name": "ShortcutBadger", "license": "Apache-2.0", "url": "https://github.com/leolin310148/ShortcutBadger", "text": "texts/apache-2.0.txt", "maven": ["me.leolin"] },
+    { "name": "Brotli", "license": "MIT", "url": "https://github.com/google/brotli", "text": "texts/brotli.txt", "maven": ["org.brotli"] },
+    { "name": "JUnit", "license": "EPL-1.0", "url": "https://github.com/junit-team/junit4", "text": "texts/junit.txt", "maven": ["junit"] },
+    { "name": "Hamcrest", "license": "BSD-3-Clause", "url": "https://github.com/hamcrest/JavaHamcrest", "text": "texts/hamcrest.txt", "maven": ["org.hamcrest"] },
+    { "name": "Pika", "license": "MIT", "url": "https://github.com/lukmccall/pika", "text": "texts/pika.txt", "maven": ["io.github.lukmccall.pika"] },
+    { "name": "gradle-simple", "license": "MIT", "url": "https://github.com/jitpack/gradle-simple", "text": "texts/gradle-simple.txt", "maven": ["com.github.jitpack"] },
+    { "name": "Google Play services, ML Kit and Play Install Referrer", "license": "Google terms", "url": "https://developers.google.com/ml-kit/terms", "note": "Proprietary Google libraries, used under the Android Software Development Kit License (https://developer.android.com/studio/terms) and the ML Kit Terms of Service (https://developers.google.com/ml-kit/terms). On Android, QR code scanning uses ML Kit.", "maven": ["com.google.android.gms", "com.google.mlkit", "com.google.android.odml", "com.android.installreferrer"] }
+  ],
+  "repositoryTexts": {
+    "$comment": "License texts for bundled packages that ship no license file and share a repository with no listed package that does.",
+    "github.com/lobehub/lobe-icons": "texts/repo-lobehub-lobe-icons.txt",
+    "github.com/radix-ui/primitives": "texts/repo-radix-ui-primitives.txt",
+    "github.com/react-navigation/standard-navigation": "texts/repo-react-navigation-standard-navigation.txt",
+    "github.com/react/metro": "texts/repo-facebook-metro.txt"
+  },
+  "npmProvided": {
+    "$comment": "Native artifacts built from a JavaScript package that is listed with the bundle's packages.",
+    "pods": ["React", "React-*", "RCT*", "FBLazyVector", "Yoga", "ReactCodegen", "ReactAppDependencyProvider", "ReactCommon", "Expo*", "EX*", "expo-*", "RN*", "react-native-*", "Mewla*", "TerminalVt", "LinkTransport", "KeyboardLifecycle", "AppUpdate", "FileUpload"],
+    "maven": ["host.exp.exponent", "expo.modules", "com.facebook.react", "com.facebook.yoga"]
+  }
+}

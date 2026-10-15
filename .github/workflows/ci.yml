@@ -95,6 +95,8 @@ jobs:
       - name: Typecheck
         run: bunx tsc --noEmit
         working-directory: app
+      - name: Open-source licenses are current
+        run: bun run licenses:generate --check
       - name: Android export
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: bunx expo export --platform android
@@ -140,6 +142,8 @@ jobs:
           cd ios
           pod install
           ../../scripts/assert-ios-camera-barcode-pod.sh Podfile.lock
+          cd ../..
+          bun run licenses:generate --pods app/ios/Podfile.lock
       - name: Build unsigned Simulator app
         env:
           DERIVED_DATA: ${{ runner.temp }}/ios-derived
@@ -217,6 +221,11 @@ jobs:
           ./scripts/verify-apk-notice.sh "$APK"
           ./scripts/verify-android-native-symbols.py \
             --lock app/modules/terminal-vt/native.lock.json --apk "$APK"
+      - name: Open-source licenses cover the Android build
+        run: |
+          set -euo pipefail
+          (cd app/android && ./gradlew -q :app:dependencies --configuration releaseRuntimeClasspath) > "$RUNNER_TEMP/android-deps.txt"
+          bun run licenses:generate --maven "$RUNNER_TEMP/android-deps.txt"
 
   native-contract:
     name: Native terminal contract
