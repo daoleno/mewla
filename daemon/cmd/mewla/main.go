@@ -2054,10 +2054,10 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		return fmt.Errorf("build pairing links: %w", err)
 	}
 	if phoneAddress == "" {
-		if connectLink, address, err := buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing); err != nil {
+		if connectLinks, address, err := buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing); err != nil {
 			fmt.Fprintf(stderr, "Remote access pairing unavailable: %v\n", err)
-		} else if connectLink != "" {
-			links.phoneAddress, links.phoneLink = address, connectLink
+		} else if connectLinks.Link != "" {
+			links.phoneAddress, links.phoneLink, links.phoneLegacy = address, connectLinks.Link, connectLinks.Legacy
 			phoneAddress = address
 		}
 	}
@@ -2075,11 +2075,11 @@ func runPairCommand(args []string, stderr io.Writer) error {
 				authManager.PublicKeyHex() != pairingInfo.DaemonPublicKey {
 				return errors.New("runtime owner pairing identity changed")
 			}
-			connectLink, err := buildLinkPairingLink(authManager, linkConfig, linkConfigPath, pairing)
+			connectLinks, err := buildLinkPairingLink(authManager, linkConfig, linkConfigPath, pairing)
 			if err != nil {
 				return err
 			}
-			links.phoneAddress, links.phoneLink = "Mewla Link", connectLink
+			links.phoneAddress, links.phoneLink, links.phoneLegacy = "Mewla Link", connectLinks.Link, connectLinks.Legacy
 		}
 	}
 	if links.phoneLink == "" && links.localBrowser == "" && len(links.httpsBrowser) == 0 {
@@ -2098,19 +2098,19 @@ func runPairCommand(args []string, stderr io.Writer) error {
 }
 
 // buildLinkPairingLink admits one phone through the configured Mewla Link
-// relay and returns its connect link.
+// relay and returns its connect links.
 func buildLinkPairingLink(
 	authManager *auth.Manager,
 	linkConfig link.ConnectorConfig,
 	linkConfigPath string,
 	pairing auth.PairingToken,
-) (string, error) {
+) (link.PairingLinks, error) {
 	identity, err := link.LoadOrCreateTransportIdentity(
 		authManager.StorageDir(),
 		link.RelayDomains(linkConfig),
 	)
 	if err != nil {
-		return "", fmt.Errorf("initialize Mewla Link transport identity: %w", err)
+		return link.PairingLinks{}, fmt.Errorf("initialize Mewla Link transport identity: %w", err)
 	}
 	pairContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -2122,13 +2122,13 @@ func buildLinkPairingLink(
 		auth.DefaultPairingTTL,
 	)
 	if err != nil {
-		return "", fmt.Errorf(
+		return link.PairingLinks{}, fmt.Errorf(
 			"request Mewla Link pairing admission from %s: %w (make sure mewla is running and Link is connected)",
 			linkConfigPath,
 			err,
 		)
 	}
-	connectLink, _, err := link.BuildPairingLink(
+	connectLinks, _, err := link.BuildPairingLink(
 		authManager,
 		identity,
 		linkConfig,
@@ -2136,9 +2136,9 @@ func buildLinkPairingLink(
 		admissions,
 	)
 	if err != nil {
-		return "", fmt.Errorf("build Mewla Link pairing payload: %w", err)
+		return link.PairingLinks{}, fmt.Errorf("build Mewla Link pairing payload: %w", err)
 	}
-	return connectLink, nil
+	return connectLinks, nil
 }
 
 func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {

@@ -107,6 +107,57 @@ describe("Pairing V2", () => {
   });
 });
 
+// Shared with daemon/link/pairing_compact_test.go: the Go encoder and this
+// decoder must agree on the version 3 layout and its signature binding.
+const COMPACT_GOLDEN =
+  "AN43KVROR7TFJ6KAPCYRF2FJROTZAH4FHLTJLPWX4DRZCC5NASLGIIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCGMZTGMZTGMZTGMZTGMZTGMZTGNCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIA53FTB5QABK2LOJ5ZDR7UD6VSZJ3GNTCZ2SAFQAX6EXGTCUOC62XJM3WVZS7AMVPXIYOOBR7W373DWAZR4Z5XNYQSIWIZL2J6YTNTDXCT5323VAWEDROVUWK5BNN52HIZLSFUZWMOLBAECG2YLJNYFG2LTNMV3WYYJOMFUQDOYBKVKVKVKVKVKVKVKVKVKVKVKVKU";
+
+describe("Pairing V3", () => {
+  test("reads the daemon's compact Link pairing payload", () => {
+    const seed = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+    const keyPair = nacl.sign.keyPair.fromSeed(seed);
+    const parsed = parseConnectLink(`mewla://settings?v=3&p=${COMPACT_GOLDEN}`);
+    expect(parsed).toEqual({
+      url: `wss://${"55".repeat(16)}.m.mewla.ai/ws`,
+      daemonId: undefined,
+      daemonPublicKey: bytesToHex(keyPair.publicKey),
+      enrollmentToken: "22".repeat(32),
+      link: {
+        kind: "link",
+        routeId: "33".repeat(16),
+        transportPin: "44".repeat(32),
+        candidates: [
+          {
+            name: "main",
+            admissionUrl: `wss://${"55".repeat(16)}.m.mewla.ai/ws`,
+            url: "wss://quiet-otter-3f9a.m.mewla.ai/ws",
+          },
+        ],
+      },
+    });
+    expect(
+      parseConnectLink(
+        `https://quiet-otter-3f9a.m.mewla.ai/#pair=${encodeURIComponent(`mewla://settings?v=3&p=${COMPACT_GOLDEN}`)}`,
+      )?.enrollmentToken,
+    ).toBe("22".repeat(32));
+  });
+
+  test("rejects any changed character, other encodings and versions", () => {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    for (let index = 0; index < COMPACT_GOLDEN.length; index++) {
+      const current = COMPACT_GOLDEN[index];
+      const replacement = alphabet[(alphabet.indexOf(current) + 1) % alphabet.length];
+      const changed = COMPACT_GOLDEN.slice(0, index) + replacement + COMPACT_GOLDEN.slice(index + 1);
+      expect(parseConnectLink(`mewla://settings?v=3&p=${changed}`)).toBeNull();
+    }
+    expect(parseConnectLink(`mewla://settings?v=3&p=${COMPACT_GOLDEN.toLowerCase()}`)).toBeNull();
+    expect(parseConnectLink(`mewla://settings?v=3&p=${COMPACT_GOLDEN.slice(0, -2)}`)).toBeNull();
+    expect(parseConnectLink(`mewla://settings?v=3&p=${COMPACT_GOLDEN}AAAA`)).toBeNull();
+    expect(parseConnectLink(`mewla://settings?v=2&p=${COMPACT_GOLDEN}`)).toBeNull();
+    expect(parseConnectLink(`mewla://settings?p=${COMPACT_GOLDEN}`)).toBeNull();
+  });
+});
+
 test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
   const query = `u=${encodeURIComponent("wss://mewla.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
   const current = `mewla://settings?${query}`;

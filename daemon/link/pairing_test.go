@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,7 @@ func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalizeConnectorConfig: %v", err)
 	}
-	linkValue, payload, err := BuildPairingLink(
+	links, payload, err := BuildPairingLink(
 		manager,
 		identity,
 		config,
@@ -62,11 +63,12 @@ func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {
 	if err := ValidatePairingPayload(payload, time.Now()); err != nil {
 		t.Fatalf("ValidatePairingPayload: %v", err)
 	}
-	if payload.RouteID != identity.RouteID ||
+	if payload.Version != CompactPairingVersion ||
+		payload.RouteID != identity.RouteID ||
 		payload.TransportPin != identity.SPKISHA256 ||
 		payload.EnrollmentToken != pairing.Value ||
 		len(payload.Candidates) != 2 {
-		t.Fatalf("unexpected V2 payload: %#v", payload)
+		t.Fatalf("unexpected pairing payload: %#v", payload)
 	}
 	if payload.Candidates[0].Name != "region-a" ||
 		payload.Candidates[0].AdmissionURL == "" ||
@@ -74,12 +76,21 @@ func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {
 		t.Fatalf("unexpected sorted candidates: %#v", payload.Candidates)
 	}
 
-	parsedURL, err := url.Parse(linkValue)
+	compactPrefix := "mewla://settings?v=3&p="
+	if !strings.HasPrefix(links.Link, compactPrefix) {
+		t.Fatalf("unexpected pairing link: %s", links.Link)
+	}
+	compact, err := DecodeCompactPairing(strings.TrimPrefix(links.Link, compactPrefix))
+	if err != nil || !reflect.DeepEqual(compact, payload) {
+		t.Fatalf("compact link = %#v, %v", compact, err)
+	}
+
+	parsedURL, err := url.Parse(links.Legacy)
 	if err != nil {
 		t.Fatalf("url.Parse: %v", err)
 	}
 	if parsedURL.Scheme != "mewla" || parsedURL.Query().Get("v") != "2" {
-		t.Fatalf("unexpected pairing link: %s", linkValue)
+		t.Fatalf("unexpected legacy pairing link: %s", links.Legacy)
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parsedURL.Query().Get("p"))
 	if err != nil {
@@ -89,8 +100,12 @@ func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("unmarshal V2 payload: %v", err)
 	}
-	if decoded.Signature != payload.Signature {
-		t.Fatal("serialized pairing signature changed")
+	if err := ValidatePairingPayload(decoded, time.Now()); err != nil {
+		t.Fatalf("legacy V2 payload: %v", err)
+	}
+	if decoded.DaemonID != manager.DaemonID() || decoded.EnrollmentToken != payload.EnrollmentToken ||
+		!reflect.DeepEqual(decoded.Candidates, payload.Candidates) {
+		t.Fatalf("legacy payload differs: %#v", decoded)
 	}
 
 	tampered := payload
@@ -102,6 +117,6 @@ func TestPairingV2BindsRoutePinCandidatesAndEnrollment(t *testing.T) {
 		t.Fatal("tampered transport pin passed daemon identity proof")
 	}
 	if err := ValidatePairingPayload(payload, pairing.ExpiresAt.Add(time.Second)); err == nil {
-		t.Fatal("expired Pairing V2 payload was accepted")
+		t.Fatal("expired pairing payload was accepted")
 	}
 }

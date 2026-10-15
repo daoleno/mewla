@@ -138,10 +138,15 @@ type pairingLinks struct {
 	expiresAt    time.Time
 	phoneAddress string // "Mewla Link" or the URL in the QR; empty when no phone can reach this computer
 	phoneLink    string
+	phoneLegacy  string // the version 2 Link link for apps before compactPairingAppVersion
 	localBrowser string
 	localShort   string // http://127.0.0.1:9876/p/<token>, when the daemon serves it
 	httpsBrowser []string
 }
+
+// compactPairingAppVersion is the first app that reads version 3 Link
+// pairing links.
+const compactPairingAppVersion = "0.2.17"
 
 // shortBrowserLink is this computer's one-line browser pairing link; the
 // daemon redirects it to the full pairing page.
@@ -284,6 +289,9 @@ func printPairing(w io.Writer, status pairingStatus, links pairingLinks, details
 		fmt.Fprintln(w, "  or go to Settings → Pair a computer.")
 		fmt.Fprintln(w, "  "+phoneReachLine(links.phoneAddress))
 		fmt.Fprintln(w, "  "+style.dim("The code works once, until "+links.expiresAt.Local().Format("15:04")+"."))
+		if links.phoneLegacy != "" {
+			fmt.Fprintln(w, "  "+style.dim("Needs the app "+compactPairingAppVersion+" or later; older app: ")+style.cmd(detailsCommand))
+		}
 	} else {
 		fmt.Fprintln(w, style.bold("Phones can't reach this computer yet"))
 		fmt.Fprintf(w, "  From anywhere: %s    Same Wi-Fi: %s\n", style.cmd("mewla login"), style.cmd("mewla --lan"))
@@ -337,6 +345,9 @@ func printPairingDetails(w io.Writer, title string, links pairingLinks) {
 			}
 		}
 		fmt.Fprintf(w, "or paste:  %s\n", links.phoneLink)
+		if links.phoneLegacy != "" {
+			fmt.Fprintf(w, "App before %s, paste:  %s\n", compactPairingAppVersion, links.phoneLegacy)
+		}
 		fmt.Fprintf(w, "Address:   %s   (other addresses: mewla address list)\n", links.phoneAddress)
 	} else {
 		fmt.Fprintln(w, "Phones can't reach this computer yet. Restart with mewla --lan for Wi-Fi/LAN")
