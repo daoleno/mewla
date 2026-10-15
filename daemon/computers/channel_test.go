@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +37,9 @@ type computer struct {
 	stopRun context.CancelFunc
 	stopped chan struct{}
 
+	// browser is what this computer says about its Chrome.
+	browser atomic.Bool
+
 	mu          sync.Mutex
 	received    []string
 	receipts    []string
@@ -51,7 +55,9 @@ func newComputer(t *testing.T, ctx context.Context, name string) *computer {
 	c := &computer{t: t, name: name, auth: manager}
 	c.manager, err = computers.NewManager(computers.Options{
 		Auth: manager, Version: "test", Name: name, Deliver: c.deliver,
-		Caps: func() computers.Caps { return computers.Caps{OS: "test", Apps: []string{name + "-app"}} },
+		Caps: func() computers.Caps {
+			return computers.Caps{OS: "test", Apps: []string{name + "-app"}, BrowserUse: c.browser.Load()}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -508,4 +514,24 @@ func TestTheAppForgetsAPairOnBothComputers(t *testing.T) {
 	if removed := forget(linux, mac); len(removed) != 0 {
 		t.Fatalf("second remove: %+v", removed)
 	}
+}
+
+// Chrome getting ready on the Mac reaches the other Brain over the open
+// channel, without waiting for it to reconnect.
+func TestNewCapsReachTheOtherComputer(t *testing.T) {
+	t.Cleanup(computers.FastTimings())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	linux := newComputer(t, ctx, "manjaro")
+	mac := newComputer(t, ctx, "studio")
+	p := pairPhone(t, linux, mac)
+	connectWithPhone(t, p, linux, mac)
+	eventually(t, "online", func() bool { return linux.peer("mac").Online })
+	if linux.peer("mac").Caps.BrowserUse {
+		t.Fatal("browser use before Chrome is ready")
+	}
+	mac.browser.Store(true)
+	eventually(t, "browser use on the open channel", func() bool { return linux.peer("mac").Caps.BrowserUse })
+	mac.browser.Store(false)
+	eventually(t, "browser use gone again", func() bool { return !linux.peer("mac").Caps.BrowserUse })
 }
