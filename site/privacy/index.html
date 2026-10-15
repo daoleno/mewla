@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy policy · Mewla</title>
+<meta name="description" content="What Mewla collects, where your data goes, and how to delete your remote access account.">
+<link rel="canonical" href="https://mewla.ai/privacy/">
+<link rel="alternate" hreflang="zh" href="https://mewla.ai/privacy/zh/">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fbfaf7">
+<link rel="icon" href="../favicon-32.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="../docs/docs.css">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="d-top">
+  <a class="d-word" href="../" aria-label="Mewla home">mewla</a>
+  <a class="d-section" href="../docs/">docs</a>
+  <a class="d-lang" href="zh/" hreflang="zh" lang="zh">中文</a>
+</header>
+<main class="d-solo" id="content">
+  <article class="d-doc">
+<h1>Privacy policy</h1>
+<p>Mewla lets you run AI agents on your own computer and use them from your phone. Your work stays between your devices and your computer.</p>
+<p class="d-updated">Last updated 15 October 2026</p>
+
+<div class="callout callout-short">
+<ul>
+<li>The Mewla app and the <code>mewla</code> program on your computer send no analytics, telemetry or crash reports. No ads, no tracking.</li>
+<li>Your sessions, prompts, files, terminal and screen travel only between your phone and your own computer. We never receive them.</li>
+<li>Only if you turn on remote access (<code>mewla login</code>) do we keep a small account: your GitHub id and username, and the address and name of each computer you sign in.</li>
+<li>You can delete that account at any time with <code>mewla logout -delete-account</code>.</li>
+</ul>
+</div>
+
+<h2 id="who">Who we are</h2>
+<p>Mewla is made by daoleno (“we”, “us”). Questions about this policy or your data: <a href="mailto:support@mewla.ai">support@mewla.ai</a>.</p>
+
+<h2 id="app">The app and your computer</h2>
+<p>Mewla has two parts: the app on your phone, and <code>mewla</code>, which runs on a computer you own. The app talks only to the computers you pair it with. Everything you see and send in the app (sessions, chat, terminal, files, Brain, Calendar, Work, Screen) goes between your phone and that computer. We do not run a server that stores any of it, and we cannot see it.</p>
+<ul>
+<li><strong>No account in the app.</strong> You pair the app with your computer using a one-time code. There is nothing to sign up for.</li>
+<li><strong>On your phone</strong> the app keeps the list of computers you paired, a private key for each pairing (in the iOS Keychain or Android Keystore) and your settings. Uninstalling the app deletes them.</li>
+<li><strong>On your computer</strong> <code>mewla</code> keeps its state in a folder you control (<code>~/.mewla</code> by default): paired devices, Brain’s notes, Work records, uploaded files and settings. <a href="../docs/security/#data-on-your-computer">What is stored where</a>.</li>
+<li><strong>Camera</strong> is used only to scan a pairing QR code. Nothing is recorded or sent anywhere.</li>
+<li><strong>Notifications.</strong> Calendar reminders are scheduled on your phone. If your computer sends you a push notification, it goes through Expo’s push service and Apple or Google to reach your phone.</li>
+<li><strong>Updates.</strong> The Android app downloaded from GitHub checks GitHub Releases for new versions. App Store and Google Play versions do not.</li>
+</ul>
+
+<h2 id="ai">AI agents and model providers</h2>
+<p>Agents such as Claude Code and Codex, and Mewla’s Brain, run on your computer. When you use them, the agent on your computer sends your prompts, and the files or command output it decides to include, to the model provider you chose (for example Anthropic or OpenAI), under your own account or API key with that provider. The Mewla app does not send them to any model provider, and we do not receive them. The provider’s own privacy policy applies to what it receives.</p>
+<p>The same goes for services you connect on your computer, such as GitHub or Telegram: your computer talks to them directly.</p>
+
+<h2 id="remote">Remote access (optional)</h2>
+<p>If you run <code>mewla login</code>, your computer gets an address such as <code>quiet-otter-3f9a.m.mewla.ai</code>, so your phone can reach it from any network. This is the only service we run, and you can use Mewla without it (on your own network, or through Tailscale or your own tunnel).</p>
+<h3>What the account service keeps</h3>
+<ul>
+<li>Your GitHub user id and username. You sign in with GitHub; we ask only for read access to your GitHub profile, and we do not keep the GitHub token.</li>
+<li>For each computer you sign in: its address, the name you gave the address (if any), its public key, and when it was signed in and last checked in.</li>
+<li>Addresses that were ever used are kept, with nothing that links them to you, so that no one else is ever given the same address. A browser that paired at an address may hold a key for it.</li>
+</ul>
+<h3>What the relay does</h3>
+<p>The relay passes encrypted traffic between your devices and your computer. The encryption ends on your computer, which holds the only key, so the relay cannot read what passes through, and it does not record it. It only counts connections and bytes in total.</p>
+<h3>IP addresses</h3>
+<p>The relay and the account service see the IP address of every connection. They keep it in memory to limit abuse (for example, at most 10 sign-ins from one address an hour) and pass the address of a connecting device on to your computer, which uses it for the same kind of limit. Neither writes IP addresses to its logs. The server’s firewall logs network packets it rejects or cannot match to a connection, with their source IP address, and deletes those logs after about five weeks.</p>
+<h3>Logs and backups</h3>
+<p>The account service logs sign-ins, sign-outs, address changes and deletions with the account id, GitHub username and computer address. These logs are size-limited: older lines are deleted as new ones are written. We back up the account database; a deleted account can remain in a backup for up to 30 days, until that backup is deleted.</p>
+<h3>Certificates and other providers</h3>
+<ul>
+<li>Your computer gets its own HTTPS certificate from Let’s Encrypt. Like every public certificate, it is listed in public Certificate Transparency logs, so your computer’s address is public. It is two random words unless you choose a name.</li>
+<li>The service runs on a server we rent from OVHcloud. Its DNS is hosted by Cloudflare. Sign-in goes through GitHub.</li>
+</ul>
+
+<h2 id="delete">Deleting your data</h2>
+<ul>
+<li><strong>Remote access account.</strong> On any computer still signed in with it, run <code>mewla logout -delete-account</code> and type your account name to confirm. This deletes your GitHub id and username and every computer signed in with the account; other computers drop off within an hour. If no computer is signed in any more, sign in once with the same GitHub account (<code>mewla login</code>) and run the command, or email <a href="mailto:support@mewla.ai">support@mewla.ai</a> from your GitHub email address.</li>
+<li><strong>Just one computer.</strong> <code>mewla logout</code> removes that computer from your account.</li>
+<li><strong>GitHub.</strong> To remove Mewla’s access on GitHub as well, revoke it at <a href="https://github.com/settings/applications">github.com/settings/applications</a>.</li>
+<li><strong>Everything else</strong> is on your own devices: uninstall the app, and delete the state folder (<code>~/.mewla</code>) on your computer.</li>
+</ul>
+
+<h2 id="website">This website</h2>
+<p>mewla.ai is hosted on GitHub Pages and loads fonts from Google Fonts. Like any web server, they see your IP address and browser details when you visit; their privacy policies apply. The site sets no cookies and has no analytics. It remembers which pet you picked in your browser’s local storage, which never leaves your browser.</p>
+
+<h2 id="children">Children</h2>
+<p>Mewla is a tool for developers and is not meant for children.</p>
+
+<h2 id="changes">Changes</h2>
+<p>If this policy changes, we will update this page and its date. Changes that affect the remote access account will also be noted in the <a href="../docs/releases/">release notes</a>.</p>
+
+<h2 id="contact">Contact</h2>
+<p>Email <a href="mailto:support@mewla.ai">support@mewla.ai</a>, or see <a href="../support/">Support</a>.</p>
+  </article>
+  <footer class="d-foot">Mewla · <a href="../">Home</a> · <a href="../docs/">Docs</a> · <a href="../support/">Support</a></footer>
+</main>
+</body>
+</html>
