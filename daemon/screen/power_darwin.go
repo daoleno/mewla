@@ -15,6 +15,12 @@ func keepAwakeCommand() *exec.Cmd {
 	return exec.Command("caffeinate", "-i", "-s", "-w", strconv.Itoa(os.Getpid()))
 }
 
+// keepDisplayCommand is `caffeinate -d`: the display stays on while an agent
+// uses the screen, also on battery, and the hold ends with this daemon.
+func keepDisplayCommand() *exec.Cmd {
+	return exec.Command("caffeinate", "-d", "-w", strconv.Itoa(os.Getpid()))
+}
+
 // WakeDisplay declares user activity so a sleeping display turns on for a
 // viewer that just connected; a locked Mac then shows its login window.
 func WakeDisplay() {

@@ -25,6 +25,14 @@ type Backend interface {
 	Start(ctx context.Context) (Session, error)
 }
 
+// ErrCaptureStopped means the system ended a running capture, as it does when
+// the display goes to sleep.
+var ErrCaptureStopped = errors.New("screen capture stopped")
+
+// displayHolder keeps the display on, which an agent's capture needs: a
+// display that sleeps takes the capture with it.
+type displayHolder interface{ HoldDisplay(on bool) }
+
 // Capability is a backend's support and permission state.
 type Capability struct {
 	Supported   bool         `json:"supported"`

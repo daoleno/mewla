@@ -127,6 +127,8 @@ type Service struct {
 	agent      *agentSession
 	workerName func(id string) string
 	agentGate  func() bool
+	// agentPosted is when an ended agent session last posted input.
+	agentPosted time.Time
 	// auditMu serializes the agent audit log.
 	auditMu     sync.Mutex
 	auditPruned bool

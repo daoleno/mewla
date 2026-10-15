@@ -27,7 +27,9 @@ import (
 // injects input with CGEvent, through purego so release builds stay
 // cross-compiled without cgo. It needs Screen Recording and Accessibility.
 
-func newBackend() Backend { return &macBackend{stale: map[string]bool{}} }
+func newBackend() Backend {
+	return &macBackend{stale: map[string]bool{}, display: keeper{command: keepDisplayCommand}}
+}
 
 // macBackend tracks permissions granted while Mewla runs that this process
 // still can't use: macOS applies some grants only to a new process.
@@ -36,7 +38,10 @@ type macBackend struct {
 	stale   map[string]bool
 	guiding bool
 	restart func()
+	display keeper
 }
+
+func (b *macBackend) HoldDisplay(on bool) { b.display.set(on) }
 
 // SetRestart lets the backend restart Mewla once every grant is in place but
 // this process can't use one yet.
@@ -491,7 +496,7 @@ func registerOutputClass() error {
 					s := outputs[self]
 					outputsMu.Unlock()
 					if s != nil {
-						s.stopped(errors.New("screen capture stopped: " + nsErrorText(err)))
+						s.stopped(fmt.Errorf("%w: %s", ErrCaptureStopped, nsErrorText(err)))
 					}
 				},
 			},

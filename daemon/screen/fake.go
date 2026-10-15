@@ -2,6 +2,7 @@ package screen
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"sync"
@@ -33,6 +34,24 @@ type FakeBackend struct {
 	Confirmed []string
 	Requested int
 	lastInput time.Time
+	// sleeps counts SleepDisplay; a capture started before the last one
+	// has stopped, and starting a new capture wakes the display.
+	sleeps      int
+	DisplayHeld bool
+}
+
+// SleepDisplay turns the display off, which stops every running capture.
+func (f *FakeBackend) SleepDisplay() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sleeps++
+	f.bump()
+}
+
+func (f *FakeBackend) HoldDisplay(on bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.DisplayHeld = on
 }
 
 // Presence reports the fake's lock and its last input, which every injected
@@ -123,7 +142,9 @@ func (f *FakeBackend) Confirm(_ context.Context, device string) (bool, error) {
 }
 
 func (f *FakeBackend) Start(context.Context) (Session, error) {
-	return &fakeSession{backend: f, image: image.NewRGBA(image.Rect(0, 0, f.Width, f.Height))}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return &fakeSession{backend: f, image: image.NewRGBA(image.Rect(0, 0, f.Width, f.Height)), sleeps: f.sleeps}, nil
 }
 
 // bump marks a change; callers hold f.mu.
@@ -136,12 +157,17 @@ func (f *FakeBackend) bump() {
 type fakeSession struct {
 	backend *FakeBackend
 	image   *image.RGBA
+	sleeps  int
 }
 
 func (s *fakeSession) Frame(ctx context.Context, after uint64) (Frame, error) {
 	f := s.backend
 	for {
 		f.mu.Lock()
+		if f.sleeps != s.sleeps {
+			f.mu.Unlock()
+			return Frame{}, fmt.Errorf("%w: no display to capture", ErrCaptureStopped)
+		}
 		if f.version+1 > after {
 			s.draw()
 			frame := Frame{Seq: f.version + 1, Image: s.image}
