@@ -15,6 +15,7 @@ import (
 	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/enrollment"
@@ -59,6 +60,7 @@ type controlWatcher interface {
 type controlApp struct {
 	browsers          *browser.Manager
 	connections       *connections.Manager
+	computers         *computers.Manager
 	resourceSampler   *watcher.ResourceSampler
 	auth              *auth.Manager
 	enrollments       *enrollment.Manager
@@ -100,6 +102,18 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("plugin_request_failed", err.Error())
 		}
 		return control.Response{OK: true, Connections: &result}
+	case "computers":
+		if req.ComputersRequest == nil {
+			return control.ErrorResponse("invalid_request", "Computers request is required")
+		}
+		if a.computers == nil {
+			return control.ErrorResponse("computers_unavailable", "Computers are not running")
+		}
+		result, err := a.computers.Handle(context.Background(), *req.ComputersRequest)
+		if err != nil {
+			return control.ErrorResponse("computers_failed", err.Error())
+		}
+		return control.Response{OK: true, Computers: &result}
 	case "watch":
 		if req.WatchRequest == nil {
 			return control.ErrorResponse("invalid_request", "Watch request is required")

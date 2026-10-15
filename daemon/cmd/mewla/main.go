@@ -25,6 +25,7 @@ import (
 	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
@@ -134,6 +135,8 @@ func run(args []string, stderr io.Writer) error {
 			return runTelegramCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
+		case "computers":
+			return runComputersCommand(args[1:], stderr)
 		case "screen":
 			return runScreenCommand(args[1:], stderr)
 		case "address":
@@ -465,6 +468,35 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)
 	}
+	hostName, _ := os.Hostname()
+	computerManager, err := computers.NewManager(computers.Options{
+		Auth:    authManager,
+		Version: Version,
+		Name:    computers.ShortHostname(hostName),
+		// Another computer's Brain reaches this one's through the same
+		// receipt-deduplicated entry Telegram uses.
+		Deliver: func(receipt, body string) (string, error) {
+			disposition, err := brainService.SubmitExternalUserInput(receipt, body)
+			return string(disposition), err
+		},
+		Addresses: func() []string {
+			entries, err := book.List()
+			if err != nil {
+				return nil
+			}
+			urls := make([]string, 0, len(entries))
+			for _, entry := range entries {
+				urls = append(urls, entry.URL)
+			}
+			return urls
+		},
+		Caps: computers.DetectCaps,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize computers: %w", err)
+	}
+	srv.SetComputers(computerManager)
+	controlHandler.computers = computerManager
 	connectionManager, err := connections.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
@@ -539,6 +571,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 		{
 			name: "Telegram connection",
 			run:  telegramManager.Run,
+		},
+		{
+			name: "Computers",
+			run: func(ctx context.Context) error {
+				computerManager.Run(ctx)
+				return nil
+			},
 		},
 		{
 			name: "watcher",
@@ -2326,11 +2365,15 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 			return json.NewEncoder(os.Stdout).Encode(map[string]any{"devices": devices})
 		}
 		for _, device := range devices {
+			name := device.Name
+			if device.Kind == auth.DeviceKindComputer {
+				name += " (computer)"
+			}
 			fmt.Fprintf(
 				os.Stdout,
 				"%s\t%s\t%s\n",
 				device.ID,
-				device.Name,
+				name,
 				device.LastSeenAt.Format(time.RFC3339),
 			)
 		}

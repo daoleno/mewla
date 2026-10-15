@@ -24,3 +24,6 @@ var productHandoffPolicy string
 
 //go:embed templates/policies/calendar.md
 var productCalendarPolicy string
+
+//go:embed templates/policies/computers.md
+var productComputersPolicy string

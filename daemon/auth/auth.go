@@ -24,6 +24,17 @@ const (
 	AuthorizationHeaderPrefix = "Device "
 	DefaultPairingTTL         = 15 * time.Minute
 	DeviceListPurpose         = "mewla-device-admin:list:GET:/devices"
+
+	// ComputerPurpose is the only signed purpose a computer-kind device may
+	// use, and only computer-kind devices may use it: another Mewla computer
+	// talks to this one through /computer and nothing else.
+	ComputerPurpose = "mewla-computer"
+	// DeviceKindComputer marks a device enrolled by another Mewla daemon.
+	// The kind comes from the pairing token this daemon issued, never from
+	// the enrolling client.
+	DeviceKindComputer = "computer"
+
+	computerInviteSignatureDomain = "mewla-computer-invite-v1\x00"
 )
 
 var (
@@ -39,6 +50,7 @@ type TrustedDevice struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
 	PublicKeyHex string    `json:"public_key_hex"`
+	Kind         string    `json:"kind,omitempty"`
 	AddedAt      time.Time `json:"added_at"`
 	LastSeenAt   time.Time `json:"last_seen_at"`
 }
@@ -46,6 +58,7 @@ type TrustedDevice struct {
 type DeviceInfo struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
+	Kind       string    `json:"kind,omitempty"`
 	AddedAt    time.Time `json:"added_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
 }
@@ -53,6 +66,7 @@ type DeviceInfo struct {
 type PairingToken struct {
 	Value     string
 	ExpiresAt time.Time
+	Kind      string `json:",omitempty"`
 }
 
 // PersistenceResult reports whether an atomic replacement crossed its rename
@@ -188,6 +202,7 @@ func (m *Manager) ListDevices() []DeviceInfo {
 			devices = append(devices, DeviceInfo{
 				ID:         device.ID,
 				Name:       device.Name,
+				Kind:       device.Kind,
 				AddedAt:    device.AddedAt,
 				LastSeenAt: device.LastSeenAt,
 			})
@@ -285,6 +300,12 @@ func (m *Manager) publishRevocation(deviceID string) {
 }
 
 func (m *Manager) IssuePairingToken(ttl time.Duration) (PairingToken, error) {
+	return m.IssuePairingTokenForKind(ttl, "")
+}
+
+// IssuePairingTokenForKind issues a one-time token whose enrolled device gets
+// kind. An empty kind is a phone or browser.
+func (m *Manager) IssuePairingTokenForKind(ttl time.Duration, kind string) (PairingToken, error) {
 	if ttl <= 0 {
 		ttl = DefaultPairingTTL
 	}
@@ -296,6 +317,7 @@ func (m *Manager) IssuePairingToken(ttl time.Duration) (PairingToken, error) {
 	pairing := PairingToken{
 		Value:     token,
 		ExpiresAt: time.Now().Add(ttl).UTC(),
+		Kind:      strings.TrimSpace(kind),
 	}
 
 	m.mu.Lock()
@@ -359,10 +381,14 @@ func (m *Manager) EnrollDevice(token, expectedDaemonID, expectedPublicKeyHex, de
 		return nil, fmt.Errorf("device id already paired with a different key")
 	}
 
+	if ok && existing.Kind != pairing.Kind {
+		return nil, fmt.Errorf("device id already paired as a different kind")
+	}
 	device := &TrustedDevice{
 		ID:           deviceID,
 		Name:         deviceName,
 		PublicKeyHex: devicePublicKeyHex,
+		Kind:         pairing.Kind,
 		AddedAt:      now,
 		LastSeenAt:   now,
 	}
@@ -461,6 +487,9 @@ func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.D
 	if !ok {
 		return nil, ErrUnknownDevice
 	}
+	if (device.Kind == DeviceKindComputer) != (strings.TrimSpace(purpose) == ComputerPurpose) {
+		return nil, ErrUnauthorized
+	}
 	publicKeyBytes, err := decodeFixedHex(device.PublicKeyHex, ed25519.PublicKeySize)
 	if err != nil {
 		return nil, ErrUnauthorized
@@ -523,6 +552,46 @@ func (m *Manager) CreateServerAssertion(purpose string) (ServerAssertion, error)
 		NonceHex:     nonceHex,
 		SignatureHex: hex.EncodeToString(signature),
 	}, nil
+}
+
+// CreateComputerInviteSignature signs a domain-separated computer invite with
+// the daemon identity, so an invite cannot be confused with any other signed
+// daemon payload.
+func (m *Manager) CreateComputerInviteSignature(payload []byte) string {
+	message := append([]byte(computerInviteSignatureDomain), payload...)
+	return hex.EncodeToString(ed25519.Sign(m.privateKey, message))
+}
+
+// VerifyComputerInviteSignature checks an invite signed by the daemon whose
+// Ed25519 public key is publicKeyHex.
+func VerifyComputerInviteSignature(publicKeyHex string, payload []byte, signatureHex string) bool {
+	publicKey, err := decodeFixedHex(normalizeHex(publicKeyHex), ed25519.PublicKeySize)
+	if err != nil {
+		return false
+	}
+	signature, err := decodeFixedHex(normalizeHex(signatureHex), ed25519.SignatureSize)
+	if err != nil {
+		return false
+	}
+	message := append([]byte(computerInviteSignatureDomain), payload...)
+	return ed25519.Verify(ed25519.PublicKey(publicKey), message, signature)
+}
+
+// VerifyServerAssertion checks a daemon response assertion against the
+// daemon public key the caller pinned.
+func VerifyServerAssertion(publicKeyHex, purpose string, assertion ServerAssertion) bool {
+	publicKey, err := decodeFixedHex(normalizeHex(publicKeyHex), ed25519.PublicKeySize)
+	if err != nil {
+		return false
+	}
+	signature, err := decodeFixedHex(normalizeHex(assertion.SignatureHex), ed25519.SignatureSize)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(publicKey)
+	daemonID := hex.EncodeToString(sum[:])
+	payload := BuildServerAssertionPayload(purpose, daemonID, assertion.Timestamp, assertion.NonceHex)
+	return ed25519.Verify(ed25519.PublicKey(publicKey), payload, signature)
 }
 
 // CreateLinkSignature signs a domain-separated Mewla Link control-plane
