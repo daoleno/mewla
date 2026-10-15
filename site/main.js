@@ -8,7 +8,7 @@ const LINKS = {
   source: 'https://github.com/daoleno/mewla',
   releases: 'https://github.com/daoleno/mewla/releases',
   apk: 'https://github.com/daoleno/mewla/releases/latest',
-  installScript: 'https://raw.githubusercontent.com/daoleno/mewla/main/install.sh',
+  installScript: 'https://mewla.ai/install.sh',
 };
 for (const node of document.querySelectorAll('[data-link]')) {
   const url = LINKS[node.dataset.link];

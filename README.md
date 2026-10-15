@@ -57,15 +57,16 @@ model, and a live view of what agents use on the machine.
 
 ## Get started
 
-You need Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac, with `tmux`
-and one signed-in agent CLI.
+You need Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac. `mewla`
+offers to install `tmux` and an agent CLI (Claude Code or Codex) when they are
+missing.
 
 ```sh
-# 1. Install: checksum-verified, no sudo, no telemetry
-curl -fsSL https://raw.githubusercontent.com/daoleno/mewla/main/install.sh | sh
+# 1. Install: checksum-verified, no telemetry
+curl -fsSL https://mewla.ai/install.sh | sh
 
-# 2. Start on a network you trust; it prints a pairing QR code
-mewla --lan
+# 2. Start; press Enter to accept each suggestion and sign in with GitHub
+mewla
 ```
 
 3. Install the app: the Android arm64 APK from
@@ -75,7 +76,7 @@ mewla --lan
 4. Scan the QR code. Open **Sessions** to start an agent, or **Brain** to give
    it a goal. For later phones and browsers, run `mewla pair`.
 
-Away from home, use Tailscale or an HTTPS tunnel instead of `--lan`:
+Other ways to connect, such as the same Wi-Fi only or Tailscale, are in
 [Connect and pair](docs/connect-and-pair.md). The full path is in
 [Get started](docs/get-started.md).
 
