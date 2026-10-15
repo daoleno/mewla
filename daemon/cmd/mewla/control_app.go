@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/browser"
@@ -71,6 +72,7 @@ type controlApp struct {
 	calendarStore     *calendar.Store
 	calendarScheduler *calendar.Scheduler
 	screen            *screen.Service
+	agentUse          *agentuse.Service
 	profiles          *modelprofiles.Owner
 	telegram          telegramControlManager
 	threadRuntimeSet  func(string, modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error)
@@ -102,6 +104,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("plugin_request_failed", err.Error())
 		}
 		return control.Response{OK: true, Connections: &result}
+	case "computer":
+		return a.handleComputerControl(req)
 	case "computers":
 		if req.ComputersRequest == nil {
 			return control.ErrorResponse("invalid_request", "Computers request is required")

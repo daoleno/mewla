@@ -478,11 +478,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("initialize agent use: %w", err)
 	}
 	go agentUse.Refresh()
-	w.SetAgentTools(func(command string) string {
-		if !agentUse.BrowserReady() {
-			return command
-		}
-		return work.WithChromeMCP(command, watcher.ExecutablePath(), authManager.StorageDir())
+	w.SetAgentTools(func(command string, worker bool) string {
+		// The screen acts for a named Worker, so only sessions that carry
+		// their Worker identity get it.
+		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady()}
+		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
 	hostName, _ := os.Hostname()
@@ -510,6 +510,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		Caps: func() computers.Caps {
 			caps := computers.DetectCaps()
 			caps.BrowserUse = agentUse.BrowserReady()
+			caps.ComputerUse = agentUse.ComputerReady()
 			return caps
 		},
 	})
@@ -537,6 +538,23 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	srv.SetScreen(screenService)
 	controlHandler.screen = screenService
+	// Agents use the screen through the daemon, which holds the permissions;
+	// a person viewing it always comes first.
+	screenService.SetAgentGate(agentUse.Enabled)
+	screenService.SetWorkerNames(func(id string) string {
+		if worker := w.GetWorker(id); worker != nil {
+			return worker.Name
+		}
+		return ""
+	})
+	agentUse.SetComputer(agentuse.ComputerHooks{
+		Status: func() agentuse.ComputerStatus { return computerStatus(ctx, screenService) },
+		OpenSettings: func(permission string) error {
+			return screenService.OpenAgentSettings(ctx, permission)
+		},
+		Stop: screenService.StopAgent,
+	})
+	controlHandler.agentUse = agentUse
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager

@@ -114,6 +114,9 @@ func printComputersResult(w io.Writer, action string, result computers.Result) {
 				if peer.Caps.BrowserUse {
 					line += "\tagents can use its Chrome"
 				}
+				if peer.Caps.ComputerUse {
+					line += "\tagents can use its screen"
+				}
 			}
 			if peer.Queued > 0 {
 				line += fmt.Sprintf("\t%d waiting", peer.Queued)

@@ -29,6 +29,7 @@ type Request struct {
 	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
 	WatchRequest         *watch.Request                         `json:"watch_request,omitempty"`
 	ComputersRequest     *computers.Request                     `json:"computers_request,omitempty"`
+	ComputerAction       *screen.AgentAction                    `json:"computer_action,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`
@@ -111,6 +112,7 @@ type Response struct {
 	Connections        *connections.Response                    `json:"connections,omitempty"`
 	Watch              *watch.Response                          `json:"watch,omitempty"`
 	Computers          *computers.Result                        `json:"computers,omitempty"`
+	ComputerResult     *screen.AgentResult                      `json:"computer_result,omitempty"`
 	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	OK                 bool                                     `json:"ok"`
 	Error              *Error                                   `json:"error,omitempty"`

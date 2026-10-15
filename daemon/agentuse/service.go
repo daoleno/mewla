@@ -69,8 +69,9 @@ type BrowserStatus struct {
 }
 
 type Status struct {
-	Enabled bool          `json:"enabled"`
-	Browser BrowserStatus `json:"browser"`
+	Enabled  bool            `json:"enabled"`
+	Browser  BrowserStatus   `json:"browser"`
+	Computer *ComputerStatus `json:"computer,omitempty"`
 }
 
 type settings struct {
@@ -97,6 +98,7 @@ type Service struct {
 	installing   bool
 	installErr   error
 	installErrAt time.Time
+	computer     *ComputerHooks
 }
 
 // New reads this computer's switch from stateDir. It never touches Chrome.
@@ -138,7 +140,7 @@ func (s *Service) Status() Status {
 	if time.Since(s.cachedAt) < statusTTL {
 		status := s.cached
 		s.mu.Unlock()
-		return status
+		return s.withComputer(status)
 	}
 	s.mu.Unlock()
 	return s.Refresh()
@@ -150,6 +152,10 @@ func (s *Service) BrowserReady() bool {
 }
 
 func (s *Service) Refresh() Status {
+	return s.withComputer(s.refreshBrowser())
+}
+
+func (s *Service) refreshBrowser() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_ = s.loadLocked()
@@ -273,9 +279,14 @@ func (s *Service) SetEnabled(enabled bool) (Status, error) {
 	next := s.settings
 	next.Off = !enabled
 	err := s.saveLocked(next)
+	hooks := s.computer
 	s.mu.Unlock()
 	if err != nil {
 		return Status{}, err
+	}
+	if !enabled && hooks != nil {
+		// Off means now: an agent using the screen stops at once.
+		hooks.Stop()
 	}
 	return s.Refresh(), nil
 }
@@ -342,6 +353,20 @@ func (s *Service) Fix(fix string) (Status, error) {
 		s.mu.Lock()
 		s.installErr = nil
 		s.mu.Unlock()
+	case FixOpenSettings:
+		s.mu.Lock()
+		hooks := s.computer
+		s.mu.Unlock()
+		if hooks == nil {
+			return Status{}, errors.New("no agent can use this computer's screen")
+		}
+		permission := hooks.Status().Permission
+		if permission == "" {
+			return s.Refresh(), nil
+		}
+		if err := hooks.OpenSettings(permission); err != nil {
+			return Status{}, err
+		}
 	default:
 		return Status{}, fmt.Errorf("unknown fix %q", fix)
 	}

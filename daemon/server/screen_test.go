@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -244,5 +245,86 @@ func TestStaleScreenApprovalIsForgottenAtStartup(t *testing.T) {
 	cfg, _ := screen.LoadConfig(stateDir)
 	if !cfg.Approved(device) || cfg.Approved("revoked") {
 		t.Fatalf("config after startup = %+v", cfg)
+	}
+}
+
+// Watching an agent shows its screen without taking over: the agent keeps
+// control, the viewer's input goes nowhere, and the viewer hears when the
+// agent is done.
+func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
+	a, priv, device := sessionFileAuthFixture(t)
+	fake := screen.NewFakeBackend(320, 200)
+	service := screen.NewServiceWith(t.TempDir(), fake)
+	defer service.StopAgent()
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(service)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	req, _ := http.NewRequest(http.MethodPost, h.URL+"/screen", strings.NewReader(`{"action":"enable"}`))
+	req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("enable: %v %v", resp, err)
+	}
+	dial := func() *screenViewerClient {
+		header := http.Header{}
+		header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen-view"))
+		conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer?watch=1", header)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &screenViewerClient{t: t, conn: conn}
+	}
+	readError := func(v *screenViewerClient) string {
+		t.Helper()
+		for {
+			_ = v.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+			kind, data, err := v.conn.ReadMessage()
+			if err != nil {
+				t.Fatalf("closed without saying why: %v", err)
+			}
+			var msg struct{ Type, Error string }
+			if kind == websocket.TextMessage && json.Unmarshal(data, &msg) == nil && msg.Type == "error" {
+				return msg.Error
+			}
+		}
+	}
+
+	nobody := dial()
+	if got := readError(nobody); !strings.Contains(got, "No agent") {
+		t.Fatalf("watching nobody: %q", got)
+	}
+	nobody.conn.Close()
+
+	if _, err := service.Act(context.Background(), "%7", screen.AgentAction{Action: "screenshot"}); err != nil {
+		t.Fatal(err)
+	}
+	v := dial()
+	defer v.conn.Close()
+	v.read(12)
+	v.write([]byte("RFB 003.008\n"))
+	v.read(2)
+	v.write([]byte{1})
+	v.read(4)
+	v.write([]byte{1}) // ClientInit
+	init := v.read(24)
+	if binary.BigEndian.Uint16(init[0:]) != 320 || binary.BigEndian.Uint16(init[2:]) != 200 {
+		t.Fatalf("ServerInit %v", init)
+	}
+	v.read(int(binary.BigEndian.Uint32(init[20:])))
+	v.write([]byte{3, 0, 0, 0, 0, 0, 1, 64, 0, 200}) // FramebufferUpdateRequest
+	v.read(4)                                        // the update arrives
+	v.write([]byte{5, 1, 0, 10, 0, 20})              // a tap
+	v.write([]byte{4, 1, 0, 0, 0, 0, 0, 'q'})        // a key
+	time.Sleep(100 * time.Millisecond)
+	if pointers, keys := fake.Snapshot(); len(pointers) != 0 || len(keys) != 0 {
+		t.Fatalf("a watcher's input reached the screen: %v %v", pointers, keys)
+	}
+	if state, ok := service.Agent(); !ok || state.Worker != "%7" {
+		t.Fatal("watching took the screen from the agent")
+	}
+
+	service.StopAgent()
+	if got := readError(v); !strings.Contains(got, "agent is done") {
+		t.Fatalf("agent ended: %q", got)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,37 +20,6 @@ var screenUpgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 	ReadBufferSize:  32 << 10,
 	WriteBufferSize: 64 << 10,
-}
-
-// screenControllers admits one viewer at a time; a newer viewer replaces the
-// older one, which is told why before it closes.
-type screenControllers struct {
-	mu      sync.Mutex
-	current *screenController
-}
-
-type screenController struct {
-	cancel context.CancelCauseFunc
-}
-
-var errScreenReplaced = errors.New("Another device took over this screen")
-
-func (c *screenControllers) take(cancel context.CancelCauseFunc) *screenController {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.current != nil {
-		c.current.cancel(errScreenReplaced)
-	}
-	c.current = &screenController{cancel: cancel}
-	return c.current
-}
-
-func (c *screenControllers) release(owner *screenController) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.current == owner {
-		c.current = nil
-	}
 }
 
 func (s *Server) SetScreen(service *screen.Service) {
@@ -121,6 +89,9 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 			err = s.screen.OpenSettings(ctx, device.ID, body.Permission)
 		case body.Action == "" && body.KeepAwake != nil:
 			err = s.screen.SetKeepAwake(device.ID, *body.KeepAwake)
+		case body.Action == "stop_agent":
+			// Stopping an agent is always safe, so any paired device may.
+			s.screen.StopAgent()
 		case body.Action == "restart":
 			if err = s.screen.Restart(device.ID); err == nil {
 				w.WriteHeader(http.StatusAccepted)
@@ -181,7 +152,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				reason := "screen closed"
-				if cause := context.Cause(ctx); errors.Is(cause, errScreenReplaced) {
+				if cause := context.Cause(ctx); errors.Is(cause, screen.ErrScreenReplaced) {
 					reason = cause.Error()
 				}
 				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, reason), time.Now().Add(time.Second))
@@ -209,24 +180,37 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		return send(websocket.TextMessage, raw)
 	}
 
-	upstream, err := s.screen.Open(ctx, device.ID)
+	// watch=1 watches the agent using the screen without taking over: the
+	// viewer sees the agent's capture and its input goes nowhere.
+	watch := r.URL.Query().Get("watch") == "1"
+	open := s.screen.Open
+	if watch {
+		open = s.screen.Watch
+	}
+	upstream, err := open(ctx, device.ID)
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
 	defer upstream.Close()
-	controller := s.screenControllers.take(cancel)
-	defer s.screenControllers.release(controller)
 	name := device.Name
 	if name == "" {
 		name = "A paired device"
 	}
-	screen.WakeDisplay()
-	screen.Notify("Mewla Screen", name+" is viewing and controlling this computer.")
+	doing, ended := "viewing and controlling", "stopped controlling"
+	if watch {
+		doing, ended = "watching the agent on", "stopped watching"
+	} else {
+		// A person comes first: this ends an agent's control of the screen.
+		controller := s.screen.TakeControl(cancel)
+		defer s.screen.ReleaseControl(controller)
+		screen.WakeDisplay()
+	}
+	screen.Notify("Mewla Screen", name+" is "+doing+" this computer.")
 	started := time.Now()
 	var fromScreen, toScreen atomic.Int64
 	defer func() {
-		screen.Notify("Mewla Screen", name+" stopped controlling this computer.")
+		screen.Notify("Mewla Screen", name+" "+ended+" this computer.")
 		log.Printf("screen: device %s session ended after %s, %d bytes to viewer, %d bytes from viewer",
 			device.ID, time.Since(started).Round(time.Second), fromScreen.Load(), toScreen.Load())
 	}()
@@ -305,7 +289,11 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			if ctx.Err() == nil {
-				sendJSON(map[string]string{"type": "error", "error": "The screen session ended"})
+				message := "The screen session ended"
+				if watch {
+					message = "The agent is done with the screen"
+				}
+				sendJSON(map[string]string{"type": "error", "error": message})
 			}
 			return
 		}

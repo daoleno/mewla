@@ -35,6 +35,9 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 		return flag.ErrHelp
 	}
 	action := args[0]
+	if action == "computer-mcp" {
+		return runComputerMCP(args[1:], stderr)
+	}
 	fs := flag.NewFlagSet("mewla agent-use "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var stateDir string
@@ -112,6 +115,16 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 		line += " (profile " + browser.Profile + ")"
 	}
 	fmt.Fprintln(w, line)
+	if computer := status.Computer; computer != nil {
+		fmt.Fprintln(w, "This computer's screen: "+computer.Summary)
+		if computer.Active != nil {
+			name := computer.Active.Name
+			if name == "" {
+				name = computer.Active.Worker
+			}
+			fmt.Fprintf(w, "  %s is using it now.\n", name)
+		}
+	}
 	switch browser.Fix {
 	case agentuse.FixInstallExtension:
 		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension's page in Chrome; click Add to Chrome.")
