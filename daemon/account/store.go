@@ -231,6 +231,73 @@ func (s *Store) deleteMachine(ctx context.Context, key string) (machineRecord, e
 	return machine, tx.Commit()
 }
 
+// deleteAccount removes the account that owns key's machine, every machine
+// of that account and their logins. The labels are retired like a logout's.
+func (s *Store) deleteAccount(ctx context.Context, key string) (accountRecord, []machineRecord, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return accountRecord{}, nil, err
+	}
+	defer tx.Rollback()
+	current, err := getMachine(ctx, tx, `daemon_public_key = ?`, key)
+	if err != nil {
+		return accountRecord{}, nil, err
+	}
+	account, err := getAccount(ctx, tx, `id = ?`, current.AccountID)
+	if err != nil {
+		return accountRecord{}, nil, err
+	}
+	if account.Disabled {
+		return accountRecord{}, nil, errDisabled
+	}
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT id, account_id, daemon_public_key, route_id, label, name FROM machines WHERE account_id = ?`,
+		account.ID,
+	)
+	if err != nil {
+		return accountRecord{}, nil, err
+	}
+	var machines []machineRecord
+	for rows.Next() {
+		var machine machineRecord
+		if err := rows.Scan(
+			&machine.ID,
+			&machine.AccountID,
+			&machine.DaemonPublicKey,
+			&machine.RouteID,
+			&machine.Label,
+			&machine.Name,
+		); err != nil {
+			rows.Close()
+			return accountRecord{}, nil, err
+		}
+		machines = append(machines, machine)
+	}
+	if err := rows.Close(); err != nil {
+		return accountRecord{}, nil, err
+	}
+	for _, machine := range machines {
+		if err := retireLabel(ctx, tx, machine.Label); err != nil {
+			return accountRecord{}, nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM logins WHERE daemon_public_key = ?`, machine.DaemonPublicKey); err != nil {
+			return accountRecord{}, nil, err
+		}
+	}
+	// Logins from computers that never got a machine still name the account.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM logins WHERE account_id = ?`, account.ID); err != nil {
+		return accountRecord{}, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM machines WHERE account_id = ?`, account.ID); err != nil {
+		return accountRecord{}, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM accounts WHERE id = ?`, account.ID); err != nil {
+		return accountRecord{}, nil, err
+	}
+	return account, machines, tx.Commit()
+}
+
 // A label is a browser origin: whoever holds it next could read what an
 // earlier browser stored there, such as its paired device key. Labels are
 // therefore never handed out again once a machine renames or signs out.

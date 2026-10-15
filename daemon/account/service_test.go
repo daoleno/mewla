@@ -599,6 +599,89 @@ func TestLogoutDeletesMachine(t *testing.T) {
 	}
 }
 
+func TestDeleteAccountRemovesAccountAndEveryMachine(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	laptop, desktop, stranger := newDaemon(t), newDaemon(t), newDaemon(t)
+	first := h.loginUser(laptop, "", newRouteID(t), "alice")
+	second := h.loginUser(desktop, "", newRouteID(t), "alice")
+	h.loginUser(stranger, "", newRouteID(t), "bob")
+	// A pending login of the account's computer goes too.
+	h.startLogin(laptop, "", newRouteID(t))
+
+	if status, raw := h.call(laptop, http.MethodDelete, "/v1/account", nil); status != http.StatusNoContent {
+		t.Fatalf("delete account = %d %s", status, raw)
+	}
+	for _, daemon := range []*auth.Manager{laptop, desktop} {
+		if status, _ := h.call(daemon, http.MethodGet, "/v1/machine", nil); status != http.StatusNotFound {
+			t.Fatalf("GET /v1/machine after account deletion = %d, want 404", status)
+		}
+	}
+	if status, _ := h.call(stranger, http.MethodGet, "/v1/machine", nil); status != http.StatusOK {
+		t.Fatalf("another account's machine = %d, want 200", status)
+	}
+	if _, err := getAccount(ctx, h.store.db, `id = ?`, first.AccountID); err != errNotFound {
+		t.Fatalf("account row after deletion: err=%v, want not found", err)
+	}
+	var remaining int
+	if err := h.store.db.QueryRowContext(
+		ctx,
+		`SELECT (SELECT COUNT(*) FROM machines WHERE account_id = ?) +
+			(SELECT COUNT(*) FROM logins WHERE daemon_public_key IN (?, ?) OR account_id = ?)`,
+		first.AccountID, laptop.PublicKeyHex(), desktop.PublicKeyHex(), first.AccountID,
+	).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatalf("rows left for the deleted account: %d err=%v", remaining, err)
+	}
+	tx, err := h.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, label := range []string{first.Label, second.Label} {
+		if taken, err := labelTaken(ctx, tx, label); err != nil || !taken {
+			t.Fatalf("label %s of the deleted account is not retired: taken=%v err=%v", label, taken, err)
+		}
+	}
+	_ = tx.Rollback()
+
+	if status, _ := h.call(laptop, http.MethodDelete, "/v1/account", nil); status != http.StatusNotFound {
+		t.Fatalf("second delete = %d, want 404", status)
+	}
+	// Signing in again starts a new account.
+	again := h.loginUser(laptop, "", newRouteID(t), "alice")
+	if again.AccountID == first.AccountID {
+		t.Fatal("account id reused after deletion")
+	}
+}
+
+func TestDeleteAccountNeedsSignatureAndKeepsBans(t *testing.T) {
+	h := newHarness(t, nil)
+	daemon := newDaemon(t)
+	machine := h.loginAs(daemon, "mallory")
+	unsigned, err := http.NewRequest(http.MethodDelete, h.server.URL+"/v1/account", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := h.send(unsigned); status != http.StatusUnauthorized {
+		t.Fatalf("unsigned delete = %d, want 401", status)
+	}
+	forged := h.signedRequest(daemon, http.MethodDelete, "/v1/account", nil, signOptions{signer: newDaemon(t)})
+	if status, _ := h.send(forged); status != http.StatusUnauthorized {
+		t.Fatalf("delete signed by another key = %d, want 401", status)
+	}
+	if status, _ := h.call(newDaemon(t), http.MethodDelete, "/v1/account", nil); status != http.StatusNotFound {
+		t.Fatalf("delete from a computer that is not signed in = %d, want 404", status)
+	}
+	if err := h.store.SetAccountDisabled(context.Background(), machine.AccountID, true); err != nil {
+		t.Fatal(err)
+	}
+	if status, raw := h.call(daemon, http.MethodDelete, "/v1/account", nil); status != http.StatusForbidden {
+		t.Fatalf("disabled delete = %d %s, want 403", status, raw)
+	}
+	if _, err := getAccount(context.Background(), h.store.db, `id = ?`, machine.AccountID); err != nil {
+		t.Fatalf("disabled account was deleted: %v", err)
+	}
+}
+
 func TestLoginExpiresAndValidates(t *testing.T) {
 	h := newHarness(t, nil)
 	daemon := newDaemon(t)

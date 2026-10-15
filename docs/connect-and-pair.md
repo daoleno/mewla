@@ -215,6 +215,7 @@ mewla login     # shows https://connect.mewla.ai/device and a code; sign in with
 mewla pair      # the phone QR now uses remote access
 mewla login -name studio   # rename the address, e.g. https://studio-c0ffee.m.mewla.ai
 mewla logout    # turn it off
+mewla logout -delete-account   # turn it off and delete your account
 ```
 
 The address starts with two random words, never your computer's hostname,
@@ -239,6 +240,13 @@ public certificate logs, and you can rename three times a day.
   happy to publish.
 - `mewla address list` and `mewla doctor` show the address, the relay
   connection and the certificate.
+
+The service keeps your GitHub id and login, and each signed-in computer's
+address and name. `mewla logout` forgets this computer.
+`mewla logout -delete-account` asks you to type the account name, then deletes
+the account and every computer signed in with it; the others drop off within
+an hour. Run it from any computer still signed in with that account. See the
+[privacy policy](https://mewla.ai/privacy/).
 
 ## Mewla Link
 

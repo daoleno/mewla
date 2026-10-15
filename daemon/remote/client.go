@@ -115,6 +115,13 @@ func (client *Client) Logout(ctx context.Context) error {
 	return err
 }
 
+// DeleteAccount deletes this computer's account at the service and signs
+// out every computer signed in with it.
+func (client *Client) DeleteAccount(ctx context.Context) error {
+	_, err := client.do(ctx, http.MethodDelete, "/v1/account", nil, nil)
+	return err
+}
+
 func (client *Client) do(ctx context.Context, method, path string, body any, out any) (int, error) {
 	var raw []byte
 	if body != nil {
@@ -144,7 +151,7 @@ func (client *Client) do(ctx context.Context, method, path string, body any, out
 	switch {
 	case response.StatusCode == http.StatusUnauthorized ||
 		response.StatusCode == http.StatusForbidden && path == "/v1/machine" ||
-		response.StatusCode == http.StatusNotFound && strings.HasPrefix(path, "/v1/machine"):
+		response.StatusCode == http.StatusNotFound && (strings.HasPrefix(path, "/v1/machine") || path == "/v1/account"):
 		return response.StatusCode, ErrSignedOut
 	case response.StatusCode >= 300:
 		var problem struct {
@@ -189,6 +196,8 @@ func (err *ServiceError) Error() string {
 		return "sign-in was declined in the browser"
 	case "quota":
 		return "this account already has the most computers it can sign in; sign one out first"
+	case "account disabled":
+		return "this account is disabled; to delete it, write to the address at https://mewla.ai/privacy"
 	}
 	if err.Code == "" {
 		return fmt.Sprintf("remote access service answered %d", err.Status)
