@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"sync"
+	"time"
 )
 
 // FakeBackend is a scripted screen for tests and the `screenfake` build. Its
@@ -15,6 +16,7 @@ type FakeBackend struct {
 	Unsupported   bool
 	Missing       []string // ids of permissions not granted
 	Answer        bool     // Confirm's answer
+	Locked        bool
 
 	mu        sync.Mutex
 	changed   chan struct{}
@@ -28,6 +30,29 @@ type FakeBackend struct {
 	Opened    []string
 	Confirmed []string
 	Requested int
+	lastInput time.Time
+}
+
+// Presence reports the fake's lock and its last input, which every injected
+// event updates too, the way a real system may count an agent's events.
+func (f *FakeBackend) Presence() Presence {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return Presence{Locked: f.Locked, LastInput: f.lastInput}
+}
+
+// PersonInput is someone using the computer's own keyboard or pointer.
+func (f *FakeBackend) PersonInput() {
+	f.mu.Lock()
+	f.lastInput = time.Now()
+	f.mu.Unlock()
+}
+
+// SetLocked locks or unlocks the fake screen.
+func (f *FakeBackend) SetLocked(locked bool) {
+	f.mu.Lock()
+	f.Locked = locked
+	f.mu.Unlock()
 }
 
 type FakePointer struct {
@@ -156,6 +181,7 @@ func (s *fakeSession) Pointer(x, y int, buttons uint8) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Pointers = append(f.Pointers, FakePointer{X: x, Y: y, Buttons: buttons})
+	f.lastInput = time.Now()
 	f.pointer = image.Pt(x, y)
 	if buttons&1 != 0 {
 		f.clicks = append(f.clicks, f.pointer)
@@ -172,6 +198,7 @@ func (s *fakeSession) Key(keysym uint32, down bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Keys = append(f.Keys, FakeKey{Keysym: keysym, Down: down})
+	f.lastInput = time.Now()
 	if down {
 		f.keys = append(f.keys, keysym)
 		f.bump()

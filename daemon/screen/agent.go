@@ -26,6 +26,16 @@ var (
 	ErrPersonControlling = errors.New("A person is using this computer's screen; try again when they are done")
 	ErrAgentStopped      = errors.New("A person took over this computer's screen; the agent's control ended")
 	ErrScreenReplaced    = errors.New("Another device took over this screen")
+	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once someone unlocks it")
+	ErrPersonAtComputer  = errors.New("Someone is using this computer's keyboard or pointer, so the agent paused; wait about 10 seconds and try again")
+)
+
+// An agent pauses while someone uses the computer itself: until personPause
+// after their last input. Input counts as theirs when it came personMargin
+// after the agent's own last event, which the system may count as input too.
+var (
+	personPause  = 10 * time.Second
+	personMargin = 300 * time.Millisecond
 )
 
 // AgentLongEdge is the long edge of agent screenshots. Agents give
@@ -150,6 +160,10 @@ type agentSession struct {
 	lastAct  time.Time
 	pointer  image.Point
 	buttons  uint8
+	// presence reports the person at the computer; lastPost is when this
+	// agent's own last event went out.
+	presence func() Presence
+	lastPost time.Time
 	scale    float64 // framebuffer pixels per screenshot pixel
 }
 
@@ -193,7 +207,17 @@ func (s *Service) AgentReady(ctx context.Context) (Capability, error) {
 	if !capability.Ready() {
 		return capability, ErrPermissions
 	}
+	if s.presence().Locked {
+		return capability, ErrScreenLocked
+	}
 	return capability, nil
+}
+
+func (s *Service) presence() Presence {
+	if reporter, ok := s.backend.(presenceReporter); ok {
+		return reporter.Presence()
+	}
+	return Presence{}
 }
 
 // OpenAgentSettings shows the settings page for a permission agents need.
@@ -215,6 +239,11 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	agent, err := s.agentFor(worker)
 	if err != nil {
 		return AgentResult{}, err
+	}
+	if agent.personActive() {
+		agent.letGo()
+		s.audit(worker, action, ErrPersonAtComputer)
+		return AgentResult{}, ErrPersonAtComputer
 	}
 	agent.mu.Lock()
 	agent.inflight++
@@ -260,7 +289,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		}
 	}
 	agent := &agentSession{
-		worker: worker, label: label, since: time.Now(), session: session, control: control,
+		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence,
 		cancel: cancel, ctx: ctx, ready: make(chan struct{}), changed: make(chan struct{}), lastUse: time.Now(),
 	}
 	s.agent = agent
@@ -301,10 +330,7 @@ func (s *Service) watchAgent(agent *agentSession) {
 	// An action in flight finishes letting go of its keys first, and a button
 	// the agent left down between actions comes up.
 	agent.mu.Lock()
-	if agent.buttons != 0 {
-		_ = agent.session.Pointer(agent.pointer.X, agent.pointer.Y, 0)
-		agent.buttons = 0
-	}
+	agent.letGoLocked()
 	_ = agent.session.Close()
 	agent.mu.Unlock()
 	s.ReleaseControl(agent.control)
@@ -314,6 +340,38 @@ func (s *Service) watchAgent(agent *agentSession) {
 	}
 	s.agentMu.Unlock()
 	Notify("Mewla", "The agent ("+agent.label+") stopped using this computer.")
+}
+
+// personActive says someone used the computer's own keyboard or pointer in
+// the last personPause, after this agent's last event.
+func (a *agentSession) personActive() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.personActiveLocked()
+}
+
+func (a *agentSession) personActiveLocked() bool {
+	if a.presence == nil {
+		return false
+	}
+	last := a.presence().LastInput
+	return !last.IsZero() && last.After(a.lastPost.Add(personMargin)) && time.Since(last) < personPause
+}
+
+// letGo releases a button the agent left down between actions, so a paused
+// or stopped agent never holds one under the person's hand.
+func (a *agentSession) letGo() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.letGoLocked()
+}
+
+func (a *agentSession) letGoLocked() {
+	if a.buttons != 0 {
+		_ = a.session.Pointer(a.pointer.X, a.pointer.Y, 0)
+		a.buttons = 0
+		a.lastPost = time.Now()
+	}
 }
 
 // capture keeps the newest frame so a screenshot never waits for a change.
@@ -405,33 +463,36 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 func (a *agentSession) input(action AgentAction) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	// A person can take over at any moment: every event first checks that the
-	// agent still has the screen, and an interrupted action lets go of what it
-	// holds, so no key or button stays pressed on the person's screen.
+	// A person comes first, whether they take over from the app or use the
+	// computer itself: every event first checks that the agent still has the
+	// screen and nobody else is typing or pointing, and an interrupted action
+	// lets go of what it holds, so no key or button stays pressed.
 	var held []uint32
+	var interrupted error
 	stopped := func() error {
 		if a.ctx.Err() != nil {
-			return context.Cause(a.ctx)
+			interrupted = context.Cause(a.ctx)
+		} else if a.personActiveLocked() {
+			interrupted = ErrPersonAtComputer
 		}
-		return nil
+		return interrupted
 	}
 	defer func() {
-		if a.ctx.Err() == nil {
+		if interrupted == nil {
 			return
 		}
 		for i := len(held) - 1; i >= 0; i-- {
 			_ = a.session.Key(held[i], false)
 		}
-		if a.buttons != 0 {
-			_ = a.session.Pointer(a.pointer.X, a.pointer.Y, 0)
-			a.buttons = 0
-		}
+		a.letGoLocked()
 	}()
 	press := func(keysym uint32, down bool) error {
 		if err := stopped(); err != nil {
 			return err
 		}
-		if err := a.session.Key(keysym, down); err != nil {
+		err := a.session.Key(keysym, down)
+		a.lastPost = time.Now()
+		if err != nil {
 			return err
 		}
 		if down {
@@ -470,7 +531,9 @@ func (a *agentSession) input(action AgentAction) error {
 			return err
 		}
 		a.pointer, a.buttons = p, buttons
-		return a.session.Pointer(p.X, p.Y, buttons)
+		err := a.session.Pointer(p.X, p.Y, buttons)
+		a.lastPost = time.Now()
+		return err
 	}
 	clicks := func(mask uint8, n int) error {
 		if err := pointer(point, a.buttons&^mask); err != nil {
@@ -579,10 +642,18 @@ func (a *agentSession) input(action AgentAction) error {
 			if d <= 0 || d > 10*time.Second {
 				d = time.Second
 			}
-			select {
-			case <-time.After(d):
-			case <-a.ctx.Done():
-				return context.Cause(a.ctx)
+			// Held without a.mu released, so cleanup comes first on a stop;
+			// a person's input ends the hold as well.
+			tick := time.NewTicker(100 * time.Millisecond)
+			defer tick.Stop()
+			for deadline := time.Now().Add(d); time.Now().Before(deadline); {
+				select {
+				case <-tick.C:
+				case <-a.ctx.Done():
+				}
+				if err := stopped(); err != nil {
+					return err
+				}
 			}
 		}
 		for i := len(keys) - 1; i >= 0; i-- {

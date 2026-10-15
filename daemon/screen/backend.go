@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"time"
 )
 
 // Backend is one platform's screen: what it can do, the permissions it needs,
@@ -56,6 +57,21 @@ type Permission struct {
 	// RestartRequired means the grant exists but takes effect only after
 	// Mewla restarts.
 	RestartRequired bool `json:"restart_required,omitempty"`
+}
+
+// Presence is what an agent needs to know about the person at the computer.
+type Presence struct {
+	// Locked means the screen is locked, or another user has the console.
+	Locked bool
+	// LastInput is when the keyboard or pointer last made input, an agent's
+	// own included. Zero when unknown.
+	LastInput time.Time
+}
+
+// presenceReporter is a backend that can tell. Without one, the screen
+// counts as unlocked and nobody as at the computer.
+type presenceReporter interface {
+	Presence() Presence
 }
 
 // Session is one live capture of a display.
