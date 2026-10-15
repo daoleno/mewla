@@ -1,6 +1,7 @@
 package agentuse
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -328,5 +329,36 @@ func TestNoDesktopIsNotReady(t *testing.T) {
 	}
 	if found != 2 {
 		t.Fatalf("desktop session not passed to Chrome: %v", env)
+	}
+}
+
+// A Mac left running: the extension and its key arrive while nothing asks
+// for the status, and the daemon still fetches the browser tools.
+func TestTheDaemonNoticesChromeGettingReadyOnItsOwn(t *testing.T) {
+	c := newFakeComputer(t)
+	c.withNode()
+	s := c.service(true)
+	s.recheck = 10 * time.Millisecond
+	if status := s.Refresh(); status.Browser.State != BrowserNoExtension {
+		t.Fatalf("no extension: %+v", status)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.Run(ctx)
+
+	c.installExtension("Default")
+	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Default"), append([]byte{1}, validKey...))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		s.mu.Lock()
+		state := s.cached.Browser.State
+		s.mu.Unlock()
+		if state == BrowserReady {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("never ready on its own: %s", state)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

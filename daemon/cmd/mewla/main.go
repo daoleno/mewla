@@ -483,6 +483,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("initialize agent use: %w", err)
 	}
 	go agentUse.Refresh()
+	go agentUse.Run(ctx)
 	w.SetAgentTools(func(command string, worker bool) string {
 		// The screen acts for a named Worker, so only sessions that carry
 		// their Worker identity get it.

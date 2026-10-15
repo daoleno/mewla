@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,6 +56,10 @@ const (
 	statusTTL        = 15 * time.Second
 	retryInstall     = 10 * time.Minute
 	installTimeout   = 5 * time.Minute
+	// recheckEvery is how often the daemon looks again while the browser
+	// isn't ready, so an extension or key added while Mewla runs is picked
+	// up without anyone asking.
+	recheckEvery = 30 * time.Second
 )
 
 type BrowserStatus struct {
@@ -94,6 +99,7 @@ type Service struct {
 	lookNode    func(home string) (node, npm string, ok bool)
 	lookDesktop func() ([]string, bool)
 	lookCodex   func(home string) bool
+	recheck     time.Duration
 
 	mu           sync.Mutex
 	settings     settings
@@ -109,7 +115,7 @@ type Service struct {
 // The daemon passes prepare=true so it can fetch the browser tools.
 func New(stateDir string, prepare bool) (*Service, error) {
 	home, _ := os.UserHomeDir()
-	s := &Service{dir: filepath.Join(stateDir, "agent-use"), home: home, prepare: prepare, lookChrome: findChrome, lookNode: findNode, lookDesktop: findDesktop, lookCodex: findCodexComputerUse}
+	s := &Service{dir: filepath.Join(stateDir, "agent-use"), home: home, prepare: prepare, lookChrome: findChrome, lookNode: findNode, lookDesktop: findDesktop, lookCodex: findCodexComputerUse, recheck: recheckEvery}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.loadLocked(); err != nil {
@@ -169,8 +175,32 @@ func (s *Service) refreshBrowser() Status {
 	} else {
 		status.Browser = BrowserStatus{State: BrowserOff, Summary: "Agents can't use this computer. Turn it on to let them."}
 	}
+	if s.prepare && status.Browser.State != s.cached.Browser.State {
+		log.Printf("agent use: your Chrome: %s", status.Browser.State)
+	}
 	s.cached, s.cachedAt = status, time.Now()
 	return status
+}
+
+// Run looks again on its own while the browser isn't ready: the status is
+// otherwise only refreshed when something asks, such as an agent starting,
+// so a computer left alone would never fetch the browser tools.
+func (s *Service) Run(ctx context.Context) {
+	ticker := time.NewTicker(s.recheck)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		s.mu.Lock()
+		ready := s.cached.Browser.State == BrowserReady
+		s.mu.Unlock()
+		if !ready {
+			s.Refresh()
+		}
+	}
 }
 
 // launch is everything needed to start the browser tools.
@@ -246,6 +276,9 @@ func (s *Service) installedLocked() bool {
 // lockfile's integrity hashes and without running package scripts.
 func (s *Service) install(node, npm string) {
 	err := s.runInstall(node, npm)
+	if err != nil {
+		log.Printf("agent use: couldn't fetch the browser tools: %v", err)
+	}
 	s.mu.Lock()
 	s.installing = false
 	s.installErr, s.installErrAt = err, time.Now()
