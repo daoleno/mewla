@@ -675,6 +675,8 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="resources" options={{ title: "Resources" }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
       <Stack.Screen name="settings/model-providers" options={{ title: "Model Providers" }} />
+      <Stack.Screen name="settings/licenses" options={{ title: "Open-source Licenses" }} />
+      <Stack.Screen name="settings/license" options={{ title: "" }} />
       <Stack.Screen
         name="terminal/[id]"
         options={{ headerShown: false, animation: "none" }}
