@@ -93,7 +93,10 @@ cannot be woken through it.
 
 Agents Mewla starts on a Mac can use its screen, keyboard and pointer too, for
 work in apps that have no command or website: they take a screenshot, then
-click, type and scroll on what they see. It needs nothing beyond what Screen
+click, type and scroll on what they see. They can also read the window in front
+as its buttons, fields and text, through the same Accessibility permission,
+which names what to click better than pixels; apps built on web pages, such as
+Electron apps, show little this way. It needs nothing beyond what Screen
 already has: **Agents can use this computer** on (Settings → **Agents on**
 *your Mac*, on by default), Screen not turned off, and Mewla's Screen Recording
 and Accessibility permissions. That Settings section says which is missing and
