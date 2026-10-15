@@ -2,7 +2,7 @@
 
 Release preparation starts in the manual [`.github/workflows/release-next-beta.yml`](../.github/workflows/release-next-beta.yml) workflow. Verified artifact construction and public GitHub Release publication remain in [`.github/workflows/release-artifacts.yml`](../.github/workflows/release-artifacts.yml); the preparation workflow does not build or publish public assets itself.
 
-The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow builds the same pinned `libghostty-vt` C ABI for Android on Linux and as an iOS device/simulator XCFramework on macOS. Ordinary `push` to `main` and pull requests run only fast checks in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Signed iOS archive/export and optional TestFlight upload are isolated in [`ios-release.yml`](../.github/workflows/ios-release.yml); see [iOS CI and release automation](ios-ci-release.md).
+The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow builds the same pinned `libghostty-vt` C ABI for Android on Linux and as an iOS device/simulator XCFramework on macOS. Ordinary `push` to `main` and pull requests run only fast checks in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Signed iOS archive/export and optional TestFlight upload are isolated in [`ios-release.yml`](../.github/workflows/ios-release.yml); see [iOS CI and release automation](ios-ci-release.md). The Google Play App Bundle and its testing-track upload are isolated in [`android-play.yml`](../.github/workflows/android-play.yml); see [Google Play](#google-play).
 
 ## Ordinary CI triggers
 
@@ -175,6 +175,66 @@ gh workflow run ios-release.yml \
 
 Do not create a GitHub Release by hand. Recovery repeats every identity, SHA, main-ancestry, asset, checksum, and signature gate; it can safely resume a matching draft or reconcile an existing release with `--clobber`. It never creates or rewrites a tag and never force-pushes.
 
+## Google Play
+
+[`.github/workflows/android-play.yml`](../.github/workflows/android-play.yml) builds the Play App Bundle. It is separate from the GitHub release: `release-artifacts.yml` and its sideload APK do not change.
+
+The bundle is built with `MEWLA_ANDROID_DISTRIBUTION=play-store` (`./scripts/android-release-apk.sh --aab`, Gradle `bundleRelease`, arm64-v8a). That channel leaves out `REQUEST_INSTALL_PACKAGES`, the self-update `FileProvider` and the in-app GitHub update check; Play delivers updates. The bundle is signed with the existing release key (`C2:FC:5B…:A4:FD`), which is also the Play upload key. With Play App Signing set to that same key, an install from Play and an install of the GitHub APK have the same signature and can update each other.
+
+### Dispatch
+
+| Input | Values |
+| --- | --- |
+| `ref` | Any ref that has the Play channel for `artifact-only`; an exact reviewed `vX.Y.Z` / `vX.Y.Z-beta.N` tag for an upload, so a `versionCode` is never spent on an unreleased commit |
+| `destination` | `artifact-only` (default), `internal`, or `alpha` (the default closed testing track) |
+| `release_status` | `draft` (default) or `completed`. Play accepts only `draft` until the app's first release has been rolled out in Console |
+
+```bash
+# Build and verify only; the AAB is a 14-day workflow artifact.
+gh workflow run android-play.yml --ref main -f ref=main -f destination=artifact-only
+
+# Upload a release tag to closed testing as a draft, then roll it out in Console.
+gh workflow run android-play.yml --ref main -f ref=vX.Y.Z -f destination=alpha -f release_status=draft
+```
+
+Every run checks the built AAB with `scripts/verify-aab-play.py` and the pinned bundletool:
+
+- package, `versionName` and `versionCode` match `app/app.base.json`; `targetSdkVersion` is 36;
+- no `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW` or `RECORD_AUDIO`, and no app-update `FileProvider` in the merged manifest;
+- the embedded Expo config says `distribution.android = play-store`, so the update check stays hidden;
+- only arm64-v8a libraries, every `.so` has 16 KB ELF `LOAD` alignment, and every split APK bundletool generates passes `zipalign -c -P 16`;
+- the universal APK carries the Ghostty notice and passes the native import check;
+- the upload certificate SHA-256 is the public release identity.
+
+The build job then prints the planned Play API calls with `scripts/google-play-upload.py --dry-run`. The upload job runs only for `internal` or `alpha`, in the `google-play` environment, with the uploader from the workflow commit. It never holds the signing key. It opens one edit, uploads the bundle, checks the `versionCode` and SHA-256 Play reports, sets the track release and commits; on any failure it deletes the edit. `--validate-only` (local use) lets Play validate the edit and then discards it.
+
+### Secrets
+
+| Secret | Where | Purpose |
+| --- | --- | --- |
+| `ZEN_ANDROID_KEYSTORE_BASE64`, `ZEN_ANDROID_KEYSTORE_PASSWORD`, `ZEN_ANDROID_KEY_ALIAS`, `ZEN_ANDROID_KEY_PASSWORD` | repository (already set) | The release keystore, the same as the APK build |
+| `MEWLA_PLAY_SERVICE_ACCOUNT_JSON` | environment `google-play` | The full JSON key of the Play Developer API service account |
+
+### Play Console checklist
+
+Do these once, in order. Steps 1–4 and 6 are in Play Console or Google Cloud; nothing here needs a code change.
+
+1. **Create the app.** Play Console → *Create app*: name `Mewla`, default language, *App*, *Free*, accept the declarations. The package name `com.daoleno.mewla` is fixed by the first uploaded bundle.
+2. **Prepare Play App Signing with the existing key.** You choose the signing key when you create the first release (step 6), but get the export ready now. In *Test and release → App integrity → Play app signing*, or in the first release's signing dialog, choose *Use existing app signing key from Java keystore* (wording varies: *Export and upload a key from Java keystore*). Download `pepk.jar` and the encryption public key it offers, then on the machine that holds the release keystore:
+
+   ```bash
+   java -jar pepk.jar --keystore=<release keystore> --alias=<alias> \
+     --output=mewla-signing-key.zip --include-cert --rsa-aes-encryption \
+     --encryption-key-path=encryption_public_key.pem
+   ```
+
+   Do not accept the Google-generated key. That key is permanent, and GitHub APK installs could never update to Play builds, or back.
+3. **Create the service account.** In Google Cloud Console, pick or create a project, enable *Google Play Android Developer API*, then *IAM & Admin → Service accounts → Create*. It needs no Cloud role. Under *Keys → Add key → JSON*, download the key. In Play Console *Users and permissions → Invite new users*, enter the service account email. Under *App permissions*, add Mewla with *View app information* and *Release apps to testing tracks*. Then in GitHub *Settings → Environments*, create `google-play`, optionally require a reviewer, and add the secret `MEWLA_PLAY_SERVICE_ACCOUNT_JSON` with the whole JSON file as its value. Delete the downloaded file afterwards.
+4. **Set up the testing tracks.** *Test and release → Testing → Closed testing*: use the default *Closed testing – Alpha* track (API name `alpha`), add a tester email list with at least 12 testers (personal developer accounts need 12 testers opted in for 14 days in a row before production), and pick the countries. Under *Internal testing*, add yourself as a tester.
+5. **Build the first AAB.** Dispatch `android-play.yml` with the release tag and `destination=artifact-only`, then download the `mewla-android-play-v<version>-<versionCode>` artifact.
+6. **Upload the first release by hand.** The Play API can only address an app after a bundle has fixed its package name, so the first upload goes through Console. In *Internal testing → Create new release*, pick the signing key from step 2 and upload `mewla-signing-key.zip`. Upload the AAB, then save and roll out. Check *App integrity*: both the app signing and the upload certificate SHA-256 must be `C2:FC:5B:09:…:BD:CD:A4:FD`.
+7. **Later releases go through the workflow.** Dispatch with `destination=internal` or `alpha`. Use `release_status=draft` until the first rollout is done, then `completed`. Each upload needs a new `versionCode`; release tags already increase it.
+
 ## Build-time baseline and optimization
 
 Android SDK setup explicitly requests `platform-tools` because the action's default also requests the removed SDK package `tools`. The following install step retains the pinned Android platform, build-tools, NDK, and CMake packages.
@@ -217,7 +277,9 @@ Daemon archives contain `mewla`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Relea
 | `scripts/prepare-release.py` | Validate the current annotated release and write the explicit newer identity, canonical notes, and changelog entry |
 | `scripts/materialize-android-keystore.sh` | Base64 → temp keystore file (0600); prints path only |
 | `scripts/verify-apk-release.sh` | Package/version/ABI/notice/certificate checks |
-| `scripts/android-release-apk.sh` | Clean prebuild + signed assembleRelease |
+| `scripts/android-release-apk.sh` | Clean prebuild + signed assembleRelease; `--aab` builds the play-store bundle |
+| `scripts/verify-aab-play.py` | Play AAB manifest/channel/16 KB/ABI/notice/certificate checks |
+| `scripts/google-play-upload.py` | Play Developer API upload to a testing track (`--dry-run`, `--validate-only`) |
 | `scripts/stage-release.sh` | Deterministic stage tree |
 | `scripts/sign-release-manifest.sh` | Validate the updater key and sign the exact manifest bytes |
 | `scripts/verify-release-identity.sh` | Tracked identity + stage layout |
