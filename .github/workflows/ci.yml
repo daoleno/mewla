@@ -222,9 +222,13 @@ jobs:
           ./scripts/verify-android-native-symbols.py \
             --lock app/modules/terminal-vt/native.lock.json --apk "$APK"
       - name: Open-source licenses cover the Android build
+        env:
+          NODE_ENV: production
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
         run: |
           set -euo pipefail
-          (cd app/android && ./gradlew -q :app:dependencies --configuration releaseRuntimeClasspath) > "$RUNNER_TEMP/android-deps.txt"
+          (cd app/android && ./gradlew -q :app:dependencies --configuration releaseRuntimeClasspath \
+            -PreactNativeArchitectures=arm64-v8a -Pexpo.useLegacyPackaging=true) > "$RUNNER_TEMP/android-deps.txt"
           bun run licenses:generate --maven "$RUNNER_TEMP/android-deps.txt"
 
   native-contract:
