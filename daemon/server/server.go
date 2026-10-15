@@ -97,7 +97,6 @@ type notificationPusher interface {
 type Server struct {
 	browsers                     *browser.Manager
 	screen                       *screen.Service
-	screenControllers            screenControllers
 	connections                  *connections.Manager
 	auth                         *auth.Manager
 	watcher                      *watcher.Watcher

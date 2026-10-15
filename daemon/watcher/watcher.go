@@ -267,7 +267,7 @@ type Watcher struct {
 	delegated             map[string]bool
 	activityProbe         classifier.ActivityProbe
 	providerActivityProbe ProviderActivityProbe
-	agentTools            func(command string) string
+	agentTools            func(command string, worker bool) string
 	nextEpoch             int64
 	snapshotReady         bool
 	snapshotReadyCh       chan struct{}
@@ -829,9 +829,10 @@ func (w *Watcher) SetProviderActivityProbe(probe ProviderActivityProbe) {
 }
 
 // SetAgentTools installs what every visible agent launch gains on this
-// computer (the user's Chrome). Hidden sessions, the Brain host among them,
-// keep their command as is.
-func (w *Watcher) SetAgentTools(tools func(command string) string) {
+// computer. worker says the session will carry its Mewla Worker identity
+// (MEWLA_WORKER_ID), which tools acting for a Worker need. Hidden sessions,
+// the Brain host among them, keep their command as is.
+func (w *Watcher) SetAgentTools(tools func(command string, worker bool) string) {
 	if w == nil {
 		return
 	}
@@ -3959,7 +3960,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		tools := w.agentTools
 		w.mu.RUnlock()
 		if tools != nil {
-			opts.Command = tools(opts.Command)
+			opts.Command = tools(opts.Command, opts.ProgressEnv)
 		}
 	}
 	applyProviderTmuxIsolation(&opts, w)

@@ -103,6 +103,8 @@ type Status struct {
 	// CanRestart means a service manager restarts Mewla, so Restart may be
 	// offered for a permission that needs it.
 	CanRestart bool `json:"can_restart,omitempty"`
+	// Agent is the agent using the screen now.
+	Agent *AgentState `json:"agent,omitempty"`
 }
 
 // Service reads its config on every use, so `mewla screen enable|disable`
@@ -117,6 +119,20 @@ type Service struct {
 	write sync.Mutex
 	// restart, when set, stops Mewla so its service manager starts it again.
 	restart func()
+
+	// control holds who controls the screen: one person or one agent.
+	control    sync.Mutex
+	current    *Control
+	agentMu    sync.Mutex
+	agent      *agentSession
+	workerName func(id string) string
+	agentGate  func() bool
+	// auditMu serializes the agent audit log.
+	auditMu     sync.Mutex
+	auditPruned bool
+	// agentIdle ends an agent's control after this long unused; tests
+	// shorten it.
+	agentIdle time.Duration
 }
 
 func NewService(stateDir string) *Service { return NewServiceWith(stateDir, newBackend()) }
@@ -191,6 +207,9 @@ func (s *Service) Status(ctx context.Context, deviceID string) Status {
 	}
 	status.Ready = capability.Ready() && status.Approved
 	status.CanRestart = s.restart != nil
+	if agent, ok := s.Agent(); ok {
+		status.Agent = &agent
+	}
 	return status
 }
 
@@ -325,6 +344,7 @@ func (s *Service) Open(ctx context.Context, deviceID string) (net.Conn, error) {
 // Disable is the local kill switch: it blocks every device and forgets their
 // approvals, so each must be allowed again at this computer.
 func (s *Service) Disable() error {
+	s.StopAgent()
 	return s.update(func(cfg *Config) error {
 		cfg.Disabled = true
 		cfg.Devices = nil

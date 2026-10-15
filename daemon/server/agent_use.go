@@ -19,6 +19,8 @@ type agentUseAction struct {
 	Enabled *bool   `json:"enabled,omitempty"`
 	Fix     string  `json:"fix,omitempty"`
 	Key     *string `json:"key,omitempty"`
+	// StopAgent ends the agent using the screen.
+	StopAgent bool `json:"stop_agent,omitempty"`
 }
 
 // handleAgentUse reports what agents can use on this computer and applies
@@ -52,11 +54,13 @@ func (s *Server) handleAgentUse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
-		case action.Enabled != nil && action.Fix == "" && action.Key == nil:
+		case action.StopAgent && action.Enabled == nil && action.Fix == "" && action.Key == nil:
+			status, err = s.agentUse.StopAgent()
+		case action.Enabled != nil && action.Fix == "" && action.Key == nil && !action.StopAgent:
 			status, err = s.agentUse.SetEnabled(*action.Enabled)
-		case action.Fix != "" && action.Enabled == nil && action.Key == nil:
+		case action.Fix != "" && action.Enabled == nil && action.Key == nil && !action.StopAgent:
 			status, err = s.agentUse.Fix(action.Fix)
-		case action.Key != nil && action.Enabled == nil && action.Fix == "":
+		case action.Key != nil && action.Enabled == nil && action.Fix == "" && !action.StopAgent:
 			status, err = s.agentUse.SetKey(*action.Key)
 		default:
 			http.Error(w, "send one of enabled, fix or key", http.StatusBadRequest)
