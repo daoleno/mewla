@@ -45,6 +45,19 @@ type FakeBackend struct {
 	Retained       int
 	ElementActions []FakeElementAction
 	AppKeys        []FakeAppKey
+	// SkyLight lets clicks reach an app behind others; AppClicks are those
+	// clicks and Raised the apps brought to the front.
+	SkyLight  bool
+	AppClicks []FakeAppClick
+	Raised    []int
+}
+
+// FakeAppClick is a click sent to one app's window behind others.
+type FakeAppClick struct {
+	PID           int
+	Window        uint32
+	X, Y          int
+	Button, Count int
 }
 
 // SleepDisplay turns the display off, which stops every running capture.
@@ -267,7 +280,37 @@ func (s *fakeSession) KeyTo(pid int, keysym uint32, down bool) error {
 	return nil
 }
 
-var _ appKeyer = (*fakeSession)(nil)
+func (s *fakeSession) BackgroundClicks() (bool, string) {
+	f := s.backend
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.SkyLight, "SkyLight isn't available on this Mac"
+}
+
+func (s *fakeSession) ClickTo(pid int, window uint32, x, y, button, count int) error {
+	f := s.backend
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.AppClicks = append(f.AppClicks, FakeAppClick{pid, window, x, y, button, count})
+	return nil
+}
+
+// RaiseApp brings a fake app to the front.
+func (f *FakeBackend) RaiseApp(_ context.Context, pid int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Raised = append(f.Raised, pid)
+	for i := range f.RunningApps {
+		f.RunningApps[i].Active = f.RunningApps[i].PID == pid
+	}
+	return nil
+}
+
+var (
+	_ appKeyer   = (*fakeSession)(nil)
+	_ appClicker = (*fakeSession)(nil)
+	_ appRaiser  = (*FakeBackend)(nil)
+)
 
 func (s *fakeSession) Close() error { return nil }
 

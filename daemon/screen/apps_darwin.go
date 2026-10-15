@@ -84,7 +84,7 @@ func loadApps() bool {
 		}
 		// The window list's keys are strings equal to their names.
 		appsLib.keys = map[string]uintptr{}
-		for _, name := range []string{"kCGWindowOwnerPID", "kCGWindowOwnerName", "kCGWindowLayer", "kCGWindowIsOnscreen", "kCGWindowBounds"} {
+		for _, name := range []string{"kCGWindowOwnerPID", "kCGWindowOwnerName", "kCGWindowLayer", "kCGWindowIsOnscreen", "kCGWindowBounds", "kCGWindowNumber"} {
 			ref := axLib.createString(0, name, cfStringEncodingUTF8)
 			if ref == 0 {
 				return
@@ -149,7 +149,7 @@ func runningApps() ([]App, error) {
 			}
 			index = len(apps)
 			byPID[int(pid)] = index
-			apps = append(apps, App{Name: name, PID: int(pid), Active: int(pid) == front, Hidden: true})
+			apps = append(apps, App{Name: name, PID: int(pid), Active: int(pid) == front, Hidden: true, Chromium: chromiumApp(int(pid))})
 		}
 		if !dictBool(info, "kCGWindowIsOnscreen") {
 			continue
@@ -157,6 +157,9 @@ func runningApps() ([]App, error) {
 		app := &apps[index]
 		app.Hidden = false
 		bounds := dictRect(info)
+		if id, ok := dictInt(info, "kCGWindowNumber"); ok && !bounds.Empty() {
+			app.Windows = append(app.Windows, AppWindow{ID: uint32(id), Bounds: bounds})
+		}
 		if app.Window.Empty() && !bounds.Empty() {
 			app.Window = bounds
 			for _, w := range above {
@@ -348,7 +351,84 @@ func actOnElement(e Element, action, value string) error {
 	return fmt.Errorf("the app refused it (accessibility error %d)", code)
 }
 
+// RaiseApp brings an app to the front, for a click that has to go on the
+// screen.
+func (b *macBackend) RaiseApp(_ context.Context, pid int) error {
+	if !loadApps() {
+		return ErrNoApps
+	}
+	var code int32
+	withPool(func() {
+		app := appsLib.createApplication(int32(pid))
+		if app == 0 {
+			code = axErrorInvalidElement
+			return
+		}
+		defer axLib.release(app)
+		yes := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), true)
+		code = appsLib.setAttribute(app, axLib.attrs["AXFrontmost"], uintptr(yes))
+	})
+	switch code {
+	case 0:
+		return nil
+	case axErrorAPIDisabled:
+		return ErrPermissions
+	}
+	return fmt.Errorf("couldn't bring the app forward (accessibility error %d)", code)
+}
+
+// Chromium-based apps ship one of these frameworks.
+var chromiumFrameworks = []string{"Electron Framework", "Chromium Embedded Framework", "Microsoft Edge Framework",
+	"Brave Browser Framework", "Vivaldi Framework", "Opera Framework", "ArcCore"}
+
+var chromium struct {
+	once    sync.Once
+	pidPath func(pid int32, buf *byte, size uint32) int32
+	mu      sync.Mutex
+	known   map[int]bool
+}
+
+// chromiumApp says whether the app with pid is built on Chromium, from the
+// frameworks in its bundle; remembered per process.
+func chromiumApp(pid int) bool {
+	chromium.once.Do(func() {
+		lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		if err == nil {
+			if _, err := purego.Dlsym(lib, "proc_pidpath"); err == nil {
+				purego.RegisterLibFunc(&chromium.pidPath, lib, "proc_pidpath")
+			}
+		}
+		chromium.known = map[int]bool{}
+	})
+	chromium.mu.Lock()
+	defer chromium.mu.Unlock()
+	if known, ok := chromium.known[pid]; ok {
+		return known
+	}
+	// Processes come and go on a Mac that runs for weeks.
+	if len(chromium.known) > 512 {
+		clear(chromium.known)
+	}
+	found := false
+	if chromium.pidPath != nil {
+		buf := make([]byte, 4096)
+		if n := chromium.pidPath(int32(pid), &buf[0], uint32(len(buf))); n > 0 {
+			path := string(buf[:n])
+			if i := strings.Index(path, ".app/"); i >= 0 {
+				entries, _ := os.ReadDir(path[:i+4] + "/Contents/Frameworks")
+				for _, entry := range entries {
+					name := strings.TrimSuffix(entry.Name(), ".framework")
+					found = found || strings.Contains(name, "Chrom") || slices.Contains(chromiumFrameworks, name)
+				}
+			}
+		}
+	}
+	chromium.known[pid] = found
+	return found
+}
+
 var (
 	_ appReader = (*macBackend)(nil)
 	_ appActor  = (*macBackend)(nil)
+	_ appRaiser = (*macBackend)(nil)
 )
