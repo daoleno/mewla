@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -146,5 +148,22 @@ func TestHostContinuityStartsAfterDiscoveryAndStopsWithRuntime(t *testing.T) {
 	}
 	if fw.created != 2 {
 		t.Fatalf("startup plus removal launches=%d", fw.created)
+	}
+}
+
+func TestHostContinuityRetriesOnlyTransientProbeFailureOnABoundedSchedule(t *testing.T) {
+	transient := fmt.Errorf("resolve Brain Host activation generation: %w", watcher.ErrOwnershipProbeUnavailable)
+	for attempt, want := range brainHostContinuityRetryDelays {
+		if got, ok := brainHostContinuityRetryDelay(attempt, transient); !ok || got != want {
+			t.Fatalf("attempt %d delay=%s ok=%v, want %s", attempt, got, ok, want)
+		}
+	}
+	if _, ok := brainHostContinuityRetryDelay(len(brainHostContinuityRetryDelays), transient); ok {
+		t.Fatal("retry schedule is unbounded")
+	}
+	for _, err := range []error{nil, errors.New("launch failed")} {
+		if _, ok := brainHostContinuityRetryDelay(0, err); ok {
+			t.Fatalf("non-transient %v was retried", err)
+		}
 	}
 }
