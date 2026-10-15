@@ -12,6 +12,7 @@ const (
 	ComputerUnsupported = "unsupported"
 	ComputerScreenOff   = "screen_off"
 	ComputerPermission  = "permission"
+	ComputerLocked      = "locked"
 	ComputerUnavailable = "unavailable"
 )
 
@@ -58,7 +59,9 @@ func (s *Service) Enabled() bool {
 	return !s.settings.Off
 }
 
-// ComputerReady says whether to give a new agent the screen.
+// ComputerReady says whether to give a new agent the screen. A locked screen
+// still counts: it is usable again once unlocked, and the tool says why not
+// until then.
 func (s *Service) ComputerReady() bool {
 	if !s.Enabled() {
 		return false
@@ -66,7 +69,11 @@ func (s *Service) ComputerReady() bool {
 	s.mu.Lock()
 	hooks := s.computer
 	s.mu.Unlock()
-	return hooks != nil && hooks.Status().State == ComputerReady
+	if hooks == nil {
+		return false
+	}
+	state := hooks.Status().State
+	return state == ComputerReady || state == ComputerLocked
 }
 
 // StopAgent ends the agent using the screen, from the app.

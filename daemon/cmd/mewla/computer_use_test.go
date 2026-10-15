@@ -155,6 +155,17 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A locked screen: the agent hears why, the app says so, and agents
+	// started meanwhile still get the tool for when it is unlocked.
+	backend.SetLocked(true)
+	if r, raw := call(session, map[string]any{"action": "screenshot"}); !r.IsError || !strings.Contains(raw, "locked") {
+		t.Fatalf("locked: %s", raw[:min(len(raw), 300)])
+	}
+	if status := agents.Status(); status.Computer.State != agentuse.ComputerLocked || !agents.ComputerReady() {
+		t.Fatalf("status while locked: %+v", status.Computer)
+	}
+	backend.SetLocked(false)
+
 	// Only a running Mewla Worker may act.
 	ghost := attach("%99")
 	defer ghost.Close()

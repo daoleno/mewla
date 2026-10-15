@@ -20,7 +20,7 @@ export interface AgentUseStatus {
   };
   /** The screen, keyboard and pointer; reported by computers with Screen. */
   computer?: {
-    state: "ready" | "off" | "unsupported" | "screen_off" | "permission" | "unavailable";
+    state: "ready" | "off" | "unsupported" | "screen_off" | "permission" | "locked" | "unavailable";
     summary: string;
     fix?: "open_settings";
     permission?: string;

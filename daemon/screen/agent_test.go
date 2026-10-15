@@ -296,3 +296,67 @@ func waitFor(t *testing.T, check func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// The system may count an agent's own events as input: they never pause it.
+func TestAnAgentNeverPausesItself(t *testing.T) {
+	s, _, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "type", Text: strings.Repeat("long text ", 30)})
+	act(t, s, "%7", AgentAction{Action: "left_click_drag", StartCoordinate: []int{10, 10}, Coordinate: []int{300, 200}})
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+}
+
+// Someone using the computer itself pauses the agent: what it is doing stops
+// with nothing left pressed, and it keeps the screen to carry on after.
+func TestSomeoneAtTheComputerPausesTheAgent(t *testing.T) {
+	defer func(saved time.Duration) { personPause = saved }(personPause)
+	personPause = 500 * time.Millisecond
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Act(context.Background(), "%7", AgentAction{Action: "hold_key", Text: "shift+a", Duration: 5})
+		done <- err
+	}()
+	waitFor(t, func() bool { _, keys := backend.Snapshot(); return len(keys) == 2 })
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrPersonAtComputer) {
+			t.Fatalf("hold ended with %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the agent kept holding keys while someone used the computer")
+	}
+	if _, keys := backend.Snapshot(); len(keys) != 4 || keys[2] != (FakeKey{'a', false}) || keys[3] != (FakeKey{0xffe1, false}) {
+		t.Fatalf("keys %v", keys)
+	}
+	if _, ok := s.Agent(); !ok {
+		t.Fatal("a pause ended the agent's control")
+	}
+
+	// A button held between actions comes up when the pause starts.
+	time.Sleep(personPause)
+	act(t, s, "%7", AgentAction{Action: "left_mouse_down", Coordinate: []int{10, 10}})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot"}); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("while someone is at the computer: %v", err)
+	}
+	if pointers, _ := backend.Snapshot(); pointers[len(pointers)-1].Buttons != 0 {
+		t.Fatalf("button left down: %v", pointers)
+	}
+	time.Sleep(personPause)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+}
+
+func TestALockedScreenStopsAgents(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.SetLocked(true)
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot"}); !errors.Is(err, ErrScreenLocked) {
+		t.Fatalf("locked: %v", err)
+	}
+	backend.SetLocked(false)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+}
