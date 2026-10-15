@@ -1192,6 +1192,20 @@
      "text": "fb3ca4a837f5"
     },
     {
+     "name": "@expo/dom-webview",
+     "version": "57.0.1",
+     "license": "MIT",
+     "url": "https://github.com/expo/expo",
+     "text": "fb3ca4a837f5"
+    },
+    {
+     "name": "@expo/log-box",
+     "version": "57.0.4",
+     "license": "MIT",
+     "url": "https://github.com/expo/expo/tree/main/packages/@expo/log-box",
+     "text": "fb3ca4a837f5"
+    },
+    {
      "name": "@expo/metro-runtime",
      "version": "57.0.15",
      "license": "MIT",
@@ -1458,6 +1472,13 @@
      "text": "fb3ca4a837f5"
     },
     {
+     "name": "expo-keep-awake",
+     "version": "57.0.1",
+     "license": "MIT",
+     "url": "https://github.com/expo/expo",
+     "text": "fb3ca4a837f5"
+    },
+    {
      "name": "expo-linear-gradient",
      "version": "57.0.1",
      "license": "MIT",
@@ -1476,6 +1497,16 @@
      "version": "57.0.16",
      "license": "MIT",
      "url": "https://github.com/expo/expo",
+     "text": "fb3ca4a837f5"
+    },
+    {
+     "name": "expo-modules-jsi",
+     "version": "57.0.8",
+     "license": "MIT",
+     "url": "https://github.com/expo/expo",
+     "platforms": [
+      "ios"
+     ],
      "text": "fb3ca4a837f5"
     },
     {
@@ -1508,6 +1539,13 @@
      "text": "fb3ca4a837f5"
     },
     {
+     "name": "expo-splash-screen",
+     "version": "57.0.9",
+     "license": "MIT",
+     "url": "https://github.com/expo/expo",
+     "text": "fb3ca4a837f5"
+    },
+    {
      "name": "expo-status-bar",
      "version": "57.0.1",
      "license": "MIT",
@@ -1519,9 +1557,6 @@
      "version": "57.0.2",
      "license": "MIT",
      "url": "https://github.com/expo/expo",
-     "platforms": [
-      "android"
-     ],
      "text": "fb3ca4a837f5"
     },
     {

@@ -3,7 +3,8 @@
 //
 // JavaScript packages are the ones that actually ship: every node_modules
 // package named in the source maps of the Android and iOS Metro bundles.
-// Bundled code, fonts and native libraries come from components.json, with
+// Packages autolinked into the native build are listed too. Bundled code,
+// fonts and native libraries come from components.json, with
 // their license texts in texts/ or app/assets/notices/. The output is
 // app/assets/notices/licenses.json.
 //
@@ -18,7 +19,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -103,9 +104,40 @@ function bundledPackages(bundleDir) {
           existsSync(join(candidate, "package.json")),
         );
         if (!absolute) fail(`cannot find the package of bundled source ${source}`);
-        if (!byDir.has(absolute)) byDir.set(absolute, new Set());
-        byDir.get(absolute).add(platform);
+        const real = realpathSync(absolute);
+        if (!byDir.has(real)) byDir.set(real, new Set());
+        byDir.get(real).add(platform);
       }
+    }
+  }
+  return byDir;
+}
+
+// autolinkedPackages adds the packages whose native code the release build
+// links even when none of their JavaScript is in the bundle (expo-splash-screen,
+// for example). First-party modules under app/modules are skipped.
+function autolinkedPackages(byDir) {
+  const run = (command) =>
+    JSON.parse(
+      execFileSync("bunx", ["expo-modules-autolinking", ...command, "--json"], {
+        cwd: join(root, "app"),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "inherit"],
+        maxBuffer: 64 << 20,
+      }),
+    );
+  for (const platform of platforms) {
+    const names = [
+      ...run(["resolve", "--platform", platform]).modules.filter((module) => !module.debugOnly).map((module) => module.packageName),
+      ...Object.keys(run(["react-native-config", "--platform", platform]).dependencies ?? {}),
+    ];
+    for (const name of names) {
+      const dir = resolvePackage(name, join(root, "app"));
+      if (!dir) fail(`autolinked package ${name} is not installed`);
+      const real = realpathSync(dir);
+      if (real.startsWith(join(root, "app", "modules") + sep)) continue;
+      if (!byDir.has(real)) byDir.set(real, new Set());
+      byDir.get(real).add(platform);
     }
   }
   return byDir;
@@ -243,7 +275,7 @@ function build(bundleDir) {
   }
 
   const found = [];
-  for (const [dir, seenOn] of bundledPackages(bundleDir)) {
+  for (const [dir, seenOn] of autolinkedPackages(bundledPackages(bundleDir))) {
     const onlyOn = seenOn.size < platforms.length ? { platforms: [...seenOn].sort() } : {};
     found.push(npmItem(dir, onlyOn));
   }
