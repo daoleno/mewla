@@ -102,6 +102,7 @@ import {
 } from "../components/navigation/HeaderBackButton";
 import { TelegramConnectionPanel } from "../components/settings/TelegramConnectionPanel";
 import { ComputersTogether } from "../components/settings/ComputersTogether";
+import { AgentsOnThisComputer } from "../components/settings/AgentsOnThisComputer";
 import { cancelCalendarNotifications } from "../services/calendarNotifications";
 import { revokeThisDevice } from "../services/deviceRevoke";
 import { useCurrentServer } from "../store/currentServer";
@@ -656,6 +657,12 @@ export default function SettingsScreen() {
               style={styles.sectionNotice}
             />
           ) : null}
+
+          <AgentsOnThisComputer
+            key={`agents-${currentServerId || "no-current-server"}`}
+            server={servers.find((server) => server.id === currentServerId) ?? null}
+            connected={Boolean(currentServerId) && serverConnections[currentServerId || ""] === "connected"}
+          />
 
           <ComputersTogether
             key={currentServerId || "no-current-server"}
