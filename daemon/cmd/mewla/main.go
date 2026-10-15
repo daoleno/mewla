@@ -83,6 +83,11 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
+		var notRunning mewlaNotRunningError
+		if errors.As(err, &notRunning) {
+			fmt.Fprintln(os.Stderr, notRunning.Error())
+			os.Exit(1)
+		}
 		if errors.Is(err, doctor.ErrNotReady) || errors.Is(err, errDepsMissing) || errors.Is(err, errMewlaNotRunning) {
 			os.Exit(1)
 		}
@@ -1226,7 +1231,7 @@ func runWorkerSpawn(args []string, stderr io.Writer) error {
 	}
 	resp, err := control.CallWithTimeout(socketPath, req, workerSpawnControlTimeout)
 	if err != nil {
-		return err
+		return controlError(cfg.stateDir, err)
 	}
 	return writeControlResponse(os.Stdout, resp, cfg.json)
 }
@@ -1986,6 +1991,28 @@ func parseCLIConfig(name string, args []string, stderr io.Writer) (cliConfig, er
 	return cfg, nil
 }
 
+// mewlaNotRunningError is what a command that needs the running daemon says
+// when there is none: one plain line on how to start it.
+type mewlaNotRunningError struct{ stateDir string }
+
+func (e mewlaNotRunningError) Error() string {
+	dir := e.stateDir
+	if dir == resolveCLIStateDir("") {
+		dir = ""
+	}
+	return "Mewla isn't running here. Start it with: " + startCommand(dir)
+}
+
+func (e mewlaNotRunningError) Is(target error) bool { return target == errMewlaNotRunning }
+
+// controlError turns "nothing answers on the control socket" into that line.
+func controlError(stateDir string, err error) error {
+	if errors.Is(err, control.ErrNotRunning) {
+		return mewlaNotRunningError{stateDir: stateDir}
+	}
+	return err
+}
+
 func callControl(cfg cliConfig, req control.Request) (control.Response, error) {
 	socketPath, err := control.DefaultSocketPath(cfg.stateDir)
 	if err != nil {
@@ -1993,7 +2020,7 @@ func callControl(cfg cliConfig, req control.Request) (control.Response, error) {
 	}
 	resp, err := control.Call(socketPath, req)
 	if err != nil {
-		return control.Response{}, err
+		return control.Response{}, controlError(cfg.stateDir, err)
 	}
 	if !resp.OK {
 		return resp, nil

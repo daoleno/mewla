@@ -187,7 +187,7 @@ Never send messages or make updates without task-specific user authorization, ev
 	response, err := control.CallWithTimeout(socketPath, control.Request{Type: "connections", ConnectionRequest: &q}, timeout)
 	in.Credential = ""
 	if err != nil {
-		return err
+		return controlError(cfg.stateDir, err)
 	}
 	if action == "updates" {
 		response = pendingUpdates(response)
