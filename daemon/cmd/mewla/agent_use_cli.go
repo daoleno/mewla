@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"syscall"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
 )
@@ -84,12 +83,27 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 		}
 		status, err = service.SetKey(key)
 	case "chrome-mcp":
-		// What agents run: the user's Chrome as an MCP server on stdio.
+		// What agents run: the user's Chrome as an MCP server on stdio. A
+		// detached helper runs Playwright and closes the agent's tabs when it
+		// is done, however this process ends.
+		if _, _, mcpErr := service.MCPServer(); mcpErr != nil {
+			return fmt.Errorf("your Chrome isn't available to agents: %w", mcpErr)
+		}
+		exe, exeErr := os.Executable()
+		if exeErr != nil {
+			return exeErr
+		}
+		helper := []string{exe, "agent-use", "chrome-mcp-supervise"}
+		if stateDir != "" {
+			helper = append(helper, "--state-dir", stateDir)
+		}
+		return agentuse.RelayMCP(helper, os.Environ(), os.Stdin, os.Stdout, os.Stderr)
+	case "chrome-mcp-supervise":
 		argv, env, mcpErr := service.MCPServer()
 		if mcpErr != nil {
 			return fmt.Errorf("your Chrome isn't available to agents: %w", mcpErr)
 		}
-		return syscall.Exec(argv[0], argv, env)
+		return agentuse.SuperviseMCP(argv, env, os.Stdin, os.Stdout, os.Stderr)
 	default:
 		return fmt.Errorf("unknown agent-use action %q", action)
 	}
