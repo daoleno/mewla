@@ -19,7 +19,9 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
 
 The row then reads *Agents use your Chrome, in their own tab group.* Mewla
 downloads the browser tools the first time (it needs Node.js 20 or later on
-the computer); the row shows that too.
+the computer); the row shows that too. Mewla looks again every half minute
+until Chrome is ready, so a computer left alone picks the extension up by
+itself, and your other computers learn of it over their open connection.
 
 The switch **Agents can use this computer** turns it off: agents started
 after that don't get your Chrome, and agents already running lose it the next
