@@ -15,6 +15,7 @@ uses the anonymised repository slug.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
@@ -41,6 +42,8 @@ REPO_ONLY_RE = re.compile(r"<!-- repo-only -->.*?<!-- /repo-only -->\n?", re.S)
 RELEASE_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$")
 HREF_RE = re.compile(r'(<a\b[^>]*?\bhref=")([^"]*)(")')
 SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]*)(")')
+LOCAL_ASSET_RE = re.compile(r'(<(?:link|script)\b[^>]*?\b(?:href|src)=")(?![a-z]+:|/)([^"?#]+\.(?:css|js))(")')
+LOCAL_IMPORT_RE = re.compile(r"""(\bfrom\s+['"])(\.{1,2}/[^'"?#]+\.js)(['"])""")
 TAG_RE = re.compile(r"<[^>]+>")
 BLOCK_TAG_RE = re.compile(r"</?(?:p|li|ul|ol|h[1-6]|pre|table|tr|td|th|div|blockquote|br|hr)\b[^>]*>")
 
@@ -405,7 +408,36 @@ def build(out: Path) -> list[str]:
     (out / "docs" / "search-index.json").write_text(
         json.dumps(search_index(pages), ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
     )
+    fingerprint(out)
     return [f"{len(pages)} pages written to {out}/docs"]
+
+
+def fingerprint(out: Path) -> None:
+    """Version every local stylesheet and script by its content.
+
+    Pages caches each file for ten minutes, so right after a deploy a browser can
+    pair fresh HTML with the previous styles.css. A ?v=<hash> on every reference
+    makes a changed file a new URL. Scripts go first: a module's hash covers the
+    versioned imports it was rewritten with.
+    """
+
+    def stamp(source: Path, match: re.Match[str]) -> str:
+        target = (source.parent / match.group(2)).resolve()
+        if out.resolve() not in target.parents or not target.is_file():
+            return match.group(0)
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()[:10]
+        return f"{match.group(1)}{match.group(2)}?v={digest}{match.group(3)}"
+
+    for path in sorted(out.rglob("*.js")):
+        text = path.read_text(encoding="utf-8")
+        versioned = LOCAL_IMPORT_RE.sub(lambda m: stamp(path, m), text)
+        if versioned != text:
+            path.write_text(versioned, encoding="utf-8")
+    for path in sorted(out.rglob("*.html")):
+        text = path.read_text(encoding="utf-8")
+        versioned = LOCAL_ASSET_RE.sub(lambda m: stamp(path, m), text)
+        if versioned != text:
+            path.write_text(versioned, encoding="utf-8")
 
 
 def main() -> int:
