@@ -256,9 +256,9 @@ func LookPath(name string) (string, error) {
 	return "", exec.ErrNotFound
 }
 
-// AddToPath prepends dir to this process's PATH when missing, so the daemon,
+// AddToPath appends dir to this process's PATH when missing, so the daemon,
 // the tmux server it starts and a boot unit that copies PATH all find tools
-// installed there.
+// installed there without changing which tool the user's PATH picks first.
 func AddToPath(dir string) bool {
 	if dir == "" {
 		return false
@@ -270,5 +270,5 @@ func AddToPath(dir string) bool {
 	if current == "" {
 		return os.Setenv("PATH", dir) == nil
 	}
-	return os.Setenv("PATH", dir+string(os.PathListSeparator)+current) == nil
+	return os.Setenv("PATH", current+string(os.PathListSeparator)+dir) == nil
 }

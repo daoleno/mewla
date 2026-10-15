@@ -426,12 +426,14 @@ append_profile_path() {
 }
 
 # check_tmux lets the new binary find this computer's official tmux command
-# and, in a terminal, offer to run it. Releases before `mewla deps` only get
-# a pointer to `mewla doctor`.
+# and, in a terminal, offer to run it. Releases before `mewla deps` only say
+# that tmux is missing and point to `mewla doctor`.
 check_tmux() {
   binary=$1
   if ! "$binary" deps --help >/dev/null 2>&1; then
-    "$binary" doctor >/dev/null 2>&1 || say "Check this computer: $binary doctor"
+    if ! command -v tmux >/dev/null 2>&1; then
+      say "tmux is missing. Mewla runs every agent inside tmux; see how to install it: $binary doctor"
+    fi
     return 0
   fi
   if [ -t 1 ] && (: </dev/tty) 2>/dev/null; then
