@@ -202,19 +202,21 @@ img { max-width: 100%; }
 .seal-stamp.stamped { opacity: .94; animation: thump .36s ease-out; }
 
 /* 6: Screen, the Mac on a phone held sideways; one tap clicks, the keyboard types.
-   Everything inside scales with the phone (cqw, and the drawing's viewBox). */
+   Everything inside scales with the phone (--u is 1cqw, and the drawing's viewBox);
+   engines without container units size it from the viewport instead. */
 .screen { padding: clamp(110px, 13vw, 170px) 0 0; }
 .sc-head > p:not(.kicker) { margin-top: 18px; font-size: 19px; color: var(--soft); }
-.land { max-width: 940px; margin: clamp(40px, 5vw, 64px) auto 0; container-type: inline-size; aspect-ratio: 2.16; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; border: clamp(7px, 1.1vw, 11px) solid var(--dark); border-radius: clamp(26px, 4.6vw, 48px); overflow: hidden; background: #0d0c0b; box-shadow: 0 30px 60px -24px rgba(20, 12, 6, .45); }
+.land { --u: min(9.4px, .9vw); max-width: 940px; margin: clamp(40px, 5vw, 64px) auto 0; container-type: inline-size; aspect-ratio: 2.16; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; border: clamp(7px, 1.1vw, 11px) solid var(--dark); border-radius: clamp(26px, 4.6vw, 48px); overflow: hidden; background: #0d0c0b; box-shadow: 0 30px 60px -24px rgba(20, 12, 6, .45); }
+@supports (width: 1cqw) { .land { --u: 1cqw; } }
 .ls-view { position: relative; display: flex; justify-content: center; min-height: 0; }
 .mac { display: block; height: 100%; width: auto; max-width: 100%; aspect-ratio: 16 / 10; font-family: var(--sans); }
-.stats { position: absolute; left: 2cqw; top: 2cqw; display: grid; gap: .2cqw; padding: .7cqw 1.5cqw; border-radius: 2cqw; background: rgba(255, 255, 255, .92); font-size: max(8px, 1.35cqw); line-height: 1.35; color: var(--ink); }
-.stats span { display: flex; align-items: center; gap: .7cqw; white-space: nowrap; }
-.stats i { width: .9cqw; height: .9cqw; min-width: 5px; min-height: 5px; border-radius: 50%; background: #3d7a52; }
-.stats small { font-size: 1em; color: var(--soft); padding-left: 1.6cqw; }
-.keybar { display: flex; gap: .8cqw; margin: 0; padding: 1cqw 1.2cqw; list-style: none; background: #f4f2ee; overflow: hidden; }
-.keybar li { flex: none; display: grid; place-items: center; height: 4.8cqw; min-width: 4.8cqw; padding: 0 1.2cqw; border: 1px solid #e5e0d6; border-radius: 1.4cqw; background: #fff; font-size: max(8px, 1.8cqw); font-weight: 500; white-space: nowrap; }
-.keybar svg { width: 2.6cqw; height: 2.6cqw; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.stats { position: absolute; left: calc(2 * var(--u)); top: calc(2 * var(--u)); display: grid; gap: calc(.2 * var(--u)); padding: calc(.7 * var(--u)) calc(1.5 * var(--u)); border-radius: calc(2 * var(--u)); background: rgba(255, 255, 255, .92); font-size: max(8px, calc(1.35 * var(--u))); line-height: 1.35; color: var(--ink); }
+.stats span { display: flex; align-items: center; gap: calc(.7 * var(--u)); white-space: nowrap; }
+.stats i { width: calc(.9 * var(--u)); height: calc(.9 * var(--u)); min-width: 5px; min-height: 5px; border-radius: 50%; background: #3d7a52; }
+.stats small { font-size: 1em; color: var(--soft); padding-left: calc(1.6 * var(--u)); }
+.keybar { display: flex; gap: calc(.8 * var(--u)); margin: 0; padding: var(--u) calc(1.2 * var(--u)); list-style: none; background: #f4f2ee; overflow: hidden; }
+.keybar li { flex: none; display: grid; place-items: center; height: calc(4.8 * var(--u)); min-width: calc(4.8 * var(--u)); padding: 0 calc(1.2 * var(--u)); border: 1px solid #e5e0d6; border-radius: calc(1.4 * var(--u)); background: #fff; font-size: max(8px, calc(1.8 * var(--u))); font-weight: 500; white-space: nowrap; }
+.keybar svg { width: calc(2.6 * var(--u)); height: calc(2.6 * var(--u)); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .mac .ring, .mac .finger { transform-box: fill-box; transform-origin: center; }
 /* the finished state; with script it plays from the start once in view */
 .mac .cur { transform: translate(474px, 284px); }
