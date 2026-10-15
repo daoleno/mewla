@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stdimage "image"
 	"image/jpeg"
 	"os"
 	"os/exec"
@@ -114,6 +115,14 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 	if k := keys[len(keys)-2]; k.Keysym != 0x01000000+'到' || !k.Down {
 		t.Fatalf("typed %v", keys)
+	}
+
+	// The focused window, as elements with points to click.
+	backend.Tree = &screen.ElementTree{App: "Notes", Elements: []screen.Element{
+		{Role: "AXButton", Title: "New Note", Frame: stdimage.Rect(100, 40, 300, 80), Enabled: true},
+	}}
+	if r, raw := call(session, map[string]any{"action": "elements"}); r.IsError || !strings.Contains(raw, `button \"New Note\" at (100, 30)`) {
+		t.Fatalf("elements: %s", raw[:min(len(raw), 400)])
 	}
 
 	// A person opens Screen: the agent is refused until they are done.

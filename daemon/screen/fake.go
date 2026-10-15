@@ -17,6 +17,8 @@ type FakeBackend struct {
 	Missing       []string // ids of permissions not granted
 	Answer        bool     // Confirm's answer
 	Locked        bool
+	// Tree is what Elements reads; nil reads as no accessibility.
+	Tree *ElementTree
 
 	mu        sync.Mutex
 	changed   chan struct{}
@@ -39,6 +41,16 @@ func (f *FakeBackend) Presence() Presence {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return Presence{Locked: f.Locked, LastInput: f.lastInput}
+}
+
+// Elements returns the scripted tree, as a Mac reads the focused window.
+func (f *FakeBackend) Elements(context.Context, int) (ElementTree, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Tree == nil {
+		return ElementTree{}, ErrNoElements
+	}
+	return *f.Tree, nil
 }
 
 // PersonInput is someone using the computer's own keyboard or pointer.

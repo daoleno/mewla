@@ -88,7 +88,8 @@ const computerToolDescription = `Use this computer's screen, keyboard and pointe
 	`Start with action "screenshot"; give every coordinate in that screenshot's pixels. ` +
 	`Actions: screenshot, left_click, right_click, middle_click, double_click, triple_click, mouse_move, ` +
 	`left_click_drag (start_coordinate to coordinate), left_mouse_down, left_mouse_up, scroll (scroll_direction, scroll_amount), ` +
-	`type (text), key (text such as "cmd+c" or "Return"), hold_key (text, duration), wait (duration seconds), cursor_position. ` +
+	`type (text), key (text such as "cmd+c" or "Return"), hold_key (text, duration), wait (duration seconds), cursor_position, ` +
+	`elements (the focused window's buttons, fields and text, each with the point to click; prefer it to reading pixels in a Mac app). ` +
 	`Take a screenshot after acting to see the result. A person comes first: if they take over, stop and report; ` +
 	`if someone uses this computer's own keyboard or pointer, you are paused: wait about 10 seconds and try again; ` +
 	`if the screen is locked, stop and report, since only someone at the computer can unlock it. ` +
