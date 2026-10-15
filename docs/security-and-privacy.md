@@ -60,7 +60,10 @@ viewing the screen always takes over from an agent, someone using the Mac's own
 keyboard or trackpad pauses it, agents can't use a locked Mac, the app's switch
 stops agents at once (`mewla screen disable` and `mewla agent-use off` within
 seconds), and each action is logged without what was typed. See
-[Screen](screen.md#agents-on-the-screen).
+[Screen](screen.md#agents-on-the-screen). Codex's own computer use, when your
+Codex has it, is Codex's tool: none of this covers it, except that the switch
+turns it off for Codex Workers started afterwards. See
+[Codex's own computer use](screen.md#codexs-own-computer-use).
 
 ## Agents in your browser
 

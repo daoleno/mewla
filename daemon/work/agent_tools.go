@@ -12,6 +12,9 @@ import (
 const (
 	ChromeMCPName   = "mewla_chrome"
 	ComputerMCPName = "mewla_computer"
+	// CodexComputerUseName is Codex's own computer use, from the user's
+	// Codex config.
+	CodexComputerUseName = "computer-use"
 )
 
 // AgentTools is what an agent launched now can use on this computer.
@@ -20,12 +23,16 @@ type AgentTools struct {
 	Chrome bool
 	// Computer is this computer's screen, keyboard and pointer.
 	Computer bool
+	// NoCodexComputerUse turns off Codex's own computer use, which the
+	// user's Codex config adds, while agents may not use this computer.
+	NoCodexComputerUse bool
 }
 
 // WithAgentTools gives a Codex or Claude launch this computer's ready tools
 // as invocation-scoped MCP servers. Anything else, or a command that already
 // names MCP servers itself, is returned unchanged: these tools are extras,
-// never a reason a launch fails.
+// never a reason a launch fails. A Codex launch can also have Codex's own
+// computer use turned off.
 func WithAgentTools(command, executable, stateDir string, tools AgentTools) string {
 	type server struct {
 		name string
@@ -41,7 +48,11 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 	if tools.Computer {
 		servers = append(servers, server{ComputerMCPName, []string{"agent-use", "computer-mcp", "--state-dir", stateDir}, []string{"MEWLA_WORKER_ID"}})
 	}
-	if len(servers) == 0 {
+	// Only a config that defines the server can turn it off: Codex refuses a
+	// server entry with nothing to run. A launch that picks its own Codex
+	// home may not have it, so it is left alone.
+	disableCodex := tools.NoCodexComputerUse && InferWorkerProvider(command) == WorkerProviderCodex && !strings.Contains(command, "CODEX_HOME=")
+	if len(servers) == 0 && !disableCodex {
 		return command
 	}
 	opts, ok := inspectLaunchCommandOptions(command)
@@ -53,6 +64,12 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 			arg == "--mcp-config" || strings.HasPrefix(arg, "--mcp-config=") || arg == "--strict-mcp-config" {
 			return command
 		}
+		if strings.HasPrefix(arg, "mcp_servers."+CodexComputerUseName) {
+			disableCodex = false
+		}
+	}
+	if disableCodex {
+		command += " -c " + shellquote.Word("mcp_servers."+CodexComputerUseName+".enabled=false")
 	}
 	switch InferWorkerProvider(command) {
 	case WorkerProviderCodex:

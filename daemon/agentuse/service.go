@@ -72,6 +72,9 @@ type Status struct {
 	Enabled  bool            `json:"enabled"`
 	Browser  BrowserStatus   `json:"browser"`
 	Computer *ComputerStatus `json:"computer,omitempty"`
+	// CodexComputerUse is set when the user's Codex config gives Codex its
+	// own computer use. Codex Workers here get it while the switch is on.
+	CodexComputerUse bool `json:"codex_computer_use,omitempty"`
 }
 
 type settings struct {
@@ -90,6 +93,7 @@ type Service struct {
 	lookChrome  func(home string) (chromeInstall, bool)
 	lookNode    func(home string) (node, npm string, ok bool)
 	lookDesktop func() ([]string, bool)
+	lookCodex   func(home string) bool
 
 	mu           sync.Mutex
 	settings     settings
@@ -105,7 +109,7 @@ type Service struct {
 // The daemon passes prepare=true so it can fetch the browser tools.
 func New(stateDir string, prepare bool) (*Service, error) {
 	home, _ := os.UserHomeDir()
-	s := &Service{dir: filepath.Join(stateDir, "agent-use"), home: home, prepare: prepare, lookChrome: findChrome, lookNode: findNode, lookDesktop: findDesktop}
+	s := &Service{dir: filepath.Join(stateDir, "agent-use"), home: home, prepare: prepare, lookChrome: findChrome, lookNode: findNode, lookDesktop: findDesktop, lookCodex: findCodexComputerUse}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.loadLocked(); err != nil {
@@ -159,7 +163,7 @@ func (s *Service) refreshBrowser() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_ = s.loadLocked()
-	status := Status{Enabled: !s.settings.Off}
+	status := Status{Enabled: !s.settings.Off, CodexComputerUse: s.lookCodex(s.home)}
 	if status.Enabled {
 		status.Browser, _ = s.browserLocked()
 	} else {

@@ -61,3 +61,24 @@ func TestAgentToolsNeverBreakALaunch(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestTheSwitchTurnsOffCodexsOwnComputerUse(t *testing.T) {
+	off := AgentTools{NoCodexComputerUse: true}
+	got := WithAgentTools("codex --model selected", "/mewla", "/state", off)
+	if got != "codex --model selected -c mcp_servers.computer-use.enabled=false" {
+		t.Fatal(got)
+	}
+	if _, ok := splitSupportedLaunchFields(got); !ok {
+		t.Fatalf("unsafe command: %s", got)
+	}
+	if again := WithAgentTools(got, "/mewla", "/state", off); again != got {
+		t.Fatalf("added twice: %s", again)
+	}
+	// Claude has no such tool; a launch with its own Codex home may not
+	// define the server, and Codex refuses to start with half an entry.
+	for _, command := range []string{"claude", "env CODEX_HOME=/elsewhere codex", "codex -c mcp_servers.computer-use.enabled=true"} {
+		if got := WithAgentTools(command, "/mewla", "/state", off); got != command {
+			t.Fatalf("changed %q into %q", command, got)
+		}
+	}
+}

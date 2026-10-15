@@ -139,6 +139,9 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 			fmt.Fprintf(w, "  %s is using it now.\n", name)
 		}
 	}
+	if status.CodexComputerUse {
+		fmt.Fprintln(w, "Codex's own computer use: Codex Workers here have it. Mewla can't watch or pause it.")
+	}
 	switch browser.Fix {
 	case agentuse.FixInstallExtension:
 		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension's page in Chrome; click Add to Chrome.")
