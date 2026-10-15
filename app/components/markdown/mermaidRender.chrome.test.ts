@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { parseMessageBlocks } from "../terminal/InterfaceMessageBodyModel";
 import {
   pngIsNonBlank,
@@ -16,6 +16,19 @@ const shotDir = join(process.env.TMPDIR || "/tmp", "mewla-mermaid-shots");
 mkdirSync(shotDir, { recursive: true });
 
 describe("Mermaid actual render", () => {
+  // Every render spawns a fresh headless Chrome. In CI the *first* process
+  // start can take ~30 s (cold binary, dynamically linked libraries and the
+  // font cache), which is what blew the Perpetuo test's 20 s timeout twice.
+  // Pay that cold start here, under a timeout sized for it, so each test's
+  // timeout only measures rendering. The warm-up deliberately renders the
+  // same CJK fixture as the slow test so the font cache is warm too.
+  beforeAll(async () => {
+    await renderMermaidSvgWithChrome(PERPETUO_SINGLE_DOMAIN_FLOWCHART, {
+      width: 390,
+      height: 844,
+    });
+  }, 120_000);
+
   test("renders the Perpetuo subgraphs, Chinese labels, numbered and dotted edges", async () => {
     const shot = join(shotDir, "perpetuo-390.png");
     const result = await renderMermaidSvgWithChrome(
