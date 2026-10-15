@@ -431,6 +431,7 @@ func issuePairingControlResponse(manager *auth.Manager) control.Response {
 			ExpiresAt:       pairing.ExpiresAt,
 			DaemonID:        manager.DaemonID(),
 			DaemonPublicKey: manager.PublicKeyHex(),
+			ShortLinks:      true,
 		},
 	}
 }
