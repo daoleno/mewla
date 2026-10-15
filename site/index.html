@@ -375,6 +375,58 @@
     </div>
   </section>
 
+  <!-- Remote access: sign in once on the computer, then any network -->
+  <section class="remote" id="remote">
+    <div class="wrap">
+      <div class="rm-head">
+        <p class="kicker">Remote access</p>
+        <h2>One sign-in. Any network.</h2>
+        <p>No Tailscale, Cloudflare, open port or domain needed.</p>
+      </div>
+      <figure class="rm rv" data-perch="0.3" data-act="perk">
+        <div class="term rm-term">
+          <div class="term-bar"><i></i><i></i><i></i><span>mewla</span></div>
+<pre><span class="s1"><b>$</b> mewla
+
+Welcome to Mewla. How should your phone and browsers reach this computer?
+
+  <span class="pick">1. Sign in, reach it from anywhere (recommended)</span>
+  2. Only on the same Wi-Fi
+  3. I'll set up Tailscale or HTTPS myself
+  4. Decide later
+</span><span class="s2">
+Choose 1-4 [1]: 1
+
+Sign in to turn on remote access for this computer.
+  Open:  https://connect.mewla.ai/device
+  Code:  <b>WDJB-MJHT</b>
+</span><span class="s3">
+Signed in as mira (github).
+This computer's address: <b>https://quiet-otter-3f9a.m.mewla.ai</b>
+</span><span class="s4">
+Mewla Web (Android) at https://quiet-otter-3f9a.m.mewla.ai asks to use this computer.
+  Number: <em class="num">482</em>   Approve only if the browser shows the same number:
+  mewla devices approve -id 9c2e41d0 -number 482</span></pre>
+        </div>
+        <div class="card rm-gh">
+          <p class="cap"><svg class="lg"><use href="#lg-github"/></svg>GitHub · Device activation</p>
+          <p class="code">WDJB-MJHT</p>
+          <span class="ok">Authorize Mewla</span>
+        </div>
+        <div class="rm-phone" role="img" aria-label="A phone on 5G opens quiet-otter-3f9a.m.mewla.ai in its browser and shows the number 482">
+          <p class="sbar"><b>9:41</b><span>5G</span></p>
+          <p class="url"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>quiet-otter-3f9a.m.mewla.ai</p>
+          <div class="wait">
+            <small>CONNECT TO MEWLA</small>
+            <b>Waiting for approval</b>
+            <span class="num">482</span>
+          </div>
+        </div>
+      </figure>
+      <p class="rm-safe">A new device gets in only after you match its number on the computer, and the relay never sees what you send. <a href="docs/connect-and-pair/#remote-access">How it works</a></p>
+    </div>
+  </section>
+
   <!-- Install -->
   <section class="install" id="install">
     <div class="wrap">
@@ -397,8 +449,8 @@
         </li>
         <li>
           <span class="n">2</span><h3>Start</h3>
-          <div class="cmd"><code>mewla --lan</code><button type="button" data-copy>Copy</button></div>
-          <p class="small">Away from home? <a href="docs/connect-and-pair/#tailscale"><svg class="lg"><use href="#lg-tailscale"/></svg>Tailscale</a></p>
+          <div class="cmd"><code>mewla</code><button type="button" data-copy>Copy</button></div>
+          <p class="small">Pick 1 and sign in with GitHub. <a href="docs/connect-and-pair/#choose-an-address">Other ways to connect</a></p>
         </li>
         <li>
           <span class="n">3</span><h3>Scan &amp; pair</h3>

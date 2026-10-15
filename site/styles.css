@@ -337,6 +337,56 @@ img { max-width: 100%; }
 .cmd1 code { display: block; width: 100%; padding: 14px 16px; border-radius: 14px; background: var(--dark); color: #efe9df; font-size: 13.5px; }
 @media (max-width: 899px) { .bento li { min-height: 0; } .gauges b { font-size: 9px; } }
 
+/* remote access: the first-run question, GitHub, then a phone on 5G showing the number
+   the computer prints. Finished state by default; with script it plays once in view. */
+.remote { padding: 0 0 clamp(90px, 11vw, 140px); }
+.rm-head > p:not(.kicker) { margin-top: 18px; font-size: 19px; color: var(--soft); }
+.rm { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "term" "gh" "phone"; align-items: start; max-width: 1000px; margin: clamp(40px, 5vw, 64px) auto 0; }
+@media (min-width: 600px) { .rm { grid-template-columns: minmax(0, 1fr) 220px; grid-template-areas: "term term" "gh phone"; align-items: center; } }
+@media (min-width: 900px) { .rm { grid-template-columns: minmax(0, 1fr) 250px; grid-template-areas: "term gh" "term phone"; gap: 22px 44px; } }
+.rm-term { grid-area: term; min-width: 0; }
+.rm-term .term-bar span { transform: none; }
+.rm-term pre { margin: 0; padding: 16px 18px 20px; font: 12.5px/1.55 var(--mono); color: #b9b2a7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rm-term b { font-weight: 500; color: #fff; }
+.rm-term .pick { color: #ff8f80; }
+.rm .num { font-style: normal; color: #fff; background: var(--red); border-radius: 5px; }
+.rm-term .num { padding: 1px 5px; }
+.rm-gh { grid-area: gh; justify-self: start; width: min(100%, 280px); padding: 16px 18px 18px; border-radius: 20px; rotate: -2deg; }
+.rm-gh .cap { margin-bottom: 10px; }
+.rm-gh .cap .lg { font-size: 18px; color: var(--ink); }
+.rm-gh .code { font: 500 20px var(--mono); letter-spacing: .08em; }
+.rm-gh .ok { display: block; margin-top: 14px; padding: 9px 12px; border-radius: 10px; background: #1f883d; color: #fff; text-align: center; font-weight: 600; font-size: 14.5px; }
+.rm-phone { grid-area: phone; justify-self: center; width: min(100%, 240px); aspect-ratio: 9 / 16; display: flex; flex-direction: column; gap: 10px; padding: 12px 10px; border: 9px solid var(--dark); border-radius: 38px; background: var(--card); box-shadow: 0 30px 60px -24px rgba(20, 12, 6, .45); }
+.sbar { display: flex; justify-content: space-between; padding: 0 10px; font-size: 12px; }
+.sbar span { font-weight: 600; font-size: 11px; }
+.rm-phone .url { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 8px; border-radius: 11px; background: var(--tint); font-size: 11px; font-weight: 500; overflow-wrap: anywhere; text-align: center; }
+.rm-phone .url svg { flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; }
+.wait { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
+.wait small { font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--faint); }
+.wait b { font: 800 19px/1.1 var(--display); }
+.wait .num { margin-top: 10px; padding: 2px 4px 2px 14px; font: 800 46px/1.1 var(--display); letter-spacing: .16em; }
+.rm-safe { max-width: 1000px; margin: 26px auto 0; font-size: 15px; color: var(--soft); text-align: center; }
+.rm-safe a { color: inherit; white-space: nowrap; }
+.js .rm .s2, .js .rm .s3, .js .rm .s4, .js .rm .rm-gh, .js .rm .url, .js .rm .wait { opacity: 0; }
+.js .rm .num { background: transparent; color: inherit; }
+.js .rm .wait .num { color: var(--red-ink); }
+.js .rm.in .s2 { animation: rm-show .3s .9s both; }
+.js .rm.in .rm-gh { animation: drop .6s var(--ease) 1.5s both; }
+.js .rm.in .rm-gh .ok { animation: rm-press .5s 2.4s both; }
+.js .rm.in .s3 { animation: rm-show .3s 3s both; }
+.js .rm.in .url { animation: rm-show .3s 3.5s both; }
+.js .rm.in .wait { animation: pop .5s var(--ease) 3.9s both; }
+.js .rm.in .s4 { animation: rm-show .3s 4.7s both; }
+.js .rm.in .num { animation: rm-match .5s 5.4s both; }
+@keyframes rm-show { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rm-press { 0%, 100% { transform: none; } 40% { transform: scale(.94); box-shadow: 0 0 0 4px rgba(31, 136, 61, .3); } }
+@keyframes rm-match { from { background: transparent; color: inherit; } to { background: var(--red); color: #fff; } }
+@media (max-width: 599px) {
+  .rm-term pre { font-size: 10.5px; padding: 14px 14px 16px; }
+  .rm-phone { width: 232px; aspect-ratio: 9 / 15; }
+}
+@media (max-width: 899px) { .rm-phone .url { font-size: 10px; } }
+
 /* install */
 .install { padding: clamp(90px, 11vw, 140px) 0; background: var(--tint); border-block: 1px solid var(--line); }
 .needs { list-style: none; padding: 0; margin: 26px 0 40px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -495,5 +545,7 @@ img { max-width: 100%; }
   .js .land .dlg { opacity: 0; }
   .js .land .new-note { opacity: 1; }
   .js .land .cover { transform: translateX(108px); }
+  .js .rm .s2, .js .rm .s3, .js .rm .s4, .js .rm .rm-gh, .js .rm .url, .js .rm .wait { opacity: 1; }
+  .js .rm .num, .js .rm .wait .num { background: var(--red); color: #fff; }
   .toy { display: none; }
 }

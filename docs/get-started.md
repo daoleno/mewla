@@ -37,19 +37,21 @@ reports before you go on.
 
 ## 2. Start it and pair your phone
 
-On a network you trust (home Wi-Fi, not a café):
-
 ```sh
-mewla --lan
+mewla
 ```
+
+The first time, it asks how your phone and browsers should reach this
+computer. Pick 1 and sign in with GitHub: the computer gets its own address,
+such as `https://quiet-otter-3f9a.m.mewla.ai`, that works from any network.
 
 With no device paired yet, it prints a QR code and a pairing link. Install the
 app (the Android APK from [Releases](https://github.com/daoleno/mewla/releases),
 or [iOS from source](install-daemon.md#ios)), open it and scan the code. The
 code works once and expires; `mewla pair` prints a fresh one.
 
-Away from home, use Tailscale or an HTTPS tunnel instead of `--lan`; see
-[Connect and pair](connect-and-pair.md).
+Other ways to connect, such as the same Wi-Fi only, Tailscale or your own
+HTTPS address, are in [Connect and pair](connect-and-pair.md#choose-an-address).
 
 ## 3. Start a Session
 
