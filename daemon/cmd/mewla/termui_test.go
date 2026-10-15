@@ -123,7 +123,7 @@ func TestLinkPairingNamesTheAppVersionAndKeepsTheOlderLink(t *testing.T) {
 		phoneLegacy:  "mewla://settings?p=e30&v=2",
 	}
 	var screen, details bytes.Buffer
-	printPairing(&screen, pairingStatus{remoteURL: "https://quiet-otter-3f9a.m.mewla.ai"}, links, "mewla pair --details")
+	printPairing(&screen, pairingStatus{remoteURL: "https://quiet-otter-3f9a.m.mewla.ai"}, links, "")
 	printPairingDetails(&details, "Pair a new phone or browser.", links)
 	if !strings.Contains(screen.String(), "  Needs the app 0.2.17 or later; older app: mewla pair --details\n") ||
 		!strings.Contains(screen.String(), "Works from any network.") {

@@ -6,6 +6,7 @@ A phone or browser needs two things to use Mewla on your computer:
 - **Pairing**: a one-time code that gives that one device access.
 
 `mewla address list` shows every address. `mewla pair` prints the code.
+`mewla open` opens the web UI in this computer's browser and pairs it.
 `mewla devices` lists who has access.
 
 The daemon has its own Ed25519 key. During pairing the device enrolls its own
@@ -168,8 +169,38 @@ the new one loads.
 
 ### In a browser
 
-Open the browser link `mewla pair` printed. Later visits to the same address
-reuse the pairing.
+On the computer running Mewla:
+
+```sh
+mewla open      # or: mewla web
+```
+
+It opens `http://127.0.0.1:9876` in the default browser through a one-time
+pairing link, so the browser is paired the first time and goes straight in
+after that. A browser that is already paired reuses its device; it is not added
+again. It also prints the addresses:
+
+```text
+■ Mewla web UI
+  This computer   http://127.0.0.1:9876 · opened in your browser
+  Remote          https://quiet-otter-3f9a.m.mewla.ai
+                  Open it in a browser on another computer, then match
+                  its number here: mewla devices pending
+  Wi-Fi/LAN       http://192.168.x.x:9876 · phone app only
+```
+
+The remote access line appears after `mewla login`; open that address on any
+other computer and [approve its number](#add-another-browser). Other HTTPS
+addresses are listed too. Wi-Fi/LAN and Tailscale addresses are for the phone
+app: the web app is not served over plain HTTP.
+
+Over SSH, without a display, or with `--print`, nothing is opened: it prints
+the addresses and the one-time link instead. Over SSH, forward the port first
+(`ssh -L 9876:127.0.0.1:9876 <computer>`) and open the link on your own
+computer. If Mewla is not running, it says so; start it with `mewla`.
+
+The browser link `mewla pair` prints works the same way. Later visits to the
+same address reuse the pairing.
 
 The web app is served only to this computer (`127.0.0.1`) and at HTTPS
 addresses; `mewla --lan` does not expose it over plain HTTP. The browser gets
