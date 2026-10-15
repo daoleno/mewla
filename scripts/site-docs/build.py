@@ -336,7 +336,7 @@ TEMPLATE = """<!doctype html>
 {body}
     </article>
 {pager}
-    <footer class="d-foot">Mewla documentation · Apache-2.0 · <a href="{site_root}">Mewla home</a></footer>
+    <footer class="d-foot">Mewla documentation · Apache-2.0 · <a href="{site_root}">Mewla home</a> · <a href="{site_root}support/">Support</a> · <a href="{site_root}privacy/">Privacy</a></footer>
   </main>
 {toc}
 </div>
