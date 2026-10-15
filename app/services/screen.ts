@@ -39,12 +39,15 @@ export interface ScreenStatus {
   power?: ScreenPower;
   /** A service manager restarts Mewla, so the app may ask it to restart. */
   can_restart?: boolean;
+  /** An agent using the screen now. Viewing it takes over and stops the agent. */
+  agent?: { worker: string; name?: string; since: string };
 }
 
 export type ScreenAction =
   | { action: "enable" }
   | { action: "open_settings"; permission: string }
   | { action: "restart" }
+  | { action: "stop_agent" }
   | { keep_awake: boolean };
 
 /** HTTP failure with the status kept apart from any body text. */
@@ -129,11 +132,13 @@ export class ScreenConnection {
   private timer: ReturnType<typeof setInterval> | undefined;
   private reason: string | null = null;
 
-  constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers) {}
+  /** watch: see the agent using the screen without taking over; input goes nowhere. */
+  constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers, private watch = false) {}
 
   async connect() {
     const url = await endpoint(this.server, "/screen/viewer");
     url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
+    if (this.watch) url.searchParams.set("watch", "1");
     const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-screen-view" });
     if (this.closed) return;
     let socket: WebSocket;
