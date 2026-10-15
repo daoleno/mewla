@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"github.com/daoleno/mewla/daemon/remote"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,8 +42,19 @@ func TestFirstRunPromptOnlyForAFreshManualStart(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(existing, "identity.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if !firstRunPromptAllowed(nil, existing, true) {
+		t.Fatal("an existing install without a saved answer was not asked")
+	}
+	if err := remote.SaveConfig(existing, remote.Config{ServiceURL: "https://service.example", Machine: remote.Machine{
+		MachineID: "mach_1", AccountLogin: "octo", Provider: "github", Hostname: "quiet-otter-1a2b.mewla.test",
+		Label: "quiet-otter-1a2b", RouteID: strings.Repeat("ab", 16), Grant: "grant",
+		GrantExpiresAtMS: time.Now().Add(time.Hour).UnixMilli(),
+		Relays:           []remote.Relay{{Name: "r1", ControlAddress: "127.0.0.1:1", ControlServerName: "relay.test", ClientDomain: "mewla.test", ClientPort: 443}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
 	if firstRunPromptAllowed(nil, existing, true) {
-		t.Fatal("an existing daemon identity prompted")
+		t.Fatal("a computer signed in to remote access was asked again")
 	}
 	if err := saveStartupChoice(fresh, choiceLater); err != nil {
 		t.Fatal(err)

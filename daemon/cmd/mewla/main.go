@@ -59,6 +59,7 @@ type pairConfig struct {
 	endpoint       string
 	stateDir       string
 	linkConfigPath string
+	details        bool
 }
 
 type cliConfig struct {
@@ -194,10 +195,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	lifecycleLock, authManager, err := acquireDaemonAuthOwner(cfg.stateDir)
 	if err != nil {
-		if len(args) == 0 && strings.Contains(err.Error(), "another Mewla daemon owns") {
+		if onlyStateDirArgs(args) && strings.Contains(err.Error(), "another Mewla daemon owns") {
 			devices, listErr := listDevices(cfg.stateDir)
 			if listErr == nil && len(devices) == 0 {
-				return runPairCommand(nil, stderr)
+				return runPairCommand(stateDirArgs(cfg.stateDir), stderr)
+			}
+			if listErr == nil {
+				printRunningStatus(stderr, cfg.stateDir, len(devices))
+				return nil
 			}
 		}
 		return err
@@ -628,14 +633,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 			name: "HTTP server",
 			run: func(ctx context.Context) error {
 				return srv.RunWithReady(ctx, cfg.addr, func() {
-					if err := printFirstDevicePairing(stderr, authManager, book); err != nil {
+					paired, err := printFirstDevicePairing(stderr, authManager, book, cfg.stateDir)
+					if err != nil {
 						fmt.Fprintf(stderr, "Could not create first-device pairing link: %v\n", err)
 					}
 					entries, listErr := book.List()
 					if listErr != nil {
 						fmt.Fprintf(stderr, "Could not read this computer's addresses: %v\n", listErr)
 					}
-					printStartupInfo(stderr, cfg.addr, cfg.stateDir, authManager.StorageDir(), linkEnabled, entries)
+					printStartupInfo(stderr, cfg.addr, cfg.stateDir, authManager.StorageDir(), linkEnabled, entries, paired)
 				})
 			},
 		},
@@ -2076,7 +2082,15 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	if links.phoneLink == "" && links.localBrowser == "" && len(links.httpsBrowser) == 0 {
 		return errors.New("this computer has no address yet; start Mewla (mewla, or mewla --lan for phones) and run mewla pair again")
 	}
-	printPairing(stderr, "Pair a new phone or browser.", links)
+	if !pairingInfo.ShortLinks {
+		links.localShort = ""
+	}
+	if cfg.details {
+		printPairingDetails(stderr, "Pair a new phone or browser.", links)
+		return nil
+	}
+	devices, _ := listDevices(cfg.stateDir)
+	printPairing(stderr, pairingStatusFor(stateDir, len(devices)), links, pairCommand(cfg.stateDir)+" --details")
 	return nil
 }
 
@@ -2209,6 +2223,7 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 	cfg := pairConfig{}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json)")
+	fs.BoolVar(&cfg.details, "details", false, "also show the paste link, every browser link and how to revoke a device")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [address]")
 		fmt.Fprintln(stderr, "")

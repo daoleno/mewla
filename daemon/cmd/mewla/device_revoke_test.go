@@ -177,7 +177,7 @@ func TestPairCLIUsesOnlineControlOwnerWithoutSecondManager(t *testing.T) {
 	}
 	var output bytes.Buffer
 	if err := runPairCommand(
-		[]string{"-state-dir", stateDir, "http://127.0.0.1:9876"},
+		[]string{"-state-dir", stateDir, "-details", "http://127.0.0.1:9876"},
 		&output,
 	); err != nil {
 		t.Fatalf("online pair through live owner: %v", err)
@@ -238,7 +238,7 @@ func TestPairCLILocksOfflineOwnerBeforeManagerConstruction(t *testing.T) {
 
 	var output bytes.Buffer
 	if err := runPairCommand(
-		[]string{"-state-dir", stateDir, "http://127.0.0.1:9876"},
+		[]string{"-state-dir", stateDir, "-details", "http://127.0.0.1:9876"},
 		&output,
 	); err != nil {
 		t.Fatalf("offline pair: %v", err)
