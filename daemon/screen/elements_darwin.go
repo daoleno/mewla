@@ -108,7 +108,7 @@ func loadAX() bool {
 		axLib.attrs = map[string]uintptr{}
 		for _, name := range []string{
 			"AXFocusedApplication", "AXFocusedWindow", "AXChildren", "AXRole", "AXTitle",
-			"AXDescription", "AXValue", "AXPosition", "AXSize", "AXEnabled", "AXFocused",
+			"AXDescription", "AXValue", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXWindows",
 		} {
 			ref := axLib.createString(0, name, cfStringEncodingUTF8)
 			if ref == 0 {
@@ -157,21 +157,34 @@ func readFocusedWindow(ctx context.Context, limit int) (ElementTree, error) {
 	}
 	defer axLib.release(window)
 	tree.Window = axString(window, "AXTitle")
-	deadline := time.Now().Add(axBudget)
+	walkElements(ctx, &tree, window, limit, time.Now().Add(axBudget), nil)
+	return tree, nil
+}
+
+// walkElements appends root and what it contains to tree, in reading order.
+// With keep, each element is also retained as its ref and its action names
+// are read; keep reports whether the walk may go on.
+func walkElements(ctx context.Context, tree *ElementTree, root uintptr, limit int, deadline time.Time, keep func(element uintptr, e *Element) bool) {
 	var walk func(element uintptr, depth int)
 	walk = func(element uintptr, depth int) {
 		if len(tree.Elements) >= limit || time.Now().After(deadline) || ctx.Err() != nil {
 			tree.Truncated = true
 			return
 		}
-		title := axString(element, "AXTitle")
-		if title == "" {
-			title = axString(element, "AXDescription")
+		e := Element{Depth: depth, Role: axString(element, "AXRole"), Title: axString(element, "AXTitle"),
+			Frame: axFrame(element), Enabled: axBool(element, "AXEnabled", true), Focused: axBool(element, "AXFocused", false)}
+		if e.Title == "" {
+			e.Title = axString(element, "AXDescription")
 		}
-		tree.Elements = append(tree.Elements, Element{
-			Depth: depth, Role: axString(element, "AXRole"), Title: title, Value: axValueText(element),
-			Frame: axFrame(element), Enabled: axBool(element, "AXEnabled", true), Focused: axBool(element, "AXFocused", false),
-		})
+		// A password is never read, so it can't be shown or kept.
+		if e.Role != "AXSecureTextField" {
+			e.Value = axValueText(element)
+		}
+		if keep != nil && !keep(element, &e) {
+			tree.Truncated = true
+			return
+		}
+		tree.Elements = append(tree.Elements, e)
 		if depth >= axMaxDepth {
 			return
 		}
@@ -188,8 +201,7 @@ func readFocusedWindow(ctx context.Context, limit int) (ElementTree, error) {
 			walk(axLib.arrayAt(children, i), depth+1)
 		}
 	}
-	walk(window, 0)
-	return tree, nil
+	walk(root, 0)
 }
 
 // axCopy reads one attribute; a non-zero result is the caller's to release.

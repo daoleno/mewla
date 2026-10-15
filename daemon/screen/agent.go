@@ -93,6 +93,8 @@ type AgentAction struct {
 	ScrollDirection string  `json:"scroll_direction,omitempty"`
 	ScrollAmount    int     `json:"scroll_amount,omitempty"`
 	Duration        float64 `json:"duration,omitempty"`
+	// App names the app an app action is for: its name or pid.
+	App string `json:"app,omitempty"`
 }
 
 // AgentResult is what the agent sees: a JPEG screenshot and/or a short line
@@ -169,6 +171,14 @@ type agentSession struct {
 	// readElements reads the focused window, when the backend can.
 	readElements func(ctx context.Context, limit int) (ElementTree, error)
 	scale        float64 // framebuffer pixels per screenshot pixel
+
+	// appMu serializes reading apps and acting on their elements: tree is
+	// the agent's latest read, whose ids its element actions name, and the
+	// handles it holds are released only under appMu.
+	appMu   sync.Mutex
+	apps    appReader
+	tree    *ElementTree
+	treeApp App
 }
 
 // Agent reports the agent using the screen, if any.
@@ -312,6 +322,9 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	if reader, ok := s.backend.(elementReader); ok {
 		agent.readElements = reader.Elements
 	}
+	if reader, ok := s.backend.(appReader); ok {
+		agent.apps = reader
+	}
 	if holder, ok := s.backend.(displayHolder); ok {
 		holder.HoldDisplay(true)
 	}
@@ -357,6 +370,7 @@ func (s *Service) watchAgent(agent *agentSession) {
 	_ = agent.session.Close()
 	posted := agent.lastPost
 	agent.mu.Unlock()
+	agent.releaseTree()
 	s.ReleaseControl(agent.control)
 	s.agentMu.Lock()
 	if posted.After(s.agentPosted) {
@@ -384,6 +398,57 @@ func (a *agentSession) elements(ctx context.Context) (AgentResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return AgentResult{Text: formatElements(tree, a.latest.Rect, a.toAgent)}, nil
+}
+
+// listApps lists the apps an agent can read and act on.
+func (a *agentSession) listApps(ctx context.Context) (AgentResult, error) {
+	if a.apps == nil {
+		return AgentResult{}, ErrNoApps
+	}
+	apps, err := a.apps.Apps(ctx)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	return AgentResult{Text: formatApps(apps)}, nil
+}
+
+// appState reads one app, in front or not, and gives its elements ids. The
+// previous read's ids end here.
+func (a *agentSession) appState(ctx context.Context, name string) (AgentResult, error) {
+	if a.apps == nil {
+		return AgentResult{}, ErrNoApps
+	}
+	apps, err := a.apps.Apps(ctx)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	app, err := resolveApp(apps, name)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	a.appMu.Lock()
+	defer a.appMu.Unlock()
+	tree, err := a.apps.ReadApp(ctx, app.PID, elementsRead)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	if a.tree != nil {
+		a.apps.Release(*a.tree)
+	}
+	a.tree, a.treeApp = &tree, app
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return AgentResult{Text: formatAppTree(app, tree, a.latest.Rect, a.toAgent)}, nil
+}
+
+// releaseTree lets go of the latest read's elements, when the agent ends.
+func (a *agentSession) releaseTree() {
+	a.appMu.Lock()
+	defer a.appMu.Unlock()
+	if a.tree != nil {
+		a.apps.Release(*a.tree)
+		a.tree = nil
+	}
 }
 
 // personActive says someone used the computer's own keyboard or pointer in
@@ -489,6 +554,10 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 		return a.screenshot(ctx)
 	case "elements":
 		return a.elements(ctx)
+	case "apps":
+		return a.listApps(ctx)
+	case "app_state":
+		return a.appState(ctx, action.App)
 	case "cursor_position":
 		a.mu.Lock()
 		x, y := a.toAgent(a.pointer)
@@ -825,6 +894,7 @@ type auditLine struct {
 	Action     string    `json:"action"`
 	Coordinate []int     `json:"coordinate,omitempty"`
 	Start      []int     `json:"start_coordinate,omitempty"`
+	App        string    `json:"app,omitempty"`
 	Keys       string    `json:"keys,omitempty"`
 	TextLength int       `json:"text_length,omitempty"`
 	TextHash   string    `json:"text_sha256,omitempty"`
@@ -833,7 +903,7 @@ type auditLine struct {
 
 // audit records what an agent did, never what it typed or saw.
 func (s *Service) audit(worker string, action AgentAction, actErr error) {
-	line := auditLine{Time: time.Now().UTC(), Worker: worker, Action: action.Action, Coordinate: action.Coordinate, Start: action.StartCoordinate}
+	line := auditLine{Time: time.Now().UTC(), Worker: worker, Action: action.Action, Coordinate: action.Coordinate, Start: action.StartCoordinate, App: action.App}
 	switch action.Action {
 	case "type":
 		sum := sha256.Sum256([]byte(action.Text))
