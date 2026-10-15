@@ -99,6 +99,11 @@ type AgentAction struct {
 	// do to it; set_value takes Text.
 	Element       int    `json:"element,omitempty"`
 	ElementAction string `json:"element_action,omitempty"`
+	// Match names an element of the latest read by what it is instead of
+	// its id, for element, wait_for and expect.
+	Match *ElementMatch `json:"match,omitempty"`
+	// Steps are a batch's actions, run in order.
+	Steps []AgentAction `json:"steps,omitempty"`
 }
 
 // AgentResult is what the agent sees: a JPEG screenshot and/or a short line
@@ -250,6 +255,9 @@ func (s *Service) OpenAgentSettings(ctx context.Context, permission string) erro
 func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (AgentResult, error) {
 	if strings.TrimSpace(worker) == "" {
 		return AgentResult{}, errors.New("computer use needs the Worker it acts for")
+	}
+	if action.Action == "steps" {
+		return s.runSteps(ctx, worker, action.Steps)
 	}
 	if _, err := s.AgentReady(ctx); err != nil {
 		return AgentResult{}, err
@@ -466,6 +474,13 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if a.tree == nil {
 		return AgentResult{}, errors.New("read an app with app_state first")
 	}
+	if action.Element == 0 && action.Match != nil {
+		id, err := a.tree.match(*action.Match, true)
+		if err != nil {
+			return AgentResult{}, err
+		}
+		action.Element = id
+	}
 	if action.Element < 1 || action.Element > len(a.tree.Elements) {
 		return AgentResult{}, fmt.Errorf("there is no element [%d] in the last app_state", action.Element)
 	}
@@ -615,6 +630,10 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 		return a.appState(ctx, action.App)
 	case "element":
 		return a.actOnElement(ctx, action)
+	case "wait_for":
+		return a.waitFor(ctx, action)
+	case "expect":
+		return a.expect(ctx, action)
 	case "cursor_position":
 		a.mu.Lock()
 		x, y := a.toAgent(a.pointer)
