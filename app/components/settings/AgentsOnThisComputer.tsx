@@ -16,6 +16,7 @@ const FIX_TITLES: Record<AgentUseFix, (name: string) => string> = {
   install_extension: (name) => `Open the extension's page in Chrome on ${name}`,
   open_extension: (name) => `Open the extension in Chrome on ${name}`,
   retry: () => "Try again",
+  open_settings: (name) => `Open the permission's settings on ${name}`,
 };
 
 const POLL_MS = 5_000;
@@ -55,7 +56,7 @@ export function AgentsOnThisComputer({ server, connected }: { server: StoredServ
 
   // Until the browser is ready the user is usually fixing something on the
   // computer (adding the extension), so look again every few seconds.
-  const waiting = Boolean(status?.enabled && status.browser.state !== "ready");
+  const waiting = Boolean(status?.enabled && (status.browser.state !== "ready" || (status.computer && status.computer.state !== "ready" && status.computer.state !== "unsupported") || status.computer?.active));
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => void reload(), POLL_MS);
@@ -90,6 +91,7 @@ export function AgentsOnThisComputer({ server, connected }: { server: StoredServ
   };
 
   const browser = status?.browser;
+  const computer = status?.computer;
   const enabled = status?.enabled ?? false;
   const fix = browser?.fix;
   const footer =
@@ -136,6 +138,35 @@ export function AgentsOnThisComputer({ server, connected }: { server: StoredServ
                   : undefined,
             )
           }
+        />
+      ) : null}
+      {enabled && computer ? (
+        <ListRow title="This computer's screen" subtitle={computer.summary} icon="desktop" numberOfLines={3} />
+      ) : null}
+      {enabled && computer?.fix ? (
+        <ListRow
+          title={FIX_TITLES[computer.fix](server.name)}
+          icon="open-external"
+          loading={busy === "computer-fix"}
+          disabled={!connected || busy !== null}
+          onPress={() =>
+            void apply(
+              "computer-fix",
+              { fix: computer.fix! },
+              `Settings opened on ${server.name}. Turn on Mewla there, or from Screen.`,
+            )
+          }
+        />
+      ) : null}
+      {computer?.active ? (
+        <ListRow
+          title={`Stop ${computer.active.name || "the agent"}`}
+          subtitle="It is using the screen now"
+          icon="stop"
+          destructive
+          loading={busy === "stop"}
+          disabled={!connected || busy !== null}
+          onPress={() => void apply("stop", { stop_agent: true })}
         />
       ) : null}
       {enabled && (browser?.state === "no_key" || browser?.key_pasted) ? (

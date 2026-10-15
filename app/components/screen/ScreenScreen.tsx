@@ -44,7 +44,7 @@ import {
   type ScreenViewerHostHandle,
 } from "./screenViewerProtocol";
 
-type Phase = "checking" | "setup" | "connecting" | "live" | "lost";
+type Phase = "checking" | "setup" | "agent" | "connecting" | "live" | "lost";
 
 const MODIFIERS: { key: ScreenModifier; label: string; name: string }[] = [
   { key: "Command", label: "⌘", name: "Command" },
@@ -96,6 +96,7 @@ export function ScreenScreen() {
   const [typing, setTyping] = useState(false);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [watching, setWatching] = useState(false);
   const host = useRef<ScreenViewerHostHandle>(null);
   const input = useRef<TextInput>(null);
   const connection = useRef<ScreenConnection | null>(null);
@@ -148,10 +149,14 @@ export function ScreenScreen() {
     setStats(null);
   }, []);
 
-  const connect = useCallback(async () => {
+  // A person comes first, so viewing ends an agent's control. Only an
+  // explicit "takeOver" does that; opening the page waits for the agent, and
+  // "watch" shows the agent's screen without taking over.
+  const connect = useCallback(async (how: "auto" | "takeOver" | "watch" = "auto") => {
     if (!currentServer) return;
     const server = currentServer;
     disconnect();
+    setWatching(false);
     const token = epoch.current;
     const active = () => token === epoch.current && isCurrentServer(server.id);
     setPhase("checking");
@@ -175,6 +180,12 @@ export function ScreenScreen() {
       setPhase("setup");
       return;
     }
+    if (next.agent && how === "auto") {
+      setPhase("agent");
+      return;
+    }
+    const watch = how === "watch" && !!next.agent;
+    setWatching(watch);
     setPhase("connecting");
     const socket = new ScreenConnection(server, {
       open() { if (active()) toViewer({ type: "open" }); },
@@ -188,10 +199,12 @@ export function ScreenScreen() {
       closed(why) {
         if (!active()) return;
         toViewer({ type: "close" });
+        // The agent finished: look again, which opens the screen.
+        if (watch) { void connect(); return; }
         setReason(why || "The connection to the screen ended.");
         setPhase("lost");
       },
-    });
+    }, watch);
     connection.current = socket;
     try { await socket.connect(); } catch (error) {
       if (!active()) return;
@@ -232,6 +245,20 @@ export function ScreenScreen() {
     }, 3000);
     return () => clearInterval(timer);
   }, [connect, currentServer, isCurrentServer, waitingForPermissions]);
+
+  // While an agent uses the screen, look again until it is done, then open.
+  useEffect(() => {
+    if (phase !== "agent" || !currentServer) return;
+    const server = currentServer;
+    const timer = setInterval(() => {
+      void screenRequest(server).then((next) => {
+        if (!isCurrentServer(server.id)) return;
+        setStatus(next);
+        if (!next.agent) void connect();
+      }).catch(() => {});
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [connect, currentServer, isCurrentServer, phase]);
 
   // Power state changes slowly; refresh it while the viewer is open.
   useEffect(() => {
@@ -340,13 +367,31 @@ export function ScreenScreen() {
     } finally { setBusy(false); }
     if (isCurrentServer(server.id)) void connect();
   };
+  const stopAgent = async () => {
+    if (!currentServer) return;
+    const server = currentServer;
+    setBusy(true);
+    try {
+      const next = await screenRequest(server, { action: "stop_agent" });
+      if (isCurrentServer(server.id)) setStatus(next);
+    } catch (error) {
+      if (isCurrentServer(server.id)) setReason(error instanceof Error ? error.message : String(error));
+    } finally { setBusy(false); }
+    if (isCurrentServer(server.id)) void connect();
+  };
   const changeMode = (next: ScreenPointerMode) => {
     setMode(next);
     toViewer({ type: "mode", mode: next });
   };
 
   const title = status?.name || serverName;
-  const menuItems: ActionMenuItem[] = [
+  const agentName = status?.agent?.name || "the agent";
+  const menuItems: ActionMenuItem[] = watching ? [
+    { key: "take-over", icon: "hand", label: "Take over", detail: `Stops ${agentName} and gives you the screen`, onPress: () => void connect("takeOver") },
+    { key: "stop-agent", icon: "close", label: `Stop ${agentName}`, destructive: true, disabled: busy, onPress: () => void stopAgent() },
+    { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
+    { key: "disconnect", icon: "exit", label: "Stop watching", onPress: () => { disconnect(); setWatching(false); setPhase("agent"); } },
+  ] : [
     {
       key: "mode", icon: mode === "touch" ? "hand" : "navigate",
       label: mode === "touch" ? "Use as trackpad" : "Touch to click",
@@ -403,6 +448,24 @@ export function ScreenScreen() {
             onChooseComputer={() => router.push("/settings")} />
         </ScrollView>
       ) : null}
+      {phase === "agent" && status?.agent ? (
+        <View style={styles.notice}>
+          <InlineNotice icon="desktop" title={`${status.agent.name || "An agent"} is using ${title}`}
+            detail="Watch it work, or take over to use the screen yourself, which stops it. The screen opens by itself when it is done."
+            action={{ label: "Take over", onPress: () => void connect("takeOver"), disabled: busy }} />
+          <View style={styles.agentActions}>
+            <Button label="Watch" icon="eye" size="sm" onPress={() => void connect("watch")} disabled={busy} />
+            <Button label={`Stop ${status.agent.name || "the agent"}`} size="sm" variant="outlined" onPress={() => void stopAgent()} disabled={busy} />
+          </View>
+        </View>
+      ) : null}
+      {watching && phase === "live" && status?.agent ? (
+        <View style={styles.notice}>
+          <InlineNotice icon="eye" title={`Watching ${status.agent.name || "an agent"}`}
+            detail="Only watching: your taps don't reach the screen. Take over or stop it from the menu."
+            action={{ label: "Take over", onPress: () => void connect("takeOver"), disabled: busy }} />
+        </View>
+      ) : null}
       {phase === "checking" && !status ? (
         <View style={[styles.root, styles.center]}><EmptyState busy title={`Opening ${serverName}'s screen…`} /></View>
       ) : null}
@@ -437,7 +500,7 @@ export function ScreenScreen() {
           </Pressable>
         ) : null}
       </View>
-      {phase === "live" ? (
+      {phase === "live" && !watching ? (
         <View style={[styles.tray, { borderTopColor: colors.borderSubtle, paddingBottom: typing ? Spacing.xs : Math.max(insets.bottom, Spacing.xs) }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
             <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />
@@ -566,6 +629,7 @@ const styles = StyleSheet.create({
   hidden: { display: "none" },
   center: { justifyContent: "center", alignItems: "center", padding: Spacing.lg },
   notice: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
+  agentActions: { flexDirection: "row", gap: Spacing.sm, paddingTop: Spacing.sm },
   stats: {
     position: "absolute", left: Spacing.sm, flexDirection: "row", alignItems: "center", gap: Spacing.xs,
     paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radii.sm, borderWidth: StyleSheet.hairlineWidth, opacity: 0.92,

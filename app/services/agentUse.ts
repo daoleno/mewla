@@ -3,7 +3,7 @@ import { getOrCreateLocalDeviceIdentity, type LocalDeviceIdentity } from "./auth
 import type { StoredServer } from "./storage";
 import { requestFailure, signedFetch } from "./signedRequest";
 
-export type AgentUseFix = "install_extension" | "open_extension" | "retry";
+export type AgentUseFix = "install_extension" | "open_extension" | "retry" | "open_settings";
 
 /** What agents can use on one computer, as that computer reports it. */
 export interface AgentUseStatus {
@@ -18,9 +18,18 @@ export interface AgentUseStatus {
     profile?: string;
     key_pasted?: boolean;
   };
+  /** The screen, keyboard and pointer; reported by computers with Screen. */
+  computer?: {
+    state: "ready" | "off" | "unsupported" | "screen_off" | "permission" | "unavailable";
+    summary: string;
+    fix?: "open_settings";
+    permission?: string;
+    /** The agent using the screen now. */
+    active?: { worker: string; name?: string; since: string };
+  };
 }
 
-export type AgentUseChange = { enabled: boolean } | { fix: AgentUseFix } | { key: string };
+export type AgentUseChange = { enabled: boolean } | { fix: AgentUseFix } | { key: string } | { stop_agent: true };
 
 export async function getAgentUse(
   server: StoredServer,
