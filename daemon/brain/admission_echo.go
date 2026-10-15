@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -24,47 +25,6 @@ func admissionCorrelationDigest(item TimelineItem) string {
 	return AdmissionDigest(item.Body)
 }
 
-func providerEchoMatchesAdmission(
-	admission BrainInputAdmission,
-	threadID string,
-	providerSessionID string,
-	body string,
-	createdAt time.Time,
-	nativeDigests ...string,
-) bool {
-	if admission.State != BrainInputAdmissionAccepted || admission.AcceptedAt == nil || createdAt.IsZero() {
-		return false
-	}
-	if strings.TrimSpace(threadID) != admission.ThreadID ||
-		strings.TrimSpace(providerSessionID) != admission.SessionID {
-		return false
-	}
-	if AdmissionDigest(strings.TrimSpace(body)) != admission.BodySHA256 &&
-		!nativeDigestMatchesAdmission(admission, nativeDigests) {
-		return false
-	}
-	// No upper timestamp bound: the provider stamps its user_message row when
-	// the turn loop processes the input, which is always after the daemon's
-	// transport acceptance, so a bounded window could never match the echo it
-	// must claim. Causal credit order (one echo per admission, timeline-ordered
-	// admissions, stream-ordered events) is the only ordering authority.
-	createdAt = createdAt.UTC()
-	return !createdAt.Before(admission.CreatedAt.UTC())
-}
-
-// nativeDigestMatchesAdmission accepts the provider's exact native input
-// digests (raw bytes, or the payload inside a recognized transport envelope
-// such as Claude's paste wrapper). Display cleaning may change body bytes, so
-// the body digest alone cannot prove such an echo.
-func nativeDigestMatchesAdmission(admission BrainInputAdmission, digests []string) bool {
-	for _, digest := range digests {
-		if digest = strings.TrimSpace(digest); digest != "" && digest == admission.BodySHA256 {
-			return true
-		}
-	}
-	return false
-}
-
 func exactProviderEventTimestamp(event work.CodexConversationEvent) (time.Time, bool) {
 	raw := strings.TrimSpace(event.Timestamp)
 	if raw == "" {
@@ -79,54 +39,89 @@ func exactProviderEventTimestamp(event work.CodexConversationEvent) (time.Time, 
 	return time.Time{}, false
 }
 
-// ProviderUserEchoSuppressions returns only provider user-message IDs already
-// claimed by durable exact admission reconciliation for the current provider
-// Session. Overlay rendering never performs a second, digest-only matching
-// decision or carries a claim across a replacement Session.
-func ProviderUserEchoSuppressions(items []TimelineItem, providerSessionID string) map[string]bool {
-	providerSessionID = strings.TrimSpace(providerSessionID)
-	suppress := map[string]bool{}
-	for _, item := range items {
-		if !IsBrainInputAdmission(item) || admissionEchoSessionID(item) != providerSessionID {
-			continue
-		}
-		if echoID := strings.TrimSpace(item.AdmissionEchoEventID); echoID != "" {
-			suppress[echoID] = true
-		}
-	}
-	return suppress
+// providerUserInput is one provider-native user input in a Brain thread: a
+// durable provider row or a live provider event not yet materialized.
+type providerUserInput struct {
+	id        string
+	sessionID string
+	createdAt time.Time
+	digests   []string
+	durable   bool
 }
 
-// The admission retains its immutable pre-send Session identity. A Host whose
-// native transcript was initially unbound records the proven echo Session
-// separately, so replay never retargets a consumed credit after Host replacement.
-func admissionEchoSessionID(item TimelineItem) string {
-	if id := strings.TrimSpace(item.AdmissionEchoSessionID); id != "" {
-		return id
+// echoes reports whether this input is the provider's record of the admitted
+// bytes. Provider and Host Session identity are deliberately not inputs: the
+// admission is the user's message, and a Host whose native transcript is not
+// (yet) bound must not turn its own echo into a second bubble. Provider clocks
+// keep milliseconds, so the causal bound is the admission's prepare
+// millisecond; the provider can only record the input after it was typed.
+func (input providerUserInput) echoes(admission BrainInputAdmission) bool {
+	if input.createdAt.Before(admission.CreatedAt.UTC().Truncate(time.Millisecond)) {
+		return false
 	}
-	return strings.TrimSpace(item.SessionID)
+	for _, digest := range input.digests {
+		if digest == admission.BodySHA256 {
+			return true
+		}
+	}
+	return false
 }
 
-// claimProviderUserEchoes matches provider user events against accepted
-// lifecycle admissions in causal order. Unconsumed admissions receive
-// AdmissionEchoEventID for durable idempotence.
+// reconcileAdmissionEchoes is the one rule that decides which provider user
+// inputs are echoes of Brain input admissions in a thread. The admission row is
+// the message; its echo only confirms delivery and never becomes a row.
 //
-// Already-durable provider-native rows are claimed only when exactly one of
-// them proves the admission's echo in its causal window. A row materialized
-// before its admission was projected has a display-cleaned Body, so the proof
-// uses its stored native digests, or the live event's for older rows.
-func claimProviderUserEchoes(
+// Accepted admissions without an echo are credited in prepare order, and
+// provider inputs (durable rows and live events alike) consume them in
+// provider time order: an input echoes the earliest open admission with the
+// same native input bytes prepared at or before it. Inputs that echo nothing
+// (Terminal typing into the Brain Session) stay independent rows.
+//
+// claimed holds every echo id consumed in the thread; claims maps each newly
+// credited admission row to its echo; out drops durable rows claimed now.
+func reconcileAdmissionEchoes(
 	items []TimelineItem,
-	providerEvents []work.CodexConversationEvent,
 	admissions []BrainInputAdmission,
 	threadID string,
 	providerSessionID string,
-	host HostSession,
-) (map[string]bool, []TimelineItem, bool) {
-	suppress := map[string]bool{}
-	if len(items) == 0 || len(providerEvents) == 0 {
-		return suppress, items, false
+	providerEvents []work.CodexConversationEvent,
+) (claimed map[string]bool, claims map[string]string, out []TimelineItem) {
+	claimed = map[string]bool{}
+	claims = map[string]string{}
+	for _, item := range items {
+		if IsBrainInputAdmission(item) {
+			if echoID := strings.TrimSpace(item.AdmissionEchoEventID); echoID != "" {
+				claimed[echoID] = true
+			}
+		}
 	}
+
+	accepted := map[string]BrainInputAdmission{}
+	for _, admission := range admissions {
+		if admission.ThreadID == threadID && admission.State == BrainInputAdmissionAccepted && admission.AcceptedAt != nil {
+			accepted[AdmissionTimelineItemID(admission.RequestID)] = admission
+		}
+	}
+	type credit struct {
+		index     int
+		admission BrainInputAdmission
+	}
+	var credits []credit
+	for index, item := range items {
+		if !IsBrainInputAdmission(item) || strings.TrimSpace(item.AdmissionEchoEventID) != "" {
+			continue
+		}
+		admission, ok := accepted[strings.TrimSpace(item.ID)]
+		if ok && timelineItemMatchesBrainInputAdmission(item, admission) {
+			credits = append(credits, credit{index: index, admission: admission})
+		}
+	}
+	if len(credits) == 0 {
+		return claimed, claims, items
+	}
+	sort.SliceStable(credits, func(left, right int) bool {
+		return credits[left].admission.CreatedAt.Before(credits[right].admission.CreatedAt)
+	})
 
 	liveDigests := map[string][]string{}
 	for _, event := range providerEvents {
@@ -134,129 +129,118 @@ func claimProviderUserEchoes(
 			liveDigests[strings.TrimSpace(event.ID)] = providerEventInputDigests(event)
 		}
 	}
-	claimedEchoIDs := map[string]bool{}
+	seen := map[string]bool{}
+	var inputs []providerUserInput
 	for _, item := range items {
-		if IsBrainInputAdmission(item) {
-			if echoID := strings.TrimSpace(item.AdmissionEchoEventID); echoID != "" {
-				claimedEchoIDs[echoID] = true
-			}
-		}
-	}
-	knownProviderUserIDs := map[string]bool{}
-	var durableEchoes []TimelineItem
-	for _, item := range items {
-		if strings.TrimSpace(item.Kind) != timelineKindUserMessage {
-			continue
-		}
-		if IsBrainInputAdmission(item) {
-			continue
-		}
 		id := strings.TrimSpace(item.ID)
-		if id == "" {
+		if id == "" || claimed[id] || IsBrainInputAdmission(item) ||
+			strings.TrimSpace(item.Kind) != timelineKindUserMessage ||
+			!strings.EqualFold(strings.TrimSpace(item.Role), "user") {
 			continue
 		}
-		knownProviderUserIDs[id] = true
-		if claimedEchoIDs[id] {
-			continue
+		body := strings.TrimSpace(item.Body)
+		digests := append(append([]string(nil), item.ProviderInputSHA256...), liveDigests[id]...)
+		digests = append(digests, AdmissionDigest(body))
+		if inner, ok := work.UnwrapClaudePasteDisplay(body); ok {
+			// Rows materialized before paste unwrapping kept Claude's envelope.
+			digests = append(digests, AdmissionDigest(strings.TrimSpace(inner)))
 		}
-		if len(item.ProviderInputSHA256) == 0 {
-			item.ProviderInputSHA256 = liveDigests[id]
-		}
-		durableEchoes = append(durableEchoes, item)
+		seen[id] = true
+		inputs = append(inputs, providerUserInput{
+			id: id, sessionID: strings.TrimSpace(item.SessionID), createdAt: item.CreatedAt.UTC(),
+			digests: providerInputDigests(digests...), durable: true,
+		})
 	}
-
-	type credit struct {
-		index       int
-		admission   BrainInputAdmission
-		knownEchoID string
-	}
-	credits := make([]credit, 0, len(items))
-	out := append([]TimelineItem(nil), items...)
-	for index, item := range out {
-		if !IsBrainInputAdmission(item) {
-			continue
-		}
-		echoID := strings.TrimSpace(item.AdmissionEchoEventID)
-		if echoID != "" {
-			if admissionEchoSessionID(item) == providerSessionID {
-				suppress[echoID] = true
-			}
-			continue
-		}
-		for _, admission := range admissions {
-			if admission.State != BrainInputAdmissionAccepted ||
-				!timelineItemMatchesBrainInputAdmission(item, admission) {
-				continue
-			}
-			// A send can precede discovery of the native transcript. Only the
-			// exact recorded Host can prove that formerly unbound Session;
-			// an explicitly bound admission must never follow a replacement.
-			if admission.SessionID == admission.HostSessionID &&
-				admission.HostSessionID == strings.TrimSpace(host.ID) &&
-				providerSessionID != "" && providerSessionID == strings.TrimSpace(host.ProviderSessionID) {
-				admission.SessionID = providerSessionID
-			}
-			// Repair a previously materialized echo only when exactly one
-			// candidate proves it in the admission's causal window.
-			knownEchoID, matches := "", 0
-			for _, prior := range durableEchoes {
-				if providerRowMatchesAdmissionWindow(prior, admission) {
-					matches++
-					knownEchoID = prior.ID
-				}
-			}
-			if matches != 1 {
-				knownEchoID = ""
-			}
-			credits = append(credits, credit{index: index, admission: admission, knownEchoID: knownEchoID})
-			break
-		}
-	}
-
-	dirty := false
 	for _, event := range providerEvents {
-		if strings.TrimSpace(event.Kind) != timelineKindUserMessage {
+		id := strings.TrimSpace(event.ID)
+		if id == "" || seen[id] || claimed[id] ||
+			strings.TrimSpace(event.Kind) != timelineKindUserMessage || !providerEventMaterializable(event) {
 			continue
 		}
-		eventID := strings.TrimSpace(event.ID)
-		if eventID == "" {
-			continue
-		}
-		if suppress[eventID] {
-			continue
-		}
-		createdAt, hasExactTimestamp := exactProviderEventTimestamp(event)
-		if !hasExactTimestamp {
-			continue
-		}
-		matched := -1
-		for cursor := 0; cursor < len(credits); cursor++ {
-			// Durable rows need the unique late-binding proof above.
-			if knownProviderUserIDs[eventID] && credits[cursor].knownEchoID != eventID {
+		createdAt, _ := exactProviderEventTimestamp(event)
+		digests := append(providerEventInputDigests(event), AdmissionDigest(strings.TrimSpace(event.Body)))
+		seen[id] = true
+		inputs = append(inputs, providerUserInput{
+			id: id, sessionID: providerSessionID, createdAt: createdAt,
+			digests: providerInputDigests(digests...),
+		})
+	}
+	sort.SliceStable(inputs, func(left, right int) bool {
+		return inputs[left].createdAt.Before(inputs[right].createdAt)
+	})
+
+	out = append([]TimelineItem(nil), items...)
+	removed := map[string]bool{}
+	for _, input := range inputs {
+		for cursor := range credits {
+			if !input.echoes(credits[cursor].admission) {
 				continue
 			}
-			if !providerEchoMatchesAdmission(
-				credits[cursor].admission,
-				threadID,
-				providerSessionID,
-				event.Body,
-				createdAt,
-				event.AdmissionSHA256,
-				event.AdmissionUnwrappedSHA256,
-			) {
-				continue
+			row := &out[credits[cursor].index]
+			row.AdmissionEchoEventID = input.id
+			row.AdmissionEchoSessionID = input.sessionID
+			claimed[input.id] = true
+			claims[strings.TrimSpace(row.ID)] = input.id
+			if input.durable {
+				removed[input.id] = true
 			}
-			matched = cursor
+			credits = append(credits[:cursor], credits[cursor+1:]...)
 			break
 		}
-		if matched < 0 {
+		if len(credits) == 0 {
+			break
+		}
+	}
+	if len(claims) == 0 {
+		return claimed, claims, items
+	}
+	if len(removed) > 0 {
+		kept := out[:0]
+		for _, item := range out {
+			if !IsBrainInputAdmission(item) && removed[strings.TrimSpace(item.ID)] {
+				continue
+			}
+			kept = append(kept, item)
+		}
+		out = kept
+	}
+	return claimed, claims, out
+}
+
+// reconcileThreadAdmissionEchoes applies reconcileAdmissionEchoes to one
+// thread inside the whole timeline ledger. Non-empty claims means next must be
+// written back.
+func reconcileThreadAdmissionEchoes(
+	allItems []TimelineItem,
+	admissions []BrainInputAdmission,
+	threadID string,
+	providerSessionID string,
+	providerEvents []work.CodexConversationEvent,
+) (claimed map[string]bool, claims map[string]string, next []TimelineItem) {
+	var thread []TimelineItem
+	for _, item := range allItems {
+		if strings.TrimSpace(item.ThreadID) == threadID {
+			normalizeLegacyTimelineKind(&item)
+			thread = append(thread, item)
+		}
+	}
+	claimed, claims, updated := reconcileAdmissionEchoes(thread, admissions, threadID, providerSessionID, providerEvents)
+	if len(claims) == 0 {
+		return claimed, claims, allItems
+	}
+	byID := make(map[string]TimelineItem, len(updated))
+	for _, item := range updated {
+		byID[strings.TrimSpace(item.ID)] = item
+	}
+	next = make([]TimelineItem, 0, len(allItems))
+	for _, item := range allItems {
+		if strings.TrimSpace(item.ThreadID) != threadID {
+			next = append(next, item)
 			continue
 		}
-		suppress[eventID] = true
-		out[credits[matched].index].AdmissionEchoEventID = eventID
-		out[credits[matched].index].AdmissionEchoSessionID = providerSessionID
-		dirty = true
-		credits = append(credits[:matched], credits[matched+1:]...)
+		if updatedItem, ok := byID[strings.TrimSpace(item.ID)]; ok {
+			next = append(next, updatedItem)
+		}
 	}
-	return suppress, out, dirty
+	return claimed, claims, next
 }

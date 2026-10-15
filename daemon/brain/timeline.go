@@ -87,71 +87,30 @@ func brainInputAdmissionTimelineItem(admission BrainInputAdmission) TimelineItem
 	}
 }
 
-func providerRowMatchesAdmissionWindow(item TimelineItem, admission BrainInputAdmission) bool {
-	if item.BrainAdmission || strings.TrimSpace(item.Kind) != timelineKindUserMessage ||
-		!strings.EqualFold(strings.TrimSpace(item.Role), "user") {
-		return false
-	}
-	nativeDigests := append([]string(nil), item.ProviderInputSHA256...)
-	if inner, ok := work.UnwrapClaudePasteDisplay(strings.TrimSpace(item.Body)); ok {
-		// Rows materialized before paste unwrapping kept Claude's envelope, so
-		// their echo never matched and showed as a second bubble.
-		nativeDigests = append(nativeDigests, AdmissionDigest(strings.TrimSpace(inner)))
-	}
-	return providerEchoMatchesAdmission(
-		admission,
-		item.ThreadID,
-		item.SessionID,
-		item.Body,
-		item.CreatedAt,
-		nativeDigests...,
-	)
-}
-
-func brainInputAdmissionProjectionState(
-	allItems []TimelineItem,
-	admission BrainInputAdmission,
-) (int, []int, error) {
-	canonicalIndex := -1
+// brainInputAdmissionCanonicalIndex finds the admission's own timeline row.
+// A row holding its identity for any other input is a hard error.
+func brainInputAdmissionCanonicalIndex(allItems []TimelineItem, admission BrainInputAdmission) (int, error) {
 	canonicalID := AdmissionTimelineItemID(admission.RequestID)
 	for index, existing := range allItems {
 		if strings.TrimSpace(existing.ID) != canonicalID {
 			continue
 		}
 		if !timelineItemMatchesBrainInputAdmission(existing, admission) {
-			return -1, nil, fmt.Errorf(
+			return -1, fmt.Errorf(
 				"timeline identity %q belongs to different Brain input admission",
 				existing.ID,
 			)
 		}
-		canonicalIndex = index
-		break
+		return index, nil
 	}
-
-	claimedProviderIDs := make(map[string]bool, len(allItems))
-	for _, existing := range allItems {
-		if !IsBrainInputAdmission(existing) {
-			continue
-		}
-		if echoID := strings.TrimSpace(existing.AdmissionEchoEventID); echoID != "" {
-			claimedProviderIDs[echoID] = true
-		}
-	}
-	candidates := make([]int, 0, 1)
-	for index, existing := range allItems {
-		if claimedProviderIDs[strings.TrimSpace(existing.ID)] {
-			continue
-		}
-		if providerRowMatchesAdmissionWindow(existing, admission) {
-			candidates = append(candidates, index)
-		}
-	}
-	return canonicalIndex, candidates, nil
+	return -1, nil
 }
 
 // ProjectBrainInputAdmission idempotently materializes the presentation row
-// from accepted lifecycle authority. Failure never rolls back acceptance
-// or Attention; the existing bounded startup pass retries this projection.
+// from accepted lifecycle authority, then lets reconcileAdmissionEchoes credit
+// a provider echo that became durable first. Failure never rolls back
+// acceptance or Attention; the existing bounded startup pass retries this
+// projection.
 func (s *Store) ProjectBrainInputAdmission(admission BrainInputAdmission) error {
 	persisted, found, err := s.BrainInputAdmission(admission.RequestID, admission.ThreadID)
 	if err != nil {
@@ -180,57 +139,30 @@ func (s *Store) ProjectBrainInputAdmission(admission BrainInputAdmission) error 
 	if err != nil {
 		return err
 	}
-	item := brainInputAdmissionTimelineItem(admission)
-	canonicalIndex, candidates, err := brainInputAdmissionProjectionState(allItems, admission)
+	canonicalIndex, err := brainInputAdmissionCanonicalIndex(allItems, admission)
 	if err != nil {
 		return err
 	}
-	if canonicalIndex >= 0 {
-		item = allItems[canonicalIndex]
-	}
-	if canonicalIndex >= 0 && strings.TrimSpace(item.AdmissionEchoEventID) != "" {
+	if canonicalIndex >= 0 && strings.TrimSpace(allItems[canonicalIndex].AdmissionEchoEventID) != "" {
 		return nil
 	}
-
-	// A provider transcript snapshot can race between immutable admission
-	// preparation and acceptance. Reconcile only the exact provider-native row
-	// from the admission's causal window (same thread, provider Session,
-	// digest, recorded at or after admission creation). This is deliberately
-	// narrower than ordinary echo suppression: exact thread, provider Session,
-	// digest, and timestamp are all required, and one admission may consume
-	// only one provider row.
-	if len(candidates) > 1 {
-		return fmt.Errorf(
-			"Brain input admission %q has %d provider echoes in its acceptance window",
-			admission.RequestID,
-			len(candidates),
-		)
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return err
 	}
-	if len(candidates) == 0 {
-		if canonicalIndex >= 0 {
-			return nil
-		}
+	item := brainInputAdmissionTimelineItem(admission)
+	if canonicalIndex < 0 {
+		allItems = append(allItems, item)
+	}
+	_, claims, next := reconcileThreadAdmissionEchoes(allItems, database.BrainInputAdmissions, admission.ThreadID, "", nil)
+	if len(claims) > 0 {
+		return s.rewriteTimelineLocked(next)
+	}
+	if canonicalIndex < 0 {
 		_, err := s.appendTimelineItemLocked(item)
 		return err
 	}
-
-	candidateIndex := candidates[0]
-	item.AdmissionEchoEventID = strings.TrimSpace(allItems[candidateIndex].ID)
-	reconciled := make([]TimelineItem, 0, len(allItems))
-	for index, existing := range allItems {
-		switch index {
-		case candidateIndex:
-			continue
-		case canonicalIndex:
-			reconciled = append(reconciled, item)
-		default:
-			reconciled = append(reconciled, existing)
-		}
-	}
-	if canonicalIndex < 0 {
-		reconciled = append(reconciled, item)
-	}
-	return s.rewriteTimelineLocked(reconciled)
+	return nil
 }
 
 // TimelineItem is one durable Brain-thread timeline row. The append-only
@@ -528,56 +460,28 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 	if err != nil {
 		return err
 	}
-	items := make([]TimelineItem, 0, len(allItems))
-	for _, item := range allItems {
-		if item.ThreadID != threadID {
-			continue
-		}
-		normalizeLegacyTimelineKind(&item)
-		items = append(items, item)
-	}
-	sortTimelineItems(items)
 	sessionID := strings.TrimSpace(conversation.SessionID)
 	if sessionID == "" {
 		sessionID = "provider"
 	}
-	host, err := s.readHostSessionLocked()
-	if err != nil {
-		return err
-	}
-	// Assign echo credits before appending so restart/replay stays idempotent.
-	suppress, updatedItems, dirty := claimProviderUserEchoes(
-		items,
-		conversation.Events,
+	// Credit echoes before appending so restart/replay stays idempotent.
+	claimed, claims, allItems := reconcileThreadAdmissionEchoes(
+		allItems,
 		database.BrainInputAdmissions,
 		threadID,
 		sessionID,
-		host,
+		conversation.Events,
 	)
-	if dirty {
-		byID := make(map[string]TimelineItem, len(updatedItems))
-		for _, item := range updatedItems {
-			byID[item.ID] = item
-		}
-		reconciled := make([]TimelineItem, 0, len(allItems))
-		for _, item := range allItems {
-			if item.ThreadID == threadID && !IsBrainInputAdmission(item) &&
-				item.Kind == timelineKindUserMessage && item.SessionID == sessionID && suppress[item.ID] {
-				continue
-			}
-			if next, ok := byID[item.ID]; ok {
-				item = next
-			}
-			reconciled = append(reconciled, item)
-		}
-		if err := s.rewriteTimelineLocked(reconciled); err != nil {
+	if len(claims) > 0 {
+		if err := s.rewriteTimelineLocked(allItems); err != nil {
 			return err
 		}
-		items = updatedItems
 	}
-	known := make(map[string]bool, len(items))
-	for _, item := range items {
-		known[item.ID] = true
+	known := make(map[string]bool, len(allItems))
+	for _, item := range allItems {
+		if item.ThreadID == threadID {
+			known[item.ID] = true
+		}
 	}
 	for _, event := range conversation.Events {
 		if !providerEventMaterializable(event) {
@@ -587,7 +491,7 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 		if id == "" || known[id] {
 			continue
 		}
-		if strings.TrimSpace(event.Kind) == timelineKindUserMessage && suppress[id] {
+		if strings.TrimSpace(event.Kind) == timelineKindUserMessage && claimed[id] {
 			continue
 		}
 		item, ok := timelineItemFromProviderEvent(threadID, sessionID, event)

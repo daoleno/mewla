@@ -2232,21 +2232,16 @@ func (s *Server) brainScopedConversation(scopeKey string, conversation work.Code
 	for _, event := range timelineItemsToConversationEventsForServer(timelineItems) {
 		appendUnique(event)
 	}
-	echoProviderSessionID := strings.TrimSpace(conversation.SessionID)
-	if echoProviderSessionID == "" {
-		echoProviderSessionID = "provider"
-	}
-	echoSuppressions := brain.ProviderUserEchoSuppressions(timelineItems, echoProviderSessionID)
 	// Current-host provider events overlay the durable timeline so tools,
 	// streaming partials, and live Activity remain visible. An empty provider
 	// snapshot leaves the durable timeline intact. Durable calendar/work_result
-	// rows win over provider duplicates with the same ID. Brain input admissions
-	// suppress provider echoes one-to-one; same-body Terminal inputs still overlay.
+	// rows win over provider duplicates with the same ID. User rows come only
+	// from the durable timeline: materialization above already decided which
+	// provider inputs echo a Brain admission and which are independent Terminal
+	// inputs, so the overlay never makes a second, live-only decision.
 	for _, event := range providerEvents {
 		if strings.TrimSpace(event.Kind) == "user_message" {
-			if echoSuppressions[strings.TrimSpace(event.ID)] {
-				continue
-			}
+			continue
 		}
 		id := strings.TrimSpace(event.ID)
 		if id != "" {
