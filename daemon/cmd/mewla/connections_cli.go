@@ -26,7 +26,8 @@ Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no impli
 A call that times out may already have run; check its state with a read tool before calling it again.
 MCP resources: resources --id account [--cursor c] lists documents and URI templates; read-resource --id account --uri onlora://projects/<id> reads one.
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
-updates --id account shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
+updates --id account asks the service now and shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
+A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
 Add: --integration github|notion|google|slack|linear|fal|image|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Image generation: --integration image --endpoint https://host/v1 --model name; the API key is read like any credential.
 fal: --integration fal; an empty key keeps only its free model search. set-key --id account replaces an API key.
@@ -82,10 +83,6 @@ Never send messages or make updates without task-specific user authorization, ev
 		q.Action = strings.ReplaceAll(action, "-", "_")
 	default:
 		return errors.New("unknown plugin command")
-	}
-	if action == "updates" {
-		// The account, cut to the tools that wait for the person's confirmation.
-		q.Action = "get"
 	}
 	if toolList != "" {
 		for _, name := range strings.Split(toolList, ",") {

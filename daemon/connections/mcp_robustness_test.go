@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/oauth2"
 )
 
 var emptyObject = map[string]any{"type": "object", "properties": map[string]any{}}
@@ -119,6 +120,139 @@ func TestToolUpdatesSyncWithoutBreakingTheConnection(t *testing.T) {
 	}
 	if a = mustHandle(t, reopened, Request{Action: "get", ID: id}).Account; strings.Join(a.Updates, ",") != "changing" {
 		t.Fatalf("reopened updates %v", a.Updates)
+	}
+}
+
+// The service removes, adds and changes tools between calls. Asking for
+// updates shows all three without a call or refresh first.
+func TestRemoteToolChangesShowWithoutACall(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "Fixture", Version: "1"}, nil)
+	var steady, changing, fresh, revert atomic.Int32
+	addFixtureTool(server, "steady", "Unchanged", &steady)
+	addFixtureTool(server, "changing", "Version one", &changing)
+	addFixtureTool(server, "gone", "Removed soon", &atomic.Int32{})
+	addFixtureTool(server, "revert", "Original", &revert)
+	m, id := mcpFixture(t, server)
+	mustHandle(t, m, Request{Action: "policy", ID: id, Tools: []string{"steady", "changing", "gone", "revert"}, Allowed: true})
+
+	addFixtureTool(server, "changing", "Version two", &changing)
+	server.RemoveTools("gone")
+	addFixtureTool(server, "fresh", "New tool", &fresh)
+	addFixtureTool(server, "revert", "Changed for a while", &revert)
+
+	a := mustHandle(t, m, Request{Action: "updates", ID: id}).Account
+	if strings.Join(a.Updates, ",") != "changing,fresh,revert" {
+		t.Fatalf("updates %v", a.Updates)
+	}
+	tools := map[string]Tool{}
+	for _, tool := range a.Tools {
+		tools[tool.Name] = tool
+	}
+	if _, ok := tools["gone"]; ok {
+		t.Fatal("a removed tool stayed in the list")
+	}
+	if c := tools["changing"]; c.Description != "Version two" || c.Allowed || !c.Updated {
+		t.Fatalf("changed tool %+v", c)
+	}
+	if f := tools["fresh"]; f.Allowed || !f.Updated {
+		t.Fatalf("new tool %+v", f)
+	}
+	if s := tools["steady"]; !s.Allowed || s.Updated {
+		t.Fatalf("unchanged tool %+v", s)
+	}
+	m.mu.Lock()
+	_, kept := m.records[id].Grants["gone"]
+	m.mu.Unlock()
+	if kept {
+		t.Fatal("a removed tool kept its grant")
+	}
+
+	// A blocked call names the one command that confirms every waiting update.
+	_, err := m.Handle(context.Background(), Request{Action: "invoke", ID: id, Tool: "changing"})
+	want := `updated the tool "changing" since it was allowed`
+	command := "mewla connections confirm-updates --id " + id + " --tools changing,fresh,revert"
+	if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), command) || strings.Contains(strings.ToLower(err.Error()), "authoriz") {
+		t.Fatalf("updated tool error: %v", err)
+	}
+	if _, err = m.Handle(context.Background(), Request{Action: "invoke", ID: id, Tool: "fresh"}); err == nil || !strings.Contains(err.Error(), `added the tool "fresh"`) {
+		t.Fatalf("new tool error: %v", err)
+	}
+	if changing.Load()+fresh.Load() != 0 {
+		t.Fatal("an unconfirmed tool ran")
+	}
+
+	// A tool that changes back to what the person allowed waits for nothing.
+	addFixtureTool(server, "revert", "Original", &revert)
+	a = mustHandle(t, m, Request{Action: "updates", ID: id}).Account
+	if strings.Join(a.Updates, ",") != "changing,fresh" {
+		t.Fatalf("updates after revert %v", a.Updates)
+	}
+	mustHandle(t, m, Request{Action: "invoke", ID: id, Tool: "revert"})
+
+	// A tool removed after the list was read is reported as removed.
+	server.RemoveTools("steady")
+	_, err = m.Handle(context.Background(), Request{Action: "invoke", ID: id, Tool: "steady"})
+	if err == nil || !strings.Contains(err.Error(), `no longer offers the tool "steady"`) {
+		t.Fatalf("removed tool error: %v", err)
+	}
+	if steady.Load() != 0 {
+		t.Fatal("a removed tool ran")
+	}
+
+	// A tool the saved list does not know yet is looked up before the call.
+	addFixtureTool(server, "later", "Added after the last read", &atomic.Int32{})
+	if _, err = m.Handle(context.Background(), Request{Action: "invoke", ID: id, Tool: "later"}); err == nil || !strings.Contains(err.Error(), `added the tool "later"`) {
+		t.Fatalf("unknown tool error: %v", err)
+	}
+
+	// Describing reads the list again once it is older than a minute.
+	addFixtureTool(server, "described", "Seen by describe", &atomic.Int32{})
+	m.mu.Lock()
+	m.toolsSeen[id] = time.Now().Add(-toolsFresh)
+	m.mu.Unlock()
+	if d := mustHandle(t, m, Request{Action: "describe", ID: id, Tool: "described"}).Tool; d == nil || !d.Updated {
+		t.Fatalf("describe missed a new tool: %+v", d)
+	}
+
+	// Confirming the named set lets them run.
+	mustHandle(t, m, Request{Action: "confirm_updates", ID: id, Tools: []string{"changing", "described", "fresh", "later"}})
+	mustHandle(t, m, Request{Action: "invoke", ID: id, Tool: "changing"})
+	mustHandle(t, m, Request{Action: "invoke", ID: id, Tool: "fresh"})
+	if changing.Load() != 1 || fresh.Load() != 1 {
+		t.Fatal("confirmed tools did not run")
+	}
+}
+
+// Showing an account never refreshes an expired OAuth token, so it never
+// holds the manager lock over the network; updates and calls do refresh.
+func TestStoredTokenNeedsNoRefresh(t *testing.T) {
+	m := testManager(t, func(*http.Request) (*http.Response, error) { return nil, errors.New("no network") })
+	r := &record{Account: Account{ID: "a1"}}
+	_ = m.vault.Set("integration:a1", "key")
+	if secret, ok := m.storedToken(r); !ok || secret != "key" {
+		t.Fatal("an API key needs no refresh")
+	}
+	r.OAuth = &oauthAccount{}
+	for _, c := range []struct {
+		expiry time.Time
+		ok     bool
+	}{{time.Now().Add(time.Hour), true}, {time.Now().Add(-time.Hour), false}} {
+		raw, _ := json.Marshal(oauthSecret{Token: &oauth2.Token{AccessToken: "at", RefreshToken: "rt", Expiry: c.expiry}})
+		_ = m.vault.Set("integration:a1", string(raw))
+		if secret, ok := m.storedToken(r); ok != c.ok || (ok && secret != "at") {
+			t.Fatalf("expiry %v: ok %v", c.expiry, ok)
+		}
+	}
+}
+
+func TestToolUpdatedErrorQuotesRemoteNames(t *testing.T) {
+	e := toolUpdatedError{service: "Svc", id: "a1", tool: "x", pending: []string{"x", "y;rm -rf $HOME"}}
+	if !strings.Contains(e.Error(), `--tools 'x,y;rm -rf $HOME'`) {
+		t.Fatalf("names not quoted: %s", e.Error())
+	}
+	e.pending = []string{"x", "a,b"}
+	if strings.Contains(e.Error(), "confirm-updates") {
+		t.Fatalf("a name with a comma cannot be confirmed by the command: %s", e.Error())
 	}
 }
 

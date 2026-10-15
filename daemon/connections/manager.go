@@ -40,6 +40,7 @@ type Manager struct {
 	connectFlows map[string]*connectFlow
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool
+	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
 }
 
 // SetWebOrigins admits web UI origins for browser sign-in returns. Without it,
@@ -58,7 +59,7 @@ func New(dir string) (*Manager, error) {
 	return m, err
 }
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
-	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken}
+	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -139,6 +140,17 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	if q.Action == "resources" || q.Action == "read_resource" {
 		return m.mcpResources(parent, q)
 	}
+	// An MCP service may have changed its tools since they were last listed.
+	// Updates asks it now; showing an account asks briefly, and keeps the
+	// saved list if the service is slow or unreachable.
+	switch q.Action {
+	case "updates":
+		if err := m.syncRemoteTools(parent, q.ID, true, 20*time.Second); err != nil {
+			return Response{}, errors.New("could not check the service for tool updates: " + err.Error())
+		}
+	case "get", "describe":
+		_ = m.syncRemoteTools(parent, q.ID, false, 4*time.Second)
+	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	m.mu.Lock()
@@ -199,7 +211,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	if !ok {
 		return Response{}, errors.New("plugin account not found")
 	}
-	if q.Action == "get" {
+	if q.Action == "get" || q.Action == "updates" {
 		a := m.projection(r)
 		return Response{Account: &a}, nil
 	}
@@ -268,7 +280,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		}
 		current := r.Account.Tools
 		r.Account.Tools = previous
-		syncTools(r, current)
+		m.adoptTools(r, current)
 	default:
 		return Response{}, errors.New("unknown plugin operation")
 	}
@@ -420,6 +432,15 @@ func (m *Manager) event(r *record, tool string, err error) {
 	}
 }
 
+func offersTool(r *record, name string) bool {
+	for _, t := range r.Account.Tools {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // checkInvoke validates a call against the account's granted, discovered tool.
 func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 	if !r.Account.Enabled || r.Account.Status == "disconnected" {
@@ -443,7 +464,8 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 		return Tool{}, nil, errors.New("tool not found")
 	}
 	if _, updated := r.Updates[t.Name]; updated && r.Grants[t.Name] != fingerprint(*t) {
-		return Tool{}, nil, toolUpdatedError{accountService(r), t.Name}
+		_, allowedBefore := r.Grants[t.Name]
+		return Tool{}, nil, toolUpdatedError{service: accountService(r), id: r.Account.ID, tool: t.Name, added: !allowedBefore, pending: updatedNames(r)}
 	}
 	if r.Grants[t.Name] != fingerprint(*t) {
 		return Tool{}, nil, errors.New("tool is not authorized; enable this tool for this account in Plugins")

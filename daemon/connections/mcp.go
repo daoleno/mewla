@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -49,12 +50,38 @@ func (e serviceError) Error() string {
 	return e.service + " reported an error: " + e.detail
 }
 
-// toolUpdatedError is a call to a tool whose definition changed upstream
-// since the person allowed it. The call was not sent.
-type toolUpdatedError struct{ service, tool string }
+// toolUpdatedError is a call to a tool the service added, changed since the
+// person allowed it, or removed. The call was not sent. It names the command
+// that confirms every update waiting on the account, so one step clears them.
+type toolUpdatedError struct {
+	service, id, tool string
+	added, removed    bool
+	pending           []string
+}
 
 func (e toolUpdatedError) Error() string {
-	return fmt.Sprintf("%s updated the tool %q; it runs again once the person confirms the update in Extensions", e.service, e.tool)
+	if e.removed {
+		return fmt.Sprintf("%s no longer offers the tool %q; the call was not sent. mewla connections get --id %s lists the tools it offers now", e.service, e.tool, e.id)
+	}
+	what := fmt.Sprintf("%s updated the tool %q since it was allowed", e.service, e.tool)
+	if e.added {
+		what = fmt.Sprintf("%s added the tool %q", e.service, e.tool)
+	}
+	msg := what + "; the call was not sent. It runs once the new version is confirmed in Extensions"
+	// The CLI splits --tools on commas and trims each name.
+	for _, name := range e.pending {
+		if strings.Contains(name, ",") || strings.TrimSpace(name) != name {
+			return msg
+		}
+	}
+	if len(e.pending) == 0 {
+		return msg
+	}
+	msg += " or with: mewla connections confirm-updates --id " + e.id + " --tools " + shellquote.Word(strings.Join(e.pending, ","))
+	if len(e.pending) > 1 {
+		msg += fmt.Sprintf(" (all %d tools waiting on this account; mewla connections updates --id %s shows them)", len(e.pending), e.id)
+	}
+	return msg
 }
 
 // timeoutError is a call that ran out of time after it was sent. The service
@@ -253,15 +280,16 @@ func (m *Manager) callMCP(ctx context.Context, r *record, secret string, t Tool,
 		return mcpOutcome{Err: err}
 	}
 	out := mcpOutcome{Tools: current}
-	found := false
+	found, offered := false, false
 	for _, tool := range current {
-		if tool.Name == t.Name && fingerprint(tool) == fingerprint(t) {
-			found = true
+		if tool.Name == t.Name {
+			offered = true
+			found = fingerprint(tool) == fingerprint(t)
 		}
 	}
 	if !found {
 		s.Close()
-		out.Err = toolUpdatedError{accountService(r), t.Name}
+		out.Err = toolUpdatedError{service: accountService(r), id: r.Account.ID, tool: t.Name, removed: !offered}
 		return out
 	}
 	result, err := s.CallTool(ctx, &mcp.CallToolParams{Name: t.Name, Arguments: args})
@@ -369,6 +397,16 @@ func (m *Manager) invokeMCPAccount(parent context.Context, q Request) (Response,
 		m.mu.Unlock()
 		return Response{}, false, nil
 	}
+	if !offersTool(r, q.Tool) {
+		// The service may have added it since the list was last read.
+		m.mu.Unlock()
+		_ = m.syncRemoteTools(parent, q.ID, true, 20*time.Second)
+		m.mu.Lock()
+		if r, ok = m.records[q.ID]; !ok || m.isPending(q.ID) {
+			m.mu.Unlock()
+			return Response{}, true, errors.New("plugin account not found")
+		}
+	}
 	t, args, err := checkInvoke(r, q)
 	secret := ""
 	if err == nil {
@@ -432,9 +470,12 @@ func (m *Manager) finishMCP(id, tool string, sensitive []string, out mcpOutcome,
 		return result, err
 	}
 	if out.Tools != nil {
-		if updated := syncTools(r, out.Tools); len(updated) > 0 {
-			log.Printf("plugins: %s updated %d tools; waiting for confirmation: %d", r.Account.Integration, len(updated), len(r.Updates))
-		}
+		m.adoptTools(r, out.Tools)
+	}
+	var updated toolUpdatedError
+	if errors.As(err, &updated) && !updated.removed {
+		updated.pending = updatedNames(r)
+		err = updated
 	}
 	if !record {
 		if out.Tools != nil {
@@ -442,7 +483,6 @@ func (m *Manager) finishMCP(id, tool string, sensitive []string, out mcpOutcome,
 		}
 		return result, err
 	}
-	var updated toolUpdatedError
 	var timedOut timeoutError
 	switch {
 	case isTransportError(err, errAuth):
