@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,6 +39,7 @@ import (
 	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/pairlink"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/screen"
 	skillmgmt "github.com/daoleno/mewla/daemon/skills"
@@ -424,6 +426,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.Handle("/resources", s.appRoute(webUI, http.HandlerFunc(s.handleResourceTelemetryHTTP)))
 	mux.HandleFunc("/pair", s.handlePair)
+	mux.HandleFunc("/p/", s.handleShortPairLink)
 	mux.HandleFunc("/enrollment/request", s.handleEnrollmentRequest)
 	mux.HandleFunc("/enrollment/status", s.handleEnrollmentStatus)
 	mux.HandleFunc("/enrollment/pending", s.handleEnrollmentPending)
@@ -703,6 +706,47 @@ func (s *Server) cancelSkillsRequestsLocked(conn *websocket.Conn) {
 		mutation.cancel()
 		delete(s.pluginsMutations, conn)
 	}
+}
+
+// handleShortPairLink turns http://127.0.0.1:9876/p/<token> into the browser
+// pairing page for this origin. The token is the secret either way; only
+// loopback requests to a loopback host are served, so the origin in the
+// connect link is this computer.
+func (s *Server) handleShortPairLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	host, _, err := net.SplitHostPort(r.Host)
+	remote, _, remoteErr := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || remoteErr != nil || !loopbackHost(host) || !loopbackHost(remote) {
+		http.NotFound(w, r)
+		return
+	}
+	token, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(r.URL.Path, "/p/"))
+	if err != nil || len(token) != 32 {
+		http.NotFound(w, r)
+		return
+	}
+	link, err := pairlink.ConnectLink("ws://"+r.Host, s.auth.PublicKeyHex(), hex.EncodeToString(token))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	fragment := url.Values{}
+	fragment.Set("pair", link)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, "/#"+fragment.Encode(), http.StatusFound)
+}
+
+func loopbackHost(host string) bool {
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {

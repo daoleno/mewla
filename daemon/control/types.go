@@ -100,6 +100,8 @@ type PairingInfo struct {
 	ExpiresAt       time.Time `json:"expires_at"`
 	DaemonID        string    `json:"daemon_id"`
 	DaemonPublicKey string    `json:"daemon_public_key"`
+	// ShortLinks says the daemon serves /p/<token> for this computer's browser.
+	ShortLinks bool `json:"short_links,omitempty"`
 }
 
 type Response struct {
