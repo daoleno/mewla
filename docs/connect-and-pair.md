@@ -6,7 +6,7 @@ A phone or browser needs two things to use Mewla on your computer:
 - **Pairing**: a one-time code that gives that one device access.
 
 `mewla address list` shows every address. `mewla pair` prints the code.
-`mewla open` opens the web UI in this computer's browser and pairs it.
+`mewla web` opens the web UI in this computer's browser and pairs it.
 `mewla devices` lists who has access.
 
 The daemon has its own Ed25519 key. During pairing the device enrolls its own
@@ -176,7 +176,7 @@ the new one loads.
 On the computer running Mewla:
 
 ```sh
-mewla open      # or: mewla web
+mewla web
 ```
 
 It opens `http://127.0.0.1:9876` in the default browser through a one-time

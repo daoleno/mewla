@@ -9,7 +9,7 @@ import (
 )
 
 // A browser that already trusts this daemon and opens a fresh pairing link
-// (mewla open) pairs its same device key again: one device, first AddedAt.
+// (mewla web) pairs its same device key again: one device, first AddedAt.
 func TestManagerReEnrollingTheSameDeviceKeepsOneDevice(t *testing.T) {
 	manager, err := NewManager(t.TempDir())
 	if err != nil {

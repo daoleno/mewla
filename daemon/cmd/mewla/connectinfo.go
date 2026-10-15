@@ -307,7 +307,7 @@ func printPairing(w io.Writer, status pairingStatus, links pairingLinks, stateDi
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, style.bold("Browser on this computer"))
 		fmt.Fprintln(w, "  "+browser)
-		fmt.Fprintln(w, "  "+style.dim("Or let Mewla open and pair it: ")+style.cmd(openCommand(stateDir)))
+		fmt.Fprintln(w, "  "+style.dim("Or let Mewla open and pair it: ")+style.cmd(webCommand(stateDir)))
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, style.dim("Paste link, other addresses, revoking a device: ")+style.cmd(detailsCommand))
@@ -324,7 +324,7 @@ func printRunningStatus(w io.Writer, stateDir string, devices int) {
 	}
 	printStatus(w, style, pairingStatusFor(resolved, devices))
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, style.dim("Open the web UI here: ")+style.cmd(openCommand(stateDir)))
+	fmt.Fprintln(w, style.dim("Open the web UI here: ")+style.cmd(webCommand(stateDir)))
 	fmt.Fprintln(w, style.dim("Pair another phone or browser: ")+style.cmd(pairCommand(stateDir)))
 	fmt.Fprintln(w)
 }
@@ -464,7 +464,7 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEna
 		fmt.Fprintf(w, "  %-11s %s\n", "Anywhere", style.cmd("mewla login"))
 	}
 	if err == nil && (isLoopbackHost(host) || isWildcardHost(host)) {
-		fmt.Fprintf(w, "  %-11s %s\n", "Browser", style.cmd(openCommand(stateDir)))
+		fmt.Fprintf(w, "  %-11s %s\n", "Browser", style.cmd(webCommand(stateDir)))
 	}
 	if linkEnabled || len(phone) > 0 {
 		fmt.Fprintf(w, "  %-11s %s\n\n", "Pair", style.cmd(pairCommand(stateDir)))

@@ -151,7 +151,7 @@ func TestPrintStartupInfoForLoopbackWithoutPhoneAddress(t *testing.T) {
 	for _, want := range []string{
 		"Data        /tmp/mewla-state\n",
 		"listening on 127.0.0.1:9876 (this computer only)",
-		"Browser     mewla open -state-dir /tmp/mewla-state\n",
+		"Browser     mewla web -state-dir /tmp/mewla-state\n",
 		"restart with mewla --lan, or add an HTTPS address (mewla address add)",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -390,7 +390,7 @@ func TestPairCommandWithoutAnyAddressFailsHonestly(t *testing.T) {
 }
 
 func TestUnknownCommandIsNotStartedAsTheDaemon(t *testing.T) {
-	for _, removed := range []string{"frobnicate", "webui"} {
+	for _, removed := range []string{"frobnicate", "open", "webui"} {
 		err := run([]string{removed}, io.Discard)
 		if err == nil || !strings.Contains(err.Error(), "unknown command") || !strings.Contains(err.Error(), "mewla --help") {
 			t.Fatalf("run(%s) = %v", removed, err)

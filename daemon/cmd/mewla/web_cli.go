@@ -18,25 +18,25 @@ import (
 	"github.com/daoleno/mewla/daemon/remote"
 )
 
-// errMewlaNotRunning ends mewla open with status 1 after it said so.
+// errMewlaNotRunning ends mewla web with status 1 after it said so.
 var errMewlaNotRunning = errors.New("mewla is not running")
 
-type openConfig struct {
+type webConfig struct {
 	stateDir string
 	print    bool
 }
 
-// openEnv is what mewla open needs from this computer, so tests run it
+// webEnv is what mewla web needs from this computer, so tests run it
 // without a daemon, a desktop or a browser.
-type openEnv struct {
+type webEnv struct {
 	running func(stateDir string) (bool, error)
 	pair    func(stateDir string) (*control.PairingInfo, error)
 	desktop func() (bool, string)
 	open    func(target string) error
 }
 
-func defaultOpenEnv() openEnv {
-	return openEnv{
+func defaultWebEnv() webEnv {
+	return webEnv{
 		running: bootStateLockHeld,
 		pair:    requestPairingToken,
 		desktop: desktopSession,
@@ -44,22 +44,22 @@ func defaultOpenEnv() openEnv {
 	}
 }
 
-func runOpenCommand(args []string, stderr io.Writer) error {
-	cfg, err := parseOpenConfig(args, stderr)
+func runWebCommand(args []string, stderr io.Writer) error {
+	cfg, err := parseWebConfig(args, stderr)
 	if err != nil {
 		return err
 	}
-	return runOpen(cfg, stderr, defaultOpenEnv())
+	return runWeb(cfg, stderr, defaultWebEnv())
 }
 
-func parseOpenConfig(args []string, stderr io.Writer) (openConfig, error) {
-	fs := flag.NewFlagSet("mewla open", flag.ContinueOnError)
+func parseWebConfig(args []string, stderr io.Writer) (webConfig, error) {
+	fs := flag.NewFlagSet("mewla web", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	cfg := openConfig{}
+	cfg := webConfig{}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	fs.BoolVar(&cfg.print, "print", false, "print the addresses and a one-time link; do not open a browser")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla open [flags]   (also: mewla web)")
+		fmt.Fprintln(stderr, "Usage: mewla web [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Open the Mewla web UI in this computer's browser, paired on first use, and")
 		fmt.Fprintln(stderr, "print the addresses other browsers use. Without a desktop (over SSH, or no")
@@ -76,8 +76,8 @@ func parseOpenConfig(args []string, stderr io.Writer) (openConfig, error) {
 	return cfg, nil
 }
 
-// openView is everything mewla open prints.
-type openView struct {
+// webView is everything mewla web prints.
+type webView struct {
 	stateDir  string
 	local     string // this computer's web UI origin; "" when Mewla does not listen on loopback
 	localLink string // one-time link that opens and pairs this computer's browser
@@ -90,7 +90,7 @@ type openView struct {
 	phoneOnly []addressbook.Entry // Wi-Fi/LAN and Tailscale: the app only
 }
 
-func runOpen(cfg openConfig, w io.Writer, env openEnv) error {
+func runWeb(cfg webConfig, w io.Writer, env webEnv) error {
 	stateDir, err := auth.ResolveStorageDir(cfg.stateDir)
 	if err != nil {
 		return fmt.Errorf("resolve auth storage directory: %w", err)
@@ -101,7 +101,7 @@ func runOpen(cfg openConfig, w io.Writer, env openEnv) error {
 	}
 	style := styleForWriter(w)
 	if !running {
-		fmt.Fprintln(w, "Mewla is not running. Start it with "+style.cmd(startCommand(cfg.stateDir))+", then run "+style.cmd(openCommand(cfg.stateDir))+" again.")
+		fmt.Fprintln(w, "Mewla is not running. Start it with "+style.cmd(startCommand(cfg.stateDir))+", then run "+style.cmd(webCommand(cfg.stateDir))+" again.")
 		return errMewlaNotRunning
 	}
 	pairingInfo, err := env.pair(cfg.stateDir)
@@ -116,7 +116,7 @@ func runOpen(cfg openConfig, w io.Writer, env openEnv) error {
 	if err != nil {
 		return err
 	}
-	view := buildOpenView(entries, pairingInfo, stateDir)
+	view := buildWebView(entries, pairingInfo, stateDir)
 	view.stateDir = cfg.stateDir
 
 	desktop, reason := env.desktop()
@@ -134,14 +134,14 @@ func runOpen(cfg openConfig, w io.Writer, env openEnv) error {
 			view.opened = true
 		}
 	}
-	printOpen(w, view)
+	printWeb(w, view)
 	return nil
 }
 
-// buildOpenView sorts the address book into this computer, remote access,
+// buildWebView sorts the address book into this computer, remote access,
 // other HTTPS addresses and the phone-only plain HTTP addresses.
-func buildOpenView(entries []addressbook.Entry, pairingInfo *control.PairingInfo, stateDir string) openView {
-	view := openView{expiresAt: pairingInfo.ExpiresAt}
+func buildWebView(entries []addressbook.Entry, pairingInfo *control.PairingInfo, stateDir string) webView {
+	view := webView{expiresAt: pairingInfo.ExpiresAt}
 	if config, ok, err := remote.LoadConfig(stateDir); err == nil && ok {
 		view.remoteURL = strings.TrimRight(config.URL(), "/")
 	}
@@ -177,7 +177,7 @@ func buildOpenView(entries []addressbook.Entry, pairingInfo *control.PairingInfo
 }
 
 // printOpen says what was opened and lists where else the web UI is.
-func printOpen(w io.Writer, view openView) {
+func printWeb(w io.Writer, view webView) {
 	style := styleForWriter(w)
 	const pad = 16
 	row := func(label, value string) {
@@ -257,11 +257,11 @@ func desktopSession() (bool, string) {
 	return false, "opening a browser is not supported on " + runtime.GOOS
 }
 
-func openCommand(stateDir string) string {
+func webCommand(stateDir string) string {
 	if strings.TrimSpace(stateDir) != "" {
-		return "mewla open -state-dir " + stateDir
+		return "mewla web -state-dir " + stateDir
 	}
-	return "mewla open"
+	return "mewla web"
 }
 
 func startCommand(stateDir string) string {

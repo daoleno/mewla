@@ -17,7 +17,7 @@ type DaemonIdentity = { daemonId?: string; daemonPublicKey: string };
 /**
  * A code from a server this device already saved re-pairs the same device
  * key: the daemon keeps one device for it, so there is no new access to
- * confirm. `mewla open` relies on this to reopen a paired browser quietly.
+ * confirm. `mewla web` relies on this to reopen a paired browser quietly.
  */
 export function alreadyPairedWith(
   servers: readonly DaemonIdentity[],
