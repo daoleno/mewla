@@ -102,6 +102,12 @@ opens the right settings page.
 - **You come first.** Opening Screen while an agent works shows who is using
   it; **Take over** ends the agent's control and opens the screen. When the
   agent is done, the screen opens by itself. While you view it, agents wait.
+  Someone using the Mac's own keyboard or trackpad pauses the agent at once,
+  letting go of any key or button it holds; it carries on 10 seconds after
+  their last input.
+- **Not while locked.** Agents can't use a locked Mac, and Settings says so.
+  Only someone at the Mac can unlock it; a Mac left to run agents all day
+  needs its automatic screen lock off (System Settings → Lock Screen).
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
   tap away. The Mac shows a notification when an agent starts and stops using
