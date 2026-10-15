@@ -19,6 +19,7 @@ import (
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/work"
@@ -580,7 +581,7 @@ func (e env) checkExecutors() ExecutorsCheck {
 	default:
 		check.Status = StatusFail
 		check.Remediation = RemediationInstallExecutor
-		check.Summary = "no usable executor found; install and authenticate at least one of Codex, Claude, Cursor, Grok, Pi, or OpenCode"
+		check.Summary = "no usable executor found; install and authenticate at least one of Claude Code, Codex, Cursor Agent, Grok, Pi, or OpenCode"
 		check.RecommendationConfidence = ConfidenceNone
 	}
 	return check
@@ -942,36 +943,39 @@ func hasPiProviderEnv() bool {
 	return false
 }
 
+// recommendHost picks Brain's host from usable executors in hostdeps'
+// AgentOrder, the same order the install menu uses.
 func recommendHost(usable []ExecutorCheck) string {
 	if len(usable) == 0 {
 		return ""
 	}
-	prefer := []string{"codex", "claude", "agent", "grok", "pi", "opencode"}
-	index := map[string]ExecutorCheck{}
-	for _, item := range usable {
-		index[item.ID] = item
-	}
-	for _, id := range prefer {
-		if _, ok := index[id]; ok {
-			return id
+	order := hostdeps.AgentOrder()
+	for _, id := range order {
+		for _, item := range usable {
+			if item.ID == id {
+				return id
+			}
 		}
 	}
-	// Prefer by provider if IDs differ.
-	for _, provider := range []string{
-		work.WorkerProviderCodex,
-		work.WorkerProviderClaude,
-		work.WorkerProviderCursor,
-		work.WorkerProviderGrok,
-		work.WorkerProviderPi,
-		work.WorkerProviderOpenCode,
-	} {
+	// Executors under other ids rank by their provider.
+	for _, id := range order {
 		for _, item := range usable {
-			if item.Provider == provider {
+			if provider := agentProviders[id]; provider != "" && item.Provider == provider {
 				return item.ID
 			}
 		}
 	}
 	return usable[0].ID
+}
+
+// agentProviders maps hostdeps.AgentOrder ids to their worker provider.
+var agentProviders = map[string]string{
+	"claude":   work.WorkerProviderClaude,
+	"codex":    work.WorkerProviderCodex,
+	"agent":    work.WorkerProviderCursor,
+	"grok":     work.WorkerProviderGrok,
+	"pi":       work.WorkerProviderPi,
+	"opencode": work.WorkerProviderOpenCode,
 }
 
 func firstCommandToken(command string) string {

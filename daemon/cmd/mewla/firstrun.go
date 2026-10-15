@@ -176,7 +176,12 @@ func applyStartupChoice(cfg *daemonConfig, args []string, stderr io.Writer) erro
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, style.title("Welcome to Mewla"))
 		deps := newDepsPrompt(reader, stderr, true)
-		deps.checkAll()
+		if running {
+			deps.setBrainHost = func(id string) error { return setRunningBrainHost(cfg.stateDir, id) }
+		}
+		if _, _, err := deps.checkAll(); err != nil {
+			return err
+		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		choice, err = runFirstRunChoice(ctx, reader, stderr, stateDir)
 		stop()

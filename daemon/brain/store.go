@@ -115,7 +115,11 @@ func (s *Store) WorklogPath() string {
 }
 
 func (s *Store) HostSessionPath() string {
-	return filepath.Join(s.statePath(), "host_session.json")
+	return hostSessionPath(s.Root)
+}
+
+func hostSessionPath(root string) string {
+	return filepath.Join(root, "state", "host_session.json")
 }
 
 // ConversationProjectionVersion returns a cheap version of every durable
@@ -291,8 +295,25 @@ func (s *Store) writeReplaceHostSessionBinding(path string, value any) error {
 func (s *Store) SetHostExecutorID(executorID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return setHostExecutorID(s.HostSessionPath(), executorID)
+}
+
+// SaveHostExecutorID is SetHostExecutorID for a Brain root that no running
+// daemon owns: first run saves the agent chosen for Brain without opening
+// the Store.
+func SaveHostExecutorID(root, executorID string) error {
+	return setHostExecutorID(hostSessionPath(root), executorID)
+}
+
+// LoadHostSession reads the Brain host binding under root without opening
+// the Store.
+func LoadHostSession(root string) (HostSession, error) {
+	return readHostSession(hostSessionPath(root))
+}
+
+func setHostExecutorID(path, executorID string) error {
 	executorID = strings.TrimSpace(executorID)
-	host, err := s.readHostSessionLocked()
+	host, err := readHostSession(path)
 	if err != nil {
 		return err
 	}
@@ -306,7 +327,7 @@ func (s *Store) SetHostExecutorID(executorID string) error {
 		next.TranscriptPath = host.TranscriptPath
 		next.ProviderDataRoot = host.ProviderDataRoot
 	}
-	return writeJSONFile(s.HostSessionPath(), next)
+	return writeJSONFile(path, next)
 }
 
 // SetHostProviderTranscript persists the stable Host Executor Session provider
@@ -586,7 +607,11 @@ type chatStateFile struct {
 }
 
 func (s *Store) readHostSessionLocked() (HostSession, error) {
-	raw, err := os.ReadFile(s.HostSessionPath())
+	return readHostSession(s.HostSessionPath())
+}
+
+func readHostSession(path string) (HostSession, error) {
+	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return HostSession{}, nil
 	}

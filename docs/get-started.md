@@ -48,7 +48,9 @@ install that never made these choices asks once, the next time you run
 `mewla` in a terminal, even while Mewla is already running in the background. Without
 `tmux`, it offers your system's install command. Without a signed-in agent
 CLI, it offers Claude Code or Codex with their official installers, then their
-sign-in (`claude auth login` or `codex login`). One ready agent is enough.
+sign-in (`claude auth login` or `codex login`). One ready agent is enough, and
+Brain uses it. With more than one ready, it asks once which agent Brain should
+use, Claude Code first; change it any time with `mewla brain use <agent>`.
 
 Then it asks how your phone and browsers should reach this computer. Pick 1
 and sign in with GitHub: the computer gets its own address, such as

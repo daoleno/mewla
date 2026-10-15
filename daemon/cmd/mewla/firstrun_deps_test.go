@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/hostdeps"
 )
@@ -18,6 +19,9 @@ type fakeHost struct {
 	tmuxOK     bool
 	agentState map[string]doctor.AuthState // id -> auth; missing = not installed
 	failRun    bool
+	brainHost  string // agent Brain already uses
+	brainSet   bool   // a Brain host is set, even with an empty id
+	saved      []string
 }
 
 func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Platform) (*depsPrompt, *bytes.Buffer) {
@@ -59,11 +63,18 @@ func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Plat
 				}
 				if item.Usable {
 					check.UsableCount++
-					check.RecommendedHost = id
+					if check.RecommendedHost == "" {
+						check.RecommendedHost = id
+					}
 				}
 				check.Items = append(check.Items, item)
 			}
 			return check
+		},
+		brainHost: func() (string, bool) { return h.brainHost, h.brainSet || h.brainHost != "" },
+		setBrainHost: func(id string) error {
+			h.saved = append(h.saved, id)
+			return nil
 		},
 	}, &out
 }
@@ -194,6 +205,126 @@ func TestEnsureAgentSkipAndNonInteractive(t *testing.T) {
 		if !strings.Contains(out.String(), line) {
 			t.Fatalf("output missing %q:\n%s", line, out)
 		}
+	}
+}
+
+func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	both := map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}
+	host := &fakeHost{tmuxOK: true, agentState: both}
+	d, out := host.prompt("\n", true, ubuntuHost)
+	if _, ready, err := d.checkAll(); !ready || err != nil {
+		t.Fatalf("ready=%v err=%v\n%s", ready, err, out)
+	}
+	if strings.Join(host.saved, "|") != "claude" {
+		t.Fatalf("Enter saved %q, want claude, the default\n%s", host.saved, out)
+	}
+	for _, line := range []string{
+		"Claude Code, Codex · ready",
+		"Which agent should Brain use?",
+		"1. Claude Code   signed in",
+		"2. Codex         signed in",
+		"Brain uses Claude Code. Change it any time: mewla brain use codex",
+	} {
+		if !strings.Contains(out.String(), line) {
+			t.Fatalf("output missing %q:\n%s", line, out)
+		}
+	}
+
+	host = &fakeHost{tmuxOK: true, agentState: both}
+	d, out = host.prompt("2\n", true, ubuntuHost)
+	d.checkAll()
+	if strings.Join(host.saved, "|") != "codex" || !strings.Contains(out.String(), "Brain uses Codex. Change it any time: mewla brain use claude") {
+		t.Fatalf("choosing 2 saved %q\n%s", host.saved, out)
+	}
+}
+
+func TestCheckAllListsClaudeCodeFirstEvenWhenOnlyCodexSignInIsVerified(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnknown}}
+	d, out := host.prompt("\n", true, ubuntuHost)
+	d.checkAll()
+	if strings.Join(host.saved, "|") != "claude" || !strings.Contains(out.String(), "1. Claude Code   sign-in not checked") {
+		t.Fatalf("saved %q\n%s", host.saved, out)
+	}
+}
+
+func TestCheckAllDoesNotAskWithOneReadyAgent(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnauthenticated}}
+	d, out := host.prompt("", true, ubuntuHost)
+	if _, ready, _ := d.checkAll(); !ready {
+		t.Fatalf("codex not ready\n%s", out)
+	}
+	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Codex · Brain uses it") {
+		t.Fatalf("one ready agent: saved %q\n%s", host.saved, out)
+	}
+}
+
+func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	both := map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}
+	host := &fakeHost{tmuxOK: true, agentState: both, brainHost: "codex"}
+	d, out := host.prompt("", true, ubuntuHost)
+	d.checkAll()
+	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Codex · Brain uses it") {
+		t.Fatalf("chosen host: saved %q\n%s", host.saved, out)
+	}
+
+	// A Brain that already ran without a recorded executor keeps its agent.
+	host = &fakeHost{tmuxOK: true, agentState: both, brainSet: true}
+	d, out = host.prompt("", true, ubuntuHost)
+	d.checkAll()
+	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Brain keeps its agent") {
+		t.Fatalf("running Brain: saved %q\n%s", host.saved, out)
+	}
+}
+
+func TestChooseBrainHostWithoutTerminalTakesTheDefault(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
+	d, out := host.prompt("", false, ubuntuHost)
+	if err := d.chooseBrainHost(readyAgents(d.agents())); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(host.saved, "|") != "claude" || strings.Contains(out.String(), "Which agent") ||
+		!strings.Contains(out.String(), "Brain uses the first ready agent, Claude Code. Change it any time: mewla brain use codex") {
+		t.Fatalf("saved %q\n%s", host.saved, out)
+	}
+}
+
+func TestChooseBrainHostClosedInputSavesNothing(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
+	d, out := host.prompt("", true, ubuntuHost)
+	if err := d.chooseBrainHost(readyAgents(d.agents())); err != nil {
+		t.Fatal(err)
+	}
+	if len(host.saved) != 0 || !strings.Contains(out.String(), "Choose any time: mewla brain use <claude|codex>") {
+		t.Fatalf("saved %q\n%s", host.saved, out)
+	}
+}
+
+func TestCurrentBrainHostReadsTheBindingBrainUseWrites(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "")
+	if id, chosen := currentBrainHost(); id != "" || chosen {
+		t.Fatalf("fresh Brain root: %q %v", id, chosen)
+	}
+	root, err := brain.DefaultRoot()
+	if err != nil || !strings.HasPrefix(root, home) {
+		t.Fatalf("brain root %q outside temp HOME (%v)", root, err)
+	}
+	if err := newDepsPrompt(nil, nil, false).setBrainHost("codex"); err != nil {
+		t.Fatal(err)
+	}
+	if id, chosen := currentBrainHost(); id != "codex" || !chosen {
+		t.Fatalf("after save: %q %v", id, chosen)
+	}
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "grok")
+	if id, chosen := currentBrainHost(); id != "grok" || !chosen {
+		t.Fatalf("override: %q %v", id, chosen)
 	}
 }
 

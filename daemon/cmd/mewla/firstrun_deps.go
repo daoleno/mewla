@@ -12,8 +12,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/hostdeps"
 )
@@ -32,6 +35,12 @@ type depsPrompt struct {
 	// tmux and agents re-check the machine; tests replace them.
 	tmux   func() doctor.TmuxCheck
 	agents func() doctor.ExecutorsCheck
+	// brainHost names the agent Brain already uses; chosen is true when one
+	// is set by mewla brain use, an earlier first run, a Brain that already
+	// ran (id may then be empty) or MEWLA_BRAIN_HOST_EXECUTOR. setBrainHost
+	// saves a choice where mewla brain use does. Tests replace both.
+	brainHost    func() (id string, chosen bool)
+	setBrainHost func(id string) error
 }
 
 func newDepsPrompt(in *bufio.Reader, w io.Writer, interactive bool) *depsPrompt {
@@ -44,7 +53,43 @@ func newDepsPrompt(in *bufio.Reader, w io.Writer, interactive bool) *depsPrompt 
 		run:         runShownCommand,
 		tmux:        func() doctor.TmuxCheck { return doctor.CheckTmux(options) },
 		agents:      func() doctor.ExecutorsCheck { return doctor.CheckExecutors(options) },
+		brainHost:   currentBrainHost,
+		setBrainHost: func(id string) error {
+			root, err := brain.DefaultRoot()
+			if err != nil {
+				return err
+			}
+			return brain.SaveHostExecutorID(root, id)
+		},
 	}
+}
+
+// currentBrainHost reads the agent Brain uses from the environment override
+// or the Brain host binding mewla brain use writes.
+func currentBrainHost() (string, bool) {
+	if id := strings.TrimSpace(os.Getenv("MEWLA_BRAIN_HOST_EXECUTOR")); id != "" {
+		return id, true
+	}
+	root, err := brain.DefaultRoot()
+	if err != nil {
+		return "", false
+	}
+	host, err := brain.LoadHostSession(root)
+	if err != nil {
+		// Unreadable is not "never chosen": leave it alone.
+		return "", true
+	}
+	return host.ExecutorID, host.ExecutorID != "" || host.ID != ""
+}
+
+// setRunningBrainHost moves the Brain of the Mewla already running to id,
+// exactly as mewla brain use does.
+func setRunningBrainHost(stateDir, id string) error {
+	resp, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "brain_set_executor", ExecutorID: id})
+	if err != nil {
+		return err
+	}
+	return controlResponseError(resp)
 }
 
 // runShownCommand runs exactly the command that was printed, with the
@@ -112,7 +157,7 @@ func agentName(id string) string {
 
 // checkAll shows tmux and the agent CLI as aligned status rows, then offers
 // whatever is missing, tmux first.
-func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool) {
+func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool, err error) {
 	style := d.style()
 	tmux, agents := d.tmux(), d.agents()
 	tmuxReady = tmux.Status == doctor.StatusOK
@@ -124,9 +169,22 @@ func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool) {
 		tmuxValue = "found, but it does not work"
 	}
 	agentValue := "none installed"
+	var choices []doctor.ExecutorCheck
 	switch {
 	case agentReady:
-		agentValue = agentName(agents.RecommendedHost) + style.dim(" · Brain uses it")
+		ready := readyAgents(agents)
+		host, chosen := d.brainHost()
+		switch {
+		case chosen && host != "":
+			agentValue = agentName(host) + style.dim(" · Brain uses it")
+		case chosen:
+			agentValue = agentList(ready) + style.dim(" · Brain keeps its agent")
+		case len(ready) > 1:
+			agentValue = agentList(ready) + style.dim(" · ready")
+			choices = ready
+		default:
+			agentValue = agentName(agents.RecommendedHost) + style.dim(" · Brain uses it")
+		}
 	case anyInstalledAgent(agents) != "":
 		agentValue = agentName(anyInstalledAgent(agents)) + " · not signed in"
 	}
@@ -134,6 +192,11 @@ func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool) {
 	fmt.Fprintln(d.w, style.bold("This computer"))
 	fmt.Fprintln(d.w, style.check(tmuxReady, "tmux", tmuxValue))
 	fmt.Fprintln(d.w, style.check(agentReady, "Agent CLI", agentValue))
+	if len(choices) > 1 {
+		if err := d.chooseBrainHost(choices); err != nil {
+			return tmuxReady, agentReady, err
+		}
+	}
 	if !tmuxReady {
 		fmt.Fprintln(d.w)
 		tmuxReady = d.ensureTmux()
@@ -142,7 +205,87 @@ func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool) {
 		fmt.Fprintln(d.w)
 		agentReady = d.ensureAgent()
 	}
-	return tmuxReady, agentReady
+	return tmuxReady, agentReady, nil
+}
+
+// chooseBrainHost asks once which ready agent Brain runs on, Claude Code
+// first, and saves the answer as Brain's host. Without a terminal it takes
+// the first and says how to change it. Ctrl-C stops first run with nothing
+// saved, so it is asked again.
+func (d *depsPrompt) chooseBrainHost(ready []doctor.ExecutorCheck) error {
+	style := d.style()
+	fmt.Fprintln(d.w)
+	pick := 0
+	if d.interactive {
+		fmt.Fprintln(d.w, style.bold("Which agent should Brain use?"))
+		fmt.Fprintln(d.w)
+		options := make([]menuOption, 0, len(ready))
+		for _, item := range ready {
+			note := "sign-in not checked"
+			if item.Auth == doctor.AuthAuthenticated {
+				note = "signed in"
+			}
+			options = append(options, menuOption{label: agentName(item.ID), note: note})
+		}
+		switch pick = chooseOption(d.in, d.w, options); pick {
+		case menuCancelled:
+			return errStartupCancelled
+		case menuClosed:
+			fmt.Fprintf(d.w, "Brain's agent is not chosen yet. Choose any time: %s\n", style.cmd(brainUseHint(readyIDs(ready))))
+			return nil
+		}
+	}
+	chosen := ready[pick]
+	if err := d.setBrainHost(chosen.ID); err != nil {
+		fmt.Fprintf(d.w, "Could not save Brain's agent (%v). Choose later: %s\n", err, style.cmd("mewla brain use "+chosen.ID))
+		return nil
+	}
+	others := slices.DeleteFunc(readyIDs(ready), func(id string) bool { return id == chosen.ID })
+	verb := "uses"
+	if !d.interactive {
+		verb = "uses the first ready agent,"
+	}
+	fmt.Fprintf(d.w, "✓ Brain %s %s. Change it any time: %s\n", verb, agentName(chosen.ID), style.cmd(brainUseHint(others)))
+	return nil
+}
+
+// brainUseHint is the mewla brain use command that moves Brain to one of ids.
+func brainUseHint(ids []string) string {
+	if len(ids) == 1 {
+		return "mewla brain use " + ids[0]
+	}
+	return "mewla brain use <" + strings.Join(ids, "|") + ">"
+}
+
+// readyAgents lists usable executors in hostdeps' AgentOrder, the order the
+// install menu uses.
+func readyAgents(check doctor.ExecutorsCheck) []doctor.ExecutorCheck {
+	ready := []doctor.ExecutorCheck{}
+	for _, item := range check.Items {
+		if item.Usable {
+			ready = append(ready, item)
+		}
+	}
+	slices.SortStableFunc(ready, func(a, b doctor.ExecutorCheck) int {
+		return hostdeps.AgentRank(a.ID) - hostdeps.AgentRank(b.ID)
+	})
+	return ready
+}
+
+func readyIDs(ready []doctor.ExecutorCheck) []string {
+	ids := make([]string, 0, len(ready))
+	for _, item := range ready {
+		ids = append(ids, item.ID)
+	}
+	return ids
+}
+
+func agentList(ready []doctor.ExecutorCheck) string {
+	names := make([]string, 0, len(ready))
+	for _, item := range ready {
+		names = append(names, agentName(item.ID))
+	}
+	return strings.Join(names, ", ")
 }
 
 func anyInstalledAgent(check doctor.ExecutorsCheck) string {

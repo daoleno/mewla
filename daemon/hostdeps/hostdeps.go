@@ -197,8 +197,26 @@ type Agent struct {
 	Login   string
 }
 
+// agentOrder lists executor ids in the one order Mewla uses everywhere: the
+// install menu, doctor's recommended host and the Brain host picked when more
+// than one agent CLI is ready. Claude Code comes first, as on mewla.ai.
+var agentOrder = []string{"claude", "codex", "agent", "grok", "pi", "opencode"}
+
+// AgentOrder returns the executor ids in Mewla's preference order.
+func AgentOrder() []string {
+	return slices.Clone(agentOrder)
+}
+
+// AgentRank is id's place in AgentOrder; ids outside it sort after.
+func AgentRank(id string) int {
+	if index := slices.Index(agentOrder, id); index >= 0 {
+		return index
+	}
+	return len(agentOrder)
+}
+
 // Agents returns the official install and sign-in commands for the agent CLIs
-// first run offers, in menu order. macOS, Linux and WSL share the official
+// first run offers, in AgentOrder. macOS, Linux and WSL share the official
 // native installers (code.claude.com/docs/en/setup, github.com/openai/codex).
 func Agents(p Platform) []Agent {
 	if p.GOOS != "darwin" && p.GOOS != "linux" {
@@ -208,7 +226,7 @@ func Agents(p Platform) []Agent {
 	if p.Headless {
 		codexLogin = "codex login --device-auth"
 	}
-	return []Agent{
+	agents := []Agent{
 		{
 			ID:      "claude",
 			Name:    "Claude Code",
@@ -222,6 +240,8 @@ func Agents(p Platform) []Agent {
 			Login:   codexLogin,
 		},
 	}
+	slices.SortStableFunc(agents, func(a, b Agent) int { return AgentRank(a.ID) - AgentRank(b.ID) })
+	return agents
 }
 
 // ExtraPathDirs are directories installers put binaries in that a fresh shell
