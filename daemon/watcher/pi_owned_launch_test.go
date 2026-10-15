@@ -601,7 +601,7 @@ func TestPollPiSessionBindingClearedOnProviderSwitch(t *testing.T) {
 func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
 	binDir := t.TempDir()
 	tmuxPath := filepath.Join(binDir, "tmux")
-	script := "#!/bin/sh\n" +
+	script := "#!/bin/sh\n[ \"$1\" = -u ] && shift\n" +
 		"printf '%s\\n' \"$*\" >> \"$TMUX_OPTION_LOG\"\n" +
 		"exit 0\n"
 	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
@@ -691,7 +691,7 @@ func TestListTmuxWindowsParsesPiSessionBinding(t *testing.T) {
 	binding := EncodePiSessionBinding("--session", filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl"))
 	line := "%1\tpi\t/repo/mewla\tpi\t900\t\t\t\t" + binding + "\tfixture"
 	tmuxPath := filepath.Join(binDir, "tmux")
-	script := "#!/bin/sh\n" +
+	script := "#!/bin/sh\n[ \"$1\" = -u ] && shift\n" +
 		"if [ \"$1\" = \"list-panes\" ]; then\n" +
 		"  cat <<'EOF'\n" +
 		line + "\n" +

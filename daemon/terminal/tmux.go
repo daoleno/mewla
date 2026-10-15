@@ -3,6 +3,7 @@ package terminal
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,11 +27,11 @@ var terminalIDCounter atomic.Int64
 // Sessions). Mewla-owned Brain/delegated Sessions live on the daemon-namespaced
 // server, so their linked view sessions are created there too.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
-	return exec.Command("tmux", append(tmuxsocket.Args(socketPath), args...)...)
+	return exec.Command("tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
 }
 
 func tmuxCommandContext(ctx context.Context, socketPath string, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, "tmux", append(tmuxsocket.Args(socketPath), args...)...)
+	return exec.CommandContext(ctx, "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
 }
 
 // TmuxBackend attaches a dedicated tmux client to an existing tmux session
@@ -682,8 +683,11 @@ func tmuxLinkedViewSession(
 	if strings.HasPrefix(targetID, "%") {
 		out, probeErr := tmuxCommandContext(ctx, socket, "display-message", "-p", "-t", targetID, "#{pane_id}\t#{window_id}").Output()
 		fields := strings.Split(strings.TrimSpace(string(out)), "\t")
-		if probeErr != nil || len(fields) != 2 || fields[0] != targetID {
-			return "", nil, fmt.Errorf("Worker pane %s is unavailable", targetID)
+		if probeErr != nil {
+			return "", nil, fmt.Errorf("Worker pane %s is unavailable: tmux display-message: %w%s", targetID, probeErr, tmuxStderr(probeErr))
+		}
+		if len(fields) != 2 || fields[0] != targetID {
+			return "", nil, fmt.Errorf("Worker pane %s is unavailable: tmux display-message returned %q", targetID, strings.TrimSpace(string(out)))
 		}
 		sourceTarget, err = fields[1], nil
 	}
@@ -775,6 +779,14 @@ func tmuxLinkViewWindowCommand(
 		"-t",
 		bootstrapTarget,
 	)
+}
+
+func tmuxStderr(err error) string {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || len(bytes.TrimSpace(exitErr.Stderr)) == 0 {
+		return ""
+	}
+	return ": " + string(bytes.TrimSpace(exitErr.Stderr))
 }
 
 func tmuxSourceWindowTarget(targetID string) (string, error) {
