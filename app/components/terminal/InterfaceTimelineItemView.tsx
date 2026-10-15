@@ -16,6 +16,7 @@ import { PlanUpdate } from "./InterfaceTimelinePlan";
 import type { PlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
 import { TaskNotificationCard } from "./TaskNotificationCard";
+import { ComputerMessageCard } from "./ComputerMessageCard";
 import {
   BRAIN_PRESENCE_ITEM_PREFIX,
   BrainCatRow,
@@ -23,6 +24,7 @@ import {
 } from "../mewla/BrainCompanion";
 import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "./InterfaceTimelineModel";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
+import type { ComputerMessageTimelineItem } from "./computerMessageCardModel";
 import {
   AssistantMessage,
   UserMessage,
@@ -35,7 +37,8 @@ export type TimelineItem =
   | ActivityTimelineItem
   | PlanTimelineItem
   | BrainWorkEventTimelineItem
-  | TaskNotificationTimelineItem;
+  | TaskNotificationTimelineItem
+  | ComputerMessageTimelineItem;
 
 interface TimelineItemViewProps {
   item: TimelineItem;
@@ -95,6 +98,9 @@ function TimelineItemViewImpl({
         theme={theme}
       />
     );
+  }
+  if (item.type === "computer-message") {
+    return <ComputerMessageCard item={item} chrome={chrome} theme={theme} />;
   }
   const activity = (
     <ActivityEvent

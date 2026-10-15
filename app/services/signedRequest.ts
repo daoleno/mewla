@@ -11,7 +11,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 /** A request signed by this phone's device key for one purpose. */
 export async function signedFetch(
   server: StoredServer,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   pathname: string,
   purpose: string,
   body: string | undefined,
