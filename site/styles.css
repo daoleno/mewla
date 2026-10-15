@@ -54,6 +54,7 @@ img { max-width: 100%; }
 .bar nav .nav-cta:hover { color: #fff; transform: none; box-shadow: none; background: var(--red-ink); border-color: var(--red-ink); }
 .bar nav a { white-space: nowrap; }
 @media (max-width: 920px) { .bar nav { gap: 18px; } }
+@media (max-width: 840px) { .bar nav .nav-x { display: none; } }
 @media (max-width: 760px) { .bar nav > a:not(.btn):not(.gh) { display: none; } .bar nav { gap: 16px; } .bar nav .nav-cta { margin-left: 0; } }
 
 /* buttons */
@@ -262,7 +263,132 @@ img { max-width: 100%; }
 .sw { position: relative; width: 42px; height: 24px; border-radius: 999px; background: #2c6fe0; flex: none; }
 .sw::after { content: ""; position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
 
-/* 7: Plugins, the dark climax */
+/* 7: your other computers. Brain on Linux hands the task over; on the Mac an agent makes
+   the channel in Slack, then opens it in Chrome in its own tab group; the person comes
+   first. Content sets every height (no aspect-ratio, no container units), so older
+   engines lay it out the same. Finished state by default; with script it plays once. */
+.comp { padding: clamp(110px, 13vw, 170px) 0 0; }
+.comp h2 { letter-spacing: -.015em; max-width: none; }
+.cp-head > p:not(.kicker) { margin-top: 18px; font-size: 19px; color: var(--soft); }
+.cp { display: grid; gap: 26px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "route" "phone" "desk" "ctl"; max-width: 1060px; margin: clamp(40px, 5vw, 64px) auto 0; }
+@media (min-width: 980px) { .cp { grid-template-columns: 330px minmax(0, 1fr); grid-template-areas: "route route" "phone desk" "ctl ctl"; gap: 28px 44px; align-items: center; } }
+.cp-route { grid-area: route; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 14.5px; font-weight: 600; }
+.cp-route span { display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px 8px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); white-space: nowrap; }
+.cp-route .lg { font-size: 19px; }
+.cp-route i { position: relative; flex: 0 1 140px; min-width: 40px; height: 2px; background: repeating-linear-gradient(90deg, #d6cebf 0, #d6cebf 6px, transparent 6px, transparent 11px); }
+.cp-route b { position: absolute; left: 0; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: cp-hop 3.2s var(--ease) infinite; }
+@keyframes cp-hop { 0% { left: 0; opacity: 0; } 12%, 80% { opacity: 1; } 100% { left: calc(100% - 8px); opacity: 0; } }
+
+/* the phone: Brain's conversation on Linux, with the app's handover cards */
+.cp-phone { grid-area: phone; justify-self: center; width: min(100%, 340px); padding: 12px 12px 16px; border: 9px solid var(--dark); border-radius: 38px; background: var(--card); box-shadow: 0 30px 60px -24px rgba(20, 12, 6, .45); }
+.cp-top { display: flex; align-items: center; gap: 8px; padding: 2px 4px 12px; margin-bottom: 14px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.cp-top img { width: 24px; height: 24px; border-radius: 6px; }
+.cp-top span { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--tint); font-size: 12px; font-weight: 600; color: var(--soft); }
+.cp-top .lg { font-size: 14px; }
+.cp-phone .msg { max-width: 90%; padding: 10px 14px; font-size: 14px; border-radius: 18px; }
+.cp-phone .msg.me { border-bottom-right-radius: 6px; }
+.cp-phone .msg.brain { margin-top: 10px; align-items: flex-start; border-bottom-left-radius: 6px; }
+.cp-phone .msg.brain img { width: 22px; height: 22px; border-radius: 6px; }
+.cm { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.cm-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12.5px; font-weight: 500; color: var(--soft); }
+.cm-head span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-ok { display: inline-flex; align-items: center; gap: 5px; font-style: normal; font-weight: 600; color: #22703c; }
+.cm-ok svg { width: 14px; height: 14px; }
+.cm-ok circle { fill: #2f8a4c; }
+.cm-ok path { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cm-body { font-size: 14px; line-height: 1.45; }
+.cp .nw { white-space: nowrap; }
+.cm-foot { display: flex; gap: 12px; margin-top: 8px; font-size: 12.5px; color: var(--soft); }
+.cm-foot b { margin-left: auto; font-weight: 600; color: var(--red-ink); }
+
+/* the Mac: its desktop, the Slack app and the user's Chrome */
+.cp-desk { grid-area: desk; position: relative; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); padding: 44px 18px 24px; border: 10px solid var(--dark); border-radius: 28px; background: linear-gradient(170deg, #e4d8c5 0%, #d2bfa3 55%, #bea586 100%); overflow: hidden; box-shadow: 0 30px 60px -24px rgba(20, 12, 6, .45); }
+.mbar { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 12px; background: rgba(251, 250, 247, .72); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.mbar .lg { font-size: 14px; }
+.mbar em { margin-left: auto; font-style: normal; }
+.win { position: relative; min-width: 0; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(22, 20, 18, .07), 0 20px 40px -16px rgba(60, 40, 20, .42); }
+.sl { grid-column: 1 / 9; grid-row: 1; align-self: start; }
+.cr { grid-column: 5 / 13; grid-row: 1; z-index: 1; margin-top: 132px; }
+.tbar { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: var(--tint); border-bottom: 1px solid var(--line); }
+.tbar i { width: 10px; height: 10px; border-radius: 50%; background: #ee6a5f; }
+.tbar i + i { background: #f5bd4f; } .tbar i + i + i { background: #61c454; }
+.tbar span { display: inline-flex; align-items: center; gap: 6px; margin: 0 auto; padding-right: 40px; font-size: 12.5px; font-weight: 600; color: var(--soft); }
+.tbar .lg { font-size: 14px; }
+.sl-body { display: grid; grid-template-columns: 36% minmax(0, 1fr); min-height: 214px; }
+.sl-side { list-style: none; margin: 0; padding: 12px 8px; background: #2e2228; color: #d9ced3; font-size: 13px; }
+.sl-side li { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; overflow: hidden; }
+.sl-side .sl-new { background: rgba(255, 255, 255, .16); color: #fff; font-weight: 600; }
+.lk { flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.sl-main { display: flex; flex-direction: column; padding: 14px 14px 12px; min-width: 0; }
+.sl-ch { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 700; }
+.sl-ch .lk { width: 15px; height: 15px; stroke-width: 1.8; }
+.sl-note { margin-top: 4px; font-size: 13px; color: var(--soft); }
+.sl-in { margin-top: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; color: var(--faint); white-space: nowrap; overflow: hidden; }
+.sl-dlg { position: absolute; left: 0; right: 0; top: 30px; bottom: 0; display: flex; align-items: center; justify-content: center; background: rgba(22, 20, 18, .3); opacity: 0; visibility: hidden; }
+.dlg-box { width: min(86%, 270px); padding: 14px 16px; border-radius: 12px; background: #fff; box-shadow: 0 16px 36px -12px rgba(20, 12, 6, .5); }
+.dlg-t { font-size: 15px; font-weight: 700; }
+.dlg-f { margin-top: 10px; padding: 6px 10px; border: 1.5px solid #2c6fe0; border-radius: 7px; font-size: 13.5px; }
+.dlg-p { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; font-size: 13.5px; }
+.dlg-b { display: flex; justify-content: flex-end; margin-top: 12px; }
+.dlg-go { position: relative; padding: 6px 16px; border-radius: 7px; background: #1d7a5a; color: #fff; font-size: 13.5px; font-weight: 600; }
+.tapr { position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; border: 2.5px solid var(--red); border-radius: 50%; opacity: 0; }
+.cur { position: absolute; left: 55%; top: 45%; width: 16px; height: 23px; fill: var(--ink); stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
+.tabs { display: flex; align-items: flex-end; gap: 2px; padding: 8px 8px 0; background: #e9e5dd; overflow: hidden; }
+.tab { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0; padding: 6px 11px 7px; border-radius: 9px 9px 0 0; font-size: 12px; color: var(--soft); white-space: nowrap; overflow: hidden; }
+.tab.on { flex: 0 0 auto; background: #fff; color: var(--ink); font-weight: 500; box-shadow: inset 0 -3px 0 var(--red); }
+.tab .lg { font-size: 13px; }
+.grp { flex: none; align-self: center; width: 12px; height: 12px; margin: 0 3px 0 8px; border-radius: 50%; background: var(--red); }
+.url { margin: 6px 8px; padding: 5px 12px; border-radius: 999px; background: var(--tint); font-size: 12px; color: var(--soft); }
+.dbg { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #f3f0ea; border-block: 1px solid var(--line); font-size: 11.5px; line-height: 1.35; }
+.dbg span { flex: none; margin-left: auto; padding: 2px 10px; border: 1px solid #cfc8bc; border-radius: 6px; font-weight: 600; }
+.cr-page { padding: 14px 14px 18px; }
+@media (max-width: 599px) {
+  .cp-desk { padding: 38px 10px 14px; border-width: 8px; border-radius: 24px; }
+  .sl, .cr { grid-column: 1 / 13; }
+  .cr { grid-row: 2; margin: -34px 0 0 22px; }
+  .sl-body { min-height: 190px; }
+  .tab { flex: none; }
+  .tab.mute { display: none; }
+  .mbar span { display: none; }
+}
+
+/* the person comes first: Screen while an agent works, and the one switch */
+.cp-ctl { grid-area: ctl; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 760px) { .cp-ctl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cp-card { padding: 16px 18px 18px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); box-shadow: var(--shadow); }
+.cp-card .cap { margin-bottom: 10px; }
+.nt { display: flex; gap: 10px; padding: 12px; border-radius: 14px; background: var(--tint); }
+.nt svg, .acts svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.nt p { font-size: 13.5px; line-height: 1.45; color: var(--soft); }
+.nt b { display: block; font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.acts span { display: inline-flex; align-items: center; gap: 6px; padding: 8px 15px; border: 1px solid var(--line); border-radius: 999px; font-size: 13.5px; font-weight: 600; }
+.acts svg { width: 16px; height: 16px; }
+.acts .go { background: var(--ink); border-color: var(--ink); color: #fff; }
+.cp-card .row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.cp-card .row:last-child { border-bottom: 0; padding-bottom: 0; }
+.cp-card .row b { flex: 1; font-weight: 600; }
+.cp-card .row small { flex-basis: 100%; font-size: 13px; color: var(--soft); }
+.cp-more { margin-top: 26px; text-align: center; font-size: 14.5px; color: var(--soft); }
+.cp-more a { color: inherit; white-space: nowrap; }
+.js .cp .msg, .js .cp .cm, .js .cp .cm-ok, .js .cp .sl-new, .js .cp .sl-main .sl-ch, .js .cp .sl-main .sl-note, .js .cp .cr { opacity: 0; }
+.js .cp .sl-dlg { opacity: 1; visibility: visible; }
+.js .cp .cur { transform: translate(70px, 58px); }
+.js .cp.in .msg.me { animation: pop .5s var(--ease) .3s both; }
+.js .cp.in .msg.brain { animation: pop .5s var(--ease) 1s both; }
+.js .cp.in .cm-to { animation: drop .6s var(--ease) 1.7s both; }
+.js .cp.in .cm-ok { animation: rm-show .3s 2.5s both; }
+.js .cp.in .cur { animation: cp-move .8s var(--ease) 2.9s both; }
+.js .cp.in .tapr { animation: sc-ring .7s ease-out 3.7s both; }
+.js .cp.in .sl-dlg { animation: cp-out .35s ease 4.1s both; }
+.js .cp.in .sl-new, .js .cp.in .sl-main .sl-ch, .js .cp.in .sl-main .sl-note { animation: sc-in .45s var(--ease) 4.4s both; }
+.js .cp.in .cr { animation: cp-rise .6s var(--ease) 5.1s both; }
+.js .cp.in .cm-from { animation: drop .6s var(--ease) 6.2s both; }
+@keyframes cp-move { from { transform: translate(70px, 58px); } to { transform: none; } }
+@keyframes cp-out { from { opacity: 1; visibility: visible; } to { opacity: 0; visibility: hidden; } }
+@keyframes cp-rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+/* 8: Plugins, the dark climax */
 .plugins { position: relative; margin-top: clamp(110px, 13vw, 170px); padding: clamp(90px, 11vw, 150px) 0; background: var(--dark); color: #f4f0ea; overflow: hidden; }
 .plugins::before { content: ""; position: absolute; left: 50%; top: -30%; width: 900px; height: 900px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(200, 55, 43, .28), transparent); pointer-events: none; }
 .pl-grid { position: relative; display: grid; gap: 72px; align-items: center; grid-template-columns: minmax(0, 1fr); }
@@ -296,7 +422,7 @@ img { max-width: 100%; }
 .btns .yes { background: var(--ink); border-color: var(--ink); color: #fff; }
 .btns .yes.stamped { background: var(--red); border-color: var(--red); animation: thump-flat .36s ease-out; }
 
-/* 8: calendar */
+/* 9: calendar */
 .ev { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 14px; border-radius: 16px; background: var(--tint); font-size: 15px; font-weight: 600; }
 .ev + .ev { margin-top: 8px; }
 .ev b { font: 500 13px var(--mono); color: var(--soft); padding-top: 2px; }
@@ -547,5 +673,8 @@ img { max-width: 100%; }
   .js .land .cover { transform: translateX(108px); }
   .js .rm .s2, .js .rm .s3, .js .rm .s4, .js .rm .rm-gh, .js .rm .url, .js .rm .wait { opacity: 1; }
   .js .rm .num, .js .rm .wait .num { background: var(--red); color: #fff; }
+  .js .cp .msg, .js .cp .cm, .js .cp .cm-ok, .js .cp .sl-new, .js .cp .sl-main .sl-ch, .js .cp .sl-main .sl-note, .js .cp .cr { opacity: 1; }
+  .js .cp .sl-dlg { opacity: 0; visibility: hidden; }
+  .js .cp .cur { transform: none; }
   .toy { display: none; }
 }

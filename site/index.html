@@ -80,6 +80,7 @@
     <nav aria-label="Sections">
       <a href="#story">How it works</a>
       <a href="#screen">Screen</a>
+      <a class="nav-x" href="#computers">Computers</a>
       <a href="#plugins">Plugins</a>
       <a href="#install">Install</a>
       <a href="docs/">Docs</a>
@@ -289,11 +290,95 @@
     </div>
   </section>
 
+  <!-- Your other computers: Brain on Linux hands a task to the Mac, whose agent does it
+       on the Mac's screen and in the user's signed-in Chrome; the person comes first -->
+  <section class="comp" id="computers">
+    <div class="wrap">
+      <div class="cp-head">
+        <p class="kicker">07 · Your other computers <span class="tag">New</span></p>
+        <h2>Ask here.<br>Your Mac does it.</h2>
+        <p>In its own apps and your signed-in Chrome. Take over any time.</p>
+      </div>
+      <figure class="cp rv">
+        <p class="cp-route" aria-label="Brain on Linux hands the task to the Mac">
+          <span><svg class="lg"><use href="#lg-linux"/></svg>Brain on Linux</span><i aria-hidden="true"><b></b></i><span><svg class="lg"><use href="#lg-apple"/></svg>Mac</span>
+        </p>
+        <div class="cp-phone">
+          <p class="cp-top"><img src="mark.png" alt=""><b>Brain</b><span><svg class="lg"><use href="#lg-linux"/></svg>Linux</span></p>
+          <p class="msg me">Make a private Slack channel, <span class="nw">#atlas-beta</span>, for the 1.4 testers.</p>
+          <p class="msg brain"><img src="mark.png" alt="">Slack is signed in on the Mac. I’ve asked the Mac to do it.</p>
+          <div class="cm cm-to">
+            <p class="cm-head"><span>Handed to Mac · 14:02</span><em class="cm-ok"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M4.8 8.2 7 10.3l4.2-4.6"/></svg>Delivered</em></p>
+            <p class="cm-body">Create a private Slack channel <span class="nw">#atlas-beta</span> for the atlas-notes 1.4 testers.</p>
+            <p class="cm-foot"><span>Show all</span><b>Open on Mac</b></p>
+          </div>
+          <div class="cm cm-from">
+            <p class="cm-head"><span>Reply from Mac · 14:05</span></p>
+            <p class="cm-body">Done. <span class="nw">#atlas-beta</span> is private, with no one invited yet. I checked it in your Chrome.</p>
+            <p class="cm-foot"><span>Show all</span><b>Open on Mac</b></p>
+          </div>
+        </div>
+        <div class="cp-desk" data-perch="0.5" data-act="patrol" role="img" aria-label="The Mac's desktop: an agent creates the private channel atlas-beta in the Slack app, then opens it in Chrome, in a tab group of its own">
+          <p class="mbar"><svg class="lg"><use href="#lg-apple"/></svg><b>Slack</b><span>File</span><span>Edit</span><span>View</span><em>Tue 14:03</em></p>
+          <div class="win sl">
+            <p class="tbar"><i></i><i></i><i></i><span><svg class="lg"><use href="#lg-slack"/></svg>Slack</span></p>
+            <div class="sl-body">
+              <ul class="sl-side">
+                <li># general</li>
+                <li># releases</li>
+                <li class="sl-new"><svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></svg>atlas-beta</li>
+              </ul>
+              <div class="sl-main">
+                <p class="sl-ch"><svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></svg>atlas-beta</p>
+                <p class="sl-note">You created this private channel today.</p>
+                <p class="sl-in">Message #atlas-beta</p>
+              </div>
+            </div>
+            <div class="sl-dlg">
+              <div class="dlg-box">
+                <p class="dlg-t">Create a channel</p>
+                <p class="dlg-f"># atlas-beta</p>
+                <p class="dlg-p"><span>Make private</span><i class="sw" aria-hidden="true"></i></p>
+                <p class="dlg-b"><span class="dlg-go">Create<b class="tapr"></b><svg class="cur" viewBox="0 0 22 32" aria-hidden="true"><path d="M1 1v26l6.5-6 4.5 10 4.6-2-4.4-9.8H21z"/></svg></span></p>
+              </div>
+            </div>
+          </div>
+          <div class="win cr">
+            <p class="tabs"><span class="tab">Inbox</span><span class="tab mute">Calendar</span><i class="grp" aria-hidden="true"></i><span class="tab on"><svg class="lg"><use href="#lg-slack"/></svg>atlas-beta · Slack</span></p>
+            <p class="url">app.slack.com</p>
+            <p class="dbg">“Playwright Extension” started debugging this browser <span>Cancel</span></p>
+            <div class="cr-page">
+              <p class="sl-ch"><svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></svg>atlas-beta</p>
+              <p class="sl-note">Private channel · 1 member</p>
+            </div>
+          </div>
+        </div>
+        <div class="cp-ctl">
+          <div class="cp-card">
+            <p class="cap">Screen · Mac</p>
+            <div class="nt">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg>
+              <p><b>codex is using Mac</b>Watch it work, or take over to use the screen yourself, which stops it. The screen opens by itself when it is done.</p>
+            </div>
+            <p class="acts"><span class="go">Take over</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>Watch</span><span>Stop codex</span></p>
+          </div>
+          <div class="cp-card">
+            <p class="cap">Settings · Agents on Mac</p>
+            <p class="row"><b>Agents can use this computer</b><i class="sw" aria-label="On"></i></p>
+            <p class="row"><b>Your Chrome</b><small>Agents use your Chrome, in their own tab group.</small></p>
+            <p class="row"><b>This computer’s screen</b><small>Agents can see and use this screen. Watch or stop them from Screen.</small></p>
+          </div>
+        </div>
+      </figure>
+      <p class="cp-more"><a href="docs/computers/">Your other computers</a> · <a href="docs/your-browser/">Agents in your browser</a> · <a href="docs/screen/#agents-on-the-screen">Agents on the screen</a></p>
+    </div>
+  </section>
+
   <!-- The climax: Plugins -->
   <section class="plugins" id="plugins">
     <div class="wrap pl-grid">
       <div class="pl-copy">
-        <p class="kicker">07 · Plugins <span class="tag">Preview</span></p>
+        <p class="kicker">08 · Plugins <span class="tag">Preview</span></p>
         <h2>Then Brain reaches past your computer.</h2>
         <p>It reads your tools. Changes wait for your yes.</p>
         <ul class="hub rv" aria-label="Plugins">
@@ -323,7 +408,7 @@
   <section class="story after">
     <ol class="wrap beats">
       <li class="beat">
-        <div class="copy"><span class="n">08</span><h3>Monday’s check is booked.</h3><p>Brain puts it on the Calendar. It runs as Work when the day comes.</p></div>
+        <div class="copy"><span class="n">09</span><h3>Monday’s check is booked.</h3><p>Brain puts it on the Calendar. It runs as Work when the day comes.</p></div>
         <div class="vis card cal rv" data-perch="0.72" data-act="sleep">
           <p class="cap">Calendar</p>
           <p class="ev"><b>Fri 17:00</b><span>atlas-notes 1.4 released<small>Done</small></span></p>
