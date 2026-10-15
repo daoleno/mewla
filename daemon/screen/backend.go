@@ -29,6 +29,11 @@ type Backend interface {
 // the display goes to sleep.
 var ErrCaptureStopped = errors.New("screen capture stopped")
 
+// appKeyer is a session that can send keys to one app, in front or not.
+type appKeyer interface {
+	KeyTo(pid int, keysym uint32, down bool) error
+}
+
 // displayHolder keeps the display on, which an agent's capture needs: a
 // display that sleeps takes the capture with it.
 type displayHolder interface{ HoldDisplay(on bool) }

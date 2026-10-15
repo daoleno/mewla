@@ -133,3 +133,30 @@ func TestAgentActsOnElementsById(t *testing.T) {
 		t.Fatalf("audit:\n%s", audit)
 	}
 }
+
+// Keys and text can go to an app behind others, without touching the one in
+// front; pointer actions can't, since only keys reach one app.
+func TestAgentTypesIntoAnAppBehindOthers(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = fakeApps()
+	if got := act(t, s, "%7", AgentAction{Action: "type", Text: "hi", App: "Safari"}).Text; !strings.Contains(got, "app_state") {
+		t.Fatalf("type: %q", got)
+	}
+	act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+l", App: "202"})
+	backend.mu.Lock()
+	keys, global := backend.AppKeys, len(backend.Keys)
+	backend.mu.Unlock()
+	if global != 0 || len(keys) != 8 {
+		t.Fatalf("keys to the app %+v, to the computer %d", keys, global)
+	}
+	for _, k := range keys {
+		if k.PID != 202 {
+			t.Fatalf("a key went elsewhere: %+v", keys)
+		}
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{1, 1}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "only type, key and hold_key") {
+		t.Fatalf("click in an app: %v", err)
+	}
+	// The agent's own keys to the app are not a person at the computer.
+	act(t, s, "%7", AgentAction{Action: "type", Text: "more", App: "Safari"})
+}

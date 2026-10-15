@@ -44,6 +44,7 @@ type FakeBackend struct {
 	RunningApps    []FakeApp
 	Retained       int
 	ElementActions []FakeElementAction
+	AppKeys        []FakeAppKey
 }
 
 // SleepDisplay turns the display off, which stops every running capture.
@@ -100,6 +101,12 @@ type FakePointer struct {
 type FakeKey struct {
 	Keysym uint32
 	Down   bool
+}
+
+// FakeAppKey is a key sent to one app.
+type FakeAppKey struct {
+	PID int
+	FakeKey
 }
 
 func NewFakeBackend(width, height int) *FakeBackend {
@@ -249,6 +256,19 @@ func (s *fakeSession) Key(keysym uint32, down bool) error {
 	}
 	return nil
 }
+
+// KeyTo sends a key to one app: it counts as input, like any posted event,
+// but leaves the screen as it is.
+func (s *fakeSession) KeyTo(pid int, keysym uint32, down bool) error {
+	f := s.backend
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.AppKeys = append(f.AppKeys, FakeAppKey{pid, FakeKey{keysym, down}})
+	f.lastInput = time.Now()
+	return nil
+}
+
+var _ appKeyer = (*fakeSession)(nil)
 
 func (s *fakeSession) Close() error { return nil }
 

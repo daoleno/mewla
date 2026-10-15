@@ -631,18 +631,49 @@ func (a *agentSession) act(ctx context.Context, action AgentAction) (AgentResult
 		}
 		return a.screenshot(ctx)
 	}
-	if err := a.input(action); err != nil {
+	// Keys can go to one app, which stays where it is.
+	pid := 0
+	if action.App != "" {
+		switch action.Action {
+		case "type", "key", "hold_key":
+		default:
+			return AgentResult{}, fmt.Errorf("%s works on the screen; only type, key and hold_key take an app", action.Action)
+		}
+		if _, ok := a.session.(appKeyer); !ok || a.apps == nil {
+			return AgentResult{}, ErrNoApps
+		}
+		apps, err := a.apps.Apps(ctx)
+		if err != nil {
+			return AgentResult{}, err
+		}
+		app, err := resolveApp(apps, action.App)
+		if err != nil {
+			return AgentResult{}, err
+		}
+		pid = app.PID
+	}
+	if err := a.input(action, pid); err != nil {
 		return AgentResult{}, err
 	}
 	a.mu.Lock()
 	a.lastAct = time.Now()
 	a.mu.Unlock()
+	if pid != 0 {
+		return AgentResult{Text: "done; read the app with app_state to see the result"}, nil
+	}
 	return AgentResult{Text: "done; take a screenshot to see the result"}, nil
 }
 
-func (a *agentSession) input(action AgentAction) error {
+// input performs one action on the screen; a pid sends its keys to that app
+// alone.
+func (a *agentSession) input(action AgentAction, pid int) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	send := a.session.Key
+	if pid != 0 {
+		keyer := a.session.(appKeyer)
+		send = func(keysym uint32, down bool) error { return keyer.KeyTo(pid, keysym, down) }
+	}
 	// A person comes first, whether they take over from the app or use the
 	// computer itself: every event first checks that the agent still has the
 	// screen and nobody else is typing or pointing, and an interrupted action
@@ -662,7 +693,7 @@ func (a *agentSession) input(action AgentAction) error {
 			return
 		}
 		for i := len(held) - 1; i >= 0; i-- {
-			_ = a.session.Key(held[i], false)
+			_ = send(held[i], false)
 			a.lastPost = time.Now()
 		}
 		a.letGoLocked()
@@ -671,7 +702,7 @@ func (a *agentSession) input(action AgentAction) error {
 		if err := stopped(); err != nil {
 			return err
 		}
-		err := a.session.Key(keysym, down)
+		err := send(keysym, down)
 		a.lastPost = time.Now()
 		if err != nil {
 			return err

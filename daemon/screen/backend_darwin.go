@@ -725,7 +725,14 @@ const (
 	cgScrollUnitLine       = 1
 )
 
-func (s *macSession) post(events []macEvent) {
+// post sends events to the whole computer, or with a pid only to that app,
+// which needs not be in front.
+func (s *macSession) post(events []macEvent, pid int) {
+	deliver := func(event uintptr) { mac.CGEventPost(cgHIDEventTap, event) }
+	if pid != 0 {
+		toPid := eventPostToPid()
+		deliver = func(event uintptr) { toPid(int32(pid), event) }
+	}
 	for _, e := range events {
 		var event uintptr
 		switch e.Kind {
@@ -760,7 +767,7 @@ func (s *macSession) post(events []macEvent) {
 				if ev := mac.CGEventCreateKeyboardEvent(s.source0, 0, down); ev != 0 {
 					mac.CGEventKeyboardSetUnicodeString(ev, uint64(len(text)), &text[0])
 					mac.CGEventSetFlags(ev, e.Flags)
-					mac.CGEventPost(cgHIDEventTap, ev)
+					deliver(ev)
 					mac.CFRelease(ev)
 				}
 			}
@@ -772,9 +779,40 @@ func (s *macSession) post(events []macEvent) {
 		if e.Kind != macKey && e.Flags != 0 {
 			mac.CGEventSetFlags(event, e.Flags)
 		}
-		mac.CGEventPost(cgHIDEventTap, event)
+		deliver(event)
 		mac.CFRelease(event)
 	}
+}
+
+// CGEventPostToPid loads apart from the rest, so a macOS without it loses
+// only keys sent to one app.
+var postToPid struct {
+	once sync.Once
+	fn   func(pid int32, event uintptr)
+}
+
+func eventPostToPid() func(pid int32, event uintptr) {
+	postToPid.once.Do(func() {
+		lib, err := purego.Dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		if err != nil {
+			return
+		}
+		if _, err := purego.Dlsym(lib, "CGEventPostToPid"); err != nil {
+			log.Printf("screen: keys to one app unavailable: no CGEventPostToPid")
+			return
+		}
+		purego.RegisterLibFunc(&postToPid.fn, lib, "CGEventPostToPid")
+	})
+	return postToPid.fn
+}
+
+// KeyTo sends one key to the app with pid, in the background.
+func (s *macSession) KeyTo(pid int, keysym uint32, down bool) error {
+	if eventPostToPid() == nil {
+		return errors.New("this Mac can't send keys to one app; leave app out to type into the app in front")
+	}
+	s.post(s.input.key(keysym, down), pid)
+	return nil
 }
 
 func utf16Units(r rune) []uint16 {
@@ -786,12 +824,12 @@ func utf16Units(r rune) []uint16 {
 }
 
 func (s *macSession) Pointer(x, y int, buttons uint8) error {
-	s.post(s.input.pointer(x, y, buttons))
+	s.post(s.input.pointer(x, y, buttons), 0)
 	return nil
 }
 
 func (s *macSession) Key(keysym uint32, down bool) error {
-	s.post(s.input.key(keysym, down))
+	s.post(s.input.key(keysym, down), 0)
 	return nil
 }
 
