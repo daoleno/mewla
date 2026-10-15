@@ -1,0 +1,123 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"syscall"
+
+	"github.com/daoleno/mewla/daemon/agentuse"
+)
+
+const agentUseUsage = `Usage: mewla agent-use <status|on|off|fix|key> [flags]
+
+Let agents on this computer use it the way you do: your Chrome, with the
+sites you are logged in to, in a tab group of their own. It is on by default
+and needs no setup beyond adding the Playwright extension to Chrome.
+
+  status          What agents can use now, and the one thing to fix if not
+  on | off        The same switch as the app's "Agents can use this computer"
+  fix             Do the fix status names (opens Chrome on this computer)
+  key [-clear]    Paste the Playwright extension's key from stdin, when Mewla
+                  can't read it from Chrome itself
+
+The app shows the same status: Settings → Agents on this computer.
+`
+
+func runAgentUseCommand(args []string, stderr io.Writer) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		fmt.Fprint(stderr, agentUseUsage)
+		return flag.ErrHelp
+	}
+	action := args[0]
+	fs := flag.NewFlagSet("mewla agent-use "+action, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var stateDir string
+	var outputJSON, clear bool
+	fs.StringVar(&stateDir, "state-dir", "", "state directory (default: ~/.mewla)")
+	fs.BoolVar(&outputJSON, "json", false, "print JSON")
+	if action == "key" {
+		fs.BoolVar(&clear, "clear", false, "forget the pasted key and read it from Chrome again")
+	}
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	service, err := agentuse.New(resolveCLIStateDir(stateDir), false)
+	if err != nil {
+		return err
+	}
+	var status agentuse.Status
+	switch action {
+	case "status":
+		status = service.Refresh()
+	case "on", "off":
+		status, err = service.SetEnabled(action == "on")
+	case "fix":
+		current := service.Refresh()
+		if current.Browser.Fix == "" {
+			status = current
+			break
+		}
+		status, err = service.Fix(current.Browser.Fix)
+	case "key":
+		key := ""
+		if !clear {
+			line, readErr := bufio.NewReader(os.Stdin).ReadString('\n')
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				return readErr
+			}
+			key = strings.TrimSpace(line)
+			if key == "" {
+				return errors.New("paste the key on stdin, or use -clear")
+			}
+		}
+		status, err = service.SetKey(key)
+	case "chrome-mcp":
+		// What agents run: the user's Chrome as an MCP server on stdio.
+		argv, env, mcpErr := service.MCPServer()
+		if mcpErr != nil {
+			return fmt.Errorf("your Chrome isn't available to agents: %w", mcpErr)
+		}
+		return syscall.Exec(argv[0], argv, env)
+	default:
+		return fmt.Errorf("unknown agent-use action %q", action)
+	}
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return json.NewEncoder(os.Stdout).Encode(status)
+	}
+	printAgentUse(os.Stdout, status)
+	return nil
+}
+
+func printAgentUse(w io.Writer, status agentuse.Status) {
+	if !status.Enabled {
+		fmt.Fprintln(w, "Agents can use this computer: off")
+		return
+	}
+	fmt.Fprintln(w, "Agents can use this computer: on")
+	browser := status.Browser
+	line := "Your Chrome: " + browser.Summary
+	if browser.Profile != "" && browser.State == agentuse.BrowserReady {
+		line += " (profile " + browser.Profile + ")"
+	}
+	fmt.Fprintln(w, line)
+	switch browser.Fix {
+	case agentuse.FixInstallExtension:
+		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension's page in Chrome; click Add to Chrome.")
+	case agentuse.FixOpenExtension:
+		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension in Chrome so it makes its key.")
+	case agentuse.FixRetry:
+		fmt.Fprintln(w, "  mewla agent-use fix   tries the download again.")
+	}
+}

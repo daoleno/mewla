@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/browser"
@@ -137,6 +138,8 @@ func run(args []string, stderr io.Writer) error {
 			return runDevicesCommand(args[1:], stderr)
 		case "computers":
 			return runComputersCommand(args[1:], stderr)
+		case "agent-use":
+			return runAgentUseCommand(args[1:], stderr)
 		case "screen":
 			return runScreenCommand(args[1:], stderr)
 		case "address":
@@ -468,6 +471,20 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize Telegram connection: %w", err)
 	}
+	// Agents on this computer use the user's own Chrome when it is ready;
+	// nothing to configure, one switch in the app.
+	agentUse, err := agentuse.New(authManager.StorageDir(), true)
+	if err != nil {
+		return fmt.Errorf("initialize agent use: %w", err)
+	}
+	go agentUse.Refresh()
+	w.SetAgentTools(func(command string) string {
+		if !agentUse.BrowserReady() {
+			return command
+		}
+		return work.WithChromeMCP(command, watcher.ExecutablePath(), authManager.StorageDir())
+	})
+	srv.SetAgentUse(agentUse)
 	hostName, _ := os.Hostname()
 	computerManager, err := computers.NewManager(computers.Options{
 		Auth:    authManager,
@@ -490,7 +507,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 			}
 			return urls
 		},
-		Caps: computers.DetectCaps,
+		Caps: func() computers.Caps {
+			caps := computers.DetectCaps()
+			caps.BrowserUse = agentUse.BrowserReady()
+			return caps
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("initialize computers: %w", err)
