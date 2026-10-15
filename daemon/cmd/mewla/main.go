@@ -496,6 +496,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 			disposition, err := brainService.SubmitExternalUserInput(receipt, body)
 			return string(disposition), err
 		},
+		// A message Brain sends shows as a card in its current conversation.
+		Thread: func() string {
+			thread, _ := brainService.ChatThreadID()
+			return thread
+		},
 		Addresses: func() []string {
 			entries, err := book.List()
 			if err != nil {

@@ -45,6 +45,9 @@ type Options struct {
 	// Addresses lists the URLs other computers may use to reach this one.
 	Addresses func() []string
 	Caps      func() Caps
+	// Thread names the Brain conversation a message is sent from, so its
+	// card shows there.
+	Thread func() string
 }
 
 type Manager struct {
@@ -724,6 +727,10 @@ func (m *Manager) send(req Request) (Result, error) {
 	if len(text) > 64<<10 || len(req.UserSaid) > 16<<10 {
 		return Result{}, errors.New("message is too long; send a short brief and let the other Brain ask")
 	}
+	thread := ""
+	if m.opts.Thread != nil {
+		thread = m.opts.Thread()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key, view, err := m.resolveLocked(req.Computer)
@@ -749,8 +756,18 @@ func (m *Manager) send(req Request) (Result, error) {
 		State: StateQueued, UpdatedAt: now, NextAttemptAt: now,
 	}
 	m.state.Outbox = append(m.state.Outbox, item)
+	if thread != "" {
+		m.state.Handoffs = append(m.state.Handoffs, handoff{
+			ID: item.Message.ID, Thread: thread, PeerKey: key, Computer: view.Name, Kind: kind,
+			ReplyTo: item.Message.ReplyTo, UserSaid: clip(item.Message.UserSaid), Text: clip(text),
+			State: StateQueued, CreatedAt: now,
+		})
+	}
 	if err := saveState(m.dir, m.state); err != nil {
 		m.state.Outbox = m.state.Outbox[:len(m.state.Outbox)-1]
+		if thread != "" {
+			m.state.Handoffs = m.state.Handoffs[:len(m.state.Handoffs)-1]
+		}
 		return Result{}, err
 	}
 	if conn := m.conns[key]; conn != nil {
@@ -896,8 +913,13 @@ func (m *Manager) add(ctx context.Context, req Request) (Result, error) {
 
 // remove forgets a computer. An inbound computer's key is revoked here; an
 // outbound one stops being dialed (the other computer still lists this one
-// until it is revoked there).
+// until it is revoked there). With ExpectedDaemonID it forgets that computer
+// in both directions, and finding nothing is not an error: the app removes a
+// pair from each side, and either side may already be done.
 func (m *Manager) remove(req Request) (Result, error) {
+	if daemonID := strings.ToLower(strings.TrimSpace(req.ExpectedDaemonID)); daemonID != "" {
+		return m.forget(daemonID)
+	}
 	m.mu.Lock()
 	key, view, err := m.resolveLocked(req.Computer)
 	if err != nil {
@@ -912,6 +934,39 @@ func (m *Manager) remove(req Request) (Result, error) {
 		return Result{Computer: &view}, nil
 	}
 	defer m.mu.Unlock()
+	m.removeOutboundLocked(key)
+	return Result{Computer: &view}, nil
+}
+
+// forget removes every entry for one computer: the one this computer dials
+// and the key that computer uses to reach this one.
+func (m *Manager) forget(daemonID string) (Result, error) {
+	device := ""
+	if len(daemonID) >= 16 {
+		device = "computer-" + daemonID[:16]
+	}
+	m.mu.Lock()
+	var removed, inbound []PeerView
+	for _, view := range m.peersLocked() {
+		switch {
+		case view.Direction == DirectionOutbound && view.DaemonID == daemonID:
+			m.removeOutboundLocked(outboundKey(view.DaemonID))
+			removed = append(removed, view)
+		case view.Direction == DirectionInbound && (view.DaemonID == daemonID || (device != "" && view.DeviceID == device)):
+			inbound = append(inbound, view)
+		}
+	}
+	m.mu.Unlock()
+	for _, view := range inbound {
+		if _, err := m.opts.Auth.RevokeDevice(view.DeviceID); err != nil {
+			return Result{}, err
+		}
+		removed = append(removed, view)
+	}
+	return Result{Computers: removed}, nil
+}
+
+func (m *Manager) removeOutboundLocked(key string) {
 	if cancel := m.loops[key]; cancel != nil {
 		cancel()
 		delete(m.loops, key)
@@ -926,6 +981,11 @@ func (m *Manager) remove(req Request) (Result, error) {
 		}
 	}
 	m.state.Peers = kept
+	// Its cards say what never arrived.
+	for i, h := range m.state.Handoffs {
+		if h.PeerKey == key && (h.State == StateQueued || h.State == StateSent) {
+			m.state.Handoffs[i].State = StateFailed
+		}
+	}
 	m.dropOutboxLocked(key)
-	return Result{Computer: &view}, nil
 }

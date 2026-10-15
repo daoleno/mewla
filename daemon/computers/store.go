@@ -33,15 +33,33 @@ type outboxItem struct {
 	NextAttemptAt time.Time `json:"next_attempt_at"`
 }
 
+// handoff remembers a message this computer's Brain sent, for its
+// conversation: outbox items go once delivered, the card stays.
+type handoff struct {
+	ID        string    `json:"id"`
+	Thread    string    `json:"thread"`
+	PeerKey   string    `json:"peer_key"`
+	Computer  string    `json:"computer"`
+	Kind      string    `json:"kind"`
+	ReplyTo   string    `json:"reply_to,omitempty"`
+	UserSaid  string    `json:"user_said,omitempty"`
+	Text      string    `json:"text"`
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type persisted struct {
-	Peers  []outboundPeer `json:"peers"`
-	Outbox []outboxItem   `json:"outbox"`
+	Peers    []outboundPeer `json:"peers"`
+	Outbox   []outboxItem   `json:"outbox"`
+	Handoffs []handoff      `json:"handoffs,omitempty"`
 }
 
 const (
 	stateFile      = "computers.json"
 	keepFinished   = 7 * 24 * time.Hour
 	maxOutboxItems = 500
+	maxHandoffs    = 300
+	handoffText    = 2000
 	giveUpAfter    = 24 * time.Hour
 )
 
@@ -66,12 +84,30 @@ func saveState(dir string, state persisted) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+	syncHandoffs(&state)
 	pruneOutbox(&state, time.Now().UTC())
 	payload, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
 	return atomicfile.Write(filepath.Join(dir, stateFile), payload, 0o600)
+}
+
+// syncHandoffs copies each sent message's delivery onto its card and keeps
+// the newest cards.
+func syncHandoffs(state *persisted) {
+	states := make(map[string]string, len(state.Outbox))
+	for _, item := range state.Outbox {
+		states[item.Message.ID] = item.State
+	}
+	for i := range state.Handoffs {
+		if current, ok := states[state.Handoffs[i].ID]; ok {
+			state.Handoffs[i].State = current
+		}
+	}
+	if extra := len(state.Handoffs) - maxHandoffs; extra > 0 {
+		state.Handoffs = append([]handoff(nil), state.Handoffs[extra:]...)
+	}
 }
 
 func pruneOutbox(state *persisted, now time.Time) {
