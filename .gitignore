@@ -3,9 +3,9 @@
 daemon/bin/
 daemon/tmp/
 
-# Dependencies
-node_modules/
-app/node_modules/
+# Dependencies (no trailing slash: worktrees link node_modules as a symlink)
+node_modules
+app/node_modules
 app/dist/
 dist-download/
 coverage/
