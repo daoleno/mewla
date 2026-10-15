@@ -30,7 +30,7 @@
 
 <div class="callout callout-short">
 <ul>
-<li>The Mewla app and the <code>mewla</code> program on your computer send no analytics, telemetry or crash reports. No ads, no tracking.</li>
+<li>The Mewla app and the <code>mewla</code> program on your computer send us no analytics, telemetry or crash reports. No ads, no tracking.</li>
 <li>Your sessions, prompts, files, terminal and screen travel only between your phone and your own computer. We never receive them.</li>
 <li>Only if you turn on remote access (<code>mewla login</code>) do we keep a small account: your GitHub id and username, and the address and name of each computer you sign in.</li>
 <li>You can delete that account at any time with <code>mewla logout -delete-account</code>.</li>
@@ -46,7 +46,7 @@
 <li><strong>No account in the app.</strong> You pair the app with your computer using a one-time code. There is nothing to sign up for.</li>
 <li><strong>On your phone</strong> the app keeps the list of computers you paired, a private key for each pairing (in the iOS Keychain or Android Keystore) and your settings. Uninstalling the app deletes them.</li>
 <li><strong>On your computer</strong> <code>mewla</code> keeps its state in a folder you control (<code>~/.mewla</code> by default): paired devices, Brain’s notes, Work records, uploaded files and settings. <a href="../docs/security/#data-on-your-computer">What is stored where</a>.</li>
-<li><strong>Camera</strong> is used only to scan a pairing QR code. Nothing is recorded or sent anywhere.</li>
+<li><strong>Camera</strong> is used only to scan a pairing QR code, and the images are not saved or sent anywhere. On Android the scanning is done on the phone by Google’s ML Kit, which, according to Google, may send Google information about the device, the app and how the scanner performs, to measure and improve ML Kit (<a href="https://developers.google.com/ml-kit/android-data-disclosure">Google’s disclosure</a>).</li>
 <li><strong>Notifications.</strong> Calendar reminders are scheduled on your phone. If your computer sends you a push notification, it goes through Expo’s push service and Apple or Google to reach your phone.</li>
 <li><strong>Updates.</strong> The Android app downloaded from GitHub checks GitHub Releases for new versions. App Store and Google Play versions do not.</li>
 </ul>

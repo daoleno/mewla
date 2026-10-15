@@ -30,7 +30,7 @@
 
 <div class="callout callout-short">
 <ul>
-<li>Mewla App 和你电脑上的 <code>mewla</code> 程序不发送任何统计、遥测或崩溃报告。没有广告，没有跟踪。</li>
+<li>Mewla App 和你电脑上的 <code>mewla</code> 程序不向我们发送任何统计、遥测或崩溃报告。没有广告，没有跟踪。</li>
 <li>你的会话、提示词、文件、终端和屏幕只在你的手机和你自己的电脑之间传输。我们收不到。</li>
 <li>只有当你打开远程访问（<code>mewla login</code>）时，我们才保存一个很小的账号：你的 GitHub id 和用户名，以及你登录的每台电脑的地址和名字。</li>
 <li>你随时可以用 <code>mewla logout -delete-account</code> 删除这个账号。</li>
@@ -46,7 +46,7 @@
 <li><strong>App 里没有账号。</strong>你用一次性配对码把 App 和电脑配对，不需要注册。</li>
 <li><strong>手机上</strong>，App 保存配对过的电脑列表、每次配对的私钥（在 iOS 钥匙串或 Android Keystore 里）和你的设置。卸载 App 就会删除它们。</li>
 <li><strong>电脑上</strong>，<code>mewla</code> 把状态保存在你掌控的文件夹里（默认 <code>~/.mewla</code>）：已配对的设备、Brain 的笔记、Work 记录、上传的文件和设置。<a href="../../docs/security/#data-on-your-computer">具体存了什么</a>。</li>
-<li><strong>相机</strong>只用来扫描配对二维码，不录制，也不发送到任何地方。</li>
+<li><strong>相机</strong>只用来扫描配对二维码，画面不保存，也不发送到任何地方。在 Android 上，识别由手机上的 Google ML Kit 完成；据 Google 说明，ML Kit 可能向 Google 发送设备、App 和识别性能方面的信息，用于衡量和改进 ML Kit（<a href="https://developers.google.com/ml-kit/android-data-disclosure">Google 的说明</a>）。</li>
 <li><strong>通知。</strong>日历提醒在手机本地安排。如果你的电脑给你发推送通知，它会经过 Expo 的推送服务，再由 Apple 或 Google 送到你的手机。</li>
 <li><strong>更新。</strong>从 GitHub 下载的 Android App 会去 GitHub Releases 检查新版本。App Store 和 Google Play 的版本不会。</li>
 </ul>
