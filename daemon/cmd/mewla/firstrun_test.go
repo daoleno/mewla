@@ -80,6 +80,9 @@ func TestFirstRunChoiceRemembersWiFi(t *testing.T) {
 }
 
 func TestFirstRunChoiceWithoutAnAnswerAsksAgain(t *testing.T) {
+	t.Setenv("CI", "")
+	t.Setenv("INVOCATION_ID", "")
+	t.Setenv("XPC_SERVICE_NAME", "")
 	dir := t.TempDir()
 	var out bytes.Buffer
 	choice, err := runFirstRunChoice(context.Background(), bufio.NewReader(strings.NewReader("")), &out, dir)
