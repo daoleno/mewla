@@ -119,8 +119,11 @@ mewla update --check  # is there a newer release?
 mewla update          # verify and install it
 ```
 
-`mewla update` checks the release's signed manifest and the archive checksum
-before it replaces the binary. It does not restart a running daemon; stop and
+`mewla update` finds the newest stable release the way the install script
+does, from GitHub's `releases/latest` redirect, so it needs no GitHub API call
+and API rate limits don't apply. Betas are not offered; install one with
+`MEWLA_VERSION`. It checks the release's signed manifest and the archive
+checksum before it replaces the binary. It does not restart a running daemon; stop and
 start `mewla` when convenient. On macOS with the service installed, it also
 replaces `Mewla.app` and restarts the service, keeping your address,
 directories and `PATH`. Your `tmux` sessions and agents keep running.

@@ -15,10 +15,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,8 +27,11 @@ import (
 )
 
 const (
-	DefaultAPIURL = "https://api.github.com/repos/daoleno/mewla/releases?per_page=100"
-	ManifestAsset = "release-manifest.json"
+	// DefaultReleasesURL is where releases are published. Mewla finds the
+	// newest stable one from its /latest redirect, as install.sh does, so
+	// updates need no GitHub API call and no API rate limit.
+	DefaultReleasesURL = "https://github.com/daoleno/mewla/releases"
+	ManifestAsset      = "release-manifest.json"
 	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz.
 	ArchiveBinary       = "mewla"
 	ManifestSignature   = "release-manifest.json.sig"
@@ -55,32 +58,19 @@ type Manifest struct {
 	Artifacts     []Artifact `json:"artifacts"`
 }
 
-type releaseAsset struct {
-	Name string `json:"name"`
-	URL  string `json:"browser_download_url"`
-}
-
-type release struct {
-	TagName    string         `json:"tag_name"`
-	Draft      bool           `json:"draft"`
-	Prerelease bool           `json:"prerelease"`
-	Assets     []releaseAsset `json:"assets"`
-}
-
 type Candidate struct {
 	Version     string
 	Tag         string
-	Prerelease  bool
 	Artifact    Artifact
 	ArtifactURL string
 }
 
 type Client struct {
-	HTTPClient *http.Client
-	APIURL     string
-	PublicKey  ed25519.PublicKey
-	GOOS       string
-	GOARCH     string
+	HTTPClient  *http.Client
+	ReleasesURL string
+	PublicKey   ed25519.PublicKey
+	GOOS        string
+	GOARCH      string
 }
 
 func NewClient() (*Client, error) {
@@ -97,11 +87,11 @@ func NewClient() (*Client, error) {
 		return nil, errors.New("update public key is not Ed25519")
 	}
 	return &Client{
-		HTTPClient: &http.Client{Timeout: 15 * time.Second},
-		APIURL:     DefaultAPIURL,
-		PublicKey:  key,
-		GOOS:       runtime.GOOS,
-		GOARCH:     runtime.GOARCH,
+		HTTPClient:  &http.Client{Timeout: 15 * time.Second},
+		ReleasesURL: DefaultReleasesURL,
+		PublicKey:   key,
+		GOOS:        runtime.GOOS,
+		GOARCH:      runtime.GOARCH,
 	}, nil
 }
 
@@ -118,71 +108,81 @@ func PlatformArtifactName(goos, goarch string) (string, error) {
 	}
 }
 
+// Latest returns the newest stable release when it is newer than current,
+// with its archive checked against the signed release manifest, or nil.
 func (c *Client) Latest(ctx context.Context, current string) (*Candidate, error) {
 	wantName, err := PlatformArtifactName(c.GOOS, c.GOARCH)
 	if err != nil {
 		return nil, err
 	}
-	releases, err := c.listReleases(ctx)
+	tag, version, err := c.latestTag(ctx)
 	if err != nil {
 		return nil, err
 	}
-	type versionedRelease struct {
-		version semVersion
-		release release
+	if currentVersion, err := parseSemVersion(strings.TrimPrefix(current, "v")); err == nil &&
+		compareSemVersion(version, currentVersion) <= 0 {
+		return nil, nil
 	}
-	var eligible []versionedRelease
-	for _, item := range releases {
-		if item.Draft {
-			continue
-		}
-		version, err := parseSemVersion(strings.TrimPrefix(item.TagName, "v"))
-		if err != nil {
-			continue
-		}
-		eligible = append(eligible, versionedRelease{version: version, release: item})
+	download := strings.TrimRight(c.ReleasesURL, "/") + "/download/" + tag + "/"
+	manifestBytes, err := c.download(ctx, download+ManifestAsset, maxManifestSize)
+	if err != nil {
+		return nil, fmt.Errorf("download %s %s: %w", tag, ManifestAsset, err)
 	}
-	sort.SliceStable(eligible, func(i, j int) bool {
-		return compareSemVersion(eligible[i].version, eligible[j].version) > 0
-	})
+	signature, err := c.download(ctx, download+ManifestSignature, maxSignatureSize)
+	if err != nil {
+		return nil, fmt.Errorf("download %s %s: %w", tag, ManifestSignature, err)
+	}
+	manifest, err := VerifyManifest(manifestBytes, signature, c.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("verify %s manifest: %w", tag, err)
+	}
+	if manifest.Version != version.String() {
+		return nil, fmt.Errorf("%s manifest is for version %s", tag, manifest.Version)
+	}
+	artifact, ok := manifestArtifact(manifest, c.GOOS, c.GOARCH, wantName)
+	if !ok {
+		return nil, fmt.Errorf("%s has no %s", tag, wantName)
+	}
+	return &Candidate{
+		Version:     manifest.Version,
+		Tag:         tag,
+		Artifact:    artifact,
+		ArtifactURL: download + wantName,
+	}, nil
+}
 
-	currentVersion, currentErr := parseSemVersion(strings.TrimPrefix(current, "v"))
-	for _, item := range eligible {
-		if currentErr == nil && compareSemVersion(item.version, currentVersion) <= 0 {
-			continue
-		}
-		assets := assetsByName(item.release.Assets)
-		manifestAsset, hasManifest := assets[ManifestAsset]
-		signatureAsset, hasSignature := assets[ManifestSignature]
-		artifactAsset, hasArtifact := assets[wantName]
-		if !hasManifest || !hasSignature || !hasArtifact {
-			continue
-		}
-		manifestBytes, err := c.download(ctx, manifestAsset.URL, maxManifestSize)
-		if err != nil {
-			continue
-		}
-		signature, err := c.download(ctx, signatureAsset.URL, maxSignatureSize)
-		if err != nil {
-			continue
-		}
-		manifest, err := VerifyManifest(manifestBytes, signature, c.PublicKey)
-		if err != nil || manifest.Version != item.version.String() {
-			continue
-		}
-		artifact, ok := manifestArtifact(manifest, c.GOOS, c.GOARCH, wantName)
-		if !ok {
-			continue
-		}
-		return &Candidate{
-			Version:     manifest.Version,
-			Tag:         item.release.TagName,
-			Prerelease:  item.release.Prerelease,
-			Artifact:    artifact,
-			ArtifactURL: artifactAsset.URL,
-		}, nil
+// latestTag reads the tag from the releases/latest redirect without
+// following it, and accepts only a v-prefixed semantic version.
+func (c *Client) latestTag(ctx context.Context) (string, semVersion, error) {
+	base, err := url.Parse(strings.TrimRight(c.ReleasesURL, "/"))
+	if err != nil {
+		return "", semVersion{}, fmt.Errorf("releases URL: %w", err)
 	}
-	return nil, nil
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base.String()+"/latest", nil)
+	if err != nil {
+		return "", semVersion{}, err
+	}
+	req.Header.Set("User-Agent", "mewla-self-update")
+	client := *c.HTTPClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", semVersion{}, fmt.Errorf("find the latest release: %w", err)
+	}
+	_ = resp.Body.Close()
+	location, err := resp.Location()
+	if err != nil || resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return "", semVersion{}, fmt.Errorf("find the latest release: HTTP %s without a release redirect", resp.Status)
+	}
+	tag, ok := strings.CutPrefix(location.Path, base.Path+"/tag/")
+	if !ok || location.Host != base.Host {
+		return "", semVersion{}, errors.New("find the latest release: no release is published yet")
+	}
+	version, err := parseSemVersion(strings.TrimPrefix(tag, "v"))
+	if err != nil || tag != "v"+version.String() {
+		return "", semVersion{}, fmt.Errorf("find the latest release: unexpected tag %q", tag)
+	}
+	return tag, version, nil
 }
 
 func (c *Client) DownloadBinary(ctx context.Context, candidate Candidate) ([]byte, error) {
@@ -205,28 +205,6 @@ func (c *Client) DownloadBinary(ctx context.Context, candidate Candidate) ([]byt
 		return nil, err
 	}
 	return binary, nil
-}
-
-func (c *Client) listReleases(ctx context.Context) ([]release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.APIURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "mewla-self-update")
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("list GitHub releases: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("list GitHub releases: HTTP %s", resp.Status)
-	}
-	var releases []release
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&releases); err != nil {
-		return nil, fmt.Errorf("decode GitHub releases: %w", err)
-	}
-	return releases, nil
 }
 
 func (c *Client) download(ctx context.Context, url string, limit int64) ([]byte, error) {
@@ -288,23 +266,6 @@ func manifestArtifact(manifest Manifest, goos, goarch, name string) (Artifact, b
 		}
 	}
 	return Artifact{}, false
-}
-
-func assetsByName(assets []releaseAsset) map[string]releaseAsset {
-	result := make(map[string]releaseAsset, len(assets))
-	duplicates := make(map[string]bool)
-	for _, asset := range assets {
-		if duplicates[asset.Name] {
-			continue
-		}
-		if _, exists := result[asset.Name]; exists {
-			delete(result, asset.Name)
-			duplicates[asset.Name] = true
-			continue
-		}
-		result[asset.Name] = asset
-	}
-	return result
 }
 
 func extractBinary(archive []byte) ([]byte, error) {
