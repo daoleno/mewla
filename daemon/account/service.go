@@ -227,6 +227,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/login/poll", s.requireSignature(s.handleLoginPoll))
 	mux.HandleFunc("GET /v1/machine", s.requireSignature(s.handleGetMachine))
 	mux.HandleFunc("DELETE /v1/machine", s.requireSignature(s.handleDeleteMachine))
+	mux.HandleFunc("DELETE /v1/account", s.requireSignature(s.handleDeleteAccount))
 	mux.HandleFunc("PUT /v1/machine/name", s.requireSignature(s.handleRenameMachine))
 	mux.HandleFunc("PUT /v1/machine/acme-challenge", s.requireSignature(s.handleACMEChallenge))
 	mux.HandleFunc("DELETE /v1/machine/acme-challenge", s.requireSignature(s.handleACMEChallenge))
@@ -586,6 +587,30 @@ func (s *Service) handleDeleteMachine(w http.ResponseWriter, r *http.Request) {
 		machine.AccountID,
 		machine.Label,
 	)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteAccount deletes the account of the signing computer: the
+// account row (provider subject and login) and every computer signed in
+// with it. Those computers drop off when their current grant expires. A
+// disabled account cannot delete itself, so deleting never lifts a ban.
+func (s *Service) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
+	account, machines, err := s.config.Store.deleteAccount(r.Context(), daemonKey(r))
+	switch {
+	case errors.Is(err, errNotFound):
+		writeError(w, http.StatusNotFound, "no machine")
+		return
+	case errors.Is(err, errDisabled):
+		writeError(w, http.StatusForbidden, "account disabled")
+		return
+	case err != nil:
+		s.internalError(w, "delete account", err)
+		return
+	}
+	for _, machine := range machines {
+		s.acme.forget(machine.ID)
+	}
+	s.config.Logf("account: account deleted: account=%s machines=%d", account.ID, len(machines))
 	w.WriteHeader(http.StatusNoContent)
 }
 

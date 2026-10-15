@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -18,6 +19,7 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/remote"
+	"golang.org/x/term"
 )
 
 func runLoginCommand(args []string, stderr io.Writer) error {
@@ -204,14 +206,34 @@ func remoteRename(ctx context.Context, w io.Writer, stateDir string, config remo
 }
 
 func runLogoutCommand(args []string, stderr io.Writer) error {
+	return runLogout(args, os.Stdin, term.IsTerminal(int(os.Stdin.Fd())), stderr)
+}
+
+// runLogout signs this computer out of remote access. With -delete-account
+// it deletes the whole account at the service, after the person types the
+// account name (or passes -yes when no one is at a terminal).
+func runLogout(args []string, stdin io.Reader, interactive bool, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla logout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	stateDir := fs.String("state-dir", "", "state directory for daemon identity and trusted devices")
+	deleteAccount := fs.Bool("delete-account", false, "delete your remote access account and sign out every computer on it")
+	yes := fs.Bool("yes", false, "with -delete-account: do not ask for confirmation")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: mewla logout [-delete-account [-yes]] [flags]")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "Turn remote access off for this computer. With -delete-account, also delete")
+		fmt.Fprintln(stderr, "the account (your GitHub id and login) and every computer signed in with it.")
+		fmt.Fprintln(stderr, "")
+		fs.PrintDefaults()
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+	if *yes && !*deleteAccount {
+		return errors.New("-yes only confirms -delete-account")
 	}
 	resolvedStateDir, err := auth.ResolveStorageDir(*stateDir)
 	if err != nil {
@@ -222,8 +244,16 @@ func runLogoutCommand(args []string, stderr io.Writer) error {
 		return err
 	}
 	if !ok {
+		if *deleteAccount {
+			return errors.New("this computer is not signed in to remote access; sign in with the account to delete (mewla login), then run mewla logout -delete-account")
+		}
 		fmt.Fprintln(stderr, "This computer is not signed in to remote access.")
 		return nil
+	}
+	if *deleteAccount && !*yes {
+		if err := confirmAccountDeletion(stdin, interactive, stderr, config.Machine); err != nil {
+			return err
+		}
 	}
 	authManager, err := auth.NewManager(resolvedStateDir)
 	if err != nil {
@@ -235,7 +265,14 @@ func runLogoutCommand(args []string, stderr io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if err := client.Logout(ctx); err != nil && !errors.Is(err, remote.ErrSignedOut) {
+	if *deleteAccount {
+		if err := client.DeleteAccount(ctx); err != nil {
+			if errors.Is(err, remote.ErrSignedOut) {
+				return errors.New("the service no longer knows this computer, so it cannot tell which account to delete; sign in again (mewla login), then run mewla logout -delete-account")
+			}
+			return fmt.Errorf("delete the account at the service: %w (nothing changed here; try again)", err)
+		}
+	} else if err := client.Logout(ctx); err != nil && !errors.Is(err, remote.ErrSignedOut) {
 		return fmt.Errorf("sign out at the service: %w (nothing changed here; try again)", err)
 	}
 	if err := remote.RemoveSignIn(resolvedStateDir); err != nil {
@@ -244,8 +281,41 @@ func runLogoutCommand(args []string, stderr io.Writer) error {
 	if book, err := addressbook.New(resolvedStateDir); err == nil {
 		_ = book.Remove(config.URL())
 	}
+	if *deleteAccount {
+		fmt.Fprintf(stderr, "Deleted the remote access account %s.\n", accountName(config.Machine))
+		fmt.Fprintf(stderr, "%s no longer reaches this computer. Other computers on the account drop off within an hour.\n", config.URL())
+		fmt.Fprintln(stderr, "To also remove Mewla's access on GitHub: https://github.com/settings/applications")
+		return nil
+	}
 	fmt.Fprintf(stderr, "Signed out. %s no longer reaches this computer.\n", config.URL())
 	fmt.Fprintln(stderr, "Phones and browsers stay paired; they reach this computer again after mewla login.")
+	return nil
+}
+
+func accountName(machine remote.Machine) string {
+	if machine.Provider == "" {
+		return machine.AccountLogin
+	}
+	return machine.AccountLogin + " (" + machine.Provider + ")"
+}
+
+// confirmAccountDeletion asks the person to type the account name.
+func confirmAccountDeletion(stdin io.Reader, interactive bool, w io.Writer, machine remote.Machine) error {
+	if !interactive {
+		return errors.New("deleting the account needs confirmation; run it in a terminal, or add -yes")
+	}
+	fmt.Fprintf(w, "This deletes the remote access account %s:\n", accountName(machine))
+	fmt.Fprintln(w, "  - the service forgets your GitHub id and login;")
+	fmt.Fprintln(w, "  - every computer signed in with it loses its address and is signed out.")
+	fmt.Fprintln(w, "Phones stay paired, and work on this network or another address you set up.")
+	fmt.Fprintf(w, "Type %s to delete the account: ", machine.AccountLogin)
+	line, err := bufio.NewReader(stdin).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("read confirmation: %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(line), machine.AccountLogin) {
+		return errors.New("not deleted: the name did not match")
+	}
 	return nil
 }
 
