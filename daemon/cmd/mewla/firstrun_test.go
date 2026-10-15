@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"os"
@@ -54,7 +55,7 @@ func TestFirstRunPromptOnlyForAFreshManualStart(t *testing.T) {
 func TestFirstRunChoiceRemembersWiFi(t *testing.T) {
 	dir := t.TempDir()
 	var out bytes.Buffer
-	choice, err := runFirstRunChoice(context.Background(), strings.NewReader("x\n2\n"), &out, dir)
+	choice, err := runFirstRunChoice(context.Background(), bufio.NewReader(strings.NewReader("x\n2\n")), &out, dir)
 	if err != nil || choice != choiceLAN {
 		t.Fatalf("choice = %q, %v", choice, err)
 	}

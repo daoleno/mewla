@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -3345,11 +3346,43 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 				return executor
 			}
 		}
+		if preferred == "" {
+			if executor, ok := s.installedHostExecutor(); ok {
+				return executor
+			}
+		}
 		if executor, ok := s.execs.WorkerExecutor("codex"); ok {
 			return executor
 		}
 	}
 	return work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux})
+}
+
+// hostLookPath finds executor commands; tests replace it.
+var hostLookPath = exec.LookPath
+
+// hostPreference is the order a first Brain host is picked in, matching
+// mewla doctor's recommendation.
+var hostPreference = []string{"codex", "claude", "agent", "grok", "pi", "opencode"}
+
+// installedHostExecutor picks, before any Brain host has been chosen, the
+// first configured executor whose command is installed, so a computer with
+// only Claude Code installed does not start Brain on a missing codex.
+func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
+	for _, id := range hostPreference {
+		executor, ok := s.execs.WorkerExecutor(id)
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(executor.Command)
+		if len(fields) == 0 {
+			continue
+		}
+		if _, err := hostLookPath(fields[0]); err == nil {
+			return executor, true
+		}
+	}
+	return work.WorkerExecutor{}, false
 }
 
 // HostExecutorID names the executor running Brain. Launches Brain does not

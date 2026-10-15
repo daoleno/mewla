@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
 func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
@@ -50,8 +52,8 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	if report.Executors.UsableCount != 0 {
 		t.Fatalf("usable_count = %d", report.Executors.UsableCount)
 	}
-	if len(report.Tmux.InstallHints) != 4 {
-		t.Fatalf("install hints = %d", len(report.Tmux.InstallHints))
+	if len(report.Tmux.InstallHints) != 1 || report.Tmux.InstallHints[0].Command == "" {
+		t.Fatalf("install hints = %+v, want only this machine's command", report.Tmux.InstallHints)
 	}
 
 	raw, err := json.Marshal(report)
@@ -78,10 +80,8 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	text := human.String()
 	for _, want := range []string{
 		"NOT READY",
-		"sudo apt install tmux",
-		"sudo dnf install tmux",
-		"sudo pacman -S tmux",
-		"brew install tmux",
+		"Install tmux on ",
+		report.Tmux.InstallHints[0].Command,
 		"install_tmux",
 		"install_executor",
 	} {
@@ -835,4 +835,19 @@ func findExecutor(report Report, id string) *ExecutorCheck {
 		}
 	}
 	return nil
+}
+
+func TestTmuxInstallHintsNameOnlyThisPlatform(t *testing.T) {
+	mac := tmuxInstallHints(hostdeps.Platform{GOOS: "darwin", Pretty: "macOS", Brew: "brew"})
+	if len(mac) != 1 || mac[0].ID != "brew" || mac[0].Command != "brew install tmux" {
+		t.Fatalf("mac hints = %+v", mac)
+	}
+	fedora := tmuxInstallHints(hostdeps.Platform{GOOS: "linux", Pretty: "Fedora Linux 42", Manager: "dnf", HasSudo: true})
+	if len(fedora) != 1 || fedora[0].Command != "sudo dnf install -y tmux" || fedora[0].OS != "Fedora Linux 42" {
+		t.Fatalf("fedora hints = %+v", fedora)
+	}
+	unknown := tmuxInstallHints(hostdeps.Platform{GOOS: "linux", HasSudo: true})
+	if len(unknown) != 1 || unknown[0].ID != "manual" || unknown[0].Command != "see "+hostdeps.TmuxInstallDoc {
+		t.Fatalf("unknown hints = %+v", unknown)
+	}
 }
