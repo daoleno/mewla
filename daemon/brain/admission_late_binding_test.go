@@ -62,9 +62,6 @@ func TestAdmissionEchoAfterLateHostTranscriptBinding(t *testing.T) {
 				if err != nil || len(rows) != 1 || rows[0].ID != prepared.RequestID || rows[0].AdmissionEchoEventID != echo.ID || rows[0].AdmissionEchoSessionID != nativeID {
 					t.Fatalf("pass %d: %+v %v", pass, rows, err)
 				}
-				if !ProviderUserEchoSuppressions(rows, nativeID)[echo.ID] || ProviderUserEchoSuppressions(rows, "other")[echo.ID] {
-					t.Fatal("wrong overlay suppression identity")
-				}
 				persisted, found, err := store.BrainInputAdmission(prepared.RequestID, thread)
 				if err != nil || !found || persisted.SessionID != hostID {
 					t.Fatalf("immutable admission changed: %+v %v", persisted, err)
@@ -88,7 +85,10 @@ func TestAdmissionEchoAfterLateHostTranscriptBinding(t *testing.T) {
 	}
 }
 
-func TestLateBindingCannotClaimAnotherHostsOrBoundSessionsEcho(t *testing.T) {
+// A replaced Host or a native thread switch does not turn the admission's own
+// echo into a second message: the echo decision never consults Session or Host
+// identity.
+func TestHostOrNativeSessionChangeStillClaimsAdmissionEcho(t *testing.T) {
 	for _, originalSession := range []string{"old-host", "old-provider"} {
 		t.Run(originalSession, func(t *testing.T) {
 			store, err := NewStore(t.TempDir())
@@ -118,12 +118,13 @@ func TestLateBindingCannotClaimAnotherHostsOrBoundSessionsEcho(t *testing.T) {
 			if err := store.ProjectBrainInputAdmission(accepted); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.MaterializeProviderConversation("thread", work.CodexConversation{Available: true, SessionID: "replacement-native", Events: []work.CodexConversationEvent{{ID: "unrelated", Kind: "user_message", Body: "same", Timestamp: base.Add(time.Second).Format(time.RFC3339Nano)}}}); err != nil {
+			if err := store.MaterializeProviderConversation("thread", work.CodexConversation{Available: true, SessionID: "replacement-native", Events: []work.CodexConversationEvent{{ID: "replacement-echo", Kind: "user_message", Body: "same", Timestamp: base.Add(time.Second).Format(time.RFC3339Nano)}}}); err != nil {
 				t.Fatal(err)
 			}
 			rows, err := store.ThreadTimeline("thread", 0)
-			if err != nil || len(rows) != 2 || rows[0].AdmissionEchoEventID != "" {
-				t.Fatalf("cross-owner echo claimed: %+v %v", rows, err)
+			if err != nil || len(rows) != 1 || rows[0].ID != "receipt-old" ||
+				rows[0].AdmissionEchoEventID != "replacement-echo" || rows[0].AdmissionEchoSessionID != "replacement-native" {
+				t.Fatalf("echo after Host change was not claimed once: %+v %v", rows, err)
 			}
 		})
 	}

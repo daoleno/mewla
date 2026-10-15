@@ -1360,6 +1360,48 @@ describe("one user bubble per send across stream ordering", () => {
     expect(visibleUserIds(current)).toEqual(["history", "provider-a", "provider-b"]);
   });
 
+  test("Brain chat shows one bubble per send for receipt rows and uncertain-delivery echoes across reconnect", () => {
+    const brainSnapshot = (
+      current: ReturnType<typeof state>,
+      events: NonNullable<ReturnType<typeof state>["conversation"]>["events"],
+      generation = 1,
+      revision = current.streamCursor.revision + 1,
+    ) =>
+      interfaceChatThreadReducer(current, {
+        type: "snapshot",
+        generation,
+        payload: {
+          request_id: `stream-${generation}`,
+          conversation_id: "brain-thread:thread-a",
+          revision,
+          conversation: {
+            available: true,
+            source: "brain_chat",
+            session_id: "brain-thread:thread-a",
+            events,
+          },
+        },
+      });
+    let current = brainSnapshot(state([]), [userEvent("history", 1)]);
+    current = add(current, "local-a", "receipt-a");
+    current = add(current, "local-b", "receipt-b");
+    // A was accepted: the daemon delivers it under its receipt, twice in a
+    // replayed snapshot. B came back input_uncertain, so the daemon never
+    // projects its receipt; the provider's own record of B is the only
+    // daemon row for it and must still consume the local row.
+    const receiptA = userEvent("receipt-a", 2);
+    const providerB = userEvent("provider-b", 3);
+    current = brainSnapshot(current, [userEvent("history", 1), receiptA, receiptA, providerB]);
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(visibleUserIds(current)).toEqual(["history", "receipt-a", "provider-b"]);
+
+    current = interfaceChatThreadReducer(current, { type: "stream_start", generation: 2 });
+    current = brainSnapshot(current, [userEvent("history", 1), receiptA, providerB], 2, 1);
+    current = brainSnapshot(current, current.conversation!.events, 2, 2);
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(visibleUserIds(current)).toEqual(["history", "receipt-a", "provider-b"]);
+  });
+
   test("failed retry is replaced by its receipt once and ignores late failure", () => {
     let current = add(snapshot(state([]), []), "local-a", "receipt-a");
     current = interfaceChatThreadReducer(current, {

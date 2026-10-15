@@ -2089,8 +2089,8 @@ func (s *Store) BrainInputAdmission(requestID, threadID string) (BrainInputAdmis
 }
 
 // UnprojectedBrainInputAdmissions returns a bounded restart batch. Projection
-// membership is derived from the idempotent timeline identity plus any exact
-// provider echo still stranded inside the admission's causal window, so no
+// membership is derived from the idempotent timeline identity plus any provider
+// echo reconcileAdmissionEchoes would still credit from durable rows, so no
 // second durable acknowledgement field or repair queue is needed.
 func (s *Store) UnprojectedBrainInputAdmissions(limit int) ([]BrainInputAdmission, bool, error) {
 	if limit <= 0 {
@@ -2106,18 +2106,28 @@ func (s *Store) UnprojectedBrainInputAdmissions(limit int) ([]BrainInputAdmissio
 	if err != nil {
 		return nil, false, err
 	}
+	echoPending := map[string]bool{}
+	reconciledThreads := map[string]bool{}
 	out := make([]BrainInputAdmission, 0, limit)
 	for _, admission := range database.BrainInputAdmissions {
 		if admission.State != BrainInputAdmissionAccepted {
 			continue
 		}
-		canonicalIndex, candidates, err := brainInputAdmissionProjectionState(allItems, admission)
+		canonicalIndex, err := brainInputAdmissionCanonicalIndex(allItems, admission)
 		if err != nil {
 			return nil, false, err
 		}
-		if canonicalIndex >= 0 &&
-			(strings.TrimSpace(allItems[canonicalIndex].AdmissionEchoEventID) != "" || len(candidates) == 0) {
-			continue
+		if canonicalIndex >= 0 {
+			if !reconciledThreads[admission.ThreadID] {
+				reconciledThreads[admission.ThreadID] = true
+				_, claims, _ := reconcileThreadAdmissionEchoes(allItems, database.BrainInputAdmissions, admission.ThreadID, "", nil)
+				for rowID := range claims {
+					echoPending[rowID] = true
+				}
+			}
+			if !echoPending[AdmissionTimelineItemID(admission.RequestID)] {
+				continue
+			}
 		}
 		if len(out) == limit {
 			return out, true, nil

@@ -280,15 +280,17 @@ func TestEchoAfterAcceptanceIsClaimedAndStartupRepairsExistingDuplicate(t *testi
 	}
 }
 
-func TestProviderRowsBeforeAdmissionCreationOrOtherSessionRemainIndependent(t *testing.T) {
+func TestProviderRowsBeforeAdmissionCreationRemainIndependent(t *testing.T) {
 	base := time.Date(2026, 8, 11, 14, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name            string
 		providerSession string
 		providerAt      time.Time
 	}{
-		{name: "before prepare", providerSession: "provider-session", providerAt: base.Add(-time.Nanosecond)},
-		{name: "other provider session", providerSession: "other-session", providerAt: base.Add(500 * time.Millisecond)},
+		// Provider clocks keep milliseconds: anything stamped before the
+		// prepare millisecond was typed before this admission existed.
+		{name: "before prepare", providerSession: "provider-session", providerAt: base.Add(-time.Millisecond)},
+		{name: "other provider session before prepare", providerSession: "other-session", providerAt: base.Add(-time.Second)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -347,7 +349,10 @@ func TestProviderRowsBeforeAdmissionCreationOrOtherSessionRemainIndependent(t *t
 	}
 }
 
-func TestAdmissionEchoMatchingRequiresExactSessionAndCreationBound(t *testing.T) {
+// Provider or Host Session identity is not part of the echo decision: an
+// unbound or replaced Host still records the admitted bytes after they were
+// typed, and that record is the admission's echo, not a second message.
+func TestAdmissionEchoMatchingRequiresCreationBoundNotSession(t *testing.T) {
 	base := time.Date(2026, 8, 11, 14, 15, 0, 0, time.UTC)
 	tests := []struct {
 		name            string
@@ -360,8 +365,8 @@ func TestAdmissionEchoMatchingRequiresExactSessionAndCreationBound(t *testing.T)
 		// processing, which is always after the daemon's transport acceptance;
 		// this is the admission's own echo and must be suppressed.
 		{name: "echo recorded after accept", providerSession: "provider-session", providerAt: base.Add(time.Second + time.Nanosecond), wantSuppressed: true},
-		{name: "same text before prepare", providerSession: "provider-session", providerAt: base.Add(-time.Nanosecond)},
-		{name: "same text replacement session", providerSession: "replacement-session", providerAt: base.Add(500 * time.Millisecond)},
+		{name: "same text before prepare", providerSession: "provider-session", providerAt: base.Add(-time.Millisecond)},
+		{name: "unbound or replacement session echo", providerSession: "replacement-session", providerAt: base.Add(500 * time.Millisecond), wantSuppressed: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -412,7 +417,10 @@ func TestAdmissionEchoMatchingRequiresExactSessionAndCreationBound(t *testing.T)
 	}
 }
 
-func TestProviderEchoAdmissionWindowAmbiguityFailsClosed(t *testing.T) {
+// Two identical provider inputs inside one admission's window are two inputs:
+// the earlier one is the echo, the later one stays its own row. Failing closed
+// here used to leave the admission unprojected and both rows visible.
+func TestTwoProviderInputsInAdmissionWindowCreditTheEarlierOne(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -451,17 +459,22 @@ func TestProviderEchoAdmissionWindowAmbiguityFailsClosed(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("accept changed=%v err=%v", changed, err)
 	}
-	if err := store.ProjectBrainInputAdmission(accepted); err == nil || !strings.Contains(err.Error(), "2 provider echoes") {
-		t.Fatalf("ambiguous projection err=%v", err)
+	if err := store.ProjectBrainInputAdmission(accepted); err != nil {
+		t.Fatal(err)
 	}
 	items, err := store.ThreadTimeline(threadID, 0)
 	if err != nil || len(items) != 2 {
-		t.Fatalf("fail-closed timeline=%+v err=%v", items, err)
+		t.Fatalf("timeline=%+v err=%v", items, err)
 	}
+	byID := map[string]TimelineItem{}
 	for _, item := range items {
-		if item.BrainAdmission || item.ID == candidate.RequestID {
-			t.Fatalf("ambiguous projection mutated timeline: %+v", items)
-		}
+		byID[item.ID] = item
+	}
+	if admission := byID[candidate.RequestID]; !admission.BrainAdmission || admission.AdmissionEchoEventID != events[0].ID {
+		t.Fatalf("admission did not claim the earlier input: %+v", items)
+	}
+	if later, ok := byID[events[1].ID]; !ok || later.BrainAdmission {
+		t.Fatalf("later identical input must stay independent: %+v", items)
 	}
 }
 
@@ -853,41 +866,5 @@ func TestIsBrainInputAdmissionRequiresExplicitFlag(t *testing.T) {
 	legacyShaped.BrainAdmission = true
 	if !IsBrainInputAdmission(legacyShaped) {
 		t.Fatal("explicit brain_admission must qualify")
-	}
-}
-
-func TestProviderUserEchoSuppressionsAreOneToOne(t *testing.T) {
-	body := "echo body"
-	digest := AdmissionDigest(body)
-	items := []TimelineItem{{
-		ID:                   "receipt-1",
-		SessionID:            "provider-session",
-		Kind:                 "user_message",
-		Body:                 body,
-		BrainAdmission:       true,
-		AdmissionSHA256:      digest,
-		AdmissionEchoEventID: "echo-1",
-	}, {
-		ID:                   "receipt-2",
-		SessionID:            "provider-session",
-		Kind:                 "user_message",
-		Body:                 body,
-		BrainAdmission:       true,
-		AdmissionSHA256:      digest,
-		AdmissionEchoEventID: "echo-2",
-	}, {
-		ID:   "provider-native:1",
-		Kind: "user_message",
-		Body: body,
-	}}
-	suppress := ProviderUserEchoSuppressions(items, "provider-session")
-	if suppress["provider-native:1"] {
-		t.Fatalf("durable provider row consumed a credit: %#v", suppress)
-	}
-	if !suppress["echo-1"] || !suppress["echo-2"] || suppress["terminal-3"] {
-		t.Fatalf("suppress = %#v", suppress)
-	}
-	if replacement := ProviderUserEchoSuppressions(items, "replacement-session"); len(replacement) != 0 {
-		t.Fatalf("replacement Session inherited echo claims: %#v", replacement)
 	}
 }

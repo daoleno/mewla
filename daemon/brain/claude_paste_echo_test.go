@@ -62,10 +62,6 @@ func TestPastedBrainInputEchoShowsOnce(t *testing.T) {
 	if items[0].ID != accepted.RequestID || items[0].AdmissionEchoEventID != conversation.Events[0].ID {
 		t.Fatalf("admission did not claim its pasted echo: %+v", items)
 	}
-	suppress := ProviderUserEchoSuppressions(items, sessionID)
-	if !suppress[conversation.Events[0].ID] {
-		t.Fatal("live provider overlay must suppress the claimed echo")
-	}
 	events := TimelineItemsToConversationEvents(items)
 	if len(events) != 1 || events[0].Kind != timelineKindUserMessage || events[0].Body != realPastedBrainInput {
 		t.Fatalf("pasted tag-like text must show once as the user's message: %+v", events)
