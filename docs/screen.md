@@ -92,11 +92,15 @@ cannot be woken through it.
 ## Agents on the screen
 
 Agents Mewla starts on a Mac can use its screen, keyboard and pointer too, for
-work in apps that have no command or website: they take a screenshot, then
-click, type and scroll on what they see. They can also read the window in front
-as its buttons, fields and text, through the same Accessibility permission,
-which names what to click better than pixels; apps built on web pages, such as
-Electron apps, show little this way. It needs nothing beyond what Screen
+work in apps that have no command or website. They work the way you would with
+the app's own controls: they list the Mac's apps, read one app's windows as its
+buttons, fields and text, even an app behind others, and press, fill in or
+open those by name, without moving the pointer or bringing the app forward
+(some actions bring it forward themselves). They can type into one app the
+same way, and run a short list of such steps in one go, such as find, press,
+type and check. Apps built on web pages, such as Electron apps, show little
+this way; there agents take a screenshot and click, type and scroll on what
+they see, as a person would. It needs nothing beyond what Screen
 already has: **Agents can use this computer** on (Settings → **Agents on**
 *your Mac*, on by default), Screen not turned off, and Mewla's Screen Recording
 and Accessibility permissions. That Settings section says which is missing and
@@ -119,14 +123,17 @@ opens the right settings page.
   it. A MacBook with its lid closed and no external display can't be woken.
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
-  tap away. The Mac shows a notification when an agent starts and stops using
+  tap away. Work in an app behind others happens out of sight, so Watch may
+  not show it; it is still the agent's turn on the screen, with the same
+  pause, stop and record. The Mac shows a notification when an agent starts and stops using
   the screen, and Settings shows the agent with a **Stop** row.
 - **One at a time.** One agent uses the screen at a time; the agent's control
   ends a minute after its last action.
 - **What is kept.** Each action is recorded on the Mac in
   `~/.mewla/screen-agent-audit.jsonl` (readable only by you, kept 30 days):
-  which agent, which action, where, which keys. What it typed is kept only as
-  a length and a fingerprint; screenshots are not kept.
+  which agent, which action, which app and control, where, which keys. What
+  it typed or filled in is kept only as a length and a fingerprint;
+  screenshots and what it read are not kept.
 
 Brain has agents ask you before they send, pay, delete or change an account,
 and use the screen only when no command, file or website route will do. Text
