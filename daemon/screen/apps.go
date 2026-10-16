@@ -28,6 +28,9 @@ type App struct {
 	// Chromium apps (Chrome, Edge, Electron apps) ignore input they can't
 	// trust, so they are only clicked on the screen.
 	Chromium bool `json:"-"`
+	// Bundle is its bundle's file name, which a Mac in another language
+	// shows under a translated name: Notes for 备忘录.
+	Bundle string `json:"-"`
 }
 
 // AppWindow is one window on the screen, in framebuffer pixels.
@@ -60,7 +63,7 @@ type windowInfo struct {
 // its front one, then those with windows only elsewhere in all, hidden.
 // Layer 0 holds apps' own windows; menus, the Dock and the menu bar sit
 // above it. The process self is left out.
-func appsFromWindows(onScreen, all []windowInfo, front, self int, chromium func(pid int) bool) []App {
+func appsFromWindows(onScreen, all []windowInfo, front, self int, bundle func(pid int) (string, bool)) []App {
 	byPID := map[int]int{}
 	var apps []App
 	add := func(w windowInfo) *App {
@@ -71,7 +74,8 @@ func appsFromWindows(onScreen, all []windowInfo, front, self int, chromium func(
 		if !seen {
 			index = len(apps)
 			byPID[w.PID] = index
-			apps = append(apps, App{Name: w.Name, PID: w.PID, Active: w.PID == front, Hidden: true, Chromium: chromium(w.PID)})
+			name, chromium := bundle(w.PID)
+			apps = append(apps, App{Name: w.Name, PID: w.PID, Active: w.PID == front, Hidden: true, Bundle: name, Chromium: chromium})
 		}
 		return &apps[index]
 	}
@@ -214,6 +218,14 @@ func resolveApp(apps []App, name string) (App, error) {
 			found = append(found, app)
 		}
 	}
+	// Then by bundle, so an app is found by the name it has in English.
+	if len(found) == 0 {
+		for _, app := range apps {
+			if app.Bundle != "" && strings.EqualFold(app.Bundle, name) {
+				found = append(found, app)
+			}
+		}
+	}
 	switch len(found) {
 	case 1:
 		return found[0], nil
@@ -238,6 +250,9 @@ func formatApps(apps []App) string {
 	b.WriteString("Apps with a window (name, pid). Read one with app_state.\n")
 	for _, app := range apps {
 		line := fmt.Sprintf("%s, pid %d", oneLine(app.Name), app.PID)
+		if app.Bundle != "" && !strings.EqualFold(app.Bundle, app.Name) {
+			line = fmt.Sprintf("%s (%s), pid %d", oneLine(app.Name), oneLine(app.Bundle), app.PID)
+		}
 		if app.Active {
 			line += ", in front"
 		}

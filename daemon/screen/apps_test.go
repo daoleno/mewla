@@ -297,14 +297,14 @@ func TestOpenAnAppThatIsNotRunning(t *testing.T) {
 	s, backend, dir := newAgentService(t)
 	backend.RunningApps = fakeApps()
 	backend.InstalledApps = []FakeInstalledApp{
-		{FakeApp: FakeApp{App: App{Name: "备忘录", PID: 505}}, Bundle: "com.apple.Notes"},
+		{FakeApp: FakeApp{App: App{Name: "提醒事项", PID: 505, Bundle: "Reminders"}}, Bundle: "com.apple.reminders"},
 		{FakeApp: FakeApp{App: App{Name: "Calendar", PID: 606}}},
 	}
 	act(t, s, "%7", AgentAction{Action: "apps"})
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInput()
 
-	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "com.apple.Notes"}).Text; got != "Opened 备忘录 (pid 505) behind the app in front; read it with app_state." {
+	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "com.apple.reminders"}).Text; got != "Opened 提醒事项 (pid 505) behind the app in front; read it with app_state." {
 		t.Fatalf("by bundle id: %s", got)
 	}
 	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "calendar"}).Text; !strings.Contains(got, "Opened Calendar (pid 606)") {
@@ -313,7 +313,11 @@ func TestOpenAnAppThatIsNotRunning(t *testing.T) {
 	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "Calendar"}).Text; got != "Calendar is already open (pid 606); read it with app_state." {
 		t.Fatalf("again: %s", got)
 	}
-	act(t, s, "%7", AgentAction{Action: "app_state", App: "备忘录"})
+	// A Mac in Chinese shows Reminders as 提醒事项: it is known by both names.
+	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "reminders"}).Text; got != "提醒事项 is already open (pid 505); read it with app_state." {
+		t.Fatalf("by its English name: %s", got)
+	}
+	act(t, s, "%7", AgentAction{Action: "app_state", App: "提醒事项"})
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "open_app", App: "Nope"}); err == nil || !strings.Contains(err.Error(), "Unable to find application") {
 		t.Fatalf("missing: %v", err)
 	}
@@ -322,14 +326,14 @@ func TestOpenAnAppThatIsNotRunning(t *testing.T) {
 			t.Fatalf("%q: %v", name, err)
 		}
 	}
-	if want := []string{"com.apple.Notes", "calendar", "Nope"}; !slices.Equal(backend.Launched, want) {
+	if want := []string{"com.apple.reminders", "calendar", "Nope"}; !slices.Equal(backend.Launched, want) {
 		t.Fatalf("launched %q", backend.Launched)
 	}
 	if pointers, keys := backend.Snapshot(); len(pointers)+len(keys) != 0 {
 		t.Fatal("opening an app touched the pointer or keyboard")
 	}
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
-	if strings.Count(string(audit), `"action":"open_app"`) != 11 {
+	if strings.Count(string(audit), `"action":"open_app"`) != 12 {
 		t.Fatalf("audit %s", audit)
 	}
 }
@@ -446,7 +450,7 @@ func TestCoverersComeFromTheScreensOrder(t *testing.T) {
 		{PID: 1, Name: "Mewla", ID: 5, OnScreen: true, Bounds: image.Rect(0, 0, 10, 10)},
 	}
 	onScreen := []windowInfo{chrome, {PID: 750, Name: "Finder", ID: 3, OnScreen: true, Bounds: image.Rect(1300, 800, 1400, 850)}, settings}
-	apps := appsFromWindows(onScreen, all, 700, 1, func(pid int) bool { return pid == 700 })
+	apps := appsFromWindows(onScreen, all, 700, 1, func(pid int) (string, bool) { return map[int]string{600: "System Settings"}[pid], pid == 700 })
 	if len(apps) != 4 {
 		t.Fatalf("apps %+v", apps)
 	}
@@ -459,5 +463,12 @@ func TestCoverersComeFromTheScreensOrder(t *testing.T) {
 	}
 	if apps[3].Name != "Music" || !apps[3].Hidden {
 		t.Fatalf("an app with no window showing: %+v", apps[3])
+	}
+	// An app is found, and listed, by its bundle's English name too.
+	if app, err := resolveApp(apps, "system settings"); err != nil || app.PID != 600 {
+		t.Fatalf("by bundle: %+v %v", app, err)
+	}
+	if list := formatApps(apps); !strings.Contains(list, "系统设置 (System Settings), pid 600\n") || !strings.Contains(list, "Google Chrome, pid 700, in front\n") {
+		t.Fatalf("apps:\n%s", list)
 	}
 }

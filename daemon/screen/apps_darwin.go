@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -135,7 +136,7 @@ func runningApps() ([]App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return appsFromWindows(onScreen, all, front, os.Getpid(), chromiumApp), nil
+	return appsFromWindows(onScreen, all, front, os.Getpid(), appBundle), nil
 }
 
 func windowInfos(option uint32) ([]windowInfo, error) {
@@ -354,8 +355,9 @@ func actOnElement(e Element, action, value string) error {
 // PressAt presses, through accessibility, what an app has at a point in
 // global points, which are framebuffer pixels: the element there, or the
 // nearest of its three closest ancestors that can be pressed. It asks the
-// app itself, so a window over the point doesn't matter. Nothing to press
-// there, or the point in another app's element, is no error and no press.
+// app itself; whether a window over the point still lets it answer is for a
+// real Mac to show. Nothing to press there, or the point in another app's
+// element, is no error and no press: the click is sent instead.
 func (b *macBackend) PressAt(_ context.Context, pid, x, y int) (string, bool, error) {
 	if !loadApps() {
 		return "", false, ErrNoApps
@@ -466,12 +468,13 @@ var chromium struct {
 	once    sync.Once
 	pidPath func(pid int32, buf *byte, size uint32) int32
 	mu      sync.Mutex
-	known   map[int]bool
+	known   map[int]bundleInfo
 }
 
-// chromiumApp says whether the app with pid is built on Chromium, from the
+// appBundle is the app with pid's bundle file name, such as Notes for a
+// Notes.app shown as 备忘录, and whether it is built on Chromium, from the
 // frameworks in its bundle; remembered per process.
-func chromiumApp(pid int) bool {
+func appBundle(pid int) (string, bool) {
 	chromium.once.Do(func() {
 		lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_GLOBAL)
 		if err == nil {
@@ -479,33 +482,39 @@ func chromiumApp(pid int) bool {
 				purego.RegisterLibFunc(&chromium.pidPath, lib, "proc_pidpath")
 			}
 		}
-		chromium.known = map[int]bool{}
+		chromium.known = map[int]bundleInfo{}
 	})
 	chromium.mu.Lock()
 	defer chromium.mu.Unlock()
 	if known, ok := chromium.known[pid]; ok {
-		return known
+		return known.name, known.chromium
 	}
 	// Processes come and go on a Mac that runs for weeks.
 	if len(chromium.known) > 512 {
 		clear(chromium.known)
 	}
-	found := false
+	var info bundleInfo
 	if chromium.pidPath != nil {
 		buf := make([]byte, 4096)
 		if n := chromium.pidPath(int32(pid), &buf[0], uint32(len(buf))); n > 0 {
 			path := string(buf[:n])
 			if i := strings.Index(path, ".app/"); i >= 0 {
+				info.name = strings.TrimSuffix(filepath.Base(path[:i+4]), ".app")
 				entries, _ := os.ReadDir(path[:i+4] + "/Contents/Frameworks")
 				for _, entry := range entries {
 					name := strings.TrimSuffix(entry.Name(), ".framework")
-					found = found || strings.Contains(name, "Chrom") || slices.Contains(chromiumFrameworks, name)
+					info.chromium = info.chromium || strings.Contains(name, "Chrom") || slices.Contains(chromiumFrameworks, name)
 				}
 			}
 		}
 	}
-	chromium.known[pid] = found
-	return found
+	chromium.known[pid] = info
+	return info.name, info.chromium
+}
+
+type bundleInfo struct {
+	name     string
+	chromium bool
 }
 
 var (
