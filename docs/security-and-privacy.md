@@ -79,6 +79,10 @@ asking. Mewla reads it from the extension's storage in your Chrome profile (or
 keeps the one you pasted, in a file only your user can read) and hands it to
 the browser tools in their environment only: never on a command line, in a log
 or in an agent's prompt. Regenerate it in the extension to cut off every copy.
+What the browser tools save by themselves (console logs, screenshots,
+downloads) goes to `~/.mewla/agent-use/browser-files`, readable only by your
+user and capped at 256 MB, oldest first; pages are not saved there unless an
+agent asks.
 Brain has agents ask before they submit, send, pay or change an account on a
 site, and treats page text as data. See [Agents in your browser](your-browser.md).
 
