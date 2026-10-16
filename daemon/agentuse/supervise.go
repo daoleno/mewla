@@ -124,7 +124,7 @@ type supervisor struct {
 // Codex doesn't show an MCP server's instructions, so the advice goes where
 // every agent reads it.
 var toolAdvice = map[string]string{
-	"browser_run_code_unsafe": "Each tool call costs a model turn, which takes far longer than the browser. Once you know the controls a flow needs (from browser_find), do the rest of it (click, fill, send, wait for the result) in one script, using getByRole with the names you found and a short timeout on each wait, such as { timeout: 5000 }, so a wrong guess fails fast. Return just what you need to read.",
+	"browser_run_code_unsafe": "Each tool call costs a model turn, which takes far longer than the browser. Once you know the controls a flow needs (from browser_find), do the rest of it (click, fill, wait for the result) in one script, using getByRole with the names you found and a short timeout on each wait, such as { timeout: 5000 }, so a wrong guess fails fast. Return just what you need to read. A send, submit or payment goes in the script only if it is already approved; otherwise stop the script before it, ask, then finish.",
 	"browser_snapshot":        "Actions don't return the page, so take a snapshot only when you need to see it. A busy app's whole page (chat, mail, docs) can run to hundreds of thousands of tokens: prefer browser_find, or pass target to snapshot one part.",
 	"browser_find":            "The cheap way to learn the controls a flow needs, or to check that it worked: search for the few names you need, not for every button or textbox.",
 }
