@@ -43,8 +43,9 @@ page does next. What takes the time is the agent's turns, not the browser, so
 Mewla's browser tools steer agents to few of them: an action answers with what
 changed rather than the whole page, which on a busy app such as Slack runs to
 hundreds of thousands of tokens; agents look up only the controls they need,
-then do a known flow (open a channel, type, send, check it arrived) in one
-script. Brain has them ask you before they submit, send, pay or change
+then do a known flow (open a channel, type a message, read it back) in one
+script. A script sends, submits or pays only what you already approved;
+otherwise it stops before that step and the agent asks. Brain has them ask you before they submit, send, pay or change
 an account, and treats text on a web page as data, never as an instruction.
 
 A Mac's Chrome is also reachable from your other computers: Brain on your
