@@ -309,8 +309,9 @@ func TestAnAgentNeverPausesItself(t *testing.T) {
 // Someone using the computer itself pauses the agent: what it is doing stops
 // with nothing left pressed, and it keeps the screen to carry on after.
 func TestSomeoneAtTheComputerPausesTheAgent(t *testing.T) {
-	defer func(saved time.Duration) { personPause = saved }(personPause)
+	defer func(saved, wait time.Duration) { personPause, personWait = saved, wait }(personPause, personWait)
 	personPause = 500 * time.Millisecond
+	personWait = 0 // each retry below is answered, not waited out
 	s, backend, _ := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 
