@@ -98,9 +98,12 @@ the app's own controls: they list the Mac's apps, open one that isn't running
 buttons, fields and text, even an app behind others, and press, fill in or
 open those by name, without moving the pointer or bringing the app forward
 (some actions bring it forward themselves). They can type into one app the
-same way, and click a point in its window behind others; that uses a part of
-macOS Apple doesn't document, so where it isn't available, and for apps built
-on Chromium, the app comes to the front for the click. They can run a short
+same way, and click a point in its window behind others: a plain click on
+something the app can press presses it through accessibility; any other click
+is sent through a part of macOS Apple doesn't document, which an app behind
+others may ignore, so the agent is told to check what happened. Where that
+isn't available, and for apps built on Chromium, the app comes to the front
+for the click. They can run a short
 list of such steps in one go, such as find, press, type and check. Apps built on web pages, such as Electron apps, show little
 this way; there agents take a screenshot and click, type and scroll on what
 they see, as a person would. It needs nothing beyond what Screen

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ type FakeBackend struct {
 	// SkyLight lets clicks reach an app behind others; AppClicks are those
 	// clicks and Raised the apps brought to the front.
 	SkyLight  bool
+	HitTest   bool
 	AppClicks []FakeAppClick
 	Raised    []int
 	// InstalledApps are apps OpenApp can start; Launched is what it was asked.
@@ -412,6 +414,29 @@ func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTre
 		return tree, nil
 	}
 	return ElementTree{}, errors.New("the app quit")
+}
+
+// PressAt presses the last fake element of the app whose frame holds the
+// point and that offers AXPress, when HitTest is on.
+func (f *FakeBackend) PressAt(_ context.Context, pid, x, y int) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.HitTest {
+		return "", false, nil
+	}
+	for _, app := range f.RunningApps {
+		if app.PID != pid {
+			continue
+		}
+		for i := len(app.Elements) - 1; i >= 0; i-- {
+			e := app.Elements[i]
+			if image.Pt(x, y).In(e.Frame) && slices.Contains(e.Actions, "AXPress") {
+				f.ElementActions = append(f.ElementActions, FakeElementAction{PID: pid, Index: i, Action: "AXPress"})
+				return fmt.Sprintf("%s %q", strings.TrimPrefix(e.Role, "AX"), e.Title), true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 // ElementHash and SameElement take a fake element for the same one when it
