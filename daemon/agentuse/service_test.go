@@ -130,7 +130,7 @@ func TestMCPServerPassesTheKeyOnlyInTheEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(argv, " ")
-	for _, want := range []string{c.node, "@playwright/mcp/cli.js", "--extension", "--executable-path " + c.chrome.Executable, "--profile-dir-name Profile 2", "--snapshot-mode none", "--output-dir " + filepath.Join(c.root, "state", "agent-use", "browser-files"), "--output-max-size ", "--file-paths absolute"} {
+	for _, want := range []string{c.node, "@playwright/mcp/cli.js", "--extension", "--executable-path " + c.chrome.Executable, "--profile-dir-name Profile 2", "--snapshot-mode none", "--codegen none", "--output-dir " + filepath.Join(c.root, "state", "agent-use", "browser-files"), "--output-max-size ", "--file-paths absolute"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("argv %q lacks %q", joined, want)
 		}
