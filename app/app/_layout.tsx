@@ -55,6 +55,7 @@ import {
   isOnboarded,
   markOnboarded,
 } from "../services/storage";
+import { syncComputers } from "../services/computerSync";
 import { importConnection } from "../services/importConnection";
 import { confirmPairingScopeFor } from "../services/confirmPairingScope";
 import { readInitialConnectLink } from "../services/initialConnectLink";
@@ -235,6 +236,8 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
             routerRef.current.replace({
               pathname: "/list",
             });
+            // A new computer starts working with the others in the background.
+            void syncComputers().then(() => refreshServers());
           },
         });
         if (!savedServer) {
@@ -687,6 +690,7 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="browser" options={{ title: "Browser" }} />
       <Stack.Screen name="resources" options={{ title: "Resources" }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
+      <Stack.Screen name="settings/computer" options={{ title: "" }} />
       <Stack.Screen name="settings/model-providers" options={{ title: "Model Providers" }} />
       <Stack.Screen name="settings/licenses" options={{ title: "Open-source Licenses" }} />
       <Stack.Screen name="settings/license" options={{ title: "" }} />

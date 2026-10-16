@@ -30,13 +30,18 @@ describe("Settings copy density", () => {
       "Camera permission required",
       "Allow camera access to scan a mewla pairing QR code.",
       "On the computer, run mewla pair. Scan its QR code or paste the link it prints.",
-      'accessibilityLabel="Address"',
       "Telegram cloud messages are not deleted.",
       'accessibilityLabel="Appearance theme"',
       "<SegmentedControl",
     ]) {
       expect(source).toContain(necessaryCopy);
     }
+    // A computer's address is edited on its own page, never in the list.
+    const computerPage = readFileSync(
+      join(import.meta.dir, "../components/settings/ComputerPanel.tsx"),
+      "utf8",
+    );
+    expect(computerPage).toContain('accessibilityLabel="Address"');
     // Appearance is one segmented control; each segment owns its radio state.
     const segmented = readFileSync(
       join(import.meta.dir, "../components/ui/SegmentedControl.tsx"),

@@ -8,7 +8,7 @@ import {
   type StoredTransportCandidate,
 } from "./storedServerContract";
 
-export { serverAddressForDisplay, serverAddressProblem } from "./storedServerContract";
+export { serverAddressForDisplay, serverAddressProblem, serverNamedByAddress } from "./storedServerContract";
 export type {
   ServerTransportKind,
   StoredServer,
@@ -63,6 +63,16 @@ export async function saveServer(
   await AsyncStorage.setItem(KEYS.servers, JSON.stringify(next.servers));
   return next.server;
   });
+}
+
+/** Renames a server or moves its address, keeping every other field. */
+export async function updateServer(
+  serverID: string,
+  change: { name?: string; url?: string },
+): Promise<StoredServer | null> {
+  const existing = (await getServers()).find((server) => server.id === serverID);
+  if (!existing) return null;
+  return saveServer({ ...existing, ...change });
 }
 
 export async function removeServer(serverID: string): Promise<void> {
