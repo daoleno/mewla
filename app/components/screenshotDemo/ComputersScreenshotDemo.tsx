@@ -26,7 +26,7 @@ const LINUX: AgentUseStatus = {
 export function ComputersScreenshotDemo({ fixture, header }: { fixture?: string; header: (title: string) => React.ReactNode }) {
   const colors = useAppColors();
   const page = fixture === "mac" || fixture === "linux" ? fixture : "list";
-  const [name, setName] = useState(page === "mac" ? "daoleno's MacBook Pro" : "zen");
+  const [name, setName] = useState(page === "mac" ? "daoleno's MacBook Pro" : "manjaro");
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bgPrimary }} contentContainerStyle={styles.content}>
       {header(page === "list" ? "Settings" : name)}
@@ -37,7 +37,7 @@ export function ComputersScreenshotDemo({ fixture, header }: { fixture?: string;
             <ComputersSection
               computers={[
                 { id: "mac", name: "daoleno's MacBook Pro", status: "Online" },
-                { id: "linux", name: "zen", status: "In use" },
+                { id: "linux", name: "manjaro", status: "In use" },
               ]}
               onOpen={NOOP}
               onPair={NOOP}

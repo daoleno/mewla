@@ -14,6 +14,8 @@ export function computerStatusWord(input: {
     if (input.connection === "connected") return "In use";
     if (input.issue) return input.issue === "device_not_paired" ? "Pair again" : "Can't connect";
     if (input.connection === "connecting") return "Connecting…";
+    // Turned off on this phone; the probe answering doesn't make it in use.
+    return "Not connected";
   }
   switch (input.check?.state) {
     case "online":
@@ -23,7 +25,7 @@ export function computerStatusWord(input: {
     case "offline":
       return "Offline";
     default:
-      return input.current ? "Offline" : "";
+      return "";
   }
 }
 

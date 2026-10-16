@@ -144,6 +144,11 @@ async function joinAll(servers: readonly StoredServer[], deps: TeamDeps): Promis
   }
 }
 
+/** Whether computers are being introduced now. */
+export function joiningComputers(): boolean {
+  return running !== null;
+}
+
 /** The daemon ids of computers that `server` could not be connected with. */
 export function computersApartFrom(server: StoredServer): string[] {
   const ids: string[] = [];
