@@ -528,8 +528,114 @@ func bundleIdentifier(path string) string {
 	return objc.Send[string](id, selUTF8String)
 }
 
+// menuWalk bounds the search of an app's menus for a shortcut.
+const (
+	menuItems = 3000
+	menuDepth = 6
+	menuTime  = 3 * time.Second
+)
+
+// PressMenuKey presses the menu item with the shortcut through
+// accessibility, which an app behind others acts on without being brought
+// forward.
+func (b *macBackend) PressMenuKey(ctx context.Context, pid int, shortcut Shortcut) (string, bool, error) {
+	if !loadApps() {
+		return "", false, ErrNoApps
+	}
+	var path string
+	var found bool
+	var err error
+	withPool(func() { path, found, err = pressMenuKey(ctx, pid, shortcut) })
+	return path, found, err
+}
+
+func pressMenuKey(ctx context.Context, pid int, shortcut Shortcut) (string, bool, error) {
+	app := appsLib.createApplication(int32(pid))
+	if app == 0 {
+		return "", false, fmt.Errorf("couldn't reach the app with pid %d", pid)
+	}
+	defer axLib.release(app)
+	axLib.setTimeout(app, 1)
+	bar, code := axCopy(app, "AXMenuBar")
+	switch {
+	case code == axErrorAPIDisabled:
+		return "", false, ErrPermissions
+	case code != 0 || bar == 0:
+		return "", false, nil // no menus to look in: the keys are sent instead
+	}
+	defer axLib.release(bar)
+	deadline := time.Now().Add(menuTime)
+	seen := 0
+	var item uintptr
+	var path []string
+	var walk func(element uintptr, titles []string, depth int) bool
+	walk = func(element uintptr, titles []string, depth int) bool {
+		seen++
+		if seen > menuItems || depth > menuDepth || time.Now().After(deadline) || ctx.Err() != nil {
+			return false
+		}
+		role := axString(element, "AXRole")
+		if role == "AXMenuItem" || role == "AXMenuBarItem" {
+			titles = append(titles[:len(titles):len(titles)], axString(element, "AXTitle"))
+		}
+		if role == "AXMenuItem" {
+			modifiers := int64(0)
+			if value, code := axCopy(element, "AXMenuItemCmdModifiers"); code == 0 && value != 0 {
+				if axLib.typeID(value) == axLib.numberTypeID() {
+					axLib.numberValue(value, cfNumberSInt64, unsafe.Pointer(&modifiers))
+				}
+				axLib.release(value)
+			}
+			if shortcut.matches(axString(element, "AXMenuItemCmdChar"), modifiers) {
+				item, path = appsLib.retain(element), titles
+				return true
+			}
+		}
+		children, code := axCopy(element, "AXChildren")
+		if code != 0 || children == 0 {
+			return false
+		}
+		defer axLib.release(children)
+		if axLib.typeID(children) != axLib.arrayTypeID() {
+			return false
+		}
+		for i, n := int64(0), axLib.arrayCount(children); i < n; i++ {
+			if walk(axLib.arrayAt(children, i), titles, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	if !walk(bar, nil, 0) {
+		return "", false, nil
+	}
+	defer axLib.release(item)
+	where := strings.Join(path, " > ")
+	if !axBool(item, "AXEnabled", true) {
+		return where, true, fmt.Errorf("%s (%s) is turned off in the app's menus right now, so it wasn't chosen", where, shortcut)
+	}
+	press := axLib.createString(0, "AXPress", cfStringEncodingUTF8)
+	if press == 0 {
+		return where, true, errors.New("couldn't choose the menu item")
+	}
+	defer axLib.release(press)
+	switch code := appsLib.performAction(item, press); code {
+	case 0:
+		return where, true, nil
+	case axErrorAPIDisabled:
+		return where, true, ErrPermissions
+	case axErrorCannotComplete:
+		// Choosing an item can run a while (a dialog opening): the app may
+		// have done it without answering in time.
+		return where, true, fmt.Errorf("chose %s, but the app didn't answer in time; read it to see whether it took effect", where)
+	default:
+		return where, true, fmt.Errorf("the app refused %s (accessibility error %d)", where, code)
+	}
+}
+
 var (
-	_ appReader = (*macBackend)(nil)
-	_ appActor  = (*macBackend)(nil)
-	_ appRaiser = (*macBackend)(nil)
+	_ menuPresser = (*macBackend)(nil)
+	_ appReader   = (*macBackend)(nil)
+	_ appActor    = (*macBackend)(nil)
+	_ appRaiser   = (*macBackend)(nil)
 )
