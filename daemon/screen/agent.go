@@ -709,7 +709,7 @@ func (a *agentSession) numberLocked(tree *ElementTree) {
 func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult, error) {
 	tree, err := a.apps.ReadApp(ctx, app.PID, elementsRead)
 	if err != nil {
-		return AgentResult{}, err
+		return AgentResult{}, a.gone(ctx, app, err)
 	}
 	a.numberLocked(&tree)
 	if a.tree != nil {
@@ -759,7 +759,7 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	// An accessibility action posts no input event, so it leaves the
 	// agent's last event as it was.
 	if err := actor.ActOnElement(ctx, e, name, action.Text); err != nil {
-		return AgentResult{}, err
+		return AgentResult{}, a.gone(ctx, a.treeApp, err)
 	}
 	select {
 	case <-time.After(elementSettle):
@@ -772,6 +772,35 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	}
 	result.Text = fmt.Sprintf("Done: %s on [%d]. The app now:\n", strings.TrimPrefix(name, "AX"), action.Element) + result.Text
 	return result, nil
+}
+
+// appGoneError is an app that quit, or closed its last window, since it was
+// read. Its elements are gone with it.
+type appGoneError struct{ app App }
+
+func (e appGoneError) Error() string {
+	return fmt.Sprintf("%s (pid %d) quit or closed its windows since it was read; open it with open_app, then read it again", oneLine(e.app.Name), e.app.PID)
+}
+
+func (e appGoneError) Is(target error) bool { return target == ErrStaleElement }
+
+// gone explains a failed read of app, or action on one of its elements,
+// when the app is no longer there: an app that has quit can't answer, which
+// accessibility reports as an app that didn't answer in time.
+func (a *agentSession) gone(ctx context.Context, app App, err error) error {
+	if errors.Is(err, ErrPermissions) || ctx.Err() != nil {
+		return err
+	}
+	apps, listErr := a.apps.Apps(ctx)
+	if listErr != nil {
+		return err
+	}
+	for _, running := range apps {
+		if running.PID == app.PID {
+			return err
+		}
+	}
+	return appGoneError{app}
 }
 
 // releaseTree lets go of the latest read's elements, when the agent ends.
