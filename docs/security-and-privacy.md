@@ -47,7 +47,9 @@ A message from another computer reaches Brain marked as relayed by your other
 Brain, with your own words quoted separately. Brain does not treat it as your
 consent: before payments, messages to other people, deletion, account changes
 or installing software it asks you through the Brain you are talking to.
-`mewla computers remove` or `mewla devices revoke` ends the access at once.
+Removing a computer from the phone ends its access on your other computers.
+`mewla computers remove` or `mewla devices revoke` ends it at once too, but the
+phone connects two computers it holds again on the next Settings visit.
 See [Your other computers](computers.md).
 
 ## Agents on the screen
