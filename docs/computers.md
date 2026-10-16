@@ -84,7 +84,7 @@ Each message is delivered once, even if the connection drops while it is sent.
 mewla computers list                     # who you can reach, online or not
 mewla computers send mac "…"             # what Brain runs to hand over a task
 mewla computers status                   # delivery of sent messages
-mewla computers remove mac               # stop working with a computer
+mewla computers remove mac               # forget a computer (see below)
 ```
 
 ## What the other computer may do
@@ -92,8 +92,11 @@ mewla computers remove mac               # stop working with a computer
 A computer you connect gets its own key, with less access than your phone: it
 can only send messages to this computer's Brain and receive its answers. It
 cannot open terminals or files, see the screen, or manage devices. It shows up
-in `mewla devices list` as *(computer)*; **Remove computer** in the app,
-`mewla computers remove` or `mewla devices revoke` ends it at once.
+in `mewla devices list` as *(computer)*. **Remove computer** in the app ends
+it at once and for good. `mewla computers remove` or `mewla devices revoke`
+also ends it at once, but while both computers are still on your phone, the
+phone connects them again the next time you open Settings; to stop for good,
+remove one of them from the phone.
 
 Because the other Brain can do anything you could ask it to do, a request from
 another computer is treated as relayed, not as your own words: the receiving
