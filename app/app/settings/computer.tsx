@@ -20,6 +20,7 @@ import {
   checkComputer,
   computersApartFrom,
   forgetEverywhere,
+  joiningComputers,
   type ComputerCheck,
 } from "../../services/computerTeam";
 import { revokeThisDevice } from "../../services/deviceRevoke";
@@ -89,11 +90,14 @@ export default function ComputerScreen() {
     });
     return () => {
       cancelled = true;
-      // Close the Link tunnel this page opened, unless the app now uses it.
-      if (wsClient.liveServerId() !== target.id) void invalidateStoredServerTransport(target);
+      // Close the Link tunnel this page opened, unless the app now uses it
+      // or computers are still being introduced over it.
+      if (wsClient.liveServerId() !== target.id && !joiningComputers()) void invalidateStoredServerTransport(target);
     };
   }, [serverKey, loadServers, refreshServers]);
 
+  const agentUseRef = useRef<AgentUseStatus | null>(null);
+  agentUseRef.current = agentUse;
   const loadAgentUse = useCallback(async () => {
     const target = serverRef.current;
     if (!target) return;
@@ -101,8 +105,8 @@ export default function ComputerScreen() {
       const next = await getAgentUse(target);
       if (serverRef.current?.id === target.id) setAgentUse(next);
     } catch (reason) {
-      if (serverRef.current?.id === target.id) {
-        setAgentUse(null);
+      // A missed look while the page polls keeps what it last showed.
+      if (serverRef.current?.id === target.id && !agentUseRef.current) {
         setNote({ key: "agents", text: reason instanceof Error ? reason.message : String(reason) });
       }
     }
@@ -195,7 +199,9 @@ export default function ComputerScreen() {
       ? { text: "This computer no longer knows this phone.", label: "Pair again", onPress: pairAgain }
       : current && issue
         ? { text: issue.title, detail: issue.hint || issue.detail, label: "Try again", onPress: reconnect }
-        : null;
+        : status === "Not connected"
+          ? { text: "Not connected", label: "Connect", onPress: reconnect }
+          : null;
 
   const saveDetails = async () => {
     const name = draftName.trim();

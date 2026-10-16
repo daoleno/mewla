@@ -31,6 +31,8 @@ describe("computerStatusWord", () => {
     expect(computerStatusWord({ current: true, connection: "connecting", issue: null, check: undefined })).toBe("Connecting…");
     expect(computerStatusWord({ current: true, connection: "offline", issue: "network_unreachable", check: undefined })).toBe("Can't connect");
     expect(computerStatusWord({ current: true, connection: "offline", issue: "device_not_paired", check: undefined })).toBe("Pair again");
+    // Disconnected on this phone: answering a probe doesn't make it in use.
+    expect(computerStatusWord({ current: true, connection: "offline", issue: null, check: { state: "online" } })).toBe("Not connected");
   });
 });
 

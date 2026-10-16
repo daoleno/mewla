@@ -103,7 +103,6 @@ export function ComputerPanel(props: ComputerPanelProps) {
             value={props.name}
             onChangeText={props.onName}
             onEndEditing={props.onSaveDetails}
-            onSubmitEditing={props.onSaveDetails}
             returnKeyType="done"
             accessibilityLabel="Computer name"
             placeholderTextColor={colors.textSecondary}
@@ -122,8 +121,7 @@ export function ComputerPanel(props: ComputerPanelProps) {
               value={props.address}
               onChangeText={props.onAddress}
               onEndEditing={props.onSaveDetails}
-              onSubmitEditing={props.onSaveDetails}
-              returnKeyType="done"
+                returnKeyType="done"
               accessibilityLabel="Address"
               placeholder="https://mewla.example.com"
               placeholderTextColor={colors.textSecondary}
