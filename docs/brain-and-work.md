@@ -86,8 +86,8 @@ and keeps it for you.
 
 **A message that didn't arrive.** A sent message stays where you sent it. If
 your computer rejects it, the connection drops before your computer confirms
-it, or no confirmation comes within 30 seconds, the bubble says **Not
-delivered** right away, with **Retry** and **Discard**. Retry can't send it
+it, or your computer stops answering for 30 seconds before confirming it, the
+bubble says **Not delivered** right away, with **Retry** and **Discard**. Retry can't send it
 twice: if it had arrived after all, your computer just confirms it. If your
 computer can't tell whether the agent received it, the bubble says **Delivery
 unknown**, with **Send again** and **Discard**. It clears by itself if the

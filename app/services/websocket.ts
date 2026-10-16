@@ -373,6 +373,8 @@ class ServerSocket {
   private shouldReconnect = true;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private attemptSequence = 0;
+  /** When the live socket last delivered a frame (the daemon sends one at least every 10 s). */
+  lastFrameAt: number | undefined;
 
   constructor(
     private meta: ConnectionMeta,
@@ -527,6 +529,7 @@ class ServerSocket {
         if (attemptId !== this.attemptSequence) {
           return;
         }
+        this.lastFrameAt = Date.now();
         try {
           const data = JSON.parse(event.data);
           this.emit(data.type, data);
@@ -2769,6 +2772,11 @@ export class WebSocketClient {
         parse: () => undefined,
       },
     );
+  }
+
+  /** When the live connection to `serverId` last delivered any frame. */
+  lastFrameAt(serverId: string) {
+    return this.liveSocket(serverId)?.lastFrameAt;
   }
 
   isConnected(serverId: string) {

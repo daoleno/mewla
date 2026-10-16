@@ -6,11 +6,27 @@ export const PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL =
   "Discard unsent message";
 
 /**
- * How long a send may go unanswered before the row says so. A live send is
- * acknowledged in about a second; a socket that died without a close event
- * never answers, and a row must not wait on it silently.
+ * How long a send may wait while the connection is silent. A socket that died
+ * without a close event never answers, and a row must not wait on it
+ * silently. A live connection is never silent this long (the daemon sends a
+ * frame at least every 10 s), and an acknowledgement on a live connection can
+ * legitimately take minutes while the provider is busy, so silence, not the
+ * acknowledgement's age, is what times a send out.
  */
-export const PENDING_SEND_ACK_DEADLINE_MS = 30_000;
+export const PENDING_SEND_SILENCE_DEADLINE_MS = 30_000;
+
+/**
+ * Milliseconds until a send counts as unacknowledged on a silent connection,
+ * or 0 once it does. Any frame after the send restarts the wait.
+ */
+export function pendingSendSilenceRemainingMs(args: {
+  sentAt: number;
+  lastFrameAt?: number;
+  now: number;
+}) {
+  const quietSince = Math.max(args.sentAt, args.lastFrameAt ?? args.sentAt);
+  return Math.max(0, quietSince + PENDING_SEND_SILENCE_DEADLINE_MS - args.now);
+}
 
 /**
  * pending: in flight. failed: not delivered (rejected, or the connection or
@@ -151,7 +167,7 @@ export type PendingDeliverySettlement =
 export const CONNECTION_CLOSED_SEND_ERROR =
   "Not delivered: the connection closed before your computer confirmed it.";
 export const ACK_TIMEOUT_SEND_ERROR =
-  "Not delivered: your computer didn't confirm it.";
+  "Not delivered: your computer stopped answering before it confirmed it.";
 export const UNCERTAIN_SEND_ERROR =
   "Your computer couldn't confirm the agent received this. Send it again only if the agent didn't get it.";
 

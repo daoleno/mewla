@@ -19,7 +19,7 @@ import type {
 } from "./InterfaceChatSession";
 import { beginLiveMessageAttempt } from "./messageSendRecovery";
 import {
-  PENDING_SEND_ACK_DEADLINE_MS,
+  pendingSendSilenceRemainingMs,
   settlePendingDelivery,
   staleReceiptAutoRetryPolicy,
   type PendingDeliveryOutcome,
@@ -158,15 +158,35 @@ export function useInterfaceMessageTransport({
           requestId: receipt.requestId,
         });
       };
-      // A socket that died without a close event never answers.
-      const deadline = setTimeout(() => {
-        ackDeadlinesRef.current.delete(deadline);
-        settle({ kind: "ack_timeout" });
-      }, PENDING_SEND_ACK_DEADLINE_MS);
-      ackDeadlinesRef.current.add(deadline);
+      // A socket that died without a close event never answers: time the
+      // send out once the connection has been silent, never while it is live.
+      const sentAt = Date.now();
+      let settled = false;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const armDeadline = () => {
+        const remaining = pendingSendSilenceRemainingMs({
+          sentAt,
+          lastFrameAt: wsClient.lastFrameAt(serverId),
+          now: Date.now(),
+        });
+        if (remaining === 0) {
+          deadline = undefined;
+          settle({ kind: "ack_timeout" });
+          return;
+        }
+        deadline = setTimeout(() => {
+          if (deadline) ackDeadlinesRef.current.delete(deadline);
+          if (!settled) armDeadline();
+        }, remaining);
+        ackDeadlinesRef.current.add(deadline);
+      };
+      armDeadline();
       void receipt.outcome.then((outcome) => {
-        clearTimeout(deadline);
-        ackDeadlinesRef.current.delete(deadline);
+        settled = true;
+        if (deadline) {
+          clearTimeout(deadline);
+          ackDeadlinesRef.current.delete(deadline);
+        }
         if (outcome.kind === "failed") {
           const message = pendingUserMessagesRef.current.find(
             (candidate) => candidate.id === pendingMessageId,
@@ -194,7 +214,7 @@ export function useInterfaceMessageTransport({
         settle(outcome);
       });
     },
-    [settlePendingUserMessage],
+    [serverId, settlePendingUserMessage],
   );
 
   const dispatchPendingUserMessage = useCallback(
