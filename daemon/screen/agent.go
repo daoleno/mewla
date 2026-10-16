@@ -830,7 +830,7 @@ func (a *agentSession) openApp(ctx context.Context, name string) (AgentResult, e
 			}
 		}
 		if time.Now().After(deadline) {
-			return AgentResult{Text: fmt.Sprintf("Asked macOS to open %s, but no new window has shown up yet; look again with apps in a moment.", oneLine(name))}, nil
+			return AgentResult{Text: fmt.Sprintf("Asked macOS to open %s, but no new app has shown a window yet. It may still be starting, or already be open under another name: look with apps.", oneLine(name))}, nil
 		}
 		select {
 		case <-ctx.Done():
