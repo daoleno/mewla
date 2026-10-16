@@ -73,24 +73,16 @@ import {
 import { wsClient } from "../services/websocket";
 import type { TelegramConnectionStatus } from "../services/websocket";
 import {
-  ConnectionState,
-  countWorkersByServer,
-  useWorkerList,
   useWorkerServerSummary,
 } from "../store/workers";
 import * as Storage from "../services/storage";
-import { connectionIssueAccent } from "../services/connectionIssue";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import {
-  ActionMenu,
   AppText,
   Button,
-  InlineNotice,
   ListRow,
   ListSection,
-  confirmDestructive,
 } from "../components/ui";
-import type { ActionMenuItem } from "../components/ui/ActionMenu";
 import { MewlaMark } from "../components/mewla/MewlaMark";
 import { PetPicker } from "../components/settings/PetPicker";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
@@ -101,10 +93,10 @@ import {
   HeaderBackButton,
 } from "../components/navigation/HeaderBackButton";
 import { TelegramConnectionPanel } from "../components/settings/TelegramConnectionPanel";
-import { ComputersTogether } from "../components/settings/ComputersTogether";
-import { AgentsOnThisComputer } from "../components/settings/AgentsOnThisComputer";
-import { cancelCalendarNotifications } from "../services/calendarNotifications";
-import { revokeThisDevice } from "../services/deviceRevoke";
+import { computerStatusWord } from "../components/settings/computerModel";
+import { ComputersSection } from "../components/settings/ComputersSection";
+import { syncComputers } from "../services/computerSync";
+import type { ComputerCheck } from "../services/computerTeam";
 import { useCurrentServer } from "../store/currentServer";
 import {
   telegramSetupMode,
@@ -124,20 +116,12 @@ export default function SettingsScreen() {
   const router = useRouter();
   const screenFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const agents = useWorkerList();
   const {
     currentServerId,
     refreshServers: refreshCurrentServers,
     switchCurrentServer,
   } = useCurrentServer();
-  const {
-    dispatch,
-    hydratedServers,
-    serverConnections,
-    serverConnectionIssues,
-    serverLatencyById,
-  } = useWorkerServerSummary();
-  const agentCounts = useMemo(() => countWorkersByServer(agents), [agents]);
+  const { serverConnections, serverConnectionIssues } = useWorkerServerSummary();
   const colors = useAppColors();
   const { preference, setPreference } = useThemeContext();
   const { theme } = useAppTheme();
@@ -152,11 +136,8 @@ export default function SettingsScreen() {
   const [loaded, setLoaded] = useState(false);
   const [pairPresentation, setPairPresentation] =
     useState<PairPresentationState>(createClosedPairPresentation);
-  const [editingServerId, setEditingServerId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState("");
-  const [draftEndpoint, setDraftEndpoint] = useState("");
   const [draftImportValue, setDraftImportValue] = useState("");
-  const [serverMenuId, setServerMenuId] = useState<string | null>(null);
+  const [checks, setChecks] = useState<Record<string, ComputerCheck>>({});
   const [handledAutoOpenToken, setHandledAutoOpenToken] = useState<
     string | null
   >(null);
@@ -181,11 +162,6 @@ export default function SettingsScreen() {
     return true;
   }, []);
 
-  const editingServer = useMemo(
-    () => servers.find((server) => server.id === editingServerId) || null,
-    [editingServerId, servers],
-  );
-
   useFocusEffect(
     React.useCallback(() => {
       let cancelled = false;
@@ -196,6 +172,16 @@ export default function SettingsScreen() {
 
         setServers(savedServers);
         setLoaded(true);
+        // Each computer answers for itself; the one in use is not the only
+        // one that can be online.
+        await syncComputers(async (nextChecks, renamed) => {
+          if (cancelled) return;
+          setChecks(nextChecks);
+          if (renamed) {
+            setServers(await Storage.getServers());
+            await refreshCurrentServers();
+          }
+        });
       })();
 
       return () => {
@@ -228,33 +214,7 @@ export default function SettingsScreen() {
     await refreshCurrentServers(preferredServerId);
   };
 
-  const connectServer = async (server: Storage.StoredServer) => {
-    await Storage.setServerAutoConnect(server.id, true);
-    if (server.id !== currentServerId) {
-      await switchCurrentServer(server.id);
-      return;
-    }
-    wsClient.connect(server);
-  };
-
-  const disconnectServer = async (serverId: string) => {
-    await Storage.setServerAutoConnect(serverId, false);
-    wsClient.disconnect(serverId);
-  };
-
   const openCreateServer = () => {
-    setEditingServerId(null);
-    setDraftName("");
-    setDraftEndpoint("");
-    setDraftImportValue("");
-    setCameraMountError(null);
-    setPairPresentation(openPairEditor());
-  };
-
-  const openEditServer = (server: Storage.StoredServer) => {
-    setEditingServerId(server.id);
-    setDraftName(server.name);
-    setDraftEndpoint(Storage.serverAddressForDisplay(server.url));
     setDraftImportValue("");
     setCameraMountError(null);
     setPairPresentation(openPairEditor());
@@ -266,9 +226,6 @@ export default function SettingsScreen() {
       return;
     }
     setPairPresentation(closePairPresentation());
-    setEditingServerId(null);
-    setDraftName("");
-    setDraftEndpoint("");
     setDraftImportValue("");
     setCameraMountError(null);
   };
@@ -308,56 +265,6 @@ export default function SettingsScreen() {
     closeEditor();
   };
 
-  const handleSaveServer = async () => {
-    if (!editingServer) {
-      await handleImportDraft();
-      return;
-    }
-
-    const normalizedEndpoint = draftEndpoint.trim();
-    const addressProblem = Storage.serverAddressProblem(normalizedEndpoint);
-    if (addressProblem) {
-      Alert.alert("Check the address", addressProblem);
-      return;
-    }
-
-    const previousConnectionState = editingServerId
-      ? serverConnections[editingServerId]
-      : "connected";
-    const shouldReconnect =
-      previousConnectionState === "connected" ||
-      previousConnectionState === "connecting";
-
-    let savedServer: Storage.StoredServer;
-    try {
-      savedServer = await Storage.saveServer({
-        id: editingServer.id,
-        name: draftName,
-        url: normalizedEndpoint,
-        daemonId: editingServer.daemonId,
-        daemonPublicKey: editingServer.daemonPublicKey,
-        transportKind: editingServer.transportKind,
-        transportPin: editingServer.transportPin,
-        linkRouteId: editingServer.linkRouteId,
-        transportCandidates: editingServer.transportCandidates,
-      });
-    } catch (error: any) {
-      Alert.alert(
-        "Check the address",
-        error?.message || "Use an address like https://mewla.example.com.",
-      );
-      return;
-    }
-
-    await refreshServers();
-    closeEditor();
-
-    if (shouldReconnect && savedServer.id === currentServerId) {
-      await Storage.setServerAutoConnect(savedServer.id, true);
-      wsClient.connect(savedServer);
-    }
-  };
-
   const importServer = async (rawValue: string) => {
     // A failure keeps the scan claim until its alert is dismissed: the live
     // camera still sees the same QR and would resubmit a spent one-time code.
@@ -366,6 +273,11 @@ export default function SettingsScreen() {
       const savedServer = await importConnection(rawValue, {
         onImported: async (importedServer) => {
           await refreshServers(importedServer.id);
+          void syncComputers(async (nextChecks) => {
+            setChecks(nextChecks);
+            setServers(await Storage.getServers());
+            await refreshCurrentServers();
+          });
         },
         onProgress: setPairProgress,
       });
@@ -380,9 +292,6 @@ export default function SettingsScreen() {
 
       // Paste, image, and camera share one success path: release the single Modal.
       setPairPresentation(completePairImport());
-      setEditingServerId(null);
-      setDraftName("");
-      setDraftEndpoint("");
       setDraftImportValue("");
       setCameraMountError(null);
       if (params.pairingRequired === "1") {
@@ -410,26 +319,6 @@ export default function SettingsScreen() {
       }
     }
   };
-
-  const handleDeleteServer = (server: Storage.StoredServer) => {
-    confirmDestructive({
-      title: `Remove ${server.name}?`,
-      message:
-        "Mewla asks the computer to forget this phone. Its Sessions stay there. Pair again to reconnect.",
-      confirmLabel: "Remove",
-      onConfirm: async () => {
-        // Before disconnecting, while the transport is still up; bounded so
-        // an offline computer never blocks the removal.
-        await revokeThisDevice(server);
-        wsClient.disconnect(server.id);
-        dispatch({ type: "REMOVE_SERVER", serverId: server.id });
-        await Storage.removeServer(server.id);
-        await cancelCalendarNotifications(server.id);
-        await refreshServers();
-      },
-    });
-  };
-
 
   const handleImportDraft = async () => {
     let rawValue = draftImportValue.trim();
@@ -499,66 +388,6 @@ export default function SettingsScreen() {
 
   if (!loaded) return null;
 
-  const currentIssue = currentServerId
-    ? serverConnectionIssues[currentServerId] ?? null
-    : null;
-  const menuServer = servers.find((server) => server.id === serverMenuId) ?? null;
-  const serverMenuItems = (server: Storage.StoredServer): ActionMenuItem[] => {
-    const current = server.id === currentServerId;
-    const connectionState = serverConnections[server.id] || "offline";
-    const connectionIssue = serverConnectionIssues[server.id] || null;
-    const agentCount = agentCounts[server.id] || 0;
-    const hydrated = Boolean(hydratedServers[server.id]);
-    const actionLabel = !current
-      ? "Use"
-      : connectionState === "connected"
-        ? "Disconnect"
-        : connectionState === "connecting" || connectionIssue
-          ? "Retry"
-          : "Connect";
-    const primaryDetail =
-      connectionIssue?.hint ??
-      connectionIssue?.detail ??
-      (current && connectionState === "connected"
-        ? hydrated
-          ? `${agentCount} ${agentCount === 1 ? "active agent" : "active agents"}`
-          : "Loading agents"
-        : undefined);
-    return [
-      {
-        key: "connection",
-        label: actionLabel,
-        accessibilityLabel: `${actionLabel} ${server.name}`,
-        detail: primaryDetail,
-        icon: !current
-          ? "swap-horizontal"
-          : connectionState === "connected"
-            ? "power"
-            : "refresh",
-        onPress: () => {
-          void (connectionState === "connected" && current
-            ? disconnectServer(server.id)
-            : connectServer(server));
-        },
-      },
-      {
-        key: "edit",
-        label: "Edit",
-        accessibilityLabel: `Edit ${server.name}`,
-        icon: "edit",
-        onPress: () => openEditServer(server),
-      },
-      {
-        key: "remove",
-        label: "Remove",
-        accessibilityLabel: `Remove ${server.name}`,
-        icon: "trash",
-        destructive: true,
-        onPress: () => handleDeleteServer(server),
-      },
-    ];
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={[]}>
       <ScrollView
@@ -571,104 +400,22 @@ export default function SettingsScreen() {
       >
         <View style={styles.contentInner}>
           <SettingsSectionHeader>Computers</SettingsSectionHeader>
-          <ListSection
-            footer={servers.length === 0 ? "Pair this phone with a computer running Mewla. On the computer, run mewla pair." : null}
-          >
-            {servers.map((server) => {
-              const current = server.id === currentServerId;
-              const connectionState = serverConnections[server.id] || "offline";
-              const latencySample = serverLatencyById[server.id];
-              const connectionIssue = serverConnectionIssues[server.id] || null;
-              const endpoint =
-                server.transportKind === "link"
-                  ? "Mewla Link"
-                  : Storage.serverAddressForDisplay(server.url);
-              const status = [
-                connectionIssue?.title ?? connectionLabel(connectionState),
-                connectionState === "connected" && latencySample
-                  ? formatLatency(latencySample.latencyMs)
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <ListRow
-                  key={server.id}
-                  title={server.name}
-                  subtitle={`${status} · ${endpoint}`}
-                  leading={
-                    <View style={styles.serverGlyph}>
-                      <Icon
-                        name="desktop"
-                        size={20}
-                        color={colors.textSecondary}
-                      />
-                      {/* Healthy servers stay clean; only a state to act on gets a dot. */}
-                      {connectionIssue || connectionState !== "connected" ? (
-                        <View
-                          style={[
-                            styles.serverGlyphDot,
-                            {
-                              borderColor: colors.bgSurface,
-                              backgroundColor: connectionIssue
-                                ? connectionIssueAccent(connectionIssue, colors)
-                                : connectionColor(connectionState, colors),
-                            },
-                          ]}
-                        />
-                      ) : null}
-                    </View>
-                  }
-                  trailing={
-                    current ? (
-                      <AppText variant="micro" style={[styles.inUse, { color: colors.textPrimary, backgroundColor: theme.materials.tint }]}>
-                        In use
-                      </AppText>
-                    ) : null
-                  }
-                  accessory="chevron"
-                  accessibilityLabel={`${server.name}${current ? ", in use" : ""}, ${connectionLabel(connectionState)}${
-                    connectionState === "connected" && latencySample
-                      ? `, ${formatLatency(latencySample.latencyMs)} latency`
-                      : ""
-                  }, ${endpoint}`}
-                  accessibilityHint="Shows actions for this server"
-                  onPress={() => setServerMenuId(server.id)}
-                />
-              );
-            })}
-            <ListRow
-              title="Pair a computer"
-              icon="add"
-              accessibilityLabel="Pair a computer"
-              accessory="chevron"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                openCreateServer();
-              }}
-            />
-          </ListSection>
-          {currentIssue ? (
-            <InlineNotice
-              // The server row above says what is wrong; this says what to do.
-              tone="neutral"
-              title="To fix this"
-              detail={currentIssue.hint || currentIssue.detail}
-              style={styles.sectionNotice}
-            />
-          ) : null}
-
-          <AgentsOnThisComputer
-            key={`agents-${currentServerId || "no-current-server"}`}
-            server={servers.find((server) => server.id === currentServerId) ?? null}
-            connected={Boolean(currentServerId) && serverConnections[currentServerId || ""] === "connected"}
-          />
-
-          <ComputersTogether
-            key={currentServerId || "no-current-server"}
-            servers={servers}
-            currentServerId={currentServerId}
-            connected={Boolean(currentServerId) && serverConnections[currentServerId || ""] === "connected"}
+          <ComputersSection
+            computers={servers.map((server) => ({
+              id: server.id,
+              name: server.name,
+              status: computerStatusWord({
+                current: server.id === currentServerId,
+                connection: serverConnections[server.id],
+                issue: serverConnectionIssues[server.id]?.code,
+                check: checks[server.id],
+              }),
+            }))}
+            onOpen={(id) => router.push({ pathname: "/settings/computer", params: { id } })}
+            onPair={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              openCreateServer();
+            }}
           />
 
           <SettingsSectionHeader>Channels</SettingsSectionHeader>
@@ -739,13 +486,6 @@ export default function SettingsScreen() {
           </ListSection>
         </View>
       </ScrollView>
-
-      <ActionMenu
-        visible={menuServer !== null}
-        title={menuServer?.name}
-        onClose={() => setServerMenuId(null)}
-        items={menuServer ? serverMenuItems(menuServer) : []}
-      />
 
       {/* Unified Pair/Edit presentation: one RisingSheet Modal, editor|scanner modes */}
       <RisingSheet
@@ -946,116 +686,48 @@ export default function SettingsScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.modalTitle} accessibilityRole="header">
-              {editingServerId ? "Edit Computer" : "Pair a Computer"}
+              Pair a Computer
             </Text>
 
-            {editingServer ? (
-              <>
-                <Text style={styles.fieldLabel}>Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={draftName}
-                  onChangeText={setDraftName}
-                  accessibilityLabel="Server name"
-                  placeholder="workstation"
-                  placeholderTextColor={colors.textSecondary}
-                  selectionColor={colors.selectionBackground}
-                  cursorColor={colors.accentStrong}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+            <Text style={styles.importLead}>
+              On the computer, run mewla pair. Scan its QR code or paste the link it prints.
+            </Text>
 
-                {editingServer.transportKind === "link" ? (
-                  <View style={styles.identityCard}>
-                    <Text style={styles.identityLabel}>Address</Text>
-                    <Text style={styles.fieldHint}>Mewla Link</Text>
-                  </View>
-                ) : (
-                  <>
-                    <Text style={[styles.fieldLabel, { marginTop: 16 }]}>
-                      Address
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={draftEndpoint}
-                      onChangeText={setDraftEndpoint}
-                      accessibilityLabel="Address"
-                      placeholder="https://mewla.example.com"
-                      placeholderTextColor={colors.textSecondary}
-                      selectionColor={colors.selectionBackground}
-                      cursorColor={colors.accentStrong}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                    />
-                    <Text style={styles.fieldHint}>
-                      Where this phone reaches the computer. Run mewla address list on the computer to see every address.
-                    </Text>
-                  </>
-                )}
+            <Text style={styles.fieldLabel}>Pairing Link</Text>
+            <TextInput
+              style={[styles.input, styles.importInput]}
+              value={draftImportValue}
+              onChangeText={setDraftImportValue}
+              accessibilityLabel="Pairing link"
+              placeholder="mewla://settings?p=… or https://…/#pair=…"
+              placeholderTextColor={colors.textSecondary}
+              selectionColor={colors.selectionBackground}
+              cursorColor={colors.accentStrong}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+              textAlignVertical="top"
+            />
+            <View style={styles.modalActions}>
+              <Button label="Cancel" variant="plain" style={styles.modalAction} onPress={closeEditor} />
+              <Button
+                label="Pair"
+                variant="filled"
+                style={styles.modalAction}
+                onPress={() => {
+                  void handleImportDraft();
+                }}
+              />
+            </View>
 
-                <View style={styles.identityCard}>
-                  <Text style={styles.identityLabel}>Trusted Daemon</Text>
-                  <Text style={styles.identityCode} numberOfLines={1}>
-                    {editingServer.daemonId}
-                  </Text>
-                </View>
-
-                <View style={styles.modalActions}>
-                  <Button label="Cancel" variant="plain" style={styles.modalAction} onPress={closeEditor} />
-                  <Button
-                    label="Save"
-                    variant="filled"
-                    style={styles.modalAction}
-                    onPress={() => {
-                      void handleSaveServer();
-                    }}
-                  />
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.importLead}>
-                  On the computer, run mewla pair. Scan its QR code or paste the link it prints.
-                </Text>
-
-                <Text style={styles.fieldLabel}>Pairing Link</Text>
-                <TextInput
-                  style={[styles.input, styles.importInput]}
-                  value={draftImportValue}
-                  onChangeText={setDraftImportValue}
-                  accessibilityLabel="Pairing link"
-                  placeholder="mewla://settings?p=… or https://…/#pair=…"
-                  placeholderTextColor={colors.textSecondary}
-                  selectionColor={colors.selectionBackground}
-                  cursorColor={colors.accentStrong}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  multiline
-                  textAlignVertical="top"
-                />
-                <View style={styles.modalActions}>
-                  <Button label="Cancel" variant="plain" style={styles.modalAction} onPress={closeEditor} />
-                  <Button
-                    label="Pair"
-                    variant="filled"
-                    style={styles.modalAction}
-                    onPress={() => {
-                      void handleImportDraft();
-                    }}
-                  />
-                </View>
-
-                <Button
-                  label="Scan QR Code"
-                  icon="qr-code"
-                  variant="tinted"
-                  block
-                  style={styles.scanQrAction}
-                  onPress={openScanner}
-                />
-              </>
-            )}
+            <Button
+              label="Scan QR Code"
+              icon="qr-code"
+              variant="tinted"
+              block
+              style={styles.scanQrAction}
+              onPress={openScanner}
+            />
           </ScrollView>
         )}
       </RisingSheet>
@@ -1408,17 +1080,6 @@ function TelegramConnectionRow({
   );
 }
 
-function connectionLabel(state: ConnectionState): string {
-  switch (state) {
-    case "connected":
-      return "Connected";
-    case "connecting":
-      return "Connecting";
-    case "offline":
-      return "Offline";
-  }
-}
-
 function telegramConnectionStateLabel(
   state: TelegramConnectionStatus["state"],
 ): string {
@@ -1447,27 +1108,6 @@ function telegramConnectionStateTone(
     case "disabled":
       return "neutral";
   }
-}
-
-function connectionColor(
-  state: ConnectionState,
-  colors: AppColors,
-): string {
-  switch (state) {
-    case "connected":
-      return colors.statusRunning;
-    case "connecting":
-      return colors.warning;
-    case "offline":
-      return colors.disabledText;
-  }
-}
-
-function formatLatency(latencyMs: number): string {
-  if (latencyMs >= 1000) {
-    return `${(latencyMs / 1000).toFixed(1)}s`;
-  }
-  return `${latencyMs} ms`;
 }
 
 function createStyles(theme: ResolvedTheme) {
@@ -1499,28 +1139,9 @@ function createStyles(theme: ResolvedTheme) {
       alignItems: "center",
       justifyContent: "center",
     },
-    serverGlyphDot: {
-      position: "absolute",
-      right: -3,
-      bottom: -3,
-      width: 11,
-      height: 11,
-      borderRadius: 6,
-      borderWidth: 2,
-    },
-    sectionNotice: {
-      marginTop: -14,
-      marginBottom: 26,
-    },
 
 
     channelSection: {},
-    inUse: {
-      overflow: "hidden",
-      borderRadius: 999,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-    },
     appearance: {
       marginBottom: 26,
     },
@@ -1633,31 +1254,6 @@ function createStyles(theme: ResolvedTheme) {
     importInput: {
       minHeight: 112,
       paddingTop: 10,
-    },
-    fieldHint: {
-      ...UiTextMetrics,
-      ...TypeScale.caption,
-      marginTop: 8,
-      color: colors.textTertiary,
-    },
-    identityCard: {
-      marginTop: 16,
-      borderRadius: Radii.sm,
-      padding: 12,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    identityLabel: {
-      ...UiTextMetrics,
-      ...TypeScale.label,
-      color: colors.textSecondary,
-      marginBottom: 6,
-    },
-    identityCode: {
-      ...UiTextMetrics,
-      ...TypeScale.mono,
-      color: colors.textPrimary,
     },
     modalActions: {
       flexDirection: "row",

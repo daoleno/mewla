@@ -57,7 +57,8 @@ describe("navigation and Skills copy density", () => {
   test("Settings does not duplicate current-server status", () => {
     expect(settingsSource).not.toContain("Current:");
     expect(settingsSource).not.toMatch(/>\s*Current\s*</);
-    expect(settingsSource).toContain("connectionLabel(connectionState)");
+    // Each computer row carries one status word, from one place.
+    expect(settingsSource).toContain("computerStatusWord({");
   });
   test("Skills chrome is a compact local manager", () => {
     expect(skillsSource).toContain('placeholder="Search Skills"');

@@ -259,6 +259,11 @@ function dedupeServers(servers: StoredServer[]): StoredServer[] {
   return normalized;
 }
 
+/** Whether `server` still goes by its address rather than a name. */
+export function serverNamedByAddress(server: StoredServer): boolean {
+  return server.name === deriveServerName(server.url);
+}
+
 function deriveServerName(url: string): string {
   try {
     const parsed = new URL(url);

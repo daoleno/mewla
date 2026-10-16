@@ -111,6 +111,7 @@ import { pluginJobs } from "../services/pluginOnboarding";
 import { useCalendarDispatch, type CalendarItem } from "../store/calendar";
 import { ResourcesScreenshotDemo, SkillsScreenshotDemo, WorkScreenshotDemo } from "../components/screenshotDemo/ToolsScreenshotDemos";
 import { Icon } from "../components/icons/Icon";
+import { ComputersScreenshotDemo } from "../components/screenshotDemo/ComputersScreenshotDemo";
 
 const NOOP = () => undefined;
 const loadNoDemoAsset = async () => null;
@@ -161,6 +162,8 @@ export default function ScreenshotDemoRoute() {
       return <ResourcesScreenshotDemo header={<DemoStackHeader title="Resources" />} />;
     case "work":
       return <WorkScreenshotDemo header={<DemoStackHeader title="" />} />;
+    case "computers":
+      return <ComputersScreenshotDemo fixture={params.fixture} header={(title) => <DemoStackHeader title={title} />} />;
     case "profile":
       return <InterfaceDevicePerformanceDemoGate />;
     case "reading":

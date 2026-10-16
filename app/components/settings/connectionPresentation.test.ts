@@ -10,6 +10,8 @@ const settingsSource = readFileSync(
   "utf8",
 );
 const panelSource = readFileSync(join(import.meta.dir,"TelegramConnectionPanel.tsx"),"utf8");
+const computersSource = readFileSync(join(import.meta.dir, "ComputersSection.tsx"), "utf8");
+const computerPageSource = readFileSync(join(import.meta.dir, "../../app/settings/computer.tsx"), "utf8");
 
 function sourceBlock(start: string, end: string): string {
   const startIndex = settingsSource.indexOf(start);
@@ -22,7 +24,7 @@ function sourceBlock(start: string, end: string): string {
 
 describe("Settings connection information architecture", () => {
   test("compact Telegram entry opens focused details with error recovery", () => {
-    const telegram = sourceBlock("function TelegramConnectionRow", "function connectionLabel");
+    const telegram = sourceBlock("function TelegramConnectionRow", "function telegramConnectionStateLabel");
     expect(telegram).toContain('visible={expanded} onClose={closeDetails} layout="fullscreen"');
     expect(telegram).toContain('accessibilityLabel="Back to Settings"');
     expect(telegram).toContain("<TelegramConnectionPanel");
@@ -33,7 +35,8 @@ describe("Settings connection information architecture", () => {
     for (const section of ["Computers", "Channels", "Agents"]) {
       expect(settingsSource).toMatch(new RegExp(`>\\s*${section}\\s*<`));
     }
-    expect(settingsSource).toContain('accessibilityLabel="Pair a computer"');
+    expect(settingsSource).toContain("<ComputersSection");
+    expect(computersSource).toContain('accessibilityLabel="Pair a computer"');
     expect(settingsSource).not.toContain("CONNECTION_KIND_OPTIONS");
     expect(settingsSource).not.toContain("Add Connection");
   });
@@ -43,11 +46,13 @@ describe("Settings connection information architecture", () => {
     expect(overview).toContain('serverId={currentServerId}');
     expect(overview).toContain('serverConnections[currentServerId] === "connected"');
     expect(overview).toContain('No current server');
-    expect(settingsSource).toContain(": Storage.serverAddressForDisplay(server.url);");
+    // An address shows only on the computer's own page, never in the list.
+    expect(settingsSource).not.toContain("serverAddressForDisplay");
+    expect(computerPageSource).toContain("Storage.serverAddressForDisplay(found.url)");
     expect(settingsSource).not.toMatch(/>\s*Messaging\s*</);
   });
   test("standalone Telegram entry is one grouped list row with semantic status", () => {
-    const telegram = sourceBlock("function TelegramConnectionRow", "function connectionLabel");
+    const telegram = sourceBlock("function TelegramConnectionRow", "function telegramConnectionStateLabel");
     expect(telegram).toContain("<ListSection");
     expect(telegram).toContain("<ListRow");
     expect(telegram).toContain('title="Telegram"');
@@ -63,7 +68,7 @@ describe("Settings connection information architecture", () => {
 
     const telegram = sourceBlock(
       "function TelegramConnectionRow",
-      "function connectionLabel",
+      "function telegramConnectionStateLabel",
     );
     // The server row owns "offline"; Telegram only says it can't be used now.
     expect(telegram).not.toContain("Server offline");
@@ -79,12 +84,12 @@ describe("Settings connection information architecture", () => {
   test("Mewla Server selection preserves the established pairing path", () => {
     const pairing = sourceBlock(
       "const openCreateServer",
-      "const openEditServer",
+      "const closeEditor",
     );
     expect(pairing).toContain("setPairPresentation(openPairEditor())");
     expect(settingsSource).toContain("openPairScanner(current)");
     expect(settingsSource).toContain("await importServer(data || \"\")");
-    expect(settingsSource).toContain("await handleImportDraft()");
+    expect(settingsSource).toContain("void handleImportDraft()");
     expect(settingsSource).not.toContain(
       "Advanced / Self-managed: run mewla pair",
     );
@@ -93,7 +98,7 @@ describe("Settings connection information architecture", () => {
   test("Telegram never participates in current-server selection", () => {
     const telegram = sourceBlock(
       "function TelegramConnectionRow",
-      "function connectionLabel",
+      "function telegramConnectionStateLabel",
     );
     expect(telegram).not.toContain("switchCurrentServer");
     expect(telegram).not.toContain("connectServer(");
@@ -115,7 +120,7 @@ describe("Settings connection information architecture", () => {
   test("Telegram setup uses compact secure input and keeps advanced actions on demand", () => {
     const telegram = sourceBlock(
       "function TelegramConnectionRow",
-      "function connectionLabel",
+      "function telegramConnectionStateLabel",
     );
     expect(settingsSource).toContain(
       'const TELEGRAM_BOTFATHER_URL = "https://t.me/BotFather"',
@@ -133,7 +138,7 @@ describe("Settings connection information architecture", () => {
   test("token input is secure, explicitly pasted, and cleared on every exit", () => {
     const telegram = sourceBlock(
       "function TelegramConnectionRow",
-      "function connectionLabel",
+      "function telegramConnectionStateLabel",
     );
     expect(panelSource).toContain("secureTextEntry");
     expect(telegram).toContain("await Clipboard.getStringAsync()");
@@ -153,7 +158,7 @@ describe("Settings connection information architecture", () => {
   test("owner binding stays automatic and contains no manual identity fields", () => {
     const telegram = sourceBlock(
       "function TelegramConnectionRow",
-      "function connectionLabel",
+      "function telegramConnectionStateLabel",
     );
     expect(telegram).toContain("wsClient.beginTelegramBinding(serverId)");
     expect(telegram).toContain("Linking.openURL(challenge.url)");
@@ -175,7 +180,8 @@ describe("Settings connection information architecture", () => {
   });
 
   test("connection controls expose roles, state, and disabled state accessibly", () => {
-    expect(settingsSource).toContain('accessibilityLabel="Pair a computer"');
+    expect(settingsSource).toContain("<ComputersSection");
+    expect(computersSource).toContain('accessibilityLabel="Pair a computer"');
     expect(settingsSource).toContain('accessibilityHint="Open Telegram details and actions"');
     expect(panelSource).toContain('accessibilityLabel="Telegram bot token"');
     expect(panelSource).toContain('accessibilityState={{ disabled: unavailable, busy }}');
