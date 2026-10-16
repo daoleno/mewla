@@ -356,7 +356,13 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	if tree.Truncated {
 		b.WriteString("(the app has more than was read)\n")
 	}
-	if shown == 0 {
+	switch {
+	case shown > 0:
+	case app.Hidden:
+		// Accessibility reaches only windows on this screen: not those on
+		// another desktop, or of a hidden app.
+		b.WriteString("Nothing readable now: none of its windows is on this screen (it may be on another desktop, or hidden), where accessibility can't reach it. bring_forward shows it, when nobody is using the computer.\n")
+	default:
 		b.WriteString("Nothing readable: this app shows little to accessibility; use screenshots.\n")
 	}
 	return b.String()

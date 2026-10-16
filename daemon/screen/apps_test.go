@@ -629,3 +629,24 @@ func TestReadAnElementsWholeValue(t *testing.T) {
 		t.Fatalf("audit %s", audit)
 	}
 }
+
+// An app whose windows are on another desktop reads as such, not as an app
+// that shows little to accessibility; once in front it reads in full.
+func TestAnAppOnAnotherDesktopSaysSo(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Active, apps[2].Active = false, true
+	apps[0].OtherDesktop = true
+	backend.RunningApps = apps
+	got := act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"}).Text
+	if !strings.Contains(got, "none of its windows is on this screen (it may be on another desktop, or hidden)") || strings.Contains(got, "shows little") {
+		t.Fatalf("behind:\n%s", got)
+	}
+	act(t, s, "%7", AgentAction{Action: "bring_forward", App: "Notes"})
+	if got := act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"}).Text; !strings.Contains(got, `Button "New Note"`) {
+		t.Fatalf("in front:\n%s", got)
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "app_state", App: "301"}).Text; !strings.Contains(got, "shows little to accessibility") {
+		t.Fatalf("an app with nothing to read:\n%s", got)
+	}
+}
