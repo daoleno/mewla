@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { mergePendingUserMessagesIntoTimeline } from "./InterfaceTimelineModel";
 import {
+  PENDING_SEND_SILENCE_DEADLINE_MS,
+  pendingSendSilenceRemainingMs,
   presentPendingUserMessageLifecycle,
   settlePendingDelivery,
   showsPendingSendStatusMark,
@@ -328,6 +330,31 @@ describe("every send outcome settles visibly", () => {
     expect(settlePendingDelivery({ kind: "pending" })).toEqual({
       kind: "acknowledge",
     });
+  });
+
+  test("only a silent connection times a send out, never a slow acknowledgement", () => {
+    const sentAt = Date.parse("2026-10-16T05:00:00.000Z");
+    // Brain admissions on this computer took up to 236.9 s to be accepted
+    // while the provider was busy; the connection stayed live meanwhile.
+    const slowAckAt = sentAt + 236_937;
+    expect(
+      pendingSendSilenceRemainingMs({
+        sentAt,
+        lastFrameAt: slowAckAt - 10_000,
+        now: slowAckAt,
+      }),
+    ).toBe(PENDING_SEND_SILENCE_DEADLINE_MS - 10_000);
+    // No frame since the send: a half-open socket.
+    expect(
+      pendingSendSilenceRemainingMs({
+        sentAt,
+        lastFrameAt: sentAt - 5_000,
+        now: sentAt + PENDING_SEND_SILENCE_DEADLINE_MS,
+      }),
+    ).toBe(0);
+    expect(
+      pendingSendSilenceRemainingMs({ sentAt, now: sentAt + 1_000 }),
+    ).toBe(PENDING_SEND_SILENCE_DEADLINE_MS - 1_000);
   });
 
   test("a missing acknowledgement is Not delivered until a late one arrives", () => {
