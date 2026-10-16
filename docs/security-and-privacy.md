@@ -58,10 +58,15 @@ of your user on that computer can reach, as with the rest of `mewla`. Agents
 don't need a phone's Screen approval: the switch is the approval. A person
 viewing the screen always takes over from an agent, someone using the Mac's own
 keyboard or trackpad pauses what it does on the screen and in the app in front
-(work in an app behind goes on), agents can't use a locked Mac, the app's switch
+(work in an app behind goes on; key presses, clicks, pointer moves and
+scrolling count, a hand resting on the trackpad doesn't, and the agent and the
+log say which input it saw), agents can't use a locked Mac, the app's switch
 stops agents at once (`mewla screen disable` and `mewla agent-use off` within
 seconds), and each action is logged without what was typed, including work in
-an app behind others, which Watch may not show. See
+an app behind others, which Watch may not show. Agents can also open an app
+that isn't running, by its name or bundle id, never a file or link, and a
+plain click on a window behind others presses what is there through
+accessibility, without the pointer. See
 [Screen](screen.md#agents-on-the-screen). Codex's own computer use, when your
 Codex has it, is Codex's tool: none of this covers it, except that the switch
 turns it off for Codex Workers started afterwards. See
