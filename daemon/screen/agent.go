@@ -364,15 +364,18 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	s.current = control
 	s.control.Unlock()
 
+	starting := time.Now()
 	session, err := s.backend.Start(ctx)
 	if err != nil {
 		cancel(err)
 		s.ReleaseControl(control)
 		return nil, err
 	}
-	// Starting a capture may wake the display by declaring activity.
-	if woke := time.Now().Add(wakeDeclares); wakeDeclares > 0 && woke.After(lastPost) {
-		lastPost = woke
+	// Starting a capture wakes a sleeping display by declaring activity,
+	// which may read as input for a moment. Only then: a person already
+	// at the computer is never overlooked.
+	if woke := time.Unix(0, displayWoke.Load()); !woke.Before(starting) {
+		lastPost = later(lastPost, woke.Add(wakeDeclares))
 	}
 	label := worker
 	if s.workerName != nil {

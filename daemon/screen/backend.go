@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"sync/atomic"
 	"time"
 )
 
@@ -71,6 +72,14 @@ type Permission struct {
 	// Mewla restarts.
 	RestartRequired bool `json:"restart_required,omitempty"`
 }
+
+// displayWoke is when this process last declared activity to wake a
+// sleeping display, in Unix nanoseconds. For wakeDeclares after that, input
+// may be the wake's, not a person's.
+var (
+	displayWoke  atomic.Int64
+	wakeDeclares = 2 * time.Second
+)
 
 // Presence is what an agent needs to know about the person at the computer.
 type Presence struct {

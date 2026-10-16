@@ -43,6 +43,7 @@ type FakeBackend struct {
 	// sleeps counts SleepDisplay; a capture started before the last one
 	// has stopped, and starting a new capture wakes the display.
 	sleeps      int
+	woken       int
 	DisplayHeld bool
 	// RunningApps are the apps an agent can read; Retained counts the
 	// element handles read and not yet released.
@@ -191,6 +192,10 @@ func (f *FakeBackend) Confirm(_ context.Context, device string) (bool, error) {
 func (f *FakeBackend) Start(context.Context) (Session, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.sleeps != f.woken {
+		f.woken = f.sleeps
+		displayWoke.Store(time.Now().UnixNano())
+	}
 	return &fakeSession{backend: f, image: image.NewRGBA(image.Rect(0, 0, f.Width, f.Height)), sleeps: f.sleeps}, nil
 }
 
