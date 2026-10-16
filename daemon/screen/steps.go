@@ -19,11 +19,14 @@ const (
 )
 
 // ElementMatch names an element by what it is: its role, and its name or
-// value, matched without case, whole first and then as part.
+// value, matched without case, whole first and then as part. Empty asks for
+// an element with no value, such as a new note's text before anything is
+// written over it.
 type ElementMatch struct {
 	Role  string `json:"role,omitempty"`
 	Title string `json:"title,omitempty"`
 	Value string `json:"value,omitempty"`
+	Empty bool   `json:"empty,omitempty"`
 }
 
 func (m ElementMatch) String() string {
@@ -37,6 +40,9 @@ func (m ElementMatch) String() string {
 	if m.Value != "" {
 		parts = append(parts, `= "`+m.Value+`"`)
 	}
+	if m.Empty {
+		parts = append(parts, "(empty)")
+	}
 	return strings.Join(parts, " ")
 }
 
@@ -45,6 +51,9 @@ func (m ElementMatch) String() string {
 func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
 	if m.Role == "" && m.Title == "" && m.Value == "" {
 		return 0, errors.New("a match needs a role, title or value")
+	}
+	if m.Empty && m.Value != "" {
+		return 0, errors.New("a match is either empty or has a value")
 	}
 	role := strings.TrimPrefix(strings.ToLower(m.Role), "ax")
 	var whole, part []int
@@ -57,6 +66,10 @@ func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
 			value = ""
 		}
 		if m.Value != "" && !strings.Contains(strings.ToLower(value), strings.ToLower(m.Value)) {
+			continue
+		}
+		// A password's value is never read, so it can't be known empty.
+		if m.Empty && (e.Value != "" || e.Role == "AXSecureTextField") {
 			continue
 		}
 		switch {
