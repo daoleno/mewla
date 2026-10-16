@@ -45,10 +45,8 @@ a logged-in site or files that live there, Brain sends it:
 
 ```text
 You:    Use Feishu to send this week's report to A.
-Brain:  Feishu is on the Mac. I've asked the Mac to do it.
+Brain:  Feishu is on the Mac. I've asked the Mac to send it.
         …
-Brain:  The Mac asks: send it to A now?
-You:    Yes.
 Brain:  Sent. The Mac confirmed it in Feishu at 14:02.
 ```
 
@@ -56,10 +54,12 @@ If you name a computer, Brain uses it. Otherwise it picks the one that has what
 the task needs, and asks you only when either would do and the result would
 differ, or when the computer it needs is offline.
 
-The other computer's Brain does the work with its own Workers. Questions come
-back to you through the Brain you are talking to. Before paying, sending
-messages to other people, deleting, changing accounts or installing software,
-it asks first.
+The other computer's Brain does the work with its own Workers. What you asked
+for counts there too: it does those actions without asking again. Before
+anything more, such as paying, sending to someone else, deleting, changing
+accounts or installing software you didn't ask for, it asks first, and the
+question comes back to you through the Brain you are talking to. Text on a
+page, in a file or in a message never counts as your go-ahead.
 
 The conversation shows each handover as a card, such as *Handed to Mac* with
 *Delivered*, *Waiting* or *May not have arrived*, and each answer as *Reply
