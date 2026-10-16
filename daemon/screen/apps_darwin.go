@@ -472,9 +472,10 @@ var chromium struct {
 }
 
 // appBundle is the app with pid's bundle file name, such as Notes for a
-// Notes.app shown as 备忘录, and whether it is built on Chromium, from the
-// frameworks in its bundle; remembered per process.
-func appBundle(pid int) (string, bool) {
+// Notes.app shown as 备忘录, its bundle id, and whether it is built on
+// Chromium, from the frameworks in its bundle; remembered per process. It
+// runs inside an autorelease pool.
+func appBundle(pid int) bundleInfo {
 	chromium.once.Do(func() {
 		lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_GLOBAL)
 		if err == nil {
@@ -487,7 +488,7 @@ func appBundle(pid int) (string, bool) {
 	chromium.mu.Lock()
 	defer chromium.mu.Unlock()
 	if known, ok := chromium.known[pid]; ok {
-		return known.name, known.chromium
+		return known
 	}
 	// Processes come and go on a Mac that runs for weeks.
 	if len(chromium.known) > 512 {
@@ -500,6 +501,7 @@ func appBundle(pid int) (string, bool) {
 			path := string(buf[:n])
 			if i := strings.Index(path, ".app/"); i >= 0 {
 				info.name = strings.TrimSuffix(filepath.Base(path[:i+4]), ".app")
+				info.id = bundleIdentifier(path[:i+4])
 				entries, _ := os.ReadDir(path[:i+4] + "/Contents/Frameworks")
 				for _, entry := range entries {
 					name := strings.TrimSuffix(entry.Name(), ".framework")
@@ -509,12 +511,21 @@ func appBundle(pid int) (string, bool) {
 		}
 	}
 	chromium.known[pid] = info
-	return info.name, info.chromium
+	return info
 }
 
-type bundleInfo struct {
-	name     string
-	chromium bool
+// bundleIdentifier is the bundle id in the app bundle at path, from its
+// Info.plist through Foundation, or "".
+func bundleIdentifier(path string) string {
+	bundle := objc.ID(objc.GetClass("NSBundle")).Send(objc.RegisterName("bundleWithPath:"), nsString(path))
+	if bundle == 0 {
+		return ""
+	}
+	id := bundle.Send(objc.RegisterName("bundleIdentifier"))
+	if id == 0 {
+		return ""
+	}
+	return objc.Send[string](id, selUTF8String)
 }
 
 var (

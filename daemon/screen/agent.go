@@ -816,18 +816,16 @@ func (a *agentSession) openApp(ctx context.Context, name string) (AgentResult, e
 	deadline := time.Now().Add(appOpenWait)
 	for {
 		if apps, err := a.apps.Apps(ctx); err == nil {
-			// The new app by its name, or the one new app: a Mac lists apps
-			// by their localized names, which a bundle id doesn't give.
+			// The new app by its name or bundle id, or the one new app: a
+			// Mac lists apps by their localized names.
 			var found []App
 			for _, app := range apps {
-				if known[app.PID] {
-					continue
+				if !known[app.PID] {
+					found = append(found, app)
 				}
-				if strings.EqualFold(app.Name, name) {
-					found = []App{app}
-					break
-				}
-				found = append(found, app)
+			}
+			if app, err := resolveApp(found, name); err == nil {
+				found = []App{app}
 			}
 			if len(found) == 1 {
 				app := found[0]
@@ -839,7 +837,7 @@ func (a *agentSession) openApp(ctx context.Context, name string) (AgentResult, e
 			}
 		}
 		if time.Now().After(deadline) {
-			return AgentResult{Text: fmt.Sprintf("Asked macOS to open %s, but no new app has shown a window yet. It may still be starting, or already be open under another name: look with apps.", oneLine(name))}, nil
+			return AgentResult{Text: fmt.Sprintf("Asked macOS to open %s, but no new app has shown a window yet. It may still be starting, or be running with no window open: look with apps.", oneLine(name))}, nil
 		}
 		select {
 		case <-ctx.Done():

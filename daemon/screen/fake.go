@@ -373,7 +373,9 @@ func (f *FakeBackend) OpenApp(_ context.Context, name string) error {
 	f.Launched = append(f.Launched, name)
 	for i, app := range f.InstalledApps {
 		if strings.EqualFold(app.Name, name) || app.Bundle == name {
-			f.RunningApps = append(f.RunningApps, app.FakeApp)
+			running := app.FakeApp
+			running.BundleID = app.Bundle
+			f.RunningApps = append(f.RunningApps, running)
 			f.InstalledApps = append(f.InstalledApps[:i], f.InstalledApps[i+1:]...)
 			return nil
 		}

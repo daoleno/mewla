@@ -29,8 +29,10 @@ type App struct {
 	// trust, so they are only clicked on the screen.
 	Chromium bool `json:"-"`
 	// Bundle is its bundle's file name, which a Mac in another language
-	// shows under a translated name: Notes for 备忘录.
-	Bundle string `json:"-"`
+	// shows under a translated name: Notes for 备忘录. BundleID is its
+	// bundle identifier, such as com.apple.Notes.
+	Bundle   string `json:"-"`
+	BundleID string `json:"-"`
 }
 
 // AppWindow is one window on the screen, in framebuffer pixels.
@@ -63,7 +65,7 @@ type windowInfo struct {
 // its front one, then those with windows only elsewhere in all, hidden.
 // Layer 0 holds apps' own windows; menus, the Dock and the menu bar sit
 // above it. The process self is left out.
-func appsFromWindows(onScreen, all []windowInfo, front, self int, bundle func(pid int) (string, bool)) []App {
+func appsFromWindows(onScreen, all []windowInfo, front, self int, bundle func(pid int) bundleInfo) []App {
 	byPID := map[int]int{}
 	var apps []App
 	add := func(w windowInfo) *App {
@@ -74,8 +76,8 @@ func appsFromWindows(onScreen, all []windowInfo, front, self int, bundle func(pi
 		if !seen {
 			index = len(apps)
 			byPID[w.PID] = index
-			name, chromium := bundle(w.PID)
-			apps = append(apps, App{Name: w.Name, PID: w.PID, Active: w.PID == front, Hidden: true, Bundle: name, Chromium: chromium})
+			info := bundle(w.PID)
+			apps = append(apps, App{Name: w.Name, PID: w.PID, Active: w.PID == front, Hidden: true, Bundle: info.name, BundleID: info.id, Chromium: info.chromium})
 		}
 		return &apps[index]
 	}
@@ -103,6 +105,13 @@ func appsFromWindows(onScreen, all []windowInfo, front, self int, bundle func(pi
 		add(w)
 	}
 	return apps
+}
+
+// bundleInfo is what an app's bundle says about it.
+type bundleInfo struct {
+	name     string // the bundle's file name
+	id       string // its bundle identifier
+	chromium bool
 }
 
 // appOpener is a backend that can open an app that isn't running, behind
@@ -213,9 +222,19 @@ func resolveApp(apps []App, name string) (App, error) {
 		return App{}, fmt.Errorf("no app with a window has pid %d; see apps", pid)
 	}
 	var found []App
-	for _, app := range apps {
-		if strings.EqualFold(app.Name, name) {
-			found = append(found, app)
+	// A bundle id names one app whatever the Mac's language.
+	if bundleID.MatchString(name) {
+		for _, app := range apps {
+			if app.BundleID != "" && strings.EqualFold(app.BundleID, name) {
+				found = append(found, app)
+			}
+		}
+	}
+	if len(found) == 0 {
+		for _, app := range apps {
+			if strings.EqualFold(app.Name, name) {
+				found = append(found, app)
+			}
 		}
 	}
 	// Then by bundle, so an app is found by the name it has in English.
