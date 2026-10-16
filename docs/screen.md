@@ -131,7 +131,9 @@ opens the right settings page.
   sleeping display stops what the agent sees; the Mac's display sleep, and a
   lock that follows it, wait until a minute after the agent's last action. If
   the display goes off anyway, the agent is told, and its next action wakes
-  it. A MacBook with its lid closed and no external display can't be woken.
+  it. On a Mac that asks for its password after the display sleeps, the
+  display going to sleep also locks it, and agents wait until it's
+  unlocked. A MacBook with its lid closed and no external display can't be woken.
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
   tap away. Work in an app behind others happens out of sight, so Watch may
