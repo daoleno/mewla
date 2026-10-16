@@ -805,6 +805,58 @@ func (a *agentSession) readValue(ctx context.Context, e Element, id int) (AgentR
 	return AgentResult{Text: text + ":\n" + value}, nil
 }
 
+// frontWatch is how long after choosing a menu item an app that takes the
+// front is looked for; on a Mac it does so within milliseconds.
+var frontWatch = 400 * time.Millisecond
+
+// frontApp is the app in front now, named from apps where it is listed.
+func (a *agentSession) frontApp(ctx context.Context, apps []App) App {
+	reader, ok := a.apps.(frontReader)
+	if !ok {
+		return App{}
+	}
+	pid, err := reader.FrontPID(ctx)
+	if err != nil || pid == 0 {
+		return App{}
+	}
+	for _, app := range apps {
+		if app.PID == pid {
+			return app
+		}
+	}
+	return App{Name: "pid " + strconv.Itoa(pid), PID: pid}
+}
+
+// giveFrontBack undoes app taking the front from before when one of its
+// menu items was chosen behind other windows, as a Mac app may do for a
+// menu command chosen through accessibility: the person's app, and their
+// typing, would go to it. Bringing an app forward is only ever asked for,
+// with bring_forward. The answer says what happened.
+func (a *agentSession) giveFrontBack(ctx context.Context, app, before App) string {
+	reader, ok := a.apps.(frontReader)
+	raiser, canRaise := a.apps.(appRaiser)
+	if !ok || !canRaise || before.PID == 0 || before.PID == app.PID {
+		return ""
+	}
+	deadline := time.Now().Add(frontWatch)
+	for {
+		if front, err := reader.FrontPID(ctx); err == nil && front == app.PID {
+			if err := raiser.RaiseApp(ctx, before.PID); err != nil {
+				return fmt.Sprintf(" Choosing it brought %s to the front, and the front couldn't be given back to %s: %v.", oneLine(app.Name), oneLine(before.Name), err)
+			}
+			return fmt.Sprintf(" Choosing it brought %s to the front; the front was given back to %s.", oneLine(app.Name), oneLine(before.Name))
+		}
+		if !time.Now().Before(deadline) {
+			return ""
+		}
+		select {
+		case <-time.After(50 * time.Millisecond):
+		case <-ctx.Done():
+			return ""
+		}
+	}
+}
+
 // bringForward brings an app to the front, for keys it ignores behind other
 // windows. That takes the front from the person's app, so it waits for them
 // as anything on the screen does, and is only ever asked for.
@@ -1154,7 +1206,12 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		// it works behind other windows, where an app may ignore keys.
 		if shortcut, ok := menuShortcut(action.Text); ok && action.Action == "key" {
 			if presser, ok := a.apps.(menuPresser); ok {
+				before := a.frontApp(ctx, apps)
 				path, found, err := presser.PressMenuKey(ctx, pid, shortcut)
+				var off menuItemOff
+				if errors.As(err, &off) && !app.Active {
+					return AgentResult{}, fmt.Errorf("%w. Commands like this one are often off while the app isn't in front: bring_forward it when nobody is using the computer, then try again", err)
+				}
 				if err != nil {
 					return AgentResult{}, a.gone(ctx, app, err)
 				}
@@ -1162,7 +1219,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 					a.mu.Lock()
 					a.lastAct = time.Now()
 					a.mu.Unlock()
-					return AgentResult{Text: fmt.Sprintf("Chose %s (%s) in %s's menus, without sending keys; read it with app_state to see the result.", path, shortcut, oneLine(app.Name))}, nil
+					text := fmt.Sprintf("Chose %s (%s) in %s's menus, without sending keys.", path, shortcut, oneLine(app.Name))
+					return AgentResult{Text: text + a.giveFrontBack(ctx, app, before) + " Read it with app_state to see the result."}, nil
 				}
 			}
 		}

@@ -117,7 +117,17 @@ func (b *macBackend) Apps(context.Context) ([]App, error) {
 	return apps, err
 }
 
-func runningApps() ([]App, error) {
+// FrontPID is the app in front, as the apps list gives it.
+func (b *macBackend) FrontPID(context.Context) (int, error) {
+	if !loadApps() {
+		return 0, ErrNoApps
+	}
+	front := 0
+	withPool(func() { front = frontPID() })
+	return front, nil
+}
+
+func frontPID() int {
 	front := 0
 	if app, code := axCopy(axLib.system, "AXFocusedApplication"); code == 0 && app != 0 {
 		var pid int32
@@ -126,6 +136,11 @@ func runningApps() ([]App, error) {
 		}
 		axLib.release(app)
 	}
+	return front
+}
+
+func runningApps() ([]App, error) {
+	front := frontPID()
 	// Only the list of windows on the screen runs from front to back; the
 	// list of all windows, which also names apps with none showing, doesn't.
 	onScreen, err := windowInfos(cgWindowListOnScreenOnly | cgWindowListExcludeDesktop)
@@ -661,7 +676,7 @@ func pressMenuKey(ctx context.Context, pid int, shortcut Shortcut) (string, bool
 	defer axLib.release(item)
 	where := strings.Join(path, " > ")
 	if !axBool(item, "AXEnabled", true) {
-		return where, true, fmt.Errorf("%s (%s) is turned off in the app's menus right now, so it wasn't chosen", where, shortcut)
+		return where, true, menuItemOff{where, shortcut}
 	}
 	press := axLib.createString(0, "AXPress", cfStringEncodingUTF8)
 	if press == 0 {
@@ -684,6 +699,7 @@ func pressMenuKey(ctx context.Context, pid int, shortcut Shortcut) (string, bool
 
 var (
 	_ menuPresser = (*macBackend)(nil)
+	_ frontReader = (*macBackend)(nil)
 	_ valueReader = (*macBackend)(nil)
 	_ appReader   = (*macBackend)(nil)
 	_ appActor    = (*macBackend)(nil)
