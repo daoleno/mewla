@@ -17,6 +17,10 @@ import (
 // one's Brain.
 func (s *Server) SetComputers(manager *computers.Manager) { s.computers = manager }
 
+// SetComputerName is what people call this computer; a paired device reads
+// it from /auth-check and shows it instead of an address.
+func (s *Server) SetComputerName(name string) { s.computerName = name }
+
 // handleComputer is the only route a computer-kind device may use. The auth
 // manager refuses its key on every other purpose.
 func (s *Server) handleComputer(w http.ResponseWriter, r *http.Request) {

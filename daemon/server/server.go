@@ -112,6 +112,7 @@ type Server struct {
 	calendarScheduler            *calendar.Scheduler
 	telegram                     *telegramchannel.Manager
 	computers                    *computers.Manager
+	computerName                 string
 	agentUse                     *agentuse.Service
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
@@ -820,6 +821,7 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 		"device_id":         device.ID,
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
+		"name":              s.computerName,
 	})
 }
 

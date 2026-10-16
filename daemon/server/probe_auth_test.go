@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -105,4 +106,27 @@ func probeAuthorizationHeader(
 		nonceHex +
 		":" +
 		hex.EncodeToString(signature)
+}
+
+func TestAuthCheckReportsComputerName(t *testing.T) {
+	manager, privateKey, deviceID := sessionFileAuthFixture(t)
+	server := New(manager, nil, nil, nil, nil, nil, nil)
+	server.SetComputerName("daoleno's MacBook Pro")
+
+	request := httptest.NewRequest(http.MethodGet, "/auth-check", nil)
+	request.Header.Set("Authorization", probeAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("auth-check status=%d body=%q", response.Code, response.Body.String())
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Name != "daoleno's MacBook Pro" {
+		t.Fatalf("name = %q", body.Name)
+	}
 }

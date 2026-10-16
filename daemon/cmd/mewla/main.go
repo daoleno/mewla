@@ -491,6 +491,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
+	srv.SetComputerName(computers.FriendlyName())
 	hostName, _ := os.Hostname()
 	computerManager, err := computers.NewManager(computers.Options{
 		Auth:    authManager,
