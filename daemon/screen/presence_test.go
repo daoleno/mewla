@@ -131,3 +131,59 @@ func TestAnAgentsAppEventsAreItsOwn(t *testing.T) {
 		t.Fatalf("a person's click: %v", err)
 	}
 }
+
+// A pause about to end is waited out inside the action, so the agent
+// doesn't spend a turn to try again.
+func TestAPauseAboutToEndIsWaitedOut(t *testing.T) {
+	defer func(saved time.Duration) { personPause = saved }(personPause)
+	personPause = 800 * time.Millisecond
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+	start := time.Now()
+	act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if waited := time.Since(start); waited < 500*time.Millisecond {
+		t.Fatalf("acted %v after the person, inside the pause", waited)
+	}
+}
+
+// A pause with longer left is answered at once, with the time left and the
+// work that goes on meanwhile.
+func TestALongPauseIsAnsweredAtOnce(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+	start := time.Now()
+	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
+	if !errors.Is(err, ErrPersonAtComputer) || time.Since(start) > 500*time.Millisecond {
+		t.Fatalf("after %v: %v", time.Since(start), err)
+	}
+	if text := err.Error(); !strings.Contains(text, "Try again in about 10 s") || !strings.Contains(text, "app_state, element and steps on it go on") {
+		t.Fatalf("answer %q", text)
+	}
+}
+
+// The person taking over ends a wait at once.
+func TestTakingOverEndsTheWait(t *testing.T) {
+	defer func(saved time.Duration) { personPause = saved }(personPause)
+	personPause = 2500 * time.Millisecond
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	start := time.Now()
+	_, cancel := context.WithCancelCause(context.Background())
+	person := s.TakeControl(cancel)
+	defer s.ReleaseControl(person)
+	if err := <-done; !errors.Is(err, ErrAgentStopped) || time.Since(start) > time.Second {
+		t.Fatalf("after %v: %v", time.Since(start), err)
+	}
+}

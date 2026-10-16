@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,7 +31,7 @@ var (
 	ErrScreenReplaced    = errors.New("Another device took over this screen")
 	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once it's unlocked")
 	ErrDisplayAsleep     = errors.New("This computer's display went to sleep or off, so the agent lost its view; try again and Mewla wakes it (a closed lid with no external display stays off)")
-	ErrPersonAtComputer  = errors.New("Someone is using this computer's keyboard or pointer, so the agent paused; wait about 10 seconds and try again")
+	ErrPersonAtComputer  = errors.New("Someone is using this computer's keyboard or pointer, so the agent paused")
 )
 
 // An agent pauses while someone uses the computer itself: until personPause
@@ -41,6 +42,11 @@ var (
 	personMargin = 300 * time.Millisecond
 )
 
+// personWait is how long an action waits for a pause that is about to end,
+// rather than cost the agent a turn to try again. A pause with longer left
+// is answered at once.
+var personWait = 3 * time.Second
+
 // personError is ErrPersonAtComputer with the input that was seen, so a
 // pause that won't end can be told apart: a person, a phantom tap, or
 // another program driving the computer.
@@ -48,6 +54,8 @@ type personError struct {
 	kind   InputKind
 	seen   time.Time
 	inputs [inputKinds]time.Time
+	// until is when the pause ends, unless they go on.
+	until time.Time
 }
 
 func (e personError) Is(target error) bool { return target == ErrPersonAtComputer }
@@ -67,7 +75,8 @@ func (e personError) Error() string {
 	if len(last) > 0 {
 		text += "; last " + strings.Join(last, ", ")
 	}
-	return text + ")"
+	left := max(1, int(math.Ceil(e.until.Sub(now).Seconds())))
+	return text + fmt.Sprintf("). Try again in about %d s, or meanwhile work in an app that isn't in front: app_state, element and steps on it go on while they use the computer.", left)
 }
 
 // AgentLongEdge is the long edge of agent screenshots. Agents give
@@ -309,7 +318,7 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	// screen itself, or on the app in front, waits for them.
 	background := agent.inBackground(ctx, action)
 	if !background {
-		if err := agent.personInput(); err != nil {
+		if err := agent.waitForPerson(ctx); err != nil {
 			agent.letGo()
 			// An agent waiting for the person keeps its session, so the
 			// next try doesn't start a capture, and wake the display, anew.
@@ -877,9 +886,32 @@ func (a *agentSession) personInputLocked() error {
 		}
 	}
 	if time.Now().Before(a.pausedUntil) {
-		return a.paused
+		paused := a.paused
+		paused.until = a.pausedUntil
+		return paused
 	}
 	return nil
+}
+
+// waitForPerson is personInput, but waits out a pause that ends within
+// personWait. More input meanwhile extends it; the agent's control ending,
+// as when the person takes over, ends the wait at once.
+func (a *agentSession) waitForPerson(ctx context.Context) error {
+	deadline := time.Now().Add(personWait)
+	for {
+		err := a.personInput()
+		var paused personError
+		if err == nil || !errors.As(err, &paused) || paused.until.After(deadline) {
+			return err
+		}
+		select {
+		case <-time.After(time.Until(paused.until)):
+		case <-ctx.Done():
+			return err
+		case <-a.ctx.Done():
+			return context.Cause(a.ctx)
+		}
+	}
 }
 
 func later(a, b time.Time) time.Time {
