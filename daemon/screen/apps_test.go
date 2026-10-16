@@ -430,3 +430,34 @@ func TestABackgroundClickPressesWhatItCan(t *testing.T) {
 		t.Fatalf("pressed %+v, clicked %+v", backend.ElementActions, backend.AppClicks)
 	}
 }
+
+// Only the list of windows on the screen runs front to back: a window that
+// comes later in the list of all windows can still be over another, as
+// Chrome was over System Settings on a real Mac.
+func TestCoverersComeFromTheScreensOrder(t *testing.T) {
+	settings := windowInfo{PID: 600, Name: "系统设置", ID: 32, OnScreen: true, Bounds: image.Rect(502, 113, 1242, 738)}
+	chrome := windowInfo{PID: 700, Name: "Google Chrome", ID: 1173, OnScreen: true, Bounds: image.Rect(0, 33, 1512, 897)}
+	all := []windowInfo{
+		settings,
+		{PID: 600, Name: "系统设置", ID: 33, Bounds: image.Rect(0, 0, 1512, 33)},
+		{PID: 700, Name: "Google Chrome", ID: 47, Layer: 103, Bounds: image.Rect(150, 401, 229, 421)},
+		chrome,
+		{PID: 800, Name: "Music", ID: 900, Bounds: image.Rect(0, 0, 400, 300)},
+		{PID: 1, Name: "Mewla", ID: 5, OnScreen: true, Bounds: image.Rect(0, 0, 10, 10)},
+	}
+	onScreen := []windowInfo{chrome, {PID: 750, Name: "Finder", ID: 3, OnScreen: true, Bounds: image.Rect(1300, 800, 1400, 850)}, settings}
+	apps := appsFromWindows(onScreen, all, 700, 1, func(pid int) bool { return pid == 700 })
+	if len(apps) != 4 {
+		t.Fatalf("apps %+v", apps)
+	}
+	got := apps[2]
+	if apps[0].Name != "Google Chrome" || !apps[0].Active || !apps[0].Chromium || got.Name != "系统设置" || got.Hidden || got.Window != settings.Bounds || !slices.Equal(got.CoveredBy, []string{"Google Chrome"}) {
+		t.Fatalf("apps %+v", apps)
+	}
+	if len(got.Windows) != 1 || got.Windows[0].ID != 32 || len(apps[1].CoveredBy) != 1 {
+		t.Fatalf("windows %+v, Finder under %v", got.Windows, apps[1].CoveredBy)
+	}
+	if apps[3].Name != "Music" || !apps[3].Hidden {
+		t.Fatalf("an app with no window showing: %+v", apps[3])
+	}
+}

@@ -46,6 +46,7 @@ var appsLib struct {
 type cgRect struct{ X, Y, W, H float64 }
 
 const (
+	cgWindowListOnScreenOnly   = 1 << 0
 	cgWindowListExcludeDesktop = 1 << 4
 	cfNumberSInt64             = 4
 )
@@ -116,11 +117,6 @@ func (b *macBackend) Apps(context.Context) ([]App, error) {
 }
 
 func runningApps() ([]App, error) {
-	list := appsLib.windowList(cgWindowListExcludeDesktop, 0)
-	if list == 0 {
-		return nil, errors.New("couldn't list this computer's windows")
-	}
-	defer axLib.release(list)
 	front := 0
 	if app, code := axCopy(axLib.system, "AXFocusedApplication"); code == 0 && app != 0 {
 		var pid int32
@@ -129,55 +125,39 @@ func runningApps() ([]App, error) {
 		}
 		axLib.release(app)
 	}
-	byPID := map[int]int{}
-	var apps []App
-	// Windows on the screen so far; the list runs from front to back.
-	type shown struct {
-		pid    int
-		bounds image.Rectangle
+	// Only the list of windows on the screen runs from front to back; the
+	// list of all windows, which also names apps with none showing, doesn't.
+	onScreen, err := windowInfos(cgWindowListOnScreenOnly | cgWindowListExcludeDesktop)
+	if err != nil {
+		return nil, err
 	}
-	var above []shown
+	all, err := windowInfos(cgWindowListExcludeDesktop)
+	if err != nil {
+		return nil, err
+	}
+	return appsFromWindows(onScreen, all, front, os.Getpid(), chromiumApp), nil
+}
+
+func windowInfos(option uint32) ([]windowInfo, error) {
+	list := appsLib.windowList(option, 0)
+	if list == 0 {
+		return nil, errors.New("couldn't list this computer's windows")
+	}
+	defer axLib.release(list)
+	var out []windowInfo
 	for i, n := int64(0), axLib.arrayCount(list); i < n; i++ {
 		info := axLib.arrayAt(list, i)
-		// Layer 0 holds apps' own windows; menus, the Dock and the menu bar
-		// sit above it.
-		if layer, ok := dictInt(info, "kCGWindowLayer"); !ok || layer != 0 {
+		w := windowInfo{Name: dictString(info, "kCGWindowOwnerName"), OnScreen: dictBool(info, "kCGWindowIsOnscreen"), Bounds: dictRect(info)}
+		layer, ok := dictInt(info, "kCGWindowLayer")
+		if !ok {
 			continue
 		}
-		pid, ok := dictInt(info, "kCGWindowOwnerPID")
-		if !ok || pid <= 0 || pid == int64(os.Getpid()) {
-			continue
-		}
-		index, seen := byPID[int(pid)]
-		if !seen {
-			name := dictString(info, "kCGWindowOwnerName")
-			if name == "" {
-				continue
-			}
-			index = len(apps)
-			byPID[int(pid)] = index
-			apps = append(apps, App{Name: name, PID: int(pid), Active: int(pid) == front, Hidden: true, Chromium: chromiumApp(int(pid))})
-		}
-		if !dictBool(info, "kCGWindowIsOnscreen") {
-			continue
-		}
-		app := &apps[index]
-		app.Hidden = false
-		bounds := dictRect(info)
-		if id, ok := dictInt(info, "kCGWindowNumber"); ok && !bounds.Empty() {
-			app.Windows = append(app.Windows, AppWindow{ID: uint32(id), Bounds: bounds})
-		}
-		if app.Window.Empty() && !bounds.Empty() {
-			app.Window = bounds
-			for _, w := range above {
-				if w.pid != app.PID && w.bounds.Overlaps(bounds) && !slices.Contains(app.CoveredBy, apps[byPID[w.pid]].Name) {
-					app.CoveredBy = append(app.CoveredBy, apps[byPID[w.pid]].Name)
-				}
-			}
-		}
-		above = append(above, shown{app.PID, bounds})
+		pid, _ := dictInt(info, "kCGWindowOwnerPID")
+		id, _ := dictInt(info, "kCGWindowNumber")
+		w.Layer, w.PID, w.ID = int(layer), int(pid), uint32(id)
+		out = append(out, w)
 	}
-	return apps, nil
+	return out, nil
 }
 
 // dictRect is a window's bounds, in global points, which are the main
