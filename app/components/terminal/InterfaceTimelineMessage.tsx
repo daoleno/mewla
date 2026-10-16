@@ -27,7 +27,10 @@ import {
   PENDING_SEND_STATUS_MARK_SIZE,
   PENDING_SEND_STATUS_OUTSIDE_RIGHT,
 } from "./pendingSendStatusGeometry";
-import { showsPendingSendStatusMark } from "./pendingUserMessageLifecycle";
+import {
+  showsPendingSendStatusMark,
+  type PendingUserMessageLifecycle,
+} from "./pendingUserMessageLifecycle";
 
 export type DisplayAttachment = {
   name: string;
@@ -44,10 +47,12 @@ export interface MessageTimelineItem {
   body: string;
   attachments: DisplayAttachment[];
   pending?: boolean;
-  pendingLifecycle?: "pending" | "failed";
+  pendingLifecycle?: PendingUserMessageLifecycle;
   pendingLifecycleLabel?: string;
   pendingFailureMessage?: string;
+  pendingRetryLabel?: string;
   onRetryPending?: () => void;
+  onDiscardPending?: () => void;
   streaming?: boolean;
 
   /** Process-local presentation alias; provider id/body remain canonical. */
@@ -104,9 +109,11 @@ export function UserMessage({
     lifecycle: item.pendingLifecycle,
   });
   const showFooter =
-    item.pendingLifecycle === "failed" ||
+    (item.pendingLifecycle !== undefined &&
+      item.pendingLifecycle !== "pending") ||
     Boolean(item.pendingLifecycleLabel) ||
     Boolean(item.onRetryPending) ||
+    Boolean(item.onDiscardPending) ||
     appTheme.chat.showTimestamps;
 
   return (
@@ -137,7 +144,9 @@ export function UserMessage({
             lifecycleLabel={item.pendingLifecycleLabel}
             failureMessage={item.pendingFailureMessage}
             failureColor={chrome.danger}
+            retryLabel={item.pendingRetryLabel}
             onRetry={item.onRetryPending}
+            onDiscard={item.onDiscardPending}
           />
         ) : null}
         {showPendingSendMark ? (

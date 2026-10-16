@@ -8,7 +8,7 @@ export type StructuredCommandFailure = {
 
 export type StructuredCommandOutcome =
   | { kind: "sent" }
-  | { kind: "pending" }
+  | { kind: "pending"; code?: string; message?: string }
   | { kind: "failed"; failure: StructuredCommandFailure }
   | { kind: "connection_closed" };
 
@@ -93,7 +93,15 @@ export function dispatchStructuredCommand({
   }
   function handlePending(payload: any) {
     if (matches(payload)) {
-      finish({ kind: "pending" });
+      finish({
+        kind: "pending",
+        ...(typeof payload?.code === "string" && payload.code
+          ? { code: payload.code }
+          : {}),
+        ...(typeof payload?.message === "string" && payload.message
+          ? { message: payload.message }
+          : {}),
+      });
     }
   }
   function handleDisconnected(payload: any) {

@@ -15,10 +15,16 @@ import type {
   PendingUserMessage,
   PendingUserMessageAttempt,
   PendingUserMessageInput,
-  PendingUserMessageRejection,
+  PendingUserMessageSettlement,
 } from "./InterfaceChatSession";
 import { beginLiveMessageAttempt } from "./messageSendRecovery";
-import { staleReceiptAutoRetryPolicy } from "./pendingUserMessageLifecycle";
+import {
+  PENDING_SEND_ACK_DEADLINE_MS,
+  settlePendingDelivery,
+  staleReceiptAutoRetryPolicy,
+  type PendingDeliveryOutcome,
+  type PendingUserMessageAction,
+} from "./pendingUserMessageLifecycle";
 import { submitProviderCommandAsUserInput } from "./providerCommandSubmission";
 import {
   beginComposerStop,
@@ -47,10 +53,11 @@ interface UseInterfaceMessageTransportInput {
     id: string,
     attempt: PendingUserMessageAttempt,
   ): void;
-  rejectPendingUserMessage(
+  settlePendingUserMessage(
     id: string,
-    rejection: PendingUserMessageRejection,
+    settlement: PendingUserMessageSettlement,
   ): void;
+  discardPendingUserMessage(id: string): void;
   requestTurnFocus(pendingMessageId: string): void;
 }
 
@@ -69,7 +76,8 @@ export function useInterfaceMessageTransport({
   clearComposerNativeText,
   addPendingUserMessage,
   beginPendingUserMessageAttempt,
-  rejectPendingUserMessage,
+  settlePendingUserMessage,
+  discardPendingUserMessage,
   requestTurnFocus,
 }: UseInterfaceMessageTransportInput) {
   const [sending, setSending] = useState(false);
@@ -80,6 +88,7 @@ export function useInterfaceMessageTransport({
   const currentDraftRef = useRef(draft);
   const currentAttachmentsRef = useRef(attachments);
   const pendingUserMessagesRef = useRef(pendingUserMessages);
+  const ackDeadlinesRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   currentDraftRef.current = draft;
   currentAttachmentsRef.current = attachments;
   pendingUserMessagesRef.current = pendingUserMessages;
@@ -93,6 +102,10 @@ export function useInterfaceMessageTransport({
     () => () => {
       sendLockedRef.current = false;
       interruptActivityIdRef.current = undefined;
+      for (const deadline of ackDeadlinesRef.current) {
+        clearTimeout(deadline);
+      }
+      ackDeadlinesRef.current.clear();
     },
     [],
   );
@@ -130,45 +143,58 @@ export function useInterfaceMessageTransport({
     ) => boolean
   >(() => false);
 
+  // Every attempt ends in a visible state. An acknowledgement keeps the row
+  // waiting for its receipt; a rejection, closed connection or missing
+  // acknowledgement says "Not delivered" with Retry and Discard; a delivery
+  // the computer cannot prove says so with Send again and Discard.
   const observeInputOutcome = useCallback(
     (
       pendingMessageId: string,
       receipt: ReturnType<typeof wsClient.sendInput>,
     ) => {
+      const settle = (outcome: PendingDeliveryOutcome) => {
+        settlePendingUserMessage(pendingMessageId, {
+          ...settlePendingDelivery(outcome),
+          requestId: receipt.requestId,
+        });
+      };
+      // A socket that died without a close event never answers.
+      const deadline = setTimeout(() => {
+        ackDeadlinesRef.current.delete(deadline);
+        settle({ kind: "ack_timeout" });
+      }, PENDING_SEND_ACK_DEADLINE_MS);
+      ackDeadlinesRef.current.add(deadline);
       void receipt.outcome.then((outcome) => {
-        if (outcome.kind !== "failed") {
-          return;
-        }
-        const message = pendingUserMessagesRef.current.find(
-          (candidate) => candidate.id === pendingMessageId,
-        );
-        if (
-          message &&
-          staleReceiptAutoRetryPolicy(message, outcome.failure).autoRetry
-        ) {
-          // Legacy/stale receipt binding for this logical input: the daemon
-          // proved no provider mutation. Invalidate the stale identity and
-          // transparently resubmit the same payload once with a fresh
-          // identity; the row flag bounds the recovery to one attempt. If the
-          // composer is mid-send, surface the failure instead of stranding
-          // the row pending.
+        clearTimeout(deadline);
+        ackDeadlinesRef.current.delete(deadline);
+        if (outcome.kind === "failed") {
+          const message = pendingUserMessagesRef.current.find(
+            (candidate) => candidate.id === pendingMessageId,
+          );
           if (
-            dispatchPendingUserMessageRef.current(message, {
-              reuseIdentity: false,
-              staleAutoRetry: true,
-            })
+            message &&
+            staleReceiptAutoRetryPolicy(message, outcome.failure).autoRetry
           ) {
-            return;
+            // Legacy/stale receipt binding for this logical input: the daemon
+            // proved no provider mutation. Invalidate the stale identity and
+            // transparently resubmit the same payload once with a fresh
+            // identity; the row flag bounds the recovery to one attempt. If
+            // the composer is mid-send, surface the failure instead of
+            // stranding the row pending.
+            if (
+              dispatchPendingUserMessageRef.current(message, {
+                reuseIdentity: false,
+                staleAutoRetry: true,
+              })
+            ) {
+              return;
+            }
           }
         }
-        rejectPendingUserMessage(pendingMessageId, {
-          requestId: outcome.failure.requestId,
-          code: outcome.failure.code,
-          message: outcome.failure.message,
-        });
+        settle(outcome);
       });
     },
-    [rejectPendingUserMessage],
+    [settlePendingUserMessage],
   );
 
   const dispatchPendingUserMessage = useCallback(
@@ -308,28 +334,33 @@ export function useInterfaceMessageTransport({
     ],
   );
 
-  const retryPendingUserMessage = useCallback(
-    (pendingMessageId: string) => {
-      if (sendLockedRef.current) {
-        return;
-      }
+  const actOnPendingUserMessage = useCallback(
+    (pendingMessageId: string, action: PendingUserMessageAction) => {
       const message = pendingUserMessages.find(
         (candidate) =>
-          candidate.id === pendingMessageId && candidate.lifecycle === "failed",
+          candidate.id === pendingMessageId && candidate.lifecycle !== "pending",
       );
       if (!message) {
         return;
       }
-      // Retry is the exact same logical input: reuse its stable identity so
-      // the daemon receipt ledger stays idempotent (an accepted retry is
-      // acknowledged without replay; a proven non-mutation is re-armed and
-      // submitted exactly once more).
+      if (action === "discard") {
+        discardPendingUserMessage(message.id);
+        return;
+      }
+      if (sendLockedRef.current) {
+        return;
+      }
+      // A not-delivered retry is the exact same logical input: reuse its
+      // stable identity so the daemon receipt ledger stays idempotent (an
+      // accepted retry is acknowledged without replay; a proven non-mutation
+      // is re-armed and submitted exactly once more). An uncertain receipt is
+      // never replayed, so sending it again needs a fresh identity.
       dispatchPendingUserMessage(message, {
-        reuseIdentity: true,
+        reuseIdentity: message.lifecycle === "failed",
         staleAutoRetry: false,
       });
     },
-    [dispatchPendingUserMessage, pendingUserMessages],
+    [discardPendingUserMessage, dispatchPendingUserMessage, pendingUserMessages],
   );
 
   const startNewInterfaceChat = useCallback(
@@ -423,6 +454,6 @@ export function useInterfaceMessageTransport({
     startNewInterfaceChat,
     sendSlashCommandToInterface,
     interruptInterface,
-    retryPendingUserMessage,
+    actOnPendingUserMessage,
   };
 }

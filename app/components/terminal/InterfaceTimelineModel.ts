@@ -24,7 +24,10 @@ import {
   type SemanticActionKind,
 } from "../../services/toolCallSemantics";
 import type { PendingUserMessage } from "./InterfaceChatSession";
-import { presentPendingUserMessageLifecycle } from "./pendingUserMessageLifecycle";
+import {
+  presentPendingUserMessageLifecycle,
+  type PendingUserMessageAction,
+} from "./pendingUserMessageLifecycle";
 import {
   type PatchFileSummary,
   type PatchOperation,
@@ -295,7 +298,10 @@ function attachWaitStatusToLastCommand(
 export function mergePendingUserMessagesIntoTimeline(
   timelineItems: TimelineItem[],
   pendingUserMessages: PendingUserMessage[],
-  onRetryPendingUserMessage?: (id: string) => void,
+  onPendingUserMessageAction?: (
+    id: string,
+    action: PendingUserMessageAction,
+  ) => void,
 ): TimelineItem[] {
   if (pendingUserMessages.length === 0) {
     return timelineItems;
@@ -312,6 +318,9 @@ export function mergePendingUserMessagesIntoTimeline(
       attachments: message.attachments,
     };
     const presentation = presentPendingUserMessageLifecycle(message);
+    // Settled: the computer did not take this attempt, so the row offers its
+    // own way out instead of waiting.
+    const settled = message.lifecycle !== "pending";
 
     const pendingItem = {
       ...item,
@@ -319,11 +328,15 @@ export function mergePendingUserMessagesIntoTimeline(
       pendingLifecycle: message.lifecycle,
       // Empty pending label is mark/a11y only — do not pass "" into UI props.
       pendingLifecycleLabel: presentation.label || undefined,
-      pendingFailureMessage:
-        message.lifecycle === "failed" ? message.failureMessage : undefined,
+      pendingFailureMessage: settled ? message.failureMessage : undefined,
+      pendingRetryLabel: presentation.retryLabel,
       onRetryPending:
-        message.lifecycle === "failed" && onRetryPendingUserMessage
-          ? () => onRetryPendingUserMessage(message.id)
+        settled && onPendingUserMessageAction
+          ? () => onPendingUserMessageAction(message.id, "retry")
+          : undefined,
+      onDiscardPending:
+        settled && onPendingUserMessageAction
+          ? () => onPendingUserMessageAction(message.id, "discard")
           : undefined,
     };
 

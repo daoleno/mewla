@@ -21,9 +21,12 @@ import {
 import type { WorkerStatus } from "../../constants/tokens";
 import {
   beginPendingUserMessageAttempt as beginPendingUserMessageAttemptState,
-  rejectPendingUserMessage as rejectPendingUserMessageState,
+  acknowledgePendingUserMessage,
+  markPendingUserMessageUncertain,
+  rejectPendingUserMessage,
   reconcilePendingUserMessagesAgainstEvents,
   type ProviderEventTurnFocusAlias,
+  type PendingDeliverySettlement,
   type PendingUserMessageLifecycle,
 } from "./pendingUserMessageLifecycle";
 import {
@@ -74,6 +77,7 @@ export type PendingUserMessage = {
   failureMessage?: string;
   createdAfterMaxSeq?: number;
   createdAfterEventIds?: string[];
+  claimedElsewhereEventIds?: string[];
   staleReceiptAutoRetried?: boolean;
 };
 
@@ -84,6 +88,7 @@ export type PendingUserMessageInput = Omit<
   | "dispatchAttemptOrder"
   | "createdAfterMaxSeq"
   | "createdAfterEventIds"
+  | "claimedElsewhereEventIds"
 >;
 
 export type PendingUserMessageAttempt = {
@@ -91,10 +96,9 @@ export type PendingUserMessageAttempt = {
   staleReceiptAutoRetried?: boolean;
 };
 
-export type PendingUserMessageRejection = {
+/** The outcome of one send attempt, correlated by its request id. */
+export type PendingUserMessageSettlement = PendingDeliverySettlement & {
   requestId: string;
-  code: string;
-  message: string;
 };
 
 export type InterfaceChatWorkerInfo = {
@@ -169,12 +173,11 @@ type InterfaceChatThreadAction =
       staleReceiptAutoRetried?: boolean;
     }
   | {
-      type: "reject_pending_user_message";
+      type: "settle_pending_user_message";
       id: string;
-      requestId: string;
-      code: string;
-      message: string;
-    };
+      settlement: PendingUserMessageSettlement;
+    }
+  | { type: "discard_pending_user_message"; id: string };
 
 function initialInterfaceChatThreadState(
   cacheKey: string,
@@ -288,20 +291,44 @@ export function interfaceChatThreadReducer(
         ? reconcileLocalPendingMessages({ ...state, pendingUserMessages })
         : state;
     }
-    case "reject_pending_user_message": {
+    case "settle_pending_user_message": {
       let changed = false;
       const pendingUserMessages = state.pendingUserMessages.map((message) => {
         if (message.id !== action.id) {
           return message;
         }
-        const next = rejectPendingUserMessageState(message, action);
+        const next = settlePendingUserMessageState(message, action.settlement);
         changed ||= next !== message;
         return next;
       });
       return !changed ? state : { ...state, pendingUserMessages };
     }
+    case "discard_pending_user_message": {
+      // Only a row the computer did not take can be discarded; an in-flight
+      // row settles first.
+      const pendingUserMessages = state.pendingUserMessages.filter(
+        (message) => message.id !== action.id || message.lifecycle === "pending",
+      );
+      return pendingUserMessages.length === state.pendingUserMessages.length
+        ? state
+        : { ...state, pendingUserMessages };
+    }
     default:
       return state;
+  }
+}
+
+function settlePendingUserMessageState(
+  message: PendingUserMessage,
+  settlement: PendingUserMessageSettlement,
+): PendingUserMessage {
+  switch (settlement.kind) {
+    case "acknowledge":
+      return acknowledgePendingUserMessage(message, settlement.requestId);
+    case "reject":
+      return rejectPendingUserMessage(message, settlement);
+    case "uncertain":
+      return markPendingUserMessageUncertain(message, settlement);
   }
 }
 
@@ -1014,16 +1041,20 @@ export function useInterfaceChatSession({
     [],
   );
 
-  const rejectPendingUserMessage = useCallback(
-    (id: string, rejection: PendingUserMessageRejection) => {
+  const settlePendingUserMessage = useCallback(
+    (id: string, settlement: PendingUserMessageSettlement) => {
       dispatchThread({
-        type: "reject_pending_user_message",
+        type: "settle_pending_user_message",
         id,
-        ...rejection,
+        settlement,
       });
     },
     [],
   );
+
+  const discardPendingUserMessage = useCallback((id: string) => {
+    dispatchThread({ type: "discard_pending_user_message", id });
+  }, []);
 
   useEffect(() => {
     dispatchThread({
@@ -1143,7 +1174,8 @@ export function useInterfaceChatSession({
         : undefined,
     addPendingUserMessage,
     beginPendingUserMessageAttempt,
-    rejectPendingUserMessage,
+    settlePendingUserMessage,
+    discardPendingUserMessage,
   };
 }
 

@@ -11,7 +11,7 @@ import {
   type PendingUserMessage,
   type PendingUserMessageAttempt,
   type PendingUserMessageInput,
-  type PendingUserMessageRejection,
+  type PendingUserMessageSettlement,
 } from "./InterfaceChatSession";
 import { useInterfaceComposerAttachments } from "./useInterfaceComposerAttachments";
 import { useInterfaceControllerPresentation } from "./useInterfaceControllerPresentation";
@@ -39,10 +39,11 @@ interface UseInterfaceChatControllerInput {
     id: string,
     attempt: PendingUserMessageAttempt,
   ): void;
-  rejectPendingUserMessage(
+  settlePendingUserMessage(
     id: string,
-    rejection: PendingUserMessageRejection,
+    settlement: PendingUserMessageSettlement,
   ): void;
+  discardPendingUserMessage(id: string): void;
   requestTurnFocus(pendingMessageId: string): void;
   focusComposer(): void;
   clearComposerNativeText(): void;
@@ -69,7 +70,8 @@ export function useInterfaceChatController({
   slashCommands,
   addPendingUserMessage,
   beginPendingUserMessageAttempt,
-  rejectPendingUserMessage,
+  settlePendingUserMessage,
+  discardPendingUserMessage,
   requestTurnFocus,
   focusComposer,
   clearComposerNativeText,
@@ -110,7 +112,7 @@ export function useInterfaceChatController({
     interrupting,
     operationalError,
     reportOfflineSend,
-    retryPendingUserMessage,
+    actOnPendingUserMessage,
     sending,
     startNewInterfaceChat,
     sendSlashCommandToInterface,
@@ -130,7 +132,8 @@ export function useInterfaceChatController({
     clearComposerNativeText,
     addPendingUserMessage,
     beginPendingUserMessageAttempt,
-    rejectPendingUserMessage,
+    settlePendingUserMessage,
+    discardPendingUserMessage,
     requestTurnFocus,
   });
 
@@ -201,7 +204,7 @@ export function useInterfaceChatController({
     canSend,
     sendDraft,
     interruptInterface,
-    retryPendingUserMessage,
+    actOnPendingUserMessage,
     pickSlashCommand,
     runStatusCommand,
     handleUploadAttachment,

@@ -3,7 +3,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatChatBubbleTime } from '../../constants/telegramPresentation';
 import { TouchTarget, Typography, useAppTheme } from '../../constants/tokens';
 import { PendingMessageLifecycleLabel } from './PendingMessageLifecycleLabel';
-import { PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL } from './pendingUserMessageLifecycle';
+import {
+  PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL,
+  PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL,
+  PENDING_MESSAGE_SEND_AGAIN_ACCESSIBILITY_LABEL,
+} from './pendingUserMessageLifecycle';
 import { chromeTint } from './composerMaterial';
 import { Icon } from "../icons/Icon";
 
@@ -22,7 +26,9 @@ interface MessageBubbleFooterProps {
   lifecycleLabel?: string;
   failureMessage?: string;
   failureColor?: string;
+  retryLabel?: string;
   onRetry?: () => void;
+  onDiscard?: () => void;
 }
 
 export function MessageBubbleFooter({
@@ -31,7 +37,9 @@ export function MessageBubbleFooter({
   lifecycleLabel,
   failureMessage,
   failureColor,
+  retryLabel = 'Retry',
   onRetry,
+  onDiscard,
 }: MessageBubbleFooterProps) {
   const { theme } = useAppTheme();
   const hasLifecycleLabel = Boolean(lifecycleLabel);
@@ -44,7 +52,7 @@ export function MessageBubbleFooter({
     tone === 'sent'
       ? theme.chat.sentTimestamp
       : theme.chat.receivedTimestamp;
-  if (!label && !failureMessage && !onRetry) {
+  if (!label && !failureMessage && !onRetry && !onDiscard) {
     return null;
   }
   const retryInk = failureColor || timeColor;
@@ -72,10 +80,28 @@ export function MessageBubbleFooter({
             {label}
           </Text>
         ) : null}
+        {onDiscard ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL}
+            hitSlop={RETRY_HIT_SLOP}
+            onPress={onDiscard}
+            style={({ pressed }) => [
+              styles.retryCapsule,
+              { opacity: pressed ? 0.64 : 1 },
+            ]}
+          >
+            <Text style={[styles.retry, { color: timeColor }]}>Discard</Text>
+          </Pressable>
+        ) : null}
         {onRetry ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL}
+            accessibilityLabel={
+              retryLabel === 'Send again'
+                ? PENDING_MESSAGE_SEND_AGAIN_ACCESSIBILITY_LABEL
+                : PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL
+            }
             hitSlop={RETRY_HIT_SLOP}
             onPress={onRetry}
             style={({ pressed }) => [
@@ -87,7 +113,7 @@ export function MessageBubbleFooter({
             ]}
           >
             <Icon name="refresh" size={12} color={retryInk} />
-            <Text style={[styles.retry, { color: retryInk }]}>Retry</Text>
+            <Text style={[styles.retry, { color: retryInk }]}>{retryLabel}</Text>
           </Pressable>
         ) : null}
       </View>

@@ -22,6 +22,7 @@ import {
   foldBrainToolRows,
   mergeBrainPresenceIntoTimeline,
 } from "../mewla/brainPresenceTimeline";
+import type { PendingUserMessageAction } from "./pendingUserMessageLifecycle";
 
 type StableTimelineEntry = {
   item: TimelineItem;
@@ -45,7 +46,7 @@ export function useInterfaceTimelineItems({
   pendingUserMessages,
   turnFocusAnchorAliases,
   runningActivity,
-  onRetryPendingUserMessage,
+  onPendingUserMessageAction,
   onBrainWorkEventActivate,
   openSessionIds,
   brainCurrentWork,
@@ -54,7 +55,7 @@ export function useInterfaceTimelineItems({
   pendingUserMessages: PendingUserMessage[];
   turnFocusAnchorAliases?: ReadonlyMap<string, string>;
   runningActivity?: ProviderActivity;
-  onRetryPendingUserMessage(id: string): void;
+  onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   onBrainWorkEventActivate?: (
     event: BrainWorkResultEvent,
     canOpenSession: boolean,
@@ -146,7 +147,7 @@ export function useInterfaceTimelineItems({
     const nextItems = mergePendingUserMessagesIntoTimeline(
       providerTimelineWithActivity,
       pendingUserMessages,
-      onRetryPendingUserMessage,
+      onPendingUserMessageAction,
     );
     const previous = previousRef.current;
     const nextById = new Map<string, StableTimelineEntry>();
@@ -175,7 +176,7 @@ export function useInterfaceTimelineItems({
     };
     return stableItems;
   }, [
-    onRetryPendingUserMessage,
+    onPendingUserMessageAction,
     pendingUserMessages,
     projectedTimelineItems,
     providerTimelineWithActivity,

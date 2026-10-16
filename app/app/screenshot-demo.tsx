@@ -479,7 +479,7 @@ function ChatDemo() {
     events: timelineEvents,
     pendingUserMessages,
     runningActivity,
-    onRetryPendingUserMessage: NOOP,
+    onPendingUserMessageAction: NOOP,
   });
   const attachments = showAttachment
     ? [
@@ -799,7 +799,7 @@ function BrainChatDemo({ empty, running, loading = false, events, work }: { empt
     events: empty || loading ? emptyPending : events,
     pendingUserMessages: emptyPending,
     runningActivity: running ? runningActivity : undefined,
-    onRetryPendingUserMessage: NOOP,
+    onPendingUserMessageAction: NOOP,
   });
   const hasContent = draft.trim().length > 0;
   const appBarInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;

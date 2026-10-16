@@ -1,7 +1,24 @@
 export const PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL =
   "Retry sending message";
+export const PENDING_MESSAGE_SEND_AGAIN_ACCESSIBILITY_LABEL =
+  "Send message again";
+export const PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL =
+  "Discard unsent message";
 
-export type PendingUserMessageLifecycle = "pending" | "failed";
+/**
+ * How long a send may go unanswered before the row says so. A live send is
+ * acknowledged in about a second; a socket that died without a close event
+ * never answers, and a row must not wait on it silently.
+ */
+export const PENDING_SEND_ACK_DEADLINE_MS = 30_000;
+
+/**
+ * pending: in flight. failed: not delivered (rejected, or the connection or
+ * acknowledgement was lost); Retry reuses the receipt, so it never sends
+ * twice. uncertain: the computer could not prove delivery and will not replay
+ * the receipt; only a fresh send or Discard settles it.
+ */
+export type PendingUserMessageLifecycle = "pending" | "failed" | "uncertain";
 
 export type PendingUserMessageLifecycleFields = {
   lifecycle: PendingUserMessageLifecycle;
@@ -10,7 +27,14 @@ export type PendingUserMessageLifecycleFields = {
   failureCode?: string;
   failureMessage?: string;
   createdAfterMaxSeq?: number;
+  /**
+   * Events before this attempt: those visible when it was sent, plus echoes
+   * claimed by earlier sends. The row's causal place in the timeline; a later
+   * send never moves it.
+   */
   createdAfterEventIds?: string[];
+  /** Echoes claimed by later sends: FIFO exclusion only, never a place. */
+  claimedElsewhereEventIds?: string[];
   /** True after one transparent stale-receipt auto-retry with a fresh identity. */
   staleReceiptAutoRetried?: boolean;
 };
@@ -36,6 +60,7 @@ export function beginPendingUserMessageAttempt<
     failureMessage: undefined,
     createdAfterMaxSeq: attempt.createdAfterMaxSeq,
     createdAfterEventIds: attempt.createdAfterEventIds,
+    claimedElsewhereEventIds: undefined,
     staleReceiptAutoRetried:
       attempt.staleReceiptAutoRetried ?? message.staleReceiptAutoRetried,
   };
@@ -62,10 +87,123 @@ export function rejectPendingUserMessage<
   };
 }
 
+/** The receipt could not be proven delivered and will not be replayed. */
+export function markPendingUserMessageUncertain<
+  T extends PendingUserMessageLifecycleFields,
+>(
+  message: T,
+  uncertainty: {
+    requestId: string;
+    code: string;
+    message: string;
+  },
+): T {
+  if (message.dispatchRequestId !== uncertainty.requestId) {
+    return message;
+  }
+  return {
+    ...message,
+    lifecycle: "uncertain",
+    failureCode: uncertainty.code,
+    failureMessage: uncertainty.message,
+  };
+}
+
+/**
+ * A late acknowledgement after the ack deadline: the computer has the input,
+ * so the row waits for its receipt row again.
+ */
+export function acknowledgePendingUserMessage<
+  T extends PendingUserMessageLifecycleFields,
+>(message: T, requestId: string): T {
+  if (
+    message.dispatchRequestId !== requestId ||
+    message.lifecycle === "pending"
+  ) {
+    return message;
+  }
+  return {
+    ...message,
+    lifecycle: "pending",
+    failureCode: undefined,
+    failureMessage: undefined,
+  };
+}
+
+/** What the user can do with a row the computer did not take. */
+export type PendingUserMessageAction = "retry" | "discard";
+
+export type PendingDeliveryOutcome =
+  | { kind: "sent" }
+  | { kind: "pending"; code?: string; message?: string }
+  | {
+      kind: "failed";
+      failure: { requestId: string; code: string; message: string };
+    }
+  | { kind: "connection_closed" }
+  | { kind: "ack_timeout" };
+
+export type PendingDeliverySettlement =
+  | { kind: "acknowledge" }
+  | { kind: "reject"; code: string; message: string }
+  | { kind: "uncertain"; code: string; message: string };
+
+export const CONNECTION_CLOSED_SEND_ERROR =
+  "Not delivered: the connection closed before your computer confirmed it.";
+export const ACK_TIMEOUT_SEND_ERROR =
+  "Not delivered: your computer didn't confirm it.";
+export const UNCERTAIN_SEND_ERROR =
+  "Your computer couldn't confirm the agent received this. Send it again only if the agent didn't get it.";
+
+/**
+ * Every send outcome the computer did not acknowledge settles the row into a
+ * visible state with its own actions. Nothing is left pending on a send the
+ * computer may never have seen.
+ */
+export function settlePendingDelivery(
+  outcome: PendingDeliveryOutcome,
+): PendingDeliverySettlement {
+  switch (outcome.kind) {
+    case "sent":
+      return { kind: "acknowledge" };
+    case "pending":
+      // Without a code the computer holds the input (accepted by the
+      // provider, or the same receipt is already in flight): its receipt or
+      // provider echo settles the row. Only input_uncertain is unproven.
+      return outcome.code === "input_uncertain"
+        ? {
+            kind: "uncertain",
+            code: outcome.code,
+            message: UNCERTAIN_SEND_ERROR,
+          }
+        : { kind: "acknowledge" };
+    case "failed":
+      return {
+        kind: "reject",
+        code: outcome.failure.code,
+        message: outcome.failure.message,
+      };
+    case "connection_closed":
+      return {
+        kind: "reject",
+        code: "connection_closed",
+        message: CONNECTION_CLOSED_SEND_ERROR,
+      };
+    case "ack_timeout":
+      return {
+        kind: "reject",
+        code: "ack_timeout",
+        message: ACK_TIMEOUT_SEND_ERROR,
+      };
+  }
+}
+
 export type PendingLifecyclePresentation = {
   lifecycle: PendingUserMessageLifecycle;
   label: string;
   accessibilityLabel: string;
+  /** The resend action's label once settled. */
+  retryLabel?: "Retry" | "Send again";
 };
 
 export function presentPendingUserMessageLifecycle(
@@ -74,8 +212,17 @@ export function presentPendingUserMessageLifecycle(
   if (message.lifecycle === "failed") {
     return {
       lifecycle: "failed",
-      label: "Send failed",
-      accessibilityLabel: "Message send failed",
+      label: "Not delivered",
+      accessibilityLabel: "Message not delivered",
+      retryLabel: "Retry",
+    };
+  }
+  if (message.lifecycle === "uncertain") {
+    return {
+      lifecycle: "uncertain",
+      label: "Delivery unknown",
+      accessibilityLabel: "Message delivery unknown",
+      retryLabel: "Send again",
     };
   }
   return {
@@ -92,7 +239,7 @@ export function showsPendingSendStatusMark(args: {
   pending?: boolean;
   lifecycle?: PendingUserMessageLifecycle;
 }): boolean {
-  return Boolean(args.pending) && args.lifecycle !== "failed";
+  return Boolean(args.pending) && (args.lifecycle ?? "pending") === "pending";
 }
 
 /**
@@ -144,6 +291,11 @@ export type PendingUserMessageReconciliation<T> = {
  *    seq-boundary guessing. Message bodies are never identities.
  * 2. Provider-neutral causal FIFO fallback for ordinary provider echoes whose
  *    ids differ from the request receipt.
+ *
+ * A row stays after its send boundary. An event claimed by an earlier send
+ * joins that boundary (the earlier send's echo precedes this row); an event
+ * claimed by a later send is only excluded from this row's FIFO and never
+ * moves it, so an unsettled row is not carried under newer messages.
  */
 export function reconcilePendingUserMessagesAgainstEvents<
   T extends PendingUserMessageLifecycleFields & { id: string },
@@ -161,7 +313,20 @@ export function reconcilePendingUserMessagesAgainstEvents<
     return { pendingUserMessages, providerEventAliases: [] };
   }
 
-  const consumedEventIds = new Set<string>();
+  // Send order: attempt order, then presentation order.
+  const sendRank = new Map(
+    pendingUserMessages
+      .map((message, presentationIndex) => ({ message, presentationIndex }))
+      .sort(
+        (left, right) =>
+          finiteAttemptOrder(left.message.dispatchAttemptOrder) -
+            finiteAttemptOrder(right.message.dispatchAttemptOrder) ||
+          left.presentationIndex - right.presentationIndex,
+      )
+      .map(({ message }, rank) => [message.id, rank]),
+  );
+  // Claimed event id -> send rank of the row that claimed it.
+  const consumedEventIds = new Map<string, number>();
   const clearedPendingIds = new Set<string>();
   const providerEventAliases: ProviderEventTurnFocusAlias[] = [];
 
@@ -179,7 +344,7 @@ export function reconcilePendingUserMessagesAgainstEvents<
     if (!exact) {
       continue;
     }
-    consumedEventIds.add(exact.id);
+    consumedEventIds.set(exact.id, sendRank.get(message.id)!);
     clearedPendingIds.add(message.id);
     providerEventAliases.push({
       providerEventId: exact.id,
@@ -204,7 +369,10 @@ export function reconcilePendingUserMessagesAgainstEvents<
     });
   const remainingById = new Map<string, T>();
   for (const { message } of attempts) {
-    const priorEventIds = new Set(message.createdAfterEventIds ?? []);
+    const priorEventIds = new Set([
+      ...(message.createdAfterEventIds ?? []),
+      ...(message.claimedElsewhereEventIds ?? []),
+    ]);
     const providerEvent = userEvents.find((event) => {
       if (priorEventIds.has(event.id) || consumedEventIds.has(event.id)) {
         return false;
@@ -217,7 +385,7 @@ export function reconcilePendingUserMessagesAgainstEvents<
       );
     });
     if (providerEvent) {
-      consumedEventIds.add(providerEvent.id);
+      consumedEventIds.set(providerEvent.id, sendRank.get(message.id)!);
       clearedPendingIds.add(message.id);
       providerEventAliases.push({
         providerEventId: providerEvent.id,
@@ -229,12 +397,34 @@ export function reconcilePendingUserMessagesAgainstEvents<
       remainingById.set(message.id, message);
       continue;
     }
-    const createdAfterEventIds = Array.from(
-      new Set([...priorEventIds, ...consumedEventIds]),
-    );
+    const order = sendRank.get(message.id)!;
+    const claimedEarlier: string[] = [];
+    const claimedLater: string[] = [];
+    for (const [eventId, claimantOrder] of consumedEventIds) {
+      (claimantOrder < order ? claimedEarlier : claimedLater).push(eventId);
+    }
     remainingById.set(message.id, {
       ...message,
-      createdAfterEventIds,
+      ...(claimedEarlier.length > 0
+        ? {
+            createdAfterEventIds: Array.from(
+              new Set([
+                ...(message.createdAfterEventIds ?? []),
+                ...claimedEarlier,
+              ]),
+            ),
+          }
+        : {}),
+      ...(claimedLater.length > 0
+        ? {
+            claimedElsewhereEventIds: Array.from(
+              new Set([
+                ...(message.claimedElsewhereEventIds ?? []),
+                ...claimedLater,
+              ]),
+            ),
+          }
+        : {}),
     });
   }
   return {

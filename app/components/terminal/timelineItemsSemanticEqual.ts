@@ -44,7 +44,9 @@ export function timelineItemsSemanticEqual(
       left.pendingLifecycle === right.pendingLifecycle &&
       left.pendingLifecycleLabel === right.pendingLifecycleLabel &&
       left.pendingFailureMessage === right.pendingFailureMessage &&
+      left.pendingRetryLabel === right.pendingRetryLabel &&
       left.onRetryPending === right.onRetryPending &&
+      left.onDiscardPending === right.onDiscardPending &&
       left.streaming === right.streaming &&
       left.turnFocusAnchorId === right.turnFocusAnchorId &&
       attachmentsEqual(left.attachments, right.attachments)
