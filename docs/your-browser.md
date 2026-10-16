@@ -69,5 +69,11 @@ mewla agent-use fix      # do the fix that status names
 
 The extension's key stays on the computer, readable only by your user. It goes
 to the browser tools through their environment, never into a command line, a
-log or an agent's prompt. See
+log or an agent's prompt.
+
+Files the browser tools make on their own, such as console logs, screenshots
+and downloads, go to `~/.mewla/agent-use/browser-files` rather than the
+project the agent works in, so a page you are logged in to never lands in a
+repository. Mewla keeps the newest 256 MB there and deletes older files as new
+ones arrive; move a download somewhere else to keep it. See
 [Security and privacy](security-and-privacy.md#agents-in-your-browser).

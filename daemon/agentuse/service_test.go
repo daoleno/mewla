@@ -130,13 +130,16 @@ func TestMCPServerPassesTheKeyOnlyInTheEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(argv, " ")
-	for _, want := range []string{c.node, "@playwright/mcp/cli.js", "--extension", "--executable-path " + c.chrome.Executable, "--profile-dir-name Profile 2"} {
+	for _, want := range []string{c.node, "@playwright/mcp/cli.js", "--extension", "--executable-path " + c.chrome.Executable, "--profile-dir-name Profile 2", "--snapshot-mode none", "--output-dir " + filepath.Join(c.root, "state", "agent-use", "browser-files"), "--output-max-size ", "--file-paths absolute"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("argv %q lacks %q", joined, want)
 		}
 	}
 	if strings.Contains(joined, validKey) {
 		t.Fatal("the key is on the command line")
+	}
+	if info, err := os.Stat(filepath.Join(c.root, "state", "agent-use", "browser-files")); err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("browser files dir: %v %v", info, err)
 	}
 	keys := 0
 	for _, entry := range env {

@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -262,6 +263,11 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 
 func (s *Service) packageDir() string { return filepath.Join(s.dir, "playwright-mcp") }
 
+// browserFilesBudget bounds the files agents' browser tools leave behind.
+const browserFilesBudget = 256 << 20
+
+func (s *Service) browserFilesDir() string { return filepath.Join(s.dir, "browser-files") }
+
 func lockStamp() string {
 	sum := sha256.Sum256(playwrightLock)
 	return hex.EncodeToString(sum[:])
@@ -425,7 +431,19 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 	if status.State != BrowserReady {
 		return nil, nil, errors.New(status.Summary)
 	}
-	argv = []string{l.node, l.cli, "--extension", "--executable-path", l.chrome, "--profile-dir-name", l.profile}
+	if err := os.MkdirAll(s.browserFilesDir(), 0o700); err != nil {
+		return nil, nil, err
+	}
+	argv = []string{l.node, l.cli, "--extension", "--executable-path", l.chrome, "--profile-dir-name", l.profile,
+		// An action answers with what changed, not the whole page: a busy
+		// app's page is hundreds of thousands of tokens, which the agent
+		// asks for, when it needs it, with browser_find or browser_snapshot.
+		"--snapshot-mode", "none",
+		// Files Playwright names itself (console logs, screenshots,
+		// downloads) stay in Mewla's state, not in the Worker's project,
+		// within a budget that drops the oldest first.
+		"--output-dir", s.browserFilesDir(), "--output-max-size", strconv.Itoa(browserFilesBudget), "--file-paths", "absolute",
+	}
 	// Agents' MCP hosts pass only a few variables on; Chrome also needs the
 	// desktop session, found by the daemon side.
 	replaced := map[string]bool{"PATH": true}
