@@ -40,6 +40,35 @@ var (
 	personMargin = 300 * time.Millisecond
 )
 
+// personError is ErrPersonAtComputer with the input that was seen, so a
+// pause that won't end can be told apart: a person, a phantom tap, or
+// another program driving the computer.
+type personError struct {
+	kind   InputKind
+	seen   time.Time
+	inputs [inputKinds]time.Time
+}
+
+func (e personError) Is(target error) bool { return target == ErrPersonAtComputer }
+
+func (e personError) Error() string {
+	now := time.Now()
+	ago := func(t time.Time) string {
+		return strconv.FormatFloat(max(0, now.Sub(t).Seconds()), 'f', 1, 64) + " s ago"
+	}
+	text := ErrPersonAtComputer.Error() + " (saw a " + e.kind.String() + " " + ago(e.seen)
+	var last []string
+	for kind, at := range e.inputs {
+		if InputKind(kind) != e.kind && !at.IsZero() {
+			last = append(last, InputKind(kind).String()+" "+ago(at))
+		}
+	}
+	if len(last) > 0 {
+		text += "; last " + strings.Join(last, ", ")
+	}
+	return text + ")"
+}
+
 // AgentLongEdge is the long edge of agent screenshots. Agents give
 // coordinates on the screenshot; Mewla converts them to the display.
 const AgentLongEdge = 1280
@@ -174,10 +203,15 @@ type agentSession struct {
 	pointer  image.Point
 	buttons  uint8
 	// presence reports the person at the computer; lastPost is when this
-	// agent's own last event went out.
-	presence    func() Presence
-	lastPost    time.Time
-	pausedUntil time.Time
+	// agent's own last event went out, and lastAppKey and lastAppClick
+	// when it last sent one to an app, which a Mac may count as that kind
+	// of input too.
+	presence     func() Presence
+	lastPost     time.Time
+	lastAppKey   time.Time
+	lastAppClick time.Time
+	pausedUntil  time.Time
+	paused       personError
 	// readElements reads the focused window, when the backend can.
 	readElements func(ctx context.Context, limit int) (ElementTree, error)
 	scale        float64 // framebuffer pixels per screenshot pixel
@@ -271,10 +305,17 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	// input, so it goes on while they use the computer; anything on the
 	// screen itself, or on the app in front, waits for them.
 	background := agent.inBackground(ctx, action)
-	if !background && agent.personActive() {
-		agent.letGo()
-		s.audit(worker, action, ErrPersonAtComputer)
-		return AgentResult{}, ErrPersonAtComputer
+	if !background {
+		if err := agent.personInput(); err != nil {
+			agent.letGo()
+			// An agent waiting for the person keeps its session, so the
+			// next try doesn't start a capture, and wake the display, anew.
+			agent.mu.Lock()
+			agent.lastUse = time.Now()
+			agent.mu.Unlock()
+			s.audit(worker, action, err)
+			return AgentResult{}, err
+		}
 	}
 	agent.mu.Lock()
 	agent.inflight++
@@ -325,6 +366,10 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		cancel(err)
 		s.ReleaseControl(control)
 		return nil, err
+	}
+	// Starting a capture may wake the display by declaring activity.
+	if woke := time.Now().Add(wakeDeclares); wakeDeclares > 0 && woke.After(lastPost) {
+		lastPost = woke
 	}
 	label := worker
 	if s.workerName != nil {
@@ -446,7 +491,7 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 	default:
 		if _, click := appClicks[action.Action]; click && name != "" {
 			_, background, _, err := a.clickPath(ctx, name)
-			return err == nil && background
+			return err != nil || background
 		}
 		return false
 	}
@@ -458,7 +503,9 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 		return false
 	}
 	app, err := resolveApp(apps, name)
-	return err == nil && !app.Active
+	// An app that isn't there fails without input, saying so, rather than
+	// waiting for the person.
+	return err != nil || !app.Active
 }
 
 // appClicks are the clicks that can name an app: its button and count.
@@ -526,7 +573,11 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		if window == 0 {
 			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", c[0], c[1], oneLine(app.Name))
 		}
-		if err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count); err != nil {
+		err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count)
+		a.mu.Lock()
+		a.lastAppClick = time.Now()
+		a.mu.Unlock()
+		if err != nil {
 			return AgentResult{}, err
 		}
 		a.mu.Lock()
@@ -666,26 +717,51 @@ func (a *agentSession) releaseTree() {
 	}
 }
 
-// personActive says someone used the computer's own keyboard or pointer in
-// the last personPause, after this agent's last event.
-func (a *agentSession) personActive() bool {
+// personInput is a personError when someone used the computer's own
+// keyboard or pointer in the last personPause, after this agent's last
+// event of that kind.
+func (a *agentSession) personInput() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.personActiveLocked()
+	return a.personInputLocked()
 }
 
-func (a *agentSession) personActiveLocked() bool {
+func (a *agentSession) personInputLocked() error {
 	if a.presence == nil {
-		return false
+		return nil
+	}
+	inputs := a.presence().Input
+	var seen personError
+	for kind, at := range inputs {
+		own := a.lastPost
+		switch InputKind(kind) {
+		case InputKey:
+			own = later(own, a.lastAppKey)
+		case InputClick:
+			own = later(own, a.lastAppClick)
+		}
+		if !at.IsZero() && at.After(own.Add(personMargin)) && at.After(seen.seen) {
+			seen = personError{kind: InputKind(kind), seen: at, inputs: inputs}
+		}
 	}
 	// Once seen, the pause holds for its full time: the agent's own events
 	// after it, such as letting go of a button, must not end it early.
-	if last := a.presence().LastInput; !last.IsZero() && last.After(a.lastPost.Add(personMargin)) {
-		if until := last.Add(personPause); until.After(a.pausedUntil) {
-			a.pausedUntil = until
+	if !seen.seen.IsZero() {
+		if until := seen.seen.Add(personPause); until.After(a.pausedUntil) {
+			a.pausedUntil, a.paused = until, seen
 		}
 	}
-	return time.Now().Before(a.pausedUntil)
+	if time.Now().Before(a.pausedUntil) {
+		return a.paused
+	}
+	return nil
+}
+
+func later(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // letGo releases a button the agent left down between actions, so a paused
@@ -857,8 +933,8 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 	stopped := func() error {
 		if a.ctx.Err() != nil {
 			interrupted = context.Cause(a.ctx)
-		} else if !background && a.personActiveLocked() {
-			interrupted = ErrPersonAtComputer
+		} else if !background {
+			interrupted = a.personInputLocked()
 		}
 		return interrupted
 	}
@@ -871,6 +947,9 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 			if !background {
 				a.lastPost = time.Now()
 			}
+			if pid != 0 {
+				a.lastAppKey = time.Now()
+			}
 		}
 		a.letGoLocked()
 	}()
@@ -881,6 +960,9 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 		err := send(keysym, down)
 		if !background {
 			a.lastPost = time.Now()
+		}
+		if pid != 0 {
+			a.lastAppKey = time.Now()
 		}
 		if err != nil {
 			return err

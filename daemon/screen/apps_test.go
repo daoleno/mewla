@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func fakeApps() []FakeApp {
@@ -266,9 +265,7 @@ func TestClicksReachAnAppBehindOthers(t *testing.T) {
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{600, 100}, App: "Slack"}); !errors.Is(err, ErrPersonAtComputer) {
 		t.Fatalf("on the screen while someone works: %v", err)
 	}
-	backend.mu.Lock()
-	backend.lastInput = time.Time{}
-	backend.mu.Unlock()
+	backend.ForgetInput()
 	s.StopAgent()
 	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
 	got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{600, 100}, App: "Slack"}).Text

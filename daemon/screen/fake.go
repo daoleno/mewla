@@ -34,7 +34,10 @@ type FakeBackend struct {
 	Opened    []string
 	Confirmed []string
 	Requested int
-	lastInput time.Time
+	input     [inputKinds]time.Time
+	// AppEventsSeen makes keys and clicks sent to one app count as input
+	// too, as a Mac might.
+	AppEventsSeen bool
 	// sleeps counts SleepDisplay; a capture started before the last one
 	// has stopped, and starting a new capture wakes the display.
 	sleeps      int
@@ -79,7 +82,7 @@ func (f *FakeBackend) HoldDisplay(on bool) {
 func (f *FakeBackend) Presence() Presence {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return Presence{Locked: f.Locked, LastInput: f.lastInput}
+	return Presence{Locked: f.Locked, Input: f.input}
 }
 
 // Elements returns the scripted tree, as a Mac reads the focused window.
@@ -92,10 +95,22 @@ func (f *FakeBackend) Elements(context.Context, int) (ElementTree, error) {
 	return *f.Tree, nil
 }
 
-// PersonInput is someone using the computer's own keyboard or pointer.
+// PersonInput is someone typing on the computer's own keyboard.
 func (f *FakeBackend) PersonInput() {
+	f.PersonInputOf(InputKey)
+}
+
+// PersonInputOf is someone making one kind of input.
+func (f *FakeBackend) PersonInputOf(kind InputKind) {
 	f.mu.Lock()
-	f.lastInput = time.Now()
+	f.input[kind] = time.Now()
+	f.mu.Unlock()
+}
+
+// ForgetInput clears the input seen so far.
+func (f *FakeBackend) ForgetInput() {
+	f.mu.Lock()
+	f.input = [inputKinds]time.Time{}
 	f.mu.Unlock()
 }
 
@@ -245,7 +260,13 @@ func (s *fakeSession) Pointer(x, y int, buttons uint8) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Pointers = append(f.Pointers, FakePointer{X: x, Y: y, Buttons: buttons})
-	f.lastInput = time.Now()
+	kind := InputPointer
+	if buttons&(8|16|32|64) != 0 {
+		kind = InputScroll
+	} else if buttons&7 != 0 || image.Pt(x, y) == f.pointer {
+		kind = InputClick
+	}
+	f.input[kind] = time.Now()
 	f.pointer = image.Pt(x, y)
 	if buttons&1 != 0 {
 		f.clicks = append(f.clicks, f.pointer)
@@ -262,7 +283,7 @@ func (s *fakeSession) Key(keysym uint32, down bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Keys = append(f.Keys, FakeKey{Keysym: keysym, Down: down})
-	f.lastInput = time.Now()
+	f.input[InputKey] = time.Now()
 	if down {
 		f.keys = append(f.keys, keysym)
 		f.bump()
@@ -277,6 +298,9 @@ func (s *fakeSession) KeyTo(pid int, keysym uint32, down bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.AppKeys = append(f.AppKeys, FakeAppKey{pid, FakeKey{keysym, down}})
+	if f.AppEventsSeen {
+		f.input[InputKey] = time.Now()
+	}
 	return nil
 }
 
@@ -292,6 +316,9 @@ func (s *fakeSession) ClickTo(pid int, window uint32, x, y, button, count int) e
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.AppClicks = append(f.AppClicks, FakeAppClick{pid, window, x, y, button, count})
+	if f.AppEventsSeen {
+		f.input[InputClick] = time.Now()
+	}
 	return nil
 }
 
