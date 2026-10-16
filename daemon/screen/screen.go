@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
@@ -129,6 +130,9 @@ type Service struct {
 	agentGate  func() bool
 	// agentPosted is when an ended agent session last posted input.
 	agentPosted time.Time
+	// elementIDs is the last element id given out: every app read numbers
+	// its elements after it, so an id never comes back meaning another.
+	elementIDs atomic.Int64
 	// auditMu serializes the agent audit log.
 	auditMu     sync.Mutex
 	auditPruned bool

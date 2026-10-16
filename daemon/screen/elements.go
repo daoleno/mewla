@@ -42,6 +42,27 @@ type ElementTree struct {
 	Truncated bool
 	// PID is the app's process, when read by app.
 	PID int
+	// IDs are the elements' ids, when an agent's app read gave them out;
+	// otherwise element i's id is i+1.
+	IDs []int
+}
+
+// id is element i's id.
+func (t *ElementTree) id(i int) int {
+	if i < len(t.IDs) {
+		return t.IDs[i]
+	}
+	return i + 1
+}
+
+// index is the element with id, or -1.
+func (t *ElementTree) index(id int) int {
+	for i := range t.Elements {
+		if t.id(i) == id {
+			return i
+		}
+	}
+	return -1
 }
 
 // elementReader is a backend that can read the focused window's elements.

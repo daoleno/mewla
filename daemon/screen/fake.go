@@ -414,6 +414,12 @@ func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTre
 	return ElementTree{}, errors.New("the app quit")
 }
 
+// ElementHash and SameElement take a fake element for the same one when it
+// is in the same place with the same role; a Mac compares the live element.
+func (f *FakeBackend) ElementHash(e Element) uintptr { return e.ref }
+
+func (f *FakeBackend) SameElement(a, b Element) bool { return a.ref == b.ref && a.Role == b.Role }
+
 func (f *FakeBackend) Release(tree ElementTree) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

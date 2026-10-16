@@ -61,9 +61,9 @@ func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
 		}
 		switch {
 		case m.Title == "" || strings.EqualFold(e.Title, m.Title):
-			whole = append(whole, i+1)
+			whole = append(whole, t.id(i))
 		case strings.Contains(strings.ToLower(e.Title), strings.ToLower(m.Title)):
-			part = append(part, i+1)
+			part = append(part, t.id(i))
 		}
 	}
 	found := whole

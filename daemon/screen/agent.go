@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	xdraw "golang.org/x/image/draw"
@@ -206,6 +207,8 @@ type agentSession struct {
 	// agent's own last event went out, and lastAppKey and lastAppClick
 	// when it last sent one to an app, which a Mac may count as that kind
 	// of input too.
+	// ids is the Service's element id counter.
+	ids          *atomic.Int64
 	presence     func() Presence
 	lastPost     time.Time
 	lastAppKey   time.Time
@@ -378,7 +381,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		}
 	}
 	agent := &agentSession{
-		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence, lastPost: lastPost,
+		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence, lastPost: lastPost, ids: &s.elementIDs,
 		cancel: cancel, ctx: ctx, ready: make(chan struct{}), changed: make(chan struct{}), lastUse: time.Now(),
 	}
 	if reader, ok := s.backend.(elementReader); ok {
@@ -643,12 +646,46 @@ func (a *agentSession) appState(ctx context.Context, name string) (AgentResult, 
 	return a.readAppLocked(ctx, app)
 }
 
+// numberLocked gives a new read's elements their ids: an element still the
+// same live element as in the latest read keeps its id, and any other gets
+// one never given out before, so an old id never comes to mean another
+// element. Callers hold appMu, with the latest read not yet released.
+func (a *agentSession) numberLocked(tree *ElementTree) {
+	same, _ := a.apps.(elementIdentity)
+	previous := map[uintptr][]int{}
+	if same != nil && a.tree != nil && a.tree.PID == tree.PID {
+		for i, e := range a.tree.Elements {
+			h := same.ElementHash(e)
+			previous[h] = append(previous[h], i)
+		}
+	}
+	tree.IDs = make([]int, len(tree.Elements))
+	kept := map[int]bool{}
+	for i, e := range tree.Elements {
+		id := 0
+		if same != nil {
+			for _, j := range previous[same.ElementHash(e)] {
+				if old := a.tree.id(j); !kept[old] && same.SameElement(a.tree.Elements[j], e) {
+					id = old
+					break
+				}
+			}
+		}
+		if id == 0 {
+			id = int(a.ids.Add(1))
+		}
+		kept[id] = true
+		tree.IDs[i] = id
+	}
+}
+
 // readAppLocked replaces the agent's latest read; callers hold appMu.
 func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult, error) {
 	tree, err := a.apps.ReadApp(ctx, app.PID, elementsRead)
 	if err != nil {
 		return AgentResult{}, err
 	}
+	a.numberLocked(&tree)
 	if a.tree != nil {
 		a.apps.Release(*a.tree)
 	}
@@ -681,10 +718,14 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		}
 		action.Element = id
 	}
-	if action.Element < 1 || action.Element > len(a.tree.Elements) {
+	index := a.tree.index(action.Element)
+	if index < 0 {
+		if action.Element >= 1 && int64(action.Element) <= a.ids.Load() {
+			return AgentResult{}, fmt.Errorf("%w ([%d] isn't in the latest read: the element it named is gone, or was in another app)", ErrStaleElement, action.Element)
+		}
 		return AgentResult{}, fmt.Errorf("there is no element [%d] in the last app_state", action.Element)
 	}
-	e := a.tree.Elements[action.Element-1]
+	e := a.tree.Elements[index]
 	name, err := elementAction(e, action.ElementAction)
 	if err != nil {
 		return AgentResult{}, err

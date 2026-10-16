@@ -36,6 +36,8 @@ var appsLib struct {
 	rectFromDict      func(dict uintptr, rect *cgRect) bool
 	performAction     func(element, action uintptr) int32
 	setAttribute      func(element, attribute, value uintptr) int32
+	hash              func(ref uintptr) uintptr
+	equal             func(a, b uintptr) bool
 
 	keys map[string]uintptr
 }
@@ -76,6 +78,8 @@ func loadApps() bool {
 			{&appsLib.rectFromDict, "CoreGraphics", "CGRectMakeWithDictionaryRepresentation"},
 			{&appsLib.performAction, "ApplicationServices", "AXUIElementPerformAction"},
 			{&appsLib.setAttribute, "ApplicationServices", "AXUIElementSetAttributeValue"},
+			{&appsLib.hash, "CoreFoundation", "CFHash"},
+			{&appsLib.equal, "CoreFoundation", "CFEqual"},
 		} {
 			if _, err := purego.Dlsym(libs[fn.lib], fn.name); err != nil {
 				log.Printf("screen: reading apps unavailable: no %s", fn.name)
@@ -268,6 +272,19 @@ func axActionNames(element uintptr) []string {
 		}
 	}
 	return out
+}
+
+// ElementHash and SameElement compare the live accessibility elements: two
+// reads' handles to one element are equal, whatever its text now says.
+func (b *macBackend) ElementHash(e Element) uintptr {
+	if e.ref == 0 || !loadApps() {
+		return 0
+	}
+	return appsLib.hash(e.ref)
+}
+
+func (b *macBackend) SameElement(x, y Element) bool {
+	return x.ref != 0 && y.ref != 0 && loadApps() && appsLib.equal(x.ref, y.ref)
 }
 
 func (b *macBackend) Release(tree ElementTree) {
