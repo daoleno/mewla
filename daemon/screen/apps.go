@@ -249,7 +249,7 @@ func resolveApp(apps []App, name string) (App, error) {
 	case 1:
 		return found[0], nil
 	case 0:
-		return App{}, fmt.Errorf("no app named %q has a window; see apps", name)
+		return App{}, fmt.Errorf("no app named %q has a window; see apps, or open it with open_app", name)
 	}
 	pids := make([]string, len(found))
 	for i, app := range found {
