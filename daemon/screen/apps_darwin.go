@@ -300,8 +300,9 @@ func (b *macBackend) ActOnElement(ctx context.Context, e Element, action, value 
 	return err
 }
 
-func actOnElement(e Element, action, value string) error {
-	// Never act on an element that can't be shown to be the one read.
+// stillRead checks that e's live element is still the one that was read:
+// nothing is done to, or read from, an element that can't be shown to be.
+func stillRead(e Element) error {
 	role, code := axCopy(e.ref, "AXRole")
 	switch {
 	case code == axErrorInvalidElement || (code == 0 && role == 0):
@@ -318,6 +319,14 @@ func actOnElement(e Element, action, value string) error {
 	if !same || title != e.Title {
 		return ErrStaleElement
 	}
+	return nil
+}
+
+func actOnElement(e Element, action, value string) error {
+	if err := stillRead(e); err != nil {
+		return err
+	}
+	var code int32
 	switch action {
 	case "focus":
 		yes := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), true)
@@ -350,6 +359,46 @@ func actOnElement(e Element, action, value string) error {
 		return errors.New("the app didn't answer in time; it may be busy")
 	}
 	return fmt.Errorf("the app refused it (accessibility error %d)", code)
+}
+
+// ReadValue reads an element's whole value, up to limit characters, past
+// the cut a read of the app makes.
+func (b *macBackend) ReadValue(ctx context.Context, e Element, limit int) (string, int, error) {
+	if !loadApps() {
+		return "", 0, ErrNoApps
+	}
+	if e.ref == 0 {
+		return "", 0, ErrStaleElement
+	}
+	var value string
+	var length int
+	var err error
+	withPool(func() { value, length, err = readValue(e, limit) })
+	return value, length, err
+}
+
+func readValue(e Element, limit int) (string, int, error) {
+	if err := stillRead(e); err != nil {
+		return "", 0, err
+	}
+	value, code := axCopy(e.ref, "AXValue")
+	switch {
+	case code == axErrorNoValue || code == axErrorAttributeUnsupported || (code == 0 && value == 0):
+		return "", 0, nil
+	case code != 0:
+		return "", 0, fmt.Errorf("the app didn't answer (accessibility error %d); read it again", code)
+	}
+	defer axLib.release(value)
+	if axLib.typeID(value) != axLib.stringTypeID() {
+		text := axValueText(e.ref)
+		return text, len([]rune(text)), nil
+	}
+	length := int(axLib.stringLength(value))
+	str := objc.ID(value)
+	if length > limit {
+		str = str.Send(selSubstringToIndex, uint64(limit))
+	}
+	return objc.Send[string](str, selUTF8String), length, nil
 }
 
 // PressAt presses, through accessibility, what an app has at a point in
@@ -635,6 +684,7 @@ func pressMenuKey(ctx context.Context, pid int, shortcut Shortcut) (string, bool
 
 var (
 	_ menuPresser = (*macBackend)(nil)
+	_ valueReader = (*macBackend)(nil)
 	_ appReader   = (*macBackend)(nil)
 	_ appActor    = (*macBackend)(nil)
 	_ appRaiser   = (*macBackend)(nil)

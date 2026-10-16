@@ -598,3 +598,34 @@ func TestBringForward(t *testing.T) {
 		t.Fatal("no app")
 	}
 }
+
+// read gives an element's whole text, lines and all, which a read of the
+// app cuts short; up to valueRead characters, and never a password.
+func TestReadAnElementsWholeValue(t *testing.T) {
+	s, backend, dir := newAgentService(t)
+	apps := fakeApps()
+	body := "Mewla check\nNative computer benchmark\n" + strings.Repeat("a long line of the note ", 40)
+	apps[0].Elements = append(apps[0].Elements, Element{Depth: 1, Role: "AXTextArea", Value: body, Enabled: true},
+		Element{Depth: 1, Role: "AXTextArea", Title: "Huge", Value: strings.Repeat("x", valueRead+5), Enabled: true})
+	backend.RunningApps = apps
+	state := act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"}).Text
+	if strings.Contains(state, "Native computer benchmark\n") || !strings.Contains(state, "…") {
+		t.Fatalf("the read already holds it all:\n%s", state)
+	}
+	note := idOf(t, state, "TextArea = \"Mewla check")
+	if got := act(t, s, "%7", AgentAction{Action: "element", Element: note, ElementAction: "read"}).Text; got != fmt.Sprintf("[%d] TextArea holds %d characters:\n%s", note, len(body), body) {
+		t.Fatalf("read:\n%s", got)
+	}
+	huge := idOf(t, state, `TextArea "Huge"`)
+	if got := act(t, s, "%7", AgentAction{Action: "element", Element: huge, ElementAction: "read"}).Text; !strings.HasPrefix(got, fmt.Sprintf("[%d] TextArea \"Huge\" holds %d characters; the first %d:\n", huge, valueRead+5, valueRead)) || !strings.HasSuffix(got, ":\n"+strings.Repeat("x", valueRead)) {
+		t.Fatalf("huge: %.120s", got)
+	}
+	password := idOf(t, state, "SecureTextField")
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: password, ElementAction: "read"}); err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Fatalf("password: %v", err)
+	}
+	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
+	if strings.Contains(string(audit), "Native computer") || !strings.Contains(string(audit), `"element_action":"read"`) {
+		t.Fatalf("audit %s", audit)
+	}
+}
