@@ -66,6 +66,13 @@ func checkAppName(name string) error {
 	return nil
 }
 
+// elementIdentity is a backend that can tell an element in a new read is
+// the same live element as one before, which then keeps its id.
+type elementIdentity interface {
+	ElementHash(e Element) uintptr
+	SameElement(a, b Element) bool
+}
+
 // appRaiser is a backend that can bring an app to the front.
 type appRaiser interface {
 	RaiseApp(ctx context.Context, pid int) error
@@ -189,7 +196,7 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	if app.Active {
 		b.WriteString(", in front")
 	}
-	b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; ids last until this agent reads an app again.\n")
+	b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; an element keeps its id while it stays the same, and an id whose element is gone is refused.\n")
 	shown, hidden := 0, 0
 	for i, e := range tree.Elements {
 		title, value := oneLine(e.Title), oneLine(e.Value)
@@ -208,7 +215,7 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 			continue
 		}
 		shown++
-		line := strings.Repeat("  ", min(e.Depth, 8)) + fmt.Sprintf("[%d] %s", i+1, strings.TrimPrefix(e.Role, "AX"))
+		line := strings.Repeat("  ", min(e.Depth, 8)) + fmt.Sprintf("[%d] %s", tree.id(i), strings.TrimPrefix(e.Role, "AX"))
 		if title != "" {
 			line += ` "` + title + `"`
 		}

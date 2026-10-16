@@ -3,6 +3,7 @@ package screen
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
@@ -51,7 +52,7 @@ func TestAgentReadsAnyAppWithIds(t *testing.T) {
 	}
 
 	safari := act(t, s, "%7", AgentAction{Action: "app_state", App: "safari"}).Text
-	if !strings.Contains(safari, `[2] Link "Statements" {Press}`+"\n") {
+	if !strings.Contains(safari, `[6] Link "Statements" {Press}`+"\n") {
 		t.Fatalf("an element off the screen still has an id, without a point:\n%s", safari)
 	}
 	if backend.Retained != 2 {
@@ -206,8 +207,8 @@ func TestAPersonPausesOnlyWhatTheyUse(t *testing.T) {
 	}
 
 	act(t, s, "%7", AgentAction{Action: "apps"})
-	act(t, s, "%7", AgentAction{Action: "app_state", App: "Safari"})
-	act(t, s, "%7", AgentAction{Action: "element", Element: 2, ElementAction: "press"})
+	safari := act(t, s, "%7", AgentAction{Action: "app_state", App: "Safari"}).Text
+	act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, safari, `Link "Statements"`), ElementAction: "press"})
 	act(t, s, "%7", AgentAction{Action: "type", Text: "rent", App: "Safari"})
 	act(t, s, "%7", AgentAction{Action: "hold_key", Text: "shift", Duration: 0.3, App: "Safari"})
 	act(t, s, "%7", AgentAction{Action: "screenshot", App: "Safari"})
@@ -330,5 +331,69 @@ func TestOpenAnAppThatIsNotRunning(t *testing.T) {
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
 	if strings.Count(string(audit), `"action":"open_app"`) != 11 {
 		t.Fatalf("audit %s", audit)
+	}
+}
+
+// idOf is the id on the line of an app_state that holds label.
+func idOf(t *testing.T, state, label string) int {
+	t.Helper()
+	for _, line := range strings.Split(state, "\n") {
+		if strings.Contains(line, label) {
+			var id int
+			if _, err := fmt.Sscanf(strings.TrimSpace(line), "[%d]", &id); err == nil {
+				return id
+			}
+		}
+	}
+	t.Fatalf("no %q in:\n%s", label, state)
+	return 0
+}
+
+// An element keeps its id while it is the same element; an id whose
+// element went away is refused, never moved to whatever took its place.
+func TestAnIdNeverMovesToAnotherElement(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	settings := FakeApp{App: App{Name: "系统设置", PID: 909}, Elements: []Element{
+		{Role: "AXWindow", Title: "通用", Enabled: true},
+		{Depth: 1, Role: "AXTextField", Title: "Search", Enabled: true, Actions: []string{"AXConfirm"}},
+		{Depth: 1, Role: "AXButton", Title: "Cancel", Enabled: true, Actions: []string{"AXPress"}},
+		{Depth: 1, Role: "AXSplitter", Enabled: true, Actions: []string{"AXIncrement"}},
+		{Depth: 1, Role: "AXButton", Title: "关于本机", Enabled: true, Actions: []string{"AXPress"}},
+	}}
+	backend.RunningApps = append(fakeApps(), settings)
+	act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"})
+	first := act(t, s, "%7", AgentAction{Action: "app_state", App: "系统设置"}).Text
+	cancel, about := idOf(t, first, `Button "Cancel"`), idOf(t, first, "关于本机")
+
+	// Acting reads the app again; what didn't change keeps its id.
+	again := act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, first, "Search"), ElementAction: "set_value", Text: "显示器"}).Text
+	if idOf(t, again, `Button "Cancel"`) != cancel || idOf(t, again, "关于本机") != about {
+		t.Fatalf("ids moved:\n%s\n%s", first, again)
+	}
+
+	// Cancel goes away and the splitter takes its place in the window.
+	backend.mu.Lock()
+	app := &backend.RunningApps[len(backend.RunningApps)-1]
+	app.Elements = append(app.Elements[:2], app.Elements[3:]...)
+	backend.mu.Unlock()
+	after := act(t, s, "%7", AgentAction{Action: "app_state", App: "系统设置"}).Text
+	if splitter := idOf(t, after, "Splitter"); splitter == cancel || splitter <= about {
+		t.Fatalf("the splitter took an old id:\n%s\n%s", first, after)
+	}
+	pressed := len(backend.ElementActions)
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: cancel, ElementAction: "press"}); !errors.Is(err, ErrStaleElement) || !strings.Contains(err.Error(), "isn't in the latest read") {
+		t.Fatalf("old id: %v", err)
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: 999, ElementAction: "press"}); err == nil || !strings.Contains(err.Error(), "no element [999]") {
+		t.Fatalf("never given: %v", err)
+	}
+	if len(backend.ElementActions) != pressed {
+		t.Fatal("acted on an old id")
+	}
+
+	// Another app's read never reuses ids either.
+	notes := act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"}).Text
+	if id := idOf(t, notes, "New Note"); id <= about {
+		t.Fatalf("Notes reused an id:\n%s", notes)
 	}
 }
