@@ -34,6 +34,12 @@ func TestFakePlaywrightHelper(t *testing.T) {
 			continue
 		}
 		result := map[string]any{"content": []any{}}
+		if msg.Method == "tools/list" {
+			result = map[string]any{"tools": []any{
+				map[string]any{"name": "browser_snapshot", "description": "Capture accessibility snapshot of the current page.", "inputSchema": map[string]any{"type": "object"}},
+				map[string]any{"name": "browser_click", "description": "Perform click on a web page", "inputSchema": map[string]any{"type": "object"}},
+			}}
+		}
 		switch msg.Params.Name {
 		case "browser_navigate":
 			tabs++
@@ -149,6 +155,42 @@ func TestRelayHelper(t *testing.T) {
 		_ = SuperviseMCP(argv, append(env, "MEWLA_RELAY_ROLE="), os.Stdin, os.Stdout, os.Stderr)
 		os.Exit(0)
 	}
+}
+
+func TestAgentsAreToldToScriptAndReadOnlyWhatTheyNeed(t *testing.T) {
+	s := superviseFake(t)
+	if _, err := s.in.Write([]byte(`{"jsonrpc":"2.0","id":7,"method":"tools/list"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !s.out.Scan() {
+		t.Fatal("no answer")
+	}
+	var answer struct {
+		ID     int `json:"id"`
+		Result struct {
+			Tools []struct {
+				Name        string         `json:"name"`
+				Description string         `json:"description"`
+				InputSchema map[string]any `json:"inputSchema"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(s.out.Bytes(), &answer); err != nil || answer.ID != 7 || len(answer.Result.Tools) != 2 {
+		t.Fatalf("answer %s (%v)", s.out.Text(), err)
+	}
+	snapshot, click := answer.Result.Tools[0], answer.Result.Tools[1]
+	if want := "Capture accessibility snapshot of the current page.\n\n" + toolAdvice["browser_snapshot"]; snapshot.Description != want || snapshot.InputSchema["type"] != "object" {
+		t.Fatalf("browser_snapshot is %+v", snapshot)
+	}
+	if click.Description != "Perform click on a web page" {
+		t.Fatalf("browser_click is %+v", click)
+	}
+	// Tool answers pass unchanged.
+	if got := s.call(t, 8, "some_other_tool"); got != `{"id":8,"jsonrpc":"2.0","result":{"content":[]}}` {
+		t.Fatalf("tool answer %s", got)
+	}
+	_ = s.in.Close()
+	s.finish(t)
 }
 
 func TestAnAgentThatNeverUsedTheBrowserLeavesChromeAlone(t *testing.T) {
