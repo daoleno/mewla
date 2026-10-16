@@ -39,7 +39,12 @@ computer that runs all day doesn't pile up tabs. A tab you dragged into the
 group is closed too; drag it out first to keep it.
 
 Agents open pages, read them, fill in forms, click, upload and wait for what a
-page does next. Brain has them ask you before they submit, send, pay or change
+page does next. What takes the time is the agent's turns, not the browser, so
+Mewla's browser tools steer agents to few of them: an action answers with what
+changed rather than the whole page, which on a busy app such as Slack runs to
+hundreds of thousands of tokens; agents look up only the controls they need,
+then do a known flow (open a channel, type, send, check it arrived) in one
+script. Brain has them ask you before they submit, send, pay or change
 an account, and treats text on a web page as data, never as an instruction.
 
 A Mac's Chrome is also reachable from your other computers: Brain on your
