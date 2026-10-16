@@ -2,6 +2,7 @@ package screen
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,5 +75,69 @@ func TestAgentRunsStepsInOneCall(t *testing.T) {
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
 	if strings.Contains(string(audit), `"rent"`) || strings.Count(string(audit), `"action":"element"`) < 3 {
 		t.Fatalf("audit:\n%s", audit)
+	}
+}
+
+// noteRecipe makes a note with text in one call: choose New Note by its
+// shortcut, wait for the new note's empty text, write it, read it back.
+// The empty match keeps a shortcut that didn't take from writing over the
+// note on show.
+func noteRecipe(text string) []AgentAction {
+	return []AgentAction{
+		{Action: "key", App: "Notes", Text: "cmd+n"},
+		{Action: "wait_for", App: "Notes", Match: &ElementMatch{Role: "TextArea", Empty: true}, Duration: 1},
+		{Action: "element", Match: &ElementMatch{Role: "TextArea", Empty: true}, ElementAction: "set_value", Text: text},
+		{Action: "element", Match: &ElementMatch{Role: "TextArea", Value: strings.SplitN(text, "\n", 2)[0]}, ElementAction: "read"},
+	}
+}
+
+func notesBehind() []FakeApp {
+	apps := fakeApps()
+	apps[0].Active, apps[2].Active = false, true
+	apps[0].Elements = append(apps[0].Elements, Element{Depth: 1, Role: "AXTextArea", Value: "Shopping list\nmilk", Enabled: true})
+	return apps
+}
+
+// A note with text takes one call, behind the app someone is using, and is
+// read back whole; native Codex took 14 calls for the same on a Mac.
+func TestANoteWithTextInOneCall(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := notesBehind()
+	apps[0].Menu = []FakeMenuItem{{Path: "File > New Note", Char: "N", Adds: []Element{{Depth: 1, Role: "AXTextArea", Enabled: true}}}}
+	backend.RunningApps = apps
+	act(t, s, "%7", AgentAction{Action: "apps"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+
+	text := "Mewla check\nV2 computer benchmark\nVerification line 3 v2"
+	result, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: noteRecipe(text)})
+	if err != nil || !strings.HasPrefix(result.Text, "1. key: done\n2. wait_for: done\n3. element: done\n4. element: done\n") ||
+		!strings.HasSuffix(result.Text, fmt.Sprintf("TextArea holds %d characters:\n%s", len(text), text)) {
+		t.Fatalf("recipe: %v\n%q", err, result.Text)
+	}
+	if len(backend.AppKeys) != 0 || len(backend.MenuPresses) != 1 {
+		t.Fatalf("keys %v, menus %v", backend.AppKeys, backend.MenuPresses)
+	}
+	if notes := backend.RunningApps[0].Elements; notes[len(notes)-2].Value != "Shopping list\nmilk" || notes[len(notes)-1].Value != text {
+		t.Fatalf("notes %+v", notes)
+	}
+}
+
+// When the shortcut doesn't make a new note, the recipe stops before
+// writing: the note on show is never written over.
+func TestANoteRecipeNeverWritesOverANote(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = notesBehind() // no menu: the keys go, and are ignored
+	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: noteRecipe("Mewla check\nx")})
+	if err == nil || !strings.Contains(err.Error(), "2. wait_for: failed") || !strings.Contains(err.Error(), "did not run") {
+		t.Fatalf("recipe: %v", err)
+	}
+	for _, a := range backend.ElementActions {
+		if a.Action == "set_value" {
+			t.Fatalf("wrote %+v", a)
+		}
+	}
+	if notes := backend.RunningApps[0].Elements; notes[len(notes)-1].Value != "Shopping list\nmilk" {
+		t.Fatalf("the note on show changed: %+v", notes[len(notes)-1])
 	}
 }

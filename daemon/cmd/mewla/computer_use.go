@@ -137,8 +137,9 @@ const stepsToolDescription = `Run up to 20 actions in one call, in order, stoppi
 	`A step is any computer action, or apps, app_state (app), element (id or match, element_action, and value for set_value), ` +
 	`wait_for (app, match, duration up to 10 seconds: read the app until an element matching appears), ` +
 	`or expect (match, optionally app to read first: fail unless an element matches). ` +
-	`A match names an element by role, title and value, without case, a whole name before part of one; when acting, several matches are an error. ` +
-	`Use it for a known sequence such as find, click, type, check; read the app again when you need to see more.`
+	`A match names an element by role, title and value, without case, a whole name before part of one, or with empty: true one with no text; when acting, several matches are an error. ` +
+	`Use it for a known sequence such as find, click, type, check; read the app again when you need to see more. ` +
+	`A new note, for one: key "cmd+n" with app Notes; wait_for, then element set_value on {"role": "TextArea", "empty": true}; element read to check it.`
 
 // stepsInput is a batch; a step has no steps of its own.
 type stepsInput struct {
