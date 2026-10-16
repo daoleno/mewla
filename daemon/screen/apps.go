@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,6 +43,62 @@ type appClicker interface {
 	// why not.
 	BackgroundClicks() (bool, string)
 	ClickTo(pid int, window uint32, x, y, button, clicks int) error
+}
+
+// windowInfo is one window from the system's window list.
+type windowInfo struct {
+	PID      int
+	Name     string
+	ID       uint32
+	Layer    int
+	OnScreen bool
+	Bounds   image.Rectangle
+}
+
+// appsFromWindows lists the apps with a window: those on the screen first,
+// front to back as onScreen runs, each with the apps whose windows lie over
+// its front one, then those with windows only elsewhere in all, hidden.
+// Layer 0 holds apps' own windows; menus, the Dock and the menu bar sit
+// above it. The process self is left out.
+func appsFromWindows(onScreen, all []windowInfo, front, self int, chromium func(pid int) bool) []App {
+	byPID := map[int]int{}
+	var apps []App
+	add := func(w windowInfo) *App {
+		if w.Layer != 0 || w.PID <= 0 || w.PID == self || w.Name == "" {
+			return nil
+		}
+		index, seen := byPID[w.PID]
+		if !seen {
+			index = len(apps)
+			byPID[w.PID] = index
+			apps = append(apps, App{Name: w.Name, PID: w.PID, Active: w.PID == front, Hidden: true, Chromium: chromium(w.PID)})
+		}
+		return &apps[index]
+	}
+	var above []windowInfo
+	for _, w := range onScreen {
+		app := add(w)
+		if app == nil || !w.OnScreen {
+			continue
+		}
+		app.Hidden = false
+		if w.ID != 0 && !w.Bounds.Empty() {
+			app.Windows = append(app.Windows, AppWindow{ID: w.ID, Bounds: w.Bounds})
+		}
+		if app.Window.Empty() && !w.Bounds.Empty() {
+			app.Window = w.Bounds
+			for _, o := range above {
+				if o.PID != app.PID && o.Bounds.Overlaps(w.Bounds) && !slices.Contains(app.CoveredBy, apps[byPID[o.PID]].Name) {
+					app.CoveredBy = append(app.CoveredBy, apps[byPID[o.PID]].Name)
+				}
+			}
+		}
+		above = append(above, w)
+	}
+	for _, w := range all {
+		add(w)
+	}
+	return apps
 }
 
 // appOpener is a backend that can open an app that isn't running, behind
