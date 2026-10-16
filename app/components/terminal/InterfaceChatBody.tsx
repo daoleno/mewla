@@ -35,6 +35,7 @@ import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import { InterfaceTimelineJumpButton } from "./InterfaceTimelineJumpButton";
+import type { PendingUserMessageAction } from "./pendingUserMessageLifecycle";
 
 export interface InterfaceChatBodyProps {
   screenFocused: boolean;
@@ -129,7 +130,7 @@ export interface InterfaceChatBodyProps {
   onSendPress(): void;
   onStopPress(): void;
   onModelControlPress?(): void;
-  onRetryPendingUserMessage(id: string): void;
+  onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   onTerminalActionKey(key: string): Promise<void> | void;
   composerAccessory?: React.ReactNode;
   skillsSheet?: React.ReactNode;
@@ -212,7 +213,7 @@ export function InterfaceChatBody({
   onSendPress,
   onStopPress,
   onModelControlPress,
-  onRetryPendingUserMessage,
+  onPendingUserMessageAction,
   onTerminalActionKey,
   composerAccessory,
   skillsSheet,
@@ -304,7 +305,7 @@ export function InterfaceChatBody({
           events={events}
           pendingUserMessages={pendingUserMessages}
           turnFocusAnchorAliases={turnFocusAnchorAliases}
-          onRetryPendingUserMessage={onRetryPendingUserMessage}
+          onPendingUserMessageAction={onPendingUserMessageAction}
           runningActivity={runningActivity}
           onBrainWorkEventActivate={onBrainWorkEventActivate}
           openSessionIds={openSessionIds}

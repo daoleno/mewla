@@ -211,7 +211,8 @@ export function useInterfaceChatSurfaceState({
     turnFocusAnchorAliases,
     addPendingUserMessage,
     beginPendingUserMessageAttempt,
-    rejectPendingUserMessage,
+    settlePendingUserMessage,
+    discardPendingUserMessage,
   } = session;
   const setObservedDraft = useCallback(
     (value: string) => {
@@ -482,7 +483,8 @@ export function useInterfaceChatSurfaceState({
     slashCommands,
     addPendingUserMessage,
     beginPendingUserMessageAttempt,
-    rejectPendingUserMessage,
+    settlePendingUserMessage,
+    discardPendingUserMessage,
     requestTurnFocus: timeline.requestTurnFocus,
     focusComposer: composerInput.focus,
     clearComposerNativeText: composerInput.clearNativeText,

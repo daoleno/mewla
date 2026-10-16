@@ -434,20 +434,26 @@ describe("process-local Chat reducer", () => {
   test("a stale failure cannot overwrite the reducer's current attempt", () => {
     const current = state([pending({ dispatchRequestId: "request-current" })]);
     const stale = interfaceChatThreadReducer(current, {
-      type: "reject_pending_user_message",
+      type: "settle_pending_user_message",
       id: "pending-a",
-      requestId: "request-previous",
-      code: "old_failure",
-      message: "old attempt",
+      settlement: {
+        kind: "reject",
+        requestId: "request-previous",
+        code: "old_failure",
+        message: "old attempt",
+      },
     });
     expect(stale).toBe(current);
 
     const failed = interfaceChatThreadReducer(current, {
-      type: "reject_pending_user_message",
+      type: "settle_pending_user_message",
       id: "pending-a",
-      requestId: "request-current",
-      code: "send_input_failed",
-      message: "provider refused input",
+      settlement: {
+        kind: "reject",
+        requestId: "request-current",
+        code: "send_input_failed",
+        message: "provider refused input",
+      },
     });
     expect(failed.pendingUserMessages[0]).toMatchObject({
       lifecycle: "failed",
@@ -1405,8 +1411,8 @@ describe("one user bubble per send across stream ordering", () => {
   test("failed retry is replaced by its receipt once and ignores late failure", () => {
     let current = add(snapshot(state([]), []), "local-a", "receipt-a");
     current = interfaceChatThreadReducer(current, {
-      type: "reject_pending_user_message", id: "local-a", requestId: "receipt-a",
-      code: "send_input_failed", message: "not submitted",
+      type: "settle_pending_user_message", id: "local-a",
+      settlement: { kind: "reject", requestId: "receipt-a", code: "send_input_failed", message: "not submitted" },
     });
     expect(current.pendingUserMessages[0]?.lifecycle).toBe("failed");
     current = interfaceChatThreadReducer(current, {
@@ -1416,8 +1422,8 @@ describe("one user bubble per send across stream ordering", () => {
     const echo = userEvent("receipt-a", 1);
     current = snapshot(current, [echo, echo]);
     current = interfaceChatThreadReducer(current, {
-      type: "reject_pending_user_message", id: "local-a", requestId: "receipt-a",
-      code: "send_input_failed", message: "late failure",
+      type: "settle_pending_user_message", id: "local-a",
+      settlement: { kind: "reject", requestId: "receipt-a", code: "send_input_failed", message: "late failure" },
     });
     expect(current.pendingUserMessages).toEqual([]);
     expect(current.conversation?.events).toHaveLength(1);

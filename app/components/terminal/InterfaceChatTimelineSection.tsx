@@ -37,6 +37,7 @@ import { ImageOwnerContext } from "./AppImage";
 import { bindSessionFileRequestToGeneration, buildSessionFileBinarySource } from "../../services/sessionFilePreview";
 import type { ImageOwner } from "../../services/imageSource";
 import type { TimelineReadingPosition } from "./timelineReadingPosition";
+import type { PendingUserMessageAction } from "./pendingUserMessageLifecycle";
 
 interface InterfaceChatTimelineSectionProps {
   serverId: string;
@@ -98,7 +99,7 @@ interface InterfaceChatTimelineSectionProps {
   onTextSelectionGestureEnd(): void;
   onUnavailableAction?: () => void;
   showUnavailableAction?: boolean;
-  onRetryPendingUserMessage(id: string): void;
+  onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   filePreviewLoader?: SessionFilePreviewLoader;
 }
 
@@ -151,7 +152,7 @@ export function InterfaceChatTimelineSection({
   onTextSelectionGestureEnd,
   onUnavailableAction,
   showUnavailableAction,
-  onRetryPendingUserMessage,
+  onPendingUserMessageAction,
   filePreviewLoader,
 }: InterfaceChatTimelineSectionProps) {
   const imageOwner = useMemo<ImageOwner>(() => ({
@@ -197,7 +198,7 @@ export function InterfaceChatTimelineSection({
     onBrainWorkEventActivate,
     openSessionIds,
     brainCurrentWork,
-    onRetryPendingUserMessage,
+    onPendingUserMessageAction,
   });
   const loadAssetPreview = useCallback(
     async (path: string) => {

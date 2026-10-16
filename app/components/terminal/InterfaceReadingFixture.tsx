@@ -253,7 +253,7 @@ function ReadingSurface({
           onTurnFocusSpacerLayout={pinned.handleTurnFocusSpacerLayout}
           onTextSelectionGestureStart={pinned.handleTextSelectionGestureStart}
           onTextSelectionGestureEnd={pinned.handleTextSelectionGestureEnd}
-          onRetryPendingUserMessage={noop}
+          onPendingUserMessageAction={noop}
           filePreviewLoader={loader}
         />
       )}

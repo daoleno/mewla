@@ -84,6 +84,15 @@ dot and the menu's last line says why. Nothing is pinned over the chat. If
 you press Send while offline, the composer says the message was not sent
 and keeps it for you.
 
+**A message that didn't arrive.** A sent message stays where you sent it. If
+your computer rejects it, the connection drops before your computer confirms
+it, or no confirmation comes within 30 seconds, the bubble says **Not
+delivered** right away, with **Retry** and **Discard**. Retry can't send it
+twice: if it had arrived after all, your computer just confirms it. If your
+computer can't tell whether the agent received it, the bubble says **Delivery
+unknown**, with **Send again** and **Discard**. It clears by itself if the
+agent turns out to have it. Session chats behave the same way.
+
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
 into one "Worked · N steps" row. Tap it to see them. Session chats keep every
 row.

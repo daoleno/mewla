@@ -132,7 +132,7 @@ export function InterfaceDevicePerformanceDemo({
   const timeline = useInterfaceTimelineItems({
     events: scenarioState.events,
     pendingUserMessages: emptyPending,
-    onRetryPendingUserMessage: NOOP,
+    onPendingUserMessageAction: NOOP,
   });
 
   const topChromeInset = CHAT_HEADER_HEIGHT + CHAT_HEADER_OUTER_GAP * 2;

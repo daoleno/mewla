@@ -42,8 +42,9 @@ describe("pending user message lifecycle", () => {
       presentPendingUserMessageLifecycle(pending({ lifecycle: "failed" })),
     ).toEqual({
       lifecycle: "failed",
-      label: "Send failed",
-      accessibilityLabel: "Message send failed",
+      label: "Not delivered",
+      accessibilityLabel: "Message not delivered",
+      retryLabel: "Retry",
     });
   });
 
@@ -545,7 +546,7 @@ describe("pending timeline rows", () => {
     expect(merged[2]).toMatchObject({
       pending: true,
       pendingLifecycle: "failed",
-      pendingLifecycleLabel: "Send failed",
+      pendingLifecycleLabel: "Not delivered",
       pendingFailureMessage: "provider refused input",
     });
   });
