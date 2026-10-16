@@ -125,7 +125,8 @@ missing, and **Open Settings** opens the right page on the Mac.
   itself, or another program clicking or typing. Work in an app behind the one in front goes on meanwhile:
   reading it (a field's or note's whole text included), pressing or filling
   in its controls, choosing its menu items
-  by their shortcuts (⌘N in Notes makes a new note), typing into it alone and
+  by their shortcuts (⌘N in Notes makes a new note; an app that comes to
+  the front for it gives the front straight back to yours), typing into it alone and
   clicking its window behind yours don't touch the pointer or keyboard in
   use. Anything on the screen itself, or in the app in front, waits, and so
   does bringing an app to the front, which an agent does only when an app

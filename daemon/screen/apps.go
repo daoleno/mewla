@@ -441,6 +441,23 @@ func menuShortcut(combo string) (Shortcut, bool) {
 	return s, command && s.Char != ""
 }
 
+// menuItemOff is a menu item found by its shortcut but turned off, so it
+// wasn't chosen.
+type menuItemOff struct {
+	path     string
+	shortcut Shortcut
+}
+
+func (e menuItemOff) Error() string {
+	return fmt.Sprintf("%s (%s) is turned off in the app's menus right now, so it wasn't chosen", e.path, e.shortcut)
+}
+
+// frontReader is a backend that can say which app is in front, more
+// cheaply than listing them all.
+type frontReader interface {
+	FrontPID(ctx context.Context) (int, error)
+}
+
 // menuPresser is a backend that can choose an app's menu item by its
 // shortcut through accessibility: no key is sent, so an app behind others
 // acts on it as if it were in front.

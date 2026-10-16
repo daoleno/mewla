@@ -374,13 +374,27 @@ type FakeApp struct {
 
 // FakeMenuItem is a fake app's menu item with a shortcut: Char and
 // Modifiers as accessibility gives them. Choosing it adds Adds to the app's
-// elements, as a new note does.
+// elements, as a new note does, and with Activates brings the app to the
+// front, as choosing Notes' New Note through accessibility does on a Mac.
 type FakeMenuItem struct {
 	Path      string
 	Char      string
 	Modifiers int64
 	Disabled  bool
+	Activates bool
 	Adds      []Element
+}
+
+// FrontPID is the fake's app in front.
+func (f *FakeBackend) FrontPID(context.Context) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, app := range f.RunningApps {
+		if app.Active {
+			return app.PID, nil
+		}
+	}
+	return 0, nil
 }
 
 // PressMenuKey chooses the fake app's menu item with the shortcut.
@@ -397,10 +411,15 @@ func (f *FakeBackend) PressMenuKey(_ context.Context, pid int, shortcut Shortcut
 				continue
 			}
 			if item.Disabled {
-				return item.Path, true, fmt.Errorf("%s (%s) is turned off in the app's menus right now, so it wasn't chosen", item.Path, shortcut)
+				return item.Path, true, menuItemOff{item.Path, shortcut}
 			}
 			f.MenuPresses = append(f.MenuPresses, item.Path)
 			app.Elements = append(app.Elements, item.Adds...)
+			if item.Activates {
+				for j := range f.RunningApps {
+					f.RunningApps[j].Active = f.RunningApps[j].PID == pid
+				}
+			}
 			return item.Path, true, nil
 		}
 		return "", false, nil

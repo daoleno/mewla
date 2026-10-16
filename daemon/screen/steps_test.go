@@ -141,3 +141,26 @@ func TestANoteRecipeNeverWritesOverANote(t *testing.T) {
 		t.Fatalf("the note on show changed: %+v", notes[len(notes)-1])
 	}
 }
+
+// On another desktop, Notes taking the front for New Note gives it back,
+// and its new note can't be reached from here: the recipe stops before
+// writing anything, rather than bring it forward unasked.
+func TestANoteRecipeOnAnotherDesktopStopsBeforeWriting(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := notesBehind()
+	apps[0].OtherDesktop = true
+	apps[0].Menu = []FakeMenuItem{{Path: "File > New Note", Char: "N", Activates: true, Adds: []Element{{Depth: 1, Role: "AXTextArea", Enabled: true}}}}
+	backend.RunningApps = apps
+	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: noteRecipe("Mewla check\nx")})
+	if err == nil || !strings.Contains(err.Error(), "1. key: done\n2. wait_for: failed") {
+		t.Fatalf("recipe: %v", err)
+	}
+	for _, a := range backend.ElementActions {
+		if a.Action == "set_value" {
+			t.Fatalf("wrote %+v", a)
+		}
+	}
+	if pid, _ := backend.FrontPID(context.Background()); pid != 301 {
+		t.Fatalf("in front: %d", pid)
+	}
+}

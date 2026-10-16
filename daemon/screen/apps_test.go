@@ -557,7 +557,7 @@ func TestShortcutsChooseMenuItemsBehindOtherWindows(t *testing.T) {
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInput()
 
-	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+n", App: "Notes"}).Text; got != "Chose File > New Note (cmd+n) in Notes's menus, without sending keys; read it with app_state to see the result." {
+	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+n", App: "Notes"}).Text; got != "Chose File > New Note (cmd+n) in Notes's menus, without sending keys. Read it with app_state to see the result." {
 		t.Fatalf("cmd+n: %s", got)
 	}
 	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+option+f", App: "Notes"}).Text; !strings.Contains(got, "Chose Edit > Find > Search (cmd+option+f)") {
@@ -627,6 +627,52 @@ func TestReadAnElementsWholeValue(t *testing.T) {
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
 	if strings.Contains(string(audit), "Native computer") || !strings.Contains(string(audit), `"element_action":"read"`) {
 		t.Fatalf("audit %s", audit)
+	}
+}
+
+// An app that takes the front when its menu item is chosen behind others,
+// as Notes does for New Note on a Mac, gives it back to the person's app at
+// once, and the answer says so.
+func TestChoosingAMenuItemGivesTheFrontBack(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Active, apps[2].Active = false, true // Helper is the person's
+	apps[0].Menu = []FakeMenuItem{
+		{Path: "File > New Note", Char: "N", Activates: true, Adds: []Element{{Depth: 1, Role: "AXTextArea", Enabled: true}}},
+		{Path: "Format > Bold", Char: "B"},
+	}
+	backend.RunningApps = apps
+	front := func() int { pid, _ := backend.FrontPID(context.Background()); return pid }
+	if before := front(); before != 301 {
+		t.Fatalf("in front before: %d", before)
+	}
+	got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+n", App: "Notes"}).Text
+	if got != "Chose File > New Note (cmd+n) in Notes's menus, without sending keys. Choosing it brought Notes to the front; the front was given back to Helper. Read it with app_state to see the result." {
+		t.Fatalf("cmd+n: %s", got)
+	}
+	if after := front(); after != 301 || !slices.Equal(backend.Raised, []int{301}) {
+		t.Fatalf("in front after: %d, raised %v", after, backend.Raised)
+	}
+	// An item that leaves the front alone says nothing of it.
+	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+b", App: "Notes"}).Text; strings.Contains(got, "front") || len(backend.Raised) != 1 || front() != 301 {
+		t.Fatalf("cmd+b: %s %v", got, backend.Raised)
+	}
+}
+
+// Behind other windows, an item that is turned off says what may turn it on.
+func TestATurnedOffMenuItemSaysWhy(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Menu = []FakeMenuItem{{Path: "Edit > Find > Note List Search…", Char: "F", Modifiers: 2, Disabled: true}}
+	backend.RunningApps = apps
+	// In front, it is off for the app's own reasons.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "cmd+option+f", App: "Notes"}); err == nil || strings.Contains(err.Error(), "bring_forward") {
+		t.Fatalf("in front: %v", err)
+	}
+	backend.RunningApps[0].Active, backend.RunningApps[2].Active = false, true
+	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "cmd+option+f", App: "Notes"})
+	if err == nil || !strings.Contains(err.Error(), "Edit > Find > Note List Search… (cmd+option+f) is turned off") || !strings.Contains(err.Error(), "often off while the app isn't in front: bring_forward it when nobody is using the computer") {
+		t.Fatalf("behind: %v", err)
 	}
 }
 
