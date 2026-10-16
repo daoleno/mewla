@@ -367,6 +367,9 @@ type FakeApp struct {
 	App
 	Elements []Element
 	Menu     []FakeMenuItem
+	// OtherDesktop puts its windows on another desktop: on the screen, and
+	// readable, only while it is in front.
+	OtherDesktop bool
 }
 
 // FakeMenuItem is a fake app's menu item with a shortcut: Char and
@@ -437,6 +440,9 @@ func (f *FakeBackend) Apps(context.Context) ([]App, error) {
 	apps := make([]App, len(f.RunningApps))
 	for i, app := range f.RunningApps {
 		apps[i] = app.App
+		if app.OtherDesktop {
+			apps[i].Hidden = !app.Active
+		}
 	}
 	return apps, nil
 }
@@ -450,6 +456,9 @@ func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTre
 			continue
 		}
 		tree := ElementTree{App: app.Name, PID: pid}
+		if app.OtherDesktop && !app.Active {
+			return tree, nil
+		}
 		for i, e := range app.Elements {
 			if i == limit {
 				tree.Truncated = true
