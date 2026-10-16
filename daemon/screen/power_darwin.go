@@ -21,16 +21,12 @@ func keepDisplayCommand() *exec.Cmd {
 	return exec.Command("caffeinate", "-d", "-w", strconv.Itoa(os.Getpid()))
 }
 
-// wakeDeclares is how long WakeDisplay declares activity. Starting a
-// capture wakes the display, so input seen that long after it is the
-// agent's doing, not a person's.
-var wakeDeclares = 2 * time.Second
-
 // WakeDisplay declares user activity so a sleeping display turns on for a
 // viewer that just connected; a locked Mac then shows its login window.
 func WakeDisplay() {
 	cmd := exec.Command("caffeinate", "-u", "-t", "2")
 	if cmd.Start() == nil {
+		displayWoke.Store(time.Now().UnixNano())
 		go func() { _ = cmd.Wait() }()
 	}
 }

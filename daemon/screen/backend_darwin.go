@@ -66,6 +66,7 @@ var mac struct {
 	AXIsProcessTrusted             func() bool
 	AXIsProcessTrustedWithOptions  func(options objc.ID) bool
 	CGMainDisplayID                func() uint32
+	CGDisplayIsAsleep              func(display uint32) bool
 
 	CGEventSourceCreate             func(state int32) uintptr
 	CGEventCreateMouseEvent         func(source uintptr, kind uint32, at cgPoint, button uint32) uintptr
@@ -147,6 +148,7 @@ func loadMacFunctions() error {
 	bind(&mac.CGPreflightScreenCaptureAccess, "CoreGraphics", "CGPreflightScreenCaptureAccess")
 	bind(&mac.CGRequestScreenCaptureAccess, "CoreGraphics", "CGRequestScreenCaptureAccess")
 	bind(&mac.CGMainDisplayID, "CoreGraphics", "CGMainDisplayID")
+	bind(&mac.CGDisplayIsAsleep, "CoreGraphics", "CGDisplayIsAsleep")
 	bind(&mac.CGEventSourceCreate, "CoreGraphics", "CGEventSourceCreate")
 	bind(&mac.CGEventCreateMouseEvent, "CoreGraphics", "CGEventCreateMouseEvent")
 	bind(&mac.CGEventCreateKeyboardEvent, "CoreGraphics", "CGEventCreateKeyboardEvent")
@@ -515,7 +517,11 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 	if err := registerOutputClass(); err != nil {
 		return nil, fmt.Errorf("register stream output: %w", err)
 	}
-	WakeDisplay()
+	// Only a sleeping display is woken: declaring activity otherwise
+	// would hide a person's input.
+	if mac.CGDisplayIsAsleep(mac.CGMainDisplayID()) {
+		WakeDisplay()
+	}
 
 	content, err := shareableContent(ctx)
 	if err != nil {

@@ -54,19 +54,39 @@ func TestAMissingAppIsNotAPause(t *testing.T) {
 	}
 }
 
-// Starting a capture may wake the display by declaring activity: input
-// seen then is the agent's own.
+// Starting a capture wakes a sleeping display by declaring activity: input
+// seen right then is the agent's own.
 func TestWakingTheDisplayIsNotAPerson(t *testing.T) {
 	defer func(saved time.Duration) { wakeDeclares = saved }(wakeDeclares)
 	wakeDeclares = 500 * time.Millisecond
 	s, backend, _ := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	backend.SleepDisplay()
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	act(t, s, "%7", AgentAction{Action: "screenshot"}) // a new capture wakes it
 	backend.PersonInputOf(InputPointer)
 	act(t, s, "%7", AgentAction{Action: "cursor_position"})
 	time.Sleep(wakeDeclares + personMargin)
 	backend.PersonInputOf(InputPointer)
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrPersonAtComputer) {
 		t.Fatalf("after the wake: %v", err)
+	}
+}
+
+// A display already on isn't woken, so someone typing as an agent's session
+// starts pauses its very first action.
+func TestAPersonTypingAsASessionStartsComesFirst(t *testing.T) {
+	defer func(saved time.Duration) { wakeDeclares = saved }(wakeDeclares)
+	wakeDeclares = 5 * time.Second
+	s, backend, _ := newAgentService(t)
+	backend.PersonInput()
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("first action: %v", err)
+	}
+	time.Sleep(personMargin)
+	backend.PersonInput()
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "a"}); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("while they type: %v", err)
 	}
 }
 
