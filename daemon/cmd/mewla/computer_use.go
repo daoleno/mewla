@@ -100,7 +100,9 @@ const computerToolDescription = `Use this computer's screen, keyboard and pointe
 
 const (
 	appsToolDescription = `List this computer's apps that have a window: name, pid, which is in front and which are hidden. ` +
-		`Then read one with app_state.`
+		`Then read one with app_state. An app that isn't running isn't listed: open it with open_app.`
+	openAppToolDescription = `Open an app that isn't running, by its name (Notes) or bundle id (com.apple.Notes), behind the app in front where macOS allows, ` +
+		`and wait for its window. It opens apps only, never a file or URL, and goes on while someone uses the computer. Then read it with app_state.`
 	appStateToolDescription = `Read one app's windows as elements, in front or behind, without bringing it forward: ` +
 		`each line has an id, role, name, value, the actions it offers and, when on the screen, the point to click in screenshot pixels. ` +
 		`Ids last until you read an app again. Prefer this to screenshots in a Mac app; apps built on web pages show little this way. ` +
@@ -166,6 +168,11 @@ type elementInput struct {
 	Value  string `json:"value,omitempty" jsonschema:"the text for set_value"`
 }
 
+// openAppInput names an app to open.
+type openAppInput struct {
+	App string `json:"app" jsonschema:"the app's name, such as Notes, or bundle id, such as com.apple.Notes"`
+}
+
 // appInput names an app by its name or pid; empty means the app in front.
 type appInput struct {
 	App string `json:"app,omitempty" jsonschema:"the app's name or pid, from apps; empty for the app in front"`
@@ -225,6 +232,9 @@ func runComputerMCP(args []string, stderr io.Writer) error {
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "apps", Description: appsToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "apps"})
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: "open_app", Description: openAppToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in openAppInput) (*mcp.CallToolResult, any, error) {
+		return relay(screen.AgentAction{Action: "open_app", App: in.App})
 	})
 	mcp.AddTool(server, &mcp.Tool{Name: "app_state", Description: appStateToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in appInput) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "app_state", App: in.App})

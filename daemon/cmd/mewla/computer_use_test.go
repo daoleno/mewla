@@ -87,7 +87,7 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 5 {
+	if err != nil || len(tools.Tools) != 6 {
 		t.Fatalf("tools %+v %v", tools, err)
 	}
 
@@ -131,6 +131,10 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}}}
 	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "apps", Arguments: map[string]any{}}); err != nil || r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, "Mail, pid 44\n") {
 		t.Fatalf("apps: %+v %v", r, err)
+	}
+	backend.InstalledApps = []screen.FakeInstalledApp{{FakeApp: screen.FakeApp{App: screen.App{Name: "Calendar", PID: 66}}}}
+	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "open_app", Arguments: map[string]any{"app": "Calendar"}}); err != nil || r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, "Opened Calendar (pid 66) behind the app in front") {
+		t.Fatalf("open_app: %+v %v", r, err)
 	}
 	if r, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "app_state", Arguments: map[string]any{"app": "mail"}}); err != nil || r.IsError || !strings.Contains(r.Content[0].(*mcp.TextContent).Text, `[1] Button "Send" {Press}`) {
 		t.Fatalf("app_state: %+v %v", r, err)

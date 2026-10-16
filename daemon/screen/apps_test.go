@@ -6,8 +6,10 @@ import (
 	"image"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func fakeApps() []FakeApp {
@@ -285,5 +287,48 @@ func TestClicksReachAnAppBehindOthers(t *testing.T) {
 	// Safari is in front now: a click there is a plain screen click.
 	if got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"}).Text; !strings.Contains(got, "Safari is in front") || len(backend.Raised) != 2 {
 		t.Fatalf("in front: %s %v", got, backend.Raised)
+	}
+}
+
+// An app that isn't running opens behind the one in front, by name or
+// bundle id, even while someone uses the computer; only apps open.
+func TestOpenAnAppThatIsNotRunning(t *testing.T) {
+	s, backend, dir := newAgentService(t)
+	backend.RunningApps = fakeApps()
+	backend.InstalledApps = []FakeInstalledApp{
+		{FakeApp: FakeApp{App: App{Name: "备忘录", PID: 505}}, Bundle: "com.apple.Notes"},
+		{FakeApp: FakeApp{App: App{Name: "Calendar", PID: 606}}},
+	}
+	act(t, s, "%7", AgentAction{Action: "apps"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+
+	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "com.apple.Notes"}).Text; got != "Opened 备忘录 (pid 505) behind the app in front; read it with app_state." {
+		t.Fatalf("by bundle id: %s", got)
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "calendar"}).Text; !strings.Contains(got, "Opened Calendar (pid 606)") {
+		t.Fatalf("by name: %s", got)
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "open_app", App: "Calendar"}).Text; got != "Calendar is already open (pid 606); read it with app_state." {
+		t.Fatalf("again: %s", got)
+	}
+	act(t, s, "%7", AgentAction{Action: "app_state", App: "备忘录"})
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "open_app", App: "Nope"}); err == nil || !strings.Contains(err.Error(), "Unable to find application") {
+		t.Fatalf("missing: %v", err)
+	}
+	for _, name := range []string{"", "/Applications/Notes.app", "https://example.com", "-n", "../x", "a\nb", "file:x"} {
+		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "open_app", App: name}); err == nil || errors.Is(err, ErrPersonAtComputer) {
+			t.Fatalf("%q: %v", name, err)
+		}
+	}
+	if want := []string{"com.apple.Notes", "calendar", "Nope"}; !slices.Equal(backend.Launched, want) {
+		t.Fatalf("launched %q", backend.Launched)
+	}
+	if pointers, keys := backend.Snapshot(); len(pointers)+len(keys) != 0 {
+		t.Fatal("opening an app touched the pointer or keyboard")
+	}
+	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
+	if strings.Count(string(audit), `"action":"open_app"`) != 11 {
+		t.Fatalf("audit %s", audit)
 	}
 }
