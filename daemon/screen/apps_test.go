@@ -397,3 +397,36 @@ func TestAnIdNeverMovesToAnotherElement(t *testing.T) {
 		t.Fatalf("Notes reused an id:\n%s", notes)
 	}
 }
+
+// A plain click behind other windows on something the app can press is
+// pressed through accessibility; any other is only sent, and said to be.
+func TestABackgroundClickPressesWhatItCan(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[1].Hidden = false
+	apps[1].Windows = []AppWindow{{ID: 7, Bounds: image.Rect(0, 0, 800, 600)}}
+	apps[1].Elements = append(apps[1].Elements, Element{Depth: 1, Role: "AXButton", Title: "Cancel", Frame: image.Rect(180, 180, 240, 220), Enabled: true, Actions: []string{"AXPress"}})
+	backend.RunningApps = apps
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+
+	got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"}).Text
+	if !strings.Contains(got, `Pressed Button "Cancel" at that point in Safari`) || !strings.Contains(got, "path: accessibility press") {
+		t.Fatalf("pressable: %s", got)
+	}
+	if len(backend.ElementActions) != 1 || backend.ElementActions[0] != (FakeElementAction{PID: 202, Index: 2, Action: "AXPress"}) || len(backend.AppClicks) != 0 {
+		t.Fatalf("pressed %+v, clicked %+v", backend.ElementActions, backend.AppClicks)
+	}
+	for _, action := range []AgentAction{
+		{Action: "left_click", Coordinate: []int{200, 200}, App: "Safari"},
+		{Action: "double_click", Coordinate: []int{100, 100}, App: "Safari"},
+	} {
+		got := act(t, s, "%7", action).Text
+		if !strings.Contains(got, "Sent a click to Safari behind other windows (path: SkyLight)") || !strings.Contains(got, "check whether it took effect") || strings.Contains(got, "Clicked") {
+			t.Fatalf("%s: %s", action.Action, got)
+		}
+	}
+	if len(backend.AppClicks) != 2 || len(backend.ElementActions) != 1 {
+		t.Fatalf("pressed %+v, clicked %+v", backend.ElementActions, backend.AppClicks)
+	}
+}

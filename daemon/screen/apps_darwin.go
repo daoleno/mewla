@@ -37,6 +37,7 @@ var appsLib struct {
 	performAction     func(element, action uintptr) int32
 	setAttribute      func(element, attribute, value uintptr) int32
 	hash              func(ref uintptr) uintptr
+	elementAt         func(app uintptr, x, y float32, element *uintptr) int32
 	equal             func(a, b uintptr) bool
 
 	keys map[string]uintptr
@@ -79,6 +80,7 @@ func loadApps() bool {
 			{&appsLib.performAction, "ApplicationServices", "AXUIElementPerformAction"},
 			{&appsLib.setAttribute, "ApplicationServices", "AXUIElementSetAttributeValue"},
 			{&appsLib.hash, "CoreFoundation", "CFHash"},
+			{&appsLib.elementAt, "ApplicationServices", "AXUIElementCopyElementAtPosition"},
 			{&appsLib.equal, "CoreFoundation", "CFEqual"},
 		} {
 			if _, err := purego.Dlsym(libs[fn.lib], fn.name); err != nil {
@@ -367,6 +369,67 @@ func actOnElement(e Element, action, value string) error {
 		return errors.New("the app didn't answer in time; it may be busy")
 	}
 	return fmt.Errorf("the app refused it (accessibility error %d)", code)
+}
+
+// PressAt presses, through accessibility, what an app has at a point in
+// global points, which are framebuffer pixels: the element there, or the
+// nearest of its three closest ancestors that can be pressed. It asks the
+// app itself, so a window over the point doesn't matter. Nothing to press
+// there, or the point in another app's element, is no error and no press.
+func (b *macBackend) PressAt(_ context.Context, pid, x, y int) (string, bool, error) {
+	if !loadApps() {
+		return "", false, ErrNoApps
+	}
+	var what string
+	var pressed bool
+	var err error
+	withPool(func() { what, pressed, err = pressAt(pid, x, y) })
+	return what, pressed, err
+}
+
+var pressContainers = []string{"AXApplication", "AXWindow", "AXSheet", "AXGroup", "AXScrollArea", "AXSplitGroup",
+	"AXList", "AXOutline", "AXTable", "AXBrowser", "AXToolbar", "AXTabGroup", "AXLayoutArea", "AXWebArea"}
+
+func pressAt(pid, x, y int) (string, bool, error) {
+	app := appsLib.createApplication(int32(pid))
+	if app == 0 {
+		return "", false, nil
+	}
+	defer axLib.release(app)
+	var element uintptr
+	if appsLib.elementAt(app, float32(x), float32(y), &element) != 0 || element == 0 {
+		return "", false, nil
+	}
+	defer func() { axLib.release(element) }()
+	for depth := 0; depth < 4; depth++ {
+		var owner int32
+		if appsLib.getPid(element, &owner) != 0 || int(owner) != pid {
+			return "", false, nil
+		}
+		// A container holds more than the point: pressing it is no click.
+		if slices.Contains(pressContainers, axString(element, "AXRole")) {
+			return "", false, nil
+		}
+		if slices.Contains(axActionNames(element), "AXPress") {
+			what := strings.TrimPrefix(axString(element, "AXRole"), "AX")
+			title := axString(element, "AXTitle")
+			if title == "" {
+				title = axString(element, "AXDescription")
+			}
+			if title != "" {
+				what += fmt.Sprintf(" %q", oneLine(title))
+			}
+			err := actOnElement(Element{Role: axString(element, "AXRole"), Title: title, ref: element}, "AXPress", "")
+			return what, err == nil, err
+		}
+		parent, code := axCopy(element, "AXParent")
+		if code != 0 || parent == 0 {
+			return "", false, nil
+		}
+		axLib.release(element)
+		element = parent
+	}
+	return "", false, nil
 }
 
 // RaiseApp brings an app to the front, for a click that has to go on the

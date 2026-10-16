@@ -66,6 +66,13 @@ func checkAppName(name string) error {
 	return nil
 }
 
+// appPresser is a backend that can press, through accessibility, what an
+// app has at a point, behind other windows. pressed is false when nothing
+// there can be pressed.
+type appPresser interface {
+	PressAt(ctx context.Context, pid, x, y int) (what string, pressed bool, err error)
+}
+
 // elementIdentity is a backend that can tell an element in a new read is
 // the same live element as one before, which then keeps its id.
 type elementIdentity interface {

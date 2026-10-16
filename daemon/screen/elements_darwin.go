@@ -108,7 +108,7 @@ func loadAX() bool {
 		axLib.attrs = map[string]uintptr{}
 		for _, name := range []string{
 			"AXFocusedApplication", "AXFocusedWindow", "AXChildren", "AXRole", "AXTitle",
-			"AXDescription", "AXValue", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXWindows", "AXFrontmost",
+			"AXDescription", "AXValue", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXWindows", "AXFrontmost", "AXParent",
 		} {
 			ref := axLib.createString(0, name, cfStringEncodingUTF8)
 			if ref == 0 {

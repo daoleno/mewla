@@ -576,6 +576,20 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		if window == 0 {
 			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", c[0], c[1], oneLine(app.Name))
 		}
+		// A plain click on something the app can press is pressed through
+		// accessibility, which an app behind others acts on for sure.
+		if presser, ok := a.apps.(appPresser); ok && click == appClicks["left_click"] {
+			what, pressed, err := presser.PressAt(ctx, app.PID, p.X, p.Y)
+			if err != nil {
+				return AgentResult{}, err
+			}
+			if pressed {
+				a.mu.Lock()
+				a.lastAct = time.Now()
+				a.mu.Unlock()
+				return AgentResult{Text: fmt.Sprintf("Pressed %s at that point in %s, behind other windows (path: accessibility press); it and the pointer stayed where they were. Read it with app_state to see the result.", what, oneLine(app.Name))}, nil
+			}
+		}
 		err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count)
 		a.mu.Lock()
 		a.lastAppClick = time.Now()
@@ -586,7 +600,7 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		a.mu.Lock()
 		a.lastAct = time.Now()
 		a.mu.Unlock()
-		return AgentResult{Text: fmt.Sprintf("Clicked in %s behind other windows (path: SkyLight); it and the pointer stayed where they were. Read it with app_state to see the result.", oneLine(app.Name))}, nil
+		return AgentResult{Text: fmt.Sprintf("Sent a click to %s behind other windows (path: SkyLight); it and the pointer stayed where they were. An app that isn't active may ignore such a click, or only bring its window forward: read it with app_state to check whether it took effect, and when what you meant to click has an id, press it with element instead.", oneLine(app.Name))}, nil
 	}
 	text := "Clicked on the screen (path: screen pointer"
 	if !app.Active {
