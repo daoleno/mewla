@@ -32,8 +32,18 @@ var presenceLib struct {
 const (
 	cfStringEncodingUTF8             = 0x08000100
 	cgEventSourceStateHIDSystemState = 1
-	cgAnyInputEventType              = 0xFFFFFFFF
 )
+
+// personEvents are the CGEventTypes (CGEventTypes.h) that make each kind of
+// input. Not kCGAnyInputEventType: that also counts touches and gestures,
+// which a hand resting on a trackpad makes without end, and a program
+// declaring activity to keep the display on.
+var personEvents = [inputKinds][]uint32{
+	InputKey:     {10, 12},      // key down, modifier change
+	InputClick:   {1, 3, 25},    // left, right, other button down
+	InputPointer: {5, 6, 7, 27}, // moved, dragged with each button
+	InputScroll:  {22},          // scroll wheel or two-finger scroll
+}
 
 func loadPresence() bool {
 	presenceLib.once.Do(func() {
@@ -90,8 +100,17 @@ func (b *macBackend) Presence() Presence {
 		p.Locked = sessionFlag(session, presenceLib.lockedKey, false) || !sessionFlag(session, presenceLib.onConsoleKey, true)
 		presenceLib.release(session)
 	}
-	if seconds := presenceLib.secondsSince(cgEventSourceStateHIDSystemState, cgAnyInputEventType); seconds >= 0 && seconds < 365*24*3600 {
-		p.LastInput = time.Now().Add(-time.Duration(seconds * float64(time.Second)))
+	now := time.Now()
+	for kind, events := range personEvents {
+		for _, event := range events {
+			seconds := presenceLib.secondsSince(cgEventSourceStateHIDSystemState, event)
+			if seconds < 0 || seconds >= 365*24*3600 {
+				continue
+			}
+			if at := now.Add(-time.Duration(seconds * float64(time.Second))); at.After(p.Input[kind]) {
+				p.Input[kind] = at
+			}
+		}
 	}
 	return p
 }

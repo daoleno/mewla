@@ -76,9 +76,26 @@ type Permission struct {
 type Presence struct {
 	// Locked means the screen is locked, or another user has the console.
 	Locked bool
-	// LastInput is when the keyboard or pointer last made input, an agent's
-	// own included. Zero when unknown.
-	LastInput time.Time
+	// Input is when each kind of input a person makes last happened, an
+	// agent's own included; zero when unknown. A touch that neither moves
+	// the pointer nor clicks, such as a hand resting on a trackpad, and a
+	// program declaring activity to wake the display, are not input.
+	Input [inputKinds]time.Time
+}
+
+// InputKind is one kind of input a person makes.
+type InputKind int
+
+const (
+	InputKey InputKind = iota
+	InputClick
+	InputPointer
+	InputScroll
+	inputKinds
+)
+
+func (k InputKind) String() string {
+	return [...]string{"key press", "click", "pointer move", "scroll"}[k]
 }
 
 // presenceReporter is a backend that can tell. Without one, the screen

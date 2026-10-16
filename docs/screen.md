@@ -113,7 +113,11 @@ opens the right settings page.
   agent is done, the screen opens by itself. While you view it, agents wait.
   Someone using the Mac's own keyboard or trackpad pauses the agent at once,
   letting go of any key or button it holds; it carries on 10 seconds after
-  their last input. Work in an app behind the one in front goes on meanwhile:
+  their last input. A key press, a click, moving the pointer and scrolling
+  count; a hand resting on the trackpad doesn't. The agent is told which
+  input it saw and when, and so is the record below, so a pause that won't
+  end shows what keeps it going: a person, a tap the trackpad registers by
+  itself, or another program clicking or typing. Work in an app behind the one in front goes on meanwhile:
   reading it, pressing or filling in its controls, typing into it alone and
   clicking its window behind yours don't touch the pointer or keyboard in
   use. Anything on the screen itself,
