@@ -439,6 +439,9 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		// app's page is hundreds of thousands of tokens, which the agent
 		// asks for, when it needs it, with browser_find or browser_snapshot.
 		"--snapshot-mode", "none",
+		// An action's answer doesn't repeat the Playwright code it ran: for
+		// browser_run_code_unsafe that is the agent's whole script again.
+		"--codegen", "none",
 		// Files Playwright names itself (console logs, screenshots,
 		// downloads) stay in Mewla's state, not in the Worker's project,
 		// within a budget that drops the oldest first.
