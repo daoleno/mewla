@@ -350,3 +350,86 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	}
 	return b.String()
 }
+
+// Shortcut is a menu item's keyboard shortcut: command with a character,
+// and any of shift, option and control.
+type Shortcut struct {
+	Char                   string
+	Shift, Option, Control bool
+}
+
+func (s Shortcut) String() string {
+	text := "cmd"
+	for _, m := range []struct {
+		on   bool
+		name string
+	}{{s.Control, "ctrl"}, {s.Option, "option"}, {s.Shift, "shift"}} {
+		if m.on {
+			text += "+" + m.name
+		}
+	}
+	return text + "+" + strings.ToLower(s.Char)
+}
+
+// axModifiers is the shortcut's modifiers as accessibility gives a menu
+// item's (AXMenuItemCmdModifiers): command is implied, unless bit 3 says
+// otherwise; shift, option and control are bits 0 to 2.
+func (s Shortcut) axModifiers() int64 {
+	var mask int64
+	if s.Shift {
+		mask |= 1
+	}
+	if s.Option {
+		mask |= 2
+	}
+	if s.Control {
+		mask |= 4
+	}
+	return mask
+}
+
+// matches says whether a menu item with this character and modifier mask
+// has the shortcut.
+func (s Shortcut) matches(char string, modifiers int64) bool {
+	return char != "" && strings.EqualFold(char, s.Char) && modifiers == s.axModifiers()
+}
+
+// menuShortcut is the shortcut a key combo such as "cmd+n" or
+// "cmd+option+f" makes, when it is one a menu item can have: command, any
+// other modifiers, and one character.
+func menuShortcut(combo string) (Shortcut, bool) {
+	keys, err := parseCombo(combo)
+	if err != nil {
+		return Shortcut{}, false
+	}
+	var s Shortcut
+	command := false
+	for _, k := range keys {
+		switch k {
+		case 0xffeb:
+			command = true
+		case 0xffe1:
+			s.Shift = true
+		case 0xffe9:
+			s.Option = true
+		case 0xffe3:
+			s.Control = true
+		default:
+			if s.Char != "" || k < 0x21 || k > 0x7e {
+				return Shortcut{}, false
+			}
+			s.Char = strings.ToUpper(string(rune(k)))
+		}
+	}
+	return s, command && s.Char != ""
+}
+
+// menuPresser is a backend that can choose an app's menu item by its
+// shortcut through accessibility: no key is sent, so an app behind others
+// acts on it as if it were in front.
+type menuPresser interface {
+	// PressMenuKey presses the item of pid's menus with the shortcut and
+	// gives its place in the menus, such as "File > New Note". found is
+	// false when no item has it; an item that is turned off is an error.
+	PressMenuKey(ctx context.Context, pid int, shortcut Shortcut) (path string, found bool, err error)
+}

@@ -774,6 +774,37 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	return result, nil
 }
 
+// bringForward brings an app to the front, for keys it ignores behind other
+// windows. That takes the front from the person's app, so it waits for them
+// as anything on the screen does, and is only ever asked for.
+func (a *agentSession) bringForward(ctx context.Context, name string) (AgentResult, error) {
+	raiser, ok := a.apps.(appRaiser)
+	if !ok || a.apps == nil {
+		return AgentResult{}, ErrNoApps
+	}
+	if strings.TrimSpace(name) == "" {
+		return AgentResult{}, errors.New("bring_forward needs app")
+	}
+	apps, err := a.apps.Apps(ctx)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	app, err := resolveApp(apps, name)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	if app.Active {
+		return AgentResult{Text: fmt.Sprintf("%s is already in front.", oneLine(app.Name))}, nil
+	}
+	if err := raiser.RaiseApp(ctx, app.PID); err != nil {
+		return AgentResult{}, a.gone(ctx, app, err)
+	}
+	a.mu.Lock()
+	a.lastAct = time.Now()
+	a.mu.Unlock()
+	return AgentResult{Text: fmt.Sprintf("Brought %s to the front: keys sent to it now reach it as a person's would.", oneLine(app.Name))}, nil
+}
+
 // appGoneError is an app that quit, or closed its last window, since it was
 // read. Its elements are gone with it.
 type appGoneError struct{ app App }
@@ -1001,7 +1032,7 @@ func (a *agentSession) capture() {
 	}
 }
 
-func (a *agentSession) act(ctx context.Context, action AgentAction, background bool) (AgentResult, error) {
+func (a *agentSession) act(ctx context.Context, action AgentAction, background bool) (result AgentResult, err error) {
 	select {
 	case <-a.ready:
 	case <-time.After(agentFirstFrame):
@@ -1038,6 +1069,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		return a.openApp(ctx, action.App)
 	case "app_state":
 		return a.appState(ctx, action.App)
+	case "bring_forward":
+		return a.bringForward(ctx, action.App)
 	case "element":
 		return a.actOnElement(ctx, action)
 	case "wait_for":
@@ -1086,6 +1119,29 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 			return AgentResult{}, err
 		}
 		pid = app.PID
+		// A shortcut is the app's menu item: chosen through accessibility,
+		// it works behind other windows, where an app may ignore keys.
+		if shortcut, ok := menuShortcut(action.Text); ok && action.Action == "key" {
+			if presser, ok := a.apps.(menuPresser); ok {
+				path, found, err := presser.PressMenuKey(ctx, pid, shortcut)
+				if err != nil {
+					return AgentResult{}, a.gone(ctx, app, err)
+				}
+				if found {
+					a.mu.Lock()
+					a.lastAct = time.Now()
+					a.mu.Unlock()
+					return AgentResult{Text: fmt.Sprintf("Chose %s (%s) in %s's menus, without sending keys; read it with app_state to see the result.", path, shortcut, oneLine(app.Name))}, nil
+				}
+			}
+		}
+		if !app.Active {
+			defer func() {
+				if result.Text != "" {
+					result.Text = fmt.Sprintf("Sent it to %s behind other windows. An app that isn't in front may ignore keys: read it with app_state to check, and if nothing changed, use bring_forward when nobody is using the computer.", oneLine(app.Name))
+				}
+			}()
+		}
 	}
 	if err := a.input(action, pid, background); err != nil {
 		return AgentResult{}, err

@@ -60,6 +60,8 @@ type FakeBackend struct {
 	// InstalledApps are apps OpenApp can start; Launched is what it was asked.
 	InstalledApps []FakeInstalledApp
 	Launched      []string
+	// MenuPresses are the menu items chosen by shortcut.
+	MenuPresses []string
 }
 
 // FakeAppClick is a click sent to one app's window behind others.
@@ -364,7 +366,46 @@ func (f *FakeBackend) Snapshot() ([]FakePointer, []FakeKey) {
 type FakeApp struct {
 	App
 	Elements []Element
+	Menu     []FakeMenuItem
 }
+
+// FakeMenuItem is a fake app's menu item with a shortcut: Char and
+// Modifiers as accessibility gives them. Choosing it adds Adds to the app's
+// elements, as a new note does.
+type FakeMenuItem struct {
+	Path      string
+	Char      string
+	Modifiers int64
+	Disabled  bool
+	Adds      []Element
+}
+
+// PressMenuKey chooses the fake app's menu item with the shortcut.
+func (f *FakeBackend) PressMenuKey(_ context.Context, pid int, shortcut Shortcut) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.RunningApps {
+		app := &f.RunningApps[i]
+		if app.PID != pid {
+			continue
+		}
+		for _, item := range app.Menu {
+			if !shortcut.matches(item.Char, item.Modifiers) {
+				continue
+			}
+			if item.Disabled {
+				return item.Path, true, fmt.Errorf("%s (%s) is turned off in the app's menus right now, so it wasn't chosen", item.Path, shortcut)
+			}
+			f.MenuPresses = append(f.MenuPresses, item.Path)
+			app.Elements = append(app.Elements, item.Adds...)
+			return item.Path, true, nil
+		}
+		return "", false, nil
+	}
+	return "", false, errors.New("the app quit")
+}
+
+var _ menuPresser = (*FakeBackend)(nil)
 
 // OpenApp starts one of the fake's InstalledApps, by name or bundle id.
 func (f *FakeBackend) OpenApp(_ context.Context, name string) error {

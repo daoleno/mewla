@@ -513,3 +513,88 @@ func TestAnAppThatQuitIsSaidToBeGone(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 }
+
+// A combo names a menu shortcut when it has command and one character; the
+// modifiers are accessibility's mask, command implied.
+func TestMenuShortcuts(t *testing.T) {
+	for combo, want := range map[string]Shortcut{
+		"cmd+n": {Char: "N"}, "CMD+N": {Char: "N"}, "cmd+shift+n": {Char: "N", Shift: true},
+		"cmd+option+f": {Char: "F", Option: true}, "ctrl+cmd+alt+shift+k": {Char: "K", Shift: true, Option: true, Control: true},
+		"cmd+,": {Char: ","},
+	} {
+		if got, ok := menuShortcut(combo); !ok || got != want {
+			t.Fatalf("%s: %+v %v", combo, got, ok)
+		}
+	}
+	for _, combo := range []string{"Return", "n", "ctrl+c", "cmd+return", "cmd+a+b", "cmd+space", "cmd", "cmd+é"} {
+		if got, ok := menuShortcut(combo); ok {
+			t.Fatalf("%s: %+v", combo, got)
+		}
+	}
+	if s := (Shortcut{Char: "F", Option: true}); s.axModifiers() != 2 || !s.matches("f", 2) || s.matches("F", 0) || s.String() != "cmd+option+f" {
+		t.Fatalf("mask %d %s", s.axModifiers(), s)
+	}
+	if s := (Shortcut{Char: "N", Shift: true, Control: true}); s.axModifiers() != 5 {
+		t.Fatalf("mask %d", s.axModifiers())
+	}
+}
+
+// A shortcut sent to an app behind others chooses its menu item, without
+// keys and while someone uses the computer; one no item has is sent as keys,
+// and the answer says an app behind may ignore them. bring_forward is the
+// way out, and waits for the person.
+func TestShortcutsChooseMenuItemsBehindOtherWindows(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Active, apps[2].Active = false, true
+	apps[0].Menu = []FakeMenuItem{
+		{Path: "File > New Note", Char: "N", Adds: []Element{{Depth: 1, Role: "AXTextArea", Enabled: true}}},
+		{Path: "Edit > Find > Search", Char: "F", Modifiers: 2},
+		{Path: "File > Print…", Char: "P", Disabled: true},
+	}
+	backend.RunningApps = apps
+	act(t, s, "%7", AgentAction{Action: "apps"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+
+	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+n", App: "Notes"}).Text; got != "Chose File > New Note (cmd+n) in Notes's menus, without sending keys; read it with app_state to see the result." {
+		t.Fatalf("cmd+n: %s", got)
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+option+f", App: "Notes"}).Text; !strings.Contains(got, "Chose Edit > Find > Search (cmd+option+f)") {
+		t.Fatalf("cmd+option+f: %s", got)
+	}
+	if !strings.Contains(act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"}).Text, "TextArea") {
+		t.Fatal("the new note isn't there")
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "cmd+p", App: "Notes"}); err == nil || !strings.Contains(err.Error(), "File > Print… (cmd+p) is turned off") {
+		t.Fatalf("turned off: %v", err)
+	}
+	if len(backend.AppKeys) != 0 || !slices.Equal(backend.MenuPresses, []string{"File > New Note", "Edit > Find > Search"}) {
+		t.Fatalf("keys %v, menus %v", backend.AppKeys, backend.MenuPresses)
+	}
+	// No item has cmd+shift+n: the keys go to the app, which may ignore them.
+	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+shift+n", App: "Notes"}).Text; !strings.Contains(got, "Sent it to Notes behind other windows. An app that isn't in front may ignore keys") || len(backend.AppKeys) == 0 {
+		t.Fatalf("not a menu shortcut: %s", got)
+	}
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInputOf(InputPointer)
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "bring_forward", App: "Notes"}); !errors.Is(err, ErrPersonAtComputer) || len(backend.Raised) != 0 {
+		t.Fatalf("bring_forward while someone types: %v %v", err, backend.Raised)
+	}
+}
+
+// bring_forward brings an app to the front once nobody is using the
+// computer, and says so when it already is.
+func TestBringForward(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = fakeApps()
+	if got := act(t, s, "%7", AgentAction{Action: "bring_forward", App: "Safari"}).Text; !strings.Contains(got, "Brought Safari to the front") || !slices.Equal(backend.Raised, []int{202}) {
+		t.Fatalf("%s %v", got, backend.Raised)
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "bring_forward", App: "Safari"}).Text; got != "Safari is already in front." {
+		t.Fatalf("again: %s", got)
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "bring_forward"}); err == nil {
+		t.Fatal("no app")
+	}
+}
