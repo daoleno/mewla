@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +42,28 @@ type appClicker interface {
 	// why not.
 	BackgroundClicks() (bool, string)
 	ClickTo(pid int, window uint32, x, y, button, clicks int) error
+}
+
+// appOpener is a backend that can open an app that isn't running, behind
+// the one in front where the system allows.
+type appOpener interface {
+	OpenApp(ctx context.Context, name string) error
+}
+
+// bundleID is how an app's bundle id looks, such as com.apple.Notes.
+var bundleID = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+){2,}$`)
+
+// checkAppName refuses anything but an app's name or bundle id: open_app
+// never opens a file, a URL or a command-line option.
+func checkAppName(name string) error {
+	if name == "" {
+		return errors.New("open_app needs an app's name, such as Notes, or its bundle id")
+	}
+	if strings.ContainsAny(name, "/\\:") || strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") ||
+		strings.IndexFunc(name, func(r rune) bool { return r < ' ' || r == 0x7f }) >= 0 {
+		return fmt.Errorf("open_app opens an app by its name or bundle id, not a file, URL or option: %q", name)
+	}
+	return nil
 }
 
 // appRaiser is a backend that can bring an app to the front.

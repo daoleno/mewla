@@ -93,7 +93,8 @@ cannot be woken through it.
 
 Agents Mewla starts on a Mac can use its screen, keyboard and pointer too, for
 work in apps that have no command or website. They work the way you would with
-the app's own controls: they list the Mac's apps, read one app's windows as its
+the app's own controls: they list the Mac's apps, open one that isn't running
+(behind the app in front, by its name; only apps, never a file or link), read one app's windows as its
 buttons, fields and text, even an app behind others, and press, fill in or
 open those by name, without moving the pointer or bringing the app forward
 (some actions bring it forward themselves). They can type into one app the

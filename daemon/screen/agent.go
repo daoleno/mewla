@@ -479,7 +479,7 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 	}
 	name := action.App
 	switch action.Action {
-	case "apps":
+	case "apps", "open_app":
 		return true
 	case "element":
 		name = treeApp()
@@ -717,6 +717,73 @@ func (a *agentSession) releaseTree() {
 	}
 }
 
+// appOpenWait bounds how long open_app waits for the app's window.
+var appOpenWait = 10 * time.Second
+
+// openApp opens an app that isn't running, behind the one in front, and
+// waits for it to show up in apps. Opening one never touches the pointer
+// or keyboard, so it doesn't wait for a person.
+func (a *agentSession) openApp(ctx context.Context, name string) (AgentResult, error) {
+	opener, ok := a.apps.(appOpener)
+	if !ok {
+		return AgentResult{}, ErrNoApps
+	}
+	name = strings.TrimSpace(name)
+	if err := checkAppName(name); err != nil {
+		return AgentResult{}, err
+	}
+	before, err := a.apps.Apps(ctx)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	if app, err := resolveApp(before, name); err == nil {
+		return AgentResult{Text: fmt.Sprintf("%s is already open (pid %d); read it with app_state.", oneLine(app.Name), app.PID)}, nil
+	}
+	known := map[int]bool{}
+	for _, app := range before {
+		known[app.PID] = true
+	}
+	if err := opener.OpenApp(ctx, name); err != nil {
+		return AgentResult{}, err
+	}
+	deadline := time.Now().Add(appOpenWait)
+	for {
+		if apps, err := a.apps.Apps(ctx); err == nil {
+			// The new app by its name, or the one new app: a Mac lists apps
+			// by their localized names, which a bundle id doesn't give.
+			var found []App
+			for _, app := range apps {
+				if known[app.PID] {
+					continue
+				}
+				if strings.EqualFold(app.Name, name) {
+					found = []App{app}
+					break
+				}
+				found = append(found, app)
+			}
+			if len(found) == 1 {
+				app := found[0]
+				where := "behind the app in front"
+				if app.Active {
+					where = "and macOS brought it to the front"
+				}
+				return AgentResult{Text: fmt.Sprintf("Opened %s (pid %d) %s; read it with app_state.", oneLine(app.Name), app.PID, where)}, nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return AgentResult{Text: fmt.Sprintf("Asked macOS to open %s, but no new window has shown up yet; look again with apps in a moment.", oneLine(name))}, nil
+		}
+		select {
+		case <-ctx.Done():
+			return AgentResult{}, ctx.Err()
+		case <-a.ctx.Done():
+			return AgentResult{}, context.Cause(a.ctx)
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
 // personInput is a personError when someone used the computer's own
 // keyboard or pointer in the last personPause, after this agent's last
 // event of that kind.
@@ -850,6 +917,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		return a.elements(ctx)
 	case "apps":
 		return a.listApps(ctx)
+	case "open_app":
+		return a.openApp(ctx, action.App)
 	case "app_state":
 		return a.appState(ctx, action.App)
 	case "element":

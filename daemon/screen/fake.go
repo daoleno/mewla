@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"strings"
 	"sync"
 	"time"
 )
@@ -53,6 +54,9 @@ type FakeBackend struct {
 	SkyLight  bool
 	AppClicks []FakeAppClick
 	Raised    []int
+	// InstalledApps are apps OpenApp can start; Launched is what it was asked.
+	InstalledApps []FakeInstalledApp
+	Launched      []string
 }
 
 // FakeAppClick is a click sent to one app's window behind others.
@@ -353,6 +357,27 @@ func (f *FakeBackend) Snapshot() ([]FakePointer, []FakeKey) {
 type FakeApp struct {
 	App
 	Elements []Element
+}
+
+// OpenApp starts one of the fake's InstalledApps, by name or bundle id.
+func (f *FakeBackend) OpenApp(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Launched = append(f.Launched, name)
+	for i, app := range f.InstalledApps {
+		if strings.EqualFold(app.Name, name) || app.Bundle == name {
+			f.RunningApps = append(f.RunningApps, app.FakeApp)
+			f.InstalledApps = append(f.InstalledApps[:i], f.InstalledApps[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("macOS couldn't open %s: Unable to find application named '%s'", name, name)
+}
+
+// FakeInstalledApp is an app open_app can start.
+type FakeInstalledApp struct {
+	FakeApp
+	Bundle string
 }
 
 // Apps lists the fake's running apps.

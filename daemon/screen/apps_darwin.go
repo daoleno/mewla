@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -353,6 +354,26 @@ func actOnElement(e Element, action, value string) error {
 
 // RaiseApp brings an app to the front, for a click that has to go on the
 // screen.
+// OpenApp opens an app by name or bundle id with open -g, which keeps it
+// behind the app in front; the name was checked to be no path or option.
+func (b *macBackend) OpenApp(ctx context.Context, name string) error {
+	by := "-a"
+	if bundleID.MatchString(name) {
+		by = "-b"
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "/usr/bin/open", "-g", by, name).CombinedOutput()
+	if err != nil {
+		why := strings.TrimSpace(string(out))
+		if why == "" {
+			why = err.Error()
+		}
+		return fmt.Errorf("macOS couldn't open %s: %s", oneLine(name), oneLine(why))
+	}
+	return nil
+}
+
 func (b *macBackend) RaiseApp(_ context.Context, pid int) error {
 	if !loadApps() {
 		return ErrNoApps
