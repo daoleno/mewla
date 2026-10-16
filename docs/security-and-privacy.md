@@ -32,8 +32,11 @@ every viewer and forgets every allowed device.
 
 ## Your other computers
 
-A computer you connect under **Working together** (or with
-`mewla computers add`) gets its own device key of a separate kind. That key
+Computers paired with the same phone are connected to each other
+automatically, by that phone, which both already trust (or by hand with
+`mewla computers add`). Pair only computers you trust with each other: each
+one's Brain can ask the others to do work. A connected computer gets its own
+device key of a separate kind. That key
 opens only the computer channel: it can send messages to this computer's
 Brain and receive the answers, and nothing else. No terminal, files, Screen
 or device management. Each side pins the other's key, and plain HTTP outside

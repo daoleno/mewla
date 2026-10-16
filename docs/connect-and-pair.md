@@ -163,8 +163,9 @@ open **Settings > Pair a computer** in the app, then scan the QR code, import a
 screenshot or photo of it, or paste the printed link. Opening a `mewla://` link
 on the phone works too.
 
-After pairing, the app reconnects with the stored address and device key. To
-change the address later, edit the computer in **Settings**.
+After pairing, the app reconnects with the stored address and device key. The
+computer shows up under the name it calls itself, such as your Mac's name. To
+rename it or change the address later, tap it in **Settings**.
 
 The app can keep several paired computers, but it connects to only one at a
 time: the current one. Switching in **Settings** disconnects from the previous
@@ -258,7 +259,8 @@ mewla devices revoke -id <device-id>
 
 Revoking removes the device's key, closes its live connections and rejects its
 later requests. Browsers appear as `Mewla Web (...)`. Removing a computer in the
-app's Settings first asks that computer to revoke the phone, for up to three
+app's Settings first has your other computers forget it, then asks that
+computer to revoke the phone, for up to three
 seconds; if the computer is offline the phone forgets it anyway and the key
 stays trusted until you revoke it here.
 

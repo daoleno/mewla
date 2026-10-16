@@ -9,17 +9,18 @@ leave your other tabs alone. Nothing to configure; there is one switch.
 
 It is on unless you turn it off. The first time, Chrome needs one extension:
 
-1. Open **Settings**. Under **Agents on** *your computer*, the **Your Chrome**
-   row says what is missing.
-2. Tap **Open the extension's page in Chrome**. Chrome on that computer opens
-   the Playwright Extension in the Chrome Web Store. Click **Add to Chrome**
-   there, or through [Screen](screen.md) if you are not at the computer.
-3. Mewla reads the extension's key from Chrome by itself. If the row asks for
-   it, tap **Open the extension in Chrome** once so the extension makes its key.
+1. Open **Settings** and tap the computer. Its page reads *Chrome needs the
+   Playwright extension.*
+2. Tap **Add extension**. Chrome on that computer opens the Playwright
+   Extension in the Chrome Web Store. Click **Add to Chrome** there, or
+   through [Screen](screen.md) if you are not at the computer.
+3. Mewla reads the extension's key from Chrome by itself. If the page asks,
+   tap **Open it** once so the extension makes its key.
 
-The row then reads *Agents use your Chrome, in their own tab group.* Mewla
-downloads the browser tools the first time (it needs Node.js 20 or later on
-the computer); the row shows that too. Mewla looks again every half minute
+When nothing is missing, the page shows only the switch. Mewla downloads the
+browser tools the first time (it needs Node.js 20 or later on the computer).
+A computer without a desktop session, such as a headless server, has no
+Chrome for agents to use; its page shows nothing about it. Mewla looks again every half minute
 until Chrome is ready, so a computer left alone picks the extension up by
 itself, and your other computers learn of it over their open connection.
 

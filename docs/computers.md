@@ -8,22 +8,25 @@ asked. Only messages cross between the two computers; nothing else is copied.
 
 ## Connect two computers
 
-Pair your phone with both computers first ([Connect and pair](connect-and-pair.md)).
-Then, with the computer you talk to in use:
+Pair your phone with both computers ([Connect and pair](connect-and-pair.md)).
+That is all: the computers on your phone work together by themselves. When
+you open **Settings**, or pair another computer, the phone asks each computer
+whether it is up, and introduces any two that answer and don't know each
+other yet. Your phone, which both already trust, asks one for a one-time
+invite and hands it to the other, which pairs with it and pins its key. No
+terminal, no copying links, no visit to either computer.
 
-1. Open **Settings**. Under **Working together**, each of your other computers
-   is listed.
-2. Tap the one you want. Your phone, which both computers already trust, asks
-   it for a one-time invite and hands it over. The computer in use pairs with it
-   and pins its key.
+One of the two must be able to reach the other: over Tailscale, an HTTPS
+address, or the address your phone uses (not Mewla Link, which only your phone
+can use). A Mac reached only through Mewla Link dials out to the other
+computer instead, so one such computer is fine. When neither can reach the
+other, the computer's page in **Settings** says so.
 
-No terminal, no copying links, no visit to the other computer. The row then
-reads *can hand it work* and shows whether that computer is online.
-
-To stop, tap the row again and choose **Stop working together**. Both
-computers forget each other, in both directions, and messages still waiting
-are dropped. A computer this phone doesn't know is listed too, so you can stop
-it the same way.
+**Remove computer** on a computer's page in **Settings** ends it: your other
+computers forget it, it forgets them, and messages still waiting are dropped.
+A computer that is offline then is told what to run when it is back. A
+computer that only another computer knows, not your phone, is not touched;
+remove it with `mewla computers remove` on the computer that knows it.
 
 From a terminal instead:
 
@@ -89,8 +92,8 @@ mewla computers remove mac               # stop working with a computer
 A computer you connect gets its own key, with less access than your phone: it
 can only send messages to this computer's Brain and receive its answers. It
 cannot open terminals or files, see the screen, or manage devices. It shows up
-in `mewla devices list` as *(computer)*; **Stop working together** in the
-app, `mewla computers remove` or `mewla devices revoke` ends it at once.
+in `mewla devices list` as *(computer)*; **Remove computer** in the app,
+`mewla computers remove` or `mewla devices revoke` ends it at once.
 
 Because the other Brain can do anything you could ask it to do, a request from
 another computer is treated as relayed, not as your own words: the receiving

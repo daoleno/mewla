@@ -107,10 +107,10 @@ for the click. They can run a short
 list of such steps in one go, such as find, press, type and check. Apps built on web pages, such as Electron apps, show little
 this way; there agents take a screenshot and click, type and scroll on what
 they see, as a person would. It needs nothing beyond what Screen
-already has: **Agents can use this computer** on (Settings → **Agents on**
-*your Mac*, on by default), Screen not turned off, and Mewla's Screen Recording
-and Accessibility permissions. That Settings section says which is missing and
-opens the right settings page.
+already has: **Agents can use this computer** on (Settings → your Mac, on by
+default), Screen not turned off, and Mewla's Screen Recording and
+Accessibility permissions. The Mac's page in Settings says which permission is
+missing, and **Open Settings** opens the right page on the Mac.
 
 - **You come first.** Opening Screen while an agent works shows who is using
   it; **Take over** ends the agent's control and opens the screen. When the
