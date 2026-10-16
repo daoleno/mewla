@@ -113,6 +113,7 @@ const (
 const elementToolDescription = `Act on one element from your latest app_state by its id, in the background: ` +
 	`press, focus, set_value (with value, replacing the element's text), show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, ` +
 	`or any action the element lists. It answers with the app read again; use the ids in that answer. ` +
+	`read gives the element's whole text instead (app_state cuts each to a line), up to 20,000 characters, to check what a field or note holds. ` +
 	`If the element changed since you read it, read the app again; nothing is guessed.`
 
 // computerInput is one action on the screen, or with app, on one app.
@@ -148,7 +149,7 @@ type stepsInput struct {
 type stepInput struct {
 	computerInput
 	ID            int                  `json:"id,omitempty" jsonschema:"for element: an id from the latest app_state"`
-	ElementAction string               `json:"element_action,omitempty" jsonschema:"for element: press, focus, set_value and the rest"`
+	ElementAction string               `json:"element_action,omitempty" jsonschema:"for element: press, focus, set_value, read and the rest"`
 	Value         string               `json:"value,omitempty" jsonschema:"for element with set_value: the text"`
 	Match         *screen.ElementMatch `json:"match,omitempty" jsonschema:"for element, wait_for and expect: the element by role, title, value"`
 }
@@ -165,7 +166,7 @@ func (in stepInput) action() screen.AgentAction {
 // elementInput is one action on one element of the latest app_state.
 type elementInput struct {
 	ID     int    `json:"id" jsonschema:"the element's id from the latest app_state"`
-	Action string `json:"action" jsonschema:"press, focus, set_value, show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, or one of the element's own actions"`
+	Action string `json:"action" jsonschema:"press, focus, set_value, read, show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, or one of the element's own actions"`
 	Value  string `json:"value,omitempty" jsonschema:"the text for set_value"`
 }
 

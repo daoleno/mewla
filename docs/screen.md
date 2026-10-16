@@ -123,7 +123,8 @@ missing, and **Open Settings** opens the right page on the Mac.
   input it saw and when, and so is the record below, so a pause that won't
   end shows what keeps it going: a person, a tap the trackpad registers by
   itself, or another program clicking or typing. Work in an app behind the one in front goes on meanwhile:
-  reading it, pressing or filling in its controls, choosing its menu items
+  reading it (a field's or note's whole text included), pressing or filling
+  in its controls, choosing its menu items
   by their shortcuts (⌘N in Notes makes a new note), typing into it alone and
   clicking its window behind yours don't touch the pointer or keyboard in
   use. Anything on the screen itself, or in the app in front, waits, and so

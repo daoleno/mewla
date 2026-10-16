@@ -752,6 +752,9 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		return AgentResult{}, fmt.Errorf("there is no element [%d] in the last app_state", action.Element)
 	}
 	e := a.tree.Elements[index]
+	if strings.EqualFold(strings.TrimSpace(action.ElementAction), "read") {
+		return a.readValue(ctx, e, action.Element)
+	}
 	name, err := elementAction(e, action.ElementAction)
 	if err != nil {
 		return AgentResult{}, err
@@ -772,6 +775,34 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	}
 	result.Text = fmt.Sprintf("Done: %s on [%d]. The app now:\n", strings.TrimPrefix(name, "AX"), action.Element) + result.Text
 	return result, nil
+}
+
+// readValue gives one element's whole value, up to valueRead characters,
+// for checking what a field or document holds. Callers hold appMu.
+func (a *agentSession) readValue(ctx context.Context, e Element, id int) (AgentResult, error) {
+	reader, ok := a.apps.(valueReader)
+	if !ok {
+		return AgentResult{}, ErrNoApps
+	}
+	if e.Role == "AXSecureTextField" {
+		return AgentResult{}, errors.New("a password field's value is never read")
+	}
+	value, length, err := reader.ReadValue(ctx, e, valueRead)
+	if err != nil {
+		return AgentResult{}, a.gone(ctx, a.treeApp, err)
+	}
+	what := strings.TrimPrefix(e.Role, "AX")
+	if e.Title != "" {
+		what += fmt.Sprintf(" %q", oneLine(e.Title))
+	}
+	if length == 0 {
+		return AgentResult{Text: fmt.Sprintf("[%d] %s holds no text.", id, what)}, nil
+	}
+	text := fmt.Sprintf("[%d] %s holds %d characters", id, what, length)
+	if length > valueRead {
+		text += fmt.Sprintf("; the first %d", valueRead)
+	}
+	return AgentResult{Text: text + ":\n" + value}, nil
 }
 
 // bringForward brings an app to the front, for keys it ignores behind other

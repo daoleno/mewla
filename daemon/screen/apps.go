@@ -173,6 +173,17 @@ type appActor interface {
 	ActOnElement(ctx context.Context, e Element, action, value string) error
 }
 
+// valueReader is a backend that can read one element's whole value, which
+// a read of the app cuts short.
+type valueReader interface {
+	// ReadValue checks that e is still the element that was read, then
+	// gives up to limit characters of its value, and its whole length.
+	ReadValue(ctx context.Context, e Element, limit int) (value string, length int, err error)
+}
+
+// valueRead bounds what reading one element's value gives.
+const valueRead = 20000
+
 // ErrStaleElement means an id no longer names what was read.
 var ErrStaleElement = errors.New("That element changed or went away; read the app again with app_state")
 
@@ -195,7 +206,7 @@ func elementAction(e Element, asked string) (string, error) {
 			return own, nil
 		}
 	}
-	return "", fmt.Errorf("%q is not something this element does; it offers press, focus, set_value and its own actions", asked)
+	return "", fmt.Errorf("%q is not something this element does; it offers press, focus, set_value, read and its own actions", asked)
 }
 
 // ErrNoApps means this computer can't read apps as elements.

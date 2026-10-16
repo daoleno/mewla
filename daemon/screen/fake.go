@@ -530,4 +530,26 @@ func (f *FakeBackend) ActOnElement(_ context.Context, e Element, action, value s
 	return ErrStaleElement
 }
 
-var _ appActor = (*FakeBackend)(nil)
+// ReadValue gives a fake element's live value, cut at limit characters.
+func (f *FakeBackend) ReadValue(_ context.Context, e Element, limit int) (string, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	pid, index := int(e.ref>>16), int(e.ref&0xffff)-1
+	for _, app := range f.RunningApps {
+		if app.PID != pid || index < 0 || index >= len(app.Elements) {
+			continue
+		}
+		live := app.Elements[index]
+		if live.Role != e.Role || live.Title != e.Title {
+			break
+		}
+		runes := []rune(live.Value)
+		return string(runes[:min(limit, len(runes))]), len(runes), nil
+	}
+	return "", 0, ErrStaleElement
+}
+
+var (
+	_ appActor    = (*FakeBackend)(nil)
+	_ valueReader = (*FakeBackend)(nil)
+)
