@@ -11,15 +11,17 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func TestDSHNativeLogStreamingAndReloadIdentity(t *testing.T) {
+func TestDSHNativeLogV4ProjectionAndReloadIdentity(t *testing.T) {
 	rows := []string{
-		`{"type":"session","version":0,"id":"session-fixture","cwd":"/fixture"}`,
-		`{"type":"turn/start","seq":0,"time":1000,"data":{"turn":1}}`,
-		`{"type":"user/message","seq":1,"time":1001,"data":{"id":"user-1","source":{"kind":"user"},"content":[{"type":"text","text":"inspect"}]}}`,
-		`{"type":"user/message","seq":2,"time":1002,"data":{"id":"system-1","source":{"kind":"plugin"},"content":[{"type":"text","text":"private runtime context"}]}}`,
-		`{"type":"text-chunks","seq0":3,"time0":1003,"data":{"turn":1,"step":1,"index":0,"dt":[1,1],"texts":["hel","lo","!"]}}`,
+		`{"type":"session","version":4,"id":"session-fixture","cwd":"/fixture"}`,
+		`{"type":"turn/start","seq":4,"time":1000,"data":{"turn":1}}`,
+		`{"type":"step/start","seq":5,"time":1000,"data":{"turn":1,"step":1}}`,
+		`{"type":"user/message","seq":6,"time":1001,"data":{"id":"user-1","role":"user","source":{"kind":"user","rpcId":"req-1"},"content":[{"type":"text","text":"inspect"}]}}`,
+		`{"type":"user/message","seq":7,"time":1002,"data":{"id":"system-1","role":"user","source":{"kind":"time-context"},"content":[{"type":"text","text":"private runtime context"}]}}`,
+		`{"type":"assistant/message","seq":8,"time":1006,"data":{"turn":1,"step":1,"message":{"role":"assistant","content":[{"type":"reasoning","text":"look first"},{"type":"text","text":"hello!"},{"type":"tool-call","id":"call-1","name":"read_file","arguments":"{}"}]},"stream":[]}}`,
+		`{"type":"tool/call","seq":9,"time":1007,"data":{"turn":1,"step":1,"callId":"call-1","name":"read_file","arguments":"{}"}}`,
 	}
-	path := filepath.Join(t.TempDir(), "session.jsonl.zstd")
+	path := filepath.Join(t.TempDir(), dshSessionLogName)
 	write := func() {
 		file, err := os.Create(path)
 		if err != nil {
@@ -37,30 +39,78 @@ func TestDSHNativeLogStreamingAndReloadIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(partial.Events) != 2 || partial.Events[1].Body != "hello!" || !partial.Events[1].Partial {
+	if len(partial.Events) != 4 || partial.Events[0].Body != "inspect" || partial.Events[1].Kind != "reasoning" || partial.Events[2].Body != "hello!" || partial.Events[3].Status != "running" {
 		t.Fatalf("partial=%+v", partial.Events)
 	}
+	if partial.Activity == nil || partial.Activity.Status == ProviderActivityCompleted {
+		t.Fatalf("open turn settled: %+v", partial.Activity)
+	}
 	rows = append(rows,
-		`{"type":"assistant/message","seq":6,"time":1006,"data":{"turn":1,"step":1,"message":{"id":"native-1","content":[{"type":"text","text":"hello!"}]}}}`,
-		`{"type":"tool/call","seq":7,"time":1007,"data":{"turn":1,"step":1,"callId":"call-1","name":"read_file","arguments":"{}"}}`,
-		`{"type":"tool/result","seq":8,"time":1008,"data":{"turn":1,"step":1,"message":{"content":[{"type":"tool-result","toolCallId":"call-1","content":[{"type":"text","text":"result"},{"type":"image","attachment":{"attachmentId":"image-1"}}]}]}}}`,
-		`{"type":"turn/end","seq":9,"time":1009,"data":{"turn":1,"reason":{"kind":"completed"}}}`)
+		`{"type":"tool/result","seq":10,"time":1008,"data":{"turn":1,"step":1,"message":{"role":"tool","toolCallId":"call-1","content":[{"type":"text","text":"result"},{"type":"image","attachment":{"attachmentId":"image-1"}}]}}}`,
+		`{"type":"step/end","seq":11,"time":1009,"data":{"turn":1,"step":1}}`,
+		`{"type":"turn/end","seq":12,"time":1009,"data":{"turn":1,"reason":{"kind":"completed"}}}`)
 	write()
 	complete, err := parseDSHConversation(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if complete.Events[1].ID != partial.Events[1].ID || complete.Events[1].Seq != partial.Events[1].Seq || complete.Events[1].Partial {
-		t.Fatal("stream/reload identity changed")
+	if complete.Events[2].ID != partial.Events[2].ID || complete.Events[2].Seq != partial.Events[2].Seq {
+		t.Fatal("reload identity changed")
 	}
-	if len(complete.Events) != 3 || complete.Events[2].CallID != "call-1" || complete.Events[2].Output != "result\n![Image](dsh-attachment:image-1)" || complete.Events[2].Partial {
+	if len(complete.Events) != 4 || complete.Events[3].CallID != "call-1" || complete.Events[3].Output != "result\n![Image](dsh-attachment:image-1)" || complete.Events[3].Partial || complete.Events[3].Status != "completed" {
 		t.Fatalf("tool correlation=%+v", complete.Events)
 	}
-
 	if complete.Activity == nil || complete.Activity.Status != ProviderActivityCompleted {
 		t.Fatalf("activity=%+v", complete.Activity)
 	}
 	_, _ = json.Marshal(complete)
+}
+
+func TestDSHNativeLogV4SurfacesFailedTurn(t *testing.T) {
+	rows := []string{
+		`{"type":"session","version":4,"id":"session-failed","cwd":"/fixture"}`,
+		`{"type":"turn/start","seq":4,"time":1000,"data":{"turn":1}}`,
+		`{"type":"user/message","seq":8,"time":1001,"data":{"id":"user-1","role":"user","source":{"kind":"user","rpcId":"req-1"},"content":[{"type":"text","text":"hi"}]}}`,
+		`{"type":"assistant/attempt","seq":16,"time":1002,"data":{"turn":1,"step":1,"stream":[]}}`,
+		`{"type":"turn/end","seq":18,"time":1003,"data":{"turn":1,"reason":{"kind":"error","error":{"message":"no API key for provider route","code":"MISSING_CREDENTIAL"}}}}`,
+	}
+	path := filepath.Join(t.TempDir(), dshSessionLogName)
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoder, _ := zstd.NewWriter(file)
+	for _, row := range rows {
+		encoder.Write([]byte(row + "\n"))
+	}
+	encoder.Close()
+	file.Close()
+	conversation, err := parseDSHConversation(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := conversation.Events[len(conversation.Events)-1]
+	if last.Kind != "status" || last.Status != "failed" || !strings.Contains(last.Body, "no API key") {
+		t.Fatalf("events=%+v", conversation.Events)
+	}
+	if conversation.Activity == nil || conversation.Activity.Status != ProviderActivityFailed {
+		t.Fatalf("activity=%+v", conversation.Activity)
+	}
+}
+
+func TestDSHRejectsOtherLogGenerations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), dshSessionLogName)
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoder, _ := zstd.NewWriter(file)
+	encoder.Write([]byte(`{"type":"session","version":3,"id":"session-old","cwd":"/fixture"}` + "\n"))
+	encoder.Close()
+	file.Close()
+	if _, err := parseDSHConversation(path); err == nil {
+		t.Fatal("older log generation accepted")
+	}
 }
 
 func TestDSHLaunchAndLockOwnership(t *testing.T) {

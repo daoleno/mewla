@@ -9,10 +9,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -104,23 +106,83 @@ func CallDSH(ctx context.Context, id, method string, payload any, result any) er
 	return json.NewDecoder(io.LimitReader(response.Body, 32<<20)).Decode(result)
 }
 
-func callDSHNative(ctx context.Context, address, method string, payload any, result any) error {
+// dshNative is one authenticated client of the private `dsh web` process.
+// The browser-session cookie minted from the process launch token admits the
+// owner Peer, which serves unary RPCs and answers forwarded events alike.
+type dshNative struct {
+	address string
+	cookie  string
+}
+
+var dshLaunchURLPattern = regexp.MustCompile(`dsh web: (http://\S+)`)
+
+// dshLaunchToken reads the launch token `dsh web` prints with its URL.
+func dshLaunchToken(output []byte) string {
+	match := dshLaunchURLPattern.FindSubmatch(output)
+	if match == nil {
+		return ""
+	}
+	parsed, err := url.Parse(string(match[1]))
+	if err != nil {
+		return ""
+	}
+	return parsed.Query().Get("token")
+}
+
+// authenticateDSHNative exchanges the launch token for the signed session
+// cookie the native `/api` fence requires.
+func authenticateDSHNative(ctx context.Context, address, token string) (*dshNative, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address+"/?token="+url.QueryEscape(token), nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := (&http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	for _, cookie := range response.Cookies() {
+		if strings.HasPrefix(cookie.Name, "dsh-auth-") && cookie.Value != "" {
+			return &dshNative{address: address, cookie: cookie.Name + "=" + cookie.Value}, nil
+		}
+	}
+	return nil, fmt.Errorf("DSH did not accept its launch token (HTTP %d)", response.StatusCode)
+}
+
+// call invokes one native session endpoint such as `session/prompt`; its one
+// parameter is named `request`.
+func (n *dshNative) call(ctx context.Context, endpoint string, request any, result any) error {
+	args := map[string]any{}
+	if request != nil {
+		args["request"] = request
+	}
+	return n.rpc(ctx, endpoint, args, result)
+}
+
+// rpc posts one Typert client-request envelope carrying `payload.args`.
+func (n *dshNative) rpc(ctx context.Context, endpoint string, args any, result any) error {
 	id := uuid.NewString()
-	body, err := json.Marshal(map[string]any{"type": "client-request", "rpcId": id, "method": method, "payload": payload})
+	body, err := json.Marshal(map[string]any{"type": "client-request", "rpcId": id, "method": endpoint, "payload": map[string]any{"args": args}})
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, address+"/api/"+method, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.address+"/api/"+endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cookie", n.cookie)
 	response, err := (&http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		message, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		return fmt.Errorf("%s: HTTP %d %s", endpoint, response.StatusCode, strings.TrimSpace(string(message)))
+	}
 	var envelope struct {
+		Type   string `json:"type"`
 		RPCID  string `json:"rpcId"`
 		Result struct {
 			OK    bool            `json:"ok"`
@@ -134,13 +196,54 @@ func callDSHNative(ctx context.Context, address, method string, payload any, res
 	if err := json.NewDecoder(io.LimitReader(response.Body, 32<<20)).Decode(&envelope); err != nil {
 		return err
 	}
-	if envelope.RPCID != id || !envelope.Result.OK {
+	if envelope.Type != "server-response" || envelope.RPCID != id {
+		return fmt.Errorf("%s: unexpected native response", endpoint)
+	}
+	if !envelope.Result.OK {
 		return fmt.Errorf("%s: %s", envelope.Result.Error.Code, envelope.Result.Error.Message)
 	}
-	if result == nil {
+	if result == nil || len(envelope.Result.Value) == 0 {
 		return nil
 	}
 	return json.Unmarshal(envelope.Result.Value, result)
+}
+
+type dshModelChoice struct {
+	Provider        string `json:"provider"`
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+}
+
+// models composes the deployment catalog with the Session's next selection
+// into the `current/routable/groups` view the daemon server renders.
+func (n *dshNative) models(ctx context.Context, id string) (any, error) {
+	var catalog struct {
+		Default           dshModelChoice    `json:"default"`
+		RoutableProviders []string          `json:"routableProviders"`
+		Groups            []json.RawMessage `json:"groups"`
+	}
+	if err := n.call(ctx, "session/modelCatalog", nil, &catalog); err != nil {
+		return nil, err
+	}
+	var projections *struct {
+		Values struct {
+			ModelSelection struct {
+				Next *dshModelChoice `json:"next"`
+			} `json:"modelSelection"`
+		} `json:"values"`
+	}
+	if err := n.call(ctx, "session/projections", map[string]any{"sessionId": id}, &projections); err != nil {
+		return nil, err
+	}
+	current := catalog.Default
+	if projections != nil && projections.Values.ModelSelection.Next != nil {
+		current = *projections.Values.ModelSelection.Next
+	}
+	groups := catalog.Groups
+	if groups == nil {
+		groups = []json.RawMessage{}
+	}
+	return map[string]any{"current": current, "routable": slices.Contains(catalog.RoutableProviders, current.Provider), "groups": groups}, nil
 }
 
 // RunDSHSession owns one native web-profile subprocess and one session socket.
@@ -181,17 +284,19 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	port := reserve.Addr().(*net.TCPAddr).Port
 	reserve.Close()
 	// Keep native persistence under Mewla's provider-session owner; do not edit DSH
-	// user profiles, credentials, defaults, or existing Sessions.
+	// user profiles, credentials, defaults, or existing Sessions. The webserver row
+	// is restated so a user profile layer cannot widen this private listener.
 	patchPath := filepath.Join(DSHRoot(), id+".patch.yml")
-	patch := fmt.Sprintf("- id: session-persistence-jsonl\n  config:\n    root: %q\n", filepath.Join(DSHRoot(), "logs"))
+	patch := fmt.Sprintf("- id: session-persistence-jsonl\n  config:\n    root: %q\n- id: webserver\n  config:\n    host: 127.0.0.1\n    port: %d\n", filepath.Join(DSHRoot(), "logs"), port)
 	if err := os.WriteFile(patchPath, []byte(patch), 0600); err != nil {
 		return err
 	}
 	defer os.Remove(patchPath)
-	command := exec.Command("dsh", "--profile", "web", "--patch", patchPath, "--host", "127.0.0.1", "--port", fmt.Sprint(port))
+	command := exec.Command("dsh", "--profile", "web", "--patch", patchPath, "--host", "127.0.0.1", "--port", fmt.Sprint(port), "--no-open")
 	command.Dir = cwd
 	bindDSHProcess(command)
-	log, err := os.OpenFile(filepath.Join(DSHRoot(), id+".log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	logPath := filepath.Join(DSHRoot(), id+".log")
+	log, err := os.OpenFile(logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
@@ -213,14 +318,20 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 		}
 	}()
 	address := fmt.Sprintf("http://127.0.0.1:%d", port)
-	ready := false
-	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
-		var created struct {
-			SessionID string `json:"sessionId"`
-		}
-		if err := callDSHNative(ctx, address, "session.create", map[string]any{"sessionId": id, "cwd": cwd}, &created); err == nil && created.SessionID == id {
-			ready = true
-			break
+	var native *dshNative
+	for deadline := time.Now().Add(30 * time.Second); native == nil && time.Now().Before(deadline); {
+		if output, err := os.ReadFile(logPath); err == nil {
+			if token := dshLaunchToken(output); token != "" {
+				if client, err := authenticateDSHNative(ctx, address, token); err == nil {
+					var created struct {
+						SessionID string `json:"sessionId"`
+					}
+					if err := client.call(ctx, "session/create", map[string]any{"sessionId": id, "cwd": cwd}, &created); err == nil && created.SessionID == id {
+						native = client
+						break
+					}
+				}
+			}
 		}
 		select {
 		case err := <-exited:
@@ -231,18 +342,18 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	if !ready {
+	if native == nil {
 		return fmt.Errorf("DSH startup timed out; inspect its private Session log")
 	}
 	interactions := newDSHInteractionOwner(id)
 	interactionContext, stopInteractions := context.WithCancel(ctx)
 	defer stopInteractions()
-	go interactions.run(interactionContext, address)
+	go interactions.run(interactionContext, native)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		method := strings.TrimPrefix(r.URL.Path, "/")
 		switch method {
-		case "session.interactions", "session.respond", "session.prompt", "session.cancel", "session.history", "session.models", "session.selectModel", "session.attachment":
+		case "session.interactions", "session.respond", "session.prompt", "session.cancel", "session.models", "session.selectModel", "session.attachment":
 		default:
 			http.Error(w, "unsupported DSH operation", 400)
 			return
@@ -257,27 +368,38 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 			return
 		}
 		payload["sessionId"] = id
-		if method == "session.interactions" {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(interactions.snapshot())
-			return
-		}
-		if method == "session.respond" {
-			if err := interactions.answer(r.Context(), address, payload); err != nil {
+		var result any
+		switch method {
+		case "session.interactions":
+			result = interactions.snapshot()
+		case "session.respond":
+			if err := interactions.answer(r.Context(), native, payload); err != nil {
 				http.Error(w, err.Error(), 409)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(map[string]bool{"accepted": true})
-			return
-		}
-
-		var result json.RawMessage
-		if err := callDSHNative(r.Context(), address, method, payload, &result); err != nil {
-			http.Error(w, err.Error(), 502)
-			return
+			result = map[string]bool{"accepted": true}
+		case "session.models":
+			models, err := native.models(r.Context(), id)
+			if err != nil {
+				http.Error(w, err.Error(), 502)
+				return
+			}
+			result = models
+		default:
+			if method == "session.prompt" {
+				if requestID, _ := payload["requestId"].(string); requestID == "" {
+					payload["requestId"] = uuid.NewString()
+				}
+			}
+			var value json.RawMessage
+			if err := native.call(r.Context(), "session/"+strings.TrimPrefix(method, "session."), payload, &value); err != nil {
+				http.Error(w, err.Error(), 502)
+				return
+			}
+			result = value
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(result)
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go server.Serve(listener)

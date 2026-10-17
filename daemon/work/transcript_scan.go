@@ -106,7 +106,7 @@ func DiscoverTranscripts(home string, since time.Time) ([]TranscriptSource, erro
 			firstNonEmpty(summary.Info.ID, filepath.Base(sessionDir)), summary.Info.CWD)
 	}
 
-	dshFiles, _ := filepath.Glob(filepath.Join(DSHRoot(), "logs", "*", "*", "session.jsonl.zstd"))
+	dshFiles, _ := filepath.Glob(filepath.Join(DSHRoot(), "logs", "*", "*", dshSessionLogName))
 	for _, path := range dshFiles {
 		add(WorkerProviderDSH, path, filepath.Base(filepath.Dir(path)), "")
 	}

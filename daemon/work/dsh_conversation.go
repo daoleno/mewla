@@ -18,13 +18,17 @@ import (
 
 const dshConversationSource = "dsh_session_jsonl"
 
+// dshSessionLogName is the current native log generation (session format v4).
+const (
+	dshSessionLogName    = "session.v4.jsonl.zstd"
+	dshSessionLogVersion = 4
+)
+
 type dshEvent struct {
-	Type  string          `json:"type"`
-	Seq   int             `json:"seq"`
-	Time  int64           `json:"time"`
-	Seq0  int             `json:"seq0"`
-	Time0 int64           `json:"time0"`
-	Data  json.RawMessage `json:"data"`
+	Type string          `json:"type"`
+	Seq  int             `json:"seq"`
+	Time int64           `json:"time"`
+	Data json.RawMessage `json:"data"`
 }
 
 type dshBlock struct {
@@ -38,14 +42,13 @@ type dshBlock struct {
 		Name      string `json:"name"`
 		MediaType string `json:"mediaType"`
 	} `json:"attachment"`
-	ToolCallID string     `json:"toolCallId"`
-	Content    []dshBlock `json:"content"`
-	IsError    bool       `json:"isError"`
 }
 type dshMessage struct {
-	ID      string     `json:"id"`
-	Content []dshBlock `json:"content"`
-	Source  struct {
+	ID         string     `json:"id"`
+	Content    []dshBlock `json:"content"`
+	ToolCallID string     `json:"toolCallId"`
+	IsError    bool       `json:"isError"`
+	Source     struct {
 		Kind string `json:"kind"`
 	} `json:"source"`
 }
@@ -55,7 +58,7 @@ func (r *ProviderConversationReader) loadDSHConversationForWorker(worker classif
 	if id == "" {
 		return CodexConversation{Reason: "session_not_ready", Events: []CodexConversationEvent{}}, nil
 	}
-	paths, err := filepath.Glob(filepath.Join(DSHRoot(), "logs", "*", id, "session.jsonl.zstd"))
+	paths, err := filepath.Glob(filepath.Join(DSHRoot(), "logs", "*", id, dshSessionLogName))
 	if err != nil {
 		return CodexConversation{}, err
 	}
@@ -105,7 +108,7 @@ func parseDSHConversation(path string) (CodexConversation, error) {
 		ID      string `json:"id"`
 		CWD     string `json:"cwd"`
 	}
-	if err := json.Unmarshal(scanner.Bytes(), &header); err != nil || header.Type != "session" || header.Version != 0 || header.ID == "" {
+	if err := json.Unmarshal(scanner.Bytes(), &header); err != nil || header.Type != "session" || header.Version != dshSessionLogVersion || header.ID == "" {
 		return CodexConversation{}, fmt.Errorf("unsupported DSH session header")
 	}
 	var events []dshEvent
@@ -153,24 +156,17 @@ func projectDSHConversation(id, cwd, path string, events []dshEvent) CodexConver
 			} `json:"source"`
 			ID     string `json:"id"`
 			Reason struct {
-				Kind string `json:"kind"`
+				Kind  string `json:"kind"`
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
 			} `json:"reason"`
-			Result json.RawMessage `json:"result"`
-			Texts  []string        `json:"texts"`
-			Chunk  struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"chunk"`
 		}
 		if json.Unmarshal(event.Data, &data) != nil {
 			continue
 		}
-		seq, clock := event.Seq, event.Time
-		if strings.HasSuffix(event.Type, "-chunks") {
-			seq = event.Seq0
-			clock = event.Time0
-		}
-		timestamp := time.UnixMilli(clock).UTC().Format(time.RFC3339Nano)
+		seq := event.Seq
+		timestamp := time.UnixMilli(event.Time).UTC().Format(time.RFC3339Nano)
 		activityID := fmt.Sprintf("%s:turn:%d", id, data.Turn)
 		assistantID := fmt.Sprintf("%s:assistant:%d:%d", id, data.Turn, data.Step)
 		base := CodexConversationEvent{ID: fmt.Sprintf("%s:%d", id, seq), Seq: seq + 1, Timestamp: timestamp, Source: dshConversationSource}
@@ -184,6 +180,14 @@ func projectDSHConversation(id, cwd, path string, events []dshEvent) CodexConver
 			}
 			if data.Reason.Kind == "error" || data.Reason.Kind == "blocked" {
 				status = ProviderActivityFailed
+				if message := strings.TrimSpace(data.Reason.Error.Message); message != "" {
+					base.ID = fmt.Sprintf("%s:error:%d", id, data.Turn)
+					base.Kind = "status"
+					base.Title = "error"
+					base.Body = message
+					base.Status = "failed"
+					put(base)
+				}
 			}
 			lifecycle.settle(activityID, status, timestamp)
 		case "user/message":
@@ -197,42 +201,24 @@ func projectDSHConversation(id, cwd, path string, events []dshEvent) CodexConver
 			base.Body, exact = dshUserContent(data.Content)
 			base.AdmissionSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(exact)))
 			put(base)
-		case "assistant/chunk", "text-chunks", "reasoning-chunks":
-			kind := data.Chunk.Type
-			text := data.Chunk.Text
-			if event.Type == "text-chunks" {
-				kind = "text-delta"
-				text = strings.Join(data.Texts, "")
+		case "assistant/message":
+			if reasoning := dshReasoningText(data.Message.Content); reasoning != "" {
+				thought := base
+				thought.ID = assistantID + ":reasoning"
+				thought.Kind = "reasoning"
+				thought.Role = "assistant"
+				thought.Body = reasoning
+				put(thought)
 			}
-			if event.Type == "reasoning-chunks" {
-				kind = "reasoning-delta"
-				text = strings.Join(data.Texts, "")
-			}
-			if kind != "text-delta" && kind != "reasoning-delta" {
+			body := dshContentText(data.Message.Content)
+			if body == "" {
 				continue
 			}
 			base.ID = assistantID
 			base.Kind = "assistant_message"
 			base.Role = "assistant"
-			if kind == "reasoning-delta" {
-				base.ID += ":reasoning"
-				base.Kind = "reasoning"
-			}
-			if index, ok := positions[base.ID]; ok {
-				base.Body = conversation.Events[index].Body
-			}
-			base.Body += text
-			base.Partial = true
+			base.Body = body
 			put(base)
-		case "assistant/message":
-			base.ID = assistantID
-			base.Kind = "assistant_message"
-			base.Role = "assistant"
-			base.Body = dshContentText(data.Message.Content)
-			put(base)
-			if index, ok := positions[assistantID+":reasoning"]; ok {
-				conversation.Events[index].Partial = false
-			}
 		case "tool/call":
 			base.ID = id + ":tool:" + data.CallID
 			base.Kind = "tool_call"
@@ -243,17 +229,16 @@ func projectDSHConversation(id, cwd, path string, events []dshEvent) CodexConver
 			base.Partial = true
 			put(base)
 		case "tool/result":
-			if len(data.Message.Content) == 0 {
+			data.CallID = data.Message.ToolCallID
+			if data.CallID == "" {
 				continue
 			}
-			block := data.Message.Content[0]
-			data.CallID = block.ToolCallID
 			base.ID = id + ":result:" + data.CallID
 			base.Kind = "tool_result"
 			base.CallID = data.CallID
-			base.Output = dshContentText(block.Content)
+			base.Output = dshContentText(data.Message.Content)
 			base.Status = "completed"
-			if block.IsError {
+			if data.Message.IsError {
 				base.Status = "failed"
 			}
 			if index, ok := positions[id+":tool:"+data.CallID]; ok {
@@ -270,6 +255,16 @@ func projectDSHConversation(id, cwd, path string, events []dshEvent) CodexConver
 	}
 	result := conversationWithActivity(conversation, &lifecycle)
 	return result
+}
+
+func dshReasoningText(blocks []dshBlock) string {
+	var parts []string
+	for _, block := range blocks {
+		if block.Type == "reasoning" && strings.TrimSpace(block.Text) != "" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func dshContentText(blocks []dshBlock) string {
