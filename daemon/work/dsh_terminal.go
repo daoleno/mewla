@@ -75,6 +75,12 @@ func runDSHTerminal(ctx context.Context, id string, exited chan error) error {
 				draft = nil
 				continue
 			}
+			if value == 21 && !pasted {
+				// Ctrl-U clears the draft; Mewla sends it before delegated input.
+				draft = nil
+				fmt.Fprint(os.Stdout, "\r\x1b[2K› ")
+				continue
+			}
 			if (value == '\r' || value == '\n') && !pasted {
 				if len(draft) == 0 {
 					continue

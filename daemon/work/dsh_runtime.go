@@ -149,6 +149,36 @@ func authenticateDSHNative(ctx context.Context, address, token string) (*dshNati
 	return nil, fmt.Errorf("DSH did not accept its launch token (HTTP %d)", response.StatusCode)
 }
 
+// openDSHSession reopens the stored Session named id, or creates it.
+// session/create reuses a named Session only while it is blank, so a resumed
+// conversation is found through session/list first.
+func openDSHSession(ctx context.Context, client *dshNative, id, cwd string) error {
+	var listed struct {
+		Items []struct {
+			SessionID string `json:"sessionId"`
+		} `json:"items"`
+	}
+	// session/list names its reserved empty parameter `_request`.
+	if err := client.rpc(ctx, "session/list", map[string]any{"_request": map[string]any{}}, &listed); err != nil {
+		return err
+	}
+	for _, item := range listed.Items {
+		if item.SessionID == id {
+			return nil
+		}
+	}
+	var created struct {
+		SessionID string `json:"sessionId"`
+	}
+	if err := client.call(ctx, "session/create", map[string]any{"sessionId": id, "cwd": cwd}, &created); err != nil {
+		return err
+	}
+	if created.SessionID != id {
+		return fmt.Errorf("DSH created Session %q instead of %q", created.SessionID, id)
+	}
+	return nil
+}
+
 // call invokes one native session endpoint such as `session/prompt`; its one
 // parameter is named `request`.
 func (n *dshNative) call(ctx context.Context, endpoint string, request any, result any) error {
@@ -319,18 +349,19 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 	}()
 	address := fmt.Sprintf("http://127.0.0.1:%d", port)
 	var native *dshNative
+	var startErr error
 	for deadline := time.Now().Add(30 * time.Second); native == nil && time.Now().Before(deadline); {
 		if output, err := os.ReadFile(logPath); err == nil {
 			if token := dshLaunchToken(output); token != "" {
-				if client, err := authenticateDSHNative(ctx, address, token); err == nil {
-					var created struct {
-						SessionID string `json:"sessionId"`
-					}
-					if err := client.call(ctx, "session/create", map[string]any{"sessionId": id, "cwd": cwd}, &created); err == nil && created.SessionID == id {
-						native = client
-						break
-					}
+				client, err := authenticateDSHNative(ctx, address, token)
+				if err == nil {
+					err = openDSHSession(ctx, client, id, cwd)
 				}
+				if err == nil {
+					native = client
+					break
+				}
+				startErr = err
 			}
 		}
 		select {
@@ -343,7 +374,7 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 		}
 	}
 	if native == nil {
-		return fmt.Errorf("DSH startup timed out; inspect its private Session log")
+		return fmt.Errorf("DSH startup timed out (%v); inspect its private Session log", startErr)
 	}
 	interactions := newDSHInteractionOwner(id)
 	interactionContext, stopInteractions := context.WithCancel(ctx)
