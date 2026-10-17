@@ -19,12 +19,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// MaxCallTimeout bounds the longest plugin call, so the CLI can wait for it.
+const MaxCallTimeout = 10 * time.Minute
+
 // A remote MCP call waits at least this long, and longer when its arguments
-// ask the service to wait (Onlora's wait_s), up to the media ceiling.
+// ask the service to wait (Onlora's wait_s), up to MaxCallTimeout.
 const (
 	mcpCallTimeout = 2 * time.Minute
 	mcpWaitMargin  = 30 * time.Second
-	mcpMaxTimeout  = MediaCallTimeout
 	// A service's own error text is passed on, cut to this many bytes.
 	maxServiceErrorBytes = 2000
 )
@@ -377,14 +379,14 @@ func mcpTimeout(t Tool, args map[string]any) time.Duration {
 		if strings.HasSuffix(name, "_ms") {
 			unit = time.Millisecond
 		}
-		if value > float64(mcpMaxTimeout/unit) {
-			return mcpMaxTimeout
+		if value > float64(MaxCallTimeout/unit) {
+			return MaxCallTimeout
 		}
 		if wait := time.Duration(value*float64(unit)) + mcpWaitMargin; wait > timeout {
 			timeout = wait
 		}
 	}
-	return min(timeout, mcpMaxTimeout)
+	return min(timeout, MaxCallTimeout)
 }
 
 // invokeMCPAccount runs one MCP tool call. The manager lock is held only to

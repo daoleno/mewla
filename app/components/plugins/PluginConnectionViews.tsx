@@ -24,7 +24,6 @@ import {
 import { Icon, type IconName } from "../icons/Icon";
 import { ServiceMark } from "./ServiceMarks";
 import { hasServiceMark } from "./serviceMarkPaths";
-import { AccountKeyEntry } from "./ApiKeyForm";
 
 type Job = { read: string; write: string; example: string } | undefined;
 
@@ -38,7 +37,6 @@ const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"
 const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
-  image: "image",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
@@ -170,9 +168,8 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
     // A custom service needs its address first, on its own page.
     trailing = <Button label={custom ? "Add" : "Connect"} size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={form ? onOpen : onConnect} accessibilityLabel={`${custom ? "Add" : "Connect"} ${plugin.name}`} />;
   } else if (state.kind === "reconnect") {
-    const key = state.account.auth_method === "api_key";
-    label = `${plugin.name}, ${state.account.name} needs ${key ? "an API key" : "sign-in again"}`;
-    trailing = <Button label={key ? "Enter key" : "Reconnect"} size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={() => onReconnect(state.account)} accessibilityLabel={`${key ? "Enter key for" : "Reconnect"} ${state.account.name}`} />;
+    label = `${plugin.name}, ${state.account.name} needs sign-in again`;
+    trailing = <Button label="Reconnect" size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={() => onReconnect(state.account)} accessibilityLabel={`Reconnect ${state.account.name}`} />;
   } else if (state.kind === "status") {
     label = `${plugin.name}, ${names}, ${state.label}`;
     trailing = connecting ? <ActivityIndicator /> : <StatusPill label={state.label} tone={state.tone} />;
@@ -426,15 +423,12 @@ export function AccountCard({
   onSetEnabled,
   onDisconnect,
   onOpenTools,
-  onSetKey,
 }: {
   plugin: PluginIntegration;
   account: PluginAccount;
   job: Job;
   running: string | null;
   onAccess(group: "read" | "write", allowed: boolean): void;
-  /** An API-key account takes its new key right here instead of a sign-in. */
-  onSetKey?(key: string): void;
   onRecover(action: AccountRecoveryAction): void;
   /** Off hides every tool from Brain and Workers; the sign-in and tool choices stay. */
   onSetEnabled(on: boolean): void;
@@ -480,12 +474,7 @@ export function AccountCard({
           </View>
         }
       />
-      {recovery?.action === "reconnect" && account.auth_method === "api_key" && onSetKey ? (
-        <>
-          <ListRow icon="key" title={recovery.title} subtitle={recovery.detail} numberOfLines={3} />
-          <AccountKeyEntry account={account} serviceName={plugin.name} saving={running === `recover:${account.id}`} disabled={busy} onSave={onSetKey} />
-        </>
-      ) : recovery ? (
+      {recovery ? (
         <ListRow
           icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
           iconColor={undefined}

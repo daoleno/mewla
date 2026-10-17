@@ -210,8 +210,6 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 				r.Account.Status = "configured"
 			}
 			return nil
-		case "fal", "image":
-			return m.discoverMedia(ctx, r, secret)
 		case "mcp", "linear":
 			var err error
 			tools, err = m.discoverMCP(ctx, r, secret)

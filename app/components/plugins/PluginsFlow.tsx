@@ -10,7 +10,7 @@ import { Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, usesApiKey, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -309,16 +309,10 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const recover = (account: PluginAccount, action: AccountRecoveryAction) => {
     if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
     else if (action === "disconnect") void disconnect(account);
-    // An API-key account takes its new key on its service page.
-    else if (usesApiKey(account.integration)) router.push(pluginServicePath(account.integration));
     else void connect(account.integration, { writes: reconnectsWithWrites(account) });
   };
   /** The account's own on/off switch. Off keeps its sign-in and tool choices. */
   const setEnabled = (account: PluginAccount, on: boolean) => void send(enabledRequest(account, on), `enabled:${account.id}`);
-  /** Replaces an API-key account's key; the server checks it first. */
-  const setKey = (account: PluginAccount, key: string) => {
-    void send({ action: "set_key", id: account.id, input: { integration: account.integration, credential: key } }, `recover:${account.id}`);
-  };
   /** Loads one account's tools and history, for its Tools page. */
   const load = useCallback((id: string) => send({ action: "get", id }, `load:${id}`), [send]);
   /**
@@ -348,7 +342,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
     plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
-    setAccess, disconnect, recover, setEnabled, setKey, load, setTools, confirmUpdates, serviceLabel,
+    setAccess, disconnect, recover, setEnabled, load, setTools, confirmUpdates, serviceLabel,
   };
 }
 
