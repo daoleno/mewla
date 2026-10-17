@@ -22,7 +22,8 @@ import {
   type ToolsSwitch,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
-import { ServiceMark, hasServiceMark } from "./ServiceMarks";
+import { ServiceMark } from "./ServiceMarks";
+import { hasServiceMark } from "./serviceMarkPaths";
 import { AccountKeyEntry } from "./ApiKeyForm";
 
 type Job = { read: string; write: string; example: string } | undefined;
@@ -38,7 +39,6 @@ const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
   image: "image",
-  onlora: "book",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
