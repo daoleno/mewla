@@ -162,7 +162,13 @@ func TestPluginsControlSocketPersistence(t *testing.T) {
 		}
 		return r
 	}
-	if r := call(connections.Request{Action: "list"}); !r.OK || len(r.Connections.Catalog) != len(connections.Catalog()) {
+	listed := 0
+	for _, item := range connections.Catalog() {
+		if !connections.Unlisted(item.ID) {
+			listed++
+		}
+	}
+	if r := call(connections.Request{Action: "list"}); !r.OK || len(r.Connections.Catalog) != listed {
 		t.Fatal("catalog unavailable")
 	}
 	r := call(connections.Request{Action: "add", Input: &connections.Input{Integration: "openapi", Name: "local fixture", Endpoint: "https://example.com", Spec: json.RawMessage(`{"openapi":"3.0.3","info":{"title":"test","version":"1"},"paths":{"/read":{"get":{"operationId":"read","responses":{"200":{"description":"ok"}}}}}}`)}})

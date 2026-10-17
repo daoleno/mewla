@@ -19,16 +19,19 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 	assertAvailability := func(expected map[string]bool) {
 		t.Helper()
 		result := mustHandle(t, m, Request{Action: "list"})
-		if len(result.Catalog) != 11 {
-			t.Fatalf("catalog count: %d", len(result.Catalog))
+		if len(result.Catalog) != len(expected) {
+			t.Fatalf("catalog: %+v", result.Catalog)
 		}
 		for _, item := range result.Catalog {
-			if item.Available != expected[item.ID] || (item.UnavailableReason == "") != item.Available {
+			available, listed := expected[item.ID]
+			if !listed || item.Available != available || (item.UnavailableReason == "") != item.Available {
 				t.Fatalf("incorrect readiness: %+v", item)
 			}
 		}
 	}
-	expected := map[string]bool{"github": false, "slack": false, "google": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "fal": true, "image": true, "mcp": true, "openapi": true}
+	// Google, fal and Image generation are listed only on a daemon that has
+	// an account for one of them.
+	expected := map[string]bool{"github": false, "slack": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "mcp": true, "openapi": true}
 	assertAvailability(expected)
 	for _, kind := range []string{"github", "slack", "google"} {
 		_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: kind}})
@@ -40,7 +43,12 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 		t.Fatal("unavailable connection created state")
 	}
 	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "public-github", "public-slack", "https://publisher.example"
-	expected["github"], expected["slack"], expected["google"] = true, true, true
+	expected["github"], expected["slack"] = true, true
+	assertAvailability(expected)
+	m.records["existing-google"] = &record{Account: Account{ID: "existing-google", Integration: "google", Enabled: true, Status: "connected"}}
+	m.records["existing-fal"] = &record{Account: Account{ID: "existing-fal", Integration: "fal", Enabled: true, Status: "connected"}}
+	m.records["gone-image"] = &record{Account: Account{ID: "gone-image", Integration: "image", Status: "disconnected"}}
+	expected["google"], expected["fal"] = true, true
 	assertAvailability(expected)
 	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "", "", ""
 	for _, kind := range []string{"github", "slack", "google"} {
@@ -54,8 +62,7 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 	expected["google"] = false
 	assertAvailability(expected)
 	// Existing linked accounts remain accessible when new sign-in is unavailable.
-	m.records["existing"] = &record{Account: Account{ID: "existing", Integration: "google", Enabled: true, Status: "connected"}}
-	if len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 {
+	if len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 3 {
 		t.Fatal("existing account hidden")
 	}
 }
