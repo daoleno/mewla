@@ -429,11 +429,11 @@ func TestOnloraToolGroupsOnlyOnItsEndpoint(t *testing.T) {
 	}
 }
 
-// Cloudflare connects with one tap from the web UI: discovery and dynamic
-// registration against its published metadata, asking only for the scopes
-// every grant needs so its consent page picks the rest. Cloudflare refuses
-// the app's mewla:// return, so the app is told before anything registers.
-func TestCloudflareConnectRegistersFromTheWebUIOnly(t *testing.T) {
+// Cloudflare connects with one tap: discovery and dynamic registration against
+// its published metadata, asking only for the scopes every grant needs so its
+// consent page picks the rest. Cloudflare refuses the app's mewla:// return,
+// so the app's sign-in returns through Mewla's https return page.
+func TestCloudflareConnectRegistersEachReturn(t *testing.T) {
 	m, _ := New(t.TempDir())
 	m.networkOwned = false
 	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
@@ -475,8 +475,29 @@ func TestCloudflareConnectRegistersFromTheWebUIOnly(t *testing.T) {
 	if r.Account.Name != "Cloudflare" || r.Account.Endpoint != "https://mcp.cloudflare.com/mcp" || r.Account.AuthMethod != "mcp_oauth" || writeConsent(r) {
 		t.Fatalf("pending account %+v", r.Account)
 	}
-	if _, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: "cloudflare"}}); err == nil || !strings.Contains(err.Error(), "web UI") || registrations != 1 {
-		t.Fatalf("app connect: %v after %d registrations", err, registrations)
+	// The app's sign-in registers Mewla's https return page and finishes
+	// through connect_finish with the mewla://plugins URL it forwards.
+	app := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "cloudflare"}}).Flow
+	if registrations != 2 || len(registered.RedirectURIs) != 1 || registered.RedirectURIs[0] != NativeReturnRelay || app.WebReturn {
+		t.Fatalf("app registered %+v after %d registrations", registered, registrations)
+	}
+	authorize, _ = url.Parse(app.AuthorizationURL)
+	state := authorize.Query().Get("state")
+	if authorize.Query().Get("redirect_uri") != NativeReturnRelay || !m.pending[state].Mobile || m.pending[state].Web {
+		t.Fatalf("app authorization %s", app.AuthorizationURL)
+	}
+	exchanged := url.Values{}
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method+" "+req.URL.String() != "POST https://mcp.cloudflare.com/token" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+		}
+		_ = req.ParseForm()
+		exchanged = req.PostForm
+		return &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":"invalid_grant"}`))}, nil
+	})}
+	finish := mustHandle(t, m, Request{Action: "connect_finish", FlowID: app.ID, Callback: NativeCallback + "?" + url.Values{"code": {"relayed"}, "state": {state}}.Encode()}).Flow
+	if exchanged.Get("redirect_uri") != NativeReturnRelay || exchanged.Get("code") != "relayed" || exchanged.Get("code_verifier") == "" || finish.Status != "failed" {
+		t.Fatalf("exchange %v, flow %+v", exchanged, finish)
 	}
 	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "cloudflare", Name: "Pasted", Credential: "token"}}); err == nil {
 		t.Fatal("Cloudflare accepted a pasted credential")
@@ -509,6 +530,48 @@ func TestNativeRedirectForAppSchemesAndLoopback(t *testing.T) {
 	} {
 		if nativeRedirect(raw) != native {
 			t.Fatalf("%q native = %v", raw, !native)
+		}
+	}
+}
+
+// Registration carries Mewla's name and branding for consent pages, and a
+// server that refuses the branding still registers Mewla without it.
+func TestDynamicRegistrationBrandingFallsBack(t *testing.T) {
+	for _, refuses := range []bool{false, true} {
+		m, _ := New(t.TempDir())
+		m.networkOwned = false
+		m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
+		var bodies []map[string]any
+		m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			status, body := 200, ""
+			switch req.Method + " " + req.URL.String() {
+			case "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp":
+				body = `{"resource":"https://mcp.cloudflare.com/mcp","authorization_servers":["https://mcp.cloudflare.com"]}`
+			case "GET https://mcp.cloudflare.com/.well-known/oauth-authorization-server":
+				body = `{"issuer":"https://mcp.cloudflare.com","authorization_endpoint":"https://mcp.cloudflare.com/authorize","token_endpoint":"https://mcp.cloudflare.com/token","registration_endpoint":"https://mcp.cloudflare.com/register","code_challenge_methods_supported":["S256"]}`
+			case "POST https://mcp.cloudflare.com/register":
+				var sent map[string]any
+				_ = json.NewDecoder(req.Body).Decode(&sent)
+				bodies = append(bodies, sent)
+				body = `{"client_id":"cloudflare-client","token_endpoint_auth_method":"none"}`
+				if _, branded := sent["logo_uri"]; refuses && branded {
+					status, body = 400, `{"error":"invalid_client_metadata"}`
+				}
+			default:
+				t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+			}
+			return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+		})}
+		mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "cloudflare", WebOrigin: "https://mewla.example"}})
+		want := 1
+		if refuses {
+			want = 2
+		}
+		if len(bodies) != want || bodies[0]["client_name"] != "Mewla" || bodies[0]["client_uri"] != "https://mewla.ai" || bodies[0]["logo_uri"] != "https://mewla.ai/mark.png" || bodies[0]["policy_uri"] != "https://mewla.ai/privacy/" {
+			t.Fatalf("refuses=%t registrations %v", refuses, bodies)
+		}
+		if last := bodies[len(bodies)-1]; refuses && (last["client_name"] != "Mewla" || last["logo_uri"] != nil || last["client_uri"] != nil || last["policy_uri"] != nil) {
+			t.Fatalf("fallback registration %v", last)
 		}
 	}
 }

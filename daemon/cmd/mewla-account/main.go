@@ -25,6 +25,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/account"
 	"github.com/daoleno/mewla/daemon/account/dns"
+	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/daoleno/mewla/daemon/proxyproto"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
@@ -257,7 +258,7 @@ func run(args []string) error {
 // listenPublicTLS serves handler over HTTPS for publicURL's host, with a
 // Let's Encrypt certificate by TLS-ALPN-01. Behind the relay that is the
 // only challenge that reaches it: the relay passes the TLS stream through.
-// Health checks are not served here.
+// Health checks are not served here; the plugin sign-in return page is.
 func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, handler http.Handler) (*http.Server, net.Listener, error) {
 	parsed, err := url.Parse(publicURL)
 	if err != nil || parsed.Scheme != "https" || parsed.Port() != "" {
@@ -286,6 +287,7 @@ func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, ha
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", http.NotFoundHandler())
+	mux.HandleFunc("GET "+pluginreturn.Path, pluginreturn.Handler)
 	mux.Handle("/", handler)
 	server := &http.Server{
 		Handler:           mux,
