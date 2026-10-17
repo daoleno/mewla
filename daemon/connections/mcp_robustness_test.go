@@ -366,7 +366,7 @@ func TestMCPTimeoutFollowsTheRequestedWait(t *testing.T) {
 		{map[string]any{"wait_s": float64(45)}, mcpCallTimeout},     // 75s, still under the base
 		{map[string]any{"wait_s": float64(300)}, 330 * time.Second}, // longer than the base
 		{map[string]any{"timeout_ms": float64(200_000)}, 230 * time.Second},
-		{map[string]any{"wait_s": float64(1e9)}, mcpMaxTimeout},
+		{map[string]any{"wait_s": float64(1e9)}, MaxCallTimeout},
 	}
 	for _, c := range cases {
 		if got := mcpTimeout(tool, c.args); got != c.want {

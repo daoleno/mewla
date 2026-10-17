@@ -57,9 +57,9 @@ Mewla's own app registration with the provider:
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
 
-Google Workspace, fal and Image generation are no longer offered for new
-connections. A server that already has one of these accounts keeps listing the
-service, and the account keeps working; see [Media](#media).
+Google Workspace is not offered for now, on any server. fal and Image
+generation were removed: a server deletes their accounts and saved keys when it
+starts. Onlora generates images, speech and video.
 
 ## What Brain can do
 
@@ -120,43 +120,6 @@ Cloudflare's MCP server covers the whole Cloudflare API with a few tools:
 under **Make changes when asked**, so turn that on before Brain reads anything
 from your account, and it can only do what you granted on Cloudflare's page; to grant more, disconnect and connect again, choosing more
 permissions there.
-
-## Media
-
-Onlora generates images, speech and video for new users. A server that
-already has a fal or Image generation account keeps it: these two plugins let
-Brain and Workers make images, video and audio. Both cost
-money per call, so generating sits under **Make changes when asked** and stays
-off until you allow it.
-
-- **fal** reaches fal's whole model catalogue, video models such as Seedance
-  included. Tap **fal**, paste a key from fal's dashboard
-  (**Get a fal key**) and tap **Connect fal**. Brain can search models, read a
-  model's inputs and price, run short jobs, queue long ones (submit, then
-  status and result) and upload a local file for image or video inputs.
-- **Image generation** reaches any OpenAI-compatible images endpoint. Enter its
-  base URL (the address before `/images/generations`), an API key and a default
-  model. Add one account per endpoint. Tools: generate, and edit where the
-  endpoint supports `/images/edits`.
-
-A key is checked before it is saved and is never shown again. When a key is
-missing or rejected, its row on Extensions shows **Enter key**: tap it, paste
-the key under **Needs an API key** and tap **Save key**. A fal account added from the CLI without a key can
-still search models; anything billed asks for the key.
-
-Output files never pass through Brain's context. Each call saves its images,
-video or audio to files and returns their paths, types and sizes, plus seed,
-usage or price when the service reports them. From the CLI, pass `output_dir`
-in `--args` (relative to the current directory); otherwise files go to
-`media/<plugin>/<date>/` in the daemon's state directory, and the result says
-where.
-
-```sh
-mewla connections invoke --id ACCOUNT_ID --tool generate \
-  --args '{"prompt":"a sleeping cat, ink drawing","output_dir":"art"}' --json
-mewla connections invoke --id FAL_ID --tool submit \
-  --args '{"model":"bytedance/seedance-2.5/text-to-video","input":{"prompt":"..."}}' --json
-```
 
 ## Custom services
 

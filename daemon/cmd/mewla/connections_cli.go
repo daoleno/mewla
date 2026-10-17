@@ -19,7 +19,7 @@ import (
 
 func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|set-key|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
+		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name.
 Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination, never retried.
@@ -28,10 +28,7 @@ MCP resources: resources --id account [--cursor c] lists documents and URI templ
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
 updates --id account asks the service now and shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
-Add: --integration github|notion|google|slack|linear|fal|image|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
-Image generation: --integration image --endpoint https://host/v1 --model name; the API key is read like any credential.
-fal: --integration fal; an empty key keeps only its free model search. set-key --id account replaces an API key.
-Media tools write output files to --args output_dir (relative to this directory) or the daemon's media folder and return paths, never file bytes.
+Add: --integration github|notion|google|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Cloudflare (connected in Extensions) covers the whole Cloudflare API: find the endpoint with its search tool, then call it with execute; docs searches Cloudflare's docs.
 Deleting Cloudflare resources, changing DNS, or creating or revoking tokens needs the user's authorization for that task.
 Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|google|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
@@ -63,7 +60,6 @@ Never send messages or make updates without task-specific user authorization, ev
 	fs.StringVar(&in.Integration, "integration", "", "plugin ID")
 	fs.StringVar(&in.Name, "name", "", "account name")
 	fs.StringVar(&in.Endpoint, "endpoint", "", "remote HTTPS endpoint")
-	fs.StringVar(&in.Model, "model", "", "Image generation default model")
 	fs.StringVar(&argsJSON, "args", "{}", "tool arguments JSON")
 	fs.StringVar(&argsFile, "args-file", "", "tool arguments file")
 	fs.StringVar(&specFile, "spec-file", "", "OpenAPI JSON document")
@@ -78,7 +74,7 @@ Never send messages or make updates without task-specific user authorization, ev
 		return errors.New("unexpected positional arguments")
 	}
 	switch action {
-	case "list", "add", "set-key", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy", "resources", "updates":
+	case "list", "add", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy", "resources", "updates":
 	case "read-resource", "confirm-updates", "dismiss-updates":
 		q.Action = strings.ReplaceAll(action, "-", "_")
 	default:
@@ -121,10 +117,8 @@ Never send messages or make updates without task-specific user authorization, ev
 		if !json.Valid(q.Arguments) {
 			return errors.New("arguments must be JSON")
 		}
-		// Media tools resolve relative file paths against this directory.
-		q.Cwd, _ = os.Getwd()
 	}
-	if action == "add" || action == "import-gh" || action == "set-key" {
+	if action == "add" || action == "import-gh" {
 		if action == "import-gh" {
 			in.Integration = "github"
 			if in.Name == "" {
@@ -149,11 +143,7 @@ Never send messages or make updates without task-specific user authorization, ev
 				if !term.IsTerminal(int(os.Stdin.Fd())) {
 					return errors.New("use --credential-stdin for a secure pipe (empty input for a public endpoint)")
 				}
-				if action == "set-key" {
-					fmt.Fprint(stderr, "API key: ")
-				} else {
-					fmt.Fprint(stderr, "Account token (empty for public endpoint): ")
-				}
+				fmt.Fprint(stderr, "Account token (empty for public endpoint): ")
 				raw, err := term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Fprintln(stderr)
 				if err != nil {
@@ -170,15 +160,13 @@ Never send messages or make updates without task-specific user authorization, ev
 			in.Spec = raw
 		}
 		q.Action = "add"
-		if action == "set-key" {
-			q.Action = "set_key"
-		}
 		q.Input = &in
 	}
 	timeout := 30 * time.Second
 	if action == "invoke" {
-		// A video can take minutes; the daemon bounds each call itself.
-		timeout = connections.MediaCallTimeout + time.Minute
+		// A remote tool that waits for its work can take minutes; the daemon
+		// bounds each call itself.
+		timeout = connections.MaxCallTimeout + time.Minute
 	}
 	socketPath, err := control.DefaultSocketPath(cfg.stateDir)
 	if err != nil {

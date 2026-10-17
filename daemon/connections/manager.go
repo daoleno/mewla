@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -71,7 +72,34 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 	if m.records == nil {
 		return nil, errors.New("invalid plugin catalog")
 	}
+	if err := m.removeRetired(); err != nil {
+		return nil, err
+	}
 	return m, nil
+}
+
+// retired integrations were removed from Mewla. Their accounts and stored
+// keys are deleted when the daemon starts; there is nothing to migrate to.
+var retired = map[string]bool{"fal": true, "image": true}
+
+func (m *Manager) removeRetired() error {
+	removed := false
+	for id, r := range m.records {
+		if !retired[r.Account.Integration] {
+			continue
+		}
+		// An account whose key can't be deleted yet stays until the next start.
+		if err := m.vault.Delete("integration:" + id); err != nil {
+			log.Printf("plugins: removing retired %s account: %v", r.Account.Integration, err)
+			continue
+		}
+		delete(m.records, id)
+		removed = true
+	}
+	if removed {
+		return m.save()
+	}
+	return nil
 }
 func (m *Manager) save() error {
 	records := map[string]*record{}
@@ -128,11 +156,8 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return Response{}, errors.New("plugin request is too large")
 	}
 	if q.Action == "invoke" {
-		// A media call can take minutes; it runs outside the manager lock.
-		if response, handled, err := m.invokeMedia(parent, q); handled {
-			return response, err
-		}
-		// So can a remote MCP tool that waits for its work (Onlora's wait_s).
+		// A remote MCP tool that waits for its work (Onlora's wait_s) can take
+		// minutes; it runs outside the manager lock.
 		if response, handled, err := m.invokeMCPAccount(parent, q); handled {
 			return response, err
 		}
@@ -258,10 +283,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if err := reviewUpdates(r, q.Tools, q.Action == "confirm_updates"); err != nil {
 			return Response{}, err
 		}
-	case "set_key":
-		if err := m.setKey(ctx, r, q.Input); err != nil {
-			return Response{}, err
-		}
 	case "refresh":
 		if r.Account.Status == "disconnected" {
 			return Response{}, errors.New("connect this account again")
@@ -349,21 +370,11 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 		endpoint = "https://slack.com/api"
 	case "linear":
 		endpoint = "https://mcp.linear.app/mcp"
-	case "fal":
-		endpoint = falAPI
-	case "image":
-		endpoint = strings.TrimRight(strings.TrimSpace(in.Endpoint), "/")
-		if model := strings.TrimSpace(in.Model); model == "" || len(model) > 200 {
-			return Response{}, errors.New("enter the default model (up to 200 characters)")
-		}
-		if strings.TrimSpace(in.Credential) == "" {
-			return Response{}, errors.New("enter the API key")
-		}
 	case "mcp", "openapi":
 	default:
 		return Response{}, errors.New("unknown plugin")
 	}
-	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" && in.Integration != "openapi" && in.Integration != "image" {
+	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" && in.Integration != "openapi" {
 		return Response{}, errors.New("internal network trust is only supported for custom plugins")
 	}
 	if _, err := trustedEndpointURL(endpoint, in.TrustedNetworks); err != nil {
@@ -373,9 +384,6 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 		return Response{}, errors.New("connect an authorized account first")
 	}
 	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: name, Endpoint: endpoint, TrustedNetworks: append([]string(nil), in.TrustedNetworks...), Enabled: true, History: []Event{}}, Spec: in.Spec, Grants: map[string]string{}}
-	if in.Integration == "image" {
-		r.Account.Model = strings.TrimSpace(in.Model)
-	}
 	in.Credential = strings.TrimSpace(in.Credential)
 	if err := m.discover(ctx, r, in.Credential); err != nil {
 		return Response{}, err
