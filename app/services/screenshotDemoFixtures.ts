@@ -752,7 +752,7 @@ export const SCREENSHOT_PLUGINS = {
   github: { id: "github", name: "GitHub", available: true, setup_url: "", description: "Repositories, issues and pull requests." },
   notion: { id: "notion", name: "Notion", available: true, setup_url: "", description: "Pages and databases in your workspace." },
   linear: { id: "linear", name: "Linear", available: true, setup_url: "", description: "Issues, projects and team activity." },
-  google: { id: "google", name: "Google", available: true, setup_url: "", description: "Gmail, Drive and Calendar." },
+  cloudflare: { id: "cloudflare", name: "Cloudflare", available: true, setup_url: "", description: "Workers, R2, D1, DNS and more." },
   onlora: { id: "onlora", name: "Onlora", available: true, setup_url: "", description: "Creative projects, assets and generation." },
   slack: { id: "slack", name: "Slack", available: false, unavailable_reason: "Sign-in is not set up on this server yet.", setup_url: "", description: "Channels and messages." },
   mcp: { id: "mcp", name: "MCP server", available: true, setup_url: "", description: "Any Model Context Protocol server." },

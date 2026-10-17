@@ -68,7 +68,14 @@ func TestPluginsRequirePairedDeviceAndPreserveRequestIdentity(t *testing.T) {
 		if json.Unmarshal(result["connections"], &resultBody) != nil {
 			t.Fatal("missing plugin catalog")
 		}
-		want := connections.Catalog()
+		// A new daemon has no Google, fal or Image generation account, so
+		// those unlisted services are left out.
+		want := []connections.Integration{}
+		for _, item := range connections.Catalog() {
+			if !connections.Unlisted(item.ID) {
+				want = append(want, item)
+			}
+		}
 		if len(resultBody.Catalog) != len(want) {
 			t.Fatalf("plugin catalog has %d entries, want %d", len(resultBody.Catalog), len(want))
 		}

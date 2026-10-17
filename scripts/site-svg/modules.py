@@ -99,7 +99,7 @@ def skills():
 def plugins():
     s, x, y, w = screen("pl", 500, "Plugins: one row per service",
                         "GitHub and Linear are connected, Notion needs a reconnect with a Reconnect button on its row, "
-                        "and Google has a Connect button. MCP and OpenAPI services are added under Your own services.")
+                        "and Cloudflare has a Connect button. MCP and OpenAPI services are added under Your own services.")
     screen_header(s, x, y + 6, w, "Plugins")
     sx, sw = x + 18, w - 36
 
@@ -127,7 +127,7 @@ def plugins():
     services = [("github", "GitHub", "atlas-notes", "ready", "Connected"),
                 ("notion", "Notion", "Atlas workspace", "button", "Reconnect"),
                 ("linear", "Linear", "Atlas team", "ready", "Connected"),
-                ("google", "Google", "Gmail, Drive and Calendar", "button", "Connect")]
+                ("cloudflare", "Cloudflare", "Workers, R2, D1, DNS and more", "button", "Connect")]
     rows(y + 108, services)
     ay = y + 108 + 60 * len(services) + 34
     caption(s, sx + 4, ay, "Your own services")

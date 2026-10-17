@@ -61,11 +61,31 @@ func (m *Manager) unavailableReason(kind string) string {
 	return ""
 }
 
+// unlisted services are not offered to new users: Google is held back until
+// it can do more than Calendar, and fal and Image generation need the user's
+// own key or endpoint (Onlora already generates images). A daemon that has an
+// account for one keeps listing it, so that account stays manageable.
+var unlisted = map[string]bool{"google": true, "fal": true, "image": true}
+
+// Unlisted reports a service the catalog shows only to a daemon with an
+// account for it.
+func Unlisted(id string) bool { return unlisted[id] }
+
 func (m *Manager) catalog() []Integration {
-	catalog := Catalog()
-	for i := range catalog {
-		catalog[i].UnavailableReason = m.unavailableReason(catalog[i].ID)
-		catalog[i].Available = catalog[i].UnavailableReason == ""
+	inUse := map[string]bool{}
+	for _, r := range m.records {
+		if r.Account.Status != "disconnected" && !m.isPending(r.Account.ID) {
+			inUse[r.Account.Integration] = true
+		}
+	}
+	catalog := []Integration{}
+	for _, item := range Catalog() {
+		if unlisted[item.ID] && !inUse[item.ID] {
+			continue
+		}
+		item.UnavailableReason = m.unavailableReason(item.ID)
+		item.Available = item.UnavailableReason == ""
+		catalog = append(catalog, item)
 	}
 	return catalog
 }

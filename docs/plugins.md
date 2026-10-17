@@ -1,16 +1,15 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Google Workspace, Cloudflare, Onlora for generating and finding assets, fal and
-Image generation for media, and custom MCP or OpenAPI services. Plugins are a
-**preview**.
+GitHub, Slack, Cloudflare, Onlora for generating and finding assets, and custom
+MCP or OpenAPI services. Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
 shows that server's accounts and never moves an account between servers.
 
 ## Connect a service
 
-![Plugins: one row per service. GitHub and Linear connected, Notion with Reconnect on its row, Google with Connect, and Remote MCP to add](assets/plugins.svg)
+![Plugins: one row per service. GitHub and Linear connected, Notion with Reconnect on its row, Cloudflare with Connect, and Remote MCP to add](assets/plugins.svg)
 
 1. Open the menu and choose **Extensions**. Mewla's plugins come first, one
    row per service.
@@ -40,7 +39,6 @@ signed in to on your computer. Mewla shows the identity first and copies it only
 after you confirm.
 
 There are no tokens, client IDs or callback URLs to type for sign-in services.
-The two media plugins take an API key instead; see [Media](#media).
 
 ## Sign-in availability
 
@@ -52,16 +50,16 @@ Mewla's own app registration with the provider:
 | Linear | Official browser sign-in | Returns to the web UI's Extensions page |
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
-| Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare doesn't accept the phone app's return address yet: connect it from the web UI | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
+| Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Shows **Not yet available** until Mewla's Slack app registration ships | Slack's app returns only to the Mewla app: connect Slack from the phone |
-| Google Workspace | Shows **Not yet available** unless your daemon already has Google sign-in configured | Google opens in a new tab; Extensions updates when you're done |
-| fal | API key, pasted on its page | Same as the app |
-| Image generation | Base URL, API key and default model, on its page | Same as the app |
-
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
+
+Google Workspace, fal and Image generation are no longer offered for new
+connections. A server that already has one of these accounts keeps listing the
+service, and the account keeps working; see [Media](#media).
 
 ## What Brain can do
 
@@ -125,7 +123,9 @@ permissions there.
 
 ## Media
 
-Two plugins let Brain and Workers make images, video and audio. Both cost
+Onlora generates images, speech and video for new users. A server that
+already has a fal or Image generation account keeps it: these two plugins let
+Brain and Workers make images, video and audio. Both cost
 money per call, so generating sits under **Make changes when asked** and stays
 off until you allow it.
 
