@@ -1,11 +1,13 @@
 package work
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -78,7 +80,11 @@ func PrepareDelegatedCommand(provider, command string) (string, error) {
 	case WorkerProviderClaude, WorkerProviderCursor, WorkerProviderGrok:
 		return ScheduledActionCommand(provider, Executor{Name: provider, Kind: provider, Command: command})
 	case WorkerProviderOpenCode:
-		return HardenOpenCodeDelegatedCommand(command)
+		hardened, err := HardenOpenCodeDelegatedCommand(command)
+		if err != nil {
+			return "", err
+		}
+		return EnsureOpenCodeSessionLaunchCommand(hardened)
 	case WorkerProviderDSH:
 		return EnsureDSHSessionLaunchCommand(command)
 	case WorkerProviderPi:
@@ -116,6 +122,42 @@ func HardenOpenCodeDelegatedCommand(command string) (string, error) {
 		return command, nil
 	}
 	return command + " " + OpenCodeAutoFlag, nil
+}
+
+// EnsureOpenCodeSessionLaunchCommand gives a delegated OpenCode launch its own
+// session id. OpenCode 2's --session continues that session or creates it on
+// the first prompt, so Mewla owns the transcript from launch instead of
+// discovering it afterwards. A command that already names a session or
+// continues the last one is left as is.
+func EnsureOpenCodeSessionLaunchCommand(command string) (string, error) {
+	options, ok := inspectLaunchCommandOptions(command)
+	if !ok {
+		return "", fmt.Errorf("opencode launch must be a direct command to own its session")
+	}
+	if present, _ := options.option("", "--continue", "-c"); present {
+		return command, nil
+	}
+	if _, present, err := exclusiveOpenCodeSessionToken(options.argv); err != nil || present {
+		return command, err
+	}
+	if options.terminated {
+		return "", ErrResumeTerminated
+	}
+	return appendCommandOptions(command, "--session", NewOpenCodeSessionID(time.Now())), nil
+}
+
+// NewOpenCodeSessionID returns an id in OpenCode's own session format:
+// "ses_", 12 hex digits of the inverted millisecond clock (so newer sessions
+// sort first, as OpenCode's do), and 14 random base62 characters.
+func NewOpenCodeSessionID(now time.Time) string {
+	const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	clock := ^(uint64(now.UnixMilli())*0x1000 + 1) & (1<<48 - 1)
+	random := make([]byte, 14)
+	_, _ = rand.Read(random)
+	for index, value := range random {
+		random[index] = alphabet[int(value)%len(alphabet)]
+	}
+	return fmt.Sprintf("ses_%012x%s", clock, random)
 }
 
 // openCodeCommandHasExactAuto reports an exact `--auto` argv token without

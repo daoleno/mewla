@@ -3,15 +3,17 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strings"
+	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/opencodeapi/opencodeapitest"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
+	"github.com/gorilla/websocket"
 )
 
 // P0 regression: non-OpenCode providers (Codex, Claude, Cursor, Grok, Pi) and
@@ -292,57 +294,17 @@ func recentOpenCodeServerDeltaFixtureStart(now time.Time) time.Time {
 	return now.UTC().Add(-time.Hour).Truncate(time.Second)
 }
 
-// P1 regression: a deleted OpenCode row must be reported through the server
-// delta as an authoritative delete (the reader's count-mismatch full read
-// removes it from the conversation, and the id-set diff emits the delete).
-func TestOpenCodeDeletionFlowsServerDelta(t *testing.T) {
-	if _, err := exec.LookPath("sqlite3"); err != nil {
-		t.Skip("sqlite3 required")
-	}
-	started := recentOpenCodeServerDeltaFixtureStart(time.Now())
-	dbPath := t.TempDir() + "/opencode.db"
-	schema := `
-CREATE TABLE project (id TEXT PRIMARY KEY);
-CREATE TABLE session (
-  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, parent_id TEXT,
-  slug TEXT NOT NULL, directory TEXT NOT NULL, title TEXT NOT NULL,
-  version TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL
-);
-CREATE TABLE message (
-  id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL,
-  time_updated INTEGER NOT NULL, data TEXT NOT NULL
-);
-CREATE TABLE part (
-  id TEXT PRIMARY KEY, message_id TEXT NOT NULL, session_id TEXT NOT NULL,
-  time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL
-);
-INSERT INTO project(id) VALUES ('proj');
-`
-	seed := fmt.Sprintf(schema+
-		"INSERT INTO session(id, project_id, parent_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_srvdel', 'proj', NULL, 'slug', '/repo/srvdel', 't', '1', %d, %d);\n"+
-		"INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES ('msg_a', 'ses_srvdel', %d, %d, '{\"role\":\"user\"}');\n"+
-		"INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES ('msg_b', 'ses_srvdel', %d, %d, '{\"role\":\"user\"}');\n"+
-		"INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_a', 'msg_a', 'ses_srvdel', %d, %d, '{\"type\":\"text\",\"text\":\"alpha\"}');\n"+
-		"INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_b', 'msg_b', 'ses_srvdel', %d, %d, '{\"type\":\"text\",\"text\":\"beta\"}');\n",
-		started.UnixMilli(), started.Add(30*time.Second).UnixMilli(),
-		started.Add(time.Second).UnixMilli(), started.Add(time.Second).UnixMilli(),
-		started.Add(10*time.Second).UnixMilli(), started.Add(10*time.Second).UnixMilli(),
-		started.Add(time.Second).UnixMilli(), started.Add(time.Second).UnixMilli(),
-		started.Add(10*time.Second).UnixMilli(), started.Add(10*time.Second).UnixMilli(),
-	)
-	cmd := exec.Command("sqlite3", dbPath)
-	cmd.Stdin = strings.NewReader(seed)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("fixture: %v: %s", err, out)
-	}
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
+// openOpenCodeSubscription subscribes to one OpenCode Worker's conversation
+// and returns the socket after its snapshot.
+func openOpenCodeSubscription(t *testing.T, cwd string, started time.Time) (*websocket.Conn, work.CodexConversation) {
+	t.Helper()
 	srv := &Server{watcher: watcher.New(time.Second)}
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
 		Type:      "codex_conversation_subscribe",
-		RequestID: "subscription-del",
-		TargetID:  "agent-del",
-		Cwd:       "/repo/srvdel",
+		RequestID: "subscription-" + filepath.Base(cwd),
+		TargetID:  "agent-" + filepath.Base(cwd),
+		Cwd:       cwd,
 		Command:   "opencode",
 		StartedAt: json.RawMessage(fmt.Sprintf("%q", started.Format(time.RFC3339Nano))),
 	}
@@ -362,21 +324,27 @@ INSERT INTO project(id) VALUES ('proj');
 	if snapshot.Type != "codex_conversation_snapshot" {
 		t.Fatalf("snapshot = %#v", snapshot)
 	}
+	return conn, snapshot.Conversation
+}
+
+// A message OpenCode deletes must reach the client as an authoritative delta
+// delete.
+func TestOpenCodeDeletionFlowsServerDelta(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := recentOpenCodeServerDeltaFixtureStart(time.Now())
+	service.PutSession(opencodeapitest.Session{ID: "ses_srvdel", Directory: "/repo/srvdel", Created: started.Add(time.Second), Updated: started.Add(30 * time.Second)})
+	service.PutMessage("ses_srvdel", opencodeapitest.User("msg_a", started.Add(time.Second), "alpha"))
+	service.PutMessage("ses_srvdel", opencodeapitest.User("msg_b", started.Add(10*time.Second), "beta"))
+	conn, snapshot := openOpenCodeSubscription(t, "/repo/srvdel", started)
 	ids := map[string]bool{}
-	for _, event := range snapshot.Conversation.Events {
+	for _, event := range snapshot.Events {
 		ids[event.ID] = true
 	}
 	if !ids["msg_a"] || !ids["msg_b"] {
 		t.Fatalf("snapshot events = %v", ids)
 	}
 
-	// Delete the msg_a turn: the next poll must emit a delta deleting msg_a.
-	stmt := "DELETE FROM part WHERE id = 'prt_a';\nDELETE FROM message WHERE id = 'msg_a';\n"
-	delCmd := exec.Command("sqlite3", dbPath)
-	delCmd.Stdin = strings.NewReader(stmt)
-	if out, err := delCmd.CombinedOutput(); err != nil {
-		t.Fatalf("delete: %v: %s", err, out)
-	}
+	service.RemoveMessage("ses_srvdel", "msg_a")
 	var delta struct {
 		Type    string   `json:"type"`
 		Deletes []string `json:"deletes"`
@@ -384,101 +352,23 @@ INSERT INTO project(id) VALUES ('proj');
 	if err := conn.ReadJSON(&delta); err != nil {
 		t.Fatal(err)
 	}
-	if delta.Type != "codex_conversation_delta" {
-		t.Fatalf("second message = %#v", delta)
-	}
-	found := false
-	for _, id := range delta.Deletes {
-		if id == "msg_a" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("deleted event id missing from delta deletes: %#v", delta.Deletes)
+	if delta.Type != "codex_conversation_delta" || !slices.Contains(delta.Deletes, "msg_a") {
+		t.Fatalf("delta must delete msg_a: %#v", delta)
 	}
 }
 
-// The memoized path (content-versioned OpenCode reader) must still deliver an
-// in-place streaming update: the reader reports the changed event id, the
-// memoized fingerprint recomputes it, and the delta carries the new body.
+// A streaming assistant message growing in place must reach the client as an
+// upsert carrying the new body.
 func TestOpenCodeInPlaceUpdateFlowsMemoizedDelta(t *testing.T) {
-	if _, err := exec.LookPath("sqlite3"); err != nil {
-		t.Skip("sqlite3 required")
-	}
+	service := opencodeapitest.Install(t)
 	started := recentOpenCodeServerDeltaFixtureStart(time.Now())
-	dbPath := t.TempDir() + "/opencode.db"
-	schema := `
-CREATE TABLE project (id TEXT PRIMARY KEY);
-CREATE TABLE session (
-  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, parent_id TEXT,
-  slug TEXT NOT NULL, directory TEXT NOT NULL, title TEXT NOT NULL,
-  version TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL
-);
-CREATE TABLE message (
-  id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL,
-  time_updated INTEGER NOT NULL, data TEXT NOT NULL
-);
-CREATE TABLE part (
-  id TEXT PRIMARY KEY, message_id TEXT NOT NULL, session_id TEXT NOT NULL,
-  time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL
-);
-INSERT INTO project(id) VALUES ('proj');
-`
-	seed := fmt.Sprintf(schema+
-		"INSERT INTO session(id, project_id, parent_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_inc', 'proj', NULL, 'slug', '/repo/inc', 't', '1', %d, %d);\n"+
-		"INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES ('msg_1', 'ses_inc', %d, %d, '{\"role\":\"user\"}');\n"+
-		"INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES ('msg_2', 'ses_inc', %d, %d, '{\"role\":\"assistant\"}');\n"+
-		"INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_1', 'msg_1', 'ses_inc', %d, %d, '{\"type\":\"text\",\"text\":\"hello\"}');\n"+
-		"INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_2', 'msg_2', 'ses_inc', %d, %d, '{\"type\":\"text\",\"text\":\"first\"}');\n",
-		started.UnixMilli(), started.Add(30*time.Second).UnixMilli(),
-		started.Add(time.Second).UnixMilli(), started.Add(time.Second).UnixMilli(),
-		started.Add(2*time.Second).UnixMilli(), started.Add(2*time.Second).UnixMilli(),
-		started.Add(time.Second).UnixMilli(), started.Add(time.Second).UnixMilli(),
-		started.Add(2*time.Second).UnixMilli(), started.Add(2*time.Second).UnixMilli(),
-	)
-	cmd := exec.Command("sqlite3", dbPath)
-	cmd.Stdin = strings.NewReader(seed)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("fixture: %v: %s", err, out)
-	}
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	srv := &Server{watcher: watcher.New(time.Second)}
-	conn := openThinProxyTestSocket(t, srv)
-	request := clientMessage{
-		Type:      "codex_conversation_subscribe",
-		RequestID: "subscription-inc",
-		TargetID:  "agent-inc",
-		Cwd:       "/repo/inc",
-		Command:   "opencode",
-		StartedAt: json.RawMessage(fmt.Sprintf("%q", started.Format(time.RFC3339Nano))),
-	}
-	if err := conn.WriteJSON(request); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	var snapshot struct {
-		Type         string                 `json:"type"`
-		Conversation work.CodexConversation `json:"conversation"`
-	}
-	if err := conn.ReadJSON(&snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.Type != "codex_conversation_snapshot" {
-		t.Fatalf("snapshot = %#v", snapshot)
-	}
+	at := func(seconds int) time.Time { return started.Add(time.Duration(seconds) * time.Second) }
+	service.PutSession(opencodeapitest.Session{ID: "ses_inc", Directory: "/repo/inc", Created: at(1), Updated: at(30)})
+	service.PutMessage("ses_inc", opencodeapitest.User("msg_1", at(1), "hello"))
+	service.PutMessage("ses_inc", opencodeapitest.Assistant("msg_2", at(2), time.Time{}, opencodeapitest.Text("first")))
+	conn, _ := openOpenCodeSubscription(t, "/repo/inc", started)
 
-	// Streaming in-place update: grow the assistant text part row in place.
-	update := fmt.Sprintf(
-		"UPDATE part SET data = '{\"type\":\"text\",\"text\":\"first second\"}', time_updated = %d WHERE id = 'prt_2';\n",
-		started.Add(3*time.Second).UnixMilli(),
-	)
-	updCmd := exec.Command("sqlite3", dbPath)
-	updCmd.Stdin = strings.NewReader(update)
-	if out, err := updCmd.CombinedOutput(); err != nil {
-		t.Fatalf("update: %v: %s", err, out)
-	}
+	service.PutMessage("ses_inc", opencodeapitest.Assistant("msg_2", at(2), time.Time{}, opencodeapitest.Text("first second")))
 	var delta struct {
 		Type    string                        `json:"type"`
 		Upserts []work.CodexConversationEvent `json:"upserts"`
@@ -489,13 +379,10 @@ INSERT INTO project(id) VALUES ('proj');
 	if delta.Type != "codex_conversation_delta" {
 		t.Fatalf("second message = %#v", delta)
 	}
-	found := false
-	for _, event := range delta.Upserts {
-		if event.ID == "prt_2" && event.Body == "first second" {
-			found = true
-		}
-	}
+	found := slices.ContainsFunc(delta.Upserts, func(event work.CodexConversationEvent) bool {
+		return event.ID == "msg_2:text:0" && event.Body == "first second"
+	})
 	if !found {
-		t.Fatalf("in-place update missing from memoized delta: %#v", delta.Upserts)
+		t.Fatalf("in-place update missing from delta: %#v", delta.Upserts)
 	}
 }

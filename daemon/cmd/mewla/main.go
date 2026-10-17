@@ -1257,7 +1257,7 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.StringVar(&req.Executor, "executor", "", "configured executor name (default: the Brain host executor)")
 	fs.StringVar(&req.BrowserID, "browser", "", "explicit persistent Browser resource to attach")
 	fs.StringVar(&req.Command, "command", "", "explicit command override (delegated client policy still applies)")
-	fs.StringVar(&req.ModelID, "model", "", "model for this launch (codex, claude, pi, grok, agent, opencode); empty keeps the client default")
+	fs.StringVar(&req.ModelID, "model", "", "model for this launch (codex, claude, pi, grok, agent); empty keeps the client default")
 	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "reasoning level for this launch (codex, claude, pi); empty keeps the client default")
 	fs.StringVar(&req.Cwd, "cwd", "", "Worker working directory")
 	fs.StringVar(&req.Prompt, "prompt", "", "initial prompt text")

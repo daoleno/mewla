@@ -2,11 +2,12 @@ package work
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/opencodeapi/opencodeapitest"
 )
 
 func TestProviderAdmissionDigestPreservesEmbeddedWrapperMarkers(t *testing.T) {
@@ -111,16 +112,11 @@ func providerAdmissionFixtureEvent(
 		}
 		return firstAdmissionFixtureEvent(t, conversation.Events)
 	case WorkerProviderOpenCode:
-		dbPath := filepath.Join(t.TempDir(), "opencode-admission.db")
+		service := opencodeapitest.Install(t)
 		started := time.Date(2026, 8, 6, 2, 0, 0, 0, time.UTC)
-		createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-			{ID: "ses_admit", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(time.Second).UnixMilli()},
-		}, []openCodeMessageSeed{
-			{ID: "msg_user", SessionID: "ses_admit", CreatedMS: started.UnixMilli(), Data: `{"role":"user"}`},
-		}, []openCodePartSeed{
-			{ID: "p1", MessageID: "msg_user", SessionID: "ses_admit", CreatedMS: started.UnixMilli(), Data: mustOpenCodeTextPart(payload)},
-		})
-		conversation, err := parseOpenCodeConversation(dbPath, "ses_admit")
+		service.PutSession(opencodeapitest.Session{ID: "ses_admit", Directory: "/repo", Created: started, Updated: started.Add(time.Second)})
+		service.PutMessage("ses_admit", opencodeapitest.User("msg_user", started, payload))
+		conversation, err := parseOpenCodeConversation("ses_admit")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,14 +125,6 @@ func providerAdmissionFixtureEvent(
 		t.Fatalf("unsupported provider %q", provider)
 		return CodexConversationEvent{}
 	}
-}
-
-func mustOpenCodeTextPart(payload string) string {
-	raw, err := json.Marshal(map[string]any{"type": "text", "text": payload})
-	if err != nil {
-		panic(err)
-	}
-	return string(raw)
 }
 
 func firstAdmissionFixtureEvent(

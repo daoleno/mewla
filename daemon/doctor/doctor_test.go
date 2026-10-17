@@ -674,7 +674,7 @@ exit 1
 	writeExec(t, filepath.Join(binDir, name), script)
 }
 
-func TestParseOpenCodeModelsAndDBPathProbes(t *testing.T) {
+func TestParseOpenCodeModelsAndServiceProbes(t *testing.T) {
 	if got := parseOpenCodeModelsProbe([]byte("openai/gpt-5\nopencode/big-pickle\n"), nil); got != StatusOK {
 		t.Fatalf("models ok = %s", got)
 	}
@@ -684,17 +684,14 @@ func TestParseOpenCodeModelsAndDBPathProbes(t *testing.T) {
 	if got := parseOpenCodeModelsProbe([]byte("\n\n"), nil); got != StatusUnknown {
 		t.Fatalf("models empty = %s", got)
 	}
-	if got := parseOpenCodeDBPathProbe([]byte("/home/user/.local/share/opencode/opencode.db\n"), nil); got != StatusOK {
-		t.Fatalf("db path ok = %s", got)
+	if got := parseOpenCodeServiceProbe([]byte("http://127.0.0.1:49374\n"), nil); got != StatusOK {
+		t.Fatalf("service ok = %s", got)
 	}
-	if got := parseOpenCodeDBPathProbe(nil, errors.New("exit 1")); got != StatusFail {
-		t.Fatalf("db path err = %s", got)
+	if got := parseOpenCodeServiceProbe(nil, errors.New("exit 1")); got != StatusFail {
+		t.Fatalf("service err = %s", got)
 	}
-	if got := parseOpenCodeDBPathProbe([]byte("relative.db"), nil); got != StatusUnknown {
-		t.Fatalf("relative db path = %s", got)
-	}
-	if got := parseOpenCodeDBPathProbe([]byte("line1\nline2\n"), nil); got != StatusUnknown {
-		t.Fatalf("multiline db path = %s", got)
+	if got := parseOpenCodeServiceProbe([]byte("not running\n"), nil); got != StatusUnknown {
+		t.Fatalf("service stopped = %s", got)
 	}
 }
 
@@ -703,11 +700,11 @@ func TestOpenCodeDoctorProbesAreSecretSafeAndNonMutating(t *testing.T) {
 	binDir := t.TempDir()
 	stateDir := filepath.Join(home, ".mewla")
 	writeFakeTmux(t, binDir)
-	dbPath := filepath.Join(home, ".local", "share", "opencode", "opencode.db")
+	serviceURL := "http://127.0.0.1:49374"
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
-		authList: "1 credentials\nopenai oauth\n",
-		models:   "openai/gpt-5\nopencode/big-pickle\n",
-		dbPath:   dbPath,
+		authList:   "1 credentials\nopenai oauth\n",
+		models:     "openai/gpt-5\nopencode/big-pickle\n",
+		serviceURL: serviceURL,
 	})
 	writeExecutorsTOML(t, home, `
 delegated_executor = "opencode"
@@ -745,12 +742,17 @@ command = "opencode"
 	if item == nil {
 		t.Fatal("missing opencode executor check")
 	}
-	if item.ModelsStatus != StatusOK || item.DBPathStatus != StatusOK {
-		t.Fatalf("probe status models=%s db=%s summary=%q", item.ModelsStatus, item.DBPathStatus, item.Summary)
+	if item.ModelsStatus != StatusOK || item.ServiceStatus != StatusOK {
+		t.Fatalf("probe status models=%s service=%s summary=%q", item.ModelsStatus, item.ServiceStatus, item.Summary)
 	}
 	joined := strings.Join(seen, " | ")
-	if !strings.Contains(joined, "opencode models") || !strings.Contains(joined, "opencode db path") {
-		t.Fatalf("expected models and db path probes, seen=%v", seen)
+	if !strings.Contains(joined, "opencode models") || !strings.Contains(joined, "opencode service status") {
+		t.Fatalf("expected models and service status probes, seen=%v", seen)
+	}
+	for _, call := range seen {
+		if strings.Contains(call, "service start") || strings.Contains(call, "service stop") {
+			t.Fatalf("doctor must not change the service: %q", call)
+		}
 	}
 	for _, call := range seen {
 		if strings.Contains(call, "--refresh") {
@@ -764,7 +766,7 @@ command = "opencode"
 	if strings.Contains(string(raw), "openai/gpt-5") || strings.Contains(string(raw), "oauth") {
 		t.Fatalf("report leaked probe body: %s", raw)
 	}
-	if strings.Contains(item.Summary, "openai/gpt-5") || strings.Contains(item.Summary, dbPath) {
+	if strings.Contains(item.Summary, "openai/gpt-5") || strings.Contains(item.Summary, serviceURL) {
 		t.Fatalf("summary leaked probe body: %q", item.Summary)
 	}
 }
@@ -775,9 +777,9 @@ func TestOpenCodeDoctorProbeFailuresStayHonest(t *testing.T) {
 	stateDir := filepath.Join(home, ".mewla")
 	writeFakeTmux(t, binDir)
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
-		authList:   "",
-		modelsFail: true,
-		dbFail:     true,
+		authList:    "",
+		modelsFail:  true,
+		serviceFail: true,
 	})
 	writeExecutorsTOML(t, home, `
 [[executors]]
@@ -805,31 +807,36 @@ command = "opencode"
 	if item == nil {
 		t.Fatal("missing opencode executor check")
 	}
-	if item.ModelsStatus != StatusFail || item.DBPathStatus != StatusFail {
-		t.Fatalf("expected failed probes, got models=%s db=%s", item.ModelsStatus, item.DBPathStatus)
+	if item.ModelsStatus != StatusFail || item.ServiceStatus != StatusFail {
+		t.Fatalf("expected failed probes, got models=%s service=%s", item.ModelsStatus, item.ServiceStatus)
 	}
 	if item.Auth != AuthUnknown {
 		t.Fatalf("auth must stay unknown on empty auth list, got %s", item.Auth)
 	}
-	if !strings.Contains(item.Summary, "models probe failed") || !strings.Contains(item.Summary, "db path probe failed") {
+	if !strings.Contains(item.Summary, "models probe failed") || !strings.Contains(item.Summary, "service probe failed") {
 		t.Fatalf("summary = %q", item.Summary)
 	}
 }
 
 type openCodeFakeBehavior struct {
-	authList   string
-	models     string
-	dbPath     string
-	modelsFail bool
-	dbFail     bool
+	version     string
+	authList    string
+	models      string
+	serviceURL  string
+	modelsFail  bool
+	serviceFail bool
 }
 
 func writeFakeOpenCode(t *testing.T, binDir string, behavior openCodeFakeBehavior) {
 	t.Helper()
+	version := behavior.version
+	if version == "" {
+		version = "opencode v2.0.32"
+	}
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
 if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then
-  echo "1.18.13"
+  echo %q
   exit 0
 fi
 if [ "$1" = "auth" ] && [ "$2" = "list" ]; then
@@ -850,9 +857,9 @@ if [ "$1" = "models" ]; then
   printf '%%s' %q
   exit 0
 fi
-if [ "$1" = "db" ] && [ "$2" = "path" ]; then
+if [ "$1" = "service" ] && [ "$2" = "status" ]; then
   if [ %q = "1" ]; then
-    echo "db failed" >&2
+    echo "service failed" >&2
     exit 1
   fi
   printf '%%s\n' %q
@@ -860,11 +867,12 @@ if [ "$1" = "db" ] && [ "$2" = "path" ]; then
 fi
 echo "unexpected: $*" >&2
 exit 1
-`, behavior.authList,
+`, version,
+		behavior.authList,
 		bool01(behavior.modelsFail),
 		behavior.models,
-		bool01(behavior.dbFail),
-		behavior.dbPath,
+		bool01(behavior.serviceFail),
+		behavior.serviceURL,
 	)
 	writeExec(t, filepath.Join(binDir, "opencode"), script)
 }
@@ -904,5 +912,44 @@ func TestTmuxInstallHintsNameOnlyThisPlatform(t *testing.T) {
 	unknown := tmuxInstallHints(hostdeps.Platform{GOOS: "linux", HasSudo: true})
 	if len(unknown) != 1 || unknown[0].ID != "manual" || unknown[0].Command != "see "+hostdeps.TmuxInstallDoc {
 		t.Fatalf("unknown hints = %+v", unknown)
+	}
+}
+
+func TestOpenCodeDoctorRejectsOpenCode1(t *testing.T) {
+	home := t.TempDir()
+	binDir := t.TempDir()
+	writeFakeTmux(t, binDir)
+	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{version: "1.18.13", models: "openai/gpt-5\n"})
+	writeExecutorsTOML(t, home, `
+[[executors]]
+name = "opencode"
+command = "opencode"
+`)
+	report, err := Run(Options{
+		Home:          home,
+		StateDir:      filepath.Join(home, ".mewla"),
+		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
+		Addr:          "127.0.0.1:0",
+		PathEnv:       binDir,
+		Now:           func() time.Time { return time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC) },
+		Listen: func(network, address string) (io.Closer, error) {
+			return nopCloser{}, nil
+		},
+		HTTPGet: func(ctx context.Context, url string) (int, []byte, error) {
+			return 0, nil, errors.New("refused")
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	item := findExecutor(report, "opencode")
+	if item == nil {
+		t.Fatal("missing opencode executor check")
+	}
+	if item.Status != StatusFail || item.Remediation != RemediationInstallExecutor {
+		t.Fatalf("status=%s remediation=%s", item.Status, item.Remediation)
+	}
+	if !strings.Contains(item.Summary, "OpenCode 1.18.13 found") || !strings.Contains(item.Summary, "OpenCode 2 only") {
+		t.Fatalf("summary = %q", item.Summary)
 	}
 }

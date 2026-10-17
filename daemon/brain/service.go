@@ -3533,9 +3533,11 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 		}
 		if resumeSessionID != "" {
 			hardened, err = work.WithProviderResumeToken(provider, hardened, resumeSessionID)
-			if err != nil {
-				return "", err
-			}
+		} else {
+			hardened, err = work.EnsureOpenCodeSessionLaunchCommand(hardened)
+		}
+		if err != nil {
+			return "", err
 		}
 		return withCLIOnPath(hardened), nil
 	case work.WorkerProviderDSH:

@@ -263,20 +263,7 @@ func (r *ProviderConversationReader) loadBoundOpenCodeConversation(identity Host
 			Events:    []CodexConversationEvent{},
 		}, nil
 	}
-	dbPath := strings.TrimSpace(identity.Path)
-	if dbPath == "" {
-		resolved, err := openCodeDBPath()
-		if err != nil || resolved == "" {
-			r.resetSource()
-			return CodexConversation{
-				Available: false,
-				Reason:    "db_unavailable",
-				Events:    []CodexConversationEvent{},
-			}, nil
-		}
-		dbPath = resolved
-	}
-	conversation, err := r.loadOpenCodeConversation(dbPath, sessionID)
+	conversation, err := r.loadOpenCodeConversation(sessionID)
 	if err != nil {
 		return CodexConversation{}, err
 	}
@@ -323,14 +310,8 @@ func hostIdentityUsable(identity HostTranscriptIdentity, provider string) bool {
 		}
 		return identity.SessionID != ""
 	case WorkerProviderOpenCode:
-		if identity.SessionID != "" {
-			if identity.Path == "" {
-				return true
-			}
-			_, err := os.Stat(identity.Path)
-			return err == nil
-		}
-		return false
+		// The session lives behind the OpenCode service; the id is the identity.
+		return strings.HasPrefix(identity.SessionID, "ses")
 	default:
 		if identity.Path == "" {
 			return false

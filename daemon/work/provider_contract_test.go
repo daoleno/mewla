@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+
+	"github.com/daoleno/mewla/daemon/opencodeapi/opencodeapitest"
 )
 
 // providerContractSemantics is the provider-neutral normalized projection used
@@ -22,23 +24,19 @@ type providerContractSemantics struct {
 	Body     string
 }
 
-func openCodeCanonicalConversation(t *testing.T, dbPath string, started time.Time) CodexConversation {
+func openCodeCanonicalConversation(t *testing.T, started time.Time) CodexConversation {
 	t.Helper()
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_par", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(9 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_par", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + intString(started.Add(8*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_par", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"run the tool"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"reasoning","text":"thinking hard"}`},
-		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"text","text":"starting"}`},
-		{ID: "p5", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(5 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"call_1","state":{"status":"completed","input":{"command":"true"},"output":"ok"}}`},
-		{ID: "p6", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(6 * time.Second).UnixMilli(), Data: `{"type":"text","text":"done"}`},
-		{ID: "p7", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(7 * time.Second).UnixMilli(), Data: `{"type":"step-finish","reason":"stop"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_par")
+	service := opencodeapitest.Install(t)
+	service.PutSession(opencodeapitest.Session{ID: "ses_par", Directory: "/repo", Created: started, Updated: started.Add(9 * time.Second)})
+	service.PutMessage("ses_par", opencodeapitest.User("msg_user", started.Add(time.Second), "run the tool"))
+	service.PutMessage("ses_par", opencodeapitest.Assistant("msg_asst1", started.Add(2*time.Second), started.Add(5*time.Second),
+		opencodeapitest.Reasoning("thinking hard"),
+		opencodeapitest.Text("starting"),
+		opencodeapitest.Tool("call_1", "bash", "completed", map[string]any{"command": "true"}, "ok")))
+	service.PutMessage("ses_par", opencodeapitest.Assistant("msg_asst2", started.Add(6*time.Second), started.Add(8*time.Second),
+		opencodeapitest.Text("done")))
+	service.PutMessage("ses_par", opencodeapitest.Idle("msg_idle", started.Add(8*time.Second), "succeeded"))
+	got, err := parseOpenCodeConversation("ses_par")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +112,7 @@ func assertContractParity(t *testing.T, name string, openCode, pi CodexConversat
 // to ingestion; the common CodexConversationEvent model is identical.
 func TestProviderContractParity(t *testing.T) {
 	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	openCode := openCodeCanonicalConversation(t, filepath.Join(t.TempDir(), "opencode.db"), started)
+	openCode := openCodeCanonicalConversation(t, started)
 	pi := piCanonicalConversation(t, filepath.Join(t.TempDir(), "session.jsonl"))
 	assertContractParity(t, "canonical", openCode, pi)
 

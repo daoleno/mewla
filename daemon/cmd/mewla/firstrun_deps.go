@@ -192,6 +192,11 @@ func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool, err error) {
 	fmt.Fprintln(d.w, style.bold("This computer"))
 	fmt.Fprintln(d.w, style.check(tmuxReady, "tmux", tmuxValue))
 	fmt.Fprintln(d.w, style.check(agentReady, "Agent CLI", agentValue))
+	for _, item := range agents.Items {
+		if outdatedAgent(item) {
+			fmt.Fprintf(d.w, "  %s\n", item.Summary)
+		}
+	}
 	if len(choices) > 1 {
 		if err := d.chooseBrainHost(choices); err != nil {
 			return tmuxReady, agentReady, err
@@ -290,11 +295,17 @@ func agentList(ready []doctor.ExecutorCheck) string {
 
 func anyInstalledAgent(check doctor.ExecutorsCheck) string {
 	for _, item := range check.Items {
-		if item.BinaryFound {
+		if item.BinaryFound && !outdatedAgent(item) {
 			return item.ID
 		}
 	}
 	return ""
+}
+
+// outdatedAgent reports an installed agent CLI whose version Mewla does not
+// support (OpenCode 1); doctor's summary says how to upgrade.
+func outdatedAgent(item doctor.ExecutorCheck) bool {
+	return item.BinaryFound && item.Remediation == doctor.RemediationInstallExecutor
 }
 
 // ensureTmux reports whether tmux works, after offering to install it.
