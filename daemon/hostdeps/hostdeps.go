@@ -250,12 +250,12 @@ func Agents(p Platform) []Agent {
 }
 
 // ExtraPathDirs are directories installers put binaries in that a fresh shell
-// may not have on PATH yet: the native agent installers' ~/.local/bin and
-// Homebrew on Apple Silicon.
+// may not have on PATH yet: the native agent installers' ~/.local/bin,
+// OpenCode 2's ~/.opencode/bin and Homebrew on Apple Silicon.
 func ExtraPathDirs(home string) []string {
 	dirs := []string{}
 	if home != "" {
-		dirs = append(dirs, filepath.Join(home, ".local", "bin"))
+		dirs = append(dirs, filepath.Join(home, ".local", "bin"), filepath.Join(home, ".opencode", "bin"))
 	}
 	if runtime.GOOS == "darwin" {
 		dirs = append(dirs, "/opt/homebrew/bin")

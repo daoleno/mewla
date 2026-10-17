@@ -320,9 +320,35 @@ func isOpenCodeInputReady(content string) bool {
 	if openCodeBlockedOverlayRe.MatchString(content) {
 		return false
 	}
-	return openCodeComposerPlaceholderRe.MatchString(content) &&
+	return (openCodeComposerPlaceholderRe.MatchString(content) || openCodeComposerEmpty(content)) &&
 		openCodeAgentLineRe.MatchString(content) &&
 		(openCodeVersionFooterRe.MatchString(content) || openCodeIdleFooterRe.MatchString(content))
+}
+
+// openCodeComposerEmpty reports OpenCode 2's composer box with no draft. The
+// "Ask anything…" placeholder appears only in an empty session; a session
+// opened with --session shows blank "┃" rows above the agent line instead.
+func openCodeComposerEmpty(content string) bool {
+	lines := strings.Split(content, "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		line := strings.TrimSpace(lines[index])
+		if !strings.HasPrefix(line, "┃") || !openCodeAgentLineRe.MatchString(line) {
+			continue
+		}
+		blank := 0
+		for above := index - 1; above >= 0; above-- {
+			row := strings.TrimSpace(lines[above])
+			if !strings.HasPrefix(row, "┃") {
+				break
+			}
+			if strings.TrimSpace(strings.TrimPrefix(row, "┃")) != "" {
+				return false
+			}
+			blank++
+		}
+		return blank > 0
+	}
+	return false
 }
 
 func looksLikeOpenCodePane(content string) bool {

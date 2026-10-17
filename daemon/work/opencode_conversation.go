@@ -743,7 +743,11 @@ func (b *openCodeConversationBuilder) consume(message openCodeMessage) {
 	timestamp := openCodeTimestamp(message.Time.Created)
 	switch message.Type {
 	case "user":
-		body := message.Text
+		// The 2.0.32 TUI appends one space to a pasted prompt; admission hashes
+		// exactly the prompt Mewla sent, without that space or the attachment
+		// names shown after it.
+		sent := strings.TrimSuffix(message.Text, " ")
+		body := strings.TrimSpace(message.Text)
 		for _, file := range message.Files {
 			if name := firstNonEmpty(file.Name, file.URI); name != "" {
 				body = strings.TrimSpace(body + "\n[" + name + "]")
@@ -760,7 +764,7 @@ func (b *openCodeConversationBuilder) consume(message openCodeMessage) {
 			Kind:            "user_message",
 			Role:            "user",
 			Body:            body,
-			AdmissionSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(body))),
+			AdmissionSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(sent))),
 		})
 		b.startActivity(message.ID, timestamp)
 	case "assistant":
