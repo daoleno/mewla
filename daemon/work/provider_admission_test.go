@@ -115,7 +115,8 @@ func providerAdmissionFixtureEvent(
 		service := opencodeapitest.Install(t)
 		started := time.Date(2026, 8, 6, 2, 0, 0, 0, time.UTC)
 		service.PutSession(opencodeapitest.Session{ID: "ses_admit", Directory: "/repo", Created: started, Updated: started.Add(time.Second)})
-		service.PutMessage("ses_admit", opencodeapitest.User("msg_user", started, payload))
+		// OpenCode 2's TUI stores a pasted prompt with one appended space.
+		service.PutMessage("ses_admit", opencodeapitest.User("msg_user", started, payload+" "))
 		conversation, err := parseOpenCodeConversation("ses_admit")
 		if err != nil {
 			t.Fatal(err)

@@ -1,6 +1,8 @@
 package work
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -279,3 +281,34 @@ func TestOpenCodeCacheSkipsAPIWhenStampUnchangedAndRefreshesTail(t *testing.T) {
 }
 
 func itoa(value int) string { return strconv.Itoa(value) }
+
+func TestOpenCodeBareCommandBindsAfterAnEarlyMiss(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+	reader := NewProviderConversationReader()
+	worker := openCodeWorker("/repo", "opencode", started)
+	if conversation, _ := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Second)); conversation.Available {
+		t.Fatalf("no session yet: %+v", conversation)
+	}
+	service.PutSession(opencodeapitest.Session{ID: "ses_mine", Directory: "/repo", Created: started.Add(3 * time.Second), Updated: started.Add(4 * time.Second)})
+	service.PutMessage("ses_mine", opencodeapitest.User("msg_1", started.Add(3*time.Second), "task"))
+	conversation, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(5*time.Second))
+	if err != nil || conversation.SessionID != "ses_mine" || conversation.Activity == nil || len(conversation.Events) != 1 || conversation.Events[0].AdmissionSHA256 == "" {
+		t.Fatalf("bare command must bind after an early miss: %+v err=%v", conversation, err)
+	}
+}
+
+func TestOpenCodeAdmissionDigestDropsThePasteSpace(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+	service.PutSession(opencodeapitest.Session{ID: "ses_1", Directory: "/repo", Created: started, Updated: started.Add(time.Second)})
+	service.PutMessage("ses_1", opencodeapitest.User("msg_1", started.Add(time.Second), "do the task\n\nprotocol 300 "))
+	conversation, err := NewProviderConversationReader().Load(openCodeWorker("/repo", "opencode --session ses_1", started), WorkerProviderOpenCode, started.Add(2*time.Second))
+	if err != nil || len(conversation.Events) != 1 {
+		t.Fatalf("conversation %+v err=%v", conversation, err)
+	}
+	want := fmt.Sprintf("%x", sha256.Sum256([]byte("do the task\n\nprotocol 300")))
+	if got := conversation.Events[0].AdmissionSHA256; got != want {
+		t.Fatalf("admission digest %s, want the sent prompt's %s", got, want)
+	}
+}

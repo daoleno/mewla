@@ -13,11 +13,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
 // ErrSessionNotFound means the service does not know the requested session.
@@ -35,22 +38,37 @@ var Runner = func(ctx context.Context, args ...string) ([]byte, error) {
 	if testing.Testing() {
 		return nil, fmt.Errorf("%w: tests must install a fake opencode service", ErrUnavailable)
 	}
-	binary, err := exec.LookPath("opencode")
+	// The daemon may run without the user's shell PATH (a login item), so
+	// look where OpenCode's installer puts the binary too.
+	binary, err := hostdeps.LookPath("opencode")
 	if err != nil {
 		return nil, fmt.Errorf("%w: opencode not found on PATH", ErrUnavailable)
 	}
-	var stdout, stderr bytes.Buffer
-	command := exec.CommandContext(ctx, binary, args...)
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	if err := command.Run(); err != nil {
-		// Typed API errors arrive as JSON on stdout with a non-zero exit.
-		if stdout.Len() > 0 {
-			return stdout.Bytes(), &callError{status: strings.TrimSpace(stderr.String()), body: stdout.Bytes()}
-		}
-		return nil, fmt.Errorf("%w: %v: %s", ErrUnavailable, err, strings.TrimSpace(stderr.String()))
+	// The CLI exits before draining a large response into a pipe (2.0.32 cut
+	// session.message.list at 256 KiB with exit 0), so stdout is a file.
+	stdout, err := os.CreateTemp("", "mewla-opencode-api-*.json")
+	if err != nil {
+		return nil, err
 	}
-	return stdout.Bytes(), nil
+	defer os.Remove(stdout.Name())
+	defer stdout.Close()
+	var stderr bytes.Buffer
+	command := exec.CommandContext(ctx, binary, args...)
+	command.Stdout = stdout
+	command.Stderr = &stderr
+	runErr := command.Run()
+	body, err := os.ReadFile(stdout.Name())
+	if err != nil {
+		return nil, err
+	}
+	if runErr != nil {
+		// Typed API errors arrive as JSON on stdout with a non-zero exit.
+		if len(body) > 0 {
+			return body, &callError{status: strings.TrimSpace(stderr.String()), body: body}
+		}
+		return nil, fmt.Errorf("%w: %v: %s", ErrUnavailable, runErr, strings.TrimSpace(stderr.String()))
+	}
+	return body, nil
 }
 
 type callError struct {
@@ -97,6 +115,10 @@ func Call(ctx context.Context, operation string, params map[string]string, resul
 	}
 	if result == nil {
 		return nil
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		// A successful exit with no body means the service did not answer.
+		return fmt.Errorf("%w: opencode api %s returned no output", ErrUnavailable, operation)
 	}
 	if err := json.Unmarshal(out, result); err != nil {
 		return fmt.Errorf("opencode api %s: %w", operation, err)

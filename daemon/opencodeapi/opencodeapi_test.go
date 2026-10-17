@@ -59,3 +59,12 @@ func TestSessionNotFoundIsTyped(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestEmptyResponseIsUnavailable(t *testing.T) {
+	previous := Runner
+	t.Cleanup(func() { Runner = previous })
+	Runner = func(context.Context, ...string) ([]byte, error) { return []byte("\n"), nil }
+	if _, err := GetSession(context.Background(), "ses_x"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+}

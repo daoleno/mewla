@@ -216,3 +216,21 @@ draft still sitting here
 		t.Fatal("isAgentCommand must recognize pi/opencode")
 	}
 }
+
+func TestOpenCode2ResumedSessionComposerIsReady(t *testing.T) {
+	// OpenCode 2.0.32 opened with --session on a session that has history.
+	pane := "     Build · DeepSeek V4.1 Flash · 10.5s · 54.2 tok/s\n" +
+		"  ┃\n  ┃\n  ┃\n" +
+		"  ┃  Build · DeepSeek V4.1 Flash OpenCode Go\n" +
+		"  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n" +
+		"  ~/.mewla/t/ocproof2                                  8.3K (1%) · $0.00  ctrl+p commands\n"
+	if !isOpenCodeInputReady(pane) {
+		t.Fatal("resumed session with an empty composer must be ready")
+	}
+	if isOpenCodeInputReady(strings.Replace(pane, "  ┃\n  ┃\n  ┃\n", "  ┃\n  ┃  draft\n  ┃\n", 1)) {
+		t.Fatal("a draft in the composer must block readiness")
+	}
+	if isOpenCodeInputReady(strings.Replace(pane, "~/.mewla/t/ocproof2                                  8.3K (1%) · $0.00  ctrl+p commands", "esc interrupt  ctrl+p commands", 1)) {
+		t.Fatal("busy footer must block readiness")
+	}
+}
