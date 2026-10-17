@@ -20,6 +20,7 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/hostdeps"
+	"github.com/daoleno/mewla/daemon/opencodeapi"
 	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/work"
@@ -637,6 +638,15 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 	item.BinaryFound = true
 	item.BinaryPath = path
 	item.Version = e.probeVersion(path, worker.Provider)
+	if worker.Provider == work.WorkerProviderOpenCode {
+		version := opencodeapi.ParseVersion([]byte(item.Version))
+		if opencodeapi.MajorVersion(version) != opencodeapi.SupportedMajor {
+			item.Status = StatusFail
+			item.Remediation = RemediationInstallExecutor
+			item.Summary = fmt.Sprintf("OpenCode %s found; Mewla supports OpenCode 2 only. Upgrade: %s", openCodeVersionLabel(version), hostdeps.OpenCodeInstall)
+			return item
+		}
+	}
 	item.Auth = e.probeAuth(path, worker.Provider)
 	if worker.Provider == work.WorkerProviderOpenCode {
 		e.probeOpenCodeRuntime(path, &item)
@@ -664,17 +674,24 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 		item.Summary = fmt.Sprintf("%s runnable (%s); auth state unknown", item.ID, item.Provider)
 	}
 	if worker.Provider == work.WorkerProviderOpenCode {
-		item.Summary = appendOpenCodeProbeSummary(item.Summary, item.ModelsStatus, item.DBPathStatus)
+		item.Summary = appendOpenCodeProbeSummary(item.Summary, item.ModelsStatus, item.ServiceStatus)
 	}
 	return item
 }
 
-// probeOpenCodeRuntime runs secret-safe, non-mutating OpenCode probes required
-// by the product contract: `models` without --refresh, and `db path`. Output
-// bodies are never copied into the report.
+func openCodeVersionLabel(version string) string {
+	if version == "" {
+		return "of unknown version"
+	}
+	return version
+}
+
+// probeOpenCodeRuntime runs secret-safe, non-mutating OpenCode 2 probes:
+// `models` and `service status` (the background server Mewla reads sessions
+// through). Output bodies are never copied into the report.
 func (e env) probeOpenCodeRuntime(binaryPath string, item *ExecutorCheck) {
 	item.ModelsStatus = StatusUnknown
-	item.DBPathStatus = StatusUnknown
+	item.ServiceStatus = StatusUnknown
 
 	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
 	defer cancel()
@@ -683,8 +700,8 @@ func (e env) probeOpenCodeRuntime(binaryPath string, item *ExecutorCheck) {
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
 	defer cancel2()
-	dbOut, dbErr := e.opts.RunCommand(ctx2, binaryPath, "db", "path")
-	item.DBPathStatus = parseOpenCodeDBPathProbe(dbOut, dbErr)
+	serviceOut, serviceErr := e.opts.RunCommand(ctx2, binaryPath, "service", "status")
+	item.ServiceStatus = parseOpenCodeServiceProbe(serviceOut, serviceErr)
 }
 
 func parseOpenCodeModelsProbe(out []byte, err error) Status {
@@ -709,25 +726,20 @@ func parseOpenCodeModelsProbe(out []byte, err error) Status {
 	return StatusOK
 }
 
-func parseOpenCodeDBPathProbe(out []byte, err error) Status {
+// parseOpenCodeServiceProbe accepts `opencode service status` printing the
+// running server's URL.
+func parseOpenCodeServiceProbe(out []byte, err error) Status {
 	if err != nil {
 		return StatusFail
 	}
-	path := strings.TrimSpace(string(out))
-	if path == "" {
-		return StatusUnknown
+	text := strings.TrimSpace(string(out))
+	if strings.HasPrefix(text, "http://") || strings.HasPrefix(text, "https://") {
+		return StatusOK
 	}
-	// Reject multi-line or clearly non-path payloads without echoing them.
-	if strings.ContainsAny(path, "\n\r\t") {
-		return StatusUnknown
-	}
-	if !filepath.IsAbs(path) {
-		return StatusUnknown
-	}
-	return StatusOK
+	return StatusUnknown
 }
 
-func appendOpenCodeProbeSummary(summary string, models, dbPath Status) string {
+func appendOpenCodeProbeSummary(summary string, models, service Status) string {
 	parts := make([]string, 0, 2)
 	switch models {
 	case StatusOK:
@@ -737,13 +749,13 @@ func appendOpenCodeProbeSummary(summary string, models, dbPath Status) string {
 	case StatusUnknown:
 		parts = append(parts, "models unknown")
 	}
-	switch dbPath {
+	switch service {
 	case StatusOK:
-		parts = append(parts, "db path ok")
+		parts = append(parts, "service running")
 	case StatusFail:
-		parts = append(parts, "db path probe failed")
+		parts = append(parts, "service probe failed")
 	case StatusUnknown:
-		parts = append(parts, "db path unknown")
+		parts = append(parts, "service not running")
 	}
 	if len(parts) == 0 {
 		return summary

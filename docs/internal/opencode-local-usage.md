@@ -1,62 +1,59 @@
 # OpenCode Local Usage
 
-Mewla Stats aggregates OpenCode model usage entirely from the OpenCode CLI's
-local structured database. There is no subscription probing, no credential
-read, no OpenCode-internal configuration, and no upstream API access: Stats
-needs nothing beyond the data the OpenCode CLI already writes on the host.
+Mewla Stats aggregates OpenCode model usage from OpenCode 2's background
+service. There is no subscription probing, no credential read, no
+OpenCode-internal configuration, and no upstream API access. Mewla supports
+OpenCode 2 only.
 
 ## Data source
 
-The OpenCode CLI stores one row per message in its SQLite database. Stats and
-Work resolve it the same way (`daemon/providerpaths`): `MEWLA_OPENCODE_DB`,
-then the path `opencode db path` reports (spawned once and memoized), then the
-platform default when that file exists:
+OpenCode 2 keeps sessions behind a background service and documents its API as
+OpenAPI. Stats and Work reach it with the official client, `opencode api
+<operation>`, which finds and authenticates to the running service itself
+(`daemon/opencodeapi`). Mewla never reads the service password or OpenCode's
+storage tables.
 
-- Linux: `$XDG_DATA_HOME/opencode/opencode.db` (default
-  `~/.local/share/opencode/opencode.db`)
-- macOS: `~/Library/Application Support/opencode/opencode.db`
-- Windows: `%LOCALAPPDATA%\opencode\opencode.db`
-
-The `message` table's `data` column is JSON metadata; each assistant message
-records the exact usage fields Mewla aggregates:
+- `session.list` pages sessions newest-updated first.
+- `session.message.list --param type=assistant` returns each session's
+  assistant messages. Each records the usage fields Mewla aggregates:
 
 ```
-role, modelID, cost, tokens.{input,output,reasoning,cache.{read,write}},
-time.created, path.cwd
+model.{id,providerID}, cost, tokens.{input,output,reasoning,cache.{read,write}},
+time.created
 ```
 
-The read is a single read-only `sqlite3` query that projects only these
-fields (`json_extract`); the conversation text lives in the `part` table and
-is never read. `json_valid` guards keep one malformed row from failing the
-whole read.
+The session's `location.directory` attributes usage to a project. A session's
+messages are re-read only when its `time.updated` changes. The database file
+that `opencode debug paths` reports is only stat'ed, as a cheap change stamp
+for live conversations.
+
+When the service is not running or `opencode` is missing, OpenCode usage is
+absent, never estimated.
 
 ## Aggregation
 
 Only observed facts are aggregated, keyed by the `(provider, model)` pair
-recorded in each message row:
+recorded in each message:
 
-- **Request count**: one per assistant message that carries token usage (the
-  input/output/reasoning/cache read/write fields as recorded).
+- **Request count**: one per assistant message that carries token usage.
 - **Tokens**: input, output, reasoning, cache read, and cache write summed
   exactly as recorded.
-- **Cost**: the recorded `cost` value. A model with rows that lack a cost
-  field is reported with cost *unknown* — cost is never estimated or
-  invented for OpenCode models.
-- Rows without any token usage (for example interrupted or empty turns) and
-  user messages contribute nothing.
+- **Cost**: the recorded `cost` value. A model with messages that lack a cost
+  is reported with cost *unknown*; cost is never estimated or invented for
+  OpenCode models.
+- Messages without any token usage (for example interrupted or empty turns)
+  and user messages contribute nothing.
 - Missing token subfields contribute zero to their bucket; unavailable
   metrics are omitted.
-- Quota, subscription, plan, or provider-entitlement state is never inferred
-  from the provider name or anything else.
+- Quota, subscription, plan, or provider-entitlement state is never inferred.
 
 The aggregated rows flow into the same per-date model, project, and activity
-aggregates as Claude Code, Codex, Grok, and Cursor Agent usage. The Models
-section renders when any observed usage rows exist; with no OpenCode rows,
-nothing OpenCode-specific appears.
+aggregates as Claude Code, Codex, Grok, and Cursor Agent usage. With no
+OpenCode usage, nothing OpenCode-specific appears.
 
 ## Security
 
-- The database is opened read-only (`sqlite3 -readonly`); the live CLI is
-  never disturbed.
+- Every call is a read (`session.list`, `session.message.list`); Mewla never
+  writes through the API for Stats.
 - No credentials are read, logged, or serialized. No upstream requests are
   made.

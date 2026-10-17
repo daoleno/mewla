@@ -5,12 +5,14 @@
 package providerpaths
 
 import (
+	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/daoleno/mewla/daemon/opencodeapi"
 )
 
 // ClaudeConfigDir is Claude Code's config root: CLAUDE_CONFIG_DIR, else
@@ -38,9 +40,8 @@ func PiAgentDir(home string) string {
 	}
 }
 
-// openCodeDBResolved memoizes a successful OpenCode SQLite path resolution.
-// The `opencode db path` CLI spawn is expensive (the opencode process startup
-// can take hundreds of milliseconds), so it must never run per poll. A failed
+// openCodeDBResolved memoizes a successful OpenCode database path resolution.
+// The `opencode debug paths` spawn must never run per poll. A failed
 // resolution is NOT cached: discovery is retried on later calls so a
 // transient failure (or a late-arriving opencode install) self-corrects. The
 // MEWLA_OPENCODE_DB override is re-read every call (tests set it
@@ -50,8 +51,8 @@ var (
 	openCodeDBResolved string
 )
 
-// OpenCodeDB is OpenCode's SQLite database: MEWLA_OPENCODE_DB, else what
-// `opencode db path` reports, else the platform data directory when the file
+// OpenCodeDB is OpenCode 2's database file: MEWLA_OPENCODE_DB, else the db
+// line of `opencode debug paths`, else the platform data directory when the file
 // exists there. It returns "" when no database is found.
 func OpenCodeDB(home string) string {
 	if override := strings.TrimSpace(os.Getenv("MEWLA_OPENCODE_DB")); override != "" {
@@ -78,15 +79,11 @@ func OpenCodeDB(home string) string {
 }
 
 func openCodeCLIDBPath() string {
-	binary, err := exec.LookPath("opencode")
+	paths, err := opencodeapi.DebugPaths(context.Background())
 	if err != nil {
 		return ""
 	}
-	out, err := exec.Command(binary, "db", "path").CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	return paths.DB
 }
 
 // openCodeDefaultDBPath mirrors the official CLI's platform layout:

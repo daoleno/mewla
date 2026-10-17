@@ -16,7 +16,7 @@ these; one installed, signed-in CLI is enough:
 | `agent` (Cursor) | `cursor-agent --force --sandbox disabled` | Bypassed |
 | `grok` | `grok --no-alt-screen --permission-mode bypassPermissions` | Bypassed |
 | `pi` | `pi` | None; Pi is always permissive |
-| `opencode` | `opencode` | The CLI's own policy |
+| `opencode` | `opencode` (OpenCode 2 only) | The CLI's own policy |
 | `dsh` | `dsh` | Opens the DSH web harness, not a terminal agent |
 
 A Session's type follows the program that actually runs: a Cursor Session using

@@ -189,6 +189,11 @@ func TmuxPlan(p Platform) Plan {
 	return plan
 }
 
+// OpenCodeInstall is OpenCode 2's official installer (opencode.ai/v2/docs).
+// It also upgrades an OpenCode 1 install; doctor and first run name it when
+// they find OpenCode 1, since Mewla supports OpenCode 2 only.
+const OpenCodeInstall = "curl -fsSL https://opencode.ai/v2/install | bash"
+
 // Agent is an agent CLI Mewla can offer to install.
 type Agent struct {
 	ID      string // executor id, e.g. "claude"

@@ -2,44 +2,51 @@ package stats
 
 import (
 	"encoding/json"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/opencodeapi/opencodeapitest"
 )
 
-func writeOpenCodeDBFixture(t *testing.T, home string, rows []string) string {
+var openCodeFixtureServices sync.Map // testing.TB -> *opencodeapitest.Service
+
+// writeOpenCodeDBFixture serves rows through the fake OpenCode service: each
+// row becomes one session (its path.cwd as the directory) holding one message.
+// Rows the service could never return (malformed JSON) are dropped. A later
+// call replaces every session with a newer update clock.
+func writeOpenCodeDBFixture(t *testing.T, _ string, rows []string) {
 	t.Helper()
-	t.Setenv("XDG_DATA_HOME", "")
-	t.Setenv("LOCALAPPDATA", "")
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Skip("sqlite3 not found")
+	value, ok := openCodeFixtureServices.Load(t)
+	if !ok {
+		value = opencodeapitest.Install(t)
+		openCodeFixtureServices.Store(t, value)
+		t.Cleanup(func() { openCodeFixtureServices.Delete(t) })
 	}
-	dir := filepath.Join(home, ".local", "share", "opencode")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
+	service := value.(*opencodeapitest.Service)
+	for index := range 64 {
+		service.DeleteSession("ses-" + strconv.Itoa(index))
 	}
-	dbPath := filepath.Join(dir, "opencode.db")
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	sql := `DROP TABLE IF EXISTS message;
-	CREATE TABLE message (
-		id text PRIMARY KEY,
-		session_id text NOT NULL,
-		time_created integer NOT NULL,
-		time_updated integer NOT NULL,
-		data text NOT NULL
-	);`
-	for i, row := range rows {
-		sql += "INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('msg-" + string(rune('a'+i)) + "', 'ses-1', 0, 0, '" + row + "');\n"
+	updated := time.Now()
+	for index, row := range rows {
+		var v1 map[string]any
+		if json.Unmarshal([]byte(row), &v1) != nil {
+			continue
+		}
+		path, _ := v1["path"].(map[string]any)
+		cwd, _ := path["cwd"].(string)
+		id := "ses-" + strconv.Itoa(index)
+		service.PutSession(opencodeapitest.Session{ID: id, Directory: cwd, Created: updated, Updated: updated})
+		message := map[string]any{"id": "msg-" + strconv.Itoa(index), "type": v1["role"], "time": v1["time"], "tokens": v1["tokens"], "content": []any{}}
+		message["model"] = map[string]any{"id": v1["modelID"], "providerID": v1["providerID"]}
+		if cost, ok := v1["cost"]; ok {
+			message["cost"] = cost
+		}
+		service.PutMessage(id, message)
 	}
-	if out, err := exec.Command(sqlite3, dbPath, sql).CombinedOutput(); err != nil {
-		t.Fatalf("create opencode fixture: %v\n%s", err, out)
-	}
-	return dbPath
 }
 
 func openCodeMsg(role, model string, cost *float64, tin, tout, trea, tcr, tcw int64, createdMs int64, cwd string) string {
@@ -97,7 +104,7 @@ func TestCollectOpenCodeStatsAggregatesObservedFacts(t *testing.T) {
 	})
 
 	c := &Collector{now: time.Now}
-	byDate := c.collectOpenCodeStats(home)
+	byDate := c.collectOpenCodeStats()
 
 	if len(byDate) != 2 {
 		t.Fatalf("dates = %v, want 2", byDate)
@@ -166,7 +173,7 @@ func TestCollectOpenCodeStatsKeepsProviderIdentityForSameModel(t *testing.T) {
 		`{"role":"assistant","providerID":"deepseek","modelID":"deepseek-v4-flash","tokens":{"input":1000000,"output":1000000,"reasoning":1000000,"cache":{"read":1000000,"write":0}},"time":{"created":` + jsonNumber(float64(created)) + `}}`,
 		`{"role":"assistant","providerID":"opencode-go","modelID":"deepseek-v4-flash","cost":0.25,"tokens":{"input":1000000,"output":1000000,"reasoning":0,"cache":{"read":1000000,"write":0}},"time":{"created":` + jsonNumber(float64(created)) + `}}`,
 	})
-	models := buildModelStats(aggregateModelsByDate((&Collector{}).collectOpenCodeStats(home), "0000-00-00", "9999-99-99"))
+	models := buildModelStats(aggregateModelsByDate((&Collector{}).collectOpenCodeStats(), "0000-00-00", "9999-99-99"))
 	if len(models) != 2 {
 		t.Fatalf("same-model providers collapsed: %+v", models)
 	}
@@ -192,8 +199,8 @@ func TestCollectOpenCodeStatsStableAndReload(t *testing.T) {
 	})
 
 	c := &Collector{now: time.Now}
-	first := c.collectOpenCodeStats(home)
-	second := c.collectOpenCodeStats(home)
+	first := c.collectOpenCodeStats()
+	second := c.collectOpenCodeStats()
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("repeated collection must be stable")
 	}
@@ -209,7 +216,7 @@ func TestCollectOpenCodeStatsStableAndReload(t *testing.T) {
 		openCodeMsg("assistant", "qwen3.6-plus-free", &cost0015, 700, 90, 0, 0, 0, created, "/home/user/proj-mewla"),
 	})
 
-	third := c.collectOpenCodeStats(home)
+	third := c.collectOpenCodeStats()
 	day2 := third["2026-08-07"]
 	if day2 == nil || day2.models["deepseek-v4-flash"].sessions != 2 {
 		t.Fatalf("reloaded deepseek = %#v", day2)
@@ -245,7 +252,7 @@ func TestCollectOpenCodeStatsMissingFieldsAndBadRows(t *testing.T) {
 	writeOpenCodeDBFixture(t, home, rows)
 
 	c := &Collector{now: time.Now}
-	byDate := c.collectOpenCodeStats(home)
+	byDate := c.collectOpenCodeStats()
 
 	agg := byDate["2026-08-07"]
 	if agg == nil {
@@ -277,7 +284,7 @@ func TestCollectOpenCodeStatsToleratesMalformedRows(t *testing.T) {
 	})
 
 	c := &Collector{now: time.Now}
-	byDate := c.collectOpenCodeStats(home)
+	byDate := c.collectOpenCodeStats()
 	agg := byDate["2026-08-07"]
 	if agg == nil || agg.models["deepseek-v4-flash"].sessions != 1 {
 		t.Fatalf("malformed rows must be skipped without failing the read: %#v", byDate)
@@ -285,9 +292,9 @@ func TestCollectOpenCodeStatsToleratesMalformedRows(t *testing.T) {
 }
 
 func TestCollectOpenCodeStatsAbsentDatabase(t *testing.T) {
-	home := t.TempDir()
+	opencodeapitest.Install(t).Unavailable = true
 	c := &Collector{now: time.Now}
-	if got := c.collectOpenCodeStats(home); len(got) != 0 {
+	if got := c.collectOpenCodeStats(); len(got) != 0 {
 		t.Fatalf("absent database must yield no rows: %#v", got)
 	}
 }

@@ -23,7 +23,7 @@ func TestResolveWorkerCommandAppliesPerLaunchModelAndReasoning(t *testing.T) {
 		{"claude", "claude-opus-5-5", "high", []string{"claude --model claude-opus-5-5 --effort high", ClaudeFullAuthorizationFlag}, []string{"sonnet", "low"}},
 		{"pi", "opencode-go/deepseek-v4.1-flash", "high", []string{"pi --model opencode-go/deepseek-v4.1-flash --thinking high", "--session /"}, []string{"low"}},
 		{"grok", "grok-5", "", []string{"grok --model grok-5"}, []string{"old"}},
-		{"opencode", "openai/gpt-6", "", []string{"opencode --model openai/gpt-6 --auto"}, nil},
+		{"opencode", "", "", []string{"opencode --auto --session ses_"}, nil},
 		{"claude", "", "", []string{"claude --model sonnet --effort=low"}, nil},
 	} {
 		got, err := cfg.ResolveWorkerCommand(tc.executor, "", tc.model, tc.reasoning, true)
@@ -45,10 +45,11 @@ func TestResolveWorkerCommandAppliesPerLaunchModelAndReasoning(t *testing.T) {
 
 func TestResolveWorkerCommandRejectsUnsupportedSelection(t *testing.T) {
 	cfg := NewExecutorConfig(map[string]Executor{
-		"claude": {Name: "claude", Command: "claude"},
-		"pi":     {Name: "pi", Command: "pi", Kind: "pi"},
-		"grok":   {Name: "grok", Command: "grok"},
-		"dsh":    {Name: "dsh", Command: "dsh", Kind: "dsh"},
+		"claude":   {Name: "claude", Command: "claude"},
+		"pi":       {Name: "pi", Command: "pi", Kind: "pi"},
+		"grok":     {Name: "grok", Command: "grok"},
+		"dsh":      {Name: "dsh", Command: "dsh", Kind: "dsh"},
+		"opencode": {Name: "opencode", Command: "opencode", Kind: "opencode"},
 	})
 	for _, tc := range []struct{ executor, model, reasoning, want string }{
 		{"claude", "", "ultra", "accepted: low, medium, high, xhigh, max"},
@@ -56,6 +57,8 @@ func TestResolveWorkerCommandRejectsUnsupportedSelection(t *testing.T) {
 		{"pi", "sonnet:high", "low", "already carries a thinking level"},
 		{"grok", "", "high", "no per-launch reasoning option"},
 		{"dsh", "x", "", "no per-launch model/reasoning option"},
+		// OpenCode 2's client rejects --model; it uses its saved model.
+		{"opencode", "openai/gpt-6", "", "no per-launch model/reasoning option"},
 	} {
 		_, err := cfg.ResolveWorkerCommand(tc.executor, "", tc.model, tc.reasoning, true)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

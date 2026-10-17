@@ -9,7 +9,8 @@ running as a service, updates, the app builds and uninstalling.
 - `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS)
 - `tmux` on `PATH`; the installer and `mewla` offer to install it
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
-  `cursor-agent`, `grok`, `pi` or `opencode`. One is enough; `mewla` offers
+  `cursor-agent`, `grok`, `pi` or `opencode` (OpenCode 2; `mewla doctor` names
+  the upgrade command when it finds OpenCode 1). One is enough; `mewla` offers
   Claude Code and Codex when none is ready, and asks which one Brain uses
   when several are.
 

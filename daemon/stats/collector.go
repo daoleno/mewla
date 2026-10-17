@@ -43,6 +43,8 @@ type Collector struct {
 	lastCodexAuthFingerprint string
 	warningsMu               sync.Mutex
 	warnings                 map[string]string
+	openCodeUsageMu          sync.Mutex
+	openCodeUsage            map[string]openCodeSessionUsage
 }
 
 // warnf logs a degraded-state warning once per change. Refreshes repeat every
@@ -376,7 +378,7 @@ func (c *Collector) refresh() {
 	workerByDate := c.collectClaudeSessionStats(home)
 	mergeDateAgg(workerByDate, c.collectGrokStats(home))
 	mergeDateAgg(workerByDate, c.collectCursorAgentStats(home))
-	mergeDateAgg(workerByDate, c.collectOpenCodeStats(home))
+	mergeDateAgg(workerByDate, c.collectOpenCodeStats())
 	mergeDateAgg(workerByDate, c.collectPiStats(home))
 
 	// Collect Codex CLI data.

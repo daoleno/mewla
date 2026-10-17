@@ -16,14 +16,14 @@ type launchModelFlags struct {
 }
 
 // Checked against each CLI's --help: claude --model/--effort, pi
-// --model/--thinking, grok -m/--model, cursor-agent --model, opencode -m/--model.
+// --model/--thinking, grok -m/--model, cursor-agent --model. OpenCode 2's
+// interactive client has no model flag; it uses the model saved in OpenCode.
 // Codex has its own parser in codex_worker_command.go.
 var launchModelFlagsByProvider = map[string]launchModelFlags{
-	WorkerProviderClaude:   {model: []string{"--model"}, reasoning: []string{"--effort"}, levels: []string{"low", "medium", "high", "xhigh", "max"}},
-	WorkerProviderPi:       {model: []string{"--model"}, reasoning: []string{"--thinking"}, levels: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}},
-	WorkerProviderGrok:     {model: []string{"--model", "-m"}},
-	WorkerProviderCursor:   {model: []string{"--model"}},
-	WorkerProviderOpenCode: {model: []string{"--model", "-m"}},
+	WorkerProviderClaude: {model: []string{"--model"}, reasoning: []string{"--effort"}, levels: []string{"low", "medium", "high", "xhigh", "max"}},
+	WorkerProviderPi:     {model: []string{"--model"}, reasoning: []string{"--thinking"}, levels: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}},
+	WorkerProviderGrok:   {model: []string{"--model", "-m"}},
+	WorkerProviderCursor: {model: []string{"--model"}},
 }
 
 // ResolveWorkerCommand resolves one launch command from the catalog or an

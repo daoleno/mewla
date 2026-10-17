@@ -3,15 +3,16 @@ package work
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/opencodeapi"
 	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
@@ -56,8 +57,8 @@ func TranscriptStreamed(provider string) bool {
 }
 
 // DiscoverTranscripts lists provider transcripts modified at or after since.
-// OpenCode keeps its sessions in one database; each session is one source
-// whose Path is "<db>#<session id>".
+// OpenCode sessions live behind the OpenCode service; each session is one
+// source whose Path is "opencode:<session id>".
 func DiscoverTranscripts(home string, since time.Time) ([]TranscriptSource, error) {
 	var out []TranscriptSource
 	add := func(provider, path, sessionID, cwd string) {
@@ -111,38 +112,33 @@ func DiscoverTranscripts(home string, since time.Time) ([]TranscriptSource, erro
 		add(WorkerProviderDSH, path, filepath.Base(filepath.Dir(path)), "")
 	}
 
-	sessions, err := discoverOpenCodeTranscripts(home, since)
+	sessions, err := discoverOpenCodeTranscripts(since)
 	if err != nil {
 		return out, err
 	}
 	return append(out, sessions...), nil
 }
 
-func discoverOpenCodeTranscripts(home string, since time.Time) ([]TranscriptSource, error) {
-	dbPath := providerpaths.OpenCodeDB(home)
-	info, err := os.Stat(dbPath)
-	if err != nil || info.Size() == 0 {
-		return nil, nil
-	}
-	sqlite3, err := exec.LookPath("sqlite3")
+func discoverOpenCodeTranscripts(since time.Time) ([]TranscriptSource, error) {
+	sessions, err := opencodeapi.ListSessions(context.Background(), opencodeapi.SessionQuery{UpdatedSince: since})
 	if err != nil {
-		return nil, nil
-	}
-	rows, err := queryOpenCodeSessionRows(sqlite3, dbPath, fmt.Sprintf(
-		`SELECT id, directory, parent_id, time_created, time_updated FROM session WHERE time_updated >= %d AND (parent_id IS NULL OR parent_id = '') ORDER BY time_updated;`,
-		since.UnixMilli(),
-	))
-	if err != nil {
+		if errors.Is(err, opencodeapi.ErrUnavailable) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	out := make([]TranscriptSource, 0, len(rows))
-	for _, row := range rows {
+	out := make([]TranscriptSource, 0, len(sessions))
+	for _, session := range sessions {
+		if session.ParentID != "" {
+			continue
+		}
+		updated := session.Updated().UTC()
 		out = append(out, TranscriptSource{
-			Provider: WorkerProviderOpenCode, Path: dbPath + "#" + row.ID,
-			SessionID: row.ID, CWD: row.Directory,
+			Provider: WorkerProviderOpenCode, Path: "opencode:" + session.ID,
+			SessionID: session.ID, CWD: session.Location.Directory,
 			// The update clock stands in for size: it changes whenever the
 			// session gains a message.
-			Size: row.TimeUpdated, ModTime: time.UnixMilli(row.TimeUpdated).UTC(),
+			Size: updated.UnixMilli(), ModTime: updated,
 		})
 	}
 	return out, nil
@@ -288,8 +284,7 @@ func parseWholeTranscript(source TranscriptSource, visit func(TranscriptMessage)
 		scan.CWD = firstNonEmpty(conversation.CWD, scan.CWD)
 		events = conversation.Events
 	case WorkerProviderOpenCode:
-		dbPath, sessionID, _ := strings.Cut(source.Path, "#")
-		conversation, err := parseOpenCodeConversation(dbPath, sessionID)
+		conversation, err := parseOpenCodeConversation(source.SessionID)
 		if err != nil {
 			return scan, err
 		}

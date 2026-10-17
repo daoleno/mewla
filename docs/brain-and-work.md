@@ -190,7 +190,7 @@ Without `-executor`, the Worker uses Brain's own agent. Mewla maps `-model` and
 | `pi` | `--model provider/id` | `--thinking`: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `grok` | `--model` | Not supported |
 | `agent` (Cursor) | `--model` | Not supported |
-| `opencode` | `--model provider/model` | Not supported |
+| `opencode` | Not supported; OpenCode 2 uses the model saved in OpenCode | Not supported |
 
 A launch value replaces the same flag in the configured command. An executor
 that cannot take an option fails the launch with an explanation rather than

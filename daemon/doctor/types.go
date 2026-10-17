@@ -209,8 +209,8 @@ type ExecutorCheck struct {
 	Summary               string                  `json:"summary"`
 	// OpenCode-only non-mutating probes. StatusUnknown means the probe was not
 	// run or failed ambiguously; never includes model lists or secrets.
-	ModelsStatus Status `json:"models_status,omitempty"`
-	DBPathStatus Status `json:"db_path_status,omitempty"`
+	ModelsStatus  Status `json:"models_status,omitempty"`
+	ServiceStatus Status `json:"service_status,omitempty"`
 }
 
 // TmuxInstallHints returns the one official tmux install command for this

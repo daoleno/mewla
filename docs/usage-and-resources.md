@@ -36,8 +36,8 @@ Per agent:
   reference estimates, not your subscription bill.
 - **Codex**: each request is priced at its own context size, so long-context
   tiers apply per request.
-- **OpenCode**: read from OpenCode's local database, the one
-  `opencode db path` reports (or `MEWLA_OPENCODE_DB`).
+- **OpenCode**: read from OpenCode 2's background service through its own
+  API (`opencode api`).
 - **Pi**: read from `~/.pi/agent/sessions` (or `$PI_CODING_AGENT_DIR/sessions`).
 
 ## Resources

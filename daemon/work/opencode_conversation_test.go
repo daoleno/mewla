@@ -1,133 +1,32 @@
 package work
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/opencodeapi/opencodeapitest"
 )
 
-func TestOpenCodeBindRejectsAmbiguousSameCWD(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_a", Directory: "/repo", CreatedMS: started.Add(1 * time.Second).UnixMilli(), UpdatedMS: started.Add(2 * time.Second).UnixMilli()},
-		{ID: "ses_b", Directory: "/repo", CreatedMS: started.Add(1 * time.Second).UnixMilli(), UpdatedMS: started.Add(3 * time.Second).UnixMilli()},
-	}, nil, nil)
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	reader := NewProviderConversationReader()
-	_, ok, err := reader.findOpenCodeSession(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok {
-		t.Fatal("ambiguous same-CWD candidates must refuse bind")
-	}
-}
-
-func TestOpenCodeExactAdmissionAndLifecycle(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	payload := "opencode-mewla-ack"
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_exact", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_exact", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + fmt.Sprintf("%d", started.Add(5*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_exact", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"` + payload + `"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"text","text":"ack"}`},
-		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"step-finish","reason":"stop"}`},
-	})
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	reader := NewProviderConversationReader()
-	got, err := reader.Load(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, WorkerProviderOpenCode, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.Available || got.SessionID != "ses_exact" {
-		t.Fatalf("conversation = %+v", got)
-	}
-	want := fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
-	if len(got.Events) == 0 || got.Events[0].AdmissionSHA256 != want {
-		t.Fatalf("admission events = %#v", got.Events)
-	}
-	if got.Activity == nil || got.Activity.Status != ProviderActivityCompleted {
-		t.Fatalf("activity = %+v", got.Activity)
-	}
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_exact", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
-		{ID: "ses_other", Directory: "/repo", CreatedMS: started.Add(30 * time.Second).UnixMilli(), UpdatedMS: started.Add(40 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_exact", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + fmt.Sprintf("%d", started.Add(5*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_exact", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"` + payload + `"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"text","text":"ack"}`},
-		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_exact", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"step-finish","reason":"stop"}`},
-	})
-	second, err := reader.Load(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, WorkerProviderOpenCode, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if second.SessionID != "ses_exact" {
-		t.Fatalf("cross-bound to %q", second.SessionID)
-	}
-}
-
 func TestHardenOpenCodeDelegatedCommand(t *testing.T) {
-	got, err := HardenOpenCodeDelegatedCommand("opencode")
-	if err != nil || got != "opencode --auto" {
-		t.Fatalf("got %q err=%v", got, err)
+	for _, tc := range []struct{ in, want string }{
+		{"opencode", "opencode --auto"},
+		{"opencode --auto", "opencode --auto"},
+		{"env PATH=/opt -- opencode", "env PATH=/opt -- opencode --auto"},
+		{"opencode --auto --pure", "opencode --auto --pure"},
+	} {
+		got, err := HardenOpenCodeDelegatedCommand(tc.in)
+		if err != nil || got != tc.want {
+			t.Fatalf("%q: got %q err=%v", tc.in, got, err)
+		}
 	}
-	got, err = HardenOpenCodeDelegatedCommand("opencode --auto")
-	if err != nil || got != "opencode --auto" {
-		t.Fatalf("idempotent got %q err=%v", got, err)
-	}
-	got, err = HardenOpenCodeDelegatedCommand("env PATH=/opt -- opencode")
-	if err != nil || got != "env PATH=/opt -- opencode --auto" {
-		t.Fatalf("env-wrapped got %q err=%v", got, err)
-	}
-	got, err = HardenOpenCodeDelegatedCommand("env PATH=/opt -- opencode --auto")
-	if err != nil || got != "env PATH=/opt -- opencode --auto" {
-		t.Fatalf("env-wrapped exact got %q err=%v", got, err)
-	}
-	if _, err := HardenOpenCodeDelegatedCommand("opencode --auto=false"); err == nil {
-		t.Fatal("expected --auto=false rejection")
-	}
-	if _, err := HardenOpenCodeDelegatedCommand("opencode --auto=true"); err == nil {
-		t.Fatal("expected --auto=true rejection")
-	}
-	if _, err := HardenOpenCodeDelegatedCommand("opencode --auto --auto=false"); err == nil {
-		t.Fatal("expected contradictory auto flags rejection")
-	}
-	if _, err := HardenOpenCodeDelegatedCommand("env PATH=/x -- opencode --auto=false"); err == nil {
-		t.Fatal("expected env-wrapped --auto=false rejection")
-	}
-	// Duplicate exact --auto remains enabled and unchanged.
-	got, err = HardenOpenCodeDelegatedCommand("opencode --auto --pure")
-	if err != nil || got != "opencode --auto --pure" {
-		t.Fatalf("duplicate-safe exact got %q err=%v", got, err)
+	for _, bad := range []string{"opencode --auto=false", "opencode --auto=true", "opencode --auto --auto=false"} {
+		if _, err := HardenOpenCodeDelegatedCommand(bad); err == nil {
+			t.Fatalf("%q must be rejected", bad)
+		}
 	}
 }
 
@@ -140,793 +39,243 @@ func TestOpenCodeOwnedSessionIDIgnoresContinue(t *testing.T) {
 	}
 }
 
-func TestOpenCodeMessageFinishSettlesWithoutStepFinish(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	payload := "opencode-finish-settle"
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_finish", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_finish", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_finish", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + fmt.Sprintf("%d", started.Add(4*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_finish", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"` + payload + `"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_finish", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_finish", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"text","text":"ack"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_finish")
+func TestDelegatedOpenCodeLaunchOwnsANewSession(t *testing.T) {
+	got, err := PrepareDelegatedCommand(WorkerProviderOpenCode, "opencode")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Activity == nil || got.Activity.Status != ProviderActivityCompleted {
-		t.Fatalf("message finish must settle: %+v", got.Activity)
+	id := OpenCodeOwnedSessionID(got)
+	if !strings.HasPrefix(got, "opencode --auto --session ses_") || id == "" {
+		t.Fatalf("delegated launch = %q", got)
 	}
-}
-
-func TestOpenCodeToolLifecycleAndFailure(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_tool", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(6 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_tool", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_tool", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"error","time":{"created":1,"completed":` + fmt.Sprintf("%d", started.Add(5*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_tool", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"run tool"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_tool", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_tool", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"c1","state":{"status":"completed","input":"{\"cmd\":\"true\"}","output":"ok"}}`},
-		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_tool", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"step-finish","reason":"error"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_tool")
-	if err != nil {
-		t.Fatal(err)
+	again, _ := PrepareDelegatedCommand(WorkerProviderOpenCode, "opencode")
+	if OpenCodeOwnedSessionID(again) == id {
+		t.Fatalf("two launches share session %s", id)
 	}
-	var tool *CodexConversationEvent
-	for i := range got.Events {
-		if got.Events[i].Kind == "tool_call" {
-			tool = &got.Events[i]
-			break
+	// An explicit session or --continue is kept, never doubled.
+	for _, command := range []string{"opencode --auto -s ses_keep", "opencode --auto --continue"} {
+		kept, err := PrepareDelegatedCommand(WorkerProviderOpenCode, command)
+		if err != nil || kept != command {
+			t.Fatalf("%q became %q err=%v", command, kept, err)
 		}
 	}
-	if tool == nil || tool.ToolName != "bash" || tool.Status != "completed" {
-		t.Fatalf("tool event = %#v", tool)
-	}
-	if got.Activity == nil || got.Activity.Status != ProviderActivityFailed {
-		t.Fatalf("failed finish = %+v", got.Activity)
-	}
-}
-
-func TestOpenCodeNonmatchingUserDoesNotAdmitPayload(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_other", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_other", CreatedMS: started.UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_other", CreatedMS: started.UnixMilli(), Data: `{"type":"text","text":"other-user-text"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_other")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := fmt.Sprintf("%x", sha256.Sum256([]byte("opencode-mewla-ack")))
-	for _, event := range got.Events {
-		if event.Kind == "user_message" && event.AdmissionSHA256 == want {
-			t.Fatalf("nonmatching user admitted exact digest: %#v", event)
-		}
+	// A resume token still lands on a hardened command without a second session.
+	resumed, err := WithProviderResumeToken(WorkerProviderOpenCode, "opencode --auto", "ses_old")
+	if err != nil || resumed != "opencode --auto -s ses_old" {
+		t.Fatalf("resume = %q err=%v", resumed, err)
 	}
 }
 
-func TestOpenCodeBindsRootNotChildSession(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_parent", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
-		{ID: "ses_child", Directory: "/repo", ParentID: "ses_parent", CreatedMS: started.Add(20 * time.Second).UnixMilli(), UpdatedMS: started.Add(30 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_parent", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_parent", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"parent-user"}`},
-	})
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
+func TestNewOpenCodeSessionIDMatchesOpenCodeFormat(t *testing.T) {
+	// OpenCode's own id for a session created at this instant starts eb59f479.
+	now := time.UnixMilli(1792249215078)
+	id := NewOpenCodeSessionID(now)
+	if !regexp.MustCompile(`^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$`).MatchString(id) {
+		t.Fatalf("id %q", id)
+	}
+	if !strings.HasPrefix(id, "ses_eb59f479") {
+		t.Fatalf("clock part of %q", id)
+	}
+	if later := NewOpenCodeSessionID(now.Add(time.Second)); later >= id {
+		t.Fatalf("newer session %q must sort before %q", later, id)
+	}
+}
 
-	// startedAt aligned with the child leaves the root window empty, but the
-	// parent row was created before the agent started: it provably belongs to
-	// a different conversation instance, so the origin gate refuses instead
-	// of projecting a previous thread into this agent. Children still never
-	// bind — the refusal is session_not_found, not a child binding.
+func openCodeWorker(cwd, command string, started time.Time) classifier.Worker {
+	return classifier.Worker{Cwd: cwd, Command: command, StartedAt: started}
+}
+
+func TestOpenCodeBindRejectsAmbiguousSameCWD(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+	for _, id := range []string{"ses_a", "ses_b"} {
+		service.PutSession(opencodeapitest.Session{ID: id, Directory: "/repo", Created: started.Add(time.Second), Updated: started.Add(2 * time.Second)})
+	}
+	_, ok, err := NewProviderConversationReader().findOpenCodeSession(openCodeWorker("/repo", "opencode", started), started.Add(time.Minute))
+	if err != nil || ok {
+		t.Fatalf("ambiguous same-CWD sessions must refuse bind: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestOpenCodeBindsRootNotChildAndNeverPreStart(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+	service.PutSession(opencodeapitest.Session{ID: "ses_prev", Directory: "/repo", Created: started.Add(-time.Hour), Updated: started.Add(time.Minute)})
+	service.PutMessage("ses_prev", opencodeapitest.User("msg_prev", started.Add(-time.Hour), "previous session history"))
 	reader := NewProviderConversationReader()
-	candidate, ok, err := reader.findOpenCodeSession(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started.Add(20 * time.Second),
-	}, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok {
-		t.Fatalf("pre-start root must not bind a known-start agent: %+v", candidate)
-	}
-
-	// startedAt zero: freshest root fallback still binds the parent, not the
-	// child, and not session_not_found.
-	reader = NewProviderConversationReader()
-	candidate, ok, err = reader.findOpenCodeSession(classifier.Worker{
-		Cwd:     "/repo",
-		Command: "opencode",
-	}, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || candidate.ID != "ses_parent" {
-		t.Fatalf("zero startedAt must fall back to root: ok=%v candidate=%+v", ok, candidate)
-	}
-}
-
-func TestOpenCodeBindFreshestRootWhenStartWindowMisses(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_old", Directory: "/repo", CreatedMS: started.Add(-30 * time.Minute).UnixMilli(), UpdatedMS: started.Add(-29 * time.Minute).UnixMilli()},
-		{ID: "ses_new", Directory: "/repo", CreatedMS: started.Add(20 * time.Minute).UnixMilli(), UpdatedMS: started.Add(21 * time.Minute).UnixMilli()},
-	}, nil, nil)
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	reader := NewProviderConversationReader()
-	candidate, ok, err := reader.findOpenCodeSession(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, started.Add(22*time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || candidate.ID != "ses_new" {
-		t.Fatalf("window miss must bind freshest root: ok=%v candidate=%+v", ok, candidate)
-	}
-	// A newer root must not replace the pinned binding mid-subscription.
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_old", Directory: "/repo", CreatedMS: started.Add(-30 * time.Minute).UnixMilli(), UpdatedMS: started.Add(-29 * time.Minute).UnixMilli()},
-		{ID: "ses_new", Directory: "/repo", CreatedMS: started.Add(20 * time.Minute).UnixMilli(), UpdatedMS: started.Add(21 * time.Minute).UnixMilli()},
-		{ID: "ses_latest", Directory: "/repo", CreatedMS: started.Add(40 * time.Minute).UnixMilli(), UpdatedMS: started.Add(41 * time.Minute).UnixMilli()},
-	}, nil, nil)
-	candidate, ok, err = reader.findOpenCodeSession(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, started.Add(45*time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok || candidate.ID != "ses_new" {
-		t.Fatalf("pinned binding must not cross-bind: ok=%v candidate=%+v", ok, candidate)
-	}
-}
-
-// A newly created Mewla OpenCode session races its own provider row: OpenCode
-// writes the session row lazily, so early polls see only the previous
-// session's row. A row created before the agent started provably belongs to
-// another conversation and must never bind — not even as the freshest root —
-// and once the agent's own row appears it must win over the older row even
-// when the older row was updated more recently.
-func TestOpenCodeNewSessionNeverBindsPreStartRows(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_prev", Directory: "/repo", CreatedMS: started.Add(-time.Hour).UnixMilli(), UpdatedMS: started.Add(time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p_prev", MessageID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"previous session history"}`},
-	})
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	reader := NewProviderConversationReader()
-	worker := classifier.Worker{Cwd: "/repo", Command: "opencode", StartedAt: started}
+	worker := openCodeWorker("/repo", "opencode", started)
 
 	conversation, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(5*time.Second))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if conversation.Available {
-		t.Fatalf("new session must not project a pre-start row: %+v", conversation)
+	if err != nil || conversation.Available || conversation.Reason != "session_not_found" {
+		t.Fatalf("pre-start session must not bind: %+v err=%v", conversation, err)
 	}
 
-	// The agent's own row appears. ses_prev stays more recently updated, so a
-	// freshest-root rule alone would still pick the wrong thread.
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_prev", Directory: "/repo", CreatedMS: started.Add(-time.Hour).UnixMilli(), UpdatedMS: started.Add(time.Minute).UnixMilli()},
-		{ID: "ses_own", Directory: "/repo", CreatedMS: started.Add(2 * time.Second).UnixMilli(), UpdatedMS: started.Add(3 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_own_user", SessionID: "ses_own", CreatedMS: started.Add(2500 * time.Millisecond).UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p_prev", MessageID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"previous session history"}`},
-		{ID: "p_own", MessageID: "msg_own_user", SessionID: "ses_own", CreatedMS: started.Add(2500 * time.Millisecond).UnixMilli(), Data: `{"type":"text","text":"own session history"}`},
-	})
+	service.PutSession(opencodeapitest.Session{ID: "ses_own", Directory: "/repo", Created: started.Add(2 * time.Second), Updated: started.Add(3 * time.Second)})
+	service.PutSession(opencodeapitest.Session{ID: "ses_child", ParentID: "ses_own", Directory: "/repo", Created: started.Add(2 * time.Second), Updated: started.Add(4 * time.Second)})
+	service.PutMessage("ses_own", opencodeapitest.User("msg_own", started.Add(2*time.Second), "own session history"))
 	conversation, err = reader.Load(worker, WorkerProviderOpenCode, started.Add(10*time.Second))
+	if err != nil || !conversation.Available || conversation.SessionID != "ses_own" {
+		t.Fatalf("own root must bind: %+v err=%v", conversation, err)
+	}
+	if len(conversation.Events) != 1 || conversation.Events[0].Body != "own session history" {
+		t.Fatalf("events %#v", conversation.Events)
+	}
+}
+
+func TestOpenCodeLaunchSessionBindsOnceOpenCodeCreatesIt(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+	reader := NewProviderConversationReader()
+	worker := openCodeWorker("/repo", "opencode --auto --session ses_mine", started)
+	// A concurrent session in the same directory never steals the binding.
+	service.PutSession(opencodeapitest.Session{ID: "ses_other", Directory: "/repo", Created: started.Add(time.Second), Updated: started.Add(time.Second)})
+
+	conversation, _ := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Second))
+	if conversation.Available {
+		t.Fatalf("launch session does not exist yet: %+v", conversation)
+	}
+	service.PutSession(opencodeapitest.Session{ID: "ses_mine", Directory: "/repo", Created: started.Add(2 * time.Second), Updated: started.Add(2 * time.Second)})
+	service.PutMessage("ses_mine", opencodeapitest.User("msg_1", started.Add(2*time.Second), "task"))
+	conversation, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(3*time.Second))
+	if err != nil || conversation.SessionID != "ses_mine" || len(conversation.Events) != 1 {
+		t.Fatalf("launch session must bind: %+v err=%v", conversation, err)
+	}
+}
+
+func TestOpenCodeServiceUnavailableIsAReasonNotAnError(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	service.Unavailable = true
+	conversation, err := NewProviderConversationReader().Load(openCodeWorker("/repo", "opencode", time.Now()), WorkerProviderOpenCode, time.Now())
+	if err != nil || conversation.Reason != "service_unavailable" {
+		t.Fatalf("got %+v err=%v", conversation, err)
+	}
+}
+
+func TestOpenCodeProjectsTurnAndSettlesOnIdle(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+	at := func(seconds int) time.Time { return started.Add(time.Duration(seconds) * time.Second) }
+	service.PutSession(opencodeapitest.Session{ID: "ses_1", Directory: "/repo", Created: started, Updated: at(1)})
+	service.PutMessage("ses_1", opencodeapitest.User("msg_u", at(1), "fix it"))
+	service.PutMessage("ses_1", opencodeapitest.Assistant("msg_a", at(2), time.Time{},
+		opencodeapitest.Reasoning("thinking"),
+		opencodeapitest.Tool("call_1", "bash", "running", map[string]any{"command": "make"}, ""),
+		opencodeapitest.Tool("call_2", "read", "streaming", map[string]any{"path": "a"}, "")))
+	reader := NewProviderConversationReader()
+	worker := openCodeWorker("/repo", "opencode -s ses_1", started)
+
+	live, err := reader.Load(worker, WorkerProviderOpenCode, at(3))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !conversation.Available || conversation.SessionID != "ses_own" {
-		t.Fatalf("own row must bind once written: available=%v session=%q", conversation.Available, conversation.SessionID)
+	if live.Activity == nil || live.Activity.Status != ProviderActivityRunning {
+		t.Fatalf("running turn activity %+v", live.Activity)
 	}
-	for _, event := range conversation.Events {
-		if event.Body == "previous session history" {
-			t.Fatalf("previous session history leaked into new session: %#v", conversation.Events)
+	if len(live.Events) != 4 || !live.Events[1].Partial || live.Events[2].Status != "running" || live.Events[3].Input != `{"path":"a"}` {
+		t.Fatalf("live events %#v", live.Events)
+	}
+
+	service.PutMessage("ses_1", opencodeapitest.Assistant("msg_a", at(2), at(4),
+		opencodeapitest.Reasoning("thinking"),
+		opencodeapitest.Tool("call_1", "bash", "completed", map[string]any{"command": "make"}, "built"),
+		opencodeapitest.Tool("call_2", "read", "error", map[string]any{"path": "a"}, "no such file")))
+	service.PutMessage("ses_1", opencodeapitest.Assistant("msg_b", at(5), at(6), opencodeapitest.Text("done")))
+	service.PutMessage("ses_1", opencodeapitest.Idle("msg_i", at(6), "succeeded"))
+	done, err := reader.Load(worker, WorkerProviderOpenCode, at(7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Activity == nil || done.Activity.Status != ProviderActivityCompleted {
+		t.Fatalf("settled activity %+v", done.Activity)
+	}
+	want := []struct{ kind, status, body string }{
+		{"user_message", "", "fix it"}, {"reasoning", "", "thinking"},
+		{"tool_call", "completed", ""}, {"tool_call", "failed", ""}, {"assistant_message", "", "done"},
+	}
+	if len(done.Events) != len(want) {
+		t.Fatalf("events %#v", done.Events)
+	}
+	for index, event := range done.Events {
+		if event.Kind != want[index].kind || event.Status != want[index].status || event.Partial ||
+			(want[index].body != "" && event.Body != want[index].body) {
+			t.Fatalf("event %d = %#v", index, event)
 		}
 	}
-}
-
-// A discovered pin established while started-at evidence was unavailable must
-// release as soon as a known start contradicts it — including through the
-// unchanged-stamp fast path — so the subscription self-heals to the agent's
-// own row instead of serving another conversation forever.
-func TestOpenCodePinReleasesWhenStartEvidenceArrivesLate(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_prev", Directory: "/repo", CreatedMS: started.Add(-time.Hour).UnixMilli(), UpdatedMS: started.Add(-30 * time.Minute).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p_prev", MessageID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"previous session history"}`},
-	})
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	reader := NewProviderConversationReader()
-
-	// No start evidence yet: legacy fallback binds the freshest root.
-	conversation, err := reader.Load(classifier.Worker{
-		Cwd:     "/repo",
-		Command: "opencode",
-	}, WorkerProviderOpenCode, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !conversation.Available || conversation.SessionID != "ses_prev" {
-		t.Fatalf("zero-start fallback must bind freshest root: %+v", conversation)
-	}
-
-	// Start evidence arrives with the DB stamp unchanged: the fast path must
-	// not keep serving the pre-start pin.
-	conversation, err = reader.Load(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, WorkerProviderOpenCode, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if conversation.Available {
-		t.Fatalf("late start evidence must release the pre-start pin: %+v", conversation)
-	}
-
-	// The agent's own row appears: the subscription heals onto it.
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_prev", Directory: "/repo", CreatedMS: started.Add(-time.Hour).UnixMilli(), UpdatedMS: started.Add(-30 * time.Minute).UnixMilli()},
-		{ID: "ses_own", Directory: "/repo", CreatedMS: started.Add(time.Second).UnixMilli(), UpdatedMS: started.Add(2 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_own_user", SessionID: "ses_own", CreatedMS: started.Add(1500 * time.Millisecond).UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p_prev", MessageID: "msg_prev_user", SessionID: "ses_prev", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"previous session history"}`},
-		{ID: "p_own", MessageID: "msg_own_user", SessionID: "ses_own", CreatedMS: started.Add(1500 * time.Millisecond).UnixMilli(), Data: `{"type":"text","text":"own session history"}`},
-	})
-	conversation, err = reader.Load(classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode",
-		StartedAt: started,
-	}, WorkerProviderOpenCode, started.Add(2*time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !conversation.Available || conversation.SessionID != "ses_own" {
-		t.Fatalf("released pin must rebind to the agent's own row: available=%v session=%q", conversation.Available, conversation.SessionID)
+	if done.Events[2].Output != "built" || done.Events[3].Output != "no such file" {
+		t.Fatalf("tool outputs %#v", done.Events[2:4])
 	}
 }
 
-// An explicit -s ses_* launch token declares ownership: a resumed thread
-// legitimately predates the Mewla agent process, so the origin gate must never
-// release a launch-owned binding.
-func TestOpenCodeLaunchTokenOwnsPreStartRow(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_resumed", Directory: "/repo", CreatedMS: started.Add(-time.Hour).UnixMilli(), UpdatedMS: started.Add(-30 * time.Minute).UnixMilli()},
-		{ID: "ses_other", Directory: "/repo", CreatedMS: started.Add(time.Second).UnixMilli(), UpdatedMS: started.Add(2 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_resumed_user", SessionID: "ses_resumed", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"role":"user"}`},
-	}, []openCodePartSeed{
-		{ID: "p_resumed", MessageID: "msg_resumed_user", SessionID: "ses_resumed", CreatedMS: started.Add(-50 * time.Minute).UnixMilli(), Data: `{"type":"text","text":"resumed history"}`},
-	})
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
-	reader := NewProviderConversationReader()
-	worker := classifier.Worker{
-		Cwd:       "/repo",
-		Command:   "opencode -s ses_resumed",
-		StartedAt: started,
-	}
-	for attempt := 0; attempt < 2; attempt++ {
-		conversation, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))
+func TestOpenCodeIdleOutcomeMapsFailureAndInterrupt(t *testing.T) {
+	for outcome, want := range map[string]ProviderActivityStatus{"failed": ProviderActivityFailed, "interrupted": ProviderActivityInterrupted} {
+		service := opencodeapitest.Install(t)
+		started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
+		service.PutSession(opencodeapitest.Session{ID: "ses_x", Directory: "/repo", Created: started, Updated: started})
+		service.PutMessage("ses_x", opencodeapitest.User("msg_u", started, "go"))
+		service.PutMessage("ses_x", opencodeapitest.Assistant("msg_a", started, time.Time{},
+			opencodeapitest.Tool("call", "bash", "running", map[string]any{}, "")))
+		service.PutMessage("ses_x", opencodeapitest.Idle("msg_i", started.Add(time.Second), outcome))
+		conversation, err := parseOpenCodeConversation("ses_x")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !conversation.Available || conversation.SessionID != "ses_resumed" {
-			t.Fatalf("launch token must own its pre-start row (attempt %d): available=%v session=%q", attempt, conversation.Available, conversation.SessionID)
+		if conversation.Activity == nil || conversation.Activity.Status != want {
+			t.Fatalf("%s: activity %+v", outcome, conversation.Activity)
+		}
+		if tool := conversation.Events[1]; tool.Partial || tool.Status != "interrupted" {
+			t.Fatalf("%s: unfinished tool %#v", outcome, tool)
 		}
 	}
 }
 
-func TestOpenCodeSubtaskAndToolStateProjection(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
+func TestOpenCodeCacheSkipsAPIWhenStampUnchangedAndRefreshesTail(t *testing.T) {
+	service := opencodeapitest.Install(t)
 	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_sub", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(10 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_sub", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_sub", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + fmt.Sprintf("%d", started.Add(9*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_sub", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"explore"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_sub", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_sub", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"subtask","prompt":"explore data flow","description":"Explore terminal data flow","agent":"explore","command":"explore"}`},
-		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_sub", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"c_pending","state":{"status":"pending","input":{"command":"true"},"raw":""}}`},
-		{ID: "p5", MessageID: "msg_asst", SessionID: "ses_sub", CreatedMS: started.Add(5 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"c_failed","state":{"status":"error","input":{"command":"boom"},"error":"boom"}}`},
-		{ID: "p6", MessageID: "msg_asst", SessionID: "ses_sub", CreatedMS: started.Add(6 * time.Second).UnixMilli(), Data: `{"type":"step-finish","reason":"stop"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_sub")
-	if err != nil {
-		t.Fatal(err)
+	service.PutSession(opencodeapitest.Session{ID: "ses_c", Directory: "/repo", Created: started, Updated: started})
+	for index := range 120 {
+		id := "msg_" + strings.Repeat("0", 3-len(itoa(index))) + itoa(index)
+		service.PutMessage("ses_c", opencodeapitest.User(id, started.Add(time.Duration(index)*time.Millisecond), "m"+itoa(index)))
 	}
-	var subtask *CodexConversationEvent
-	var pending *CodexConversationEvent
-	var failed *CodexConversationEvent
-	for i := range got.Events {
-		switch got.Events[i].Kind {
-		case "tool_call":
-			switch got.Events[i].ToolName {
-			case "subtask":
-				subtask = &got.Events[i]
-			case "bash":
-				if got.Events[i].CallID == "c_pending" {
-					pending = &got.Events[i]
-				} else if got.Events[i].CallID == "c_failed" {
-					failed = &got.Events[i]
-				}
-			}
-		}
-	}
-	if subtask == nil || subtask.Status != "completed" || subtask.Partial {
-		t.Fatalf("subtask event = %#v", subtask)
-	}
-	if pending == nil || pending.Status != "pending" || pending.Partial {
-		t.Fatalf("pending tool event = %#v", pending)
-	}
-	if failed == nil || failed.Status != "failed" || failed.Partial {
-		t.Fatalf("error tool event = %#v", failed)
-	}
-	if got.Activity == nil || got.Activity.Status != ProviderActivityCompleted {
-		t.Fatalf("activity = %+v", got.Activity)
-	}
-}
-
-func TestOpenCodeSubtaskRunningWhileStepsOpen(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 6, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_live", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_live", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_live", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant"}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_live", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"live"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_live", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_live", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"subtask","prompt":"still running","agent":"explore"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_live")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var subtask *CodexConversationEvent
-	for i := range got.Events {
-		if got.Events[i].Kind == "tool_call" && got.Events[i].ToolName == "subtask" {
-			subtask = &got.Events[i]
-			break
-		}
-	}
-	if subtask == nil || subtask.Status != "running" || !subtask.Partial {
-		t.Fatalf("in-flight subtask event = %#v", subtask)
-	}
-	if got.Activity == nil || got.Activity.Status != ProviderActivityRunning {
-		t.Fatalf("activity = %+v", got.Activity)
-	}
-}
-
-// openCodeUpstreamSessions is a helper around real OpenCode v1.18.x shapes:
-// part.data carries the Part union with type discriminator and tool state
-// discriminated by status (pending/running/completed/error), message.data
-// carries role + optional finish/time.completed, and timestamps are
-// milliseconds. Both polls below rewrite the same part IDs to simulate the
-// watcher observing the same live session across polls and restarts.
-func TestOpenCodeRealUpstreamToolShapesAcrossPolls(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 7, 0, 0, 10, 0, time.UTC)
-	session := []openCodeSessionSeed{
-		{ID: "ses_up", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(9 * time.Second).UnixMilli()},
-	}
-	messages := []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_up", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user","time":{"created":1}}`},
-		{ID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","time":{"created":1}}`},
-	}
-	// Poll 1: in-flight turn with interleaved reasoning/text and two concurrent
-	// tools (one running, one pending) using the exact upstream state shapes.
-	// A live OpenCode turn has no finish/completed on the assistant message row
-	// while parts are still streaming.
-	inFlightParts := []openCodePartSeed{
-		{ID: "prt_user", MessageID: "msg_user", SessionID: "ses_up", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"run both tools"}`},
-		{ID: "prt_start", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"snapshot":"8ac09ffb","type":"step-start"}`},
-		{ID: "prt_reason", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"reasoning","text":"thinking hard","time":{"start":1,"end":2}}`},
-		{ID: "prt_text1", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"text","text":"starting"}`},
-		{ID: "prt_tool_a", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(5 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"call_00_a","state":{"metadata":{"output":""},"status":"running","input":{"command":"true"},"time":{"start":1}}}`},
-		{ID: "prt_tool_b", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(6 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"read","callID":"call_00_b","state":{"status":"pending","input":{"filePath":"/repo/a.txt"},"raw":""}}`},
-		{ID: "prt_text2", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(7 * time.Second).UnixMilli(), Data: `{"type":"text","text":"between tools"}`},
-	}
-	// Poll 2: same part IDs settled: tool a completed with output/title,
-	// tool b failed carrying state.error (no state.output), an unknown part
-	// type plus a snapshot part that must not drop surrounding messages, and a
-	// step-finish closing the turn. The assistant message now carries the
-	// authoritative finish and time.completed.
-	settledMessages := []openCodeMessageSeed{
-		messages[0],
-		{ID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + intString(started.Add(8*time.Second).UnixMilli()) + `}}`},
-	}
-	settledParts := []openCodePartSeed{
-		inFlightParts[0], inFlightParts[1], inFlightParts[2], inFlightParts[3],
-		{ID: "prt_tool_a", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(5 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"call_00_a","state":{"status":"completed","input":{"command":"true"},"output":"ok\n","title":"Run command: true","metadata":{"output":"ok\n","exit":0,"truncated":false},"time":{"start":1,"end":2}}}`},
-		{ID: "prt_tool_b", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(6 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"read","callID":"call_00_b","state":{"status":"error","input":{"filePath":"/repo/a.txt"},"error":"Error: ENOENT: no such file or directory","metadata":{"output":""},"time":{"start":1,"end":2}}}`},
-		{ID: "prt_text2", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(7 * time.Second).UnixMilli(), Data: `{"type":"text","text":"between tools"}`},
-		{ID: "prt_unknown", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(8 * time.Second).UnixMilli(), Data: `{"type":"compaction","auto":false}`},
-		{ID: "prt_snapshot", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(9 * time.Second).UnixMilli(), Data: `{"snapshot":"8ac09ffb","type":"snapshot"}`},
-		{ID: "prt_finish", MessageID: "msg_asst", SessionID: "ses_up", CreatedMS: started.Add(10 * time.Second).UnixMilli(), Data: `{"reason":"stop","snapshot":"8ac09ffb","type":"step-finish","tokens":{"total":10,"input":5,"output":5,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0.0001}`},
-	}
-
-	createOpenCodeFixtureDB(t, dbPath, session, messages, inFlightParts)
-	inFlight, err := parseOpenCodeConversation(dbPath, "ses_up")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Restart/upsert simulation: a fresh read of the same session (new DB file
-	// bytes, same part IDs) must not duplicate events and must preserve stable
-	// identity, then the settled snapshot replaces the in-flight projection.
-	createOpenCodeFixtureDB(t, dbPath, session, messages, inFlightParts)
-	inFlightSecond, err := parseOpenCodeConversation(dbPath, "ses_up")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(inFlight.Events) != len(inFlightSecond.Events) {
-		t.Fatalf("restart duplicate drift: %d vs %d events", len(inFlight.Events), len(inFlightSecond.Events))
-	}
-	for i := range inFlight.Events {
-		if inFlight.Events[i].ID != inFlightSecond.Events[i].ID {
-			t.Fatalf("restart identity drift at %d: %s vs %s", i, inFlight.Events[i].ID, inFlightSecond.Events[i].ID)
-		}
-	}
-
-	eventByCall := map[string]CodexConversationEvent{}
-	kindCounts := map[string]int{}
-	for _, event := range inFlight.Events {
-		kindCounts[event.Kind]++
-		if event.Kind == "tool_call" {
-			eventByCall[event.CallID] = event
-		}
-	}
-	if kindCounts["tool_call"] != 2 {
-		t.Fatalf("in-flight tool_call events = %d, want 2: %#v", kindCounts["tool_call"], inFlight.Events)
-	}
-	if kindCounts["reasoning"] != 1 || kindCounts["assistant_message"] != 2 || kindCounts["user_message"] != 1 {
-		t.Fatalf("in-flight kinds = %#v", kindCounts)
-	}
-	runningTool := eventByCall["call_00_a"]
-	if runningTool.Status != "running" || !runningTool.Partial || runningTool.Input != `{"command":"true"}` {
-		t.Fatalf("running tool = %#v", runningTool)
-	}
-	pendingTool := eventByCall["call_00_b"]
-	if pendingTool.Status != "pending" || !pendingTool.Partial || pendingTool.ToolName != "read" {
-		t.Fatalf("pending tool = %#v", pendingTool)
-	}
-	if inFlight.Activity == nil || inFlight.Activity.Status != ProviderActivityRunning {
-		t.Fatalf("in-flight activity = %+v", inFlight.Activity)
-	}
-
-	createOpenCodeFixtureDB(t, dbPath, session, settledMessages, settledParts)
-	settled, err := parseOpenCodeConversation(dbPath, "ses_up")
-	if err != nil {
-		t.Fatal(err)
-	}
-	settledByCall := map[string]CodexConversationEvent{}
-	settledTexts := 0
-	for _, event := range settled.Events {
-		if event.Kind == "tool_call" {
-			settledByCall[event.CallID] = event
-		}
-		if event.Kind == "assistant_message" {
-			settledTexts++
-		}
-	}
-	completed := settledByCall["call_00_a"]
-	if completed.Status != "completed" || completed.Partial {
-		t.Fatalf("completed tool = %#v", completed)
-	}
-	if completed.Output != "ok" {
-		t.Fatalf("completed output = %q, want %q", completed.Output, "ok")
-	}
-	failed := settledByCall["call_00_b"]
-	if failed.Status != "failed" || failed.Partial {
-		t.Fatalf("error tool = %#v", failed)
-	}
-	if !strings.Contains(failed.Output, "ENOENT") {
-		t.Fatalf("error tool must surface state.error as output, got %q", failed.Output)
-	}
-	// Unknown/snapshot parts must fail closed: skipped without dropping the
-	// interleaved assistant text or any tool event.
-	if settledTexts != 2 {
-		t.Fatalf("settled assistant texts = %d, want 2: %#v", settledTexts, settled.Events)
-	}
-	if len(settled.Events) != len(inFlight.Events) {
-		t.Fatalf("settled event count = %d, want %d (no dup/regression): %#v", len(settled.Events), len(inFlight.Events), settled.Events)
-	}
-	if settled.Activity == nil || settled.Activity.Status != ProviderActivityCompleted {
-		t.Fatalf("settled activity = %+v", settled.Activity)
-	}
-}
-
-func TestOpenCodeMalformedToolPartFailsClosed(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 8, 7, 0, 0, 10, 0, time.UTC)
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_mal", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(5 * time.Second).UnixMilli()},
-	}, []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_mal", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user"}`},
-		{ID: "msg_asst", SessionID: "ses_mal", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + intString(started.Add(4*time.Second).UnixMilli()) + `}}`},
-	}, []openCodePartSeed{
-		{ID: "p1", MessageID: "msg_user", SessionID: "ses_mal", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"type":"text","text":"before"}`},
-		{ID: "p2", MessageID: "msg_asst", SessionID: "ses_mal", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `not json at all`},
-		{ID: "p3", MessageID: "msg_asst", SessionID: "ses_mal", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"tool","tool":"bash","callID":"c1","state":{"status":"completed","input":{"command":"true"},"output":"ok"}}`},
-		{ID: "p4", MessageID: "msg_asst", SessionID: "ses_mal", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"text","text":"after"}`},
-	})
-	got, err := parseOpenCodeConversation(dbPath, "ses_mal")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var tool *CodexConversationEvent
-	for i := range got.Events {
-		if got.Events[i].Kind == "tool_call" {
-			tool = &got.Events[i]
-		}
-	}
-	if tool == nil || tool.Status != "completed" {
-		t.Fatalf("malformed part must not drop the tool event: %#v", got.Events)
-	}
-	texts := 0
-	for _, event := range got.Events {
-		if event.Kind == "assistant_message" && event.Body == "after" {
-			texts++
-		}
-	}
-	if texts != 1 {
-		t.Fatalf("surrounding text dropped by malformed part: %#v", got.Events)
-	}
-}
-
-type openCodeSessionSeed struct {
-	ID, Directory string
-	ParentID      string
-	CreatedMS     int64
-	UpdatedMS     int64
-}
-
-type openCodeMessageSeed struct {
-	ID, SessionID, Data string
-	CreatedMS           int64
-}
-
-type openCodePartSeed struct {
-	ID, MessageID, SessionID, Data string
-	CreatedMS                      int64
-}
-
-func createOpenCodeFixtureDB(t *testing.T, path string, sessions []openCodeSessionSeed, messages []openCodeMessageSeed, parts []openCodePartSeed) {
-	t.Helper()
-	if _, err := exec.LookPath("sqlite3"); err != nil {
-		t.Skip("sqlite3 required")
-	}
-	_ = os.Remove(path)
-	var b strings.Builder
-	b.WriteString(`
-CREATE TABLE project (id TEXT PRIMARY KEY);
-CREATE TABLE session (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL,
-  parent_id TEXT,
-  slug TEXT NOT NULL,
-  directory TEXT NOT NULL,
-  title TEXT NOT NULL,
-  version TEXT NOT NULL,
-  time_created INTEGER NOT NULL,
-  time_updated INTEGER NOT NULL
-);
-CREATE TABLE message (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  time_created INTEGER NOT NULL,
-  time_updated INTEGER NOT NULL,
-  data TEXT NOT NULL
-);
-CREATE TABLE part (
-  id TEXT PRIMARY KEY,
-  message_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  time_created INTEGER NOT NULL,
-  time_updated INTEGER NOT NULL,
-  data TEXT NOT NULL
-);
-INSERT INTO project(id) VALUES ('proj');
-`)
-	for _, session := range sessions {
-		parentValue := "NULL"
-		if strings.TrimSpace(session.ParentID) != "" {
-			parentValue = sqliteStringLiteral(session.ParentID)
-		}
-		fmt.Fprintf(&b,
-			"INSERT INTO session(id, project_id, parent_id, slug, directory, title, version, time_created, time_updated) VALUES (%s, 'proj', %s, 'slug', %s, 't', '1', %d, %d);\n",
-			sqliteStringLiteral(session.ID),
-			parentValue,
-			sqliteStringLiteral(session.Directory),
-			session.CreatedMS,
-			session.UpdatedMS,
-		)
-	}
-	for _, message := range messages {
-		fmt.Fprintf(&b,
-			"INSERT INTO message(id, session_id, time_created, time_updated, data) VALUES (%s, %s, %d, %d, %s);\n",
-			sqliteStringLiteral(message.ID),
-			sqliteStringLiteral(message.SessionID),
-			message.CreatedMS,
-			message.CreatedMS,
-			sqliteStringLiteral(message.Data),
-		)
-	}
-	for _, part := range parts {
-		fmt.Fprintf(&b,
-			"INSERT INTO part(id, message_id, session_id, time_created, time_updated, data) VALUES (%s, %s, %s, %d, %d, %s);\n",
-			sqliteStringLiteral(part.ID),
-			sqliteStringLiteral(part.MessageID),
-			sqliteStringLiteral(part.SessionID),
-			part.CreatedMS,
-			part.CreatedMS,
-			sqliteStringLiteral(part.Data),
-		)
-	}
-	cmd := exec.Command("sqlite3", path)
-	cmd.Stdin = strings.NewReader(b.String())
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("sqlite3 fixture: %v: %s", err, out)
-	}
-}
-
-func TestOpenCodeSettleReportsPartialFlipsAsChanged(t *testing.T) {
-	started := time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC)
-	session := []openCodeSessionSeed{
-		{ID: "ses_par", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(9 * time.Second).UnixMilli()},
-	}
-	inFlightMessages := []openCodeMessageSeed{
-		{ID: "msg_user", SessionID: "ses_par", CreatedMS: started.Add(time.Second).UnixMilli(), Data: `{"role":"user","time":{"created":1}}`},
-		{ID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","time":{"created":1}}`},
-	}
-	inFlightParts := []openCodePartSeed{
-		{ID: "prt_start", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(3 * time.Second).UnixMilli(), Data: `{"type":"step-start"}`},
-		{ID: "prt_text2", MessageID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(4 * time.Second).UnixMilli(), Data: `{"type":"text","text":"streaming text"}`},
-	}
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	createOpenCodeFixtureDB(t, dbPath, session, inFlightMessages, inFlightParts)
-	t.Setenv("MEWLA_OPENCODE_DB", dbPath)
 	reader := NewProviderConversationReader()
-	worker := classifier.Worker{Cwd: "/repo", Command: "opencode", StartedAt: started}
-	first, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, event := range first.Events {
-		if event.Kind == "assistant_message" && !event.Partial {
-			t.Fatalf("in-flight text must be partial: %#v", event)
-		}
+	worker := openCodeWorker("/repo", "opencode -s ses_c", started)
+	first, err := reader.Load(worker, WorkerProviderOpenCode, started)
+	if err != nil || len(first.Events) != 120 {
+		t.Fatalf("first load %d events err=%v", len(first.Events), err)
 	}
 	version := reader.ConversationVersion()
-	if version == 0 {
-		t.Fatal("no content version")
+
+	calls := service.CallCount("session.message.list") + service.CallCount("session.get")
+	if _, err := reader.Load(worker, WorkerProviderOpenCode, started); err != nil {
+		t.Fatal(err)
 	}
-	// The turn settles: only the assistant message row changes (finish).
-	settledMessages := []openCodeMessageSeed{
-		inFlightMessages[0],
-		{ID: "msg_asst", SessionID: "ses_par", CreatedMS: started.Add(2 * time.Second).UnixMilli(), Data: `{"role":"assistant","finish":"stop","time":{"created":1,"completed":` + fmt.Sprintf("%d", started.Add(6*time.Second).UnixMilli()) + `}}`},
+	if got := service.CallCount("session.message.list") + service.CallCount("session.get"); got != calls {
+		t.Fatalf("unchanged stamp made %d API calls", got-calls)
 	}
-	createOpenCodeFixtureDB(t, dbPath, session, settledMessages, inFlightParts)
-	second, err := reader.Load(worker, WorkerProviderOpenCode, started.Add(time.Minute))
+	if reader.ConversationVersion() != version {
+		t.Fatal("unchanged poll must keep the content version")
+	}
+
+	// A new message and a reverted tail message: one newest-first page.
+	pages := service.CallCount("session.message.list")
+	service.RemoveMessage("ses_c", "msg_119")
+	service.PutMessage("ses_c", opencodeapitest.User("msg_120", started.Add(time.Second), "newest"))
+	next, err := reader.Load(worker, WorkerProviderOpenCode, started)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got := service.CallCount("session.message.list") - pages; got != 1 {
+		t.Fatalf("tail refresh used %d pages", got)
+	}
+	if len(next.Events) != 120 || next.Events[119].Body != "newest" || next.Events[118].Body != "m118" {
+		t.Fatalf("refreshed tail %d events, last %#v", len(next.Events), next.Events[len(next.Events)-1])
+	}
 	if reader.ConversationVersion() == version {
-		t.Fatal("settle must bump the content version")
+		t.Fatal("changed content must advance the version")
 	}
-	for _, event := range second.Events {
-		if event.Kind == "assistant_message" && event.Partial {
-			t.Fatalf("settled text must not be partial: %#v", event)
-		}
-	}
-	// The settle clears Partial on events whose rows did not change; the
-	// changed-id report must include them so the memoized delta reaches the App.
-	changed := map[string]bool{}
-	for _, id := range reader.ChangedEventIDs() {
-		changed[id] = true
-	}
-	for _, event := range first.Events {
-		if event.Kind == "assistant_message" && !changed[event.ID] {
-			t.Fatalf("settled Partial flip not reported as changed: %q", event.ID)
-		}
+	changed := strings.Join(reader.ChangedEventIDs(), ",")
+	if !strings.Contains(changed, "msg_120") || !strings.Contains(changed, "msg_119") {
+		t.Fatalf("changed ids %q", changed)
 	}
 }
 
-// TestOpenCodeReaderPreservesRawProviderUserBytes proves the provider
-// projection applies no trim or composer-artifact reversal: the Body and
-// admission digest are exactly the persisted bytes for indentation, trailing
-// whitespace, tabs/newlines, a large paste-summary-shaped text (the shape the
-// composer actually persists), and a large manually typed/API text. Admission
-// normalization lives only on the send side, never on provider evidence.
-func TestOpenCodeReaderPreservesRawProviderUserBytes(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opencode.db")
-	started := time.Date(2026, 9, 10, 14, 0, 0, 0, time.UTC)
-	cases := []struct {
-		name string
-		text string
-	}{
-		{"leading indentation", "    indented first line\nsecond line"},
-		{"double trailing spaces", "line one\nline two  "},
-		{"tab then newline then space", "line one\t\n "},
-		{"large paste-summary shape", "Fix the task.\n\n" + strings.Repeat("context line\n", 12) + "run --lease 300 "},
-		{"large manually typed text", "Typed directly.\n\n" + strings.Repeat("detail line\n", 12) + "end --lease 300"},
-		{"embedded CRLF", "first\r\nsecond\r\n"},
-	}
-	messages := make([]openCodeMessageSeed, 0, len(cases))
-	parts := make([]openCodePartSeed, 0, len(cases))
-	for index, test := range cases {
-		messageID := fmt.Sprintf("msg_raw_%d", index)
-		messages = append(messages, openCodeMessageSeed{
-			ID: messageID, SessionID: "ses_raw", CreatedMS: started.Add(time.Duration(index) * time.Second).UnixMilli(), Data: `{"role":"user"}`,
-		})
-		parts = append(parts, openCodePartSeed{
-			ID: fmt.Sprintf("p_raw_%d", index), MessageID: messageID, SessionID: "ses_raw",
-			CreatedMS: started.Add(time.Duration(index) * time.Second).UnixMilli(), Data: mustOpenCodeTextPart(test.text),
-		})
-	}
-	createOpenCodeFixtureDB(t, dbPath, []openCodeSessionSeed{
-		{ID: "ses_raw", Directory: "/repo", CreatedMS: started.UnixMilli(), UpdatedMS: started.Add(time.Minute).UnixMilli()},
-	}, messages, parts)
-	conversation, err := parseOpenCodeConversation(dbPath, "ses_raw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	byBody := map[string]CodexConversationEvent{}
-	for _, event := range conversation.Events {
-		if event.Kind == "user_message" {
-			byBody[event.Body] = event
-		}
-	}
-	for _, test := range cases {
-		event, ok := byBody[test.text]
-		if !ok {
-			t.Fatalf("%s: provider bytes were rewritten; got %#v", test.name, byBody)
-		}
-		want := fmt.Sprintf("%x", sha256.Sum256([]byte(test.text)))
-		if event.AdmissionSHA256 != want {
-			t.Fatalf("%s: admission digest = %q, want raw bytes digest %q", test.name, event.AdmissionSHA256, want)
-		}
-	}
-}
+func itoa(value int) string { return strconv.Itoa(value) }
