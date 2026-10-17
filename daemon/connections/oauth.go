@@ -98,6 +98,16 @@ func nativeRedirect(raw string) bool {
 	return true
 }
 
+// registrationBranding is the RFC 7591 metadata providers show on their
+// consent pages for clients Mewla registers.
+var registrationBranding = map[string]string{
+	"client_uri": "https://mewla.ai",
+	"logo_uri":   "https://mewla.ai/mark.png",
+	"policy_uri": "https://mewla.ai/privacy/",
+}
+
+var errOAuthRejected = errors.New("OAuth endpoint rejected request")
+
 func validCallback(raw string) bool {
 	u, err := url.Parse(raw)
 	return len(raw) <= 4096 && err == nil && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/plugins/oauth/callback" && (u.Scheme == "https" && u.Hostname() != "" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))
@@ -172,9 +182,11 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if in.Integration == "onlora" && callback == NativeCallback {
 		client.ClientID = onloraAppClientID
 	}
-	// Cloudflare registers only https and loopback returns, never mewla://.
+	// Cloudflare registers only https and loopback returns, never mewla://, so
+	// the app's sign-in returns through Mewla's https page, which forwards the
+	// code and state to mewla://plugins.
 	if in.Integration == "cloudflare" && client.RedirectURL == NativeCallback {
-		return Response{}, errors.New("Cloudflare doesn't accept the Mewla app's return address yet. Connect Cloudflare from Mewla's web UI on this server.")
+		client.RedirectURL = NativeReturnRelay
 	}
 	// A registered app that returns only to the Mewla app (Slack's publisher
 	// app) can't bring a web UI sign-in back; say so before the browser leaves.
@@ -255,17 +267,31 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 			}
 			return Response{}, errors.New("Mewla's authorization for this service is not ready. No account was connected.")
 		}
-		registration := map[string]any{"client_name": "Mewla Plugins", "redirect_uris": []string{client.RedirectURL}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}
+		registration := map[string]any{"client_name": "Mewla", "redirect_uris": []string{client.RedirectURL}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": "none"}
 		if nativeRedirect(client.RedirectURL) {
 			registration["application_type"] = "native"
 		}
-		body, _ := json.Marshal(registration)
 		var registered struct {
 			ClientID     string `json:"client_id"`
 			ClientSecret string `json:"client_secret"`
 			AuthMethod   string `json:"token_endpoint_auth_method"`
 		}
-		if err := m.oauthJSON(ctx, r, "POST", meta.RegistrationEndpoint, body, &registered); err != nil {
+		// Consent pages show the branding. A server that refuses one of these
+		// fields gets the registration without them, once.
+		branded := map[string]any{}
+		for key, value := range registration {
+			branded[key] = value
+		}
+		for key, value := range registrationBranding {
+			branded[key] = value
+		}
+		body, _ := json.Marshal(branded)
+		err := m.oauthJSON(ctx, r, "POST", meta.RegistrationEndpoint, body, &registered)
+		if errors.Is(err, errOAuthRejected) {
+			body, _ = json.Marshal(registration)
+			err = m.oauthJSON(ctx, r, "POST", meta.RegistrationEndpoint, body, &registered)
+		}
+		if err != nil {
 			return Response{}, errors.New("OAuth dynamic registration failed; this provider may require a registered client")
 		}
 		if registered.ClientID == "" || len(registered.ClientID) > 2048 || len(registered.ClientSecret) > 16384 {
@@ -296,7 +322,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: callback != "" && client.RedirectURL == NativeCallback, Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: callback == NativeCallback && (client.RedirectURL == NativeCallback || client.RedirectURL == NativeReturnRelay), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -472,7 +498,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		return ""
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Mewla Plugins</title><h1>Account connected</h1><p>You can return to Mewla.</p><a href="mewla://plugins">Open Plugins</a>`)
+	fmt.Fprint(w, `<!doctype html><meta name="viewport" content="width=device-width"><title>Mewla</title><h1>Account connected</h1><p>You can return to Mewla.</p><a href="mewla://plugins">Open Plugins</a>`)
 	return ""
 }
 func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
@@ -644,7 +670,7 @@ func (m *Manager) oauthJSON(ctx context.Context, r *record, method, target strin
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return errors.New("OAuth endpoint rejected request")
+		return errOAuthRejected
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, MaxResultBytes+1))
 	if err != nil || len(raw) > MaxResultBytes || json.Unmarshal(raw, out) != nil {

@@ -255,7 +255,7 @@ for this MVP.
 
 | Kamal piece | Role |
 | --- | --- |
-| `account` role (`mewla-link-account-<version>`) | Device-code login (GitHub, shown as `https://connect.mewla.ai/device`), machine registry (SQLite), route grants, DNS-01 TXT records for each computer's certificate (answered only once the zone's authoritative nameservers serve the record, at most 20 s, because the daemon asks the CA to validate right away), quotas, 10 sign-in attempts per client address an hour. Not published; network alias `mewla-account` on the `kamal` network. |
+| `account` role (`mewla-link-account-<version>`) | The plugin sign-in return page `https://connect.mewla.ai/plugins/return` (HTTPS listener only; `daemon/pluginreturn`): for providers that refuse `mewla://`, it forwards only `code`, `state`, `error` and `iss` to `mewla://plugins`, logs nothing and never redirects anywhere else. Device-code login (GitHub, shown as `https://connect.mewla.ai/device`), machine registry (SQLite), route grants, DNS-01 TXT records for each computer's certificate (answered only once the zone's authoritative nameservers serve the record, at most 20 s, because the daemon asks the CA to validate right away), quotas, 10 sign-in attempts per client address an hour. Not published; network alias `mewla-account` on the `kamal` network. |
 | `relay` accessory (`mewla-link-relay`) | Publishes host `:443` and `:8443` (IPv4) and its operator listener on `127.0.0.1:9180`. |
 
 Both run from one image (`daemon/Dockerfile.link`). Nothing uses kamal-proxy.

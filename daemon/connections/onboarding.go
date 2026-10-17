@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
@@ -20,6 +21,12 @@ import (
 // redirect a code/token to a supplied origin. PKCE and the paired channel bind
 // native completion to this daemon's original flow.
 const NativeCallback = "mewla://plugins"
+
+// NativeReturnRelay is Mewla's https page for providers that refuse an app
+// scheme. It forwards only code, state, error and iss to NativeCallback, so the
+// app finishes the sign-in exactly as from a direct return. Served by
+// cmd/mewla-account.
+const NativeReturnRelay = "https://connect.mewla.ai" + pluginreturn.Path
 
 type ConnectFlow struct {
 	ID               string    `json:"id"`
