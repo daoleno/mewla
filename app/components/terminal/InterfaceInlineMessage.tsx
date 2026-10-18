@@ -6,7 +6,7 @@ import type {
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
 import type { MarkdownInlinePart } from "../markdown/markdownInline";
-import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
+import { useMarkdownLinks } from "../markdown/useMarkdownLinkOpener";
 import { recognizeSessionFileReference } from "../../services/sessionFilePreview";
 import { interfaceInlineCodeStyle } from "./InterfaceInlineCodeStyle";
 import { tokenizeInlineMessage } from "./InterfaceMessageBodyModel";
@@ -26,14 +26,16 @@ export function InterfaceInlineMessage({
   compact = false,
 }: InterfaceInlineMessageProps) {
   const filePreview = useSessionFilePreviewContext();
-  const handleLinkPress = useMarkdownLinkOpener();
+  const { open: handleLinkPress, openable } = useMarkdownLinks();
   const render = (
     parts: MarkdownInlinePart[],
     insideLink = false,
   ): React.ReactNode =>
     parts.map((part, index) => {
+      const linked =
+        part.kind === "link" && Boolean(part.url) && openable(part.url!);
       const content = part.children
-        ? render(part.children, insideLink || part.kind === "link")
+        ? render(part.children, insideLink || linked)
         : part.text;
       if (part.kind === "bold") {
         return (
@@ -94,11 +96,14 @@ export function InterfaceInlineMessage({
       }
       if (part.kind === "link") {
         const url = part.url;
+        if (!linked || !url) {
+          return <React.Fragment key={index}>{content}</React.Fragment>;
+        }
         return (
           <Text
             accessibilityRole="link"
             key={index}
-            onPress={url ? () => handleLinkPress(url) : undefined}
+            onPress={() => handleLinkPress(url)}
             style={[styles.messageLink, { color: chrome.link }]}
           >
             {content}

@@ -14,8 +14,8 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { autolinkBareUrls } from "../markdown/markdownAutolinks";
-import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
+import { prepareMarkdownLinks } from "../markdown/prepareMarkdownLinks";
+import { useMarkdownLinks } from "../markdown/useMarkdownLinkOpener";
 import { MarkdownWithMermaid } from "../markdown/MarkdownWithMermaid";
 import { InterfaceMarkdownErrorBoundary } from "./InterfaceMarkdownErrorBoundary";
 import {
@@ -33,6 +33,7 @@ interface InterfaceNativeMarkdownBodyProps {
   /** Directory that links without a path resolve against, and the opener for files they name. */
   baseDir?: string;
   openFile?(reference: string): boolean;
+  canOpenFile?(reference: string): boolean;
   renderFallback(value: string): React.ReactNode;
 }
 
@@ -46,6 +47,7 @@ export function InterfaceNativeMarkdownBody({
   streaming = false,
   baseDir,
   openFile,
+  canOpenFile,
   renderFallback,
 }: InterfaceNativeMarkdownBodyProps) {
   const {
@@ -57,16 +59,21 @@ export function InterfaceNativeMarkdownBody({
     null,
   );
   const selectionFreezeActiveRef = useRef(false);
+  const { open: openLink, openable } = useMarkdownLinks({
+    baseDir,
+    openFile,
+    canOpenFile,
+  });
   const markdown = useMemo(
-    () => autolinkBareUrls(prepareInterfaceMarkdown(value, streaming)),
-    [streaming, value],
+    () =>
+      prepareMarkdownLinks(prepareInterfaceMarkdown(value, streaming), openable),
+    [openable, streaming, value],
   );
   const markdownStyle = useMemo(
     () => interfaceMarkdownStyle(chrome, theme, compact),
     [chrome, compact, theme],
   );
   const fallback = renderFallback(markdown || value);
-  const openLink = useMarkdownLinkOpener({ baseDir, openFile });
   const handleLinkPress = useCallback(
     (event: LinkPressEvent) => openLink(event.url),
     [openLink],

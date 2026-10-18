@@ -10,8 +10,8 @@ import {
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { TypeScale, Typography, useAppColors, useAppTheme } from "../../constants/tokens";
 import { buildChatChrome } from "../../theme";
-import { autolinkBareUrls } from "../markdown/markdownAutolinks";
-import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
+import { prepareMarkdownLinks } from "../markdown/prepareMarkdownLinks";
+import { useMarkdownLinks } from "../markdown/useMarkdownLinkOpener";
 import { MarkdownWithMermaid } from "../markdown/MarkdownWithMermaid";
 import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
 import { useCurrentServer } from "../../store/currentServer";
@@ -182,8 +182,11 @@ function MarkdownContent({ content }: { content: string }) {
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  const openLink = useMarkdownLinkOpener();
-  const markdown = useMemo(() => autolinkBareUrls(content), [content]);
+  const { open: openLink, openable } = useMarkdownLinks();
+  const markdown = useMemo(
+    () => prepareMarkdownLinks(content, openable),
+    [content, openable],
+  );
   const markdownStyle = useMemo(
     () =>
       buildSkillsMarkdownStyle(colors, {

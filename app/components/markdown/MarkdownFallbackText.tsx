@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Text, type StyleProp, type TextStyle } from "react-native";
 import { tokenizeMarkdownLinks } from "./markdownLinks";
-import { useMarkdownLinkOpener } from "./useMarkdownLinkOpener";
+import { useMarkdownLinks } from "./useMarkdownLinkOpener";
 
 interface MarkdownFallbackTextProps {
   value: string;
@@ -9,6 +9,7 @@ interface MarkdownFallbackTextProps {
   linkStyle?: StyleProp<TextStyle>;
   baseDir?: string;
   openFile?(reference: string): boolean;
+  canOpenFile?(reference: string): boolean;
 }
 
 export function MarkdownFallbackText({
@@ -17,15 +18,20 @@ export function MarkdownFallbackText({
   linkStyle,
   baseDir,
   openFile,
+  canOpenFile,
 }: MarkdownFallbackTextProps) {
   const parts = useMemo(() => tokenizeMarkdownLinks(value), [value]);
-  const openLink = useMarkdownLinkOpener({ baseDir, openFile });
+  const { open: openLink, openable } = useMarkdownLinks({
+    baseDir,
+    openFile,
+    canOpenFile,
+  });
 
   return (
     <Text selectable style={style}>
       {parts.map((part, index) => {
         const url = part.url;
-        if (!url) {
+        if (!url || !openable(url)) {
           return part.text;
         }
         return (

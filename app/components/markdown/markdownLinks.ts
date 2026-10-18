@@ -13,6 +13,25 @@ export type MarkdownLinkTarget =
   | { kind: "file"; reference: string }
   | { kind: "blocked" };
 
+export interface MarkdownLinkOptions {
+  /** Directory of the Markdown document, for links relative to it. */
+  baseDir?: string;
+  /** Whether this surface can open a file; without it file links are text. */
+  canOpenFile?(reference: string): boolean;
+}
+
+/** A link that would do nothing when pressed is shown as plain text instead. */
+export function isMarkdownLinkOpenable(
+  value: string,
+  { baseDir, canOpenFile }: MarkdownLinkOptions = {},
+) {
+  const target = resolveMarkdownLink(value, baseDir);
+  if (target.kind === "file") {
+    return canOpenFile?.(target.reference) ?? false;
+  }
+  return target.kind === "external";
+}
+
 export interface MarkdownLinkActions {
   openUrl: MarkdownUrlOpener;
   /** Opens a workspace or Session file; returns false when none can open it. */
