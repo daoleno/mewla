@@ -401,11 +401,9 @@ img { max-width: 100%; }
 .hub .gl { padding: 8px; }
 .hub li { position: relative; overflow: hidden; }
 /* Brain pinging each connected tool in turn */
-.hub li:not(.next)::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 140, 120, .28) 50%, transparent 70%); transform: translateX(-100%); animation: ping-tool 5s ease-in-out infinite; }
-.hub li:nth-child(2)::after { animation-delay: .35s; } .hub li:nth-child(3)::after { animation-delay: .7s; } .hub li:nth-child(4)::after { animation-delay: 1.05s; } .hub li:nth-child(5)::after { animation-delay: 1.4s; } .hub li:nth-child(6)::after { animation-delay: 1.75s; }
+.hub li::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 140, 120, .28) 50%, transparent 70%); transform: translateX(-100%); animation: ping-tool 5s ease-in-out infinite; }
+.hub li:nth-child(2)::after { animation-delay: .35s; } .hub li:nth-child(3)::after { animation-delay: .7s; } .hub li:nth-child(4)::after { animation-delay: 1.05s; } .hub li:nth-child(5)::after { animation-delay: 1.4s; } .hub li:nth-child(6)::after { animation-delay: 1.75s; } .hub li:nth-child(7)::after { animation-delay: 2.1s; } .hub li:nth-child(8)::after { animation-delay: 2.45s; }
 @keyframes ping-tool { 0%, 40% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
-.hub li.next { opacity: .5; }
-.hub small { margin-left: 2px; padding: 1px 7px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 999px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; }
 .js .hub.in li { animation: rise .5s var(--ease) both; }
 .hub.in li:nth-child(2) { animation-delay: .07s; } .hub.in li:nth-child(3) { animation-delay: .14s; } .hub.in li:nth-child(4) { animation-delay: .21s; }
 .hub.in li:nth-child(5) { animation-delay: .28s; } .hub.in li:nth-child(6) { animation-delay: .35s; } .hub.in li:nth-child(7) { animation-delay: .42s; } .hub.in li:nth-child(8) { animation-delay: .49s; }

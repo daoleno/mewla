@@ -53,7 +53,7 @@ Mewla's own app registration with the provider:
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
-| Slack | Official Slack sign-in from the phone app. Mewla's Slack app isn't publicly distributed yet, so Slack accepts it only in Mewla's own workspace for now; other workspaces see a Slack error | Slack's app returns only to the Mewla app: connect Slack from the phone |
+| Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
 
