@@ -112,6 +112,12 @@ func validCallback(raw string) bool {
 	u, err := url.Parse(raw)
 	return len(raw) <= 4096 && err == nil && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/plugins/oauth/callback" && (u.Scheme == "https" && u.Hostname() != "" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))
 }
+
+// appReturn reports a redirect that ends in the Mewla app, directly or
+// through Mewla's https return page.
+func appReturn(redirect string) bool {
+	return redirect == NativeCallback || redirect == NativeReturnRelay
+}
 func (m *Manager) configureOAuth(in *Input) (Response, error) {
 	if in == nil || in.OAuthClient == nil || !(validCallback(in.OAuthClient.RedirectURL) || in.Integration == "github" && in.OAuthClient.RedirectURL == "" || in.Integration == "slack" && in.OAuthClient.RedirectURL == NativeCallback && in.OAuthClient.ClientSecret == "") || len(in.OAuthClient.ClientID) > 2048 || len(in.OAuthClient.ClientSecret) > 16384 {
 		return Response{}, errors.New("provide an OAuth client and registered daemon /plugins/oauth/callback URL")
@@ -190,7 +196,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	// A registered app that returns only to the Mewla app (Slack's publisher
 	// app) can't bring a web UI sign-in back; say so before the browser leaves.
-	if callback != "" && callback != NativeCallback && client.RedirectURL == NativeCallback {
+	if callback != "" && callback != NativeCallback && appReturn(client.RedirectURL) {
 		return Response{}, errors.New(serviceName(in.Integration) + " sign-in returns to the Mewla app. Connect " + serviceName(in.Integration) + " from the Mewla app on your phone.")
 	}
 
@@ -322,7 +328,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: callback == NativeCallback && (client.RedirectURL == NativeCallback || client.RedirectURL == NativeReturnRelay), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }

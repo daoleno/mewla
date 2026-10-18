@@ -31,6 +31,20 @@ func TestForwardsOnlyTheAuthorizationResultToTheApp(t *testing.T) {
 	}
 }
 
+// Slack returns code and state, or error and state, with no iss.
+func TestForwardsSlackReturns(t *testing.T) {
+	for query, want := range map[string]url.Values{
+		"code=12347206286420.123.abcdef&state=s1":                              {"code": {"12347206286420.123.abcdef"}, "state": {"s1"}},
+		"error=invalid_team_for_non_distributed_app&state=s2":                  {"error": {"invalid_team_for_non_distributed_app"}, "state": {"s2"}},
+		"error=access_denied&state=s3&error_description=x&team=T1&enterprise=": {"error": {"access_denied"}, "state": {"s3"}},
+	} {
+		location, _ := url.Parse(serve("GET", query).Header().Get("Location"))
+		if location.Scheme != "mewla" || location.Host != "plugins" || location.Query().Encode() != want.Encode() {
+			t.Fatalf("%q forwarded %s", query, location)
+		}
+	}
+}
+
 func TestRejectsMalformedReturns(t *testing.T) {
 	for _, query := range []string{
 		"",

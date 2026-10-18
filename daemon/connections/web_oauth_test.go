@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -166,8 +167,9 @@ func TestWebCallbackLeavesNativeFlow(t *testing.T) {
 	}
 }
 
-// Slack's publisher app returns only to the Mewla app, so the web UI says so
-// instead of sending the browser to a sign-in that can't come back.
+// Slack's publisher app returns only to the Mewla app, through Mewla's https
+// return page, so the web UI says so instead of sending the browser to a
+// sign-in that can't come back.
 func TestWebConnectRefusesAppOnlyReturn(t *testing.T) {
 	previous := SlackPublicClientID
 	SlackPublicClientID = "public-slack"
@@ -179,8 +181,27 @@ func TestWebConnectRefusesAppOnlyReturn(t *testing.T) {
 		t.Fatalf("web Slack connect: %v", err)
 	}
 	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
-	if native == nil || !strings.Contains(native.AuthorizationURL, url.QueryEscape(NativeCallback)) {
-		t.Fatal("the app's Slack sign-in changed")
+	authorize, _ := url.Parse(native.AuthorizationURL)
+	q := authorize.Query()
+	state := q.Get("state")
+	if authorize.Host != "slack.com" || q.Get("redirect_uri") != NativeReturnRelay || q.Get("client_id") != "public-slack" || q.Get("code_challenge_method") != "S256" || !m.pending[state].Mobile || m.pending[state].Web {
+		t.Fatalf("the app's Slack sign-in %s", native.AuthorizationURL)
+	}
+	// The relay forwards Slack's code and state to mewla://plugins; the
+	// exchange repeats the https redirect with PKCE and no secret.
+	exchanged := url.Values{}
+	m.networkOwned = false
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method+" "+req.URL.String() != "POST https://slack.com/api/oauth.v2.access" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+		}
+		_ = req.ParseForm()
+		exchanged = req.PostForm
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error":"invalid_code"}`))}, nil
+	})}
+	finish := mustHandle(t, m, Request{Action: "connect_finish", FlowID: native.ID, Callback: NativeCallback + "?" + url.Values{"code": {"relayed"}, "state": {state}}.Encode()}).Flow
+	if exchanged.Get("redirect_uri") != NativeReturnRelay || exchanged.Get("code") != "relayed" || exchanged.Get("code_verifier") == "" || exchanged.Has("client_secret") || finish.Status != "failed" {
+		t.Fatalf("exchange %v, flow %+v", exchanged, finish)
 	}
 }
 
