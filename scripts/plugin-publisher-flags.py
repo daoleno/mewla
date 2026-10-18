@@ -36,10 +36,8 @@ def publisher_flags(document, required):
             raise ValueError(f"{service}: invalid public client ID")
         if service == "github" and config[identity] != "daoleno":
             raise ValueError("GitHub publisher must be the approved owner daoleno")
-        if service == "slack" and config[identity] is not None and (
-            not isinstance(config[identity], str) or not re.fullmatch(r"T[A-Z0-9]+", config[identity])
-        ):
-            raise ValueError("Slack publisher must identify an actual team workspace")
+        if service == "slack" and config[identity] is not None and config[identity] != "T0CA7628ECC":
+            raise ValueError("Slack publisher must be the approved Mewla workspace T0CA7628ECC")
         if client_id and not config[identity]:
             raise ValueError(f"{service}: publisher identity is required with client_id")
         if service in required and client_id is None:

@@ -18,7 +18,7 @@ spec.loader.exec_module(publisher)
 
 class PublisherTests(unittest.TestCase):
     def setUp(self):
-        self.config = {'schema_version': 1, 'github': {'owner': 'daoleno', 'client_id': 'fixture.github'}, 'slack': {'workspace_id': 'T123ABC', 'client_id': '123.456'}}
+        self.config = {'schema_version': 1, 'github': {'owner': 'daoleno', 'client_id': 'fixture.github'}, 'slack': {'workspace_id': 'T0CA7628ECC', 'client_id': '123.456'}}
 
     def test_public_only_and_missing_registration(self):
         self.assertIn('GitHubPublicClientID=fixture.github', publisher.publisher_flags(self.config, ['github']))
@@ -28,7 +28,7 @@ class PublisherTests(unittest.TestCase):
             publisher.publisher_flags(self.config, ['github'])
 
     def test_reject_secrets_unknown_owner_and_linker_injection(self):
-        for path, value in [(('github', 'client_secret'), 'secret'), (('github', 'owner'), 'paul-freeride'), (('slack', 'workspace_id'), None), (('github', 'client_id'), 'x -X main.Version=evil'), (('github', 'client_id'), '$(touch bad)'), (('github', 'client_id'), '')]:
+        for path, value in [(('github', 'client_secret'), 'secret'), (('github', 'owner'), 'paul-freeride'), (('slack', 'workspace_id'), None), (('slack', 'workspace_id'), 'T123OTHER'), (('github', 'client_id'), 'x -X main.Version=evil'), (('github', 'client_id'), '$(touch bad)'), (('github', 'client_id'), '')]:
             with self.subTest(path=path, value=value):
                 config = copy.deepcopy(self.config)
                 config[path[0]][path[1]] = value
