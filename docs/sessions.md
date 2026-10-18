@@ -76,6 +76,14 @@ seeking does not download the whole file. The header offers Download for any
 file; text files (Markdown, code, txt, JSON) also offer Copy, which copies the
 whole file content. Images and binaries have no Copy — download them instead.
 
+Links in a reply work the same way. Web addresses, with or without
+`[text](…)`, open in your browser, including one that sits right beside Chinese
+text or punctuation, and email addresses open your mail app. A link that
+names a file, such as `[report](report.pdf)` or `[app](./out/app.apk)`, opens
+that file as above, and the header's Download saves it. Inside a Markdown file
+you opened, a link to another file is relative to that file. Links that can run
+code (`javascript:`, `data:`) never open.
+
 A file that is not really what its name says (an `.mp4` that is not an MP4
 container, say) is not played. A codec the device can't decode, such as HEVC
 in some browsers, shows "can't be played here"; download it instead.

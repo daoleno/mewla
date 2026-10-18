@@ -31,6 +31,7 @@ import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
 import type { ImageOwner } from "../../services/imageSource";
 import { InterfaceNativeMarkdownBody } from "../terminal/InterfaceNativeMarkdownBody";
 import { MarkdownFallbackText } from "../markdown/MarkdownFallbackText";
+import { dirnameOf } from "../markdown/markdownLinks";
 import {
   brainWorkspaceEntryAccessibilityLabel,
   brainWorkspaceEntryIconName,
@@ -304,6 +305,29 @@ export function BrainWorkspaceViewer({
     [loadDirectory, loadFile],
   );
 
+  const openWorkspaceFile = useCallback(
+    (reference: string) => {
+      // Brain files are addressed relative to the workspace root.
+      const root = `${(currentTree?.workspace || workspace || "").replace(/\/+$/, "")}/`;
+      const path = reference.startsWith(root)
+        ? reference.slice(root.length)
+        : reference.startsWith("/") || reference.startsWith("~/")
+          ? null
+          : reference;
+      if (!path) {
+        return false;
+      }
+      void loadFile({
+        name: path.split("/").at(-1) || path,
+        path,
+        kind: "file",
+        children: [],
+      });
+      return true;
+    },
+    [currentTree?.workspace, loadFile, workspace],
+  );
+
   const selectedMediaPath =
     selectedPath && sessionFileMediaKindForPath(selectedPath)
       ? selectedPath
@@ -450,6 +474,7 @@ export function BrainWorkspaceViewer({
             chrome={chrome}
             theme={theme}
             styles={styles}
+            onOpenFile={openWorkspaceFile}
           />
         ) : currentEntries.length === 0 ? (
           <View style={styles.previewState}>
@@ -513,11 +538,13 @@ function BrainWorkspaceFilePreview({
   chrome,
   theme,
   styles,
+  onOpenFile,
 }: {
   file: BrainWorkspaceFile;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   styles: ReturnType<typeof createStyles>;
+  onOpenFile(reference: string): boolean;
 }) {
   if (file.kind === "image") {
     return <View style={{ padding: 12 }}><AppImage source={file.data_url ? { kind: "inline", uri: file.data_url, name: file.name } : { kind: "owned", path: file.path, name: file.name }} chrome={chrome} /></View>;
@@ -542,9 +569,13 @@ function BrainWorkspaceFilePreview({
               value={content}
               chrome={chrome}
               theme={theme}
+              baseDir={dirnameOf(file.path)}
+              openFile={onOpenFile}
               renderFallback={(value) => (
                 <MarkdownFallbackText
                   value={value}
+                  baseDir={dirnameOf(file.path)}
+                  openFile={onOpenFile}
                   style={[styles.plainText, { color: chrome.text }]}
                   linkStyle={{
                     color: chrome.link,

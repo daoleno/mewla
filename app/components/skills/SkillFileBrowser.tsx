@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +10,8 @@ import {
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { TypeScale, Typography, useAppColors, useAppTheme } from "../../constants/tokens";
 import { buildChatChrome } from "../../theme";
-import { openSafeMarkdownUrl } from "../markdown/markdownLinks";
+import { autolinkBareUrls } from "../markdown/markdownAutolinks";
+import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
 import { MarkdownWithMermaid } from "../markdown/MarkdownWithMermaid";
 import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
 import { useCurrentServer } from "../../store/currentServer";
@@ -182,6 +182,8 @@ function MarkdownContent({ content }: { content: string }) {
     () => buildChatChrome(appTheme),
     [appTheme],
   );
+  const openLink = useMarkdownLinkOpener();
+  const markdown = useMemo(() => autolinkBareUrls(content), [content]);
   const markdownStyle = useMemo(
     () =>
       buildSkillsMarkdownStyle(colors, {
@@ -193,7 +195,7 @@ function MarkdownContent({ content }: { content: string }) {
   );
   return (
     <MarkdownWithMermaid
-      markdown={content}
+      markdown={markdown}
       chrome={chrome}
       theme={theme}
       renderMarkdown={(value) => (
@@ -201,9 +203,7 @@ function MarkdownContent({ content }: { content: string }) {
           markdown={value}
           markdownStyle={markdownStyle}
           selectable
-          onLinkPress={(event) =>
-            void openSafeMarkdownUrl(event.url, (url) => Linking.openURL(url))
-          }
+          onLinkPress={(event) => openLink(event.url)}
         />
       )}
     />

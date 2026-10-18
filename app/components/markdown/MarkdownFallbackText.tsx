@@ -1,44 +1,38 @@
-import React, { useCallback, useMemo } from "react";
-import {
-  Linking,
-  Text,
-  type StyleProp,
-  type TextStyle,
-} from "react-native";
-import {
-  isSafeMarkdownUrl,
-  openSafeMarkdownUrl,
-  tokenizeMarkdownLinks,
-} from "./markdownLinks";
+import React, { useMemo } from "react";
+import { Text, type StyleProp, type TextStyle } from "react-native";
+import { tokenizeMarkdownLinks } from "./markdownLinks";
+import { useMarkdownLinkOpener } from "./useMarkdownLinkOpener";
 
 interface MarkdownFallbackTextProps {
   value: string;
   style?: StyleProp<TextStyle>;
   linkStyle?: StyleProp<TextStyle>;
+  baseDir?: string;
+  openFile?(reference: string): boolean;
 }
 
 export function MarkdownFallbackText({
   value,
   style,
   linkStyle,
+  baseDir,
+  openFile,
 }: MarkdownFallbackTextProps) {
   const parts = useMemo(() => tokenizeMarkdownLinks(value), [value]);
-  const handleLinkPress = useCallback((url: string) => {
-    void openSafeMarkdownUrl(url, (safeUrl) => Linking.openURL(safeUrl));
-  }, []);
+  const openLink = useMarkdownLinkOpener({ baseDir, openFile });
 
   return (
     <Text selectable style={style}>
       {parts.map((part, index) => {
         const url = part.url;
-        if (!url || !isSafeMarkdownUrl(url)) {
+        if (!url) {
           return part.text;
         }
         return (
           <Text
             accessibilityRole="link"
             key={index}
-            onPress={() => handleLinkPress(url)}
+            onPress={() => openLink(url)}
             style={linkStyle}
           >
             {part.text}
