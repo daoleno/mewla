@@ -59,6 +59,7 @@ import { wsClient } from "../../services/websocket";
 import { BottomSheetFrame } from "../ui";
 import { MessageBody } from "./InterfaceMessageBody";
 import { TimelineTextSelectableContext } from "./TimelineTextSelectableContext";
+import { dirnameOf, resolveAgainst } from "../markdown/markdownLinks";
 import { SessionFilePreviewContext } from "./SessionFilePreviewContext";
 import { SessionFilePdfPreview } from "./SessionFilePdfPreview";
 import { SessionFileMediaPreview } from "./SessionFileMediaPreview";
@@ -259,6 +260,10 @@ export function SessionFilePreviewSheet({
     onClose();
   }, [onClose]);
   const retry = useCallback(() => dispatch({ type: "retry" }), []);
+  const openLinkedFile = useCallback(
+    (reference: string) => dispatch({ type: "open", reference }),
+    [],
+  );
   const markBinaryFailure = useCallback(() => {
     dispatch({
       type: "failed",
@@ -447,6 +452,7 @@ export function SessionFilePreviewSheet({
           chrome={chrome}
           theme={theme}
           onRetry={retry}
+          onOpenFile={openLinkedFile}
           onBinaryError={markBinaryFailure}
           onPdfError={markPdfFailure}
           resolveMediaSource={resolveMediaSource}
@@ -618,6 +624,7 @@ function SessionFilePreviewBody({
   chrome,
   theme,
   onRetry,
+  onOpenFile,
   onBinaryError,
   onPdfError,
   resolveMediaSource,
@@ -626,10 +633,22 @@ function SessionFilePreviewBody({
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   onRetry(): void;
+  onOpenFile(reference: string): void;
   onBinaryError(): void;
   onPdfError(message: string, stale: boolean): void;
   resolveMediaSource(): Promise<SessionFileBinarySource>;
 }) {
+  const metadataPath = state.metadata?.path;
+  // Links in a previewed Markdown file are relative to that file.
+  const linkedFiles = useMemo(
+    () => ({
+      open(reference: string) {
+        onOpenFile(resolveAgainst(dirnameOf(metadataPath ?? ""), reference));
+        return true;
+      },
+    }),
+    [metadataPath, onOpenFile],
+  );
   if (state.status === "loading") {
     return (
       <PreviewState
@@ -670,7 +689,7 @@ function SessionFilePreviewBody({
           showsVerticalScrollIndicator
         >
           <TimelineTextSelectableContext.Provider value={{ selectable: true }}>
-            <SessionFilePreviewContext.Provider value={null}>
+            <SessionFilePreviewContext.Provider value={linkedFiles}>
               <MessageBody
                 value={state.text.content}
                 chrome={chrome}

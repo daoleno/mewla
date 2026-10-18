@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   EnrichedMarkdownText,
   type LinkPressEvent,
@@ -14,7 +14,8 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { openSafeMarkdownUrl } from "../markdown/markdownLinks";
+import { autolinkBareUrls } from "../markdown/markdownAutolinks";
+import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
 import { MarkdownWithMermaid } from "../markdown/MarkdownWithMermaid";
 import { InterfaceMarkdownErrorBoundary } from "./InterfaceMarkdownErrorBoundary";
 import {
@@ -29,6 +30,9 @@ interface InterfaceNativeMarkdownBodyProps {
   theme: TerminalThemePalette;
   compact?: boolean;
   streaming?: boolean;
+  /** Directory that links without a path resolve against, and the opener for files they name. */
+  baseDir?: string;
+  openFile?(reference: string): boolean;
   renderFallback(value: string): React.ReactNode;
 }
 
@@ -40,6 +44,8 @@ export function InterfaceNativeMarkdownBody({
   theme,
   compact = false,
   streaming = false,
+  baseDir,
+  openFile,
   renderFallback,
 }: InterfaceNativeMarkdownBodyProps) {
   const {
@@ -52,7 +58,7 @@ export function InterfaceNativeMarkdownBody({
   );
   const selectionFreezeActiveRef = useRef(false);
   const markdown = useMemo(
-    () => prepareInterfaceMarkdown(value, streaming),
+    () => autolinkBareUrls(prepareInterfaceMarkdown(value, streaming)),
     [streaming, value],
   );
   const markdownStyle = useMemo(
@@ -60,9 +66,11 @@ export function InterfaceNativeMarkdownBody({
     [chrome, compact, theme],
   );
   const fallback = renderFallback(markdown || value);
-  const handleLinkPress = useCallback((event: LinkPressEvent) => {
-    void openSafeMarkdownUrl(event.url, (url) => Linking.openURL(url));
-  }, []);
+  const openLink = useMarkdownLinkOpener({ baseDir, openFile });
+  const handleLinkPress = useCallback(
+    (event: LinkPressEvent) => openLink(event.url),
+    [openLink],
+  );
   const clearSelectionStartTimer = useCallback(() => {
     if (!selectionStartTimerRef.current) {
       return;

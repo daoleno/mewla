@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import React, { useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { Spacing, Typography, useAppColors, useAppTheme, type AppColors } from "../../constants/tokens";
 import { buildChatChrome } from "../../theme";
-import { openSafeMarkdownUrl } from "../markdown/markdownLinks";
+import type { MarkdownInlinePart } from "../markdown/markdownInline";
+import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
 import { MermaidDiagram } from "../markdown/MermaidDiagram";
 import { isMermaidFenceLanguage } from "../markdown/mermaidFences";
 import { MarkdownWithImages } from "../markdown/MarkdownWithImages";
@@ -31,9 +32,7 @@ function MarkdownTextView({ value }: { value: string }) {
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  const handleLinkPress = useCallback((url: string) => {
-    void openSafeMarkdownUrl(url, (safeUrl) => Linking.openURL(safeUrl));
-  }, []);
+  const handleLinkPress = useMarkdownLinkOpener();
 
   return (
     <View style={styles.root}>
@@ -242,36 +241,52 @@ function renderInline(
   styles: ReturnType<typeof createStyles>,
   onLinkPress: (url: string) => void,
 ) {
-  return tokenizeMarkdownInline(text).map((part, index) => {
-    if (part.kind === "bold") {
-      return (
-        <Text key={index} style={styles.bold}>
-          {part.text}
-        </Text>
-      );
-    }
-    if (part.kind === "code") {
-      return (
-        <Text key={index} style={styles.inlineCode}>
-          {part.text}
-        </Text>
-      );
-    }
-    if (part.kind === "link") {
-      const url = part.url;
-      return (
-        <Text
-          accessibilityRole="link"
-          key={index}
-          onPress={url ? () => onLinkPress(url) : undefined}
-          style={styles.link}
-        >
-          {part.text}
-        </Text>
-      );
-    }
-    return part.text;
-  });
+  const render = (parts: MarkdownInlinePart[]): React.ReactNode =>
+    parts.map((part, index) => {
+      const content = part.children ? render(part.children) : part.text;
+      switch (part.kind) {
+        case "bold":
+          return (
+            <Text key={index} style={styles.bold}>
+              {content}
+            </Text>
+          );
+        case "italic":
+          return (
+            <Text key={index} style={styles.italic}>
+              {content}
+            </Text>
+          );
+        case "strike":
+          return (
+            <Text key={index} style={styles.strike}>
+              {content}
+            </Text>
+          );
+        case "code":
+          return (
+            <Text key={index} style={styles.inlineCode}>
+              {part.text}
+            </Text>
+          );
+        case "link": {
+          const url = part.url;
+          return (
+            <Text
+              accessibilityRole="link"
+              key={index}
+              onPress={url ? () => onLinkPress(url) : undefined}
+              style={styles.link}
+            >
+              {content}
+            </Text>
+          );
+        }
+        default:
+          return part.text;
+      }
+    });
+  return render(tokenizeMarkdownInline(text));
 }
 
 function createStyles(colors: AppColors) {
@@ -326,6 +341,12 @@ function createStyles(colors: AppColors) {
     bold: {
       fontFamily: Typography.uiFontMedium,
       color: colors.textPrimary,
+    },
+    italic: {
+      fontStyle: "italic",
+    },
+    strike: {
+      textDecorationLine: "line-through",
     },
     inlineCode: {
       color: colors.textPrimary,

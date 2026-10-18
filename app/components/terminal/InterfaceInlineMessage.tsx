@@ -1,11 +1,12 @@
-import React, { useCallback } from "react";
-import { Linking, StyleSheet, Text } from "react-native";
+import React from "react";
+import { StyleSheet, Text } from "react-native";
 import { Typography } from "../../constants/tokens";
 import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { openSafeMarkdownUrl } from "../markdown/markdownLinks";
+import type { MarkdownInlinePart } from "../markdown/markdownInline";
+import { useMarkdownLinkOpener } from "../markdown/useMarkdownLinkOpener";
 import { recognizeSessionFileReference } from "../../services/sessionFilePreview";
 import { interfaceInlineCodeStyle } from "./InterfaceInlineCodeStyle";
 import { tokenizeInlineMessage } from "./InterfaceMessageBodyModel";
@@ -25,96 +26,80 @@ export function InterfaceInlineMessage({
   compact = false,
 }: InterfaceInlineMessageProps) {
   const filePreview = useSessionFilePreviewContext();
-  const handleLinkPress = useCallback(
-    (url: string) => {
-      const reference = recognizeSessionFileReference(url);
-      if (reference && filePreview?.open(reference)) {
-        return;
+  const handleLinkPress = useMarkdownLinkOpener();
+  const render = (parts: MarkdownInlinePart[]): React.ReactNode =>
+    parts.map((part, index) => {
+      const content = part.children ? render(part.children) : part.text;
+      if (part.kind === "bold") {
+        return (
+          <Text key={index} style={[styles.messageBold, { color: chrome.text }]}>
+            {content}
+          </Text>
+        );
       }
-      void openSafeMarkdownUrl(url, (safeUrl) => Linking.openURL(safeUrl));
-    },
-    [filePreview],
-  );
+      if (part.kind === "italic") {
+        return (
+          <Text key={index} style={[styles.messageItalic, { color: chrome.text }]}>
+            {content}
+          </Text>
+        );
+      }
+      if (part.kind === "strike") {
+        return (
+          <Text
+            key={index}
+            style={[
+              styles.messageStrike,
+              {
+                color: chrome.textMuted,
+                textDecorationColor: chrome.textSubtle,
+              },
+            ]}
+          >
+            {content}
+          </Text>
+        );
+      }
+      if (part.kind === "code") {
+        const reference = recognizeSessionFileReference(part.text);
+        return (
+          <Text
+            key={index}
+            accessibilityRole={reference ? "link" : undefined}
+            onPress={
+              reference && filePreview
+                ? () => filePreview.open(reference)
+                : undefined
+            }
+            style={[
+              styles.messageInlineCode,
+              compact ? styles.messageInlineCodeCompact : null,
+              {
+                color: interfaceInlineCodeStyle(theme, compact).color,
+              },
+            ]}
+          >
+            {part.text}
+          </Text>
+        );
+      }
+      if (part.kind === "link") {
+        const url = part.url;
+        return (
+          <Text
+            accessibilityRole="link"
+            key={index}
+            onPress={url ? () => handleLinkPress(url) : undefined}
+            style={[styles.messageLink, { color: chrome.link }]}
+          >
+            {content}
+          </Text>
+        );
+      }
+      return part.text;
+    });
 
-  return (
-    <>
-      {tokenizeInlineMessage(text).map((part, index) => {
-        if (part.kind === "bold") {
-          return (
-            <Text
-              key={index}
-              style={[styles.messageBold, { color: chrome.text }]}
-            >
-              {part.text}
-            </Text>
-          );
-        }
-        if (part.kind === "italic") {
-          return (
-            <Text
-              key={index}
-              style={[styles.messageItalic, { color: chrome.text }]}
-            >
-              {part.text}
-            </Text>
-          );
-        }
-        if (part.kind === "strike") {
-          return (
-            <Text
-              key={index}
-              style={[
-                styles.messageStrike,
-                {
-                  color: chrome.textMuted,
-                  textDecorationColor: chrome.textSubtle,
-                },
-              ]}
-            >
-              {part.text}
-            </Text>
-          );
-        }
-        if (part.kind === "code") {
-          const reference = recognizeSessionFileReference(part.text);
-          return (
-            <Text
-              key={index}
-              accessibilityRole={reference ? "link" : undefined}
-              onPress={
-                reference && filePreview
-                  ? () => filePreview.open(reference)
-                  : undefined
-              }
-              style={[
-                styles.messageInlineCode,
-                compact ? styles.messageInlineCodeCompact : null,
-                {
-                  color: interfaceInlineCodeStyle(theme, compact).color,
-                },
-              ]}
-            >
-              {part.text}
-            </Text>
-          );
-        }
-        if (part.kind === "link") {
-          const url = part.url;
-          return (
-            <Text
-              accessibilityRole="link"
-              key={index}
-              onPress={url ? () => handleLinkPress(url) : undefined}
-              style={[styles.messageLink, { color: chrome.link }]}
-            >
-              {part.text}
-            </Text>
-          );
-        }
-        return part.text;
-      })}
-    </>
-  );
+  return <>{render(tokenizeInlineMessage(text))}</>;
 }
 
 const styles = StyleSheet.create({

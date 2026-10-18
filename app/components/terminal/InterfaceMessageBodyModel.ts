@@ -1,4 +1,7 @@
-import { parseMarkdownLinkToken } from "../markdown/markdownLinks";
+import {
+  tokenizeMarkdownInline,
+  type MarkdownInlinePart,
+} from "../markdown/markdownInline";
 import {
   isTimelineProjectionPerfEnabled,
   recordMarkdownParseSample,
@@ -20,11 +23,7 @@ export type MessageListItem = {
   taskState?: "checked" | "unchecked";
 };
 
-export type InlineMessagePart = {
-  text: string;
-  kind?: "bold" | "code" | "italic" | "link" | "strike";
-  url?: string;
-};
+export type InlineMessagePart = MarkdownInlinePart;
 
 export type MessageTableAlignment = "left" | "center" | "right";
 
@@ -521,41 +520,4 @@ function normalizeProseText(value: string) {
     .replace(/[\u201C\u201D]/g, '"');
 }
 
-export function tokenizeInlineMessage(text: string): InlineMessagePart[] {
-  const pattern =
-    /(`[^`]+`|~~[^~]+~~|\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*|\[[^\]]+\]\([^)]+\))/g;
-  const parts: InlineMessagePart[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, match.index) });
-    }
-    const token = match[0];
-    if (token.startsWith("`")) {
-      parts.push({ kind: "code", text: token.slice(1, -1) });
-    } else if (token.startsWith("~~")) {
-      parts.push({ kind: "strike", text: token.slice(2, -2) });
-    } else if (token.startsWith("**")) {
-      parts.push({ kind: "bold", text: token.slice(2, -2) });
-    } else if (token.startsWith("__")) {
-      parts.push({ kind: "bold", text: token.slice(2, -2) });
-    } else if (token.startsWith("*")) {
-      parts.push({ kind: "italic", text: token.slice(1, -1) });
-    } else {
-      const link = parseMarkdownLinkToken(token);
-      parts.push({
-        kind: "link",
-        text: link?.text || token,
-        url: link?.url,
-      });
-    }
-    lastIndex = match.index + token.length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex) });
-  }
-  return parts;
-}
+export const tokenizeInlineMessage = tokenizeMarkdownInline;
