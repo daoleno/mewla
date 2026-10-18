@@ -49,6 +49,19 @@ describe("Markdown inline links", () => {
     ]);
   });
 
+  test("ends a URL at CJK characters with no punctuation between", () => {
+    expect(tokenizeMarkdownInline("见https://example.com/guide然后看，或https://example.com/a?q=1かな한글")).toEqual([
+      { text: "见" },
+      link("https://example.com/guide"),
+      { text: "然后看，或" },
+      link("https://example.com/a?q=1"),
+      { text: "かな한글" },
+    ]);
+    expect(tokenizeMarkdownInline("https://example.com/%E4%B8%AD")).toEqual([
+      link("https://example.com/%E4%B8%AD"),
+    ]);
+  });
+
   test("reads [text](url), titles and balanced parentheses", () => {
     expect(
       tokenizeMarkdownInline('[w](https://en.wikipedia.org/wiki/Foo_(bar)) [q](https://e.com/s?q=a&b=c "Title")'),

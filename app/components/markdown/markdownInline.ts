@@ -8,9 +8,11 @@ export type MarkdownInlinePart = {
   children?: MarkdownInlinePart[];
 };
 
-// Full-width punctuation ends a bare URL: GFM runs a URL to the next space,
-// which would swallow the rest of a Chinese or Japanese sentence.
-const CJK_PUNCTUATION = /[　-〿＀-￯]/;
+// CJK text and full-width punctuation end a bare URL: GFM runs a URL to the
+// next space, which would swallow the rest of a Chinese, Japanese or Korean
+// sentence. A URL that really has such characters writes them as %xx.
+const CJK_PUNCTUATION =
+  /[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
 
 export class MessageTokenizer extends Tokenizer {
   url(src: string): Tokens.Link | undefined {

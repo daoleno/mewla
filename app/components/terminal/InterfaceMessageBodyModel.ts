@@ -13,7 +13,8 @@ export type MessageBlock =
   | { type: "list"; items: MessageListItem[] }
   | MessageTableBlock
   | { type: "code"; text: string; language?: string; closed?: boolean }
-  | { type: "quote"; text: string };
+  | { type: "quote"; text: string }
+  | { type: "rule" };
 
 export type MessageListItem = {
   marker: string;
@@ -148,6 +149,12 @@ function parseMessageBlocksUninstrumented(value: string): MessageBlock[] {
       flushOpenBlocks();
       blocks.push(table.block);
       lineIndex = table.nextLineIndex - 1;
+      continue;
+    }
+
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushOpenBlocks();
+      blocks.push({ type: "rule" });
       continue;
     }
 

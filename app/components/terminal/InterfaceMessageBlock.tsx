@@ -319,6 +319,12 @@ export function InterfaceMessageBlock({
       }
       return codeBlock;
     }
+    case "rule":
+      return (
+        <View
+          style={[styles.messageRule, { backgroundColor: chrome.borderStrong }]}
+        />
+      );
     case "quote":
       return (
         <View
@@ -549,6 +555,11 @@ const styles = StyleSheet.create({
   messageTableTextCompact: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  messageRule: {
+    alignSelf: "stretch",
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 10,
   },
   messageQuote: {
     alignSelf: "stretch",

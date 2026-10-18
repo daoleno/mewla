@@ -2,13 +2,19 @@ import { Lexer, type Token, type Tokens } from "marked";
 import { MessageTokenizer } from "./markdownInline";
 
 /**
- * The native Markdown renderer only links a bare URL that has whitespace or
- * ASCII punctuation on both sides, so a URL beside Chinese text stays plain.
- * Rewrites each bare URL marked recognises into an explicit <url> autolink;
- * code, existing links and every other character are left as written.
+ * Prepares Markdown for the native renderer, which links whatever it is given.
+ *  - A link that would do nothing when pressed (a blocked scheme, a file this
+ *    surface cannot open) becomes its text.
+ *  - A bare URL becomes an explicit <url> autolink: the renderer only links a
+ *    bare URL with whitespace or ASCII punctuation on both sides, so a URL
+ *    beside Chinese text would stay plain.
+ * Code, other links and every other character are left as written.
  */
-export function autolinkBareUrls(markdown: string): string {
-  if (!/(?:https?:\/\/|ftp:\/\/|www\.)/i.test(markdown)) {
+export function prepareMarkdownLinks(
+  markdown: string,
+  openable?: (href: string) => boolean,
+): string {
+  if (!openable && !/(?:https?:\/\/|ftp:\/\/|www\.)/i.test(markdown)) {
     return markdown;
   }
   const edits: { start: number; end: number; text: string }[] = [];
@@ -21,7 +27,13 @@ export function autolinkBareUrls(markdown: string): string {
       const start = base + offset;
       if (token.type === "link") {
         const link = token as Tokens.Link;
-        if (link.raw === link.text && /^www\./i.test(link.raw)) {
+        if (openable && link.raw !== link.text && !openable(link.href)) {
+          edits.push({
+            start,
+            end: start + link.raw.length,
+            text: link.tokens.map((child) => child.raw).join(""),
+          });
+        } else if (link.raw === link.text && /^www\./i.test(link.raw)) {
           edits.push({ start, end: start + link.raw.length, text: `[${link.raw}](<${link.href}>)` });
         } else if (link.raw === link.text && /^(?:https?|ftp):\/\//i.test(link.href)) {
           edits.push({ start, end: start + link.raw.length, text: `<${link.href}>` });

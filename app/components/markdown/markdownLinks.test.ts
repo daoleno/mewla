@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   dirnameOf,
+  isMarkdownLinkOpenable,
   openMarkdownLink,
   resolveAgainst,
   resolveMarkdownLink,
@@ -162,5 +163,20 @@ describe("Markdown link activation", () => {
     });
 
     expect(result).toBe(false);
+  });
+});
+
+describe("Markdown link openability", () => {
+  test("shows only links that would do something", () => {
+    const canOpenFile = (reference: string) => reference.startsWith("docs/");
+    expect(isMarkdownLinkOpenable("https://e.com/a")).toBe(true);
+    expect(isMarkdownLinkOpenable("mailto:a@e.com")).toBe(true);
+    expect(isMarkdownLinkOpenable("javascript:alert(1)", { canOpenFile })).toBe(false);
+    expect(isMarkdownLinkOpenable("data:text/html,x", { canOpenFile })).toBe(false);
+    expect(isMarkdownLinkOpenable("docs/a.md", { canOpenFile })).toBe(true);
+    expect(isMarkdownLinkOpenable("other/a.md", { canOpenFile })).toBe(false);
+    // A surface with no file opener leaves file links as text.
+    expect(isMarkdownLinkOpenable("docs/a.md")).toBe(false);
+    expect(isMarkdownLinkOpenable("#top", { canOpenFile })).toBe(false);
   });
 });

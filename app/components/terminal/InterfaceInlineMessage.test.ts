@@ -52,7 +52,7 @@ describe("Interface Chat inline code inside a link", () => {
       },
     ]);
     const source = readFileSync(join(import.meta.dir, "InterfaceInlineMessage.tsx"), "utf8");
-    expect(source).toContain('insideLink || part.kind === "link"');
+    expect(source).toContain("render(part.children, insideLink || linked)");
     expect(source).toMatch(/insideLink\s*\? null\s*: recognizeSessionFileReference/);
   });
 });

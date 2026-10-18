@@ -305,15 +305,27 @@ export function BrainWorkspaceViewer({
     [loadDirectory, loadFile],
   );
 
+  const workspaceDir = (currentTree?.workspace || workspace || "").replace(/\/+$/, "");
+  // Brain files are addressed relative to the workspace root.
+  const workspacePathOf = useCallback(
+    (reference: string) => {
+      const root = `${workspaceDir}/`;
+      if (reference.startsWith(root)) {
+        return reference.slice(root.length);
+      }
+      return reference.startsWith("/") || reference.startsWith("~/")
+        ? null
+        : reference;
+    },
+    [workspaceDir],
+  );
+  const canOpenWorkspaceFile = useCallback(
+    (reference: string) => workspacePathOf(reference) !== null,
+    [workspacePathOf],
+  );
   const openWorkspaceFile = useCallback(
     (reference: string) => {
-      // Brain files are addressed relative to the workspace root.
-      const root = `${(currentTree?.workspace || workspace || "").replace(/\/+$/, "")}/`;
-      const path = reference.startsWith(root)
-        ? reference.slice(root.length)
-        : reference.startsWith("/") || reference.startsWith("~/")
-          ? null
-          : reference;
+      const path = workspacePathOf(reference);
       if (!path) {
         return false;
       }
@@ -325,7 +337,7 @@ export function BrainWorkspaceViewer({
       });
       return true;
     },
-    [currentTree?.workspace, loadFile, workspace],
+    [loadFile, workspacePathOf],
   );
 
   const selectedMediaPath =
@@ -475,6 +487,7 @@ export function BrainWorkspaceViewer({
             theme={theme}
             styles={styles}
             onOpenFile={openWorkspaceFile}
+            canOpenFile={canOpenWorkspaceFile}
           />
         ) : currentEntries.length === 0 ? (
           <View style={styles.previewState}>
@@ -539,12 +552,14 @@ function BrainWorkspaceFilePreview({
   theme,
   styles,
   onOpenFile,
+  canOpenFile,
 }: {
   file: BrainWorkspaceFile;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   styles: ReturnType<typeof createStyles>;
   onOpenFile(reference: string): boolean;
+  canOpenFile(reference: string): boolean;
 }) {
   if (file.kind === "image") {
     return <View style={{ padding: 12 }}><AppImage source={file.data_url ? { kind: "inline", uri: file.data_url, name: file.name } : { kind: "owned", path: file.path, name: file.name }} chrome={chrome} /></View>;
@@ -571,11 +586,13 @@ function BrainWorkspaceFilePreview({
               theme={theme}
               baseDir={dirnameOf(file.path)}
               openFile={onOpenFile}
+              canOpenFile={canOpenFile}
               renderFallback={(value) => (
                 <MarkdownFallbackText
                   value={value}
                   baseDir={dirnameOf(file.path)}
                   openFile={onOpenFile}
+                  canOpenFile={canOpenFile}
                   style={[styles.plainText, { color: chrome.text }]}
                   linkStyle={{
                     color: chrome.link,
