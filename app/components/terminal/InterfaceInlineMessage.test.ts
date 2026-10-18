@@ -40,3 +40,19 @@ describe("Interface Chat inline code rendering", () => {
     ]);
   });
 });
+
+describe("Interface Chat inline code inside a link", () => {
+  test("keeps the link as the only press target", () => {
+    expect(tokenizeInlineMessage("[`README.md`](https://example.com/readme)")).toEqual([
+      {
+        kind: "link",
+        text: "README.md",
+        url: "https://example.com/readme",
+        children: [{ kind: "code", text: "README.md" }],
+      },
+    ]);
+    const source = readFileSync(join(import.meta.dir, "InterfaceInlineMessage.tsx"), "utf8");
+    expect(source).toContain('insideLink || part.kind === "link"');
+    expect(source).toMatch(/insideLink\s*\? null\s*: recognizeSessionFileReference/);
+  });
+});

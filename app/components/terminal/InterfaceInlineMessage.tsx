@@ -27,9 +27,14 @@ export function InterfaceInlineMessage({
 }: InterfaceInlineMessageProps) {
   const filePreview = useSessionFilePreviewContext();
   const handleLinkPress = useMarkdownLinkOpener();
-  const render = (parts: MarkdownInlinePart[]): React.ReactNode =>
+  const render = (
+    parts: MarkdownInlinePart[],
+    insideLink = false,
+  ): React.ReactNode =>
     parts.map((part, index) => {
-      const content = part.children ? render(part.children) : part.text;
+      const content = part.children
+        ? render(part.children, insideLink || part.kind === "link")
+        : part.text;
       if (part.kind === "bold") {
         return (
           <Text key={index} style={[styles.messageBold, { color: chrome.text }]}>
@@ -61,7 +66,11 @@ export function InterfaceInlineMessage({
         );
       }
       if (part.kind === "code") {
-        const reference = recognizeSessionFileReference(part.text);
+        // Inside a link the link owns the press, so `README.md` in
+        // [`README.md`](https://…) does not open a local file instead.
+        const reference = insideLink
+          ? null
+          : recognizeSessionFileReference(part.text);
         return (
           <Text
             key={index}
