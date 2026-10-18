@@ -19,8 +19,10 @@ func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
 			return OAuthClientConfig{ClientID: GitHubPublicClientID}, true, nil
 		}
 	case "slack":
+		// Public distribution requires https on every Slack redirect URL, so
+		// the app's sign-in returns through Mewla's page to mewla://plugins.
 		if SlackPublicClientID != "" {
-			return OAuthClientConfig{ClientID: SlackPublicClientID, RedirectURL: NativeCallback}, true, nil
+			return OAuthClientConfig{ClientID: SlackPublicClientID, RedirectURL: NativeReturnRelay}, true, nil
 		}
 	}
 	// Operator overrides serve existing single-operator installations. This is
@@ -53,7 +55,7 @@ func (m *Manager) unavailableReason(kind string) string {
 		ready = ready && client.ClientSecret != "" && validCallback(client.RedirectURL)
 	}
 	if kind == "slack" {
-		ready = ready && (client.RedirectURL == NativeCallback && client.ClientSecret == "" || validCallback(client.RedirectURL) && client.ClientSecret != "")
+		ready = ready && (appReturn(client.RedirectURL) && client.ClientSecret == "" || validCallback(client.RedirectURL) && client.ClientSecret != "")
 	}
 	if !ready {
 		return serviceName(kind) + " sign-in is not set up yet."
