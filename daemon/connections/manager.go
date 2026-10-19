@@ -503,9 +503,73 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 		return Tool{}, nil, errors.New("tool arguments must be a JSON object")
 	}
 	if err = resolved.Validate(args); err != nil {
-		return Tool{}, nil, explainSchemaMismatch(t.InputSchema, args, err)
+		return Tool{}, nil, schemaInvokeError(err)
 	}
 	return *t, args, nil
+}
+
+// maxSchemaMismatchDetail bounds the whole schema explanation attached to a
+// rejected call, so one deep validation chain cannot flood the caller.
+const maxSchemaMismatchDetail = 300
+
+func schemaInvokeError(err error) error {
+	message := "arguments do not match the tool schema: " + schemaMismatchDetail(err)
+	runes := []rune(message)
+	if len(runes) > maxSchemaMismatchDetail {
+		message = string(runes[:maxSchemaMismatchDetail-1]) + "…"
+	}
+	return errors.New(message)
+}
+
+// schemaMismatchDetail turns a jsonschema-go validation error into one readable
+// line: the deepest failing argument path, then the library's reason. The
+// library nests one "validating <pointer>: " frame per level, so only the last
+// frame survives, with /properties/items/items/properties/prompt rewritten to
+// items[].prompt.
+func schemaMismatchDetail(err error) string {
+	detail := err.Error()
+	if i := strings.LastIndex(detail, "validating "); i >= 0 {
+		detail = detail[i+len("validating "):]
+	}
+	pointer, reason, ok := strings.Cut(detail, ": ")
+	if !ok {
+		return detail
+	}
+	if path := schemaArgumentPath(pointer); path != "" {
+		return path + ": " + reason
+	}
+	return reason
+}
+
+// schemaArgumentPath rewrites a JSON pointer into the argument notation a
+// caller writes: properties become dotted names and array elements become [].
+func schemaArgumentPath(pointer string) string {
+	var path strings.Builder
+	name := false
+	for _, token := range strings.Split(strings.Trim(pointer, "/"), "/") {
+		switch {
+		case token == "":
+			continue
+		case name:
+			if path.Len() > 0 {
+				path.WriteByte('.')
+			}
+			path.WriteString(token)
+			name = false
+		case token == "properties" || token == "$defs" || token == "definitions":
+			name = true
+		case token == "items":
+			path.WriteString("[]")
+		case token == "root":
+			// The library labels the whole document instead of a field.
+		default:
+			if path.Len() > 0 {
+				path.WriteByte('.')
+			}
+			path.WriteString(token)
+		}
+	}
+	return path.String()
 }
 
 func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, error) {
