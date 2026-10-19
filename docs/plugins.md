@@ -152,8 +152,10 @@ Brain and Workers use the same accounts through the CLI:
 ```sh
 mewla connections list --json
 mewla connections search --query github --json
+mewla connections describe --id ACCOUNT_ID --json   # every tool: name and description
 mewla connections describe --id ACCOUNT_ID --tool get_me --json
 mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
+mewla connections invoke --id ACCOUNT_ID --tool add_asset --args-file asset.json --json
 mewla connections policy --id ACCOUNT_ID --tools get_me,list_issues --allow
 mewla connections resources --id ACCOUNT_ID
 mewla connections read-resource --id ACCOUNT_ID --uri onlora://projects/PROJECT_ID
@@ -162,7 +164,10 @@ mewla connections confirm-updates --id ACCOUNT_ID --tools generate_image,write_f
 ```
 
 `policy --tools` sets every listed tool in one change: all of them, or none
-if any name is unknown. Leave out `--allow` to turn them off.
+if any name is unknown. Leave out `--allow` to turn them off. `describe`
+without `--tool` lists every tool on the account. Inline `--args` stays small;
+put a large payload (up to 8 MiB, such as `add_asset`'s base64 asset) in a file
+and pass `--args-file path`.
 
 Each call is one bounded request; nothing pages automatically.
 

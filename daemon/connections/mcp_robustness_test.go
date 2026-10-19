@@ -561,3 +561,57 @@ func TestResourcesListAndReadBehindReadAccess(t *testing.T) {
 		t.Fatalf("disabled account: %v", err)
 	}
 }
+
+// A tool may declare a payload larger than the old 64 KiB input bound, such as
+// Onlora's add_asset with a base64 asset. The request must reach the service.
+func TestInvokeAcceptsLargeToolArguments(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "Fixture", Version: "1"}, nil)
+	var received atomic.Int64
+	schema := map[string]any{"type": "object", "properties": map[string]any{"data": map[string]any{"type": "string"}}, "required": []string{"data"}, "additionalProperties": false}
+	server.AddTool(&mcp.Tool{Name: "add_asset", Description: "Store one asset", InputSchema: schema}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		received.Store(int64(len(req.Params.Arguments)))
+		return textResult("stored"), nil
+	})
+	m, id := mcpFixture(t, server)
+	mustHandle(t, m, Request{Action: "policy", ID: id, Tool: "add_asset", Allowed: true})
+	payload := strings.Repeat("A", 5<<20)
+	args, err := json.Marshal(map[string]string{"data": payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Handle(context.Background(), Request{Action: "invoke", ID: id, Tool: "add_asset", Arguments: args}); err != nil {
+		t.Fatalf("large arguments rejected: %v", err)
+	}
+	if received.Load() < int64(5<<20) {
+		t.Fatalf("service received %d argument bytes, want the full payload", received.Load())
+	}
+}
+
+// describe without a tool name lists the account's tools like search does.
+func TestDescribeWithoutToolListsEveryTool(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "Fixture", Version: "1"}, nil)
+	var calls atomic.Int32
+	addFixtureTool(server, "search", "Find things", &calls)
+	addFixtureTool(server, "create", "Make things", &calls)
+	m, id := mcpFixture(t, server)
+	resp := mustHandle(t, m, Request{Action: "describe", ID: id})
+	if resp.Tool != nil {
+		t.Fatal("describe without a tool returned one schema")
+	}
+	want := map[string]string{"search": "Find things", "create": "Make things"}
+	if len(resp.Matches) != len(want) {
+		t.Fatalf("matches %+v", resp.Matches)
+	}
+	for _, match := range resp.Matches {
+		if match.ConnectionID != id || match.Account != "Fixture" || want[match.Name] != match.Description || match.Allowed {
+			t.Fatalf("match %+v", match)
+		}
+	}
+	one := mustHandle(t, m, Request{Action: "describe", ID: id, Tool: "search"})
+	if one.Tool == nil || one.Tool.Name != "search" || len(one.Matches) != 0 {
+		t.Fatalf("named describe %+v", one)
+	}
+	if _, err := m.Handle(context.Background(), Request{Action: "describe", ID: id, Tool: "missing"}); err == nil {
+		t.Fatal("unknown tool accepted")
+	}
+}
