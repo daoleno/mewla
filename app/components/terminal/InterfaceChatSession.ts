@@ -127,6 +127,9 @@ interface UseInterfaceChatSessionInput {
   screenFocused: boolean;
 }
 
+/** A snapshot still missing this long after a subscribe or gap is worth a log line. */
+const SNAPSHOT_WAIT_REPORT_MS = 8_000;
+
 const draftCache = new Map<string, string>();
 const attachmentCache = new Map<string, ComposerAttachment[]>();
 
@@ -1138,6 +1141,48 @@ export function useInterfaceChatSession({
     screenFocused,
     serverId,
     resyncToken,
+  ]);
+
+  // A stuck stream leaves no trace on the daemon, so say so there: a gap that
+  // forced a resubscribe, and a snapshot that has not come back.
+  const awaitingSnapshot =
+    threadState.cacheKey === cacheKey ? threadState.awaitingSnapshot : false;
+  const streamRevision =
+    threadState.cacheKey === cacheKey ? threadState.streamCursor.revision : 0;
+  useEffect(() => {
+    if (resyncToken === 0 || !serverId) {
+      return;
+    }
+    wsClient.reportDiagnostic(
+      serverId,
+      "stream_gap",
+      `resync=${resyncToken} revision=${streamRevision} scope=${conversationScopeKey ?? ""}`,
+      workerId,
+    );
+    // Only a new resync is news; the revision is read as it was at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resyncToken]);
+  useEffect(() => {
+    if (!awaitingSnapshot || !serverId || connectionState !== "connected") {
+      return;
+    }
+    const timer = setTimeout(() => {
+      wsClient.reportDiagnostic(
+        serverId,
+        "snapshot_wait",
+        `no snapshot after ${SNAPSHOT_WAIT_REPORT_MS}ms resync=${resyncToken} generation=${subscriptionGeneration} scope=${conversationScopeKey ?? ""}`,
+        workerId,
+      );
+    }, SNAPSHOT_WAIT_REPORT_MS);
+    return () => clearTimeout(timer);
+  }, [
+    awaitingSnapshot,
+    connectionState,
+    conversationScopeKey,
+    resyncToken,
+    serverId,
+    subscriptionGeneration,
+    workerId,
   ]);
 
   useEffect(() => {

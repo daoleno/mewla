@@ -555,6 +555,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				// Without this line a phone that lost its connection leaves no
+				// trace here: connect and disconnect are verbose-only.
+				log.Printf("websocket: client connection lost remote=%s device=%s: %v", r.RemoteAddr, device.ID, err)
+			}
 			break
 		}
 		if owner.revoked.Load() ||
@@ -932,6 +937,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSessionLifecycleMessage(conn, raw)
 	case "telegram_connection_status", "telegram_connection_configure", "telegram_connection_bind", "telegram_connection_enable", "telegram_connection_disable", "telegram_connection_revoke", "telegram_connection_remove":
 		s.handleTelegramMessage(conn, raw)
+	case "client_diagnostic":
+		s.handleClientDiagnostic(conn, raw)
 	case "send_input", "send_key", "send_action":
 		s.handleSessionInputMessage(conn, raw)
 	case "answer_choice":

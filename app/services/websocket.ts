@@ -633,8 +633,12 @@ interface RequestOptions<T> {
  * state before the new socket can publish anything. Every send names its
  * server and fails unless that server is the live one.
  */
+/** Same event at most this often, so a flapping stream cannot flood the log. */
+const DIAGNOSTIC_MIN_GAP_MS = 10_000;
+
 export class WebSocketClient {
   private readonly handlers = new Map<string, MessageHandler[]>();
+  private readonly diagnosticSentAt = new Map<string, number>();
   private live: { meta: ConnectionMeta; socket: ServerSocket } | null = null;
 
   /** Connects to `server`, ending any live connection first. */
@@ -2232,6 +2236,34 @@ export class WebSocketClient {
           Array.isArray(payload.answers) ? payload.answers : [],
       },
     );
+  }
+
+  /**
+   * One line in the daemon log about a moment only this app can see (a stream
+   * gap, a snapshot that never came, a send nobody confirmed). The daemon
+   * keeps no record of those, so a stuck screen leaves nothing to inspect
+   * without it. Best effort and rate-limited per event; never throws.
+   */
+  reportDiagnostic(
+    serverId: string,
+    event: string,
+    detail: string,
+    streamId?: string,
+  ) {
+    const now = Date.now();
+    const last = this.diagnosticSentAt.get(event);
+    if (last !== undefined && now - last < DIAGNOSTIC_MIN_GAP_MS) {
+      return;
+    }
+    const sent = this.trySendNow(serverId, {
+      type: "client_diagnostic",
+      name: event,
+      request_id: streamId,
+      body: detail,
+    });
+    if (sent) {
+      this.diagnosticSentAt.set(event, now);
+    }
   }
 
   sendKey(serverId: string, workerId: string, key: string) {
