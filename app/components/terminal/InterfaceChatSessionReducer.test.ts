@@ -1430,3 +1430,82 @@ describe("one user bubble per send across stream ordering", () => {
     expect(visibleUserIds(current)).toEqual(["receipt-a"]);
   });
 });
+
+describe("Brain echo claim across mixed seq spaces", () => {
+  // Real shape (scrubbed): the durable Brain timeline numbers rows by position
+  // (~5k), while live provider events are numbered line*100+index (~4M).
+  const body = "dup-shape single line";
+  const providerEchoId = "provider-session:echo-uuid:user";
+  const receiptId = "mvekitfg_htkg8k";
+  const durable = [
+    { id: "h1", seq: 5054, kind: "user_message" as const, body: "earlier" },
+    { id: "h2", seq: 5055, kind: "assistant_message" as const, body: "reply" },
+  ];
+  const liveTool = {
+    id: "provider-session:tool-1",
+    seq: 4_082_600,
+    kind: "status" as const,
+    body: "live tool event",
+  };
+  const brainSnapshot = (
+    current: ReturnType<typeof state>,
+    events: NonNullable<ReturnType<typeof state>["conversation"]>["events"],
+    revision: number,
+  ) =>
+    interfaceChatThreadReducer(current, {
+      type: "snapshot",
+      generation: 1,
+      payload: {
+        request_id: "stream-a",
+        conversation_id: "brain-thread:thread-a",
+        revision,
+        conversation: {
+          available: true,
+          source: "brain_chat",
+          session_id: "brain-thread:thread-a",
+          events,
+        },
+      },
+    });
+  const visibleUsers = (current: ReturnType<typeof state>) =>
+    mergePendingUserMessagesIntoTimeline(
+      projectTimeline(current.conversation?.events ?? [], null).items,
+      current.pendingUserMessages,
+    ).filter((item) => item.type === "message" && item.role === "user");
+
+  test("a provider echo consumes the send when live events outnumber durable seq", () => {
+    let current = brainSnapshot(state([]), [...durable, liveTool], 1);
+    current = interfaceChatThreadReducer(current, {
+      type: "add_pending_user_message",
+      message: {
+        ...pending({ id: "local-a", body, sentText: body, dispatchRequestId: receiptId }),
+      },
+    });
+    expect(current.pendingUserMessages).toHaveLength(1);
+
+    // The echo reaches the client before the admission row does.
+    current = brainSnapshot(
+      current,
+      [
+        ...durable,
+        { id: providerEchoId, seq: 5056, kind: "user_message", body },
+        liveTool,
+      ],
+      2,
+    );
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(visibleUsers(current).map((item) => item.id)).toEqual([
+      "h1",
+      providerEchoId,
+    ]);
+
+    // Then the daemon credits the echo to the admission row.
+    current = brainSnapshot(
+      current,
+      [...durable, { id: receiptId, seq: 5056, kind: "user_message", body }, liveTool],
+      3,
+    );
+    expect(current.pendingUserMessages).toEqual([]);
+    expect(visibleUsers(current).map((item) => item.id)).toEqual(["h1", receiptId]);
+  });
+});
