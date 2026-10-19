@@ -169,6 +169,11 @@ without `--tool` lists every tool on the account. Inline `--args` stays small;
 put a large payload (up to 8 MiB, such as `add_asset`'s base64 asset) in a file
 and pass `--args-file path`.
 
+When arguments do not fit the tool's input schema, the error names the
+argument paths that missed it and the constraint each one broke, up to three
+(for example `items: has 9 items, maxItems is 8`), so a call can be fixed
+without re-reading the whole schema.
+
 Each call is one bounded request; nothing pages automatically.
 
 - **Resources.** An MCP server can publish documents next to its tools, such as
