@@ -503,7 +503,7 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 		return Tool{}, nil, errors.New("tool arguments must be a JSON object")
 	}
 	if err = resolved.Validate(args); err != nil {
-		return Tool{}, nil, errors.New("arguments do not match the tool schema; describe the tool first")
+		return Tool{}, nil, explainSchemaMismatch(t.InputSchema, args, err)
 	}
 	return *t, args, nil
 }
