@@ -61,6 +61,9 @@ interface UseInterfaceMessageTransportInput {
   requestTurnFocus(pendingMessageId: string): void;
 }
 
+/** An acknowledged send whose receipt row has not arrived this long is logged. */
+const PENDING_UNRECONCILED_REPORT_MS = 45_000;
+
 export function useInterfaceMessageTransport({
   serverId,
   workerId,
@@ -153,10 +156,42 @@ export function useInterfaceMessageTransport({
       receipt: ReturnType<typeof wsClient.sendInput>,
     ) => {
       const settle = (outcome: PendingDeliveryOutcome) => {
+        const settlement = settlePendingDelivery(outcome);
         settlePendingUserMessage(pendingMessageId, {
-          ...settlePendingDelivery(outcome),
+          ...settlement,
           requestId: receipt.requestId,
         });
+        if (settlement.kind !== "acknowledge") {
+          wsClient.reportDiagnostic(
+            serverId,
+            "send_unsettled",
+            `request=${receipt.requestId} outcome=${outcome.kind} settled=${settlement.kind}`,
+            receipt.requestId,
+          );
+        } else {
+          // Acknowledged, so the row now waits for its receipt row. Say so if
+          // that never comes: the row would sit with its clock while the
+          // computer already has the message.
+          const waiting = setTimeout(() => {
+            ackDeadlinesRef.current.delete(waiting);
+            const still = pendingUserMessagesRef.current.find(
+              (candidate) =>
+                candidate.id === pendingMessageId &&
+                candidate.lifecycle === "pending",
+            );
+            if (still) {
+              wsClient.reportDiagnostic(
+                serverId,
+                "pending_unreconciled",
+                `request=${receipt.requestId} waited=${PENDING_UNRECONCILED_REPORT_MS}ms ` +
+                  `lastFrameAgeMs=${Math.max(0, Date.now() - (wsClient.lastFrameAt(serverId) ?? 0))} ` +
+                  `priorEvents=${still.createdAfterEventIds?.length ?? 0}`,
+                receipt.requestId,
+              );
+            }
+          }, PENDING_UNRECONCILED_REPORT_MS);
+          ackDeadlinesRef.current.add(waiting);
+        }
       };
       // A socket that died without a close event never answers: time the
       // send out once the connection has been silent, never while it is live.

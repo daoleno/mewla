@@ -34,6 +34,24 @@ links go only to the terminal, never to the file.
 tail -n 50 ~/.mewla/logs/daemon.log
 ```
 
+### When the phone's screen stops updating
+
+The app reports a few moments only it can see as one line each in the daemon
+log: `client diagnostic device=<id> event=<name> ...`. `stream_gap` means a live
+conversation skipped a revision and resubscribed, `snapshot_wait` means no
+snapshot came back within 8 seconds of subscribing, `send_unsettled` means a
+send was not confirmed, and `pending_unreconciled` means a confirmed send
+still had no row 45 seconds later. A connection that dropped without a clean
+close is logged as `websocket: client connection lost ... device=<id>`. To
+check a stuck screen afterwards:
+
+```sh
+grep -E 'client diagnostic|client connection lost' ~/.mewla/logs/daemon.log | tail -n 30
+```
+
+A device id is in `mewla devices list`. Each event is reported at most once
+every 10 seconds per device.
+
 ## The daemon will not start
 
 - **`mewla: command not found`**: the install directory is not on `PATH`. Open a

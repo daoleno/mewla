@@ -117,6 +117,25 @@ test("diff pages preserve literal paths and correlate requests with their owning
   client.disconnect();
 });
 
+test("a client diagnostic is one frame per event within the rate limit and silent when offline", async () => {
+  const client = new WebSocketClient();
+  client.reportDiagnostic(server.id, "stream_gap", "offline", "stream-1");
+  const socket = await connectClient(client, server);
+  socket.open();
+  client.reportDiagnostic(server.id, "stream_gap", "resync=1 revision=7", "stream-1");
+  client.reportDiagnostic(server.id, "stream_gap", "resync=2 revision=7", "stream-1");
+  client.reportDiagnostic(server.id, "snapshot_wait", "no snapshot", "stream-1");
+  const frames = socket.sent.map((frame) => JSON.parse(frame));
+  expect(frames.map((frame) => frame.name)).toEqual(["stream_gap", "snapshot_wait"]);
+  expect(frames[0]).toEqual({
+    type: "client_diagnostic",
+    name: "stream_gap",
+    request_id: "stream-1",
+    body: "resync=1 revision=7",
+  });
+  client.disconnect();
+});
+
 describe("one live connection", () => {
   test("switching servers ends the old socket and isolates its requests", async () => {
     const client = new WebSocketClient();
