@@ -38,8 +38,9 @@ Permission does not replace the user's instruction for a task. Sending mail/mess
 ```sh
 mewla connections list --json
 mewla connections search --query github --json
+mewla connections describe --id ACCOUNT_ID --json   # every tool, name and description
 mewla connections describe --id ACCOUNT_ID --tool get_me --json
-mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
+mewla connections invoke --id ACCOUNT_ID --tool add_asset --args-file asset.json --json
 ```
 
 Disconnect commits the disabled state before provider revocation and credential deletion. Future calls fail even if removal/revocation needs retry. Providers without supported revocation still require vendor-side removal if complete vendor revocation is desired. Calls already in flight finish before disconnect returns. Writes are never automatically retried.

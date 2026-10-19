@@ -7,7 +7,18 @@ import (
 )
 
 const MaxResultBytes = 1 << 20
-const MaxInputBytes = 64 << 10
+
+// MaxInputBytes bounds one tool call's arguments. Onlora's add_asset accepts
+// up to 4 MB in a single base64 payload, which is about 5.3 MiB encoded plus
+// JSON, so 8 MiB carries the largest declared tool payload with room to spare.
+// The local control socket and the app WebSocket have no smaller frame limit,
+// and the call is still bounded in memory.
+const MaxInputBytes = 8 << 20
+
+// MaxRequestBytes bounds a whole connections request, so the JSON envelope
+// (arguments plus routing fields) fits when arguments reach MaxInputBytes.
+const MaxRequestBytes = MaxInputBytes + (1 << 20)
+
 const MaxTools = 200
 
 // One tool's input schema, and all of an account's schemas together. Notion's

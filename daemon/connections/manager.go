@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -152,7 +153,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return Response{}, errors.New("plugins are unavailable")
 	}
 	raw, _ := json.Marshal(q)
-	if len(raw) > 2<<20 {
+	if len(raw) > MaxRequestBytes {
 		return Response{}, errors.New("plugin request is too large")
 	}
 	if q.Action == "invoke" {
@@ -245,9 +246,20 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if !r.Account.Enabled || r.Account.Status == "disconnected" {
 			return Response{}, errors.New("plugin account is disabled or disconnected")
 		}
-		for _, t := range m.projection(r).Tools {
+		tools := m.projection(r).Tools
+		if q.Tool == "" {
+			// Without a tool name, describe lists every tool the way search
+			// does: name and description, no schemas.
+			matches := make([]Match, 0, len(tools))
+			for _, t := range tools {
+				matches = append(matches, Match{ConnectionID: r.Account.ID, Account: r.Account.Name, Name: t.Name, Description: t.Description, Allowed: t.Allowed})
+			}
+			return Response{Matches: matches}, nil
+		}
+		for _, t := range tools {
 			if t.Name == q.Tool {
-				return Response{Tool: &t}, nil
+				tool := t
+				return Response{Tool: &tool}, nil
 			}
 		}
 		return Response{}, errors.New("tool not found")
@@ -458,7 +470,7 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 		q.Arguments = json.RawMessage(`{}`)
 	}
 	if len(q.Arguments) > MaxInputBytes {
-		return Tool{}, nil, errors.New("tool input exceeds 64 KiB")
+		return Tool{}, nil, fmt.Errorf("tool input exceeds %d MiB", MaxInputBytes>>20)
 	}
 	var t *Tool
 	for _, tool := range r.Account.Tools {

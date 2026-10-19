@@ -21,8 +21,8 @@ func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
 		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
-Search: --query text. Describe/invoke: --id account --tool name.
-Invoke: --args '{"query":{...}}' or --args-file path. One bounded call, no implicit pagination, never retried.
+Search: --query text. Describe/invoke: --id account --tool name; describe without --tool lists every tool.
+Invoke: --args '{"query":{...}}' or --args-file path (up to 8 MiB). One bounded call, no implicit pagination, never retried.
 A call that times out may already have run; check its state with a read tool before calling it again.
 MCP resources: resources --id account [--cursor c] lists documents and URI templates; read-resource --id account --uri onlora://projects/<id> reads one.
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
