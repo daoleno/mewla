@@ -251,7 +251,7 @@ export function interfaceChatThreadReducer(
         dispatchAttemptOrder: nextPendingDispatchAttemptOrder(
           state.pendingUserMessages,
         ),
-        createdAfterMaxSeq: maxConversationEventSeq(state.conversation),
+        createdAfterMaxSeq: maxUserEventSeq(state.conversation),
         createdAfterEventIds: Array.from(
           conversationEventIdSet(state.conversation),
         ),
@@ -266,7 +266,7 @@ export function interfaceChatThreadReducer(
       });
     }
     case "begin_pending_user_message_attempt": {
-      const createdAfterMaxSeq = maxConversationEventSeq(state.conversation);
+      const createdAfterMaxSeq = maxUserEventSeq(state.conversation);
       const createdAfterEventIds = Array.from(
         conversationEventIdSet(state.conversation),
       );
@@ -1493,10 +1493,22 @@ function conversationEventIdSet(conversation: CodexConversation | null) {
   return ids;
 }
 
-function maxConversationEventSeq(conversation: CodexConversation | null) {
+/**
+ * The send boundary for the causal echo fallback. Candidates are user events,
+ * so the boundary must come from user events too: a Brain timeline numbers its
+ * durable rows by position, while live provider events (tools, partials) are
+ * numbered by transcript line, orders of magnitude higher. A boundary taken
+ * from every event sat above every durable user row, so no echo could ever
+ * consume its send.
+ */
+function maxUserEventSeq(conversation: CodexConversation | null) {
   let maxSeq = 0;
   conversation?.events.forEach((event) => {
-    if (typeof event.seq === "number" && event.seq > maxSeq) {
+    if (
+      event.kind === "user_message" &&
+      typeof event.seq === "number" &&
+      event.seq > maxSeq
+    ) {
       maxSeq = event.seq;
     }
   });
