@@ -217,7 +217,9 @@ def validate_changelog(
         raise PrepareError(
             "CHANGELOG.md release entries are not strictly reverse chronological"
         )
-    if next_tag in content:
+    # An exact entry, not a substring: v0.2.27 must not collide with the
+    # v0.2.27-beta.1 entry it follows.
+    if next_tag in entries:
         raise PrepareError(f"CHANGELOG.md already contains {next_tag}")
     for tag in entries:
         note = root / "docs" / "releases" / f"{tag}.md"

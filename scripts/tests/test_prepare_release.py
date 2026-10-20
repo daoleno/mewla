@@ -158,6 +158,37 @@ class ChangelogValidationTests(unittest.TestCase):
             )
 
 
+    def changelog_root(self, tags):
+        scratch = os.environ.get("MEWLA_BUILD_TMPDIR") or os.environ.get("TMPDIR")
+        temporary = tempfile.TemporaryDirectory(
+            prefix="mewla-changelog-", dir=Path(scratch) if scratch else None
+        )
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        (root / "docs/releases").mkdir(parents=True)
+        for tag in tags:
+            (root / "docs/releases" / f"{tag}.md").write_text(
+                f"# Mewla {tag}\n", encoding="utf-8"
+            )
+        changelog = prepare_release.CHANGELOG_PREFIX + "".join(
+            f"- [{tag}](docs/releases/{tag}.md)\n" for tag in tags
+        )
+        return root, changelog
+
+    def test_accepts_a_stable_release_after_its_own_beta(self):
+        root, changelog = self.changelog_root(["v0.2.27-beta.1", "v0.2.26"])
+        prepare_release.validate_changelog(
+            root, changelog, "0.2.27-beta.1", "v0.2.27"
+        )
+
+    def test_rejects_a_tag_that_is_already_listed(self):
+        root, changelog = self.changelog_root(["v0.2.27", "v0.2.26"])
+        with self.assertRaisesRegex(
+            prepare_release.PrepareError, "already contains v0.2.27"
+        ):
+            prepare_release.validate_changelog(root, changelog, "0.2.27", "v0.2.27")
+
+
 class UserNotesTests(unittest.TestCase):
     def test_splits_summary_and_sections_in_canonical_order(self):
         summary, sections = prepare_release.parse_user_notes(
