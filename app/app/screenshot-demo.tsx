@@ -29,6 +29,8 @@ import {
   resolvePrimaryAppBarGeometry,
 } from "../components/navigation/PrimaryDrawerShell";
 import { ChatCanvas } from "../components/terminal/ChatCanvas";
+import { ClaudeChoiceCard } from "../components/terminal/ClaudeChoiceCard";
+import { choiceCardMaxHeight } from "../components/terminal/claudeChoiceModel";
 import { InterfaceChatComposer } from "../components/terminal/InterfaceChatComposer";
 import { InterfaceChatKeyboardFrame } from "../components/terminal/InterfaceChatKeyboardFrame";
 import { InterfaceTimelineView } from "../components/terminal/InterfaceTimelineView";
@@ -54,6 +56,7 @@ import {
 } from "../constants/tokens";
 import { buildChatChrome } from "../theme";
 import {
+  SCREENSHOT_CHOICE_FIXTURE,
   SCREENSHOT_BRAIN_EVENTS,
   SCREENSHOT_BRAIN_NEEDS,
   SCREENSHOT_BRAIN_WORK_DESK,
@@ -403,8 +406,12 @@ function ChatDemo() {
     long?: string | string[];
     pending?: string | string[];
     working?: string | string[];
+    choice?: string | string[];
     fixture?: string;
   }>();
+  const showChoice =
+    (Array.isArray(params.choice) ? params.choice[0] : params.choice) === "1";
+  const { height: windowHeight } = useWindowDimensions();
   const activityFixture = params.fixture === "activity";
   const { theme: appTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
@@ -531,6 +538,21 @@ function ChatDemo() {
           chrome={chrome}
           topChromeInset={topChromeInset}
           composer={
+            <>
+              {showChoice ? (
+                <ClaudeChoiceCard
+                  callId="demo-choice"
+                  choice={SCREENSHOT_CHOICE_FIXTURE}
+                  live
+                  chrome={chrome}
+                  maxHeight={choiceCardMaxHeight({
+                    windowHeight,
+                    topChromeInset,
+                    bottomInset: insets.bottom,
+                  })}
+                  onSubmit={async () => {}}
+                />
+              ) : null}
             <InterfaceChatComposer
               inputRef={inputRef}
               draft={draft}
@@ -576,6 +598,7 @@ function ChatDemo() {
               onSendPress={() => setDraft("")}
               onStopPress={NOOP}
             />
+            </>
           }
           renderTimeline={(extraContentPadding, keyboardLifecycleGate) => (
             <InterfaceTimelineView

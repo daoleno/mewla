@@ -7,7 +7,13 @@ import {
 import {
   buildChoiceAnswerPayload,
   choiceAnsweredSummary,
+  choiceCardMaxHeight,
+  choiceDraftAnswerText,
   choiceDraftComplete,
+  choiceReviewStep,
+  clampChoiceStep,
+  nextChoiceStep,
+  unansweredChoiceQuestions,
   emptyChoiceDraft,
   latestPendingChoice,
   setChoiceOtherText,
@@ -158,5 +164,61 @@ describe("claude choice model", () => {
     const [unanswered] = buildTimeline([choiceEvent("toolu_1", "unanswered")]);
     expect(unanswered).toMatchObject({ title: "Not answered", detail: "Which fruit?" });
     expect(latestPendingChoice([choiceEvent("toolu_1", "unanswered")])).toBeNull();
+  });
+});
+
+describe("one-question-at-a-time steps", () => {
+  const wizard: ConversationChoice = {
+    kind: "AskUserQuestion",
+    state: "pending",
+    questions: [
+      { question: "A?", options: [{ label: "a1" }, { label: "a2" }] },
+      { question: "B?", multi_select: true, options: [{ label: "b1" }, { label: "b2" }] },
+      { question: "C?", options: [{ label: "c1" }, { label: "c2" }] },
+    ],
+  };
+
+  test("review is the step after the last question and steps never leave the range", () => {
+    expect(choiceReviewStep(wizard)).toBe(3);
+    expect(nextChoiceStep(wizard, 0)).toBe(1);
+    expect(nextChoiceStep(wizard, 2)).toBe(3);
+    expect(nextChoiceStep(wizard, 3)).toBe(3);
+    expect(clampChoiceStep(wizard, -4)).toBe(0);
+    expect(clampChoiceStep(wizard, 9)).toBe(3);
+    expect(clampChoiceStep(wizard, Number.NaN)).toBe(0);
+  });
+
+  test("unanswered questions follow the draft, including an empty Other", () => {
+    let draft = emptyChoiceDraft(wizard);
+    expect(unansweredChoiceQuestions(wizard, draft)).toEqual([0, 1, 2]);
+    draft = toggleChoiceOption(wizard, draft, 0, 1);
+    draft = toggleChoiceOther(wizard, draft, 2);
+    expect(unansweredChoiceQuestions(wizard, draft)).toEqual([1, 2]);
+    draft = setChoiceOtherText(draft, 2, "  Sea ");
+    draft = toggleChoiceOption(wizard, draft, 1, 0);
+    expect(unansweredChoiceQuestions(wizard, draft)).toEqual([]);
+    // Changing an answer later replaces it and leaves the others alone.
+    draft = toggleChoiceOption(wizard, draft, 0, 0);
+    expect(buildChoiceAnswerPayload("call", wizard, draft)?.answers).toEqual([
+      { selected: [0] },
+      { selected: [0] },
+      { selected: [], other: "Sea" },
+    ]);
+  });
+
+  test("answer text joins the chosen labels and the Other text for the review", () => {
+    let draft = emptyChoiceDraft(wizard);
+    expect(choiceDraftAnswerText(wizard.questions[1], draft[1])).toBe("");
+    draft = toggleChoiceOption(wizard, draft, 1, 1);
+    draft = toggleChoiceOption(wizard, draft, 1, 0);
+    draft = toggleChoiceOther(wizard, draft, 1);
+    expect(choiceDraftAnswerText(wizard.questions[1], draft[1])).toBe("");
+    draft = setChoiceOtherText(draft, 1, "mine");
+    expect(choiceDraftAnswerText(wizard.questions[1], draft[1])).toBe("b1, b2, mine");
+  });
+
+  test("the card height budget keeps the card under the header and never collapses", () => {
+    expect(choiceCardMaxHeight({ windowHeight: 844, topChromeInset: 100, bottomInset: 34 })).toBe(590);
+    expect(choiceCardMaxHeight({ windowHeight: 300, topChromeInset: 100, bottomInset: 34 })).toBe(200);
   });
 });
