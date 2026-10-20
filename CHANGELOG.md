@@ -4,6 +4,7 @@ Canonical release notes live under [`docs/releases/`](docs/releases/). This file
 
 ## Releases
 
+- [v0.2.27-beta.1](docs/releases/v0.2.27-beta.1.md)
 - [v0.2.26](docs/releases/v0.2.26.md)
 - [v0.2.25](docs/releases/v0.2.25.md)
 - [v0.2.24](docs/releases/v0.2.24.md)
