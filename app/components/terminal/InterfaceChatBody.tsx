@@ -1,6 +1,7 @@
 import React from "react";
 import {
   StyleSheet,
+  useWindowDimensions,
   View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -8,6 +9,7 @@ import {
   type FlatList,
   type TextInput,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SharedValue } from "react-native-reanimated";
 import type {
   CodexConversation,
@@ -31,7 +33,7 @@ import { InterfaceChatTimelineSection } from "./InterfaceChatTimelineSection";
 import { TerminalActionPromptCard } from "./TerminalActionPromptCard";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
 import { ClaudeChoiceCard } from "./ClaudeChoiceCard";
-import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
+import { choiceCardMaxHeight, type InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import { InterfaceTimelineJumpButton } from "./InterfaceTimelineJumpButton";
@@ -218,6 +220,8 @@ export function InterfaceChatBody({
   composerAccessory,
   skillsSheet,
 }: InterfaceChatBodyProps) {
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const composer = !readOnly ? (
     <>
       {choicePrompt ? (
@@ -226,8 +230,12 @@ export function InterfaceChatBody({
           choice={choicePrompt.choice}
           live={choicePrompt.live}
           chrome={chrome}
+          maxHeight={choiceCardMaxHeight({
+            windowHeight,
+            topChromeInset,
+            bottomInset: insets.bottom,
+          })}
           onSubmit={choicePrompt.onSubmit}
-          onSwitchToTerminal={onUnavailableAction}
         />
       ) : terminalActionPrompt ? (
         <TerminalActionPromptCard

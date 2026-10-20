@@ -1,5 +1,5 @@
 import type { GitDiffPage, GitDiffPageRequest, GitDiffRow, GitDiffStatusSnapshot } from "./gitDiff";
-import type { CodexConversationEvent } from "./codexConversation";
+import type { CodexConversationEvent, ConversationChoice } from "./codexConversation";
 import type { Worker } from "../store/workers";
 import type { PendingUserMessage } from "../components/terminal/InterfaceChatSession";
 import type { ProvidersSnapshot } from "./providers/types";
@@ -826,3 +826,50 @@ export function screenshotGitDiffPage(request: GitDiffPageRequest): GitDiffPage 
     next_match: -1,
   };
 }
+
+/** A pending four-question AskUserQuestion, as the Brain view shows it. */
+export const SCREENSHOT_CHOICE_FIXTURE: ConversationChoice = {
+  kind: "AskUserQuestion",
+  state: "pending",
+  questions: [
+    {
+      header: "备份",
+      question: "数据库备份放在哪？目前测试环境的数据只存在一个节点的本地磁盘上，没有备份。",
+      options: [
+        {
+          label: "每天 pg_dump 到 GCS (Recommended)",
+          description:
+            "数据库仍在集群里，每天导出一次传到 GCS，保留 14 天；需要一个 GCS 桶和写入权限，可以由我在项目里创建，或者你指定一个已有的桶",
+        },
+        { label: "改用 Cloud SQL", description: "GCP 托管的 PostgreSQL，自带自动备份和时间点恢复；每月多花一些钱，也要多配一些 GCP 权限" },
+        { label: "先备份到另一台节点", description: "最简单，但整个集群出问题时备份也会一起没" },
+      ],
+    },
+    {
+      header: "注册",
+      question: "正式版开放谁来注册？",
+      options: [
+        { label: "只能邀请加入 (Recommended)", description: "关闭公开注册，客户通过组织邀请或由管理员开号；和测试环境一样" },
+        { label: "开放公开注册", description: "任何人都能注册；上线前要先配好 SMTP 邮件验证" },
+      ],
+    },
+    {
+      header: "区域",
+      question: "要部署到哪些区域？",
+      multi_select: true,
+      options: [
+        { label: "us-central1", description: "美国中部，延迟最低的默认区域" },
+        { label: "asia-east1", description: "台湾，亚洲用户更近" },
+        { label: "europe-west1", description: "比利时，欧洲用户使用" },
+      ],
+    },
+    {
+      header: "套餐",
+      question: "默认套餐用哪一档？",
+      options: [
+        { label: "Free", description: "不限时，功能有限" },
+        { label: "Pro", description: "完整功能，按月付费" },
+      ],
+    },
+  ],
+};

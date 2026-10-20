@@ -157,6 +157,67 @@ export function buildChoiceAnswerPayload(
   };
 }
 
+/** Room the composer needs under the card, in dp. */
+const CHOICE_CARD_COMPOSER_RESERVE = 112;
+const CHOICE_CARD_MIN_HEIGHT = 200;
+
+/**
+ * The tallest the card may be so it never reaches the floating header: the
+ * card sits in the composer overlay, which has no height limit of its own.
+ */
+export function choiceCardMaxHeight(input: {
+  windowHeight: number;
+  topChromeInset: number;
+  bottomInset: number;
+}) {
+  const room =
+    input.windowHeight - input.topChromeInset - input.bottomInset - CHOICE_CARD_COMPOSER_RESERVE - 8;
+  return Math.max(CHOICE_CARD_MIN_HEIGHT, Math.floor(room));
+}
+
+/**
+ * The wizard's position: 0..n-1 is a question, n is the review step. Like the
+ * Claude Code terminal, one question shows at a time and the last step lists
+ * every answer before it is sent.
+ */
+export function choiceReviewStep(choice: ConversationChoice) {
+  return choice.questions.length;
+}
+
+export function clampChoiceStep(choice: ConversationChoice, step: number) {
+  return Math.min(Math.max(Math.trunc(step) || 0, 0), choiceReviewStep(choice));
+}
+
+/** The step a single-select pick moves to: the next question, else review. */
+export function nextChoiceStep(choice: ConversationChoice, step: number) {
+  return clampChoiceStep(choice, step + 1);
+}
+
+export function unansweredChoiceQuestions(choice: ConversationChoice, draft: ChoiceDraftAnswer[]) {
+  const missing: number[] = [];
+  choice.questions.forEach((question, index) => {
+    if (!choiceQuestionAnswered(question, draft[index])) {
+      missing.push(index);
+    }
+  });
+  return missing;
+}
+
+/** "Cloud SQL" or "US East, Asia, Oceania": the labels and Other text chosen. */
+export function choiceDraftAnswerText(
+  question: ConversationChoiceQuestion,
+  answer: ChoiceDraftAnswer | undefined,
+) {
+  if (!answer || !choiceQuestionAnswered(question, answer)) {
+    return "";
+  }
+  const labels = answer.selected
+    .map((index) => question.options[index]?.label ?? "")
+    .filter(Boolean);
+  const other = answerOther(answer);
+  return (other ? [...labels, other] : labels).join(", ");
+}
+
 /** "Fruit: Banana · Colors: Red, Blue" for the resolved timeline line. */
 export function choiceAnsweredSummary(choice: ConversationChoice): string {
   return choiceAnswerLines(choice).join(" · ");
