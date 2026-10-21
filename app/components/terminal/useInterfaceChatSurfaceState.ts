@@ -43,6 +43,7 @@ import {
 import { liveActionPromptScopeKey } from "../../services/workerSessionListTransport";
 import { useCodexSlashCommands } from "./CodexSlashCommands";
 import { useInterfaceChatBodyProps } from "./useInterfaceChatBodyProps";
+import { latestReplyOf } from "./InterfaceTimelineModel";
 import { useInterfaceMessageActions } from "./useInterfaceMessageActions";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import {
@@ -104,7 +105,7 @@ interface InterfaceChatSurfaceState {
   bodyProps: InterfaceChatBodyProps;
   messageActions: Pick<
     ReturnType<typeof useInterfaceMessageActions>,
-    "environment" | "onEdit" | "onResend"
+    "environment" | "latestReply" | "onEdit" | "onRetry"
   >;
 }
 
@@ -501,6 +502,10 @@ export function useInterfaceChatSurfaceState({
   });
 
   const desktopWeb = useDesktopWeb();
+  const latestReply = useMemo(
+    () => latestReplyOf(events, pendingUserMessages.length),
+    [events, pendingUserMessages.length],
+  );
   const messageActions = useInterfaceMessageActions({
     serverId,
     workerId,
@@ -511,6 +516,7 @@ export function useInterfaceChatSurfaceState({
       workerState.workers.find(
         (candidate) => candidate.key === makeSessionKey(serverId, workerId),
       )?.capabilities?.message_rewind === true,
+    latestReply,
     desktop: desktopWeb,
     chrome,
     draft,
@@ -742,8 +748,9 @@ export function useInterfaceChatSurfaceState({
     bodyProps,
     messageActions: {
       environment: messageActions.environment,
+      latestReply: messageActions.latestReply,
       onEdit: messageActions.onEdit,
-      onResend: messageActions.onResend,
+      onRetry: messageActions.onRetry,
     },
   };
 }

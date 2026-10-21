@@ -12,7 +12,7 @@ import {
 } from "../../constants/tokens";
 import { mixHex } from "../../theme/colorUtils";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
-import { MessageActionSurface } from "./MessageActions";
+import { MessageActionSurface, ReplyActionRow } from "./MessageActions";
 import type { MessageActionSubject } from "./messageActionsModel";
 import { MessageBubbleFooter } from "./MessageBubbleFooter";
 import {
@@ -120,7 +120,12 @@ export function UserMessage({
   const subject = messageSubject(item);
   return (
     <View style={[styles.userRow, spacing]}>
-      <MessageActionSurface subject={subject} align="end" chrome={chrome}>
+      <MessageActionSurface
+        subject={subject}
+        align="end"
+        maxWidth={isChatGpt ? "88%" : "86%"}
+        chrome={chrome}
+      >
         <View
           // Busy only — never a status-only accessibilityLabel that replaces body.
           accessibilityState={item.pending ? { busy: true } : undefined}
@@ -205,9 +210,10 @@ export function AssistantMessage({
     presentation.groupPosition !== "middle" &&
     presentation.groupPosition !== "last";
 
+  const subject = messageSubject(item);
   return (
     <View style={[styles.assistantRow, spacing]}>
-      <MessageActionSurface subject={messageSubject(item)} align="start" chrome={chrome}>
+      <MessageActionSurface subject={subject} align="start" chrome={chrome}>
         {showSender ? (
           <Text style={[styles.assistantSender, { color: chrome.accent }]}>
             {senderLabel}
@@ -225,6 +231,7 @@ export function AssistantMessage({
           ) : null}
         </View>
       </MessageActionSurface>
+      <ReplyActionRow subject={subject} chrome={chrome} />
     </View>
   );
 }
@@ -240,7 +247,7 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     position: "relative",
-    maxWidth: "86%",
+    maxWidth: "100%",
     overflow: "visible",
     paddingHorizontal: 14,
     paddingTop: 9,
@@ -249,7 +256,7 @@ const styles = StyleSheet.create({
   },
   userBubbleChatGpt: {
     position: "relative",
-    maxWidth: "88%",
+    maxWidth: "100%",
     overflow: "visible",
     paddingHorizontal: 14,
     paddingVertical: 10,

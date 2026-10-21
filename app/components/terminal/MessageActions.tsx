@@ -1,14 +1,17 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, View, type DimensionValue } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Icon, type IconName } from "../icons/Icon";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { CODE_BLOCK_COPIED_RESET_MS } from "./InterfaceMessageCodeBlockCopy";
 import {
+  isRerunnablePrompt,
   messageActionKinds,
   messageCopyText,
+  type LatestReply,
   type MessageActionEnvironment,
   type MessageActionKind,
   type MessageActionSubject,
@@ -20,10 +23,14 @@ import {
 
 export interface MessageActionsValue {
   environment: MessageActionEnvironment;
-  /** The message whose text is selectable (phone: after "Select text"). */
-  selectingId: string | null;
+  /** The newest reply and its prompt, for the reply's Copy and Retry row. */
+  latestReply: LatestReply | undefined;
+  /** Opens the message menu (phone). */
   openMenu(subject: MessageActionSubject): void;
-  run(kind: Exclude<MessageActionKind, "copy" | "select">, subject: MessageActionSubject): void;
+  copy(subject: MessageActionSubject): void;
+  select(subject: MessageActionSubject): void;
+  edit(subject: MessageActionSubject): void;
+  retry(prompt: MessageActionSubject): void;
 }
 
 export const MessageActionsContext = createContext<MessageActionsValue | null>(null);
@@ -31,9 +38,6 @@ export const MessageActionsContext = createContext<MessageActionsValue | null>(n
 export function useMessageActions() {
   return useContext(MessageActionsContext);
 }
-
-const LONG_PRESS_MS = 360;
-const RESEND_ARMED_MS = 3000;
 
 export function useCopyFeedback(text: string) {
   const [copied, setCopied] = useState(false);
@@ -48,20 +52,31 @@ export function useCopyFeedback(text: string) {
   return { copied, copy };
 }
 
+const LONG_PRESS_MS = 350;
+// Two recognizers watch the same press; the second to fire is the same press.
+const SAME_PRESS_MS = 800;
+
 /**
- * Wraps one message so it answers to the message menu: a long press on the
- * phone, a context menu and a hover row on desktop. Bubble text is not
- * natively selectable on the phone (that long press belongs to the menu); the
- * menu's Select text turns selection on for that one message.
+ * Wraps one message so it answers to the message actions: a long press opens
+ * the message sheet on the phone (as in the ChatGPT and Claude apps), a hover
+ * row shows on desktop (whose right click and text selection stay the
+ * browser's own).
+ *
+ * The long press is watched twice on purpose. A gesture-handler recognizer
+ * works at the native touch level, so it does not depend on the text view
+ * under the finger handing the touch on to the JS responder; the Pressable is
+ * the JS-responder path. Either opens the sheet, once.
  */
 export function MessageActionSurface({
   subject,
   align,
+  maxWidth,
   chrome,
   children,
 }: {
   subject: MessageActionSubject;
   align: "start" | "end";
+  maxWidth?: DimensionValue;
   chrome: TerminalThemeChrome;
   children: React.ReactNode;
 }) {
@@ -69,34 +84,51 @@ export function MessageActionSurface({
   const desktop = useDesktopWeb();
   const [hovered, setHovered] = useState(false);
   const parentSelectable = useContext(TimelineTextSelectableContext);
-  // On the phone a bubble's text is not natively selectable: a Text with its
-  // own long-press handler would take the press from this wrapper, so those
-  // handlers are dropped too. Select text hands both back for that one message.
-  // Without the menu provider (previews, fixtures) text keeps its own rules.
-  const selecting = actions?.selectingId === subject.id;
-  const selectable = useMemo<TimelineTextSelectableContextValue>(
-    () =>
-      desktop || !actions
-        ? parentSelectable
-        : selecting
-          ? { ...parentSelectable, selectable: true }
-          : { selectable: false },
-    [actions, desktop, parentSelectable, selecting],
+  const kinds = useMemo(
+    () => (actions ? messageActionKinds(subject, actions.environment) : []),
+    [actions, subject],
   );
-  const kinds = actions ? messageActionKinds(subject, actions.environment) : [];
-  const enabled = actions !== null && kinds.length > 0;
-  // The wrapper stays the same element whether or not there is anything to
-  // offer, so a reply that finishes streaming does not remount its text.
+  const menuEnabled = !desktop && kinds.length > 0;
+  // A message with a menu does not start the system's own text selection: that
+  // long press belongs to the sheet, whose Select Text selects. Without a menu
+  // (streaming, previews) the text keeps the timeline's rules.
+  const selectable = useMemo<TimelineTextSelectableContextValue>(
+    () => (menuEnabled ? { selectable: false } : parentSelectable),
+    [menuEnabled, parentSelectable],
+  );
+  const lastOpened = useRef(0);
+  const open = useCallback(() => {
+    if (!actions) return;
+    const now = Date.now();
+    if (now - lastOpened.current < SAME_PRESS_MS) return;
+    lastOpened.current = now;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    actions.openMenu(subject);
+  }, [actions, subject]);
+  const longPress = useMemo(
+    () =>
+      Gesture.LongPress()
+        .runOnJS(true)
+        .enabled(menuEnabled)
+        .minDuration(LONG_PRESS_MS)
+        .maxDistance(10)
+        .onStart(open),
+    [menuEnabled, open],
+  );
+  const content = (
+    <TimelineTextSelectableContext.Provider value={selectable}>
+      {children}
+    </TimelineTextSelectableContext.Provider>
+  );
+  const inner = [align === "end" ? styles.end : styles.fill, maxWidth ? { maxWidth } : null];
+
   if (desktop) {
     const web = {
       onHoverIn: () => setHovered(true),
       onHoverOut: () => setHovered(false),
-      onContextMenu: (event: { preventDefault?: () => void }) => {
-        if (!actions || !enabled) return;
-        event.preventDefault?.();
-        actions.openMenu(subject);
-      },
     } as object;
+    // The newest reply carries its own always-visible Copy and Retry row.
+    const rowOwner = actions?.latestReply?.replyId === subject.id;
     return (
       <Pressable
         accessible={false}
@@ -104,38 +136,92 @@ export function MessageActionSurface({
         {...web}
         style={[styles.desktopWrap, align === "end" ? styles.desktopEnd : null]}
       >
-        {children}
-        {actions && enabled ? (
+        <View style={inner}>{content}</View>
+        {actions && kinds.length > 0 && !rowOwner ? (
           <MessageActionBar
             subject={subject}
             kinds={kinds}
             visible={hovered}
             align={align}
             chrome={chrome}
-            onRun={actions.run}
+            onEdit={actions.edit}
           />
         ) : null}
       </Pressable>
     );
   }
   return (
+    <GestureDetector gesture={longPress}>
+      <Pressable
+        accessible={false}
+        focusable={false}
+        delayLongPress={LONG_PRESS_MS}
+        onLongPress={menuEnabled ? open : undefined}
+        style={inner}
+      >
+        {content}
+      </Pressable>
+    </GestureDetector>
+  );
+}
+
+/**
+ * The newest reply's quiet icon row, always visible as in ChatGPT: Copy, and
+ * Retry where the agent can run the prompt again.
+ */
+export function ReplyActionRow({
+  subject,
+  chrome,
+}: {
+  subject: MessageActionSubject;
+  chrome: TerminalThemeChrome;
+}) {
+  const actions = useMessageActions();
+  const { copied, copy } = useCopyFeedback(messageCopyText(subject));
+  const latest = actions?.latestReply;
+  if (!actions || !latest || latest.replyId !== subject.id || subject.streaming) return null;
+  const retryable = isRerunnablePrompt(latest.prompt, actions.environment);
+  return (
+    <View style={styles.replyRow}>
+      <RowButton
+        icon={copied ? "check" : "copy"}
+        label={copied ? "Copied" : "Copy"}
+        color={copied ? chrome.accent : chrome.textMuted}
+        onPress={copy}
+      />
+      {retryable ? (
+        <RowButton
+          icon="refresh"
+          label="Retry"
+          color={chrome.textMuted}
+          onPress={() => actions.retry(latest.prompt)}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function RowButton({
+  icon,
+  label,
+  color,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  color: string;
+  onPress(): void;
+}) {
+  return (
     <Pressable
-      accessible={false}
-      focusable={false}
-      delayLongPress={LONG_PRESS_MS}
-      onLongPress={
-        actions && enabled && actions.selectingId !== subject.id
-          ? () => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              actions.openMenu(subject);
-            }
-          : undefined
-      }
-      style={align === "end" ? styles.phoneEnd : styles.fill}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={6}
+      onPress={onPress}
+      style={styles.replyButton}
+      {...(Platform.OS === "web" ? ({ title: label } as object) : null)}
     >
-      <TimelineTextSelectableContext.Provider value={selectable}>
-        {children}
-      </TimelineTextSelectableContext.Provider>
+      <Icon name={icon} size={18} color={color} />
     </Pressable>
   );
 }
@@ -151,24 +237,18 @@ function MessageActionBar({
   visible,
   align,
   chrome,
-  onRun,
+  onEdit,
 }: {
   subject: MessageActionSubject;
   kinds: MessageActionKind[];
   visible: boolean;
   align: "start" | "end";
   chrome: TerminalThemeChrome;
-  onRun: MessageActionsValue["run"];
+  onEdit(subject: MessageActionSubject): void;
 }) {
   const { copied, copy } = useCopyFeedback(messageCopyText(subject));
-  const [resendArmed, setResendArmed] = useState(false);
   const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    if (!resendArmed) return;
-    const timer = setTimeout(() => setResendArmed(false), RESEND_ARMED_MS);
-    return () => clearTimeout(timer);
-  }, [resendArmed]);
-  const shown = visible || focused || resendArmed;
+  const shown = visible || focused;
   return (
     <View
       style={[styles.bar, align === "end" ? styles.barEnd : null, { opacity: shown ? 1 : 0 }]}
@@ -189,25 +269,7 @@ function MessageActionBar({
           color={chrome.textMuted}
           hover={chrome.surfaceMuted}
           onFocusChange={setFocused}
-          onPress={() => onRun("edit", subject)}
-        />
-      ) : null}
-      {kinds.includes("resend") ? (
-        // One click arms it, a second sends: a stray click cannot send twice.
-        <BarButton
-          icon={resendArmed ? "paper-plane" : "refresh"}
-          label={resendArmed ? "Confirm resend" : "Resend message"}
-          color={resendArmed ? chrome.accent : chrome.textMuted}
-          hover={chrome.surfaceMuted}
-          onFocusChange={setFocused}
-          onPress={() => {
-            if (!resendArmed) {
-              setResendArmed(true);
-              return;
-            }
-            setResendArmed(false);
-            onRun("resend", subject);
-          }}
+          onPress={() => onEdit(subject)}
         />
       ) : null}
     </View>
@@ -249,9 +311,8 @@ function BarButton({
 
 const styles = StyleSheet.create({
   fill: { alignSelf: "stretch", width: "100%" },
-  alignEnd: { alignSelf: "flex-end", alignItems: "flex-end" },
+  end: { alignSelf: "flex-end" },
   barEnd: { justifyContent: "flex-end" },
-  phoneEnd: { alignSelf: "stretch", width: "100%", flexDirection: "row", justifyContent: "flex-end" },
   desktopWrap: { alignSelf: "stretch", width: "100%", minWidth: 0, position: "relative" },
   desktopEnd: { alignItems: "flex-end" },
   bar: {
@@ -269,6 +330,20 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  replyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+    marginLeft: -8,
+  },
+  replyButton: {
+    width: 36,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },

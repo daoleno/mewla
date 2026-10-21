@@ -35,6 +35,7 @@ import {
   type ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
+import type { LatestReply } from "./messageActionsModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
 import { isImageAttachment } from "../../services/imageSource";
@@ -1013,6 +1014,51 @@ function explorationEntryLine(entry: ExplorationEntry) {
   }).title;
   const suffix = entry.running ? " (running)" : entry.failed ? " (failed)" : "";
   return `${action}${suffix}`;
+}
+
+/**
+ * The newest finished reply, when it is the last thing in the conversation, and
+ * the prompt it answers. A reply that a newer prompt already answered, or one
+ * with a message still being sent, offers no Retry.
+ */
+export function latestReplyOf(
+  unsortedEvents: readonly CodexConversationEvent[],
+  pendingCount: number,
+): LatestReply | undefined {
+  if (pendingCount > 0) return undefined;
+  const events = [...unsortedEvents].sort(compareConversationEvents);
+  let replyIndex = -1;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.kind === "user_message") return undefined;
+    if (
+      event.kind === "assistant_message" &&
+      !event.partial &&
+      extractDisplayMessage(event.body || "").body
+    ) {
+      replyIndex = index;
+      break;
+    }
+  }
+  if (replyIndex < 0) return undefined;
+  for (let index = replyIndex - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.kind !== "user_message") continue;
+    const extracted = extractDisplayMessage(event.body || "");
+    const reply = events[replyIndex];
+    return {
+      replyId: reply.id || `${reply.kind}:${reply.seq}`,
+      prompt: {
+        id: event.id || `${event.kind}:${event.seq}`,
+        role: "user",
+        body: extracted.body,
+        hasAttachments: extracted.attachments.length > 0,
+        pending: false,
+        streaming: false,
+      },
+    };
+  }
+  return undefined;
 }
 
 function extractDisplayMessage(value: string): {

@@ -91,8 +91,9 @@ describe("pending user message lifecycle", () => {
     expect(bubbleSource).toContain(
       "right: PENDING_SEND_STATUS_OUTSIDE_RIGHT",
     );
-    expect(bubbleSource).toMatch(/userBubble:[\s\S]*?maxWidth: "86%"/);
-    expect(bubbleSource).toMatch(/userBubbleChatGpt:[\s\S]*?maxWidth: "88%"/);
+    expect(mewlaUser).toContain('maxWidth={isChatGpt ? "88%" : "86%"}');
+    expect(bubbleSource).toMatch(/userBubble:[\s\S]*?maxWidth: "100%"/);
+    expect(bubbleSource).toMatch(/userBubbleChatGpt:[\s\S]*?maxWidth: "100%"/);
     expect(bubbleSource).toMatch(/pendingSendMark:[\s\S]*bottom: 0/);
     expect(mewlaUser).toContain(
       "accessibilityState={item.pending ? { busy: true } : undefined}",

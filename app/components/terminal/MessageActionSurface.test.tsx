@@ -15,12 +15,25 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
 } else {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let desktop = false;
+  const platform = { OS: "ios" };
+  const opened: string[] = [];
+  const gestureConfig: { enabled?: boolean; minDuration?: number; onStart?: () => void } = {};
   mock.module("react-native", () => ({
-    Platform: { OS: "ios" },
+    Platform: platform,
     Pressable: "Pressable",
     View: "View",
     StyleSheet: { create: (styles: unknown) => styles },
   }));
+  mock.module("react-native-gesture-handler", () => {
+    const builder: any = {
+      runOnJS: () => builder,
+      enabled: (value: boolean) => ((gestureConfig.enabled = value), builder),
+      minDuration: (value: number) => ((gestureConfig.minDuration = value), builder),
+      maxDistance: () => builder,
+      onStart: (callback: () => void) => ((gestureConfig.onStart = callback), builder),
+    };
+    return { Gesture: { LongPress: () => builder }, GestureDetector: "GestureDetector" };
+  });
   mock.module("expo-clipboard", () => ({ setStringAsync: async () => {} }));
   mock.module("expo-haptics", () => ({
     impactAsync: async () => {},
@@ -28,7 +41,7 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
   }));
   mock.module("../icons/Icon", () => ({ Icon: "Icon" }));
   mock.module("../navigation/useDesktopWeb", () => ({ useDesktopWeb: () => desktop }));
-  const { MessageActionSurface, MessageActionsContext } = await import("./MessageActions");
+  const { MessageActionSurface, MessageActionsContext, ReplyActionRow } = await import("./MessageActions");
   const { TimelineTextSelectableContext, useTimelineSelectableTextProps } = await import(
     "./TimelineTextSelectableContext"
   );
@@ -41,16 +54,21 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     pending: false,
     streaming: false,
   };
+  const reply = { ...subject, id: "a1", role: "assistant" as const, body: "**done**" };
   const environment = { messageRewind: true, brain: false, running: false, connected: true, canSelectText: true };
   // The timeline's own handlers, which a selectable Text would use as its long press.
   const timelineGesture = { selectable: true, onTextSelectionGestureStart() {}, onTextSelectionGestureEnd() {} };
 
-  function render(selectingId: string | null, opened: string[] = []) {
+  function render(
+    message: typeof subject | typeof reply,
+    options: { calls?: string[]; env?: typeof environment; latestReply?: { replyId: string; prompt: typeof subject } } = {},
+  ) {
     let seen: ReturnType<typeof useTimelineSelectableTextProps> | undefined;
     function Child() {
       seen = useTimelineSelectableTextProps();
       return null;
     }
+    const calls = options.calls ?? [];
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
@@ -61,57 +79,103 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
             MessageActionsContext.Provider,
             {
               value: {
-                environment,
-                selectingId,
-                openMenu: (s: { id: string }) => opened.push(s.id),
-                run: () => {},
+                environment: options.env ?? environment,
+                latestReply: options.latestReply,
+                openMenu: (m: { id: string }) => opened.push(m.id),
+                copy: (m: { id: string }) => calls.push(`copy ${m.id}`),
+                select: (m: { id: string }) => calls.push(`select ${m.id}`),
+                edit: (m: { id: string }) => calls.push(`edit ${m.id}`),
+                retry: (m: { id: string }) => calls.push(`retry ${m.id}`),
               },
             },
             React.createElement(MessageActionSurface, {
-              subject,
-              align: "end",
+              subject: message,
+              align: message.role === "user" ? "end" : "start",
+              maxWidth: "86%",
               chrome: {} as any,
               children: React.createElement(Child),
             }),
+            React.createElement(ReplyActionRow, { subject: message, chrome: {} as any }),
           ),
         ),
       );
     });
     return { seen: () => seen!, tree: renderer };
   }
+  const pressable = (view: { tree: TestRenderer.ReactTestRenderer }) => view.tree.root.findByType("Pressable" as any);
 
-  test("on the phone a long press on the text reaches the menu, not a selectable Text", () => {
+  test("on the phone a long press on your message opens its sheet; the text does not start its own selection", () => {
     desktop = false;
-    const view = render(null);
+    platform.OS = "android";
+    opened.length = 0;
+    const view = render(subject);
     expect(view.seen().selectable).toBe(false);
     // A Text carrying these would become the touch responder and swallow the press.
     expect(view.seen().onLongPress).toBeUndefined();
     expect(view.seen().onPressOut).toBeUndefined();
-  });
-
-  test("the long press opens the menu for that message", () => {
-    desktop = false;
-    const opened: string[] = [];
-    const view = render(null, opened);
-    const pressable = view.tree.root.findByType("Pressable" as any);
-    act(() => pressable.props.onLongPress());
+    expect(gestureConfig.enabled).toBe(true);
+    expect(gestureConfig.minDuration).toBe(350);
+    act(() => pressable(view).props.onLongPress());
     expect(opened).toEqual(["u1"]);
   });
 
-  test("Select text hands selection and its gestures back for that message only", () => {
+  test("the gesture-handler path opens the sheet too, and both paths for one press open it once", () => {
     desktop = false;
-    const selecting = render("u1");
-    expect(selecting.seen().selectable).toBe(true);
-    expect(selecting.seen().onLongPress).toBe(timelineGesture.onTextSelectionGestureStart);
-    // While selecting, the wrapper steps aside so the OS selection long press works.
-    expect(selecting.tree.root.findByType("Pressable" as any).props.onLongPress).toBeUndefined();
-    const other = render("someone-else");
-    expect(other.seen().selectable).toBe(false);
+    platform.OS = "ios";
+    opened.length = 0;
+    const view = render(subject);
+    act(() => gestureConfig.onStart!());
+    expect(opened).toEqual(["u1"]);
+    act(() => pressable(view).props.onLongPress());
+    expect(opened).toEqual(["u1"]);
   });
 
-  test("on desktop the timeline keeps native selection", () => {
+  test("a reply opens the same sheet on both phones", () => {
+    desktop = false;
+    for (const os of ["ios", "android"]) {
+      platform.OS = os;
+      opened.length = 0;
+      const view = render(reply);
+      expect(view.seen().selectable).toBe(false);
+      act(() => pressable(view).props.onLongPress());
+      expect(opened).toEqual(["a1"]);
+    }
+  });
+
+  test("a streaming reply or an empty message has no sheet and keeps the timeline's text rules", () => {
+    desktop = false;
+    platform.OS = "ios";
+    opened.length = 0;
+    const streaming = render({ ...reply, streaming: true });
+    expect(pressable(streaming).props.onLongPress).toBeUndefined();
+    expect(gestureConfig.enabled).toBe(false);
+    expect(streaming.seen().selectable).toBe(true);
+    expect(pressable(render({ ...subject, body: " " })).props.onLongPress).toBeUndefined();
+  });
+
+  test("on desktop the timeline keeps native selection and shows the hover row", () => {
     desktop = true;
-    const view = render(null);
+    platform.OS = "web";
+    const view = render(subject);
+    expect(view.tree.root.findAllByType("GestureDetector" as any)).toHaveLength(0);
     expect(view.seen().selectable).toBe(true);
+    expect(view.tree.root.findByProps({ accessibilityLabel: "Edit message" })).toBeDefined();
+  });
+
+  test("the newest reply shows Copy and Retry; older replies and busy Sessions do not", () => {
+    desktop = false;
+    platform.OS = "ios";
+    const latestReply = { replyId: "a1", prompt: subject };
+    const calls: string[] = [];
+    const view = render(reply, { latestReply, calls });
+    const retry = view.tree.root.findByProps({ accessibilityLabel: "Retry" });
+    view.tree.root.findByProps({ accessibilityLabel: "Copy" });
+    act(() => retry.props.onPress());
+    expect(calls).toEqual(["retry u1"]);
+
+    expect(render({ ...reply, id: "a0" }, { latestReply }).tree.root.findAllByProps({ accessibilityLabel: "Retry" })).toHaveLength(0);
+    const busy = render(reply, { latestReply, env: { ...environment, running: true } });
+    expect(busy.tree.root.findAllByProps({ accessibilityLabel: "Retry" })).toHaveLength(0);
+    busy.tree.root.findByProps({ accessibilityLabel: "Copy" });
   });
 }
