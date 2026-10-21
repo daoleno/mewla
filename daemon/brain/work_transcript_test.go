@@ -226,3 +226,50 @@ func TestTurnEndForcesResolveInsideRecheckWindow(t *testing.T) {
 		t.Fatalf("terminal fact did not re-resolve: %+v", links)
 	}
 }
+
+// A Worker that reports done as its first signal is admitted by that very
+// fact, so no attempt exists yet when the fact arrives; the pending delegated
+// submission is what names the Work.
+func TestTurnEndOfFastWorkerLinksThroughPendingAdmission(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := createSignalTestWork(t, store, "fast worker", "worker")
+	fw := &fakeWatcher{turnStore: store, sessions: map[string]*classifier.Worker{
+		"worker": {ID: "worker", Delegated: true, ProcessID: 321, PaneAlive: true, Command: "claude"},
+	}}
+	payload := "do the thing"
+	if _, _, err := store.PrepareInputAdmission(watcher.InputAdmission{
+		WorkID: item.ID, SessionID: "worker", ProposedTurnID: "fast-turn", Receipt: "fast-turn",
+		PayloadSHA256: pendingSubmissionDigest(payload), ProcessIdentity: "delegated-process",
+		PaneGeneration: "delegated-pane", AcceptedAt: time.Now().UTC(), Mode: watcher.InputAdmissionFresh,
+		SignalProtocol: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := store.WorkByAttemptSession("worker"); found {
+		t.Fatal("test premise: no attempt before the first signal")
+	}
+	service := NewService(store, fw, nil)
+	service.recordTranscriptSync = true
+	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
+		return "claude", work.HostTranscriptIdentity{SessionID: "conv-fast", Path: "/t/conv-fast.jsonl"}, true, nil
+	}
+	if _, err := service.ApplyDelegatedTurnProgress(watcher.TurnFact{
+		SessionID: "worker", TurnID: "fast-turn", Class: watcher.EvidenceControl, Kind: "done",
+		SourceID: "fast-done", Summary: "finished fast", At: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	links, err := store.WorkTranscripts(item.ID)
+	if err != nil || len(links) != 1 || links[0].ProviderSessionID != "conv-fast" || links[0].TurnID != "fast-turn" {
+		t.Fatalf("links = %+v err=%v", links, err)
+	}
+
+	// A Host submission (claim token) is not a Worker attempt.
+	service.recordTurnEndTranscript(watcher.TurnFact{SessionID: "nobody", TurnID: "x", Kind: "done"})
+	if links, _ = store.WorkTranscripts("no-such-work"); len(links) != 0 {
+		t.Fatalf("unexpected links: %+v", links)
+	}
+}

@@ -219,8 +219,35 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 		return
 	}
 	item, found, err := s.store.WorkByAttemptSession(sessionID)
-	if err != nil || !found || !item.AttemptDelegated {
+	if err != nil {
 		return
+	}
+	if found && !item.AttemptDelegated {
+		return
+	}
+	if !found {
+		// The first matching signal admits a pending submission atomically, so
+		// a Worker that finishes quickly has no attempt yet when its terminal
+		// fact arrives. The pending delegated submission names the Work.
+		pending, err := s.store.PendingInputAdmissions(sessionID)
+		if err != nil {
+			return
+		}
+		workID := ""
+		for _, admission := range pending {
+			if admission.ClaimToken != "" || strings.TrimSpace(admission.WorkID) == "" {
+				continue
+			}
+			if workID == "" || admission.ProposedTurnID == fact.TurnID {
+				workID = strings.TrimSpace(admission.WorkID)
+			}
+		}
+		if workID == "" {
+			return
+		}
+		if item, err = s.store.Work(workID); err != nil || item.Status == WorkDone || item.Status == WorkCancelled {
+			return
+		}
 	}
 	// The watcher calls into the ledger from paths that hold its own locks, so
 	// the worker lookup and the process proof run off that path. The attempt
