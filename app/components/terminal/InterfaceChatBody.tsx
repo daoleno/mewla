@@ -135,6 +135,7 @@ export interface InterfaceChatBodyProps {
   onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   onTerminalActionKey(key: string): Promise<void> | void;
   composerAccessory?: React.ReactNode;
+  composerEditBar?: React.ReactNode;
   skillsSheet?: React.ReactNode;
 }
 
@@ -218,6 +219,7 @@ export function InterfaceChatBody({
   onPendingUserMessageAction,
   onTerminalActionKey,
   composerAccessory,
+  composerEditBar,
   skillsSheet,
 }: InterfaceChatBodyProps) {
   const { height: windowHeight } = useWindowDimensions();
@@ -248,6 +250,7 @@ export function InterfaceChatBody({
         />
       ) : null}
       {composerAccessory}
+      {composerEditBar}
       <InterfaceChatComposerSection
         accessoryOpen={composerAccessory != null}
         inputRef={inputRef}

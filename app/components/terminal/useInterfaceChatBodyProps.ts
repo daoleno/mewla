@@ -71,6 +71,8 @@ interface UseInterfaceChatBodyPropsInput {
   ): void;
   showUnavailableAction?: boolean;
   composerAccessory?: ReactNode;
+  /** The edit bar: above the composer, but not a picker that holds Enter. */
+  composerEditBar?: ReactNode;
   skillsSheet?: ReactNode;
 }
 
@@ -117,6 +119,7 @@ export function useInterfaceChatBodyProps({
   onKeyboardLifecycleInvalidate,
   showUnavailableAction,
   composerAccessory,
+  composerEditBar,
   skillsSheet,
 }: UseInterfaceChatBodyPropsInput): InterfaceChatBodyProps {
   const handleUploadPress = useCallback(() => {
@@ -213,6 +216,7 @@ export function useInterfaceChatBodyProps({
       onPendingUserMessageAction: controller.actOnPendingUserMessage,
       onTerminalActionKey,
       composerAccessory,
+      composerEditBar,
       skillsSheet,
     }),
     [
@@ -266,6 +270,7 @@ export function useInterfaceChatBodyProps({
       onTerminalActionKey,
       onKeyboardLifecycleInvalidate,
       composerAccessory,
+      composerEditBar,
       screenFocused,
       showUnavailableAction,
       daemonId,
