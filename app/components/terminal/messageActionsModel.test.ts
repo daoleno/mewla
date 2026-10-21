@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { normalizeWorkerSessionCapabilities } from "../../services/providers/sessionCapabilities";
 import {
   RESEND_HOLD_MS,
+  isRerunnablePrompt,
   createResendGuard,
   editIsSendable,
   messageActionKinds,
   messageCopyText,
   messageEditMode,
+  messageMenuItems,
   type MessageActionEnvironment,
   type MessageActionSubject,
 } from "./messageActionsModel";
@@ -29,8 +31,8 @@ const env: MessageActionEnvironment = {
 };
 
 describe("message menu", () => {
-  test("a user message offers copy, select, edit and resend", () => {
-    expect(messageActionKinds(user, env)).toEqual(["copy", "select", "edit", "resend"]);
+  test("a user message offers copy, select text and edit", () => {
+    expect(messageActionKinds(user, env)).toEqual(["copy", "select", "edit"]);
   });
 
   test("an assistant message offers only copy and select", () => {
@@ -38,10 +40,10 @@ describe("message menu", () => {
   });
 
   test("desktop has native selection, so no select entry", () => {
-    expect(messageActionKinds(user, { ...env, canSelectText: false })).toEqual(["copy", "edit", "resend"]);
+    expect(messageActionKinds(user, { ...env, canSelectText: false })).toEqual(["copy", "edit"]);
   });
 
-  test("edit and resend wait for the agent to stop and for a connection", () => {
+  test("edit waits for the agent to stop and for a connection", () => {
     expect(messageActionKinds(user, { ...env, running: true })).toEqual(["copy", "select"]);
     expect(messageActionKinds(user, { ...env, connected: false })).toEqual(["copy", "select"]);
   });
@@ -52,12 +54,22 @@ describe("message menu", () => {
     expect(messageActionKinds({ ...user, body: "  " }, env)).toEqual([]);
   });
 
-  test("a message with attachments cannot be faithfully edited or resent", () => {
+  test("a message with attachments cannot be faithfully edited", () => {
     expect(messageActionKinds({ ...user, hasAttachments: true }, env)).toEqual(["copy", "select"]);
   });
 
   test("copy keeps Markdown and drops only trailing whitespace", () => {
     expect(messageCopyText({ body: "```ts\nlet a = 1;\n```\n\n- one\n" })).toBe("```ts\nlet a = 1;\n```\n\n- one");
+  });
+});
+
+describe("message sheet rows", () => {
+  test("list Copy, Select Text and Edit in that order, each running its own kind", () => {
+    const ran: string[] = [];
+    const items = messageMenuItems(["copy", "select", "edit"], (kind) => ran.push(kind));
+    expect(items.map((item) => item.label)).toEqual(["Copy", "Select Text", "Edit"]);
+    items.forEach((item) => item.onPress());
+    expect(ran).toEqual(["copy", "select", "edit"]);
   });
 });
 
@@ -68,16 +80,25 @@ describe("edit mode per executor", () => {
     expect(messageEditMode({ messageRewind: true, brain: true })).toBe("copy");
   });
 
-  test("an unchanged edit is not sent", () => {
+  test("an edit is sent whenever it says something; unchanged it is a retry", () => {
     const edit = { id: "u1", original: "ship it", mode: "rewind" as const };
-    expect(editIsSendable(edit, "ship it")).toBe(false);
-    expect(editIsSendable(edit, "  ship it  ")).toBe(false);
-    expect(editIsSendable(edit, "")).toBe(false);
+    expect(editIsSendable(edit, "ship it")).toBe(true);
     expect(editIsSendable(edit, "ship it today")).toBe(true);
+    expect(editIsSendable(edit, "  ")).toBe(false);
+    expect(editIsSendable(edit, "")).toBe(false);
+  });
+
+  test("Retry runs a sent text prompt of an idle, connected Session again", () => {
+    expect(isRerunnablePrompt(user, env)).toBe(true);
+    expect(isRerunnablePrompt(user, { ...env, running: true })).toBe(false);
+    expect(isRerunnablePrompt(user, { ...env, connected: false })).toBe(false);
+    expect(isRerunnablePrompt({ ...user, hasAttachments: true }, env)).toBe(false);
+    expect(isRerunnablePrompt({ ...user, pending: true }, env)).toBe(false);
+    expect(isRerunnablePrompt(assistant, env)).toBe(false);
   });
 });
 
-describe("resend guard", () => {
+describe("retry guard", () => {
   test("a second tap while the first is held does nothing", () => {
     let now = 1000;
     const guard = createResendGuard(() => now);
@@ -104,7 +125,7 @@ describe("resend guard", () => {
   });
 });
 
-describe("what Edit and Resend do per executor", () => {
+describe("what Edit and Retry do per executor", () => {
   // The daemon advertises message_rewind per Session; the app never guesses it
   // from the executor's name.
   const wire = (messageRewind?: boolean) =>
@@ -126,12 +147,12 @@ describe("what Edit and Resend do per executor", () => {
   ];
 
   for (const row of table) {
-    test(`${row.executor}: edit ${row.edit === "rewind" ? "rewinds the conversation" : "sends an edited copy as a new message"}; resend is always a new message`, () => {
+    test(`${row.executor}: edit ${row.edit === "rewind" ? "rewinds the conversation" : "sends an edited copy as a new message"}; retry follows the same mode`, () => {
       const messageRewind = wire(row.rewind)?.message_rewind === true;
       const environment = { ...env, messageRewind, brain: row.brain };
       expect(messageEditMode(environment)).toBe(row.edit);
       expect(messageActionKinds(user, environment)).toContain("edit");
-      expect(messageActionKinds(user, environment)).toContain("resend");
+      expect(isRerunnablePrompt(user, environment)).toBe(true);
     });
   }
 

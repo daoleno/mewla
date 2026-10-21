@@ -1,99 +1,79 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
+import { ActionMenu } from "../ui/ActionMenu";
 import { useOptionalToast } from "../ui/Toast";
 import { MessageActionsContext, type MessageActionsValue } from "./MessageActions";
-import { MessageEditCue } from "./MessageEditChip";
+import { MessageTextSheet } from "./MessageTextSheet";
 import {
   messageActionKinds,
   messageCopyText,
-  messageEditMode,
+  messageMenuItems,
+  type LatestReply,
   type MessageActionEnvironment,
   type MessageActionSubject,
 } from "./messageActionsModel";
 
 /**
- * Owns the message menu (phone) and routes menu and hover-row choices to the
- * Session's edit and resend handlers.
+ * Owns the message sheet (phone) and routes its choices, the hover row and the
+ * reply row to the Session's copy, select, edit and retry handlers.
  */
 export function MessageActionsProvider({
   environment,
-  chrome,
+  latestReply,
   onEdit,
-  onResend,
+  onRetry,
   children,
 }: {
   environment: MessageActionEnvironment;
-  chrome: TerminalThemeChrome;
+  latestReply: LatestReply | undefined;
   onEdit(subject: MessageActionSubject): void;
-  onResend(subject: MessageActionSubject): void;
+  onRetry(prompt: MessageActionSubject): void;
   children: React.ReactNode;
 }) {
   const toast = useOptionalToast();
-  // The subject outlives the sheet's close animation so it does not empty out.
+  // The subject outlives the sheet's close so the rows do not empty out.
   const [menu, setMenu] = useState<MessageActionSubject | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [selectingId, setSelectingId] = useState<string | null>(null);
-  const environmentRef = useRef(environment);
-  environmentRef.current = environment;
+  const [selectText, setSelectText] = useState<string | null>(null);
+  const closeMenu = useCallback(() => setMenuVisible(false), []);
+  const closeSelect = useCallback(() => setSelectText(null), []);
 
   const value = useMemo<MessageActionsValue>(
     () => ({
       environment,
-      selectingId,
+      latestReply,
       openMenu: (subject) => {
-        setSelectingId(null);
         setMenu(subject);
         setMenuVisible(true);
       },
-      run: (kind, subject) => {
-        if (kind === "edit") onEdit(subject);
-        else onResend(subject);
+      copy: (subject) => {
+        void Clipboard.setStringAsync(messageCopyText(subject)).then(() => {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          toast?.show({ title: "Copied", tone: "success" });
+        });
       },
+      select: (subject) => setSelectText(messageCopyText(subject)),
+      edit: onEdit,
+      retry: onRetry,
     }),
-    [environment, onEdit, onResend, selectingId],
+    [environment, latestReply, onEdit, onRetry, toast],
   );
 
-  const items = useMemo<ActionMenuItem[]>(() => {
+  const items = useMemo(() => {
     if (!menu) return [];
-    const mode = messageEditMode(environment);
-    return messageActionKinds(menu, environment).map((kind): ActionMenuItem => {
-      switch (kind) {
-        case "copy":
-          return {
-            key: kind,
-            label: "Copy",
-            icon: "copy",
-            onPress: () => {
-              void Clipboard.setStringAsync(messageCopyText(menu)).then(() => {
-                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                toast?.show({ title: "Copied", tone: "success" });
-              });
-            },
-          };
-        case "select":
-          return { key: kind, label: "Select text", icon: "text", onPress: () => setSelectingId(menu.id) };
-        case "edit":
-          return {
-            key: kind,
-            label: "Edit",
-            icon: "edit",
-            trailing: <MessageEditCue mode={mode} chrome={chrome} />,
-            onPress: () => onEdit(menu),
-          };
-        default:
-          return { key: kind, label: "Resend", icon: "refresh", onPress: () => onResend(menu) };
-      }
+    return messageMenuItems(messageActionKinds(menu, environment), (kind) => {
+      if (kind === "copy") value.copy(menu);
+      else if (kind === "select") value.select(menu);
+      else value.edit(menu);
     });
-  }, [chrome, environment, menu, onEdit, onResend, toast]);
+  }, [environment, menu, value]);
 
-  const close = useCallback(() => setMenuVisible(false), []);
   return (
     <MessageActionsContext.Provider value={value}>
       {children}
-      <ActionMenu visible={menuVisible && menu !== null} items={items} onClose={close} />
+      <ActionMenu visible={menuVisible && menu !== null} items={items} onClose={closeMenu} />
+      <MessageTextSheet text={selectText} onClose={closeSelect} />
     </MessageActionsContext.Provider>
   );
 }

@@ -124,9 +124,9 @@ function InterfaceChatSurfaceImpl({
     <View style={[styles.root, { backgroundColor: canvasBackground }]}>
       <MessageActionsProvider
         environment={messageActions.environment}
-        chrome={chrome}
+        latestReply={messageActions.latestReply}
         onEdit={messageActions.onEdit}
-        onResend={messageActions.onResend}
+        onRetry={messageActions.onRetry}
       >
         <InterfaceChatBody {...bodyProps} readOnly={readOnly} />
       </MessageActionsProvider>

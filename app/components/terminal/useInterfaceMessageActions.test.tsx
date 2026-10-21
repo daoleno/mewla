@@ -3,7 +3,7 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
 if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
-  test("message edit and resend flow in isolation", () => {
+  test("message edit and retry flow in isolation", () => {
     const result = Bun.spawnSync([process.execPath, "test", import.meta.filename], {
       env: { ...process.env, MEWLA_MESSAGE_ACTIONS_TEST: "1" },
     });
@@ -46,6 +46,7 @@ if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
       connected: true,
       running: false,
       messageRewind: true,
+      latestReply: undefined,
       desktop: false,
       chrome: {} as any,
       draft,
@@ -102,10 +103,6 @@ if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
     expect(view.hook.accessory).not.toBeNull();
     calls.length = 0;
 
-    // Unchanged text is not a new message.
-    await act(async () => view.hook.sendEdited());
-    expect(calls).toEqual([]);
-
     view.type("ship it tomorrow");
     await act(async () => view.hook.sendEdited());
     expect(calls).toEqual(["rewind srv %7 u2", 'send "ship it tomorrow"']);
@@ -145,7 +142,6 @@ if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
     await act(async () => view.hook.sendEdited());
     expect(calls).toEqual(["rewind srv %7 u2"]);
     expect((view.hook.accessory as any).props).toMatchObject({
-      mode: "copy",
       error: "Claude highlighted a different message.",
     });
     calls.length = 0;
@@ -162,7 +158,6 @@ if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
     calls.length = 0;
     await act(async () => view.hook.sendEdited());
     expect(calls).toEqual(["rewind srv %7 u2"]);
-    expect((view.hook.accessory as any).props).toMatchObject({ mode: "rewind" });
     expect((view.hook.accessory as any).props.error).toContain("input box");
     // After the person clears the box, the same send goes out without a second rewind.
     calls.length = 0;
@@ -200,17 +195,50 @@ if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
     expect(view.hook.accessory).toBeNull();
   });
 
-  test("resend sends the same text once per tap burst", () => {
+  test("sending an edit unchanged rewinds and sends the same text", async () => {
     reset();
     const view = mount();
-    act(() => {
-      view.hook.onResend(subject);
-      view.hook.onResend(subject);
-      view.hook.onResend(subject);
+    act(() => view.hook.onEdit(subject));
+    calls.length = 0;
+    await act(async () => view.hook.sendEdited());
+    expect(calls).toEqual(["rewind srv %7 u2", 'send "ship it"']);
+  });
+
+  test("retry on a rewindable agent rewinds to the prompt, then sends it once per tap burst", async () => {
+    reset();
+    const view = mount();
+    await act(async () => {
+      void view.hook.onRetry(subject);
+      void view.hook.onRetry(subject);
+      void view.hook.onRetry(subject);
     });
+    expect(calls).toEqual(["rewind srv %7 u2", 'resend "ship it"']);
+  });
+
+  test("retry on an agent that cannot rewind sends the prompt as a new message", async () => {
+    reset();
+    const view = mount({ messageRewind: false });
+    await act(async () => view.hook.onRetry(subject));
     expect(calls).toEqual(['resend "ship it"']);
-    act(() => view.hook.onResend({ ...subject, id: "u3", body: "other" }));
+    await act(async () => view.hook.onRetry({ ...subject, id: "u3", body: "other" }));
     expect(calls).toEqual(['resend "ship it"', 'resend "other"']);
+  });
+
+  test("a retry whose rewind fails sends nothing and leaves the prompt as an editable copy", async () => {
+    reset();
+    rewindImpl = async () => {
+      throw new Error("The agent is working; stop it first.");
+    };
+    const view = mount();
+    await act(async () => view.hook.onRetry(subject));
+    expect(calls.filter((c) => c.startsWith("resend"))).toEqual([]);
+    expect(view.draft).toBe("ship it");
+    expect((view.hook.accessory as any).props).toMatchObject({ error: "The agent is working; stop it first." });
+    // The hold is released, so the person may tap Retry again.
+    calls.length = 0;
+    rewindImpl = async () => ({ composerClean: true });
+    await act(async () => view.hook.onRetry(subject));
+    expect(calls).toEqual(["rewind srv %7 u2", 'resend "ship it"']);
   });
 
   test("switching conversation drops the edit", () => {

@@ -1,15 +1,16 @@
+import type { ActionMenuItem } from "../ui/ActionMenu";
+
 /**
  * What the message menu offers, and what each choice really does.
  *
- * Copy and Resend work everywhere. Edit depends on the agent: where its CLI can
- * step the conversation back to an earlier prompt, editing rewinds to that
- * prompt and sends the edited text from there ("rewind"). Everywhere else, and
- * always in Brain's own thread, it prefills the composer with an edited copy
- * that goes out as a new message ("copy"). Nothing claims history changed when
- * it did not.
+ * Copy and Select Text work everywhere. Edit depends on the agent: where its
+ * CLI can step the conversation back to an earlier prompt, sending the edit
+ * rewinds to that prompt first ("rewind"). Everywhere else, and always in
+ * Brain's own thread, it goes out as a new message with the text prefilled
+ * ("copy"). Retry on the latest reply follows the same two modes.
  */
 export type MessageEditMode = "rewind" | "copy";
-export type MessageActionKind = "copy" | "select" | "edit" | "resend";
+export type MessageActionKind = "copy" | "select" | "edit";
 
 export interface MessageActionSubject {
   id: string;
@@ -30,8 +31,14 @@ export interface MessageActionEnvironment {
   /** A turn is running: rewinding or resending would collide with it. */
   running: boolean;
   connected: boolean;
-  /** Native text selection is off in bubbles; the menu turns it on per message. */
+  /** Select Text opens the message in a sheet (phone); desktop selects in place. */
   canSelectText: boolean;
+}
+
+/** The newest reply and the prompt it answers: what Retry runs again. */
+export interface LatestReply {
+  replyId: string;
+  prompt: MessageActionSubject;
 }
 
 export function messageEditMode(env: Pick<MessageActionEnvironment, "messageRewind" | "brain">): MessageEditMode {
@@ -49,12 +56,36 @@ export function messageActionKinds(
   if (env.canSelectText) {
     kinds.push("select");
   }
-  const editable =
-    subject.role === "user" && !subject.pending && !subject.hasAttachments && env.connected;
-  if (editable && !env.running) {
-    kinds.push("edit", "resend");
+  if (isRerunnablePrompt(subject, env)) {
+    kinds.push("edit");
   }
   return kinds;
+}
+
+/** A sent text-only prompt of a connected, idle Session can be edited or retried. */
+export function isRerunnablePrompt(subject: MessageActionSubject, env: MessageActionEnvironment): boolean {
+  return (
+    subject.role === "user" &&
+    !subject.pending &&
+    !subject.hasAttachments &&
+    subject.body.trim().length > 0 &&
+    env.connected &&
+    !env.running
+  );
+}
+
+const MENU_ITEMS: Record<MessageActionKind, Pick<ActionMenuItem, "label" | "icon">> = {
+  copy: { label: "Copy", icon: "copy" },
+  select: { label: "Select Text", icon: "text" },
+  edit: { label: "Edit", icon: "edit" },
+};
+
+/** The sheet's rows for one message: Copy, Select Text, Edit, as each applies. */
+export function messageMenuItems(
+  kinds: readonly MessageActionKind[],
+  run: (kind: MessageActionKind) => void,
+): ActionMenuItem[] {
+  return kinds.map((kind) => ({ key: kind, ...MENU_ITEMS[kind], onPress: () => run(kind) }));
 }
 
 /** The text copied: assistant Markdown and user text exactly as written. */
@@ -65,27 +96,25 @@ export function messageCopyText(subject: Pick<MessageActionSubject, "body">): st
 export interface MessageEdit {
   /** The provider event the edit starts from. */
   id: string;
-  /** The text as it was sent, to tell an unchanged edit from a changed one. */
+  /** The text as it was sent. */
   original: string;
   mode: MessageEditMode;
   /**
    * The agent already stepped back to this message but its input box was not
-   * clean. The rewind is done and is never repeated; the same text may go out
-   * unchanged once the person has cleared the box.
+   * clean. The rewind is done and is never repeated; the text may go out once
+   * the person has cleared the box.
    */
   rewound?: boolean;
 }
 
-/** An edited message goes out only when it says something different. */
-export function editIsSendable(edit: MessageEdit, draft: string): boolean {
-  const next = draft.trim();
-  return next.length > 0 && (edit.rewound === true || next !== edit.original.trim());
+/** An edit goes out whenever it says something; sending it unchanged is a retry. */
+export function editIsSendable(_edit: MessageEdit, draft: string): boolean {
+  return draft.trim().length > 0;
 }
 
 /**
- * Resend must not double-send on a double tap or a slow acknowledgement: a
- * message is held for the hold window after each tap, and for as long as its
- * previous resend is still unsettled.
+ * Retry must not double-send on a double tap or a slow acknowledgement: a
+ * prompt is held for the hold window after each tap.
  */
 export const RESEND_HOLD_MS = 2500;
 

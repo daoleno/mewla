@@ -38,11 +38,13 @@ describe("pending send status composition", () => {
     expect(stylesBlock).not.toContain("userBubbleHost");
     expect(stylesBlock).not.toContain("userBubbleHostChatGpt");
 
-    // Original bubble maxWidth restored on the single bubble styles.
-    expect(userBubbleStyle).toContain('maxWidth: "86%"');
+    // The bubble fills the message wrapper, which carries the 86% / 88% cap
+    // (the native menu wraps the bubble and must hold the same width).
+    expect(mewlaUser).toContain('maxWidth={isChatGpt ? "88%" : "86%"}');
+    expect(userBubbleStyle).toContain('maxWidth: "100%"');
     expect(userBubbleStyle).toContain('position: "relative"');
     expect(userBubbleStyle).toContain('overflow: "visible"');
-    expect(chatgptBubbleStyle).toContain('maxWidth: "88%"');
+    expect(chatgptBubbleStyle).toContain('maxWidth: "100%"');
     expect(chatgptBubbleStyle).toContain('position: "relative"');
     expect(chatgptBubbleStyle).toContain('overflow: "visible"');
 
