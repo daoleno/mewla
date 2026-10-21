@@ -534,19 +534,6 @@ export function useInterfaceChatSurfaceState({
     }),
     [controller, messageActions.editBlocksSend, sendEdited],
   );
-  const bodyAccessory = useMemo(
-    () =>
-      messageActions.accessory
-        ? React.createElement(
-            React.Fragment,
-            null,
-            renderedComposerAccessory,
-            messageActions.accessory,
-          )
-        : renderedComposerAccessory,
-    [messageActions.accessory, renderedComposerAccessory],
-  );
-
   const composerPresentation = useInterfaceComposerPresentation({
     draft,
     slashCommands,
@@ -741,7 +728,8 @@ export function useInterfaceChatSurfaceState({
     onTerminalActionKey: sendTerminalActionKey,
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
-    composerAccessory: bodyAccessory,
+    composerAccessory: renderedComposerAccessory,
+    composerEditBar: messageActions.accessory,
     skillsSheet: sheets,
   });
   return {
