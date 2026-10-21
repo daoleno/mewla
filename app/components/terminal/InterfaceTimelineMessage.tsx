@@ -124,6 +124,7 @@ export function UserMessage({
         subject={subject}
         align="end"
         maxWidth={isChatGpt ? "88%" : "86%"}
+        radii={bubbleRadii}
         chrome={chrome}
       >
         <View
@@ -176,6 +177,7 @@ function messageSubject(item: MessageTimelineItem): MessageActionSubject {
     hasAttachments: item.attachments.length > 0,
     pending: Boolean(item.pending),
     streaming: Boolean(item.streaming),
+    timestamp: item.timestamp,
   };
 }
 
@@ -213,24 +215,22 @@ export function AssistantMessage({
   const subject = messageSubject(item);
   return (
     <View style={[styles.assistantRow, spacing]}>
-      <MessageActionSurface subject={subject} align="start" chrome={chrome}>
-        {showSender ? (
-          <Text style={[styles.assistantSender, { color: chrome.accent }]}>
-            {senderLabel}
-          </Text>
+      {showSender ? (
+        <Text style={[styles.assistantSender, { color: chrome.accent }]}>
+          {senderLabel}
+        </Text>
+      ) : null}
+      <View style={styles.assistantContent}>
+        <MessageBody
+          value={item.body}
+          chrome={assistantChrome}
+          theme={theme}
+          streaming={item.streaming}
+        />
+        {appTheme.chat.showTimestamps ? (
+          <MessageBubbleFooter timestamp={item.timestamp} tone="received" />
         ) : null}
-        <View style={styles.assistantContent}>
-          <MessageBody
-            value={item.body}
-            chrome={assistantChrome}
-            theme={theme}
-            streaming={item.streaming}
-          />
-          {appTheme.chat.showTimestamps ? (
-            <MessageBubbleFooter timestamp={item.timestamp} tone="received" />
-          ) : null}
-        </View>
-      </MessageActionSurface>
+      </View>
       <ReplyActionRow subject={subject} chrome={chrome} />
     </View>
   );

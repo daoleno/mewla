@@ -6,10 +6,10 @@ import {
   createResendGuard,
   editIsSendable,
   messageEditMode,
-  type LatestReply,
   type MessageActionEnvironment,
   type MessageActionSubject,
   type MessageEdit,
+  type ReplyTurns,
 } from "./messageActionsModel";
 
 interface Input {
@@ -20,7 +20,7 @@ interface Input {
   running: boolean;
   /** Daemon capability: this Session's CLI can rewind. */
   messageRewind: boolean;
-  latestReply: LatestReply | undefined;
+  replyTurns: ReplyTurns;
   desktop: boolean;
   chrome: TerminalThemeChrome;
   draft: string;
@@ -38,7 +38,7 @@ const INPUT_NOT_CLEAN =
  *
  * Edit puts the message in the composer. Sending it either rewinds the agent's
  * conversation to that message first (where the CLI can), or goes out as a new
- * message. Retry is the same without the editing: it sends the latest prompt
+ * message. Retry is the same without the editing: it sends a reply's prompt
  * again. A rewind that fails sends nothing and falls back to the honest second
  * option, which the person then confirms by sending again.
  */
@@ -49,7 +49,7 @@ export function useInterfaceMessageActions({
   connected,
   running,
   messageRewind,
-  latestReply,
+  replyTurns,
   desktop,
   chrome,
   draft,
@@ -203,5 +203,5 @@ export function useInterfaceMessageActions({
   );
 
   const editBlocksSend = rewinding || (edit !== null && !editIsSendable(edit, draft));
-  return { environment, latestReply, onEdit, onRetry, sendEdited, accessory, editBlocksSend };
+  return { environment, replyTurns, onEdit, onRetry, sendEdited, accessory, editBlocksSend };
 }

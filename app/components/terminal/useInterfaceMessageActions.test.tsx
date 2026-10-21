@@ -46,7 +46,7 @@ if (!process.env.MEWLA_MESSAGE_ACTIONS_TEST) {
       connected: true,
       running: false,
       messageRewind: true,
-      latestReply: undefined,
+      replyTurns: new Map(),
       desktop: false,
       chrome: {} as any,
       draft,

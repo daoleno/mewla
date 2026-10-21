@@ -124,7 +124,7 @@ function InterfaceChatSurfaceImpl({
     <View style={[styles.root, { backgroundColor: canvasBackground }]}>
       <MessageActionsProvider
         environment={messageActions.environment}
-        latestReply={messageActions.latestReply}
+        replyTurns={messageActions.replyTurns}
         onEdit={messageActions.onEdit}
         onRetry={messageActions.onRetry}
       >

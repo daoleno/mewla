@@ -8,7 +8,8 @@ import {
   messageActionKinds,
   messageCopyText,
   messageEditMode,
-  messageMenuItems,
+  messageMenuEntries,
+  isRetryableTurn,
   type MessageActionEnvironment,
   type MessageActionSubject,
 } from "./messageActionsModel";
@@ -63,13 +64,28 @@ describe("message menu", () => {
   });
 });
 
-describe("message sheet rows", () => {
-  test("list Copy, Select Text and Edit in that order, each running its own kind", () => {
-    const ran: string[] = [];
-    const items = messageMenuItems(["copy", "select", "edit"], (kind) => ran.push(kind));
-    expect(items.map((item) => item.label)).toEqual(["Copy", "Select Text", "Edit"]);
-    items.forEach((item) => item.onPress());
-    expect(ran).toEqual(["copy", "select", "edit"]);
+describe("message menu rows", () => {
+  test("list Copy, Select Text and Edit in that order", () => {
+    const entries = messageMenuEntries(["copy", "select", "edit"]);
+    expect(entries.map((entry) => entry.label)).toEqual(["Copy", "Select Text", "Edit"]);
+    expect(entries.map((entry) => entry.kind)).toEqual(["copy", "select", "edit"]);
+  });
+});
+
+describe("reply retry", () => {
+  const turn = { replyId: "a1", prompt: user, latest: false, settled: true };
+
+  test("any turn can be retried while its prompt can run again", () => {
+    expect(isRetryableTurn(turn, env)).toBe(true);
+    expect(isRetryableTurn({ ...turn, latest: true }, env)).toBe(true);
+  });
+
+  test("busy, offline, attachments, a message mid-send or no prompt hide it", () => {
+    expect(isRetryableTurn(turn, { ...env, running: true })).toBe(false);
+    expect(isRetryableTurn(turn, { ...env, connected: false })).toBe(false);
+    expect(isRetryableTurn({ ...turn, prompt: { ...user, hasAttachments: true } }, env)).toBe(false);
+    expect(isRetryableTurn({ ...turn, settled: false }, env)).toBe(false);
+    expect(isRetryableTurn({ ...turn, prompt: undefined }, env)).toBe(false);
   });
 });
 

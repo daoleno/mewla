@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, View, type DimensionValue } from "react-native";
+import { Platform, Pressable, StyleSheet, View, type DimensionValue, type GestureResponderEvent, type ViewStyle } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -7,14 +7,16 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Icon, type IconName } from "../icons/Icon";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { CODE_BLOCK_COPIED_RESET_MS } from "./InterfaceMessageCodeBlockCopy";
+import type { MessageMenuAnchor } from "./MessageMenuOverlay";
 import {
-  isRerunnablePrompt,
+  isRetryableTurn,
   messageActionKinds,
   messageCopyText,
-  type LatestReply,
   type MessageActionEnvironment,
   type MessageActionKind,
   type MessageActionSubject,
+  type ReplyTurn,
+  type ReplyTurns,
 } from "./messageActionsModel";
 import {
   TimelineTextSelectableContext,
@@ -23,14 +25,16 @@ import {
 
 export interface MessageActionsValue {
   environment: MessageActionEnvironment;
-  /** The newest reply and its prompt, for the reply's Copy and Retry row. */
-  latestReply: LatestReply | undefined;
-  /** Opens the message menu (phone). */
-  openMenu(subject: MessageActionSubject): void;
+  /** Every turn's final reply, for its Copy and Retry row. */
+  replyTurns: ReplyTurns;
+  /** The message whose menu is open, for its highlight. */
+  activeId: string | null;
+  /** Opens the menu next to a message (phone). */
+  openMenu(subject: MessageActionSubject, anchor: MessageMenuAnchor): void;
   copy(subject: MessageActionSubject): void;
   select(subject: MessageActionSubject): void;
   edit(subject: MessageActionSubject): void;
-  retry(prompt: MessageActionSubject): void;
+  retry(turn: ReplyTurn): void;
 }
 
 export const MessageActionsContext = createContext<MessageActionsValue | null>(null);
@@ -53,30 +57,55 @@ export function useCopyFeedback(text: string) {
 }
 
 const LONG_PRESS_MS = 350;
-// Two recognizers watch the same press; the second to fire is the same press.
-const SAME_PRESS_MS = 800;
+const HIGHLIGHT_RADIUS = 20;
 
 /**
- * Wraps one message so it answers to the message actions: a long press opens
- * the message sheet on the phone (as in the ChatGPT and Claude apps), a hover
+ * The pressed view's rect in the window. The list is inverted, and a measure
+ * of a view inside it reports where the layout puts it, mirrored from where it
+ * is drawn, so only its size is taken from the measure. Where it is comes from
+ * the touch: the finger's window position less its position inside the view.
+ */
+function pressedRect(
+  view: View | null,
+  touch: { windowX: number; windowY: number; viewX: number; viewY: number },
+): Promise<MessageMenuAnchor["rect"] | null> {
+  return new Promise((resolve) => {
+    if (!view) return resolve(null);
+    view.measureInWindow((_x, _y, width, height) =>
+      resolve(
+        Number.isFinite(width) && Number.isFinite(height)
+          ? { x: touch.windowX - touch.viewX, y: touch.windowY - touch.viewY, width, height }
+          : null,
+      ),
+    );
+  });
+}
+
+/**
+ * Wraps a message of one's own so it answers to the message actions: a long
+ * press opens the menu beside it on the phone (as in the ChatGPT app), a hover
  * row shows on desktop (whose right click and text selection stay the
  * browser's own).
  *
- * The long press is watched twice on purpose. A gesture-handler recognizer
- * works at the native touch level, so it does not depend on the text view
- * under the finger handing the touch on to the JS responder; the Pressable is
- * the JS-responder path. Either opens the sheet, once.
+ * The press is gesture-handler's: it works at the native touch level, so it
+ * does not depend on the text view under the finger handing the touch on. The
+ * bubble's text is not natively selectable (that long press is the menu's);
+ * Select Text in the menu shows it where selection works. Replies are not
+ * wrapped at all: their text keeps the system's own selection.
  */
 export function MessageActionSurface({
   subject,
   align,
   maxWidth,
+  radii,
   chrome,
   children,
 }: {
   subject: MessageActionSubject;
   align: "start" | "end";
   maxWidth?: DimensionValue;
+  /** The bubble's corner radii, so the pressed highlight is its shape. */
+  radii?: ViewStyle;
   chrome: TerminalThemeChrome;
   children: React.ReactNode;
 }) {
@@ -84,27 +113,34 @@ export function MessageActionSurface({
   const desktop = useDesktopWeb();
   const [hovered, setHovered] = useState(false);
   const parentSelectable = useContext(TimelineTextSelectableContext);
+  const bubbleRef = useRef<View>(null);
   const kinds = useMemo(
     () => (actions ? messageActionKinds(subject, actions.environment) : []),
     [actions, subject],
   );
   const menuEnabled = !desktop && kinds.length > 0;
   // A message with a menu does not start the system's own text selection: that
-  // long press belongs to the sheet, whose Select Text selects. Without a menu
-  // (streaming, previews) the text keeps the timeline's rules.
+  // long press belongs to the menu, whose Select Text selects. Without a menu
+  // (still sending, previews) the text keeps the timeline's rules.
   const selectable = useMemo<TimelineTextSelectableContextValue>(
     () => (menuEnabled ? { selectable: false } : parentSelectable),
     [menuEnabled, parentSelectable],
   );
-  const lastOpened = useRef(0);
-  const open = useCallback(() => {
-    if (!actions) return;
-    const now = Date.now();
-    if (now - lastOpened.current < SAME_PRESS_MS) return;
-    lastOpened.current = now;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    actions.openMenu(subject);
-  }, [actions, subject]);
+  const open = useCallback(
+    async (event: { x: number; y: number; absoluteX: number; absoluteY: number }) => {
+      if (!actions) return;
+      const rect = await pressedRect(bubbleRef.current, {
+        windowX: event.absoluteX,
+        windowY: event.absoluteY,
+        viewX: event.x,
+        viewY: event.y,
+      });
+      if (!rect) return;
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      actions.openMenu(subject, { rect, touchY: event.absoluteY, align });
+    },
+    [actions, align, subject],
+  );
   const longPress = useMemo(
     () =>
       Gesture.LongPress()
@@ -112,7 +148,7 @@ export function MessageActionSurface({
         .enabled(menuEnabled)
         .minDuration(LONG_PRESS_MS)
         .maxDistance(10)
-        .onStart(open),
+        .onStart((event) => void open(event)),
     [menuEnabled, open],
   );
   const content = (
@@ -127,8 +163,6 @@ export function MessageActionSurface({
       onHoverIn: () => setHovered(true),
       onHoverOut: () => setHovered(false),
     } as object;
-    // The newest reply carries its own always-visible Copy and Retry row.
-    const rowOwner = actions?.latestReply?.replyId === subject.id;
     return (
       <Pressable
         accessible={false}
@@ -137,7 +171,7 @@ export function MessageActionSurface({
         style={[styles.desktopWrap, align === "end" ? styles.desktopEnd : null]}
       >
         <View style={inner}>{content}</View>
-        {actions && kinds.length > 0 && !rowOwner ? (
+        {actions && kinds.length > 0 ? (
           <MessageActionBar
             subject={subject}
             kinds={kinds}
@@ -150,24 +184,26 @@ export function MessageActionSurface({
       </Pressable>
     );
   }
+  const active = actions?.activeId === subject.id;
   return (
     <GestureDetector gesture={longPress}>
-      <Pressable
-        accessible={false}
-        focusable={false}
-        delayLongPress={LONG_PRESS_MS}
-        onLongPress={menuEnabled ? open : undefined}
-        style={inner}
-      >
+      <View ref={bubbleRef} collapsable={false} style={inner}>
         {content}
-      </Pressable>
+        {active ? (
+          <View
+            pointerEvents="none"
+            style={[styles.highlight, radii, { backgroundColor: chrome.text, opacity: 0.1 }]}
+          />
+        ) : null}
+      </View>
     </GestureDetector>
   );
 }
 
 /**
- * The newest reply's quiet icon row, always visible as in ChatGPT: Copy, and
- * Retry where the agent can run the prompt again.
+ * The quiet icon row under a turn's final reply, as in ChatGPT: Copy, Retry
+ * where the agent can run the prompt again, and on the phone a menu with
+ * Select Text. Older replies have it too.
  */
 export function ReplyActionRow({
   subject,
@@ -177,10 +213,14 @@ export function ReplyActionRow({
   chrome: TerminalThemeChrome;
 }) {
   const actions = useMessageActions();
+  const desktop = useDesktopWeb();
+  const moreRef = useRef<View>(null);
   const { copied, copy } = useCopyFeedback(messageCopyText(subject));
-  const latest = actions?.latestReply;
-  if (!actions || !latest || latest.replyId !== subject.id || subject.streaming) return null;
-  const retryable = isRerunnablePrompt(latest.prompt, actions.environment);
+  const turn = actions?.replyTurns.get(subject.id);
+  if (!actions || !turn || subject.streaming) return null;
+  const retryable = isRetryableTurn(turn, actions.environment);
+  const kinds = messageActionKinds(subject, actions.environment);
+  const more = !desktop && kinds.includes("select");
   return (
     <View style={styles.replyRow}>
       <RowButton
@@ -194,8 +234,30 @@ export function ReplyActionRow({
           icon="refresh"
           label="Retry"
           color={chrome.textMuted}
-          onPress={() => actions.retry(latest.prompt)}
+          onPress={() => actions.retry(turn)}
         />
+      ) : null}
+      {more ? (
+        <View ref={moreRef} collapsable={false}>
+          <RowButton
+            icon="more-horizontal"
+            label="More"
+            color={chrome.textMuted}
+            onPress={(event) => {
+              const { pageX, pageY, locationX, locationY } = event.nativeEvent;
+              void pressedRect(moreRef.current, {
+                windowX: pageX,
+                windowY: pageY,
+                viewX: locationX,
+                viewY: locationY,
+              }).then((rect) => {
+                if (!rect) return;
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                actions.openMenu(subject, { rect, touchY: rect.y + rect.height / 2, align: "start" });
+              });
+            }}
+          />
+        </View>
       ) : null}
     </View>
   );
@@ -210,7 +272,7 @@ function RowButton({
   icon: IconName;
   label: string;
   color: string;
-  onPress(): void;
+  onPress(event: GestureResponderEvent): void;
 }) {
   return (
     <Pressable
@@ -332,6 +394,14 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
+  },
+  highlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: HIGHLIGHT_RADIUS,
   },
   replyRow: {
     flexDirection: "row",

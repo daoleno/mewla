@@ -1,4 +1,4 @@
-import type { ActionMenuItem } from "../ui/ActionMenu";
+import type { IconName } from "../icons/Icon";
 
 /**
  * What the message menu offers, and what each choice really does.
@@ -7,7 +7,7 @@ import type { ActionMenuItem } from "../ui/ActionMenu";
  * CLI can step the conversation back to an earlier prompt, sending the edit
  * rewinds to that prompt first ("rewind"). Everywhere else, and always in
  * Brain's own thread, it goes out as a new message with the text prefilled
- * ("copy"). Retry on the latest reply follows the same two modes.
+ * ("copy"). Retry on a reply follows the same two modes.
  */
 export type MessageEditMode = "rewind" | "copy";
 export type MessageActionKind = "copy" | "select" | "edit";
@@ -21,6 +21,8 @@ export interface MessageActionSubject {
   pending: boolean;
   /** Assistant text that is still arriving. */
   streaming: boolean;
+  /** When it was sent: the anchored menu's header on a message of one's own. */
+  timestamp?: string;
 }
 
 export interface MessageActionEnvironment {
@@ -35,10 +37,25 @@ export interface MessageActionEnvironment {
   canSelectText: boolean;
 }
 
-/** The newest reply and the prompt it answers: what Retry runs again. */
-export interface LatestReply {
+/**
+ * One turn's final reply and the prompt it answers: what Retry runs again.
+ * A reply with no prompt before it still has its row, without Retry.
+ * `latest` is the conversation's newest turn; `settled` is false while a
+ * message is still being sent, when nothing may be rerun.
+ */
+export interface ReplyTurn {
   replyId: string;
-  prompt: MessageActionSubject;
+  prompt: MessageActionSubject | undefined;
+  latest: boolean;
+  settled: boolean;
+}
+
+/** Every turn's final reply, keyed by the reply's message id. */
+export type ReplyTurns = ReadonlyMap<string, ReplyTurn>;
+
+/** A reply's Retry: the prompt can run again and nothing is mid-send. */
+export function isRetryableTurn(turn: ReplyTurn, env: MessageActionEnvironment): boolean {
+  return turn.settled && turn.prompt !== undefined && isRerunnablePrompt(turn.prompt, env);
 }
 
 export function messageEditMode(env: Pick<MessageActionEnvironment, "messageRewind" | "brain">): MessageEditMode {
@@ -74,18 +91,21 @@ export function isRerunnablePrompt(subject: MessageActionSubject, env: MessageAc
   );
 }
 
-const MENU_ITEMS: Record<MessageActionKind, Pick<ActionMenuItem, "label" | "icon">> = {
-  copy: { label: "Copy", icon: "copy" },
-  select: { label: "Select Text", icon: "text" },
-  edit: { label: "Edit", icon: "edit" },
+export interface MessageMenuEntry {
+  kind: MessageActionKind;
+  label: string;
+  icon: IconName;
+}
+
+const MENU_ENTRIES: Record<MessageActionKind, MessageMenuEntry> = {
+  copy: { kind: "copy", label: "Copy", icon: "copy" },
+  select: { kind: "select", label: "Select Text", icon: "text" },
+  edit: { kind: "edit", label: "Edit", icon: "edit" },
 };
 
-/** The sheet's rows for one message: Copy, Select Text, Edit, as each applies. */
-export function messageMenuItems(
-  kinds: readonly MessageActionKind[],
-  run: (kind: MessageActionKind) => void,
-): ActionMenuItem[] {
-  return kinds.map((kind) => ({ key: kind, ...MENU_ITEMS[kind], onPress: () => run(kind) }));
+/** The anchored menu's rows for one message: Copy, Select Text, Edit, as each applies. */
+export function messageMenuEntries(kinds: readonly MessageActionKind[]): MessageMenuEntry[] {
+  return kinds.map((kind) => MENU_ENTRIES[kind]);
 }
 
 /** The text copied: assistant Markdown and user text exactly as written. */
