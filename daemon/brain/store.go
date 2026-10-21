@@ -114,6 +114,11 @@ func (s *Store) WorklogPath() string {
 	return filepath.Join(s.WorkspacePath(), worklogDirName)
 }
 
+// StateDir is the directory holding the Brain chat log and runtime state.
+func (s *Store) StateDir() string {
+	return s.statePath()
+}
+
 func (s *Store) HostSessionPath() string {
 	return hostSessionPath(s.Root)
 }
@@ -249,7 +254,7 @@ func (s *Store) SetHostSession(id, executorID string) error {
 	id = strings.TrimSpace(id)
 	executorID = strings.TrimSpace(executorID)
 	if id == "" {
-		return writeJSONFile(s.HostSessionPath(), hostSessionFile{})
+		return writeHostSessionFile(s.HostSessionPath(), hostSessionFile{})
 	}
 	previous, _ := s.readHostSessionLocked()
 	host := hostSessionFile{
@@ -262,7 +267,7 @@ func (s *Store) SetHostSession(id, executorID string) error {
 		host.TranscriptPath = previous.TranscriptPath
 		host.ProviderDataRoot = previous.ProviderDataRoot
 	}
-	return writeJSONFile(s.HostSessionPath(), host)
+	return writeHostSessionFile(s.HostSessionPath(), host)
 }
 
 // ReplaceHostSessionBinding atomically writes a new host tmux target together
@@ -289,7 +294,7 @@ func (s *Store) writeReplaceHostSessionBinding(path string, value any) error {
 	if s != nil && s.replaceHostBindingWrite != nil {
 		return s.replaceHostBindingWrite(path, value)
 	}
-	return writeJSONFile(path, value)
+	return writeHostSessionFile(path, value)
 }
 
 func (s *Store) SetHostExecutorID(executorID string) error {
@@ -327,7 +332,7 @@ func setHostExecutorID(path, executorID string) error {
 		next.TranscriptPath = host.TranscriptPath
 		next.ProviderDataRoot = host.ProviderDataRoot
 	}
-	return writeJSONFile(path, next)
+	return writeHostSessionFile(path, next)
 }
 
 // SetHostProviderTranscript persists the stable Host Executor Session provider
@@ -368,7 +373,7 @@ func (s *Store) compareAndSetHostProviderTranscript(expected HostSession, provid
 }
 
 func (s *Store) writeHostProviderTranscriptLocked(host HostSession, providerSessionID, transcriptPath, providerDataRoot string) error {
-	return writeJSONFile(s.HostSessionPath(), hostSessionFile{
+	return writeHostSessionFile(s.HostSessionPath(), hostSessionFile{
 		ID:                host.ID,
 		ExecutorID:        host.ExecutorID,
 		UpdatedAt:         time.Now().UTC(),
@@ -432,6 +437,8 @@ func (s *Store) ensureFiles() error {
 	if err := ensureFile(s.HostSessionPath(), []byte("{}\n")); err != nil {
 		return err
 	}
+	// Seed the history with the binding that exists today.
+	s.archiveCurrentHostSession()
 	if err := ensureFile(s.ChatStatePath(), []byte("{}\n")); err != nil {
 		return err
 	}

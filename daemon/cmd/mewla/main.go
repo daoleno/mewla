@@ -127,6 +127,8 @@ func run(args []string, stderr io.Writer) error {
 			return runServiceCommand(args[1:], stderr)
 		case "brain":
 			return runBrainCommand(args[1:], stderr)
+		case "memory":
+			return runMemoryCommand(args[1:], stderr)
 		case "calendar":
 			return runCalendarCommand(args[1:], stderr)
 		case "browser":
@@ -2333,6 +2335,7 @@ Set up and maintain
 
 Agents and tools
   brain        Inspect Brain workspace and host executor configuration
+  memory       Search Brain chat for what the user said or decided
   worker       List, spawn, inspect, message, progress, and close Mewla Workers
   providers    Set the image model behind Codex image_gen
   connections  Plugins shared by Brain and Workers
