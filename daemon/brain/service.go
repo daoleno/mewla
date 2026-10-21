@@ -89,8 +89,10 @@ type Service struct {
 
 	// resolveWorkerTranscript overrides live provider conversation proof for
 	// Work transcript links; nil uses the real resolvers. workTranscriptWatch
-	// is guarded by reconcileMu.
+	// is guarded by workTranscriptMu.
 	resolveWorkerTranscript func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error)
+	recordTranscriptSync    bool // tests: run the turn-end link inline
+	workTranscriptMu        sync.Mutex
 	workTranscriptWatch     map[string]workTranscriptWatch
 
 	reconcileMu      sync.Mutex
@@ -402,6 +404,7 @@ func (s *Service) ApplyTurnFact(fact watcher.TurnFact) (watcher.TurnSnapshot, bo
 	if s == nil || s.store == nil {
 		return watcher.TurnSnapshot{}, false, fmt.Errorf("brain store is not configured")
 	}
+	s.recordTurnEndTranscript(fact)
 	return s.store.ApplyTurnFact(fact)
 }
 
@@ -409,6 +412,7 @@ func (s *Service) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.Tur
 	if s == nil || s.store == nil {
 		return watcher.TurnProgressResult{}, fmt.Errorf("brain store is not configured")
 	}
+	s.recordTurnEndTranscript(fact)
 	return s.store.ApplyDelegatedTurnProgress(fact)
 }
 
@@ -1819,7 +1823,7 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 			continue
 		}
 		if worker != nil && item.AttemptDelegated {
-			s.recordWorkTranscript(item, worker, turn.TurnID)
+			s.recordWorkTranscript(item, worker, turn.TurnID, false)
 		}
 		if worker == nil {
 			// Inventory is a discovery snapshot, not proof of process death. A

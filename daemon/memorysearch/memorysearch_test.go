@@ -13,6 +13,7 @@ import (
 
 type fixtureRow struct {
 	id, kind, body, at, workID string
+	admission                  bool
 }
 
 func writeRows(t *testing.T, path string, rows ...fixtureRow) {
@@ -30,6 +31,7 @@ func writeRows(t *testing.T, path string, rows ...fixtureRow) {
 		raw, _ := json.Marshal(map[string]any{
 			"id": row.id, "role": role, "kind": row.kind, "body": row.body,
 			"created_at": row.at, "work_id": row.workID, "session_id": "s",
+			"brain_admission": row.admission,
 		})
 		if _, err := file.Write(append(raw, '\n')); err != nil {
 			t.Fatal(err)
@@ -406,5 +408,109 @@ func TestSchemaVersionMismatchRebuilds(t *testing.T) {
 	info, err := os.Stat(path)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("index mode = %v err=%v", info.Mode(), err)
+	}
+}
+
+func TestBackfilledNonTypingRowsAreContext(t *testing.T) {
+	ix, dir := openFixture(t)
+	writeRows(t, filepath.Join(dir, "messages.jsonl"),
+		fixtureRow{id: "typed", kind: "user_message", at: "2026-10-01T00:00:00Z", admission: true, body: "zeta rollout plan: ship Friday"},
+		fixtureRow{id: "s:t1:user", kind: "user_message", at: "2026-10-02T00:00:00Z", body: "This session is being continued from a previous conversation. zeta rollout plan was Friday."},
+		fixtureRow{id: "s:t2:user", kind: "user_message", at: "2026-10-03T00:00:00Z", body: "<task-notification>\n<task-id>x</task-id>zeta finished</task-notification>"},
+		fixtureRow{id: "s:t3:user", kind: "user_message", at: "2026-10-04T00:00:00Z", body: "<pasted_content id=\"1\">\n<zen_work_event>{\"summary\":\"zeta done\"}</zen_work_event>\n</pasted_content id=\"1\">"},
+		fixtureRow{id: "s:t4:user", kind: "user_message", at: "2026-10-05T00:00:00Z", body: "[Request interrupted by user] zeta"},
+		// What the user pasted or typed in Brain's terminal is still theirs.
+		fixtureRow{id: "s:t5:user", kind: "user_message", at: "2026-10-06T00:00:00Z", body: "<pasted_content id=\"2\">\n~ zeta ping ok\n</pasted_content id=\"2\">"},
+		fixtureRow{id: "s:t6:user", kind: "user_message", at: "2026-10-07T00:00:00Z", body: "typed zeta first <zen_work_event>{}</zen_work_event>"},
+		fixtureRow{id: "s:t7:user", kind: "user_message", at: "2026-10-08T00:00:00Z", body: "zeta 继续"},
+		fixtureRow{id: "s:a1:assistant:1", kind: "assistant_message", at: "2026-10-09T00:00:00Z", body: "zeta reply from brain"},
+	)
+	refresh(t, ix, dir)
+
+	whoOfHit := func(from string) map[string]string {
+		out := map[string]string{}
+		for _, hit := range search(t, ix, SearchOptions{Query: "zeta", From: from, Limit: 50}) {
+			out[hit.ID] = hit.Who
+		}
+		return out
+	}
+	user := whoOfHit("user")
+	for _, id := range []string{"typed", "s:t5:user", "s:t6:user", "s:t7:user"} {
+		if user[id] != WhoUser {
+			t.Errorf("%s should be user, --from user gave %v", id, user)
+		}
+	}
+	for _, id := range []string{"s:t1:user", "s:t2:user", "s:t3:user", "s:t4:user", "s:a1:assistant:1"} {
+		if _, leaked := user[id]; leaked {
+			t.Errorf("%s leaked into --from user", id)
+		}
+	}
+	ctx := whoOfHit("context")
+	if len(ctx) != 4 || ctx["s:t1:user"] != WhoContext || ctx["s:t4:user"] != WhoContext {
+		t.Fatalf("--from context = %v", ctx)
+	}
+
+	// --from all keeps them, after every real message (both match tiers).
+	all := search(t, ix, SearchOptions{Query: "zeta", Limit: 50})
+	seenContext := false
+	for _, hit := range all {
+		if hit.Who == WhoContext {
+			seenContext = true
+		} else if seenContext {
+			t.Fatalf("real message %s ranked after a context row: %s", hit.ID, ids(all))
+		}
+	}
+	if len(all) != 9 {
+		t.Fatalf("--from all = %s", ids(all))
+	}
+	if _, err := ix.Search(context.Background(), SearchOptions{Query: "zeta", From: "robot"}); err == nil {
+		t.Fatal("bad --from accepted")
+	}
+}
+
+func TestBackfilledCopyCollapsesIntoRealMessage(t *testing.T) {
+	ix, dir := openFixture(t)
+	writeRows(t, filepath.Join(dir, "messages.jsonl"),
+		// The backfilled copy is NEWER than the real message: the real one wins.
+		fixtureRow{id: "real", kind: "user_message", at: "2026-10-01T00:00:00Z", admission: true, body: "please retry the job"},
+		fixtureRow{id: "s:t1:user", kind: "user_message", at: "2026-10-01T00:00:02Z", body: "please retry the job"},
+		// No real counterpart: the backfilled typing stays a user hit.
+		fixtureRow{id: "s:t2:user", kind: "user_message", at: "2026-10-02T00:00:00Z", body: "only typed in the terminal"},
+		// A context row that repeats a real message folds in as well.
+		fixtureRow{id: "s:t3:user", kind: "user_message", at: "2026-10-03T00:00:00Z", body: "<task-notification>pinned</task-notification>"},
+		fixtureRow{id: "real2", kind: "user_message", at: "2026-10-04T00:00:00Z", admission: true, body: "<task-notification>pinned</task-notification>"},
+	)
+	refresh(t, ix, dir)
+
+	hits := search(t, ix, SearchOptions{Query: "retry the job"})
+	if len(hits) != 1 || hits[0].ID != "real" || hits[0].Who != WhoUser || hits[0].Duplicates != 1 {
+		t.Fatalf("retry hits = %+v", hits)
+	}
+	hits = search(t, ix, SearchOptions{Query: "only typed", From: "user"})
+	if len(hits) != 1 || hits[0].ID != "s:t2:user" || hits[0].Who != WhoUser {
+		t.Fatalf("backfilled typing = %+v", hits)
+	}
+	hits = search(t, ix, SearchOptions{Query: "pinned"})
+	if len(hits) != 1 || hits[0].ID != "real2" || hits[0].Duplicates != 1 {
+		t.Fatalf("context duplicate = %+v", hits)
+	}
+}
+
+func TestContextRanksAfterRealMessagesAcrossTiers(t *testing.T) {
+	ix, dir := openFixture(t)
+	writeRows(t, filepath.Join(dir, "messages.jsonl"),
+		// Exact phrase, but context (newest).
+		fixtureRow{id: "s:c:user", kind: "user_message", at: "2026-10-09T00:00:00Z", body: "This session is being continued: rollout plan for friday"},
+		// Terms only, but real.
+		fixtureRow{id: "real-terms", kind: "assistant_message", at: "2026-10-01T00:00:00Z", body: "friday is the day we do the rollout, per the plan"},
+		fixtureRow{id: "real-phrase", kind: "user_message", at: "2026-10-02T00:00:00Z", admission: true, body: "rollout plan: friday"},
+	)
+	refresh(t, ix, dir)
+	if got := ids(search(t, ix, SearchOptions{Query: "rollout plan", Limit: 10})); got != "real-phrase,real-terms,s:c:user" {
+		t.Fatalf("order = %q", got)
+	}
+	// The limit never lets context displace a real message.
+	if got := ids(search(t, ix, SearchOptions{Query: "rollout plan", Limit: 2})); got != "real-phrase,real-terms" {
+		t.Fatalf("limited = %q", got)
 	}
 }

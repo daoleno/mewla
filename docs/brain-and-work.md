@@ -158,10 +158,13 @@ mewla memory show <id> --around 5                    # one message and the 5 on 
 ```
 
 Search covers visible text only: your messages, Brain's replies and Work result
-cards, including messages you sent while Brain was busy. Tool output and
+cards, including messages you sent while Brain was busy. Text Brain's own
+agent session fed back into the chat that you did not type (a compaction
+summary, a forwarded Work event, a notification) is labelled `context`: it is
+left out of `--from user`, and under `all` it ranks after real messages. Tool output and
 thinking are not in the chat log, so they are never searched. Any phrase works,
 including Chinese and partial phrases; one- and two-character queries are
-matched literally. `--from` is `user`, `brain` or `all`, `--since` and `--until`
+matched literally. `--from` is `user`, `brain`, `context` or `all`, `--since` and `--until`
 take a date, an RFC 3339 time or an age such as `30d`, and `--json` prints the
 hits with their ids, times and Work ids.
 

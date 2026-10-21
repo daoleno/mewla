@@ -29,7 +29,7 @@ import (
 
 // schemaVersion is stored in PRAGMA user_version. Bump it when the schema or
 // Redact changes so the next open discards the index and rebuilds it.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // cursorProbe is how many bytes before the cursor are hashed to detect that a
 // file was rewritten or replaced rather than appended to.
@@ -45,6 +45,10 @@ const (
 	WhoUser  = "user"
 	WhoBrain = "brain"
 	WhoWork  = "work"
+	// WhoContext marks user-role rows Brain's Claude transcript fed back into
+	// the chat that the user did not type: compaction summaries, forwarded
+	// Mewla events and notifications. They are searchable but never "user".
+	WhoContext = "context"
 )
 
 var sourceName = regexp.MustCompile(`^messages(-[0-9]+)?\.jsonl$`)
@@ -119,7 +123,7 @@ func (ix *Index) createSchema() error {
 		`CREATE TABLE msg(
 			seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, at INTEGER NOT NULL,
 			who TEXT NOT NULL, work_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
-			dedupe TEXT NOT NULL)`,
+			dedupe TEXT NOT NULL, backfilled INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX msg_at ON msg(at, seq)`,
 		`CREATE VIRTUAL TABLE msg_fts USING fts5(
 			body, content='msg', content_rowid='seq', tokenize='trigram')`,
@@ -197,6 +201,9 @@ type timelineRow struct {
 	Body      string `json:"body"`
 	CreatedAt string `json:"created_at"`
 	WorkID    string `json:"work_id"`
+	// BrainAdmission marks rows written when the user sent a message through
+	// Mewla, as opposed to rows backfilled from Brain's provider transcript.
+	BrainAdmission bool `json:"brain_admission"`
 }
 
 func (ix *Index) refreshFile(ctx context.Context, path string) (rescan bool, added int, err error) {
@@ -272,15 +279,19 @@ func (ix *Index) refreshFile(ctx context.Context, path string) (rescan bool, add
 		if !ok {
 			continue
 		}
+		backfilled := isBackfilled(item)
+		if backfilled && who == WhoUser && isContextBody(item.Body) {
+			who = WhoContext
+		}
 		at, perr := time.Parse(time.RFC3339Nano, item.CreatedAt)
 		body := strings.TrimSpace(Redact(item.Body))
 		if perr != nil || body == "" || strings.TrimSpace(item.ID) == "" {
 			continue
 		}
 		res, err := conn.ExecContext(ctx,
-			`INSERT INTO msg(id, at, who, work_id, body, dedupe) VALUES(?,?,?,?,?,?)
+			`INSERT INTO msg(id, at, who, work_id, body, dedupe, backfilled) VALUES(?,?,?,?,?,?,?)
 			 ON CONFLICT(id) DO NOTHING`,
-			item.ID, at.UnixNano(), who, strings.TrimSpace(item.WorkID), body, dedupeKey(who, body))
+			item.ID, at.UnixNano(), who, strings.TrimSpace(item.WorkID), body, dedupeKey(who, body), backfilled)
 		if err != nil {
 			return rescan, added, err
 		}
@@ -315,6 +326,36 @@ func (ix *Index) refreshFile(ctx context.Context, path string) (rescan bool, add
 	return rescan, added, nil
 }
 
+// isBackfilled reports a user row Brain's provider transcript wrote into the
+// chat (id "<session>:<turn>:user"), as opposed to one Mewla admitted when the
+// user sent it.
+func isBackfilled(item timelineRow) bool {
+	return item.Role == "user" && !item.BrainAdmission && strings.HasSuffix(item.ID, ":user") && strings.Count(item.ID, ":") >= 2
+}
+
+var (
+	pastedWrapper = regexp.MustCompile(`^<pasted_content[^>]*>\s*`)
+	markupStart   = regexp.MustCompile(`^<[A-Za-z][\w:-]*[\s>]`)
+)
+
+// isContextBody reports text the user did not type: Claude's compaction
+// summary, an interruption marker, or a message that is only markup (task
+// notifications, forwarded Mewla events). A paste wrapper is looked through;
+// the user's own paste (a log, a document) stays theirs. Typed text followed by
+// markup does not start with it and also stays theirs.
+func isContextBody(body string) bool {
+	body = strings.TrimSpace(body)
+	for _, prefix := range []string{"This session is being continued", "[Request interrupted", "Caveat:"} {
+		if strings.HasPrefix(body, prefix) {
+			return true
+		}
+	}
+	if loc := pastedWrapper.FindStringIndex(body); loc != nil {
+		body = body[loc[1]:]
+	}
+	return markupStart.MatchString(body)
+}
+
 func whoOf(item timelineRow) (string, bool) {
 	switch strings.TrimSpace(item.Kind) {
 	case "user_message":
@@ -334,7 +375,13 @@ func whoOf(item timelineRow) (string, bool) {
 	return "", false
 }
 
+// dedupeKey identifies a message by side and normalized text. User and context
+// rows share a side: a backfilled copy of what the user typed collapses into
+// the real message.
 func dedupeKey(who, body string) string {
+	if who == WhoContext {
+		who = WhoUser
+	}
 	sum := sha256.Sum256([]byte(who + "\x00" + strings.Join(strings.Fields(body), " ")))
 	return hex.EncodeToString(sum[:12])
 }

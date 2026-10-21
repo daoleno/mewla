@@ -40,8 +40,10 @@ type Message struct {
 	Match  bool      `json:"match,omitempty"`
 }
 
-// SearchOptions filters a search. From is "user", "brain", "work" or
-// "all"/"" (everything). Zero Since/Until are open-ended.
+// SearchOptions filters a search. From is "user", "brain", "work", "context"
+// or "all"/"" (everything). "user" is only what the user typed; context rows
+// (summaries, forwarded events) appear under "all", after real messages. Zero
+// Since/Until are open-ended.
 type SearchOptions struct {
 	Query string
 	From  string
@@ -66,11 +68,11 @@ func (ix *Index) Search(ctx context.Context, opts SearchOptions) ([]Hit, error) 
 	var filterArgs []any
 	switch from := strings.ToLower(strings.TrimSpace(opts.From)); from {
 	case "", "all":
-	case WhoUser, WhoBrain, WhoWork:
+	case WhoUser, WhoBrain, WhoWork, WhoContext:
 		filters = append(filters, "m.who = ?")
 		filterArgs = append(filterArgs, from)
 	default:
-		return nil, fmt.Errorf("--from must be user, brain or all, got %q", opts.From)
+		return nil, fmt.Errorf("--from must be user, brain, context or all, got %q", opts.From)
 	}
 	if !opts.Since.IsZero() {
 		filters = append(filters, "m.at >= ?")
@@ -86,35 +88,59 @@ func (ix *Index) Search(ctx context.Context, opts SearchOptions) ([]Hit, error) 
 		tiers = append(tiers, terms)
 	}
 
-	var hits []Hit
+	// Real messages fill the result first across both tiers; context rows
+	// (summaries, forwarded events) only follow them, newest first per tier.
+	var real, contextHits []Hit
 	seenID := map[string]bool{}
-	seenText := map[string]int{} // dedupe key -> index in hits
+	type slot struct {
+		context bool
+		at      int
+	}
+	seenText := map[string]slot{}
 	for _, terms := range tiers {
-		if len(hits) >= limit {
+		if len(real) >= limit {
 			break
 		}
 		rows, err := ix.candidates(ctx, terms, filters, filterArgs)
 		if err != nil {
 			return nil, err
 		}
+		fresh := rows[:0]
 		for _, row := range rows {
-			if seenID[row.id] {
-				continue
+			if !seenID[row.id] {
+				seenID[row.id] = true
+				fresh = append(fresh, row)
 			}
-			seenID[row.id] = true
-			if at, ok := seenText[row.dedupe]; ok {
-				hits[at].Duplicates++
-				continue
-			}
-			if len(hits) >= limit {
-				continue // keep counting duplicates of listed hits only
-			}
-			seenText[row.dedupe] = len(hits)
-			hits = append(hits, Hit{
-				ID: row.id, At: time.Unix(0, row.at).UTC(), Who: row.who,
-				Snippet: snippet(row.body, terms), WorkID: row.workID,
-			})
 		}
+		for _, group := range collapse(fresh) {
+			if at, ok := seenText[group.rep.dedupe]; ok {
+				if at.context {
+					contextHits[at.at].Duplicates += group.count + 1
+				} else {
+					real[at.at].Duplicates += group.count + 1
+				}
+				continue
+			}
+			isContext := group.rep.who == WhoContext
+			if (isContext && len(contextHits) >= limit) || (!isContext && len(real) >= limit) {
+				continue
+			}
+			hit := Hit{
+				ID: group.rep.id, At: time.Unix(0, group.rep.at).UTC(), Who: group.rep.who,
+				Snippet: snippet(group.rep.body, terms), WorkID: group.rep.workID, Duplicates: group.count,
+			}
+			if isContext {
+				seenText[group.rep.dedupe] = slot{true, len(contextHits)}
+				contextHits = append(contextHits, hit)
+			} else {
+				seenText[group.rep.dedupe] = slot{false, len(real)}
+				real = append(real, hit)
+			}
+		}
+	}
+	hits := append(real, contextHits...)
+	if len(hits) > limit {
+		hits = hits[:limit]
 	}
 	return hits, nil
 }
@@ -122,6 +148,47 @@ func (ix *Index) Search(ctx context.Context, opts SearchOptions) ([]Hit, error) 
 type candidate struct {
 	id, who, workID, body, dedupe string
 	at                            int64
+	backfilled                    bool
+}
+
+func (c candidate) real() bool { return !c.backfilled && c.who != WhoContext }
+
+type collapsed struct {
+	rep   candidate
+	count int // other messages with the same text
+}
+
+// collapse groups newest-first rows by text. The representative is the real
+// message when there is one (a backfilled copy folds into what the user
+// typed), else the newest. Groups come back real messages first, context rows
+// after, each newest first.
+func collapse(rows []candidate) []collapsed {
+	index := map[string]int{}
+	var groups []collapsed
+	for _, row := range rows {
+		i, ok := index[row.dedupe]
+		if !ok {
+			index[row.dedupe] = len(groups)
+			groups = append(groups, collapsed{rep: row})
+			continue
+		}
+		groups[i].count++
+		if row.real() && !groups[i].rep.real() {
+			groups[i].rep = row
+		}
+	}
+	ordered := make([]collapsed, 0, len(groups))
+	for _, group := range groups {
+		if group.rep.who != WhoContext {
+			ordered = append(ordered, group)
+		}
+	}
+	for _, group := range groups {
+		if group.rep.who == WhoContext {
+			ordered = append(ordered, group)
+		}
+	}
+	return ordered
 }
 
 // candidates returns messages containing every term, newest first. A single
@@ -146,7 +213,7 @@ func (ix *Index) candidates(ctx context.Context, terms []string, filters []strin
 	args = append(args, filterArgs...)
 	args = append(args, maxCandidates)
 	rows, err := ix.db.QueryContext(ctx,
-		`SELECT m.id, m.at, m.who, m.work_id, m.body, m.dedupe FROM msg m
+		`SELECT m.id, m.at, m.who, m.work_id, m.body, m.dedupe, m.backfilled FROM msg m
 		 WHERE `+strings.Join(conds, " AND ")+`
 		 ORDER BY m.at DESC, m.seq DESC LIMIT ?`, args...)
 	if err != nil {
@@ -156,7 +223,7 @@ func (ix *Index) candidates(ctx context.Context, terms []string, filters []strin
 	var out []candidate
 	for rows.Next() {
 		var c candidate
-		if err := rows.Scan(&c.id, &c.at, &c.who, &c.workID, &c.body, &c.dedupe); err != nil {
+		if err := rows.Scan(&c.id, &c.at, &c.who, &c.workID, &c.body, &c.dedupe, &c.backfilled); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

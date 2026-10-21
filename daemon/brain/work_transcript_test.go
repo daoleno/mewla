@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -63,12 +64,12 @@ func TestServiceRecordsWorkTranscriptOncePerWorkerInstance(t *testing.T) {
 	item := Work{ID: "work-1"}
 	worker := &classifier.Worker{ID: "%7", ProcessID: 99, StartedAt: time.Unix(1000, 0)}
 
-	service.recordWorkTranscript(item, worker, "turn-1")
+	service.recordWorkTranscript(item, worker, "turn-1", false)
 	if got, _ := store.WorkTranscripts("work-1"); len(got) != 0 {
 		t.Fatalf("recorded before proof: %+v", got)
 	}
-	service.recordWorkTranscript(item, worker, "turn-1")
-	service.recordWorkTranscript(item, worker, "turn-1")
+	service.recordWorkTranscript(item, worker, "turn-1", false)
+	service.recordWorkTranscript(item, worker, "turn-1", false)
 	got, _ := store.WorkTranscripts("work-1")
 	if len(got) != 1 || got[0].Executor != "claude" || got[0].ProviderSessionID != "sess-1" ||
 		got[0].TranscriptPath != "/t/sess-1.jsonl" || got[0].TurnID != "turn-1" || got[0].SessionID != "%7" {
@@ -82,7 +83,7 @@ func TestServiceRecordsWorkTranscriptOncePerWorkerInstance(t *testing.T) {
 	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
 		return "", work.HostTranscriptIdentity{}, false, errors.New("boom")
 	}
-	service.recordWorkTranscript(item, &classifier.Worker{ID: "%8", ProcessID: 5}, "")
+	service.recordWorkTranscript(item, &classifier.Worker{ID: "%8", ProcessID: 5}, "", false)
 }
 
 func TestHostSessionHistoryKeepsReplacedBindings(t *testing.T) {
@@ -150,5 +151,78 @@ func TestHostSessionHistorySeedsCurrentBindingOnOpen(t *testing.T) {
 	}
 	if got, _ := reopened.HostSessionHistory(); len(got) != 1 {
 		t.Fatalf("duplicate history entries: %+v", got)
+	}
+}
+
+func TestTurnEndRecordsTranscriptBeforeAttemptIsReleased(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := createSignalTestWork(t, store, "short lived worker", "worker")
+	fw := &fakeWatcher{turnStore: store, sessions: map[string]*classifier.Worker{
+		"worker": {ID: "worker", Delegated: true, ProcessID: 123, PaneAlive: true, Command: "claude"},
+	}}
+	if _, err := fw.SubmitDelegatedWorkInput("worker", "input", item.ID, "turn-1", "", "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store, fw, nil)
+	service.recordTranscriptSync = true
+	resolves := 0
+	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
+		resolves++
+		return "claude", work.HostTranscriptIdentity{Provider: "claude", SessionID: "conv-9", Path: "/t/conv-9.jsonl"}, true, nil
+	}
+
+	// No reconcile tick ever runs: the turn ends first.
+	if _, err := service.ApplyDelegatedTurnProgress(watcher.TurnFact{
+		SessionID: "worker", TurnID: "turn-1", Class: watcher.EvidenceControl, Kind: "done",
+		SourceID: "done-1", Summary: "finished", At: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	links, err := store.WorkTranscripts(item.ID)
+	if err != nil || len(links) != 1 || links[0].ProviderSessionID != "conv-9" || links[0].SessionID != "worker" || links[0].TurnID != "turn-1" {
+		t.Fatalf("links = %+v err=%v", links, err)
+	}
+	// The attempt is released now, so the reconcile path has nothing left to
+	// link: the turn-end record is the only one.
+	if got, found, _ := store.WorkByAttemptSession("worker"); found && got.AttemptDelegated {
+		t.Fatalf("attempt still held: %+v", got)
+	}
+
+	// A later fact with the attempt gone, a repeat, and a Session with no Work
+	// neither record nor fail.
+	service.ApplyTurnFact(watcher.TurnFact{SessionID: "worker", TurnID: "turn-1", Kind: "done", SourceID: "done-2", At: time.Now()})
+	service.ApplyTurnFact(watcher.TurnFact{SessionID: "stranger", TurnID: "t", Kind: "done", SourceID: "x", At: time.Now()})
+	if links, _ = store.WorkTranscripts(item.ID); len(links) != 1 {
+		t.Fatalf("duplicate links: %+v", links)
+	}
+	if resolves != 1 {
+		t.Fatalf("resolver ran %d times", resolves)
+	}
+}
+
+func TestTurnEndForcesResolveInsideRecheckWindow(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{store: store, now: time.Now}
+	conversation := "conv-a"
+	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
+		return "claude", work.HostTranscriptIdentity{SessionID: conversation, Path: "/t/" + conversation + ".jsonl"}, true, nil
+	}
+	item := Work{ID: "work-1"}
+	worker := &classifier.Worker{ID: "%7", ProcessID: 99, StartedAt: time.Unix(1000, 0)}
+	service.recordWorkTranscript(item, worker, "t1", false)
+	conversation = "conv-b" // the Worker ran /clear
+	service.recordWorkTranscript(item, worker, "t1", false)
+	if links, _ := store.WorkTranscripts("work-1"); len(links) != 1 {
+		t.Fatalf("recheck window ignored: %+v", links)
+	}
+	service.recordWorkTranscript(item, worker, "t1", true)
+	if links, _ := store.WorkTranscripts("work-1"); len(links) != 2 || links[1].ProviderSessionID != "conv-b" {
+		t.Fatalf("terminal fact did not re-resolve: %+v", links)
 	}
 }
