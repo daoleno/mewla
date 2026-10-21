@@ -385,6 +385,11 @@ func claudeTranscriptCreatedAt(path string, fallback time.Time) time.Time {
 
 func parseClaudeConversation(path string) (CodexConversation, error) {
 	builder := newClaudeConversationBuilder(strings.TrimSuffix(filepath.Base(path), ".jsonl"))
+	abandoned, err := claudeAbandonedRecords(path)
+	if err != nil {
+		return CodexConversation{}, err
+	}
+	builder.abandoned = abandoned
 	if err := consumeClaudeJSONL(path, builder.consumeLine); err != nil {
 		return CodexConversation{}, err
 	}
@@ -431,6 +436,10 @@ type claudeConversationBuilder struct {
 	// pendingTaskTurn holds the activity a task notification would open. It
 	// starts only once the provider actually answers with an assistant record.
 	pendingTaskTurn claudePendingTaskTurn
+	// abandoned holds the uuids of records on branches Claude left behind when
+	// the user rewound to an earlier prompt. They stay in the file but are no
+	// longer part of the conversation.
+	abandoned map[string]struct{}
 	// seenTaskNotifications drops the rare second copy when Claude records one
 	// notification both as a mid-turn attachment and as a later prompt.
 	seenTaskNotifications map[string]bool
@@ -504,12 +513,22 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 	if envelope.IsSidechain {
 		return
 	}
+	if _, left := b.abandoned[envelope.UUID]; left && envelope.UUID != "" {
+		return
+	}
 	timestamp := normalizeCodexTimestamp(envelope.Timestamp)
 	recordID := firstNonEmpty(strings.TrimSpace(envelope.UUID), fmt.Sprintf("line-%d", lineNumber))
 
 	switch envelope.Type {
 	case "user":
 		if envelope.IsMeta {
+			return
+		}
+		if claudeInterruptMarker(envelope.Message.Content) {
+			// Claude records Esc as a user-shaped line. It is the end of the
+			// turn the person stopped, not a prompt: it neither shows as one
+			// nor opens a turn that would never finish.
+			b.activityLifecycle.settle("", ProviderActivityInterrupted, timestamp)
 			return
 		}
 		activityID := providerActivityID(firstNonEmpty(b.sessionID, b.sourceID), recordID, lineNumber)
@@ -1097,4 +1116,74 @@ func stripClaudeEmbeddedPasteEnvelopes(text string) string {
 	}
 	out.WriteString(rest)
 	return strings.TrimSpace(out.String())
+}
+
+// claudeAbandonedRecords finds the records Claude left behind by rewinding.
+// Rewinding to an earlier prompt does not rewrite the transcript: the edited
+// prompt is appended as a second child of the same parent, and the old prompt
+// with everything under it stays in the file. Two human prompts sharing a
+// parent mark that fork; the later one is the live branch.
+func claudeAbandonedRecords(path string) (map[string]struct{}, error) {
+	type record struct {
+		uuid   string
+		parent string
+	}
+	var records []record
+	humanChildren := map[string][]string{}
+	err := consumeClaudeJSONL(path, func(_ int, line []byte) {
+		var envelope struct {
+			Type        string `json:"type"`
+			UUID        string `json:"uuid"`
+			ParentUUID  string `json:"parentUuid"`
+			IsMeta      bool   `json:"isMeta"`
+			IsSidechain bool   `json:"isSidechain"`
+			Origin      struct {
+				Kind string `json:"kind"`
+			} `json:"origin"`
+			Message struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(line, &envelope) != nil || envelope.UUID == "" || envelope.IsSidechain {
+			return
+		}
+		records = append(records, record{uuid: envelope.UUID, parent: envelope.ParentUUID})
+		if envelope.Type != "user" || envelope.IsMeta || envelope.ParentUUID == "" {
+			return
+		}
+		if kind := strings.TrimSpace(envelope.Origin.Kind); kind != "" && kind != "human" {
+			return
+		}
+		if bytes.Contains(envelope.Message.Content, []byte(`"tool_result"`)) ||
+			bytes.Contains(envelope.Message.Content, []byte(claudeInterruptPrefix)) {
+			return
+		}
+		humanChildren[envelope.ParentUUID] = append(humanChildren[envelope.ParentUUID], envelope.UUID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	abandoned := map[string]struct{}{}
+	for _, children := range humanChildren {
+		for _, uuid := range children[:len(children)-1] {
+			abandoned[uuid] = struct{}{}
+		}
+	}
+	if len(abandoned) == 0 {
+		return nil, nil
+	}
+	for _, record := range records {
+		if _, left := abandoned[record.parent]; left {
+			abandoned[record.uuid] = struct{}{}
+		}
+	}
+	return abandoned, nil
+}
+
+const claudeInterruptPrefix = "[Request interrupted by user"
+
+// claudeInterruptMarker reports Claude's own note that the person stopped it.
+func claudeInterruptMarker(raw json.RawMessage) bool {
+	text, ok := claudeUserPlainText(raw)
+	return ok && strings.HasPrefix(strings.TrimSpace(text), claudeInterruptPrefix)
 }

@@ -386,6 +386,14 @@ type codexMeta struct {
 	ID         string
 	CWD        string
 	Originator string
+	// HistoryBase is set on a segment Codex started by rewinding a thread: the
+	// earlier turns stay in the parent segment's file, up to EndByteOffset.
+	HistoryBase *codexHistoryBase
+}
+
+type codexHistoryBase struct {
+	ThreadID      string
+	EndByteOffset int64
 }
 
 func readCodexMeta(path string) (codexMeta, error) {
@@ -425,16 +433,24 @@ func readCodexMetaFromReader(source io.Reader) (codexMeta, error) {
 				ID         string `json:"id"`
 				CWD        string `json:"cwd"`
 				Originator string `json:"originator"`
+				History    *struct {
+					ThreadID      string `json:"thread_id"`
+					EndByteOffset int64  `json:"end_byte_offset"`
+				} `json:"history_base"`
 			} `json:"payload"`
 		}
 		if json.Unmarshal(line, &envelope) != nil || envelope.Type != "session_meta" {
 			return codexMeta{}, fmt.Errorf("missing codex session metadata in first record")
 		}
-		return codexMeta{
+		meta := codexMeta{
 			ID:         strings.TrimSpace(envelope.Payload.ID),
 			CWD:        strings.TrimSpace(envelope.Payload.CWD),
 			Originator: strings.TrimSpace(envelope.Payload.Originator),
-		}, nil
+		}
+		if base := envelope.Payload.History; base != nil && strings.TrimSpace(base.ThreadID) != "" && base.EndByteOffset > 0 {
+			meta.HistoryBase = &codexHistoryBase{ThreadID: strings.TrimSpace(base.ThreadID), EndByteOffset: base.EndByteOffset}
+		}
+		return meta, nil
 	}
 	if err := scanner.Err(); err != nil {
 		return codexMeta{}, fmt.Errorf("codex session metadata exceeded explicit read/record limit: %w", err)

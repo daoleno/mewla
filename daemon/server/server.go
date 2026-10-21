@@ -116,6 +116,8 @@ type Server struct {
 	agentUse                     *agentuse.Service
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
+	rewindMessageOverride        func(workerID string, request watcher.MessageRewindRequest) error
+	rewound                      rewoundMessages
 	sendInputOverride            func(workerID, text string) error
 	sendInputWithReceiptOverride func(workerID, text, receipt string) error
 	sendActionOverride           func(workerID, action string) error
@@ -336,6 +338,7 @@ type clientMessage struct {
 	ConnectionRequest    *connections.Request                   `json:"connection_request"`
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
 	ChoiceAnswer         json.RawMessage                        `json:"choice_answer"`
+	MessageRewind        json.RawMessage                        `json:"message_rewind"`
 	ServiceID            string                                 `json:"service_id"`
 	ServiceGeneration    string                                 `json:"service_generation"`
 	TunnelAction         string                                 `json:"tunnel_action"`
@@ -943,6 +946,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSessionInputMessage(conn, raw)
 	case "answer_choice":
 		go s.handleAnswerChoice(conn, raw)
+	case "rewind_message":
+		go s.handleRewindMessage(conn, raw)
 	case "git_diff_status", "git_diff_patch", "git_diff_page", "git_diff_file_content", "git_repo_entries", "git_repo_file_content", "list_dir":
 		s.handleRepositoryMessage(conn, raw)
 	case "service_tunnel":
@@ -1738,7 +1743,7 @@ func (s *Server) loadProviderConversation(
 	if err != nil {
 		return work.CodexConversation{}, err
 	}
-	return conversation, nil
+	return s.rewound.apply(strings.TrimSpace(resolved.targetID), conversation), nil
 }
 
 func (s *Server) handleListSessionServices(conn *websocket.Conn, raw clientMessage) {

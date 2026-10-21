@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -379,13 +380,20 @@ func parseCodexConversation(path string) (CodexConversation, error) {
 	builder := newCodexConversationBuilder(filepath.Base(path))
 	builder.sessionID = strings.TrimSpace(meta.ID)
 	builder.cwd = strings.TrimSpace(meta.CWD)
+	// A rewound thread continues in a new file that holds only what came after
+	// the rewind point. Read the kept turns from the segments it builds on,
+	// unless a large file's window already starts past them.
+	markerBase := 0
+	if lineOffset == 0 {
+		markerBase = consumeCodexHistorySegments(builder, path, meta)
+	}
 	reader := bufio.NewReader(file)
 	for {
 		currentLineOffset := lineOffset
 		line, err := reader.ReadBytes('\n')
 		lineOffset += int64(len(line))
 		if len(bytes.TrimSpace(line)) > 0 {
-			builder.consumeLine(codexConversationLineMarker(currentLineOffset), line)
+			builder.consumeLine(markerBase+codexConversationLineMarker(currentLineOffset), line)
 		}
 		if err != nil {
 			if err == io.EOF {
@@ -2234,4 +2242,97 @@ func isLowSignalCodexStatus(title, body string) bool {
 		return true
 	}
 	return false
+}
+
+const maxCodexHistorySegments = 32
+
+type codexHistorySegment struct {
+	path string
+	end  int64
+}
+
+// consumeCodexHistorySegments feeds the builder the turns a rewound segment
+// inherits, oldest first, and returns the marker offset the segment's own
+// lines continue from so ids stay unique and ordered across files.
+func consumeCodexHistorySegments(builder *codexConversationBuilder, path string, meta codexMeta) int {
+	var chain []codexHistorySegment
+	current := meta
+	for len(chain) < maxCodexHistorySegments && current.HistoryBase != nil {
+		basePath, ok := findCodexSegment(path, current.HistoryBase.ThreadID)
+		if !ok {
+			break
+		}
+		chain = append(chain, codexHistorySegment{path: basePath, end: current.HistoryBase.EndByteOffset})
+		baseMeta, err := readCodexMeta(basePath)
+		if err != nil {
+			break
+		}
+		current = baseMeta
+	}
+	markerBase := 0
+	for index := len(chain) - 1; index >= 0; index-- {
+		markerBase += consumeCodexSegmentPrefix(builder, chain[index], markerBase)
+	}
+	return markerBase
+}
+
+// findCodexSegment locates the rollout file of one segment by its thread id.
+// Segments of a rewound thread live next to each other under sessions/.
+func findCodexSegment(activePath, threadID string) (string, bool) {
+	if strings.ContainsAny(threadID, `*?[]/\`) {
+		return "", false
+	}
+	normalized := filepath.ToSlash(activePath)
+	root := ""
+	if index := strings.LastIndex(normalized, "/sessions/"); index >= 0 {
+		root = filepath.FromSlash(normalized[:index+len("/sessions")])
+	}
+	var patterns []string
+	if root != "" {
+		patterns = append(patterns, filepath.Join(root, "*", "*", "*", "rollout-*"+threadID+".jsonl"))
+	}
+	patterns = append(patterns, filepath.Join(filepath.Dir(activePath), "rollout-*"+threadID+".jsonl"))
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		sort.Strings(matches)
+		for _, match := range matches {
+			if match != activePath {
+				return match, true
+			}
+		}
+	}
+	return "", false
+}
+
+func consumeCodexSegmentPrefix(builder *codexConversationBuilder, segment codexHistorySegment, markerBase int) int {
+	file, err := os.Open(segment.path)
+	if err != nil {
+		return 0
+	}
+	defer file.Close()
+	start := int64(0)
+	if segment.end > maxCodexConversationRead {
+		start = segment.end - maxCodexConversationRead
+	}
+	if _, err := file.Seek(start, io.SeekStart); err != nil {
+		return 0
+	}
+	reader := bufio.NewReader(io.LimitReader(file, segment.end-start))
+	offset := start
+	if start > 0 {
+		skipped, _ := reader.ReadBytes('\n')
+		offset += int64(len(skipped))
+	}
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(bytes.TrimSpace(line)) > 0 {
+			builder.consumeLine(markerBase+codexConversationLineMarker(offset), line)
+		}
+		offset += int64(len(line))
+		if err != nil {
+			break
+		}
+	}
+	builder.flushPendingUserEcho()
+	return int(segment.end)
 }
