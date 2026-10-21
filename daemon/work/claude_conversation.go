@@ -1122,7 +1122,8 @@ func stripClaudeEmbeddedPasteEnvelopes(text string) string {
 // Rewinding to an earlier prompt does not rewrite the transcript: the edited
 // prompt is appended as a second child of the same parent, and the old prompt
 // with everything under it stays in the file. Two human prompts sharing a
-// parent mark that fork; the later one is the live branch.
+// parent mark that fork; the later one is the live branch. Rewinding to the
+// very first prompt forks at the root: two prompts with no parent.
 func claudeAbandonedRecords(path string) (map[string]struct{}, error) {
 	type record struct {
 		uuid   string
@@ -1148,7 +1149,7 @@ func claudeAbandonedRecords(path string) (map[string]struct{}, error) {
 			return
 		}
 		records = append(records, record{uuid: envelope.UUID, parent: envelope.ParentUUID})
-		if envelope.Type != "user" || envelope.IsMeta || envelope.ParentUUID == "" {
+		if envelope.Type != "user" || envelope.IsMeta {
 			return
 		}
 		if kind := strings.TrimSpace(envelope.Origin.Kind); kind != "" && kind != "human" {
