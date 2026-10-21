@@ -1,0 +1,40 @@
+
+ ▐▛███▛█   Claude Code v2.1.305
+▝▜██████▀  Opus 5.5 with high effort · API Usage Billing
+ ▝▝   ▝▝   /repo/scratch
+
+
+❯ reply with exactly: one
+
+● one
+
+✻ Crunched for 2s · done 9:28
+
+❯ create file c.txt containing GAMMA, nothing else
+
+● Bash(printf 'GAMMA' > /repo/scratch/c.txt && cat
+      /repo/scratch/c.txt)
+  ⎿  GAMMA
+  ⎿  Created c.txt (+1 -0)
+      1 +GAMMA
+      2   No newline at end of file
+
+● I created c.txt in the working directory. It contains only GAMMA, with no trailing newline.
+
+✻ Brewed for 6s · done 9:29
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Rewind
+
+   Confirm you want to restore to the point before you sent this message:
+
+   │ reply with exactly: one
+   │ (15m ago)
+
+   The conversation will be forked.
+   The code will be unchanged.
+
+   ❯ 1. Restore conversation
+     2. Summarize from here
+     3. Summarize up to here
+     4. Never mind

@@ -12,6 +12,10 @@ type workerSessionWireCapabilities struct {
 	StructuredEvents         bool `json:"structured_events"`
 	ModelProfileManaged      bool `json:"model_profile_managed"`
 	ModelProfileActiveSwitch bool `json:"model_profile_active_switch"`
+	// MessageRewind is set when the Session's own CLI can step the conversation
+	// back to an earlier prompt, so editing a message can rewind instead of
+	// sending an edited copy as a new message.
+	MessageRewind bool `json:"message_rewind"`
 }
 
 type workerSessionWire struct {
@@ -34,6 +38,7 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 			StructuredEvents:         s.workerSupportsStructuredEvents(worker),
 			ModelProfileManaged:      managed,
 			ModelProfileActiveSwitch: activeSwitch,
+			MessageRewind:            s.workerSupportsMessageRewind(worker),
 		},
 	}
 }
@@ -179,4 +184,12 @@ func ambiguousWorkerExecutable(executable string) bool {
 	default:
 		return false
 	}
+}
+
+func (s *Server) workerSupportsMessageRewind(worker *classifier.Worker) bool {
+	if worker == nil || work.DSHSessionID(worker.Command) != "" {
+		return false
+	}
+	_, ok := messageRewindProvider(s.structuredProviderForWorker(worker))
+	return ok
 }
