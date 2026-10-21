@@ -114,6 +114,11 @@ export function useToast() {
   return context;
 }
 
+/** For surfaces that can render outside the app shell (previews, fixtures). */
+export function useOptionalToast() {
+  return useContext(ToastContext);
+}
+
 const styles = StyleSheet.create({
   layer: {
     position: "absolute",

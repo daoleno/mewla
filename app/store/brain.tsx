@@ -695,7 +695,8 @@ function workerRefsEqual(
     left.capabilities?.model_profile_managed ===
       right.capabilities?.model_profile_managed &&
     left.capabilities?.model_profile_active_switch ===
-      right.capabilities?.model_profile_active_switch
+      right.capabilities?.model_profile_active_switch &&
+    left.capabilities?.message_rewind === right.capabilities?.message_rewind
   );
 }
 

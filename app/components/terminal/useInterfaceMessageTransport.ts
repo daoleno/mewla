@@ -319,6 +319,7 @@ export function useInterfaceMessageTransport({
       text: string,
       previousDraft: string,
       previousAttachments: ComposerAttachment[],
+      options: { preserveComposer?: boolean } = {},
     ) => {
       if (sendLockedRef.current) {
         return;
@@ -334,7 +335,7 @@ export function useInterfaceMessageTransport({
           }),
         createOptimisticRow: (receipt) => {
           return addPendingUserMessage({
-            body: previousDraft.trim(),
+            body: (options.preserveComposer ? text : previousDraft).trim(),
             sentText: text,
             attachments: previousAttachments.map((attachment) => ({
               name: attachment.name,
@@ -366,11 +367,13 @@ export function useInterfaceMessageTransport({
       }
       const { pendingMessageId, receipt } = attempt;
       requestTurnFocus(pendingMessageId);
-      setDraft("");
-      clearComposerNativeText();
-      setAttachments([]);
-      currentDraftRef.current = "";
-      currentAttachmentsRef.current = [];
+      if (!options.preserveComposer) {
+        setDraft("");
+        clearComposerNativeText();
+        setAttachments([]);
+        currentDraftRef.current = "";
+        currentAttachmentsRef.current = [];
+      }
       unlockSend();
       observeInputOutcome(pendingMessageId, receipt);
     },
@@ -387,6 +390,19 @@ export function useInterfaceMessageTransport({
       setDraft,
       unlockSend,
     ],
+  );
+
+  // Resend sends a message's own text again as a new message and leaves
+  // whatever the composer holds alone.
+  const resendMessageToInterface = useCallback(
+    (text: string) => {
+      if (connectionState !== "connected") {
+        reportOfflineSend();
+        return;
+      }
+      submitTextToInterface(text, "", [], { preserveComposer: true });
+    },
+    [connectionState, reportOfflineSend, submitTextToInterface],
   );
 
   const actOnPendingUserMessage = useCallback(
@@ -506,6 +522,7 @@ export function useInterfaceMessageTransport({
     operationalError,
     reportOfflineSend,
     submitTextToInterface,
+    resendMessageToInterface,
     startNewInterfaceChat,
     sendSlashCommandToInterface,
     interruptInterface,

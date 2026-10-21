@@ -7,6 +7,8 @@ export type WorkerSessionCapabilities = {
   structured_events: boolean;
   model_profile_managed: boolean;
   model_profile_active_switch: boolean;
+  /** The Session's own CLI can step the conversation back to an earlier prompt. */
+  message_rewind?: boolean;
 };
 
 export function normalizeWorkerSessionCapabilities(
@@ -18,6 +20,7 @@ export function normalizeWorkerSessionCapabilities(
     structured_events: record.structured_events === true,
     model_profile_managed: record.model_profile_managed === true,
     model_profile_active_switch: record.model_profile_active_switch === true,
+    ...(record.message_rewind === true ? { message_rewind: true } : {}),
   };
 }
 

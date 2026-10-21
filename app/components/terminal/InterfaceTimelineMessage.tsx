@@ -12,7 +12,8 @@ import {
 } from "../../constants/tokens";
 import { mixHex } from "../../theme/colorUtils";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
-import { MessageCopyAction } from "./MessageCopyAction";
+import { MessageActionSurface } from "./MessageActions";
+import type { MessageActionSubject } from "./messageActionsModel";
 import { MessageBubbleFooter } from "./MessageBubbleFooter";
 import {
   chatgptUserBubbleRadii,
@@ -116,47 +117,61 @@ export function UserMessage({
     Boolean(item.onDiscardPending) ||
     appTheme.chat.showTimestamps;
 
+  const subject = messageSubject(item);
   return (
     <View style={[styles.userRow, spacing]}>
-      <View
-        // Busy only — never a status-only accessibilityLabel that replaces body.
-        accessibilityState={item.pending ? { busy: true } : undefined}
-        style={[
-          isChatGpt ? styles.userBubbleChatGpt : styles.userBubble,
-          bubbleRadii,
-          { backgroundColor: sentBubbleColor },
-        ]}
-      >
-        {hasBody ? (
-          <MessageBody value={item.body} chrome={sentChrome} theme={theme} />
-        ) : null}
-        {item.attachments.length > 0 ? (
-          <InterfaceTimelineAttachmentPreviewList
-            attachments={item.attachments}
-            chrome={sentChrome}
-            compact={hasBody}
-          />
-        ) : null}
-        {showFooter ? (
-          <MessageBubbleFooter
-            timestamp={item.timestamp}
-            tone="sent"
-            lifecycleLabel={item.pendingLifecycleLabel}
-            failureMessage={item.pendingFailureMessage}
-            failureColor={chrome.danger}
-            retryLabel={item.pendingRetryLabel}
-            onRetry={item.onRetryPending}
-            onDiscard={item.onDiscardPending}
-          />
-        ) : null}
-        {showPendingSendMark ? (
-          <View style={styles.pendingSendMark} pointerEvents="none">
-            <PendingSendStatusMark color={appTheme.chat.outboundSentClock} />
-          </View>
-        ) : null}
-      </View>
+      <MessageActionSurface subject={subject} align="end" chrome={chrome}>
+        <View
+          // Busy only — never a status-only accessibilityLabel that replaces body.
+          accessibilityState={item.pending ? { busy: true } : undefined}
+          style={[
+            isChatGpt ? styles.userBubbleChatGpt : styles.userBubble,
+            bubbleRadii,
+            { backgroundColor: sentBubbleColor },
+          ]}
+        >
+          {hasBody ? (
+            <MessageBody value={item.body} chrome={sentChrome} theme={theme} />
+          ) : null}
+          {item.attachments.length > 0 ? (
+            <InterfaceTimelineAttachmentPreviewList
+              attachments={item.attachments}
+              chrome={sentChrome}
+              compact={hasBody}
+            />
+          ) : null}
+          {showFooter ? (
+            <MessageBubbleFooter
+              timestamp={item.timestamp}
+              tone="sent"
+              lifecycleLabel={item.pendingLifecycleLabel}
+              failureMessage={item.pendingFailureMessage}
+              failureColor={chrome.danger}
+              retryLabel={item.pendingRetryLabel}
+              onRetry={item.onRetryPending}
+              onDiscard={item.onDiscardPending}
+            />
+          ) : null}
+          {showPendingSendMark ? (
+            <View style={styles.pendingSendMark} pointerEvents="none">
+              <PendingSendStatusMark color={appTheme.chat.outboundSentClock} />
+            </View>
+          ) : null}
+        </View>
+      </MessageActionSurface>
     </View>
   );
+}
+
+function messageSubject(item: MessageTimelineItem): MessageActionSubject {
+  return {
+    id: item.id,
+    role: item.role,
+    body: item.body,
+    hasAttachments: item.attachments.length > 0,
+    pending: Boolean(item.pending),
+    streaming: Boolean(item.streaming),
+  };
 }
 
 export function AssistantMessage({
@@ -192,23 +207,24 @@ export function AssistantMessage({
 
   return (
     <View style={[styles.assistantRow, spacing]}>
-      {showSender ? (
-        <Text style={[styles.assistantSender, { color: chrome.accent }]}>
-          {senderLabel}
-        </Text>
-      ) : null}
-      <View style={styles.assistantContent}>
-        <MessageBody
-          value={item.body}
-          chrome={assistantChrome}
-          theme={theme}
-          streaming={item.streaming}
-        />
-        {appTheme.chat.showTimestamps ? (
-          <MessageBubbleFooter timestamp={item.timestamp} tone="received" />
+      <MessageActionSurface subject={messageSubject(item)} align="start" chrome={chrome}>
+        {showSender ? (
+          <Text style={[styles.assistantSender, { color: chrome.accent }]}>
+            {senderLabel}
+          </Text>
         ) : null}
-        {item.streaming ? null : <MessageCopyAction text={item.body} chrome={chrome} />}
-      </View>
+        <View style={styles.assistantContent}>
+          <MessageBody
+            value={item.body}
+            chrome={assistantChrome}
+            theme={theme}
+            streaming={item.streaming}
+          />
+          {appTheme.chat.showTimestamps ? (
+            <MessageBubbleFooter timestamp={item.timestamp} tone="received" />
+          ) : null}
+        </View>
+      </MessageActionSurface>
     </View>
   );
 }

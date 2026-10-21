@@ -69,6 +69,31 @@ the card becomes an **Answered** line in the chat.
 Claude's permission and plan-approval prompts also show as **Waiting for your
 choice**, with Claude's own options. Answer those in the Terminal.
 
+### Copy, edit and resend a message
+
+Press and hold a message on the phone, or hover over it (or right-click) on
+desktop, to **Copy** it, **Edit** it or **Resend** it. Copy gives the text as
+written, Markdown included; code blocks keep their own copy button. On the
+phone, **Select text** turns on text selection for that one message.
+
+**Resend** sends the same text again as a new message. It is offered only when
+the agent is not working, and one tap sends once.
+
+**Edit** puts the message in the composer. What sending it does depends on the
+agent:
+
+| Agent | Sending an edited message |
+| --- | --- |
+| Claude Code, Codex, Pi | Steps the agent's conversation back to that message, as the agent's own message-editing gesture does, and sends the edited text from there. The later turns leave the chat. Files the agent changed stay as they are. |
+| Every other agent, and Brain | Sends the edited text as a new message. Nothing earlier changes. |
+
+The chip above the composer shows which one you will get: a step-back arrow, a
+chat bubble and a crossed-out document when the conversation is rewound and the
+files are not, a pencil alone when it is a new message. Mewla rewinds only when
+the agent is idle and its own message list is showing the message you chose.
+If it cannot prove that, nothing is rewound or sent, and the edit becomes a new
+message you can still send. Brain's own thread is never rewound.
+
 ### Files in a reply
 
 Tap a file path in a reply, a tool row or a changed-files list to open it
