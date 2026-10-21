@@ -35,7 +35,7 @@ import {
   type ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
-import type { LatestReply } from "./messageActionsModel";
+import type { MessageActionSubject, ReplyTurn, ReplyTurns } from "./messageActionsModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
 import { isImageAttachment } from "../../services/imageSource";
@@ -1017,48 +1017,59 @@ function explorationEntryLine(entry: ExplorationEntry) {
 }
 
 /**
- * The newest finished reply, when it is the last thing in the conversation, and
- * the prompt it answers. A reply that a newer prompt already answered, or one
- * with a message still being sent, offers no Retry.
+ * Each turn's final finished reply and the prompt it answers. A turn with
+ * tool calls between pieces of text gets its row under the last piece only.
+ * The newest turn is `latest`; while a message is still being sent no turn is
+ * `settled`, so none offers Retry.
  */
-export function latestReplyOf(
+export function replyTurnsOf(
   unsortedEvents: readonly CodexConversationEvent[],
   pendingCount: number,
-): LatestReply | undefined {
-  if (pendingCount > 0) return undefined;
+): ReplyTurns {
   const events = [...unsortedEvents].sort(compareConversationEvents);
-  let replyIndex = -1;
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event.kind === "user_message") return undefined;
-    if (
-      event.kind === "assistant_message" &&
-      !event.partial &&
-      extractDisplayMessage(event.body || "").body
-    ) {
-      replyIndex = index;
-      break;
+  const turns: ReplyTurn[] = [];
+  let prompt: MessageActionSubject | undefined;
+  let reply: CodexConversationEvent | undefined;
+  let newestPromptId: string | undefined;
+  const close = () => {
+    if (reply) {
+      turns.push({
+        replyId: reply.id || `${reply.kind}:${reply.seq}`,
+        prompt,
+        latest: false,
+        settled: pendingCount === 0,
+      });
     }
-  }
-  if (replyIndex < 0) return undefined;
-  for (let index = replyIndex - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event.kind !== "user_message") continue;
-    const extracted = extractDisplayMessage(event.body || "");
-    const reply = events[replyIndex];
-    return {
-      replyId: reply.id || `${reply.kind}:${reply.seq}`,
-      prompt: {
+    reply = undefined;
+  };
+  for (const event of events) {
+    if (event.kind === "user_message") {
+      close();
+      const extracted = extractDisplayMessage(event.body || "");
+      prompt = {
         id: event.id || `${event.kind}:${event.seq}`,
         role: "user",
         body: extracted.body,
         hasAttachments: extracted.attachments.length > 0,
         pending: false,
         streaming: false,
-      },
-    };
+      };
+      newestPromptId = prompt.id;
+    } else if (
+      event.kind === "assistant_message" &&
+      !event.partial &&
+      extractDisplayMessage(event.body || "").body
+    ) {
+      reply = event;
+    }
   }
-  return undefined;
+  close();
+  const byReply = new Map<string, ReplyTurn>();
+  for (const turn of turns) {
+    // Still answering a newer prompt: the last reply on screen is not the latest.
+    byReply.set(turn.replyId, { ...turn, latest: turn.prompt !== undefined && turn.prompt.id === newestPromptId });
+  }
+  return byReply;
 }
 
 function extractDisplayMessage(value: string): {
