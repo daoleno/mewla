@@ -71,16 +71,25 @@ choice**, with Claude's own options. Answer those in the Terminal.
 
 ### Copy, edit and retry a message
 
-Press and hold a message on the phone, as in the ChatGPT and Claude apps, and a
-sheet opens with **Copy**, **Select Text** and, on your own messages, **Edit**.
-On desktop, hover over a message for Copy and Edit; right-click and text
-selection are the browser's own. Copy gives the text as written, Markdown
-included; code blocks keep their own copy button. **Select Text** opens the
-message in a sheet where the system's text selection works.
+Press and hold one of your messages on the phone, as in the ChatGPT and Claude
+apps, and a small menu opens next to it: the time it was sent, then **Copy**,
+**Select Text** and **Edit**. The menu follows the message, opens above or below
+it depending on the room, stays clear of the keyboard, and closes when you tap
+elsewhere, scroll or press Back. A very long message anchors the menu to where
+you pressed.
 
-Under the newest reply a quiet row is always shown: **Copy**, and **Retry**,
-which runs the prompt it answers again. Retry and Edit are offered only when the
-agent is idle and the prompt has no attachments.
+Replies keep the system's own text selection: press and hold a word, drag the
+handles, tap a link. Under every reply a quiet row shows **Copy** and, where it
+applies, **Retry**, plus a **...** menu with **Copy** and **Select Text** (the
+message in a sheet, for selecting a whole block at once). On desktop, hover over
+a message for Copy and Edit; right-click and text selection are the browser's
+own. Copy gives the text as written, Markdown included; code blocks keep their
+own copy button.
+
+**Retry** runs the prompt a reply answers again. It is offered only when the
+agent is idle, the Session is connected and the prompt has no attachments, as
+for Edit. Retry on an older reply asks first when it would remove the messages
+after it.
 
 **Edit** puts the message in the composer with a small bar above it and an x to
 cancel. Sending it unchanged is the same as Retry. What sending does depends on
