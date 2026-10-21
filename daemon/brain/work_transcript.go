@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -169,13 +170,18 @@ func resolveWorkerTranscript(worker *classifier.Worker) (provider string, identi
 
 // recordWorkTranscript links an active Work to its Worker's provider
 // conversation. Failures are logged and never block reconciliation.
-func (s *Service) recordWorkTranscript(item Work, worker *classifier.Worker, turnID string) {
+//
+// force skips the recheck window; a turn ending is the last moment the live
+// process can prove which conversation it was in.
+func (s *Service) recordWorkTranscript(item Work, worker *classifier.Worker, turnID string, force bool) {
+	s.workTranscriptMu.Lock()
+	defer s.workTranscriptMu.Unlock()
 	if s.workTranscriptWatch == nil {
 		s.workTranscriptWatch = map[string]workTranscriptWatch{}
 	}
 	key := fmt.Sprintf("%s|%s|%d|%d", item.ID, worker.ID, worker.ProcessID, worker.StartedAt.Unix())
 	now := s.nowUTC()
-	if seen, ok := s.workTranscriptWatch[key]; ok && now.Sub(seen.checkedAt) < workTranscriptRecheck && seen.recorded {
+	if seen, ok := s.workTranscriptWatch[key]; ok && !force && now.Sub(seen.checkedAt) < workTranscriptRecheck && seen.recorded {
 		return
 	}
 	resolve := s.resolveWorkerTranscript
@@ -197,4 +203,43 @@ func (s *Service) recordWorkTranscript(item Work, worker *classifier.Worker, tur
 	}); err != nil {
 		log.Printf("brain Work %s transcript link record failed: %v", item.ID, err)
 	}
+}
+
+// recordTurnEndTranscript links the Work a Session's turn belongs to before
+// the fact is applied: the reducer may release the attempt (and the pane may
+// close soon after), so a Worker that finishes between two reconcile ticks
+// would otherwise never be linked. Terminal facts re-resolve even inside the
+// recheck window. It never blocks or fails the fact.
+func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
+	if s == nil || s.store == nil || s.watcher == nil {
+		return
+	}
+	sessionID := strings.TrimSpace(fact.SessionID)
+	if sessionID == "" {
+		return
+	}
+	item, found, err := s.store.WorkByAttemptSession(sessionID)
+	if err != nil || !found || !item.AttemptDelegated {
+		return
+	}
+	// The watcher calls into the ledger from paths that hold its own locks, so
+	// the worker lookup and the process proof run off that path. The attempt
+	// was read above, before the fact can release it.
+	record := func() {
+		worker := s.watcher.GetWorker(sessionID)
+		if worker == nil {
+			return
+		}
+		switch fact.Kind {
+		case "done", "failed", "attention":
+			s.recordWorkTranscript(item, worker, fact.TurnID, true)
+		default:
+			s.recordWorkTranscript(item, worker, fact.TurnID, false)
+		}
+	}
+	if s.recordTranscriptSync {
+		record()
+		return
+	}
+	go record()
 }

@@ -66,7 +66,7 @@ func runMemorySearch(args []string, stderr io.Writer) error {
 	var limit int
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.BoolVar(&cfg.json, "json", false, "print JSON output")
-	fs.StringVar(&from, "from", "all", "whose messages: user, brain or all")
+	fs.StringVar(&from, "from", "all", "whose messages: user (typed), brain, context (summaries, forwarded events) or all")
 	fs.StringVar(&since, "since", "", "only at or after this time: RFC3339, YYYY-MM-DD, or an age such as 36h or 30d")
 	fs.StringVar(&until, "until", "", "only at or before this time (same formats)")
 	fs.IntVar(&limit, "limit", 20, "maximum hits")
