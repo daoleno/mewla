@@ -49,7 +49,9 @@ mewla brain use <executor>            # move Brain to another agent; the thread 
 mewla brain workspace                 # path to Brain's notes
 mewla brain objective show|clear
 mewla brain objective set "Ship atlas-notes v1.4 this week"   # the goal line in the app
-mewla brain work list --json          # open Work; -all, -full, -id <work> for more
+mewla brain work list --json          # open Work; -all, -full, -id <work> for more (-id adds transcript paths)
+mewla memory search "<phrase>" [--from user|brain|all] [--since 30d] [--limit 20] [--json]
+mewla memory show <id> [--around 3] [--json]   # a chat message with its neighbours
 mewla brain work update -id <work> -status done
 mewla brain work update -id <work> -status waiting \
   -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"

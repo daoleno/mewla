@@ -189,6 +189,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainPlaybooks()
 	case "brain_gc":
 		return a.handleBrainGC()
+	case "memory_search", "memory_show":
+		return a.handleMemory(req)
 	case "brain_work_list":
 		return a.handleBrainWorkList(req)
 	case "brain_work_create":
@@ -930,7 +932,11 @@ func (a *controlApp) handleBrainWorkList(req control.Request) control.Response {
 		if err != nil {
 			return brainWorkControlError(err)
 		}
-		return control.Response{OK: true, BrainWork: &item, BrainWorkEvents: events}
+		transcripts, err := a.brainStore.WorkTranscripts(workID)
+		if err != nil {
+			return brainWorkControlError(err)
+		}
+		return control.Response{OK: true, BrainWork: &item, BrainWorkEvents: events, BrainWorkTranscripts: transcripts}
 	}
 	items, err := a.brainStore.ListWork()
 	if err != nil {

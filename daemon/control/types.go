@@ -14,6 +14,7 @@ import (
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/memorysearch"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/statedir"
@@ -89,6 +90,19 @@ type Request struct {
 	ServiceGeneration    string                                 `json:"service_generation,omitempty"`
 	TunnelAction         string                                 `json:"tunnel_action,omitempty"`
 	ServiceUnit          string                                 `json:"service_unit,omitempty"`
+	Memory               *MemoryRequest                         `json:"memory,omitempty"`
+}
+
+// MemoryRequest is a memory_search (Query, From, Since, Until, Limit) or
+// memory_show (ID, Around) call over Brain chat.
+type MemoryRequest struct {
+	Query  string    `json:"query,omitempty"`
+	From   string    `json:"from,omitempty"`
+	Since  time.Time `json:"since,omitempty"`
+	Until  time.Time `json:"until,omitempty"`
+	Limit  int       `json:"limit,omitempty"`
+	ID     string    `json:"id,omitempty"`
+	Around int       `json:"around,omitempty"`
 }
 
 type PersistenceOutcome string
@@ -109,48 +123,51 @@ type PairingInfo struct {
 }
 
 type Response struct {
-	Browser            *browser.Response                        `json:"browser,omitempty"`
-	Connections        *connections.Response                    `json:"connections,omitempty"`
-	Watch              *watch.Response                          `json:"watch,omitempty"`
-	Computers          *computers.Result                        `json:"computers,omitempty"`
-	AgentUse           *agentuse.Status                         `json:"agent_use,omitempty"`
-	ComputerResult     *screen.AgentResult                      `json:"computer_result,omitempty"`
-	ResourceTelemetry  *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
-	OK                 bool                                     `json:"ok"`
-	Error              *Error                                   `json:"error,omitempty"`
-	Worker             *Worker                                  `json:"worker,omitempty"`
-	Workers            []Worker                                 `json:"workers,omitempty"`
-	WorkerReceipt      *WorkerReceipt                           `json:"worker_receipt,omitempty"`
-	Executor           *Executor                                `json:"executor,omitempty"`
-	Executors          []Executor                               `json:"executors,omitempty"`
-	Context            any                                      `json:"context,omitempty"`
-	ScreenCapability   *screen.Capability                       `json:"screen_capability,omitempty"`
-	Housekeeping       any                                      `json:"housekeeping,omitempty"`
-	Playbooks          any                                      `json:"playbooks,omitempty"`
-	Text               string                                   `json:"text,omitempty"`
-	Workspace          string                                   `json:"workspace,omitempty"`
-	CalendarItem       *calendar.Item                           `json:"calendar_item,omitempty"`
-	CalendarItems      []calendar.Item                          `json:"calendar_items,omitempty"`
-	Devices            []auth.DeviceInfo                        `json:"devices,omitempty"`
-	Enrollments        []enrollment.Request                     `json:"enrollments,omitempty"`
-	Pairing            *PairingInfo                             `json:"pairing,omitempty"`
-	PersistenceOutcome PersistenceOutcome                       `json:"persistence_outcome,omitempty"`
-	PersistenceDurable *bool                                    `json:"persistence_durable,omitempty"`
-	Confirmation       string                                   `json:"confirmation,omitempty"`
-	TurnID             string                                   `json:"turn_id,omitempty"`
-	BrainWork          *brain.Work                              `json:"brain_work,omitempty"`
-	BrainWorks         []brain.Work                             `json:"brain_work_items,omitempty"`
-	BrainWorkEvent     *brain.WorkEvent                         `json:"brain_work_event,omitempty"`
-	BrainWorkEvents    []brain.WorkEvent                        `json:"brain_work_events,omitempty"`
-	Providers          *modelprofiles.ProviderCatalogProjection `json:"providers,omitempty"`
-	ThreadRuntime      *modelprofiles.ThreadRuntimeSelection    `json:"thread_runtime,omitempty"`
-	SessionRoute       *modelprofiles.WireSessionSnapshot       `json:"session_route,omitempty"`
-	Binding            *modelprofiles.WireBinding               `json:"binding,omitempty"`
-	TelegramStatus     *telegramchannel.Status                  `json:"telegram_status,omitempty"`
-	TelegramBinding    *telegramchannel.BindingChallenge        `json:"telegram_binding,omitempty"`
-	ServiceTunnel      *watcher.ServiceTunnel                   `json:"service_tunnel,omitempty"`
-	ServiceSnapshot    *watcher.SessionServiceSnapshot          `json:"service_snapshot,omitempty"`
-	Service            *watcher.ManagedServiceDescriptor        `json:"service,omitempty"`
+	Browser              *browser.Response                        `json:"browser,omitempty"`
+	Connections          *connections.Response                    `json:"connections,omitempty"`
+	Watch                *watch.Response                          `json:"watch,omitempty"`
+	Computers            *computers.Result                        `json:"computers,omitempty"`
+	AgentUse             *agentuse.Status                         `json:"agent_use,omitempty"`
+	ComputerResult       *screen.AgentResult                      `json:"computer_result,omitempty"`
+	ResourceTelemetry    *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
+	OK                   bool                                     `json:"ok"`
+	Error                *Error                                   `json:"error,omitempty"`
+	Worker               *Worker                                  `json:"worker,omitempty"`
+	Workers              []Worker                                 `json:"workers,omitempty"`
+	WorkerReceipt        *WorkerReceipt                           `json:"worker_receipt,omitempty"`
+	Executor             *Executor                                `json:"executor,omitempty"`
+	Executors            []Executor                               `json:"executors,omitempty"`
+	Context              any                                      `json:"context,omitempty"`
+	ScreenCapability     *screen.Capability                       `json:"screen_capability,omitempty"`
+	Housekeeping         any                                      `json:"housekeeping,omitempty"`
+	Playbooks            any                                      `json:"playbooks,omitempty"`
+	Text                 string                                   `json:"text,omitempty"`
+	Workspace            string                                   `json:"workspace,omitempty"`
+	CalendarItem         *calendar.Item                           `json:"calendar_item,omitempty"`
+	CalendarItems        []calendar.Item                          `json:"calendar_items,omitempty"`
+	Devices              []auth.DeviceInfo                        `json:"devices,omitempty"`
+	Enrollments          []enrollment.Request                     `json:"enrollments,omitempty"`
+	Pairing              *PairingInfo                             `json:"pairing,omitempty"`
+	PersistenceOutcome   PersistenceOutcome                       `json:"persistence_outcome,omitempty"`
+	PersistenceDurable   *bool                                    `json:"persistence_durable,omitempty"`
+	Confirmation         string                                   `json:"confirmation,omitempty"`
+	TurnID               string                                   `json:"turn_id,omitempty"`
+	BrainWork            *brain.Work                              `json:"brain_work,omitempty"`
+	BrainWorks           []brain.Work                             `json:"brain_work_items,omitempty"`
+	BrainWorkEvent       *brain.WorkEvent                         `json:"brain_work_event,omitempty"`
+	BrainWorkEvents      []brain.WorkEvent                        `json:"brain_work_events,omitempty"`
+	BrainWorkTranscripts []brain.WorkTranscriptLink               `json:"brain_work_transcripts,omitempty"`
+	Providers            *modelprofiles.ProviderCatalogProjection `json:"providers,omitempty"`
+	ThreadRuntime        *modelprofiles.ThreadRuntimeSelection    `json:"thread_runtime,omitempty"`
+	SessionRoute         *modelprofiles.WireSessionSnapshot       `json:"session_route,omitempty"`
+	Binding              *modelprofiles.WireBinding               `json:"binding,omitempty"`
+	TelegramStatus       *telegramchannel.Status                  `json:"telegram_status,omitempty"`
+	TelegramBinding      *telegramchannel.BindingChallenge        `json:"telegram_binding,omitempty"`
+	ServiceTunnel        *watcher.ServiceTunnel                   `json:"service_tunnel,omitempty"`
+	ServiceSnapshot      *watcher.SessionServiceSnapshot          `json:"service_snapshot,omitempty"`
+	Service              *watcher.ManagedServiceDescriptor        `json:"service,omitempty"`
+	MemoryHits           []memorysearch.Hit                       `json:"memory_hits,omitempty"`
+	MemoryMessages       []memorysearch.Message                   `json:"memory_messages,omitempty"`
 }
 
 type Error struct {

@@ -87,6 +87,12 @@ type Service struct {
 	// BrainInputAdmission + watcher receipt state remain the restart authority.
 	inFlightHostInputs map[string]struct{}
 
+	// resolveWorkerTranscript overrides live provider conversation proof for
+	// Work transcript links; nil uses the real resolvers. workTranscriptWatch
+	// is guarded by reconcileMu.
+	resolveWorkerTranscript func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error)
+	workTranscriptWatch     map[string]workTranscriptWatch
+
 	reconcileMu      sync.Mutex
 	hostActivationMu sync.Mutex
 	hostMu           sync.Mutex
@@ -1811,6 +1817,9 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 		if turnErr != nil {
 			log.Printf("brain Session canonical turn read failed for %s: %v", item.AttemptSessionID, turnErr)
 			continue
+		}
+		if worker != nil && item.AttemptDelegated {
+			s.recordWorkTranscript(item, worker, turn.TurnID)
 		}
 		if worker == nil {
 			// Inventory is a discovery snapshot, not proof of process death. A

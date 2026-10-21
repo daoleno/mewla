@@ -141,6 +141,36 @@ mewla brain work list --json -id <work-id>   # one Work with its history
 mewla brain work update -id <work-id> -status done
 ```
 
+`work list -id` also shows `brain_work_transcripts`: for each Worker attempt,
+the agent, its conversation id and the path of its transcript. The link stays
+after the Worker and the Work are closed, so a past result can be traced back
+to what the Worker did. Mewla records the path; the agent owns the file, and
+Claude Code removes its own transcripts after about 30 days.
+
+## Brain's memory of the chat
+
+Brain looks up what you said or decided in its own chat, rather than guessing:
+
+```sh
+mewla memory search "不要用写死的规则"               # exact phrase first, then newest
+mewla memory search handoff --from user --since 30d  # only your messages, last 30 days
+mewla memory show <id> --around 5                    # one message and the 5 on each side
+```
+
+Search covers visible text only: your messages, Brain's replies and Work result
+cards, including messages you sent while Brain was busy. Tool output and
+thinking are not in the chat log, so they are never searched. Any phrase works,
+including Chinese and partial phrases; one- and two-character queries are
+matched literally. `--from` is `user`, `brain` or `all`, `--since` and `--until`
+take a date, an RFC 3339 time or an age such as `30d`, and `--json` prints the
+hits with their ids, times and Work ids.
+
+The index is a file in Brain's state directory that Mewla builds from the chat
+log and updates on each query; the first search on a long history takes several
+seconds. Text that looks like a credential (known key prefixes, JWTs, private
+keys, `KEY=value` secrets, long random strings) is masked before it is stored.
+The chat log itself is unchanged.
+
 ## The pet
 
 Brain is a pet, a small cat by default. It is on screen once, and what it
