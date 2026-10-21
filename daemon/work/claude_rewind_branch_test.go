@@ -143,3 +143,21 @@ func TestParseClaudeConversation_InterruptEndsTheTurnWithoutAPrompt(t *testing.T
 		t.Fatalf("the stopped turn is still running: %+v", got.Activity)
 	}
 }
+
+// Editing the very first prompt forks at the root: the edited prompt has no
+// parent either. The old first prompt must leave the conversation, or the
+// daemon keeps hiding the rewound turns and the new turn with them.
+func TestParseClaudeConversation_RewindToFirstPromptDropsOldRoot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rewind-first.jsonl")
+	writeJSONL(t, path,
+		claudeRewindUser("u1", "", "Reply with ONE"),
+		claudeRewindAssistant("a1", "u1", "ONE"),
+		claudeRewindUser("u2", "", "Reply with TWO"),
+		claudeRewindAssistant("a2", "u2", "TWO"),
+	)
+	got := strings.Join(claudeConversationBodies(t, path), "\n")
+	want := "user: Reply with TWO\nassistant: TWO"
+	if got != want {
+		t.Fatalf("conversation after rewinding to the first prompt:\n%s\nwant:\n%s", got, want)
+	}
+}
