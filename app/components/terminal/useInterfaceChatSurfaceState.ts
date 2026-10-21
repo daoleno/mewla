@@ -43,6 +43,8 @@ import {
 import { liveActionPromptScopeKey } from "../../services/workerSessionListTransport";
 import { useCodexSlashCommands } from "./CodexSlashCommands";
 import { useInterfaceChatBodyProps } from "./useInterfaceChatBodyProps";
+import { useInterfaceMessageActions } from "./useInterfaceMessageActions";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import {
   useInterfaceComposerInput,
   useInterfaceComposerPresentation,
@@ -100,6 +102,10 @@ interface UseInterfaceChatSurfaceStateInput {
 
 interface InterfaceChatSurfaceState {
   bodyProps: InterfaceChatBodyProps;
+  messageActions: Pick<
+    ReturnType<typeof useInterfaceMessageActions>,
+    "environment" | "onEdit" | "onResend"
+  >;
 }
 
 type CodexStatusRequest = {
@@ -494,6 +500,47 @@ export function useInterfaceChatSurfaceState({
     onSwitchToTerminal,
   });
 
+  const desktopWeb = useDesktopWeb();
+  const messageActions = useInterfaceMessageActions({
+    serverId,
+    workerId,
+    conversationScopeKey,
+    connected: connectionState === "connected",
+    running: Boolean(runningActivity),
+    messageRewind:
+      workerState.workers.find(
+        (candidate) => candidate.key === makeSessionKey(serverId, workerId),
+      )?.capabilities?.message_rewind === true,
+    desktop: desktopWeb,
+    chrome,
+    draft,
+    setDraft: setObservedDraft,
+    focusComposer: composerInput.focus,
+    sendDraft: controller.sendDraft,
+    resendMessage: controller.resendMessage,
+  });
+  const sendEdited = messageActions.sendEdited;
+  const editAwareController = useMemo(
+    () => ({
+      ...controller,
+      sendDraft: () => void sendEdited(),
+      canSend: controller.canSend && !messageActions.editBlocksSend,
+    }),
+    [controller, messageActions.editBlocksSend, sendEdited],
+  );
+  const bodyAccessory = useMemo(
+    () =>
+      messageActions.accessory
+        ? React.createElement(
+            React.Fragment,
+            null,
+            renderedComposerAccessory,
+            messageActions.accessory,
+          )
+        : renderedComposerAccessory,
+    [messageActions.accessory, renderedComposerAccessory],
+  );
+
   const composerPresentation = useInterfaceComposerPresentation({
     draft,
     slashCommands,
@@ -677,7 +724,7 @@ export function useInterfaceChatSurfaceState({
     emptyTitle,
     emptyBody,
     composerInput,
-    controller,
+    controller: editAwareController,
     chrome,
     theme,
     onSwitchToTerminal,
@@ -688,11 +735,16 @@ export function useInterfaceChatSurfaceState({
     onTerminalActionKey: sendTerminalActionKey,
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
-    composerAccessory: renderedComposerAccessory,
+    composerAccessory: bodyAccessory,
     skillsSheet: sheets,
   });
   return {
     bodyProps,
+    messageActions: {
+      environment: messageActions.environment,
+      onEdit: messageActions.onEdit,
+      onResend: messageActions.onResend,
+    },
   };
 }
 

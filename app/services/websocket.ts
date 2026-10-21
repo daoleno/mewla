@@ -2239,6 +2239,27 @@ export class WebSocketClient {
   }
 
   /**
+   * Step a Session's CLI back to one of the user's earlier prompts so an
+   * edited message continues from there. The daemon proves the CLI is idle and
+   * on that prompt before pressing anything; files on disk are never touched.
+   */
+  rewindMessage(serverId: string, workerId: string, eventId: string) {
+    return this.request<{ composerClean: boolean }>(
+      serverId,
+      "rewind_message",
+      { worker_id: workerId, message_rewind: { event_id: eventId } },
+      {
+        responseType: "message_rewound",
+        timeoutMs: 30000,
+        timeout: "Timed out while rewinding. Check the Terminal.",
+        error: "Could not rewind.",
+        // False: the agent stepped back but its input box still holds the old prompt.
+        parse: (payload) => ({ composerClean: payload.composer_clean !== false }),
+      },
+    );
+  }
+
+  /**
    * One line in the daemon log about a moment only this app can see (a stream
    * gap, a snapshot that never came, a send nobody confirmed). The daemon
    * keeps no record of those, so a stuck screen leaves nothing to inspect

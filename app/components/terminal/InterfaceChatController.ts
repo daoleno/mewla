@@ -117,6 +117,7 @@ export function useInterfaceChatController({
     startNewInterfaceChat,
     sendSlashCommandToInterface,
     submitTextToInterface,
+    resendMessageToInterface,
   } = useInterfaceMessageTransport({
     serverId,
     workerId,
@@ -203,6 +204,7 @@ export function useInterfaceChatController({
     canAttach,
     canSend,
     sendDraft,
+    resendMessage: resendMessageToInterface,
     interruptInterface,
     actOnPendingUserMessage,
     pickSlashCommand,

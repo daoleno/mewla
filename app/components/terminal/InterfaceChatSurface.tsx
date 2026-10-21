@@ -9,6 +9,7 @@ import type { ConnectionState } from "../../store/workers";
 import type { ConnectionIssue } from "../../services/connectionIssue";
 import type { ComposerModelControlPresentation } from "../../services/providers/sessionModelHelpers";
 import { InterfaceChatBody } from "./InterfaceChatBody";
+import { MessageActionsProvider } from "./MessageActionsProvider";
 import { useInterfaceChatSurfaceState } from "./useInterfaceChatSurfaceState";
 import type { InterfaceChatWorkerInfo } from "./InterfaceChatSession";
 
@@ -83,7 +84,7 @@ function InterfaceChatSurfaceImpl({
   onSwitchToTerminal,
   onConsumeInitialComposerFocus,
 }: InterfaceChatSurfaceProps) {
-  const { bodyProps } = useInterfaceChatSurfaceState({
+  const { bodyProps, messageActions } = useInterfaceChatSurfaceState({
     visible,
     serverId,
     serverUrl,
@@ -121,7 +122,14 @@ function InterfaceChatSurfaceImpl({
 
   return (
     <View style={[styles.root, { backgroundColor: canvasBackground }]}>
-      <InterfaceChatBody {...bodyProps} readOnly={readOnly} />
+      <MessageActionsProvider
+        environment={messageActions.environment}
+        chrome={chrome}
+        onEdit={messageActions.onEdit}
+        onResend={messageActions.onResend}
+      >
+        <InterfaceChatBody {...bodyProps} readOnly={readOnly} />
+      </MessageActionsProvider>
     </View>
   );
 }

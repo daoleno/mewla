@@ -82,6 +82,7 @@ export type RawWorker = {
     structured_events?: unknown;
     model_profile_managed?: unknown;
     model_profile_active_switch?: unknown;
+    message_rewind?: unknown;
   };
 };
 
@@ -384,7 +385,8 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.capabilities?.model_profile_managed ===
         right.capabilities?.model_profile_managed &&
       left.capabilities?.model_profile_active_switch ===
-        right.capabilities?.model_profile_active_switch
+        right.capabilities?.model_profile_active_switch &&
+      left.capabilities?.message_rewind === right.capabilities?.message_rewind
     )
   );
 }
