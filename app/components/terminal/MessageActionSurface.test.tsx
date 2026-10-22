@@ -61,7 +61,7 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
 
   function render(
     message: typeof subject | typeof reply,
-    options: { calls?: string[]; env?: typeof environment; replyTurns?: Map<string, any>; activeId?: string } = {},
+    options: { calls?: string[]; env?: typeof environment; replyIds?: Set<string>; activeId?: string } = {},
   ) {
     let seen: ReturnType<typeof useTimelineSelectableTextProps> | undefined;
     function Child() {
@@ -80,14 +80,13 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
             {
               value: {
                 environment: options.env ?? environment,
-                replyTurns: options.replyTurns ?? new Map(),
+                replyIds: options.replyIds ?? new Set<string>(),
                 activeId: options.activeId ?? null,
                 openMenu: (m: { id: string }, anchor: { rect: unknown; touchY: number; align: string }) =>
                   opened.push({ id: m.id, ...anchor }),
                 copy: (m: { id: string }) => calls.push(`copy ${m.id}`),
                 select: (m: { id: string }) => calls.push(`select ${m.id}`),
                 edit: (m: { id: string }) => calls.push(`edit ${m.id}`),
-                retry: (turn: { prompt?: { id: string } }) => calls.push(`retry ${turn.prompt?.id}`),
               },
             },
             message.role === "user"
@@ -108,8 +107,7 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     });
     return { seen: () => seen!, tree: renderer };
   }
-  const turnFor = (message: { id: string }, extra: Record<string, unknown> = {}) =>
-    new Map([[message.id, { replyId: message.id, prompt: subject, latest: true, settled: true, ...extra }]]);
+  const repliesOf = (...messages: { id: string }[]) => new Set(messages.map((message) => message.id));
 
   test("on the phone a long press on your message opens the menu beside it; the text does not start its own selection", async () => {
     desktop = false;
@@ -178,41 +176,37 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     act(() => node.props.onResponderRelease());
   };
 
-  test("every reply with a turn shows Copy; Retry only where the prompt can run again", () => {
+  test("every final reply shows Copy, and a real finger lands it; there is no Retry", async () => {
     desktop = false;
     platform.OS = "ios";
-    const calls: string[] = [];
-    const view = render(reply, { replyTurns: turnFor(reply, { latest: false }), calls });
-    const retry = view.tree.root.findByProps({ accessibilityLabel: "Retry" });
-    view.tree.root.findByProps({ accessibilityLabel: "Copy" });
-    finger(retry);
-    expect(calls).toEqual(["retry u1"]);
+    const view = render(reply, { replyIds: repliesOf(reply) });
+    const copy = view.tree.root.findByProps({ accessibilityLabel: "Copy" });
+    expect(view.tree.root.findAllByProps({ accessibilityLabel: "Retry" })).toHaveLength(0);
+    expect(copy.props.hitSlop).toBeDefined();
+    expect(copy.props.style[0].width).toBeGreaterThanOrEqual(44);
+    expect(copy.props.style[0].height).toBeGreaterThanOrEqual(44);
     // Past the touch slop it is a drag, not a press; a system takeover cancels it.
-    finger(retry, [[0, 30]]);
-    act(() => retry.props.onResponderGrant(touch(70, 500)));
-    act(() => retry.props.onResponderTerminate());
-    act(() => retry.props.onResponderRelease());
-    expect(calls).toEqual(["retry u1"]);
-    expect(retry.props.hitSlop).toBeDefined();
-    expect(retry.props.style[0].width).toBeGreaterThanOrEqual(44);
-    expect(retry.props.style[0].height).toBeGreaterThanOrEqual(44);
+    finger(copy, [[0, 30]]);
+    act(() => copy.props.onResponderGrant(touch(70, 500)));
+    act(() => copy.props.onResponderTerminate());
+    act(() => copy.props.onResponderRelease());
+    expect(view.tree.root.findAllByProps({ accessibilityLabel: "Copied" })).toHaveLength(0);
+    // A little jitter is still a tap.
+    await act(async () => finger(copy));
+    view.tree.root.findByProps({ accessibilityLabel: "Copied" });
 
     // A message that is not a turn's final reply has no row.
-    expect(render({ ...reply, id: "a0" }, { replyTurns: turnFor(reply) }).tree.root.findAllByProps({ accessibilityLabel: "Copy" })).toHaveLength(0);
-    for (const hidden of [
-      render(reply, { replyTurns: turnFor(reply), env: { ...environment, running: true } }),
-      render(reply, { replyTurns: turnFor(reply, { settled: false }) }),
-      render(reply, { replyTurns: turnFor(reply, { prompt: undefined }) }),
-    ]) {
-      expect(hidden.tree.root.findAllByProps({ accessibilityLabel: "Retry" })).toHaveLength(0);
-      hidden.tree.root.findByProps({ accessibilityLabel: "Copy" });
+    expect(render({ ...reply, id: "a0" }, { replyIds: repliesOf(reply) }).tree.root.findAllByProps({ accessibilityLabel: "Copy" })).toHaveLength(0);
+    // Copy stays while the Session is busy or offline.
+    for (const env of [{ ...environment, running: true }, { ...environment, connected: false }]) {
+      render(reply, { replyIds: repliesOf(reply), env }).tree.root.findByProps({ accessibilityLabel: "Copy" });
     }
   });
 
   test("a streaming reply has no row", () => {
     desktop = false;
     platform.OS = "ios";
-    const view = render({ ...reply, streaming: true }, { replyTurns: turnFor(reply) });
+    const view = render({ ...reply, streaming: true }, { replyIds: repliesOf(reply) });
     expect(view.tree.root.findAllByProps({ accessibilityLabel: "Copy" })).toHaveLength(0);
   });
 
@@ -220,7 +214,7 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     desktop = false;
     platform.OS = "android";
     opened.length = 0;
-    const view = render(reply, { replyTurns: turnFor(reply) });
+    const view = render(reply, { replyIds: repliesOf(reply) });
     const more = view.tree.root.findByProps({ accessibilityLabel: "More" });
     act(() => more.props.onResponderGrant(touch(70, 500, 10, 8)));
     act(() => more.props.onResponderMove(touch(72, 502, 10, 8)));
@@ -229,7 +223,7 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
 
     desktop = true;
     platform.OS = "web";
-    const web = render(reply, { replyTurns: turnFor(reply), env: { ...environment, canSelectText: false } });
+    const web = render(reply, { replyIds: repliesOf(reply), env: { ...environment, canSelectText: false } });
     expect(web.tree.root.findAllByProps({ accessibilityLabel: "More" })).toHaveLength(0);
   });
 }

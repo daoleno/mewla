@@ -3,13 +3,12 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { wsClient } from "../../services/websocket";
 import { MessageEditChip } from "./MessageEditChip";
 import {
-  createResendGuard,
   editIsSendable,
   messageEditMode,
   type MessageActionEnvironment,
   type MessageActionSubject,
   type MessageEdit,
-  type ReplyTurns,
+  type ReplyIds,
 } from "./messageActionsModel";
 
 interface Input {
@@ -20,27 +19,25 @@ interface Input {
   running: boolean;
   /** Daemon capability: this Session's CLI can rewind. */
   messageRewind: boolean;
-  replyTurns: ReplyTurns;
+  replyIds: ReplyIds;
   desktop: boolean;
   chrome: TerminalThemeChrome;
   draft: string;
   setDraft(value: string): void;
   focusComposer(): void;
   sendDraft(): void;
-  resendMessage(text: string): void;
 }
 
 const INPUT_NOT_CLEAN =
   "Rewound, but the agent's input box still has text. Clear it in the Terminal, then send.";
 
 /**
- * Edit and retry for one Interface chat.
+ * Edit for one Interface chat.
  *
  * Edit puts the message in the composer. Sending it either rewinds the agent's
  * conversation to that message first (where the CLI can), or goes out as a new
- * message. Retry is the same without the editing: it sends a reply's prompt
- * again. A rewind that fails sends nothing and falls back to the honest second
- * option, which the person then confirms by sending again.
+ * message. A rewind that fails sends nothing and falls back to the honest
+ * second option, which the person then confirms by sending again.
  */
 export function useInterfaceMessageActions({
   serverId,
@@ -49,14 +46,13 @@ export function useInterfaceMessageActions({
   connected,
   running,
   messageRewind,
-  replyTurns,
+  replyIds,
   desktop,
   chrome,
   draft,
   setDraft,
   focusComposer,
   sendDraft,
-  resendMessage,
 }: Input) {
   const brain = Boolean(conversationScopeKey?.startsWith("brain-thread:"));
   const [edit, setEdit] = useState<MessageEdit | null>(null);
@@ -64,7 +60,6 @@ export function useInterfaceMessageActions({
   const [editError, setEditError] = useState<string>();
   const savedDraftRef = useRef("");
   const rewindingRef = useRef(false);
-  const guard = useMemo(() => createResendGuard(), []);
   const latest = useRef({ draft, edit, sendDraft, setDraft });
   latest.current = { draft, edit, sendDraft, setDraft };
 
@@ -78,11 +73,7 @@ export function useInterfaceMessageActions({
   useEffect(() => {
     setEdit(null);
     setEditError(undefined);
-    guard.clear();
-    return () => {
-      guard.clear();
-    };
-  }, [guard, scope]);
+  }, [scope]);
 
   const openEdit = useCallback(
     (subject: MessageActionSubject, state: Partial<MessageEdit> = {}, error?: string) => {
@@ -116,38 +107,6 @@ export function useInterfaceMessageActions({
     setEditError(undefined);
     latest.current.setDraft(savedDraftRef.current);
   }, []);
-
-  const onRetry = useCallback(
-    async (prompt: MessageActionSubject) => {
-      if (rewindingRef.current || !guard.begin(prompt.id)) return;
-      if (messageEditMode({ messageRewind, brain }) === "copy") {
-        resendMessage(prompt.body);
-        return;
-      }
-      rewindingRef.current = true;
-      setRewinding(true);
-      try {
-        const { composerClean } = await wsClient.rewindMessage(serverId, workerId, prompt.id);
-        if (composerClean) {
-          resendMessage(prompt.body);
-        } else {
-          openEdit(prompt, { rewound: true }, INPUT_NOT_CLEAN);
-        }
-      } catch (error) {
-        // Nothing was rewound or sent: the prompt waits in the composer as a copy.
-        guard.release(prompt.id);
-        openEdit(
-          prompt,
-          { mode: "copy" },
-          error instanceof Error && error.message ? error.message : "Could not rewind.",
-        );
-      } finally {
-        rewindingRef.current = false;
-        setRewinding(false);
-      }
-    },
-    [brain, guard, messageRewind, openEdit, resendMessage, serverId, workerId],
-  );
 
   const sendEdited = useCallback(async () => {
     const current = latest.current.edit;
@@ -203,5 +162,5 @@ export function useInterfaceMessageActions({
   );
 
   const editBlocksSend = rewinding || (edit !== null && !editIsSendable(edit, draft));
-  return { environment, replyTurns, onEdit, onRetry, sendEdited, accessory, editBlocksSend };
+  return { environment, replyIds, onEdit, sendEdited, accessory, editBlocksSend };
 }

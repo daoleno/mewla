@@ -10,14 +10,12 @@ import { CODE_BLOCK_COPIED_RESET_MS } from "./InterfaceMessageCodeBlockCopy";
 import type { MessageMenuAnchor } from "./MessageMenuOverlay";
 import { createSteadyPress, type SteadyTouch } from "./steadyPress";
 import {
-  isRetryableTurn,
   messageActionKinds,
   messageCopyText,
   type MessageActionEnvironment,
   type MessageActionKind,
   type MessageActionSubject,
-  type ReplyTurn,
-  type ReplyTurns,
+  type ReplyIds,
 } from "./messageActionsModel";
 import {
   TimelineTextSelectableContext,
@@ -26,8 +24,8 @@ import {
 
 export interface MessageActionsValue {
   environment: MessageActionEnvironment;
-  /** Every turn's final reply, for its Copy and Retry row. */
-  replyTurns: ReplyTurns;
+  /** Every turn's final reply, for its Copy and ⋯ row. */
+  replyIds: ReplyIds;
   /** The message whose menu is open, for its highlight. */
   activeId: string | null;
   /** Opens the menu next to a message (phone). */
@@ -35,7 +33,6 @@ export interface MessageActionsValue {
   copy(subject: MessageActionSubject): void;
   select(subject: MessageActionSubject): void;
   edit(subject: MessageActionSubject): void;
-  retry(turn: ReplyTurn): void;
 }
 
 export const MessageActionsContext = createContext<MessageActionsValue | null>(null);
@@ -205,9 +202,8 @@ export function MessageActionSurface({
 }
 
 /**
- * The quiet icon row under a turn's final reply, as in ChatGPT: Copy, Retry
- * where the agent can run the prompt again, and on the phone a menu with
- * Select Text. Older replies have it too.
+ * The quiet icon row under a turn's final reply, as in ChatGPT: Copy, and on
+ * the phone a ⋯ menu with Select Text. Older replies have it too.
  */
 export function ReplyActionRow({
   subject,
@@ -220,9 +216,7 @@ export function ReplyActionRow({
   const desktop = useDesktopWeb();
   const moreRef = useRef<View>(null);
   const { copied, copy } = useCopyFeedback(messageCopyText(subject));
-  const turn = actions?.replyTurns.get(subject.id);
-  if (!actions || !turn || subject.streaming) return null;
-  const retryable = isRetryableTurn(turn, actions.environment);
+  if (!actions || !actions.replyIds.has(subject.id) || subject.streaming) return null;
   const kinds = messageActionKinds(subject, actions.environment);
   const more = !desktop && kinds.includes("select");
   return (
@@ -234,18 +228,6 @@ export function ReplyActionRow({
         pressedColor={chrome.surfaceMuted}
         onPress={copy}
       />
-      {retryable ? (
-        <RowButton
-          icon="refresh"
-          label="Retry"
-          color={chrome.textMuted}
-          pressedColor={chrome.surfaceMuted}
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            actions.retry(turn);
-          }}
-        />
-      ) : null}
       {more ? (
         <View ref={moreRef} collapsable={false}>
           <RowButton

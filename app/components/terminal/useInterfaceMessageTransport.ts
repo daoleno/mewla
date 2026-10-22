@@ -261,7 +261,6 @@ export function useInterfaceMessageTransport({
       text: string,
       previousDraft: string,
       previousAttachments: ComposerAttachment[],
-      options: { preserveComposer?: boolean } = {},
     ) => {
       if (sendLockedRef.current || !serverId || !workerId) {
         return;
@@ -274,7 +273,7 @@ export function useInterfaceMessageTransport({
       // person's job.
       const requestId = messageOutbox.mintId();
       const pendingMessageId = addPendingUserMessage({
-        body: (options.preserveComposer ? text : previousDraft).trim(),
+        body: previousDraft.trim(),
         sentText: text,
         attachments: previousAttachments.map((attachment) => ({
           name: attachment.name,
@@ -295,13 +294,11 @@ export function useInterfaceMessageTransport({
         displayBody: text,
       });
       requestTurnFocus(pendingMessageId);
-      if (!options.preserveComposer) {
-        setDraft("");
-        clearComposerNativeText();
-        setAttachments([]);
-        currentDraftRef.current = "";
-        currentAttachmentsRef.current = [];
-      }
+      setDraft("");
+      clearComposerNativeText();
+      setAttachments([]);
+      currentDraftRef.current = "";
+      currentAttachmentsRef.current = [];
       unlockSend();
     },
     [
@@ -315,15 +312,6 @@ export function useInterfaceMessageTransport({
       setDraft,
       unlockSend,
     ],
-  );
-
-  // Resend sends a message's own text again as a new message and leaves
-  // whatever the composer holds alone.
-  const resendMessageToInterface = useCallback(
-    (text: string) => {
-      submitTextToInterface(text, "", [], { preserveComposer: true });
-    },
-    [submitTextToInterface],
   );
 
   // The only things a person does with a queued message: tap its "!" to send
@@ -456,7 +444,6 @@ export function useInterfaceMessageTransport({
     interrupting,
     operationalError,
     submitTextToInterface,
-    resendMessageToInterface,
     startNewInterfaceChat,
     sendSlashCommandToInterface,
     interruptInterface,

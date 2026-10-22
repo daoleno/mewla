@@ -1,15 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { normalizeWorkerSessionCapabilities } from "../../services/providers/sessionCapabilities";
 import {
-  RESEND_HOLD_MS,
-  isRerunnablePrompt,
-  createResendGuard,
+  isEditablePrompt,
   editIsSendable,
   messageActionKinds,
   messageCopyText,
   messageEditMode,
   messageMenuEntries,
-  isRetryableTurn,
   type MessageActionEnvironment,
   type MessageActionSubject,
 } from "./messageActionsModel";
@@ -72,23 +69,6 @@ describe("message menu rows", () => {
   });
 });
 
-describe("reply retry", () => {
-  const turn = { replyId: "a1", prompt: user, latest: false, settled: true };
-
-  test("any turn can be retried while its prompt can run again", () => {
-    expect(isRetryableTurn(turn, env)).toBe(true);
-    expect(isRetryableTurn({ ...turn, latest: true }, env)).toBe(true);
-  });
-
-  test("busy, offline, attachments, a message mid-send or no prompt hide it", () => {
-    expect(isRetryableTurn(turn, { ...env, running: true })).toBe(false);
-    expect(isRetryableTurn(turn, { ...env, connected: false })).toBe(false);
-    expect(isRetryableTurn({ ...turn, prompt: { ...user, hasAttachments: true } }, env)).toBe(false);
-    expect(isRetryableTurn({ ...turn, settled: false }, env)).toBe(false);
-    expect(isRetryableTurn({ ...turn, prompt: undefined }, env)).toBe(false);
-  });
-});
-
 describe("edit mode per executor", () => {
   test("rewinds only where the daemon says the CLI can, and never in Brain", () => {
     expect(messageEditMode({ messageRewind: true, brain: false })).toBe("rewind");
@@ -96,7 +76,7 @@ describe("edit mode per executor", () => {
     expect(messageEditMode({ messageRewind: true, brain: true })).toBe("copy");
   });
 
-  test("an edit is sent whenever it says something; unchanged it is a retry", () => {
+  test("an edit is sent whenever it says something", () => {
     const edit = { id: "u1", original: "ship it", mode: "rewind" as const };
     expect(editIsSendable(edit, "ship it")).toBe(true);
     expect(editIsSendable(edit, "ship it today")).toBe(true);
@@ -104,44 +84,17 @@ describe("edit mode per executor", () => {
     expect(editIsSendable(edit, "")).toBe(false);
   });
 
-  test("Retry runs a sent text prompt of an idle, connected Session again", () => {
-    expect(isRerunnablePrompt(user, env)).toBe(true);
-    expect(isRerunnablePrompt(user, { ...env, running: true })).toBe(false);
-    expect(isRerunnablePrompt(user, { ...env, connected: false })).toBe(false);
-    expect(isRerunnablePrompt({ ...user, hasAttachments: true }, env)).toBe(false);
-    expect(isRerunnablePrompt({ ...user, pending: true }, env)).toBe(false);
-    expect(isRerunnablePrompt(assistant, env)).toBe(false);
+  test("Edit applies to a sent text prompt of an idle, connected Session", () => {
+    expect(isEditablePrompt(user, env)).toBe(true);
+    expect(isEditablePrompt(user, { ...env, running: true })).toBe(false);
+    expect(isEditablePrompt(user, { ...env, connected: false })).toBe(false);
+    expect(isEditablePrompt({ ...user, hasAttachments: true }, env)).toBe(false);
+    expect(isEditablePrompt({ ...user, pending: true }, env)).toBe(false);
+    expect(isEditablePrompt(assistant, env)).toBe(false);
   });
 });
 
-describe("retry guard", () => {
-  test("a second tap while the first is held does nothing", () => {
-    let now = 1000;
-    const guard = createResendGuard(() => now);
-    expect(guard.begin("u1")).toBe(true);
-    expect(guard.begin("u1")).toBe(false);
-    now += RESEND_HOLD_MS - 1;
-    expect(guard.begin("u1")).toBe(false);
-  });
-
-  test("other messages are independent and the hold expires", () => {
-    let now = 1000;
-    const guard = createResendGuard(() => now);
-    expect(guard.begin("u1")).toBe(true);
-    expect(guard.begin("u2")).toBe(true);
-    now += RESEND_HOLD_MS;
-    expect(guard.begin("u1")).toBe(true);
-  });
-
-  test("a settled send releases the hold early", () => {
-    const guard = createResendGuard(() => 5);
-    guard.begin("u1");
-    guard.release("u1");
-    expect(guard.begin("u1")).toBe(true);
-  });
-});
-
-describe("what Edit and Retry do per executor", () => {
+describe("what Edit does per executor", () => {
   // The daemon advertises message_rewind per Session; the app never guesses it
   // from the executor's name.
   const wire = (messageRewind?: boolean) =>
@@ -163,12 +116,12 @@ describe("what Edit and Retry do per executor", () => {
   ];
 
   for (const row of table) {
-    test(`${row.executor}: edit ${row.edit === "rewind" ? "rewinds the conversation" : "sends an edited copy as a new message"}; retry follows the same mode`, () => {
+    test(`${row.executor}: edit ${row.edit === "rewind" ? "rewinds the conversation" : "sends an edited copy as a new message"}`, () => {
       const messageRewind = wire(row.rewind)?.message_rewind === true;
       const environment = { ...env, messageRewind, brain: row.brain };
       expect(messageEditMode(environment)).toBe(row.edit);
       expect(messageActionKinds(user, environment)).toContain("edit");
-      expect(isRerunnablePrompt(user, environment)).toBe(true);
+      expect(isEditablePrompt(user, environment)).toBe(true);
     });
   }
 

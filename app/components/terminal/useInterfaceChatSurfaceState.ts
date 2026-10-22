@@ -43,7 +43,7 @@ import {
 import { liveActionPromptScopeKey } from "../../services/workerSessionListTransport";
 import { useCodexSlashCommands } from "./CodexSlashCommands";
 import { useInterfaceChatBodyProps } from "./useInterfaceChatBodyProps";
-import { replyTurnsOf } from "./InterfaceTimelineModel";
+import { finalReplyIdsOf } from "./InterfaceTimelineModel";
 import { useInterfaceMessageActions } from "./useInterfaceMessageActions";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import {
@@ -105,7 +105,7 @@ interface InterfaceChatSurfaceState {
   bodyProps: InterfaceChatBodyProps;
   messageActions: Pick<
     ReturnType<typeof useInterfaceMessageActions>,
-    "environment" | "replyTurns" | "onEdit" | "onRetry"
+    "environment" | "replyIds" | "onEdit"
   >;
 }
 
@@ -502,10 +502,7 @@ export function useInterfaceChatSurfaceState({
   });
 
   const desktopWeb = useDesktopWeb();
-  const replyTurns = useMemo(
-    () => replyTurnsOf(events, pendingUserMessages.length),
-    [events, pendingUserMessages.length],
-  );
+  const replyIds = useMemo(() => finalReplyIdsOf(events), [events]);
   const messageActions = useInterfaceMessageActions({
     serverId,
     workerId,
@@ -516,14 +513,13 @@ export function useInterfaceChatSurfaceState({
       workerState.workers.find(
         (candidate) => candidate.key === makeSessionKey(serverId, workerId),
       )?.capabilities?.message_rewind === true,
-    replyTurns,
+    replyIds,
     desktop: desktopWeb,
     chrome,
     draft,
     setDraft: setObservedDraft,
     focusComposer: composerInput.focus,
     sendDraft: controller.sendDraft,
-    resendMessage: controller.resendMessage,
   });
   const sendEdited = messageActions.sendEdited;
   const editAwareController = useMemo(
@@ -736,9 +732,8 @@ export function useInterfaceChatSurfaceState({
     bodyProps,
     messageActions: {
       environment: messageActions.environment,
-      replyTurns: messageActions.replyTurns,
+      replyIds: messageActions.replyIds,
       onEdit: messageActions.onEdit,
-      onRetry: messageActions.onRetry,
     },
   };
 }
