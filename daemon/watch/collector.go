@@ -208,6 +208,7 @@ func (c *Collector) Collect(ctx context.Context, sources []string, force bool) (
 	changed, err := evaluateRules(c.store, c.now())
 	c.noteError("rules", err)
 	result.Problems = changed
+	c.applyLinks()
 	return result
 }
 
@@ -287,6 +288,8 @@ type Request struct {
 	Label     string   `json:"label,omitempty"`
 	Note      string   `json:"note,omitempty"`
 	Batches   int      `json:"batches,omitempty"`
+	WorkID    string   `json:"work_id,omitempty"`
+	By        string   `json:"by,omitempty"`
 }
 
 // Response answers a Request.
@@ -328,7 +331,28 @@ func (c *Collector) Handle(ctx context.Context, request Request) (Response, erro
 		runs, err := c.judge.runBatches(ctx, request.Batches)
 		return Response{Runs: runs}, err
 	case "label":
-		problem, err := c.store.LabelProblem(request.ProblemID, request.Label, request.Note)
+		problem, err := c.store.LabelProblem(request.ProblemID, request.Label, request.Note, request.By)
+		return Response{Problem: &problem}, err
+	case "link":
+		if err := c.requireWork(request.WorkID); err != nil {
+			return Response{}, err
+		}
+		by := LinkUser
+		if request.By == LabelByBrain {
+			by = LinkBrain
+		}
+		problem, err := c.store.LinkWork(request.ProblemID, request.WorkID, by)
+		if err == nil {
+			c.applyLinks()
+			problem = c.store.Problem(request.ProblemID)
+		}
+		return Response{Problem: &problem}, err
+	case "unlink":
+		problem, err := c.store.UnlinkWork(request.ProblemID, request.WorkID)
+		if err == nil {
+			c.applyLinks()
+			problem = c.store.Problem(request.ProblemID)
+		}
 		return Response{Problem: &problem}, err
 	case "set_enabled":
 		config, err := c.store.SetEnabled(request.Enabled)
@@ -408,4 +432,34 @@ func (c *Collector) placeFromIndex() error {
 		}
 	}
 	return c.store.Annotate(changes)
+}
+
+// applyLinks ties problems to Work and moves them by that Work's state.
+func (c *Collector) applyLinks() {
+	if c.works == nil {
+		return
+	}
+	works, err := c.works.ListWork()
+	if err != nil {
+		c.noteError("links", err)
+		return
+	}
+	_, err = c.store.ApplyLinks(works)
+	c.noteError("links", err)
+}
+
+func (c *Collector) requireWork(id string) error {
+	if c.works == nil {
+		return errors.New("Work is not available")
+	}
+	works, err := c.works.ListWork()
+	if err != nil {
+		return err
+	}
+	for _, work := range works {
+		if work.ID == strings.TrimSpace(id) {
+			return nil
+		}
+	}
+	return fmt.Errorf("work %q not found", id)
 }

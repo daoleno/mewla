@@ -509,6 +509,7 @@ func cloneProblem(problem *Problem) Problem {
 	copied.Evidence = append([]string(nil), problem.Evidence...)
 	copied.Sources = append([]string(nil), problem.Sources...)
 	copied.MergedFrom = append([]string(nil), problem.MergedFrom...)
+	copied.Works = append([]WorkLink(nil), problem.Works...)
 	if problem.Cost != nil {
 		cost := *problem.Cost
 		copied.Cost = &cost
@@ -556,7 +557,10 @@ func (s *Store) RecordProblems(rule string, flagged []Problem) (int, error) {
 		if next.FirstSeen.Before(existing.FirstSeen) {
 			existing.FirstSeen = next.FirstSeen
 		}
-		existing.Active = true
+		if existing.Status == StatusFixed && next.LastSeen.After(existing.LastSeen) {
+			existing.Status, existing.FixedReason = StatusRecurred, ""
+		}
+		existing.Active = existing.Status != StatusFixed && existing.Status != StatusDismissed
 		existing.UpdatedAt = now
 		changed++
 	}
@@ -597,4 +601,14 @@ func (s *Store) flushMetaLocked() error {
 	}
 	s.dirtyMeta = false
 	return nil
+}
+
+// Problem returns one problem by ID, or the zero value.
+func (s *Store) Problem(id string) Problem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if problem := s.problems[id]; problem != nil {
+		return cloneProblem(problem)
+	}
+	return Problem{}
 }

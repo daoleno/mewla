@@ -268,7 +268,7 @@ func (s *Store) saveProblemsLocked() error {
 
 // LabelProblem records the user's verdict. real confirms the problem, not
 // dismisses it, later keeps it as it is.
-func (s *Store) LabelProblem(id, value, note string) (Problem, error) {
+func (s *Store) LabelProblem(id, value, note, by string) (Problem, error) {
 	switch value {
 	case LabelReal, LabelNot, LabelLater:
 	default:
@@ -280,7 +280,10 @@ func (s *Store) LabelProblem(id, value, note string) (Problem, error) {
 	if problem == nil {
 		return Problem{}, fmt.Errorf("problem %q not found", id)
 	}
-	problem.Label = &Label{Value: value, Note: strings.TrimSpace(Redact(note)), At: s.now()}
+	if by != LabelByBrain {
+		by = LabelByUser
+	}
+	problem.Label = &Label{Value: value, Note: strings.TrimSpace(Redact(note)), At: s.now(), By: by}
 	switch value {
 	case LabelReal:
 		if problem.Status == StatusNew || problem.Status == StatusDismissed {

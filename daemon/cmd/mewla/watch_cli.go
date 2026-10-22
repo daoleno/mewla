@@ -22,8 +22,14 @@ Watch looks over your projects and records what needs you.
   projects [--project id]          Inferred projects, their remotes and linked sources
   signals [--project id] [--source human|process|runtime|external] [--kind k] [--since 24h] [--limit n]
   problems [--project id] [--rule judgment|ci_red|repeated_error|worker_stalls]
-  problem label <id> real|not|later [--note "why"]
-                                   Tell Watch whether a problem was real; later runs learn from it
+  problem label <id> real|not|later [--note "why"] [--by brain]
+                                   Tell Watch whether a problem was real; later runs learn from it.
+                                   Brain passes --by brain when it triages, so its verdicts are not
+                                   mistaken for yours
+  problem link <id> --work <work id> [--by brain]
+                                   Tie a problem to the Work handling it: in progress marks it
+                                   fixing, accepted Work marks it fixed
+  problem unlink <id> --work <work id>
   collect [--source s]             Run a collection pass now and print what it added
   judge [--batches n]              Judge pending signals now (Watch must be enabled; costs tokens)
   enable | disable                 Turn Watch on or off; judgment runs only while it is on
@@ -42,11 +48,13 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	rest := args[1:]
 	var positional []string
 	if action == "problem" {
-		if len(rest) < 3 || rest[0] != "label" || isHelpArg(rest[1]) {
+		need := map[string]int{"label": 2, "link": 1, "unlink": 1}
+		if len(rest) < 2 || need[rest[0]] == 0 || len(rest) < 1+need[rest[0]] || isHelpArg(rest[1]) {
 			fmt.Fprintln(stderr, watchUsage)
 			return flag.ErrHelp
 		}
-		action, positional, rest = "problem label", rest[1:3], rest[3:]
+		count := need[rest[0]]
+		action, positional, rest = "problem "+rest[0], rest[1:1+count], rest[1+count:]
 	}
 	if action == "project" {
 		if len(rest) == 0 || isHelpArg(rest[0]) {
@@ -74,6 +82,8 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	fs.BoolVar(&confirm, "confirm", false, "confirm the suggested Linear team")
 	fs.StringVar(&request.Note, "note", "", "why, in your words")
 	fs.IntVar(&request.Batches, "batches", 1, "judgment batches to run")
+	fs.StringVar(&request.WorkID, "work", "", "Work id")
+	fs.StringVar(&request.By, "by", "", "who is acting: brain, when triaging for the user")
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
@@ -104,6 +114,11 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 		timeout = time.Duration(max(request.Batches, 1)) * 16 * time.Minute
 	case "problem label":
 		request.Action, request.ProblemID, request.Label = "label", positional[0], positional[1]
+	case "problem link", "problem unlink":
+		request.Action, request.ProblemID = strings.TrimPrefix(action, "problem "), positional[0]
+		if strings.TrimSpace(request.WorkID) == "" {
+			return errors.New("--work is required")
+		}
 	case "enable", "disable":
 		request.Action, request.Enabled = "set_enabled", action == "enable"
 	case "project rename":

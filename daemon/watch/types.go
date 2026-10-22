@@ -161,6 +161,29 @@ type Problem struct {
 	FixedReason string   `json:"fixed_reason,omitempty"`
 	Run         string   `json:"run,omitempty"`
 	Label       *Label   `json:"label,omitempty"`
+
+	// Works are the pieces of Work this problem is tied to. A Work in
+	// progress makes the problem "fixing"; Work accepted after the problem's
+	// last evidence makes it "fixed" (see link.go).
+	Works   []WorkLink `json:"works,omitempty"`
+	FixedAt time.Time  `json:"fixed_at,omitzero"`
+}
+
+// How a problem came to be linked to a piece of Work.
+const (
+	LinkSubject  = "subject"  // the rule's subject is the Work
+	LinkEvidence = "evidence" // a signal of the problem happened in the Work
+	LinkMention  = "mention"  // the problem's text names the Work
+	LinkContext  = "context"  // the Work was opened for the problem
+	LinkBrain    = "brain"    // Brain linked it while triaging
+	LinkUser     = "user"
+)
+
+// WorkLink ties a problem to one piece of Work.
+type WorkLink struct {
+	WorkID string    `json:"work_id"`
+	By     string    `json:"by"`
+	At     time.Time `json:"at"`
 }
 
 // Cost estimates what a problem costs: the user's attention (corrections,
@@ -176,7 +199,15 @@ type Label struct {
 	Value string    `json:"value"`
 	Note  string    `json:"note,omitempty"`
 	At    time.Time `json:"at"`
+	// By says who gave the verdict: the user, or Brain while triaging.
+	By string `json:"by,omitempty"`
 }
+
+// Who gives a label.
+const (
+	LabelByUser  = "user"
+	LabelByBrain = "brain"
+)
 
 // Config is the user's Watch setting. Collection runs regardless; Enabled
 // gates the agent pass that later steps add.
