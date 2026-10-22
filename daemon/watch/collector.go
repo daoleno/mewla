@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 )
@@ -74,6 +75,7 @@ type Collector struct {
 	errors   map[string]string
 	lastPass *PassResult
 	lastRun  map[string]time.Time
+	closedAt map[string]closedAtEntry
 }
 
 // NewCollector creates a Collector.
@@ -491,8 +493,39 @@ func (c *Collector) applyLinks() {
 		c.noteError("links", err)
 		return
 	}
-	_, err = c.store.ApplyLinks(works)
+	_, err = c.store.ApplyLinks(works, c.workClosedAt)
 	c.noteError("links", err)
+}
+
+type closedAtEntry struct {
+	revision uint64
+	at       time.Time
+}
+
+// workClosedAt is when a Work's last event happened: its acceptance, for Work
+// that is done. Looked up once per terminal revision.
+func (c *Collector) workClosedAt(work brain.Work) time.Time {
+	c.mu.Lock()
+	if cached, ok := c.closedAt[work.ID]; ok && cached.revision == work.TerminalRevision && !cached.at.IsZero() {
+		c.mu.Unlock()
+		return cached.at
+	}
+	c.mu.Unlock()
+	at := work.CreatedAt
+	if events, err := c.works.ListWorkEvents(work.ID); err == nil {
+		for _, event := range events {
+			if event.CreatedAt.After(at) {
+				at = event.CreatedAt
+			}
+		}
+	}
+	c.mu.Lock()
+	if c.closedAt == nil {
+		c.closedAt = map[string]closedAtEntry{}
+	}
+	c.closedAt[work.ID] = closedAtEntry{revision: work.TerminalRevision, at: at}
+	c.mu.Unlock()
+	return at
 }
 
 func (c *Collector) requireWork(id string) error {

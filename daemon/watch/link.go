@@ -17,14 +17,23 @@ import (
 // A Work makes a problem "fixing" while somebody is on it, and "fixed" once
 // Brain accepted it after the problem's last evidence. A Work that closed
 // before the latest evidence never counts as the fix, so a problem that
-// returns reopens as "recurred".
+// returns reopens as "recurred". Only Work opened for the problem, or the
+// stalled Work itself, can fix it: that a problem happened inside a Work
+// that later finished says nothing about whether it was solved.
 
 // WatchContextRef is the context_ref of Work opened for a problem.
 func WatchContextRef(problemID string) string { return "watch:" + problemID }
 
+// linkFixedReason marks a "fixed" that Work set, so it can be taken back when
+// the Work no longer supports it (an earlier build fixed from any linked Work).
+const linkFixedReason = "The Work for it was accepted."
+
 func isFixLink(by string) bool {
 	return by == LinkContext || by == LinkBrain || by == LinkUser
 }
+
+// canFix says whether accepting the Work can settle the problem.
+func canFix(by string) bool { return isFixLink(by) || by == LinkSubject }
 
 // workHandled reports whether somebody is on the Work. Origin Work only
 // counts while it runs: Work waiting on the user is the problem itself.
@@ -97,7 +106,10 @@ func addLink(problem *Problem, workID, by string, at time.Time) bool {
 // ApplyLinks derives links from ids the problems already carry, then moves
 // each linked problem between new, fixing and fixed. It returns the number
 // of problems that changed.
-func (s *Store) ApplyLinks(works []brain.Work) (int, error) {
+//
+// closedAt says when a Work was accepted; Work.UpdatedAt is stamped by every
+// lifecycle projection and cannot tell. Nil falls back to UpdatedAt.
+func (s *Store) ApplyLinks(works []brain.Work, closedAt func(brain.Work) time.Time) (int, error) {
 	if len(works) == 0 {
 		return 0, nil
 	}
@@ -114,7 +126,7 @@ func (s *Store) ApplyLinks(works []brain.Work) (int, error) {
 			continue
 		}
 		touched := s.deriveLinksLocked(problem, works, byID, now)
-		if applyWorkState(problem, byID, now) {
+		if applyWorkState(problem, byID, closedAt, now) {
 			touched = true
 		}
 		if touched {
@@ -157,7 +169,7 @@ func (s *Store) deriveLinksLocked(problem *Problem, works []brain.Work, byID map
 
 // applyWorkState moves a problem by the state of its linked Work. A user's
 // dismissal always stands.
-func applyWorkState(problem *Problem, byID map[string]brain.Work, now time.Time) bool {
+func applyWorkState(problem *Problem, byID map[string]brain.Work, closedAt func(brain.Work) time.Time, now time.Time) bool {
 	if problem.Status == StatusDismissed {
 		return false
 	}
@@ -171,8 +183,15 @@ func applyWorkState(problem *Problem, byID map[string]brain.Work, now time.Time)
 		if workHandled(work, link.By) {
 			handled = true
 		}
-		if work.Status == brain.WorkDone && work.UpdatedAt.After(problem.LastSeen) && work.UpdatedAt.After(accepted) {
-			accepted = work.UpdatedAt
+		if work.Status != brain.WorkDone || !canFix(link.By) {
+			continue
+		}
+		at := work.UpdatedAt
+		if closedAt != nil {
+			at = closedAt(work)
+		}
+		if at.After(problem.LastSeen) && at.After(accepted) {
+			accepted = at
 		}
 	}
 	before := problem.Status
@@ -183,15 +202,17 @@ func applyWorkState(problem *Problem, byID map[string]brain.Work, now time.Time)
 		if problem.Status != StatusFixed {
 			problem.Status = StatusFixed
 			problem.FixedAt = accepted
-			problem.FixedReason = "The Work for it was accepted."
+			problem.FixedReason = linkFixedReason
 		}
+	case problem.Status == StatusFixed && !problem.FixedAt.IsZero() && problem.LastSeen.After(problem.FixedAt):
+		problem.Status, problem.FixedReason = StatusRecurred, ""
+	case problem.Status == StatusFixed && problem.FixedReason == linkFixedReason:
+		problem.Status, problem.FixedAt, problem.FixedReason = StatusNew, time.Time{}, ""
 	case problem.Status == StatusFixing:
 		problem.Status = StatusNew
 		if problem.Label != nil && problem.Label.Value == LabelReal {
 			problem.Status = StatusConfirmed
 		}
-	case problem.Status == StatusFixed && !problem.FixedAt.IsZero() && problem.LastSeen.After(problem.FixedAt):
-		problem.Status, problem.FixedReason = StatusRecurred, ""
 	}
 	problem.Active = problem.Status != StatusFixed && problem.Status != StatusDismissed
 	return problem.Status != before
