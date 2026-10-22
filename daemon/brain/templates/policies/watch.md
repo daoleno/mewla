@@ -24,4 +24,4 @@ The user was already pushed. In their language, say in one or two plain lines wh
 A chip tap reaches you as the typed words, and the user can also answer in their own, such as "1 handle, 3 not a problem". Several in one reply are fine.
 - Handle: open bounded Work for it with the problem id in the objective, link it with mewla watch problem link <id> --work <work id> --by brain, and confirm in one line.
 - Not a problem: mewla watch problem label <id> not --note "<their words>". It is the user's verdict, so no --by brain.
-- Later: mewla watch problem label <id> later.
+- Later: mewla watch problem label <id> later. When the user names a time ("tomorrow", "next week", 「明天再说」, 「下周再提」), pass it: --for 1d, --for 1w, --for 3d, --for 12h. It rests that long, or less if the problem shows new signals. Without a time it rests a week.

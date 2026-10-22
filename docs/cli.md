@@ -112,7 +112,7 @@ mewla watch projects
 mewla watch signals --project mewla --source human --since 24h
 mewla watch problems --rule judgment
 mewla watch enable && mewla watch judge   # agent judgment; costs tokens
-mewla watch problem label <id> real|not|later --note "why"
+mewla watch problem label <id> real|not|later --note "why"   # later takes --for 1d|3d|2w (default 7d)
 mewla watch problem link <id> --work <work id>   # Work that handles it: fixing, then fixed
 mewla watch triage [--backlog]     # hand Brain the new problems; --backlog sends every waiting one
 mewla watch brief                  # hand Brain the morning brief now

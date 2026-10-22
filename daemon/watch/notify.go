@@ -59,8 +59,6 @@ const (
 	urgentRecent = 6 * time.Hour
 	// A problem the brief already showed is not shown again for this long.
 	briefCooldown = 3 * 24 * time.Hour
-	// A "later" lasts until new evidence arrives, or this long.
-	laterFor = 7 * 24 * time.Hour
 
 	triageBatch    = 20
 	triageQuiet    = 30 * time.Minute
@@ -72,6 +70,8 @@ const (
 // Device is what Watch needs to know about the user's phone.
 type Device struct {
 	TimeZone string `json:"time_zone,omitempty"`
+	// Locale is the app's language, e.g. "zh-Hans-CN".
+	Locale string `json:"locale,omitempty"`
 }
 
 type notifyState struct {
@@ -102,7 +102,8 @@ type notifier struct {
 	thread func() string
 	now    func() time.Time
 	// calendar and language are set by the collector. Without a calendar
-	// there is no morning brief.
+	// there is no morning brief. language gives the code of the language
+	// Watch writes to the person in.
 	calendar Calendar
 	language func() string
 
@@ -168,20 +169,41 @@ func (n *notifier) saveLocked() error {
 }
 
 // SetDevice remembers the phone's timezone, which the brief's calendar item is
-// created in.
+// created in, and its language, which Watch writes in.
 func (n *notifier) SetDevice(device Device) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if device.TimeZone == "" || device.TimeZone == n.state.Device.TimeZone {
+	changed := false
+	if zone := strings.TrimSpace(device.TimeZone); zone != "" && zone != n.state.Device.TimeZone {
+		if _, err := time.LoadLocation(zone); err == nil {
+			n.state.Device.TimeZone, changed = zone, true
+		}
+	}
+	if locale := strings.TrimSpace(device.Locale); locale != "" && locale != n.state.Device.Locale && languageOf(locale) != "" {
+		n.state.Device.Locale, changed = locale, true
+	}
+	if !changed {
 		return
 	}
-	if _, err := time.LoadLocation(device.TimeZone); err != nil {
-		return
-	}
-	n.state.Device = device
 	if err := n.saveLocked(); err != nil {
 		log.Printf("WARN watch: save device: %v", err)
 	}
+}
+
+// deviceLanguage is the language code the app reported, or "".
+func (n *notifier) deviceLanguage() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return languageOf(n.state.Device.Locale)
+}
+
+// phrases are Watch's own words in the person's language.
+func (n *notifier) phrases() phrases {
+	code := ""
+	if n.language != nil {
+		code = n.language()
+	}
+	return phrasesFor(code)
 }
 
 func (n *notifier) location() *time.Location {
@@ -211,10 +233,8 @@ func (n *notifier) seedBrief(now time.Time) {
 		log.Printf("WARN watch: morning brief time: %v", err)
 		return
 	}
-	title, notes := "Morning brief", "Watch's brief of the problems nobody is handling. Move or repeat it to change when it comes; cancel it to turn it off."
-	if n.language != nil && n.language() == "Chinese" {
-		title, notes = "早报", "Watch 汇总没人处理的问题。改时间或重复方式就改变早报的时间,取消就关闭早报。"
-	}
+	say := n.phrases()
+	title, notes := say.briefTitle, say.briefNotes
 	_, _, err = n.calendar.Seed(calendar.OwnerWatchBrief, calendar.Item{
 		Title:      title,
 		Kind:       calendar.KindReminder,
@@ -338,7 +358,7 @@ func (n *notifier) briefCandidates(now time.Time) []Problem {
 			if label.Value == LabelNot {
 				continue
 			}
-			if label.Value == LabelLater && !problem.LastSeen.After(label.At) && now.Sub(label.At) < laterFor {
+			if label.Value == LabelLater && !problem.LastSeen.After(label.At) && now.Before(label.RestsUntil()) {
 				continue
 			}
 		}
@@ -533,7 +553,7 @@ func (n *notifier) sendUrgent() {
 		if n.thread != nil {
 			thread = n.thread()
 		}
-		if err := n.push(thread, "Needs you now", body); err != nil {
+		if err := n.push(thread, n.phrases().urgentTitle, body); err != nil {
 			log.Printf("WARN watch: urgent push: %v", err)
 		}
 	}

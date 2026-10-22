@@ -22,10 +22,11 @@ Watch looks over your projects and records what needs you.
   projects [--project id]          Inferred projects, their remotes and linked sources
   signals [--project id] [--source human|process|runtime|external] [--kind k] [--since 24h] [--limit n]
   problems [--project id] [--rule judgment|ci_red|repeated_error|worker_stalls]
-  problem label <id> real|not|later [--note "why"] [--by brain]
+  problem label <id> real|not|later [--note "why"] [--for 1d|3d|2w] [--by brain]
                                    Tell Watch whether a problem was real; later runs learn from it.
                                    Brain passes --by brain when it triages, so its verdicts are not
-                                   mistaken for yours
+                                   mistaken for yours. --for says how long a "later" rests (90m, 12h,
+                                   1d, 2w; default 7d); new evidence ends the rest early
   problem link <id> --work <work id> [--by brain]
                                    Tie a problem to the Work handling it: in progress marks it
                                    fixing, accepted Work marks it fixed
@@ -88,6 +89,7 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	fs.BoolVar(&request.Backlog, "backlog", false, "triage every waiting problem, not only new ones")
 	fs.StringVar(&request.WorkID, "work", "", "Work id")
 	fs.StringVar(&request.By, "by", "", "who is acting: brain, when triaging for the user")
+	fs.StringVar(&request.For, "for", "", "how long a later rests: 90m, 12h, 1d, 2w")
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
@@ -120,6 +122,9 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 		timeout = time.Duration(max(request.Batches, 1)) * 16 * time.Minute
 	case "problem label":
 		request.Action, request.ProblemID, request.Label = "label", positional[0], positional[1]
+		if request.For != "" && request.Label != watch.LabelLater {
+			return errors.New("--for only goes with later")
+		}
 	case "problem link", "problem unlink":
 		request.Action, request.ProblemID = strings.TrimPrefix(action, "problem "), positional[0]
 		if strings.TrimSpace(request.WorkID) == "" {
