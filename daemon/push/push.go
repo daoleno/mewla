@@ -243,6 +243,25 @@ func (c *Client) NotifyWorkerDone(workerID, workerName, summary string) error {
 	})
 }
 
+// NotifyBrainMessage sends a notification that opens the Brain thread. The
+// body is one line Brain chose to show; the message itself stays in Brain.
+func (c *Client) NotifyBrainMessage(threadID, title, body string) error {
+	registration, err := c.registration()
+	if err != nil {
+		return err
+	}
+	return c.sendTo(registration.token, Message{
+		Title:    title,
+		Body:     buildNotificationBody(body, "Brain has a question."),
+		Priority: "high",
+		Data: map[string]string{
+			"brain_thread_id": threadID,
+			"screen":          "brain",
+			"server_id":       registration.serverRef,
+		},
+	})
+}
+
 // NotifyScheduledResult sends a notification that deep-links to one canonical
 // Calendar result projected in Brain. Result and failure contents deliberately
 // never cross this boundary.

@@ -59,15 +59,17 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
-	browsers          *browser.Manager
-	connections       *connections.Manager
-	computers         *computers.Manager
-	resourceSampler   *watcher.ResourceSampler
-	auth              *auth.Manager
-	enrollments       *enrollment.Manager
-	watcher           controlWatcher
-	execs             *work.ExecutorConfig
-	brainStore        *brain.Store
+	browsers        *browser.Manager
+	connections     *connections.Manager
+	computers       *computers.Manager
+	resourceSampler *watcher.ResourceSampler
+	auth            *auth.Manager
+	enrollments     *enrollment.Manager
+	watcher         controlWatcher
+	execs           *work.ExecutorConfig
+	brainStore      *brain.Store
+	// notifyBrain pushes a Brain message to the phone (thread, title, body).
+	notifyBrain       func(threadID, title, body string) error
 	brainService      *brain.Service
 	calendarStore     *calendar.Store
 	calendarScheduler *calendar.Scheduler
@@ -209,6 +211,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainSetExecutor(req)
 	case "brain_objective", "brain_objective_set", "brain_objective_clear":
 		return a.handleBrainObjective(req)
+	case "brain_replies", "brain_replies_set", "brain_replies_clear":
+		return a.handleBrainReplies(req)
 	case "brain_workspace":
 		if a == nil || a.brainStore == nil {
 			return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
@@ -1504,6 +1508,44 @@ func (a *controlApp) handleBrainObjective(req control.Request) control.Response 
 			return control.ErrorResponse("brain_objective_failed", err.Error())
 		}
 		return control.Response{OK: true, Context: objective}
+	}
+}
+
+// handleBrainReplies reads, sets or clears the tap-to-answer chips under
+// Brain's latest message. Setting them can also push the message to the
+// phone: text carries the push body, so a question the user has to answer
+// reaches them away from the app.
+func (a *controlApp) handleBrainReplies(req control.Request) control.Response {
+	if a == nil || a.brainStore == nil {
+		return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
+	}
+	switch req.Type {
+	case "brain_replies_set":
+		replies, err := a.brainStore.SetQuickReplies(req.QuickReplies)
+		if err != nil {
+			return control.ErrorResponse("brain_replies_failed", err.Error())
+		}
+		result := map[string]any{"replies": replies}
+		if body := strings.TrimSpace(req.Text); body != "" && a.notifyBrain != nil {
+			threadID, _ := a.brainStore.ChatThreadID()
+			result["pushed"] = true
+			if err := a.notifyBrain(threadID, "Brain", body); err != nil {
+				result["pushed"] = false
+				result["push_error"] = err.Error()
+			}
+		}
+		return control.Response{OK: true, Context: result}
+	case "brain_replies_clear":
+		if err := a.brainStore.ClearQuickReplies(); err != nil {
+			return control.ErrorResponse("brain_replies_failed", err.Error())
+		}
+		return control.Response{OK: true}
+	default:
+		replies, err := a.brainStore.DisplayedQuickReplies()
+		if err != nil {
+			return control.ErrorResponse("brain_replies_failed", err.Error())
+		}
+		return control.Response{OK: true, Context: replies}
 	}
 }
 
