@@ -94,6 +94,21 @@ describe("calendar notification reconciliation", () => {
     expect(mock.value()).toEqual({});
   });
 
+  test("an item Mewla acts on gets no local reminder, and a stale one is cancelled", async () => {
+    const mock = harness();
+    const now = Date.parse("2026-07-14T10:00:00Z");
+    await reconcileCalendarNotifications("server", [base], mock.deps, now);
+    await reconcileCalendarNotifications(
+      "server",
+      [{ ...base, owner: "watch_brief" }],
+      mock.deps,
+      now,
+    );
+    expect(mock.scheduled).toHaveLength(1);
+    expect(mock.cancelled).toEqual(["notification-1"]);
+    expect(mock.value()).toEqual({});
+  });
+
   test("server removal does not cancel another server's notifications", async () => {
     const mock = harness();
     const now = Date.parse("2026-07-14T10:00:00Z");

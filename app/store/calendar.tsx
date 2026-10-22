@@ -39,6 +39,8 @@ export interface CalendarItem {
   source_thread_id?: string;
   source_message_id?: string;
   linked_work_id?: string;
+  /** Set by the daemon when Mewla acts on this item itself, e.g. Watch's morning brief. */
+  owner?: string;
   failure_reason?: string;
   next_at: string;
   created_at: string;
