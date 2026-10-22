@@ -168,6 +168,16 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     expect(view.tree.root.findByProps({ accessibilityLabel: "Edit message" })).toBeDefined();
   });
 
+  // A finger lands, jitters a little, lifts: what a real touch does and a bare tap does not.
+  const touch = (pageX: number, pageY: number, locationX = 18, locationY = 16) => ({
+    nativeEvent: { pageX, pageY, locationX, locationY },
+  });
+  const finger = (node: { props: any }, moves: [number, number][] = [[1, 1]], at: [number, number] = [70, 500]) => {
+    act(() => node.props.onResponderGrant(touch(at[0], at[1])));
+    for (const [dx, dy] of moves) act(() => node.props.onResponderMove(touch(at[0] + dx, at[1] + dy)));
+    act(() => node.props.onResponderRelease());
+  };
+
   test("every reply with a turn shows Copy; Retry only where the prompt can run again", () => {
     desktop = false;
     platform.OS = "ios";
@@ -175,8 +185,17 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     const view = render(reply, { replyTurns: turnFor(reply, { latest: false }), calls });
     const retry = view.tree.root.findByProps({ accessibilityLabel: "Retry" });
     view.tree.root.findByProps({ accessibilityLabel: "Copy" });
-    act(() => retry.props.onPress());
+    finger(retry);
     expect(calls).toEqual(["retry u1"]);
+    // Past the touch slop it is a drag, not a press; a system takeover cancels it.
+    finger(retry, [[0, 30]]);
+    act(() => retry.props.onResponderGrant(touch(70, 500)));
+    act(() => retry.props.onResponderTerminate());
+    act(() => retry.props.onResponderRelease());
+    expect(calls).toEqual(["retry u1"]);
+    expect(retry.props.hitSlop).toBeDefined();
+    expect(retry.props.style[0].width).toBeGreaterThanOrEqual(44);
+    expect(retry.props.style[0].height).toBeGreaterThanOrEqual(44);
 
     // A message that is not a turn's final reply has no row.
     expect(render({ ...reply, id: "a0" }, { replyTurns: turnFor(reply) }).tree.root.findAllByProps({ accessibilityLabel: "Copy" })).toHaveLength(0);
@@ -202,11 +221,10 @@ if (!process.env.MEWLA_MESSAGE_SURFACE_TEST) {
     platform.OS = "android";
     opened.length = 0;
     const view = render(reply, { replyTurns: turnFor(reply) });
-    await act(async () =>
-      view.tree.root
-        .findByProps({ accessibilityLabel: "More" })
-        .props.onPress({ nativeEvent: { pageX: 70, pageY: 500, locationX: 10, locationY: 8 } }),
-    );
+    const more = view.tree.root.findByProps({ accessibilityLabel: "More" });
+    act(() => more.props.onResponderGrant(touch(70, 500, 10, 8)));
+    act(() => more.props.onResponderMove(touch(72, 502, 10, 8)));
+    await act(async () => more.props.onResponderRelease());
     expect(opened).toMatchObject([{ id: "a1", align: "start", rect: { x: 60, y: 492, width: 200, height: 48 } }]);
 
     desktop = true;
