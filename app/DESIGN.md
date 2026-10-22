@@ -193,6 +193,12 @@ Brain has one Work surface, built from the daemon's `current_work`
   The composer is there from the start; it says "Connecting…" until Brain
   can take a message. `interfaceTimelinePhase` and `brainScreenSurface`
   decide this, and both are pure and tested.
+  Brain's chat never goes back to that screen over messages it has
+  already shown: when it remounts or its thread key flaps (a reconnect after
+  a daemon restart) it starts from the messages it last showed, without
+  Activity, and the next snapshot replaces them in place. The quick-reply
+  chips belong to Brain's last message, so they show only while a message is
+  on screen (`quickRepliesVisible`'s `hasMessage`).
 - **Goal line.** When Brain has declared an objective
   (`mewla brain objective set`), it heads the Work column and the Work sheet:
   "Ship atlas-notes v1.4 this week · 2 of 5 back". It never takes header
