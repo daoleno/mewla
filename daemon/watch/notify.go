@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
@@ -106,6 +107,9 @@ type notifier struct {
 	// Watch writes to the person in.
 	calendar Calendar
 	language func() string
+	// deviceLang is the language code of state.Device.Locale. It is read
+	// without n.mu, because tick holds n.mu while it asks for the language.
+	deviceLang atomic.Value
 
 	mu           sync.Mutex
 	state        notifyState
@@ -123,6 +127,7 @@ func newNotifier(store *Store, brain Brain, push PushFunc, thread func() string)
 	if err := readJSON(path, &n.state); err != nil {
 		return nil, err
 	}
+	n.deviceLang.Store(languageOf(n.state.Device.Locale))
 	if n.state.Sent == nil {
 		n.state.Sent = map[string]string{}
 	}
@@ -181,6 +186,7 @@ func (n *notifier) SetDevice(device Device) {
 	}
 	if locale := strings.TrimSpace(device.Locale); locale != "" && locale != n.state.Device.Locale && languageOf(locale) != "" {
 		n.state.Device.Locale, changed = locale, true
+		n.deviceLang.Store(languageOf(locale))
 	}
 	if !changed {
 		return
@@ -192,9 +198,8 @@ func (n *notifier) SetDevice(device Device) {
 
 // deviceLanguage is the language code the app reported, or "".
 func (n *notifier) deviceLanguage() string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return languageOf(n.state.Device.Locale)
+	code, _ := n.deviceLang.Load().(string)
+	return code
 }
 
 // phrases are Watch's own words in the person's language.

@@ -69,9 +69,17 @@ func TestBriefTitleAndUrgentPushFollowTheAppsLanguage(t *testing.T) {
 	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC))
 	cal := &fakeCalendar{}
 	f.n.calendar = cal
-	f.n.language = func() string { return languageOf(f.n.state.Device.Locale) }
-	f.n.state.Device.Locale = "zh-Hans-CN"
-	f.n.tick()
+	// The collector's own language function, as in the daemon: tick holds the
+	// notifier's lock while it asks, so asking must not take that lock.
+	f.n.language = (&Collector{store: f.store, judge: newJudge(f.store, t.TempDir()), notify: f.n}).language
+	f.n.SetDevice(Device{Locale: "zh-Hans-CN"})
+	ticked := make(chan struct{})
+	go func() { f.n.tick(); close(ticked) }()
+	select {
+	case <-ticked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("tick deadlocked asking for the language")
+	}
 	if len(cal.items) != 1 || cal.items[0].Title != "早报" || !strings.Contains(cal.items[0].Notes, "早报") {
 		t.Fatalf("items = %+v", cal.items)
 	}
