@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -212,44 +213,55 @@ func (r *ProviderConversationReader) loadFileConversation(
 	// of hundreds of MB again from the start, and the snapshot it waits for
 	// would take as long as the parse.
 	shared := sharedFileConversationFor(provider, path)
-	shared.mu.Lock()
-	defer shared.mu.Unlock()
-	if shared.valid &&
-		shared.source.size == info.Size() &&
-		shared.source.modTime.Equal(info.ModTime()) &&
-		sameProviderSourceFile(shared.source.fileInfo, info) {
-		r.source = shared.source
-		r.source.conversation = withOwnEvents(r.source.conversation)
-		return r.source.conversation, nil
+	for {
+		shared.mu.Lock()
+		if shared.valid && shared.matches(info) {
+			r.takeShared(shared)
+			shared.mu.Unlock()
+			return r.source.conversation, nil
+		}
+		if shared.valid && shared.mayServeStale(info) {
+			// A transcript this large that is still being written changes
+			// faster than it parses, so waiting for a parse of the current
+			// bytes would never end. Answer with the last parse and refresh it
+			// once in the background; the next poll reads the newer one.
+			if shared.loading == nil {
+				shared.loading = make(chan struct{})
+				go shared.parse(provider, path, parse, info)
+			}
+			r.takeShared(shared)
+			shared.mu.Unlock()
+			return r.source.conversation, nil
+		}
+		if wait := shared.loading; wait != nil {
+			shared.mu.Unlock()
+			<-wait
+			if info, err = os.Stat(path); err != nil {
+				return CodexConversation{}, err
+			}
+			continue
+		}
+		shared.loading = make(chan struct{})
+		shared.mu.Unlock()
+		conversation, err := shared.parse(provider, path, parse, info)
+		if err == nil {
+			shared.mu.Lock()
+			if shared.valid && shared.matches(info) {
+				// This reader keeps the parse it made; the shared copy owns
+				// its own events.
+				r.source = shared.source
+				r.source.conversation = conversation
+			}
+			shared.mu.Unlock()
+		}
+		return conversation, err
 	}
-	conversation, err := parse(path)
-	if err != nil {
-		return CodexConversation{}, err
-	}
-	after, err := os.Stat(path)
-	if err != nil {
-		return CodexConversation{}, err
-	}
-	if !sameProviderSourceFile(info, after) ||
-		info.Size() != after.Size() ||
-		!info.ModTime().Equal(after.ModTime()) {
-		// The parser opened a coherent file, but its source changed during the
-		// read. Return this poll's value without retaining it; the next poll
-		// selects and parses the current source again.
-		return conversation, nil
-	}
-	r.source = providerConversationSource{
-		provider:     provider,
-		path:         path,
-		size:         after.Size(),
-		modTime:      after.ModTime(),
-		fileInfo:     after,
-		conversation: conversation,
-	}
-	shared.source = r.source
-	shared.source.conversation = withOwnEvents(conversation)
-	shared.valid = true
-	return conversation, nil
+}
+
+// takeShared gives the reader the shared parse; the caller holds shared.mu.
+func (r *ProviderConversationReader) takeShared(shared *sharedFileConversation) {
+	r.source = shared.source
+	r.source.conversation = withOwnEvents(r.source.conversation)
 }
 
 // withOwnEvents gives a reader its own event array, so one subscription's
@@ -259,13 +271,88 @@ func withOwnEvents(conversation CodexConversation) CodexConversation {
 	return conversation
 }
 
-// sharedFileConversation is the latest parse of one transcript file. Its mutex
-// also makes concurrent loads of the same unchanged file wait for one parse.
+// staleConversationMinBytes is the transcript size from which a reader may
+// answer with the previous parse of a file that has only grown since.
+var staleConversationMinBytes int64 = 32 << 20
+
+// sharedFileConversation is the latest parse of one transcript file. loading is
+// non-nil while one parse runs and closed when it ends, so concurrent loads of
+// the same file wait for one parse instead of each running their own.
 type sharedFileConversation struct {
-	mu     sync.Mutex
-	valid  bool
-	source providerConversationSource
-	used   time.Time
+	mu      sync.Mutex
+	valid   bool
+	source  providerConversationSource
+	loading chan struct{}
+	used    time.Time
+}
+
+func (e *sharedFileConversation) matches(info os.FileInfo) bool {
+	return e.source.size == info.Size() &&
+		e.source.modTime.Equal(info.ModTime()) &&
+		sameProviderSourceFile(e.source.fileInfo, info)
+}
+
+func (e *sharedFileConversation) mayServeStale(info os.FileInfo) bool {
+	return info.Size() >= staleConversationMinBytes &&
+		info.Size() >= e.source.size &&
+		sameProviderSourceFile(e.source.fileInfo, info)
+}
+
+// parse reads the transcript without holding mu, stores the result and ends the
+// parse that the caller announced by setting e.loading.
+func (e *sharedFileConversation) parse(
+	provider, path string,
+	parse func(string) (CodexConversation, error),
+	before os.FileInfo,
+) (CodexConversation, error) {
+	conversation, err := parseRecovering(parse, path)
+	after, statErr := os.Stat(path)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer func() {
+		close(e.loading)
+		e.loading = nil
+	}()
+	if err != nil {
+		return CodexConversation{}, err
+	}
+	if statErr != nil {
+		return CodexConversation{}, statErr
+	}
+	if !sameProviderSourceFile(before, after) {
+		return conversation, nil
+	}
+	changed := before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime())
+	if changed && before.Size() < staleConversationMinBytes {
+		// The parser opened a coherent file, but its source changed during the
+		// read. Return this poll's value without retaining it; the next poll
+		// selects and parses the current source again.
+		return conversation, nil
+	}
+	// A large file that grew during its parse is kept under the size it had
+	// before: the parse holds at least that much, and the next load sees the
+	// file is newer and refreshes it.
+	e.source = providerConversationSource{
+		provider:     provider,
+		path:         path,
+		size:         before.Size(),
+		modTime:      before.ModTime(),
+		fileInfo:     before,
+		conversation: withOwnEvents(conversation),
+	}
+	e.valid = true
+	return conversation, nil
+}
+
+// parseRecovering keeps a panicking parser from leaving the shared parse
+// marked as running forever.
+func parseRecovering(parse func(string) (CodexConversation, error), path string) (conversation CodexConversation, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("parse %s: %v", path, recovered)
+		}
+	}()
+	return parse(path)
 }
 
 // maxSharedFileConversations bounds the parsed transcripts kept for reuse.
