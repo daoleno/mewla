@@ -132,6 +132,15 @@ mewla brain work update -id <work-id> -status waiting \
   -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
 ```
 
+## Quick replies
+
+When Brain asks you something with a short answer, it can put tap-to-answer
+chips under its message. A tap sends the chip's text as if you typed it, so
+you can always answer in your own words instead. The chips go once you write
+anything, when you start a new chat or after a day. Brain sets them with
+`mewla brain replies set -row "Yes|No"` after the message they answer, and can
+add `-push "one line"` to send the question to your phone.
+
 ## Who decides that Work is done
 
 Brain, after it reviews the result, or you. A Worker saying "done", a process
@@ -212,7 +221,8 @@ Brain picks the agent, model and reasoning level for every Worker. Before each
 launch it reads `routing.md` in its workspace, a few lines of Markdown such as
 "use Codex with high reasoning for refactors". It rewrites a line when you
 state a preference, when a new model appears or when a choice went badly.
-Mewla never parses the file and upgrades never overwrite it.
+Upgrades never overwrite it. Mewla reads one row only: the one starting
+`Watch judgment`, which picks the agent that reads [Watch](watch.md) signals.
 
 A Worker launch looks like this:
 
