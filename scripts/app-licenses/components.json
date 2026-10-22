@@ -3,7 +3,7 @@
   "bundled": [
     { "name": "Ghostty (libghostty-vt)", "license": "MIT", "url": "https://github.com/ghostty-org/ghostty", "platforms": ["android", "ios"], "text": "app/assets/notices/GHOSTTY-MIT.txt" },
     { "name": "noVNC", "version": "1.7.0", "license": "MPL-2.0", "url": "https://github.com/novnc/noVNC", "platforms": ["android", "ios"], "text": "app/assets/notices/NOVNC-MPL-2.0.txt" },
-    { "name": "Mermaid", "version": "11.6.0", "license": "MIT", "url": "https://github.com/mermaid-js/mermaid", "platforms": ["android", "ios"], "text": "app/assets/notices/MERMAID-MIT.txt", "npmDependenciesOf": "mermaid" },
+    { "name": "Mermaid", "version": "11.16.1", "license": "MIT", "url": "https://github.com/mermaid-js/mermaid", "platforms": ["android", "ios"], "text": "app/assets/notices/MERMAID-MIT.txt", "npmDependenciesOf": "mermaid" },
     { "name": "Pi Coding Agent mark", "license": "MIT", "url": "https://pi.dev", "platforms": ["android", "ios"], "text": "app/assets/notices/PI-MARK-MIT.txt" }
   ],
   "fonts": [
