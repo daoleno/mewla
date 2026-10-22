@@ -1509,3 +1509,77 @@ describe("Brain echo claim across mixed seq spaces", () => {
     expect(visibleUsers(current).map((item) => item.id)).toEqual(["h1", receiptId]);
   });
 });
+
+describe("Brain's last-shown conversation", () => {
+  const { cachedInterfaceConversation, clearInterfaceConversationCache, forgetInterfaceConversationsOutsideServer, rememberInterfaceConversation } =
+    require("./InterfaceChatSession") as typeof import("./InterfaceChatSession");
+  const brainKey = "server-a:scope:brain-thread:thread-1";
+  const shown = {
+    available: true,
+    session_id: "brain-thread:thread-1",
+    activity: activity(),
+    events: [
+      { id: "m1", seq: 1, kind: "assistant_message" as const, body: "Which one?" },
+    ],
+  };
+
+  test("a remounted chat starts from the messages it showed, not a loading screen", () => {
+    clearInterfaceConversationCache();
+    rememberInterfaceConversation(brainKey, shown);
+    const remounted = interfaceChatThreadReducer(state([]), {
+      type: "cache_key_changed",
+      cacheKey: brainKey,
+    });
+    expect(remounted.loading).toBe(false);
+    expect(remounted.conversation?.events.map((event) => event.id)).toEqual(["m1"]);
+    // Activity is live: a restored chat never claims Brain is still working.
+    expect(remounted.conversation?.activity).toBeUndefined();
+  });
+
+  test("a reconnect snapshot replaces the shown messages in place", () => {
+    clearInterfaceConversationCache();
+    rememberInterfaceConversation(brainKey, shown);
+    const remounted = interfaceChatThreadReducer(state([]), {
+      type: "cache_key_changed",
+      cacheKey: brainKey,
+    });
+    const resubscribed = interfaceChatThreadReducer(remounted, { type: "stream_start", generation: 1 });
+    expect(resubscribed.loading).toBe(false);
+    expect(resubscribed.conversation?.events).toHaveLength(1);
+    const replaced = interfaceChatThreadReducer(resubscribed, {
+      type: "snapshot",
+      generation: 1,
+      payload: {
+        request_id: "stream-a",
+        conversation_id: "brain-thread:thread-1",
+        revision: 1,
+        conversation: {
+          ...shown,
+          events: [
+            shown.events[0]!,
+            { id: "m2", seq: 2, kind: "assistant_message" as const, body: "Done." },
+          ],
+        },
+      },
+    });
+    expect(replaced.loading).toBe(false);
+    expect(replaced.conversation?.events.map((event) => event.id)).toEqual(["m1", "m2"]);
+  });
+
+  test("a Session's own chat and an empty conversation are not kept", () => {
+    clearInterfaceConversationCache();
+    rememberInterfaceConversation("server-a:agent:agent-a", shown);
+    rememberInterfaceConversation(brainKey, { ...shown, events: [] });
+    expect(cachedInterfaceConversation("server-a:agent:agent-a")).toBeNull();
+    expect(cachedInterfaceConversation(brainKey)).toBeNull();
+  });
+
+  test("another server's messages are dropped when the server changes", () => {
+    clearInterfaceConversationCache();
+    rememberInterfaceConversation(brainKey, shown);
+    rememberInterfaceConversation("server-b:scope:brain-thread:thread-9", shown);
+    forgetInterfaceConversationsOutsideServer("server-b");
+    expect(cachedInterfaceConversation(brainKey)).toBeNull();
+    expect(cachedInterfaceConversation("server-b:scope:brain-thread:thread-9")).not.toBeNull();
+  });
+});

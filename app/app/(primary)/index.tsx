@@ -445,16 +445,18 @@ export default function BrainScreen() {
       setDraft,
       sendText,
       lastUserMessageAt,
+      hasMessage,
     }: {
       draft: string;
       setDraft: (value: string) => void;
       sendText: (text: string) => void;
       lastUserMessageAt: number;
+      hasMessage: boolean;
     }) => {
       composerDraftRef.current = setDraft;
       const activeMention = activeExecutorMentionAtEnd(draft);
       if (!activeMention || availableExecutors.length === 0) {
-        return quickRepliesVisible(quickReplies, { draft, lastUserMessageAt }) ? (
+        return quickRepliesVisible(quickReplies, { draft, lastUserMessageAt, hasMessage }) ? (
           <QuickReplies rows={quickReplies.rows} chrome={chrome} onSelect={sendText} />
         ) : null;
       }

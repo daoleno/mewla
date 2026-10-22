@@ -49,6 +49,8 @@ interface InterfaceChatSurfaceProps {
     sendText: (text: string) => void;
     /** When the person last wrote in this conversation, in ms; 0 if never. */
     lastUserMessageAt: number;
+    /** Whether a message of the conversation is on screen to answer. */
+    hasMessage: boolean;
   }) => React.ReactNode;
   composerModelControl?: ComposerModelControlPresentation | null;
   onComposerModelControlPress?: () => void;

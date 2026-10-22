@@ -129,6 +129,57 @@ interface UseInterfaceChatSessionInput {
 const SNAPSHOT_WAIT_REPORT_MS = 8_000;
 
 const draftCache = new Map<string, string>();
+
+/**
+ * The last conversation each Brain thread showed. Brain's chat never blanks
+ * what it has already shown: when it remounts, or its key flaps, it starts from
+ * this and the next snapshot replaces it in place, instead of waiting out the
+ * daemon's first snapshot (slow right after a restart) behind a loading screen.
+ * Only the messages are kept: Activity is live and comes back with the
+ * snapshot, and a Session's own chat still starts clean (its transcript is the
+ * authority). Keys begin with the server id, and every other server's entries
+ * go when the server changes.
+ */
+const BRAIN_THREAD_KEY = ":scope:brain-thread:";
+const CONVERSATION_CACHE_MAX = 8;
+const conversationCache = new Map<string, CodexConversation>();
+
+/** @internal Exported for behavior tests of the chat's last-shown cache. */
+export function cachedInterfaceConversation(cacheKey: string): CodexConversation | null {
+  return conversationCache.get(cacheKey) ?? null;
+}
+
+function isBrainThreadCacheKey(cacheKey: string) {
+  return cacheKey.includes(BRAIN_THREAD_KEY);
+}
+
+/** @internal Exported for behavior tests of the chat's last-shown cache. */
+export function rememberInterfaceConversation(
+  cacheKey: string,
+  conversation: CodexConversation | null,
+) {
+  if (!conversation?.events.length || !isBrainThreadCacheKey(cacheKey)) return;
+  conversationCache.delete(cacheKey);
+  conversationCache.set(cacheKey, { ...conversation, activity: undefined });
+  while (conversationCache.size > CONVERSATION_CACHE_MAX) {
+    const oldest = conversationCache.keys().next().value;
+    if (oldest === undefined) break;
+    conversationCache.delete(oldest);
+  }
+}
+
+/** @internal Exported for behavior tests of the chat's last-shown cache. */
+export function forgetInterfaceConversationsOutsideServer(serverId: string) {
+  const prefix = `${serverId}:`;
+  for (const key of Array.from(conversationCache.keys())) {
+    if (!key.startsWith(prefix)) conversationCache.delete(key);
+  }
+}
+
+/** @internal Exported for behavior tests of the chat's last-shown cache. */
+export function clearInterfaceConversationCache() {
+  conversationCache.clear();
+}
 const attachmentCache = new Map<string, ComposerAttachment[]>();
 
 /** @internal Exported for behavior tests of the shared stream fallback. */
@@ -183,10 +234,11 @@ type InterfaceChatThreadAction =
 function initialInterfaceChatThreadState(
   cacheKey: string,
 ): InterfaceChatThreadState {
+  const conversation = cachedInterfaceConversation(cacheKey);
   return {
     cacheKey,
-    conversation: null,
-    loading: true,
+    conversation,
+    loading: !conversation,
     error: null,
     pendingUserMessages: [],
     turnFocusAnchorAliases: new Map(),
@@ -926,10 +978,14 @@ export function useInterfaceChatSession({
     cacheKey: composerCacheKey,
     value: attachmentCache.get(composerCacheKey) ?? [],
   }));
+  // Until the reducer has moved to this key, its last-shown conversation
+  // stands in, so the render that changes the key never blanks the chat.
+  const shownBefore =
+    threadState.cacheKey === cacheKey ? null : cachedInterfaceConversation(cacheKey);
   const conversation =
-    threadState.cacheKey === cacheKey ? threadState.conversation : null;
+    threadState.cacheKey === cacheKey ? threadState.conversation : shownBefore;
   const loading =
-    threadState.cacheKey === cacheKey ? threadState.loading : true;
+    threadState.cacheKey === cacheKey ? threadState.loading : !shownBefore;
   const error = threadState.cacheKey === cacheKey ? threadState.error : null;
   // A draft typed before the chat's owner was known moves to that owner.
   const carriedDraft =
@@ -1062,6 +1118,13 @@ export function useInterfaceChatSession({
       cacheKey,
     });
   }, [cacheKey]);
+
+  useEffect(() => {
+    if (serverId) forgetInterfaceConversationsOutsideServer(serverId);
+  }, [serverId]);
+  useEffect(() => {
+    rememberInterfaceConversation(cacheKey, conversation);
+  }, [cacheKey, conversation]);
 
   useEffect(() => {
     if (
