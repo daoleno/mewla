@@ -27,6 +27,10 @@ const (
 	StatusCancelled Status = "cancelled"
 )
 
+// OwnerWatchBrief owns Watch's morning brief: when the item is due, Watch
+// sends the brief instead of a reminder.
+const OwnerWatchBrief = "watch_brief"
+
 type Recurrence string
 
 const (
@@ -64,13 +68,17 @@ type Item struct {
 	SourceThreadID    string     `json:"source_thread_id,omitempty"`
 	SourceMessageID   string     `json:"source_message_id,omitempty"`
 	LinkedWorkID      string     `json:"linked_work_id,omitempty"`
-	FailureReason     string     `json:"failure_reason,omitempty"`
-	NextAt            time.Time  `json:"next_at"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	CancelledAt       *time.Time `json:"cancelled_at,omitempty"`
-	Revision          int64      `json:"revision"`
-	Runs              []Run      `json:"runs,omitempty"`
+	// Owner names the part of Mewla that created and acts on this item. Only
+	// the daemon sets it; clients cannot create or change it. An owned item
+	// is an ordinary reminder the user can move, repeat differently or cancel.
+	Owner         string     `json:"owner,omitempty"`
+	FailureReason string     `json:"failure_reason,omitempty"`
+	NextAt        time.Time  `json:"next_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	CancelledAt   *time.Time `json:"cancelled_at,omitempty"`
+	Revision      int64      `json:"revision"`
+	Runs          []Run      `json:"runs,omitempty"`
 }
 
 type Run struct {
