@@ -607,7 +607,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 			},
 			Executor:    brainService.HostExecutorID,
 			RoutingPath: brainStore.RoutingGuidePath(),
+			Calendar:    calendarStore,
 		})
+		calendarScheduler.Own(calendar.OwnerWatchBrief, calendar.OwnerDuty{Window: watch.BriefCatchUp, Fire: watchCollector.BriefDue})
 		controlHandler.watch = watchCollector
 		srv.SetDeviceHook(func(timeZone string) { watchCollector.SetDevice(watch.Device{TimeZone: timeZone}) })
 	}

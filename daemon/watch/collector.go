@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 )
@@ -52,6 +53,8 @@ type Options struct {
 	// RoutingPath is routing.md in the Brain workspace, where the Watch
 	// judgment row picks the executor, model and reasoning.
 	RoutingPath string
+	// Calendar holds the morning brief item. Without it there is no brief.
+	Calendar Calendar
 }
 
 // Collector runs the collectors and then the rules. Passes never overlap.
@@ -106,6 +109,8 @@ func NewCollector(options Options) *Collector {
 			log.Printf("WARN watch: notifications unavailable: %v", err)
 		} else {
 			c.notify = notify
+			notify.calendar = options.Calendar
+			notify.language = c.judge.personLanguage
 		}
 	}
 	return c
@@ -117,6 +122,17 @@ func (c *Collector) SetDevice(device Device) {
 		c.notify.SetDevice(device)
 	}
 }
+
+// BriefDue is what the calendar calls when the morning brief item is due.
+func (c *Collector) BriefDue(_ calendar.Item, due time.Time) error {
+	if c == nil {
+		return errors.New("Watch is not running")
+	}
+	return c.notify.briefDue(due)
+}
+
+// BriefCatchUp is how late the calendar may still fire an occurrence of the brief.
+const BriefCatchUp = briefCatchUp
 
 // Store returns the collector's store.
 func (c *Collector) Store() *Store { return c.store }
