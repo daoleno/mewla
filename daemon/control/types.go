@@ -69,6 +69,7 @@ type Request struct {
 	HandlingID           string                                 `json:"handling_id,omitempty"`
 	ProviderTurnID       string                                 `json:"provider_turn_id,omitempty"`
 	Text                 string                                 `json:"text,omitempty"`
+	QuickReplies         [][]string                             `json:"quick_replies,omitempty"`
 	Submit               bool                                   `json:"submit,omitempty"`
 	Hidden               bool                                   `json:"hidden,omitempty"`
 	Force                bool                                   `json:"force,omitempty"`
