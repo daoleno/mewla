@@ -27,3 +27,6 @@ var productCalendarPolicy string
 
 //go:embed templates/policies/computers.md
 var productComputersPolicy string
+
+//go:embed templates/policies/watch.md
+var productWatchPolicy string

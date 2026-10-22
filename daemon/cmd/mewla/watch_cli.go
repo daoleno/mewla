@@ -30,6 +30,9 @@ Watch looks over your projects and records what needs you.
                                    Tie a problem to the Work handling it: in progress marks it
                                    fixing, accepted Work marks it fixed
   problem unlink <id> --work <work id>
+  triage [--backlog]               Hand Brain the new or changed problems now (--backlog: every problem
+                                   still waiting, once, to start clean)
+  brief                            Hand Brain the morning brief now, if anything is worth it
   collect [--source s]             Run a collection pass now and print what it added
   judge [--batches n]              Judge pending signals now (Watch must be enabled; costs tokens)
   enable | disable                 Turn Watch on or off; judgment runs only while it is on
@@ -82,6 +85,7 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 	fs.BoolVar(&confirm, "confirm", false, "confirm the suggested Linear team")
 	fs.StringVar(&request.Note, "note", "", "why, in your words")
 	fs.IntVar(&request.Batches, "batches", 1, "judgment batches to run")
+	fs.BoolVar(&request.Backlog, "backlog", false, "triage every waiting problem, not only new ones")
 	fs.StringVar(&request.WorkID, "work", "", "Work id")
 	fs.StringVar(&request.By, "by", "", "who is acting: brain, when triaging for the user")
 	if err := fs.Parse(rest); err != nil {
@@ -109,6 +113,8 @@ func runWatchCommand(args []string, stderr io.Writer) error {
 		}
 		// The first collection reads three weeks of transcripts.
 		timeout = 20 * time.Minute
+	case "triage", "brief":
+		request.Action = action
 	case "judge":
 		request.Action = "judge"
 		timeout = time.Duration(max(request.Batches, 1)) * 16 * time.Minute
@@ -208,6 +214,8 @@ func writeWatchText(w io.Writer, response watch.Response) error {
 			}
 			fmt.Fprintf(table, "%s\t%s\t%s\t%v\t%d\t%d\t%s\n", problem.ID, problem.Rule, problem.Status, problem.Active, cost, problem.Count, problem.Title)
 		}
+	case response.Sent != nil:
+		fmt.Fprintf(table, "%d problems handed to Brain\n", *response.Sent)
 	case response.Problem != nil:
 		fmt.Fprintf(table, "%s\t%s\t%s\n", response.Problem.ID, response.Problem.Status, response.Problem.Title)
 	case response.Runs != nil:
