@@ -52,6 +52,15 @@ it still fires if the phone loses its connection to the daemon. If you deny
 notification permission, Calendar keeps working and tells you notifications are
 off.
 
+## Items Mewla acts on
+
+A reminder can belong to a part of Mewla. [Watch](watch.md#reaching-you) creates
+one called "Morning brief": a daily reminder that sends Brain the brief when it
+is due, instead of showing a notification. You edit it like any reminder: move
+the time, change the repeat, cancel it. Cancelling turns the feature off, and
+Mewla does not create it again. It has to stay a reminder, and only the daemon
+can create items of this kind.
+
 ## Ask Brain or use the CLI
 
 Brain creates calendar items when you ask for one explicitly ("remind me
