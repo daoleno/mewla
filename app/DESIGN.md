@@ -113,8 +113,9 @@ preference.
   read for.
 - **Failures show at the action.** Send stays pressable while offline: the
   composer says "Not sent: Mewla can't reach your computer. Your message is
-  still here." and keeps the draft; the note clears on reconnect. A message
-  that was sent and then failed says "Send failed" with Retry on the message.
+  still here." and keeps the draft; the note clears on reconnect. A sent
+  message waits in the queue and goes out by itself; one that could not be
+  delivered shows a "!" you tap to send it again.
   Other actions (New chat, a Work action) fail with a toast.
 - Settings holds Servers, Channels (Telegram), Agents (Model Providers),
   Appearance and About. Browser stays hidden from the menu.

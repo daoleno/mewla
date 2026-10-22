@@ -124,9 +124,8 @@ function InterfaceChatSurfaceImpl({
     <View style={[styles.root, { backgroundColor: canvasBackground }]}>
       <MessageActionsProvider
         environment={messageActions.environment}
-        replyTurns={messageActions.replyTurns}
+        replyIds={messageActions.replyIds}
         onEdit={messageActions.onEdit}
-        onRetry={messageActions.onRetry}
       >
         <InterfaceChatBody {...bodyProps} readOnly={readOnly} />
       </MessageActionsProvider>

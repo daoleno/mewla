@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import { confirmDestructive } from "../ui/confirmDestructive";
 import { useOptionalToast } from "../ui/Toast";
 import { MessageActionsContext, type MessageActionsValue } from "./MessageActions";
 import { MessageMenuOverlay, type MessageMenuAnchor } from "./MessageMenuOverlay";
@@ -9,11 +8,10 @@ import { MessageTextSheet } from "./MessageTextSheet";
 import {
   messageActionKinds,
   messageCopyText,
-  messageEditMode,
   messageMenuEntries,
   type MessageActionEnvironment,
   type MessageActionSubject,
-  type ReplyTurns,
+  type ReplyIds,
 } from "./messageActionsModel";
 
 function sentAt(timestamp: string | undefined) {
@@ -29,19 +27,17 @@ function sentAt(timestamp: string | undefined) {
 
 /**
  * Owns the message menu (phone) and routes its choices, the hover row and the
- * reply row to the Session's copy, select, edit and retry handlers.
+ * reply row to the Session's copy, select and edit handlers.
  */
 export function MessageActionsProvider({
   environment,
-  replyTurns,
+  replyIds,
   onEdit,
-  onRetry,
   children,
 }: {
   environment: MessageActionEnvironment;
-  replyTurns: ReplyTurns;
+  replyIds: ReplyIds;
   onEdit(subject: MessageActionSubject): void;
-  onRetry(prompt: MessageActionSubject): void;
   children: React.ReactNode;
 }) {
   const toast = useOptionalToast();
@@ -53,7 +49,7 @@ export function MessageActionsProvider({
   const value = useMemo<MessageActionsValue>(
     () => ({
       environment,
-      replyTurns,
+      replyIds,
       activeId: menu?.subject.id ?? null,
       openMenu: (subject, anchor) => setMenu({ subject, anchor }),
       copy: (subject) => {
@@ -64,23 +60,8 @@ export function MessageActionsProvider({
       },
       select: (subject) => setSelectText(messageCopyText(subject)),
       edit: onEdit,
-      retry: (turn) => {
-        if (!turn.prompt) return;
-        const prompt = turn.prompt;
-        // Stepping an agent back to an older prompt drops everything after it.
-        if (!turn.latest && messageEditMode(environment) === "rewind") {
-          confirmDestructive({
-            title: "Retry from here?",
-            message: "The messages after this one are removed from the conversation.",
-            confirmLabel: "Retry",
-            onConfirm: () => onRetry(prompt),
-          });
-          return;
-        }
-        onRetry(prompt);
-      },
     }),
-    [environment, menu, onEdit, onRetry, replyTurns, toast],
+    [environment, menu, onEdit, replyIds, toast],
   );
 
   const entries = useMemo(

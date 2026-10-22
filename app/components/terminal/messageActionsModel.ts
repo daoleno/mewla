@@ -7,7 +7,7 @@ import type { IconName } from "../icons/Icon";
  * CLI can step the conversation back to an earlier prompt, sending the edit
  * rewinds to that prompt first ("rewind"). Everywhere else, and always in
  * Brain's own thread, it goes out as a new message with the text prefilled
- * ("copy"). Retry on a reply follows the same two modes.
+ * ("copy").
  */
 export type MessageEditMode = "rewind" | "copy";
 export type MessageActionKind = "copy" | "select" | "edit";
@@ -37,26 +37,8 @@ export interface MessageActionEnvironment {
   canSelectText: boolean;
 }
 
-/**
- * One turn's final reply and the prompt it answers: what Retry runs again.
- * A reply with no prompt before it still has its row, without Retry.
- * `latest` is the conversation's newest turn; `settled` is false while a
- * message is still being sent, when nothing may be rerun.
- */
-export interface ReplyTurn {
-  replyId: string;
-  prompt: MessageActionSubject | undefined;
-  latest: boolean;
-  settled: boolean;
-}
-
-/** Every turn's final reply, keyed by the reply's message id. */
-export type ReplyTurns = ReadonlyMap<string, ReplyTurn>;
-
-/** A reply's Retry: the prompt can run again and nothing is mid-send. */
-export function isRetryableTurn(turn: ReplyTurn, env: MessageActionEnvironment): boolean {
-  return turn.settled && turn.prompt !== undefined && isRerunnablePrompt(turn.prompt, env);
-}
+/** The message ids that are a turn's final reply: each gets the Copy and ⋯ row. */
+export type ReplyIds = ReadonlySet<string>;
 
 export function messageEditMode(env: Pick<MessageActionEnvironment, "messageRewind" | "brain">): MessageEditMode {
   return env.messageRewind && !env.brain ? "rewind" : "copy";
@@ -73,14 +55,14 @@ export function messageActionKinds(
   if (env.canSelectText) {
     kinds.push("select");
   }
-  if (isRerunnablePrompt(subject, env)) {
+  if (isEditablePrompt(subject, env)) {
     kinds.push("edit");
   }
   return kinds;
 }
 
-/** A sent text-only prompt of a connected, idle Session can be edited or retried. */
-export function isRerunnablePrompt(subject: MessageActionSubject, env: MessageActionEnvironment): boolean {
+/** A sent text-only prompt of a connected, idle Session can be edited. */
+export function isEditablePrompt(subject: MessageActionSubject, env: MessageActionEnvironment): boolean {
   return (
     subject.role === "user" &&
     !subject.pending &&
@@ -127,34 +109,7 @@ export interface MessageEdit {
   rewound?: boolean;
 }
 
-/** An edit goes out whenever it says something; sending it unchanged is a retry. */
+/** An edit goes out whenever it says something. */
 export function editIsSendable(_edit: MessageEdit, draft: string): boolean {
   return draft.trim().length > 0;
-}
-
-/**
- * Retry must not double-send on a double tap or a slow acknowledgement: a
- * prompt is held for the hold window after each tap.
- */
-export const RESEND_HOLD_MS = 2500;
-
-export function createResendGuard(now: () => number = Date.now) {
-  const heldUntil = new Map<string, number>();
-  return {
-    begin(id: string): boolean {
-      const current = now();
-      for (const [key, until] of heldUntil) {
-        if (until <= current) heldUntil.delete(key);
-      }
-      if (heldUntil.has(id)) return false;
-      heldUntil.set(id, current + RESEND_HOLD_MS);
-      return true;
-    },
-    release(id: string) {
-      heldUntil.delete(id);
-    },
-    clear() {
-      heldUntil.clear();
-    },
-  };
 }

@@ -35,7 +35,7 @@ import {
   type ActivityTimelineItem,
 } from "./InterfaceTimelineActivityTypes";
 import type { DisplayAttachment } from "./InterfaceTimelineMessage";
-import type { MessageActionSubject, ReplyTurn, ReplyTurns } from "./messageActionsModel";
+import type { ReplyIds } from "./messageActionsModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
 import { isImageAttachment } from "../../services/imageSource";
@@ -1014,44 +1014,20 @@ function explorationEntryLine(entry: ExplorationEntry) {
 }
 
 /**
- * Each turn's final finished reply and the prompt it answers. A turn with
- * tool calls between pieces of text gets its row under the last piece only.
- * The newest turn is `latest`; while a message is still being sent no turn is
- * `settled`, so none offers Retry.
+ * The id of each turn's final finished reply. A turn with tool calls between
+ * pieces of text gets its row under the last piece only.
  */
-export function replyTurnsOf(
-  unsortedEvents: readonly CodexConversationEvent[],
-  pendingCount: number,
-): ReplyTurns {
+export function finalReplyIdsOf(unsortedEvents: readonly CodexConversationEvent[]): ReplyIds {
   const events = [...unsortedEvents].sort(compareConversationEvents);
-  const turns: ReplyTurn[] = [];
-  let prompt: MessageActionSubject | undefined;
+  const ids = new Set<string>();
   let reply: CodexConversationEvent | undefined;
-  let newestPromptId: string | undefined;
   const close = () => {
-    if (reply) {
-      turns.push({
-        replyId: reply.id || `${reply.kind}:${reply.seq}`,
-        prompt,
-        latest: false,
-        settled: pendingCount === 0,
-      });
-    }
+    if (reply) ids.add(reply.id || `${reply.kind}:${reply.seq}`);
     reply = undefined;
   };
   for (const event of events) {
     if (event.kind === "user_message") {
       close();
-      const extracted = extractDisplayMessage(event.body || "");
-      prompt = {
-        id: event.id || `${event.kind}:${event.seq}`,
-        role: "user",
-        body: extracted.body,
-        hasAttachments: extracted.attachments.length > 0,
-        pending: false,
-        streaming: false,
-      };
-      newestPromptId = prompt.id;
     } else if (
       event.kind === "assistant_message" &&
       !event.partial &&
@@ -1061,12 +1037,7 @@ export function replyTurnsOf(
     }
   }
   close();
-  const byReply = new Map<string, ReplyTurn>();
-  for (const turn of turns) {
-    // Still answering a newer prompt: the last reply on screen is not the latest.
-    byReply.set(turn.replyId, { ...turn, latest: turn.prompt !== undefined && turn.prompt.id === newestPromptId });
-  }
-  return byReply;
+  return ids;
 }
 
 function extractDisplayMessage(value: string): {

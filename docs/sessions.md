@@ -69,7 +69,7 @@ the card becomes an **Answered** line in the chat.
 Claude's permission and plan-approval prompts also show as **Waiting for your
 choice**, with Claude's own options. Answer those in the Terminal.
 
-### Copy, edit and retry a message
+### Copy and edit a message
 
 Press and hold one of your messages on the phone, as in the ChatGPT and Claude
 apps, and a small menu opens next to it: the time it was sent, then **Copy**,
@@ -79,24 +79,18 @@ elsewhere, scroll or press Back. A very long message anchors the menu to where
 you pressed.
 
 Replies keep the system's own text selection: press and hold a word, drag the
-handles, tap a link. Under every reply a quiet row shows **Copy** and, where it
-applies, **Retry**, plus a **...** menu with **Copy** and **Select Text** (the
-message in a sheet, for selecting a whole block at once). On desktop, hover over
+handles, tap a link. Under every reply a quiet row shows **Copy** and a **...**
+menu with **Copy** and **Select Text** (the message in a sheet, for selecting a
+whole block at once). On desktop, hover over
 a message for Copy and Edit; right-click and text selection are the browser's
 own. Copy gives the text as written, Markdown included; code blocks keep their
 own copy button. Each button is a 44 dp target that commits when you lift your
 finger, so a slightly drifting tap still counts.
 
-**Retry** runs the prompt a reply answers again. It is offered only when the
-agent is idle, the Session is connected and the prompt has no attachments, as
-for Edit. Retry on an older reply asks first when it would remove the messages
-after it.
-
 **Edit** puts the message in the composer with a small bar above it and an x to
-cancel. Sending it unchanged is the same as Retry. What sending does depends on
-the agent:
+cancel. What sending does depends on the agent:
 
-| Agent | Sending an edited message, or Retry |
+| Agent | Sending an edited message |
 | --- | --- |
 | Claude Code, Codex, Pi | Steps the agent's conversation back to that message, as the agent's own message-editing gesture does, and sends the text from there. The later turns leave the chat. Files the agent changed stay as they are. |
 | Every other agent, and Brain | Sends the text as a new message. Nothing earlier changes. |
