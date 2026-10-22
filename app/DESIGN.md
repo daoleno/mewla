@@ -199,6 +199,9 @@ Brain has one Work surface, built from the daemon's `current_work`
   Activity, and the next snapshot replaces them in place. The quick-reply
   chips belong to Brain's last message, so they show only while a message is
   on screen (`quickRepliesVisible`'s `hasMessage`).
+  The cat's tail row says "Waking up" only while Brain is not hydrated; a
+  Brain already known that is reconnecting keeps its state until the
+  reconnect stalls, then reads "Reconnecting".
 - **Goal line.** When Brain has declared an objective
   (`mewla brain objective set`), it heads the Work column and the Work sheet:
   "Ship atlas-notes v1.4 this week · 2 of 5 back". It never takes header

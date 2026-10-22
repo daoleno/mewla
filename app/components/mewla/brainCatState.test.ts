@@ -20,7 +20,7 @@ describe("resolveBrainCatPresence", () => {
     const needs = [work({ status: "needs_input" })];
     expect(resolveBrainCatPresence({ ...connected, hasServer: false, currentWork: needs }).state).toBe("homeless");
     expect(resolveBrainCatPresence({ ...connected, connection: "offline", currentWork: needs }).state).toBe("offline");
-    expect(resolveBrainCatPresence({ ...connected, connection: "connecting" }).state).toBe("waking");
+    expect(resolveBrainCatPresence({ ...connected, connection: "connecting", hydrated: false }).state).toBe("waking");
     expect(resolveBrainCatPresence({ ...connected, hydrated: false }).state).toBe("waking");
   });
 
@@ -28,7 +28,9 @@ describe("resolveBrainCatPresence", () => {
     const stalled = resolveBrainCatPresence({ ...connected, connection: "connecting", stalled: true });
     expect(stalled).toEqual({ state: "offline", reconnecting: true });
     expect(brainCatTailLabel(stalled)).toBe("Reconnecting");
-    expect(resolveBrainCatPresence({ ...connected, connection: "connecting", stalled: false }).state).toBe("waking");
+    // Before it stalls, a Brain that was already known is reconnecting, not waking.
+    expect(resolveBrainCatPresence({ ...connected, connection: "connecting", stalled: false }).state).toBe("idle");
+    expect(resolveBrainCatPresence({ ...connected, connection: "connecting", stalled: false, currentWork: [work({ status: "needs_input" })] }).state).toBe("attention");
     expect(brainCatTap({ presence: stalled, counts: { needs: 0, running: 0, back: 0, waiting: 0 } })).toEqual({ kind: "retry" });
   });
 
