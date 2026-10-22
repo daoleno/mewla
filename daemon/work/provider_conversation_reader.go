@@ -3,6 +3,7 @@ package work
 import (
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -206,6 +207,21 @@ func (r *ProviderConversationReader) loadFileConversation(
 
 	// A changed or newly-selected source cannot retain the prior parsed value.
 	r.resetSource()
+	// The parse of one transcript is shared by every reader. A phone that
+	// reconnects, or a second subscription, would otherwise parse a transcript
+	// of hundreds of MB again from the start, and the snapshot it waits for
+	// would take as long as the parse.
+	shared := sharedFileConversationFor(provider, path)
+	shared.mu.Lock()
+	defer shared.mu.Unlock()
+	if shared.valid &&
+		shared.source.size == info.Size() &&
+		shared.source.modTime.Equal(info.ModTime()) &&
+		sameProviderSourceFile(shared.source.fileInfo, info) {
+		r.source = shared.source
+		r.source.conversation = withOwnEvents(r.source.conversation)
+		return r.source.conversation, nil
+	}
 	conversation, err := parse(path)
 	if err != nil {
 		return CodexConversation{}, err
@@ -230,7 +246,60 @@ func (r *ProviderConversationReader) loadFileConversation(
 		fileInfo:     after,
 		conversation: conversation,
 	}
+	shared.source = r.source
+	shared.source.conversation = withOwnEvents(conversation)
+	shared.valid = true
 	return conversation, nil
+}
+
+// withOwnEvents gives a reader its own event array, so one subscription's
+// projection can never change what another reads from the shared parse.
+func withOwnEvents(conversation CodexConversation) CodexConversation {
+	conversation.Events = append([]CodexConversationEvent(nil), conversation.Events...)
+	return conversation
+}
+
+// sharedFileConversation is the latest parse of one transcript file. Its mutex
+// also makes concurrent loads of the same unchanged file wait for one parse.
+type sharedFileConversation struct {
+	mu     sync.Mutex
+	valid  bool
+	source providerConversationSource
+	used   time.Time
+}
+
+// maxSharedFileConversations bounds the parsed transcripts kept for reuse.
+const maxSharedFileConversations = 8
+
+var sharedFileConversations = struct {
+	mu      sync.Mutex
+	entries map[string]*sharedFileConversation
+}{entries: map[string]*sharedFileConversation{}}
+
+func sharedFileConversationFor(provider, path string) *sharedFileConversation {
+	key := provider + "\x00" + path
+	sharedFileConversations.mu.Lock()
+	defer sharedFileConversations.mu.Unlock()
+	entry := sharedFileConversations.entries[key]
+	if entry == nil {
+		entry = &sharedFileConversation{}
+		sharedFileConversations.entries[key] = entry
+		for len(sharedFileConversations.entries) > maxSharedFileConversations {
+			var oldestKey string
+			var oldest time.Time
+			for candidateKey, candidate := range sharedFileConversations.entries {
+				if candidate == entry {
+					continue
+				}
+				if oldestKey == "" || candidate.used.Before(oldest) {
+					oldestKey, oldest = candidateKey, candidate.used
+				}
+			}
+			delete(sharedFileConversations.entries, oldestKey)
+		}
+	}
+	entry.used = time.Now()
+	return entry
 }
 
 func sameProviderSourceFile(left, right os.FileInfo) bool {
