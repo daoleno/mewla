@@ -12,11 +12,11 @@ import {
 } from "./mermaidWebViewHtml";
 
 describe("Mermaid offline engine document", () => {
-  test("pins mermaid 11.6.0 and the exact min.js bytes", () => {
+  test("pins mermaid 11.16.1 and the exact min.js bytes", () => {
     const min = readFileSync(
       join(import.meta.dir, "../../../node_modules/mermaid/dist/mermaid.min.js"),
     );
-    expect(MERMAID_VERSION).toBe("11.6.0");
+    expect(MERMAID_VERSION).toBe("11.16.1");
     expect(createHash("sha256").update(min).digest("hex")).toBe(
       MERMAID_RUNTIME_SHA256,
     );

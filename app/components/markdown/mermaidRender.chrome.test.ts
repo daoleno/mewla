@@ -60,7 +60,7 @@ describe("Mermaid actual render", () => {
     ]) {
       expect(result.svg).toContain(node);
     }
-    expect(result.svg).toContain('id="Browser"');
+    expect(result.svg).toMatch(/id="(?:[\w-]+-)?Browser"/);
     expect(result.svg).toContain("Perpetuo");
     expect(result.svg).toContain("edge-pattern-dotted");
     expect(result.svg).toContain("⑤");
