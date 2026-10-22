@@ -194,19 +194,29 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
   old, is pushed at once, once per episode, and Brain tells you in a line.
   Starting the daemon or turning Watch on never pushes what was already
   urgent.
-- **Morning brief.** At 08:30 where your phone is (the phone tells the daemon
-  its timezone), Brain posts one message listing the three to five problems
-  nobody is handling, one plain line each: what it is and what it costs. Under
-  it are tap-to-answer chips for each: handle, not a problem, later. A tap
-  is the same as typing it, so "1 handle, 3 not a problem" works too. Handle
-  opens Work for it, not a problem labels it `not`, later labels it `later`.
-  A problem a brief showed rests for three days; `later` rests until it gets
-  new signals or a week passes. With nothing to say there is no brief. A
-  daemon that was down at 08:30 still briefs until noon.
+- **Morning brief.** The brief is an ordinary [Calendar](calendar.md) item
+  called "Morning brief" (「早报」 if you write to Brain in Chinese). The first
+  time Watch is on and your phone has told the daemon its timezone, Watch
+  creates it once: a daily reminder at 08:30 in that timezone. When it is due,
+  Brain posts one message listing the three to five problems nobody is
+  handling, one plain line each: what it is and what it costs. Under it are
+  tap-to-answer chips for each: handle, not a problem, later. A tap is the same
+  as typing it, so "1 handle, 3 not a problem" works too. Handle opens Work for
+  it, not a problem labels it `not`, later labels it `later`. A problem a brief
+  showed rests for three days; `later` rests until it gets new signals or a
+  week passes. With nothing to say there is no brief, and the phone shows no
+  reminder of its own for this item.
+
+  Change the time or repeat in Calendar (or `mewla calendar update`) and the
+  brief follows; cancel the item and briefs stop for good, because Watch only
+  creates it once. It stays a reminder: it can't be turned into another kind.
+  Each occurrence briefs at most once, also across restarts. A daemon that was
+  down when it was due still briefs up to three and a half hours late; after
+  that the occurrence is skipped.
 
 ```sh
 mewla watch triage --backlog       # hand Brain every problem still waiting, once
-mewla watch brief                  # hand Brain the brief now
+mewla watch brief                  # hand Brain the brief now, whatever Calendar says
 ```
 
 The chips are not Watch's: any Brain question can use them
@@ -220,6 +230,6 @@ source has been read), `problems.json`, `index.json` (which working directory
 each turn, Session and piece of Work used), `annotations.json` (placements and
 authors found after collection, and which signals judgment has seen) and
 `judge-runs.jsonl` (each run's size, results, tokens and cost) and
-`notify.json` (what Brain has been told, when the last brief went out, and
-your timezone). Running a
+`notify.json` (what Brain has been told, which brief occurrence went out last, whether the Calendar item
+was created, and your timezone). Running a
 collection pass again adds nothing that's already stored.
