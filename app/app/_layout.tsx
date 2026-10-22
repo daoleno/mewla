@@ -554,9 +554,11 @@ const NotificationObserver = memo(function NotificationObserver() {
   }, [router]);
 
   useEffect(() => {
+    wsClient.noteAppState(AppState.currentState);
     const subscription = AppState.addEventListener("change", (nextState) => {
       const previous = appStateRef.current;
       appStateRef.current = nextState;
+      wsClient.noteAppState(nextState);
       if (nextState !== "active") {
         wsClient.clearActiveWorkersExcept(null);
         return;

@@ -78,7 +78,6 @@ export type PendingUserMessage = {
   createdAfterMaxSeq?: number;
   createdAfterEventIds?: string[];
   claimedElsewhereEventIds?: string[];
-  staleReceiptAutoRetried?: boolean;
 };
 
 export type PendingUserMessageInput = Omit<
@@ -93,7 +92,6 @@ export type PendingUserMessageInput = Omit<
 
 export type PendingUserMessageAttempt = {
   requestId: string;
-  staleReceiptAutoRetried?: boolean;
 };
 
 /** The outcome of one send attempt, correlated by its request id. */
@@ -287,7 +285,6 @@ export function interfaceChatThreadReducer(
           dispatchAttemptOrder,
           createdAfterMaxSeq,
           createdAfterEventIds,
-          staleReceiptAutoRetried: action.staleReceiptAutoRetried,
         });
       });
       return changed

@@ -1,12 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import { mergePendingUserMessagesIntoTimeline } from "./InterfaceTimelineModel";
 import {
-  PENDING_SEND_SILENCE_DEADLINE_MS,
-  pendingSendSilenceRemainingMs,
+  UNCERTAIN_SEND_ERROR,
+  UNDELIVERED_SEND_ERROR,
   presentPendingUserMessageLifecycle,
-  settlePendingDelivery,
   showsPendingSendStatusMark,
-  type PendingDeliveryOutcome,
+  type PendingDeliverySettlement,
 } from "./pendingUserMessageLifecycle";
 import { projectTimeline } from "./projectTimeline";
 
@@ -111,16 +110,28 @@ function send(
   });
 }
 
+const UNDELIVERABLE: PendingDeliverySettlement = {
+  kind: "reject",
+  code: "send_input_failed",
+  message: UNDELIVERED_SEND_ERROR,
+};
+const ACKNOWLEDGED: PendingDeliverySettlement = { kind: "acknowledge" };
+const UNCERTAIN: PendingDeliverySettlement = {
+  kind: "uncertain",
+  code: "input_uncertain",
+  message: UNCERTAIN_SEND_ERROR,
+};
+
 function settle(
   current: ThreadState,
   id: string,
   requestId: string,
-  outcome: PendingDeliveryOutcome,
+  settlement: PendingDeliverySettlement,
 ) {
   return interfaceChatThreadReducer(current, {
     type: "settle_pending_user_message",
     id,
-    settlement: { ...settlePendingDelivery(outcome), requestId },
+    settlement: { ...settlement, requestId },
   });
 }
 
@@ -142,7 +153,7 @@ function renderedMessages(current: ThreadState) {
 }
 
 /** Replays the observed thread up to the send of 「我确实在用」. */
-function observedThread(settleLost?: PendingDeliveryOutcome) {
+function observedThread(settleLost?: PendingDeliverySettlement) {
   let current = snapshot(emptyState(), [BRAIN_ASK]);
   current = send(
     current,
@@ -196,7 +207,7 @@ describe("a send the computer never admitted", () => {
     ]);
   });
 
-  test("a closed connection says Not delivered with Retry and Discard at once", () => {
+  test("an undeliverable message shows only a tappable mark: tap resends, hold deletes", () => {
     const actions: string[] = [];
     let current = snapshot(emptyState(), [BRAIN_ASK]);
     current = send(
@@ -206,9 +217,12 @@ describe("a send the computer never admitted", () => {
       LOST_BODY,
       "2026-10-16T04:53:00.000Z",
     );
-    current = settle(current, "local-lost", "receipt-never-admitted", {
-      kind: "connection_closed",
-    });
+    current = settle(
+      current,
+      "local-lost",
+      "receipt-never-admitted",
+      UNDELIVERABLE,
+    );
 
     const row = rendered(current, (id, action) => actions.push(`${action}:${id}`))
       .find((item) => item.id === "local-lost");
@@ -218,9 +232,10 @@ describe("a send the computer never admitted", () => {
       body: LOST_BODY,
       pending: true,
       pendingLifecycle: "failed",
-      pendingLifecycleLabel: "Not delivered",
-      pendingRetryLabel: "Retry",
     });
+    // No prose anywhere in the row.
+    expect(JSON.stringify(row)).not.toContain("Not delivered");
+    expect(JSON.stringify(row)).not.toContain("Retry");
     expect(
       showsPendingSendStatusMark({
         pending: true,
@@ -234,7 +249,7 @@ describe("a send the computer never admitted", () => {
   });
 
   test("the observed thread renders each message once, in its own place", () => {
-    const current = observedThread({ kind: "connection_closed" });
+    const current = observedThread(UNDELIVERABLE);
     expect(current.pendingUserMessages).toEqual([
       expect.objectContaining({ id: "local-lost", lifecycle: "failed" }),
     ]);
@@ -258,8 +273,8 @@ describe("a send the computer never admitted", () => {
     expect(renderedMessages(discarded)).not.toContain(`user:${LOST_BODY}`);
   });
 
-  test("Retry reuses the receipt, and its admission replaces the row once", () => {
-    let current = observedThread({ kind: "connection_closed" });
+  test("resending continues the same row, and its admission replaces it once", () => {
+    let current = observedThread(UNDELIVERABLE);
     current = interfaceChatThreadReducer(current, {
       type: "begin_pending_user_message_attempt",
       id: "local-lost",
@@ -305,59 +320,8 @@ describe("a send the computer never admitted", () => {
   });
 });
 
-describe("every send outcome settles visibly", () => {
+describe("what the person sees while a message waits", () => {
   test("only an acknowledgement leaves the row waiting for its receipt", () => {
-    const outcomes: PendingDeliveryOutcome[] = [
-      { kind: "connection_closed" },
-      { kind: "ack_timeout" },
-      { kind: "pending", code: "input_uncertain" },
-      {
-        kind: "failed",
-        failure: {
-          requestId: "r",
-          code: "input_not_submitted",
-          message: "This request was not submitted.",
-        },
-      },
-    ];
-    for (const outcome of outcomes) {
-      expect(settlePendingDelivery(outcome).kind).not.toBe("acknowledge");
-    }
-    // The computer holds the input: the receipt or provider echo settles it.
-    expect(settlePendingDelivery({ kind: "sent" })).toEqual({
-      kind: "acknowledge",
-    });
-    expect(settlePendingDelivery({ kind: "pending" })).toEqual({
-      kind: "acknowledge",
-    });
-  });
-
-  test("only a silent connection times a send out, never a slow acknowledgement", () => {
-    const sentAt = Date.parse("2026-10-16T05:00:00.000Z");
-    // Brain admissions on this computer took up to 236.9 s to be accepted
-    // while the provider was busy; the connection stayed live meanwhile.
-    const slowAckAt = sentAt + 236_937;
-    expect(
-      pendingSendSilenceRemainingMs({
-        sentAt,
-        lastFrameAt: slowAckAt - 10_000,
-        now: slowAckAt,
-      }),
-    ).toBe(PENDING_SEND_SILENCE_DEADLINE_MS - 10_000);
-    // No frame since the send: a half-open socket.
-    expect(
-      pendingSendSilenceRemainingMs({
-        sentAt,
-        lastFrameAt: sentAt - 5_000,
-        now: sentAt + PENDING_SEND_SILENCE_DEADLINE_MS,
-      }),
-    ).toBe(0);
-    expect(
-      pendingSendSilenceRemainingMs({ sentAt, now: sentAt + 1_000 }),
-    ).toBe(PENDING_SEND_SILENCE_DEADLINE_MS - 1_000);
-  });
-
-  test("a missing acknowledgement is Not delivered until a late one arrives", () => {
     let current = send(
       snapshot(emptyState(), [BRAIN_ASK]),
       "local-a",
@@ -365,24 +329,25 @@ describe("every send outcome settles visibly", () => {
       "hello",
       "2026-10-16T05:00:00.000Z",
     );
-    current = settle(current, "local-a", "receipt-a", { kind: "ack_timeout" });
+    current = settle(current, "local-a", "receipt-a", UNDELIVERABLE);
     expect(current.pendingUserMessages[0]).toMatchObject({
       lifecycle: "failed",
-      failureCode: "ack_timeout",
+      failureCode: "send_input_failed",
     });
-    current = settle(current, "local-a", "receipt-a", { kind: "sent" });
+    // A late acknowledgement puts it back to waiting: the computer has it.
+    current = settle(current, "local-a", "receipt-a", ACKNOWLEDGED);
     expect(current.pendingUserMessages[0]).toMatchObject({
       lifecycle: "pending",
       failureCode: undefined,
       failureMessage: undefined,
     });
-    // A stale attempt's deadline never touches the current attempt.
-    expect(
-      settle(current, "local-a", "receipt-old", { kind: "ack_timeout" }),
-    ).toBe(current);
+    // An answer for an attempt that was replaced never touches the new one.
+    expect(settle(current, "local-a", "receipt-old", UNDELIVERABLE)).toBe(
+      current,
+    );
   });
 
-  test("an unproven delivery says so, offers Send again, and its echo clears it", () => {
+  test("an unconfirmed delivery looks like any waiting message and its echo clears it", () => {
     let current = send(
       snapshot(emptyState(), [BRAIN_ASK]),
       "local-a",
@@ -390,20 +355,21 @@ describe("every send outcome settles visibly", () => {
       "hello",
       "2026-10-16T05:00:00.000Z",
     );
-    current = settle(current, "local-a", "receipt-a", {
-      kind: "pending",
-      code: "input_uncertain",
-    });
+    current = settle(current, "local-a", "receipt-a", UNCERTAIN);
     expect(current.pendingUserMessages[0]?.lifecycle).toBe("uncertain");
     expect(presentPendingUserMessageLifecycle({ lifecycle: "uncertain" }))
-      .toMatchObject({ label: "Delivery unknown", retryLabel: "Send again" });
-    expect(
-      rendered(current, () => {}).find((item) => item.id === "local-a"),
-    ).toMatchObject({
+      .toMatchObject({ lifecycle: "uncertain" });
+    const row = rendered(current, () => {}).find((item) => item.id === "local-a");
+    expect(row).toMatchObject({
+      pending: true,
       pendingLifecycle: "uncertain",
-      pendingRetryLabel: "Send again",
-      onDiscardPending: expect.any(Function),
+      onRetryPending: undefined,
+      onDiscardPending: undefined,
     });
+    // The clock stays: nothing to tap yet.
+    expect(
+      showsPendingSendStatusMark({ pending: true, lifecycle: "uncertain" }),
+    ).toBe(true);
 
     current = snapshot(current, [
       BRAIN_ASK,
@@ -416,5 +382,18 @@ describe("every send outcome settles visibly", () => {
       },
     ]);
     expect(current.pendingUserMessages).toEqual([]);
+  });
+
+  test("an unconfirmed delivery that never echoes becomes the one tappable mark", () => {
+    let current = send(
+      snapshot(emptyState(), [BRAIN_ASK]),
+      "local-a",
+      "receipt-a",
+      "hello",
+      "2026-10-16T05:00:00.000Z",
+    );
+    current = settle(current, "local-a", "receipt-a", UNCERTAIN);
+    current = settle(current, "local-a", "receipt-a", UNDELIVERABLE);
+    expect(current.pendingUserMessages[0]?.lifecycle).toBe("failed");
   });
 });

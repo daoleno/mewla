@@ -111,7 +111,6 @@ export function useInterfaceChatController({
     interruptInterface,
     interrupting,
     operationalError,
-    reportOfflineSend,
     actOnPendingUserMessage,
     sending,
     startNewInterfaceChat,
@@ -186,12 +185,10 @@ export function useInterfaceChatController({
   const sendDraft = useInterfaceDraftSubmission({
     draft,
     attachments,
-    connectionState,
     sending,
     uploading,
     routeDraftSubmission,
     submitTextToInterface,
-    reportOfflineSend,
   });
 
   return {

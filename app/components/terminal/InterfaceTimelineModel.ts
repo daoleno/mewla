@@ -318,25 +318,22 @@ export function mergePendingUserMessagesIntoTimeline(
       body: message.body,
       attachments: message.attachments,
     };
-    const presentation = presentPendingUserMessageLifecycle(message);
-    // Settled: the computer did not take this attempt, so the row offers its
-    // own way out instead of waiting.
-    const settled = message.lifecycle !== "pending";
+    // Only an undeliverable row has anything to tap: resend, or delete on a
+    // long press. Waiting rows show just the clock.
+    const undelivered = message.lifecycle === "failed";
 
     const pendingItem = {
       ...item,
       pending: true,
       pendingLifecycle: message.lifecycle,
-      // Empty pending label is mark/a11y only — do not pass "" into UI props.
-      pendingLifecycleLabel: presentation.label || undefined,
-      pendingFailureMessage: settled ? message.failureMessage : undefined,
-      pendingRetryLabel: presentation.retryLabel,
+      pendingAccessibilityLabel:
+        presentPendingUserMessageLifecycle(message).accessibilityLabel,
       onRetryPending:
-        settled && onPendingUserMessageAction
+        undelivered && onPendingUserMessageAction
           ? () => onPendingUserMessageAction(message.id, "retry")
           : undefined,
       onDiscardPending:
-        settled && onPendingUserMessageAction
+        undelivered && onPendingUserMessageAction
           ? () => onPendingUserMessageAction(message.id, "discard")
           : undefined,
     };

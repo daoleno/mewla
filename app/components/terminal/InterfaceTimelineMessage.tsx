@@ -49,9 +49,7 @@ export interface MessageTimelineItem {
   attachments: DisplayAttachment[];
   pending?: boolean;
   pendingLifecycle?: PendingUserMessageLifecycle;
-  pendingLifecycleLabel?: string;
-  pendingFailureMessage?: string;
-  pendingRetryLabel?: string;
+  pendingAccessibilityLabel?: string;
   onRetryPending?: () => void;
   onDiscardPending?: () => void;
   streaming?: boolean;
@@ -110,11 +108,8 @@ export function UserMessage({
     lifecycle: item.pendingLifecycle,
   });
   const showFooter =
-    (item.pendingLifecycle !== undefined &&
-      item.pendingLifecycle !== "pending") ||
-    Boolean(item.pendingLifecycleLabel) ||
+    item.pendingLifecycle === "failed" ||
     Boolean(item.onRetryPending) ||
-    Boolean(item.onDiscardPending) ||
     appTheme.chat.showTimestamps;
 
   const subject = messageSubject(item);
@@ -150,12 +145,10 @@ export function UserMessage({
             <MessageBubbleFooter
               timestamp={item.timestamp}
               tone="sent"
-              lifecycleLabel={item.pendingLifecycleLabel}
-              failureMessage={item.pendingFailureMessage}
-              failureColor={chrome.danger}
-              retryLabel={item.pendingRetryLabel}
-              onRetry={item.onRetryPending}
-              onDiscard={item.onDiscardPending}
+              undeliveredColor={chrome.danger}
+              undeliveredLabel={item.pendingAccessibilityLabel}
+              onResend={item.onRetryPending}
+              onDelete={item.onDiscardPending}
             />
           ) : null}
           {showPendingSendMark ? (

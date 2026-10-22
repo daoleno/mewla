@@ -1,38 +1,13 @@
-export const PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL =
-  "Retry sending message";
-export const PENDING_MESSAGE_SEND_AGAIN_ACCESSIBILITY_LABEL =
-  "Send message again";
-export const PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL =
-  "Discard unsent message";
+export const PENDING_MESSAGE_UNDELIVERED_ACCESSIBILITY_LABEL =
+  "Message not delivered. Tap to send again. Press and hold to delete.";
 
 /**
- * How long a send may wait while the connection is silent. A socket that died
- * without a close event never answers, and a row must not wait on it
- * silently. A live connection is never silent this long (the daemon sends a
- * frame at least every 10 s), and an acknowledgement on a live connection can
- * legitimately take minutes while the provider is busy, so silence, not the
- * acknowledgement's age, is what times a send out.
- */
-export const PENDING_SEND_SILENCE_DEADLINE_MS = 30_000;
-
-/**
- * Milliseconds until a send counts as unacknowledged on a silent connection,
- * or 0 once it does. Any frame after the send restarts the wait.
- */
-export function pendingSendSilenceRemainingMs(args: {
-  sentAt: number;
-  lastFrameAt?: number;
-  now: number;
-}) {
-  const quietSince = Math.max(args.sentAt, args.lastFrameAt ?? args.sentAt);
-  return Math.max(0, quietSince + PENDING_SEND_SILENCE_DEADLINE_MS - args.now);
-}
-
-/**
- * pending: in flight. failed: not delivered (rejected, or the connection or
- * acknowledgement was lost); Retry reuses the receipt, so it never sends
- * twice. uncertain: the computer could not prove delivery and will not replay
- * the receipt; only a fresh send or Discard settles it.
+ * pending: waiting in the send queue, or taken by the computer and waiting for
+ * the provider's own row. Both look the same: a small clock. uncertain: the
+ * computer could not prove delivery and will not replay it; it also looks like
+ * pending and only turns failed if no provider row ever arrives. failed: the
+ * message could not be delivered (the computer kept refusing it, or the
+ * delivery was never confirmed); the one state the person touches.
  */
 export type PendingUserMessageLifecycle = "pending" | "failed" | "uncertain";
 
@@ -51,8 +26,6 @@ export type PendingUserMessageLifecycleFields = {
   createdAfterEventIds?: string[];
   /** Echoes claimed by later sends: FIFO exclusion only, never a place. */
   claimedElsewhereEventIds?: string[];
-  /** True after one transparent stale-receipt auto-retry with a fresh identity. */
-  staleReceiptAutoRetried?: boolean;
 };
 
 export function beginPendingUserMessageAttempt<
@@ -64,7 +37,6 @@ export function beginPendingUserMessageAttempt<
     dispatchAttemptOrder: number;
     createdAfterMaxSeq?: number;
     createdAfterEventIds?: string[];
-    staleReceiptAutoRetried?: boolean;
   },
 ): T {
   return {
@@ -77,8 +49,6 @@ export function beginPendingUserMessageAttempt<
     createdAfterMaxSeq: attempt.createdAfterMaxSeq,
     createdAfterEventIds: attempt.createdAfterEventIds,
     claimedElsewhereEventIds: undefined,
-    staleReceiptAutoRetried:
-      attempt.staleReceiptAutoRetried ?? message.staleReceiptAutoRetried,
   };
 }
 
@@ -146,80 +116,22 @@ export function acknowledgePendingUserMessage<
   };
 }
 
-/** What the user can do with a row the computer did not take. */
+/** What the person can do with a row that could not be delivered. */
 export type PendingUserMessageAction = "retry" | "discard";
-
-export type PendingDeliveryOutcome =
-  | { kind: "sent" }
-  | { kind: "pending"; code?: string; message?: string }
-  | {
-      kind: "failed";
-      failure: { requestId: string; code: string; message: string };
-    }
-  | { kind: "connection_closed" }
-  | { kind: "ack_timeout" };
 
 export type PendingDeliverySettlement =
   | { kind: "acknowledge" }
   | { kind: "reject"; code: string; message: string }
   | { kind: "uncertain"; code: string; message: string };
 
-export const CONNECTION_CLOSED_SEND_ERROR =
-  "Not delivered: the connection closed before your computer confirmed it.";
-export const ACK_TIMEOUT_SEND_ERROR =
-  "Not delivered: your computer stopped answering before it confirmed it.";
+export const UNDELIVERED_SEND_ERROR =
+  "Your computer could not take this message.";
 export const UNCERTAIN_SEND_ERROR =
-  "Your computer couldn't confirm the agent received this. Send it again only if the agent didn't get it.";
-
-/**
- * Every send outcome the computer did not acknowledge settles the row into a
- * visible state with its own actions. Nothing is left pending on a send the
- * computer may never have seen.
- */
-export function settlePendingDelivery(
-  outcome: PendingDeliveryOutcome,
-): PendingDeliverySettlement {
-  switch (outcome.kind) {
-    case "sent":
-      return { kind: "acknowledge" };
-    case "pending":
-      // Without a code the computer holds the input (accepted by the
-      // provider, or the same receipt is already in flight): its receipt or
-      // provider echo settles the row. Only input_uncertain is unproven.
-      return outcome.code === "input_uncertain"
-        ? {
-            kind: "uncertain",
-            code: outcome.code,
-            message: UNCERTAIN_SEND_ERROR,
-          }
-        : { kind: "acknowledge" };
-    case "failed":
-      return {
-        kind: "reject",
-        code: outcome.failure.code,
-        message: outcome.failure.message,
-      };
-    case "connection_closed":
-      return {
-        kind: "reject",
-        code: "connection_closed",
-        message: CONNECTION_CLOSED_SEND_ERROR,
-      };
-    case "ack_timeout":
-      return {
-        kind: "reject",
-        code: "ack_timeout",
-        message: ACK_TIMEOUT_SEND_ERROR,
-      };
-  }
-}
+  "Your computer couldn't confirm the agent received this.";
 
 export type PendingLifecyclePresentation = {
   lifecycle: PendingUserMessageLifecycle;
-  label: string;
   accessibilityLabel: string;
-  /** The resend action's label once settled. */
-  retryLabel?: "Retry" | "Send again";
 };
 
 export function presentPendingUserMessageLifecycle(
@@ -228,59 +140,22 @@ export function presentPendingUserMessageLifecycle(
   if (message.lifecycle === "failed") {
     return {
       lifecycle: "failed",
-      label: "Not delivered",
-      accessibilityLabel: "Message not delivered",
-      retryLabel: "Retry",
+      accessibilityLabel: PENDING_MESSAGE_UNDELIVERED_ACCESSIBILITY_LABEL,
     };
   }
-  if (message.lifecycle === "uncertain") {
-    return {
-      lifecycle: "uncertain",
-      label: "Delivery unknown",
-      accessibilityLabel: "Message delivery unknown",
-      retryLabel: "Send again",
-    };
-  }
+  // Waiting and unconfirmed look the same: no prose, only the clock mark.
   return {
-    lifecycle: "pending",
-    // Pending is compact status-mark/a11y only (outboundSentClock), never a
-    // bubble outline; bubble keeps busy without a status-only a11y label.
-    label: "",
+    lifecycle: message.lifecycle,
     accessibilityLabel: "Message pending provider transcript",
   };
 }
 
-/** True while transport is in-flight; false once failed or acknowledged. */
+/** True while the message waits to be delivered or echoed; false once it failed. */
 export function showsPendingSendStatusMark(args: {
   pending?: boolean;
   lifecycle?: PendingUserMessageLifecycle;
 }): boolean {
-  return Boolean(args.pending) && (args.lifecycle ?? "pending") === "pending";
-}
-
-/**
- * The stale-receipt auto-retry bound. A `stale_receipt_invalidated` failure
- * means the daemon found a legacy receipt binding for a different payload and
- * proved no provider mutation: the app invalidates that identity and
- * transparently resubmits the same logical input once with a fresh identity.
- * Any later stale failure for the same row is surfaced to the user instead.
- */
-export function staleReceiptAutoRetryPolicy(
-  message: Pick<
-    PendingUserMessageLifecycleFields,
-    "staleReceiptAutoRetried"
-  >,
-  failure: { code?: string },
-):
-  | { autoRetry: false; reason: "not_stale" | "already_retried" }
-  | { autoRetry: true } {
-  if (failure.code !== "stale_receipt_invalidated") {
-    return { autoRetry: false, reason: "not_stale" };
-  }
-  if (message.staleReceiptAutoRetried) {
-    return { autoRetry: false, reason: "already_retried" };
-  }
-  return { autoRetry: true };
+  return Boolean(args.pending) && (args.lifecycle ?? "pending") !== "failed";
 }
 
 export type ReconcileUserEvent = {
