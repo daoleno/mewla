@@ -384,6 +384,15 @@ func claudeTranscriptCreatedAt(path string, fallback time.Time) time.Time {
 }
 
 func parseClaudeConversation(path string) (CodexConversation, error) {
+	if conversation, ok, err := parseClaudeConversationTail(path); err != nil {
+		return CodexConversation{}, err
+	} else if ok {
+		return conversation, nil
+	}
+	return parseClaudeConversationFull(path)
+}
+
+func parseClaudeConversationFull(path string) (CodexConversation, error) {
 	builder := newClaudeConversationBuilder(strings.TrimSuffix(filepath.Base(path), ".jsonl"))
 	abandoned, err := claudeAbandonedRecords(path)
 	if err != nil {
@@ -419,6 +428,25 @@ func consumeClaudeJSONL(path string, consume func(int, []byte)) error {
 				return nil
 			}
 			return err
+		}
+	}
+}
+
+// consumeClaudeLines feeds the non-blank lines of data to consume, numbering
+// them from firstLine like consumeClaudeJSONL numbers a whole file.
+func consumeClaudeLines(data []byte, firstLine int, consume func(int, []byte)) {
+	lineNumber := firstLine - 1
+	for len(data) > 0 {
+		end := bytes.IndexByte(data, '\n')
+		line := data
+		if end >= 0 {
+			line, data = data[:end+1], data[end+1:]
+		} else {
+			data = nil
+		}
+		if len(bytes.TrimSpace(line)) > 0 {
+			lineNumber++
+			consume(lineNumber, line)
 		}
 	}
 }
@@ -1133,60 +1161,103 @@ func stripClaudeEmbeddedPasteEnvelopes(text string) string {
 // parent mark that fork; the later one is the live branch. Rewinding to the
 // very first prompt forks at the root: two prompts with no parent.
 func claudeAbandonedRecords(path string) (map[string]struct{}, error) {
-	type record struct {
-		uuid   string
-		parent string
-	}
-	var records []record
-	humanChildren := map[string][]string{}
-	err := consumeClaudeJSONL(path, func(_ int, line []byte) {
-		var envelope struct {
-			Type        string `json:"type"`
-			UUID        string `json:"uuid"`
-			ParentUUID  string `json:"parentUuid"`
-			IsMeta      bool   `json:"isMeta"`
-			IsSidechain bool   `json:"isSidechain"`
-			Origin      struct {
-				Kind string `json:"kind"`
-			} `json:"origin"`
-			Message struct {
-				Content json.RawMessage `json:"content"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(line, &envelope) != nil || envelope.UUID == "" || envelope.IsSidechain {
-			return
-		}
-		records = append(records, record{uuid: envelope.UUID, parent: envelope.ParentUUID})
-		if envelope.Type != "user" || envelope.IsMeta {
-			return
-		}
-		if kind := strings.TrimSpace(envelope.Origin.Kind); kind != "" && kind != "human" {
-			return
-		}
-		if bytes.Contains(envelope.Message.Content, []byte(`"tool_result"`)) ||
-			bytes.Contains(envelope.Message.Content, []byte(claudeInterruptPrefix)) {
-			return
-		}
-		humanChildren[envelope.ParentUUID] = append(humanChildren[envelope.ParentUUID], envelope.UUID)
-	})
-	if err != nil {
+	var scan claudeBranchScan
+	if err := consumeClaudeJSONL(path, scan.add); err != nil {
 		return nil, err
 	}
+	return scan.abandoned(), nil
+}
+
+// claudeBranchScan collects what rewind detection needs from a run of lines:
+// every live record's parent link and the human prompts under each parent.
+type claudeBranchScan struct {
+	records       []claudeBranchRecord
+	humanChildren map[string][]string
+}
+
+type claudeBranchRecord struct {
+	uuid   string
+	parent string
+}
+
+func (s *claudeBranchScan) add(_ int, line []byte) {
+	var envelope claudePromptEnvelope
+	if json.Unmarshal(line, &envelope) != nil || envelope.UUID == "" || envelope.IsSidechain {
+		return
+	}
+	s.records = append(s.records, claudeBranchRecord{uuid: envelope.UUID, parent: envelope.ParentUUID})
+	if !envelope.humanPrompt() {
+		return
+	}
+	if s.humanChildren == nil {
+		s.humanChildren = map[string][]string{}
+	}
+	s.humanChildren[envelope.ParentUUID] = append(s.humanChildren[envelope.ParentUUID], envelope.UUID)
+}
+
+func (s *claudeBranchScan) abandoned() map[string]struct{} {
 	abandoned := map[string]struct{}{}
-	for _, children := range humanChildren {
+	for _, children := range s.humanChildren {
 		for _, uuid := range children[:len(children)-1] {
 			abandoned[uuid] = struct{}{}
 		}
 	}
 	if len(abandoned) == 0 {
-		return nil, nil
+		return nil
 	}
-	for _, record := range records {
+	for _, record := range s.records {
 		if _, left := abandoned[record.parent]; left {
 			abandoned[record.uuid] = struct{}{}
 		}
 	}
-	return abandoned, nil
+	return abandoned
+}
+
+// openParents counts the distinct parents the scanned records point at that
+// the scan did not see. A window of a transcript whose records hang off one
+// such parent has no branch that starts before it.
+func (s *claudeBranchScan) openParents() int {
+	seen := make(map[string]struct{}, len(s.records))
+	for _, record := range s.records {
+		seen[record.uuid] = struct{}{}
+	}
+	open := map[string]struct{}{}
+	for _, record := range s.records {
+		if record.parent == "" {
+			continue
+		}
+		if _, ok := seen[record.parent]; !ok {
+			open[record.parent] = struct{}{}
+		}
+	}
+	return len(open)
+}
+
+type claudePromptEnvelope struct {
+	Type        string `json:"type"`
+	UUID        string `json:"uuid"`
+	ParentUUID  string `json:"parentUuid"`
+	IsMeta      bool   `json:"isMeta"`
+	IsSidechain bool   `json:"isSidechain"`
+	Origin      struct {
+		Kind string `json:"kind"`
+	} `json:"origin"`
+	Message struct {
+		Content json.RawMessage `json:"content"`
+	} `json:"message"`
+}
+
+// humanPrompt reports a record a person typed: not a tool result, an
+// interrupt note, a meta record or a notification.
+func (e claudePromptEnvelope) humanPrompt() bool {
+	if e.Type != "user" || e.IsMeta {
+		return false
+	}
+	if kind := strings.TrimSpace(e.Origin.Kind); kind != "" && kind != "human" {
+		return false
+	}
+	return !bytes.Contains(e.Message.Content, []byte(`"tool_result"`)) &&
+		!bytes.Contains(e.Message.Content, []byte(claudeInterruptPrefix))
 }
 
 const claudeInterruptPrefix = "[Request interrupted by user"
