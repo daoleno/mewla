@@ -102,6 +102,7 @@ type Server struct {
 	watcher                      *watcher.Watcher
 	terminal                     *terminal.Manager
 	pusher                       notificationPusher
+	deviceHook                   func(timeZone string)
 	stats                        *stats.Collector
 	work                         *work.Store
 	execs                        *work.ExecutorConfig
@@ -361,6 +362,7 @@ type clientMessage struct {
 	Action               string                                 `json:"action"`
 	PushToken            string                                 `json:"push_token"`
 	ServerRef            string                                 `json:"server_ref"`
+	TimeZone             string                                 `json:"time_zone"`
 	Cols                 int                                    `json:"cols"`
 	Rows                 int                                    `json:"rows"`
 	Col                  int                                    `json:"col"`
@@ -1001,6 +1003,9 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 	case "register_push":
 		if raw.PushToken != "" && s.pusher != nil {
 			s.pusher.SetRegistration(raw.PushToken, raw.ServerRef)
+			if s.deviceHook != nil {
+				s.deviceHook(strings.TrimSpace(raw.TimeZone))
+			}
 			s.sendJSON(conn, map[string]any{"type": "push_registered", "ok": true})
 		}
 	case "codex_conversation_subscribe":

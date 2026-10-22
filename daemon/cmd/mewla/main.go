@@ -599,8 +599,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 			Admissions: brainStore.FSM(),
 			Sessions:   w,
 			External:   connectionManager,
+			Brain:      brainService,
+			Push:       pusher.NotifyBrainMessage,
+			Thread: func() string {
+				thread, _ := brainService.ChatThreadID()
+				return thread
+			},
+			Executor: brainService.HostExecutorID,
 		})
 		controlHandler.watch = watchCollector
+		srv.SetDeviceHook(func(timeZone string) { watchCollector.SetDevice(watch.Device{TimeZone: timeZone}) })
 	}
 	runtimeOwners := []runtimeOwner{
 		{
