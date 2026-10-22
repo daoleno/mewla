@@ -15,9 +15,9 @@ import (
 
 // SetComputers installs the channel other Mewla computers use to reach this
 // one's Brain.
-// SetDeviceHook hears the phone's timezone whenever it registers for push, so
-// time-of-day features follow the person and not the computer.
-func (s *Server) SetDeviceHook(hook func(timeZone string)) { s.deviceHook = hook }
+// SetDeviceHook hears the phone's timezone and language whenever it registers for push, so
+// time-of-day and language features follow the person and not the computer.
+func (s *Server) SetDeviceHook(hook func(timeZone, locale string)) { s.deviceHook = hook }
 
 func (s *Server) SetComputers(manager *computers.Manager) { s.computers = manager }
 

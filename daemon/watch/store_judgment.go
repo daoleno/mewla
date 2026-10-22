@@ -270,7 +270,9 @@ func (s *Store) saveProblemsLocked() error {
 
 // LabelProblem records the user's verdict. real confirms the problem, not
 // dismisses it, later keeps it as it is.
-func (s *Store) LabelProblem(id, value, note, by string) (Problem, error) {
+//
+// rest is how long a "later" hides the problem; zero means DefaultLaterFor.
+func (s *Store) LabelProblem(id, value, note, by string, rest time.Duration) (Problem, error) {
 	switch value {
 	case LabelReal, LabelNot, LabelLater:
 	default:
@@ -285,7 +287,13 @@ func (s *Store) LabelProblem(id, value, note, by string) (Problem, error) {
 	if by != LabelByBrain {
 		by = LabelByUser
 	}
+	if rest != 0 && value != LabelLater {
+		return Problem{}, errors.New("a rest only goes with later")
+	}
 	problem.Label = &Label{Value: value, Note: strings.TrimSpace(Redact(note)), At: s.now(), By: by}
+	if value == LabelLater && rest > 0 {
+		problem.Label.Until = problem.Label.At.Add(rest)
+	}
 	switch value {
 	case LabelReal:
 		if problem.Status == StatusNew || problem.Status == StatusDismissed {

@@ -315,7 +315,7 @@ func TestBriefItemIsSeededOnceAtHalfPastEightInThePhonesZone(t *testing.T) {
 	f := newNotifyFixture(t, time.Date(2026, 10, 22, 4, 0, 0, 0, time.UTC)) // 12:00 Shanghai
 	cal := &fakeCalendar{}
 	f.n.calendar = cal
-	f.n.language = func() string { return "Chinese" }
+	f.n.language = func() string { return "zh" }
 	f.store.SetEnabled(false)
 	f.n.tick()
 	if len(cal.items) != 0 {
@@ -450,5 +450,97 @@ func TestBriefItemUsesTheDaemonsZoneWhenThePhoneNeverReportedOne(t *testing.T) {
 	f.n.tick()
 	if len(cal.items) != 1 || cal.items[0].Timezone != "Europe/Berlin" {
 		t.Fatalf("items = %+v", cal.items)
+	}
+}
+
+func TestLaterRestsForTheNamedTimeOrAWeek(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 30, 0, 0, time.UTC))
+	for _, id := range []string{"tomorrow", "week", "named"} {
+		f.problem(id, "Big "+id, 70)
+	}
+	label := func(id string, rest time.Duration) {
+		t.Helper()
+		if _, err := f.store.LabelProblem(id, LabelLater, "", "", rest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	label("tomorrow", 24*time.Hour)
+	label("week", 0)
+	label("named", 3*time.Hour)
+	ids := func() string {
+		var out []string
+		for _, p := range f.n.briefCandidates(f.clock) {
+			out = append(out, p.ID)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := ids(); got != "" {
+		t.Fatalf("resting problems briefed: %s", got)
+	}
+	f.advance(4 * time.Hour)
+	if got := ids(); got != "named" {
+		t.Fatalf("after 4h: %q", got)
+	}
+	f.advance(24 * time.Hour)
+	if got := ids(); !strings.Contains(got, "tomorrow") || strings.Contains(got, "week") {
+		t.Fatalf("after a day: %q", got)
+	}
+	f.advance(7 * 24 * time.Hour)
+	if got := ids(); !strings.Contains(got, "week") {
+		t.Fatalf("after a week: %q", got)
+	}
+}
+
+func TestLaterEndsEarlyOnNewEvidenceAndOldLabelsKeepAWeek(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 30, 0, 0, time.UTC))
+	f.problem("a", "Seen again", 70)
+	f.problem("old", "Labelled before --for existed", 70, func(p *Problem) {
+		p.Label = &Label{Value: LabelLater, At: f.clock.Add(-6 * 24 * time.Hour)}
+		p.LastSeen = f.clock.Add(-7 * 24 * time.Hour)
+	})
+	if _, err := f.store.LabelProblem("a", LabelLater, "", "", 14*24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	f.advance(time.Hour)
+	f.store.mu.Lock()
+	f.store.problems["a"].LastSeen = f.clock
+	f.store.mu.Unlock()
+	got := f.n.briefCandidates(f.clock)
+	var ids []string
+	for _, p := range got {
+		ids = append(ids, p.ID)
+	}
+	if strings.Join(ids, ",") != "a" {
+		t.Fatalf("want only the problem with new evidence, got %v", ids)
+	}
+	f.advance(24 * time.Hour)
+	for _, p := range f.n.briefCandidates(f.clock) {
+		if p.ID == "old" {
+			return
+		}
+	}
+	t.Fatal("an old label without a time should rest a week, then end")
+}
+
+func TestParseRest(t *testing.T) {
+	for text, want := range map[string]time.Duration{
+		"90m": 90 * time.Minute, "12h": 12 * time.Hour, "1d": 24 * time.Hour, "3D": 72 * time.Hour, "2w": 14 * 24 * time.Hour,
+	} {
+		if got, err := ParseRest(text); err != nil || got != want {
+			t.Fatalf("%s = %v %v", text, got, err)
+		}
+	}
+	for _, text := range []string{"", "d", "0d", "-1d", "1.5d", "tomorrow", "100w", "1y", "7"} {
+		if got, err := ParseRest(text); err == nil {
+			t.Fatalf("%q accepted as %v", text, got)
+		}
+	}
+}
+
+func TestARestOnlyGoesWithLater(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 30, 0, 0, time.UTC))
+	f.problem("a", "Big", 70)
+	if _, err := f.store.LabelProblem("a", LabelNot, "", "", time.Hour); err == nil {
+		t.Fatal("a rest on a not")
 	}
 }

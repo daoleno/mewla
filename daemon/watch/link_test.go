@@ -118,7 +118,7 @@ func TestEvidenceAndMentionLinkWorkAndDismissalStands(t *testing.T) {
 	}
 	addJudged(t, store, "j_four", "Retry loops, see work-mentioned-2", seen, "p_sig")
 	addJudged(t, store, "j_five", "Noise", seen)
-	if _, err := store.LabelProblem("j_five", LabelNot, "flaky", LabelByBrain); err != nil {
+	if _, err := store.LabelProblem("j_five", LabelNot, "flaky", LabelByBrain, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.LinkWork("j_five", "work-evidence-1", LinkBrain); err != nil {
@@ -150,7 +150,7 @@ func TestEvidenceAndMentionLinkWorkAndDismissalStands(t *testing.T) {
 func TestLabelByDefaultsToTheUser(t *testing.T) {
 	store, seen := linkFixture(t)
 	addJudged(t, store, "j_six", "X", seen)
-	got, err := store.LabelProblem("j_six", LabelLater, "", "")
+	got, err := store.LabelProblem("j_six", LabelLater, "", "", 0)
 	if err != nil || got.Label.By != LabelByUser || got.Status != StatusNew {
 		t.Fatalf("%#v %v", got, err)
 	}

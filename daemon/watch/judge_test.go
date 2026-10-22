@@ -242,8 +242,8 @@ func TestPlaceFromIndexPlacesLateTurns(t *testing.T) {
 
 func TestPlaybookWritesInThePersonsLanguage(t *testing.T) {
 	collector, store := newTestCollector(t, t.TempDir())
-	if strings.Contains(collector.judge.playbook(), "mostly in Chinese") {
-		t.Fatal("assumed a language without evidence")
+	if !strings.Contains(collector.judge.playbook(), "Write every title, cost and reason in English") {
+		t.Fatal("without evidence of a language, problems are written in English")
 	}
 	var signals []Signal
 	for index := range 12 {

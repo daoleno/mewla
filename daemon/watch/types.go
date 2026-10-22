@@ -4,7 +4,12 @@
 // never wakes Brain. See docs/watch.md.
 package watch
 
-import "time"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
 
 // Signal sources.
 const (
@@ -201,6 +206,40 @@ type Label struct {
 	At    time.Time `json:"at"`
 	// By says who gave the verdict: the user, or Brain while triaging.
 	By string `json:"by,omitempty"`
+	// Until is when a "later" stops resting, if the person named a time. A
+	// "later" without it (older ones too) rests for DefaultLaterFor.
+	Until time.Time `json:"until,omitzero"`
+}
+
+// DefaultLaterFor is how long a "later" rests when no time was named.
+const DefaultLaterFor = 7 * 24 * time.Hour
+
+// MaxLaterFor bounds a named rest: past a year it is a "not".
+const MaxLaterFor = 366 * 24 * time.Hour
+
+// RestsUntil is when a "later" label stops hiding its problem.
+func (l Label) RestsUntil() time.Time {
+	if !l.Until.IsZero() {
+		return l.Until
+	}
+	return l.At.Add(DefaultLaterFor)
+}
+
+// ParseRest reads a rest such as 90m, 12h, 1d or 2w.
+func ParseRest(text string) (time.Duration, error) {
+	text = strings.ToLower(strings.TrimSpace(text))
+	unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour, "w": 7 * 24 * time.Hour}
+	if len(text) < 2 || unit[text[len(text)-1:]] == 0 {
+		return 0, fmt.Errorf("a rest looks like 90m, 12h, 1d or 2w, not %q", text)
+	}
+	count, err := strconv.Atoi(text[:len(text)-1])
+	if err != nil || count <= 0 {
+		return 0, fmt.Errorf("a rest looks like 90m, 12h, 1d or 2w, not %q", text)
+	}
+	if count > int(MaxLaterFor/unit[text[len(text)-1:]]) {
+		return 0, fmt.Errorf("a rest of %q is longer than a year; label it not instead", text)
+	}
+	return time.Duration(count) * unit[text[len(text)-1:]], nil
 }
 
 // Who gives a label.

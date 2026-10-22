@@ -170,8 +170,11 @@ mewla watch signals --source human --kind user_message
 ### Telling Watch it was right
 
 Label a problem `real`, `not` (not a problem) or `later`, with an optional
-note. `real` confirms it and `not` dismisses it. Your labels and notes are
-given to later runs, so they learn what you care about.
+note. `real` confirms it and `not` dismisses it. `later` hides it from the
+brief for a week, or for as long as you name with `--for` (`90m`, `12h`, `1d`,
+`2w`), and ends early if the problem shows new signals. Brain passes the time
+when you give one ("tomorrow", 「下周再提」). Your labels and notes are given to
+later runs, so they learn what you care about.
 
 ```sh
 mewla watch problem label j_1a2b3c4d5e6f not --note "flaky runner, not our code"
@@ -195,7 +198,7 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
   Starting the daemon or turning Watch on never pushes what was already
   urgent.
 - **Morning brief.** The brief is an ordinary [Calendar](calendar.md) item
-  called "Morning brief" (「早报」 if you write to Brain in Chinese). The first
+  called "Morning brief" (「早报」 in Chinese), named in the language your app is set to. The first
   time Watch is on, Watch creates it once: a daily reminder at the next 08:30
   in your phone's timezone (the phone tells the daemon; the computer's
   timezone if it never has). When it is due,
@@ -204,8 +207,8 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
   tap-to-answer chips for each: handle, not a problem, later. A tap is the same
   as typing it, so "1 handle, 3 not a problem" works too. Handle opens Work for
   it, not a problem labels it `not`, later labels it `later`. A problem a brief
-  showed rests for three days; `later` rests until it gets new signals or a
-  week passes. With nothing to say there is no brief, and the phone shows no
+  showed rests for three days; `later` rests until it gets new signals or its
+  time (a week unless you named one) passes. With nothing to say there is no brief, and the phone shows no
   reminder of its own for this item.
 
   Change the time or repeat in Calendar (or `mewla calendar update`) and the
@@ -214,6 +217,13 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
   Each occurrence briefs at most once, also across restarts. A daemon that was
   down when it was due still briefs up to three and a half hours late; after
   that the occurrence is skipped.
+
+- **Language.** The app tells the daemon its language along with its
+  timezone. Watch writes problem titles and reasons in it, and names the
+  Morning brief item and the urgent push in it (English and Chinese so far;
+  another language gets English there, while Brain still writes to you in
+  yours). An app that doesn't report one falls back to the language of your own
+  messages (Chinese is recognised), then English.
 
 ```sh
 mewla watch triage --backlog       # hand Brain every problem still waiting, once

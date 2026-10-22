@@ -611,7 +611,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		})
 		calendarScheduler.Own(calendar.OwnerWatchBrief, calendar.OwnerDuty{Window: watch.BriefCatchUp, Fire: watchCollector.BriefDue})
 		controlHandler.watch = watchCollector
-		srv.SetDeviceHook(func(timeZone string) { watchCollector.SetDevice(watch.Device{TimeZone: timeZone}) })
+		srv.SetDeviceHook(func(timeZone, locale string) {
+			watchCollector.SetDevice(watch.Device{TimeZone: timeZone, Locale: locale})
+		})
 	}
 	runtimeOwners := []runtimeOwner{
 		{

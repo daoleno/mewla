@@ -101,6 +101,7 @@ func NewCollector(options Options) *Collector {
 		errors:      map[string]string{},
 		lastRun:     map[string]time.Time{},
 	}
+	c.judge.language = c.language
 	c.judge.preferred = options.Executor
 	c.judge.routingPath = options.RoutingPath
 	if options.Brain != nil {
@@ -110,13 +111,27 @@ func NewCollector(options Options) *Collector {
 		} else {
 			c.notify = notify
 			notify.calendar = options.Calendar
-			notify.language = c.judge.personLanguage
+			notify.language = c.language
 		}
 	}
 	return c
 }
 
-// SetDevice tells Watch the user's timezone, which the morning brief follows.
+// language is the language code Watch writes in: the app's, else the one the
+// person's own messages use, else English.
+func (c *Collector) language() string {
+	if c.notify != nil {
+		if code := c.notify.deviceLanguage(); code != "" {
+			return code
+		}
+	}
+	if code := c.judge.detectedLanguage(); code != "" {
+		return code
+	}
+	return "en"
+}
+
+// SetDevice tells Watch the user's timezone and language.
 func (c *Collector) SetDevice(device Device) {
 	if c.notify != nil {
 		c.notify.SetDevice(device)
@@ -339,6 +354,8 @@ type Request struct {
 	WorkID    string   `json:"work_id,omitempty"`
 	By        string   `json:"by,omitempty"`
 	Backlog   bool     `json:"backlog,omitempty"`
+	// For is how long a "later" label rests: 90m, 12h, 1d, 2w.
+	For string `json:"for,omitempty"`
 }
 
 // Response answers a Request.
@@ -382,7 +399,14 @@ func (c *Collector) Handle(ctx context.Context, request Request) (Response, erro
 		runs, err := c.judge.runBatches(ctx, request.Batches)
 		return Response{Runs: runs}, err
 	case "label":
-		problem, err := c.store.LabelProblem(request.ProblemID, request.Label, request.Note, request.By)
+		var rest time.Duration
+		if strings.TrimSpace(request.For) != "" {
+			var err error
+			if rest, err = ParseRest(request.For); err != nil {
+				return Response{}, err
+			}
+		}
+		problem, err := c.store.LabelProblem(request.ProblemID, request.Label, request.Note, request.By, rest)
 		return Response{Problem: &problem}, err
 	case "triage":
 		if c.notify == nil {

@@ -67,6 +67,9 @@ type judge struct {
 	lookPath  func(string) (string, error)
 	lastGood  string
 
+	// language gives the language code problems are written in.
+	language func() string
+
 	// routingPath is routing.md in the Brain workspace; routing caches its row.
 	routingPath string
 	routing     *routingCache
@@ -85,6 +88,12 @@ func newJudge(store *Store, home string) *judge {
 	j := &judge{store: store, home: home, workdir: filepath.Join(store.dir, "judge"), now: func() time.Time { return time.Now().UTC() }, batchChars: judgeBatchChars}
 	j.lookPath = exec.LookPath
 	j.execute = j.runAgents
+	j.language = func() string {
+		if code := j.detectedLanguage(); code != "" {
+			return code
+		}
+		return "en"
+	}
 	j.resume()
 	return j
 }
@@ -466,11 +475,8 @@ func ambiguousAuthor(signal Signal) bool {
 func (j *judge) playbook() string {
 	var b strings.Builder
 	b.WriteString(judgePlaybook)
-	if language := j.personLanguage(); language != "" {
-		fmt.Fprintf(&b, "\n\nThe person writes mostly in %s. Write every title, cost and reason in %s.", language, language)
-	} else {
-		b.WriteString("\n\nWrite titles, costs and reasons in the language the person's own messages use.")
-	}
+	name := languageName(j.language())
+	fmt.Fprintf(&b, "\n\nThe person reads %s. Write every title, cost and reason in %s.", name, name)
 	var labeled []Problem
 	for _, problem := range j.store.Problems(Filter{Kind: RuleJudgment}) {
 		if problem.Label != nil {
@@ -494,9 +500,10 @@ func (j *judge) playbook() string {
 	return Redact(b.String())
 }
 
-// personLanguage names the person's language when their own messages make it
-// clear, so problems read in it however much English the agents wrote.
-func (j *judge) personLanguage() string {
+// detectedLanguage is the language code the person's own messages make clear
+// (only Chinese is recognised), so problems read in it however much English
+// the agents wrote. It is "" otherwise.
+func (j *judge) detectedLanguage() string {
 	han, total := 0, 0
 	for _, signal := range j.store.Signals(Filter{Source: SourceHuman, Kind: kindUserMessage}) {
 		if signal.Refs["author"] != "user" || signal.Refs["session_role"] != "direct" {
@@ -511,7 +518,7 @@ func (j *judge) personLanguage() string {
 		}
 	}
 	if total >= 10 && han*2 >= total {
-		return "Chinese"
+		return "zh"
 	}
 	return ""
 }
