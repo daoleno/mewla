@@ -8,7 +8,7 @@ import { brainWorkSurface, type BrainWorkGroup } from "../brain/brainWorkSurface
  *
  * - homeless: no computer paired, so the seal is an empty bed
  * - offline: the computer is unreachable; asleep in a greyed seal
- * - waking: connecting or loading; one eye open in the seal
+ * - waking: starting, with nothing known yet; one eye open in the seal
  * - idle: connected with nothing to do; curled up asleep in the seal
  * - working: Brain's turn is running; out of the seal and on its feet
  * - delegating: Workers are running (or waiting on) delegated Work; sitting,
@@ -64,7 +64,9 @@ export function resolveBrainCatPresence({
   if (!hasServer) return { state: "homeless" };
   if (connection === "offline") return { state: "offline" };
   if (connection === "connecting" && stalled) return { state: "offline", reconnecting: true };
-  if (connection !== "connected" || !hydrated) return { state: "waking" };
+  // Waking is Brain starting with nothing known yet. A Brain already hydrated
+  // that is only reconnecting keeps what it knew until the reconnect stalls.
+  if (!hydrated) return { state: "waking" };
   const { slips, counts } = brainWorkSurface(currentWork, undefined, now);
   if (counts.needs) {
     return {
