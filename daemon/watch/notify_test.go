@@ -316,12 +316,6 @@ func TestBriefItemIsSeededOnceAtHalfPastEightInThePhonesZone(t *testing.T) {
 	cal := &fakeCalendar{}
 	f.n.calendar = cal
 	f.n.language = func() string { return "Chinese" }
-	f.n.state.Device = Device{}
-	f.n.tick()
-	if len(cal.items) != 0 {
-		t.Fatal("seeded before the phone reported a time zone")
-	}
-	f.n.SetDevice(Device{TimeZone: "Asia/Shanghai"})
 	f.store.SetEnabled(false)
 	f.n.tick()
 	if len(cal.items) != 0 {
@@ -444,5 +438,17 @@ func TestStartupLooksAtTheBacklogWithoutPushing(t *testing.T) {
 	again.tick()
 	if countKind(fake.receipts, "urgent") != 1 || len(*pushes) != 1 || strings.Contains(fake.bodies[0], "id=ci ") {
 		t.Fatalf("transition: %v %v", fake.bodies, *pushes)
+	}
+}
+
+func TestBriefItemUsesTheDaemonsZoneWhenThePhoneNeverReportedOne(t *testing.T) {
+	t.Setenv("TZ", "Europe/Berlin")
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 4, 0, 0, 0, time.UTC))
+	cal := &fakeCalendar{}
+	f.n.calendar = cal
+	f.n.state.Device = Device{}
+	f.n.tick()
+	if len(cal.items) != 1 || cal.items[0].Timezone != "Europe/Berlin" {
+		t.Fatalf("items = %+v", cal.items)
 	}
 }

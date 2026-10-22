@@ -194,8 +194,8 @@ func (n *notifier) location() *time.Location {
 }
 
 // seedBrief creates the morning brief's calendar item once: daily at 08:30 in
-// the phone's time zone, titled in the person's language. It waits for the
-// phone to report a time zone. After that the item belongs to the user; a
+// the phone's time zone (the daemon's if the phone never reported one), titled
+// in the person's language. After that the item belongs to the user; a
 // cancelled item is never made again.
 func (n *notifier) seedBrief(now time.Time) {
 	if n.calendar == nil || n.state.BriefSeeded {
@@ -203,7 +203,8 @@ func (n *notifier) seedBrief(now time.Time) {
 	}
 	zone := n.state.Device.TimeZone
 	if zone == "" {
-		return
+		// A phone that never reported one (an older app): where the daemon runs.
+		zone = hostZone()
 	}
 	first, err := nextLocalTime(now, zone, briefSeedHour, briefSeedMinute)
 	if err != nil {
@@ -230,6 +231,27 @@ func (n *notifier) seedBrief(now time.Time) {
 	if err := n.saveLocked(); err != nil {
 		log.Printf("WARN watch: save: %v", err)
 	}
+}
+
+// hostZone names the IANA zone the daemon's computer is in.
+func hostZone() string {
+	candidates := []string{os.Getenv("TZ")}
+	if target, err := os.Readlink("/etc/localtime"); err == nil {
+		if _, after, ok := strings.Cut(target, "zoneinfo/"); ok {
+			candidates = append(candidates, after)
+		}
+	}
+	candidates = append(candidates, time.Local.String())
+	for _, name := range candidates {
+		name = strings.TrimPrefix(name, ":")
+		if name == "" || name == "Local" {
+			continue
+		}
+		if _, err := time.LoadLocation(name); err == nil {
+			return name
+		}
+	}
+	return "UTC"
 }
 
 // nextLocalTime is the next hh:mm in zone after at.

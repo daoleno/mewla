@@ -196,8 +196,9 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
   urgent.
 - **Morning brief.** The brief is an ordinary [Calendar](calendar.md) item
   called "Morning brief" (「早报」 if you write to Brain in Chinese). The first
-  time Watch is on and your phone has told the daemon its timezone, Watch
-  creates it once: a daily reminder at 08:30 in that timezone. When it is due,
+  time Watch is on, Watch creates it once: a daily reminder at the next 08:30
+  in your phone's timezone (the phone tells the daemon; the computer's
+  timezone if it never has). When it is due,
   Brain posts one message listing the three to five problems nobody is
   handling, one plain line each: what it is and what it costs. Under it are
   tap-to-answer chips for each: handle, not a problem, later. A tap is the same
