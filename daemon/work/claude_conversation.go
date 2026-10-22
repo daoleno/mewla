@@ -697,9 +697,11 @@ func (b *claudeConversationBuilder) consumeTaskNotification(lineNumber int, reco
 	return true
 }
 
-// consumeTaskNotificationAttachment projects queued task notifications that
-// Claude delivered into an already running turn. Other queued commands (for
-// example queued human prompts) are left to their existing handling.
+// consumeTaskNotificationAttachment projects what Claude delivered into an
+// already running turn: queued task notifications, and the person's own prompt
+// when Claude absorbed it mid-turn. A prompt taken that way is recorded only as
+// this attachment, never as a later user record, so without projecting it a
+// message sent while Claude was busy would never show up in the conversation.
 func (b *claudeConversationBuilder) consumeTaskNotificationAttachment(lineNumber int, recordID, timestamp string, raw json.RawMessage) {
 	var attachment struct {
 		Type        string          `json:"type"`
@@ -712,10 +714,16 @@ func (b *claudeConversationBuilder) consumeTaskNotificationAttachment(lineNumber
 	if json.Unmarshal(raw, &attachment) != nil || attachment.Type != "queued_command" {
 		return
 	}
-	if attachment.CommandMode != "task-notification" && attachment.Origin.Kind != "task-notification" {
+	if attachment.CommandMode == "task-notification" || attachment.Origin.Kind == "task-notification" {
+		b.consumeTaskNotification(lineNumber, recordID, timestamp, "task-notification", "", attachment.Prompt)
 		return
 	}
-	b.consumeTaskNotification(lineNumber, recordID, timestamp, "task-notification", "", attachment.Prompt)
+	if attachment.Origin.Kind != "human" || attachment.CommandMode != "prompt" {
+		return
+	}
+	if text, ok := claudeUserPlainText(attachment.Prompt); ok {
+		b.addMessage(lineNumber, recordID, 0, timestamp, "user", text)
+	}
 }
 
 // claudeUserPlainText returns the text of a user record made only of text
