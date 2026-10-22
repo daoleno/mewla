@@ -57,7 +57,9 @@ type Usage struct {
 	OutputTokens        int     `json:"output_tokens"`
 	CostUSD             float64 `json:"cost_usd"`
 	Models              string  `json:"models,omitempty"`
-	DurationMS          int     `json:"duration_ms,omitempty"`
+	// Executor is the agent that ran the judgment (claude, codex, pi).
+	Executor   string `json:"executor,omitempty"`
+	DurationMS int    `json:"duration_ms,omitempty"`
 }
 
 func (s *Store) applyAnnotationLocked(id string, annotation Annotation) {

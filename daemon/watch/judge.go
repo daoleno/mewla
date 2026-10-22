@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -27,10 +26,11 @@ import (
 // Its bounds are internal constants, not settings.
 
 const (
-	judgeExecutorName = "claude"
-	// Sonnet is the cheapest Claude model that judges this well enough on the
-	// accounts we tested; Haiku is not available to every subscription.
-	judgeModel = "sonnet"
+	// Claude Code judges with Sonnet, the cheapest Claude model that judges
+	// this well enough on the accounts we tested; Haiku is not available to
+	// every subscription. Other executors use the model the person set up
+	// there, at low effort (see judge_agents.go).
+	judgeClaudeModel = "sonnet"
 
 	judgeBatchChars    = 60_000
 	judgeMinBatchChars = 12_000
@@ -61,6 +61,12 @@ type judge struct {
 	execute judgeExecutor
 	now     func() time.Time
 
+	// preferred names the executor to try first (the Brain host's); lookPath
+	// finds an installed CLI. Both are replaced in tests.
+	preferred func() string
+	lookPath  func(string) (string, error)
+	lastGood  string
+
 	run sync.Mutex
 
 	mu         sync.Mutex
@@ -73,7 +79,8 @@ type judge struct {
 
 func newJudge(store *Store, home string) *judge {
 	j := &judge{store: store, home: home, workdir: filepath.Join(store.dir, "judge"), now: func() time.Time { return time.Now().UTC() }, batchChars: judgeBatchChars}
-	j.execute = j.claude
+	j.lookPath = exec.LookPath
+	j.execute = j.runAgents
 	j.resume()
 	return j
 }
@@ -112,7 +119,8 @@ type JudgeStatus struct {
 }
 
 func (j *judge) status() JudgeStatus {
-	status := JudgeStatus{Executor: judgeExecutorName, Model: judgeModel, Pending: len(j.store.Unjudged())}
+	status := JudgeStatus{Pending: len(j.store.Unjudged())}
+	status.Executor, status.Model = j.expected()
 	runs, _ := j.store.Runs()
 	for index := range runs {
 		run := runs[index]
@@ -243,8 +251,8 @@ func (j *judge) batch(ctx context.Context) (JudgeRun, error) {
 	started := j.now()
 	run := JudgeRun{
 		ID: "r_" + strconv.FormatInt(started.UnixMilli(), 36), StartedAt: started,
-		Executor: judgeExecutorName, Model: judgeModel, Signals: len(signals),
-		From: signals[0].Time, Through: signals[len(signals)-1].Time,
+		Signals: len(signals),
+		From:    signals[0].Time, Through: signals[len(signals)-1].Time,
 	}
 	system := j.playbook()
 	prompt := Redact(j.prompt(signals))
@@ -253,6 +261,10 @@ func (j *judge) batch(ctx context.Context) (JudgeRun, error) {
 	output, usage, err := j.execute(runCtx, system, prompt, judgeSchema)
 	cancel()
 	run.Usage = usage
+	run.Executor, run.Model = usage.Executor, usage.Models
+	if run.Executor == "" {
+		run.Executor, run.Model = j.expected()
+	}
 	if err == nil {
 		err = j.apply(signals, output, &run)
 	}
@@ -629,77 +641,6 @@ func (j *judge) tilde(path string) string {
 		return "~" + strings.TrimPrefix(path, j.home)
 	}
 	return path
-}
-
-// claudeResult is the part of claude -p --output-format json we read.
-type claudeResult struct {
-	IsError          bool            `json:"is_error"`
-	Result           string          `json:"result"`
-	StructuredOutput json.RawMessage `json:"structured_output"`
-	TotalCostUSD     float64         `json:"total_cost_usd"`
-	DurationMS       int             `json:"duration_ms"`
-	TerminalReason   string          `json:"terminal_reason"`
-	Usage            struct {
-		InputTokens         int `json:"input_tokens"`
-		CacheCreationTokens int `json:"cache_creation_input_tokens"`
-		CacheReadTokens     int `json:"cache_read_input_tokens"`
-		OutputTokens        int `json:"output_tokens"`
-	} `json:"usage"`
-	ModelUsage map[string]json.RawMessage `json:"modelUsage"`
-}
-
-// claude runs one judgment with Claude Code in print mode, in an empty
-// directory: no tools, MCP servers, hooks or saved session. Only the user's
-// own settings load, because they carry how this person signs in.
-func (j *judge) claude(ctx context.Context, system, prompt, schema string) (json.RawMessage, Usage, error) {
-	path, err := exec.LookPath(judgeExecutorName)
-	if err != nil {
-		return nil, Usage{}, errors.New("the claude CLI is not installed; judgment needs it")
-	}
-	if err := os.MkdirAll(j.workdir, 0o700); err != nil {
-		return nil, Usage{}, err
-	}
-	command := exec.CommandContext(ctx, path, "-p",
-		"--model", judgeModel,
-		"--tools", "",
-		"--no-session-persistence",
-		"--setting-sources", "user",
-		"--settings", `{"disableAllHooks":true}`,
-		"--strict-mcp-config",
-		"--output-format", "json",
-		"--json-schema", schema,
-		"--system-prompt", system,
-		"--max-budget-usd", judgeBudgetUSD,
-	)
-	command.Dir = j.workdir
-	command.Stdin = strings.NewReader(prompt)
-	bindJudgeToDaemon(command)
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &limitedWriter{buffer: &stdout, limit: judgeOutputLimit}
-	command.Stderr = &limitedWriter{buffer: &stderr, limit: 64 << 10}
-	runErr := command.Run()
-	var result claudeResult
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		if runErr != nil {
-			return nil, Usage{}, fmt.Errorf("claude exited: %v: %s", runErr, excerpt(stderr.String(), 300))
-		}
-		return nil, Usage{}, fmt.Errorf("claude output is not JSON: %s", excerpt(stdout.String(), 300))
-	}
-	usage := Usage{
-		InputTokens: result.Usage.InputTokens, CacheCreationTokens: result.Usage.CacheCreationTokens,
-		CacheReadTokens: result.Usage.CacheReadTokens, OutputTokens: result.Usage.OutputTokens,
-		CostUSD: result.TotalCostUSD, DurationMS: result.DurationMS,
-	}
-	models := make([]string, 0, len(result.ModelUsage))
-	for model := range result.ModelUsage {
-		models = append(models, model)
-	}
-	sort.Strings(models)
-	usage.Models = strings.Join(models, ",")
-	if result.IsError || len(result.StructuredOutput) == 0 || string(result.StructuredOutput) == "null" {
-		return nil, usage, fmt.Errorf("claude gave no structured output (%s): %s", result.TerminalReason, excerpt(result.Result, 300))
-	}
-	return result.StructuredOutput, usage, nil
 }
 
 type limitedWriter struct {
