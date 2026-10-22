@@ -20,6 +20,8 @@ import (
 
 const SchemaVersion = 2
 
+var errOwnerExists = errors.New("an item for this owner already exists")
+
 type document struct {
 	SchemaVersion int    `json:"schema_version"`
 	Items         []Item `json:"items"`
@@ -193,9 +195,39 @@ func (s *Store) Get(id string) (Item, error) {
 	return cloneItem(item), nil
 }
 
+// Create adds a client's item. Ownership is the daemon's to give, so a client
+// cannot claim it.
 func (s *Store) Create(item Item) (Item, error) {
+	item.Owner = ""
+	return s.create(item)
+}
+
+// Seed adds an item for owner unless one was ever created for it, whatever its
+// status: a cancelled item stays, which is how deleting it turns its feature
+// off for good. The check and the insert are one step under the lock, so a
+// crash or a restart cannot leave two.
+func (s *Store) Seed(owner string, item Item) (Item, bool, error) {
+	if strings.TrimSpace(owner) == "" {
+		return Item{}, false, fmt.Errorf("seed requires an owner")
+	}
+	item.Owner = owner
+	created, err := s.create(item)
+	if errors.Is(err, errOwnerExists) {
+		return created, false, nil
+	}
+	return created, err == nil, err
+}
+
+func (s *Store) create(item Item) (Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if item.Owner != "" {
+		for _, existing := range s.items {
+			if existing.Owner == item.Owner {
+				return cloneItem(existing), errOwnerExists
+			}
+		}
+	}
 	item = cloneItem(item)
 	if item.ID == "" {
 		item.ID = uuid.NewString()
@@ -237,6 +269,11 @@ func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
 	}
 	current = cloneItem(current)
 	item = cloneItem(item)
+	// Ownership stays with the daemon, whatever the client sent back.
+	item.Owner = current.Owner
+	if current.Owner != "" && item.Kind != KindReminder {
+		return Item{}, fmt.Errorf("this item acts for Mewla and must stay a reminder")
+	}
 	if item.Recurrence == "" {
 		item.Recurrence = RecurrenceNone
 	}
@@ -285,6 +322,28 @@ func (s *Store) Cancel(id string, expectedRevision int64) (Item, error) {
 func (s *Store) SetStatus(id string, status Status, reason string) (Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.setStatusLocked(id, status, reason)
+}
+
+// CompleteOccurrence finishes one occurrence of an owned item and moves it to
+// the next. It does nothing when the item was edited, cancelled or already
+// advanced since occurrence was read, so a change made while the owner was
+// acting is never overwritten.
+func (s *Store) CompleteOccurrence(id string, occurrence time.Time) (Item, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.items[id]
+	if !ok {
+		return Item{}, false, ErrNotFound
+	}
+	if item.Status != StatusScheduled || !item.NextAt.Equal(occurrence) {
+		return cloneItem(item), false, nil
+	}
+	done, err := s.setStatusLocked(id, StatusCompleted, "")
+	return done, err == nil, err
+}
+
+func (s *Store) setStatusLocked(id string, status Status, reason string) (Item, error) {
 	item, ok := s.items[id]
 	if !ok {
 		return Item{}, ErrNotFound

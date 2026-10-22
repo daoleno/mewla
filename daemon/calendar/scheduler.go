@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -25,8 +26,23 @@ type ActionInspector interface {
 	InspectScheduledAction(context.Context, Item, Run) (status Status, result, failure string, known bool)
 }
 
+// OwnerDuty is what an owner does when an item it owns is due. Fire gets the
+// instant the occurrence was due. An occurrence more than Window late is
+// skipped, not fired: the daemon was down and the moment has passed. A failed
+// Fire is tried again until then.
+type OwnerDuty struct {
+	Window time.Duration
+	Fire   func(item Item, due time.Time) error
+}
+
+// ownerRetry spaces the attempts after a failed Fire.
+const ownerRetry = time.Minute
+
 type Scheduler struct {
 	store        *Store
+	dutiesMu     sync.Mutex
+	duties       map[string]OwnerDuty
+	retryAt      map[string]time.Time
 	runner       ActionRunner
 	now          func() time.Time
 	interval     time.Duration
@@ -37,6 +53,57 @@ type Scheduler struct {
 
 func NewScheduler(store *Store, runner ActionRunner) *Scheduler {
 	return &Scheduler{store: store, runner: runner, now: time.Now, interval: time.Second, missedWindow: DefaultMissedActionWindow, launching: map[string]struct{}{}}
+}
+
+// Own registers what happens when an item owned by owner is due. Until it is
+// registered such an item is left alone.
+func (s *Scheduler) Own(owner string, duty OwnerDuty) {
+	s.dutiesMu.Lock()
+	defer s.dutiesMu.Unlock()
+	if s.duties == nil {
+		s.duties = map[string]OwnerDuty{}
+	}
+	s.duties[owner] = duty
+}
+
+func (s *Scheduler) duty(owner string) (OwnerDuty, bool) {
+	s.dutiesMu.Lock()
+	defer s.dutiesMu.Unlock()
+	duty, ok := s.duties[owner]
+	return duty, ok && duty.Fire != nil
+}
+
+// tickOwned acts on an owned reminder. Its owner acts instead of the
+// reminder notification; it never waits for the user.
+func (s *Scheduler) tickOwned(item Item, now time.Time) {
+	duty, ok := s.duty(item.Owner)
+	if !ok || item.NextAt.After(now) || item.Status != StatusScheduled || s.isLaunching(item.ID) {
+		return
+	}
+	if now.Sub(item.NextAt) > duty.Window {
+		_, _, _ = s.store.CompleteOccurrence(item.ID, item.NextAt)
+		return
+	}
+	s.dutiesMu.Lock()
+	wait := s.retryAt[item.ID]
+	s.dutiesMu.Unlock()
+	if wait.After(now) || !s.beginLaunch(item.ID) {
+		return
+	}
+	go func() {
+		defer s.endLaunch(item.ID)
+		if err := duty.Fire(item, item.NextAt); err != nil {
+			log.Printf("WARN calendar: %s %s: %v", item.Owner, item.ID, err)
+			s.dutiesMu.Lock()
+			if s.retryAt == nil {
+				s.retryAt = map[string]time.Time{}
+			}
+			s.retryAt[item.ID] = now.Add(ownerRetry)
+			s.dutiesMu.Unlock()
+			return
+		}
+		_, _, _ = s.store.CompleteOccurrence(item.ID, item.NextAt)
+	}()
 }
 
 func (s *Scheduler) Run(ctx context.Context) {
@@ -70,6 +137,10 @@ func (s *Scheduler) Tick(ctx context.Context) {
 		}
 		switch item.Kind {
 		case KindReminder, KindDeadline:
+			if item.Owner != "" {
+				s.tickOwned(item, now)
+				continue
+			}
 			if !item.NextAt.After(now) && item.Status == StatusScheduled {
 				status := StatusWaiting
 				if item.Recurrence != RecurrenceNone {
