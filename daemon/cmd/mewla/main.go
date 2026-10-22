@@ -605,7 +605,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 				thread, _ := brainService.ChatThreadID()
 				return thread
 			},
-			Executor: brainService.HostExecutorID,
+			Executor:    brainService.HostExecutorID,
+			RoutingPath: brainStore.RoutingGuidePath(),
 		})
 		controlHandler.watch = watchCollector
 		srv.SetDeviceHook(func(timeZone string) { watchCollector.SetDevice(watch.Device{TimeZone: timeZone}) })

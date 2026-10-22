@@ -49,6 +49,9 @@ type Options struct {
 	Thread func() string
 	// Executor names the Brain host's executor; judgment tries it first.
 	Executor func() string
+	// RoutingPath is routing.md in the Brain workspace, where the Watch
+	// judgment row picks the executor, model and reasoning.
+	RoutingPath string
 }
 
 // Collector runs the collectors and then the rules. Passes never overlap.
@@ -96,6 +99,7 @@ func NewCollector(options Options) *Collector {
 		lastRun:     map[string]time.Time{},
 	}
 	c.judge.preferred = options.Executor
+	c.judge.routingPath = options.RoutingPath
 	if options.Brain != nil {
 		notify, err := newNotifier(options.Store, options.Brain, options.Push, options.Thread)
 		if err != nil {

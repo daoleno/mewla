@@ -67,6 +67,10 @@ type judge struct {
 	lookPath  func(string) (string, error)
 	lastGood  string
 
+	// routingPath is routing.md in the Brain workspace; routing caches its row.
+	routingPath string
+	routing     *routingCache
+
 	run sync.Mutex
 
 	mu         sync.Mutex
@@ -114,6 +118,7 @@ type JudgeStatus struct {
 	FailedRuns  int       `json:"failed_runs,omitempty"`
 	LastRun     *JudgeRun `json:"last_run,omitempty"`
 	TotalUsage  Usage     `json:"total_usage"`
+	Routing     Routing   `json:"routing"`
 	LastError   string    `json:"last_error,omitempty"`
 	NextAllowed time.Time `json:"next_allowed,omitzero"`
 }
@@ -121,6 +126,7 @@ type JudgeStatus struct {
 func (j *judge) status() JudgeStatus {
 	status := JudgeStatus{Pending: len(j.store.Unjudged())}
 	status.Executor, status.Model = j.expected()
+	_, status.Routing = j.routed()
 	runs, _ := j.store.Runs()
 	for index := range runs {
 		run := runs[index]

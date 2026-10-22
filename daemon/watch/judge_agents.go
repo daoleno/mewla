@@ -13,8 +13,9 @@ import (
 	"strings"
 )
 
-// Judgment runs on an agent the person actually has. It tries the Brain
-// host's executor first, then the last one that worked, then the rest in a
+// Judgment runs on the executor routing.md names for it (judge_routing.go),
+// or else on an agent the person actually has. Without a valid row it tries
+// the Brain host's executor first, then the last one that worked, then the rest in a
 // fixed order, skipping any that is not installed. Every agent runs the same
 // way: a print-mode call in an empty directory with no tools, hooks, MCP
 // servers or saved session, a prompt Redact has already cleaned, and a JSON
@@ -29,7 +30,7 @@ import (
 //	        the prompt and checked here, tokens and cost reported
 type judgeAgent struct {
 	name string
-	run  func(ctx context.Context, j *judge, path, system, prompt, schema string) (json.RawMessage, Usage, error)
+	run  func(ctx context.Context, j *judge, path string, route judgeRoute, system, prompt, schema string) (json.RawMessage, Usage, error)
 }
 
 var judgeAgents = []judgeAgent{
@@ -40,6 +41,15 @@ var judgeAgents = []judgeAgent{
 
 // order lists the installed agents to try, preferred first.
 func (j *judge) order() []judgeAgent {
+	if route, _ := j.routed(); route.Executor != "" {
+		// A routed executor is the only one asked: falling back to another
+		// would judge with a model nobody chose.
+		for _, agent := range judgeAgents {
+			if agent.name == route.Executor {
+				return []judgeAgent{agent}
+			}
+		}
+	}
 	j.mu.Lock()
 	good := j.lastGood
 	j.mu.Unlock()
@@ -74,6 +84,10 @@ func (j *judge) expected() (string, string) {
 	if len(order) == 0 {
 		return "", ""
 	}
+	route, _ := j.routed()
+	if route.Model != "" {
+		return order[0].name, route.Model
+	}
 	if order[0].name == "claude" {
 		return "claude", judgeClaudeModel
 	}
@@ -89,13 +103,14 @@ func (j *judge) runAgents(ctx context.Context, system, prompt, schema string) (j
 	if err := os.MkdirAll(j.workdir, 0o700); err != nil {
 		return nil, Usage{}, err
 	}
+	route, _ := j.routed()
 	var failures []string
 	for _, agent := range order {
 		path, err := j.lookPath(agent.name)
 		if err != nil {
 			continue
 		}
-		output, usage, err := agent.run(ctx, j, path, system, prompt, schema)
+		output, usage, err := agent.run(ctx, j, path, route, system, prompt, schema)
 		if err == nil {
 			usage.Executor = agent.name
 			j.mu.Lock()
@@ -143,9 +158,9 @@ type claudeResult struct {
 
 // runClaude uses Claude Code in print mode. Only the user's own settings
 // load, because they carry how this person signs in.
-func runClaude(ctx context.Context, j *judge, path, system, prompt, schema string) (json.RawMessage, Usage, error) {
-	stdout, stderr, runErr := j.command(ctx, path, prompt, "-p",
-		"--model", judgeClaudeModel,
+func runClaude(ctx context.Context, j *judge, path string, route judgeRoute, system, prompt, schema string) (json.RawMessage, Usage, error) {
+	args := []string{"-p",
+		"--model", firstNonEmpty(route.Model, judgeClaudeModel),
 		"--tools", "",
 		"--no-session-persistence",
 		"--setting-sources", "user",
@@ -155,7 +170,11 @@ func runClaude(ctx context.Context, j *judge, path, system, prompt, schema strin
 		"--json-schema", schema,
 		"--system-prompt", system,
 		"--max-budget-usd", judgeBudgetUSD,
-	)
+	}
+	if route.Effort != "" {
+		args = append(args, "--effort", route.Effort)
+	}
+	stdout, stderr, runErr := j.command(ctx, path, prompt, args...)
 	var result claudeResult
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
 		if runErr != nil {
@@ -183,7 +202,7 @@ func runClaude(ctx context.Context, j *judge, path, system, prompt, schema strin
 // runCodex uses codex exec with the person's own sign-in but not their
 // config, so no hooks, MCP servers or custom instructions load. It runs
 // read-only in an empty directory and keeps no session.
-func runCodex(ctx context.Context, j *judge, path, system, prompt, schema string) (json.RawMessage, Usage, error) {
+func runCodex(ctx context.Context, j *judge, path string, route judgeRoute, system, prompt, schema string) (json.RawMessage, Usage, error) {
 	dir, err := os.MkdirTemp(j.workdir, "codex-")
 	if err != nil {
 		return nil, Usage{}, err
@@ -195,10 +214,13 @@ func runCodex(ctx context.Context, j *judge, path, system, prompt, schema string
 	}
 	lastPath := filepath.Join(dir, "last.txt")
 	// Codex has no system prompt flag: the playbook leads the prompt.
-	stdout, stderr, runErr := j.command(ctx, path, "# Instructions\n\n"+system+"\n\n# Input\n\n"+prompt,
-		"exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
-		"-s", "read-only", "-c", `model_reasoning_effort="low"`,
-		"--output-schema", schemaPath, "--json", "-o", lastPath, "-")
+	args := []string{"exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
+		"-s", "read-only", "-c", fmt.Sprintf("model_reasoning_effort=%q", firstNonEmpty(route.Effort, "low")),
+		"--output-schema", schemaPath, "--json", "-o", lastPath}
+	if route.Model != "" {
+		args = append(args, "-m", route.Model)
+	}
+	stdout, stderr, runErr := j.command(ctx, path, "# Instructions\n\n"+system+"\n\n# Input\n\n"+prompt, append(args, "-")...)
 	var usage Usage
 	for _, line := range strings.Split(stdout, "\n") {
 		var event struct {
@@ -218,7 +240,7 @@ func runCodex(ctx context.Context, j *judge, path, system, prompt, schema string
 			usage.OutputTokens += event.Usage.Output
 		}
 	}
-	usage.Models = "default"
+	usage.Models = firstNonEmpty(route.Model, "default")
 	last, readErr := os.ReadFile(lastPath)
 	if runErr != nil || readErr != nil || len(bytes.TrimSpace(last)) == 0 {
 		if runErr == nil {
@@ -233,12 +255,16 @@ func runCodex(ctx context.Context, j *judge, path, system, prompt, schema string
 // runPi uses pi in print mode with every extension, MCP server, skill and
 // context file turned off. Pi has no schema flag, so the schema rides in the
 // system prompt and the answer is checked when it is applied.
-func runPi(ctx context.Context, j *judge, path, system, prompt, schema string) (json.RawMessage, Usage, error) {
+func runPi(ctx context.Context, j *judge, path string, route judgeRoute, system, prompt, schema string) (json.RawMessage, Usage, error) {
 	system += "\n\nReply with only one JSON object that matches this JSON Schema, with no prose and no code fence:\n" + schema
-	stdout, stderr, runErr := j.command(ctx, path, prompt, "-p", "--mode", "json",
+	args := []string{"-p", "--mode", "json",
 		"--no-tools", "--no-session", "--no-extensions", "--no-mcp", "--no-skills",
-		"--no-context-files", "--no-prompt-templates", "--thinking", "off",
-		"--system-prompt", system)
+		"--no-context-files", "--no-prompt-templates", "--thinking", firstNonEmpty(route.Effort, "off"),
+		"--system-prompt", system}
+	if route.Model != "" {
+		args = append(args, "--model", route.Model)
+	}
+	stdout, stderr, runErr := j.command(ctx, path, prompt, args...)
 	var text string
 	var usage Usage
 	for _, line := range strings.Split(stdout, "\n") {

@@ -550,7 +550,7 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	brainHelp := brainOutput.String()
 	for _, want := range []string{
-		"Usage: mewla brain <workspace|context|playbooks|gc|work|objective|executors|use> [flags]",
+		"Usage: mewla brain <workspace|context|playbooks|gc|work|objective|replies|executors|use> [flags]",
 		"mewla brain objective set",
 		"Reconcile product-owned Brain workspace blocks while preserving user content",
 		"mewla brain workspace --json",
