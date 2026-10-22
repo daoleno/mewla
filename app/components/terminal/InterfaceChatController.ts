@@ -190,7 +190,21 @@ export function useInterfaceChatController({
     submitTextToInterface,
   });
 
+  // Sends text as if the person typed it (a quick-reply chip), leaving the
+  // composer to what they were writing.
+  const sendText = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || sending || uploading) {
+        return;
+      }
+      submitTextToInterface(trimmed, trimmed, []);
+    },
+    [sending, submitTextToInterface, uploading],
+  );
+
   return {
+    sendText,
     activeUpload,
     sending,
     interrupting,
