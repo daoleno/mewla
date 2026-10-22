@@ -3,6 +3,7 @@ package control
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
@@ -224,6 +225,11 @@ type Handler interface {
 }
 
 func DefaultSocketPath(stateDir string) (string, error) {
+	if stateDir == "" {
+		// A Session started by a daemon with its own state directory talks to
+		// that daemon, not to the one in the home directory.
+		stateDir = strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
+	}
 	if stateDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
