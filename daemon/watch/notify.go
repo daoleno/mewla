@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/calendar"
 )
 
 // Watch reaches Brain through Brain's ordinary input, like a message from
@@ -25,8 +26,10 @@ import (
 //     link problems to Work and keep the rest;
 //   - urgent: clear-cut severe problems, sent at once (and pushed once per
 //     episode);
-//   - brief: at 08:30 in the user's timezone, the few problems nobody is
-//     handling, which Brain turns into one short message.
+//   - brief: when the user's "Morning brief" calendar item is due, the few
+//     problems nobody is handling, which Brain turns into one short message.
+//     The item is an ordinary reminder Watch seeds once; the user moves or
+//     cancels it in Calendar.
 //
 // All three need Watch to be on. Nothing is sent for a problem Brain or a
 // Work is already on, and a quiet day sends nothing.
@@ -42,10 +45,12 @@ type PushFunc func(threadID, title, body string) error
 const (
 	notifyFile = "notify.json"
 
-	briefHour, briefMinute = 8, 30
-	// A daemon that was down at 08:30 still briefs until this hour.
-	briefCatchUpUntil = 12
-	briefMaxItems     = 5
+	// The seeded brief is due at this local time; the user owns it after.
+	briefSeedHour, briefSeedMinute = 8, 30
+	// A daemon that was down when the brief was due still briefs this long
+	// after; later than that the occurrence is skipped.
+	briefCatchUp  = 3*time.Hour + 30*time.Minute
+	briefMaxItems = 5
 	// A judged problem needs this score to be worth the morning brief.
 	briefMinScore = 40
 	// Urgent when a judged problem costs at least this much...
@@ -75,10 +80,19 @@ type notifyState struct {
 	// Urgent holds problems already pushed in their current episode.
 	Urgent map[string]time.Time `json:"urgent"`
 	// Briefed maps a problem to when a brief last showed it.
-	Briefed      map[string]time.Time `json:"briefed"`
-	LastBriefDay string               `json:"last_brief_day,omitempty"`
-	LastTriageAt time.Time            `json:"last_triage_at,omitzero"`
-	Device       Device               `json:"device"`
+	Briefed map[string]time.Time `json:"briefed"`
+	// LastBriefFor is the calendar occurrence the last brief answered. A
+	// restart that finds the same occurrence due again does not brief twice.
+	LastBriefFor time.Time `json:"last_brief_for,omitzero"`
+	// BriefSeeded records that the calendar item was created.
+	BriefSeeded  bool      `json:"brief_seeded,omitempty"`
+	LastTriageAt time.Time `json:"last_triage_at,omitzero"`
+	Device       Device    `json:"device"`
+}
+
+// Calendar is where the morning brief lives.
+type Calendar interface {
+	Seed(owner string, item calendar.Item) (calendar.Item, bool, error)
 }
 
 type notifier struct {
@@ -87,6 +101,10 @@ type notifier struct {
 	push   PushFunc
 	thread func() string
 	now    func() time.Time
+	// calendar and language are set by the collector. Without a calendar
+	// there is no morning brief.
+	calendar Calendar
+	language func() string
 
 	mu           sync.Mutex
 	state        notifyState
@@ -137,24 +155,20 @@ func (n *notifier) baseline() {
 
 // seed makes the first start quiet. Problems that already exist were never
 // sent, and a restart must not send them all at once: the backlog goes to
-// Brain only when asked for (Triage with backlog), and today's brief is not
-// owed if its time has passed.
+// Brain only when asked for (Triage with backlog).
 func (n *notifier) seed() {
-	now := n.now()
 	for _, problem := range n.store.Problems(Filter{}) {
 		n.state.Sent[problem.ID] = fingerprint(problem)
 	}
 	n.baseline()
-	if !n.beforeBrief(now) {
-		n.state.LastBriefDay = n.day(now)
-	}
 }
 
 func (n *notifier) saveLocked() error {
 	return writeJSON(filepath.Join(n.store.dir, notifyFile), n.state)
 }
 
-// SetDevice remembers the phone's timezone: the brief goes out at 08:30 there.
+// SetDevice remembers the phone's timezone, which the brief's calendar item is
+// created in.
 func (n *notifier) SetDevice(device Device) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -179,15 +193,67 @@ func (n *notifier) location() *time.Location {
 	return time.Local
 }
 
-func (n *notifier) day(at time.Time) string { return at.In(n.location()).Format("2006-01-02") }
-
-func (n *notifier) beforeBrief(at time.Time) bool {
-	local := at.In(n.location())
-	return local.Hour() < briefHour || (local.Hour() == briefHour && local.Minute() < briefMinute)
+// seedBrief creates the morning brief's calendar item once: daily at 08:30 in
+// the phone's time zone, titled in the person's language. It waits for the
+// phone to report a time zone. After that the item belongs to the user; a
+// cancelled item is never made again.
+func (n *notifier) seedBrief(now time.Time) {
+	if n.calendar == nil || n.state.BriefSeeded {
+		return
+	}
+	zone := n.state.Device.TimeZone
+	if zone == "" {
+		return
+	}
+	first, err := nextLocalTime(now, zone, briefSeedHour, briefSeedMinute)
+	if err != nil {
+		log.Printf("WARN watch: morning brief time: %v", err)
+		return
+	}
+	title, notes := "Morning brief", "Watch's brief of the problems nobody is handling. Move or repeat it to change when it comes; cancel it to turn it off."
+	if n.language != nil && n.language() == "Chinese" {
+		title, notes = "早报", "Watch 汇总没人处理的问题。改时间或重复方式就改变早报的时间,取消就关闭早报。"
+	}
+	_, _, err = n.calendar.Seed(calendar.OwnerWatchBrief, calendar.Item{
+		Title:      title,
+		Kind:       calendar.KindReminder,
+		NotifyAt:   &first,
+		Timezone:   zone,
+		Recurrence: calendar.RecurrenceDaily,
+		Notes:      notes,
+	})
+	if err != nil {
+		log.Printf("WARN watch: seed morning brief: %v", err)
+		return
+	}
+	n.state.BriefSeeded = true
+	if err := n.saveLocked(); err != nil {
+		log.Printf("WARN watch: save: %v", err)
+	}
 }
 
-func (n *notifier) inBriefWindow(at time.Time) bool {
-	return !n.beforeBrief(at) && at.In(n.location()).Hour() < briefCatchUpUntil
+// nextLocalTime is the next hh:mm in zone after at.
+func nextLocalTime(at time.Time, zone string, hour, minute int) (time.Time, error) {
+	loc, err := time.LoadLocation(zone)
+	if err != nil {
+		return time.Time{}, err
+	}
+	clock := fmt.Sprintf("%02d:%02d", hour, minute)
+	day := at.In(loc)
+	for attempts := 0; attempts < 7; attempts++ {
+		date := day.Format("2006-01-02")
+		candidate, err := calendar.ResolveLocalDateTime(date, clock, zone, "")
+		if err != nil {
+			// A time that occurs twice: take the first. One that does not
+			// exist: try the next day.
+			candidate, err = calendar.ResolveLocalDateTime(date, clock, zone, "first")
+		}
+		if err == nil && candidate.After(at) {
+			return candidate, nil
+		}
+		day = day.AddDate(0, 0, 1)
+	}
+	return time.Time{}, fmt.Errorf("no %s in %s within a week", clock, zone)
 }
 
 func fingerprint(problem Problem) string {
@@ -363,11 +429,25 @@ func (n *notifier) tick() {
 	n.forgetEnded()
 	n.sendUrgent()
 	n.sendTriage(now, false)
-	if n.inBriefWindow(now) && n.state.LastBriefDay != n.day(now) {
-		if _, err := n.sendBrief(now); err != nil {
-			log.Printf("WARN watch: morning brief: %v", err)
-		}
+	n.seedBrief(now)
+}
+
+// briefDue answers the calendar: the brief item's occurrence at due has come.
+// An error is tried again until the occurrence is too late.
+func (n *notifier) briefDue(due time.Time) error {
+	if n == nil {
+		return errors.New("Watch cannot reach Brain")
 	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if !n.store.Config().Enabled || !due.After(n.state.LastBriefFor) {
+		return nil
+	}
+	if _, err := n.sendBrief(n.now()); err != nil {
+		return err
+	}
+	n.state.LastBriefFor = due
+	return n.saveLocked()
 }
 
 // forgetEnded lets a problem that ended, or that Work fixed, be pushed again
@@ -499,12 +579,11 @@ func (n *notifier) sendTriage(now time.Time, backlog bool) (sent int) {
 }
 
 // sendBrief tells Brain the brief is due. With nothing to say it sends
-// nothing and still counts the day as done.
+// nothing.
 func (n *notifier) sendBrief(now time.Time) (int, error) {
 	items := n.briefCandidates(now)
 	if len(items) == 0 {
-		n.state.LastBriefDay = n.day(now)
-		return 0, n.saveLocked()
+		return 0, nil
 	}
 	disposition, err := n.submit("brief", items)
 	if err != nil || !delivered(disposition) {
@@ -517,7 +596,6 @@ func (n *notifier) sendBrief(now time.Time) (int, error) {
 		n.state.Briefed[problem.ID] = now
 		n.state.Sent[problem.ID] = fingerprint(problem)
 	}
-	n.state.LastBriefDay = n.day(now)
 	return len(items), n.saveLocked()
 }
 
@@ -529,8 +607,7 @@ func (n *notifier) Triage(backlog bool) int {
 	return n.sendTriage(n.now(), backlog)
 }
 
-// Brief sends today's brief now if anything is worth it. A brief sent by
-// hand counts as today's.
+// Brief sends a brief now if anything is worth it, whatever the calendar says.
 func (n *notifier) Brief() (int, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()

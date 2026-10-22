@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/calendar"
 )
 
 type fakeBrain struct {
@@ -209,20 +210,21 @@ func TestUrgentProblemsGoOutAtOnceOncePerEpisode(t *testing.T) {
 	}
 }
 
-func TestMorningBriefAtHalfPastEightInTheUsersTimezone(t *testing.T) {
-	f := newNotifyFixture(t, time.Date(2026, 10, 21, 23, 0, 0, 0, time.UTC)) // 07:00 Shanghai
+func TestMorningBriefComesWhenTheCalendarSaysSo(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 30, 0, 0, time.UTC)) // 08:30 Shanghai
 	f.problem("a", "Terminal scroll still janky", 60)
 	f.problem("b", "Upload fails on phone", 65)
 	f.problem("low", "Minor", 10)
 	f.problem("fixing", "Being fixed", 90, func(p *Problem) { p.Status = StatusFixing })
 	f.problem("later", "Later", 70, func(p *Problem) { p.Label = &Label{Value: LabelLater, At: f.clock} })
-	f.n.state.LastBriefDay = "2026-10-20"
 	f.n.tick()
 	if got := countKind(f.brain.receipts, "brief"); got != 0 {
-		t.Fatal("brief before 08:30 local")
+		t.Fatal("a tick alone sent a brief: only the calendar does")
 	}
-	f.advance(90 * time.Minute) // 08:30
-	f.n.tick()
+	due := f.clock
+	if err := f.n.briefDue(due); err != nil {
+		t.Fatal(err)
+	}
 	if got := countKind(f.brain.receipts, "brief"); got != 1 {
 		t.Fatalf("brief events = %d, receipts %v", got, f.brain.receipts)
 	}
@@ -239,48 +241,127 @@ func TestMorningBriefAtHalfPastEightInTheUsersTimezone(t *testing.T) {
 	if strings.Index(body, "id=b") > strings.Index(body, "id=a") {
 		t.Fatalf("worst first:\n%s", body)
 	}
-	f.advance(10 * time.Minute)
-	f.n.tick()
-	if got := countKind(f.brain.receipts, "brief"); got != 1 {
-		t.Fatalf("second brief the same day: %d", got)
+	// The same occurrence again (a crash before the calendar advanced) is not
+	// briefed twice, even after a restart from disk.
+	if err := f.n.briefDue(due); err != nil || countKind(f.brain.receipts, "brief") != 1 {
+		t.Fatalf("the same occurrence briefed twice: %v", err)
 	}
-	// Next morning the shown problems rest for a few days.
+	reopened, err := newNotifier(f.store, f.brain, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.briefDue(due); err != nil || countKind(f.brain.receipts, "brief") != 1 {
+		t.Fatalf("a restart briefed the same occurrence again: %v", err)
+	}
+	// The next morning the shown problems rest for a few days.
 	f.advance(24 * time.Hour)
-	f.n.tick()
-	if got := countKind(f.brain.receipts, "brief"); got != 1 {
-		t.Fatalf("a problem was shown again inside the cooldown: %d", got)
+	if err := f.n.briefDue(due.Add(24 * time.Hour)); err != nil || countKind(f.brain.receipts, "brief") != 1 {
+		t.Fatalf("a problem was shown again inside the cooldown: %v", err)
+	}
+}
+
+func TestMovingTheBriefAfterOneWasSentBriefsAgain(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 30, 0, 0, time.UTC))
+	f.problem("a", "Big", 70)
+	if err := f.n.briefDue(f.clock); err != nil {
+		t.Fatal(err)
+	}
+	f.problem("b", "Another", 75)
+	f.advance(20 * time.Minute)
+	if err := f.n.briefDue(f.clock); err != nil {
+		t.Fatal(err)
+	}
+	if got := countKind(f.brain.receipts, "brief"); got != 2 {
+		t.Fatalf("a later occurrence the same day should brief: %d", got)
 	}
 }
 
 func TestNothingToSayMeansNoBrief(t *testing.T) {
-	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 40, 0, 0, time.UTC)) // 08:40 local
-	f.n.state.LastBriefDay = "2026-10-21"
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 40, 0, 0, time.UTC))
 	f.problem("low", "Minor", 10)
-	f.n.tick()
-	if countKind(f.brain.receipts, "brief") != 0 {
-		t.Fatal("sent a brief with nothing in it")
-	}
-	if f.n.state.LastBriefDay != "2026-10-22" {
-		t.Fatal("the quiet day was not counted")
+	if err := f.n.briefDue(f.clock); err != nil || countKind(f.brain.receipts, "brief") != 0 {
+		t.Fatalf("sent a brief with nothing in it: %v", err)
 	}
 	if sent, err := f.n.Brief(); sent != 0 || err != nil || countKind(f.brain.receipts, "brief") != 0 {
 		t.Fatalf("manual brief: %d %v", sent, err)
 	}
 }
 
-func TestBriefOnlyWhileWatchIsOnAndNotAfterNoon(t *testing.T) {
-	f := newNotifyFixture(t, time.Date(2026, 10, 22, 6, 0, 0, 0, time.UTC)) // 14:00 local
+func TestBriefOnlyWhileWatchIsOn(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 1, 0, 0, 0, time.UTC))
 	f.problem("a", "Big", 70)
-	f.n.state.LastBriefDay = "2026-10-21"
-	f.n.tick()
-	if countKind(f.brain.receipts, "brief") != 0 {
-		t.Fatal("brief after the catch-up window")
+	f.store.SetEnabled(false)
+	if err := f.n.briefDue(f.clock); err != nil || len(f.brain.receipts) != 0 {
+		t.Fatalf("sent while Watch is off: %v", err)
 	}
-	f.clock = time.Date(2026, 10, 22, 1, 0, 0, 0, time.UTC)
+}
+
+type fakeCalendar struct {
+	items []calendar.Item
+}
+
+func (c *fakeCalendar) Seed(owner string, item calendar.Item) (calendar.Item, bool, error) {
+	for _, existing := range c.items {
+		if existing.Owner == owner {
+			return existing, false, nil
+		}
+	}
+	item.Owner = owner
+	c.items = append(c.items, item)
+	return item, true, nil
+}
+
+func TestBriefItemIsSeededOnceAtHalfPastEightInThePhonesZone(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 4, 0, 0, 0, time.UTC)) // 12:00 Shanghai
+	cal := &fakeCalendar{}
+	f.n.calendar = cal
+	f.n.language = func() string { return "Chinese" }
+	f.n.state.Device = Device{}
+	f.n.tick()
+	if len(cal.items) != 0 {
+		t.Fatal("seeded before the phone reported a time zone")
+	}
+	f.n.SetDevice(Device{TimeZone: "Asia/Shanghai"})
 	f.store.SetEnabled(false)
 	f.n.tick()
-	if len(f.brain.receipts) != 0 {
-		t.Fatal("sent while Watch is off")
+	if len(cal.items) != 0 {
+		t.Fatal("seeded while Watch is off")
+	}
+	f.store.SetEnabled(true)
+	f.n.tick()
+	f.n.tick()
+	if len(cal.items) != 1 {
+		t.Fatalf("items = %d", len(cal.items))
+	}
+	item := cal.items[0]
+	want := time.Date(2026, 10, 23, 0, 30, 0, 0, time.UTC) // tomorrow 08:30 Shanghai: today's has passed
+	if item.Title != "早报" || item.Kind != calendar.KindReminder || item.Recurrence != calendar.RecurrenceDaily ||
+		item.Timezone != "Asia/Shanghai" || item.NotifyAt == nil || !item.NotifyAt.Equal(want) || item.Owner != calendar.OwnerWatchBrief {
+		t.Fatalf("seeded item = %+v", item)
+	}
+	// A restart, with the item cancelled or gone, never makes another.
+	cal.items = nil
+	reopened, err := newNotifier(f.store, f.brain, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened.calendar = cal
+	reopened.tick()
+	if len(cal.items) != 0 {
+		t.Fatal("seeded again after a restart")
+	}
+}
+
+func TestBriefTitleDefaultsToEnglish(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)) // 08:00 Shanghai: today's 08:30 is still ahead
+	cal := &fakeCalendar{}
+	f.n.calendar = cal
+	f.n.tick()
+	if len(cal.items) != 1 || cal.items[0].Title != "Morning brief" {
+		t.Fatalf("items = %+v", cal.items)
+	}
+	if want := time.Date(2026, 10, 22, 0, 30, 0, 0, time.UTC); !cal.items[0].NotifyAt.Equal(want) {
+		t.Fatalf("first brief at %v, want %v", cal.items[0].NotifyAt, want)
 	}
 }
 
