@@ -41,6 +41,11 @@ type Options struct {
 	Admissions AdmissionSource
 	Sessions   SessionLister
 	External   ExternalReader
+	// Brain, Push and Thread let Watch reach Brain and the phone. Without
+	// Brain, Watch collects and judges but sends nothing.
+	Brain  Brain
+	Push   PushFunc
+	Thread func() string
 }
 
 // Collector runs the collectors and then the rules. Passes never overlap.
@@ -54,6 +59,7 @@ type Collector struct {
 	external    ExternalReader
 	transcripts transcriptSource
 	judge       *judge
+	notify      *notifier
 	now         func() time.Time
 	pause       func()
 
@@ -70,7 +76,7 @@ type Collector struct {
 
 // NewCollector creates a Collector.
 func NewCollector(options Options) *Collector {
-	return &Collector{
+	c := &Collector{
 		store:       options.Store,
 		home:        options.Home,
 		logPath:     options.LogPath,
@@ -84,6 +90,22 @@ func NewCollector(options Options) *Collector {
 		pause:       func() { time.Sleep(2 * time.Millisecond) },
 		errors:      map[string]string{},
 		lastRun:     map[string]time.Time{},
+	}
+	if options.Brain != nil {
+		notify, err := newNotifier(options.Store, options.Brain, options.Push, options.Thread)
+		if err != nil {
+			log.Printf("WARN watch: notifications unavailable: %v", err)
+		} else {
+			c.notify = notify
+		}
+	}
+	return c
+}
+
+// SetDevice tells Watch the user's timezone, which the morning brief follows.
+func (c *Collector) SetDevice(device Device) {
+	if c.notify != nil {
+		c.notify.SetDevice(device)
 	}
 }
 
@@ -126,6 +148,7 @@ func (c *Collector) Run(ctx context.Context) error {
 		case <-timer.C:
 		}
 		c.Collect(ctx, nil, false)
+		c.notify.tick()
 		timer.Reset(runtimeEvery)
 	}
 }
@@ -290,6 +313,7 @@ type Request struct {
 	Batches   int      `json:"batches,omitempty"`
 	WorkID    string   `json:"work_id,omitempty"`
 	By        string   `json:"by,omitempty"`
+	Backlog   bool     `json:"backlog,omitempty"`
 }
 
 // Response answers a Request.
@@ -303,6 +327,8 @@ type Response struct {
 	Config   *Config     `json:"config,omitempty"`
 	Problem  *Problem    `json:"problem,omitempty"`
 	Runs     []JudgeRun  `json:"runs,omitempty"`
+	// Sent is how many problems a triage or brief handed to Brain.
+	Sent *int `json:"sent,omitempty"`
 }
 
 // Handle serves a CLI request.
@@ -333,6 +359,24 @@ func (c *Collector) Handle(ctx context.Context, request Request) (Response, erro
 	case "label":
 		problem, err := c.store.LabelProblem(request.ProblemID, request.Label, request.Note, request.By)
 		return Response{Problem: &problem}, err
+	case "triage":
+		if c.notify == nil {
+			return Response{}, errors.New("Watch cannot reach Brain")
+		}
+		if !c.store.Config().Enabled {
+			return Response{}, errors.New("Watch is off; run mewla watch enable first")
+		}
+		sent := c.notify.Triage(request.Backlog)
+		return Response{Sent: &sent}, nil
+	case "brief":
+		if c.notify == nil {
+			return Response{}, errors.New("Watch cannot reach Brain")
+		}
+		if !c.store.Config().Enabled {
+			return Response{}, errors.New("Watch is off; run mewla watch enable first")
+		}
+		sent, err := c.notify.Brief()
+		return Response{Sent: &sent}, err
 	case "link":
 		if err := c.requireWork(request.WorkID); err != nil {
 			return Response{}, err
