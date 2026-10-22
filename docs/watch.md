@@ -5,8 +5,9 @@ scattered signals into a small number of problems worth your attention.
 
 Watch collects signals all the time, for free. When you turn Watch on, an
 agent also reads new signals and turns them into a few problems, ranked by
-what they cost you. The in-app view comes in a later release. Until then you
-can inspect everything with `mewla watch`.
+what they cost you. Watch has no screen of its own: problems reach you through
+Brain, in the conversation you already have ([Reaching you](#reaching-you)).
+You can inspect everything with `mewla watch`.
 
 ## Projects
 
@@ -90,6 +91,22 @@ A few clear-cut problems are flagged immediately, without a model:
 - **Worker stalled or lost repeatedly.** One piece of Work lost or stalled its
   Worker at least twice in the last week.
 
+### Problems and Work
+
+A problem is tied to the Work that handles it, so the ones Brain already dealt
+with stop asking for you:
+
+- A problem is linked to Work when its rule's subject is that Work, when its
+  signals happened in it, when its text names the Work id, or when the Work
+  was opened for it (its objective names the problem id). Brain adds the
+  rest while triaging: `mewla watch problem link <id> --work <work id>`.
+- Work that is running makes the problem **fixing**. Work opened for the
+  problem, or the stalled Work itself, makes it **fixed** once Brain accepts
+  it after the problem's last signal. Work the problem merely happened in
+  never fixes it.
+- A problem that returns after being fixed is **recurred**. A cancelled Work
+  puts it back. Your `not` label always stands.
+
 ### Judgment
 
 With Watch on, new signals are handed in batches to one agent run with no
@@ -109,14 +126,38 @@ tools. It does three things:
 Before that, signals whose turn, Session or Work later turned up in a known
 repository are placed without a model.
 
-Judgment uses Claude Code (`claude -p`) with Sonnet, signed in the way your
-own Claude Code is, without tools, hooks, MCP servers or a saved session. A run takes at most 300 signals or about
-60,000 characters. A full batch runs at once; a partial one waits two hours, since the rules
+Judgment runs on an agent you have, signed in the way your own copy is,
+without tools, hooks, MCP servers or a saved session. Claude Code
+(`claude -p`, Sonnet), Codex (`codex exec`) and Pi (`pi -p`) can judge. A run
+takes at most 300 signals or about 60,000 characters. A full batch runs at once; a partial one waits two hours, since the rules
 above already flag severe problems at once.
 There are at most 60 runs a day, and a failed run waits 10 minutes and retries
 with a smaller batch. Nothing runs when there are no new signals. Signal text
 is treated as data, never as instructions, and secrets are removed again
 before it is sent. Each run's tokens and cost are logged.
+
+#### Which agent judges
+
+One row of `routing.md` in Brain's workspace picks it, like a Worker's route.
+The Task cell starts with `Watch judgment`; the other cells are the executor,
+model and reasoning, with the same ids as for Workers (`default` leaves the
+choice to the agent):
+
+```
+| Watch judgment | pi | opencode-go/deepseek-v4.1-flash | low |
+```
+
+Watch reads the row strictly: the executor must be Claude Code, Codex or Pi
+and be installed, the model one id, and the reasoning a level that executor
+knows (Claude low–max, Codex none–ultra, Pi off–max). It reads the file again
+whenever it changes. With no row, or one it can't use, Watch chooses by itself
+and `mewla watch status` says why (`judgment.routing`): Brain's own agent
+first, then the one that last worked, then Claude Code, Codex and Pi. A row it
+can use is the only agent asked; if that run fails the failure is logged and
+retried, never passed to another model. New workspaces start with a Claude
+Code Sonnet row. The row picks who judges and nothing else: no tools, hooks,
+saved session, redaction, batch, daily and cost limits change with it. Each
+run's executor, model, tokens and cost (where the agent reports it) are logged.
 
 ```sh
 mewla watch enable
@@ -136,6 +177,41 @@ given to later runs, so they learn what you care about.
 mewla watch problem label j_1a2b3c4d5e6f not --note "flaky runner, not our code"
 ```
 
+## Reaching you
+
+Watch writes to Brain the way a message from Telegram or another computer
+does, and only while Watch is on. Brain decides what to do and what to tell
+you; Watch never speaks in your conversation itself, and what it hands Brain
+stays out of the thread. The rules live in Brain's `policies/watch.md`.
+
+- **Triage.** New or changed problems go to Brain in one batch, after they
+  have been quiet for half an hour or ten have piled up, at most every two
+  hours. Brain closes noise (`not`, with a reason, marked as Brain's verdict
+  so Watch doesn't learn it as yours), links problems to the Work already on
+  them and leaves the rest. It doesn't message you.
+- **Urgent.** A failed CI run on a default branch that is its workflow's latest
+  run, or a problem costing 80 or more, whose last signal is under six hours
+  old, is pushed at once, once per episode, and Brain tells you in a line.
+  Starting the daemon or turning Watch on never pushes what was already
+  urgent.
+- **Morning brief.** At 08:30 where your phone is (the phone tells the daemon
+  its timezone), Brain posts one message listing the three to five problems
+  nobody is handling, one plain line each: what it is and what it costs. Under
+  it are tap-to-answer chips for each: handle, not a problem, later. A tap
+  is the same as typing it, so "1 handle, 3 not a problem" works too. Handle
+  opens Work for it, not a problem labels it `not`, later labels it `later`.
+  A problem a brief showed rests for three days; `later` rests until it gets
+  new signals or a week passes. With nothing to say there is no brief. A
+  daemon that was down at 08:30 still briefs until noon.
+
+```sh
+mewla watch triage --backlog       # hand Brain every problem still waiting, once
+mewla watch brief                  # hand Brain the brief now
+```
+
+The chips are not Watch's: any Brain question can use them
+(`mewla brain replies set -row "Yes|No"`; see [Brain and Work](brain-and-work.md)).
+
 ## Storage
 
 Everything lives in `~/.mewla/watch/`: `config.json` (the setting),
@@ -143,5 +219,7 @@ Everything lives in `~/.mewla/watch/`: `config.json` (the setting),
 source has been read), `problems.json`, `index.json` (which working directory
 each turn, Session and piece of Work used), `annotations.json` (placements and
 authors found after collection, and which signals judgment has seen) and
-`judge-runs.jsonl` (each run's size, results, tokens and cost). Running a
+`judge-runs.jsonl` (each run's size, results, tokens and cost) and
+`notify.json` (what Brain has been told, when the last brief went out, and
+your timezone). Running a
 collection pass again adds nothing that's already stored.

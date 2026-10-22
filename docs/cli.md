@@ -49,6 +49,7 @@ mewla brain use <executor>            # move Brain to another agent; the thread 
 mewla brain workspace                 # path to Brain's notes
 mewla brain objective show|clear
 mewla brain objective set "Ship atlas-notes v1.4 this week"   # the goal line in the app
+mewla brain replies set -row "Yes|No" [-push "one line"]      # tap-to-answer chips under Brain's last message
 mewla brain work list --json          # open Work; -all, -full, -id <work> for more (-id adds transcript paths)
 mewla memory search "<phrase>" [--from user|brain|context|all] [--since 30d] [--limit 20] [--json]
 mewla memory show <id> [--around 3] [--json]   # a chat message with its neighbours
@@ -112,6 +113,9 @@ mewla watch signals --project mewla --source human --since 24h
 mewla watch problems --rule judgment
 mewla watch enable && mewla watch judge   # agent judgment; costs tokens
 mewla watch problem label <id> real|not|later --note "why"
+mewla watch problem link <id> --work <work id>   # Work that handles it: fixing, then fixed
+mewla watch triage [--backlog]     # hand Brain the new problems; --backlog sends every waiting one
+mewla watch brief                  # hand Brain the morning brief now
 mewla watch project rename --project <id> --name "New name"
 mewla watch project link-linear --project <id> --team KEY --confirm
 ```
