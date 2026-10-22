@@ -52,9 +52,29 @@ type githubCursor struct {
 	AlertsSince time.Time `json:"alerts_since"`
 	// RunsSince is the latest completion seen. Runs finish out of ID order
 	// (a long CI run after a short Pages run), so reads overlap it and rely on
-	// signal-ID dedupe. Failing is tracked per workflow.
-	RunsSince time.Time       `json:"runs_since"`
-	Failing   map[string]bool `json:"failing,omitempty"`
+	// signal-ID dedupe.
+	RunsSince time.Time `json:"runs_since"`
+	// CIChecked marks cursors written once a pass is judged against the
+	// store, not against this cursor's memory; older cursors re-read the
+	// whole window once, so a pass that was missed still clears its failure.
+	CIChecked bool `json:"ci_checked,omitempty"`
+}
+
+// ciKind says what a completed run is to Watch. Every failure is a signal. A
+// success is one only for a workflow Watch still records as red, so the
+// latest run of each workflow decides whether it is red, however many other
+// workflows ran in between and however the cursor got there.
+func ciKind(run githubRun, lastFailed, lastPassed map[string]time.Time) string {
+	switch run.Conclusion {
+	case "failure", "timed_out", "startup_failure":
+		return kindCIFailed
+	case "success":
+		failedAt, red := lastFailed[run.Name]
+		if red && run.UpdatedAt.After(failedAt) && !lastPassed[run.Name].After(failedAt) {
+			return kindCIPassed
+		}
+	}
+	return ""
 }
 
 const runOverlap = 15 * time.Minute
@@ -279,11 +299,16 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	// Default-branch CI: each failed run, and each workflow's first pass
 	// after it failed.
 	if link.Branch != "" {
-		if cursor.Failing == nil {
-			cursor.Failing = map[string]bool{}
+		lastFailed, lastPassed := map[string]time.Time{}, map[string]time.Time{}
+		for kind, latest := range map[string]map[string]time.Time{kindCIFailed: lastFailed, kindCIPassed: lastPassed} {
+			for _, signal := range c.store.Signals(Filter{Source: SourceExternal, Kind: kind}) {
+				if signal.ProjectID == projectID && signal.Time.After(latest[signal.Refs["workflow"]]) {
+					latest[signal.Refs["workflow"]] = signal.Time
+				}
+			}
 		}
 		body, _ = c.readGitHub(ctx, link, reads, "actions", "list_workflow_runs",
-			map[string]any{"branch": link.Branch, "status": "completed", "per_page": 50})
+			map[string]any{"branch": link.Branch, "status": "completed", "per_page": 100})
 		if body != nil {
 			var page struct {
 				Runs []githubRun `json:"workflow_runs"`
@@ -291,6 +316,10 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 			_ = json.Unmarshal(body, &page)
 			sort.Slice(page.Runs, func(i, j int) bool { return page.Runs[i].UpdatedAt.Before(page.Runs[j].UpdatedAt) })
 			readFrom := cursor.RunsSince.Add(-runOverlap)
+			if !cursor.CIChecked {
+				readFrom = horizon
+				cursor.CIChecked = true
+			}
 			for _, run := range page.Runs {
 				if run.UpdatedAt.Before(horizon) || run.UpdatedAt.Before(readFrom) {
 					continue
@@ -298,16 +327,16 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 				if run.UpdatedAt.After(cursor.RunsSince) {
 					cursor.RunsSince = run.UpdatedAt
 				}
-				failed := run.Conclusion == "failure" || run.Conclusion == "timed_out" || run.Conclusion == "startup_failure"
-				passed := run.Conclusion == "success"
-				kind, summary := "", ""
-				switch {
-				case failed:
-					kind, summary = kindCIFailed, fmt.Sprintf("%s %s on %s: %s", run.Name, run.Conclusion, run.HeadBranch, run.DisplayTitle)
-					cursor.Failing[run.Name] = true
-				case passed && cursor.Failing[run.Name]:
-					kind, summary = kindCIPassed, fmt.Sprintf("%s passed on %s again: %s", run.Name, run.HeadBranch, run.DisplayTitle)
-					delete(cursor.Failing, run.Name)
+				kind, summary := ciKind(run, lastFailed, lastPassed), ""
+				switch kind {
+				case kindCIFailed:
+					summary = fmt.Sprintf("%s %s on %s: %s", run.Name, run.Conclusion, run.HeadBranch, run.DisplayTitle)
+					if run.UpdatedAt.After(lastFailed[run.Name]) {
+						lastFailed[run.Name] = run.UpdatedAt
+					}
+				case kindCIPassed:
+					summary = fmt.Sprintf("%s passed on %s again: %s", run.Name, run.HeadBranch, run.DisplayTitle)
+					lastPassed[run.Name] = run.UpdatedAt
 				default:
 					continue
 				}

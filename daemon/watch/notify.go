@@ -48,8 +48,10 @@ const (
 	briefMaxItems     = 5
 	// A judged problem needs this score to be worth the morning brief.
 	briefMinScore = 40
-	// Urgent when a judged problem costs at least this much.
+	// Urgent when a judged problem costs at least this much...
 	urgentScore = 80
+	// ...and only while it is happening: its last signal is this recent.
+	urgentRecent = 6 * time.Hour
 	// A problem the brief already showed is not shown again for this long.
 	briefCooldown = 3 * 24 * time.Hour
 	// A "later" lasts until new evidence arrives, or this long.
@@ -89,10 +91,14 @@ type notifier struct {
 	mu           sync.Mutex
 	state        notifyState
 	pendingSince map[string]time.Time
+	// prevUrgent is what was urgent at the last look. Only a problem that
+	// becomes urgent after that is pushed: what already was urgent when the
+	// daemon started, or when Watch was turned on, is not news.
+	prevUrgent map[string]bool
 }
 
 func newNotifier(store *Store, brain Brain, push PushFunc, thread func() string) (*notifier, error) {
-	n := &notifier{store: store, brain: brain, push: push, thread: thread, now: store.now, pendingSince: map[string]time.Time{}}
+	n := &notifier{store: store, brain: brain, push: push, thread: thread, now: store.now, pendingSince: map[string]time.Time{}, prevUrgent: map[string]bool{}}
 	path := filepath.Join(store.dir, notifyFile)
 	_, statErr := os.Stat(path)
 	if err := readJSON(path, &n.state); err != nil {
@@ -111,7 +117,22 @@ func newNotifier(store *Store, brain Brain, push PushFunc, thread func() string)
 		n.seed()
 		return n, n.saveLocked()
 	}
-	return n, nil
+	// Every start looks at the backlog without pushing.
+	n.baseline()
+	return n, n.saveLocked()
+}
+
+// baseline records the problems that are urgent right now as already known.
+func (n *notifier) baseline() {
+	now := n.now()
+	for _, problem := range n.store.Problems(Filter{}) {
+		if urgent(problem, now) {
+			n.prevUrgent[problem.ID] = true
+			if _, ok := n.state.Urgent[problem.ID]; !ok {
+				n.state.Urgent[problem.ID] = now
+			}
+		}
+	}
 }
 
 // seed makes the first start quiet. Problems that already exist were never
@@ -122,10 +143,8 @@ func (n *notifier) seed() {
 	now := n.now()
 	for _, problem := range n.store.Problems(Filter{}) {
 		n.state.Sent[problem.ID] = fingerprint(problem)
-		if urgent(problem) {
-			n.state.Urgent[problem.ID] = now
-		}
 	}
+	n.baseline()
 	if !n.beforeBrief(now) {
 		n.state.LastBriefDay = n.day(now)
 	}
@@ -193,8 +212,11 @@ func waiting(problem Problem) bool {
 	return true
 }
 
-func urgent(problem Problem) bool {
+func urgent(problem Problem, now time.Time) bool {
 	if !waiting(problem) || problem.Label != nil && problem.Label.Value == LabelNot {
+		return false
+	}
+	if now.Sub(problem.LastSeen) > urgentRecent {
 		return false
 	}
 	if problem.Rule == RuleCIRed && problem.Severe {
@@ -365,12 +387,27 @@ func (n *notifier) forgetEnded() {
 }
 
 func (n *notifier) sendUrgent() {
+	now := n.now()
+	current := map[string]bool{}
 	var fresh []Problem
 	for _, problem := range n.store.Problems(Filter{}) {
-		if _, pushed := n.state.Urgent[problem.ID]; !pushed && urgent(problem) {
+		if !urgent(problem, now) {
+			continue
+		}
+		current[problem.ID] = true
+		if _, pushed := n.state.Urgent[problem.ID]; !pushed && !n.prevUrgent[problem.ID] {
 			fresh = append(fresh, problem)
 		}
 	}
+	// A problem Brain did not take stays "fresh" for the next look.
+	defer func() {
+		for _, problem := range fresh {
+			if _, pushed := n.state.Urgent[problem.ID]; !pushed {
+				delete(current, problem.ID)
+			}
+		}
+		n.prevUrgent = current
+	}()
 	if len(fresh) == 0 {
 		return
 	}
@@ -381,7 +418,6 @@ func (n *notifier) sendUrgent() {
 		}
 		return
 	}
-	now := n.now()
 	for _, problem := range fresh {
 		n.state.Urgent[problem.ID] = now
 		n.state.Sent[problem.ID] = fingerprint(problem)

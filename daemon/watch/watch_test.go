@@ -731,3 +731,124 @@ func TestExternalCoverageFollowsThePluginSwitchAndGrants(t *testing.T) {
 		t.Fatalf("unreachable: %+v", coverage())
 	}
 }
+
+func ciRun(name, conclusion string, at time.Time) githubRun {
+	return githubRun{ID: at.Unix(), Name: name, Conclusion: conclusion, UpdatedAt: at, HeadBranch: "main"}
+}
+
+func TestCILatestRunPerWorkflowDecides(t *testing.T) {
+	base := time.Date(2026, 10, 15, 2, 50, 0, 0, time.UTC)
+	failed, passed := map[string]time.Time{}, map[string]time.Time{}
+	step := func(run githubRun) string {
+		kind := ciKind(run, failed, passed)
+		switch kind {
+		case kindCIFailed:
+			failed[run.Name] = run.UpdatedAt
+		case kindCIPassed:
+			passed[run.Name] = run.UpdatedAt
+		}
+		return kind
+	}
+	// A pass for a workflow nobody saw fail is not a signal.
+	if got := step(ciRun("Android Google Play", "success", base.Add(-time.Hour))); got != "" {
+		t.Fatalf("pass without failure = %q", got)
+	}
+	if got := step(ciRun("Android Google Play", "failure", base)); got != kindCIFailed {
+		t.Fatalf("failure = %q", got)
+	}
+	// Another workflow going green does not clear it.
+	step(ciRun("Pages", "failure", base))
+	if got := step(ciRun("Pages", "success", base.Add(time.Minute))); got != kindCIPassed {
+		t.Fatalf("Pages pass = %q", got)
+	}
+	if _, ok := passed["Android Google Play"]; ok {
+		t.Fatal("another workflow's pass cleared Android Google Play")
+	}
+	// Its own newer success clears it, once; later greens add nothing.
+	if got := step(ciRun("Android Google Play", "success", base.Add(8*time.Minute))); got != kindCIPassed {
+		t.Fatalf("own pass = %q", got)
+	}
+	if got := step(ciRun("Android Google Play", "success", base.Add(time.Hour))); got != "" {
+		t.Fatalf("second pass = %q", got)
+	}
+	// A run older than the failure cannot clear it.
+	failed["Old"] = base
+	if got := step(ciRun("Old", "success", base.Add(-time.Minute))); got != "" {
+		t.Fatalf("older success = %q", got)
+	}
+}
+
+func TestCIRedResolvesWhenANewerRunSucceeds(t *testing.T) {
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 15, 2, 58, 0, 0, time.UTC)
+	signal := func(id, kind string, when time.Time) Signal {
+		return Signal{ID: id, Source: SourceExternal, ProjectID: "p1", Time: when, Kind: kind, Excerpt: id,
+			Refs: map[string]string{"workflow": "Android Google Play", "branch": "main"}}
+	}
+	store.Append([]Signal{signal("e_fail", kindCIFailed, at)})
+	if _, err := evaluateRules(store, at.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	problems := store.Problems(Filter{Kind: RuleCIRed})
+	if len(problems) != 1 || !problems[0].Active {
+		t.Fatalf("red: %#v", problems)
+	}
+	store.Append([]Signal{signal("e_pass", kindCIPassed, at.Add(3*time.Minute))})
+	if _, err := evaluateRules(store, at.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Problem(problems[0].ID); got.Active {
+		t.Fatalf("still active after a newer success: %#v", got)
+	}
+}
+
+// A failure Watch recorded earlier is cleared by a later green run even when
+// the cursor never saw the failure (the stale Android Google Play problem),
+// and further green runs add no signals.
+func TestExternalCIClearsAFailureTheCursorForgot(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "perpetuo")
+	gitRepo(t, repo, "git@github.com:acme/perpetuo.git")
+	collector, store := newTestCollector(t, home)
+	store.ProjectForCWD(repo, time.Now())
+	now := time.Now().UTC()
+	run := func(id int, name, conclusion string, ago time.Duration) map[string]any {
+		return map[string]any{"id": id, "name": name, "head_branch": "main", "status": "completed", "conclusion": conclusion,
+			"run_attempt": 1, "updated_at": now.Add(-ago).Format(time.RFC3339)}
+	}
+	body := func(value any) []byte { raw, _ := json.Marshal(value); return raw }
+	external := &fakeExternal{responses: map[string]fakeResponse{
+		"/repos/acme/perpetuo": {Status: 200, Body: body(map[string]any{"default_branch": "main"})},
+		"/repos/acme/perpetuo/actions/runs": {Status: 200, Body: body(map[string]any{"workflow_runs": []any{
+			run(1, "Android Google Play", "failure", 3*time.Hour)}})},
+	}}
+	collector.external = external
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || !problems[0].Active {
+		t.Fatalf("not red: %+v", problems)
+	}
+
+	// The cursor loses its memory, as an older build's did; the workflow went
+	// green eight minutes later while Pages kept running.
+	if err := store.DeleteCursor("external:" + store.Projects()[0].ID); err != nil {
+		t.Log(err)
+	}
+	external.responses["/repos/acme/perpetuo/actions/runs"] = fakeResponse{Status: 200, Body: body(map[string]any{"workflow_runs": []any{
+		run(1, "Android Google Play", "failure", 3*time.Hour),
+		run(2, "Android Google Play", "success", 3*time.Hour-8*time.Minute),
+		run(3, "Pages", "success", time.Hour),
+		run(4, "Android Google Play", "success", 30*time.Minute),
+	}})}
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || problems[0].Active {
+		t.Fatalf("still red after a newer success: %+v", problems)
+	}
+	passes := len(store.Signals(Filter{Kind: kindCIPassed}))
+	collector.Collect(context.Background(), []string{SourceExternal}, true)
+	if got := len(store.Signals(Filter{Kind: kindCIPassed})); got != passes || passes != 1 {
+		t.Fatalf("pass signals = %d then %d, want exactly 1", passes, got)
+	}
+}

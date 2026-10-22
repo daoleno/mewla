@@ -306,3 +306,62 @@ func countKind(receipts []string, kind string) (n int) {
 	}
 	return n
 }
+
+func TestStaleProblemsAreNotUrgent(t *testing.T) {
+	f := newNotifyFixture(t, time.Date(2026, 10, 22, 4, 0, 0, 0, time.UTC))
+	f.problem("old-ci", "CI red since last week", 0, func(p *Problem) {
+		p.Rule = RuleCIRed
+		p.Severe = true
+		p.Cost = nil
+		p.LastSeen = f.clock.Add(-urgentRecent - time.Minute)
+	})
+	f.problem("old-loud", "Costly, but days ago", 90, func(p *Problem) { p.LastSeen = f.clock.Add(-72 * time.Hour) })
+	f.n.tick()
+	if countKind(f.brain.receipts, "urgent") != 0 || len(f.pushes) != 0 {
+		t.Fatalf("stale problems pushed: %v %v", f.brain.receipts, f.pushes)
+	}
+}
+
+func TestStartupLooksAtTheBacklogWithoutPushing(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 10, 22, 4, 0, 0, 0, time.UTC)
+	open := func() (*notifier, *fakeBrain, *[]string, *Store) {
+		store, err := OpenStore(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store.now = func() time.Time { return now }
+		store.SetEnabled(true)
+		fake := &fakeBrain{}
+		var pushes []string
+		n, err := newNotifier(store, fake, func(_, title, body string) error { pushes = append(pushes, title+body); return nil }, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n, fake, &pushes, store
+	}
+	n, _, _, store := open()
+	red := &Problem{ID: "ci", Rule: RuleCIRed, Title: "CI red", Status: StatusNew, Active: true, Severe: true, LastSeen: now.Add(-time.Minute)}
+	store.mu.Lock()
+	store.problems["ci"] = red
+	store.mu.Unlock()
+	// The daemon restarts while the problem is urgent, and Urgent was lost
+	// with the episode (for example it had been inactive for a moment).
+	n.state.Urgent = map[string]time.Time{}
+	_ = n.saveLocked()
+
+	again, fake, pushes, store := open()
+	again.tick()
+	if len(fake.receipts) != 0 || len(*pushes) != 0 {
+		t.Fatalf("a restart pushed the backlog: %v %v", fake.receipts, *pushes)
+	}
+
+	// A problem that turns urgent after startup is news.
+	store.mu.Lock()
+	store.problems["new"] = &Problem{ID: "new", Rule: RuleCIRed, Title: "Another workflow", Status: StatusNew, Active: true, Severe: true, LastSeen: now}
+	store.mu.Unlock()
+	again.tick()
+	if countKind(fake.receipts, "urgent") != 1 || len(*pushes) != 1 || strings.Contains(fake.bodies[0], "id=ci ") {
+		t.Fatalf("transition: %v %v", fake.bodies, *pushes)
+	}
+}
