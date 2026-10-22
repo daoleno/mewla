@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, View, type DimensionValue, type GestureResponderEvent, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, View, type DimensionValue, type ViewStyle } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -8,6 +8,7 @@ import { Icon, type IconName } from "../icons/Icon";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { CODE_BLOCK_COPIED_RESET_MS } from "./InterfaceMessageCodeBlockCopy";
 import type { MessageMenuAnchor } from "./MessageMenuOverlay";
+import { createSteadyPress, type SteadyTouch } from "./steadyPress";
 import {
   isRetryableTurn,
   messageActionKinds,
@@ -57,6 +58,9 @@ export function useCopyFeedback(text: string) {
 }
 
 const LONG_PRESS_MS = 350;
+/** A reply button is the 44 dp the platforms ask of a touch target, with a little more above and below. */
+const REPLY_BUTTON_SIZE = 44;
+const REPLY_BUTTON_HIT_SLOP = { top: 4, bottom: 4, left: 0, right: 0 };
 const HIGHLIGHT_RADIUS = 20;
 
 /**
@@ -227,6 +231,7 @@ export function ReplyActionRow({
         icon={copied ? "check" : "copy"}
         label={copied ? "Copied" : "Copy"}
         color={copied ? chrome.accent : chrome.textMuted}
+        pressedColor={chrome.surfaceMuted}
         onPress={copy}
       />
       {retryable ? (
@@ -234,7 +239,11 @@ export function ReplyActionRow({
           icon="refresh"
           label="Retry"
           color={chrome.textMuted}
-          onPress={() => actions.retry(turn)}
+          pressedColor={chrome.surfaceMuted}
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            actions.retry(turn);
+          }}
         />
       ) : null}
       {more ? (
@@ -243,8 +252,8 @@ export function ReplyActionRow({
             icon="more-horizontal"
             label="More"
             color={chrome.textMuted}
-            onPress={(event) => {
-              const { pageX, pageY, locationX, locationY } = event.nativeEvent;
+            pressedColor={chrome.surfaceMuted}
+            onPress={({ pageX, pageY, locationX, locationY }) => {
               void pressedRect(moreRef.current, {
                 windowX: pageX,
                 windowY: pageY,
@@ -267,24 +276,50 @@ function RowButton({
   icon,
   label,
   color,
+  pressedColor,
   onPress,
 }: {
   icon: IconName;
   label: string;
   color: string;
-  onPress(event: GestureResponderEvent): void;
+  pressedColor: string;
+  onPress(touch: SteadyTouch): void;
 }) {
+  const [pressed, setPressed] = useState(false);
+  const onPressRef = useRef(onPress);
+  onPressRef.current = onPress;
+  const press = useMemo(
+    () => createSteadyPress({ onPress: (touch) => onPressRef.current(touch), onActiveChange: setPressed }),
+    [],
+  );
+  // Not a Pressable: see steadyPress. The icon ignores touches so the press
+  // lands on the button itself and locationX is relative to it.
   return (
-    <Pressable
+    <View
+      accessible
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={6}
-      onPress={onPress}
-      style={styles.replyButton}
+      accessibilityActions={[{ name: "activate" }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "activate") {
+          onPressRef.current({ pageX: 0, pageY: 0, locationX: 0, locationY: 0 });
+        }
+      }}
+      hitSlop={REPLY_BUTTON_HIT_SLOP}
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => false}
+      onResponderGrant={press.grant}
+      onResponderMove={press.move}
+      onResponderRelease={press.release}
+      onResponderTerminate={press.terminate}
+      onResponderTerminationRequest={press.canTerminate}
+      style={[styles.replyButton, pressed ? { backgroundColor: pressedColor } : null]}
       {...(Platform.OS === "web" ? ({ title: label } as object) : null)}
     >
-      <Icon name={icon} size={18} color={color} />
-    </Pressable>
+      <View pointerEvents="none">
+        <Icon name={icon} size={18} color={color} />
+      </View>
+    </View>
   );
 }
 
@@ -406,14 +441,13 @@ const styles = StyleSheet.create({
   replyRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 6,
-    marginLeft: -8,
+    // The icons sit in 44 dp targets; the first icon still lines up with the text.
+    marginLeft: -(REPLY_BUTTON_SIZE - 18) / 2 + 1,
   },
   replyButton: {
-    width: 36,
-    height: 32,
-    borderRadius: 8,
+    width: REPLY_BUTTON_SIZE,
+    height: REPLY_BUTTON_SIZE,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },

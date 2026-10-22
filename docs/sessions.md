@@ -84,7 +84,8 @@ applies, **Retry**, plus a **...** menu with **Copy** and **Select Text** (the
 message in a sheet, for selecting a whole block at once). On desktop, hover over
 a message for Copy and Edit; right-click and text selection are the browser's
 own. Copy gives the text as written, Markdown included; code blocks keep their
-own copy button.
+own copy button. Each button is a 44 dp target that commits when you lift your
+finger, so a slightly drifting tap still counts.
 
 **Retry** runs the prompt a reply answers again. It is offered only when the
 agent is idle, the Session is connected and the prompt has no attachments, as
