@@ -105,6 +105,9 @@ export function calendarReminderPlan(
     .filter(
       (item) =>
         item.kind === "reminder" &&
+        // An item Mewla acts on (the morning brief) sends its own message, and
+        // only when it has something to say; no reminder on top of it.
+        !item.owner &&
         item.status === "scheduled" &&
         Boolean(item.next_at) &&
         Date.parse(item.next_at) > now,
