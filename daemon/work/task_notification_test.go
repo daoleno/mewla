@@ -376,3 +376,39 @@ func TestClaudeEmbeddedPasteEnvelopeDisplaysWithoutTags(t *testing.T) {
 		t.Fatalf("unmatched envelope stays literal: %q", conversation.Events[0].Body)
 	}
 }
+
+// Claude absorbs a prompt sent mid-turn as a queued_command attachment and never
+// writes it as a user record. The conversation must still show it, once.
+func TestClaudeMidTurnHumanPromptAttachmentProjectsUserMessage(t *testing.T) {
+	session := "1495dd74-412e-4131-914f-8f7a0fb5566d"
+	human := map[string]any{
+		"type": "user", "uuid": "human-1", "timestamp": "2026-10-22T04:24:30Z", "sessionId": session,
+		"origin":  map[string]any{"kind": "human"},
+		"message": map[string]any{"role": "user", "content": "ordtestQ1"},
+	}
+	absorbed := map[string]any{
+		"type": "attachment", "uuid": "att-q2", "timestamp": "2026-10-22T04:24:33.185Z", "sessionId": session,
+		"attachment": map[string]any{
+			"type": "queued_command", "prompt": "ordtestQ2", "commandMode": "prompt",
+			"origin": map[string]any{"kind": "human"}, "humanTurn": true,
+		},
+	}
+	conversation := parseClaudeFixture(t, human, absorbed)
+	var bodies []string
+	for _, event := range conversation.Events {
+		if event.Kind == "user_message" {
+			bodies = append(bodies, event.Body)
+		}
+	}
+	if len(bodies) != 2 || bodies[0] != "ordtestQ1" || bodies[1] != "ordtestQ2" {
+		t.Fatalf("user messages = %q, want [ordtestQ1 ordtestQ2]", bodies)
+	}
+	last := conversation.Events[len(conversation.Events)-1]
+	if last.AdmissionSHA256 == "" {
+		t.Fatalf("absorbed prompt must carry its admission digest: %#v", last)
+	}
+	if conversation.Activity == nil || conversation.Activity.ID != session+":activity:human-1" ||
+		conversation.Activity.Status != ProviderActivityRunning {
+		t.Fatalf("absorbing a prompt must not replace the running turn: %#v", conversation.Activity)
+	}
+}
