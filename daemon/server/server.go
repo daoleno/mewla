@@ -1970,6 +1970,7 @@ func (s *Server) publishCodexConversationSubscription(
 		return
 	}
 
+	projectionStart := time.Now()
 	conversation = work.SanitizeConversationProjection(conversation)
 	conversation = conversationForProviderAttachment(conversation, resolved.fromWatcher)
 	providerFingerprint := codexConversationSubscriptionFingerprint(conversation)
@@ -1987,6 +1988,14 @@ func (s *Server) publishCodexConversationSubscription(
 		if version, versionErr := s.brainConversationProjectionVersion(raw.ConversationScopeKey); versionErr == nil {
 			brainProjectionVersion = version
 		}
+	}
+	if took := time.Since(projectionStart); took >= slowSessionInputLog {
+		// The other half of a slow first snapshot: the load above is logged
+		// on its own, and this is the Brain overlay and sanitize after it.
+		log.Printf(
+			"websocket: slow conversation projection target=%s scope=%q events=%d took=%s",
+			resolved.targetID, raw.ConversationScopeKey, len(conversation.Events), took.Round(time.Millisecond),
+		)
 	}
 
 	// Never-erase guard: an unavailable empty load (transcript miss, malformed
