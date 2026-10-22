@@ -46,7 +46,7 @@ const codexOK = `out=""; while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shi
 cat >/dev/null
 echo '{"from":"codex"}' > "$out"
 echo '{"type":"turn.completed","usage":{"input_tokens":1000,"cached_input_tokens":400,"output_tokens":30}}'`
-const piOK = "cat >/dev/null\n" + `echo '{"type":"turn_end","message":{"role":"assistant","model":"flash","content":[{"type":"text","text":"` + "```json\\n" + `{\"from\":\"pi\"}` + "\\n```" + `"}],"usage":{"input":10,"output":4,"cost":{"total":0.001}}}}'`
+const piOK = "cat >/dev/null\n" + `printf '%s\n' '{"type":"turn_end","message":{"role":"assistant","model":"flash","content":[{"type":"text","text":"` + "```json\\n" + `{\"from\":\"pi\"}` + "\\n```" + `"}],"usage":{"input":10,"output":4,"cost":{"total":0.001}}}}'`
 
 func TestJudgmentFallsBackAcrossInstalledAgents(t *testing.T) {
 	j := agentFixture(t, map[string]string{"claude": claudeBroken, "codex": codexOK, "pi": piOK}, "")
