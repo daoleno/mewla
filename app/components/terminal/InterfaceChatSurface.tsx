@@ -45,6 +45,10 @@ interface InterfaceChatSurfaceProps {
   renderComposerAccessory?: (args: {
     draft: string;
     setDraft: (value: string) => void;
+    /** Sends text as if typed (quick replies). */
+    sendText: (text: string) => void;
+    /** When the person last wrote in this conversation, in ms; 0 if never. */
+    lastUserMessageAt: number;
   }) => React.ReactNode;
   composerModelControl?: ComposerModelControlPresentation | null;
   onComposerModelControlPress?: () => void;

@@ -14,6 +14,8 @@ import {
 } from "../../components/brain/BrainExecutorSheet";
 import { BrainExecutorIcon } from "../../components/brain/BrainExecutorIcon";
 import { BrainExecutorMentionPicker } from "../../components/brain/BrainExecutorMentionPicker";
+import { QuickReplies } from "../../components/brain/QuickReplies";
+import { quickRepliesVisible } from "../../components/brain/brainQuickReplies";
 import { BrainWorkspaceViewer } from "../../components/brain/BrainWorkspaceViewer";
 import { BrainWorkEventDetailSheet } from "../../components/brain/BrainWorkEventDetailSheet";
 import { SessionModelSheet } from "../../components/providers/SessionModelSheet";
@@ -436,18 +438,25 @@ export default function BrainScreen() {
     ],
   );
 
+  const quickReplies = activeBrain?.quick_replies;
   const renderBrainComposerAccessory = useCallback(
     ({
       draft,
       setDraft,
+      sendText,
+      lastUserMessageAt,
     }: {
       draft: string;
       setDraft: (value: string) => void;
+      sendText: (text: string) => void;
+      lastUserMessageAt: number;
     }) => {
       composerDraftRef.current = setDraft;
       const activeMention = activeExecutorMentionAtEnd(draft);
       if (!activeMention || availableExecutors.length === 0) {
-        return null;
+        return quickRepliesVisible(quickReplies, { draft, lastUserMessageAt }) ? (
+          <QuickReplies rows={quickReplies.rows} chrome={chrome} onSelect={sendText} />
+        ) : null;
       }
       return (
         <BrainExecutorMentionPicker
@@ -463,7 +472,7 @@ export default function BrainScreen() {
         />
       );
     },
-    [availableExecutors, chrome, hostExecutor?.id],
+    [availableExecutors, chrome, hostExecutor?.id, quickReplies],
   );
 
   const [selectedWorkResult, setSelectedWorkResult] = useState<{ event: BrainWorkResultEvent; serverId: string } | null>(null);

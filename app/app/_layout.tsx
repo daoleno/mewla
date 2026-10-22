@@ -594,6 +594,8 @@ const NotificationObserver = memo(function NotificationObserver() {
           type: "register_push",
           push_token: token,
           server_ref: serverId,
+          // The morning brief goes out at 08:30 where the person is.
+          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
       };
 

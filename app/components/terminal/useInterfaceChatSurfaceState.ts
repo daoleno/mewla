@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { latestUserMessageAt } from "./latestUserMessageAt";
 import { AppState } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -92,6 +93,10 @@ interface UseInterfaceChatSurfaceStateInput {
   renderComposerAccessory?: (args: {
     draft: string;
     setDraft: (value: string) => void;
+    /** Sends text as if typed (quick replies). */
+    sendText: (text: string) => void;
+    /** When the person last wrote in this conversation, in ms; 0 if never. */
+    lastUserMessageAt: number;
   }) => ReactNode;
   composerModelControl?:
     | import("../../services/providers/sessionModelHelpers").ComposerModelControlPresentation
@@ -235,8 +240,19 @@ export function useInterfaceChatSurfaceState({
     },
     [onDraftChange, restoreDraft],
   );
+  const sendTextRef = useRef<(text: string) => void>(() => undefined);
+  const sendQuickText = useCallback((text: string) => sendTextRef.current(text), []);
+  const lastUserMessageAt = latestUserMessageAt(
+    conversation?.events,
+    pendingUserMessages,
+  );
   const renderedComposerAccessory = renderComposerAccessory
-    ? renderComposerAccessory({ draft, setDraft: setObservedDraft })
+    ? renderComposerAccessory({
+        draft,
+        setDraft: setObservedDraft,
+        sendText: sendQuickText,
+        lastUserMessageAt,
+      })
     : composerAccessory;
   const composerInput = useInterfaceComposerInput({
     enabled: active && connectionState === "connected",
@@ -500,6 +516,7 @@ export function useInterfaceChatSurfaceState({
     openSkillsSheet,
     onSwitchToTerminal,
   });
+  sendTextRef.current = controller.sendText;
 
   const desktopWeb = useDesktopWeb();
   const replyIds = useMemo(() => finalReplyIdsOf(events), [events]);

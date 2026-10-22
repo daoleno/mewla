@@ -49,3 +49,17 @@ func handoffEvent(sent computers.Handoff) work.CodexConversationEvent {
 		},
 	}
 }
+
+// withoutWatchEvents hides what Watch hands Brain (triage, urgent and brief
+// events). They reach Brain like user input but are not the person speaking;
+// what Brain says about them is the conversation.
+func withoutWatchEvents(events []work.CodexConversationEvent) []work.CodexConversationEvent {
+	kept := events[:0:0]
+	for _, event := range events {
+		if event.Kind == "user_message" && strings.HasPrefix(event.ID, "watch:") {
+			continue
+		}
+		kept = append(kept, event)
+	}
+	return kept
+}
