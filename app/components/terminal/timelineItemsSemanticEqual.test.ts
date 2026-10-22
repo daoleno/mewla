@@ -176,8 +176,6 @@ function legacyRemovedProductionTimelineItemsEqual(
       left.body === right.body &&
       left.pending === right.pending &&
       left.pendingLifecycle === right.pendingLifecycle &&
-      left.pendingLifecycleLabel === right.pendingLifecycleLabel &&
-      left.pendingFailureMessage === right.pendingFailureMessage &&
       left.onRetryPending === right.onRetryPending &&
       left.streaming === right.streaming &&
       left.turnFocusAnchorId === right.turnFocusAnchorId &&

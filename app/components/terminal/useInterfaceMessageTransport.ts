@@ -17,12 +17,11 @@ import type {
   PendingUserMessageInput,
   PendingUserMessageSettlement,
 } from "./InterfaceChatSession";
-import { beginLiveMessageAttempt } from "./messageSendRecovery";
+import { messageOutbox } from "../../services/messageOutboxRuntime";
+import type { OutboxEntry, OutboxEvent } from "../../services/messageOutbox";
 import {
-  pendingSendSilenceRemainingMs,
-  settlePendingDelivery,
-  staleReceiptAutoRetryPolicy,
-  type PendingDeliveryOutcome,
+  UNCERTAIN_SEND_ERROR,
+  UNDELIVERED_SEND_ERROR,
   type PendingUserMessageAction,
 } from "./pendingUserMessageLifecycle";
 import { submitProviderCommandAsUserInput } from "./providerCommandSubmission";
@@ -31,9 +30,6 @@ import {
   reconcileComposerStopLatch,
   releaseComposerStopLatch,
 } from "./composerStopLatch";
-
-export const OFFLINE_SEND_ERROR =
-  "Not sent: Mewla can't reach your computer. Your message is still here.";
 
 interface UseInterfaceMessageTransportInput {
   serverId: string;
@@ -91,7 +87,6 @@ export function useInterfaceMessageTransport({
   const currentDraftRef = useRef(draft);
   const currentAttachmentsRef = useRef(attachments);
   const pendingUserMessagesRef = useRef(pendingUserMessages);
-  const ackDeadlinesRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   currentDraftRef.current = draft;
   currentAttachmentsRef.current = attachments;
   pendingUserMessagesRef.current = pendingUserMessages;
@@ -105,10 +100,6 @@ export function useInterfaceMessageTransport({
     () => () => {
       sendLockedRef.current = false;
       interruptActivityIdRef.current = undefined;
-      for (const deadline of ackDeadlinesRef.current) {
-        clearTimeout(deadline);
-      }
-      ackDeadlinesRef.current.clear();
     },
     [],
   );
@@ -129,190 +120,141 @@ export function useInterfaceMessageTransport({
     setOperationalError(undefined);
   }, [workerId, conversationScopeKey, serverId]);
 
-  // Send pressed while offline: say so where the user pressed it. The draft
-  // stays in the composer, and the note clears once the server is back.
-  const reportOfflineSend = useCallback(() => {
-    setOperationalError(OFFLINE_SEND_ERROR);
+  // Which row shows which queued message. A row is made once per outbox id.
+  const rowIdByRequestRef = useRef(new Map<string, string>());
+  const rowIdFor = useCallback((requestId: string) => {
+    const known = rowIdByRequestRef.current.get(requestId);
+    if (known) return known;
+    return pendingUserMessagesRef.current.find(
+      (message) => message.dispatchRequestId === requestId,
+    )?.id;
   }, []);
-  useEffect(() => {
-    if (connectionState !== "connected") return;
-    setOperationalError((current) => (current === OFFLINE_SEND_ERROR ? undefined : current));
-  }, [connectionState]);
 
-  const dispatchPendingUserMessageRef = useRef<
-    (
-      message: PendingUserMessage,
-      options: { reuseIdentity: boolean; staleAutoRetry: boolean },
-    ) => boolean
-  >(() => false);
-
-  // Every attempt ends in a visible state. An acknowledgement keeps the row
-  // waiting for its receipt; a rejection, closed connection or missing
-  // acknowledgement says "Not delivered" with Retry and Discard; a delivery
-  // the computer cannot prove says so with Send again and Discard.
-  const observeInputOutcome = useCallback(
-    (
-      pendingMessageId: string,
-      receipt: ReturnType<typeof wsClient.sendInput>,
-    ) => {
-      const settle = (outcome: PendingDeliveryOutcome) => {
-        const settlement = settlePendingDelivery(outcome);
-        settlePendingUserMessage(pendingMessageId, {
-          ...settlement,
-          requestId: receipt.requestId,
-        });
-        if (settlement.kind !== "acknowledge") {
-          wsClient.reportDiagnostic(
-            serverId,
-            "send_unsettled",
-            `request=${receipt.requestId} outcome=${outcome.kind} settled=${settlement.kind}`,
-            receipt.requestId,
-          );
-        } else {
-          // Acknowledged, so the row now waits for its receipt row. Say so if
-          // that never comes: the row would sit with its clock while the
-          // computer already has the message.
-          const waiting = setTimeout(() => {
-            ackDeadlinesRef.current.delete(waiting);
-            const still = pendingUserMessagesRef.current.find(
-              (candidate) =>
-                candidate.id === pendingMessageId &&
-                candidate.lifecycle === "pending",
-            );
-            if (still) {
-              wsClient.reportDiagnostic(
-                serverId,
-                "pending_unreconciled",
-                `request=${receipt.requestId} waited=${PENDING_UNRECONCILED_REPORT_MS}ms ` +
-                  `lastFrameAgeMs=${Math.max(0, Date.now() - (wsClient.lastFrameAt(serverId) ?? 0))} ` +
-                  `priorEvents=${still.createdAfterEventIds?.length ?? 0}`,
-                receipt.requestId,
-              );
-            }
-          }, PENDING_UNRECONCILED_REPORT_MS);
-          ackDeadlinesRef.current.add(waiting);
-        }
-      };
-      // A socket that died without a close event never answers: time the
-      // send out once the connection has been silent, never while it is live.
-      const sentAt = Date.now();
-      let settled = false;
-      let deadline: ReturnType<typeof setTimeout> | undefined;
-      const armDeadline = () => {
-        const remaining = pendingSendSilenceRemainingMs({
-          sentAt,
-          lastFrameAt: wsClient.lastFrameAt(serverId),
-          now: Date.now(),
-        });
-        if (remaining === 0) {
-          deadline = undefined;
-          settle({ kind: "ack_timeout" });
-          return;
-        }
-        deadline = setTimeout(() => {
-          if (deadline) ackDeadlinesRef.current.delete(deadline);
-          if (!settled) armDeadline();
-        }, remaining);
-        ackDeadlinesRef.current.add(deadline);
-      };
-      armDeadline();
-      void receipt.outcome.then((outcome) => {
-        settled = true;
-        if (deadline) {
-          clearTimeout(deadline);
-          ackDeadlinesRef.current.delete(deadline);
-        }
-        if (outcome.kind === "failed") {
-          const message = pendingUserMessagesRef.current.find(
-            (candidate) => candidate.id === pendingMessageId,
-          );
-          if (
-            message &&
-            staleReceiptAutoRetryPolicy(message, outcome.failure).autoRetry
-          ) {
-            // Legacy/stale receipt binding for this logical input: the daemon
-            // proved no provider mutation. Invalidate the stale identity and
-            // transparently resubmit the same payload once with a fresh
-            // identity; the row flag bounds the recovery to one attempt. If
-            // the composer is mid-send, surface the failure instead of
-            // stranding the row pending.
-            if (
-              dispatchPendingUserMessageRef.current(message, {
-                reuseIdentity: false,
-                staleAutoRetry: true,
-              })
-            ) {
-              return;
-            }
-          }
-        }
-        settle(outcome);
-      });
-    },
-    [serverId, settlePendingUserMessage],
-  );
-
-  const dispatchPendingUserMessage = useCallback(
-    (
-      message: PendingUserMessage,
-      options: { reuseIdentity: boolean; staleAutoRetry: boolean } = {
-        reuseIdentity: true,
-        staleAutoRetry: false,
-      },
-    ) => {
-      if (sendLockedRef.current) {
-        return false;
+  const showQueuedEntry = useCallback(
+    (entry: OutboxEntry) => {
+      if (rowIdFor(entry.id)) {
+        return;
       }
-      sendLockedRef.current = true;
-      setSending(true);
-      setOperationalError(undefined);
-      let receipt: ReturnType<typeof wsClient.sendInput>;
-      try {
-        receipt = wsClient.sendInput(
-          serverId,
-          workerId,
-          `${message.sentText}\n`,
-          {
-            displayBody: message.sentText,
-            conversationScopeKey,
-            // Retries of the exact same logical input reuse its stable
-            // identity so the daemon receipt ledger stays idempotent; a
-            // stale-receipt recovery mints a fresh identity.
-            requestId: options.reuseIdentity
-              ? message.dispatchRequestId
-              : undefined,
-          },
-        );
-      } catch (error: any) {
-        setOperationalError(
-          error?.message || "Retry was not dispatched. Try again.",
-        );
-        unlockSend();
-        return false;
-      }
-      beginPendingUserMessageAttempt(message.id, {
-        requestId: receipt.requestId,
-        ...(options.staleAutoRetry
-          ? { staleReceiptAutoRetried: true }
+      const rowId = addPendingUserMessage({
+        body: entry.displayBody.trim(),
+        sentText: entry.displayBody,
+        attachments: [],
+        lifecycle: entry.state === "undeliverable" ? "failed" : "pending",
+        dispatchRequestId: entry.id,
+        ...(entry.state === "undeliverable"
+          ? { failureCode: entry.failureCode, failureMessage: UNDELIVERED_SEND_ERROR }
           : {}),
       });
-      unlockSend();
-      observeInputOutcome(message.id, receipt);
-      return true;
+      rowIdByRequestRef.current.set(entry.id, rowId);
     },
-    [
-      workerId,
-      beginPendingUserMessageAttempt,
-      conversationScopeKey,
-      observeInputOutcome,
-      serverId,
-      unlockSend,
-    ],
+    [addPendingUserMessage, rowIdFor],
   );
 
+  // The outbox owns delivery; this only keeps the rows honest. Messages that
+  // were queued before this screen opened (or before an app restart) get their
+  // row back, and every answer settles the row it belongs to.
   useEffect(() => {
-    dispatchPendingUserMessageRef.current = dispatchPendingUserMessage;
-  }, [dispatchPendingUserMessage]);
+    if (!serverId || !workerId) {
+      return;
+    }
+    const mine = (entry: OutboxEntry) =>
+      entry.serverId === serverId &&
+      entry.workerId === workerId &&
+      (entry.conversationScopeKey ?? "") === (conversationScopeKey ?? "");
+    const showWaiting = () => {
+      for (const entry of messageOutbox.entriesFor(
+        serverId,
+        workerId,
+        conversationScopeKey,
+      )) {
+        showQueuedEntry(entry);
+      }
+    };
+    showWaiting();
+    void messageOutbox.hydrate().then(showWaiting);
+    const unreconciledTimers = new Set<ReturnType<typeof setTimeout>>();
+    const unsubscribe = messageOutbox.subscribe((event: OutboxEvent) => {
+      if (event.kind === "changed") {
+        if (event.serverId === serverId) showWaiting();
+        return;
+      }
+      if (!mine(event.entry)) {
+        return;
+      }
+      const entry = event.entry;
+      if (event.kind === "reidentified") {
+        const rowId = rowIdFor(event.previousId);
+        if (rowId) {
+          rowIdByRequestRef.current.delete(event.previousId);
+          rowIdByRequestRef.current.set(entry.id, rowId);
+          beginPendingUserMessageAttempt(rowId, { requestId: entry.id });
+        }
+        return;
+      }
+      const rowId = rowIdFor(entry.id);
+      if (!rowId) {
+        return;
+      }
+      if (event.kind === "accepted") {
+        settlePendingUserMessage(rowId, {
+          kind: "acknowledge",
+          requestId: entry.id,
+        });
+        // The computer has it, so the row waits for its provider row. Say so
+        // if that never comes: the row would sit with its clock for good.
+        const waiting = setTimeout(() => {
+          unreconciledTimers.delete(waiting);
+          const still = pendingUserMessagesRef.current.find(
+            (candidate) =>
+              candidate.id === rowId && candidate.lifecycle === "pending",
+          );
+          if (still) {
+            wsClient.reportDiagnostic(
+              serverId,
+              "pending_unreconciled",
+              `request=${entry.id} waited=${PENDING_UNRECONCILED_REPORT_MS}ms ` +
+                `lastFrameAgeMs=${Math.max(0, Date.now() - (wsClient.lastFrameAt(serverId) ?? 0))} ` +
+                `priorEvents=${still.createdAfterEventIds?.length ?? 0}`,
+              entry.id,
+            );
+          }
+        }, PENDING_UNRECONCILED_REPORT_MS);
+        unreconciledTimers.add(waiting);
+      } else if (event.kind === "uncertain") {
+        settlePendingUserMessage(rowId, {
+          kind: "uncertain",
+          requestId: entry.id,
+          code: "input_uncertain",
+          message: UNCERTAIN_SEND_ERROR,
+        });
+      } else if (event.kind === "undeliverable") {
+        settlePendingUserMessage(rowId, {
+          kind: "reject",
+          requestId: entry.id,
+          code: entry.failureCode ?? "undeliverable",
+          message: UNDELIVERED_SEND_ERROR,
+        });
+        wsClient.reportDiagnostic(
+          serverId,
+          "send_undeliverable",
+          `request=${entry.id} code=${entry.failureCode ?? ""} attempts=${entry.attempts}`,
+          entry.id,
+        );
+      }
+    });
+    return () => {
+      unsubscribe();
+      for (const timer of unreconciledTimers) clearTimeout(timer);
+    };
+  }, [
+    beginPendingUserMessageAttempt,
+    conversationScopeKey,
+    rowIdFor,
+    serverId,
+    settlePendingUserMessage,
+    showQueuedEntry,
+    workerId,
+  ]);
 
   const submitTextToInterface = useCallback(
     (
@@ -321,51 +263,37 @@ export function useInterfaceMessageTransport({
       previousAttachments: ComposerAttachment[],
       options: { preserveComposer?: boolean } = {},
     ) => {
-      if (sendLockedRef.current) {
+      if (sendLockedRef.current || !serverId || !workerId) {
         return;
       }
       sendLockedRef.current = true;
       setSending(true);
       setOperationalError(undefined);
-      const attempt = beginLiveMessageAttempt({
-        writeNow: () =>
-          wsClient.sendInput(serverId, workerId, `${text}\n`, {
-            displayBody: text,
-            conversationScopeKey,
-          }),
-        createOptimisticRow: (receipt) => {
-          return addPendingUserMessage({
-            body: (options.preserveComposer ? text : previousDraft).trim(),
-            sentText: text,
-            attachments: previousAttachments.map((attachment) => ({
-              name: attachment.name,
-              path: attachment.path,
-              localUri: attachment.localUri,
-              mimeType: attachment.mimeType,
-            })),
-            lifecycle: "pending",
-            dispatchRequestId: receipt.requestId,
-          });
-        },
-        previousDraft,
-        currentDraft: currentDraftRef.current,
-        previousAttachments,
-        currentAttachments: currentAttachmentsRef.current,
+      // The message is the queue's from this moment: the row is shown, the
+      // composer is free, and delivery (now or after a reconnect) is not the
+      // person's job.
+      const requestId = messageOutbox.mintId();
+      const pendingMessageId = addPendingUserMessage({
+        body: (options.preserveComposer ? text : previousDraft).trim(),
+        sentText: text,
+        attachments: previousAttachments.map((attachment) => ({
+          name: attachment.name,
+          path: attachment.path,
+          localUri: attachment.localUri,
+          mimeType: attachment.mimeType,
+        })),
+        lifecycle: "pending",
+        dispatchRequestId: requestId,
       });
-      if (attempt.kind === "write_failed") {
-        currentDraftRef.current = attempt.restoredDraft;
-        currentAttachmentsRef.current = attempt.restoredAttachments;
-        restoreDraft(attempt.restoredDraft);
-        setAttachments(attempt.restoredAttachments);
-        setOperationalError(
-          attempt.error instanceof Error && attempt.error.message
-            ? attempt.error.message
-            : "Message was not dispatched. Send to retry.",
-        );
-        unlockSend();
-        return;
-      }
-      const { pendingMessageId, receipt } = attempt;
+      rowIdByRequestRef.current.set(requestId, pendingMessageId);
+      messageOutbox.enqueue({
+        id: requestId,
+        serverId,
+        workerId,
+        conversationScopeKey,
+        text: `${text}\n`,
+        displayBody: text,
+      });
       requestTurnFocus(pendingMessageId);
       if (!options.preserveComposer) {
         setDraft("");
@@ -375,15 +303,12 @@ export function useInterfaceMessageTransport({
         currentAttachmentsRef.current = [];
       }
       unlockSend();
-      observeInputOutcome(pendingMessageId, receipt);
     },
     [
       workerId,
       addPendingUserMessage,
       clearComposerNativeText,
       conversationScopeKey,
-      observeInputOutcome,
-      restoreDraft,
       requestTurnFocus,
       serverId,
       setAttachments,
@@ -396,42 +321,52 @@ export function useInterfaceMessageTransport({
   // whatever the composer holds alone.
   const resendMessageToInterface = useCallback(
     (text: string) => {
-      if (connectionState !== "connected") {
-        reportOfflineSend();
-        return;
-      }
       submitTextToInterface(text, "", [], { preserveComposer: true });
     },
-    [connectionState, reportOfflineSend, submitTextToInterface],
+    [submitTextToInterface],
   );
 
+  // The only things a person does with a queued message: tap its "!" to send
+  // it again, or press and hold it to delete it.
   const actOnPendingUserMessage = useCallback(
     (pendingMessageId: string, action: PendingUserMessageAction) => {
       const message = pendingUserMessages.find(
         (candidate) =>
-          candidate.id === pendingMessageId && candidate.lifecycle !== "pending",
+          candidate.id === pendingMessageId && candidate.lifecycle === "failed",
       );
       if (!message) {
         return;
       }
       if (action === "discard") {
+        messageOutbox.discard(message.dispatchRequestId);
+        rowIdByRequestRef.current.delete(message.dispatchRequestId);
         discardPendingUserMessage(message.id);
         return;
       }
-      if (sendLockedRef.current) {
+      if (messageOutbox.resend(message.dispatchRequestId)) {
         return;
       }
-      // A not-delivered retry is the exact same logical input: reuse its
-      // stable identity so the daemon receipt ledger stays idempotent (an
-      // accepted retry is acknowledged without replay; a proven non-mutation
-      // is re-armed and submitted exactly once more). An uncertain receipt is
-      // never replayed, so sending it again needs a fresh identity.
-      dispatchPendingUserMessage(message, {
-        reuseIdentity: message.lifecycle === "failed",
-        staleAutoRetry: false,
+      // The queue no longer holds it: queue the row's own text afresh.
+      const requestId = messageOutbox.mintId();
+      rowIdByRequestRef.current.set(requestId, message.id);
+      beginPendingUserMessageAttempt(message.id, { requestId });
+      messageOutbox.enqueue({
+        id: requestId,
+        serverId,
+        workerId,
+        conversationScopeKey,
+        text: `${message.sentText}\n`,
+        displayBody: message.sentText,
       });
     },
-    [discardPendingUserMessage, dispatchPendingUserMessage, pendingUserMessages],
+    [
+      beginPendingUserMessageAttempt,
+      conversationScopeKey,
+      discardPendingUserMessage,
+      pendingUserMessages,
+      serverId,
+      workerId,
+    ],
   );
 
   const startNewInterfaceChat = useCallback(
@@ -520,7 +455,6 @@ export function useInterfaceMessageTransport({
     sending,
     interrupting,
     operationalError,
-    reportOfflineSend,
     submitTextToInterface,
     resendMessageToInterface,
     startNewInterfaceChat,

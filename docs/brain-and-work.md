@@ -80,18 +80,26 @@ stays still while you type, and with Reduce Motion on it keeps only the
 haptics.
 
 **Connection.** When the app can't reach your computer, the menu (☰) gets a
-dot and the menu's last line says why. Nothing is pinned over the chat. If
-you press Send while offline, the composer says the message was not sent
-and keeps it for you.
+dot and the menu's last line says why. Nothing is pinned over the chat. The
+app keeps the connection fresh by itself: a link that stops answering is
+replaced within about half a minute, and a connection that was healthy
+reconnects at once.
 
-**A message that didn't arrive.** A sent message stays where you sent it. If
-your computer rejects it, the connection drops before your computer confirms
-it, or your computer stops answering for 30 seconds before confirming it, the
-bubble says **Not delivered** right away, with **Retry** and **Discard**. Retry can't send it
-twice: if it had arrived after all, your computer just confirms it. If your
-computer can't tell whether the agent received it, the bubble says **Delivery
-unknown**, with **Send again** and **Discard**. It clears by itself if the
-agent turns out to have it. Session chats behave the same way.
+**Sending is a queue.** Press Send and the message is yours to forget: it
+appears in the chat with a small clock and goes to your computer as soon as it
+can, again and again if the connection drops, even if you close the app and
+come back. Messages in a row arrive in the order you sent them, and a message
+that did arrive is never sent twice. While the agent is busy, the message
+goes to it anyway, the way you would type into the CLI mid-turn: Claude Code
+queues it, Codex takes it into the running turn, and Brain reads it between
+steps. It keeps the same clock and nothing else is added. The clock turns into the normal message once the agent
+shows it.
+
+**A message that can't be delivered.** Only a message your computer keeps
+refusing (for example, its session no longer exists), or one whose delivery it
+could never confirm, shows a small **!** next to it. Tap the ! to send it
+again, or press and hold it to delete it. Nothing else ever asks you to retry.
+Session chats behave the same way.
 
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
 into one "Worked · N steps" row. Tap it to see them. Session chats keep every

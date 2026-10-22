@@ -366,6 +366,19 @@ export function daemonRequestError(
   return new DaemonRequestError(message, code);
 }
 
+/** The app's foreground state, as the root layout last reported it. */
+let appState = "unknown";
+
+/**
+ * The daemon sends a frame at least every 10 s and pings every 20 s. A socket
+ * silent for longer than this is dead whatever its readyState says (a phone
+ * that changed networks or woke from doze); it is replaced at once rather than
+ * left for the OS to notice minutes later.
+ */
+export const socketWatchdog = { silentLimitMs: 25_000, checkMs: 5_000 };
+/** A connection that lived this long and then dropped reconnects without delay. */
+const HEALTHY_CONNECTION_MS = 10_000;
+
 class ServerSocket {
   private ws: WebSocket | null = null;
   private reconnectDelay = 1000;
@@ -375,6 +388,11 @@ class ServerSocket {
   private attemptSequence = 0;
   /** When the live socket last delivered a frame (the daemon sends one at least every 10 s). */
   lastFrameAt: number | undefined;
+  /** Ends the current socket now, whatever state it is in. */
+  private endCurrent: ((reason: string, code?: number) => void) | null = null;
+  private watchdog: ReturnType<typeof setInterval> | null = null;
+  /** How the last socket ended, told to the daemon once the next one opens. */
+  private pendingEndReport: string | null = null;
 
   constructor(
     private meta: ConnectionMeta,
@@ -402,9 +420,36 @@ class ServerSocket {
 
     this.emit("connection_issue", { issue: null });
 
+    this.stopWatchdog();
+    this.endCurrent = null;
     const ws = this.ws;
     this.ws = null;
     ws?.close();
+  }
+
+  /**
+   * Ends a connection that is not answering and reconnects at once, without
+   * waiting for the close handshake a dead link will never finish.
+   */
+  abandon(reason: string) {
+    this.endCurrent?.(reason);
+  }
+
+  private startWatchdog() {
+    this.stopWatchdog();
+    this.watchdog = setInterval(() => {
+      const quietFor = Date.now() - (this.lastFrameAt ?? 0);
+      if (this.isConnected && quietFor > socketWatchdog.silentLimitMs) {
+        this.abandon("silent");
+      }
+    }, socketWatchdog.checkMs);
+  }
+
+  private stopWatchdog() {
+    if (this.watchdog) {
+      clearInterval(this.watchdog);
+      this.watchdog = null;
+    }
   }
 
   sendNow(msg: object) {
@@ -430,7 +475,7 @@ class ServerSocket {
     void this.doConnect(attemptId);
   }
 
-  private scheduleReconnect() {
+  private scheduleReconnect(immediate = false) {
     if (!this.shouldReconnect) {
       return;
     }
@@ -439,7 +484,9 @@ class ServerSocket {
       clearTimeout(this.reconnectTimer);
     }
 
-    const delay = this.reconnectDelay;
+    // A connection that was healthy and then dropped is retried at once; only
+    // repeated failures back off.
+    const delay = immediate ? 0 : this.reconnectDelay;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (!this.shouldReconnect) {
@@ -486,6 +533,7 @@ class ServerSocket {
 
   private async doConnect(attemptId: number) {
     let opened = false;
+    let openedAt = 0;
 
     try {
       const authHeader = await buildAuthorizationHeader({
@@ -519,9 +567,21 @@ class ServerSocket {
         }
 
         opened = true;
+        openedAt = Date.now();
+        this.lastFrameAt = openedAt;
         this.reconnectDelay = 1000;
+        this.startWatchdog();
         this.emit("connection_issue", { issue: null });
         this.emit("connected", {});
+        if (this.pendingEndReport) {
+          // Only the phone knows why a link ended; the daemon sees a bare 1006.
+          this.trySendNow({
+            type: "client_diagnostic",
+            name: "ws_closed",
+            body: this.pendingEndReport,
+          });
+          this.pendingEndReport = null;
+        }
       };
 
       ws.onmessage = (event: any) => {
@@ -548,16 +608,28 @@ class ServerSocket {
 
       // A socket ends once, whichever event reports it first.
       let ended = false;
-      const handleEnd = () => {
+      const handleEnd = (reason = "closed", code?: number) => {
         if (ended) {
           return;
         }
         ended = true;
+        if (this.endCurrent === endThis) {
+          this.endCurrent = null;
+          this.stopWatchdog();
+        }
         if (this.ws === ws) {
           this.ws = null;
         }
         if (attemptId !== this.attemptSequence) {
           return;
+        }
+        const lived = opened ? Date.now() - openedAt : 0;
+        if (opened) {
+          this.pendingEndReport =
+            `reason=${reason} code=${code ?? ""} ` +
+            `livedMs=${lived} ` +
+            `quietMs=${Math.max(0, Date.now() - (this.lastFrameAt ?? Date.now()))} ` +
+            `appState=${appState}`;
         }
 
         // Transient close (background suspension, network blip). Keep
@@ -570,9 +642,19 @@ class ServerSocket {
         if (!opened) {
           void this.reportConnectionIssue(attemptId);
         }
-        this.scheduleReconnect();
+        this.scheduleReconnect(lived >= HEALTHY_CONNECTION_MS);
       };
-      ws.onclose = handleEnd;
+      const endThis = (reason: string, code?: number) => {
+        handleEnd(reason, code);
+        try {
+          ws.close();
+        } catch {
+          // Already gone.
+        }
+      };
+      this.endCurrent = endThis;
+      ws.onclose = (event: any) =>
+        handleEnd("closed", typeof event?.code === "number" ? event.code : undefined);
 
       ws.onerror = () => {
         try {
@@ -584,7 +666,7 @@ class ServerSocket {
         // headless Chrome). Without this the client waits in "connecting"
         // forever: no retry and no connection issue.
         if (ws.readyState === WebSocket.CLOSED) {
-          handleEnd();
+          handleEnd("error");
         }
       };
     } catch {
@@ -2825,6 +2907,16 @@ export class WebSocketClient {
         parse: () => undefined,
       },
     );
+  }
+
+  /** Records the app's foreground state so a closed socket can say what the app was doing. */
+  noteAppState(state: string) {
+    appState = state;
+  }
+
+  /** Replaces a live connection that is not answering; it reconnects at once. */
+  dropConnection(serverId: string, reason: string) {
+    this.liveSocket(serverId)?.abandon(reason);
   }
 
   /** When the live connection to `serverId` last delivered any frame. */

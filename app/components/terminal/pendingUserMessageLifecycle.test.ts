@@ -6,7 +6,6 @@ import {
   reconcilePendingUserMessagesAgainstEvents,
   rejectPendingUserMessage,
   showsPendingSendStatusMark,
-  staleReceiptAutoRetryPolicy,
 } from "./pendingUserMessageLifecycle";
 import {
   buildTimeline,
@@ -32,19 +31,17 @@ function pending(
 }
 
 describe("pending user message lifecycle", () => {
-  test("pending presentation is mark/a11y only; failed keeps visible status", () => {
+  test("presentation is never prose: the clock while waiting, one mark when undeliverable", () => {
     expect(presentPendingUserMessageLifecycle(pending())).toEqual({
       lifecycle: "pending",
-      label: "",
       accessibilityLabel: "Message pending provider transcript",
     });
     expect(
       presentPendingUserMessageLifecycle(pending({ lifecycle: "failed" })),
     ).toEqual({
       lifecycle: "failed",
-      label: "Not delivered",
-      accessibilityLabel: "Message not delivered",
-      retryLabel: "Retry",
+      accessibilityLabel:
+        "Message not delivered. Tap to send again. Press and hold to delete.",
     });
   });
 
@@ -504,9 +501,6 @@ describe("pending timeline rows", () => {
       body,
     });
     expect(userRows[0]?.type === "message" && userRows[0].pending).toBeFalsy();
-    expect(
-      userRows[0]?.type === "message" && userRows[0].pendingLifecycleLabel,
-    ).toBeFalsy();
     expect(JSON.stringify(merged)).not.toContain("Pending");
     expect(JSON.stringify(merged)).not.toContain("Sending");
   });
@@ -539,17 +533,13 @@ describe("pending timeline rows", () => {
       pending: true,
       pendingLifecycle: "pending",
     });
-    expect(
-      merged[1]?.type === "message" && merged[1].pendingLifecycleLabel,
-    ).toBeUndefined();
     expect(JSON.stringify(merged[1])).not.toContain("Pending");
     expect(JSON.stringify(merged[1])).not.toContain("Sending");
     expect(merged[2]).toMatchObject({
       pending: true,
       pendingLifecycle: "failed",
-      pendingLifecycleLabel: "Not delivered",
-      pendingFailureMessage: "provider refused input",
     });
+    expect(JSON.stringify(merged[2])).not.toContain("Not delivered");
   });
 
   test("Retry is attached only to failed local rows", () => {
@@ -587,56 +577,5 @@ describe("pending timeline rows", () => {
       role: "user",
     });
     expect(timeline[0]?.type === "message" && timeline[0].pending).toBeFalsy();
-  });
-});
-
-describe("stale receipt recovery", () => {
-  test("stale receipt failure auto-retries exactly once with a fresh identity", () => {
-    expect(
-      staleReceiptAutoRetryPolicy(pending(), {
-        code: "stale_receipt_invalidated",
-      }),
-    ).toEqual({ autoRetry: true });
-    const retried = beginPendingUserMessageAttempt(
-      pending({ lifecycle: "failed", failureCode: "stale_receipt_invalidated" }),
-      {
-        requestId: "request-fresh",
-        dispatchAttemptOrder: 2,
-        staleReceiptAutoRetried: true,
-      },
-    );
-    expect(retried).toMatchObject({
-      lifecycle: "pending",
-      dispatchRequestId: "request-fresh",
-      staleReceiptAutoRetried: true,
-    });
-    expect(
-      staleReceiptAutoRetryPolicy(retried, {
-        code: "stale_receipt_invalidated",
-      }),
-    ).toEqual({ autoRetry: false, reason: "already_retried" });
-  });
-
-  test("ordinary failures never trigger the stale auto-retry", () => {
-    expect(
-      staleReceiptAutoRetryPolicy(pending(), { code: "send_input_failed" }),
-    ).toEqual({ autoRetry: false, reason: "not_stale" });
-  });
-
-  test("manual retries preserve the auto-retry bound across attempts", () => {
-    const bounded = pending({
-      staleReceiptAutoRetried: true,
-      dispatchRequestId: "request-fresh",
-    });
-    const manualRetry = beginPendingUserMessageAttempt(bounded, {
-      requestId: "request-fresh",
-      dispatchAttemptOrder: 3,
-    });
-    expect(manualRetry.staleReceiptAutoRetried).toBe(true);
-    expect(
-      staleReceiptAutoRetryPolicy(manualRetry, {
-        code: "stale_receipt_invalidated",
-      }),
-    ).toEqual({ autoRetry: false, reason: "already_retried" });
   });
 });

@@ -1,138 +1,84 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatChatBubbleTime } from '../../constants/telegramPresentation';
 import { TouchTarget, Typography, useAppTheme } from '../../constants/tokens';
-import { PendingMessageLifecycleLabel } from './PendingMessageLifecycleLabel';
-import {
-  PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL,
-  PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL,
-  PENDING_MESSAGE_SEND_AGAIN_ACCESSIBILITY_LABEL,
-} from './pendingUserMessageLifecycle';
-import { chromeTint } from './composerMaterial';
-import { Icon } from "../icons/Icon";
+import { PENDING_MESSAGE_UNDELIVERED_ACCESSIBILITY_LABEL } from './pendingUserMessageLifecycle';
 
-/** 26 pt capsule + vertical hitSlop = platform touch target (44 pt / 48 dp). */
-const RETRY_CAPSULE_HEIGHT = 26;
-const RETRY_HIT_SLOP = {
-  top: (TouchTarget - RETRY_CAPSULE_HEIGHT) / 2,
-  bottom: (TouchTarget - RETRY_CAPSULE_HEIGHT) / 2,
-  left: 6,
-  right: 6,
-};
+/** 20 pt mark + hitSlop = platform touch target (44 pt / 48 dp). */
+const UNDELIVERED_MARK_SIZE = 20;
+const UNDELIVERED_HIT_SLOP = (TouchTarget - UNDELIVERED_MARK_SIZE) / 2;
 
 interface MessageBubbleFooterProps {
   timestamp?: string;
   tone?: 'sent' | 'received';
-  lifecycleLabel?: string;
-  failureMessage?: string;
-  failureColor?: string;
-  retryLabel?: string;
-  onRetry?: () => void;
-  onDiscard?: () => void;
+  undeliveredColor?: string;
+  undeliveredLabel?: string;
+  /** Present only for a message that could not be delivered. */
+  onResend?: () => void;
+  onDelete?: () => void;
 }
 
 export function MessageBubbleFooter({
   timestamp,
   tone = 'received',
-  lifecycleLabel,
-  failureMessage,
-  failureColor,
-  retryLabel = 'Retry',
-  onRetry,
-  onDiscard,
+  undeliveredColor,
+  undeliveredLabel = PENDING_MESSAGE_UNDELIVERED_ACCESSIBILITY_LABEL,
+  onResend,
+  onDelete,
 }: MessageBubbleFooterProps) {
   const { theme } = useAppTheme();
-  const hasLifecycleLabel = Boolean(lifecycleLabel);
-  // Pending never injects status text. Timestamps stay available so enabling
-  // them does not shift geometry when the optimistic row becomes durable.
-  const label = hasLifecycleLabel
-    ? lifecycleLabel
-    : formatChatBubbleTime(timestamp);
+  // Timestamps stay available so enabling them does not shift geometry when
+  // the optimistic row becomes durable.
+  const label = formatChatBubbleTime(timestamp);
   const timeColor =
     tone === 'sent'
       ? theme.chat.sentTimestamp
       : theme.chat.receivedTimestamp;
-  if (!label && !failureMessage && !onRetry && !onDiscard) {
+  if (!label && !onResend) {
     return null;
   }
-  const retryInk = failureColor || timeColor;
+  const markColor = undeliveredColor || timeColor;
+
+  const confirmDelete = () => {
+    if (!onDelete) return;
+    Alert.alert('Delete this message?', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: onDelete },
+    ]);
+  };
 
   return (
-    <View style={styles.stack}>
-      {failureMessage ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          accessibilityRole="text"
-          style={[styles.failure, { color: failureColor || timeColor }]}
-        >
-          {failureMessage}
-        </Text>
+    <View style={styles.row}>
+      {label ? (
+        <Text style={[styles.time, { color: timeColor }]}>{label}</Text>
       ) : null}
-      <View style={styles.row}>
-        {hasLifecycleLabel ? (
-          <PendingMessageLifecycleLabel
-            label={label!}
-            accessibilityLabel={label}
-            color={failureMessage ? failureColor || timeColor : timeColor}
-          />
-        ) : label ? (
-          <Text style={[styles.time, { color: timeColor }]}>
-            {label}
-          </Text>
-        ) : null}
-        {onDiscard ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={PENDING_MESSAGE_DISCARD_ACCESSIBILITY_LABEL}
-            hitSlop={RETRY_HIT_SLOP}
-            onPress={onDiscard}
-            style={({ pressed }) => [
-              styles.retryCapsule,
-              { opacity: pressed ? 0.64 : 1 },
-            ]}
-          >
-            <Text style={[styles.retry, { color: timeColor }]}>Discard</Text>
-          </Pressable>
-        ) : null}
-        {onRetry ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              retryLabel === 'Send again'
-                ? PENDING_MESSAGE_SEND_AGAIN_ACCESSIBILITY_LABEL
-                : PENDING_MESSAGE_RETRY_ACCESSIBILITY_LABEL
-            }
-            hitSlop={RETRY_HIT_SLOP}
-            onPress={onRetry}
-            style={({ pressed }) => [
-              styles.retryCapsule,
-              {
-                backgroundColor: chromeTint(retryInk, 0.16, 'transparent'),
-                opacity: pressed ? 0.64 : 1,
-              },
-            ]}
-          >
-            <Icon name="refresh" size={12} color={retryInk} />
-            <Text style={[styles.retry, { color: retryInk }]}>{retryLabel}</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      {onResend ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={undeliveredLabel}
+          hitSlop={UNDELIVERED_HIT_SLOP}
+          onPress={onResend}
+          onLongPress={onDelete ? confirmDelete : undefined}
+          style={({ pressed }) => [
+            styles.mark,
+            { borderColor: markColor, opacity: pressed ? 0.56 : 1 },
+          ]}
+        >
+          <Text style={[styles.markGlyph, { color: markColor }]}>!</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    alignSelf: 'stretch',
-    alignItems: 'flex-end',
-    marginTop: 2,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     alignSelf: 'flex-end',
     gap: 6,
+    marginTop: 2,
     paddingTop: 2,
   },
   time: {
@@ -141,25 +87,19 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     includeFontPadding: false,
   },
-  failure: {
-    fontFamily: Typography.uiFont,
-    fontSize: 11,
-    lineHeight: 14,
-    includeFontPadding: false,
-    textAlign: 'right',
-  },
-  retryCapsule: {
-    height: RETRY_CAPSULE_HEIGHT,
-    borderRadius: RETRY_CAPSULE_HEIGHT / 2,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
+  mark: {
+    width: UNDELIVERED_MARK_SIZE,
+    height: UNDELIVERED_MARK_SIZE,
+    borderRadius: UNDELIVERED_MARK_SIZE / 2,
+    borderWidth: 1.5,
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
   },
-  retry: {
+  markGlyph: {
     fontFamily: Typography.uiFontMedium,
     fontSize: 12,
-    lineHeight: 15,
+    lineHeight: 14,
     includeFontPadding: false,
+    textAlign: 'center',
   },
 });

@@ -72,7 +72,7 @@ class FakeWebSocket {
 const originalWebSocket = globalThis.WebSocket;
 Object.assign(globalThis, { WebSocket: FakeWebSocket });
 
-const { WebSocketClient } = await import("./websocket");
+const { WebSocketClient, socketWatchdog } = await import("./websocket");
 
 const server = {
   id: "server-a",
@@ -316,6 +316,13 @@ afterAll(() => {
   Object.assign(globalThis, { WebSocket: originalWebSocket });
 });
 
+/** Frames a socket carried other than the client's own close diagnostics. */
+function operationFrames(socket: { sent: string[] }) {
+  return socket.sent.filter(
+    (frame) => JSON.parse(frame).type !== "client_diagnostic",
+  );
+}
+
 describe("generic WebSocket live boundary", () => {
   test("an incomplete Link server fails closed before WebSocket construction", async () => {
     const client = new WebSocketClient();
@@ -517,18 +524,19 @@ describe("generic WebSocket live boundary", () => {
       socket = await waitForSocket(socketIndex);
       socket.open();
       sockets.push(socket);
-      expect(socket.sent).toEqual([]);
+      // Only the diagnostic about how the last socket ended: no operation.
+      expect(operationFrames(socket)).toEqual([]);
       if (reconnect < 2) {
         socket.close();
       }
     }
 
-    expect(sockets.every((candidate) => candidate.sent.length === 0)).toBe(
-      true,
-    );
+    expect(
+      sockets.every((candidate) => operationFrames(candidate).length === 0),
+    ).toBe(true);
     client.killWorker(server.id, "agent-new");
-    expect(socket.sent).toEqual([
-      JSON.stringify({ type: "kill_worker", worker_id: "agent-new" }),
+    expect(operationFrames(socket).map((frame) => JSON.parse(frame))).toEqual([
+      { type: "kill_worker", worker_id: "agent-new" },
     ]);
     client.disconnect();
   });
@@ -561,7 +569,7 @@ describe("generic WebSocket live boundary", () => {
     reconnectedSocket.open();
 
     expect(firstSocket.sent).toEqual([]);
-    expect(reconnectedSocket.sent).toEqual([]);
+    expect(operationFrames(reconnectedSocket)).toEqual([]);
     client.disconnect();
   });
 
@@ -1763,5 +1771,68 @@ describe("Plugins account boundary", () => {
     await expect(disconnected).rejects.toThrow("Server disconnected");
     expect(registeredHandlerCount(client)).toBe(0);
     client.disconnect();
+  });
+});
+
+/** The reconnect timer and auth/URL resolution take real turns of the loop. */
+async function socketAfter(socketIndex: number) {
+  for (let wait = 0; wait < 400; wait += 1) {
+    const socket = FakeWebSocket.instances[socketIndex];
+    if (socket) return socket;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("expected a WebSocket connection attempt");
+}
+
+describe("a connection that stops answering", () => {
+  test("is replaced at once, and the next socket says how the last one ended", async () => {
+    const original = { ...socketWatchdog };
+    socketWatchdog.checkMs = 10;
+    socketWatchdog.silentLimitMs = 60;
+    try {
+      const client = new WebSocketClient();
+      const socket = await connectClient(client);
+      socket.open();
+      const nextIndex = FakeWebSocket.instances.length;
+      // The daemon's frames keep the socket alive.
+      for (let beat = 0; beat < 5; beat += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        socket.receive({ type: "worker_session_list", worker_sessions: [] });
+      }
+      expect(FakeWebSocket.instances.length).toBe(nextIndex);
+      // Then nothing arrives: no close event, no error, just silence.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+      const replacement = await socketAfter(nextIndex);
+      replacement.open();
+      const diagnostics = replacement.sent
+        .map((frame) => JSON.parse(frame))
+        .filter((frame) => frame.type === "client_diagnostic");
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toMatchObject({ name: "ws_closed" });
+      expect(diagnostics[0].body).toContain("reason=silent");
+      client.disconnect();
+    } finally {
+      Object.assign(socketWatchdog, original);
+    }
+  });
+
+  test("a dropped healthy connection is retried without waiting", async () => {
+    const client = new WebSocketClient();
+    const socket = await connectClient(client);
+    socket.open();
+    // Pretend the socket lived long enough to count as healthy.
+    const realNow = Date.now;
+    const start = realNow();
+    Date.now = () => start + 60_000;
+    const nextIndex = FakeWebSocket.instances.length;
+    try {
+      socket.close();
+      const replacement = await socketAfter(nextIndex);
+      expect(replacement).toBeDefined();
+    } finally {
+      Date.now = realNow;
+      client.disconnect();
+    }
   });
 });
