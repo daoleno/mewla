@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"sync"
 	"time"
 
@@ -166,4 +167,60 @@ func (o *clientOutbox) closeLocked(err error) {
 	o.err = err
 	o.queue = nil
 	o.cond.Broadcast()
+}
+
+// wsPingInterval is how often the daemon pings a client. The ping keeps an
+// otherwise quiet link (a phone on a relay) from idling out, and its pong is
+// how the daemon learns the client is still there.
+var wsPingInterval = 20 * time.Second
+
+// wsReadIdleTimeout is how long a client may send nothing, not even a pong,
+// before its connection is dropped. A phone that vanished without a close (a
+// network switch, a suspended app) otherwise stays "connected" here until the
+// kernel notices, and its input resends would queue behind a dead socket.
+var wsReadIdleTimeout = 60 * time.Second
+
+// keepWebSocketAlive pings conn on a timer and drops it when the client goes
+// silent past wsReadIdleTimeout. The returned stop ends the pinger. Client
+// frames and pongs both renew the deadline; the read loop renews it after every
+// message, and this installs the control-frame handlers it cannot see.
+func keepWebSocketAlive(conn *websocket.Conn) (stop func()) {
+	interval, idle := wsPingInterval, wsReadIdleTimeout
+	renew := func() { _ = conn.SetReadDeadline(time.Now().Add(idle)) }
+	renew()
+	conn.SetPongHandler(func(string) error {
+		renew()
+		return nil
+	})
+	conn.SetPingHandler(func(data string) error {
+		renew()
+		err := conn.WriteControl(websocket.PongMessage, []byte(data), time.Now().Add(5*time.Second))
+		if err == websocket.ErrCloseSent || isTemporaryNetError(err) {
+			return nil
+		}
+		return err
+	})
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+	}()
+	return func() { once.Do(func() { close(done) }) }
+}
+
+func isTemporaryNetError(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }

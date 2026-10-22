@@ -160,6 +160,7 @@ type Server struct {
 	clients            map[*websocket.Conn]*authenticatedClient
 	active             map[*websocket.Conn]string
 	outboxes           map[*websocket.Conn]*clientOutbox
+	inputLanes         sessionInputLanes
 	codexSubs          map[*websocket.Conn]map[string]codexConversationSubscription
 	skillsInventories  map[*websocket.Conn]skillsInventoryRequest
 	skillsMutations    map[*websocket.Conn]skillsMutationRequest
@@ -543,6 +544,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer s.detachAuthenticatedClient(conn, owner)
 
 	debuglog.Printf("websocket: client connected remote=%s device=%s clients=%d", r.RemoteAddr, device.ID, s.clientCount())
+	connectedAt := time.Now()
+	stopKeepalive := keepWebSocketAlive(conn)
+	defer stopKeepalive()
 	s.sendWorkerSessionList(conn)
 	if s.work != nil {
 		s.sendJSON(conn, map[string]any{
@@ -561,10 +565,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				// Without this line a phone that lost its connection leaves no
 				// trace here: connect and disconnect are verbose-only.
-				log.Printf("websocket: client connection lost remote=%s device=%s: %v", r.RemoteAddr, device.ID, err)
+				log.Printf("websocket: client connection lost remote=%s device=%s age=%s: %v", r.RemoteAddr, device.ID, time.Since(connectedAt).Round(time.Second), err)
 			}
 			break
 		}
+		_ = conn.SetReadDeadline(time.Now().Add(wsReadIdleTimeout))
 		if owner.revoked.Load() ||
 			s.auth == nil ||
 			!s.auth.IsDeviceTrusted(owner.deviceID) {
@@ -942,7 +947,9 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleTelegramMessage(conn, raw)
 	case "client_diagnostic":
 		s.handleClientDiagnostic(conn, raw)
-	case "send_input", "send_key", "send_action":
+	case "send_input":
+		s.handleQueuedSessionInput(conn, raw)
+	case "send_key", "send_action":
 		s.handleSessionInputMessage(conn, raw)
 	case "answer_choice":
 		go s.handleAnswerChoice(conn, raw)
@@ -1918,6 +1925,14 @@ func (s *Server) publishCodexConversationSubscription(
 
 	now := time.Now()
 	conversation, err := s.loadProviderConversation(reader, resolved, now)
+	if took := time.Since(now); took >= slowSessionInputLog {
+		// A snapshot cannot arrive before this load returns; the phone only
+		// sees its own "no snapshot after 8000ms".
+		log.Printf(
+			"websocket: slow conversation load target=%s scope=%q events=%d took=%s",
+			resolved.targetID, raw.ConversationScopeKey, len(conversation.Events), took.Round(time.Millisecond),
+		)
+	}
 	if err != nil {
 		if !s.isCurrentCodexSubscription(conn, subscriptionID, generation) {
 			return
