@@ -46,6 +46,8 @@ type Options struct {
 	Brain  Brain
 	Push   PushFunc
 	Thread func() string
+	// Executor names the Brain host's executor; judgment tries it first.
+	Executor func() string
 }
 
 // Collector runs the collectors and then the rules. Passes never overlap.
@@ -91,6 +93,7 @@ func NewCollector(options Options) *Collector {
 		errors:      map[string]string{},
 		lastRun:     map[string]time.Time{},
 	}
+	c.judge.preferred = options.Executor
 	if options.Brain != nil {
 		notify, err := newNotifier(options.Store, options.Brain, options.Push, options.Thread)
 		if err != nil {
