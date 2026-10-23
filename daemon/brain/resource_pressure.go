@@ -143,14 +143,17 @@ type resourcePressureBrief struct {
 	Crossed       []watcher.PressureSignal `json:"crossed,omitempty"`
 	MemoryFreeGiB float64                  `json:"memory_available_gib,omitempty"`
 	MemoryGiB     float64                  `json:"memory_total_gib,omitempty"`
-	SwapUsedGiB   float64                  `json:"swap_used_gib,omitempty"`
-	CPUPercent    float64                  `json:"cpu_percent,omitempty"`
-	Load15        float64                  `json:"load15,omitempty"`
-	Consumers     []resourceConsumerBrief  `json:"consumers,omitempty"`
-	Orphaned      []resourceConsumerBrief  `json:"orphaned,omitempty"`
-	Queued        int                      `json:"queued"`
-	InFlight      int                      `json:"in_flight"`
-	Snapshot      string                   `json:"snapshot"`
+	// MemoryPressure is the kernel's normal/warn/critical verdict on a Mac,
+	// where there is no PSI.
+	MemoryPressure string                  `json:"memory_pressure,omitempty"`
+	SwapUsedGiB    float64                 `json:"swap_used_gib,omitempty"`
+	CPUPercent     float64                 `json:"cpu_percent,omitempty"`
+	Load15         float64                 `json:"load15,omitempty"`
+	Consumers      []resourceConsumerBrief `json:"consumers,omitempty"`
+	Orphaned       []resourceConsumerBrief `json:"orphaned,omitempty"`
+	Queued         int                     `json:"queued"`
+	InFlight       int                     `json:"in_flight"`
+	Snapshot       string                  `json:"snapshot"`
 }
 
 type resourceConsumerBrief struct {
@@ -175,6 +178,9 @@ func compactResourcePressureEvent(event watcher.ResourcePressureEvent) resourceP
 		brief.MemoryFreeGiB = roundTo(float64(memory.AvailableBytes)/(1<<30), 1)
 		brief.MemoryGiB = roundTo(float64(memory.TotalBytes)/(1<<30), 1)
 		brief.SwapUsedGiB = roundTo(float64(memory.SwapUsedBytes)/(1<<30), 1)
+	}
+	if event.MemoryPressure != nil {
+		brief.MemoryPressure = event.MemoryPressure.Level
 	}
 	if cpu := event.CPU; cpu != nil {
 		if cpu.UtilizationPercent != nil {

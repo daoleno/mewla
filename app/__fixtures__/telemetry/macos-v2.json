@@ -1,0 +1,860 @@
+{
+  "version": 2,
+  "sampled_at": "2026-10-14T17:46:40Z",
+  "state": "normal",
+  "cpu": {
+    "load1": 3.1,
+    "load5": 2.8,
+    "load15": 2.6,
+    "utilization_percent": 34.2,
+    "per_core_percent": [
+      61,
+      48,
+      52,
+      40,
+      33,
+      29,
+      22,
+      18,
+      12,
+      9
+    ]
+  },
+  "memory": {
+    "total_bytes": 17179869184,
+    "available_bytes": 6549825126,
+    "used_bytes": 10630044057,
+    "cache_bytes": 4617089843,
+    "shared_bytes": 0,
+    "swap_total_bytes": 4294967296,
+    "swap_used_bytes": 1288490188
+  },
+  "memory_pressure": {
+    "level": "normal",
+    "free_percent": 38
+  },
+  "disks": [
+    {
+      "mount": "/",
+      "total_bytes": 494000000000,
+      "free_bytes": 211000000000,
+      "used_bytes": 283000000000,
+      "read_bytes_per_second": 4400000,
+      "write_bytes_per_second": 2100000
+    }
+  ],
+  "consumers": [
+    {
+      "id": "user:Google Chrome Helper (Renderer)",
+      "owner": "user",
+      "status": "unknown",
+      "rss_bytes": 2254857830,
+      "cpu_percent": 38.0,
+      "process_count": 9,
+      "kinds": [
+        "chrome"
+      ],
+      "commands": [
+        "Google Chrome Helper (Renderer)"
+      ],
+      "processes": [
+        {
+          "pid": 812,
+          "start": "Thu Oct 22 09:14:02 2026",
+          "command": "Google Chrome Helper (Renderer)",
+          "rss_bytes": 644245094
+        }
+      ]
+    },
+    {
+      "id": "user:Xcode",
+      "owner": "user",
+      "status": "unknown",
+      "rss_bytes": 1932735283,
+      "cpu_percent": 72.0,
+      "process_count": 1,
+      "kinds": [],
+      "commands": [
+        "Xcode"
+      ],
+      "processes": [
+        {
+          "pid": 654,
+          "start": "Thu Oct 22 08:02:11 2026",
+          "command": "Xcode",
+          "rss_bytes": 1932735283
+        }
+      ]
+    },
+    {
+      "id": "user:node",
+      "owner": "user",
+      "status": "unknown",
+      "rss_bytes": 966367641,
+      "cpu_percent": 21.0,
+      "process_count": 4,
+      "kinds": [
+        "node"
+      ],
+      "commands": [
+        "node"
+      ],
+      "processes": [
+        {
+          "pid": 4410,
+          "start": "Thu Oct 23 10:31:45 2026",
+          "command": "node",
+          "rss_bytes": 429496729
+        }
+      ]
+    },
+    {
+      "id": "user:mewla",
+      "owner": "user",
+      "status": "unknown",
+      "rss_bytes": 214748364,
+      "cpu_percent": 3.0,
+      "process_count": 1,
+      "kinds": [],
+      "commands": [
+        "mewla"
+      ],
+      "processes": [
+        {
+          "pid": 501,
+          "start": "Wed Oct 21 18:20:00 2026",
+          "command": "mewla",
+          "rss_bytes": 214748364
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "sampled_at": "2026-10-14T17:41:45Z",
+      "state": "normal",
+      "memory_available_bytes": 7086696038,
+      "memory_used_bytes": 10093173145,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 31.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3145728,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:41:50Z",
+      "state": "normal",
+      "memory_available_bytes": 6944192345,
+      "memory_used_bytes": 10235676838,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 33.3,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3493637,
+      "disk_write_bytes_per_second": 2094728
+    },
+    {
+      "sampled_at": "2026-10-14T17:41:55Z",
+      "state": "normal",
+      "memory_available_bytes": 6805637933,
+      "memory_used_bytes": 10374231250,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 35.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3831905,
+      "disk_write_bytes_per_second": 2602130
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:00Z",
+      "state": "normal",
+      "memory_available_bytes": 6674872636,
+      "memory_used_bytes": 10504996547,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 37.7,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4151156,
+      "disk_write_bytes_per_second": 3081006
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:05Z",
+      "state": "normal",
+      "memory_available_bytes": 6555520422,
+      "memory_used_bytes": 10624348761,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 39.7,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4442543,
+      "disk_write_bytes_per_second": 3518087
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:10Z",
+      "state": "normal",
+      "memory_available_bytes": 6450888962,
+      "memory_used_bytes": 10728980221,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 41.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4697991,
+      "disk_write_bytes_per_second": 3901259
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:15Z",
+      "state": "normal",
+      "memory_available_bytes": 6363877966,
+      "memory_used_bytes": 10815991217,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 42.8,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4910421,
+      "disk_write_bytes_per_second": 4219903
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:20Z",
+      "state": "normal",
+      "memory_available_bytes": 6296898815,
+      "memory_used_bytes": 10882970368,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 43.9,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 5073944,
+      "disk_write_bytes_per_second": 4465188
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:25Z",
+      "state": "normal",
+      "memory_available_bytes": 6251807738,
+      "memory_used_bytes": 10928061445,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 5184030,
+      "disk_write_bytes_per_second": 4630316
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:30Z",
+      "state": "normal",
+      "memory_available_bytes": 6229854369,
+      "memory_used_bytes": 10950014814,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 45.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 5237627,
+      "disk_write_bytes_per_second": 4710712
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:35Z",
+      "state": "normal",
+      "memory_available_bytes": 6231647113,
+      "memory_used_bytes": 10948222070,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.9,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 5233250,
+      "disk_write_bytes_per_second": 4704147
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:40Z",
+      "state": "normal",
+      "memory_available_bytes": 6257136287,
+      "memory_used_bytes": 10922732896,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.5,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 5171020,
+      "disk_write_bytes_per_second": 4610803
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:45Z",
+      "state": "normal",
+      "memory_available_bytes": 6305615496,
+      "memory_used_bytes": 10874253687,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 43.7,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 5052663,
+      "disk_write_bytes_per_second": 4433266
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:50Z",
+      "state": "normal",
+      "memory_available_bytes": 6375741209,
+      "memory_used_bytes": 10804127974,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 42.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4881458,
+      "disk_write_bytes_per_second": 4176458
+    },
+    {
+      "sampled_at": "2026-10-14T17:42:55Z",
+      "state": "normal",
+      "memory_available_bytes": 6465569995,
+      "memory_used_bytes": 10714299188,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 41.1,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4662149,
+      "disk_write_bytes_per_second": 3847496
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:00Z",
+      "state": "normal",
+      "memory_available_bytes": 6572612381,
+      "memory_used_bytes": 10607256802,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 39.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4400815,
+      "disk_write_bytes_per_second": 3455495
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:05Z",
+      "state": "normal",
+      "memory_available_bytes": 6693901843,
+      "memory_used_bytes": 10485967340,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 37.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4104698,
+      "disk_write_bytes_per_second": 3011319
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:10Z",
+      "state": "normal",
+      "memory_available_bytes": 6826077021,
+      "memory_used_bytes": 10353792162,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 35.2,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3782005,
+      "disk_write_bytes_per_second": 2527279
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:15Z",
+      "state": "normal",
+      "memory_available_bytes": 6965474874,
+      "memory_used_bytes": 10214394309,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 33.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3441678,
+      "disk_write_bytes_per_second": 2016789
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:20Z",
+      "state": "normal",
+      "memory_available_bytes": 7108232194,
+      "memory_used_bytes": 10071636989,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 30.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3093149,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:25Z",
+      "state": "normal",
+      "memory_available_bytes": 7250392672,
+      "memory_used_bytes": 9929476511,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 28.3,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2746078,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:30Z",
+      "state": "normal",
+      "memory_available_bytes": 7388016536,
+      "memory_used_bytes": 9791852647,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 26.1,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2410082,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:35Z",
+      "state": "normal",
+      "memory_available_bytes": 7517289744,
+      "memory_used_bytes": 9662579439,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 24.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2094474,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:40Z",
+      "state": "normal",
+      "memory_available_bytes": 7634629677,
+      "memory_used_bytes": 9545239506,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 22.1,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1807999,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:45Z",
+      "state": "normal",
+      "memory_available_bytes": 7736784431,
+      "memory_used_bytes": 9443084752,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 20.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1558598,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:50Z",
+      "state": "normal",
+      "memory_available_bytes": 7820922937,
+      "memory_used_bytes": 9358946246,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 19.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1353182,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:43:55Z",
+      "state": "normal",
+      "memory_available_bytes": 7884713418,
+      "memory_used_bytes": 9295155765,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 18.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1197443,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:00Z",
+      "state": "normal",
+      "memory_available_bytes": 7926388015,
+      "memory_used_bytes": 9253481168,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 17.3,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1095699,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:05Z",
+      "state": "normal",
+      "memory_available_bytes": 7944791778,
+      "memory_used_bytes": 9235077405,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 17.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1050768,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:10Z",
+      "state": "normal",
+      "memory_available_bytes": 7939414672,
+      "memory_used_bytes": 9240454511,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 17.1,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1063895,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:15Z",
+      "state": "normal",
+      "memory_available_bytes": 7910405718,
+      "memory_used_bytes": 9269463465,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 17.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1134718,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:20Z",
+      "state": "normal",
+      "memory_available_bytes": 7858568854,
+      "memory_used_bytes": 9321300329,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 18.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1261273,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:25Z",
+      "state": "normal",
+      "memory_available_bytes": 7785340665,
+      "memory_used_bytes": 9394528518,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 19.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1440053,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:30Z",
+      "state": "normal",
+      "memory_available_bytes": 7692750563,
+      "memory_used_bytes": 9487118620,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 21.1,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1666103,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:35Z",
+      "state": "normal",
+      "memory_available_bytes": 7583364546,
+      "memory_used_bytes": 9596504637,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 22.9,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 1933158,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:40Z",
+      "state": "normal",
+      "memory_available_bytes": 7460214088,
+      "memory_used_bytes": 9719655095,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 24.9,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2233819,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:45Z",
+      "state": "normal",
+      "memory_available_bytes": 7326712123,
+      "memory_used_bytes": 9853157060,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 27.1,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2559751,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:50Z",
+      "state": "normal",
+      "memory_available_bytes": 7186558464,
+      "memory_used_bytes": 9993310719,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 29.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2901923,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:44:55Z",
+      "state": "normal",
+      "memory_available_bytes": 7043637264,
+      "memory_used_bytes": 10136231919,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 31.7,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3250852,
+      "disk_write_bytes_per_second": 1730550
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:00Z",
+      "state": "normal",
+      "memory_available_bytes": 6901909375,
+      "memory_used_bytes": 10277959808,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 34.0,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3596867,
+      "disk_write_bytes_per_second": 2249573
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:05Z",
+      "state": "normal",
+      "memory_available_bytes": 6765302578,
+      "memory_used_bytes": 10414566605,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 36.2,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3930380,
+      "disk_write_bytes_per_second": 2749842
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:10Z",
+      "state": "normal",
+      "memory_available_bytes": 6637602730,
+      "memory_used_bytes": 10542266453,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 38.3,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4242147,
+      "disk_write_bytes_per_second": 3217493
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:15Z",
+      "state": "normal",
+      "memory_available_bytes": 6522348847,
+      "memory_used_bytes": 10657520336,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 40.2,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4523529,
+      "disk_write_bytes_per_second": 3639565
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:20Z",
+      "state": "normal",
+      "memory_available_bytes": 6422735020,
+      "memory_used_bytes": 10757134163,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 41.8,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4766727,
+      "disk_write_bytes_per_second": 4004362
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:25Z",
+      "state": "normal",
+      "memory_available_bytes": 6341521901,
+      "memory_used_bytes": 10838347282,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 43.1,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 4965001,
+      "disk_write_bytes_per_second": 4301773
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:30Z",
+      "state": "normal",
+      "memory_available_bytes": 6280960193,
+      "memory_used_bytes": 10898908990,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.1,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 5112857,
+      "disk_write_bytes_per_second": 4523557
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:35Z",
+      "state": "normal",
+      "memory_available_bytes": 6242728275,
+      "memory_used_bytes": 10937140908,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.8,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 5206196,
+      "disk_write_bytes_per_second": 4663566
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:40Z",
+      "state": "normal",
+      "memory_available_bytes": 6227885689,
+      "memory_used_bytes": 10951983494,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 45.0,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 5242433,
+      "disk_write_bytes_per_second": 4717921
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:45Z",
+      "state": "normal",
+      "memory_available_bytes": 6236843775,
+      "memory_used_bytes": 10943025408,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.9,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 5220563,
+      "disk_write_bytes_per_second": 4685116
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:50Z",
+      "state": "normal",
+      "memory_available_bytes": 6269354273,
+      "memory_used_bytes": 10910514910,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 44.3,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 5141191,
+      "disk_write_bytes_per_second": 4566059
+    },
+    {
+      "sampled_at": "2026-10-14T17:45:55Z",
+      "state": "normal",
+      "memory_available_bytes": 6324516203,
+      "memory_used_bytes": 10855352980,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 43.4,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 5006519,
+      "disk_write_bytes_per_second": 4364050
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:00Z",
+      "state": "normal",
+      "memory_available_bytes": 6400800831,
+      "memory_used_bytes": 10779068352,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 42.2,
+      "memory_pressure_level": "warn",
+      "disk_read_bytes_per_second": 4820277,
+      "disk_write_bytes_per_second": 4084687
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:05Z",
+      "state": "normal",
+      "memory_available_bytes": 6496094041,
+      "memory_used_bytes": 10683775142,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 40.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4587627,
+      "disk_write_bytes_per_second": 3735713
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:10Z",
+      "state": "normal",
+      "memory_available_bytes": 6607754922,
+      "memory_used_bytes": 10572114261,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 38.8,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4315018,
+      "disk_write_bytes_per_second": 3326799
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:15Z",
+      "state": "normal",
+      "memory_available_bytes": 6732688955,
+      "memory_used_bytes": 10447180228,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 36.8,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 4010003,
+      "disk_write_bytes_per_second": 2869277
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:20Z",
+      "state": "normal",
+      "memory_available_bytes": 6867433776,
+      "memory_used_bytes": 10312435407,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 34.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3681036,
+      "disk_write_bytes_per_second": 2375826
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:25Z",
+      "state": "normal",
+      "memory_available_bytes": 7008255130,
+      "memory_used_bytes": 10171614053,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 32.3,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 3337234,
+      "disk_write_bytes_per_second": 1860123
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:30Z",
+      "state": "normal",
+      "memory_available_bytes": 7151250359,
+      "memory_used_bytes": 10028618824,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 29.9,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2988125,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:35Z",
+      "state": "normal",
+      "memory_available_bytes": 7292456559,
+      "memory_used_bytes": 9887412624,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 27.6,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2643383,
+      "disk_write_bytes_per_second": 1572864
+    },
+    {
+      "sampled_at": "2026-10-14T17:46:40Z",
+      "state": "normal",
+      "memory_available_bytes": 7427960408,
+      "memory_used_bytes": 9751908775,
+      "swap_used_bytes": 1288490188,
+      "load15": 2.6,
+      "cpu_percent": 25.4,
+      "memory_pressure_level": "normal",
+      "disk_read_bytes_per_second": 2312563,
+      "disk_write_bytes_per_second": 1572864
+    }
+  ],
+  "endpoint": "get_resource_telemetry",
+  "signals": [],
+  "unavailable": [
+    "psi",
+    "memory.shared"
+  ]
+}

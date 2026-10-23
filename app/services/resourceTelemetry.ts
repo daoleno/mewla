@@ -15,6 +15,18 @@ export interface PsiResource {
   full?: PsiAverages;
 }
 
+/**
+ * The kernel's own memory pressure verdict where there is no PSI (macOS).
+ * It is an ordinal level, never a stall percentage.
+ */
+export type MemoryPressureLevel = "normal" | "warn" | "critical";
+
+export interface MemoryPressure {
+  level: MemoryPressureLevel;
+  /** The kernel's free-memory percentage, 0–100, when it reports one. */
+  freePercent?: number;
+}
+
 export interface ResourceDisk {
   mount: string;
   totalBytes: number;
@@ -69,6 +81,7 @@ export interface ResourceHistorySample {
   psiCpu?: number;
   psiMemory?: number;
   psiIo?: number;
+  memoryPressure?: MemoryPressureLevel;
   diskReadBytesPerSecond?: number;
   diskWriteBytesPerSecond?: number;
 }
@@ -105,6 +118,10 @@ export interface ResourceTelemetry {
     memory?: PsiResource;
     io?: PsiResource;
   };
+  /** Present only where the platform reports it instead of PSI (macOS). */
+  memoryPressure?: MemoryPressure;
+  /** Measurements this machine cannot report, by the daemon's names. */
+  unavailable: string[];
   disks: ResourceDisk[];
   consumers: ResourceConsumer[];
   history: ResourceHistorySample[];
@@ -172,6 +189,18 @@ const CONSUMER_OWNERS: readonly ResourceConsumerOwner[] = [
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.map(str).filter((v): v is string => v !== undefined))] : [];
+}
+
+function normalizeMemoryPressureLevel(value: unknown): MemoryPressureLevel | undefined {
+  return value === "normal" || value === "warn" || value === "critical" ? value : undefined;
+}
+
+function normalizeMemoryPressure(value: unknown): MemoryPressure | undefined {
+  const source = record(value);
+  const level = normalizeMemoryPressureLevel(source?.level);
+  if (!source || !level) return undefined;
+  const free = num(source.free_percent);
+  return { level, freePercent: free === undefined ? undefined : Math.min(100, Math.max(0, free)) };
 }
 
 function normalizeProcess(value: unknown): ResourceProcess | null {
@@ -243,6 +272,7 @@ function normalizeHistorySample(value: unknown): ResourceHistorySample | null {
     psiCpu: nonNegative(source.psi_cpu_some_avg10),
     psiMemory: nonNegative(source.psi_memory_some_avg10),
     psiIo: nonNegative(source.psi_io_some_avg10),
+    memoryPressure: normalizeMemoryPressureLevel(source.memory_pressure_level),
     diskReadBytesPerSecond: nonNegative(source.disk_read_bytes_per_second),
     diskWriteBytesPerSecond: nonNegative(source.disk_write_bytes_per_second),
   };
@@ -301,6 +331,8 @@ export function normalizeResourceTelemetry(payload: unknown): ResourceTelemetry 
       memory: normalizePsiResource(psi.memory),
       io: normalizePsiResource(psi.io),
     },
+    memoryPressure: normalizeMemoryPressure(source.memory_pressure),
+    unavailable: stringList(source.unavailable),
     disks: compact((Array.isArray(source.disks) ? source.disks : []).map(normalizeDisk)),
     consumers: compact((Array.isArray(source.consumers) ? source.consumers : []).map(normalizeConsumer))
       .sort((a, b) => b.rssBytes - a.rssBytes),
@@ -600,6 +632,37 @@ export function psiHistorySeries(telemetry: ResourceTelemetry, key: PsiLine["key
       : (sample: ResourceHistorySample) => sample.psiIo;
   const now = telemetry.psi[key]?.some?.avg10;
   return withCurrent(historySeries(telemetry, pick, 100), telemetry, now === undefined ? undefined : now / 100);
+}
+
+const MEMORY_PRESSURE_STEP: Record<MemoryPressureLevel, number> = { normal: 0, warn: 0.5, critical: 1 };
+
+/** Memory pressure level history as steps: 0 normal, ½ warning, 1 critical. */
+export function memoryPressureSeries(telemetry: ResourceTelemetry): SeriesPoint[] {
+  const points: SeriesPoint[] = [];
+  for (const sample of telemetry.history) {
+    if (sample.memoryPressure) points.push({ at: sample.sampledAt, value: MEMORY_PRESSURE_STEP[sample.memoryPressure] });
+  }
+  const now = telemetry.memoryPressure?.level;
+  return withCurrent(points, telemetry, now === undefined ? undefined : MEMORY_PRESSURE_STEP[now]);
+}
+
+export const MEMORY_PRESSURE_LABEL: Record<MemoryPressureLevel, string> = {
+  normal: "Normal",
+  warn: "Warning",
+  critical: "Critical",
+};
+
+/**
+ * Did the machine report any core measurement. A daemon that cannot sample
+ * this machine (macOS before this reading existed) sends none, and a pressure
+ * state over no data would only say "Normal".
+ */
+export function hasMachineReading(telemetry: ResourceTelemetry): boolean {
+  return telemetry.memory.totalBytes !== undefined
+    || telemetry.cpu.utilizationPercent !== undefined
+    || telemetry.cpu.load1 !== undefined
+    || telemetry.memoryPressure !== undefined
+    || Object.values(telemetry.psi).some((resource) => resource !== undefined);
 }
 
 export interface ThroughputSeries {

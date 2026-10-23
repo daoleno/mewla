@@ -6,8 +6,9 @@ WebSocket. Clients send `{ "type": "get_resource_telemetry", "request_id":
 `request_id`. The endpoint is poll-friendly: clients request the latest cached snapshot every
 five seconds; reads never trigger another sample.
 
-The response is versioned and Linux-first. Unsupported platform measurements
-are omitted rather than reported as zero.
+The response is versioned. Linux and macOS each fill what their kernel offers;
+unsupported platform measurements are omitted rather than reported as zero, and
+the top-level `unavailable` array names them (for example `"psi"`).
 
 ```json
 {
@@ -140,9 +141,48 @@ are excluded. IO rates are per mount's block device when a matching counter
 exists, and omitted on overlay filesystems without an exposed block counter.
 The sampler never shells out on Linux. Processes are sampled once per interval,
 with environment ownership fields cached by PID/start identity. Network,
-temperature and GPU metrics are outside this version. macOS currently returns
-`unavailable` measurement names with empty disks/consumers and continues to
-compile; the app must render these as unavailable, never zero.
+temperature and GPU metrics are outside this version. A platform that cannot be
+sampled at all lists every measurement in `unavailable` with empty disks and
+consumers; the app renders that as "No reading", never as Normal or zero.
+
+## macOS
+
+The macOS sampler reads the kernel directly and runs no shell command of its
+own. The daemon stays cgo-free: sysctl goes through `golang.org/x/sys/unix`, and
+the Mach, libproc and IOKit calls go through purego, as `daemon/screen` does.
+
+| Field | Source |
+| --- | --- |
+| `cpu.utilization_percent`, `per_core_percent` | `host_processor_info(PROCESSOR_CPU_LOAD_INFO)` tick deltas, user + system + nice over all four states, one entry per logical CPU |
+| `cpu.load1/5/15` | sysctl `vm.loadavg` |
+| `memory.total_bytes` | sysctl `hw.memsize` |
+| `memory.used_bytes`, `available_bytes`, `cache_bytes` | `host_statistics64(HOST_VM_INFO64)` with Activity Monitor's definitions: used is app memory (anonymous pages minus purgeable) + wired + compressed; cache is file-backed + purgeable pages; available is total minus used. Page counts use the kernel page size from `host_page_size` |
+| `memory.swap_*` | sysctl `vm.swapusage` |
+| `memory.shared_bytes` | not reported; always 0 and listed as `memory.shared` in `unavailable` |
+| `memory_pressure` | sysctl `kern.memorystatus_vm_pressure_level` (1 normal, 2 warn, 4 critical; any other value is left out, not read as normal) and `kern.memorystatus_level` as `free_percent` |
+| `disks[]` | `getfsstat` capacity of `/` and of local volumes under `/Volumes`, one per APFS container |
+| `disks[0].read/write_bytes_per_second` | the sum of the byte counters of every `IOBlockStorageDriver` (IOKit `Statistics`), reported on the startup volume. It covers every physical or disk-image drive, not that volume alone |
+| `consumers[]` | `workerproc.Processes` (identity, ownership, `ps` for the list) completed with libproc: `proc_pidinfo(PROC_PIDTASKALLINFO)` for owner UID and CPU time, `proc_pidpath` for the executable name |
+
+There is no PSI on macOS. The `psi` object is absent and `psi` is listed in
+`unavailable`; no PSI figure is ever synthesized. `memory_pressure.level` is the
+kernel's own `normal`, `warn` or `critical`, and each history sample carries it
+as `memory_pressure_level`. The app labels the tile Memory pressure.
+
+Consumers are grouped by executable name, as on Linux, so every Chrome renderer
+is one row. Only processes of the daemon's own user are listed. CPU time is
+converted from Mach time with `mach_timebase_info` into the 100 Hz ticks the
+Linux rates use, so a consumer's 100% is one core on both platforms.
+
+Pressure on a Mac: the state machine reads `cpu.busy_percent` from the CPU
+utilization above, `disk.free_percent:<mount>` from the volume capacity, and
+`memory.pressure_level`: `warn` is an elevated signal (value 2) and `critical`
+a critical one (value 4). The level is the memory authority: where it is
+reported the `memory.available_percent` threshold is not applied, because an
+Activity-Monitor-style availability sits near the threshold on a healthy Mac.
+The same sustain, recovery and cooldown times apply, and Brain's
+`resource_pressure` event adds `memory_pressure`. A level the kernel does not
+report leaves the memory signal out; a failed read is never recovery.
 
 `signals` contains active threshold conditions as
 `{ "name": "psi.memory.some.avg60", "value": 3, "threshold": 2, "state": "elevated" }`.
