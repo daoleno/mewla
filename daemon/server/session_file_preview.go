@@ -92,6 +92,9 @@ type resolvedSessionFile struct {
 	generation    string
 }
 
+// errSessionFileMissing: the referenced file does not exist; answered 404.
+var errSessionFileMissing = errors.New("Session file is missing")
+
 func (s *Server) handleSessionFileMetadata(conn *websocket.Conn, raw clientMessage) {
 	resolved, err := s.resolveCurrentSessionFile(raw)
 	if err != nil {
@@ -226,7 +229,7 @@ func openSessionFile(cwd, reference string) (*resolvedSessionFile, error) {
 	canonicalPath, err := filepath.EvalSymlinks(candidatePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("Session file is missing")
+			return nil, errSessionFileMissing
 		}
 		return nil, fmt.Errorf("resolve Session file: %w", err)
 	}
@@ -237,7 +240,7 @@ func openSessionFile(cwd, reference string) (*resolvedSessionFile, error) {
 	preInfo, err := os.Stat(canonicalPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("Session file is missing")
+			return nil, errSessionFileMissing
 		}
 		return nil, fmt.Errorf("inspect Session file: %w", err)
 	}
@@ -900,7 +903,7 @@ func writeSessionFileHTTPError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, errSessionFileTooLarge):
 		http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
-	case strings.Contains(err.Error(), "missing"):
+	case errors.Is(err, errSessionFileMissing):
 		http.Error(w, err.Error(), http.StatusNotFound)
 	default:
 		http.Error(w, err.Error(), http.StatusBadRequest)
