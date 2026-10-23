@@ -66,9 +66,9 @@ stops and says so, and nothing is submitted. You can always finish in the
 Terminal. Once the question is answered, from the card or from the Terminal,
 the card becomes an **Answered** line in the chat.
 
-When Claude or Codex asks to run a command or change files, and Mewla started
-that Worker, the card names the command and offers the agent's own options
-(Allow, Deny). Tapping one answers the agent directly: nothing is typed into
+When Claude, Codex or OpenCode asks to run a command or change files, and Mewla
+started that Worker, the card names the command and offers the agent's own
+options (Allow or Deny; OpenCode also offers Always allow). Tapping one answers the agent directly: nothing is typed into
 the Terminal, and a request that was already answered, or that belongs to
 another conversation, is refused. A Worker Mewla did not start, and the prompts
 of other agents, are still read from the screen: Claude's own prompts then show
@@ -142,6 +142,22 @@ A Session's ⋯ menu holds:
 | Terminate | Stop the Session, after you confirm |
 
 Items appear only where they apply: Open Web for DSH, Open Brain for a Worker.
+
+## How Mewla follows each agent
+
+Where an agent offers a way to be followed, Mewla uses it instead of reading
+the screen or the agent's files:
+
+| Agent | Followed through | Messages and Stop |
+| --- | --- | --- |
+| Claude Code | Its hooks, set when Mewla starts it | Typed into the Terminal; the hook confirms delivery |
+| Codex | An app-server beside the Terminal, set when Mewla starts it | Sent to Codex directly |
+| OpenCode | OpenCode's background service: one event stream for all Workers, the session id chosen at launch | Sent to the service directly; a message to a session OpenCode has not created yet (its first) is typed |
+| Cursor, Grok, Pi, dsh | The agent's transcript and the screen | Typed into the Terminal |
+
+A Worker that Mewla did not start, or that started with its own settings, is
+followed from the transcript and the screen, and the app offers only what that
+supports.
 
 ## What the daemon costs while idle
 
