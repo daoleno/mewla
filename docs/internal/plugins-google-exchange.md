@@ -1,40 +1,39 @@
-# Google publisher exchange deployment artifact
+# Google sign-in exchange (Google Calendar and Gmail)
 
-This component is an unselected candidate prepared for review and fixture verification. Review the [maintained-component comparison](plugins-google-options.md) before choosing it. It is **not deployed**, and no publisher client or HTTPS origin has been registered. It is not part of a user's private daemon. Its only provider is Google; Slack uses its official public PKCE flow instead.
+Google Calendar and Gmail sign in through an exchange that runs inside the account service (`daemon/cmd/mewla-account`, package `daemon/googleauth`) at `https://connect.mewla.ai/google/*`. It exists because Google's Web client has a secret and a daemon must never hold it: users run their own daemons, a phone's browser cannot reach a daemon's loopback, and Google has retired custom-scheme and out-of-band returns. Because the daemon polls the exchange, the same flow works from the phone app and the web UI, with no per-daemon redirect URI.
 
-Build `daemon/cmd/mewla-google-auth` as a normal Go binary. Host it behind an existing product-owned TLS ingress. Required private environment configuration on that host:
+Why not the alternatives: a **Desktop** client needs a loopback redirect, which the phone's browser cannot reach on a daemon; Android and iOS clients only fit one app and not the web UI; shipping a **Web** client's secret in an open-source binary breaks Google's rule that it stays confidential.
 
-| Name | Owner / value |
+## Configuration
+
+`mewla-account` mounts the exchange only on its public HTTPS listener (`-tls-addr`) and only when all three values are set (a partial set stops the service at start):
+
+| Name | Where |
 | --- | --- |
-| `MEWLA_GOOGLE_AUTH_ORIGIN` | Confirmed product HTTPS origin, no path/query |
-| `MEWLA_GOOGLE_CLIENT_ID` | Mewla-owned Google Web application client |
-| `MEWLA_GOOGLE_CLIENT_SECRET` | Stored only in the publisher host's secret manager |
-| `MEWLA_GOOGLE_RECEIPT_KEY` | At least 32 cryptographically random bytes, base64url without padding; durable publisher secret |
-| `MEWLA_GOOGLE_AUTH_LISTEN` | Private listen address; defaults to `127.0.0.1:8098` |
+| `MEWLA_ACCOUNT_GOOGLE_CLIENT_ID` | `env.clear` in `config/deploy.yml` (public) |
+| `MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET` | Kamal secret, read by `.kamal/secrets` from `~/.config/mewla-remote/google-oauth-client.json` (`jq -r .web.client_secret`) |
+| `MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY` | Kamal secret, from `~/.config/mewla-remote/google-receipt-key`: 32 random bytes, base64url without padding. Losing it forces every Google account to reconnect |
 
-Register exactly `ORIGIN/google/callback` in the Google client. Build official daemons with the **public** `connections.GoogleExchangeOrigin` set to that origin. End users receive no client secret and do no configuration. A Google Cloud project must enable Drive/Gmail/Calendar APIs and complete the applicable consent/verification requirements.
+Official daemons carry only the public origin: `release/plugin-publishers.json` → `google.exchange_origin` → `connections.GoogleExchangeOrigin` (`scripts/plugin-publisher-flags.py`).
 
-The exchange has five fixed routes: start, browser authorize, Google callback, status/cancel, and refresh. No caller may supply a provider, token endpoint, scope string, callback URL or daemon URL. The native app asks its current daemon to start. That daemon generates a NaCl box keypair and a random nonce/retrieval capability. The broker receives only the public key and capability over HTTPS. Its browser flow uses its own single-use state, S256 PKCE and a Secure/HttpOnly/SameSite browser cookie. The Google callback exchanges with the product-held secret, seals the token pair to the original daemon public key using maintained `x/crypto/nacl/box`, and offers only a fixed `mewla://plugins` return. Browser HTML contains no code/token/retrieval capability.
+## Google Cloud project
 
-Only the daemon holding the retrieval capability can poll/cancel, and only its private key can decrypt. Decrypted results include the original nonce. The daemon verifies vendor identity and scopes, then saves the token pair and refresh binding in its existing private credential vault. Pending accounts are absent from its public account list. It deletes the exchange's pending entry after successful storage. Abandoned encrypted results expire in ten minutes.
+Project `mewla-50425` (the Firebase project). Enable the Gmail API and the Google Calendar API. Branding: app name Mewla, home page `https://mewla.ai/`, privacy policy `https://mewla.ai/privacy/`, authorized domain `mewla.ai`. One **Web application** client, named `Mewla sign-in`, with no JavaScript origins and exactly one redirect URI: `https://connect.mewla.ai/google/callback`.
 
-Refresh does not require a product-host user-token database. The exchange issues an HMAC-authenticated receipt bound to public key, client ID, hash of refresh token and hash of a random proof sealed to the daemon. Future refresh must present the receipt, matching refresh token and proof over TLS; the new result is sealed to that same key and keeps the nonce binding. The durable receipt signing key permits host restart without retaining user tokens. Lost signing keys force reconnect. The receipt/secret is bearer authority and belongs only in the daemon vault, never browser storage or logs.
+Scopes, by plugin (`googleauth.Scopes`): Calendar `calendar.calendarlist.readonly`, `calendar.events.readonly`, `calendar.freebusy`, plus `calendar.events` when changes are allowed; Gmail `gmail.readonly`, plus `gmail.modify` when changes are allowed; both with `openid` and `email`.
 
-Requests/bodies/flows are bounded, redirects are denied, and start/refresh rate limits are applied to the directly observed peer (forwarded headers are not trusted). There is no CORS API allowance. Deploy behind an ingress with global abuse limits and query/body/header logging disabled for these routes. Do not log cookies, authorization headers, vendor errors containing credentials, codes or state. Pending flows are in-memory and intentionally fail on restart; no long-term token persistence occurs product-side. The initial component serializes its exchange operations under one lock, so it is suitable for a bounded initial deployment; capacity and concurrency must be reviewed before a high-volume launch. It is not a claim of independently audited production security.
+Publishing status is **Testing**: only listed test users can connect, and Google ends a Testing grant after 7 days. Moving to production needs Google's verification: Calendar's scopes are sensitive (verification), Gmail's are restricted (verification and a yearly third-party CASA assessment, because the exchange can reach the tokens). Nothing has been submitted.
 
-Validation covers original-daemon-only decryption, cookie/PKCE/redirect binding, callback replay, denial/expiry, fixed provider destination, unauthorized polling, receipt/token/proof mismatch, refresh after host restart, daemon identity verification, storage without the publisher secret, refresh and local disconnect rejection. These are local protocol fixtures, not Google consent evidence.
+## Protocol
 
-Publisher ownership/hosting choice and real vendor consent remain required. No test changes external records, sends messages or accepts vendor agreements.
+Five fixed routes: start, browser authorize, Google callback, status/cancel, and refresh. No caller supplies a provider, token endpoint, scope string, callback URL or daemon URL; the only choice a daemon makes is the `service` (`calendar` or `gmail`), which selects a fixed scope set. The daemon generates a NaCl box keypair and a random nonce. The exchange receives the public key and nonce over HTTPS. Its browser flow uses its own single-use state, S256 PKCE and a Secure/HttpOnly/SameSite cookie. The callback exchanges the code with the secret and seals the token pair to the daemon's public key. A phone browser is returned to `mewla://plugins`; any other browser gets a page saying the tab can be closed. The page carries no code, token or retrieval capability.
 
-Reviewable build/config preparation (run at release engineering, not on end-user machines):
+Only the daemon holding the nonce can poll or cancel, and only its private key can open the result. The daemon checks the nonce, the identity and the granted scopes, saves the tokens in its vault, and cancels the pending entry. Unfinished results expire in ten minutes.
 
-```sh
-cd daemon
-GOMAXPROCS=2 go build -p 1 -o /private/artifacts/mewla-google-auth ./cmd/mewla-google-auth
-# Supply the five host environment variables above through the chosen host's
-# secret/config facility. Keep the listener private behind its TLS ingress.
-# Then build official daemons with public values only:
-GOMAXPROCS=2 go build -p 1 -ldflags '-X github.com/daoleno/mewla/daemon/connections.GoogleExchangeOrigin=https://CONFIRMED_OWNED_ORIGIN -X github.com/daoleno/mewla/daemon/connections.GitHubPublicClientID=REGISTERED_PUBLIC_ID -X github.com/daoleno/mewla/daemon/connections.SlackPublicClientID=REGISTERED_PUBLIC_ID' ./cmd/mewla
-```
+Refresh keeps no user-token database. The exchange issues an HMAC receipt bound to the public key, client ID, service, a hash of the refresh token and a hash of a random proof sealed to the daemon. A refresh must present the receipt, the matching refresh token and the proof; the new result is sealed to the same key. A restart keeps working because only the receipt key is durable. The receipt is bearer authority and lives only in the daemon vault.
 
-The capitalized values are required owner decisions, not working registrations. The code intentionally has no built-in fabricated defaults. Deployment must use the chosen product ingress and publisher account; this artifact does not authorize creating either.
+Requests and bodies are bounded, redirects are denied, `start` and `refresh` are rate limited per peer (behind the relay the PROXY-protocol header gives the real client address), and no CORS allowance exists. Pending flows are in memory and fail on restart. Operations are serialized under one lock, which suits the Testing-mode volume; review capacity before a wide launch. It is not independently audited.
+
+## Deploy and roll back
+
+Run from a checkout that has `.kamal/secrets` and `.kamal/files/` (see the [relay runbook](mewla-link-relay.md#operations-kamal)). Before deploying, record the current behaviour of `connect.mewla.ai`: `/plugins/return` forwards `code`/`state`/`error` to `mewla://plugins`, `/device` redirects to GitHub's device page, and the machine registry answers. After deploying, check the same things and `/google/start` (JSON `POST` only: a `GET` is 400). To roll back, redeploy the previous version: `kamal deploy --version <previous SHA> --skip-push` (the old image is still on the host), which drops the exchange; the secrets may stay.
