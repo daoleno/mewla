@@ -383,10 +383,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
-		if parsed.Endpoint == EndpointResponses && isDeepSeekResponsesUpstream(binding) {
-			// Trusted DeepSeek Responses envelope (not the ClientModelContract
-			// UpstreamEnvelope mapping used for Activate admission).
-			rewritten, err = sanitizeDeepSeekResponsesRequest(rewritten, envelopeDeepSeekV4Flash())
+		if adapt := responsesAdapterFor(binding); parsed.Endpoint == EndpointResponses && adapt != nil {
+			rewritten, err = adapt(rewritten)
 			if err != nil {
 				if errors.Is(err, ErrResponsesFeatureUnsupported) {
 					writeRouteError(w, http.StatusBadRequest, ErrResponsesFeatureUnsupported)

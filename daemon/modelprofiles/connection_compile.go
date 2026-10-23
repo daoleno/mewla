@@ -118,10 +118,6 @@ func accountLooksAdvanced(conn Profile, presetID string) bool {
 	if def == "" {
 		return got != ""
 	}
-	// DeepSeek stores canonical root; Claude compile may use /anthropic — durable is root.
-	if normalizeID(presetID) == ProviderPresetDeepSeek {
-		return got != "https://api.deepseek.com" && got != ""
-	}
 	return got != "" && got != def
 }
 

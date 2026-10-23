@@ -21,6 +21,17 @@ type presetSpec struct {
 	CredentialEnv  string
 	ClientModel    map[string]string // executor -> default client contract id
 	BuiltinModels  map[string]string // executor -> bundled catalog model id
+	// Variants says, per executor, where the preset differs from the shape
+	// above (one provider serving two protocols at two paths).
+	Variants map[string]presetVariant
+}
+
+// presetVariant is how a preset differs for one client.
+type presetVariant struct {
+	Protocol string
+	AuthMode string
+	// BasePath is appended to the base URL unless it already ends with it.
+	BasePath string
 }
 
 var curatedPresets = []presetSpec{
@@ -80,6 +91,11 @@ var curatedPresets = []presetSpec{
 		BuiltinModels: map[string]string{
 			ExecutorCodex:  "deepseek-v4-flash",
 			ExecutorClaude: "deepseek-v4-flash",
+		},
+		// Claude Code speaks Anthropic Messages, which DeepSeek serves under
+		// /anthropic; Codex uses the Responses shape above.
+		Variants: map[string]presetVariant{
+			ExecutorClaude: {Protocol: ProtocolAnthropicMessages, AuthMode: AuthModeXAPIKeyEnv, BasePath: "/anthropic"},
 		},
 	},
 	{
@@ -167,10 +183,6 @@ func CompileProviderConnection(in ProviderConnectionInput) (Profile, error) {
 
 	baseURL := spec.DefaultBaseURL
 	credEnv := spec.CredentialEnv
-	if normalizeID(in.PresetID) == ProviderPresetDeepSeek {
-		baseURL = "https://api.deepseek.com"
-		credEnv = "DEEPSEEK_API_KEY"
-	}
 	advanced := in.Advanced || normalizeID(in.PresetID) == ProviderPresetCustom
 	if advanced {
 		if in.BaseURL == "" {
@@ -259,24 +271,10 @@ func compileProviderConnectionForClient(in ProviderConnectionInput, executor str
 	if in.BaseURL != "" {
 		baseURL = in.BaseURL
 	}
-	if normalizeID(in.PresetID) == ProviderPresetDeepSeek {
-		credEnv = "DEEPSEEK_API_KEY"
-		switch executor {
-		case ExecutorCodex:
-			protocol = ProtocolOpenAIResponses
-			authMode = AuthModeBearerEnv
-			if baseURL == "" || baseURL == "https://api.deepseek.com" {
-				baseURL = "https://api.deepseek.com"
-			}
-		case ExecutorClaude:
-			protocol = ProtocolAnthropicMessages
-			authMode = AuthModeXAPIKeyEnv
-			root := strings.TrimRight(baseURL, "/")
-			if root == "" || root == "https://api.deepseek.com" {
-				baseURL = "https://api.deepseek.com/anthropic"
-			} else if !strings.HasSuffix(root, "/anthropic") {
-				baseURL = root + "/anthropic"
-			}
+	if variant, ok := spec.Variants[executor]; ok {
+		protocol, authMode = variant.Protocol, variant.AuthMode
+		if root := strings.TrimRight(baseURL, "/"); variant.BasePath != "" && !strings.HasSuffix(root, variant.BasePath) {
+			baseURL = root + variant.BasePath
 		}
 	}
 	if normalizeID(in.PresetID) == ProviderPresetCustom || in.Advanced {
