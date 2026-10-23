@@ -790,6 +790,15 @@ func loopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// pairErrorStatus maps a pairing failure to its HTTP status: conflicts name an
+// identity that cannot be paired as asked; everything else is unauthorized.
+func pairErrorStatus(err error) int {
+	if errors.Is(err, auth.ErrWrongDaemon) || errors.Is(err, auth.ErrDeviceKeyMismatch) {
+		return http.StatusConflict
+	}
+	return http.StatusUnauthorized
+}
+
 func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -820,18 +829,7 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		raw.DevicePublicKey,
 	)
 	if err != nil {
-		status := http.StatusUnauthorized
-		switch err {
-		case auth.ErrWrongDaemon:
-			status = http.StatusConflict
-		case auth.ErrInvalidPairingToken, auth.ErrExpiredPairingToken:
-			status = http.StatusUnauthorized
-		default:
-			if strings.Contains(err.Error(), "different key") {
-				status = http.StatusConflict
-			}
-		}
-		http.Error(w, err.Error(), status)
+		http.Error(w, err.Error(), pairErrorStatus(err))
 		return
 	}
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -62,11 +63,7 @@ func (s *Server) handleEnrollmentRequest(w http.ResponseWriter, r *http.Request)
 	}
 	request, secret, err := s.enrollments.Create(raw.DeviceID, raw.DeviceName, raw.Platform, raw.Origin, raw.DevicePublicKey)
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(err.Error(), "too many") {
-			status = http.StatusTooManyRequests
-		}
-		http.Error(w, err.Error(), status)
+		http.Error(w, err.Error(), enrollmentCreateStatus(err))
 		return
 	}
 	s.broadcastEnrollmentRequest(request)
@@ -74,6 +71,14 @@ func (s *Server) handleEnrollmentRequest(w http.ResponseWriter, r *http.Request)
 		s.enrollmentObserver(request)
 	}
 	s.writeJSONWithAssertion(w, http.StatusCreated, "mewla-enrollment-request", map[string]any{"request_id": request.ID, "secret": secret, "verification_number": request.Number, "expires_at": request.ExpiresAt})
+}
+
+// enrollmentCreateStatus answers 429 when the pending-request limit is reached.
+func enrollmentCreateStatus(err error) int {
+	if errors.Is(err, enrollment.ErrTooManyPending) {
+		return http.StatusTooManyRequests
+	}
+	return http.StatusBadRequest
 }
 
 func (s *Server) handleEnrollmentStatus(w http.ResponseWriter, r *http.Request) {

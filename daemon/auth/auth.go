@@ -43,6 +43,8 @@ var (
 	ErrReplayDetected      = errors.New("replayed auth nonce")
 	ErrWrongDaemon         = errors.New("wrong daemon identity")
 	ErrInvalidPairingToken = errors.New("invalid pairing token")
+	// ErrDeviceKeyMismatch: the device id is already paired with another key.
+	ErrDeviceKeyMismatch   = errors.New("device id already paired with a different key")
 	ErrExpiredPairingToken = errors.New("expired pairing token")
 )
 
@@ -378,7 +380,7 @@ func (m *Manager) EnrollDevice(token, expectedDaemonID, expectedPublicKeyHex, de
 	}
 	existing, ok := m.devices[deviceID]
 	if ok && existing.PublicKeyHex != devicePublicKeyHex {
-		return nil, fmt.Errorf("device id already paired with a different key")
+		return nil, ErrDeviceKeyMismatch
 	}
 
 	if ok && existing.Kind != pairing.Kind {

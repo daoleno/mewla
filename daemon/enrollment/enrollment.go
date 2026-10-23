@@ -61,6 +61,9 @@ type Manager struct {
 	now  func() time.Time
 }
 
+// ErrTooManyPending: the pending-request limit is reached; callers answer 429.
+var ErrTooManyPending = errors.New("too many pending enrollment requests")
+
 func New(stateDir string) (*Manager, error) {
 	if strings.TrimSpace(stateDir) == "" {
 		return nil, errors.New("enrollment state directory is required")
@@ -95,7 +98,7 @@ func (m *Manager) Create(deviceID, deviceName, platform, origin, publicKey strin
 		}
 	}
 	if active >= MaxPending {
-		return Request{}, "", errors.New("too many pending enrollment requests")
+		return Request{}, "", ErrTooManyPending
 	}
 	for _, item := range requests {
 		if item.Status == Pending && item.DeviceID == deviceID {
