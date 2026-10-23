@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/logonce"
 )
 
 // Router is the Mewla-owned same-protocol loopback routing runtime.
@@ -31,6 +32,9 @@ type Router struct {
 	// explicit model-switch contextual signal, or with an authoritative native
 	// settings snapshot for fragment-less changes.
 	modelSwitch func(routeID, modelID, effort string, effortPresent bool) error
+	// switchLog reports a failed native-settings convergence once per distinct
+	// failure; the request still proceeds on the authoritative binding.
+	switchLog logonce.Log
 	// nativeSettings returns the authoritative applied native thread settings
 	// for a route (persistent app-server subscription snapshot). Nil disables
 	// fragment-less native convergence.
@@ -326,7 +330,12 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 							return
 						}
 						completed = true
-						_ = r.modelSwitch(binding.RouteID, settings.Model, settings.Effort, settings.Effort != "")
+						// A failed convergence (including a lost generation
+						// race) leaves the old binding authoritative; the
+						// re-read below serves from it. Log it once so a
+						// binding that keeps refusing is visible.
+						r.switchLog.Note("model route "+binding.RouteID+" native settings convergence",
+							r.modelSwitch(binding.RouteID, settings.Model, settings.Effort, settings.Effort != ""))
 						binding, flightToken, err = r.table.BeginRouteFlight(parsed.RouteID)
 						if err != nil {
 							writeRouteError(w, http.StatusNotFound, ErrRouteNotFound)
