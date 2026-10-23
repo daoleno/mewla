@@ -32,8 +32,10 @@ import {
 import { useWorkers } from '../store/workers';
 import { useCurrentServer } from '../store/currentServer';
 import { wsClient } from '../services/websocket';
+import { failureMessage, warnOnce } from '../services/warnOnce';
 import { AnimatedPressable } from '../components/ui/AnimatedPressable';
 import { RisingSheet } from '../components/ui/RisingSheet';
+import { EmptyState } from '../components/ui/EmptyState';
 import { IconButton } from '../components/ui/IconButton';
 import {
   codexAuthSummary,
@@ -344,6 +346,10 @@ export default function StatsScreen() {
   const [statsSnapshot, setStatsSnapshot] = useState<{ serverId: string; data: StatsView | null } | null>(null);
   const statsData = statsSnapshot?.serverId === currentServerId ? statsSnapshot.data : null;
   const [loading, setLoading] = useState(true);
+  // A failed load is not "no stats yet": it keeps its own state and a retry.
+  const [loadFailure, setLoadFailure] = useState<{ serverId: string; message: string } | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const loadError = loadFailure?.serverId === currentServerId ? loadFailure.message : null;
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [daySelection, setDaySelection] = useState<{ serverId: string | null; day: DayCell } | null>(null);
   const [modelSelection, setModelSelection] = useState<{ serverId: string | null; range: TimeRange; key: string } | null>(null);
@@ -387,11 +393,23 @@ export default function StatsScreen() {
         }
         setLoading(!cached);
         void (async () => {
-          const [providerSnapshot, payload] = await Promise.all([
-            wsClient.listProviders(serverId).catch(() => null),
-            wsClient.getStats(serverId).catch(() => null),
+          const [providerSnapshot, result] = await Promise.all([
+            // Without the provider list the Codex subscription card stays hidden; stats still load.
+            wsClient.listProviders(serverId).catch((error: unknown) => { warnOnce('stats.providers', error); return null; }),
+            wsClient.getStats(serverId).then(
+              (payload) => ({ payload, failure: null as string | null }),
+              (error: unknown) => ({ payload: null, failure: failureMessage(error) }),
+            ),
           ]);
           if (cancelled || !isCurrentServer(serverId)) return;
+          if (result.failure !== null) {
+            // A failure is reported, not retried behind the user's back; Try again reloads.
+            warnOnce('stats', result.failure);
+            setLoadFailure({ serverId, message: result.failure });
+            return;
+          }
+          setLoadFailure(null);
+          const payload = result.payload;
           const current = payload && codexSubscriptionVisibleForProviderState(payload.codexSubscription, providerSnapshot)
             ? payload
             : payload ? { ...payload, codexSubscription: undefined } : null;
@@ -409,7 +427,7 @@ export default function StatsScreen() {
       };
       loadStats(0);
       return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
-    }, [connectionState, currentServerId, hasConnectingServer, isCurrentServer]),
+    }, [connectionState, currentServerId, hasConnectingServer, isCurrentServer, reloadToken]),
   );
 
   const selectRangeIndex = useCallback((index: number) => {
@@ -454,6 +472,8 @@ export default function StatsScreen() {
             active={route.key === range}
             statsData={statsData}
             loading={loading}
+            loadError={loadError}
+            onRetry={() => setReloadToken(token => token + 1)}
             expandedSections={expandedSections}
             toggleSection={toggleSection}
             selectedDay={selectedDay}
@@ -498,6 +518,8 @@ export function StatsScreenshotDemo({
         active
         statsData={statsData}
         loading={false}
+        loadError={null}
+        onRetry={() => undefined}
         expandedSections={expandedSections}
         toggleSection={toggleSection}
         selectedDay={selectedDay}
@@ -591,6 +613,8 @@ interface StatsRangeSceneProps {
   active: boolean;
   statsData: StatsView | null;
   loading: boolean;
+  loadError: string | null;
+  onRetry(): void;
   expandedSections: Set<string>;
   toggleSection(section: string): void;
   selectedDay: DayCell | null;
@@ -605,6 +629,8 @@ function StatsRangeScene({
   active,
   statsData,
   loading,
+  loadError,
+  onRetry,
   expandedSections,
   toggleSection,
   selectedDay,
@@ -676,6 +702,16 @@ function StatsRangeScene({
       {loading && !statsData ? (
         <View style={s.emptyContainer}>
           <ActivityIndicator color={colors.textSecondary} />
+        </View>
+      ) : !statsData && loadError ? (
+        <View style={s.emptyContainer}>
+          <EmptyState
+            tone="danger"
+            icon="alert"
+            title="Stats didn't load"
+            detail={loadError}
+            action={{ label: 'Try again', icon: 'refresh', onPress: onRetry }}
+          />
         </View>
       ) : !showStatsContent ? (
         <View style={s.emptyContainer}>
