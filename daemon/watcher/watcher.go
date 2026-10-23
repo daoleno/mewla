@@ -2705,11 +2705,29 @@ func capturePaneContentOn(socket, target string) (string, bool, int) {
 	if !isPaneID(target) {
 		return "", false, -1
 	}
-	screen, alive, deadStatus, err := capturePaneWithState(socket, target)
+	if screen, alive, deadStatus, err := capturePaneWithState(socket, target); err == nil {
+		return screen, alive, deadStatus
+	}
+	// A tmux that does not answer the combined call (older builds differ in
+	// how they run a command list) is read with one call per fact.
+	cmd := tmuxCommand(socket, "capture-pane", "-t", target, "-p", "-S", "-200")
+	out, err := cmd.Output()
 	if err != nil {
 		return "", false, -1
 	}
-	return screen, alive, deadStatus
+	alive, deadStatus := true, -1
+	if aliveOut, err := tmuxCommand(socket, "display-message", "-p", "-t", target, "#{pane_dead}\t#{pane_dead_status}").Output(); err == nil {
+		fields := strings.Split(strings.TrimSpace(string(aliveOut)), "\t")
+		if len(fields) >= 1 && fields[0] == "1" {
+			alive = false
+			if len(fields) >= 2 {
+				if status, parseErr := strconv.Atoi(strings.TrimSpace(fields[1])); parseErr == nil {
+					deadStatus = status
+				}
+			}
+		}
+	}
+	return string(out), alive, deadStatus
 }
 
 // CapturePaneContent returns a plain-text snapshot of a owned tmux pane.
