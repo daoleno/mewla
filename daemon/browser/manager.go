@@ -19,6 +19,9 @@ import (
 
 const LeaseLifetime = 30 * time.Second
 
+// leaseLifetime is LeaseLifetime; a variable so tests can shorten it.
+var leaseLifetime = LeaseLifetime
+
 var validID = regexp.MustCompile(`^[a-f0-9-]{36}$`)
 
 type entry struct {
@@ -31,6 +34,7 @@ type entry struct {
 	owner        Owner
 	epoch        uint64
 	expires      time.Time
+	expiry       *time.Timer // fires when expires passes; see armExpiryLocked
 	transferring bool
 	uncertain    bool
 	viewer       bool
@@ -112,7 +116,6 @@ func New(root string, backend Backend) (*Manager, error) {
 		r.Target = ""
 		m.entries[r.ID] = newEntry(r)
 	}
-	go m.expire()
 	return m, nil
 }
 func newEntry(r Resource) *entry {
@@ -292,6 +295,9 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 				e.deleted = false
 				return Response{}, err
 			}
+			if e.expiry != nil {
+				e.expiry.Stop()
+			}
 			delete(m.entries, q.ID)
 			return Response{}, nil
 		}
@@ -370,7 +376,8 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 	}
 	e.epoch++
 	e.owner = o
-	e.expires = time.Now().Add(LeaseLifetime)
+	e.expires = time.Now().Add(leaseLifetime)
+	m.armExpiryLocked(e)
 	lease := Lease{Epoch: e.epoch, Generation: e.resource.Generation, Target: e.resource.Target, Kind: o.Kind, ExpiresAt: e.expires}
 	r := snapshot(e)
 	r.Control = o.Kind
@@ -387,7 +394,8 @@ func (m *Manager) command(ctx context.Context, e *entry, o Owner, l Lease, c Com
 		return Response{}, ErrLease
 	}
 	if c.Kind == "heartbeat" {
-		e.expires = time.Now().Add(LeaseLifetime)
+		e.expires = time.Now().Add(leaseLifetime)
+		m.armExpiryLocked(e)
 		e.mu.Unlock()
 		return Response{}, nil
 	}
@@ -396,7 +404,8 @@ func (m *Manager) command(ctx context.Context, e *entry, o Owner, l Lease, c Com
 		return Response{}, ErrLease
 	}
 	rt := e.runtime
-	e.expires = time.Now().Add(LeaseLifetime)
+	e.expires = time.Now().Add(leaseLifetime)
+	m.armExpiryLocked(e)
 	e.mu.Unlock()
 	actionCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
@@ -523,35 +532,41 @@ type ownedStream struct {
 }
 
 func (s *ownedStream) Close() error { err := s.Stream.Close(); s.once.Do(s.release); return err }
-func (m *Manager) expire() {
-	t := time.NewTicker(3 * time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-m.done:
-			return
-		case <-t.C:
-			m.mu.Lock()
-			list := []*entry{}
-			for _, e := range m.entries {
-				list = append(list, e)
-			}
-			m.mu.Unlock()
-			for _, e := range list {
-				e.transition.Lock()
-				e.mu.Lock()
-				expired := e.owner.ID != "" && time.Now().After(e.expires)
-				o := e.owner
-				e.mu.Unlock()
-				if expired {
-					ctx, c := context.WithTimeout(context.Background(), 10*time.Second)
-					_ = m.releaseMatching(ctx, e, func(x Owner) bool { return x == o && time.Now().After(e.expires) })
-					c()
-				}
-				e.transition.Unlock()
-			}
-		}
+
+// armExpiryLocked aims the entry's timer at its lease's end, replacing any
+// earlier aim. Every renewal calls it with e.mu held; nothing sweeps.
+func (m *Manager) armExpiryLocked(e *entry) {
+	wait := time.Until(e.expires)
+	if e.expiry == nil {
+		e.expiry = time.AfterFunc(wait, func() { m.expireLease(e) })
+		return
 	}
+	e.expiry.Reset(wait)
+}
+
+// expireLease releases the entry's lease if it has run out. A renewal that
+// landed after the timer was aimed leaves the lease alive and the timer
+// aimed again, so a stale firing is harmless.
+func (m *Manager) expireLease(e *entry) {
+	select {
+	case <-m.done:
+		return
+	default:
+	}
+	e.transition.Lock()
+	defer e.transition.Unlock()
+	e.mu.Lock()
+	owner, expires, deleted := e.owner, e.expires, e.deleted
+	if owner.ID != "" && !deleted && time.Now().Before(expires) {
+		m.armExpiryLocked(e)
+	}
+	e.mu.Unlock()
+	if owner.ID == "" || deleted || time.Now().Before(expires) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = m.releaseMatching(ctx, e, func(x Owner) bool { return x == owner && time.Now().After(e.expires) })
 }
 func (m *Manager) Close() error {
 	m.mu.Lock()
@@ -575,6 +590,9 @@ func (m *Manager) Close() error {
 		}
 		e.mu.Lock()
 		e.deleted = true
+		if e.expiry != nil {
+			e.expiry.Stop()
+		}
 		e.mu.Unlock()
 		e.transition.Unlock()
 		c()

@@ -286,3 +286,77 @@ func TestAttachmentSelectionRequiresOpenGrantedResourceWithoutSideEffects(t *tes
 		t.Fatal("selection or revocation closed user browser")
 	}
 }
+
+func shortLeases(t *testing.T, d time.Duration) {
+	t.Helper()
+	previous := leaseLifetime
+	leaseLifetime = d
+	t.Cleanup(func() { leaseLifetime = previous })
+}
+
+func controlOf(t *testing.T, m *Manager, id string) string {
+	t.Helper()
+	return must(t, m, human, Request{Action: "status", ID: id}).Resource.Control
+}
+
+func waitUntil(t *testing.T, what string, within time.Duration, f func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for !f() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A lease ends when its time runs out, on its own timer, and a renewal moves
+// that time.
+func TestLeaseExpiresOnItsOwnTimerAndRenewalsMoveIt(t *testing.T) {
+	shortLeases(t, 150*time.Millisecond)
+	m, b, id := setup(t)
+	must(t, m, human, Request{Action: "start", ID: id})
+	must(t, m, human, Request{Action: "grant", ID: id, AllowAgents: true})
+	lease := must(t, m, agent, Request{Action: "control", ID: id}).Lease
+	if controlOf(t, m, id) != "agent" {
+		t.Fatalf("control = %q", controlOf(t, m, id))
+	}
+	releasesBefore := b.runtime.releases.Load()
+
+	// Heartbeats keep it past several lifetimes.
+	until := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(until) {
+		must(t, m, agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "heartbeat"}})
+		time.Sleep(40 * time.Millisecond)
+	}
+	if controlOf(t, m, id) != "agent" {
+		t.Fatal("a lease with heartbeats expired")
+	}
+
+	// Without them it ends by itself.
+	waitUntil(t, "the lease to expire", 2*time.Second, func() bool { return controlOf(t, m, id) == "idle" })
+	if b.runtime.releases.Load() <= releasesBefore {
+		t.Fatal("the runtime was not told to release")
+	}
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "heartbeat"}}); !errors.Is(err, ErrLease) {
+		t.Fatalf("an expired lease was accepted: %v", err)
+	}
+	// The entry can be controlled again, and that lease expires too.
+	must(t, m, agent, Request{Action: "control", ID: id})
+	waitUntil(t, "the second lease to expire", 2*time.Second, func() bool { return controlOf(t, m, id) == "idle" })
+}
+
+func TestExpiryTimersStopWithTheManager(t *testing.T) {
+	shortLeases(t, 50*time.Millisecond)
+	m, b, id := setup(t)
+	must(t, m, human, Request{Action: "start", ID: id})
+	must(t, m, human, Request{Action: "control", ID: id})
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	releases := b.runtime.releases.Load()
+	time.Sleep(200 * time.Millisecond)
+	if b.runtime.releases.Load() != releases {
+		t.Fatal("a lease timer fired after the manager closed")
+	}
+}
