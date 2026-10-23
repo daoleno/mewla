@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, type RefObject } from "react";
+import React, { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   Pressable,
   ScrollView,
@@ -7,6 +7,7 @@ import {
   View,
   type View as ViewInstance,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Typography, useAppTheme } from "../../constants/tokens";
@@ -28,6 +29,17 @@ import { useAppUpdatePending } from "../../services/useAppUpdate";
 import type { DesktopSidebarKey } from "./desktopWeb";
 import { desktopShortcutTooltip } from "./desktopShortcuts";
 import { useWebTooltip } from "../ui/useWebTooltip";
+import { useToast } from "../ui/Toast";
+import { switchToComputer } from "../../services/computerSwitch";
+import { ComputerSwitcher, useToneInk } from "./ComputerSwitcher";
+import {
+  attentionTone,
+  computerRowLabel,
+  computerRowTap,
+  computerSwitcherRows,
+  type ComputerTone,
+} from "./computerSwitcherModel";
+import { useComputerChecks } from "./useComputerChecks";
 
 interface PrimaryDrawerPanelProps {
   closeButtonRef: RefObject<ViewInstance | null>;
@@ -173,6 +185,71 @@ function PrimaryPlaceRow({
   );
 }
 
+/**
+ * The computer in use, at the foot of the menu: its name, and a state word
+ * only when there is something to act on (offline, an issue). Tapping it
+ * switches computer, or opens Settings → Computers when there is nothing to
+ * switch between.
+ */
+function ComputerRow({
+  drawerVisible,
+  name,
+  status,
+  tone,
+  switchable,
+  expanded,
+  onPress,
+}: {
+  drawerVisible: boolean;
+  name: string;
+  status: string;
+  tone: ComputerTone;
+  switchable: boolean;
+  expanded: boolean;
+  onPress(): void;
+}) {
+  const { colors } = useAppTheme();
+  const toneInk = useToneInk()(tone);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Computer, ${computerRowLabel({ name, status, current: false })}`}
+      accessibilityHint={switchable ? "Switch computer" : "Open computers in Settings"}
+      accessibilityState={switchable ? { expanded } : undefined}
+      aria-haspopup={switchable ? "menu" : undefined}
+      tabIndex={drawerVisible ? 0 : -1}
+      android_ripple={{ color: colors.surfacePressed }}
+      style={(state) => [
+        styles.serverStatus,
+        {
+          backgroundColor: state.pressed
+            ? colors.surfacePressed
+            : (state as { hovered?: boolean }).hovered
+              ? colors.surfaceSubtle
+              : "transparent",
+        },
+      ]}
+    >
+      <View style={styles.drawerRowIcon}>
+        <Icon name="desktop" size={DRAWER_ICON_SIZE} color={toneInk ?? colors.textSecondary} />
+      </View>
+      <Text numberOfLines={1} style={[styles.serverTitle, { color: colors.textPrimary }]}>
+        {name}
+      </Text>
+      {status ? (
+        <View style={styles.serverState}>
+          <View style={[styles.sealDot, { backgroundColor: toneInk ?? colors.textTertiary }]} />
+          <Text numberOfLines={1} style={[styles.serverDetail, { color: toneInk ?? colors.textTertiary }]}>
+            {status}
+          </Text>
+        </View>
+      ) : null}
+      {switchable ? <Icon name="swap-horizontal" size={16} color={colors.textTertiary} /> : null}
+    </Pressable>
+  );
+}
+
 export function PrimaryDrawerPanel({
   closeButtonRef,
   drawerVisible,
@@ -188,25 +265,26 @@ export function PrimaryDrawerPanel({
   const router = useRouter();
   const { colors } = useAppTheme();
   const { state: workersState } = useWorkers();
-  const { currentServer } = useCurrentServer();
+  const { currentServer, servers, switchCurrentServer } = useCurrentServer();
   const attention = useConnectionAttention();
+  const toast = useToast();
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const checks = useComputerChecks(servers, currentServer?.id, switcherOpen);
   const updatePending = useAppUpdatePending();
-  const connectionSummary = currentServer?.name || "No current server";
-  const connectionDetail = attention.detail;
+  const computerName = currentServer?.name || "No computer";
+  const rows = computerSwitcherRows({
+    servers,
+    currentServerId: currentServer?.id,
+    attention,
+    checks,
+  });
+  const currentRow = rows.find((row) => row.current);
+  const switchable = computerRowTap(servers.length) === "switcher";
   const sessionsAttention = sessionsNeedYou(workersState.workers, currentServer?.id);
   const { state: brainState } = useBrain();
   const brainAttention = brainNeedsYou(
     currentServer ? brainState.byServer[currentServer.id]?.current_work : undefined,
   );
-  // Healthy is the quiet default; only a state the user can act on is colored,
-  // the same states that put a dot on ☰.
-  const connectionInk =
-    attention.badge === "issue"
-      ? colors.dangerText
-      : attention.badge === "offline"
-        ? colors.warning
-        : colors.textTertiary;
-
   // Shortcut tooltips belong to the desktop web sidebar only.
   const shortcutTip = (label: string, key: string) =>
     selectedKey === undefined ? undefined : desktopShortcutTooltip(label, key);
@@ -221,6 +299,31 @@ export function PrimaryDrawerPanel({
   const selectPlace = useCallback(
     (route: PrimaryRouteName) => onSelectPrimaryRoute(route),
     [onSelectPrimaryRoute],
+  );
+
+  // A closed drawer takes its switcher with it.
+  useEffect(() => {
+    if (!drawerVisible) setSwitcherOpen(false);
+  }, [drawerVisible]);
+  const closeSwitcher = useCallback(() => setSwitcherOpen(false), []);
+  const pressComputer = useCallback(() => {
+    if (computerRowTap(servers.length) === "switcher") setSwitcherOpen((open) => !open);
+    else openRoute(PRIMARY_DRAWER_SETTINGS.pathname);
+  }, [openRoute, servers.length]);
+  // The same switch Settings makes; the drawer then shows that computer's page.
+  const selectComputer = useCallback(
+    (id: string) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onNavigateAway();
+      void switchToComputer(id, switchCurrentServer).catch((error) => {
+        toast.show({
+          title: "Couldn't switch computers",
+          detail: error instanceof Error ? error.message : "Unable to switch to that computer.",
+          tone: "error",
+        });
+      });
+    },
+    [onNavigateAway, switchCurrentServer, toast],
   );
 
   return (
@@ -311,27 +414,25 @@ export function PrimaryDrawerPanel({
           tooltip={shortcutTip(PRIMARY_DRAWER_SETTINGS.label, PRIMARY_DRAWER_SETTINGS.key)}
           onPress={() => openRoute(PRIMARY_DRAWER_SETTINGS.pathname)}
         />
-        {/* Where you are. Read-only: switching servers lives in Settings. */}
-        <View
-          accessible
-          accessibilityLabel={`Current server, ${connectionSummary}, ${connectionDetail}`}
-          style={[styles.serverStatus, { borderTopColor: colors.borderSubtle }]}
-        >
-          <View style={styles.drawerRowIcon}>
-            <Icon name="desktop" size={16} color={colors.textTertiary} />
-          </View>
-          <Text
-            numberOfLines={1}
-            style={[styles.serverTitle, { color: colors.textSecondary }]}
-          >
-            {connectionSummary}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={[styles.serverDetail, { color: connectionInk }]}
-          >
-            {connectionDetail}
-          </Text>
+        <View style={[styles.serverFooter, { borderTopColor: colors.borderSubtle }]}>
+          <ComputerSwitcher
+            visible={switcherOpen}
+            rows={rows}
+            manageIcon={PRIMARY_DRAWER_SETTINGS.icon}
+            docked={docked}
+            onSelect={selectComputer}
+            onManage={() => openRoute(PRIMARY_DRAWER_SETTINGS.pathname)}
+            onClose={closeSwitcher}
+          />
+          <ComputerRow
+            drawerVisible={drawerVisible}
+            name={computerName}
+            status={currentRow?.status ?? ""}
+            tone={currentRow?.tone ?? attentionTone(attention.badge)}
+            switchable={switchable}
+            expanded={switcherOpen}
+            onPress={pressComputer}
+          />
         </View>
       </View>
     </SafeAreaView>
@@ -401,25 +502,35 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
   },
-  serverStatus: {
+  serverFooter: {
     marginTop: 6,
-    minHeight: 44,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  serverStatus: {
+    minHeight: 52,
     paddingHorizontal: 12,
+    borderRadius: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
   serverTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 22,
     fontFamily: Typography.uiFontMedium,
+  },
+  serverState: {
+    flexShrink: 1,
+    maxWidth: "45%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   serverDetail: {
     flexShrink: 1,
-    maxWidth: "50%",
     fontSize: 12.5,
     lineHeight: 18,
     fontFamily: Typography.uiFont,

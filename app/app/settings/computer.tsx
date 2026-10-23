@@ -23,6 +23,7 @@ import {
   joiningComputers,
   type ComputerCheck,
 } from "../../services/computerTeam";
+import { switchToComputer } from "../../services/computerSwitch";
 import { revokeThisDevice } from "../../services/deviceRevoke";
 import { invalidateStoredServerTransport } from "../../services/pinnedTransport";
 import * as Storage from "../../services/storage";
@@ -295,8 +296,7 @@ export default function ComputerScreen() {
               ? undefined
               : async () => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  await Storage.setServerAutoConnect(server.id, true);
-                  await switchCurrentServer(server.id);
+                  await switchToComputer(server.id, switchCurrentServer);
                 }
           }
           onRemove={remove}

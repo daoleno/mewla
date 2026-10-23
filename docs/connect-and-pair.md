@@ -168,9 +168,12 @@ computer shows up under the name it calls itself, such as your Mac's name. To
 rename it or change the address later, tap it in **Settings**.
 
 The app can keep several paired computers, but it connects to only one at a
-time: the current one. Switching in **Settings** disconnects from the previous
-computer and clears its Sessions, Brain, Work and Calendar from the app before
-the new one loads.
+time: the current one. The computer at the bottom of the menu is the one in
+use; tap it to switch to another paired computer, or to open **Settings >
+Computers** (with a single computer it goes straight there). On a desktop
+browser the same list opens as a popover. Switching there or in **Settings**
+disconnects from the previous computer and clears its Sessions, Brain, Work and
+Calendar from the app before the new one loads.
 
 ### In a browser
 

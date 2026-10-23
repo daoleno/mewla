@@ -6,7 +6,7 @@ import type {
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
-import * as Storage from "../../services/storage";
+import { switchToComputer } from "../../services/computerSwitch";
 import { useCurrentServer } from "../../store/currentServer";
 import { chromeStatusInks } from "../brain/BrainWorkEventCard";
 import { StatusMark } from "../ui/StatusMark";
@@ -48,8 +48,7 @@ export function ComputerMessageCard({
     if (!target || opening) return;
     setOpening(true);
     try {
-      await Storage.setServerAutoConnect(target.id, true);
-      await switchCurrentServer(target.id);
+      await switchToComputer(target.id, switchCurrentServer);
     } finally {
       setOpening(false);
     }

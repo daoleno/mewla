@@ -89,13 +89,23 @@ describe("primary drawer panel", () => {
     expect(source).toContain("(route: PrimaryRouteName) => onSelectPrimaryRoute(route)");
   });
 
-  test("server status is a read-only footer row after Settings, without an always-on dot", () => {
+  test("the computer row follows Settings in the footer and switches through the one shared path", () => {
     const status = footer.getText(file);
-    expect(status).toContain('accessibilityLabel={`Current server, ${connectionSummary}, ${connectionDetail}`}');
-    expect(status.indexOf("PRIMARY_DRAWER_SETTINGS.label")).toBeLessThan(status.indexOf("Current server"));
-    expect(scroll.getText(file)).not.toContain("Current server");
+    expect(status.indexOf("PRIMARY_DRAWER_SETTINGS.label")).toBeLessThan(status.indexOf("<ComputerRow"));
+    expect(status).toContain("<ComputerSwitcher");
+    expect(scroll.getText(file)).not.toContain("ComputerRow");
+    // Not read-only: a tap switches, or opens Settings → Computers.
+    expect(source).not.toContain("Read-only");
+    expect(source).toContain('accessibilityHint={switchable ? "Switch computer" : "Open computers in Settings"}');
+    expect(source).toContain("switchToComputer(id, switchCurrentServer)");
+    expect(source).not.toContain("setServerAutoConnect");
     expect(source).not.toContain("StatusPill");
     expect(source).not.toContain('openRoute("/settings")');
+  });
+
+  test("Settings and the menu switch computers through the same function", () => {
+    const computerPage = readFileSync(new URL("../../app/settings/computer.tsx", import.meta.url), "utf8");
+    expect(computerPage).toContain("switchToComputer(server.id, switchCurrentServer)");
   });
 
   test("navigating dismisses the drawer and closed rows leave the focus order", () => {

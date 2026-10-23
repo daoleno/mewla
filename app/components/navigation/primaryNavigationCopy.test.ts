@@ -49,7 +49,9 @@ describe("navigation and Skills copy density", () => {
   test("drawer rows and connection strip remain concise", () => {
     for (const destination of [...PRIMARY_DRAWER_PLACES, ...PRIMARY_DRAWER_DESTINATIONS, PRIMARY_DRAWER_SETTINGS])
       expect(destination.label).toMatch(/^[A-Z][a-z]+$/);
-    expect(drawerSource).toContain("attention.detail");
+    // The computer row's state word is the connection strip's, quiet when healthy.
+    expect(drawerSource).toContain("computerSwitcherRows({");
+    expect(readFileSync(new URL("./computerSwitcherModel.ts", import.meta.url), "utf8")).toContain("input.attention.detail");
     expect(connectionCopySource).toContain('"Connected"');
     expect(connectionCopySource).toContain('"Offline"');
     expect(drawerSource).not.toContain("Installed and discover");
