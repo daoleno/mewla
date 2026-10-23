@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- app/theme/primitives.ts, light -->
+<resources>
+  <color name="mewla_surface">#FFFFFF</color>
+  <color name="mewla_surface_needs">#FBEBE6</color>
+  <color name="mewla_text_primary">#161412</color>
+  <color name="mewla_text_secondary">#57514A</color>
+  <color name="mewla_text_tertiary">#6C665D</color>
+  <color name="mewla_seal_text">#BC3328</color>
+  <color name="mewla_chip">#EFEBE3</color>
+</resources>

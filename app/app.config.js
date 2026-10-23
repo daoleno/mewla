@@ -83,6 +83,8 @@ module.exports = () => {
       "./plugins/withAndroidRelease",
       // Resolve duplicate BouncyCastle metadata in the Android resource merge.
       "./plugins/withAndroidPackaging",
+      // Live Updates and widgets: FCM live_state data messages reach Mewla's own service.
+      "./plugins/withAndroidMewlaLive",
       // GitHub APK builds may install their own signed, verified update.
       [
         "./plugins/withAndroidAppUpdate",
