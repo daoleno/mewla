@@ -238,9 +238,10 @@ type frameStore struct {
 	mu     sync.Mutex
 	latest *image.RGBA
 	seq    uint64
-	// at is when the system produced the latest frame.
-	at   time.Time
-	wake chan struct{}
+	// at is when the system produced the latest frame, zero when unknown;
+	// arrived is when it reached this store, which is always known.
+	at, arrived time.Time
+	wake        chan struct{}
 }
 
 func (f *frameStore) put(frame Frame) {
@@ -252,6 +253,7 @@ func (f *frameStore) put(frame Frame) {
 	copyRGBA(f.latest, src)
 	f.seq = frame.Seq
 	f.at = frame.At
+	f.arrived = time.Now()
 	f.mu.Unlock()
 	select {
 	case f.wake <- struct{}{}:
@@ -443,7 +445,7 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 
 		frames.mu.Lock()
 		changed := frames.seq != shownSeq
-		captured, captureSeq := frames.at, frames.seq
+		captured, arrived, captureSeq := frames.at, frames.arrived, frames.seq
 		var rects []image.Rectangle
 		resized, refine := false, false
 		var stillIn time.Duration
@@ -467,7 +469,7 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 		} else if may && !changed && degraded.any() {
 			// Nothing changed: shown is the screen, and a still screen is
 			// worth sending sharp.
-			if stillIn = stillAfter - time.Since(captured); stillIn <= 0 || captured.IsZero() {
+			if stillIn = stillAfter - time.Since(arrived); stillIn <= 0 {
 				rects, refine, stillIn = degraded.rects(), true, 0
 			}
 		}

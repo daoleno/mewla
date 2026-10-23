@@ -181,6 +181,8 @@ export class ScreenConnection {
       else if (message.type === "stats") {
         const stats = parseStreamStats(message as Record<string, unknown>);
         if (stats) this.handlers.streamStats?.(stats);
+        // The lock rides on stats too, in case a state message was dropped.
+        if (typeof message.locked === "boolean") this.handlers.locked?.(message.locked);
       }
       else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
     };

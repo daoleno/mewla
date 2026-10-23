@@ -87,16 +87,17 @@ func (s *Service) holdWhileViewing(ctx context.Context, obs *Observer) {
 		if reporter != nil {
 			locked = reporter.Presence().Locked
 		}
-		if !known || locked != wasLocked {
-			known, wasLocked = true, locked
-			obs.locked(locked)
-		}
+		// The hold changes first: telling the viewer may wait on its link.
 		switch {
 		case locked && release != nil:
 			release()
 			release = nil
 		case !locked && release == nil:
 			release = s.holdDisplay()
+		}
+		if !known || locked != wasLocked {
+			known, wasLocked = true, locked
+			obs.locked(locked)
 		}
 	}
 	look()

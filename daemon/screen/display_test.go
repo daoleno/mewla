@@ -182,3 +182,24 @@ func TestStatusReportsALockedComputer(t *testing.T) {
 }
 
 func netPipe() (net.Conn, net.Conn) { return net.Pipe() }
+
+// Telling the viewer may wait on its link; a lock still ends the hold at once.
+func TestALockEndsTheHoldEvenWhenTellingTheViewerBlocks(t *testing.T) {
+	service, fake := viewerService(t)
+	gate := make(chan struct{})
+	var calls int
+	var mu sync.Mutex
+	openHeld(t, service, context.Background(), &Observer{Locked: func(bool) {
+		mu.Lock()
+		calls++
+		first := calls == 1
+		mu.Unlock()
+		if !first {
+			<-gate
+		}
+	}})
+	defer close(gate)
+	waitHeld(t, fake, true)
+	fake.SetLocked(true)
+	waitHeld(t, fake, false)
+}

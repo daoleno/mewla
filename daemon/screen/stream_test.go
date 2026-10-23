@@ -293,12 +293,12 @@ func TestMotionBeatsSharpening(t *testing.T) {
 	}
 	state.ctl.drop = 6
 	frames := &frameStore{wake: make(chan struct{}, 1)}
-	frames.put(Frame{Seq: 1, Image: noisyFrame(1, 128, 128), At: time.Now()})
+	frames.put(Frame{Seq: 1, Image: noisyFrame(1, 128, 128), At: time.Time{}})
 	var out sentUpdates
 	go func() { _ = writeUpdates(ctx, state, frames, out.write) }()
 	for seq := uint64(2); seq < 8; seq++ {
 		waitFor(t, func() bool { return out.count() >= int(seq-1) })
-		frames.put(Frame{Seq: seq, Image: noisyFrame(int64(seq), 128, 128), At: time.Now()})
+		frames.put(Frame{Seq: seq, Image: noisyFrame(int64(seq), 128, 128), At: time.Time{}})
 	}
 	waitFor(t, func() bool { return out.count() >= 7 })
 	if s := state.metrics.summary(); s.Refines != 0 {
