@@ -3898,22 +3898,13 @@ func commandOutputSuffix(output []byte) string {
 	return ": " + text
 }
 
-// SendAction executes a predefined action on an owned tmux pane.
+// SendAction executes a predefined action on an owned tmux pane. The only
+// production action is "pause" (Ctrl-C), sent by the app's stop control.
 func (w *Watcher) SendAction(sessionID, action string) error {
 	var args []string
 	switch action {
-	case "approve":
-		args = []string{"send-keys", "-t", sessionID, "y", "Enter"}
-	case "reject":
-		args = []string{"send-keys", "-t", sessionID, "n", "Enter"}
 	case "pause":
 		args = []string{"send-keys", "-t", sessionID, "C-c"}
-	case "show_diff":
-		args = []string{"send-keys", "-t", sessionID, "/diff", "Enter"}
-	case "run_tests":
-		args = []string{"send-keys", "-t", sessionID, "/test", "Enter"}
-	case "git_status":
-		args = []string{"send-keys", "-t", sessionID, "git status", "Enter"}
 	default:
 		return fmt.Errorf("unknown action: %s", action)
 	}
