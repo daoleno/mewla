@@ -68,8 +68,14 @@ mewla worker status -id <session> --json
 mewla worker capture -id <session> --json     # the transcript
 mewla worker send -id <session> --work-id <work> -text "Also update the tests"
 mewla worker receipt -id <session> --work-id <work> --turn-id <turn>   # did an input arrive?
+mewla worker approvals [-id <session>]        # what a Claude Worker is waiting for you to allow
+mewla worker approve -id <session> -approval <id> -option allow   # or deny
 mewla worker close -id <session>
 ```
+
+`approvals` and `approve` answer the permission prompts of a Claude Worker that
+Mewla started and that is not in bypass mode. The answer goes through Claude's
+own hook, so no keys are sent; with no answer Claude's prompt decides.
 
 `mewla worker spawn`, `worker progress`, `worker release`, `brain context`,
 `brain playbooks`, `brain gc` and the other `brain work` actions (`create`,
