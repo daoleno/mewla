@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 
@@ -35,6 +36,8 @@ internal object WidgetRender {
       // Not provisioned, revoked, or nothing fetched yet: the only honest content is "open Mewla".
       rv.setInt(R.id.root, "setBackgroundResource", R.drawable.mewla_widget_bg)
       rv.setTextViewText(R.id.headline, "Open Mewla")
+      // A word, not a count: the count's size would break it across lines.
+      rv.setTextViewTextSize(R.id.headline, TypedValue.COMPLEX_UNIT_SP, 16f)
       rv.setTextColor(R.id.headline, color(context, R.color.mewla_text_secondary))
       rv.setViewVisibility(R.id.label, View.GONE)
       if (medium) hideDetail(rv)
@@ -44,6 +47,7 @@ internal object WidgetRender {
     rv.setInt(R.id.root, "setBackgroundResource", if (needs) R.drawable.mewla_widget_bg_needs else R.drawable.mewla_widget_bg)
     val number = if (needs) state.needsCount.coerceAtLeast(1) else state.workerCount
     rv.setTextViewText(R.id.headline, number.toString())
+    rv.setTextViewTextSize(R.id.headline, TypedValue.COMPLEX_UNIT_SP, 34f)
     rv.setTextColor(
       R.id.headline,
       color(context, if (needs) R.color.mewla_seal_text else if (number == 0) R.color.mewla_text_tertiary else R.color.mewla_text_primary),

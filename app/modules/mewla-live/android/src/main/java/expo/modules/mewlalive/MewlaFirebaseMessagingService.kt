@@ -13,10 +13,11 @@ class MewlaFirebaseMessagingService : ExpoFirebaseMessagingService() {
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
     val live = extractLive(remoteMessage.data)
     if (live == null) {
+      Log.d(TAG, "not a live message, keys=${remoteMessage.data.keys.sorted()} notification=${remoteMessage.notification != null}")
       super.onMessageReceived(remoteMessage)
       return
     }
-    Log.d(TAG, "live data message, keys=${remoteMessage.data.keys}")
+    Log.d(TAG, "live data message, keys=${remoteMessage.data.keys.sorted()}")
     LiveController.apply(this, live.payload, live.serverRef)
     // A push is also the "changed, fetch now" signal for the widgets.
     WidgetSync.refreshAsync(this)

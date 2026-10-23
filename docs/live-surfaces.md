@@ -54,7 +54,10 @@ broadcast announced.
   state (same shape, with the request's `request_id`) so a reconnecting phone
   catches up.
 - **Push** (Android, while the app is not connected): a data-only, high-priority
-  message through the existing Expo push path, with no title, body or sound.
+  message through the existing Expo push path, with no title, body, sound or
+  `channelId`. Expo turns a `channelId` into an FCM notification block, and a
+  phone whose app is not running would then show an empty system notification
+  instead of waking the app's service.
   Its data is strings: `mewla_live` = `"1"`, `server_ref` (the phone drops
   state from a server that is not its current one), `epoch`, `seq`, and
   `payload` (the State as JSON). Going idle after idle is not pushed.
@@ -94,6 +97,24 @@ to do anything but read. It gets its own credential:
 
 A push only tells the widget "changed, fetch now"; the widget reads the state
 from this endpoint, so a revoked token stops it for good.
+
+## On the phone (Android)
+
+- One native module, `app/modules/mewla-live`, owns the surface. Its own FCM
+  service takes the live data message with the app closed and hands every other
+  message to expo-notifications unchanged.
+- The notification is one ongoing notification (id 7101) that asks to be
+  promoted: a status-bar chip (the seal icon and the elapsed time, or the count
+  of open questions), a pinned card, and a segmented bar from `done` / `total`.
+  With "Live updates" off for the app, or before Android 16 QPR1, the same
+  content is a plain ongoing notification. It is taken down when the state goes
+  idle, and a swiped-away run stays away until a new run key arrives.
+- A chip or widget button opens the app on that question
+  (`mewla://live/answer?q=…&c=…`), which sends the answer once.
+- The widgets (2x2 and 4x2) draw from the last snapshot and repaint when a state
+  arrives, by push or by socket. A token the daemon refuses clears the widgets
+  and is not re-issued until the server is switched; an unreadable token is
+  dropped and issued again.
 
 ## Limits
 

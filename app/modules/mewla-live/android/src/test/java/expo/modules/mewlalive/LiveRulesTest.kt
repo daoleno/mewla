@@ -46,4 +46,15 @@ class LiveRulesTest {
     assertNull(LiveState.parse("{not json"))
     assertNull(LiveState.parse("""{"kind":"weird"}"""))
   }
+
+  @Test fun theWidgetCachesTheStateInsideTheSnapshotEnvelope() {
+    val body = """{"live":{"kind":"running","epoch":5,"seq":7,"workers":[{"name":"a","phase":"b"}]},"generated_at":123}"""
+    val cached = LiveState.liveFromSnapshot(body)
+    assertNotNull(cached)
+    assertEquals("running", LiveState.parse(cached)!!.kind)
+    // The envelope itself is not a state, which is why the widget must unwrap it.
+    assertNull(LiveState.parse(body))
+    assertNull(LiveState.liveFromSnapshot("""{"generated_at":1}"""))
+    assertNull(LiveState.liveFromSnapshot("""{"live":{"kind":"weird"}}"""))
+  }
 }

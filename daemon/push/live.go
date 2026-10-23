@@ -29,7 +29,9 @@ func (c *Client) LiveCapable() bool {
 
 // SendLive pushes a data-only, high-priority message: no title, body or sound,
 // so the phone shows nothing by itself and its app code decides what to post.
-// Values are sent as strings, which is all an FCM data message carries.
+// No channelId: Expo turns it into an FCM notification block, and a phone whose
+// app is not running would then show an empty system notification instead of
+// waking the app's service. Values are sent as strings, which is all an FCM data message carries.
 // The ticket is handled like any other push (dead tokens dropped, credential
 // problems logged once per token); live messages are not receipt-tracked,
 // because a newer state always follows and a lost one costs nothing.
@@ -60,11 +62,10 @@ func (c *Client) SendLive(data map[string]any) error {
 	flat["server_ref"] = registration.serverRef
 
 	body, err := json.Marshal(map[string]any{
-		"to":        token,
-		"data":      flat,
-		"priority":  "high",
-		"ttl":       120,
-		"channelId": "mewla-agents",
+		"to":       token,
+		"data":     flat,
+		"priority": "high",
+		"ttl":      120,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal live push: %w", err)
