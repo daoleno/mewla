@@ -452,7 +452,7 @@ class ServerSocket {
     // A phone that joined Wi-Fi after connecting through the relay moves onto
     // the direct path with one quick reconnect.
     this.upgradeProbe = setInterval(() => {
-      if (this.probingForDirect || !this.isConnected || appState !== "active") {
+      if (this.probingForDirect || !this.isConnected || appState === "background") {
         return;
       }
       this.probingForDirect = true;

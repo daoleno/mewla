@@ -310,6 +310,30 @@ describe("direct path beside the relay", () => {
     });
   }
 
+  test("a direct path that worked before is re-verified past the short grace", async () => {
+    const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+    await resolveStoredServerURL(server);
+    expect(currentTransportPath(server.id)).toBe("lan");
+
+    // Its verification has expired and the answer is now slow, as on a
+    // loaded phone: slower than the grace given to a path never seen working.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+      await new Promise((done) => setTimeout(done, 400));
+      return realFetch(...args);
+    }) as typeof fetch;
+    const realNow = Date.now;
+    Date.now = () => realNow() + 31_000;
+    try {
+      expect(await resolveStoredServerURL(server)).toBe("ws://127.0.0.1:20001/ws");
+    } finally {
+      Date.now = realNow;
+      globalThis.fetch = realFetch;
+    }
+    expect(currentTransportPath(server.id)).toBe("lan");
+    await invalidateStoredServerTransport(server);
+  });
+
   test("an unreachable address does not hold up the relay", async () => {
     hangingHosts = new Set(["192.168.1.20"]);
     const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);

@@ -65,7 +65,8 @@ pressed with ⌘, ⌃ or ⌥ arrive as shortcuts.
 
 The view rotates to landscape on this page only. The badge in the corner has
 two lines. The first says how the connection reaches the computer (Relay,
-Tailscale, LAN or Local) and which stage takes longest between the screen
+Tailscale, LAN or Local; for a phone paired through Mewla Link it is the path
+the phone chose) and which stage takes longest between the screen
 changing and your phone showing it: the network round trip (which includes
 bytes waiting in the link), the computer's encoding, the hop into the viewer or
 the viewer's own drawing. "Reduced quality" is added while the picture is
@@ -224,10 +225,12 @@ whether the phone reaches the computer through the Mewla Link relay or directly,
 and the stage says what holds the picture up.
 
 - **network** is high and the path is **Relay**: the round trip through the
-  relay dominates. A direct address (Tailscale, or Wi-Fi at home) avoids it;
-  see [Connect and pair](connect-and-pair.md). Mewla doesn't choose between
-  a relay and a direct address for you: a phone paired through Mewla Link
-  reaches the computer only through the relay.
+  relay dominates. A direct address (Tailscale, or Wi-Fi at home) avoids it,
+  and a phone paired through Mewla Link uses one by itself when the computer
+  listens on that network and the phone can reach it; see
+  [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path
+  stays **Relay** at home, the computer is probably listening on loopback only:
+  start it with `mewla --lan`.
 - **encode** is high: the computer is busy; a full-screen update normally takes
   about 10 ms.
 - **app** or **draw** is high: the phone is the limit (its bridge into the

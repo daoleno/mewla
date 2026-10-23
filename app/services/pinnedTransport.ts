@@ -85,17 +85,23 @@ export async function resolveStoredServerURL(
     return rewriteSelection(server, relay);
   }
 
+  // A direct path that worked a moment ago is re-verified for its full budget
+  // before the relay is considered; only a path never seen working gets the
+  // short grace below.
+  const expectDirect = !!stillListed(server, entry.direct);
   const relayAttempt = measureRelay(server, entry);
   const directAttempt = probeDirect(server, entry);
   relayAttempt.catch(() => undefined);
 
-  const first = await Promise.race([
-    directAttempt.then((selected) => ({ direct: selected })),
-    relayAttempt.then(
-      (selected) => ({ relay: selected }),
-      () => ({ relay: null }),
-    ),
-  ]);
+  const first = expectDirect
+    ? { direct: await directAttempt }
+    : await Promise.race([
+        directAttempt.then((selected) => ({ direct: selected })),
+        relayAttempt.then(
+          (selected) => ({ relay: selected }),
+          () => ({ relay: null }),
+        ),
+      ]);
   let chosen: Selection | null;
   if ("direct" in first) {
     chosen = first.direct ?? (await relayAttempt.catch(() => null));
@@ -345,6 +351,15 @@ export async function directPathBecameAvailable(
   const entry = paths.get(server.id);
   if (entry?.current !== "relay") return false;
   return (await probeDirect(server, entry)) !== null;
+}
+
+/**
+ * Asks the next resolve to verify a direct path afresh instead of trusting its
+ * last check, for a connection that ended while it was in use.
+ */
+export function recheckDirectPath(serverId: string): void {
+  const entry = paths.get(serverId);
+  if (entry?.direct) entry.direct.measuredAt = 0;
 }
 
 /**

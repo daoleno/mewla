@@ -206,3 +206,16 @@ include:
 
 Do not open a public issue for an unpatched flaw that can be exploited
 remotely. Security fixes target the latest stable release and the main branch.
+
+## Direct connections from a Link phone
+
+A phone paired through Mewla Link may reach the computer on its Wi-Fi/LAN or
+Tailscale address instead of the relay. It only dials private-network IP
+addresses the computer itself announced over an authenticated connection, never
+a name. The stream is TLS pinned to the computer's transport key, and before
+the device signature is sent the computer must answer a fresh 16-byte challenge
+from the phone, signed with its daemon key under a purpose used for nothing
+else. A recorded answer, another computer's key, a computer that predates the
+challenge, or a stale address now held by another device all fail and fall back
+to the relay. The connection is as private as the relay one, since the relay
+only carries the same pinned TLS stream.
