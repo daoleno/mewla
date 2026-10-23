@@ -19,18 +19,19 @@ describe("ordinary CI contract", () => {
     );
   });
 
-  it("exports only the web bundle on an ordinary push and gates native exports", () => {
+  it("exports the Android and iOS bundles on every push and leaves web to the release build", () => {
     const appJob = workflow.slice(
       workflow.indexOf("  app:"),
       workflow.indexOf("  ios-native:"),
     );
-    expect(appJob).toContain("bunx expo export --platform web");
     expect(appJob).toMatch(
-      /name: Android export\s*\n\s*if: github\.event_name == 'workflow_dispatch' \|\| github\.ref_type == 'tag'/,
+      /name: Android export\s*\n\s*run: bunx expo export --platform android/,
     );
     expect(appJob).toMatch(
-      /name: iOS export\s*\n\s*if: github\.event_name == 'workflow_dispatch' \|\| github\.ref_type == 'tag'/,
+      /name: iOS export\s*\n\s*run: bunx expo export --platform ios/,
     );
+    expect(appJob).not.toContain("--platform web");
+    expect(appJob).not.toMatch(/name: (Android|iOS) export\s*\n\s*if:/);
   });
 
   it("runs native jobs only on tag pushes or manual dispatch", () => {

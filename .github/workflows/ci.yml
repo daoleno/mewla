@@ -1,9 +1,11 @@
 name: CI
 
-# Ordinary push/PR runs only fast checks. Native work (unsigned iOS Simulator
-# build, Android native link, Android/iOS JS exports) runs on release tag pushes
-# and manual dispatch; the release flow builds the signed artifacts in
-# release-artifacts.yml and ios-release.yml.
+# Every push and PR runs the fast checks and the Android and iOS JS exports,
+# the two platforms the app ships on. The native work (unsigned iOS Simulator
+# build, Android native link) and the daemon release build, which also exports
+# the web UI the daemon embeds, run on release tag pushes and manual dispatch;
+# the release flow builds the signed artifacts in release-artifacts.yml and
+# ios-release.yml.
 on:
   push:
     branches: [main]
@@ -100,15 +102,10 @@ jobs:
       - name: Open-source licenses are current
         run: bun run licenses:generate --check
       - name: Android export
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: bunx expo export --platform android
         working-directory: app
       - name: iOS export
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         run: bunx expo export --platform ios
-        working-directory: app
-      - name: Web export
-        run: bunx expo export --platform web
         working-directory: app
 
   ios-native:
