@@ -1242,6 +1242,11 @@ var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe
 // boundary into an ambient user session.
 var ErrUnownedTmuxTarget = errors.New("tmux target is not owned by Mewla")
 
+// ErrNotOwnedDelegatedWorker means a completed Session's pane is present but
+// is no longer a delegated Worker (for example the agent exited and a shell is
+// left). Mewla refuses to touch it, and the refusal does not heal by retrying.
+var ErrNotOwnedDelegatedWorker = errors.New("not an owned delegated Worker")
+
 // ErrOwnedGenerationMismatch means the current Mewla-owned target is reachable,
 // but its pane/process generation no longer matches the canonical mutation
 // target. Unlike a transient probe or ledger read failure, this is proof that
@@ -4454,7 +4459,7 @@ func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
 			return fmt.Errorf("%w: %s", ErrUnownedTmuxTarget, sessionID)
 		}
 		if worker := w.GetWorker(sessionID); worker != nil && (worker.Hidden || !worker.Delegated) {
-			return fmt.Errorf("Session %s is not an owned delegated Worker", sessionID)
+			return fmt.Errorf("Session %s is %w", sessionID, ErrNotOwnedDelegatedWorker)
 		}
 		if turn.ProcessIdentity != "" {
 			if err := w.guardCompletedOwnedIdentity(sessionID, turn); err != nil {

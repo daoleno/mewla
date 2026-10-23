@@ -3301,6 +3301,19 @@ func (s *Server) handleWorkEvent(ev work.Event) {
 	}
 }
 
+// signalSystemStartupOutcome decides whether the startup pass is finished. A
+// failure is retried on the next tick unless nothing but refused cleanups of
+// Sessions Mewla does not own remains: those never change by retrying.
+func signalSystemStartupOutcome(complete bool, err error) (done, refused bool) {
+	if err == nil {
+		return complete, false
+	}
+	if complete && brain.OnlyCleanupRefusals(err) {
+		return true, true
+	}
+	return false, false
+}
+
 func (s *Server) heartbeat(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -3314,11 +3327,17 @@ func (s *Server) heartbeat(ctx context.Context) {
 			if s.brain != nil && s.watcher != nil && s.watcher.SnapshotReady() {
 				if !s.signalSystemStartupComplete {
 					complete, err := s.brain.ReconcileSignalSystemStartup(allWorkerSessions, 64)
-					if err != nil {
+					done, refused := signalSystemStartupOutcome(complete, err)
+					switch {
+					case refused:
+						// Every Session left is one Mewla does not own. Retrying
+						// every tick would only repeat the same refusal (and its
+						// tmux probes) forever, so report it once and stop.
+						log.Printf("brain signal-system startup reconciliation finished; left alone: %v", err)
+					case err != nil:
 						log.Printf("brain signal-system startup reconciliation failed: %v", err)
-					} else {
-						s.signalSystemStartupComplete = complete
 					}
+					s.signalSystemStartupComplete = done
 				}
 				s.brain.ReconcileDelegatedSessions(allWorkerSessions)
 			}

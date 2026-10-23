@@ -227,9 +227,46 @@ func (s *Service) reconcileCompletedSessions(workID string) error {
 		err := s.teardownSessionWith(turn.SessionID, func(id string) error {
 			return s.watcher.KillCompletedSession(id, turn.TurnID)
 		})
+		if errors.Is(err, watcher.ErrUnownedTmuxTarget) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) {
+			err = &cleanupRefusal{sessionID: turn.SessionID, err: err}
+		}
 		result = errors.Join(result, err)
 	}
 	return result
+}
+
+// cleanupRefusal is a completed Session Mewla declined to remove because it
+// does not own it as a delegated Worker. The refusal is still returned, so
+// callers see it, but a caller that retries on error can tell that retrying
+// will not change it.
+type cleanupRefusal struct {
+	sessionID string
+	err       error
+}
+
+func (r *cleanupRefusal) Error() string { return r.err.Error() }
+func (r *cleanupRefusal) Unwrap() error { return r.err }
+
+// OnlyCleanupRefusals reports whether err is made up entirely of refused
+// completed-Session cleanups: there is nothing left to retry, only to report.
+// Any other failure in the same pass, a transient one, makes it false.
+func OnlyCleanupRefusals(err error) bool {
+	switch e := err.(type) {
+	case nil:
+		return true
+	case *cleanupRefusal:
+		return true
+	case interface{ Unwrap() []error }:
+		for _, child := range e.Unwrap() {
+			if !OnlyCleanupRefusals(child) {
+				return false
+			}
+		}
+		return true
+	case interface{ Unwrap() error }:
+		return OnlyCleanupRefusals(e.Unwrap())
+	}
+	return false
 }
 
 // ReconcileWorkChange is the producer-driven wake after durable persistence.
