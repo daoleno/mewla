@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -57,8 +56,7 @@ type TurnRecord struct {
 
 type turnReadCache struct {
 	valid   bool
-	size    int64
-	modTime time.Time
+	rev     uint64
 	current map[string]TurnRecord
 	exact   map[string]TurnRecord
 }
@@ -780,19 +778,12 @@ func (s *Store) TurnByID(sessionID, turnID string) (watcher.TurnSnapshot, bool, 
 }
 
 func (s *Store) turnRecordsLocked() (*turnReadCache, error) {
-	info, err := os.Stat(s.presentationPath())
-	if err != nil {
-		return nil, err
-	}
-	if s.turnCache.valid && s.turnCache.size == info.Size() && s.turnCache.modTime.Equal(info.ModTime()) {
+	if s.turnCache.valid && s.turnCache.rev == s.rev {
 		return &s.turnCache, nil
 	}
-	database, err := s.loadPresentationLocked()
-	if err != nil {
-		return nil, err
-	}
+	database := s.presentation
 	next := turnReadCache{
-		valid: true, size: info.Size(), modTime: info.ModTime(),
+		valid: true, rev: s.rev,
 		current: make(map[string]TurnRecord), exact: make(map[string]TurnRecord, len(database.BrainTurns)),
 	}
 	for _, turn := range database.BrainTurns {

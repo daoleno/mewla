@@ -3039,8 +3039,8 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 	if store.WorkspacePath() != wantWorkspace {
 		t.Fatalf("workspace path = %q, want %q", store.WorkspacePath(), wantWorkspace)
 	}
-	if pathExists(timelineMessagesPath(root)) {
-		t.Fatalf("fresh Brain store created an empty timeline ledger")
+	if !pathExists(filepath.Join(root, "state", stateDatabaseName)) {
+		t.Fatalf("fresh Brain store has no state database")
 	}
 	if !pathExists(filepath.Join(root, "state", "reminders.json")) {
 		t.Fatalf("missing state reminders file")
@@ -3097,67 +3097,40 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 	}
 }
 
-func TestStoreContextAndHousekeepingDoNotCreateButFailClosedOnCorruptTimeline(t *testing.T) {
-	for _, existing := range []bool{false, true} {
-		t.Run(fmt.Sprintf("existing=%t", existing), func(t *testing.T) {
-			root := t.TempDir()
-			path := timelineMessagesPath(root)
-			var before os.FileInfo
-			want := []byte("not current Brain state\n")
-			if existing {
-				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, want, 0o640); err != nil {
-					t.Fatal(err)
-				}
-				var err error
-				before, err = os.Stat(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			store, err := NewStore(root)
-			if err != nil {
-				t.Fatal(err)
-			}
-			service := NewService(store, nil, nil)
-			_, contextErr := service.Context()
-			_, housekeepingErr := service.Housekeeping()
-
-			if !existing {
-				if contextErr != nil || housekeepingErr != nil {
-					t.Fatalf("empty timeline context=%v housekeeping=%v", contextErr, housekeepingErr)
-				}
-				if pathExists(path) {
-					t.Fatal("Brain context/housekeeping created an empty timeline ledger")
-				}
-				return
-			}
-			if contextErr == nil || housekeepingErr == nil ||
-				!strings.Contains(contextErr.Error(), "decode timeline line 1") ||
-				!strings.Contains(housekeepingErr.Error(), "decode timeline line 1") {
-				t.Fatalf("corrupt timeline context=%v housekeeping=%v", contextErr, housekeepingErr)
-			}
-			got, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			after, err := os.Stat(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(got, want) || after.Mode() != before.Mode() ||
-				!after.ModTime().Equal(before.ModTime()) || !os.SameFile(before, after) {
-				t.Fatalf("corrupt timeline changed: bytes=%q mode=%v mtime=%v", got, after.Mode(), after.ModTime())
-			}
-		})
+func TestStoreContextAndHousekeepingFailClosedOnCorruptTimeline(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func timelineMessagesPath(root string) string {
-	return filepath.Join(root, "state", "messages.jsonl")
+	service := NewService(store, nil, nil)
+	if _, err := service.Context(); err != nil {
+		t.Fatalf("empty timeline context: %v", err)
+	}
+	if _, err := service.Housekeeping(); err != nil {
+		t.Fatalf("empty timeline housekeeping: %v", err)
+	}
+	const corrupt = "not current Brain state"
+	if _, err := store.db.Exec(`INSERT INTO timeline(id, thread_id, body) VALUES('corrupt', 'thread', ?)`, corrupt); err != nil {
+		t.Fatal(err)
+	}
+	// The resident timeline predates the corrupt row; a fresh Store reads it.
+	reopened, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service = NewService(reopened, nil, nil)
+	_, contextErr := service.Context()
+	_, housekeepingErr := service.Housekeeping()
+	if contextErr == nil || housekeepingErr == nil ||
+		!strings.Contains(contextErr.Error(), "decode timeline item") ||
+		!strings.Contains(housekeepingErr.Error(), "decode timeline item") {
+		t.Fatalf("corrupt timeline context=%v housekeeping=%v", contextErr, housekeepingErr)
+	}
+	var got string
+	if err := reopened.db.QueryRow(`SELECT body FROM timeline WHERE id = 'corrupt'`).Scan(&got); err != nil || got != corrupt {
+		t.Fatalf("corrupt timeline row changed: %q err=%v", got, err)
+	}
 }
 
 func TestStorePreservesUnmarkedWorkspaceInstructionsBeforeCanonicalBlock(t *testing.T) {

@@ -30,7 +30,7 @@ func TestExpiryIsSupervisionOnlyAndSchedulesLossOnce(t *testing.T) {
 	if !ok || !next.Equal(deadline.Add(LostGrace)) {
 		t.Fatalf("next=%v, want loss deadline", next)
 	}
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestEndedHandlingIsDurableAndRequiresExplicitReplay(t *testing.T) {
 			t.Fatal("duplicate ending churned")
 		}
 	}
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}

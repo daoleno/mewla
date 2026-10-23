@@ -8,7 +8,7 @@ import (
 
 func TestHostAdmissionPreservesWorkerAuthorityAcrossRestart(t *testing.T) {
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestHostAdmissionPreservesWorkerAuthorityAcrossRestart(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,14 +99,14 @@ func prepareAdmissionFixture(t *testing.T, e *Engine, workID, sessionID string, 
 
 func TestPreparedAdmissionSurvivesRestartAndAcceptsExactlyOnce(t *testing.T) {
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	define(t, e, "w-admission-restart", PolicyUntilDone)
 	prepareAdmissionFixture(t, e, "w-admission-restart", "session-1", "turn-1")
 
-	e, err = Open(root)
+	e, err = openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}

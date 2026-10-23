@@ -2,8 +2,7 @@ package main
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -47,8 +46,7 @@ func TestWorkerReceiptReadsDurableAcceptanceWithoutWatcher(t *testing.T) {
 				t.Fatal(err)
 			}
 			app := &controlApp{brainStore: reopened}
-			path := filepath.Join(root, "state", "lifecycle", "state.json")
-			before, err := os.ReadFile(path)
+			before, err := json.Marshal(reopened.FSM().ListStates())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,7 +70,7 @@ func TestWorkerReceiptReadsDurableAcceptanceWithoutWatcher(t *testing.T) {
 					t.Fatal("wrong identity obtained receipt")
 				}
 			}
-			after, err := os.ReadFile(path)
+			after, err := json.Marshal(reopened.FSM().ListStates())
 			if err != nil || !bytes.Equal(before, after) {
 				t.Fatalf("read-only receipt mutated canonical state: %v", err)
 			}

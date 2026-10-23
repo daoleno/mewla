@@ -8,16 +8,30 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/sqlitedb"
 )
 
 func newTestEngine(t *testing.T) (*Engine, string) {
 	t.Helper()
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatalf("open engine: %v", err)
 	}
 	return e, root
+}
+
+// openAt opens the lifecycle database in dir. Opening it twice models a
+// daemon restart over the same durable image.
+func openAt(t *testing.T, dir string) (*Engine, error) {
+	t.Helper()
+	db, err := sqlitedb.Open(filepath.Join(dir, "brain.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return Open(db)
 }
 
 func define(t *testing.T, e *Engine, id WorkID, policy Policy) *State {
@@ -69,9 +83,7 @@ func TestReplayDeterminism(t *testing.T) {
 
 	// Append-only audit Events can still be reduced deterministically, but
 	// recovery reads the current rows from the same transaction image.
-	e.mu.Lock()
-	events := append([]Event(nil), e.events...)
-	e.mu.Unlock()
+	events := allEvents(t, e)
 	var replayed *State
 	for _, ev := range events {
 		replayed = Reduce(replayed, ev)
@@ -233,7 +245,7 @@ func TestLeaseExpiryAndEscalation(t *testing.T) {
 
 func TestLeaseExpiryAdmissionIsConcurrentAndRestartDurable(t *testing.T) {
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +299,7 @@ func TestLeaseExpiryAdmissionIsConcurrentAndRestartDurable(t *testing.T) {
 		t.Fatalf("actionable cards=%+v", cards)
 	}
 
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +433,7 @@ func TestProviderRunningRenewalsAreCoalescedAndSilenceStillExpires(t *testing.T)
 
 func TestSignalSteerPromotesExactPromptToken(t *testing.T) {
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -447,7 +459,7 @@ func TestSignalSteerPromotesExactPromptToken(t *testing.T) {
 		t.Fatalf("signal steer lineage=%+v", accepted.Attempt)
 	}
 
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +525,7 @@ func TestAdmissionPurposeRequiresCompleteTag(t *testing.T) {
 
 func TestReviewAcceptancePersistsRowsAndEventsInOneTransactionImage(t *testing.T) {
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +566,7 @@ func TestReviewAcceptancePersistsRowsAndEventsInOneTransactionImage(t *testing.T
 	}); !errors.Is(err, ErrReviewLease) {
 		t.Fatalf("stale review-purpose accepted: %v", err)
 	}
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -566,16 +578,24 @@ func TestReviewAcceptancePersistsRowsAndEventsInOneTransactionImage(t *testing.T
 	if st.Attempt == nil || st.Attempt.SessionID != "session-next" || st.Review != nil {
 		t.Fatalf("atomic transaction image is incomplete: %+v", st)
 	}
-	database, err := readLifecycleDatabase(filepath.Join(root, "state.json"))
-	if err != nil {
+	db := reopened.db
+	var row string
+	if err := db.QueryRow(`SELECT state FROM lc_work WHERE id = ?`, "w-atomic").Scan(&row); err != nil {
 		t.Fatal(err)
 	}
-	if persisted := database.Works["w-atomic"]; persisted == nil || persisted.Attempt == nil ||
-		persisted.Attempt.TurnToken != "turn-next" {
+	persisted := &State{}
+	if err := json.Unmarshal([]byte(row), persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Attempt == nil || persisted.Attempt.TurnToken != "turn-next" {
 		t.Fatalf("current Work row missing next Attempt: %+v", persisted)
 	}
-	if last := database.Events[len(database.Events)-1]; last.Kind != KTurnAdmitted || last.TurnToken != "turn-next" {
-		t.Fatalf("append-only Event missing from same image: %+v", last)
+	var kind, token string
+	if err := db.QueryRow(`SELECT kind, turn_token FROM lc_event ORDER BY seq DESC LIMIT 1`).Scan(&kind, &token); err != nil {
+		t.Fatal(err)
+	}
+	if Kind(kind) != KTurnAdmitted || token != "turn-next" {
+		t.Fatalf("append-only Event missing from same image: %s %s", kind, token)
 	}
 }
 
@@ -605,7 +625,7 @@ func TestProviderTurnMismatch(t *testing.T) {
 // actionable Review.
 func TestRestartRecovery(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +637,7 @@ func TestRestartRecovery(t *testing.T) {
 	want, _ := e.State("w1")
 	wantCards := e.Cards()
 
-	e2, err := Open(root)
+	e2, err := openAt(t, root)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -757,7 +777,7 @@ func TestReviewLifecycle(t *testing.T) {
 
 func TestAmbiguousReviewDeliveryResolutionIsAtomicIdempotentAndReplayable(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -791,7 +811,7 @@ func TestAmbiguousReviewDeliveryResolutionIsAtomicIdempotentAndReplayable(t *tes
 		t.Fatalf("idempotent retry state=%+v err=%v", retry, err)
 	}
 
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -865,17 +885,25 @@ func TestTerminalTransitionsClearWakeAndRejectInvalidStoredState(t *testing.T) {
 		t.Fatalf("completed Work retained wake: %+v", completed)
 	}
 
-	database, err := readLifecycleDatabase(filepath.Join(root, "state.json"))
+	var row string
+	if err := e.db.QueryRow(`SELECT state FROM lc_work WHERE id = ?`, "w1").Scan(&row); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := &State{}
+	if err := json.Unmarshal([]byte(row), corrupt); err != nil {
+		t.Fatal(err)
+	}
+	corrupt.Wake = &WakeState{
+		Kind: WakeUserInput, Ref: "legacy wake", Since: time.Now().UTC(),
+	}
+	raw, err := json.Marshal(corrupt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	database.Works["w1"].Wake = &WakeState{
-		Kind: WakeUserInput, Ref: "legacy wake", Since: time.Now().UTC(),
-	}
-	if err := writeLifecycleDatabase(filepath.Join(root, "state.json"), database); err != nil {
+	if _, err := e.db.Exec(`UPDATE lc_work SET state = ? WHERE id = ?`, string(raw), "w1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(root); err == nil {
+	if _, err := openAt(t, root); err == nil {
 		t.Fatal("invalid terminal wake must be rejected, not repaired during Sweep")
 	}
 }
@@ -952,10 +980,8 @@ func countReviews(st *State, reason string) int {
 }
 
 func countEngineEvents(e *Engine, workID WorkID, kind Kind, sourceID string) int {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	n := 0
-	for _, event := range e.events {
+	for _, event := range allEvents(nil, e) {
 		if event.WorkID == workID && event.Kind == kind && event.SourceID == sourceID {
 			n++
 		}

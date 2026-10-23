@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
@@ -587,7 +588,7 @@ func TestTurnSnapshotUsesExactAggregateOwnerDuringProjectionRepair(t *testing.T)
 		t.Fatal(err)
 	}
 
-	// The engine has committed the new Attempt while presentation.json still
+	// The engine has committed the new Attempt while the presentation rows still
 	// contains only the older Turn row. The read must use the aggregate token.
 	current, found, err := store.Turn(sessionID)
 	if err != nil || !found || current.TurnID != currentToken || !current.SignalProtocol {
@@ -645,7 +646,7 @@ func TestProjectionRebuildReplacesStaleReviewEvent(t *testing.T) {
 	if second.Review == nil || second.Review.EventID == first.Review.EventID {
 		t.Fatalf("new canonical event=%+v previous=%+v", second.Review, first.Review)
 	}
-	// Simulate a crash before the new engine event reaches presentation.json.
+	// Simulate a crash before the new engine event reaches the presentation rows.
 
 	store, err = NewStore(root)
 	if err != nil {
@@ -1177,9 +1178,8 @@ func TestLifecycleStoreRejectsAdmissionWithoutAttemptedAt(t *testing.T) {
 	}
 	resolveDelegatedSubmission(t, store, pending, "activity-historical", acceptedAt.Add(3*time.Second))
 
-	lifecycleRoot := filepath.Join(root, "state", "lifecycle")
-	stripLifecycleAttemptedAt(t, lifecycleRoot)
-	if _, err := lifecycle.Open(lifecycleRoot); err == nil {
+	stripLifecycleAttemptedAt(t, store.db)
+	if _, err := lifecycle.Open(store.db); err == nil {
 		t.Fatal("missing attempted_at was accepted")
 	}
 }
@@ -1283,31 +1283,39 @@ func TestProjectAcceptedAdmissionRejectsZeroAttemptedAt(t *testing.T) {
 	}
 }
 
-func stripLifecycleAttemptedAt(t *testing.T, lifecycleRoot string) {
+func stripLifecycleAttemptedAt(t *testing.T, db *sql.DB) {
 	t.Helper()
-	path := filepath.Join(lifecycleRoot, "state.json")
-	raw, err := os.ReadFile(path)
+	rows, err := db.Query(`SELECT id, state FROM lc_work`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var database map[string]any
-	if err := json.Unmarshal(raw, &database); err != nil {
-		t.Fatal(err)
-	}
-	works, _ := database["works"].(map[string]any)
-	for _, value := range works {
-		work, _ := value.(map[string]any)
+	rewritten := map[string]string{}
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			t.Fatal(err)
+		}
+		var work map[string]any
+		if err := json.Unmarshal([]byte(raw), &work); err != nil {
+			t.Fatal(err)
+		}
 		admissions, _ := work["admissions"].(map[string]any)
 		for _, value := range admissions {
 			admission, _ := value.(map[string]any)
 			delete(admission, "attempted_at")
 		}
+		body, err := json.Marshal(work)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rewritten[id] = string(body)
 	}
-	rebuilt, err := json.Marshal(database)
-	if err != nil {
+	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, rebuilt, 0o600); err != nil {
-		t.Fatal(err)
+	for id, body := range rewritten {
+		if _, err := db.Exec(`UPDATE lc_work SET state = ? WHERE id = ?`, body, id); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

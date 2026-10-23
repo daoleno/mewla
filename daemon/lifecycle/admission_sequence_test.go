@@ -22,10 +22,7 @@ func TestValidatePreparedAdmissionSerialization(t *testing.T) {
 					TurnToken: token, SessionID: "worker", AttemptedAt: time.Unix(1, 0), Status: status,
 				}
 			}
-			err := validateLifecycleDatabase(lifecycleDatabase{
-				Schema: lifecycleStoreSchema, NextSeq: 1,
-				Works: map[WorkID]*State{state.ID: state}, Events: []Event{},
-			})
+			err := validateWorks(map[WorkID]*State{state.ID: state}, 1, 0)
 			if (err == nil) != tc.valid {
 				t.Fatalf("valid=%t err=%v", tc.valid, err)
 			}
@@ -52,10 +49,7 @@ func TestValidateAdmissionAcceptanceSequence(t *testing.T) {
 					Status: AdmissionAccepted, AcceptedSeq: seq,
 				}
 			}
-			err := validateLifecycleDatabase(lifecycleDatabase{
-				Schema: lifecycleStoreSchema, NextSeq: 3,
-				Works: map[WorkID]*State{state.ID: state}, Events: []Event{},
-			})
+			err := validateWorks(map[WorkID]*State{state.ID: state}, 3, 0)
 			if (err == nil) != tc.valid {
 				t.Fatalf("valid=%t err=%v", tc.valid, err)
 			}

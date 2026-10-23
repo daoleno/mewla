@@ -1,8 +1,6 @@
 package brain
 
 import (
-	"os"
-	"strings"
 	"testing"
 	"time"
 )
@@ -29,10 +27,6 @@ func TestPresentationReadCacheIsolatedAndInvalidated(t *testing.T) {
 		store.mu.Unlock()
 		t.Fatal(err)
 	}
-	if !store.presentationCache.valid {
-		store.mu.Unlock()
-		t.Fatal("presentation cache was not populated")
-	}
 	index := workIndex(first.BrainWork, item.ID)
 	first.BrainWork[index].Title = "caller-mutation"
 	second, err := store.loadPresentationLocked()
@@ -44,39 +38,13 @@ func TestPresentationReadCacheIsolatedAndInvalidated(t *testing.T) {
 		t.Fatal("caller mutation aliased the cached presentation database")
 	}
 
-	path := store.presentationPath()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replaced := strings.Replace(string(raw), "cache-one", "cache-two", 1)
-	if replaced == string(raw) {
-		t.Fatal("fixture title not found in presentation database")
-	}
-	if err := os.WriteFile(path, []byte(replaced), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	future := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(path, future, future); err != nil {
-		t.Fatal(err)
-	}
 	store.mu.Lock()
-	external, err := store.loadPresentationLocked()
-	store.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if external.BrainWork[workIndex(external.BrainWork, item.ID)].Title != "cache-two" {
-		t.Fatal("external presentation replacement did not invalidate the cache")
-	}
-
-	store.mu.Lock()
-	external.BrainWork[workIndex(external.BrainWork, item.ID)].Title = "persisted"
-	if err := store.persistPresentationLocked(external); err != nil {
+	second.BrainWork[workIndex(second.BrainWork, item.ID)].Title = "persisted"
+	if err := store.persistPresentationLocked(second); err != nil {
 		store.mu.Unlock()
 		t.Fatal(err)
 	}
-	if store.presentationCache.valid || store.turnCache.valid {
+	if store.turnCache.valid {
 		store.mu.Unlock()
 		t.Fatal("presentation mutation did not invalidate dependent caches")
 	}

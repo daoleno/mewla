@@ -1,20 +1,18 @@
 package brain
 
 import (
-	"bufio"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/sqlitedb"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -227,15 +225,12 @@ type TimelineItem struct {
 	WaitFor         string `json:"wait_for,omitempty"`
 }
 
+// timelineReadCache is the whole timeline in seq order. It is filled on first
+// read and then kept current by every append and rewrite, so a commit never
+// costs a re-read.
 type timelineReadCache struct {
-	valid   bool
-	size    int64
-	modTime time.Time
-	items   []TimelineItem
-}
-
-func (s *Store) messagesPath() string {
-	return filepath.Join(s.statePath(), "messages.jsonl")
+	valid bool
+	items []TimelineItem
 }
 
 func (s *Store) AppendTimelineItem(item TimelineItem) (TimelineItem, error) {
@@ -300,28 +295,17 @@ func (s *Store) appendTimelineItemLocked(item TimelineItem) (TimelineItem, error
 	if err != nil {
 		return TimelineItem{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(s.messagesPath()), 0o700); err != nil {
+	if _, err := s.db.Exec(
+		`INSERT INTO timeline(id, thread_id, body) VALUES(?, ?, ?)`, item.ID, item.ThreadID, string(raw),
+	); err != nil {
 		return TimelineItem{}, err
 	}
-	file, err := os.OpenFile(s.messagesPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return TimelineItem{}, err
+	if s.timelineCache.valid {
+		normalized := item
+		normalizeLegacyTimelineKind(&normalized)
+		s.timelineCache.items = append(s.timelineCache.items, cloneTimelineItems([]TimelineItem{normalized})...)
 	}
-	if _, err := file.Write(append(raw, '\n')); err != nil {
-		_ = file.Close()
-		return TimelineItem{}, err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return TimelineItem{}, err
-	}
-	if err := file.Close(); err != nil {
-		return TimelineItem{}, err
-	}
-	if err := syncDirectory(filepath.Dir(s.messagesPath())); err != nil {
-		return TimelineItem{}, err
-	}
-	s.timelineCache = timelineReadCache{}
+	s.rev++
 	return item, nil
 }
 
@@ -330,34 +314,19 @@ func (s *Store) timelineItemByIDLocked(id string) (TimelineItem, bool, error) {
 	if id == "" {
 		return TimelineItem{}, false, nil
 	}
-	file, err := os.Open(s.messagesPath())
-	if errors.Is(err, os.ErrNotExist) {
+	var body string
+	err := s.db.QueryRow(`SELECT body FROM timeline WHERE id = ?`, id).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
 		return TimelineItem{}, false, nil
 	}
 	if err != nil {
 		return TimelineItem{}, false, err
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	lineNumber := 0
-	for scanner.Scan() {
-		lineNumber++
-		if strings.TrimSpace(scanner.Text()) == "" {
-			continue
-		}
-		var item TimelineItem
-		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
-			return TimelineItem{}, false, fmt.Errorf("decode timeline line %d: %w", lineNumber, err)
-		}
-		if strings.TrimSpace(item.ID) == "" {
-			return TimelineItem{}, false, fmt.Errorf("decode timeline line %d: id is required", lineNumber)
-		}
-		if strings.TrimSpace(item.ID) == id {
-			return item, true, nil
-		}
+	var item TimelineItem
+	if err := json.Unmarshal([]byte(body), &item); err != nil {
+		return TimelineItem{}, false, fmt.Errorf("decode timeline item %q: %w", id, err)
 	}
-	return TimelineItem{}, false, scanner.Err()
+	return item, true, nil
 }
 
 func (s *Store) ThreadTimeline(threadID string, limit int) ([]TimelineItem, error) {
@@ -699,49 +668,22 @@ func (s *Store) MarkTimelineWorkCardsRead(workID string) error {
 }
 
 func (s *Store) readAllTimelineItemsLocked() ([]TimelineItem, error) {
-	info, statErr := os.Stat(s.messagesPath())
-	if errors.Is(statErr, os.ErrNotExist) {
-		s.timelineCache = timelineReadCache{}
-		return []TimelineItem{}, nil
-	}
-	if statErr != nil {
-		return nil, statErr
-	}
-	if s.timelineCache.valid && s.timelineCache.size == info.Size() &&
-		s.timelineCache.modTime.Equal(info.ModTime()) {
+	if s.timelineCache.valid {
 		return cloneTimelineItems(s.timelineCache.items), nil
 	}
-	file, err := os.Open(s.messagesPath())
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
 	out := []TimelineItem{}
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	lineNumber := 0
-	for scanner.Scan() {
-		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
+	if err := scanBodies(s.db, `SELECT body FROM timeline ORDER BY seq`, func(body []byte) error {
 		var item TimelineItem
-		if err := json.Unmarshal([]byte(line), &item); err != nil {
-			return nil, fmt.Errorf("decode timeline line %d: %w", lineNumber, err)
-		}
-		if strings.TrimSpace(item.ID) == "" {
-			return nil, fmt.Errorf("decode timeline line %d: id is required", lineNumber)
+		if err := json.Unmarshal(body, &item); err != nil {
+			return fmt.Errorf("decode timeline item: %w", err)
 		}
 		normalizeLegacyTimelineKind(&item)
 		out = append(out, item)
-	}
-	if err := scanner.Err(); err != nil {
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	s.timelineCache = timelineReadCache{
-		valid: true, size: info.Size(), modTime: info.ModTime(), items: cloneTimelineItems(out),
-	}
+	s.timelineCache = timelineReadCache{valid: true, items: cloneTimelineItems(out)}
 	return out, nil
 }
 
@@ -756,25 +698,60 @@ func cloneTimelineItems(items []TimelineItem) []TimelineItem {
 	return out
 }
 
+// rewriteTimelineLocked makes items the whole timeline, in that order, by
+// changing only the rows that differ. Rows keep their place while they match
+// the new order; the first row that does not is deleted and every item the
+// walk has not matched is inserted after the last row, so reordering costs
+// writes only for what actually moved. A projection that edits a row in place,
+// drops rows or appends new ones therefore writes just those rows.
 func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
-	if err := os.MkdirAll(filepath.Dir(s.messagesPath()), 0o700); err != nil {
+	current, err := s.readAllTimelineItemsLocked()
+	if err != nil {
 		return err
 	}
-	if err := atomicfile.WriteStream(s.messagesPath(), 0o600, func(w io.Writer) error {
-		for _, item := range items {
-			raw, err := json.Marshal(item)
+	for index := range items {
+		items[index].ID = strings.TrimSpace(items[index].ID)
+		items[index].ThreadID = strings.TrimSpace(items[index].ThreadID)
+	}
+	err = sqlitedb.Tx(s.db, func(tx *sql.Tx) error {
+		next := 0
+		for _, row := range current {
+			if next < len(items) && items[next].ID == strings.TrimSpace(row.ID) {
+				if !reflect.DeepEqual(row, items[next]) {
+					body, err := json.Marshal(items[next])
+					if err != nil {
+						return err
+					}
+					if _, err := tx.Exec(`UPDATE timeline SET thread_id = ?, body = ? WHERE id = ?`,
+						items[next].ThreadID, string(body), items[next].ID); err != nil {
+						return err
+					}
+				}
+				next++
+				continue
+			}
+			if _, err := tx.Exec(`DELETE FROM timeline WHERE id = ?`, strings.TrimSpace(row.ID)); err != nil {
+				return err
+			}
+		}
+		for ; next < len(items); next++ {
+			body, err := json.Marshal(items[next])
 			if err != nil {
 				return err
 			}
-			if _, err := w.Write(append(raw, '\n')); err != nil {
+			if _, err := tx.Exec(`INSERT INTO timeline(id, thread_id, body) VALUES(?, ?, ?)`,
+				items[next].ID, items[next].ThreadID, string(body)); err != nil {
 				return err
 			}
 		}
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
+		s.timelineCache = timelineReadCache{}
 		return err
 	}
-	s.timelineCache = timelineReadCache{}
+	s.timelineCache = timelineReadCache{valid: true, items: cloneTimelineItems(items)}
+	s.rev++
 	return nil
 }
 

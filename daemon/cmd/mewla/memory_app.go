@@ -17,7 +17,7 @@ const memoryIndexName = "memory.sqlite"
 
 // handleMemory answers memory_search and memory_show from the Brain chat log.
 // The index opens, catches up with the log and closes per call: a warm refresh
-// reads only the bytes appended since the last one.
+// reads only the rows appended since the last one.
 func (a *controlApp) handleMemory(req control.Request) control.Response {
 	if a == nil || a.brainStore == nil {
 		return control.ErrorResponse("brain_unavailable", "Brain chat is not configured.")
@@ -35,7 +35,7 @@ func (a *controlApp) handleMemory(req control.Request) control.Response {
 		return control.ErrorResponse("memory_unavailable", err.Error())
 	}
 	defer index.Close()
-	if _, err := index.Refresh(ctx, stateDir); err != nil {
+	if _, err := index.Refresh(ctx, a.brainStore); err != nil {
 		return control.ErrorResponse("memory_unavailable", err.Error())
 	}
 
