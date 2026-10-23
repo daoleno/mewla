@@ -2,10 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -21,7 +17,6 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/control"
-	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/server"
 )
 
@@ -104,28 +99,12 @@ func TestPluginsOwnedRuntime(t *testing.T) {
 	h.StartTLS()
 	defer h.CloseClientConnections()
 	defer h.Close()
-	token, err := a.IssuePairingToken(20 * time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var route [16]byte
-	_, _ = rand.Read(route[:])
-	pin := sha256.Sum256(h.Certificate().RawSubjectPublicKeyInfo)
-	payload := link.PairingPayload{Version: link.PairingVersion, DaemonID: a.DaemonID(), DaemonPublicKey: a.PublicKeyHex(), EnrollmentToken: token.Value, RouteID: hex.EncodeToString(route[:]), TransportPin: hex.EncodeToString(pin[:]), Candidates: []link.PairingCandidate{{Name: "Plugins candidate", AdmissionURL: fmt.Sprintf("https://10.0.2.2:%d", port), StableURL: fmt.Sprintf("https://10.0.2.2:%d", port)}}, ExpiresAtMS: time.Now().Add(20 * time.Minute).UnixMilli()}
-	payload.Signature = a.CreateLinkPairingSignature(link.PairingBindingPayload(payload))
-	raw, _ := json.Marshal(payload)
-	values := url.Values{}
-	values.Set("v", fmt.Sprint(link.PairingVersion))
-	values.Set("p", base64.RawURLEncoding.EncodeToString(raw))
-	if err = os.WriteFile(filepath.Join(root, "pairing-link"), []byte("mewla://settings?"+values.Encode()), 0600); err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := &control.Server{Path: filepath.Join(root, "run", control.SocketName), Handler: &controlApp{connections: m}}
 	done := make(chan error, 1)
 	go func() { done <- c.Run(ctx) }()
-	t.Logf("Plugins candidate ready on isolated local control socket and TLS %d; pairing link remains private", port)
+	t.Logf("Plugins candidate ready on isolated local control socket and TLS %d; no pairing link: Link pairing cannot carry an emulator IP route", port)
 	select {
 	case <-stop:
 	case <-time.After(20 * time.Minute):

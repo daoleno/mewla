@@ -557,7 +557,7 @@ func runMobilePairingImport(
 	if len(offers) != 1 {
 		t.Fatalf("mobile Relay E2E requires one admission offer, got %d", len(offers))
 	}
-	pairingLinks, _, err := link.BuildPairingLink(
+	pairingLink, _, err := link.BuildPairingLink(
 		authManager,
 		identity,
 		config,
@@ -626,7 +626,7 @@ func runMobilePairingImport(
 	command.Env = append(
 		os.Environ(),
 		"MEWLA_LINK_RELAY_E2E=1",
-		"MEWLA_LINK_E2E_PAIRING_LINK="+pairingLinks.Link,
+		"MEWLA_LINK_E2E_PAIRING_LINK="+pairingLink,
 		fmt.Sprintf(
 			"MEWLA_LINK_E2E_BRIDGE_PORT=%d",
 			portOf(t, bridgeListener.Addr()),

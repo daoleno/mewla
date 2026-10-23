@@ -78,7 +78,7 @@ func TestNumberMenu(t *testing.T) {
 func TestCompactLinkPairingQRFitsAnEightyColumnTerminal(t *testing.T) {
 	for relays := 1; relays <= 3; relays++ {
 		payload := link.PairingPayload{
-			Version:         link.CompactPairingVersion,
+			Version:         link.PairingVersion,
 			DaemonPublicKey: strings.Repeat("a1", 32),
 			EnrollmentToken: strings.Repeat("b2", 32),
 			RouteID:         strings.Repeat("c3", 16),
@@ -115,21 +115,19 @@ func TestCompactLinkPairingQRFitsAnEightyColumnTerminal(t *testing.T) {
 	}
 }
 
-func TestLinkPairingNamesTheAppVersionAndKeepsTheOlderLink(t *testing.T) {
+func TestLinkPairingShowsOnePasteLink(t *testing.T) {
 	links := pairingLinks{
 		expiresAt:    time.Now().Add(15 * time.Minute),
 		phoneAddress: "Remote access, https://quiet-otter-3f9a.m.mewla.ai",
 		phoneLink:    link.CompactPairingLink("AN43KVROR7TFJ6KA"),
-		phoneLegacy:  "mewla://settings?p=e30&v=2",
 	}
 	var screen, details bytes.Buffer
 	printPairing(&screen, pairingStatus{remoteURL: "https://quiet-otter-3f9a.m.mewla.ai"}, links, "")
 	printPairingDetails(&details, "Pair a new phone or browser.", links)
-	if !strings.Contains(screen.String(), "  Needs the app 0.2.17 or later; older app: mewla pair --details\n") ||
-		!strings.Contains(screen.String(), "Works from any network.") {
+	if strings.Contains(screen.String(), "older app") || !strings.Contains(screen.String(), "Works from any network.") {
 		t.Fatalf("screen = %q", screen.String())
 	}
-	if !strings.Contains(details.String(), "App before 0.2.17, paste:  mewla://settings?p=e30&v=2\n") {
+	if strings.Contains(details.String(), "App before") || strings.Count(details.String(), "paste:") != 1 {
 		t.Fatalf("details = %q", details.String())
 	}
 }

@@ -131,14 +131,13 @@ pass it: `mewla pair https://mewla.example.com`. When the terminal is too narrow
 for the QR, it says how wide it needs to be instead of drawing a broken code.
 
 With remote access or Mewla Link, the QR holds a compact signed code (about 67
-columns by 33 rows), which needs the app 0.2.17 or later. It carries the same
-signed route, transport pin and one-time admission as before, in a shorter
-encoding.
+columns by 33 rows). It carries the signed route, transport pin and one-time
+admission. The app 0.2.17 or later reads it; a code from an older computer's
+longer format no longer pairs, so update both sides and run `mewla pair` again.
 
 `mewla pair --details` prints the same code in every other form:
 
-- **Phone:** the `mewla://` link to paste into the app. With remote access it
-  also prints the older link form for apps before 0.2.17.
+- **Phone:** the `mewla://` link to paste into the app.
 - **Browser on this computer:** the full `http://127.0.0.1:9876/#pair=…` link.
 - **Browser anywhere:** an `https://…/#pair=…` link for each HTTPS address.
 - How to revoke a device.

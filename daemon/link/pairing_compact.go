@@ -41,7 +41,7 @@ var compactEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 // payload's URLs do not have the connector's shape, so decoding would not
 // give back the exact signed values.
 func EncodeCompactPairing(payload PairingPayload) (string, error) {
-	if payload.Version != CompactPairingVersion || payload.DaemonID != "" {
+	if payload.Version != PairingVersion || payload.DaemonID != "" {
 		return "", errors.New("compact pairing needs a version 3 payload without a daemon ID")
 	}
 	if len(payload.Candidates) == 0 || len(payload.Candidates) > compactMaxCandidates {
@@ -51,7 +51,7 @@ func EncodeCompactPairing(payload PairingPayload) (string, error) {
 		return "", errors.New("compact pairing expiry out of range")
 	}
 	var out bytes.Buffer
-	out.WriteByte(CompactPairingVersion)
+	out.WriteByte(PairingVersion)
 	for _, field := range []struct {
 		value string
 		size  int
@@ -171,10 +171,10 @@ func DecodeCompactPairing(encoded string) (PairingPayload, error) {
 		return PairingPayload{}, errors.New("compact pairing is not base32")
 	}
 	in := compactReader{data: raw}
-	if in.byte() != CompactPairingVersion {
+	if in.byte() != PairingVersion {
 		return PairingPayload{}, errors.New("compact pairing has another version")
 	}
-	payload := PairingPayload{Version: CompactPairingVersion}
+	payload := PairingPayload{Version: PairingVersion}
 	payload.DaemonPublicKey = hex.EncodeToString(in.bytes(compactKeyBytes))
 	payload.EnrollmentToken = hex.EncodeToString(in.bytes(compactKeyBytes))
 	payload.RouteID = hex.EncodeToString(in.bytes(compactRouteBytes))
