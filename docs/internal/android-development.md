@@ -172,7 +172,7 @@ npx expo export --platform android
 3. Open Settings in the app.
 4. Paste the `mewla://...` link, scan the QR, or import a QR photo.
 
-Release builds explicitly allow cleartext HTTP so dynamic LAN and Tailscale IPs work. Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
+Release builds allow cleartext HTTP by default, through the `network_security_config.xml` that `withAndroidRelease` writes, so dynamic LAN and Tailscale IPs work. Android matches cleartext rules by host name, never by address range, so the config cannot say "private networks only"; it denies cleartext only for Mewla's own `mewla.ai` domains. Keeping `http://` to private addresses is the daemon address book's job (`addressbook.Normalize`). Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
 
 Remote push works in official builds: `app/app.config.js` carries Mewla's public EAS project ID and `app/google-services.json` is the public Firebase client config for `com.daoleno.mewla` and `com.daoleno.mewla.debug`. FCM delivery needs the FCM V1 key uploaded to that Expo project for each package (see [Notifications](../notifications.md)). A fork with its own package sets `MEWLA_EXPO_PROJECT_ID` (see `app/.env.example`), replaces `google-services.json`, and uploads its own key; a package name missing from `google-services.json` fails the build.
 

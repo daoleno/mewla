@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import {
   injectReleaseSigningGradle,
   injectDebugIdentityGradle,
   enablePrivateNetworkHTTP,
+  networkSecurityConfigXml,
+  writeNetworkSecurityConfig,
+  NETWORK_SECURITY_CONFIG_REL,
   NOTICE_APK_REL,
   NOTICE_SRC_REL,
 } from './withAndroidRelease.js';
@@ -75,21 +81,51 @@ describe('withAndroidRelease debug identity injection', () => {
 });
 
 describe('withAndroidRelease private-network HTTP config', () => {
-  test('enables cleartext HTTP on the production application manifest', () => {
+  test('points the production manifest at the network security config, not a global flag', () => {
     const manifest = {
       manifest: {
-        application: [{ $: { 'android:name': '.MainApplication' } }],
+        application: [
+          {
+            $: {
+              'android:name': '.MainApplication',
+              'android:usesCleartextTraffic': 'true',
+            },
+          },
+        ],
       },
     };
 
     const configured = enablePrivateNetworkHTTP(manifest);
-    expect(configured.manifest.application[0].$['android:usesCleartextTraffic']).toBe('true');
-    expect(configured.manifest.application[0].$['android:name']).toBe('.MainApplication');
+    const attributes = configured.manifest.application[0].$;
+    expect(attributes['android:networkSecurityConfig']).toBe('@xml/network_security_config');
+    expect(attributes['android:usesCleartextTraffic']).toBeUndefined();
+    expect(attributes['android:name']).toBe('.MainApplication');
   });
 
   test('fails clearly when the application manifest entry is absent', () => {
     expect(() => enablePrivateNetworkHTTP({ manifest: {} })).toThrow(
       'Android application manifest entry not found',
     );
+  });
+
+  test('allows cleartext by default for LAN and tailnet IPs but never for Mewla domains', () => {
+    const xml = networkSecurityConfigXml();
+    expect(xml).toContain('<base-config cleartextTrafficPermitted="true" />');
+    expect(xml).toContain(
+      '<domain-config cleartextTrafficPermitted="false">\n        <domain includeSubdomains="true">mewla.ai</domain>',
+    );
+    // Android matches hosts by name; an address range cannot be expressed.
+    expect(xml).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
+  });
+
+  test('writes the config into the generated project', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mewla-nsc-'));
+    try {
+      const dest = writeNetworkSecurityConfig(root);
+      expect(dest).toBe(path.join(root, NETWORK_SECURITY_CONFIG_REL));
+      expect(fs.readFileSync(dest, 'utf8')).toBe(networkSecurityConfigXml());
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
