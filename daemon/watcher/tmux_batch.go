@@ -54,16 +54,18 @@ func ownedPaneSet(socket string, targets []string) (map[string]bool, error) {
 }
 
 // paneStateMarker separates a captured screen from the state line that
-// follows it in the same tmux invocation. A control byte keeps it from
-// appearing in terminal text.
-const paneStateMarker = "\x1fmewla-pane-state\x1f"
+// follows it in the same tmux invocation. It is printable text: tmux versions
+// differ in how they escape control bytes in display-message output. The state
+// line is found by its last occurrence, so the same text on the screen cannot
+// be mistaken for it.
+const paneStateMarker = "@@mewla-pane-state@@"
 
 // capturePaneWithState captures a pane and reads its liveness in one tmux
 // invocation. The screen is everything before the final marker.
 func capturePaneWithState(socket, target string) (screen string, alive bool, deadStatus int, err error) {
 	out, err := tmuxCommand(socket,
 		"capture-pane", "-t", target, "-p", "-S", "-200", ";",
-		"display-message", "-p", "-t", target, paneStateMarker+"#{pane_dead}\t#{pane_dead_status}",
+		"display-message", "-p", "-t", target, paneStateMarker+"#{pane_dead} #{pane_dead_status}",
 	).Output()
 	if err != nil {
 		return "", false, -1, err
@@ -74,7 +76,7 @@ func capturePaneWithState(socket, target string) (screen string, alive bool, dea
 		return "", false, -1, fmt.Errorf("tmux returned no pane state")
 	}
 	alive, deadStatus = true, -1
-	fields := strings.Split(strings.TrimSpace(text[cut+len(paneStateMarker):]), "\t")
+	fields := strings.Fields(text[cut+len(paneStateMarker):])
 	if len(fields) >= 1 && fields[0] == "1" {
 		alive = false
 		if len(fields) >= 2 {
