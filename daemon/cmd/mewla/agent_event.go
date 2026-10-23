@@ -57,7 +57,7 @@ func (s *agentEventService) handleClaude(ctx context.Context, req control.AgentE
 	if err != nil {
 		return control.ErrorResponse("invalid_agent_event", err.Error())
 	}
-	workerID := s.claudeWorker(req.WorkerID, payload.SessionID)
+	workerID := s.claudeWorker(req.WorkerID, payload)
 	if workerID == "" {
 		// A Claude Mewla did not launch (or already closed). Say nothing and
 		// let Claude proceed.
@@ -116,28 +116,63 @@ func (s *agentEventService) prune() {
 	}
 }
 
-// claudeWorker resolves the Worker a Claude hook belongs to: the id its
-// environment named, if that Worker exists; otherwise the Worker whose launch
-// command carries the hook's session id.
-func (s *agentEventService) claudeWorker(envID, sessionID string) string {
+// claudeWorker resolves the Worker a Claude hook belongs to and whether the
+// hook may speak for it. The Worker is the one its environment named, or else
+// the one launched with the hook's session id. Either way the session id must
+// be the one Mewla launched the Worker with, or the conversation the Worker is
+// already bound to; otherwise another Claude that merely inherited the
+// Worker's id could move its turns or answer its approvals.
+func (s *agentEventService) claudeWorker(envID string, p claude.Payload) string {
 	workers := s.workers()
+	var worker *classifier.Worker
 	if envID = strings.TrimSpace(envID); envID != "" {
 		for _, w := range workers {
 			if w != nil && w.ID == envID {
-				return w.ID
+				worker = w
 			}
 		}
+	} else {
+		for _, w := range workers {
+			if w != nil && launchSessionID(w) == p.SessionID && p.SessionID != "" {
+				worker = w
+			}
+		}
+	}
+	if worker == nil || !s.speaksFor(worker, p) {
 		return ""
 	}
-	for _, w := range workers {
-		if w == nil {
-			continue
-		}
-		if id, present, err := work.ProviderResumeToken(work.WorkerProviderClaude, w.Command); err == nil && present && id == sessionID {
-			return w.ID
-		}
+	return worker.ID
+}
+
+// launchSessionID is the conversation id Mewla launched the Worker with.
+func launchSessionID(w *classifier.Worker) string {
+	id, present, err := work.ProviderResumeToken(work.WorkerProviderClaude, w.Command)
+	if err != nil || !present {
+		return ""
 	}
-	return ""
+	return id
+}
+
+// speaksFor reports whether the payload's session belongs to the Worker. A
+// conversation the Worker moves to later (/clear, /compact, a resume) is
+// accepted only when its SessionStart says so and its transcript sits beside
+// the one the Worker is already bound to.
+func (s *agentEventService) speaksFor(w *classifier.Worker, p claude.Payload) bool {
+	if p.SessionID == "" {
+		return false
+	}
+	state, _ := s.hub.State(w.ID)
+	if p.SessionID == launchSessionID(w) || (state.Bound && p.SessionID == state.Binding.ConversationID) {
+		return true
+	}
+	if p.HookEvent != "SessionStart" || !state.Bound || state.Binding.Ref == "" || p.TranscriptPath == "" {
+		return false
+	}
+	switch p.Source {
+	case "clear", "compact", "resume":
+		return filepath.Dir(p.TranscriptPath) == filepath.Dir(state.Binding.Ref)
+	}
+	return false
 }
 
 // runAgentEvent is the command an agent's hook runs: `mewla agent-event
@@ -222,6 +257,10 @@ func (s *agentEventService) decide(workerID, approvalID, optionID string) contro
 		if state.Approvals[i].ID == approvalID {
 			chosen = &state.Approvals[i]
 		}
+	}
+	// An answer resolves only a request the Worker's current conversation made.
+	if chosen != nil && state.Bound && chosen.ConversationID != state.Binding.ConversationID {
+		chosen = nil
 	}
 	if chosen == nil {
 		return control.ErrorResponse("approval_not_pending", "That approval is not pending.")

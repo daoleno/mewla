@@ -118,6 +118,18 @@ func (w *workerState) apply(e Event) {
 	switch e.Kind {
 	case KindBound:
 		if e.Binding != nil {
+			if w.Bound && w.Binding.ConversationID != e.Binding.ConversationID {
+				// The Worker moved to another conversation (a clear, a
+				// resume): what the old one was waiting on can no longer be
+				// answered, and its waiting hook must not be given an answer.
+				w.Approvals = nil
+				for _, answer := range w.waiters {
+					select {
+					case answer <- Decision{By: "rebind"}:
+					default:
+					}
+				}
+			}
 			w.Binding, w.Bound = *e.Binding, true
 		}
 	case KindTurnStarted:
