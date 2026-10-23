@@ -23,6 +23,10 @@ import {
   mergeBrainPresenceIntoTimeline,
 } from "../mewla/brainPresenceTimeline";
 import type { PendingUserMessageAction } from "./pendingUserMessageLifecycle";
+import {
+  mergeQuickRepliesIntoTimeline,
+  type QuickRepliesRow,
+} from "../brain/brainQuickReplies";
 
 type StableTimelineEntry = {
   item: TimelineItem;
@@ -50,6 +54,7 @@ export function useInterfaceTimelineItems({
   onBrainWorkEventActivate,
   openSessionIds,
   brainCurrentWork,
+  quickReplies,
 }: {
   events: CodexConversationEvent[];
   pendingUserMessages: PendingUserMessage[];
@@ -62,6 +67,8 @@ export function useInterfaceTimelineItems({
   ) => void;
   openSessionIds?: ReadonlySet<string>;
   brainCurrentWork?: readonly BrainCurrentWork[];
+  /** Brain only: answers to its last message, placed right after that message. */
+  quickReplies?: QuickRepliesRow;
 }) {
   const previousRef = useRef<{
     byId: Map<string, StableTimelineEntry>;
@@ -125,16 +132,19 @@ export function useInterfaceTimelineItems({
   const brainPresence = useBrainCompanion()?.presence;
   const providerTimelineWithActivity = useMemo(
     () =>
-      mergeBrainPresenceIntoTimeline(
-        mergeRunningActivityIntoTimeline(
-          brainPresence
-            ? foldBrainToolRows(providerTimelineItemsWithTurnFocus)
-            : providerTimelineItemsWithTurnFocus,
-          runningActivity,
+      mergeQuickRepliesIntoTimeline(
+        mergeBrainPresenceIntoTimeline(
+          mergeRunningActivityIntoTimeline(
+            brainPresence
+              ? foldBrainToolRows(providerTimelineItemsWithTurnFocus)
+              : providerTimelineItemsWithTurnFocus,
+            runningActivity,
+          ),
+          brainPresence,
         ),
-        brainPresence,
+        quickReplies,
       ),
-    [brainPresence, providerTimelineItemsWithTurnFocus, runningActivity],
+    [brainPresence, providerTimelineItemsWithTurnFocus, quickReplies, runningActivity],
   );
 
   return useMemo(() => {

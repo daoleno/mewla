@@ -204,8 +204,10 @@ Brain has one Work surface, built from the daemon's `current_work`
   rows flatten (`quickReplyLine`) into a single horizontally scrolling line
   that never wraps into a second row. Each chip is plain `label` text in
   `textMuted` (`text` while pressed), with no outline or fill. The line sits
-  in the timeline's tail slot right under the newest message and scrolls
-  with it, not above the composer. It is hidden while the composer has focus
+  in the timeline as its own row, right after Brain's last message (below
+  its copy / more action row, above the cat's status row), so it reads as
+  that message's possible answers and scrolls with it, not above the
+  composer (`mergeQuickRepliesIntoTimeline`). It is hidden while the composer has focus
   or text and gone once the person sends anything. The touch target is 44 px
   through the chip's own padded box (Android clips `hitSlop` to the scroll
   view), not through its looks. Brain offers at most 3, only for a real

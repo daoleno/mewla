@@ -17,6 +17,7 @@ import type { InterfaceChatBodyProps } from "./InterfaceChatBody";
 import type { InterfaceComposerPresentation } from "./InterfaceChatSurfaceModel";
 import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
 import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
+import type { QuickRepliesRow } from "../brain/brainQuickReplies";
 import type { useInterfaceChatController } from "./InterfaceChatController";
 import type {
   useInterfaceComposerInput,
@@ -71,8 +72,8 @@ interface UseInterfaceChatBodyPropsInput {
   ): void;
   showUnavailableAction?: boolean;
   composerAccessory?: ReactNode;
-  /** Continues the last message inside the timeline. */
-  timelineTail?: ReactNode;
+  /** Brain only: answers to its last message, as a row after that message. */
+  quickReplies?: QuickRepliesRow;
   /** The edit bar: above the composer, but not a picker that holds Enter. */
   composerEditBar?: ReactNode;
   skillsSheet?: ReactNode;
@@ -121,7 +122,7 @@ export function useInterfaceChatBodyProps({
   onKeyboardLifecycleInvalidate,
   showUnavailableAction,
   composerAccessory,
-  timelineTail,
+  quickReplies,
   composerEditBar,
   skillsSheet,
 }: UseInterfaceChatBodyPropsInput): InterfaceChatBodyProps {
@@ -219,7 +220,7 @@ export function useInterfaceChatBodyProps({
       onPendingUserMessageAction: controller.actOnPendingUserMessage,
       onTerminalActionKey,
       composerAccessory,
-      timelineTail,
+      quickReplies,
       composerEditBar,
       skillsSheet,
     }),
@@ -274,7 +275,7 @@ export function useInterfaceChatBodyProps({
       onTerminalActionKey,
       onKeyboardLifecycleInvalidate,
       composerAccessory,
-      timelineTail,
+      quickReplies,
       composerEditBar,
       screenFocused,
       showUnavailableAction,
