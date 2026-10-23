@@ -15,6 +15,7 @@ import (
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/logonce"
 )
 
 // Backfill is how far back the first collection reads.
@@ -76,6 +77,7 @@ type Collector struct {
 	statesByID        map[string]*lifecycle.State
 	githubPausedUntil time.Time
 	linearTeams       int
+	decodeLog         logonce.Log
 
 	mu       sync.Mutex
 	presence func(workerID string) Presence

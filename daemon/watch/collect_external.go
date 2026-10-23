@@ -216,7 +216,7 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 		var meta struct {
 			DefaultBranch string `json:"default_branch"`
 		}
-		_ = json.Unmarshal(result.Body, &meta)
+		c.decode("github repository", result.Body, &meta)
 		link.AccountID, link.Branch = account.ID, meta.DefaultBranch
 		link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
 		return link, account.Reads
@@ -227,6 +227,18 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 	}
 	link.Reason = strings.Join(failures, "; ")
 	return link, nil
+}
+
+// decode parses an external answer. A body that does not match the expected
+// shape is logged once per kind of answer, so a changed upstream schema shows
+// up in the log instead of reading as "nothing happened".
+func (c *Collector) decode(what string, body []byte, into any) bool {
+	err := json.Unmarshal(body, into)
+	if err != nil {
+		err = fmt.Errorf("unexpected response: %w", err)
+	}
+	c.decodeLog.Note("watch: "+what, err)
+	return err == nil
 }
 
 func githubArgs(owner, repo string, query map[string]any) map[string]any {
@@ -313,7 +325,7 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 			var page struct {
 				Runs []githubRun `json:"workflow_runs"`
 			}
-			_ = json.Unmarshal(body, &page)
+			c.decode("github workflow runs", body, &page)
 			sort.Slice(page.Runs, func(i, j int) bool { return page.Runs[i].UpdatedAt.Before(page.Runs[j].UpdatedAt) })
 			readFrom := cursor.RunsSince.Add(-runOverlap)
 			if !cursor.CIChecked {
@@ -360,7 +372,9 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	issuesRead := body != nil
 	if issuesRead {
 		var issues []githubIssue
-		_ = json.Unmarshal(body, &issues)
+		// An answer that does not parse is not an answer: the cursor stays
+		// where it was and the next pass reads the same window again.
+		issuesRead = c.decode("github issues", body, &issues)
 		for _, issue := range issues {
 			kind := kindIssueActivity
 			if issue.PullRequest != nil {
@@ -388,7 +402,10 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 			continue
 		}
 		var alerts []githubAlert
-		_ = json.Unmarshal(body, &alerts)
+		if !c.decode("github "+alertKind.endpoint+" alerts", body, &alerts) {
+			alertsRead = false
+			continue
+		}
 		for _, alert := range alerts {
 			if alert.UpdatedAt.Before(cursor.AlertsSince) {
 				continue

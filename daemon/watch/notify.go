@@ -16,6 +16,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/calendar"
+	"github.com/daoleno/mewla/daemon/logonce"
 )
 
 // Watch reaches Brain through Brain's ordinary input, like a message from
@@ -111,6 +112,8 @@ type notifier struct {
 	// without n.mu, because tick holds n.mu while it asks for the language.
 	deviceLang atomic.Value
 
+	saveLog logonce.Log
+
 	mu           sync.Mutex
 	state        notifyState
 	pendingSince map[string]time.Time
@@ -171,6 +174,13 @@ func (n *notifier) seed() {
 
 func (n *notifier) saveLocked() error {
 	return writeJSON(filepath.Join(n.store.dir, notifyFile), n.state)
+}
+
+// persistLocked saves after a change whose caller has no error to return. A
+// failed save is logged once: the next change saves again, but until it does a
+// restart forgets what was already sent and pushes it a second time.
+func (n *notifier) persistLocked() {
+	n.saveLog.Note("watch: save notify state", n.saveLocked())
 }
 
 // SetDevice remembers the phone's timezone, which the brief's calendar item is
@@ -512,7 +522,7 @@ func (n *notifier) forgetEnded() {
 		}
 	}
 	if changed {
-		_ = n.saveLocked()
+		n.persistLocked()
 	}
 }
 
@@ -565,7 +575,7 @@ func (n *notifier) sendUrgent() {
 			log.Printf("WARN watch: urgent push: %v", err)
 		}
 	}
-	_ = n.saveLocked()
+	n.persistLocked()
 }
 
 // sendTriage sends one batch. With backlog it sends everything waiting, as
@@ -624,7 +634,7 @@ func (n *notifier) sendTriage(now time.Time, backlog bool) (sent int) {
 			break
 		}
 	}
-	_ = n.saveLocked()
+	n.persistLocked()
 	return sent
 }
 
