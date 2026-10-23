@@ -188,7 +188,9 @@ computer, but no Cloudflare account.
   support Server-Sent Events.
 
 Mewla runs `cloudflared` with an empty configuration and never touches your own
-named tunnels or `~/.cloudflared`. Quick Tunnels need a Linux daemon.
+named tunnels or `~/.cloudflared`. It learns the URL and when the tunnel is
+connected from `cloudflared`'s own metrics endpoint on a loopback port, not by
+reading its output. Quick Tunnels need a Linux daemon.
 
 From the computer, with the ID and generation from `mewla service list --json`:
 
