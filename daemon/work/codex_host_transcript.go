@@ -22,6 +22,24 @@ type CodexTranscriptIdentity struct {
 	DataRoot string
 }
 
+// boundCodexIdentity is the transcript of a Codex that Mewla started, named by
+// the thread it announced rather than found by the files its process holds
+// open.
+func boundCodexIdentity(worker classifier.Worker) (CodexTranscriptIdentity, bool) {
+	path := CodexBoundRollout(worker.ID)
+	if path == "" {
+		return CodexTranscriptIdentity{}, false
+	}
+	if info, err := os.Stat(path); err != nil || info.IsDir() {
+		return CodexTranscriptIdentity{}, false
+	}
+	return CodexTranscriptIdentity{
+		SessionID: sessionIDFromCodexRolloutPath(path),
+		Path:      path,
+		DataRoot:  dataRootForPath(path, providerDataRootsForProcessTree(worker.ProcessID)),
+	}, true
+}
+
 // ResolveCodexTranscriptIdentity binds a live Codex process tree to its
 // provider session/path. Open rollout FDs and the process environment data
 // root win over daemon HOME and current cwd.
@@ -95,6 +113,9 @@ func ResolveCodexTranscriptIdentityForWorker(
 	worker classifier.Worker,
 	existing CodexTranscriptIdentity,
 ) CodexTranscriptIdentity {
+	if identity, ok := boundCodexIdentity(worker); ok {
+		return identity
+	}
 	existing.SessionID = strings.TrimSpace(existing.SessionID)
 	existing.Path = strings.TrimSpace(existing.Path)
 	existing.DataRoot = strings.TrimSpace(existing.DataRoot)

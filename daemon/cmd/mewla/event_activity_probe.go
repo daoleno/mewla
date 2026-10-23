@@ -7,6 +7,7 @@ import (
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // eventActivityProbe answers the watcher's provider-activity question from
@@ -30,7 +31,29 @@ func (p *eventActivityProbe) ObserveProviderActivity(worker classifier.Worker, n
 	if observation, ok := observationFromEvents(p.hub, worker.ID); ok {
 		return observation
 	}
+	if awaitingThread(p.hub, worker, now) {
+		return watcher.ProviderActivityObservation{Structured: true, FallbackAllowed: true, ProbeState: watcher.ProbeStateOK}
+	}
 	return p.fallback.ObserveProviderActivity(worker, now)
+}
+
+// threadGrace is how long a Codex that Mewla started may take to announce its
+// thread before the transcript is searched for after all.
+const threadGrace = 30 * time.Second
+
+// awaitingThread says a Codex that Mewla started has not announced its thread
+// yet. Its conversation is named by that announcement, so there is nothing to
+// search for in the meantime; the answer is "no turn yet". Past the grace
+// period the app-server is taken to be unreachable and the transcript answers.
+func awaitingThread(hub *agentevents.Hub, worker classifier.Worker, now time.Time) bool {
+	if worker.AgentControl == "" || worker.StartedAt.IsZero() || now.Sub(worker.StartedAt) > threadGrace {
+		return false
+	}
+	if work.InferWorkerProvider(worker.Command, worker.Name) != work.WorkerProviderCodex {
+		return false
+	}
+	state, ok := hub.State(worker.ID)
+	return !ok || !state.Bound
 }
 
 // ForgetProviderActivity is the watcher saying a Worker has no turn in flight,

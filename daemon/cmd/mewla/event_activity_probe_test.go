@@ -80,3 +80,25 @@ func TestEventProbeForgetKeepsTheBinding(t *testing.T) {
 		t.Fatal("a settled turn must not drop the Worker's events")
 	}
 }
+
+func TestEventProbeWaitsForTheThreadOfACodexItStarted(t *testing.T) {
+	hub := agentevents.NewHub()
+	fallback := &recordingProbe{}
+	probe := newEventActivityProbe(hub, fallback)
+	now := time.Now().UTC()
+	worker := classifier.Worker{ID: "%4", Command: "codex --remote unix:///x.sock", AgentControl: "/x.sock", StartedAt: now.Add(-2 * time.Second)}
+
+	// Not announced yet: nothing to search for, so the transcript is not read.
+	if got := probe.ObserveProviderActivity(worker, now); got.ID != "" || got.ProbeState != watcher.ProbeStateOK || fallback.calls != 0 {
+		t.Fatalf("waiting: %+v calls=%d", got, fallback.calls)
+	}
+	// Past the grace period the app-server is taken to be unreachable.
+	if got := probe.ObserveProviderActivity(worker, now.Add(time.Minute)); got.ID != "from-transcript" {
+		t.Fatalf("after grace: %+v", got)
+	}
+	// A Codex opened by hand has no control socket and is searched for at once.
+	manual := classifier.Worker{ID: "%5", Command: "codex", StartedAt: now.Add(-2 * time.Second)}
+	if got := probe.ObserveProviderActivity(manual, now); got.ID != "from-transcript" {
+		t.Fatalf("manual: %+v", got)
+	}
+}

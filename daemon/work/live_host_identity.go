@@ -55,6 +55,9 @@ func claudeIdentityRoot(pid int) string {
 // process. The recorded binding is deliberately not an input to this proof.
 func ResolveLiveHostTranscriptIdentity(worker classifier.Worker, provider string) (HostTranscriptIdentity, bool, error) {
 	if provider == WorkerProviderCodex {
+		if identity, bound := boundCodexIdentity(worker); bound {
+			return hostTranscriptFromCodex(provider, identity), true, nil
+		}
 		identity, found := ResolveCodexTranscriptIdentity(worker.ProcessID)
 		return hostTranscriptFromCodex(provider, identity), found, nil
 	}
