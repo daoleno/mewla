@@ -146,6 +146,7 @@ type Server struct {
 	// codexctl client.
 	codexLiveDial              func(ctx context.Context, socketPath string) (codexctl.LiveControl, error)
 	brainSnapshotBroadcastHook func(payload map[string]any)
+	live                       liveHub // live state, see live_state.go
 	uploadDir                  string
 	uploadStore                *attachment.Store
 	sessionFileWorkerLoader    func(workerID string) *classifier.Worker
@@ -451,6 +452,7 @@ func (s *Server) Handler() http.Handler {
 		s.connections.BrowserOAuthCallback(w, r, s.webUIAdmitted(r))
 	})
 	mux.Handle("/resources", s.appRoute(webUI, http.HandlerFunc(s.handleResourceTelemetryHTTP)))
+	mux.HandleFunc(widgetSnapshotPath, s.handleWidgetSnapshot) // live: read-only widget snapshot
 	mux.HandleFunc("/pair", s.handlePair)
 	mux.HandleFunc("/p/", s.handleShortPairLink)
 	mux.HandleFunc("/enrollment/request", s.handleEnrollmentRequest)
@@ -487,6 +489,7 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	}
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	s.startLive(runtimeCtx) // live state
 	srv := &http.Server{Handler: s.Handler()}
 
 	var runtime sync.WaitGroup
@@ -945,6 +948,10 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 	var raw clientMessage
 	if err := json.Unmarshal(msg, &raw); err != nil {
 		log.Printf("websocket: rejected malformed message remote=%s bytes=%d: %v", conn.RemoteAddr(), len(msg), err)
+		return
+	}
+
+	if s.handleLiveMessage(conn, msg, raw) { // live state
 		return
 	}
 
@@ -3245,6 +3252,7 @@ func (s *Server) broadcastBrainHostCapabilityRefresh() {
 }
 
 func (s *Server) emitBrainSnapshotBroadcast(snapshot brain.Snapshot) {
+	s.observeLive(snapshot) // live state
 	payload, err := s.brainSnapshotWire(snapshot)
 	if err != nil {
 		log.Printf("brain snapshot projection failed: %v", err)
