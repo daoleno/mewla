@@ -23,7 +23,12 @@ const (
 )
 
 var (
-	ErrNoRegistration                = errors.New("no push token registered")
+	ErrNoRegistration = errors.New("no push token registered")
+	// ErrCredentials means Expo has no usable FCM or APNs credential for the
+	// registered app. The client logs it once per token itself, so a phone whose
+	// platform has no credential yet does not log (and raise a Watch problem) on
+	// every push.
+	ErrCredentials                   = errors.New("push credentials unavailable")
 	notificationSessionSuffixPattern = regexp.MustCompile(`\s+\([^)]+\)\s*$`)
 	notificationTimestampPrefix      = regexp.MustCompile(`^\d{4}[/-]\d{2}[/-]\d{2}[ T]\d{2}:\d{2}:\d{2}\s*`)
 )
@@ -35,10 +40,11 @@ type Client struct {
 	token      string // Expo push token from mobile app
 	serverRef  string // Opaque client-side server identifier for notification routing
 
-	receiptDelays []time.Duration
-	receiptMu     sync.Mutex
-	pending       []pendingReceipt
-	receiptTimer  *time.Timer
+	receiptDelays    []time.Duration
+	credentialLogged map[string]bool
+	receiptMu        sync.Mutex
+	pending          []pendingReceipt
+	receiptTimer     *time.Timer
 }
 
 type registration struct {
@@ -139,7 +145,12 @@ func (c *Client) sendTo(token string, msg Message) error {
 		if ticket.Details.Error == errDeviceNotRegistered {
 			c.dropToken(token)
 		}
-		return fmt.Errorf("push API rejected notification%s%s", describeProblem(ticket.Details.Error, ticket.Message, token), receiptHint(ticket.Details.Error))
+		problem := describeProblem(ticket.Details.Error, ticket.Message, token) + receiptHint(ticket.Details.Error)
+		if isCredentialError(ticket.Details.Error) {
+			c.logCredentialFailureOnce(token, "send"+problem)
+			return fmt.Errorf("push API rejected notification%s: %w", problem, ErrCredentials)
+		}
+		return fmt.Errorf("push API rejected notification%s", problem)
 	}
 	c.trackReceipt(ticket.ID, token)
 	return nil

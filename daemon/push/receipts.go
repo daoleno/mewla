@@ -121,8 +121,12 @@ func (c *Client) fetchReceipts(batch []pendingReceipt) []pendingReceipt {
 		if receipt.Details.Error == errDeviceNotRegistered {
 			c.dropToken(entry.token)
 		}
-		log.Printf("push: delivery failed (ticket %s)%s%s", entry.ticketID,
-			describeProblem(receipt.Details.Error, receipt.Message, entry.token), receiptHint(receipt.Details.Error))
+		problem := describeProblem(receipt.Details.Error, receipt.Message, entry.token) + receiptHint(receipt.Details.Error)
+		if isCredentialError(receipt.Details.Error) {
+			c.logCredentialFailureOnce(entry.token, "delivery"+problem)
+			continue
+		}
+		log.Printf("push: delivery failed (ticket %s)%s", entry.ticketID, problem)
 	}
 	return c.reschedule(missing)
 }
@@ -151,6 +155,25 @@ func (c *Client) dropToken(token string) {
 	c.token = ""
 	c.serverRef = ""
 	log.Printf("push: %s: dropped the registered device; the app registers again when it next connects", errDeviceNotRegistered)
+}
+
+func isCredentialError(code string) bool {
+	return code == "InvalidCredentials" || code == "MismatchSenderId"
+}
+
+// logCredentialFailureOnce logs a credential problem the first time a token
+// hits it; every later push to that token fails the same way, silently.
+func (c *Client) logCredentialFailureOnce(token, problem string) {
+	c.mu.Lock()
+	if c.credentialLogged == nil || len(c.credentialLogged) >= 16 {
+		c.credentialLogged = map[string]bool{}
+	}
+	seen := c.credentialLogged[token]
+	c.credentialLogged[token] = true
+	c.mu.Unlock()
+	if !seen {
+		log.Printf("push: %s (reported once per device)", problem)
+	}
 }
 
 func receiptHint(code string) string {

@@ -364,3 +364,31 @@ func (b *lockedBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+func TestCredentialFailureIsReportedOncePerToken(t *testing.T) {
+	logs := &lockedBuffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logs)
+	defer log.SetOutput(previousWriter)
+
+	client := New()
+	client.SetRegistration("credential-token", "server-1")
+	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return pushResponse(http.StatusOK, `{"data":{"status":"error","message":"Unable to retrieve the FCM server key","details":{"error":"InvalidCredentials"}}}`), nil
+	})
+	for range 3 {
+		err := client.NotifyWorkerFailed("agent-1", "Agent", "failed")
+		if !errors.Is(err, ErrCredentials) || !strings.Contains(err.Error(), "InvalidCredentials") {
+			t.Fatalf("error = %v, want ErrCredentials naming InvalidCredentials", err)
+		}
+	}
+	if got := strings.Count(logs.String(), "InvalidCredentials"); got != 1 {
+		t.Fatalf("credential problem logged %d times, want 1: %q", got, logs.String())
+	}
+	if strings.Contains(logs.String(), "credential-token") {
+		t.Fatalf("token leaked: %q", logs.String())
+	}
+	if !client.HasToken() {
+		t.Fatal("a credential problem is not the device's fault; keep the token")
+	}
+}
