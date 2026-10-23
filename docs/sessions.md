@@ -150,6 +150,10 @@ menu, lists the ports they listen on, by project:
 | Session | A process inside a live Session listens on a port. The row opens that Session's terminal. |
 | Persistent | A registered user `systemd` unit is running and listening. It has no terminal. |
 
+Mewla finds the listening ports itself (from `/proc` on Linux, through `lsof`
+on macOS), so no `ss` or other tool needs to be installed on Linux. It sees the
+processes your user owns.
+
 A service bound only to `127.0.0.1` is marked local; Mewla does not invent a
 network URL for it. A registered unit that stopped shows **Inactive**; one
 whose state cannot be read shows **Error** with the reason.
