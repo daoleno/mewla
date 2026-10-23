@@ -94,6 +94,7 @@ export function InterfaceChatComposerSection({
       showAttachmentRail={presentation.showAttachmentRail}
       showCommandMenu={presentation.showCommandMenu}
       showCommandList={presentation.showCommandList}
+      commandsUnavailable={presentation.commandsUnavailable}
       pickerOpen={presentation.showCommandList || accessoryOpen}
       showComposerActions={presentation.showComposerActions}
       composerActionButtonEnabled={presentation.composerActionButtonEnabled}

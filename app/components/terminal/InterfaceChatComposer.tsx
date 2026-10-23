@@ -47,6 +47,7 @@ interface InterfaceChatComposerProps {
   showAttachmentRail: boolean;
   showCommandMenu: boolean;
   showCommandList: boolean;
+  commandsUnavailable?: boolean;
   /** A command or mention list is open: Enter must not send. */
   pickerOpen?: boolean;
   showComposerActions: boolean;
@@ -96,6 +97,7 @@ export function InterfaceChatComposer({
   showAttachmentRail,
   showCommandMenu,
   showCommandList,
+  commandsUnavailable = false,
   pickerOpen = false,
   showComposerActions,
   composerActionButtonEnabled,
@@ -131,6 +133,7 @@ export function InterfaceChatComposer({
             visible={showCommandMenu}
             showComposerActions={showComposerActions}
             showCommandList={showCommandList}
+            commandsUnavailable={commandsUnavailable}
             canAttach={canAttach}
             uploading={uploading}
             commands={commands}

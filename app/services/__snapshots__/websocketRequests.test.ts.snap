@@ -2135,9 +2135,7 @@ exports[`correlated WebSocket requests getCodexSlashCommands 1`] = `
           "value": "/x",
         },
       ],
-      "generated_at": undefined,
-      "source": undefined,
-      "version": "1",
+      "source": "bundled",
     },
   },
   "request": {

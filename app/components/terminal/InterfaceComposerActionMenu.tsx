@@ -5,6 +5,7 @@ import { ContinuousCorners, Radii, Typography } from "../../constants/tokens";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { CodexSlashCommand } from "../../services/websocket";
 import { CodexQuickCommandRow } from "./CodexQuickCommandRow";
+import { slashCommandEmptyText } from "./codexSlashCommandPresentation";
 import { Icon } from "../icons/Icon";
 
 const COMMAND_GROUPS = [
@@ -25,6 +26,7 @@ interface InterfaceComposerActionMenuProps {
   visible: boolean;
   showComposerActions: boolean;
   showCommandList: boolean;
+  commandsUnavailable: boolean;
   canAttach: boolean;
   uploading: boolean;
   commands: CodexSlashCommand[];
@@ -38,6 +40,7 @@ export function InterfaceComposerActionMenu({
   visible,
   showComposerActions,
   showCommandList,
+  commandsUnavailable,
   canAttach,
   uploading,
   commands,
@@ -176,7 +179,7 @@ export function InterfaceComposerActionMenu({
                 color={chrome.textSubtle}
               />
               <Text style={[styles.description, { color: chrome.textSubtle }]}>
-                No matching command
+                {slashCommandEmptyText(commandsUnavailable)}
               </Text>
             </View>
           )}

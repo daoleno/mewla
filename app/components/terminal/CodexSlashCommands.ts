@@ -22,69 +22,9 @@ type LocalSlashCommandCapability = Pick<
   | "terminal_supported"
 >;
 
-type LocalSlashCommandSpec = {
-  name: string;
-  description: string;
-  title?: string;
-  source?: string;
-} & LocalSlashCommandCapability;
-
 type SlashCommandOverride = Partial<
   Omit<CodexSlashCommand, "name" | "value" | "source">
 >;
-
-const CHATUI_FALLBACK_SLASH_COMMAND_SPECS = [
-  fallbackSpec({
-    name: "review",
-    category: "tools",
-    execution: "terminal-required",
-    input: requiredFreeformInput("review instructions"),
-    outputKind: "terminal",
-    description: "review my current changes and find issues",
-  }),
-  fallbackSpec({
-    name: "goal",
-    category: "session",
-    execution: "terminal-required",
-    input: optionalFreeformInput("optional goal text"),
-    outputKind: "terminal",
-    description: "set or view the goal for a long-running task",
-  }),
-  fallbackSpec({
-    name: "rename",
-    category: "session",
-    execution: "terminal-required",
-    input: requiredFreeformInput("new thread title"),
-    outputKind: "terminal",
-    description: "rename the current thread",
-  }),
-  fallbackSpec({
-    name: "new",
-    category: "session",
-    execution: "native",
-    input: inputNone(),
-    outputKind: "none",
-    description: "start a new chat during a conversation",
-  }),
-  fallbackSpec({
-    name: "init",
-    category: "tools",
-    execution: "terminal-required",
-    input: inputNone(),
-    outputKind: "terminal",
-    description: "create an AGENTS.md file with instructions for Codex",
-    chatSupported: false,
-  }),
-  fallbackSpec({
-    name: "skills",
-    category: "management",
-    execution: "native",
-    input: inputNone(),
-    outputKind: "management-screen",
-    description: "use skills to improve how Codex performs specific tasks",
-    interactive: true,
-  }),
-] satisfies LocalSlashCommandSpec[];
 
 const CHATUI_SLASH_COMMAND_OVERRIDES: Record<string, SlashCommandOverride> = {
   new: {
@@ -160,8 +100,6 @@ const HIDDEN_CHATUI_SLASH_COMMAND_NAMES = new Set([
   "theme",
 ]);
 
-const CHATUI_SLASH_COMMANDS = buildChatuiSlashCommands();
-
 export function useCodexSlashCommands({
   serverId,
   connectionState,
@@ -174,13 +112,17 @@ export function useCodexSlashCommands({
   agentKind?: AgentKind;
 }) {
   const slashCommandsEnabled = chatAgentSupportsSlashCommands(agentKind);
-  const [slashCommands, setSlashCommands] = useState<CodexSlashCommand[]>(
-    () => slashCommandsEnabled ? CHATUI_SLASH_COMMANDS : [],
-  );
+  // The daemon serves the only command list. Until it answers, or if it never
+  // has, the list is empty rather than a second copy in the app. The list is
+  // static per daemon, so a loaded list survives focus and reconnect changes
+  // and is dropped only when the current server or the agent kind changes.
+  const [slashCommands, setSlashCommands] = useState<CodexSlashCommand[]>([]);
 
   useEffect(() => {
-    setSlashCommands(slashCommandsEnabled ? CHATUI_SLASH_COMMANDS : []);
+    setSlashCommands([]);
+  }, [serverId, slashCommandsEnabled]);
 
+  useEffect(() => {
     if (!slashCommandsEnabled) {
       return;
     }
@@ -196,15 +138,11 @@ export function useCodexSlashCommands({
         if (cancelled) {
           return;
         }
-        const nextCommands = snapshot.commands.length > 0
-          ? buildChatuiSlashCommands(snapshot.commands)
-          : CHATUI_SLASH_COMMANDS;
-        setSlashCommands(nextCommands);
+        setSlashCommands(buildChatuiSlashCommands(snapshot.commands));
       })
       .catch(() => {
-        if (!cancelled) {
-          setSlashCommands(CHATUI_SLASH_COMMANDS);
-        }
+        // Leave the list as it is: empty if never loaded, which the composer
+        // reports as unavailable, or the last list this server served.
       });
 
     return () => {
@@ -310,14 +248,10 @@ export function filterSlashCommands(
     .map((entry) => entry.command);
 }
 
-function buildChatuiSlashCommands(discoveredCommands: CodexSlashCommand[] = []) {
-  const sourceCommands =
-    discoveredCommands.length > 0
-      ? discoveredCommands
-      : CHATUI_FALLBACK_SLASH_COMMAND_SPECS.map(commandFromFallbackSpec);
+function buildChatuiSlashCommands(daemonCommands: CodexSlashCommand[]) {
   const commands: CodexSlashCommand[] = [];
   const seen = new Set<string>();
-  for (const command of sourceCommands) {
+  for (const command of daemonCommands) {
     const normalized = normalizeSlashCommand(command);
     if (!normalized || seen.has(normalized.name) || isHiddenSlashCommand(normalized.name)) {
       continue;
@@ -369,55 +303,6 @@ function mergeSlashCommandOutput(
 ) {
   return {
     kind: overrideOutput?.kind || baseOutput?.kind || "terminal",
-  };
-}
-
-function commandFromFallbackSpec(spec: LocalSlashCommandSpec): CodexSlashCommand {
-  return {
-    value: `/${spec.name}`,
-    name: spec.name,
-    title: spec.title || slashCommandTitle(spec.name),
-    description: spec.description,
-    source: spec.source || "chatui-fallback",
-    category: spec.category,
-    execution: spec.execution,
-    input: spec.input,
-    output: spec.output,
-    interactive: spec.interactive,
-    chat_supported: spec.chat_supported,
-    terminal_supported: spec.terminal_supported,
-  };
-}
-
-function fallbackSpec({
-  name,
-  category,
-  execution,
-  input,
-  outputKind,
-  description,
-  interactive = false,
-  chatSupported = true,
-}: {
-  name: string;
-  category: string;
-  execution: string;
-  input: CodexSlashCommand["input"];
-  outputKind: string;
-  description: string;
-  interactive?: boolean;
-  chatSupported?: boolean;
-}): LocalSlashCommandSpec {
-  return {
-    name,
-    description,
-    category,
-    execution,
-    input,
-    output: { kind: outputKind },
-    interactive,
-    chat_supported: chatSupported,
-    terminal_supported: true,
   };
 }
 

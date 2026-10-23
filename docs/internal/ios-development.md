@@ -20,7 +20,7 @@ For all four agent kinds on both Android and iOS:
 - provider-specific composer labels, conversation timelines, tool calls, plans, attachments, Git diff, and action prompts use the shared UI;
 - Terminal mode attaches to the same daemon/tmux session and uses the platform's Ghostty bridge.
 
-Codex is currently the only kind that advertises Codex slash-command discovery in the composer. That is a provider capability distinction, not an iOS limitation. Empty or unavailable provider transcripts may also make Chat less informative; Terminal remains available as the authoritative live session view.
+Codex is currently the only kind that advertises the daemon-served Codex slash-command list in the composer. That is a provider capability distinction, not an iOS limitation. Empty or unavailable provider transcripts may also make Chat less informative; Terminal remains available as the authoritative live session view.
 
 Platform-specific implementation is deliberately limited to native plumbing:
 
