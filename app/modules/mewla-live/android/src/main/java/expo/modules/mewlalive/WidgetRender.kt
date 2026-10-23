@@ -29,7 +29,8 @@ internal object WidgetRender {
 
   private fun views(context: Context, medium: Boolean): RemoteViews {
     val prefs = LivePrefs(context)
-    val state = if (prefs.widgetRevoked) null else LiveState.parse(prefs.widgetCache)
+    val fresh = LiveRules.widgetFresh(prefs.widgetFetchedAt, System.currentTimeMillis())
+    val state = if (prefs.widgetRevoked || !fresh) null else LiveState.parse(prefs.widgetCache)
     val rv = RemoteViews(context.packageName, if (medium) R.layout.mewla_widget_medium else R.layout.mewla_widget_small)
     rv.setOnClickPendingIntent(R.id.root, openApp(context))
     if (state == null) {

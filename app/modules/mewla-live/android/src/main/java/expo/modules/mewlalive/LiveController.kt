@@ -16,6 +16,7 @@ object LiveController {
   fun apply(context: Context, raw: String, serverRef: String): Boolean {
     val state = LiveState.parse(raw) ?: return false
     val app = context.applicationContext
+    var widgetRepaint = false
     synchronized(lock) {
       val prefs = LivePrefs(app)
       val current = prefs.currentServerRef
@@ -28,7 +29,12 @@ object LiveController {
         LiveDecision.Post -> LiveNotifier.post(app, state)
       }
       prefs.remember(state)
+      // The widgets show every state that is newer than theirs, even one the notification
+      // does not show (idle, or a dismissed run). A refused or unset widget stays as it is.
+      val widgetsChanged = prefs.widgetProvisioned() && prefs.cacheWidgetState(raw, state)
+      if (widgetsChanged) widgetRepaint = true
     }
+    if (widgetRepaint) WidgetRender.renderAll(app)
     return true
   }
 

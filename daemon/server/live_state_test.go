@@ -251,6 +251,23 @@ func TestWidgetSnapshotEndpointAndTokenRevocation(t *testing.T) {
 	}
 }
 
+func TestRevokingTheDeviceStopsItsLivePushes(t *testing.T) {
+	f := newLiveFixture(t)
+	pusher := &fakeLivePusher{}
+	f.server.pusher = pusher
+	f.send(t, map[string]any{"type": "register_push", "push_token": "ExponentPushToken[x]", "server_ref": "srv", "live_state": true})
+	readWebSocketType(t, f.conn, "push_registered")
+	if !pusher.LiveCapable() {
+		t.Fatal("live_state capability must be recorded")
+	}
+	if _, err := f.manager.RevokeDevice(f.deviceID); err != nil {
+		t.Fatal(err)
+	}
+	if pusher.LiveCapable() {
+		t.Fatal("a revoked device must stop receiving live state")
+	}
+}
+
 func TestWidgetTokenDiesWithItsDevice(t *testing.T) {
 	f := newLiveFixture(t)
 	token := f.issueToken(t)

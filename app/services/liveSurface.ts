@@ -49,7 +49,8 @@ function parIs(pathname: string, expected: string): boolean {
 
 /**
  * Where the widget fetches its snapshot. Only a plain address works: a relay (link)
- * transport has no URL a widget can reach, and says so by returning null.
+ * transport has no URL a widget can reach, and says so by returning null. Those widgets
+ * show the pushed state instead.
  */
 export function widgetBaseUrl(server: Pick<StoredServer, "url" | "transportKind">): string | null {
   if (server.transportKind === "link") return null;

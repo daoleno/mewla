@@ -56,8 +56,7 @@ internal object WidgetSync {
             Log.w(TAG, "widget snapshot was not a live state")
             Result.FAILED
           } else {
-            prefs.widgetCache = live
-            prefs.widgetFetchedAt = System.currentTimeMillis()
+            LiveState.parse(live)?.let { prefs.cacheWidgetState(live, it) }
             prefs.widgetRevoked = false
             Result.OK
           }

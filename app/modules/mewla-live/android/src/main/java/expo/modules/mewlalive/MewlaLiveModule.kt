@@ -35,6 +35,14 @@ class MewlaLiveModule : Module() {
       WidgetSync.refreshAsync(context)
     }
 
+    /** A server reached through Mewla Link has no address a widget can fetch: its widgets show the pushed state. */
+    Function("configureWidgetPushed") {
+      val prefs = LivePrefs(context)
+      prefs.widgetMode = WIDGET_PUSHED
+      prefs.widgetRevoked = false
+      WidgetRender.renderAll(context)
+    }
+
     Function("clearWidget") {
       LivePrefs(context).clearWidget()
       WidgetRender.renderAll(context)
@@ -46,6 +54,7 @@ class MewlaLiveModule : Module() {
       val prefs = LivePrefs(context)
       when {
         prefs.widgetRevoked -> "revoked"
+        prefs.widgetMode == WIDGET_PUSHED -> "ok"
         prefs.widgetTokenSealed.isNotEmpty() && prefs.widgetBaseUrl.isNotEmpty() -> "ok"
         else -> "none"
       }
