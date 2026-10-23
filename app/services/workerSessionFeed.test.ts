@@ -71,4 +71,23 @@ describe("WorkerSessionFeed", () => {
     expect(feed.accept({ type: "worker_session_updated" })).toBe("drop");
     expect(feed.accept(change(2.5))).toBe("drop");
   });
+
+  test("a heartbeat at the last seq is only a keepalive", () => {
+    const feed = new WorkerSessionFeed();
+    expect(feed.accept({ type: "worker_session_heartbeat", seq: 3 })).toBe("drop");
+    feed.accept(list(4));
+    feed.accept(change(5));
+    expect(feed.accept({ type: "worker_session_heartbeat", seq: 5 })).toBe("drop");
+    expect(feed.accept({ type: "worker_session_heartbeat", seq: 4 })).toBe("drop");
+  });
+
+  test("a heartbeat ahead of the last seq means a change was lost: one resync", () => {
+    const feed = new WorkerSessionFeed();
+    feed.accept(list(4));
+    feed.accept(change(5));
+    expect(feed.accept({ type: "worker_session_heartbeat", seq: 7 })).toBe("resync");
+    expect(feed.accept({ type: "worker_session_heartbeat", seq: 7 })).toBe("drop");
+    expect(feed.accept(list(7))).toBe("apply");
+    expect(feed.accept({ type: "worker_session_heartbeat", seq: 7 })).toBe("drop");
+  });
 });

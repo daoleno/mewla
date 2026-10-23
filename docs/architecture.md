@@ -170,8 +170,11 @@ have it:
   current as of, and every later `worker_session_created`, `_updated` or
   `_archived` carries the next `seq`. The app applies a change only when its
   `seq` is one past the last, drops duplicates, and on a gap asks once for a
-  fresh list (`list_worker_sessions`); there is no periodic full list. A
-  daemon check once a minute publishes, as ordinary sequenced changes, any
+  fresh list (`list_worker_sessions`); there is no periodic full list. Every
+  10 s the daemon sends a `worker_session_heartbeat` with the current `seq`
+  and no Session: it keeps an idle socket from being judged silent, and a
+  `seq` ahead of the app's last means a change was lost, which asks for a
+  fresh list. A daemon check once a minute publishes, as ordinary sequenced changes, any
   Session whose derived fields (capabilities, executor, provider) moved
   without a watcher event. Absence from a list is never proof of anything:
   `kill_worker` is answered with `worker_killed` (or `error`), which is what a

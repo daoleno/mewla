@@ -19,6 +19,12 @@ import (
 // registry, which change without a watcher event.
 const workerFeedReconcileInterval = time.Minute
 
+// workerFeedHeartbeatInterval is how often every client is sent the feed's
+// current seq. It is the connection's liveness signal (the app drops a socket
+// that has been silent for 25 s) and it lets a client notice a change it never
+// received when no later change follows.
+const workerFeedHeartbeatInterval = 10 * time.Second
+
 // workerFeed is the one ordered stream of Session changes a client follows.
 //
 // A client receives the full list once per connection (and again only when it
@@ -74,6 +80,18 @@ func (f *workerFeed) publishLocked(kind string, wire *workerSessionWire, emit fu
 		delete(f.sent, wire.ID)
 	} else {
 		f.sent[wire.ID] = sentWorkerSession{wire: wire, body: body}
+	}
+	emit(data)
+}
+
+// heartbeat sends the seq the feed is at. It carries no Session, so it costs a
+// few bytes however many Sessions exist.
+func (f *workerFeed) heartbeat(emit func([]byte)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	data, err := json.Marshal(map[string]any{"type": "worker_session_heartbeat", "seq": f.seq})
+	if err != nil {
+		return
 	}
 	emit(data)
 }
@@ -152,16 +170,21 @@ func (s *Server) reconcileWorkerFeed() {
 	s.workerFeed.reconcile(s.visibleWorkerSessionWires, s.broadcast)
 }
 
-// runWorkerFeedReconcile keeps the derived fields of the feed honest.
+// runWorkerFeedReconcile keeps the derived fields of the feed honest and tells
+// clients where the feed is.
 func (s *Server) runWorkerFeedReconcile(ctx context.Context) {
-	ticker := time.NewTicker(workerFeedReconcileInterval)
-	defer ticker.Stop()
+	reconcile := time.NewTicker(workerFeedReconcileInterval)
+	defer reconcile.Stop()
+	heartbeat := time.NewTicker(workerFeedHeartbeatInterval)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-reconcile.C:
 			s.reconcileWorkerFeed()
+		case <-heartbeat.C:
+			s.workerFeed.heartbeat(s.broadcast)
 		}
 	}
 }

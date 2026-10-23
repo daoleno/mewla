@@ -13,6 +13,10 @@
  *   resync (a new list request) is asked for.
  * - A change before the first list of the connection is dropped; the list is
  *   already on its way and is current as of a later seq.
+ * - A `worker_session_heartbeat` is the daemon saying where the feed is every
+ *   10 s. It is never applied; one ahead of the last applied seq means the
+ *   changes in between were lost, which asks for a resync like any other gap.
+ *   (Receiving it also keeps the socket from being judged silent.)
  */
 export type WorkerFeedVerdict = "apply" | "drop" | "resync";
 
@@ -21,6 +25,7 @@ export const WORKER_SESSION_FEED_TYPES = [
   "worker_session_created",
   "worker_session_updated",
   "worker_session_archived",
+  "worker_session_heartbeat",
 ] as const;
 
 export function isWorkerSessionFeedType(type: unknown): boolean {
@@ -59,6 +64,9 @@ export class WorkerSessionFeed {
     if (this.last === null) {
       return "drop";
     }
+    if (message.type === "worker_session_heartbeat") {
+      return seq > this.last ? this.gap() : "drop";
+    }
     if (seq <= this.last) {
       return "drop";
     }
@@ -66,6 +74,10 @@ export class WorkerSessionFeed {
       this.last = seq;
       return "apply";
     }
+    return this.gap();
+  }
+
+  private gap(): WorkerFeedVerdict {
     if (this.resyncing) {
       return "drop";
     }
