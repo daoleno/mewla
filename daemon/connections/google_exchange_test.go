@@ -83,3 +83,59 @@ func TestGooglePublisherHandoffKeepsSecretOffDaemon(t *testing.T) {
 		t.Fatal("disconnected Google executed")
 	}
 }
+
+// A web UI on any address signs in to Google: the exchange is polled, so no
+// browser return has to reach this daemon.
+func TestGoogleSignInIgnoresTheWebOrigin(t *testing.T) {
+	old := GoogleExchangeOrigin
+	GoogleExchangeOrigin = "https://mewla-owned.example"
+	defer func() { GoogleExchangeOrigin = old }()
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		raw, _ := json.Marshal(googleauth.Session{ID: "flow", AuthorizationURL: GoogleExchangeOrigin + "/google/authorize?id=flow", Expires: time.Now().Add(10 * time.Minute), Status: "waiting"})
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(raw)))}, nil
+	})}
+	response := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "google-calendar", WebOrigin: "http://192.168.1.20:9876"}})
+	if response.Flow == nil || response.Flow.Status != "waiting" || response.Flow.WebReturn {
+		t.Fatalf("flow: %+v", response.Flow)
+	}
+}
+
+// The browser can close after approval but before the daemon has collected the
+// result. A cancel then must not throw the finished sign-in away.
+func TestLateCancelKeepsACompletedGoogleSignIn(t *testing.T) {
+	old := GoogleExchangeOrigin
+	GoogleExchangeOrigin = "https://mewla-owned.example"
+	defer func() { GoogleExchangeOrigin = old }()
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	var start googleauth.Start
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var result any
+		switch req.URL.Host + req.URL.Path {
+		case "mewla-owned.example/google/start":
+			_ = json.NewDecoder(req.Body).Decode(&start)
+			result = googleauth.Session{ID: "flow", AuthorizationURL: GoogleExchangeOrigin + "/google/authorize?id=flow", Expires: time.Now().Add(10 * time.Minute), Status: "waiting"}
+		case "mewla-owned.example/google/status":
+			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "ya29.late-cancel-access", RefreshToken: "1//late-cancel-refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "signed-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: googleauth.Scopes(googleauth.Calendar, false)}, start.PublicKey)
+			result = googleauth.Session{ID: "flow", Status: "connected", Ciphertext: sealed}
+		case "mewla-owned.example/google/cancel":
+			result = map[string]bool{"cancelled": true}
+		case "openidconnect.googleapis.com/v1/userinfo":
+			result = map[string]string{"sub": "123", "email": "person@example.test"}
+		default:
+			t.Fatalf("unexpected request %s", req.URL)
+		}
+		raw, _ := json.Marshal(result)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(raw)))}, nil
+	})}
+	begun := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "google-calendar"}})
+	late := mustHandle(t, m, Request{Action: "connect_cancel", FlowID: begun.Flow.ID})
+	if late.Flow == nil || late.Flow.Status != "connected" || late.Account == nil || late.Account.Integration != "google-calendar" {
+		t.Fatalf("late cancel lost the sign-in: %+v", late)
+	}
+	if len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 {
+		t.Fatal("account missing after late cancel")
+	}
+}
