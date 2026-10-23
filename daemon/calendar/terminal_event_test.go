@@ -1,8 +1,6 @@
 package calendar
 
 import (
-	"bytes"
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -77,10 +75,9 @@ func TestFinishRunFailurePathsEmitNoEventOrMutation(t *testing.T) {
 		{
 			name: "persistence failure",
 			run: func(store *Store, item Item, run Run) error {
-				path := store.path
-				store.path = filepath.Dir(path)
+				restore := failWrites(t, store)
 				_, err := store.FinishRun(item.ID, run.ID, "result", "")
-				store.path = path
+				restore()
 				return err
 			},
 		},
@@ -93,10 +90,7 @@ func TestFinishRunFailurePathsEmitNoEventOrMutation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw, err := os.ReadFile(store.Path())
-			if err != nil {
-				t.Fatal(err)
-			}
+			durable := snapshot(t, store)
 			subID, events := store.Subscribe()
 			defer store.Unsubscribe(subID)
 
@@ -110,12 +104,8 @@ func TestFinishRunFailurePathsEmitNoEventOrMutation(t *testing.T) {
 			if !reflect.DeepEqual(after, before) {
 				t.Fatalf("failed finish changed memory\nbefore: %#v\nafter:  %#v", before, after)
 			}
-			afterRaw, err := os.ReadFile(store.Path())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(afterRaw, raw) {
-				t.Fatal("failed finish changed durable bytes")
+			if !reflect.DeepEqual(snapshot(t, store), durable) {
+				t.Fatal("failed finish changed the durable calendar")
 			}
 			assertNoCalendarEvent(t, events)
 		})

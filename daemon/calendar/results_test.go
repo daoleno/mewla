@@ -1,9 +1,7 @@
 package calendar
 
 import (
-	"bytes"
 	"encoding/json"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -66,14 +64,7 @@ func TestRunProjectionFreezesPresentationAcrossItemEditAndRestart(t *testing.T) 
 		t.Fatalf("mutable parent thread changed historical projection: %#v", got)
 	}
 
-	raw, err := os.ReadFile(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	before, err := os.Stat(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := snapshot(t, store)
 	for range 50 {
 		if got := store.ScheduledResults("thread-original", 10); !reflect.DeepEqual(got, want) {
 			t.Fatalf("repeated projection changed: %#v", got)
@@ -86,7 +77,9 @@ func TestRunProjectionFreezesPresentationAcrossItemEditAndRestart(t *testing.T) 
 	if got := restarted.ScheduledResults("thread-original", 10); !reflect.DeepEqual(got, want) {
 		t.Fatalf("restart projection = %#v, want %#v", got, want)
 	}
-	assertCalendarFixtureUnchanged(t, store.Path(), raw, before)
+	if after := snapshot(t, store); !reflect.DeepEqual(after, before) {
+		t.Fatalf("projection or restart rewrote the calendar: %#v", after)
+	}
 }
 
 func TestScheduledResultsFilterOrderLimitAndFormatting(t *testing.T) {
@@ -192,14 +185,7 @@ func TestRecordLaunchThenEmptySuccessfulFinishIsRejectedWithoutMutation(t *testi
 		t.Fatalf("running launch projected as a result: %#v", got)
 	}
 
-	beforeRaw, err := os.ReadFile(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	beforeInfo, err := os.Stat(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
+	beforeDurable := snapshot(t, store)
 	if _, err := store.FinishRun(item.ID, run.ID, "", ""); err == nil {
 		t.Fatal("empty completion was accepted")
 	}
@@ -210,7 +196,9 @@ func TestRecordLaunchThenEmptySuccessfulFinishIsRejectedWithoutMutation(t *testi
 	if !reflect.DeepEqual(after, launched) {
 		t.Fatalf("empty completion changed state\nbefore: %#v\nafter:  %#v", launched, after)
 	}
-	assertCalendarFixtureUnchanged(t, store.Path(), beforeRaw, beforeInfo)
+	if after := snapshot(t, store); !reflect.DeepEqual(after, beforeDurable) {
+		t.Fatalf("invalid completion changed the calendar: %#v", after)
+	}
 	if results := store.ScheduledResults("thread-1", 0); len(results) != 0 {
 		t.Fatalf("invalid completion projected: %#v", results)
 	}
@@ -236,7 +224,7 @@ func TestScheduledResultsSkipMalformedTerminalRunsWithoutWriting(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw = append(raw, '\n')
-	path, before := writeCalendarFixture(t, root, raw)
+	writeCalendarFixture(t, root, raw)
 	store, err := NewStore(root)
 	if err != nil {
 		t.Fatal(err)
@@ -245,14 +233,16 @@ func TestScheduledResultsSkipMalformedTerminalRunsWithoutWriting(t *testing.T) {
 	if len(got) != 2 || got[0].Body != "**Valid failure failed**\n\ncompact failure" || got[1].Body != "**Valid success completed**\n\ndurable result" {
 		t.Fatalf("terminal projections = %#v", got)
 	}
-	gotRaw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	// Malformed runs stay stored exactly as they were, and projecting them
+	// writes nothing.
+	durable := snapshot(t, store)
+	if len(durable["item-1"].Runs) != 6 {
+		t.Fatalf("malformed fixture was not carried over verbatim: %#v", durable["item-1"].Runs)
 	}
-	if !bytes.Equal(gotRaw, raw) {
-		t.Fatalf("projection rewrote malformed fixture: got %q want %q", gotRaw, raw)
+	store.ScheduledResults("thread-1", 0)
+	if after := snapshot(t, store); !reflect.DeepEqual(after, durable) {
+		t.Fatalf("projection rewrote the calendar: %#v", after)
 	}
-	assertCalendarFixtureUnchanged(t, path, raw, before)
 }
 
 func TestScheduledResultProjectionRejectsMalformedTerminalPayloads(t *testing.T) {

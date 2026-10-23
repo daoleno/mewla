@@ -1,7 +1,7 @@
 package telegram
 
 import (
-	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -145,9 +145,12 @@ type durableState struct {
 type store struct {
 	mu        sync.Mutex
 	dir       string
-	statePath string
+	db        *sql.DB
 	tokenPath string
 	state     durableState
+	// stored is what the database holds, so a commit writes only the
+	// difference (see db.go).
+	stored durableState
 }
 
 func openStore(root string) (*store, error) {
@@ -155,42 +158,19 @@ func openStore(root string) (*store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	s := &store{dir: dir, statePath: filepath.Join(dir, "state.json"), tokenPath: filepath.Join(dir, "token")}
-	s.state = newDurableState()
-	migrated := false
-	data, err := os.ReadFile(s.statePath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	db, err := openRoot(dir)
+	if err != nil {
 		return nil, err
 	}
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &s.state); err != nil {
-			return nil, fmt.Errorf("decode Telegram state: %w", err)
-		}
-		switch s.state.Schema {
-		case 1:
-			for index := range s.state.Outbox {
-				s.state.Outbox[index].PlainText = s.state.Outbox[index].Text
-				s.state.Outbox[index].Variant = "plain"
-			}
-			s.state.Schema = stateSchema
-			migrated = true
-		case 2:
-			// Schema 2 -> 3 only introduces topic state maps/slices, which
-			// did not exist before; every existing row is preserved as-is.
-			s.state.Schema = stateSchema
-			migrated = true
-		case 3:
-			// Schema 3 already contains durable topic state. Schema 4 adds the
-			// non-topic private-chat recipient and a non-fatal capability notice.
-			s.state.Schema = stateSchema
-			migrated = true
-		case stateSchema:
-		default:
-			return nil, fmt.Errorf("unsupported Telegram state schema")
-		}
+	s := &store{dir: dir, db: db, tokenPath: filepath.Join(dir, "token")}
+	state, _, err := loadState(db)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
 	}
-	s.ensureMapsLocked()
-	changed := migrated
+	s.state = state
+	s.stored = cloneDurableState(state)
+	changed := false
 	for index := range s.state.Outbox {
 		if s.state.Outbox[index].State == "dispatching" {
 			s.state.Outbox[index].State = "ambiguous"
@@ -205,6 +185,7 @@ func openStore(root string) (*store, error) {
 	}
 	if changed {
 		if err := s.saveLocked(); err != nil {
+			_ = db.Close()
 			return nil, err
 		}
 	}
@@ -239,14 +220,12 @@ func (s *store) mutate(fn func(*durableState) error) error {
 	if reflect.DeepEqual(s.state, next) {
 		return nil
 	}
-	data, err := json.MarshalIndent(next, "", "  ")
-	if err != nil {
+	if err := commitState(s.db, s.stored, next); err != nil {
 		return err
 	}
-	if err := atomicPrivateWrite(s.statePath, append(data, '\n')); err != nil {
-		return err
-	}
-	s.state = next
+	// next is never mutated once it is the state: every mutation starts from
+	// a clone, so the committed image can be shared.
+	s.state, s.stored = next, next
 	return nil
 }
 
@@ -286,12 +265,13 @@ func ensureDurableMaps(state *durableState) {
 	}
 }
 
+// saveLocked commits s.state, which the caller changed in place.
 func (s *store) saveLocked() error {
-	data, err := json.MarshalIndent(s.state, "", "  ")
-	if err != nil {
+	if err := commitState(s.db, s.stored, s.state); err != nil {
 		return err
 	}
-	return atomicPrivateWrite(s.statePath, append(data, '\n'))
+	s.stored = cloneDurableState(s.state)
+	return nil
 }
 
 func (s *store) readToken() (string, error) {

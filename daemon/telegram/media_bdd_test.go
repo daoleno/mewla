@@ -385,15 +385,14 @@ func TestMediaBDDAdmissionCrashNeverReplaysAndDownloadFailureIsAtomic(t *testing
 func TestMediaBDDPersistenceFailureDoesNotAcknowledgeOrLoseInput(t *testing.T) {
 	f := newMediaFixture(t)
 	u := f.document(2, 101, "doc", "retry same receipt")
-	statePath := f.m.store.statePath
-	f.m.store.statePath = filepath.Join(f.root, "missing-parent", "state.json")
+	restore := failWrites(t, f.m.store)
 	if err := f.m.handleUpdate(t.Context(), "fixture-token", u); err == nil {
 		t.Fatal("failed staging was acknowledged")
 	}
 	if f.m.store.snapshot().NextOffset != 2 || len(f.provider.receipts()) != 0 || len(f.download) != 0 {
 		t.Fatal("failed persistence gained authority")
 	}
-	f.m.store.statePath = statePath
+	restore()
 	f.apply(t, u)
 	f.reopen(t)
 	f.apply(t, u)

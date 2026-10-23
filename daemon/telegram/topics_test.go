@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -948,10 +946,7 @@ func TestTopicMappingLimitDegradesWithoutAbortingProjection(t *testing.T) {
 func TestTopicStateStateAndFileExcludesSecrets(t *testing.T) {
 	manager, _, _, root := topicFixture(t)
 	createTopicFor(t, manager)
-	stateBytes, err := os.ReadFile(filepath.Join(root, "telegram", "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, stateBytes := storedState(t, root)
 	if strings.Contains(string(stateBytes), "test-token") {
 		t.Fatal("topic state leaked bot token")
 	}

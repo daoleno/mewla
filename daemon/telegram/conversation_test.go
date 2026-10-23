@@ -206,7 +206,7 @@ func TestFloodWaitBlocksOtherRowsInSamePrivateChat(t *testing.T) {
 
 func TestStoreMutationFailureDoesNotExposeUndurableSelection(t *testing.T) {
 	m, _, _, _ := configuredManager(t)
-	m.store.statePath = m.store.dir
+	failWrites(t, m.store)
 	err := m.store.mutate(func(s *durableState) error { s.FallbackSessionID = "never-saved"; return nil })
 	if err == nil || m.store.snapshot().FallbackSessionID != "" {
 		t.Fatal("failed store write became routing authority")
