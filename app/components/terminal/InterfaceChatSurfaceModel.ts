@@ -16,6 +16,8 @@ export interface InterfaceComposerPresentation {
   visibleSlashCommands: CodexSlashCommand[];
   showCommandMenu: boolean;
   showCommandList: boolean;
+  /** The daemon's command list has not loaded (as opposed to no command matching). */
+  commandsUnavailable: boolean;
   showComposerActions: boolean;
   showActionMenuButton: boolean;
   actionMenuIcon: "add" | "happy";
@@ -108,6 +110,7 @@ export function buildInterfaceComposerPresentation({
     visibleSlashCommands,
     showCommandMenu,
     showCommandList,
+    commandsUnavailable: slashCommandsEnabled && slashCommands.length === 0,
     showComposerActions,
     showActionMenuButton: true,
     actionMenuIcon: "add",

@@ -178,9 +178,7 @@ export interface CodexSlashCommandOutput {
 }
 
 export interface CodexSlashCommandSnapshot {
-  generated_at?: string;
   source?: string;
-  version?: string;
   commands: CodexSlashCommand[];
 }
 
@@ -1706,14 +1704,8 @@ export class WebSocketClient {
                 )
             : [];
           return {
-            generated_at:
-              typeof payload.generated_at === "string"
-                ? payload.generated_at
-                : undefined,
             source:
               typeof payload.source === "string" ? payload.source : undefined,
-            version:
-              typeof payload.version === "string" ? payload.version : undefined,
             commands,
           };
         },

@@ -14,6 +14,11 @@ export function slashCommandTitle(name: string) {
     .join(" ");
 }
 
+/** Empty-list copy: an unloaded daemon list is not the same as no match. */
+export function slashCommandEmptyText(listUnavailable: boolean) {
+  return listUnavailable ? "Codex commands unavailable" : "No matching command";
+}
+
 export function slashCommandIcon(name: string): IconName {
   switch (name) {
     case "model":
