@@ -134,7 +134,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
 		}
-		if in.Integration == "google" && GoogleExchangeOrigin != "" {
+		if isGoogle(in.Integration) {
 			return m.startGoogleExchange(ctx, &in)
 		}
 		if in.Integration == "github" {

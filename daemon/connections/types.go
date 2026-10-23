@@ -39,7 +39,8 @@ func Catalog() []Integration {
 	return []Integration{
 		{ID: "github", Name: "GitHub", Available: true, SetupURL: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", Description: "Repositories, issues and pull requests"},
 		{ID: "notion", Name: "Notion", Available: true, SetupURL: "https://www.notion.so/profile/integrations", Description: "Pages, search and workspace content"},
-		{ID: "google", Name: "Google Workspace", Available: true, SetupURL: "https://developers.google.com/workspace/guides/configure-oauth-consent", Description: "Files, email and calendar events"},
+		{ID: "google-calendar", Name: "Google Calendar", Available: true, SetupURL: "https://calendar.google.com", Description: "Calendars, events and free time"},
+		{ID: "gmail", Name: "Gmail", Available: true, SetupURL: "https://mail.google.com", Description: "Search, read and draft email"},
 		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
 		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
 		{ID: "onlora", Name: "Onlora", Available: true, SetupURL: "https://onlora.ai", Description: "Asset generation and search: images, speech and openly licensed media, kept in projects"},

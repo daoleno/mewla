@@ -89,15 +89,16 @@ func (m *Manager) startGoogleExchange(ctx context.Context, in *Input) (Response,
 	if err != nil {
 		return Response{}, err
 	}
+	service, _, _ := googleService(in.Integration)
 	pending := &googlePending{origin: GoogleExchangeOrigin, public: public, private: private, nonce: oauth2.GenerateVerifier()}
-	if err = m.googleExchangeRequest(ctx, pending.origin, "/google/start", "", googleauth.Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: pending.nonce, Writes: in.AllowWrites}, &pending.session); err != nil {
+	if err = m.googleExchangeRequest(ctx, pending.origin, "/google/start", "", googleauth.Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: pending.nonce, Service: service, Writes: in.AllowWrites}, &pending.session); err != nil {
 		return Response{}, err
 	}
 	auth, err := url.Parse(pending.session.AuthorizationURL)
 	if err != nil || auth.Scheme+"://"+auth.Host != pending.origin || auth.Path != "/google/authorize" || pending.session.ID == "" || time.Until(pending.session.Expires) > 11*time.Minute || time.Now().After(pending.session.Expires) {
 		return Response{}, errors.New("Google authorization returned an invalid flow")
 	}
-	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: "google", Status: "waiting", AuthorizationURL: pending.session.AuthorizationURL, Expires: pending.session.Expires}, google: pending, allowWrites: in.AllowWrites}
+	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: pending.session.AuthorizationURL, Expires: pending.session.Expires}, google: pending, allowWrites: in.AllowWrites}
 	m.connectFlows[f.ID] = f
 	return flowResult(f), nil
 }
@@ -125,7 +126,8 @@ func (m *Manager) pollGoogleExchange(ctx context.Context, f *connectFlow) error 
 	if credential.Nonce != p.nonce || credential.Token.RefreshToken == "" || credential.Receipt == "" || credential.Proof == "" {
 		return errors.New("Google authorization binding is invalid")
 	}
-	r := &record{Account: Account{ID: uuid.NewString(), Integration: "google", Name: "Google Workspace", Endpoint: "https://www.googleapis.com", Enabled: true, AuthMethod: "oauth", Scopes: credential.Scopes, History: []Event{}}, OAuth: &oauthAccount{GoogleExchange: p.origin, RevokeURL: "https://oauth2.googleapis.com/revoke"}, Grants: map[string]string{}}
+	_, endpoint, _ := googleService(f.Integration)
+	r := &record{Account: Account{ID: uuid.NewString(), Integration: f.Integration, Name: serviceName(f.Integration), Endpoint: endpoint, Enabled: true, AuthMethod: "oauth", Scopes: credential.Scopes, History: []Event{}}, OAuth: &oauthAccount{GoogleExchange: p.origin, RevokeURL: "https://oauth2.googleapis.com/revoke"}, Grants: map[string]string{}}
 	if err = m.discover(ctx, r, credential.Token.AccessToken); err != nil {
 		return err
 	}

@@ -81,7 +81,7 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 
 // retired integrations were removed from Mewla. Their accounts and stored
 // keys are deleted when the daemon starts; there is nothing to migrate to.
-var retired = map[string]bool{"fal": true, "image": true}
+var retired = map[string]bool{"fal": true, "image": true, "google": true}
 
 func (m *Manager) removeRetired() error {
 	removed := false
@@ -368,7 +368,7 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 	}
 	endpoint := in.Endpoint
 	switch in.Integration {
-	case "google":
+	case googleCalendarID, gmailID:
 		return Response{}, errors.New("Google uses browser authorization; start OAuth for this account")
 	case "onlora":
 		return Response{}, errors.New("Onlora uses browser authorization; connect it from Extensions")
@@ -586,7 +586,7 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 		return Response{}, errAuth
 	}
 	var result []byte
-	if r.Account.Integration == "google" {
+	if isGoogle(r.Account.Integration) {
 		result, err = m.invokeGoogle(ctx, r, secret, t, args)
 	} else {
 		result, err = m.invokeHTTP(ctx, r, secret, t, args)

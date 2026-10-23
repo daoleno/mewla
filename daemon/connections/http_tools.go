@@ -130,7 +130,7 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 		}
 	} else {
 		switch r.Account.Integration {
-		case "google":
+		case googleCalendarID, gmailID:
 			if err := m.discoverGoogle(ctx, r, secret); err != nil {
 				return err
 			}

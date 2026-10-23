@@ -52,10 +52,8 @@ func toolGroup(r *record, t Tool) string {
 		return ""
 	}
 	var reviewed []Tool
-	if r.Account.Integration == "google" {
-		for _, op := range googleOperations() {
-			reviewed = append(reviewed, op.tool)
-		}
+	if isGoogle(r.Account.Integration) {
+		reviewed = googleReviewedTools(r.Account.Integration)
 	} else {
 		reviewed = builtinTools(r.Account.Integration)
 	}
@@ -159,9 +157,9 @@ func writeConsent(r *record) bool {
 		return !contains(r.Account.Scopes, "chat:write")
 	case "linear":
 		return !contains(r.Account.Scopes, "write")
-	case "google":
-		read := googleScopes(false)
-		for _, scope := range googleScopes(true) {
+	case googleCalendarID, gmailID:
+		read := googleScopes(r.Account.Integration, false)
+		for _, scope := range googleScopes(r.Account.Integration, true) {
 			if !contains(read, scope) && !contains(r.Account.Scopes, scope) {
 				return true
 			}
