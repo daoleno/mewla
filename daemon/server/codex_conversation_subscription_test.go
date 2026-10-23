@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -993,5 +994,17 @@ func TestCodexConversationDeltaFinalizesPartialEventInPlace(t *testing.T) {
 	transient.Transient = true
 	if codexConversationEventFingerprint(final) == codexConversationEventFingerprint(transient) {
 		t.Fatal("transient projection changes must participate in the event fingerprint")
+	}
+}
+
+func TestConversationEventFingerprintCoversAttachments(t *testing.T) {
+	base := work.CodexConversationEvent{ID: "u1", Kind: "user_message", Body: "look"}
+	withFile := base
+	withFile.Attachments = []attachment.File{{Name: "a.png", Path: "/uploads/a.png"}}
+	other := base
+	other.Attachments = []attachment.File{{Name: "a.png", Path: "/uploads/b.png"}}
+	a, b, c := codexConversationEventFingerprint(base), codexConversationEventFingerprint(withFile), codexConversationEventFingerprint(other)
+	if a == b || b == c {
+		t.Fatalf("attachment changes do not change the fingerprint: %s %s %s", a, b, c)
 	}
 }
