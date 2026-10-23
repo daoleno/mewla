@@ -17,7 +17,7 @@ func TestCollectCodexSubscriptionNormalizesWhatCodexReports(t *testing.T) {
 	reset := time.Unix(1795266347, 0).UTC()
 	c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) {
 		return codexctl.AccountUsage{
-			Kind: "chatgpt", Plan: " plus ",
+			Plan:      " plus ",
 			Primary:   &codexctl.UsageWindow{UsedPercent: 42, WindowMinutes: 300, ResetsAt: reset},
 			Secondary: &codexctl.UsageWindow{UsedPercent: 7, WindowMinutes: 10080},
 		}, nil
@@ -33,36 +33,20 @@ func TestCollectCodexSubscriptionNormalizesWhatCodexReports(t *testing.T) {
 	}
 }
 
-func TestCollectCodexSubscriptionOmitsNonSubscriptionAccounts(t *testing.T) {
-	for name, usage := range map[string]codexctl.AccountUsage{
-		"no account": {},
-		"api key":    {Kind: "apiKey"},
-		"bedrock":    {Kind: "amazonBedrock"},
-	} {
-		c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) { return usage, nil })
-		c.lastCodexSubscription = &CodexSubscriptionUsage{AuthKind: "official", State: "available", FetchedAt: time.Now().Format(time.RFC3339)}
-		if got := c.collectCodexSubscription(); got != nil || c.lastCodexSubscription != nil {
-			t.Fatalf("%s: subscription = %#v, cached = %#v", name, got, c.lastCodexSubscription)
-		}
+func TestCollectCodexSubscriptionOmitsAnAccountWithoutWindows(t *testing.T) {
+	c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) { return codexctl.AccountUsage{}, nil })
+	c.lastCodexSubscription = &CodexSubscriptionUsage{AuthKind: "official", State: "available", FetchedAt: time.Now().Format(time.RFC3339)}
+	if got := c.collectCodexSubscription(); got != nil || c.lastCodexSubscription != nil {
+		t.Fatalf("subscription = %#v, cached = %#v", got, c.lastCodexSubscription)
 	}
 }
 
-func TestCollectCodexSubscriptionIsNilWhenCodexIsMissing(t *testing.T) {
+func TestCollectCodexSubscriptionIsNilWhenCodexCannotAnswerAndNothingIsCached(t *testing.T) {
 	c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) {
 		return codexctl.AccountUsage{}, errors.New("executable file not found")
 	})
 	if got := c.collectCodexSubscription(); got != nil {
 		t.Fatalf("subscription = %#v, want nil", got)
-	}
-}
-
-func TestCollectCodexSubscriptionKeepsOfficialFailureEligible(t *testing.T) {
-	c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) {
-		return codexctl.AccountUsage{Kind: "chatgpt"}, errors.New("rate limits unavailable")
-	})
-	got := c.collectCodexSubscription()
-	if got == nil || got.AuthKind != "official" || got.State != "unavailable" {
-		t.Fatalf("official unavailable subscription = %#v", got)
 	}
 }
 

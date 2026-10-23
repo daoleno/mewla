@@ -14,13 +14,11 @@ import (
 )
 
 // AccountUsage is what Codex itself reports about the signed-in account's
-// subscription quota. It is read through the app-server's own methods
-// (`account/read`, `account/rateLimits/read`), so Mewla never opens Codex's
-// credential file and never sends its token anywhere.
+// subscription quota. It is read through the app-server's own method
+// `account/rateLimits/read`, so Mewla never opens Codex's credential file and
+// never sends its token anywhere. Primary and Secondary are both nil when the
+// account has no subscription windows.
 type AccountUsage struct {
-	// Kind is the app-server's account type: "chatgpt", "apiKey",
-	// "amazonBedrock", or "" when Codex has no account.
-	Kind      string
 	Plan      string
 	Primary   *UsageWindow
 	Secondary *UsageWindow
@@ -35,7 +33,8 @@ type UsageWindow struct {
 }
 
 // ReadAccountUsage starts a short-lived `codex app-server` on stdio, asks it
-// for the account and (for a ChatGPT account) its rate limits, and stops it.
+// for the account's rate limits, and stops it. A sign-in that has none (an API
+// key, no sign-in) is an error from Codex, not an empty answer.
 // binary is the codex executable; env is its environment (nil inherits).
 func ReadAccountUsage(ctx context.Context, binary string, env []string) (AccountUsage, error) {
 	cmd := procspawn.CommandContext(ctx, "codex app-server account", binary, "app-server", "--listen", "stdio://")
@@ -67,28 +66,9 @@ func ReadAccountUsage(ctx context.Context, binary string, env []string) (Account
 	if err := rpc.notify("initialized"); err != nil {
 		return AccountUsage{}, err
 	}
-	raw, err := rpc.call(ctx, "account/read", map[string]any{})
+	raw, err := rpc.call(ctx, "account/rateLimits/read", nil)
 	if err != nil {
 		return AccountUsage{}, err
-	}
-	var account struct {
-		Account *struct {
-			Type string `json:"type"`
-		} `json:"account"`
-	}
-	if err := json.Unmarshal(raw, &account); err != nil {
-		return AccountUsage{}, fmt.Errorf("%w: account/read: %v", ErrProtocol, err)
-	}
-	if account.Account == nil {
-		return AccountUsage{}, nil
-	}
-	usage := AccountUsage{Kind: account.Account.Type}
-	if usage.Kind != "chatgpt" {
-		return usage, nil
-	}
-	raw, err = rpc.call(ctx, "account/rateLimits/read", nil)
-	if err != nil {
-		return usage, err
 	}
 	var limits struct {
 		RateLimits struct {
@@ -98,8 +78,9 @@ func ReadAccountUsage(ctx context.Context, binary string, env []string) (Account
 		} `json:"rateLimits"`
 	}
 	if err := json.Unmarshal(raw, &limits); err != nil {
-		return usage, fmt.Errorf("%w: account/rateLimits/read: %v", ErrProtocol, err)
+		return AccountUsage{}, fmt.Errorf("%w: account/rateLimits/read: %v", ErrProtocol, err)
 	}
+	var usage AccountUsage
 	usage.Plan = strings.TrimSpace(limits.RateLimits.PlanType)
 	usage.Primary = limits.RateLimits.Primary.window()
 	usage.Secondary = limits.RateLimits.Secondary.window()

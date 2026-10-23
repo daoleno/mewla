@@ -26,25 +26,21 @@ func readCodexAccountWithAppServer(ctx context.Context) (codexctl.AccountUsage, 
 }
 
 // collectCodexSubscription returns the official ChatGPT-backed Codex quota, or
-// nil when Codex is not installed, not signed in, or signed in with an API key
-// or another provider. Mewla never reads Codex's credential file or calls
+// nil when Codex is not installed or has no subscription quota to report (not
+// signed in, or signed in with an API key). Mewla never reads Codex's credential file or calls
 // OpenAI endpoints with Codex's token: Codex answers for itself.
 func (c *Collector) collectCodexSubscription() *CodexSubscriptionUsage {
 	ctx, cancel := context.WithTimeout(context.Background(), c.codexUsageTimeout)
 	defer cancel()
 	account, err := c.readCodexAccount(ctx)
-	if account.Kind != "chatgpt" {
-		if err == nil {
-			// Codex answered and this is not a subscription account.
-			c.lastCodexSubscription = nil
-		}
-		return c.staleCodexSubscription(err)
+	if err != nil {
+		// Codex is missing, not signed in with a subscription, or briefly
+		// unreachable. Only a recent good reading is worth showing.
+		return c.staleCodexSubscription()
 	}
-	if err != nil || account.Primary == nil && account.Secondary == nil {
-		if stale := c.staleCodexSubscription(err); stale != nil {
-			return stale
-		}
-		return &CodexSubscriptionUsage{AuthKind: "official", State: "unavailable"}
+	if account.Primary == nil && account.Secondary == nil {
+		c.lastCodexSubscription = nil
+		return nil
 	}
 	usage := &CodexSubscriptionUsage{
 		AuthKind:  "official",
@@ -75,9 +71,9 @@ func (c *Collector) collectCodexSubscription() *CodexSubscriptionUsage {
 
 // staleCodexSubscription is the last good quota marked stale, while a failed
 // refresh is still recent enough to be useful; nil when there is none.
-func (c *Collector) staleCodexSubscription(readErr error) *CodexSubscriptionUsage {
+func (c *Collector) staleCodexSubscription() *CodexSubscriptionUsage {
 	last := c.lastCodexSubscription
-	if readErr == nil || last == nil {
+	if last == nil {
 		return nil
 	}
 	fetched, err := time.Parse(time.RFC3339, last.FetchedAt)
