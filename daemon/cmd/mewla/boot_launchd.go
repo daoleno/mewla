@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/macapp"
 	"github.com/daoleno/mewla/daemon/shellquote"
 )
@@ -22,10 +23,10 @@ import (
 // so it is always reachable from the phone; only `mewla boot uninstall` and
 // the bootout of an update stop it for good.
 //
-// Ownership: launchd reports the job's PID. The job owns the state when that
-// PID runs the installed binary, holds the state lifecycle lock (lsof names
-// the lock file's holders) and /health serves the state's identity. As on
-// Linux, the boot CLI never kills a process it did not start.
+// Ownership: launchd reports the job's PID. The job owns the state when the
+// kernel says that PID serves the control socket while the state lifecycle lock
+// is held, the daemon reports (control socket daemon_status) it runs the
+// installed binary, and /health serves the state's identity. As on Linux, the boot CLI never kills a process it did not start.
 //
 // AbandonProcessGroup keeps the user's tmux server and Worker sessions alive
 // when launchd stops or restarts the daemon, like KillMode=process.
@@ -190,32 +191,35 @@ func parseLaunchdPrint(output string) bootLaunchdJob {
 	return job
 }
 
-// bootLaunchdLockHolders lists the processes with the state lock file open.
-// Only the owning daemon keeps it open; probes hold it for an instant.
-func bootLaunchdLockHolders(runner bootRunner, stateDir string) ([]int, error) {
-	path, err := bootLifecycleLockPath(stateDir)
+// bootControlPeerPID is the PID the kernel records for the process serving the
+// state directory's control socket. Only the owning daemon holds that socket,
+// so this names the owner without reading the process table (lsof, ps), and it
+// works against a daemon of any release. A variable so tests can stand in.
+var bootControlPeerPID = func(stateDir string) (int, error) {
+	socket, err := control.DefaultSocketPath(stateDir)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	output, err := runner.run("lsof", "-t", "--", path)
-	text := strings.TrimSpace(string(output))
-	if err != nil && text == "" {
-		// lsof exits 1 when nothing has the file open.
-		var exit interface{ ExitCode() int }
-		if errors.As(err, &exit) && exit.ExitCode() == 1 {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("lsof %s: %w", path, err)
+	return control.PeerPID(socket)
+}
+
+// bootDaemonStatus asks the daemon on the control socket for its executable
+// (control request daemon_status). Daemons older than that request answer
+// with an error, so it is asked only to check what a freshly started daemon
+// runs.
+var bootDaemonStatus = func(stateDir string) (control.DaemonStatus, error) {
+	socket, err := control.DefaultSocketPath(stateDir)
+	if err != nil {
+		return control.DaemonStatus{}, err
 	}
-	var pids []int
-	for _, field := range strings.Fields(text) {
-		pid, err := strconv.Atoi(field)
-		if err != nil {
-			return nil, fmt.Errorf("parse lsof output %q", text)
-		}
-		pids = append(pids, pid)
+	response, err := control.CallWithTimeout(socket, control.Request{Type: "daemon_status"}, 3*time.Second)
+	if err != nil {
+		return control.DaemonStatus{}, err
 	}
-	return pids, nil
+	if !response.OK || response.Daemon == nil || response.Daemon.PID <= 0 {
+		return control.DaemonStatus{}, errors.New("control socket did not report a daemon identity")
+	}
+	return *response.Daemon, nil
 }
 
 // bootLaunchdBootout removes the job and waits until launchd no longer lists
@@ -256,54 +260,52 @@ func bootLaunchdBootstrap(runner bootRunner, path string) error {
 	return last
 }
 
-func bootLaunchdProcessBinary(runner bootRunner, pid int) (string, error) {
-	output, err := runner.run("ps", "-o", "comm=", "-p", strconv.Itoa(pid))
-	if err != nil {
-		return "", fmt.Errorf("ps %d: %v: %s", pid, err, strings.TrimSpace(string(output)))
-	}
-	return strings.TrimSpace(string(output)), nil
-}
-
 type bootLaunchdSnapshot struct {
 	Job        bootLaunchdJob
 	InspectErr error
-	Binary     string
 	LockHeld   bool
-	LockPIDs   []int
 	LockErr    error
-	ServedID   string
-	ExpectedID string
-	HealthErr  error
-	StateIDErr error
+	// OwnerPID is the kernel's record of the process serving the control socket,
+	// read while the lock is held. Executable is what that daemon says it runs;
+	// it is asked only when health is checked.
+	OwnerPID      int
+	OwnerErr      error
+	Executable    string
+	ExecutableErr error
+	ServedID      string
+	ExpectedID    string
+	HealthErr     error
+	StateIDErr    error
 }
 
+// jobHoldsLock reports that the daemon owning the state directory is the
+// process launchd runs for this job.
 func (s bootLaunchdSnapshot) jobHoldsLock() bool {
-	for _, pid := range s.LockPIDs {
-		if pid == s.Job.PID {
-			return true
-		}
-	}
-	return false
+	return s.OwnerErr == nil && s.Job.PID > 0 && s.OwnerPID == s.Job.PID
 }
 
 func bootLaunchdInspectOwner(config bootConfig, runner bootRunner, health bool) bootLaunchdSnapshot {
 	var s bootLaunchdSnapshot
 	s.Job, s.InspectErr = bootLaunchdInspect(runner)
-	if s.Job.running() {
-		if binary, err := bootLaunchdProcessBinary(runner, s.Job.PID); err == nil {
-			s.Binary = binary
-		}
-	}
 	if held, err := bootStateLockHeld(config.StateDir); err != nil {
 		s.LockErr = err
 	} else {
 		s.LockHeld = held
 	}
 	if s.LockErr == nil && s.LockHeld {
-		s.LockPIDs, s.LockErr = bootLaunchdLockHolders(runner, config.StateDir)
+		s.OwnerPID, s.OwnerErr = bootControlPeerPID(config.StateDir)
 	}
 	if !health {
 		return s
+	}
+	if s.OwnerErr == nil && s.OwnerPID > 0 {
+		if status, err := bootDaemonStatus(config.StateDir); err != nil {
+			s.ExecutableErr = err
+		} else if status.PID != s.OwnerPID {
+			s.ExecutableErr = fmt.Errorf("daemon reports PID %d, the control socket is served by PID %d", status.PID, s.OwnerPID)
+		} else {
+			s.Executable = status.Executable
+		}
 	}
 	if served, err := bootProbeHealth(config.Addr); err == nil {
 		s.ServedID = served
@@ -324,14 +326,18 @@ func (s bootLaunchdSnapshot) verified(config bootConfig) error {
 		return s.InspectErr
 	case !s.Job.running():
 		return fmt.Errorf("%s is %s, not running", bootLaunchdLabel, s.Job.describe())
-	case !bootSameFilePath(s.Binary, config.Binary):
-		return fmt.Errorf("%s process %d runs %q, not the installed binary %s", bootLaunchdLabel, s.Job.PID, s.Binary, config.Binary)
 	case s.LockErr != nil:
 		return fmt.Errorf("inspect state ownership: %w", s.LockErr)
 	case !s.LockHeld:
 		return fmt.Errorf("no daemon owns state directory %s", config.StateDir)
+	case s.OwnerErr != nil:
+		return fmt.Errorf("ask the daemon owning %s who it is: %w", config.StateDir, s.OwnerErr)
 	case !s.jobHoldsLock():
-		return fmt.Errorf("state directory %s is owned by a process outside %s", config.StateDir, bootLaunchdLabel)
+		return fmt.Errorf("state directory %s is owned by process %d, outside %s (PID %d)", config.StateDir, s.OwnerPID, bootLaunchdLabel, s.Job.PID)
+	case s.ExecutableErr != nil:
+		return fmt.Errorf("ask %s process %d which binary it runs: %w", bootLaunchdLabel, s.Job.PID, s.ExecutableErr)
+	case !bootSameFilePath(s.Executable, config.Binary):
+		return fmt.Errorf("%s process %d runs %q, not the installed binary %s", bootLaunchdLabel, s.Job.PID, s.Executable, config.Binary)
 	case s.HealthErr != nil:
 		return fmt.Errorf("health %s: %w", bootProbeAddr(config.Addr), s.HealthErr)
 	case s.StateIDErr != nil:
@@ -350,8 +356,10 @@ func (s bootLaunchdSnapshot) describeOwner() string {
 		return "unknown (" + s.LockErr.Error() + ")"
 	case s.LockHeld && s.Job.running() && s.jobHoldsLock():
 		return fmt.Sprintf("state directory is owned by %s (PID %d)", bootLaunchdLabel, s.Job.PID)
+	case s.LockHeld && s.OwnerErr == nil:
+		return fmt.Sprintf("state lifecycle lock is held by a process outside %s (PID %d); mewla boot never kills it", bootLaunchdLabel, s.OwnerPID)
 	case s.LockHeld:
-		return fmt.Sprintf("state lifecycle lock is held by a process outside %s (PIDs %v); mewla boot never kills it", bootLaunchdLabel, s.LockPIDs)
+		return fmt.Sprintf("state lifecycle lock is held by a process outside %s (not answering on the control socket: %v); mewla boot never kills it", bootLaunchdLabel, s.OwnerErr)
 	default:
 		return "no running daemon owns the state directory"
 	}
@@ -699,11 +707,15 @@ func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 
 	// launchd stopped the job's own process; whatever still holds the state is
 	// a separate daemon and is left alone.
-	var holders []int
+	otherOwner := 0
+	otherOwnerHeld := false
 	if held, err := bootStateLockHeld(metadata.StateDir); err != nil {
 		return fmt.Errorf("inspect state lifecycle lock after stop: %w (LaunchAgent and configuration retained)", err)
 	} else if held {
-		holders, _ = bootLaunchdLockHolders(runner, metadata.StateDir)
+		otherOwnerHeld = true
+		if pid, err := bootControlPeerPID(metadata.StateDir); err == nil {
+			otherOwner = pid
+		}
 	}
 
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -720,8 +732,11 @@ func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 			fmt.Fprintf(out, "Removed %s\n", bundle)
 		}
 	}
-	if len(holders) > 0 {
-		fmt.Fprintf(out, "Note: state directory %s is owned by another process (PIDs %v); it was not stopped or modified\n", metadata.StateDir, holders)
+	switch {
+	case otherOwner > 0:
+		fmt.Fprintf(out, "Note: state directory %s is owned by another process (PID %d); it was not stopped or modified\n", metadata.StateDir, otherOwner)
+	case otherOwnerHeld:
+		fmt.Fprintf(out, "Note: state directory %s is owned by another process; it was not stopped or modified\n", metadata.StateDir)
 	}
 	return nil
 }

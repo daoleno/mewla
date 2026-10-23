@@ -138,6 +138,12 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("watch_request_failed", err.Error())
 		}
 		return control.Response{OK: true, Watch: &result}
+	case "daemon_status":
+		executable, err := os.Executable()
+		if err != nil {
+			return control.ErrorResponse("daemon_status_unavailable", err.Error())
+		}
+		return control.Response{OK: true, Daemon: &control.DaemonStatus{PID: os.Getpid(), Executable: executable}}
 	case "resource_telemetry":
 		if a.resourceSampler == nil {
 			return control.ErrorResponse("resource_telemetry_unavailable", "Resource sampler not ready")

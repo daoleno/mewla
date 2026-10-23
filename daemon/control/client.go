@@ -66,3 +66,26 @@ func CallWithTimeoutResult(
 	result.Response = resp
 	return result, nil
 }
+
+// PeerPID connects to the control socket and returns the PID the kernel
+// records for the process serving it. Unlike anything the daemon says about
+// itself, it needs no cooperation from the daemon, so it works against any
+// release and cannot be misreported.
+func PeerPID(socketPath string) (int, error) {
+	if socketPath == "" {
+		return 0, fmt.Errorf("control socket path required")
+	}
+	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
+	if err != nil {
+		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
+			return 0, fmt.Errorf("%w (%v)", ErrNotRunning, err)
+		}
+		return 0, fmt.Errorf("connect to Mewla control socket: %w", err)
+	}
+	defer conn.Close()
+	unixConn, ok := conn.(*net.UnixConn)
+	if !ok {
+		return 0, fmt.Errorf("control socket is not a unix connection")
+	}
+	return peerPID(unixConn)
+}
