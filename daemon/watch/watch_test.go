@@ -27,6 +27,7 @@ func fixtureSecrets() map[string]string {
 		"github-pat":        "github_" + "pat_" + strings.Repeat("11AB", 8),
 		"slack":             "xo" + "xb-" + "1234567890-abcdefghij",
 		"aws":               "AK" + "IA" + "ABCDEFGHIJ234567",
+		"expo-push-token":   "Exponent" + "PushToken[" + strings.Repeat("aB3dE", 5) + "]",
 		"jwt":               "ey" + "JhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N",
 		"fal":               "1b2c3d4e-1111-2222-3333-444455556666:" + strings.Repeat("ab12", 8),
 		"assignment":        "api_key=" + "Zq9" + strings.Repeat("x7", 10),

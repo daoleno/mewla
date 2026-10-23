@@ -42,6 +42,7 @@ type JudgeRun struct {
 	Through         time.Time `json:"through,omitzero"`
 	Placed          int       `json:"placed"`
 	Authors         int       `json:"authors"`
+	Verdicts        int       `json:"verdicts,omitempty"`
 	ProblemsNew     int       `json:"problems_new"`
 	ProblemsUpdated int       `json:"problems_updated"`
 	Dropped         int       `json:"dropped,omitempty"`
@@ -74,6 +75,11 @@ func (s *Store) applyAnnotationLocked(id string, annotation Annotation) {
 	if annotation.Author != "" {
 		signal.Author, signal.AuthorReason = annotation.Author, annotation.AuthorReason
 	}
+	if annotation.Notification != nil {
+		state := *annotation.Notification
+		state.Responses = append([]NotificationResponse(nil), state.Responses...)
+		signal.Notification = &state
+	}
 }
 
 // Annotate merges annotations into the overlay and saves it. A placement
@@ -98,6 +104,9 @@ func (s *Store) Annotate(changes map[string]Annotation) error {
 		if change.Run != "" {
 			current.Run = change.Run
 		}
+		if change.Notification != nil {
+			current.Notification = mergeNotification(current.Notification, change.Notification)
+		}
 		s.annotations[id] = current
 		s.applyAnnotationLocked(id, current)
 	}
@@ -110,9 +119,15 @@ func (s *Store) Unjudged() []Signal {
 	defer s.mu.Unlock()
 	var out []Signal
 	for _, signal := range s.signals {
-		if s.annotations[signal.ID].Run == "" {
-			out = append(out, signal)
+		annotation := s.annotations[signal.ID]
+		if annotation.Run != "" {
+			continue
 		}
+		// A notification is judged once its outcome is known.
+		if signal.Source == SourceNotification && (annotation.Notification == nil || annotation.Notification.SettledAt.IsZero()) {
+			continue
+		}
+		out = append(out, signal)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
 	return out
@@ -162,6 +177,7 @@ type JudgedProblem struct {
 	Merges      []string
 	Cost        Cost
 	Reason      string
+	Suggestion  string
 	LooksFixed  bool
 	Run         string
 	EvidenceAt  []time.Time
@@ -196,6 +212,9 @@ func (s *Store) RecordJudged(judged []JudgedProblem) (created, updated int, err 
 			existing.ProjectID = next.ProjectID
 		}
 		existing.Reason = next.Reason
+		if next.Suggestion != "" {
+			existing.Suggestion = next.Suggestion
+		}
 		cost := next.Cost
 		existing.Cost = &cost
 		existing.Run = next.Run

@@ -178,7 +178,11 @@ func TestScheduledResultPushUsesOnlyRoutingAndGenericCopy(t *testing.T) {
 				"brain_thread_id":  "thread-frozen",
 				"brain_message_id": "calendar_result:item:run",
 			}
-			if len(data) != len(wantData) {
+			// The notification id is how the app reports a tap; it is not routing.
+			if id, _ := data["notification_id"].(string); !strings.HasPrefix(id, "n_") {
+				t.Fatalf("notification_id = %#v", data["notification_id"])
+			}
+			if len(data) != len(wantData)+1 {
 				t.Fatalf("unexpected scheduled routing fields: %#v", data)
 			}
 			for key, want := range wantData {

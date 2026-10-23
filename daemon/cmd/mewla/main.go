@@ -449,7 +449,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		InputReadyBudget: work.DefaultScheduledInputReadyBudget,
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
-	controlHandler.notifyBrain = pusher.NotifyBrainMessage
+	controlHandler.notifyBrain = pusher.BrainNotifier(push.KindBrainReply)
 	srv.SetResourceSampler(resourceSampler)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
@@ -600,7 +600,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 			Sessions:   w,
 			External:   connectionManager,
 			Brain:      brainService,
-			Push:       pusher.NotifyBrainMessage,
+			Push:       pusher.BrainNotifier(push.KindWatchUrgent),
 			Thread: func() string {
 				thread, _ := brainService.ChatThreadID()
 				return thread
@@ -611,6 +611,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		})
 		calendarScheduler.Own(calendar.OwnerWatchBrief, calendar.OwnerDuty{Window: watch.BriefCatchUp, Fire: watchCollector.BriefDue})
 		controlHandler.watch = watchCollector
+		watchCollector.SetPresence(func(workerID string) watch.Presence {
+			presence := srv.NotificationPresence(workerID)
+			return watch.Presence{Foreground: presence.Foreground, Connected: presence.Connected, Viewing: presence.Viewing}
+		})
+		pusher.SetObserver(watchCollector)
+		srv.SetNotificationRecorder(watchCollector)
 		srv.SetDeviceHook(func(timeZone, locale string) {
 			watchCollector.SetDevice(watch.Device{TimeZone: timeZone, Locale: locale})
 		})

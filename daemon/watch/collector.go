@@ -78,10 +78,17 @@ type Collector struct {
 	linearTeams       int
 
 	mu       sync.Mutex
-	errors   map[string]string
-	lastPass *PassResult
-	lastRun  map[string]time.Time
-	closedAt map[string]closedAtEntry
+	presence func(workerID string) Presence
+
+	// engageDelay is how long a foreground event waits for a tap's report.
+	engageDelay time.Duration
+
+	queueOnce sync.Once
+	queue     chan func()
+	errors    map[string]string
+	lastPass  *PassResult
+	lastRun   map[string]time.Time
+	closedAt  map[string]closedAtEntry
 }
 
 // NewCollector creates a Collector.
@@ -100,6 +107,7 @@ func NewCollector(options Options) *Collector {
 		pause:       func() { time.Sleep(2 * time.Millisecond) },
 		errors:      map[string]string{},
 		lastRun:     map[string]time.Time{},
+		engageDelay: 5 * time.Second,
 	}
 	c.judge.language = c.language
 	c.judge.preferred = options.Executor
@@ -268,6 +276,7 @@ func (c *Collector) Collect(ctx context.Context, sources []string, force bool) (
 	if err := c.store.Flush(); err != nil {
 		c.noteError("store", err)
 	}
+	c.settleNotifications()
 	changed, err := evaluateRules(c.store, c.now())
 	c.noteError("rules", err)
 	result.Problems = changed
