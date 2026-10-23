@@ -298,12 +298,13 @@ func (m *Manager) projectSessionOutput(mapping topicMapping, projection brain.Se
 	if boundary.After(mapping.CreatedAt) {
 		mapping.CreatedAt = boundary
 	}
+	retained, seen := sessionRetention(projection.Assistant, mapping.CreatedAt, now)
 	candidates := make([]sessionOutputCandidate, 0, len(projection.Assistant)*2)
 	for _, item := range projection.Assistant {
 		if strings.TrimSpace(item.ID) == "" {
 			continue
 		}
-		if !mapping.CreatedAt.IsZero() && !item.CreatedAt.After(mapping.CreatedAt) {
+		if !retained[strings.TrimSpace(item.ID)] {
 			continue
 		}
 		rendered := renderMarkdown(item.Body)
@@ -326,6 +327,7 @@ func (m *Manager) projectSessionOutput(mapping topicMapping, projection brain.Se
 		return nil
 	}
 	return m.store.mutate(func(state *durableState) error {
+		pruneSessionCheckpoints(state, mapping.SessionID, retained, seen)
 		for _, candidate := range candidates {
 			if state.TopicProjection[candidate.Key] == candidate.Digest {
 				continue
@@ -419,6 +421,7 @@ func (m *Manager) projectSessionLifecycle(mapping topicMapping, projection brain
 		}
 	}
 	return m.store.mutate(func(state *durableState) error {
+		pruneSessionMarkers(state, mapping.SessionID, projection.TurnID, projection.WorkID)
 		for _, entry := range markers {
 			parts := strings.SplitN(entry, "\x00", 2)
 			checkpoint := "topic:mark:" + mapping.SessionID + ":" + parts[0]
