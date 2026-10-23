@@ -1,0 +1,1746 @@
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Stack, useLocalSearchParams, useRootNavigationState, useRouter } from "expo-router";
+import { useWindowDimensions } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { NewSessionButton, SessionsListView } from "../workers/SessionsListView";
+import { WorkerSessionSelectionBar } from "../workers/WorkerSessionSelectionBar";
+import { usePrimarySelectionBar } from "../navigation/PrimarySelectionBar";
+import { groupWorkersByDirectory } from "../../services/workerDirectory";
+import {
+  PRIMARY_SIDEBAR_BREAKPOINT,
+  PrimaryDrawerShell,
+  resolvePrimaryAppBarGeometry,
+} from "../navigation/PrimaryDrawerShell";
+import { ChatCanvas } from "../terminal/ChatCanvas";
+import { ClaudeChoiceCard } from "../terminal/ClaudeChoiceCard";
+import { choiceCardMaxHeight } from "../terminal/claudeChoiceModel";
+import { InterfaceChatComposer } from "../terminal/InterfaceChatComposer";
+import { InterfaceChatKeyboardFrame } from "../terminal/InterfaceChatKeyboardFrame";
+import { InterfaceTimelineView } from "../terminal/InterfaceTimelineView";
+import type { TimelineItem } from "../terminal/InterfaceTimelineItemView";
+import {
+  patchDisplayPath,
+  truncateRunes,
+} from "../terminal/InterfaceTimelineModel";
+import { useInterfaceTimelineItems } from "../terminal/useInterfaceTimelineItems";
+import { TerminalTopBar } from "../terminal/TerminalTopBar";
+import { GitDiffSheet } from "../terminal/GitDiffSheet";
+import { TerminalPaletteFixture } from "../terminal/TerminalPaletteFixture";
+import { useTerminalThemeChrome } from "../terminal/screen/useTerminalThemeChrome";
+import {
+  CHAT_HEADER_HEIGHT,
+  CHAT_HEADER_OUTER_GAP,
+} from "../terminal/chatChromeMetrics";
+import {
+  TypeScale,
+  UiTextMetrics,
+  useAppColors,
+  useAppTheme,
+} from "../../constants/tokens";
+import { buildChatChrome } from "../../theme";
+import {
+  SCREENSHOT_CHOICE_FIXTURE,
+  SCREENSHOT_BRAIN_EVENTS,
+  SCREENSHOT_BRAIN_NEEDS,
+  SCREENSHOT_BRAIN_WORK_DESK,
+  SCREENSHOT_CHAT_ACTIVITY_EVENTS,
+  SCREENSHOT_CHAT_EVENTS,
+  SCREENSHOT_GIT_SNAPSHOT,
+  screenshotGitDiffPage,
+  SCREENSHOT_PLUGIN_ACCOUNTS,
+  SCREENSHOT_PLUGINS,
+  SCREENSHOT_SESSION_AGENTS,
+  SCREENSHOT_STATS_FIXTURE,
+  screenshotChatPendingUserMessages,
+} from "../../services/screenshotDemoFixtures";
+import {
+  resolveScreenshotChatPendingFixture,
+  resolveScreenshotDemoState,
+  resolveScreenshotProvidersDemo,
+} from "../../services/screenshotDemo";
+import {
+  screenshotDemoEnabled,
+  screenshotDemoRouteOptedIn,
+} from "../../services/screenshotDemoGate";
+import { InterfaceDevicePerformanceDemoGate } from "../terminal/InterfaceDevicePerformanceDemo";
+import { InterfaceReadingFixture } from "../terminal/InterfaceReadingFixture";
+import { MessageBody } from "../terminal/InterfaceMessageBody";
+import { MERMAID_MARKDOWN_FIXTURE } from "../markdown/mermaidFixtures";
+import { ProvidersPresentation } from "../providers/ProvidersPresentation";
+import { SessionModelSheet } from "../providers/SessionModelSheet";
+import {
+  resolveComposerModelControl,
+  threadRuntimeRows,
+} from "../../services/providers/sessionModelHelpers";
+import type { ProvidersSnapshot } from "../../services/providers/types";
+import { StatsScreenshotDemo } from "../../app/stats";
+import type { StatsView } from "../../services/statsPayload";
+import CalendarScreen from "../../app/calendar";
+import { OnboardingPresentation } from "../onboarding/OnboardingPresentation";
+import { EmptyState } from "../ui/EmptyState";
+import { sessionEmptyState } from "../../services/sessionEmptyState";
+import { BrainCompanionContext, type BrainCompanion } from "../mewla/BrainCompanion";
+import type { BrainCatPresence, BrainCatState } from "../mewla/brainCatState";
+import { BrainWorkColumn } from "../brain/BrainWorkPanel";
+import {
+  brainWorkSurface,
+  type BrainCurrentWork,
+  type BrainObjective,
+  type BrainWorkerRef,
+} from "../brain/brainWorkSurface";
+import { BrainStatusState } from "../mewla/BrainStatusState";
+import { PetSprite } from "../pets/PetSprite";
+import { TappableCat } from "../mewla/TappableCat";
+import { NewTerminalSheet } from "../terminal/NewTerminalSheet";
+import { AccountCard, CatalogView, ServiceHeader } from "../plugins/PluginConnectionViews";
+import { pluginCatalogRows } from "../../services/pluginConnectionsModel";
+import { HeaderBackButton } from "../navigation/HeaderBackButton";
+import { pluginJobs } from "../../services/pluginOnboarding";
+import { useCalendarDispatch, type CalendarItem } from "../../store/calendar";
+import { ResourcesScreenshotDemo, SkillsScreenshotDemo, WorkScreenshotDemo } from "./ToolsScreenshotDemos";
+import { Icon } from "../icons/Icon";
+import { ComputersScreenshotDemo } from "./ComputersScreenshotDemo";
+
+const NOOP = () => undefined;
+const loadNoDemoAsset = async () => null;
+
+export default function ScreenshotDemoScreen() {
+  const router = useRouter();
+  const navigation = useRootNavigationState();
+  const params = useLocalSearchParams<{
+    demo?: string | string[];
+    state?: string | string[];
+    fixture?: string;
+  }>();
+  const state = resolveScreenshotDemoState(
+    params.state ?? process.env.EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO_STATE,
+  );
+  const enabled = screenshotDemoEnabled();
+  const explicitlyRequested = screenshotDemoRouteOptedIn(params.demo);
+  const available = enabled && explicitlyRequested;
+
+  useEffect(() => {
+    if (navigation?.key && !available) router.replace("/");
+  }, [available, navigation?.key, router]);
+
+  if (!available) return null;
+
+  switch (state) {
+    case "sessions":
+      return <SessionsDemo />;
+    case "onboarding":
+      return <OnboardingDemo key={params.fixture} />;
+    case "empty":
+      return <EmptyStatesDemo key={params.fixture} />;
+    case "brain":
+      return <BrainDemo />;
+    case "cat":
+      return <CatGalleryDemo />;
+    case "stats":
+      return <StatsDemo />;
+    case "calendar":
+      return <CalendarDemo />;
+    case "providers":
+      return <ProvidersDemo />;
+    case "plugins":
+      return <PluginsDemo />;
+    case "skills":
+      return <SkillsScreenshotDemo header={<DemoStackHeader title="Skills" />} />;
+    case "resources":
+      return <ResourcesScreenshotDemo header={<DemoStackHeader title="Resources" />} />;
+    case "work":
+      return <WorkScreenshotDemo header={<DemoStackHeader title="" />} />;
+    case "computers":
+      return <ComputersScreenshotDemo fixture={params.fixture} header={(title) => <DemoStackHeader title={title} />} />;
+    case "profile":
+      return <InterfaceDevicePerformanceDemoGate />;
+    case "reading":
+      return <InterfaceReadingFixture />;
+    case "mermaid":
+      return <MermaidDemo />;
+    case "composer":
+      return <ComposerStatesDemo />;
+    case "chat":
+    default:
+      return params.fixture === "terminal" ? (
+        <TerminalPaletteDemo />
+      ) : params.fixture === "git" ? (
+        <GitDiffDemo />
+      ) : (
+        <ChatDemo />
+      );
+  }
+}
+
+function OnboardingDemo() {
+  const params = useLocalSearchParams<{ fixture?: string }>();
+  const router = useRouter();
+  const [retrying, setRetrying] = useState(false);
+  const [paired, setPaired] = useState(false);
+  const connection = retrying ? "connecting" : paired ? "connected" : params.fixture;
+  const step = params.fixture === "install" || params.fixture === "scan" ? params.fixture : "welcome";
+  return <OnboardingPresentation serverName="Studio computer"
+    connection={["connected", "connecting", "offline"].includes(connection ?? "") ? connection : undefined}
+    pairing={false}
+    initialStep={step}
+    onCode={() => setPaired(true)}
+    onPaste={() => setPaired(true)}
+    onRetry={() => setRetrying(true)}
+    onContinue={() => router.replace({ pathname: "/screenshot-demo", params: { demo: "1", state: "brain", fixture: "empty" } })}
+    onSettings={() => router.push("/settings")}
+  />;
+}
+
+function EmptyStatesDemo() {
+  const params = useLocalSearchParams<{ fixture?: string }>();
+  const router = useRouter();
+  const colors = useAppColors();
+  const [retried, setRetried] = useState(false);
+  const [cleared, setCleared] = useState(false);
+  const [terminal, setTerminal] = useState(false);
+  const connection = retried ? "connecting" : params.fixture === "offline" ? "offline" : params.fixture === "connecting" ? "connecting" : "connected";
+  const state = sessionEmptyState(params.fixture !== "no-server", connection, params.fixture === "filtered" && !cleared);
+  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
+      <EmptyState title={state.title} icon={state.icon} busy={state.busy}
+        action={state.action ? { label: state.label, icon: state.action === "retry" ? "refresh" : "add", onPress: () => {
+          if (state.action === "retry") setRetried(true);
+          else if (state.action === "clear") setCleared(true);
+          else if (state.action === "terminal") setTerminal(true);
+          else router.push({ pathname: "/settings", params: { addServer: Date.now().toString() } });
+        }} : undefined}
+        secondary={connection !== "connected" ? { label: "Server settings", icon: "settings", onPress: () => router.push("/settings") } : undefined}
+      />
+    </ScrollView>
+    <NewTerminalSheet visible={terminal} title="New terminal" initialCwd="/workspace" serverId={null}
+      onClose={() => setTerminal(false)} onSubmit={() => setTerminal(false)} />
+  </SafeAreaView>;
+}
+
+function CalendarDemo() {
+  const dispatch = useCalendarDispatch();
+  const params = useLocalSearchParams<{
+    view?: string | string[];
+    fixture?: string | string[];
+    notification?: string | string[];
+  }>();
+  const fixture = Array.isArray(params.fixture)
+    ? params.fixture[0]
+    : params.fixture;
+  const notification = Array.isArray(params.notification)
+    ? params.notification[0]
+    : params.notification;
+  const notificationState =
+    notification === "granted" ||
+    notification === "undetermined" ||
+    notification === "unavailable"
+      ? notification
+      : "denied";
+
+  useEffect(() => {
+    dispatch({
+      type: "CALENDAR_SNAPSHOT",
+      serverId: "screenshot-calendar",
+      serverName: "Studio Mac",
+      serverUrl: "https://calendar.example.invalid",
+      items:
+        fixture === "empty" || fixture === "loading" ? [] : calendarFixtures(fixture === "states"),
+    });
+  }, [dispatch, fixture]);
+
+  return (
+    <CalendarScreen
+      serverIdOverride="screenshot-calendar"
+      notificationStateOverride={notificationState}
+      initialError={
+        fixture === "error"
+          ? "Calendar sync failed. Check the daemon connection and retry."
+          : ""
+      }
+      loading={fixture === "loading"}
+    />
+  );
+}
+
+/** `states` adds the due (Needs you), completed and cancelled items. */
+function calendarFixtures(allStates = false): CalendarItem[] {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = new Date();
+  const at = (dayOffset: number, hour: number, minute = 0) => {
+    const value = new Date(now);
+    value.setDate(value.getDate() + dayOffset);
+    value.setHours(hour, minute, 0, 0);
+    return value.toISOString();
+  };
+  const base = {
+    timezone,
+    recurrence: "none" as const,
+    created_at: at(-2, 9),
+    updated_at: at(-1, 9),
+    revision: 1,
+  };
+  const extra: CalendarItem[] = allStates
+    ? [
+        {
+          ...base,
+          id: "demo-due",
+          title: "Approve the App Store screenshots",
+          kind: "deadline",
+          status: "waiting",
+          due_at: at(0, 9),
+          next_at: at(0, 9),
+        },
+        {
+          ...base,
+          id: "demo-standup",
+          title: "Morning check-in",
+          kind: "event",
+          status: "completed",
+          start_at: at(0, 8),
+          end_at: at(0, 8, 15),
+          next_at: at(0, 8),
+        },
+        {
+          ...base,
+          id: "demo-cancelled",
+          title: "Old release dry run",
+          kind: "scheduled_action",
+          status: "cancelled",
+          due_at: at(1, 16),
+          next_at: at(1, 16),
+          action_instruction: "Run the release dry run.",
+        },
+      ]
+    : [];
+  return [
+    ...extra,
+    {
+      ...base,
+      id: "demo-reminder",
+      title: "Review the launch checklist before the customer call",
+      kind: "reminder",
+      status: "scheduled",
+      notify_at: at(0, 10, 30),
+      next_at: at(0, 10, 30),
+      notes: "Bring the accessibility notes.",
+    },
+    {
+      ...base,
+      id: "demo-action",
+      title: "整理发布说明并运行移动端回归检查",
+      kind: "scheduled_action",
+      status: "running",
+      due_at: at(0, 14),
+      next_at: at(0, 14),
+      recurrence: "weekdays",
+      action_instruction:
+        "Update the visible Work item and run the mobile checks.",
+      linked_work_id: "calendar-demo-work",
+    },
+    {
+      ...base,
+      id: "demo-event",
+      title: "Design review: Calendar and Work lifecycle",
+      kind: "event",
+      status: "scheduled",
+      start_at: at(1, 9),
+      end_at: at(1, 10),
+      next_at: at(1, 9),
+      source_thread_id: "brain-calendar-review",
+    },
+    {
+      ...base,
+      id: "demo-deadline",
+      title:
+        "Submit the deliberately very long localization and release-readiness report",
+      kind: "deadline",
+      status: "failed",
+      due_at: at(3, 17),
+      next_at: at(3, 17),
+      failure_reason: "The linked agent stopped before the report was written.",
+    },
+  ];
+}
+
+function MermaidDemo() {
+  const { theme: appTheme } = useAppTheme();
+  const { chrome, theme } = useMemo(
+    () => buildChatChrome(appTheme),
+    [appTheme],
+  );
+  return (
+    <SafeAreaView
+      accessibilityLabel="Mermaid flowchart fixture"
+      style={[styles.mermaidRoot, { backgroundColor: chrome.appBackground }]}
+    >
+      <ScrollView contentContainerStyle={styles.mermaidContent}>
+        <MessageBody
+          value={MERMAID_MARKDOWN_FIXTURE}
+          chrome={chrome}
+          theme={theme}
+        />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function ChatDemo() {
+  const params = useLocalSearchParams<{
+    attachment?: string | string[];
+    draft?: string | string[];
+    long?: string | string[];
+    pending?: string | string[];
+    working?: string | string[];
+    choice?: string | string[];
+    fixture?: string;
+  }>();
+  const showChoice =
+    (Array.isArray(params.choice) ? params.choice[0] : params.choice) === "1";
+  const { height: windowHeight } = useWindowDimensions();
+  const activityFixture = params.fixture === "activity";
+  const { theme: appTheme } = useAppTheme();
+  const { chrome, theme } = useMemo(
+    () => buildChatChrome(appTheme),
+    [appTheme],
+  );
+  const menuAnchorRef = useRef<View>(null);
+  const scrollRef = useRef<FlatList<TimelineItem>>(null);
+  const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
+  const requestedDraft = Array.isArray(params.draft)
+    ? params.draft[0]
+    : params.draft;
+  const [draft, setDraft] = useState(
+    requestedDraft === "multiline"
+      ? "Queue a careful review of the keyboard overlay.\nPreserve the visible message anchor.\nVerify every narrow width."
+      : requestedDraft === "text"
+        ? "Queue another check"
+        : "",
+  );
+  const [focused, setFocused] = useState(false);
+  const [providerActivityStartedAt] = useState(() =>
+    new Date(Date.now() - 43_000).toISOString(),
+  );
+  const longTimeline =
+    (Array.isArray(params.long) ? params.long[0] : params.long) === "1";
+  const working =
+    (Array.isArray(params.working) ? params.working[0] : params.working) ===
+    "1";
+  const showAttachment =
+    (Array.isArray(params.attachment)
+      ? params.attachment[0]
+      : params.attachment) === "1";
+  const pendingFixture = resolveScreenshotChatPendingFixture(params.pending);
+  const timelineEvents = useMemo(() => {
+    if (activityFixture) {
+      return SCREENSHOT_CHAT_ACTIVITY_EVENTS;
+    }
+    const transcriptEvents = SCREENSHOT_CHAT_EVENTS.filter(
+      (event) =>
+        event.kind === "user_message" ||
+        event.kind === "assistant_message" ||
+        event.kind === "plan",
+    );
+    if (!longTimeline) {
+      return transcriptEvents;
+    }
+    return Array.from({ length: 4 }, (_, batch) =>
+      transcriptEvents.map((event) => ({
+        ...event,
+        id: `history:${batch}:${event.id}`,
+        seq: batch * 1000 + event.seq,
+      })),
+    ).flat();
+  }, [activityFixture, longTimeline]);
+  const pendingUserMessages = useMemo(
+    () => screenshotChatPendingUserMessages(pendingFixture),
+    [pendingFixture],
+  );
+  const runningActivity = useMemo(
+    () =>
+      working
+        ? {
+            id: "demo-working-turn",
+            status: "running" as const,
+            started_at: providerActivityStartedAt,
+          }
+        : undefined,
+    [working, providerActivityStartedAt],
+  );
+  const timeline = useInterfaceTimelineItems({
+    events: timelineEvents,
+    pendingUserMessages,
+    runningActivity,
+    onPendingUserMessageAction: NOOP,
+  });
+  const attachments = showAttachment
+    ? [
+        {
+          id: "demo-attachment",
+          name: "keyboard-geometry-notes.md",
+          path: "/demo/keyboard-geometry-notes.md",
+          mimeType: "text/markdown",
+        },
+      ]
+    : [];
+  const hasContent = draft.trim().length > 0 || attachments.length > 0;
+  const topChromeInset = CHAT_HEADER_HEIGHT + CHAT_HEADER_OUTER_GAP * 2;
+
+  return (
+    <SafeAreaView
+      style={[styles.flex, { backgroundColor: chrome.appBackground }]}
+      edges={["top", "bottom"]}
+    >
+      <ChatCanvas chrome={chrome}>
+        <View pointerEvents="box-none" style={styles.demoHeaderOverlay}>
+          <TerminalTopBar
+            title="Mobile handoff"
+            subtitle="atlas-notes · Chat"
+            kind="codex"
+            status={activityFixture ? "running" : undefined}
+            backgroundColor={chrome.appBackground}
+            chrome={chrome}
+            menuAnchorRef={menuAnchorRef}
+            interfaceRenderMode="chat"
+            gitDiffDisabled={false}
+            gitDiffPresentation={{
+              accessibilityLabel: "Open changes",
+              backgroundColor: chrome.accentSoft,
+              iconColor: chrome.accent,
+              additionsText: "+42",
+              deletionsText: "−9",
+            }}
+            isStructuredChatWorker
+            onBack={NOOP}
+            onOpenGitDiff={NOOP}
+            onOpenMenu={NOOP}
+            onToggleInterfaceRenderMode={NOOP}
+          />
+        </View>
+        <InterfaceChatKeyboardFrame
+          enabled
+          keyboardVerticalOffset={0}
+          chrome={chrome}
+          topChromeInset={topChromeInset}
+          composer={
+            <>
+              {showChoice ? (
+                <ClaudeChoiceCard
+                  callId="demo-choice"
+                  choice={SCREENSHOT_CHOICE_FIXTURE}
+                  live
+                  chrome={chrome}
+                  maxHeight={choiceCardMaxHeight({
+                    windowHeight,
+                    topChromeInset,
+                    bottomInset: insets.bottom,
+                  })}
+                  onSubmit={async () => {}}
+                />
+              ) : null}
+            <InterfaceChatComposer
+              inputRef={inputRef}
+              draft={draft}
+              placeholder="Message the agent"
+              editable
+              focused={focused}
+              canAttach
+              uploading={false}
+              activeUpload={null}
+              sendEnabled={hasContent}
+              sending={false}
+              sendLabel={working ? "Queue message" : "Send message"}
+              showStopButton={working && !hasContent}
+              stopEnabled={working}
+              stopLabel="Stop current turn"
+              stopLoading={false}
+              providerActivityStartedAt={
+                working ? providerActivityStartedAt : undefined
+              }
+              bottomPadding={Math.max(insets.bottom, 8)}
+              showActionMenuButton
+              actionMenuIcon="add"
+              composerLayout="telegram"
+              showAttachmentRail
+              showCommandMenu={false}
+              showCommandList={false}
+              showComposerActions={false}
+              composerActionButtonEnabled
+              commandQuery=""
+              commands={[]}
+              attachments={attachments}
+              chrome={chrome}
+              theme={theme}
+              onSelectCommand={NOOP}
+              onToggleActionMenu={NOOP}
+              onDismissActionMenu={NOOP}
+              onRemoveAttachment={NOOP}
+              onDraftChange={setDraft}
+              onUploadPress={NOOP}
+              onCancelUpload={NOOP}
+              onInputFocus={() => setFocused(true)}
+              onInputBlur={() => setFocused(false)}
+              onSendPress={() => setDraft("")}
+              onStopPress={NOOP}
+            />
+            </>
+          }
+          renderTimeline={(extraContentPadding, keyboardLifecycleGate) => (
+            <InterfaceTimelineView
+              scrollRef={scrollRef}
+              items={timeline}
+              loading={false}
+              emptyStateSuppressed={false}
+              unavailable={false}
+              syncing={false}
+              textSelectable={false}
+              extraContentPadding={extraContentPadding}
+              keyboardLifecycleGate={keyboardLifecycleGate}
+              topChromeInset={topChromeInset}
+              chrome={chrome}
+              theme={theme}
+              onLayout={NOOP}
+              onScroll={NOOP}
+              onScrollBeginDrag={NOOP}
+              onScrollEndDrag={NOOP}
+              onMomentumScrollBegin={NOOP}
+              onMomentumScrollEnd={NOOP}
+              onContentSizeChange={NOOP}
+              onTextSelectionGestureStart={NOOP}
+              onTextSelectionGestureEnd={NOOP}
+              loadAssetPreview={loadNoDemoAsset}
+              formatPatchPath={patchDisplayPath}
+              truncateBody={truncateRunes}
+            />
+          )}
+        />
+      </ChatCanvas>
+    </SafeAreaView>
+  );
+}
+
+/** The Worker's git sheet on fixture changes; tap a file for its diff. */
+function GitDiffDemo() {
+  // The route hands the sheet the terminal palette, not the chat one.
+  const { terminalTheme: theme } = useTerminalThemeChrome();
+  const loadPage = useCallback(
+    async (request: Parameters<typeof screenshotGitDiffPage>[0]) => screenshotGitDiffPage(request),
+    [],
+  );
+  return (
+    <GitDiffSheet
+      visible
+      theme={theme}
+      snapshot={SCREENSHOT_GIT_SNAPSHOT}
+      loading={false}
+      error={null}
+      loadPage={loadPage}
+      refreshKey={0}
+      ownerKey="demo-git"
+      repoBrowserPath=""
+      repoBrowserEntries={[]}
+      repoBrowserLoading={false}
+      repoBrowserError={null}
+      repoFilePath={null}
+      repoFileLoadingPath={null}
+      repoFileError={null}
+      repoFileByPath={{}}
+      onClose={NOOP}
+      onRefresh={NOOP}
+      onOpenRepoPath={NOOP}
+      onOpenRepoFile={NOOP}
+      onCloseRepoFile={NOOP}
+      onBackRepoPath={NOOP}
+    />
+  );
+}
+
+/** The Worker's terminal mode on the real web renderer, fed fixed ANSI. */
+function TerminalPaletteDemo() {
+  const { theme: appTheme } = useAppTheme();
+  const { chromeColors, terminalTheme } = useTerminalThemeChrome();
+  const menuAnchorRef = useRef<View>(null);
+  return (
+    <SafeAreaView
+      style={[styles.flex, { backgroundColor: chromeColors.appBackground }]}
+      edges={["top", "bottom"]}
+    >
+      <TerminalTopBar
+        title="Mobile handoff"
+        subtitle="atlas-notes · Terminal"
+        kind="codex"
+        backgroundColor={terminalTheme.background}
+        chrome={chromeColors}
+        menuAnchorRef={menuAnchorRef}
+        interfaceRenderMode="terminal"
+        gitDiffDisabled={false}
+        gitDiffPresentation={{
+          accessibilityLabel: "Open changes",
+          backgroundColor: "transparent",
+          iconColor: chromeColors.text,
+        }}
+        isStructuredChatWorker={false}
+        status="running"
+        onBack={NOOP}
+        onOpenGitDiff={NOOP}
+        onOpenMenu={NOOP}
+        onToggleInterfaceRenderMode={NOOP}
+      />
+      <TerminalPaletteFixture key={appTheme.colorScheme} theme={terminalTheme} />
+    </SafeAreaView>
+  );
+}
+
+/** Brain fixtures: the cat's state between turns, keyed by `fixture`. */
+const BRAIN_DEMO_PRESENCE: Record<string, BrainCatPresence> = {
+  attention: { state: "attention", count: 1, workIds: ["desk-sync"] },
+  work: { state: "attention", count: 1, workIds: ["desk-sync"] },
+  delivered: { state: "delivered", count: 1 },
+  delegating: { state: "delegating", count: 3 },
+};
+
+type BrainWorkDemo = {
+  objective: BrainObjective;
+  currentWork: BrainCurrentWork[];
+  workers: BrainWorkerRef[];
+};
+
+/** Fixture for the goal line and Work column: the mock's atlas-notes desk. */
+const BRAIN_GOAL_DEMO: BrainWorkDemo = {
+  objective: { title: "Ship atlas-notes v1.4 this week", total: 5, back: 2 },
+  currentWork: [
+    { work_id: "desk-sync", revision: 3, title: "Sync fix needs your call", status: "waiting", progress_mode: "waiting", unread_result: true, wait_for: "Keep both copies, or the newest edit?", wake: { kind: "user_input", ref: "Keep both copies, or the newest edit?" }, updated_at: new Date(Date.now() - 4 * 60_000).toISOString() },
+    { work_id: "desk-settings", revision: 2, title: "Tidy the settings copy", status: "running", progress_mode: "owned", attempt_session_id: "%41", attempt_delegated: true, unread_result: false, updated_at: new Date(Date.now() - 60_000).toISOString() },
+    { work_id: "desk-wording", revision: 4, title: "Conflict wording", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true, summary: "Five apps compared. “Conflicted copy” wins 3 of 5.", updated_at: new Date(Date.now() - 18 * 60_000).toISOString() },
+    { work_id: "desk-notes", revision: 1, title: "Draft the release notes", status: "waiting", progress_mode: "waiting", unread_result: false, wait_for: "Waiting on the sync fix", wake: { kind: "session_terminal", ref: "%40" }, updated_at: new Date(Date.now() - 30 * 60_000).toISOString() },
+  ],
+  workers: [
+    { id: "%41", name: "settings-copy", status: "running", command: "claude", cwd: "/home/me/atlas-notes", summary: "Rewriting strings · 7 of 12" },
+  ],
+};
+
+function BrainDemo() {
+  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  if (fixture === "offline" || fixture === "connecting" || fixture === "homeless") {
+    return (
+      <PrimaryDrawerShell activePrimaryRoute="brain" onSelectPrimaryRoute={NOOP}>
+        <BrainStatusState
+          hasServer={fixture !== "homeless"}
+          connected={fixture === "connecting"}
+          onSettings={NOOP}
+          onRetry={NOOP}
+        />
+      </PrimaryDrawerShell>
+    );
+  }
+  if (fixture === "cold" || fixture === "cold-empty") {
+    return <BrainColdLoadDemo empty={fixture === "cold-empty"} />;
+  }
+  const presence = fixture === "goal" ? { state: "idle" as const } : fixture ? BRAIN_DEMO_PRESENCE[fixture] : undefined;
+  const companion: BrainCompanion = { presence: presence ?? { state: "idle" }, animate: true };
+  return (
+    <BrainCompanionContext.Provider value={companion}>
+      <BrainChatDemo
+        empty={fixture === "empty"}
+        running={fixture !== "empty" && !presence}
+        events={fixture === "work" || fixture === "goal" ? SCREENSHOT_BRAIN_WORK_DESK : fixture === "attention" ? SCREENSHOT_BRAIN_NEEDS : SCREENSHOT_BRAIN_EVENTS}
+        work={fixture === "goal" ? BRAIN_GOAL_DEMO : undefined}
+      />
+    </BrainCompanionContext.Provider>
+  );
+}
+
+/**
+ * A cold open of Brain's chat: history arrives after `loadMs` (default 2 s),
+ * so the loading state and its hand-off can be filmed. `cold-empty` loads an
+ * empty conversation. `remountMs` re-keys the chat mid-load, as the real one
+ * does when Brain's first snapshot names the thread.
+ */
+function BrainColdLoadDemo({ empty }: { empty: boolean }) {
+  const { loadMs, remountMs } = useLocalSearchParams<{ loadMs?: string; remountMs?: string }>();
+  const [loading, setLoading] = useState(true);
+  const [mount, setMount] = useState(0);
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), Number(loadMs) || 2000);
+    const remount = remountMs ? setTimeout(() => setMount(1), Number(remountMs)) : undefined;
+    return () => {
+      clearTimeout(timer);
+      if (remount) clearTimeout(remount);
+    };
+  }, [loadMs, remountMs]);
+  const companion: BrainCompanion = {
+    presence: loading ? { state: "waking" } : { state: "delegating", count: 3 },
+    animate: true,
+    onCatTap: () => "Still waking up…",
+  };
+  return (
+    <BrainCompanionContext.Provider value={companion}>
+      <BrainChatDemo key={mount} empty={empty} running={false} loading={loading} events={SCREENSHOT_BRAIN_EVENTS} />
+    </BrainCompanionContext.Provider>
+  );
+}
+
+function BrainChatDemo({ empty, running, loading = false, events, work }: { empty: boolean; running: boolean; loading?: boolean; events: typeof SCREENSHOT_BRAIN_EVENTS; work?: BrainWorkDemo }) {
+  const { theme: appTheme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const { chrome, theme } = useMemo(
+    () => buildChatChrome(appTheme),
+    [appTheme],
+  );
+  const scrollRef = useRef<FlatList<TimelineItem>>(null);
+  const inputRef = useRef<TextInput>(null);
+  const [draft, setDraft] = useState("");
+  const [focused, setFocused] = useState(false);
+  const [providerActivityStartedAt] = useState(() =>
+    new Date(Date.now() - 43_000).toISOString(),
+  );
+  const emptyPending = useMemo(() => [], []);
+  const runningActivity = useMemo(
+    () => ({
+      id: "demo-brain-working-turn",
+      status: "running" as const,
+      started_at: providerActivityStartedAt,
+    }),
+    [providerActivityStartedAt],
+  );
+  const timeline = useInterfaceTimelineItems({
+    events: empty || loading ? emptyPending : events,
+    pendingUserMessages: emptyPending,
+    runningActivity: running ? runningActivity : undefined,
+    onPendingUserMessageAction: NOOP,
+  });
+  const hasContent = draft.trim().length > 0;
+  const appBarInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
+  const { width } = useWindowDimensions();
+  const workColumn = Boolean(work) && width >= PRIMARY_SIDEBAR_BREAKPOINT;
+  const surface = useMemo(() => brainWorkSurface(work?.currentWork, work?.workers), [work]);
+  const topChromeInset = appBarInset;
+
+  return (
+    <PrimaryDrawerShell activePrimaryRoute="brain" onSelectPrimaryRoute={NOOP}>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+      <View style={{ flex: 1 }}>
+      <ChatCanvas chrome={chrome}>
+        <InterfaceChatKeyboardFrame
+          enabled
+          keyboardVerticalOffset={0}
+          chrome={chrome}
+          topChromeInset={topChromeInset}
+          composer={
+            <InterfaceChatComposer
+              inputRef={inputRef}
+              draft={draft}
+              placeholder="Tell Brain…"
+              editable
+              focused={focused}
+              canAttach
+              uploading={false}
+              activeUpload={null}
+              sendEnabled={hasContent}
+              sending={false}
+              sendLabel={running ? "Queue message" : "Send message"}
+              showStopButton={running && !hasContent}
+              stopEnabled
+              stopLabel="Stop current turn"
+              stopLoading={false}
+              providerActivityStartedAt={running ? providerActivityStartedAt : undefined}
+              bottomPadding={Math.max(insets.bottom, 8)}
+              showActionMenuButton
+              actionMenuIcon="add"
+              composerLayout="telegram"
+              showAttachmentRail
+              showCommandMenu={false}
+              showCommandList={false}
+              showComposerActions={false}
+              composerActionButtonEnabled
+              commandQuery=""
+              commands={[]}
+              attachments={[]}
+              chrome={chrome}
+              theme={theme}
+              onSelectCommand={NOOP}
+              onToggleActionMenu={NOOP}
+              onDismissActionMenu={NOOP}
+              onRemoveAttachment={NOOP}
+              onDraftChange={setDraft}
+              onUploadPress={NOOP}
+              onCancelUpload={NOOP}
+              onInputFocus={() => setFocused(true)}
+              onInputBlur={() => setFocused(false)}
+              onSendPress={() => setDraft("")}
+              onStopPress={NOOP}
+            />
+          }
+          renderTimeline={(extraContentPadding, keyboardLifecycleGate) => (
+            <InterfaceTimelineView
+              scrollRef={scrollRef}
+              items={timeline}
+              emptyTitle="Ready when you are"
+              emptyBody="Brain naps in the seal until you ask, then gets to work and brings back what it finds."
+              loading={loading}
+              emptyStateSuppressed={false}
+              unavailable={false}
+              syncing={false}
+              textSelectable={false}
+              extraContentPadding={extraContentPadding}
+              keyboardLifecycleGate={keyboardLifecycleGate}
+              topChromeInset={topChromeInset}
+              chrome={chrome}
+              theme={theme}
+              onLayout={NOOP}
+              onScroll={NOOP}
+              onScrollBeginDrag={NOOP}
+              onScrollEndDrag={NOOP}
+              onMomentumScrollBegin={NOOP}
+              onMomentumScrollEnd={NOOP}
+              onContentSizeChange={NOOP}
+              onTextSelectionGestureStart={NOOP}
+              onTextSelectionGestureEnd={NOOP}
+              loadAssetPreview={loadNoDemoAsset}
+              formatPatchPath={patchDisplayPath}
+              truncateBody={truncateRunes}
+            />
+          )}
+        />
+      </ChatCanvas>
+      </View>
+      {workColumn ? (
+        <BrainWorkColumn surface={surface} objective={work?.objective} chrome={chrome} topInset={appBarInset} animate onOpenSlip={NOOP} />
+      ) : null}
+      </View>
+    </PrimaryDrawerShell>
+  );
+}
+
+const CAT_GALLERY: { state: BrainCatState; title: string; when: string }[] = [
+  { state: "idle", title: "Idle", when: "Connected, nothing to do: asleep in the seal" },
+  { state: "waking", title: "Waking", when: "Starting, connecting or loading: hops out of the seal" },
+  { state: "working", title: "Working", when: "Brain's turn is running: on the move" },
+  { state: "delegating", title: "Delegating", when: "Workers hold delegated Work: sitting, watching" },
+  { state: "attention", title: "Needs you", when: "Work is waiting on your input: peeking over the seal" },
+  { state: "delivered", title: "Delivered", when: "An unread result is waiting: a happy hop" },
+  { state: "offline", title: "Offline", when: "Your computer is unreachable: asleep in a grey seal" },
+  { state: "homeless", title: "No home", when: "No computer paired yet: an empty seal" },
+];
+
+const CAT_TAP_DEMO: Partial<Record<BrainCatState, string>> = {
+  idle: "All quiet. 2 running, nothing needs you.",
+  waking: "Still waking up. Connecting to your computer…",
+  working: "Right now: Read routing.md",
+  attention: "Opens the first Work that needs you",
+  offline: "Knocking on your computer…",
+};
+
+/**
+ * One cat, large, for frame captures: `cat=<state>`. Tapping it hops (or
+ * stirs) and shows what the real cat answers in that state.
+ */
+function CatFrameDemo({ state }: { state: BrainCatState }) {
+  const colors = useAppColors();
+  const [said, setSaid] = useState<string | null>(null);
+  return (
+    <View style={[catGalleryStyles.frame, { backgroundColor: colors.bgPrimary }]}>
+      <TappableCat
+        state={state}
+        size={state === "idle" || state === "waking" || state === "offline" ? 160 : 200}
+        onPress={() => setSaid(CAT_TAP_DEMO[state] ?? "")}
+        accessibilityLabel={`Brain cat: ${state}`}
+      />
+      <Text style={[TypeScale.label, { color: colors.textPrimary, minHeight: 24 }]}>{said ?? " "}</Text>
+    </View>
+  );
+}
+
+/** Every cat state at hero and row size, for design review. `still=1` freezes motion. */
+function CatGalleryDemo() {
+  const { still, cat } = useLocalSearchParams<{ still?: string; cat?: string }>();
+  const colors = useAppColors();
+  const single = CAT_GALLERY.find((entry) => entry.state === cat);
+  if (single) return <CatFrameDemo state={single.state} />;
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bgPrimary }} contentContainerStyle={catGalleryStyles.grid}>
+      {CAT_GALLERY.map(({ state, title, when }) => (
+        <View key={state} style={[catGalleryStyles.cell, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
+          <View style={catGalleryStyles.art}>
+            <PetSprite state={state} size={112} animate={still !== "1"} />
+            <PetSprite state={state} size={46} animate={still !== "1"} />
+          </View>
+          <Text style={[TypeScale.title, { color: colors.textPrimary }]}>{title}</Text>
+          <Text style={[TypeScale.caption, { color: colors.textSecondary }]}>{when}</Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+const catGalleryStyles = StyleSheet.create({
+  frame: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    padding: 16,
+  },
+  cell: {
+    width: 170,
+    flexGrow: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+    gap: 4,
+  },
+  art: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 12,
+    minHeight: 116,
+    marginBottom: 10,
+  },
+});
+
+/**
+ * Composer motion fixture: both capsule states at a representative narrow
+ * width (320), with and without the active-model control, draft, attachment,
+ * running Stop timer, and a long model label proving deterministic
+ * one-line truncation (the full label stays in the chip accessibility label).
+ * Composer text is capped at COMPOSER_MAX_FONT_SCALE so the geometry never
+ * clips at large system font scales.
+ */
+function ComposerStatesDemo() {
+  const params = useLocalSearchParams<{ autoModel?: string | string[] }>();
+  const autoModel = Array.isArray(params.autoModel)
+    ? params.autoModel[0]
+    : params.autoModel;
+  const { theme: appTheme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const { chrome, theme } = useMemo(
+    () => buildChatChrome(appTheme),
+    [appTheme],
+  );
+  const compactRef = useRef<TextInput>(null);
+  const draftRef = useRef<TextInput>(null);
+  const expandedRef = useRef<TextInput>(null);
+  const runningRef = useRef<TextInput>(null);
+  const longLabelRef = useRef<TextInput>(null);
+  const routedRef = useRef<TextInput>(null);
+  const [compactDraft, setCompactDraft] = useState("");
+  const [expandedDraft, setExpandedDraft] = useState("");
+  const [runningDraft, setRunningDraft] = useState("");
+  const [providerActivityStartedAt] = useState(() =>
+    new Date(Date.now() - 43_000).toISOString(),
+  );
+  const modelControl = {
+    label: "claude-sonnet-4-5",
+    accessibilityLabel: "Open model selection, claude-sonnet-4-5",
+  };
+  const longModelControl = {
+    label: "gpt-5.1-codex-max-longhaul-8k-context",
+    accessibilityLabel:
+      "Open model selection, gpt-5.1-codex-max-longhaul-8k-context",
+  };
+  const [demoSheet, setDemoSheet] = useState<null | "routed">(null);
+  const [demoModelId, setDemoModelId] = useState("deepseek-chat");
+  const demoSelection = {
+    session_id: "tmux:@demo",
+    client: "codex" as const,
+    connection_id: "c1",
+    connection_name: "DeepSeek",
+    model_id: demoModelId,
+    credential_ready: true,
+    hot_switchable: true,
+  };
+  useEffect(() => {
+    if (autoModel !== "1") return;
+    setDemoSheet("routed");
+  }, [autoModel]);
+
+  const routedModelControl = resolveComposerModelControl({
+    capabilities: {
+      structured_events: true,
+      model_profile_managed: true,
+      model_profile_active_switch: true,
+    },
+    connectionConnected: true,
+    selection: demoSelection,
+    refreshRequired: false,
+  });
+  const demoCatalog: ProvidersSnapshot = {
+    revision: 1,
+    connections: [
+      {
+        id: "c1",
+        name: "DeepSeek",
+        clients: ["codex"],
+        credential_ready: true,
+        advanced: false,
+        preset_id: "deepseek",
+      },
+      {
+        id: "c2",
+        name: "Claude Gateway",
+        clients: ["claude"],
+        credential_ready: true,
+        advanced: true,
+      },
+    ],
+    defaults: {
+      codex: { connection_id: "c1" },
+    },
+    presets: [],
+    models: {
+      c1: [
+        { id: "deepseek-chat", available: true, source: "bundled" },
+        { id: "deepseek-reasoner", available: true, source: "bundled" },
+      ],
+      c2: [{ id: "claude-sonnet-4-5", available: true, source: "bundled" }],
+    },
+  };
+  const demoRows = threadRuntimeRows({
+    snapshot: demoCatalog,
+    selection: demoSelection,
+  });
+  const narrowRow = (
+    label: string,
+    composer: React.ReactElement<typeof InterfaceChatComposer>,
+  ) => (
+    <View style={styles.composerStateColumn}>
+      <Text style={[styles.composerStateLabel, { color: chrome.textMuted }]}>
+        {label}
+      </Text>
+      <View style={styles.composerStateRow}>{composer}</View>
+    </View>
+  );
+  const runningAttachment = [
+    {
+      id: "demo-running-attachment",
+      name: "keyboard-geometry-notes.md",
+      path: "/demo/keyboard-geometry-notes.md",
+      mimeType: "text/markdown",
+    },
+  ];
+
+  return (
+    <SafeAreaView
+      style={[styles.flex, { backgroundColor: chrome.appBackground }]}
+      edges={["top", "bottom"]}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.composerDemoBody,
+          { paddingBottom: Math.max(insets.bottom, 16) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {narrowRow(
+          "Compact · empty · no model control",
+          <InterfaceChatComposer
+            inputRef={compactRef}
+            draft={compactDraft}
+            placeholder="Message the agent"
+            editable
+            focused={false}
+            canAttach
+            uploading={false}
+            activeUpload={null}
+            sendEnabled={false}
+            sending={false}
+            sendLabel="Send message"
+            showStopButton={false}
+            stopEnabled={false}
+            stopLabel="Stop current turn"
+            stopLoading={false}
+            bottomPadding={8}
+            showActionMenuButton
+            actionMenuIcon="add"
+            composerLayout="telegram"
+            showAttachmentRail
+            showCommandMenu={false}
+            showCommandList={false}
+            showComposerActions={false}
+            composerActionButtonEnabled
+            commandQuery=""
+            commands={[]}
+            attachments={[]}
+            chrome={chrome}
+            theme={theme}
+            modelControl={null}
+            onSelectCommand={NOOP}
+            onToggleActionMenu={NOOP}
+            onDismissActionMenu={NOOP}
+            onRemoveAttachment={NOOP}
+            onDraftChange={setCompactDraft}
+            onUploadPress={NOOP}
+            onCancelUpload={NOOP}
+            onInputFocus={NOOP}
+            onInputBlur={NOOP}
+            onSendPress={NOOP}
+            onStopPress={NOOP}
+          />,
+        )}
+        {narrowRow(
+          "Compact · draft · no model control",
+          <InterfaceChatComposer
+            inputRef={draftRef}
+            draft="Queue a careful review of the keyboard overlay."
+            placeholder="Message the agent"
+            editable
+            focused={false}
+            canAttach
+            uploading={false}
+            activeUpload={null}
+            sendEnabled
+            sending={false}
+            sendLabel="Send message"
+            showStopButton={false}
+            stopEnabled={false}
+            stopLabel="Stop current turn"
+            stopLoading={false}
+            bottomPadding={8}
+            showActionMenuButton
+            actionMenuIcon="add"
+            composerLayout="telegram"
+            showAttachmentRail
+            showCommandMenu={false}
+            showCommandList={false}
+            showComposerActions={false}
+            composerActionButtonEnabled
+            commandQuery=""
+            commands={[]}
+            attachments={[]}
+            chrome={chrome}
+            theme={theme}
+            modelControl={null}
+            onSelectCommand={NOOP}
+            onToggleActionMenu={NOOP}
+            onDismissActionMenu={NOOP}
+            onRemoveAttachment={NOOP}
+            onDraftChange={NOOP}
+            onUploadPress={NOOP}
+            onCancelUpload={NOOP}
+            onInputFocus={NOOP}
+            onInputBlur={NOOP}
+            onSendPress={NOOP}
+            onStopPress={NOOP}
+          />,
+        )}
+        {narrowRow(
+          "Expanded · focused · model control",
+          <InterfaceChatComposer
+            inputRef={expandedRef}
+            draft={expandedDraft}
+            placeholder="Message the agent"
+            editable
+            focused
+            canAttach
+            uploading={false}
+            activeUpload={null}
+            sendEnabled={false}
+            sending={false}
+            sendLabel="Send message"
+            showStopButton={false}
+            stopEnabled={false}
+            stopLabel="Stop current turn"
+            stopLoading={false}
+            bottomPadding={8}
+            showActionMenuButton
+            actionMenuIcon="add"
+            composerLayout="telegram"
+            showAttachmentRail
+            showCommandMenu={false}
+            showCommandList={false}
+            showComposerActions={false}
+            composerActionButtonEnabled
+            commandQuery=""
+            commands={[]}
+            attachments={[]}
+            chrome={chrome}
+            theme={theme}
+            modelControl={modelControl}
+            onSelectCommand={NOOP}
+            onToggleActionMenu={NOOP}
+            onDismissActionMenu={NOOP}
+            onRemoveAttachment={NOOP}
+            onDraftChange={setExpandedDraft}
+            onUploadPress={NOOP}
+            onCancelUpload={NOOP}
+            onInputFocus={NOOP}
+            onInputBlur={NOOP}
+            onSendPress={NOOP}
+            onStopPress={NOOP}
+          />,
+        )}
+        {narrowRow(
+          "Expanded · multiline · attachment · running Stop",
+          <InterfaceChatComposer
+            inputRef={runningRef}
+            draft="Queue a careful review of the keyboard overlay.\nPreserve the visible message anchor.\nVerify every narrow width."
+            placeholder="Message the agent"
+            editable
+            focused
+            canAttach
+            uploading={false}
+            activeUpload={null}
+            sendEnabled={false}
+            sending={false}
+            sendLabel="Queue message"
+            showStopButton
+            stopEnabled
+            stopLabel="Stop current turn"
+            stopLoading={false}
+            providerActivityStartedAt={providerActivityStartedAt}
+            bottomPadding={8}
+            showActionMenuButton
+            actionMenuIcon="add"
+            composerLayout="telegram"
+            showAttachmentRail
+            showCommandMenu={false}
+            showCommandList={false}
+            showComposerActions={false}
+            composerActionButtonEnabled
+            commandQuery=""
+            commands={[]}
+            attachments={runningAttachment}
+            chrome={chrome}
+            theme={theme}
+            modelControl={modelControl}
+            onSelectCommand={NOOP}
+            onToggleActionMenu={NOOP}
+            onDismissActionMenu={NOOP}
+            onRemoveAttachment={NOOP}
+            onDraftChange={setRunningDraft}
+            onUploadPress={NOOP}
+            onCancelUpload={NOOP}
+            onInputFocus={NOOP}
+            onInputBlur={NOOP}
+            onSendPress={NOOP}
+            onStopPress={NOOP}
+          />,
+        )}
+        {narrowRow(
+          "Expanded · long model label truncates · full label accessible",
+          <InterfaceChatComposer
+            inputRef={longLabelRef}
+            draft=""
+            placeholder="Message the agent"
+            editable
+            focused
+            canAttach
+            uploading={false}
+            activeUpload={null}
+            sendEnabled={false}
+            sending={false}
+            sendLabel="Send message"
+            showStopButton={false}
+            stopEnabled={false}
+            stopLabel="Stop current turn"
+            stopLoading={false}
+            bottomPadding={8}
+            showActionMenuButton
+            actionMenuIcon="add"
+            composerLayout="telegram"
+            showAttachmentRail
+            showCommandMenu={false}
+            showCommandList={false}
+            showComposerActions={false}
+            composerActionButtonEnabled
+            commandQuery=""
+            commands={[]}
+            attachments={[]}
+            chrome={chrome}
+            theme={theme}
+            modelControl={longModelControl}
+            onSelectCommand={NOOP}
+            onToggleActionMenu={NOOP}
+            onDismissActionMenu={NOOP}
+            onRemoveAttachment={NOOP}
+            onDraftChange={NOOP}
+            onUploadPress={NOOP}
+            onCancelUpload={NOOP}
+            onInputFocus={NOOP}
+            onInputBlur={NOOP}
+            onSendPress={NOOP}
+            onStopPress={NOOP}
+          />,
+        )}
+        {narrowRow(
+          "Expanded · routed Provider session · switchable",
+          <InterfaceChatComposer
+            inputRef={routedRef}
+            draft=""
+            placeholder="Message the agent"
+            editable
+            focused
+            canAttach
+            uploading={false}
+            activeUpload={null}
+            sendEnabled={false}
+            sending={false}
+            sendLabel="Send message"
+            showStopButton={false}
+            stopEnabled={false}
+            stopLabel="Stop current turn"
+            stopLoading={false}
+            bottomPadding={8}
+            showActionMenuButton
+            actionMenuIcon="add"
+            composerLayout="telegram"
+            showAttachmentRail
+            showCommandMenu={false}
+            showCommandList={false}
+            showComposerActions={false}
+            composerActionButtonEnabled
+            commandQuery=""
+            commands={[]}
+            attachments={[]}
+            chrome={chrome}
+            theme={theme}
+            modelControl={routedModelControl}
+            onSelectCommand={NOOP}
+            onToggleActionMenu={NOOP}
+            onDismissActionMenu={NOOP}
+            onRemoveAttachment={NOOP}
+            onDraftChange={NOOP}
+            onUploadPress={NOOP}
+            onCancelUpload={NOOP}
+            onInputFocus={NOOP}
+            onInputBlur={NOOP}
+            onSendPress={NOOP}
+            onStopPress={NOOP}
+            onModelControlPress={() => {
+              // Open the native bottom sheet, as the real control does.
+              setDemoSheet("routed");
+            }}
+          />,
+        )}
+      </ScrollView>
+
+      <SessionModelSheet
+        visible={demoSheet !== null}
+        loading={false}
+        activating={false}
+        error={null}
+        rows={demoRows}
+        chrome={chrome}
+        onClose={() => setDemoSheet(null)}
+        onRetry={NOOP}
+        onActivate={(choice) => {
+          // Fixture-only same-Session switch: update the current model label
+          // and close; no daemon, no Provider mutation.
+          setDemoModelId(choice.modelId);
+          setDemoSheet(null);
+        }}
+      />
+    </SafeAreaView>
+  );
+}
+
+function SessionsDemo() {
+  return (
+    <PrimaryDrawerShell activePrimaryRoute="list" onSelectPrimaryRoute={NOOP}>
+      <SessionsDemoBody />
+    </PrimaryDrawerShell>
+  );
+}
+
+/**
+ * The real Sessions list view on fixture rows. `fixture=offline` shows the
+ * unreachable-server notice, `fixture=selection` the selection bar.
+ */
+function SessionsDemoBody() {
+  const colors = useAppColors();
+  const insets = useSafeAreaInsets();
+  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
+  const sections = useMemo(
+    () => groupWorkersByDirectory(SCREENSHOT_SESSION_AGENTS),
+    [],
+  );
+  const selectionMode = fixture === "selection";
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set(selectionMode ? [SCREENSHOT_SESSION_AGENTS[0].key, SCREENSHOT_SESSION_AGENTS[2].key] : []),
+  );
+  const toggle = useCallback((agent: { key: string }) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (!next.delete(agent.key)) next.add(agent.key);
+      return next;
+    });
+  }, []);
+  const rowState = useCallback(
+    (agent: { key: string }) => ({ selected: selected.has(agent.key), selectionDisabled: false }),
+    [selected],
+  );
+  const selectionBar = useMemo(
+    () =>
+      selectionMode ? (
+        <WorkerSessionSelectionBar count={selected.size} terminating={false} onCancel={NOOP} onTerminate={NOOP} />
+      ) : null,
+    [selected.size, selectionMode],
+  );
+  usePrimarySelectionBar(selectionBar);
+  const offline = fixture === "offline";
+  const bottomInset = Math.max(insets.bottom, 16);
+  return (
+    <View
+      style={[
+        styles.flex,
+        { backgroundColor: colors.bgPrimary, marginTop: topChromeInset },
+      ]}
+    >
+      <SessionsListView
+        sections={sections}
+        rowState={rowState}
+        selectionMode={selectionMode}
+        showServerName={false}
+        bottomInset={bottomInset}
+        onOpenWorker={NOOP}
+        onEnterSelection={NOOP}
+        onToggleSelection={toggle}
+      />
+      {selectionMode ? null : (
+        <NewSessionButton bottomInset={bottomInset} disabled={offline} busy={false} onPress={NOOP} />
+      )}
+    </View>
+  );
+}
+
+function StatsDemo() {
+  const colors = useAppColors();
+  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  const data = useMemo(() => {
+    const value = structuredClone(SCREENSHOT_STATS_FIXTURE) as unknown as StatsView;
+    if (fixture === "unpriced") {
+      for (const range of Object.values(value.ranges)) {
+        range.costKnown = false;
+        if (range.models[0]) Object.assign(range.models[0], { name: "New model", cost: 0, costKnown: false, unpricedReason: "insufficient_context" });
+      }
+      value.pricing = { basis: "Catalog reference estimates", source: "models.dev", stale: false };
+    }
+    return value;
+  }, [fixture]);
+  return (
+    <SafeAreaView
+      style={[styles.flex, { backgroundColor: colors.bgPrimary }]}
+      edges={["top", "bottom"]}
+    >
+      <View
+        style={[styles.statsHeader, { borderBottomColor: colors.borderSubtle }]}
+      >
+        <Icon name="stats" size={20} color={colors.accent} />
+        <View style={styles.flex}>
+          <Text style={[styles.statsTitle, { color: colors.textPrimary }]}>
+            Stats
+          </Text>
+          <Text style={[styles.statsSubtitle, { color: colors.textTertiary }]}>
+            All activity · fictional demo
+          </Text>
+        </View>
+      </View>
+      <StatsScreenshotDemo
+        statsData={data}
+      />
+    </SafeAreaView>
+  );
+}
+
+function ProvidersDemo() {
+  const params = useLocalSearchParams<{
+    fixture?: string | string[];
+    editor?: string | string[];
+    keyboard?: string | string[];
+    picker?: string | string[];
+  }>();
+  const demo = useMemo(() => resolveScreenshotProvidersDemo(params), [params]);
+  const modelPicker = useMemo(() => {
+    const raw = Array.isArray(params.picker) ? params.picker[0] : params.picker;
+    if (raw !== "1") return null;
+    const codex = demo.catalog.connections
+      .filter(
+        (candidate) =>
+          candidate.clients.includes("codex") && candidate.credential_ready,
+      )
+      .sort(
+        (left, right) =>
+          (demo.catalog.models[right.id]?.length ?? 0) -
+          (demo.catalog.models[left.id]?.length ?? 0),
+      )[0];
+    if (!codex) return null;
+    return {
+      purpose: "support" as const,
+      client: "codex" as const,
+      connection: codex,
+      models: demo.catalog.models[codex.id] ?? [],
+    };
+  }, [demo.catalog, params]);
+  return (
+    <SafeAreaView style={styles.flex} edges={[]}>
+      <DemoStackHeader title="Model Providers" />
+      <ProvidersPresentation
+        catalog={demo.catalog}
+        loading={false}
+        refreshing={false}
+        error={null}
+        offline={false}
+        unavailable={false}
+        currentServerAvailable
+        editor={demo.editor}
+        mutating={false}
+        apiKeyAutoFocus={demo.apiKeyAutoFocus}
+        onRefresh={NOOP}
+        onOpenSettings={NOOP}
+        onOpenEditor={NOOP}
+        onCloseEditor={NOOP}
+        onDelete={NOOP}
+        onUseDirect={NOOP}
+        onSelectConnection={NOOP}
+        onDiscover={NOOP}
+        modelPicker={modelPicker}
+        onCloseModelPicker={NOOP}
+        onSelectModel={NOOP}
+        onTestConnection={async () => ({
+          client: "codex",
+          modelCount: 3,
+          latencyMs: 128,
+        })}
+        onTestConnectionById={async () => ({
+          client: "codex",
+          modelCount: 3,
+          latencyMs: 128,
+        })}
+        onSaveProvider={() => ({ status: "saved" })}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  demoHeaderOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    zIndex: 20,
+  },
+  statsHeader: {
+    minHeight: 58,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  statsTitle: { ...UiTextMetrics, ...TypeScale.body },
+  statsSubtitle: { ...UiTextMetrics, ...TypeScale.micro, marginTop: 1 },
+  composerDemoBody: {
+    paddingTop: 16,
+    paddingHorizontal: 12,
+    gap: 18,
+  },
+  composerStateColumn: {
+    gap: 6,
+  },
+  composerStateLabel: {
+    ...UiTextMetrics,
+    ...TypeScale.micro,
+    marginLeft: 2,
+  },
+  composerStateRow: {
+    width: 320,
+    alignSelf: "center",
+  },
+  mermaidRoot: {
+    flex: 1,
+  },
+  mermaidContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+});
+
+/**
+ * Plugins without a live server: the real catalog and service views with
+ * fixture accounts, under the same header the Plugins stack uses.
+ */
+function PluginsDemo() {
+  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  const colors = useAppColors();
+  const P = SCREENSHOT_PLUGINS;
+  const A = SCREENSHOT_PLUGIN_ACCOUNTS;
+  const github = fixture === "github";
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+      <DemoStackHeader title={github ? "GitHub" : "Plugins"} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: 760, alignSelf: "center" }}>
+        {github ? (
+          <>
+            <ServiceHeader plugin={P.github} state={{ label: "Connected", tone: "success" }} />
+            <AccountCard
+              plugin={P.github}
+              account={A.github}
+              job={pluginJobs.github}
+              running={null}
+              onAccess={NOOP}
+              onRecover={NOOP}
+              onSetEnabled={NOOP}
+              onDisconnect={async () => false}
+              onOpenTools={NOOP}
+            />
+          </>
+        ) : (
+          <CatalogView
+            rows={pluginCatalogRows(Object.values(P), Object.values(A), pluginJobs)}
+            loading={false}
+            error=""
+            connecting={null}
+            onRetry={NOOP}
+            onOpen={NOOP}
+            onConnect={NOOP}
+            onReconnect={NOOP}
+          />
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+/** The pushed-screen header the real stack gives Plugins and Settings pages. */
+function DemoStackHeader({ title }: { title: string }) {
+  const colors = useAppColors();
+  return (
+    <Stack.Screen
+      options={{
+        headerShown: true,
+        title,
+        headerStyle: { backgroundColor: colors.bgPrimary },
+        headerTintColor: colors.textPrimary,
+        headerShadowVisible: false,
+        headerTitleAlign: "center",
+        headerTitleStyle: { fontFamily: TypeScale.label.fontFamily, fontSize: 17, color: colors.textPrimary },
+        headerLeft: () => <HeaderBackButton onPress={NOOP} />,
+      }}
+    />
+  );
+}

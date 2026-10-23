@@ -18,7 +18,7 @@ const shellSource = source("PrimaryDrawerShell.tsx");
 const primaryLayoutSource = source("../../app/(primary)/_layout.tsx");
 const brainSource = source("../../app/(primary)/index.tsx");
 const sessionsSource = source("../../app/(primary)/list.tsx");
-const screenshotDemoSource = source("../../app/screenshot-demo.tsx");
+const screenshotDemoSource = source("../screenshotDemo/ScreenshotDemoScreen.tsx");
 
 function sessionsTopForFrame(frame: PagerFrame): number {
   return resolvePrimaryAppBarGeometry(frame.safeAreaTop).contentInset;

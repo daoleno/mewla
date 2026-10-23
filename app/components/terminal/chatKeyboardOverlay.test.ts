@@ -156,7 +156,7 @@ describe("structured chat keyboard overlay", () => {
 
   test("grows the production multiline input from wrapped content", () => {
     const input = source("InterfaceComposerInput.tsx");
-    const demo = source("../../app/screenshot-demo.tsx");
+    const demo = source("../screenshotDemo/ScreenshotDemoScreen.tsx");
 
     expect(input).toContain("onContentSizeChange={handleContentSizeChange}");
     expect(input).toContain("MAX_INPUT_HEIGHT");
@@ -178,7 +178,7 @@ describe("structured chat keyboard overlay", () => {
   });
 
   test("uses the production fixed canvas for the Brain fixture", () => {
-    const demo = source("../../app/screenshot-demo.tsx");
+    const demo = source("../screenshotDemo/ScreenshotDemoScreen.tsx");
     const brain = demo.slice(
       demo.indexOf("function BrainDemo()"),
       demo.indexOf("function SessionsDemo()"),
@@ -193,7 +193,7 @@ describe("structured chat keyboard overlay", () => {
   });
 
   test("the isolated Web fixture renders production timeline and Composer primitives", () => {
-    const demo = source("../../app/screenshot-demo.tsx");
+    const demo = source("../screenshotDemo/ScreenshotDemoScreen.tsx");
 
     expect(demo).toContain("<InterfaceChatKeyboardFrame");
     expect(demo).toContain("<InterfaceTimelineView");

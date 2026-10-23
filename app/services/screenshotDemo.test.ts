@@ -9,10 +9,12 @@ import {
   resolveScreenshotChatPendingFixture,
   resolveScreenshotDemoState,
   resolveScreenshotProvidersDemo,
+} from "./screenshotDemo";
+import {
   screenshotDemoEnabled,
   screenshotDemoRouteOptedIn,
   shouldUseScreenshotDemoRuntime,
-} from "./screenshotDemo";
+} from "./screenshotDemoGate";
 import {
   SCREENSHOT_ACTIVITY_HEADER_EVENTS,
   SCREENSHOT_BRAIN_EVENTS,
@@ -24,6 +26,10 @@ const layoutSource = readFileSync(
   "utf8",
 );
 const demoRouteSource = readFileSync(
+  join(import.meta.dir, "../components/screenshotDemo/ScreenshotDemoScreen.tsx"),
+  "utf8",
+);
+const demoRouteStub = readFileSync(
   join(import.meta.dir, "../app/screenshot-demo.tsx"),
   "utf8",
 );
@@ -110,7 +116,7 @@ describe("screenshot demo isolation", () => {
     expect(demoRouteSource).toContain("ProvidersDemo");
     expect(demoRouteSource).toContain("resolveScreenshotProvidersDemo");
     expect(demoRouteSource).toContain(
-      'from "../components/providers/ProvidersPresentation"',
+      'from "../providers/ProvidersPresentation"',
     );
     expect(demoRouteSource).toContain("apiKeyAutoFocus={demo.apiKeyAutoFocus}");
     expect(demoRouteSource).not.toContain('kind: "add"');
@@ -161,7 +167,7 @@ describe("screenshot demo isolation", () => {
     expect(demoRouteSource).toContain('case "profile":');
     expect(demoRouteSource).toContain("InterfaceDevicePerformanceDemoGate");
     expect(demoRouteSource).toContain(
-      'from "../components/terminal/InterfaceDevicePerformanceDemo"',
+      'from "../terminal/InterfaceDevicePerformanceDemo"',
     );
   });
 
@@ -236,9 +242,24 @@ describe("screenshot demo isolation", () => {
       "screenshotDemoRouteOptedIn(params.demo)",
     );
     expect(demoRouteSource).toContain('router.replace("/")');
-    expect(demoRouteSource).not.toContain('from "../services/websocket"');
-    expect(demoRouteSource).not.toContain('from "../services/storage"');
-    expect(demoRouteSource).not.toContain('from "../store/brain"');
-    expect(demoRouteSource).not.toContain('from "../store/workers"');
+    expect(demoRouteSource).not.toContain('from "../../services/websocket"');
+    expect(demoRouteSource).not.toContain('from "../../services/storage"');
+    expect(demoRouteSource).not.toContain('from "../../store/brain"');
+    expect(demoRouteSource).not.toContain('from "../../store/workers"');
+  });
+
+  test("the production bundle never reaches the demo or its fixtures", () => {
+    // Metro folds __DEV__ to false in release builds and drops the require,
+    // so only the route stub and the fixture-free gate stay in the bundle.
+    expect(demoRouteStub).toContain("__DEV__");
+    // A release build that opens the link lands on the app, not a blank page.
+    expect(demoRouteStub).toContain('<Redirect href="/" />');
+    expect(demoRouteStub).toContain('require("../components/screenshotDemo/ScreenshotDemoScreen")');
+    expect(demoRouteStub).not.toMatch(/^import .*screenshotDemo/m);
+    expect(layoutSource).not.toContain("/screenshotDemo\"");
+    expect(layoutSource).toContain("/screenshotDemoGate\"");
+    expect(
+      readFileSync(join(import.meta.dir, "screenshotDemoGate.ts"), "utf8"),
+    ).not.toContain("Fixtures");
   });
 });
