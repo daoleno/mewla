@@ -65,7 +65,7 @@ func (s *Server) handleBrowserViewer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Browser is unavailable", 503)
 		return
 	}
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, websocketAuthResponseHeader(r))
 	if err != nil {
 		return
 	}

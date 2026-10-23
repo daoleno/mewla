@@ -548,7 +548,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, websocketAuthResponseHeader(r))
 	if err != nil {
 		log.Printf("websocket: upgrade failed remote=%s device=%s: %v", r.RemoteAddr, device.ID, err)
 		return
@@ -3718,19 +3718,47 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 	return device, true
 }
 
+// authSubprotocolPrefix starts the one WebSocket subprotocol a browser offers
+// to carry its device authorization: the browser WebSocket API cannot set an
+// Authorization header, and a credential in the URL lands in proxy and tunnel
+// logs. The rest of the protocol name is the base64url of the same header
+// value, so every signature, purpose and replay check is unchanged.
+const authSubprotocolPrefix = "mewla.auth."
+
 func authorizationFromRequest(r *http.Request) string {
 	if value := strings.TrimSpace(r.Header.Get("Authorization")); value != "" {
 		return value
 	}
-	encoded := strings.TrimSpace(r.URL.Query().Get("auth"))
-	if encoded == "" {
+	if !websocket.IsWebSocketUpgrade(r) {
 		return ""
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil {
-		return ""
+	for _, protocol := range websocket.Subprotocols(r) {
+		encoded, ok := strings.CutPrefix(protocol, authSubprotocolPrefix)
+		if !ok || encoded == "" {
+			continue
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+		if err != nil {
+			return ""
+		}
+		return string(decoded)
 	}
-	return string(decoded)
+	return ""
+}
+
+// websocketAuthResponseHeader selects the authorization subprotocol the
+// browser offered; a browser fails the connection if the server selects none
+// of the protocols it asked for. Requests that sent a header get no header.
+func websocketAuthResponseHeader(r *http.Request) http.Header {
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "" {
+		return nil
+	}
+	for _, protocol := range websocket.Subprotocols(r) {
+		if strings.HasPrefix(protocol, authSubprotocolPrefix) {
+			return http.Header{"Sec-Websocket-Protocol": {protocol}}
+		}
+	}
+	return nil
 }
 
 func withCORS(next http.Handler) http.Handler {
