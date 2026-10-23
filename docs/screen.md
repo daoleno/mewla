@@ -63,24 +63,48 @@ it. Text you type with the phone's keyboard, including Chinese and accented
 letters, arrives as typed, whatever input source the computer uses. Keys
 pressed with ⌘, ⌃ or ⌥ arrive as shortcuts.
 
-The view rotates to landscape on this page only. The badge in the corner shows
-the network round trip, the time from your tap until the screen redraws,
-frames per second and bandwidth, with the computer's power state below. Tap it
-to hide it. Screen sends only the parts of the screen that changed and never
-queues more than two frames, so the picture keeps up with your input on slow
-connections.
+The view rotates to landscape on this page only. The badge in the corner has
+two lines. The first says how the connection reaches the computer (Relay,
+Tailscale, LAN or Local) and which stage takes longest between the screen
+changing and your phone showing it: the network round trip (which includes
+bytes waiting in the link), the computer's encoding, the hop into the viewer or
+the viewer's own drawing. "Reduced quality" is added while the picture is
+sent at lower quality to keep up. The second line has the round trip, the time
+from your tap until the screen redraws, updates per second and bandwidth, with
+the computer's power state below. A **Locked** tag appears in the corner when
+the computer is locked. Tap the badge to hide it.
+
+Screen sends only the parts of the screen that changed, and always the newest
+screen: a slow connection drops frames instead of queueing them. It watches how
+late the phone's answers are. When they are late it first tries one more update
+in flight, and keeps it only if more updates then arrive each second (a long
+round trip); when that doesn't help (too many bytes), it lowers the picture
+quality while the screen moves, down to a floor that is still readable, and
+sends what changed again at full quality once the screen is still. When nothing is
+late, nothing changes. The screen's size never changes.
 
 ## Keep the computer reachable
 
 While a device is allowed, Mewla keeps the computer awake so you can still
-reach it when you're away. The display may still sleep; connecting wakes it,
-and a locked computer shows its login window, where you can type the password.
+reach it when you're away. The display may still sleep when nobody is
+viewing; connecting wakes it, and a locked computer shows its login window,
+where you can type the password.
+
+**While you are viewing, the display stays on**, also on battery, so the Mac
+doesn't lock or switch the picture off under your finger and ask for its
+password. The hold lasts as long as the viewer is connected and ends when it
+disconnects, times out or Mewla stops. It is never used to keep a lock
+screen lit: if the Mac is locked, or someone locks it while you view, the
+display may sleep as usual, the viewer shows **Locked**, and Mewla doesn't
+unlock or bypass anything. Watching an agent adds no hold of its own; the agent
+holds the display while it works.
 **Let this computer sleep** in the options menu, or
 `mewla screen enable -allow-sleep` at the computer, turns this off. The hold
 ends when Mewla stops.
 
-On macOS Mewla holds the same assertion as `caffeinate -i -s`. macOS still
-sleeps when:
+On macOS Mewla holds the same assertion as `caffeinate -i -s` while a device
+is allowed, and `caffeinate -d` while a viewer is connected on an unlocked Mac.
+macOS still sleeps when:
 
 - a MacBook's lid is closed and no external display is connected. Keep the lid
   open; Screen warns you when it is closed.
@@ -192,3 +216,25 @@ mewla screen status     # support, permissions, allowed devices, keep-awake
 mewla screen disable    # turn Screen off: viewers close and every device must be allowed again
 mewla screen enable     # allow devices to ask again
 ```
+
+## When the picture is slow
+
+Open the badge on the Screen page and read its first line. The path says
+whether the phone reaches the computer through the Mewla Link relay or directly,
+and the stage says what holds the picture up.
+
+- **network** is high and the path is **Relay**: the round trip through the
+  relay dominates. A direct address (Tailscale, or Wi-Fi at home) avoids it;
+  see [Connect and pair](connect-and-pair.md). Mewla doesn't choose between
+  a relay and a direct address for you: a phone paired through Mewla Link
+  reaches the computer only through the relay.
+- **encode** is high: the computer is busy; a full-screen update normally takes
+  about 10 ms.
+- **app** or **draw** is high: the phone is the limit (its bridge into the
+  viewer, or drawing the picture).
+
+At the computer, one line per session in Mewla's log summarizes the same stages
+(`screen: device … stream via …`): updates, bytes, encode and acknowledgement
+times, and the lowest quality reached. It holds numbers only. Starting Mewla with
+`MEWLA_SCREEN_ADAPTIVE=off` turns the quality and window adaptation off, to
+compare a link with and without it.
