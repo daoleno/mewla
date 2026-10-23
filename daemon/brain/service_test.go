@@ -3042,8 +3042,8 @@ func TestStoreUsesStateAndWorkspaceDirectories(t *testing.T) {
 	if !pathExists(filepath.Join(root, "state", stateDatabaseName)) {
 		t.Fatalf("fresh Brain store has no state database")
 	}
-	if !pathExists(filepath.Join(root, "state", "reminders.json")) {
-		t.Fatalf("missing state reminders file")
+	if pathExists(filepath.Join(root, "state", "reminders.json")) {
+		t.Fatalf("fresh Brain store created the retired reminders file")
 	}
 	if !pathExists(filepath.Join(root, "workspace", "memory.md")) {
 		t.Fatalf("missing workspace memory file")

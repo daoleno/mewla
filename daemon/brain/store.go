@@ -456,9 +456,6 @@ func (s *Store) ensureFiles() error {
 	if err := s.ensureWorklog(); err != nil {
 		return err
 	}
-	if err := ensureFile(s.remindersPath(), []byte("[]\n")); err != nil {
-		return err
-	}
 	if err := ensureFile(s.HostSessionPath(), []byte("{}\n")); err != nil {
 		return err
 	}
@@ -582,10 +579,6 @@ func (s *Store) statePath() string {
 
 func (s *Store) memoryPath() string {
 	return filepath.Join(s.WorkspacePath(), "memory.md")
-}
-
-func (s *Store) remindersPath() string {
-	return filepath.Join(s.statePath(), "reminders.json")
 }
 
 func (s *Store) profilePath() string {
