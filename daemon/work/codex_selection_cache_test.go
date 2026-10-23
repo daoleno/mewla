@@ -195,3 +195,34 @@ func TestABoundWorkersRolloutIsUsedWithoutAnyLookup(t *testing.T) {
 		t.Fatalf("unbound Worker candidate = %+v, %v", candidate, ok)
 	}
 }
+
+func TestBoundCodexIdentityNamesTheRolloutWithoutSearching(t *testing.T) {
+	rollout := filepath.Join(t.TempDir(), ".codex", "sessions", "2026", "10", "24", "rollout-2026-10-24T05-12-00-0199aaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl")
+	if err := os.MkdirAll(filepath.Dir(rollout), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rollout, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	previous := CodexBoundRollout
+	defer func() { CodexBoundRollout = previous }()
+	CodexBoundRollout = func(id string) string {
+		if id == "%3" {
+			return rollout
+		}
+		return ""
+	}
+	before := codexLookupCost.Subprocesses.Load()
+	identity, found, err := ResolveLiveHostTranscriptIdentity(classifier.Worker{ID: "%3"}, WorkerProviderCodex)
+	if err != nil || !found || identity.Path != rollout || identity.SessionID != "0199aaaa-bbbb-cccc-dddd-eeeeeeeeeeee" {
+		t.Fatalf("identity = %+v found=%v err=%v", identity, found, err)
+	}
+	if codexLookupCost.Subprocesses.Load() != before {
+		t.Fatal("a bound Worker's identity must not start a subprocess")
+	}
+	// A rollout that is not on disk yet names nothing: the search decides.
+	CodexBoundRollout = func(string) string { return filepath.Join(t.TempDir(), "missing.jsonl") }
+	if _, ok := boundCodexIdentity(classifier.Worker{ID: "%3"}); ok {
+		t.Fatal("a missing rollout must not bind")
+	}
+}
