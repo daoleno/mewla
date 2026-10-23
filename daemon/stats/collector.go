@@ -133,6 +133,11 @@ type modelPricing struct {
 	updatedAt    time.Time
 }
 
+// staticPricing is the built-in price table, a last resort. Prices belong to
+// the models.dev catalog (modelfacts); this table prices usage only until that
+// catalog has been downloaded once, and loadPricingCache says so when it falls
+// back to it. Once a catalog is loaded it replaces this table entirely, except
+// for retiredPricing.
 var staticPricing = map[string]modelPricing{
 	// Anthropic current models (2026)
 	"claude-fable-5":            {displayName: "Claude Fable 5", input: 10, output: 50, cacheRead: 1, cacheCreate: 12.5},
@@ -148,12 +153,6 @@ var staticPricing = map[string]modelPricing{
 	"claude-opus-4-5-20251101":   {displayName: "Claude Opus 4.5", input: 5, output: 25, cacheRead: 0.50, cacheCreate: 6.25},
 	"claude-sonnet-4-5":          {displayName: "Claude Sonnet 4.5 (latest)", input: 3, output: 15, cacheRead: 0.30, cacheCreate: 3.75},
 	"claude-sonnet-4-5-20250929": {displayName: "Claude Sonnet 4.5", input: 3, output: 15, cacheRead: 0.30, cacheCreate: 3.75},
-	"claude-opus-4-1":            {displayName: "Claude Opus 4.1 (latest)", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
-	"claude-opus-4-1-20250805":   {displayName: "Claude Opus 4.1", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
-	"claude-opus-4-0":            {displayName: "Claude Opus 4 (latest)", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
-	"claude-opus-4-20250514":     {displayName: "Claude Opus 4", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
-	"claude-sonnet-4-0":          {displayName: "Claude Sonnet 4 (latest)", input: 3, output: 15, cacheRead: 0.30, cacheCreate: 3.75},
-	"claude-sonnet-4-20250514":   {displayName: "Claude Sonnet 4", input: 3, output: 15, cacheRead: 0.30, cacheCreate: 3.75},
 	// OpenAI GPT models
 	"gpt-4.1":      {displayName: "GPT-4.1", input: 2, output: 8, cacheRead: 0.50},
 	"gpt-4.1-mini": {displayName: "GPT-4.1 mini", input: 0.40, output: 1.60, cacheRead: 0.10},
@@ -166,33 +165,23 @@ var staticPricing = map[string]modelPricing{
 	"o3-pro":  {displayName: "o3-pro", input: 20, output: 80},
 	"o4-mini": {displayName: "o4-mini", input: 1.10, output: 4.40, cacheRead: 0.28},
 	// OpenAI GPT-5.x models
-	"gpt-5":               {displayName: "GPT-5", input: 1.25, output: 10, cacheRead: 0.125},
-	"gpt-5-mini":          {displayName: "GPT-5 Mini", input: 0.25, output: 2, cacheRead: 0.025},
-	"gpt-5-nano":          {displayName: "GPT-5 Nano", input: 0.05, output: 0.40, cacheRead: 0.005},
-	"gpt-5-pro":           {displayName: "GPT-5 Pro", input: 15, output: 120},
-	"gpt-5-chat-latest":   {displayName: "GPT-5 Chat (latest)", input: 1.25, output: 10},
-	"gpt-5.1":             {displayName: "GPT-5.1", input: 1.25, output: 10, cacheRead: 0.13},
-	"gpt-5.1-chat-latest": {displayName: "GPT-5.1 Chat", input: 1.25, output: 10, cacheRead: 0.125},
-	"gpt-5.2":             {displayName: "GPT-5.2", input: 1.75, output: 14, cacheRead: 0.175},
-	"gpt-5.2-chat-latest": {displayName: "GPT-5.2 Chat", input: 1.75, output: 14, cacheRead: 0.175},
-	"gpt-5.2-pro":         {displayName: "GPT-5.2 Pro", input: 21, output: 168},
-	"gpt-5.3-chat-latest": {displayName: "GPT-5.3 Chat (latest)", input: 1.75, output: 14, cacheRead: 0.175},
-	"gpt-5.4":             {displayName: "GPT-5.4", input: 2.50, output: 15, cacheRead: 0.25},
-	"gpt-5.4-mini":        {displayName: "GPT-5.4 mini", input: 0.75, output: 4.50, cacheRead: 0.075},
-	"gpt-5.4-nano":        {displayName: "GPT-5.4 nano", input: 0.20, output: 1.25, cacheRead: 0.02},
-	"gpt-5.4-pro":         {displayName: "GPT-5.4 Pro", input: 30, output: 180},
-	"gpt-5.5":             {displayName: "GPT-5.5", input: 5, output: 30, cacheRead: 0.50},
-	"gpt-5.5-pro":         {displayName: "GPT-5.5 Pro", input: 30, output: 180},
-	"gpt-5.6-sol":         {displayName: "GPT-5.6 Sol", input: 5, output: 30, cacheRead: 0.50, cacheCreate: 6.25},
+	"gpt-5":        {displayName: "GPT-5", input: 1.25, output: 10, cacheRead: 0.125},
+	"gpt-5-mini":   {displayName: "GPT-5 Mini", input: 0.25, output: 2, cacheRead: 0.025},
+	"gpt-5-nano":   {displayName: "GPT-5 Nano", input: 0.05, output: 0.40, cacheRead: 0.005},
+	"gpt-5-pro":    {displayName: "GPT-5 Pro", input: 15, output: 120},
+	"gpt-5.1":      {displayName: "GPT-5.1", input: 1.25, output: 10, cacheRead: 0.13},
+	"gpt-5.2":      {displayName: "GPT-5.2", input: 1.75, output: 14, cacheRead: 0.175},
+	"gpt-5.2-pro":  {displayName: "GPT-5.2 Pro", input: 21, output: 168},
+	"gpt-5.4":      {displayName: "GPT-5.4", input: 2.50, output: 15, cacheRead: 0.25},
+	"gpt-5.4-mini": {displayName: "GPT-5.4 mini", input: 0.75, output: 4.50, cacheRead: 0.075},
+	"gpt-5.4-nano": {displayName: "GPT-5.4 nano", input: 0.20, output: 1.25, cacheRead: 0.02},
+	"gpt-5.4-pro":  {displayName: "GPT-5.4 Pro", input: 30, output: 180},
+	"gpt-5.5":      {displayName: "GPT-5.5", input: 5, output: 30, cacheRead: 0.50},
+	"gpt-5.5-pro":  {displayName: "GPT-5.5 Pro", input: 30, output: 180},
+	"gpt-5.6-sol":  {displayName: "GPT-5.6 Sol", input: 5, output: 30, cacheRead: 0.50, cacheCreate: 6.25},
 	// OpenAI Codex
-	"gpt-5-codex":         {displayName: "GPT-5-Codex", input: 1.25, output: 10, cacheRead: 0.125},
-	"gpt-5.1-codex":       {displayName: "GPT-5.1 Codex", input: 1.25, output: 10, cacheRead: 0.125},
-	"gpt-5.1-codex-mini":  {displayName: "GPT-5.1 Codex mini", input: 0.25, output: 2, cacheRead: 0.025},
-	"gpt-5.1-codex-max":   {displayName: "GPT-5.1 Codex Max", input: 1.25, output: 10, cacheRead: 0.125},
-	"gpt-5.2-codex":       {displayName: "GPT-5.2 Codex", input: 1.75, output: 14, cacheRead: 0.175},
 	"gpt-5.3-codex":       {displayName: "GPT-5.3 Codex", input: 1.75, output: 14, cacheRead: 0.175},
 	"gpt-5.3-codex-spark": {displayName: "GPT-5.3 Codex Spark", input: 1.75, output: 14, cacheRead: 0.175},
-	"codex-mini-latest":   {displayName: "Codex Mini", input: 1.50, output: 6, cacheRead: 0.375},
 	// xAI Grok models
 	"grok-4.20-multi-agent-0309": {displayName: "Grok 4.20 Multi-Agent", input: 1.25, output: 2.5, cacheRead: 0.20},
 	"grok-4.20-0309-non-reasoning": {
@@ -210,6 +199,28 @@ var staticPricing = map[string]modelPricing{
 	"grok-4.3":       {displayName: "Grok 4.3", input: 1.25, output: 2.5, cacheRead: 0.20},
 	"grok-4.5":       {displayName: "Grok 4.5", input: 2, output: 6, cacheRead: 0.50},
 	"grok-build-0.1": {displayName: "Grok Build 0.1", input: 1, output: 2, cacheRead: 0.20},
+}
+
+// retiredPricing prices models the models.dev catalog no longer lists but
+// whose usage still sits in session logs. It applies beneath the catalog, so a
+// model the catalog lists always takes the catalog's price.
+var retiredPricing = map[string]modelPricing{
+	"claude-opus-4-1":          {displayName: "Claude Opus 4.1 (latest)", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
+	"claude-opus-4-1-20250805": {displayName: "Claude Opus 4.1", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
+	"claude-opus-4-0":          {displayName: "Claude Opus 4 (latest)", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
+	"claude-opus-4-20250514":   {displayName: "Claude Opus 4", input: 15, output: 75, cacheRead: 1.50, cacheCreate: 18.75},
+	"claude-sonnet-4-0":        {displayName: "Claude Sonnet 4 (latest)", input: 3, output: 15, cacheRead: 0.30, cacheCreate: 3.75},
+	"claude-sonnet-4-20250514": {displayName: "Claude Sonnet 4", input: 3, output: 15, cacheRead: 0.30, cacheCreate: 3.75},
+	"gpt-5-chat-latest":        {displayName: "GPT-5 Chat (latest)", input: 1.25, output: 10},
+	"gpt-5.1-chat-latest":      {displayName: "GPT-5.1 Chat", input: 1.25, output: 10, cacheRead: 0.125},
+	"gpt-5.2-chat-latest":      {displayName: "GPT-5.2 Chat", input: 1.75, output: 14, cacheRead: 0.175},
+	"gpt-5.3-chat-latest":      {displayName: "GPT-5.3 Chat (latest)", input: 1.75, output: 14, cacheRead: 0.175},
+	"gpt-5-codex":              {displayName: "GPT-5-Codex", input: 1.25, output: 10, cacheRead: 0.125},
+	"gpt-5.1-codex":            {displayName: "GPT-5.1 Codex", input: 1.25, output: 10, cacheRead: 0.125},
+	"gpt-5.1-codex-mini":       {displayName: "GPT-5.1 Codex mini", input: 0.25, output: 2, cacheRead: 0.025},
+	"gpt-5.1-codex-max":        {displayName: "GPT-5.1 Codex Max", input: 1.25, output: 10, cacheRead: 0.125},
+	"gpt-5.2-codex":            {displayName: "GPT-5.2 Codex", input: 1.75, output: 14, cacheRead: 0.175},
+	"codex-mini-latest":        {displayName: "Codex Mini", input: 1.50, output: 6, cacheRead: 0.375},
 }
 
 const (

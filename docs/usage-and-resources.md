@@ -23,7 +23,11 @@ Costs come in four kinds, kept apart:
 | Unknown | No known price; shown as `—`, never as zero |
 
 Estimates use public reference prices; your provider or gateway may bill
-differently.
+differently. The prices come from the public models.dev catalog, which Mewla
+downloads once a day and shares with the model picker. Until the first download
+succeeds Mewla uses a short price table built into the daemon; the price source
+then reads `built-in` instead of `models.dev`, and the daemon logs that it is
+doing so.
 
 When Codex is signed in with ChatGPT and uses **Official login**, Stats also
 shows the plan's usage windows (for example 5 hours and 1 week) with the share
