@@ -3,13 +3,11 @@ package watcher
 import (
 	"fmt"
 	"net"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
 // SessionServiceSnapshot describes TCP services started under tmux sessions.
@@ -76,9 +74,6 @@ type listeningSocket struct {
 	port  int
 	bind  string
 }
-
-var ssPIDPattern = regexp.MustCompile(`pid=([0-9]+)`)
-var ssInodePattern = regexp.MustCompile(`\bino:([0-9]+)`)
 
 // DiscoverSessionServices scans tmux-owned process trees for listening TCP ports.
 func (w *Watcher) DiscoverSessionServices() (SessionServiceSnapshot, error) {
@@ -342,43 +337,50 @@ func descendantPIDsIncludingRoot(rootPID int, processes map[int]processInfo) []i
 	return result
 }
 
-func listListeningSockets() ([]listeningSocket, error) {
-	out, err := procspawn.Command("ss listeners", "ss", "-H", "-ltnpe").CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("ss listening sockets: %w", err)
-	}
-
-	return parseSSListeningSockets(string(out)), nil
-}
-
-func parseSSListeningSockets(output string) []listeningSocket {
+// parseLsofListeningSockets reads `lsof -F pfdn` for LISTEN sockets. Output is
+// one field per line, a letter then its value: "p<pid>" opens a process, and
+// each of its sockets starts at "f<fd>", then "d<kernel socket address>" and
+// "n<address:port>". The device field stands in for the socket inode.
+func parseLsofListeningSockets(output string) []listeningSocket {
 	var sockets []listeningSocket
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 4 || fields[0] != "LISTEN" {
+	pid := 0
+	device := ""
+	for _, line := range strings.Split(output, "\n") {
+		if len(line) < 2 {
 			continue
 		}
-
-		match := ssPIDPattern.FindStringSubmatch(line)
-		if len(match) != 2 {
-			continue
+		value := strings.TrimSpace(line[1:])
+		switch line[0] {
+		case 'p':
+			parsed, err := strconv.Atoi(value)
+			if err != nil || parsed <= 0 {
+				pid = 0
+				continue
+			}
+			pid, device = parsed, ""
+		case 'f':
+			device = "" // a new file: it does not inherit the previous one's device
+		case 'd':
+			device = value
+		case 'n':
+			if pid == 0 {
+				continue
+			}
+			bind, port, ok := splitAddressPort(value)
+			if !ok || port <= 0 {
+				continue
+			}
+			sockets = append(sockets, listeningSocket{pid: pid, port: port, bind: bind, inode: device})
 		}
-		pid, err := strconv.Atoi(match[1])
-		if err != nil || pid <= 0 {
-			continue
-		}
-
-		bind, port, ok := splitAddressPort(fields[3])
-		if !ok || port <= 0 {
-			continue
-		}
-		inode := ""
-		if match := ssInodePattern.FindStringSubmatch(line); len(match) == 2 {
-			inode = match[1]
-		}
-		sockets = append(sockets, listeningSocket{pid: pid, port: port, bind: bind, inode: inode})
 	}
 	return sockets
+}
+
+// formatBindAddress renders a raw 4- or 16-byte listen address the way
+// consumers expect: dotted IPv4, IPv6 without brackets, "::" for the IPv6
+// wildcard. An IPv4-mapped address reads as plain IPv4.
+func formatBindAddress(raw []byte) string {
+	return net.IP(raw).String()
 }
 
 func splitAddressPort(value string) (string, int, bool) {

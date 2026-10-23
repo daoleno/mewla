@@ -7,23 +7,23 @@ import (
 	"testing"
 )
 
-func TestParseSSListeningSockets(t *testing.T) {
-	output := `
-LISTEN 0      511                    *:3000             *:*    users:(("next-server (v1",pid=1410617,fd=22))
-LISTEN 0      4096          127.0.0.1:9876        0.0.0.0:*    users:(("mewla",pid=888,fd=9))
-LISTEN 0      4096               [::]:5173          [::]:*    users:(("node",pid=77,fd=18))
-ESTAB  0      0             127.0.0.1:3000      127.0.0.1:1111 users:(("node",pid=55,fd=5))
-LISTEN 0      4096               [::]:bad           [::]:*    users:(("node",pid=99,fd=18))
-`
-
-	got := parseSSListeningSockets(output)
+func TestParseLsofListeningSockets(t *testing.T) {
+	// `lsof -nP -iTCP -sTCP:LISTEN -F pfdn`: a process line, then fd, device and
+	// name lines per listening socket.
+	output := "p1410617\nf22\nd0x2f1c\nn*:3000\np888\nf9\nd0x77a1\nn127.0.0.1:9876\nf10\nd0x77a2\nn[::1]:9877\n" +
+		"pnotapid\nf3\nd0x1\nn*:1111\n" +
+		"p77\nf18\nd0x99\nn[::]:5173\nf19\nd0x9a\nn*:bad\nf20\nn*:6006\n"
+	got := parseLsofListeningSockets(output)
 	want := []listeningSocket{
-		{pid: 1410617, port: 3000, bind: "*"},
-		{pid: 888, port: 9876, bind: "127.0.0.1"},
-		{pid: 77, port: 5173, bind: "::"},
+		{pid: 1410617, port: 3000, bind: "*", inode: "0x2f1c"},
+		{pid: 888, port: 9876, bind: "127.0.0.1", inode: "0x77a1"},
+		{pid: 888, port: 9877, bind: "::1", inode: "0x77a2"},
+		{pid: 77, port: 5173, bind: "::", inode: "0x99"},
+		// No device field: it must not inherit the previous socket's.
+		{pid: 77, port: 6006, bind: "*", inode: ""},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("parseSSListeningSockets() = %#v, want %#v", got, want)
+		t.Fatalf("parseLsofListeningSockets() = %#v, want %#v", got, want)
 	}
 }
 
