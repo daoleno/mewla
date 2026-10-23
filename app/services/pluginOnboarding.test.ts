@@ -67,3 +67,10 @@ test("Google plugins carry the Limited Use notice in the app, other services do 
   expect(dataUseNotice("slack")).toBeNull();
   expect(GOOGLE_DATA_USE_URL).toBe("https://mewla.ai/privacy/#google");
 });
+
+test("a waiting sign-in says why its last check failed and keeps the usual guidance", () => {
+  const note = "Couldn't reach Mewla's Google sign-in (timed out). Trying again.";
+  expect(waitingDetail("gmail", "Gmail", note)).toStartWith(note);
+  expect(waitingDetail("gmail", "Gmail", note)).toContain("Finish signing in on Gmail's page");
+  expect(waitingDetail("gmail", "Gmail")).not.toContain("Trying again");
+});

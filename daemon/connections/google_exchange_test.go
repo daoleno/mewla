@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"github.com/daoleno/mewla/daemon/googleauth"
 	"golang.org/x/oauth2"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -137,5 +140,82 @@ func TestLateCancelKeepsACompletedGoogleSignIn(t *testing.T) {
 	}
 	if len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 {
 		t.Fatal("account missing after late cancel")
+	}
+}
+
+// A flaky network fails one status check now and then. The app asks every few
+// seconds, so one failed check must not end a sign-in Google has already
+// recorded: the flow stays waiting, says why, and the next check connects.
+func TestGoogleSignInSurvivesAFailedCheckAfterConsent(t *testing.T) {
+	old := GoogleExchangeOrigin
+	GoogleExchangeOrigin = "https://mewla-owned.example"
+	defer func() { GoogleExchangeOrigin = old }()
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	var start googleauth.Start
+	statuses, identity := 0, 0
+	down := true
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var result any
+		switch req.URL.Host + req.URL.Path {
+		case "mewla-owned.example/google/start":
+			_ = json.NewDecoder(req.Body).Decode(&start)
+			result = googleauth.Session{ID: "flow", AuthorizationURL: GoogleExchangeOrigin + "/google/authorize?id=flow", Expires: time.Now().Add(10 * time.Minute), Status: "waiting"}
+		case "mewla-owned.example/google/status":
+			statuses++
+			if down {
+				return nil, &net.OpError{Op: "dial", Err: context.DeadlineExceeded}
+			}
+			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "ya29.survive-access", RefreshToken: "1//survive-refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "signed-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: googleauth.Scopes(googleauth.Calendar, false)}, start.PublicKey)
+			result = googleauth.Session{ID: "flow", Status: "connected", Ciphertext: sealed}
+		case "mewla-owned.example/google/cancel":
+			result = map[string]bool{"cancelled": true}
+		case "openidconnect.googleapis.com/v1/userinfo":
+			identity++
+			if identity == 1 {
+				return nil, errors.New("connection dropped")
+			}
+			result = map[string]string{"sub": "123", "email": "person@example.test"}
+		default:
+			t.Fatalf("unexpected request %s", req.URL)
+		}
+		raw, _ := json.Marshal(result)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(raw)))}, nil
+	})}
+	begun := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "google-calendar"}})
+	missed := mustHandle(t, m, Request{Action: "connect_status", FlowID: begun.Flow.ID})
+	if missed.Flow == nil || missed.Flow.Status != "waiting" || !strings.Contains(missed.Flow.Message, "timed out") || missed.Account != nil {
+		t.Fatalf("a failed check ended the sign-in or hid its cause: %+v", missed.Flow)
+	}
+	if statuses != 2 {
+		t.Fatalf("a failed status check was tried %d times, want one retry", statuses)
+	}
+	down = false
+	dropped := mustHandle(t, m, Request{Action: "connect_status", FlowID: begun.Flow.ID})
+	if dropped.Flow == nil || dropped.Flow.Status != "waiting" || dropped.Flow.Message == "" || len(m.records) != 0 {
+		t.Fatalf("a failed account lookup ended the sign-in: %+v", dropped.Flow)
+	}
+	connected := mustHandle(t, m, Request{Action: "connect_status", FlowID: begun.Flow.ID})
+	if connected.Flow.Status != "connected" || connected.Flow.Message != "" || connected.Account == nil || connected.Account.Identity != "person@example.test" {
+		t.Fatalf("the next check did not connect: %+v", connected.Flow)
+	}
+	if len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 {
+		t.Fatal("account not saved")
+	}
+}
+
+func TestExchangeFailureNamesTheCause(t *testing.T) {
+	for want, err := range map[string]error{
+		"timed out":                &net.OpError{Op: "dial", Err: context.DeadlineExceeded},
+		"connection refused":       &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED},
+		"connection reset":         io.ErrUnexpectedEOF,
+		"DNS lookup failed":        errors.New("endpoint DNS failed"),
+		"unexpected redirect":      errors.New("redirects are not allowed"),
+		"secure connection failed": errors.New("tls: handshake failure"),
+		"network error":            errors.New("something else"),
+	} {
+		if got := exchangeFailure(err); got != want {
+			t.Errorf("%v: got %q, want %q", err, got, want)
+		}
 	}
 }

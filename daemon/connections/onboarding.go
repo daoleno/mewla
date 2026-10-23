@@ -264,6 +264,17 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 	}
 	if f.google != nil && f.Status == "waiting" {
 		if err := m.pollGoogleExchange(ctx, f); err != nil {
+			var unreachable exchangeUnreachable
+			if errors.As(err, &unreachable) || errors.Is(err, errNetwork) {
+				// The sign-in is intact on both ends; only this check failed. Say
+				// why and stay waiting: the app asks again, and an error here would
+				// make it forget a consent Google has already recorded.
+				f.Message = "Couldn't reach Google to confirm the account. Trying again."
+				if errors.As(err, &unreachable) {
+					f.Message = unreachable.Error()
+				}
+				return flowResult(f), nil
+			}
 			return Response{}, err
 		}
 	}
