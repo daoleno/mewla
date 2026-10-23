@@ -269,7 +269,7 @@ func (s *Server) resolveGitRepoRoot(targetID, cwd string) (repoRoot string, reas
 
 	root, gitErr := gitCommandOutput(resolvedCwd, false, "rev-parse", "--show-toplevel")
 	if gitErr != nil {
-		if strings.Contains(strings.ToLower(gitErr.Error()), "not a git repository") {
+		if errors.Is(gitErr, errNotGitRepository) {
 			return "", gitDiffReasonNotGitRepo, nil
 		}
 		return "", "", fmt.Errorf("resolve git repo root: %w", gitErr)
@@ -433,7 +433,7 @@ func untrackedDiffAttributes(repoRoot string, files []gitDiffFileInfo) (map[stri
 	if input.Len() == 0 {
 		return attributes, nil
 	}
-	cmd := exec.Command("git", "-C", repoRoot, "check-attr", "-z", "--stdin", "diff")
+	cmd := gitCommand("-C", repoRoot, "check-attr", "-z", "--stdin", "diff")
 	cmd.Stdin = strings.NewReader(input.String())
 	out, err := cmd.Output()
 	if err != nil {
@@ -607,16 +607,41 @@ func gitDiffStatusName(x, y byte) string {
 }
 
 func gitCommandOutput(repoRoot string, allowDiffExitCode bool, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", repoRoot}, args...)...)
+	cmd := gitCommand(append([]string{"-C", repoRoot}, args...)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if allowDiffExitCode && errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return string(out), nil
 		}
-		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		return "", gitFailure(err, out)
 	}
 	return string(out), nil
+}
+
+// errNotGitRepository: the directory is not inside a git work tree.
+var errNotGitRepository = errors.New("not a git repository")
+
+// gitCommand runs git with a pinned C locale: its diagnostics are matched in
+// gitFailure, and a translated message would turn "not a repository" into a
+// hard error.
+func gitCommand(args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	return cmd
+}
+
+// gitFailure turns a failed git run into an error. git exits 128 for every
+// fatal condition, so the one distinction callers need - outside any
+// repository - is read from the C-locale message here, the only place git
+// text is parsed.
+func gitFailure(err error, output []byte) error {
+	text := strings.TrimSpace(string(output))
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 128 && strings.Contains(text, "not a git repository") {
+		return fmt.Errorf("%w: %s", errNotGitRepository, text)
+	}
+	return fmt.Errorf("%s", text)
 }
 
 func workingTreeContentSnapshot(repoRoot string, file gitDiffFileInfo) (gitDiffContentSnapshot, error) {
@@ -704,7 +729,7 @@ func buildGitDiffContentSnapshot(label string, content []byte) gitDiffContentSna
 }
 
 func gitObjectExists(repoRoot, spec string) (bool, error) {
-	cmd := exec.Command("git", "-C", repoRoot, "cat-file", "-e", spec)
+	cmd := gitCommand("-C", repoRoot, "cat-file", "-e", spec)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 128 {
@@ -716,7 +741,7 @@ func gitObjectExists(repoRoot, spec string) (bool, error) {
 }
 
 func gitObjectContent(repoRoot, spec string) ([]byte, error) {
-	cmd := exec.Command("git", "-C", repoRoot, "show", spec)
+	cmd := gitCommand("-C", repoRoot, "show", spec)
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -728,10 +753,10 @@ func gitObjectContent(repoRoot, spec string) ([]byte, error) {
 }
 
 func gitOutput(repoRoot string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", repoRoot}, args...)...)
+	cmd := gitCommand(append([]string{"-C", repoRoot}, args...)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		return "", gitFailure(err, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
