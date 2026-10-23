@@ -27,10 +27,45 @@ type dshInteractionOwner struct {
 	connected bool
 	clientID  string
 	pending   map[string]DSHInteraction
+	// rev counts every change to the snapshot; changed is closed and replaced
+	// on each one so a waiting reader wakes without polling.
+	rev     int64
+	changed chan struct{}
 }
 
 func newDSHInteractionOwner(id string) *dshInteractionOwner {
-	return &dshInteractionOwner{sessionID: id, pending: map[string]DSHInteraction{}}
+	return &dshInteractionOwner{sessionID: id, pending: map[string]DSHInteraction{}, changed: make(chan struct{})}
+}
+
+// bump records a change to the snapshot. The caller holds o.mu.
+func (o *dshInteractionOwner) bump() {
+	o.rev++
+	close(o.changed)
+	o.changed = make(chan struct{})
+}
+
+// wait returns once the snapshot differs from the revision the caller last
+// saw, or after the timeout or context end, whichever comes first. The caller
+// then reads the snapshot, which carries the current revision.
+func (o *dshInteractionOwner) wait(ctx context.Context, after int64, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		o.mu.Lock()
+		if o.rev != after {
+			o.mu.Unlock()
+			return
+		}
+		changed := o.changed
+		o.mu.Unlock()
+		select {
+		case <-changed:
+		case <-timer.C:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // reset starts a new answer generation. Pending items belong to the native
@@ -42,6 +77,7 @@ func (o *dshInteractionOwner) reset(connected bool, clientID string) {
 	o.connected = connected
 	o.clientID = clientID
 	o.pending = map[string]DSHInteraction{}
+	o.bump()
 }
 
 // consume applies one forwarded-event frame from the native `$events` stream.
@@ -63,7 +99,10 @@ func (o *dshInteractionOwner) consume(value []byte) (pass string) {
 		o.reset(frame.ClientID != "", frame.ClientID)
 	case "cancel":
 		o.mu.Lock()
-		delete(o.pending, frame.EventID)
+		if _, ok := o.pending[frame.EventID]; ok {
+			delete(o.pending, frame.EventID)
+			o.bump()
+		}
 		o.mu.Unlock()
 	case "waterfall":
 		if frame.EventID == "" {
@@ -109,6 +148,7 @@ func (o *dshInteractionOwner) consume(value []byte) (pass string) {
 			return frame.EventID
 		}
 		o.pending[frame.EventID] = DSHInteraction{RPCID: frame.EventID, Payload: encoded}
+		o.bump()
 	}
 	return ""
 }
@@ -124,7 +164,8 @@ func (o *dshInteractionOwner) snapshot() any {
 		Epoch     string           `json:"epoch"`
 		Connected bool             `json:"connected"`
 		Items     []DSHInteraction `json:"items"`
-	}{o.epoch, o.connected, items}
+		Rev       int64            `json:"rev"`
+	}{o.epoch, o.connected, items, o.rev}
 }
 
 // run keeps one native forwarded-event stream open on `/api/remote.mux`.
@@ -226,5 +267,6 @@ func (o *dshInteractionOwner) answer(ctx context.Context, native *dshNative, pay
 		return fmt.Errorf("Native DSH rejected the answer: %w", err)
 	}
 	delete(o.pending, rpcID)
+	o.bump()
 	return nil
 }

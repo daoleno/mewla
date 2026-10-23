@@ -74,6 +74,9 @@ func dshSocket(id string) (string, error) {
 }
 
 // CallDSH only reaches the private socket of the explicitly owned Session.
+// dshInteractionWait bounds how long one snapshot request is held open.
+const dshInteractionWait = 10 * time.Second
+
 func CallDSH(ctx context.Context, id, method string, payload any, result any) error {
 	socket, err := dshSocket(id)
 	if err != nil {
@@ -402,6 +405,11 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 		var result any
 		switch method {
 		case "session.interactions":
+			// A caller that names the revision it last saw is held until the
+			// snapshot changes, so it learns of a request without polling.
+			if after, ok := payload["afterRev"].(float64); ok {
+				interactions.wait(r.Context(), int64(after), dshInteractionWait)
+			}
 			result = interactions.snapshot()
 		case "session.respond":
 			if err := interactions.answer(r.Context(), native, payload); err != nil {

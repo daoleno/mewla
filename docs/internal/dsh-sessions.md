@@ -59,6 +59,11 @@ the next listener. Native event IDs, the stream's client ID and connection epoch
 fence every answer. Allow once, Reject, structured option/custom answers, and
 cancellation post `$events/result`; cancelled, replaced, or disconnected requests
 cannot be answered from stale UI. Native permissions remain fail closed.
+The snapshot carries a revision that moves on every change. The App's review panel
+asks for the next snapshot with the revision it last saw (`dsh_after_rev`); the bridge
+holds that request for up to 10 s until a request arrives, is cancelled or is answered,
+so an idle Session costs one held request per 10 s rather than a poll every second.
+Failed requests back off to 30 s, and the panel pauses while the socket is down.
 Native terminal output is a minimal input bridge; the shared Interface provides
 message, reasoning, tool and image presentation. Windows daemon hosts do not expose
 the Unix Session bridge. Android and iOS use the same mobile implementation.

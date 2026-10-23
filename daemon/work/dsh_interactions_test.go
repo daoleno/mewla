@@ -202,3 +202,72 @@ func TestDSHLaunchTokenFromNativeOutput(t *testing.T) {
 		t.Fatal("token invented")
 	}
 }
+
+func TestDSHInteractionWaitWakesOnChange(t *testing.T) {
+	owner := newDSHInteractionOwner("session")
+	revision := func() int64 {
+		return owner.snapshot().(struct {
+			Epoch     string           `json:"epoch"`
+			Connected bool             `json:"connected"`
+			Items     []DSHInteraction `json:"items"`
+			Rev       int64            `json:"rev"`
+		}).Rev
+	}
+	seen := revision()
+
+	// An unchanged snapshot is held until the timeout.
+	started := time.Now()
+	owner.wait(context.Background(), seen, 50*time.Millisecond)
+	if time.Since(started) < 40*time.Millisecond {
+		t.Fatal("wait returned before the timeout with nothing changed")
+	}
+
+	// A stale revision returns at once.
+	started = time.Now()
+	owner.wait(context.Background(), seen-1, time.Minute)
+	if time.Since(started) > time.Second {
+		t.Fatal("wait held a caller that was already behind")
+	}
+
+	// A new request wakes a waiter and bumps the revision.
+	done := make(chan struct{})
+	go func() {
+		owner.wait(context.Background(), seen, time.Minute)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	owner.consume([]byte(`{"type":"waterfall","event":"user-questions/request","eventId":"question","request":{"questions":[{"id":"q","question":"Choose"}]}}`))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("wait did not wake on a new request")
+	}
+	if revision() == seen {
+		t.Fatal("revision did not move")
+	}
+
+	// Cancelling a request that is not pending changes nothing.
+	seen = revision()
+	owner.consume([]byte(`{"type":"cancel","eventId":"unknown"}`))
+	if revision() != seen {
+		t.Fatal("cancel of an unknown request moved the revision")
+	}
+	owner.consume([]byte(`{"type":"cancel","eventId":"question"}`))
+	if revision() == seen {
+		t.Fatal("cancel of a pending request did not move the revision")
+	}
+
+	// A cancelled context releases the waiter.
+	ctx, cancel := context.WithCancel(context.Background())
+	released := make(chan struct{})
+	go func() {
+		owner.wait(ctx, revision(), time.Minute)
+		close(released)
+	}()
+	cancel()
+	select {
+	case <-released:
+	case <-time.After(2 * time.Second):
+		t.Fatal("wait ignored its context")
+	}
+}

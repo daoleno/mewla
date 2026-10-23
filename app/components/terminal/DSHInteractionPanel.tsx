@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { SessionFileRequest } from "../../services/sessionFilePreview";
-import type { DSHAnswer, DSHInteraction, DSHInteractionSnapshot } from "../../services/dshInteractions";
+import { nextDSHPollDelayMs, type DSHAnswer, type DSHInteraction, type DSHInteractionSnapshot } from "../../services/dshInteractions";
 import { wsClient } from "../../services/websocket";
 import { useCurrentServer } from "../../store/currentServer";
+import { useWorkerServerConnections } from "../../store/workers";
 import { BottomSheetFrame } from "../ui";
 
 export function DSHInteractionPanel({ serverId, request, chrome }: { serverId: string; request: SessionFileRequest; chrome: TerminalThemeChrome }) {
@@ -18,25 +19,39 @@ export function DSHInteractionPanel({ serverId, request, chrome }: { serverId: s
   const inFlight = useRef(false);
   const current = currentServerId === serverId && snapshot?.scope === scope ? snapshot.value : undefined;
   const first = current?.items[0];
+  const connected = useWorkerServerConnections()[serverId] === "connected";
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     owner.current = scope; setOpen(false); setError(""); setSnapshot(undefined); inFlight.current = false; setBusy(false);
-    async function poll() {
-      if (!isCurrentServer(serverId)) {
-        setSnapshot(undefined);
-        if (!cancelled) timer = setTimeout(poll, 1200);
-        return;
+    if (!connected || currentServerId !== serverId) return () => { if (owner.current === scope) owner.current = ""; };
+    const sleep = (ms: number) => new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); });
+    // The daemon holds a request that names the revision it last saw until the
+    // pending requests change, so this loop idles instead of polling.
+    async function watch() {
+      let rev: number | undefined;
+      let failures = 0;
+      while (!cancelled) {
+        let delay: number;
+        try {
+          const next = await wsClient.dshInteraction(serverId, request, undefined, rev);
+          if (cancelled || !isCurrentServer(serverId)) return;
+          rev = "items" in next ? next.rev : undefined;
+          if ("items" in next) { setSnapshot({ scope, value: next }); setError(""); }
+          failures = 0;
+          delay = nextDSHPollDelayMs({ ok: true, rev });
+        } catch (error) {
+          if (cancelled || !isCurrentServer(serverId)) return;
+          setSnapshot(undefined); setError(error instanceof Error ? error.message : "Requests unavailable");
+          failures += 1;
+          delay = nextDSHPollDelayMs({ ok: false, failures });
+        }
+        if (delay > 0) await sleep(delay);
       }
-      try {
-        const next = await wsClient.dshInteraction(serverId, request);
-        if (!cancelled && isCurrentServer(serverId) && "items" in next) { setSnapshot({ scope, value: next }); setError(""); }
-      } catch (error) { if (!cancelled && isCurrentServer(serverId)) { setSnapshot(undefined); setError(error instanceof Error ? error.message : "Requests unavailable"); } }
-      if (!cancelled) timer = setTimeout(poll, 1200);
     }
-    void poll();
+    void watch();
     return () => { cancelled = true; clearTimeout(timer); if (owner.current === scope) owner.current = ""; };
-  }, [scope, isCurrentServer, serverId]);
+  }, [scope, isCurrentServer, serverId, connected, currentServerId]);
   const respond = async (answer: Omit<DSHAnswer, "epoch" | "rpcId">) => {
     if (!first || !current?.connected || !isCurrentServer(serverId) || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError("");
