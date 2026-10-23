@@ -178,6 +178,7 @@ func TestCompletedCleanupRejectsReusedOwnedGeneration(t *testing.T) {
 }
 
 func TestCompletedCleanupUnreachableSocketIsNotAbsence(t *testing.T) {
+	reachableTmuxSocket(t)
 	dir := writeFakeTmux(t, `echo "permission denied reading tmux socket" >&2
 exit 1
 `)

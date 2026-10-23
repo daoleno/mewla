@@ -106,7 +106,7 @@ func probeHarnessTmuxServer(realTmux, socket string) (int, error) {
 			return pid, nil
 		}
 		failure := fmt.Errorf("%w: %s", err, out)
-		if isNoTmuxServerError(failure) {
+		if tmuxSocketUnreachable(socket) {
 			return 0, nil
 		}
 		// A connection can race an already-started shutdown. Re-probe; this text
@@ -129,7 +129,7 @@ func stopHarnessTmuxServer(t *testing.T, realTmux, socket string) {
 		return
 	}
 	if out, err := exec.Command(realTmux, "-S", socket, "kill-server").CombinedOutput(); err != nil {
-		if !isNoTmuxServerError(fmt.Errorf("%w: %s", err, out)) && !strings.Contains(string(out), "server exited unexpectedly") {
+		if !tmuxSocketUnreachable(socket) && !strings.Contains(string(out), "server exited unexpectedly") {
 			t.Errorf("stop test tmux server %d on %s: %v: %s", pid, socket, err, out)
 			return
 		}
