@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,6 +37,29 @@ func count(label string) {
 		mu.Unlock()
 	}
 	n.Add(1)
+	site(label)
+}
+
+var sites sync.Map // "label <- caller <- caller" -> *atomic.Int64
+
+// site counts the spawn under the functions that asked for it, so a hot
+// label can be traced to the loop that drives it.
+func site(label string) {
+	var pcs [14]uintptr
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(3, pcs[:])])
+	var chain []string
+	for len(chain) < 7 {
+		frame, more := frames.Next()
+		if name := frame.Function; name != "" && !strings.HasPrefix(name, "runtime.") {
+			chain = append(chain, name[strings.LastIndex(name, "/")+1:])
+		}
+		if !more {
+			break
+		}
+	}
+	key := label + " <- " + strings.Join(chain, " <- ")
+	n, _ := sites.LoadOrStore(key, new(atomic.Int64))
+	n.(*atomic.Int64).Add(1)
 }
 
 // Command is exec.Command that counts one spawn under label.
@@ -94,11 +119,18 @@ func Handler() http.Handler {
 			rows = append(rows, row{label, n})
 		}
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Count > rows[j].Count })
+		siteRows := []row{}
+		sites.Range(func(k, v any) bool {
+			siteRows = append(siteRows, row{k.(string), v.(*atomic.Int64).Load()})
+			return true
+		})
+		sort.Slice(siteRows, func(i, j int) bool { return siteRows[i].Count > siteRows[j].Count })
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"uptime_seconds": int64(time.Since(started).Seconds()),
 			"total":          Total(snap),
 			"spawns":         rows,
+			"sites":          siteRows,
 		})
 	})
 }
