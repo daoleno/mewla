@@ -66,11 +66,13 @@ export function dataUseNotice(integration: string): string | null {
     : null;
 }
 /** The line under "Waiting for <service>". Google's review of Mewla blocks accounts that aren't on its early-access list on Google's own page, which never comes back, so say so while waiting. */
-export function waitingDetail(integration: string | undefined, serviceName: string): string {
+export function waitingDetail(integration: string | undefined, serviceName: string, note?: string): string {
   const base = `Finish signing in on ${serviceName}'s page. This updates when you're back.`;
-  return integration === "google-calendar" || integration === "gmail"
+  const detail = integration === "google-calendar" || integration === "gmail"
     ? `${base} If Google says Mewla isn't verified or blocks access, this Google account isn't on Mewla's early-access list yet.`
     : base;
+  // A check that didn't get through (a flaky network) keeps the sign-in waiting and says why.
+  return note ? `${note} ${detail}` : detail;
 }
 type ConnectInput = NonNullable<ConnectionRequest["input"]>;
 // The web UI asks the daemon to return sign-in to its own origin; native apps

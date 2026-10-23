@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/googleauth"
@@ -33,6 +38,38 @@ type googlePending struct {
 	nonce           string
 }
 
+// exchangeUnreachable is a request that got no answer from Mewla's Google
+// exchange. The sign-in itself is intact there, so the caller keeps its flow
+// and asks again. cause is a fixed plain phrase: transport errors carry URLs,
+// and the URL holds the flow id.
+type exchangeUnreachable struct{ cause string }
+
+func (e exchangeUnreachable) Error() string {
+	return "Couldn't reach Mewla's Google sign-in (" + e.cause + "). Trying again."
+}
+
+func exchangeFailure(err error) string {
+	var certificate x509.UnknownAuthorityError
+	var record tls.RecordHeaderError
+	var timeout net.Error
+	switch {
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "connection refused"
+	case errors.Is(err, syscall.ECONNRESET), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return "connection reset"
+	case errors.Is(err, syscall.ENETUNREACH), errors.Is(err, syscall.EHOSTUNREACH):
+		return "network unreachable"
+	case errors.As(err, &certificate), errors.As(err, &record), strings.Contains(err.Error(), "tls:"), strings.Contains(err.Error(), "x509:"):
+		return "secure connection failed"
+	case strings.Contains(err.Error(), "endpoint DNS"):
+		return "DNS lookup failed"
+	case strings.Contains(err.Error(), "redirects are not allowed"):
+		return "unexpected redirect"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
+		return "timed out"
+	}
+	return "network error"
+}
 func validExchangeOrigin(origin string) bool {
 	u, err := url.Parse(origin)
 	return err == nil && u.Scheme == "https" && u.Host != "" && u.Path == "" && u.RawQuery == "" && u.Fragment == "" && u.User == nil
@@ -63,8 +100,15 @@ func (m *Manager) googleExchangeRequest(ctx context.Context, origin, path, proof
 		req.Header.Set("Authorization", "Bearer "+proof)
 	}
 	response, err := m.oauthHTTP(&record{Account: Account{Endpoint: origin}}).Do(req)
+	for retry := 0; err != nil && input == nil && method == "GET" && ctx.Err() == nil && retry < 1; retry++ {
+		// A fresh connection fails now and then on a flaky network; asking again
+		// changes nothing there, so a status check may.
+		response, err = m.oauthHTTP(&record{Account: Account{Endpoint: origin}}).Do(req)
+	}
 	if err != nil {
-		return errors.New("Could not reach Mewla's Google authorization. Try again.")
+		cause := exchangeFailure(err)
+		log.Printf("google exchange: %s on %s", cause, strings.SplitN(path, "?", 2)[0])
+		return exchangeUnreachable{cause}
 	}
 	defer response.Body.Close()
 	if response.StatusCode == 401 || response.StatusCode == 403 {
@@ -111,6 +155,7 @@ func (m *Manager) pollGoogleExchange(ctx context.Context, f *connectFlow) error 
 	if session.ID != p.session.ID {
 		return errors.New("Google authorization belongs to another flow")
 	}
+	f.Message = ""
 	if session.Status == "failed" {
 		f.Status = "failed"
 		// Google returns here for a cancelled consent and also when Mewla is still

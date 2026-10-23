@@ -124,7 +124,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       fail(result.flow.message ?? "Connection cancelled. No new account was connected.", result.flow.status);
       await remember(null);
     } else if (result.flow?.status === "waiting") {
-      setPhase("waiting"); setConnectError("");
+      // A waiting flow can carry why its last check didn't get through; the next check is in a few seconds.
+      setPhase("waiting"); setConnectError(result.flow.message ?? "");
     }
   }, [apply, fail, remember, valid]);
   const finish = useCallback(async (url: string) => {

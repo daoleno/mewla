@@ -315,7 +315,7 @@ export function ConnectStatusCard({
   }
   if (phase === "waiting") {
     return (
-      <StatusCard busy title={`Waiting for ${serviceName}`} detail={waitingDetail(flow?.flow.integration, serviceName)}>
+      <StatusCard busy title={`Waiting for ${serviceName}`} detail={waitingDetail(flow?.flow.integration, serviceName, error || undefined)}>
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
