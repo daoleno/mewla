@@ -37,6 +37,8 @@ const (
 	methodThreadList        = "thread/list"
 	methodThreadResume      = "thread/resume"
 	methodThreadSettingsUpd = "thread/settings/update"
+	methodTurnStart         = "turn/start"
+	methodTurnInterrupt     = "turn/interrupt"
 	notifThreadSettingsUpd  = "thread/settings/updated"
 )
 
@@ -71,12 +73,21 @@ type Client struct {
 	mu           sync.Mutex // write lock
 	pending      map[string]chan rpcResponse
 	notif        chan Notification
+	serverReqs   chan ServerRequest
 	closed       chan struct{}
 	closeOnce    sync.Once
 	closeErr     error
 	nextID       uint64
 	clientName   string
 	resolveRetry time.Duration
+}
+
+// ServerRequest is a request the app server makes of its client and waits on:
+// a command or file-change approval. Answer it with Respond using the same ID.
+type ServerRequest struct {
+	ID     json.RawMessage
+	Method string
+	Params json.RawMessage
 }
 
 // Notification is a server-pushed JSON-RPC notification.
@@ -169,6 +180,7 @@ func Open(ctx context.Context, socketPath string, opts DialOptions) (*Client, er
 		conn:         conn,
 		pending:      map[string]chan rpcResponse{},
 		notif:        make(chan Notification, 512),
+		serverReqs:   make(chan ServerRequest, 64),
 		closed:       make(chan struct{}),
 		clientName:   opts.ClientName,
 		resolveRetry: resolveRetry,
@@ -205,6 +217,28 @@ func (c *Client) Notifications() <-chan Notification {
 	return c.notif
 }
 
+// ServerRequests returns the requests the server waits on the client to
+// answer. The channel is closed when the Client is closed.
+func (c *Client) ServerRequests() <-chan ServerRequest {
+	return c.serverReqs
+}
+
+// Respond answers a server request with a result.
+func (c *Client) Respond(id json.RawMessage, result any) error {
+	raw, err := json.Marshal(map[string]any{"id": id, "result": result})
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	select {
+	case <-c.closed:
+		return fmt.Errorf("%w: closed", ErrConnect)
+	default:
+	}
+	return c.conn.WriteMessage(websocket.TextMessage, raw)
+}
+
 // Close terminates the connection. Safe to call multiple times.
 func (c *Client) Close() error {
 	c.closeOnce.Do(func() {
@@ -230,6 +264,7 @@ func (c *Client) readPump() {
 		c.mu.Lock()
 		c.closeErr = errors.New("codex app-server connection closed")
 		close(c.notif)
+		close(c.serverReqs)
 		for id, ch := range c.pending {
 			select {
 			case ch <- rpcResponse{Error: &rpcError{Code: -32000, Message: "connection closed"}}:
@@ -245,24 +280,37 @@ func (c *Client) readPump() {
 			return
 		}
 		var envelope struct {
-			ID     *uint64         `json:"id"`
-			Method string          `json:"method"`
-			Result json.RawMessage `json:"result"`
-			Error  *rpcError       `json:"error"`
-			Params json.RawMessage `json:"params"`
+			ID     *json.RawMessage `json:"id"`
+			Method string           `json:"method"`
+			Result json.RawMessage  `json:"result"`
+			Error  *rpcError        `json:"error"`
+			Params json.RawMessage  `json:"params"`
 		}
 		if err := json.Unmarshal(raw, &envelope); err != nil {
 			continue
 		}
+		if envelope.ID != nil && envelope.Method != "" {
+			// The server asks and waits: its ids are its own, never a response
+			// to one of ours.
+			select {
+			case c.serverReqs <- ServerRequest{ID: append(json.RawMessage(nil), *envelope.ID...), Method: envelope.Method, Params: envelope.Params}:
+			default:
+			}
+			continue
+		}
 		if envelope.ID != nil {
+			var id uint64
+			if json.Unmarshal(*envelope.ID, &id) != nil {
+				continue
+			}
 			c.mu.Lock()
-			ch := c.pending[fmt.Sprintf("%d", *envelope.ID)]
+			ch := c.pending[fmt.Sprintf("%d", id)]
 			if ch != nil {
 				select {
-				case ch <- rpcResponse{ID: *envelope.ID, Result: envelope.Result, Error: envelope.Error}:
+				case ch <- rpcResponse{ID: id, Result: envelope.Result, Error: envelope.Error}:
 				default:
 				}
-				delete(c.pending, fmt.Sprintf("%d", *envelope.ID))
+				delete(c.pending, fmt.Sprintf("%d", id))
 			}
 			c.mu.Unlock()
 			continue
@@ -642,4 +690,36 @@ func (c *Client) waitSettingsAck(ctx context.Context, threadID, model string, ef
 // normalizeEffort trims and lowercases a native effort value.
 func normalizeEffort(effort string) string {
 	return strings.ToLower(strings.TrimSpace(effort))
+}
+
+// StartTurn submits a user message to a thread and returns the id of the turn
+// it started. clientMessageID comes back on the message's userMessage item, so
+// the caller can tell its own message from any other.
+func (c *Client) StartTurn(ctx context.Context, threadID, clientMessageID, text string) (turnID string, err error) {
+	params := map[string]any{
+		"threadId": threadID,
+		"input":    []map[string]any{{"type": "text", "text": text}},
+	}
+	if clientMessageID != "" {
+		params["clientUserMessageId"] = clientMessageID
+	}
+	result, err := c.call(ctx, methodTurnStart, params)
+	if err != nil {
+		return "", err
+	}
+	var parsed struct {
+		Turn struct {
+			ID string `json:"id"`
+		} `json:"turn"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil || parsed.Turn.ID == "" {
+		return "", fmt.Errorf("%w: turn/start returned no turn id", ErrProtocol)
+	}
+	return parsed.Turn.ID, nil
+}
+
+// InterruptTurn stops a running turn; the turn then completes as interrupted.
+func (c *Client) InterruptTurn(ctx context.Context, threadID, turnID string) error {
+	_, err := c.call(ctx, methodTurnInterrupt, map[string]any{"threadId": threadID, "turnId": turnID})
+	return err
 }
