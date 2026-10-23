@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
+import { ActivityIndicator, Linking, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import { waitingDetail, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
+import { dataUseNotice, GOOGLE_DATA_USE_URL, waitingDetail, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 import {
   accessControl,
   accountRecovery,
@@ -399,6 +399,11 @@ export function ConnectOffer({ plugin, job, serverName, connecting, disabled, on
         <ListRow icon="eye" title="Read and search" subtitle={job?.read} numberOfLines={3} value="On" />
         <ListRow icon="edit" title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} numberOfLines={3} value="Off" />
       </ListSection>
+      {dataUseNotice(plugin.id) ? (
+        <ListSection footer={dataUseNotice(plugin.id) ?? undefined}>
+          <ListRow icon="open-external" title="How Mewla uses your Google data" onPress={() => void Linking.openURL(GOOGLE_DATA_USE_URL)} />
+        </ListSection>
+      ) : null}
       <View style={styles.actions}>
         <Button label={`Connect ${plugin.name}`} variant="filled" size="lg" block loading={connecting} disabled={disabled} onPress={onConnect} />
         {onUseServerAccount ? <Button label="Use the GitHub login on this server" variant="plain" block disabled={disabled || connecting} onPress={onUseServerAccount} /> : null}

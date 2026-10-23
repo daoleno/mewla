@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, waitingDetail, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
+import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, dataUseNotice, GOOGLE_DATA_USE_URL, pluginJobs, waitingDetail, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
 const pending: PendingConnection = { serverId: "server-a", flow: { id: "flow-a", integration: "linear", status: "waiting", expires: new Date(Date.now() + 60000).toISOString(), authorization_url: "https://mcp.linear.app/authorize?state=secret-state" } };
 test("native return is bound to exact URI and original state", () => {
   expect(matchesPluginReturn("mewla://plugins?state=secret-state&code=one", pending.flow)).toBe(true);
@@ -59,4 +59,11 @@ test("waiting on Google says what Google's block page means, other services do n
   expect(waitingDetail("google-calendar", "Google Calendar")).toContain("early-access list");
   expect(waitingDetail("linear", "Linear")).toBe("Finish signing in on Linear's page. This updates when you're back.");
   expect(waitingDetail(undefined, "Linear")).not.toContain("Google");
+});
+test("Google plugins carry the Limited Use notice in the app, other services do not", () => {
+  for (const id of ["gmail", "google-calendar"]) {
+    expect(dataUseNotice(id)).toContain("Google API Services User Data Policy, including the Limited Use requirements");
+  }
+  expect(dataUseNotice("slack")).toBeNull();
+  expect(GOOGLE_DATA_USE_URL).toBe("https://mewla.ai/privacy/#google");
 });
