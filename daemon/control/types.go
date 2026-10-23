@@ -147,6 +147,7 @@ type Response struct {
 	AgentUse             *agentuse.Status                         `json:"agent_use,omitempty"`
 	ComputerResult       *screen.AgentResult                      `json:"computer_result,omitempty"`
 	ResourceTelemetry    *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
+	Daemon               *DaemonStatus                            `json:"daemon,omitempty"`
 	OK                   bool                                     `json:"ok"`
 	HookOutput           string                                   `json:"hook_output,omitempty"`
 	Approvals            []Approval                               `json:"approvals,omitempty"`
@@ -187,6 +188,14 @@ type Response struct {
 	Service              *watcher.ManagedServiceDescriptor        `json:"service,omitempty"`
 	MemoryHits           []memorysearch.Hit                       `json:"memory_hits,omitempty"`
 	MemoryMessages       []memorysearch.Message                   `json:"memory_messages,omitempty"`
+}
+
+// DaemonStatus is a running daemon's identity as the daemon itself reports it
+// (control request "daemon_status"), so a caller can tell whose process and
+// which executable owns the control socket without inspecting the process table.
+type DaemonStatus struct {
+	PID        int    `json:"pid"`
+	Executable string `json:"executable"`
 }
 
 type Error struct {

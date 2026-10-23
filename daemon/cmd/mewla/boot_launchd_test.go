@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -17,22 +18,27 @@ import (
 	"github.com/daoleno/mewla/daemon/macapp"
 )
 
-func launchdKeys(t *testing.T, config bootConfig) (print, bootstrap, bootout, ps, lsof string) {
+func launchdKeys(t *testing.T, config bootConfig) (print, bootstrap, bootout string) {
 	t.Helper()
 	path, err := bootLaunchdPlistPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	lock, err := bootLifecycleLockPath(config.StateDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pid := strconv.Itoa(os.Getpid())
 	return "launchctl print " + bootLaunchdTarget(),
 		"launchctl bootstrap " + bootLaunchdDomain() + " " + path,
-		"launchctl bootout " + bootLaunchdTarget(),
-		"ps -o comm= -p " + pid,
-		"lsof -t -- " + lock
+		"launchctl bootout " + bootLaunchdTarget()
+}
+
+// launchdStandInDaemon makes the control socket look served by the daemon with
+// the given PID and executable, the way the daemon holding the state lock is.
+func launchdStandInDaemon(t *testing.T, pid int, executable string) {
+	t.Helper()
+	previousPeer, previousStatus := bootControlPeerPID, bootDaemonStatus
+	bootControlPeerPID = func(string) (int, error) { return pid, nil }
+	bootDaemonStatus = func(string) (control.DaemonStatus, error) {
+		return control.DaemonStatus{PID: pid, Executable: executable}, nil
+	}
+	t.Cleanup(func() { bootControlPeerPID, bootDaemonStatus = previousPeer, previousStatus })
 }
 
 func launchdRunning() string {
@@ -54,12 +60,11 @@ func launchdFreshInstall(t *testing.T) (bootConfig, *fakeBootRunner) {
 	config, _ := newBootTestEnvironment(t)
 	daemonID := bootWriteIdentity(t, config.StateDir)
 	config.Addr = bootFreeLoopbackAddr(t)
-	print, bootstrap, bootout, ps, lsof := launchdKeys(t, config)
+	print, bootstrap, bootout := launchdKeys(t, config)
 
 	runner := bootTestRunner()
 	runner.fail(print, "Could not find service \""+bootLaunchdLabel+"\" in domain for user gui: 501")
-	runner.set(ps, bootLaunchdDaemonConfig(config).Binary)
-	runner.set(lsof, strconv.Itoa(os.Getpid()))
+	launchdStandInDaemon(t, os.Getpid(), bootLaunchdDaemonConfig(config).Binary)
 	var lock *control.LifecycleLock
 	var health sync.Once
 	runner.on(bootstrap, func() {
@@ -138,7 +143,7 @@ func TestParseLaunchdPrintReadsTopLevelStateAndPID(t *testing.T) {
 
 func TestBootLaunchdInstallIsIdempotentAndUninstalls(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
-	_, bootstrap, bootout, _, _ := launchdKeys(t, config)
+	_, bootstrap, bootout := launchdKeys(t, config)
 	var out bytes.Buffer
 	if err := bootLaunchdInstall(config, runner, &out); err != nil {
 		t.Fatal(err)
@@ -353,7 +358,7 @@ func TestBootLaunchdInstallFallsBackToAdHoc(t *testing.T) {
 
 func TestBootLaunchdInstallNewBinaryRestarts(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
-	_, bootstrap, bootout, _, _ := launchdKeys(t, config)
+	_, bootstrap, bootout := launchdKeys(t, config)
 	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
 		t.Fatal(err)
 	}
@@ -392,13 +397,13 @@ func TestBootLaunchdInstallRefusesForeignBundle(t *testing.T) {
 
 func TestBootLaunchdInstallChangedConfigRestarts(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
-	_, bootstrap, bootout, _, _ := launchdKeys(t, config)
+	_, bootstrap, bootout := launchdKeys(t, config)
 	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	runner.reset()
 	// launchd keeps listing the job briefly after bootout returns.
-	print, _, _, _, _ := launchdKeys(t, config)
+	print, _, _ := launchdKeys(t, config)
 	runner.mu.Lock()
 	unload := runner.handlers[bootout]
 	runner.mu.Unlock()
@@ -418,7 +423,7 @@ func TestBootLaunchdInstallChangedConfigRestarts(t *testing.T) {
 
 func TestBootLaunchdInstallRefusesForeignPlistAndOutsideOwner(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
-	_, bootstrap, _, _, _ := launchdKeys(t, config)
+	_, bootstrap, _ := launchdKeys(t, config)
 
 	bootHoldStateLock(t, config.StateDir)
 	err := bootLaunchdInstall(config, runner, io.Discard)
@@ -450,13 +455,126 @@ func TestBootLaunchdInstallVerificationFailureBootsOut(t *testing.T) {
 	defer func() { bootVerifyTimeout, bootVerifyInterval = previousTimeout, previousInterval }()
 
 	config, runner := launchdFreshInstall(t)
-	_, _, bootout, ps, _ := launchdKeys(t, config)
-	runner.set(ps, "/usr/local/bin/something-else")
+	_, _, bootout := launchdKeys(t, config)
+	launchdStandInDaemon(t, os.Getpid(), "/usr/local/bin/something-else")
 	err := bootLaunchdInstall(config, runner, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "not the installed binary") {
 		t.Fatalf("install = %v", err)
 	}
 	if !runner.called(bootout) {
 		t.Fatal("failed install left the job loaded")
+	}
+}
+
+// The kernel names the process serving the control socket, whatever release
+// it is, and a daemon that supports daemon_status adds its executable.
+func TestBootControlSocketIdentifiesTheServingDaemon(t *testing.T) {
+	stateDir, err := os.MkdirTemp("/tmp", "mewla-boot-status-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
+	if _, err := bootControlPeerPID(stateDir); !errors.Is(err, control.ErrNotRunning) {
+		t.Fatalf("no daemon: %v", err)
+	}
+	if _, err := bootDaemonStatus(stateDir); !errors.Is(err, control.ErrNotRunning) {
+		t.Fatalf("no daemon: %v", err)
+	}
+	socket, err := control.DefaultSocketPath(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	server := &control.Server{Path: socket, Handler: &controlApp{}}
+	done := make(chan error, 1)
+	go func() { done <- server.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+	for i := 0; i < 200; i++ {
+		if _, err := os.Stat(socket); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	pid, err := bootControlPeerPID(stateDir)
+	if err != nil || pid != os.Getpid() {
+		t.Fatalf("peer pid = %d, %v; want %d", pid, err, os.Getpid())
+	}
+	status, err := bootDaemonStatus(stateDir)
+	executable, _ := os.Executable()
+	if err != nil || status.PID != os.Getpid() || status.Executable != executable {
+		t.Fatalf("status = %+v, %v; want pid %d executable %s", status, err, os.Getpid(), executable)
+	}
+}
+
+// Updating over a daemon of the previous release, which has no daemon_status,
+// must still recognize the running job as the owner of the state.
+func TestBootLaunchdUpdateOverADaemonWithoutDaemonStatus(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	_, bootstrap, bootout := launchdKeys(t, config)
+	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	// The running daemon is now the previous release: the kernel still names
+	// it, but it answers daemon_status with an error.
+	bootDaemonStatus = func(string) (control.DaemonStatus, error) {
+		return control.DaemonStatus{}, errors.New("unknown control request type daemon_status")
+	}
+	preflight := bootLaunchdInspectOwner(config, runner, false)
+	if !preflight.Job.running() || !preflight.LockHeld || !preflight.jobHoldsLock() {
+		t.Fatalf("preflight = %+v", preflight)
+	}
+	// An update restarts the job: bootout, bootstrap, and the new daemon verifies.
+	bootDaemonStatus = func(string) (control.DaemonStatus, error) {
+		return control.DaemonStatus{PID: os.Getpid(), Executable: bootLaunchdDaemonConfig(config).Binary}, nil
+	}
+	changed := config
+	changed.PathEnv = config.PathEnv + ":/extra"
+	if err := bootLaunchdInstall(changed, runner, io.Discard); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if !runner.called(bootout) || runner.count(bootstrap) < 2 {
+		t.Fatalf("update did not restart the job (bootout %v, bootstrap %d)", runner.called(bootout), runner.count(bootstrap))
+	}
+}
+
+func TestBootLaunchdSnapshotVerifiesOwnerFromTheKernelAndTheDaemon(t *testing.T) {
+	config := bootConfig{Binary: "/Applications/Mewla.app/Contents/MacOS/mewla", StateDir: "/state", Addr: "127.0.0.1:1"}
+	healthy := bootLaunchdSnapshot{
+		Job:        bootLaunchdJob{Loaded: true, State: "running", PID: 700},
+		LockHeld:   true,
+		OwnerPID:   700,
+		Executable: config.Binary,
+		ServedID:   "id",
+		ExpectedID: "id",
+	}
+	if err := healthy.verified(config); err != nil {
+		t.Fatalf("healthy: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		change func(*bootLaunchdSnapshot)
+		want   string
+	}{
+		"nothing serves the socket": {func(s *bootLaunchdSnapshot) { s.OwnerErr = errors.New("connection refused") }, "who it is"},
+		"another process owns":      {func(s *bootLaunchdSnapshot) { s.OwnerPID = 701 }, "outside"},
+		"daemon cannot say":         {func(s *bootLaunchdSnapshot) { s.ExecutableErr = errors.New("unknown request") }, "which binary"},
+		"other executable":          {func(s *bootLaunchdSnapshot) { s.Executable = "/usr/local/bin/mewla" }, "not the installed binary"},
+		"lock free":                 {func(s *bootLaunchdSnapshot) { s.LockHeld = false }, "no daemon owns"},
+		"job not running":           {func(s *bootLaunchdSnapshot) { s.Job.State = "waiting"; s.Job.PID = 0 }, "not running"},
+	} {
+		snapshot := healthy
+		tc.change(&snapshot)
+		if err := snapshot.verified(config); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: verified = %v, want %q", name, err, tc.want)
+		}
+	}
+	outside := healthy
+	outside.OwnerPID = 701
+	if text := outside.describeOwner(); !strings.Contains(text, "outside") || !strings.Contains(text, "701") {
+		t.Errorf("describeOwner = %q", text)
+	}
+	silent := healthy
+	silent.OwnerErr = errors.New("connection refused")
+	if text := silent.describeOwner(); !strings.Contains(text, "outside") || !strings.Contains(text, "not answering") {
+		t.Errorf("describeOwner = %q", text)
 	}
 }
