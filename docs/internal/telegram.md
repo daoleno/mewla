@@ -173,6 +173,13 @@ outcomes remain. Output accumulated while disabled is not backfilled.
 A short receive wait bounds reply latency; bot/webhook capabilities refresh on
 a slower cadence. All outbound mutations use the same serialization owner.
 
+The Brain timeline is projected into the outbox only when something it reads
+changed (the Brain timeline or chat files, the Telegram connection, or the
+outbox's pending rows), plus once a minute as a safety net; an idle pass does
+not re-read the timeline or rewrite the durable state. A durable write that
+fails where nobody can receive the error (recording a delivery outcome, queueing
+a reply) is logged once per distinct cause.
+
 Markdown uses Goldmark and explicit Telegram entities, not ad hoc MarkdownV2.
 Messages are chunked at 4096 UTF-16 units using Unicode grapheme boundaries, so
 emoji variation selectors, skin tones, flags and ZWJ sequences stay together.
