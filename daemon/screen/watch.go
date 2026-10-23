@@ -14,7 +14,7 @@ var ErrNoAgent = errors.New("No agent is using this computer's screen")
 // taking it over: the viewer sees the agent's own capture, and its input is
 // dropped. Like Open, it returns the viewer's end right before ClientInit.
 // The session ends when the agent does.
-func (s *Service) Watch(ctx context.Context, deviceID string) (net.Conn, error) {
+func (s *Service) Watch(ctx context.Context, deviceID string, obs *Observer) (net.Conn, error) {
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (s *Service) Watch(ctx context.Context, deviceID string) (net.Conn, error) 
 	viewer, server := net.Pipe()
 	go func() {
 		defer server.Close()
-		_ = serveRFB(ctx, server, &agentWatch{agent: agent}, computerName())
+		_ = serveRFB(ctx, server, &agentWatch{agent: agent}, computerName(), obs)
 	}()
 	return viewer, nil
 }

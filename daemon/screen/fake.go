@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math/rand"
 	"slices"
 	"strings"
 	"sync"
@@ -62,6 +63,11 @@ type FakeBackend struct {
 	Launched      []string
 	// MenuPresses are the menu items chosen by shortcut.
 	MenuPresses []string
+	// Scroll, when above zero, shows a page of text and pictures that
+	// scrolls this many pixels at every ScrollTick, for measuring a link.
+	Scroll   int
+	offset   int
+	document *image.RGBA
 }
 
 // FakeAppClick is a click sent to one app's window behind others.
@@ -77,6 +83,15 @@ func (f *FakeBackend) SleepDisplay() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sleeps++
+	f.bump()
+}
+
+// ScrollTick moves the scrolling page one step, as a finger flicking a long
+// page would, and counts as a change of the screen.
+func (f *FakeBackend) ScrollTick() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.offset += f.Scroll
 	f.bump()
 }
 
@@ -224,7 +239,7 @@ func (s *fakeSession) Frame(ctx context.Context, after uint64) (Frame, error) {
 		}
 		if f.version+1 > after {
 			s.draw()
-			frame := Frame{Seq: f.version + 1, Image: s.image}
+			frame := Frame{Seq: f.version + 1, Image: s.image, At: time.Now()}
 			f.mu.Unlock()
 			return frame, nil
 		}
@@ -242,6 +257,10 @@ func (s *fakeSession) Frame(ctx context.Context, after uint64) (Frame, error) {
 func (s *fakeSession) draw() {
 	f := s.backend
 	img := s.image
+	if f.Scroll > 0 {
+		f.drawPage(img)
+		return
+	}
 	for y := 0; y < f.Height; y++ {
 		for x := 0; x < f.Width; x++ {
 			img.SetRGBA(x, y, color.RGBA{R: uint8(x * 255 / f.Width), G: 96, B: uint8(y * 255 / f.Height), A: 255})
@@ -581,3 +600,59 @@ var (
 	_ appActor    = (*FakeBackend)(nil)
 	_ valueReader = (*FakeBackend)(nil)
 )
+
+// drawPage copies the visible part of a long page of text lines and
+// pictures, wrapping, so every scroll step changes nearly every pixel the
+// way a real document does, at a compressed size close to a real screen's.
+func (f *FakeBackend) drawPage(img *image.RGBA) {
+	if f.document == nil {
+		f.document = fixturePage(f.Width, f.Height*4)
+	}
+	doc := f.document
+	for y := 0; y < f.Height; y++ {
+		src := (f.offset + y) % doc.Rect.Dy()
+		copy(img.Pix[y*img.Stride:y*img.Stride+f.Width*4], doc.Pix[src*doc.Stride:src*doc.Stride+f.Width*4])
+	}
+}
+
+// fixturePage is the same page every run: lines of dark words on white with
+// a textured picture now and then.
+func fixturePage(width, height int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for i := 0; i < len(img.Pix); i += 4 {
+		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = 250, 250, 248, 255
+	}
+	rng := rand.New(rand.NewSource(7))
+	fill := func(r image.Rectangle, c func(x, y int) color.RGBA) {
+		r = r.Intersect(img.Rect)
+		for y := r.Min.Y; y < r.Max.Y; y++ {
+			for x := r.Min.X; x < r.Max.X; x++ {
+				img.SetRGBA(x, y, c(x, y))
+			}
+		}
+	}
+	for y := 20; y < height-40; {
+		if rng.Intn(9) == 0 {
+			// A picture: smooth colour with grain.
+			h := 140 + rng.Intn(100)
+			base := color.RGBA{R: uint8(40 + rng.Intn(180)), G: uint8(40 + rng.Intn(180)), B: uint8(40 + rng.Intn(180)), A: 255}
+			fill(image.Rect(40, y, width-40, y+h), func(x, y int) color.RGBA {
+				n := rng.Intn(48) - 24
+				return color.RGBA{R: clamp8(int(base.R) + n + x/16%40), G: clamp8(int(base.G) + n + y/12%40), B: clamp8(int(base.B) + n), A: 255}
+			})
+			y += h + 24
+			continue
+		}
+		x := 40
+		for x < width-80 {
+			w := 14 + rng.Intn(70)
+			shade := uint8(20 + rng.Intn(70))
+			fill(image.Rect(x, y, x+w, y+11), func(int, int) color.RGBA { return color.RGBA{R: shade, G: shade, B: shade + 10, A: 255} })
+			x += w + 9
+		}
+		y += 20
+	}
+	return img
+}
+
+func clamp8(v int) uint8 { return uint8(min(max(v, 0), 255)) }

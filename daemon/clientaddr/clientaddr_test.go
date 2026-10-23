@@ -41,3 +41,31 @@ func TestParseRejectsAnythingButAnIP(t *testing.T) {
 		t.Fatal("Parse rejected a valid IP")
 	}
 }
+
+func TestPathNamesHowARequestArrived(t *testing.T) {
+	for remote, want := range map[string]string{
+		"127.0.0.1:1":           "loopback",
+		"[::1]:1":               "loopback",
+		"100.73.112.8:1":        "tailscale",
+		"[fd7a:115c:a1e0::1]:1": "tailscale",
+		"192.168.1.20:1":        "lan",
+		"10.0.0.4:1":            "lan",
+		"[fe80::1]:1":           "lan",
+		"203.0.113.7:1":         "direct",
+		"not an address":        "direct",
+	} {
+		request := httptest.NewRequest("GET", "/screen/viewer", nil)
+		request.RemoteAddr = remote
+		if got := Path(request); got != want {
+			t.Errorf("Path(%s) = %s, want %s", remote, got, want)
+		}
+	}
+	relayed := httptest.NewRequest("GET", "/screen/viewer", nil)
+	relayed.RemoteAddr = "192.168.1.20:1"
+	if got := Path(relayed.WithContext(MarkRelayed(relayed.Context()))); got != "relay" {
+		t.Errorf("a marked request is %s", got)
+	}
+	if got := Path(relayed.WithContext(With(relayed.Context(), net.ParseIP("203.0.113.7")))); got != "relay" {
+		t.Errorf("a request with a relay-reported client is %s", got)
+	}
+}

@@ -556,14 +556,16 @@ type macSession struct {
 	source0                uintptr
 	input                  *macInput
 
-	mu      sync.Mutex
-	seq     uint64
-	latest  uintptr // retained CVPixelBuffer
-	err     error
-	changed chan struct{}
-	done    chan struct{}
-	closed  bool
-	image   *image.RGBA
+	mu     sync.Mutex
+	seq    uint64
+	latest uintptr // retained CVPixelBuffer
+	// latestAt is when latest was delivered.
+	latestAt time.Time
+	err      error
+	changed  chan struct{}
+	done     chan struct{}
+	closed   bool
+	image    *image.RGBA
 }
 
 func (s *macSession) start(ctx context.Context, content objc.ID) error {
@@ -653,6 +655,7 @@ func (s *macSession) deliver(sample uintptr) {
 	}
 	previous := s.latest
 	s.latest = buffer
+	s.latestAt = time.Now()
 	s.seq++
 	close(s.changed)
 	s.changed = make(chan struct{})
@@ -681,12 +684,12 @@ func (s *macSession) Frame(ctx context.Context, after uint64) (Frame, error) {
 			return Frame{}, err
 		}
 		if s.seq > after && s.latest != 0 {
-			buffer, seq := s.latest, s.seq
+			buffer, seq, at := s.latest, s.seq, s.latestAt
 			mac.CVPixelBufferRetain(buffer)
 			s.mu.Unlock()
 			img := s.copy(buffer)
 			mac.CVPixelBufferRelease(buffer)
-			return Frame{Seq: seq, Image: img}, nil
+			return Frame{Seq: seq, Image: img, At: at}, nil
 		}
 		wait := s.changed
 		s.mu.Unlock()

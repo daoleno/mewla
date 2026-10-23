@@ -39,6 +39,11 @@ func dirtyRects(old, cur *image.RGBA) []image.Rectangle {
 		}
 		rows = append(rows, row)
 	}
+	return mergeTileRows(rows)
+}
+
+// mergeTileRows joins runs of tiles that share their columns across rows.
+func mergeTileRows(rows [][]image.Rectangle) []image.Rectangle {
 	var out []image.Rectangle
 	open := map[[2]int]int{} // [minX,maxX] -> index in out, for the previous row
 	for _, row := range rows {
@@ -197,4 +202,76 @@ func encodeRaw(img *image.RGBA, r image.Rectangle, format pixelFormat) []byte {
 		}
 	}
 	return out
+}
+
+// tileSet marks which tiles of a frame hold something worth sending again.
+type tileSet struct {
+	bounds     image.Rectangle
+	cols, rows int
+	set        []bool
+	count      int
+}
+
+func newTileSet(bounds image.Rectangle) tileSet {
+	cols, rows := (bounds.Dx()+tileSize-1)/tileSize, (bounds.Dy()+tileSize-1)/tileSize
+	return tileSet{bounds: bounds, cols: cols, rows: rows, set: make([]bool, cols*rows)}
+}
+
+func (t *tileSet) any() bool { return t.count > 0 }
+
+// each calls fn for every tile that r touches; whole reports that r covers
+// the tile entirely.
+func (t *tileSet) each(r image.Rectangle, fn func(i int, whole bool)) {
+	r = r.Intersect(t.bounds)
+	if r.Empty() {
+		return
+	}
+	for ty := (r.Min.Y - t.bounds.Min.Y) / tileSize; ty <= (r.Max.Y-1-t.bounds.Min.Y)/tileSize; ty++ {
+		for tx := (r.Min.X - t.bounds.Min.X) / tileSize; tx <= (r.Max.X-1-t.bounds.Min.X)/tileSize; tx++ {
+			tile := image.Rect(t.bounds.Min.X+tx*tileSize, t.bounds.Min.Y+ty*tileSize,
+				t.bounds.Min.X+(tx+1)*tileSize, t.bounds.Min.Y+(ty+1)*tileSize).Intersect(t.bounds)
+			fn(ty*t.cols+tx, r.Intersect(tile) == tile)
+		}
+	}
+}
+
+func (t *tileSet) add(r image.Rectangle) {
+	t.each(r, func(i int, _ bool) {
+		if !t.set[i] {
+			t.set[i] = true
+			t.count++
+		}
+	})
+}
+
+// remove clears the tiles r covers entirely; one it covers in part still
+// holds something stale.
+func (t *tileSet) remove(r image.Rectangle) {
+	t.each(r, func(i int, whole bool) {
+		if whole && t.set[i] {
+			t.set[i] = false
+			t.count--
+		}
+	})
+}
+
+func (t *tileSet) rects() []image.Rectangle {
+	rows := make([][]image.Rectangle, 0, t.rows)
+	for ty := 0; ty < t.rows; ty++ {
+		var row []image.Rectangle
+		for tx := 0; tx < t.cols; tx++ {
+			if !t.set[ty*t.cols+tx] {
+				continue
+			}
+			tile := image.Rect(t.bounds.Min.X+tx*tileSize, t.bounds.Min.Y+ty*tileSize,
+				t.bounds.Min.X+(tx+1)*tileSize, t.bounds.Min.Y+(ty+1)*tileSize).Intersect(t.bounds)
+			if n := len(row); n > 0 && row[n-1].Max.X == tile.Min.X {
+				row[n-1].Max.X = tile.Max.X
+			} else {
+				row = append(row, tile)
+			}
+		}
+		rows = append(rows, row)
+	}
+	return mergeTileRows(rows)
 }

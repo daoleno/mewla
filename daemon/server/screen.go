@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/gorilla/websocket"
 )
@@ -187,7 +188,24 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	if watch {
 		open = s.screen.Watch
 	}
-	upstream, err := open(ctx, device.ID)
+	// What the viewer shows as its badge and the daemon logs once: how the
+	// request arrived and what each stage of the stream cost. Numbers only.
+	path := clientaddr.Path(r)
+	observer := &screen.Observer{
+		Locked: func(locked bool) { sendJSON(map[string]any{"type": "state", "locked": locked}) },
+		Stats: func(stats screen.StreamStats) {
+			sendJSON(struct {
+				Type string `json:"type"`
+				Path string `json:"path"`
+				screen.StreamStats
+			}{"stats", path, stats})
+		},
+		Done: func(sum screen.StreamSummary) {
+			log.Printf("screen: device %s stream via %s: %d updates (%d sharpened) %d KB, encode p50 %.1f p95 %.1f ms, ack p50 %.0f p95 %.0f ms, quality %d..%d, up to %d in flight",
+				device.ID, path, sum.Updates, sum.Refines, sum.Bytes>>10, sum.EncodeP50, sum.EncodeP95, sum.AckP50, sum.AckP95, sum.LowestQuality, sum.ViewerQuality, sum.MaxInFlight)
+		},
+	}
+	upstream, err := open(ctx, device.ID, observer)
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return

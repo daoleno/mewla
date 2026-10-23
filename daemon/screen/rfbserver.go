@@ -8,8 +8,10 @@ import (
 	"image"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // RFB encodings and pseudo-encodings this server speaks (RFC 6143 and the
@@ -38,9 +40,12 @@ const (
 	msgEndOfContinuous   = 150
 	fenceRequest         = 1 << 31
 	maxClipboard         = 1 << 20
-	maxFramesInFlight    = 2
 	defaultQualityLevel  = 6
 )
+
+// streamAdaptive is on unless MEWLA_SCREEN_ADAPTIVE=off, a way to see a link
+// as it was before adaptation, to compare.
+var streamAdaptive = os.Getenv("MEWLA_SCREEN_ADAPTIVE") != "off"
 
 // pixelFormat is RFC 6143 §7.4. Only 32-bit true colour is supported, which
 // is what every current viewer asks for.
@@ -105,6 +110,37 @@ type rfbState struct {
 	sent      uint64
 	acked     uint64
 	wake      chan struct{}
+	// sendLog remembers each fenced update until it is acknowledged, for the
+	// age of its acknowledgement; ctl turns those ages into the quality and
+	// the in-flight limit.
+	sendLog map[uint64]sentRecord
+	ctl     *streamController
+	metrics *streamMetrics
+}
+
+type sentRecord struct {
+	at     time.Time
+	bytes  int
+	refine bool
+}
+
+// ackedTo records the fence answer for update n; callers hold state.mu.
+func (s *rfbState) ackedTo(n uint64, now time.Time) {
+	rec, ok := s.sendLog[n]
+	for seq := range s.sendLog {
+		if seq <= n {
+			delete(s.sendLog, seq)
+		}
+	}
+	if !ok {
+		return
+	}
+	age := now.Sub(rec.at)
+	s.metrics.acked(age)
+	// A sharpening of a still screen is a one-off, not the link's pace.
+	if !rec.refine {
+		s.ctl.observe(now, age, rec.bytes)
+	}
 }
 
 func (s *rfbState) signal() {
@@ -116,7 +152,7 @@ func (s *rfbState) signal() {
 
 // serveRFB runs the server half of an RFB session from ClientInit on. Frames
 // come from session; pointer and key events go back to it.
-func serveRFB(ctx context.Context, conn net.Conn, session Session, name string) error {
+func serveRFB(ctx context.Context, conn net.Conn, session Session, name string, obs *Observer) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	go func() {
@@ -140,7 +176,26 @@ func serveRFB(ctx context.Context, conn net.Conn, session Session, name string) 
 		return err
 	}
 
-	state := &rfbState{format: serverPixelFormat, quality: defaultQualityLevel, wake: make(chan struct{}, 1)}
+	state := &rfbState{
+		format: serverPixelFormat, quality: defaultQualityLevel, wake: make(chan struct{}, 1),
+		sendLog: map[uint64]sentRecord{}, ctl: newStreamController(), metrics: &streamMetrics{},
+	}
+	state.ctl.fixed = !streamAdaptive
+	defer func() { obs.done(state.metrics.summary()) }()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if stats, ok := state.metrics.take(); ok {
+					obs.stats(stats)
+				}
+			}
+		}
+	}()
 	var writeMu sync.Mutex
 	write := func(b []byte) error {
 		writeMu.Lock()
@@ -183,7 +238,9 @@ type frameStore struct {
 	mu     sync.Mutex
 	latest *image.RGBA
 	seq    uint64
-	wake   chan struct{}
+	// at is when the system produced the latest frame.
+	at   time.Time
+	wake chan struct{}
 }
 
 func (f *frameStore) put(frame Frame) {
@@ -194,6 +251,7 @@ func (f *frameStore) put(frame Frame) {
 	}
 	copyRGBA(f.latest, src)
 	f.seq = frame.Seq
+	f.at = frame.At
 	f.mu.Unlock()
 	select {
 	case f.wake <- struct{}{}:
@@ -321,6 +379,7 @@ func readClient(ctx context.Context, r io.Reader, session Session, state *rfbSta
 				state.mu.Lock()
 				if n > state.acked && n <= state.sent {
 					state.acked = n
+					state.ackedTo(n, time.Now())
 				}
 				state.mu.Unlock()
 				state.signal()
@@ -361,30 +420,39 @@ func applyEncodings(state *rfbState, raw []byte) bool {
 
 // writeUpdates sends a FramebufferUpdate whenever the viewer may take one
 // and the screen changed. With continuous updates it pushes without waiting
-// for requests, keeping at most maxFramesInFlight frames unacknowledged by
-// fences, so a slow link drops intermediate frames instead of queueing them.
+// for requests, keeping a few frames unacknowledged by fences, so a slow
+// link drops intermediate frames instead of queueing them: the newest screen
+// is always what goes next. How many, and at what JPEG quality, follows how
+// late the viewer's answers are (streamController). What went out at a lower
+// quality while the screen moved is sent again at the viewer's once it is
+// still.
 func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, write func([]byte) error) error {
 	var shown *image.RGBA
 	var shownSeq uint64
+	var degraded tileSet
 	for {
 		state.mu.Lock()
 		may := state.requested || state.continuous
-		if state.fence && state.continuous && state.sent-state.acked >= maxFramesInFlight {
+		if state.fence && state.continuous && state.sent-state.acked >= uint64(state.ctl.limit()) {
 			may = false
 		}
 		full := state.full
-		format, tight, quality, desktopSize, fence := state.format, state.tight, state.quality, state.desktopSize, state.fence
+		format, tight, viewerQuality, desktopSize, fence := state.format, state.tight, state.quality, state.desktopSize, state.fence
+		quality := state.ctl.quality(viewerQuality)
 		state.mu.Unlock()
 
 		frames.mu.Lock()
 		changed := frames.seq != shownSeq
+		captured, captureSeq := frames.at, frames.seq
 		var rects []image.Rectangle
-		resized := false
+		resized, refine := false, false
+		var stillIn time.Duration
 		if may && (changed || full) {
 			latest := frames.latest
 			if shown == nil || shown.Rect != latest.Rect {
 				resized = shown != nil
 				shown = image.NewRGBA(latest.Rect)
+				degraded = newTileSet(latest.Rect)
 				full = true
 			}
 			if full {
@@ -396,25 +464,64 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 				copyRect(shown, latest, r)
 			}
 			shownSeq = frames.seq
+		} else if may && !changed && degraded.any() {
+			// Nothing changed: shown is the screen, and a still screen is
+			// worth sending sharp.
+			if stillIn = stillAfter - time.Since(captured); stillIn <= 0 || captured.IsZero() {
+				rects, refine, stillIn = degraded.rects(), true, 0
+			}
 		}
 		frames.mu.Unlock()
 
 		if may && (len(rects) > 0 || resized) {
+			sendQuality := quality
+			if refine {
+				sendQuality = viewerQuality
+			}
 			var msg []byte
 			if resized && desktopSize {
 				msg = appendDesktopSize(msg, shown.Rect.Dx(), shown.Rect.Dy())
 			}
-			update, err := encodeUpdate(shown, rects, format, tight, quality)
+			began := time.Now()
+			update, err := encodeUpdate(shown, rects, format, tight, sendQuality)
 			if err != nil {
 				return err
 			}
+			encoded := time.Since(began)
 			msg = append(msg, update...)
+			dirty := 0
+			for _, r := range rects {
+				dirty += r.Dx() * r.Dy()
+				if tight && sendQuality < viewerQuality {
+					degraded.add(r)
+				} else {
+					degraded.remove(r)
+				}
+			}
 			state.mu.Lock()
 			state.requested = false
 			state.full = false
 			state.sent++
 			seq := state.sent
+			flight := state.ctl.limit()
+			if fence {
+				state.sendLog[seq] = sentRecord{at: time.Now(), bytes: len(msg), refine: refine}
+				for old := range state.sendLog {
+					if old+64 < seq {
+						delete(state.sendLog, old)
+					}
+				}
+			}
 			state.mu.Unlock()
+			var captureAge time.Duration
+			if !captured.IsZero() && !refine {
+				captureAge = max(0, began.Sub(captured))
+			}
+			state.metrics.sent(sentUpdate{
+				Seq: captureSeq, Bytes: len(msg), Dirty: dirty, Total: shown.Rect.Dx() * shown.Rect.Dy(),
+				CaptureAge: captureAge, Encode: encoded, Quality: sendQuality, ViewerLevel: viewerQuality,
+				InFlight: flight, Refine: refine,
+			})
 			if fence {
 				payload := strconv.FormatUint(seq, 10)
 				msg = append(msg, msgFence, 0, 0, 0)
@@ -431,11 +538,24 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 			state.full = false
 			state.mu.Unlock()
 		}
+		var still <-chan time.Time
+		var timer *time.Timer
+		if stillIn > 0 {
+			timer = time.NewTimer(stillIn)
+			still = timer.C
+		}
 		select {
 		case <-ctx.Done():
+			if timer != nil {
+				timer.Stop()
+			}
 			return ctx.Err()
 		case <-state.wake:
 		case <-frames.wake:
+		case <-still:
+		}
+		if timer != nil {
+			timer.Stop()
 		}
 	}
 }

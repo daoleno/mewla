@@ -193,13 +193,15 @@ func (s *Service) SetWorkerNames(name func(id string) string) {
 }
 
 type agentSession struct {
-	worker  string
-	label   string
-	since   time.Time
-	session Session
-	control *Control
-	cancel  context.CancelCauseFunc
-	ctx     context.Context
+	// releaseDisplay lets go of this agent's display hold.
+	releaseDisplay func()
+	worker         string
+	label          string
+	since          time.Time
+	session        Session
+	control        *Control
+	cancel         context.CancelCauseFunc
+	ctx            context.Context
 
 	mu       sync.Mutex
 	latest   *image.RGBA
@@ -402,9 +404,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	if reader, ok := s.backend.(appReader); ok {
 		agent.apps = reader
 	}
-	if holder, ok := s.backend.(displayHolder); ok {
-		holder.HoldDisplay(true)
-	}
+	agent.releaseDisplay = s.holdDisplay()
 	s.agent = agent
 	go agent.capture()
 	go s.watchAgent(agent)
@@ -455,9 +455,9 @@ func (s *Service) watchAgent(agent *agentSession) {
 	}
 	if s.agent == agent {
 		s.agent = nil
-		if holder, ok := s.backend.(displayHolder); ok {
-			holder.HoldDisplay(false)
-		}
+	}
+	if agent.releaseDisplay != nil {
+		agent.releaseDisplay()
 	}
 	s.agentMu.Unlock()
 	Notify("Mewla", "The agent ("+agent.label+") stopped using this computer.")
