@@ -2655,6 +2655,12 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintString(w, event.Role)
 	writeFingerprintString(w, event.Title)
 	writeFingerprintString(w, event.Body)
+	writeFingerprintInt(w, len(event.Attachments))
+	for _, file := range event.Attachments {
+		writeFingerprintString(w, file.Name)
+		writeFingerprintString(w, file.Path)
+		writeFingerprintString(w, file.ContentType)
+	}
 	writeFingerprintString(w, event.Command)
 	writeFingerprintString(w, event.ToolName)
 	writeFingerprintString(w, event.Input)
