@@ -86,7 +86,6 @@ if (!process.env.MEWLA_MACOS_RENDER_CHILD) {
     act(() => toggle.props.onPress());
     expect(text(mac)).toContain("Cache");
     expect(text(mac)).not.toContain("Shared");
-    expect(text(mac)).toContain("Reported by the system");
     act(() => mac.unmount());
   });
 

@@ -16,7 +16,7 @@ const MEMORY_PRESSURE_STEPS: Record<MemoryPressureLevel, number> = { normal: 1, 
  * level as a three-step meter, its history, and the load behind it. Named for
  * what it is; no PSI figure is shown or implied.
  */
-function MemoryPressureSection({ telemetry, styles, details }: SectionProps) {
+function MemoryPressureSection({ telemetry, styles }: SectionProps) {
   const { colors } = useAppTheme();
   const pressure = telemetry.memoryPressure!;
   const lit = MEMORY_PRESSURE_STEPS[pressure.level];
@@ -40,7 +40,6 @@ function MemoryPressureSection({ telemetry, styles, details }: SectionProps) {
         {[pressure.freePercent === undefined ? null : `${Math.round(pressure.freePercent)}% free`,
           load1 !== undefined && cores > 0 ? `Load ${load1.toFixed(1)} · ${cores} cores` : null].filter(Boolean).join(" · ") || "—"}
       </Text>
-      {details ? <Text style={styles.caption}>Reported by the system: normal, warning or critical</Text> : null}
     </View>
   );
 }
@@ -50,7 +49,7 @@ export function PressureSection({ telemetry, styles, details }: SectionProps) {
   const values = (["cpu", "memory", "io"] as const).map((key) => ({ key, value: telemetry.psi[key]?.some?.avg10 }));
   const peak = values.reduce<typeof values[number] | undefined>((best, next) =>
     next.value !== undefined && (best?.value === undefined || next.value > best.value) ? next : best, undefined);
-  if (!peak && telemetry.memoryPressure) return <MemoryPressureSection telemetry={telemetry} styles={styles} details={details} />;
+  if (!peak && telemetry.memoryPressure) return <MemoryPressureSection telemetry={telemetry} styles={styles} />;
   const labels = { cpu: "CPU", memory: "Mem", io: "I/O" };
   // Pressure charts are ink until the machine is actually under pressure.
   const ink = pressureInk(telemetry.state, colors);

@@ -167,7 +167,7 @@ the Mach, libproc and IOKit calls go through purego, as `daemon/screen` does.
 There is no PSI on macOS. The `psi` object is absent and `psi` is listed in
 `unavailable`; no PSI figure is ever synthesized. `memory_pressure.level` is the
 kernel's own `normal`, `warn` or `critical`, and each history sample carries it
-as `memory_pressure_level`. The app labels the tile Memory pressure.
+as `memory_pressure_level`. The app labels the tile Memory pressure and shows the level as a three-step meter.
 
 Consumers are grouped by executable name, as on Linux, so every Chrome renderer
 is one row. Only processes of the daemon's own user are listed. CPU time is
