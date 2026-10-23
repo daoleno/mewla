@@ -1,6 +1,10 @@
 package work
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/daoleno/mewla/daemon/attachment"
+)
 
 // SanitizeConversationProjection is the final user-facing API boundary. It
 // drops typed provider Goal context and Mewla's reserved direct Work Event input,
@@ -14,6 +18,7 @@ func SanitizeConversationProjection(conversation CodexConversation) CodexConvers
 				IsDirectWorkEventPresentationInput(event.Body) {
 			continue
 		}
+		event = ProjectUserAttachments(event)
 		event.Title = CleanCodexDisplayText(event.Title)
 		event.Body = CleanCodexDisplayText(event.Body)
 		event.Command = CleanCodexDisplayText(event.Command)
@@ -24,7 +29,7 @@ func SanitizeConversationProjection(conversation CodexConversation) CodexConvers
 			event.Plan[index].Step = CleanCodexDisplayText(event.Plan[index].Step)
 		}
 		if event.Kind == "user_message" || event.Kind == "assistant_message" {
-			if event.Body == "" {
+			if event.Body == "" && len(event.Attachments) == 0 {
 				continue
 			}
 		}
@@ -43,4 +48,22 @@ func isGoalInternalContextEvent(event CodexConversationEvent) bool {
 		source == "codex_internal_context:goal" ||
 		title == "codex_internal_context" ||
 		toolName == "codex_internal_context"
+}
+
+// ProjectUserAttachments moves the files a provider echoed inside a user
+// message from its text into the typed Attachments field. Providers only ever
+// receive text, so this is the one place the echo is read back; text without
+// the rendering, or with one that cannot be read, is left as it is (old rows
+// stored before attachments were typed stay plain text).
+func ProjectUserAttachments(event CodexConversationEvent) CodexConversationEvent {
+	if event.Kind != "user_message" || len(event.Attachments) > 0 {
+		return event
+	}
+	message, err := attachment.Split(event.Body)
+	if err != nil {
+		return event
+	}
+	event.Body = message.Text
+	event.Attachments = message.Files
+	return event
 }

@@ -51,11 +51,23 @@ type mediaInput struct {
 	Reply           string      `json:"reply,omitempty"`
 	Album           bool        `json:"album,omitempty"`
 	State           string      `json:"state"`
-	Body            string      `json:"body,omitempty"`
-	Attempts        int         `json:"attempts,omitempty"`
-	CreatedAt       time.Time   `json:"created_at"`
-	ReadyAt         time.Time   `json:"ready_at"`
+	// Text, Files and Captions are the input as typed fields; the daemon's
+	// one attachment.Message.Render turns them into the provider input when
+	// the batch is admitted. Files is set once every part is staged.
+	Text      string               `json:"text,omitempty"`
+	Files     []attachment.File    `json:"files,omitempty"`
+	Captions  []attachment.Caption `json:"captions,omitempty"`
+	Attempts  int                  `json:"attempts,omitempty"`
+	CreatedAt time.Time            `json:"created_at"`
+	ReadyAt   time.Time            `json:"ready_at"`
 }
+
+func (i mediaInput) message() attachment.Message {
+	return attachment.Message{Text: i.Text, Files: i.Files, Captions: i.Captions}
+}
+
+// staged reports that the batch has everything needed to be admitted.
+func (i mediaInput) staged() bool { return i.TextOnly || len(i.Files) > 0 }
 
 func mediaSelection(message Message) (mediaPart, error) {
 	part := mediaPart{MessageID: message.MessageID, Caption: attachment.Caption{Text: message.Caption, Entities: message.CaptionEntities}}
@@ -379,7 +391,7 @@ func (m *Manager) advanceMedia(ctx context.Context, token string) error {
 	if !m.mediaRecipientAvailable(input) || m.now().Sub(input.CreatedAt) > 30*time.Minute {
 		return m.failMedia(input.ID, "The original recipient is unavailable or this pending batch expired.")
 	}
-	if input.Body == "" {
+	if !input.staged() {
 		input.State = "downloading"
 		if err := m.saveMedia(input); err != nil {
 			return err
@@ -433,12 +445,12 @@ func (m *Manager) admitMedia(input mediaInput) error {
 	}
 	var admission brain.ExternalInputDisposition
 	if input.SessionID != "" {
-		admission, _ = m.brain.SubmitExternalSessionInput(input.SessionID, input.Receipt, input.Body)
+		admission, _ = m.brain.SubmitExternalSessionInput(input.SessionID, input.Receipt, input.message().Render())
 	} else {
 		if err := m.store.mutate(func(state *durableState) error { state.BrainReplyTopicID = input.MessageThreadID; return nil }); err != nil {
 			return err
 		}
-		admission, _ = m.brain.SubmitExternalUserInputInThread(input.Receipt, input.Body, input.BrainThreadID)
+		admission, _ = m.brain.SubmitExternalUserInputInThread(input.Receipt, input.message().Render(), input.BrainThreadID)
 	}
 	return m.finishMedia(input, admission)
 }
@@ -519,7 +531,7 @@ func (m *Manager) downloadMediaBatch(ctx context.Context, token string, input me
 	if input.Reply != "" {
 		body = "Replying to: " + input.Reply + "\n\n" + body
 	}
-	input.Body = attachment.Input(body, files, captions)
+	input.Text, input.Files, input.Captions = body, files, captions
 	return m.checkpointMedia(ctx, input)
 }
 

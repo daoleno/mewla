@@ -824,7 +824,9 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 		} else if inner, ok := work.UnwrapClaudePasteDisplay(strings.TrimSpace(item.Body)); ok && strings.TrimSpace(inner) != "" {
 			event.Body = strings.TrimSpace(inner)
 		}
-		return event, true
+		// The durable row keeps the exact admitted provider input (it is what
+		// the admission digest covers); the phone gets the files as a field.
+		return work.ProjectUserAttachments(event), true
 	case timelineKindAssistantMessage:
 		return work.CodexConversationEvent{
 			ID:        item.ID,

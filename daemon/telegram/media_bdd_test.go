@@ -162,15 +162,16 @@ func (f *mediaFixture) reopen(t *testing.T) {
 	t.Cleanup(m.stopTyping)
 }
 
-func decodeAttachment(t *testing.T, body string) attachment.Envelope {
+// decodeAttachment reads the provider input a receipt row recorded back into
+// its typed fields, failing when the row carries no attachment rendering.
+func decodeAttachment(t *testing.T, body string) attachment.Message {
 	t.Helper()
-	match, ok := attachment.Find(body)
-	if !ok {
-		t.Fatalf("missing canonical attachment envelope: %q", body)
-	}
-	result, err := match.Decode()
+	result, err := attachment.Split(body)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(result.Files) == 0 && len(result.Captions) == 0 {
+		t.Fatalf("missing canonical attachment rendering: %q", body)
 	}
 	return result
 }

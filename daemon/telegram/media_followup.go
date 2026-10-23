@@ -101,12 +101,12 @@ func (m *Manager) deferTextAfterMedia(message Message, updateID int64) (string, 
 			m.enqueueTopicText(fmt.Sprintf("entities:%d", updateID), err.Error(), message.MessageThreadID, message.MessageID)
 			return "invalid_entities", nil
 		}
-		body = attachment.Input(body, nil, []attachment.Caption{caption})
+		input.Captions = []attachment.Caption{caption}
 	}
 	if input.Reply != "" {
 		body = "Replying to: " + input.Reply + "\n\n" + body
 	}
-	input.TextOnly, input.Body = true, body
+	input.TextOnly, input.Text = true, body
 	input.Parts = []mediaPart{{UpdateID: updateID, MessageID: message.MessageID}}
 	err = m.store.mutate(func(current *durableState) error {
 		if !current.Enabled || current.BotID != input.BotID || current.OwnerID != input.OwnerID || current.ChatID != input.ChatID {

@@ -881,17 +881,19 @@ func (m *Manager) handleOwnerMessage(ctx context.Context, token string, message 
 	if body == "" {
 		return "ignored"
 	}
+	var captions []attachment.Caption
 	if len(message.Entities) > 0 {
 		caption := attachment.Caption{Text: message.Text, Entities: message.Entities}
 		if err := validateCaption(caption); err != nil {
 			reply(fmt.Sprintf("entities:%d", updateID), err.Error())
 			return "invalid_entities"
 		}
-		body = attachment.Input(body, nil, []attachment.Caption{caption})
+		captions = []attachment.Caption{caption}
 	}
 	if reply := replyContext(message.ReplyToMessage); reply != "" {
 		body = "Replying to: " + reply + "\n\n" + body
 	}
+	body = attachment.Message{Text: body, Captions: captions}.Render()
 	state := m.store.snapshot()
 	if message.ReplyToMessage != nil && message.ReplyToMessage.From != nil && message.ReplyToMessage.From.ID == state.BotID {
 		if sessionID := state.ReplySessions[message.ReplyToMessage.MessageID]; sessionID != "" {

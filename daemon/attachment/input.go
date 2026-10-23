@@ -2,6 +2,7 @@ package attachment
 
 import (
 	"encoding/json"
+	"errors"
 	"regexp"
 	"strings"
 )
@@ -11,12 +12,17 @@ const (
 	envelopeCloseTag = "</mewla_attachments>"
 )
 
-// envelopePattern is the one reader of the in-band envelope the phone app and
-// Telegram append to a message; app/components/terminal/attachmentEnvelope.ts
-// is its counterpart.
+// envelopePattern is the one reader of the provider-input rendering. Providers
+// (and the tmux terminal a DSH Session reads) can only be handed text, so they
+// echo the rendering back in their transcripts; Split turns that echo into the
+// typed fields again. Nothing else in Mewla reads the tag.
 var envelopePattern = regexp.MustCompile(`(?s)` + envelopeOpenTag + `\s*(.*?)\s*` + envelopeCloseTag)
 
-// Entity offsets are UTF-16 units in Text, never in the serialized envelope.
+// ErrMalformedRendering reports a tag whose JSON cannot be read. The text is
+// then left exactly as it was.
+var ErrMalformedRendering = errors.New("attachment rendering is malformed")
+
+// Entity offsets are UTF-16 units in Text, never in the rendered JSON.
 type Entity struct {
 	Type          string      `json:"type"`
 	Offset        int         `json:"offset"`
@@ -40,52 +46,56 @@ type Caption struct {
 	Entities []Entity `json:"entities,omitempty"`
 }
 
-// Envelope extends the existing mobile mewla_attachments contract. Providers
-// receive local file references through their normal receipt-owned input.
-type Envelope struct {
+// Message is one person's input as typed fields: what they wrote, the files
+// staged in the upload store, and (Telegram) the captions those files carried.
+// Senders hand the daemon this shape; Render is the only place that turns it
+// into the text a provider receives.
+type Message struct {
+	Text     string
+	Files    []File
+	Captions []Caption
+}
+
+type rendering struct {
 	Files    []File    `json:"files"`
 	Captions []Caption `json:"captions,omitempty"`
 }
 
-func Input(body string, files []File, captions []Caption) string {
-	if len(files) == 0 && len(captions) == 0 {
+// Render is the provider input: the trimmed text, then a blank line and the
+// attachment tag when there are files or captions. With nothing attached it is
+// just the trimmed text. Every provider and every sender receives this form.
+func (m Message) Render() string {
+	body := strings.TrimSpace(m.Text)
+	if len(m.Files) == 0 && len(m.Captions) == 0 {
 		return body
 	}
-	return strings.TrimSpace(body) + "\n\n" + Format(Envelope{Files: files, Captions: captions})
+	files := m.Files
+	if files == nil {
+		files = []File{}
+	}
+	raw, _ := json.Marshal(rendering{Files: files, Captions: m.Captions})
+	tag := envelopeOpenTag + string(raw) + envelopeCloseTag
+	if body == "" {
+		return tag
+	}
+	return body + "\n\n" + tag
 }
 
-// Format is the envelope as appended to a message body.
-func Format(envelope Envelope) string {
-	raw, _ := json.Marshal(envelope)
-	return envelopeOpenTag + string(raw) + envelopeCloseTag
-}
-
-// Match is the first envelope found in a message: text[Start:End] is the whole
-// tagged span and Raw its JSON.
-type Match struct {
-	Start, End int
-	Raw        string
-}
-
-func Find(text string) (Match, bool) {
+// Split reads a provider's echo of Render back into typed fields. Text without
+// a tag, or with a tag it cannot read, comes back unchanged (the latter with
+// ErrMalformedRendering).
+func Split(text string) (Message, error) {
 	loc := envelopePattern.FindStringSubmatchIndex(text)
 	if loc == nil {
-		return Match{}, false
+		return Message{Text: text}, nil
 	}
-	return Match{Start: loc[0], End: loc[1], Raw: text[loc[2]:loc[3]]}, true
-}
-
-func (m Match) Decode() (Envelope, error) {
-	var envelope Envelope
-	err := json.Unmarshal([]byte(m.Raw), &envelope)
-	return envelope, err
-}
-
-// WithoutEnvelope is the message as the person wrote it.
-func WithoutEnvelope(text string) string {
-	match, ok := Find(text)
-	if !ok {
-		return text
+	var parsed rendering
+	if err := json.Unmarshal([]byte(text[loc[2]:loc[3]]), &parsed); err != nil {
+		return Message{Text: text}, ErrMalformedRendering
 	}
-	return strings.TrimSpace(text[:match.Start] + text[match.End:])
+	return Message{
+		Text:     strings.TrimSpace(text[:loc[0]] + text[loc[1]:]),
+		Files:    parsed.Files,
+		Captions: parsed.Captions,
+	}, nil
 }

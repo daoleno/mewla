@@ -20,7 +20,7 @@ type File struct {
 	Name        string `json:"name"`
 	Path        string `json:"path"`
 	ContentType string `json:"content_type,omitempty"`
-	Size        int64  `json:"size"`
+	Size        int64  `json:"size,omitempty"`
 	Kind        string `json:"kind,omitempty"`
 	Description string `json:"description,omitempty"`
 }

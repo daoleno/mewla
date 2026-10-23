@@ -68,7 +68,7 @@ func TestSendInputKeepsOrderPerWorker(t *testing.T) {
 	releaseFirst := make(chan struct{})
 	srv := &Server{
 		sendInputOverride: func(workerID, text string) error {
-			if text == "one" {
+			if text == "one\n" {
 				close(firstEntered)
 				<-releaseFirst
 			}
@@ -105,7 +105,7 @@ func TestSendInputKeepsOrderPerWorker(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if fmt.Sprint(order) != "[other-agent:parallel agent:one agent:two agent:three]" {
+	if fmt.Sprint(order) != "[other-agent:parallel\n agent:one\n agent:two\n agent:three\n]" {
 		t.Fatalf("provider order = %v", order)
 	}
 }
@@ -141,7 +141,7 @@ func TestSendInputResentOnANewConnectionWhileTheFirstIsInFlightDeliversOnce(t *t
 	}
 	request := clientMessage{
 		Type: "send_input", RequestID: requestID, WorkerID: hostID, Text: "once only",
-		DisplayBody: "once only", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	}
 
 	first := openThinProxyTestSocket(t, srv)
