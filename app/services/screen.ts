@@ -3,6 +3,7 @@ import { buildAuthorizationHeader } from "./auth";
 import { resolveStoredServerURL, transportPathOfURL, type TransportPath } from "./pinnedTransport";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 import type { StoredServer } from "./storage";
+import { authSubprotocol } from "./webSocketAuth";
 
 export interface ScreenPower {
   source?: "ac" | "battery";
@@ -155,8 +156,7 @@ export class ScreenConnection {
     if (this.closed) return;
     let socket: WebSocket;
     if (Platform.OS === "web") {
-      url.searchParams.set("auth", base64URL(authorization));
-      socket = new WebSocket(url.toString());
+      socket = new WebSocket(url.toString(), [authSubprotocol(authorization)]);
     } else {
       const NativeWebSocket = WebSocket as unknown as { new(url: string, protocols: undefined, options: { headers: Record<string, string> }): WebSocket };
       socket = new NativeWebSocket(url.toString(), undefined, { headers: { Authorization: authorization } });
@@ -219,8 +219,4 @@ export class ScreenConnection {
     this.socket = null;
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) socket.close();
   }
-}
-
-function base64URL(value: string): string {
-  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }

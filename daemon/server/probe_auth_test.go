@@ -3,17 +3,20 @@ package server
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/gorilla/websocket"
 )
 
 func TestProbeAuthCheckAndWebSocketBoundaryRequireIndependentNonces(t *testing.T) {
@@ -159,5 +162,65 @@ func TestSignedRequestsNeverTeachTheAddressBook(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("address book learned %+v from a request", entries)
+	}
+}
+
+// The browser WebSocket API cannot set headers, so a browser carries its
+// device authorization in the one subprotocol it offers. The query string
+// carries no credential.
+func TestBrowserWebSocketAuthenticatesThroughASubprotocol(t *testing.T) {
+	manager, privateKey, deviceID := sessionFileAuthFixture(t)
+	server := New(manager, nil, nil, nil, nil, nil, nil)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws"
+	subprotocol := func(header string) string {
+		return authSubprotocolPrefix + base64.RawURLEncoding.EncodeToString([]byte(header))
+	}
+	connectHeader := func() string {
+		return calendarAuthHeader(privateKey, manager.DaemonID(), deviceID, "mewla-connect")
+	}
+
+	header := connectHeader()
+	dialer := websocket.Dialer{Subprotocols: []string{subprotocol(header)}}
+	conn, response, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("subprotocol auth was refused: %v", err)
+	}
+	if got := conn.Subprotocol(); got != subprotocol(header) {
+		t.Fatalf("selected subprotocol = %q, a browser needs the one it offered", got)
+	}
+	_ = conn.Close()
+	_ = response
+
+	// Single use: the same signed header cannot open a second socket.
+	if conn, _, err := dialer.Dial(wsURL, nil); err == nil {
+		_ = conn.Close()
+		t.Fatal("replayed subprotocol authorization opened a second socket")
+	}
+
+	// A signature for another purpose is refused, as it is in a header.
+	wrong := websocket.Dialer{Subprotocols: []string{subprotocol(calendarAuthHeader(privateKey, manager.DaemonID(), deviceID, "mewla-screen-view"))}}
+	if conn, _, err := wrong.Dial(wsURL, nil); err == nil {
+		_ = conn.Close()
+		t.Fatal("a screen-view authorization opened /ws")
+	}
+
+	// The old ?auth= query credential is gone.
+	query := wsURL + "?auth=" + base64.RawURLEncoding.EncodeToString([]byte(connectHeader()))
+	if conn, resp, err := websocket.DefaultDialer.Dial(query, nil); err == nil {
+		_ = conn.Close()
+		t.Fatal("a query-string authorization opened /ws")
+	} else if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("query authorization: %v", err)
+	}
+
+	// A subprotocol is not an Authorization substitute on plain requests.
+	plain := httptest.NewRequest(http.MethodGet, "/auth-check", nil)
+	plain.Header.Set("Sec-WebSocket-Protocol", subprotocol(probeAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID)))
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, plain)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("plain request with a subprotocol credential: %d", recorder.Code)
 	}
 }

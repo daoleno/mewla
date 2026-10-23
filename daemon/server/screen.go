@@ -125,7 +125,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Screen control is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	conn, err := screenUpgrader.Upgrade(w, r, nil)
+	conn, err := screenUpgrader.Upgrade(w, r, websocketAuthResponseHeader(r))
 	if err != nil {
 		return
 	}

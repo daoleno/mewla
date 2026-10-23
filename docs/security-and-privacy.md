@@ -108,7 +108,9 @@ site, and treats page text as data. See [Agents in your browser](your-browser.md
   authentication; every other route needs a pairing code or a device signature.
 - The web UI is served only to the same computer, or at the HTTPS addresses in
   `mewla address list`. Loading the page grants nothing; the browser must still
-  pair.
+  pair. A browser cannot set headers on a WebSocket, so it carries the same
+  single-use device signature in a WebSocket subprotocol (`mewla.auth.…`), never
+  in the URL, where proxy and tunnel logs would keep it.
 
 See [Connect and pair](connect-and-pair.md) for each route.
 

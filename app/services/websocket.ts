@@ -5,6 +5,7 @@ import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { diagnoseConnectionIssue } from "./connectionIssue";
 import { rememberDirectAddresses } from "./directAddressSync";
+import { authSubprotocol } from "./webSocketAuth";
 import {
   directPathBecameAvailable,
   resolveStoredServerURL,
@@ -574,15 +575,11 @@ class ServerSocket {
       if (attemptId !== this.attemptSequence || !this.shouldReconnect) {
         return;
       }
-      const serverUrl =
-        Platform.OS === "web"
-          ? appendAuthorizationQuery(transportURL, authHeader)
-          : transportURL;
       const WebSocketCtor = WebSocket as any;
       const ws =
         Platform.OS === "web"
-          ? new WebSocketCtor(serverUrl)
-          : new WebSocketCtor(serverUrl, [], wsOptions);
+          ? new WebSocketCtor(transportURL, [authSubprotocol(authHeader)])
+          : new WebSocketCtor(transportURL, [], wsOptions);
       this.ws = ws;
 
       ws.onopen = () => {
@@ -3285,32 +3282,6 @@ function normalizeCodexConversationSyncStatusPayload(
     state: typeof payload.state === "string" ? payload.state : "syncing",
     reason: typeof payload.reason === "string" ? payload.reason : undefined,
   };
-}
-
-function appendAuthorizationQuery(
-  serverUrl: string,
-  authHeader: string,
-): string {
-  try {
-    const parsed = new URL(serverUrl);
-    parsed.searchParams.set("auth", base64URL(authHeader));
-    return parsed.toString();
-  } catch {
-    return serverUrl;
-  }
-}
-
-function base64URL(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return globalThis
-    .btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
 }
 
 export const wsClient = new WebSocketClient();
