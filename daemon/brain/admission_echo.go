@@ -220,7 +220,6 @@ func reconcileThreadAdmissionEchoes(
 	var thread []TimelineItem
 	for _, item := range allItems {
 		if strings.TrimSpace(item.ThreadID) == threadID {
-			normalizeLegacyTimelineKind(&item)
 			thread = append(thread, item)
 		}
 	}

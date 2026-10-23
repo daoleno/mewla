@@ -3243,3 +3243,27 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+func TestThreadTimelineReadsLedgerKindsAsStored(t *testing.T) {
+	root := t.TempDir()
+	path := timelineMessagesPath(root)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ledger := `{"id":"a","thread_id":"t","kind":"chat","role":"user","body":"hi","created_at":"2026-01-01T00:00:00Z"}` + "\n" +
+		`{"id":"b","thread_id":"t","kind":"assistant_message","role":"assistant","body":"yo","created_at":"2026-01-01T00:00:01Z"}` + "\n"
+	if err := os.WriteFile(path, []byte(ledger), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ThreadTimeline("t", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].Kind != "chat" || items[1].Kind != timelineKindAssistantMessage {
+		t.Fatalf("timeline kinds were rewritten on read: %#v", items)
+	}
+}
