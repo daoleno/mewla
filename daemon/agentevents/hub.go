@@ -2,6 +2,7 @@ package agentevents
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -51,9 +52,10 @@ type State struct {
 // Hub holds each Worker's state and fans events out to subscribers. It is the
 // only place adapters publish to and core code reads from.
 type Hub struct {
-	mu      sync.Mutex
-	workers map[string]*workerState
-	nextSub int
+	mu          sync.Mutex
+	workers     map[string]*workerState
+	nextSub     int
+	onApprovals func(workerID string)
 }
 
 type workerState struct {
@@ -91,18 +93,41 @@ func (h *Hub) Publish(e Event) {
 	}
 	h.mu.Lock()
 	w := h.worker(e.WorkerID)
+	before := approvalIDs(w.Approvals)
 	w.apply(e)
+	changed := before != approvalIDs(w.Approvals)
+	onApprovals := h.onApprovals
 	subs := make([]chan Event, 0, len(w.subs))
 	for _, ch := range w.subs {
 		subs = append(subs, ch)
 	}
 	h.mu.Unlock()
+	if changed && onApprovals != nil {
+		onApprovals(e.WorkerID)
+	}
 	for _, ch := range subs {
 		select {
 		case ch <- e:
 		default:
 		}
 	}
+}
+
+// OnApprovalsChanged calls notify, outside the Hub's lock, whenever the set of
+// decisions a Worker is waiting on changes: a request came, was answered, or
+// went away because the agent moved on.
+func (h *Hub) OnApprovalsChanged(notify func(workerID string)) {
+	h.mu.Lock()
+	h.onApprovals = notify
+	h.mu.Unlock()
+}
+
+func approvalIDs(approvals []Approval) string {
+	ids := make([]string, len(approvals))
+	for i, a := range approvals {
+		ids[i] = a.ID
+	}
+	return strings.Join(ids, "\x00")
 }
 
 func (w *workerState) apply(e Event) {

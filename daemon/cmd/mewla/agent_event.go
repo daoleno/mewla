@@ -16,6 +16,7 @@ import (
 	"github.com/daoleno/mewla/daemon/agentevents/claude"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/server"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/google/uuid"
@@ -312,4 +313,35 @@ func launchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry
 		}
 		return agentevents.Launch{Command: command}, nil
 	}
+}
+
+// appApprovals is what the app sees of an agent's pending decisions, and how
+// its answer gets back.
+type appApprovals struct{ service *agentEventService }
+
+func (a appApprovals) Pending(workerID string) []server.ApprovalWire {
+	pending := a.service.approvals(workerID)
+	if len(pending) == 0 {
+		return nil
+	}
+	out := make([]server.ApprovalWire, 0, len(pending))
+	for _, item := range pending {
+		wire := server.ApprovalWire{ID: item.ID, Kind: item.Kind, Tool: item.Tool, Summary: item.Summary, Options: []server.ApprovalOptionWire{}}
+		for _, o := range item.Options {
+			wire.Options = append(wire.Options, server.ApprovalOptionWire{ID: o.ID, Label: o.Label, Scope: o.Scope})
+		}
+		out = append(out, wire)
+	}
+	return out
+}
+
+func (a appApprovals) Decide(workerID, approvalID, optionID string) error {
+	response := a.service.decide(workerID, approvalID, optionID)
+	if response.OK {
+		return nil
+	}
+	if response.Error == nil {
+		return &server.ApprovalDecisionError{Code: "approval_failed", Message: "The answer was not taken."}
+	}
+	return &server.ApprovalDecisionError{Code: response.Error.Code, Message: response.Error.Message}
 }

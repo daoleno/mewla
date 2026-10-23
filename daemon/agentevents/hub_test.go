@@ -173,3 +173,17 @@ func TestRegistryLevelsFallBackUntilTheAdapterIsConnected(t *testing.T) {
 		t.Fatalf("an agent without an adapter must be described as unadapted: %v", got)
 	}
 }
+
+func TestHubSaysWhenAWorkersPendingApprovalsChange(t *testing.T) {
+	h := NewHub()
+	var changed []string
+	h.OnApprovalsChanged(func(id string) { changed = append(changed, id) })
+	now := time.Now()
+	h.Publish(Event{WorkerID: "w", Kind: KindTurnStarted, At: now, TurnID: "t"})
+	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, At: now, Approval: &Approval{ID: "a1"}})
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, At: now})
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, At: now})
+	if len(changed) != 2 || changed[0] != "w" {
+		t.Fatalf("changes = %v, want one for the request and one for the agent moving on without it", changed)
+	}
+}

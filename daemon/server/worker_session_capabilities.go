@@ -28,7 +28,9 @@ type workerSessionWire struct {
 	// Provider is the adapter family of the Worker's executor (claude, codex,
 	// cursor, ...), empty for a plain terminal. The app presents the Worker by
 	// it instead of reading the agent out of the command line.
-	Provider     string                        `json:"provider,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	// Approvals are the decisions the agent is waiting on right now.
+	Approvals    []ApprovalWire                `json:"approvals,omitempty"`
 	Capabilities workerSessionWireCapabilities `json:"capabilities"`
 }
 
@@ -48,8 +50,9 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 		worker = &named
 	}
 	return &workerSessionWire{
-		Worker:   worker,
-		Provider: provider,
+		Worker:    worker,
+		Provider:  provider,
+		Approvals: approvalsOf(worker, s),
 		Capabilities: workerSessionWireCapabilities{
 			StructuredEvents:         s.workerSupportsStructuredEvents(worker),
 			ModelProfileManaged:      managed,

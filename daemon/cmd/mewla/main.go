@@ -491,6 +491,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetExecutorResolver(execs.IDForCommand)
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
+	srv.SetAgentApprovals(appApprovals{service: agentEvents})
+	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize address book: %w", err)

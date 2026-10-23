@@ -106,6 +106,7 @@ function TerminalViewportImpl({
             cwd: agent.cwd,
             command: agent.command,
             provider: agent.provider,
+            approvals: agent.approvals,
             name: agent.name,
             startedAt: agent.started_at,
             processId: agent.process_id,
@@ -114,6 +115,7 @@ function TerminalViewportImpl({
     [
       agent?.command,
       agent?.provider,
+      agent?.approvals,
       agent?.cwd,
       agent?.attention,
       agent?.details_json,

@@ -186,6 +186,7 @@ type Server struct {
 	enrollmentRateMu   sync.Mutex
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
+	agentApprovals     AgentApprovals
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
@@ -376,6 +377,7 @@ type clientMessage struct {
 	Text                 string                                 `json:"text"`
 	SnoozeUntil          *time.Time                             `json:"snooze_until,omitempty"`
 	Key                  string                                 `json:"key"`
+	OptionID             string                                 `json:"option_id"`
 	Data                 string                                 `json:"data"`
 	Body                 string                                 `json:"body"`
 	Action               string                                 `json:"action"`
@@ -991,6 +993,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleQueuedSessionInput(conn, raw)
 	case "send_key", "send_action":
 		s.handleSessionInputMessage(conn, raw)
+	case "approval_decision":
+		s.handleApprovalDecision(conn, raw)
 	case "answer_choice":
 		go s.handleAnswerChoice(conn, raw)
 	case "rewind_message":

@@ -35,7 +35,10 @@ import {
 } from "./InterfaceChatSession";
 import { CodexStatusSheet } from "./CodexStatusSheet";
 import { CodexSkillsSheet } from "./CodexSkillsSheet";
-import { buildTerminalActionPrompt } from "./TerminalActionPromptModel";
+import {
+  buildTerminalActionPrompt,
+  type TerminalActionPromptOption,
+} from "./TerminalActionPromptModel";
 import {
   latestPendingChoice,
   type ChoiceAnswerPayload,
@@ -625,6 +628,7 @@ export function useInterfaceChatSurfaceState({
       summary: workerInfo?.summary,
       lastOutputLines: workerInfo?.lastOutputLines,
       provider: workerInfo?.provider,
+      approvals: workerInfo?.approvals,
       scopeKey: liveActionPromptScopeKey({
         workerId,
         processId: workerInfo?.processId,
@@ -635,6 +639,7 @@ export function useInterfaceChatSurfaceState({
   }, [
     workerId,
     workerInfo?.provider,
+    workerInfo?.approvals,
     workerInfo?.lastOutputLines,
     workerInfo?.processId,
     workerInfo?.startedAt,
@@ -644,14 +649,22 @@ export function useInterfaceChatSurfaceState({
     connectionGeneration,
     pendingChoice,
   ]);
-  const sendTerminalActionKey = useCallback(
-    (key: string) => {
+  const answerTerminalAction = useCallback(
+    (option: TerminalActionPromptOption) => {
       if (connectionState !== "connected" || !serverId || !workerId) {
         throw new Error("Daemon is not connected.");
       }
-      return wsClient.sendKey(serverId, workerId, key);
+      if (option.approvalOptionId && terminalActionPrompt?.approvalId) {
+        return wsClient.decideApproval(
+          serverId,
+          workerId,
+          terminalActionPrompt.approvalId,
+          option.approvalOptionId,
+        );
+      }
+      return wsClient.sendKey(serverId, workerId, option.key);
     },
-    [workerId, connectionState, serverId],
+    [workerId, connectionState, serverId, terminalActionPrompt?.approvalId],
   );
   const skillsSheet = useMemo(
     () =>
@@ -758,7 +771,7 @@ export function useInterfaceChatSurfaceState({
     onToggleActionMenu: toggleActionMenu,
     onDismissActionMenu: dismissActionMenu,
     onModelControlPress: handleModelControlPress,
-    onTerminalActionKey: sendTerminalActionKey,
+    onTerminalActionAnswer: answerTerminalAction,
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
     composerAccessory: renderedComposerAccessory,

@@ -15,7 +15,10 @@ import type {
 } from "./InterfaceChatSession";
 import type { InterfaceChatBodyProps } from "./InterfaceChatBody";
 import type { InterfaceComposerPresentation } from "./InterfaceChatSurfaceModel";
-import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
+import type {
+  TerminalActionPrompt,
+  TerminalActionPromptOption,
+} from "./TerminalActionPromptModel";
 import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { QuickRepliesRow } from "../brain/brainQuickReplies";
 import type { useInterfaceChatController } from "./InterfaceChatController";
@@ -66,7 +69,7 @@ interface UseInterfaceChatBodyPropsInput {
   onToggleActionMenu(): void;
   onDismissActionMenu(): void;
   onModelControlPress?(): void;
-  onTerminalActionKey(key: string): Promise<void> | void;
+  onTerminalActionAnswer(option: TerminalActionPromptOption): Promise<void> | void;
   onKeyboardLifecycleInvalidate(
     reason: "route" | "app" | "foreground_closed" | "ime_closed",
   ): void;
@@ -118,7 +121,7 @@ export function useInterfaceChatBodyProps({
   onToggleActionMenu,
   onDismissActionMenu,
   onModelControlPress,
-  onTerminalActionKey,
+  onTerminalActionAnswer,
   onKeyboardLifecycleInvalidate,
   showUnavailableAction,
   composerAccessory,
@@ -218,7 +221,7 @@ export function useInterfaceChatBodyProps({
       onStopPress: handleStopPress,
       onModelControlPress,
       onPendingUserMessageAction: controller.actOnPendingUserMessage,
-      onTerminalActionKey,
+      onTerminalActionAnswer,
       composerAccessory,
       quickReplies,
       composerEditBar,
@@ -272,7 +275,7 @@ export function useInterfaceChatBodyProps({
       onToggleActionMenu,
       onDismissActionMenu,
       onModelControlPress,
-      onTerminalActionKey,
+      onTerminalActionAnswer,
       onKeyboardLifecycleInvalidate,
       composerAccessory,
       quickReplies,

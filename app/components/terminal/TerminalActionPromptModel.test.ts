@@ -429,3 +429,42 @@ describe("Claude terminal prompts", () => {
     ]);
   });
 });
+
+describe("buildTerminalActionPrompt with a decision the agent reported", () => {
+  const approval = {
+    id: "a1",
+    kind: "command",
+    tool: "shell",
+    summary: "touch /tmp/x",
+    options: [
+      { id: "accept", label: "Allow", scope: "once" },
+      { id: "cancel", label: "Deny and stop the turn", scope: "deny" },
+    ],
+  };
+
+  test("answers through the agent and reads nothing off the screen", () => {
+    const prompt = buildTerminalActionPrompt({
+      status: "running",
+      lastOutputLines: ["1. Yes, proceed", "2. No"],
+      provider: "codex",
+      approvals: [approval],
+      scopeKey: "w|1",
+    });
+    expect(prompt?.id).toBe("w|1|approval:a1");
+    expect(prompt?.approvalId).toBe("a1");
+    expect(prompt?.requestText).toBe("touch /tmp/x");
+    expect(prompt?.options.map((o) => [o.id, o.approvalOptionId, o.key])).toEqual([
+      ["accept", "accept", ""],
+      ["cancel", "cancel", ""],
+    ]);
+    expect(prompt?.options[0]).toMatchObject({ primary: true, default: true });
+    expect(prompt?.options[1].destructive).toBe(true);
+    expect(prompt?.defaultOptionId).toBe("accept");
+  });
+
+  test("a Worker waiting on nothing is not blocked by what the screen shows", () => {
+    expect(
+      buildTerminalActionPrompt({ status: "running", lastOutputLines: ["1. Yes", "2. No"], provider: "codex" }),
+    ).toBeNull();
+  });
+});
