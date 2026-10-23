@@ -137,11 +137,14 @@ type Binding struct {
 
 // Approval is a pending decision the agent is waiting on.
 type Approval struct {
-	ID      string
-	Kind    string // command, file_change, permission, question
-	Tool    string
-	Summary string
-	Options []ApprovalOption
+	ID string
+	// ConversationID is the conversation that asked. An answer resolves the
+	// request only while the Worker is still in that conversation.
+	ConversationID string
+	Kind           string // command, file_change, permission, question
+	Tool           string
+	Summary        string
+	Options        []ApprovalOption
 }
 
 // ApprovalOption is one answer the agent offers, with the agent's own id.

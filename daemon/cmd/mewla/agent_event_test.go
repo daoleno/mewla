@@ -40,7 +40,7 @@ func TestClaudeHooksPublishTheTurnForTheWorkerNamedByItsEnvironment(t *testing.T
 	if !ok || state.Binding.ConversationID != "s-1" || state.Current == nil || state.Current.ID != "p-1" || state.Current.Status != agentevents.TurnRunning {
 		t.Fatalf("state = %+v", state)
 	}
-	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"Stop","prompt_id":"p-1"}`))
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"Stop","session_id":"s-1","prompt_id":"p-1"}`))
 	if state, _ := hub.State("%4"); state.Current.Status != agentevents.TurnCompleted {
 		t.Fatalf("state = %+v", state.Current)
 	}
@@ -63,7 +63,7 @@ func TestClaudeHookFindsItsWorkerBySessionIDWhenTheEnvironmentIsSilent(t *testin
 func TestHooksFromAWorkerMewlaDoesNotKnowAreIgnored(t *testing.T) {
 	s, hub := newTestAgentEvents(&classifier.Worker{ID: "%4", Command: "claude --session-id s-1"})
 	for _, req := range []control.AgentEventRequest{
-		hook("claude", "%99", `{"hook_event_name":"Stop","prompt_id":"p"}`),
+		hook("claude", "%99", `{"hook_event_name":"Stop","session_id":"s-1","prompt_id":"p"}`),
 		hook("claude", "", `{"hook_event_name":"Stop","session_id":"stranger","prompt_id":"p"}`),
 	} {
 		if resp := s.Handle(context.Background(), req); !resp.OK || resp.HookOutput != "" {
@@ -171,5 +171,89 @@ func TestAgentLevelsFollowTheAdapterOnceItsEventsFlow(t *testing.T) {
 	other := &classifier.Worker{ID: "%8", ExecutorID: "my-proxy", Command: "my-proxy"}
 	if got := levels(other); got["approve"] != "keystroke" {
 		t.Fatalf("an unknown executor is never promoted: %v", got)
+	}
+}
+
+func TestAHookWhoseSessionIsNotTheWorkersIsRejected(t *testing.T) {
+	s, hub := newTestAgentEvents(&classifier.Worker{ID: "%4", Command: "claude --session-id s-1"})
+	ctx := context.Background()
+	// Another Claude that inherited %4's id, with its own session.
+	for _, payload := range []string{
+		`{"hook_event_name":"SessionStart","session_id":"intruder","transcript_path":"/other/i.jsonl","source":"startup"}`,
+		`{"hook_event_name":"UserPromptSubmit","session_id":"intruder","prompt_id":"p-x","prompt":"x"}`,
+		`{"hook_event_name":"Stop","session_id":"intruder","prompt_id":"p-x"}`,
+		`{"hook_event_name":"SessionEnd","session_id":"intruder"}`,
+		`{"hook_event_name":"UserPromptSubmit","prompt_id":"p-y","prompt":"no session at all"}`,
+	} {
+		if resp := s.Handle(ctx, hook("claude", "%4", payload)); !resp.OK || resp.HookOutput != "" {
+			t.Fatalf("resp = %+v", resp)
+		}
+	}
+	if len(hub.Workers()) != 0 {
+		t.Fatalf("a foreign session moved the Worker: %v", hub.Workers())
+	}
+	// Its permission request is not shown, and gets no answer from Mewla.
+	s.approvalWait = 50 * time.Millisecond
+	resp := s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"PermissionRequest","session_id":"intruder","prompt_id":"p","tool_name":"Bash","tool_input":{"command":"rm -rf x"}}`))
+	if !resp.OK || resp.HookOutput != "" || len(hub.Workers()) != 0 {
+		t.Fatalf("a foreign permission request was taken: %+v workers=%v", resp, hub.Workers())
+	}
+}
+
+func TestAWorkerFollowsItsOwnClearButNotAStrangerWearingIt(t *testing.T) {
+	s, hub := newTestAgentEvents(&classifier.Worker{ID: "%4", Command: "claude --session-id s-1"})
+	ctx := context.Background()
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionStart","session_id":"s-1","transcript_path":"/proj/s-1.jsonl","source":"startup"}`))
+	// A session id from a different project directory is not this Worker's /clear.
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionStart","session_id":"far","transcript_path":"/elsewhere/far.jsonl","source":"clear"}`))
+	// Only a SessionStart can move the Worker to a new conversation.
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"UserPromptSubmit","session_id":"s-2","prompt_id":"p","prompt":"x"}`))
+	if state, _ := hub.State("%4"); state.Binding.ConversationID != "s-1" || (state.Current != nil && state.Current.ID == "p") {
+		t.Fatalf("state = %+v", state)
+	}
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionStart","session_id":"s-2","transcript_path":"/proj/s-2.jsonl","source":"clear"}`))
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"UserPromptSubmit","session_id":"s-2","prompt_id":"p-2","prompt":"x"}`))
+	state, _ := hub.State("%4")
+	if state.Binding.ConversationID != "s-2" || state.Current == nil || state.Current.ID != "p-2" {
+		t.Fatalf("the Worker did not follow its own /clear: %+v", state)
+	}
+}
+
+func TestAnApprovalCannotBeAnsweredOnceTheWorkerLeftItsConversation(t *testing.T) {
+	s, hub := newTestAgentEvents(&classifier.Worker{ID: "%4", Command: "claude --session-id s-1"})
+	ctx := context.Background()
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionStart","session_id":"s-1","transcript_path":"/proj/s-1.jsonl","source":"startup"}`))
+	done := make(chan control.Response, 1)
+	go func() {
+		done <- s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"PermissionRequest","session_id":"s-1","prompt_id":"p","tool_name":"Bash","tool_input":{"command":"x"}}`))
+	}()
+	var approval agentevents.Approval
+	for i := 0; ; i++ {
+		if state, _ := hub.State("%4"); len(state.Approvals) == 1 {
+			approval = state.Approvals[0]
+			break
+		}
+		if i > 2000 {
+			t.Fatal("approval never appeared")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if approval.ConversationID != "s-1" {
+		t.Fatalf("approval does not name its conversation: %+v", approval)
+	}
+	// The Worker moves on: the pending request is dropped and its hook is
+	// released without an answer.
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionStart","session_id":"s-2","transcript_path":"/proj/s-2.jsonl","source":"clear"}`))
+	if resp := <-done; !resp.OK || resp.HookOutput != "" {
+		t.Fatalf("a hook of the old conversation was answered: %+v", resp)
+	}
+	if resp := s.decide("%4", approval.ID, "allow"); resp.OK {
+		t.Fatal("an approval of the old conversation was decided")
+	}
+	// An approval stamped with another conversation is refused even if pending.
+	hub.Publish(agentevents.Event{WorkerID: "%4", Kind: agentevents.KindApprovalRequest, At: time.Now(),
+		Approval: &agentevents.Approval{ID: "stale", ConversationID: "s-1", Options: []agentevents.ApprovalOption{{ID: "allow"}}}})
+	if resp := s.decide("%4", "stale", "allow"); resp.OK {
+		t.Fatal("an approval from another conversation was decided")
 	}
 }

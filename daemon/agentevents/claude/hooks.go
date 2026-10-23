@@ -114,10 +114,11 @@ func ErrorFromStopFailure(code, details string) *agentevents.TurnError {
 // Claude's hook has no request id of its own, so Mewla supplies id.
 func Approval(id string, p Payload) agentevents.Approval {
 	return agentevents.Approval{
-		ID:      id,
-		Kind:    "permission",
-		Tool:    p.ToolName,
-		Summary: summarizeToolInput(p.ToolName, p.ToolInput),
+		ID:             id,
+		ConversationID: p.SessionID,
+		Kind:           "permission",
+		Tool:           p.ToolName,
+		Summary:        summarizeToolInput(p.ToolName, p.ToolInput),
 		Options: []agentevents.ApprovalOption{
 			{ID: "allow", Label: "Allow", Scope: "once"},
 			{ID: "deny", Label: "Deny", Scope: "deny"},
