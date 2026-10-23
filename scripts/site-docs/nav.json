@@ -15,6 +15,7 @@
         { "source": "docs/sessions.md", "slug": "sessions", "title": "Sessions" },
         { "source": "docs/brain-and-work.md", "slug": "brain-and-work", "title": "Brain and Work" },
         { "source": "docs/notifications.md", "slug": "notifications", "title": "Notifications and Telegram" },
+        { "source": "docs/live-surfaces.md", "slug": "live-surfaces", "title": "Live surfaces" },
         { "source": "docs/calendar.md", "slug": "calendar", "title": "Calendar" },
         { "source": "docs/plugins.md", "slug": "plugins", "title": "Plugins" },
         { "source": "docs/screen.md", "slug": "screen", "title": "Screen" },
