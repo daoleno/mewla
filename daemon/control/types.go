@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,6 +94,20 @@ type Request struct {
 	TunnelAction         string                                 `json:"tunnel_action,omitempty"`
 	ServiceUnit          string                                 `json:"service_unit,omitempty"`
 	Memory               *MemoryRequest                         `json:"memory,omitempty"`
+	AgentEvent           *AgentEventRequest                     `json:"agent_event,omitempty"`
+	ApprovalID           string                                 `json:"approval_id,omitempty"`
+	OptionID             string                                 `json:"option_id,omitempty"`
+}
+
+// AgentEventRequest carries one agent hook call to the daemon. Payload is the
+// agent's own JSON, read from the hook's stdin and passed through untouched.
+type AgentEventRequest struct {
+	// Source names the agent whose hook fired.
+	Source string `json:"source"`
+	// WorkerID is the Worker the hook ran under (MEWLA_WORKER_ID), when the
+	// environment carries it.
+	WorkerID string          `json:"worker_id,omitempty"`
+	Payload  json.RawMessage `json:"payload"`
 }
 
 // MemoryRequest is a memory_search (Query, From, Since, Until, Limit) or
@@ -133,6 +148,8 @@ type Response struct {
 	ComputerResult       *screen.AgentResult                      `json:"computer_result,omitempty"`
 	ResourceTelemetry    *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	OK                   bool                                     `json:"ok"`
+	HookOutput           string                                   `json:"hook_output,omitempty"`
+	Approvals            []Approval                               `json:"approvals,omitempty"`
 	Error                *Error                                   `json:"error,omitempty"`
 	Worker               *Worker                                  `json:"worker,omitempty"`
 	Workers              []Worker                                 `json:"workers,omitempty"`
@@ -203,6 +220,24 @@ type Worker struct {
 	LastSeenAt          *time.Time `json:"last_seen_at,omitempty"`
 	Hidden              bool       `json:"hidden,omitempty"`
 	Delegated           bool       `json:"delegated,omitempty"`
+}
+
+// Approval is a decision a Worker's agent is waiting on. Each option carries
+// the agent's own id; a decision names one of them.
+type Approval struct {
+	ID       string           `json:"id"`
+	WorkerID string           `json:"worker_id"`
+	Kind     string           `json:"kind,omitempty"`
+	Tool     string           `json:"tool,omitempty"`
+	Summary  string           `json:"summary,omitempty"`
+	Options  []ApprovalOption `json:"options"`
+}
+
+// ApprovalOption is one answer the agent offers.
+type ApprovalOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Scope string `json:"scope,omitempty"`
 }
 
 type ExecutorCapabilities struct {

@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/agentevents"
+	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -123,6 +125,8 @@ func run(args []string, stderr io.Writer) error {
 			return runResources(args[1:], stderr)
 		case "worker":
 			return runWorkerCommand(args[1:], stderr)
+		case "agent-event":
+			return runAgentEvent(args[1:], stderr)
 		case "service":
 			return runServiceCommand(args[1:], stderr)
 		case "brain":
@@ -265,6 +269,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 			_ = logWriter.Close()
 		}()
 	}
+	eventHub := agentevents.NewHub()
+	registerDebugHandler("/debug/agent-events", jsonDebugHandler(func() any { return eventHub.Snapshot() }))
 	if err := startPprof(ctx); err != nil {
 		return err
 	}
@@ -294,7 +300,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	w.SetTmuxServer(tmuxSocketPath, tmuxScratchDir)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
-	w.SetProviderActivityProbe(newWorkProviderActivityProbe())
+	adapters := agentevents.NewRegistry()
+	agentEvents := newAgentEventService(eventHub, w.Workers)
+	w.SetProviderActivityProbe(newEventActivityProbe(eventHub, newWorkProviderActivityProbe()))
 	sc := stats.NewCollector()
 
 	workRoot, err := work.DefaultRoot()
@@ -350,7 +358,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	resourceSampler := watcher.NewResourceSampler()
 	resourceSampler.ConfigureResourceFiles(authManager.StorageDir())
+	if executable, exeErr := os.Executable(); exeErr != nil {
+		log.Printf("WARN agent events: cannot find this executable, Claude Workers will be followed from their transcript: %v", exeErr)
+	} else if err := claudeadapter.WriteSettings(claudeSettingsPath(authManager.StorageDir()), claudeHookCommand(executable, authManager.StorageDir())); err != nil {
+		log.Printf("WARN agent events: cannot write the Claude hook file, Claude Workers will be followed from their transcript: %v", err)
+	} else {
+		adapters.Register(claudeadapter.Provider, claudeadapter.Adapter{SettingsPath: claudeSettingsPath(authManager.StorageDir())})
+	}
 	controlHandler := &controlApp{
+		agentEvents:     agentEvents,
+		adapters:        adapters,
 		resourceSampler: resourceSampler,
 		auth:            authManager,
 		watcher:         w,
@@ -1013,6 +1030,10 @@ func runWorkerCommand(args []string, stderr io.Writer) error {
 		return runWorkerReceipt(args[1:], stderr)
 	case "progress":
 		return runWorkerProgress(args[1:], stderr)
+	case "approvals":
+		return runWorkerApprovals(args[1:], stderr)
+	case "approve":
+		return runWorkerApprove(args[1:], stderr)
 	case "release":
 		return runWorkerRelease(args[1:], stderr)
 	case "close":
