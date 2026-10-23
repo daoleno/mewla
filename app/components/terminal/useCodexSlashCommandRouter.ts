@@ -39,12 +39,7 @@ interface UseCodexSlashCommandRouterInput {
     previousDraft?: string,
     previousAttachments?: ComposerAttachment[],
   ): void;
-  runStatusCommand(
-    text: string,
-    command?: CodexSlashCommand,
-    previousDraft?: string,
-    previousAttachments?: ComposerAttachment[],
-  ): void;
+  openStatusSheet(): void;
   openSkillsSheet(): void;
   onSwitchToTerminal?: () => void;
 }
@@ -58,7 +53,7 @@ export function useCodexSlashCommandRouter({
   submitTextToInterface,
   startNewInterfaceChat,
   sendSlashCommandToInterface,
-  runStatusCommand,
+  openStatusSheet,
   openSkillsSheet,
   onSwitchToTerminal,
 }: UseCodexSlashCommandRouterInput) {
@@ -117,7 +112,8 @@ export function useCodexSlashCommandRouter({
         return false;
       }
       if (command.name === "status") {
-        runStatusCommand(rawText, command, previousDraft, previousAttachments);
+        setDraft("");
+        openStatusSheet();
         return true;
       }
       if (command.execution === "native") {
@@ -156,7 +152,7 @@ export function useCodexSlashCommandRouter({
       showUnsupportedSlashCommand,
       startNewInterfaceChat,
       openSkillsSheet,
-      runStatusCommand,
+      openStatusSheet,
     ],
   );
 
@@ -191,7 +187,7 @@ export function useCodexSlashCommandRouter({
     showUnsupportedSlashCommand,
     showUnavailableSlashCommand,
     sendSlashCommandToInterface,
-    runStatusCommand,
+    openStatusSheet,
     openSkillsSheet,
   });
 

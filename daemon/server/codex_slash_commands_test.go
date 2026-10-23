@@ -28,7 +28,7 @@ func TestDefaultCodexSlashCommandsContainsRealCommandSet(t *testing.T) {
 			t.Fatalf("missing command %s", value)
 		}
 	}
-	for _, value := range []string{"/test", "/help", "/sandbox", "/voice", "/theme", "/compact", "/plan", "/status", "/mcp"} {
+	for _, value := range []string{"/test", "/help", "/sandbox", "/voice", "/theme", "/compact", "/plan", "/mcp"} {
 		if values[value] {
 			t.Fatalf("unexpected non-Codex command %s", value)
 		}
@@ -48,10 +48,15 @@ func TestSlashCommandCapabilitiesAreConservative(t *testing.T) {
 			t.Fatalf("%s capability = %#v, want chat-supported Codex terminal command", value, command)
 		}
 	}
-	for _, value := range []string{"/status", "/mcp"} {
+	for _, value := range []string{"/mcp"} {
 		if command, ok := values[value]; ok {
 			t.Fatalf("%s should be hidden, got %#v", value, command)
 		}
+	}
+
+	// /status is answered by the app from Codex's app-server, not typed.
+	if command := values["/status"]; !command.ChatSupported || command.Interactive || command.Output.Kind != "management-screen" {
+		t.Fatalf("/status = %#v, want a chat-supported management screen", command)
 	}
 
 	for _, value := range []string{"/model", "/permissions", "/mention", "/skills"} {

@@ -527,6 +527,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
+	if codexFollow != nil {
+		srv.SetCodexStatus(func(ctx context.Context, workerID string) (any, error) {
+			status, err := codexFollow.Status(ctx, workerID)
+			if errors.Is(err, ErrNoCodexStatus) {
+				return nil, server.ErrCodexStatusUnavailable
+			}
+			return status, err
+		})
+	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {

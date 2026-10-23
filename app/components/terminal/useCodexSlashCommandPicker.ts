@@ -19,12 +19,7 @@ interface UseCodexSlashCommandPickerInput {
     previousDraft?: string,
     previousAttachments?: ComposerAttachment[],
   ): void;
-  runStatusCommand(
-    text: string,
-    command?: CodexSlashCommand,
-    previousDraft?: string,
-    previousAttachments?: ComposerAttachment[],
-  ): void;
+  openStatusSheet(): void;
   openSkillsSheet(): void;
   showUnsupportedSlashCommand(command: CodexSlashCommand): void;
   showUnavailableSlashCommand(command: CodexSlashCommand): void;
@@ -37,7 +32,7 @@ export function useCodexSlashCommandPicker({
   focusComposer,
   startNewInterfaceChat,
   sendSlashCommandToInterface,
-  runStatusCommand,
+  openStatusSheet,
   openSkillsSheet,
   showUnsupportedSlashCommand,
   showUnavailableSlashCommand,
@@ -66,7 +61,8 @@ export function useCodexSlashCommandPicker({
         return;
       }
       if (command.name === "status") {
-        runStatusCommand(command.value, command, command.value, []);
+        setDraft("");
+        openStatusSheet();
         return;
       }
       if (command.execution === "native") {
@@ -99,7 +95,7 @@ export function useCodexSlashCommandPicker({
       dismissActionMenu,
       focusComposer,
       openSkillsSheet,
-      runStatusCommand,
+      openStatusSheet,
       sendSlashCommandToInterface,
       setDraft,
       showUnavailableSlashCommand,

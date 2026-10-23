@@ -189,6 +189,7 @@ type Server struct {
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
 	agentApprovals     AgentApprovals
+	codexStatus        func(ctx context.Context, workerID string) (any, error)
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
@@ -1079,19 +1080,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handlePluginCommand(conn, raw)
 	case "plugin_mutation":
 		s.handlePluginMutation(conn, raw)
-	case "codex_terminal_snapshot":
-		text, err := s.watcher.CapturePaneContent(raw.TargetID)
-		if err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "codex_terminal_snapshot_failed", err.Error())
-			return
-		}
-		text = work.CleanCodexDisplayText(text)
-		s.sendJSON(conn, map[string]any{
-			"type":       "codex_terminal_snapshot",
-			"request_id": raw.RequestID,
-			"target_id":  raw.TargetID,
-			"text":       text,
-		})
+	case "codex_status":
+		go s.handleCodexStatus(conn, raw)
 	case "terminal_snapshot":
 		s.handleTerminalMessage(conn, raw)
 	case "codex_asset":

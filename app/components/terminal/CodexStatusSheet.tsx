@@ -11,7 +11,8 @@ import type {
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
 import { ContinuousCorners, Typography } from "../../constants/tokens";
-import type { CodexConversationEvent } from "../../services/codexConversation";
+import { codexStatusSections } from "../../services/codexStatus";
+import type { CodexStatusState } from "./useCodexStatus";
 import { BottomSheetFrame } from "../ui";
 import { ComposerLoadingDots } from "./ComposerLoadingDots";
 import { OutlineWidth, outlinedSurface } from "../ui/outlinedSurface";
@@ -19,9 +20,7 @@ import { Icon } from "../icons/Icon";
 
 interface CodexStatusSheetProps {
   visible: boolean;
-  event?: CodexConversationEvent | null;
-  loading: boolean;
-  timedOut: boolean;
+  state: CodexStatusState;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   onRetry(): void;
@@ -29,25 +28,21 @@ interface CodexStatusSheetProps {
   onClose(): void;
 }
 
-type StatusRow = {
-  key: string;
-  value: string;
-};
-
 export function CodexStatusSheet({
   visible,
-  event,
-  loading,
-  timedOut,
+  state,
   chrome,
   theme,
   onRetry,
   onSwitchToTerminal,
   onClose,
 }: CodexStatusSheetProps) {
-  const body = event?.body?.trim() || "";
-  const rows = useMemo(() => parseCodexStatusRows(body), [body]);
-  const timestamp = formatStatusTimestamp(event?.timestamp);
+  const sections = useMemo(
+    () => (state.phase === "ready" ? codexStatusSections(state.status) : []),
+    [state],
+  );
+  const timestamp =
+    state.phase === "ready" ? formatStatusTimestamp(state.fetchedAt) : undefined;
 
   return (
     <BottomSheetFrame
@@ -68,9 +63,20 @@ export function CodexStatusSheet({
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: chrome.text }]}>Status</Text>
           <Text style={[styles.subtitle, { color: chrome.textSubtle }]}>
-            {timestamp || "Codex /status"}
+            {timestamp || "Codex"}
           </Text>
         </View>
+        {state.phase === "ready" ? (
+          <TouchableOpacity
+            accessibilityLabel="Refresh status"
+            accessibilityRole="button"
+            style={[styles.closeButton, { backgroundColor: chrome.surfaceMuted }]}
+            onPress={onRetry}
+            activeOpacity={0.78}
+          >
+            <Icon name="refresh" size={18} color={chrome.textSubtle} />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           accessibilityLabel="Close status"
           accessibilityRole="button"
@@ -82,90 +88,125 @@ export function CodexStatusSheet({
         </TouchableOpacity>
       </View>
 
-      {body ? (
+      {state.phase === "ready" ? (
         <ScrollView
           style={styles.content}
           contentContainerStyle={styles.contentBody}
           showsVerticalScrollIndicator={false}
         >
-          {rows.length > 0 ? (
-            <View
-              style={[
-                styles.rows,
-                { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted },
-              ]}
-            >
-              {rows.map((row, index) => (
-                <View
-                  key={`${row.key}:${index}`}
-                  style={[
-                    styles.row,
-                    index > 0
-                      ? {
-                          borderTopColor: chrome.border,
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                        }
-                      : null,
-                  ]}
-                >
-                  <Text
-                    style={[styles.rowKey, { color: chrome.textSubtle }]}
-                    numberOfLines={1}
-                  >
-                    {row.key}
-                  </Text>
-                  <Text
-                    style={[styles.rowValue, { color: chrome.text }]}
-                    selectable
-                  >
-                    {row.value}
-                  </Text>
-                </View>
-              ))}
-            </View>
+          {sections.length === 0 ? (
+            <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
+              Codex reported nothing for this chat yet.
+            </Text>
           ) : null}
-
-          <View style={styles.rawSection}>
-            <Text style={[styles.sectionLabel, { color: chrome.textSubtle }]}>
-              Output
-            </Text>
-            <Text
-              style={[
-                styles.rawOutput,
-                {
-                  color: chrome.text,
-                  backgroundColor: chrome.surfaceMuted,
-                  borderColor: chrome.border,
-                },
-              ]}
-              selectable
-            >
-              {body}
-            </Text>
-          </View>
+          {sections.map((section) => (
+            <View key={section.key} style={styles.rawSection}>
+              <Text style={[styles.sectionLabel, { color: chrome.textSubtle }]}>
+                {section.title}
+              </Text>
+              <View
+                style={[
+                  styles.rows,
+                  { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted },
+                ]}
+              >
+                {section.meters?.map((meter, index) => (
+                  <View
+                    key={meter.key}
+                    style={[
+                      styles.row,
+                      index > 0
+                        ? {
+                            borderTopColor: chrome.border,
+                            borderTopWidth: StyleSheet.hairlineWidth,
+                          }
+                        : null,
+                    ]}
+                  >
+                    <Text
+                      style={[styles.rowKey, { color: chrome.textSubtle }]}
+                      numberOfLines={1}
+                    >
+                      {meter.label}
+                    </Text>
+                    <View
+                      style={[styles.meterTrack, { backgroundColor: chrome.border }]}
+                    >
+                      <View
+                        style={[
+                          styles.meterFill,
+                          {
+                            width: `${Math.max(0, 100 - meter.usedPercent)}%`,
+                            backgroundColor:
+                              meter.usedPercent >= 90 ? theme.red : chrome.accent,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.rowValue, { color: chrome.text }]}>
+                      {`${Math.round(100 - meter.usedPercent)}% left${meter.resets ? ` · ${meter.resets}` : ""}`}
+                    </Text>
+                  </View>
+                ))}
+                {section.rows.map((row, index) => (
+                  <View
+                    key={row.key}
+                    style={[
+                      styles.row,
+                      index > 0 || section.meters?.length
+                        ? {
+                            borderTopColor: chrome.border,
+                            borderTopWidth: StyleSheet.hairlineWidth,
+                          }
+                        : null,
+                    ]}
+                  >
+                    <Text
+                      style={[styles.rowKey, { color: chrome.textSubtle }]}
+                      numberOfLines={1}
+                    >
+                      {row.label}
+                    </Text>
+                    <Text
+                      style={[styles.rowValue, { color: chrome.text }]}
+                      selectable
+                    >
+                      {row.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))}
         </ScrollView>
-      ) : timedOut ? (
+      ) : state.phase === "failed" ? (
         <View style={styles.state}>
           <Icon name="warning-fill" size={20} color={theme.yellow} />
           <Text style={[styles.stateTitle, { color: chrome.text }]}>
-            No status output received
+            {state.unavailable
+              ? "No status for this chat"
+              : "Couldn't load status"}
           </Text>
           <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
-            Codex may still be rendering this command in the terminal.
+            {state.unavailable
+              ? "Mewla reads status from the Codex it started. For this chat, type /status in the terminal."
+              : state.message}
           </Text>
           <View style={styles.actions}>
-            <TouchableOpacity
-              accessibilityLabel="Retry status"
-              accessibilityRole="button"
-              style={[styles.actionButton, { backgroundColor: chrome.accent }]}
-              onPress={onRetry}
-              activeOpacity={0.82}
-            >
-              <Icon name="refresh" size={15} color={theme.cursorAccent} />
-              <Text style={[styles.primaryActionText, { color: theme.cursorAccent }]}>
-                Retry
-              </Text>
-            </TouchableOpacity>
+            {state.unavailable ? null : (
+              <TouchableOpacity
+                accessibilityLabel="Retry status"
+                accessibilityRole="button"
+                style={[styles.actionButton, { backgroundColor: chrome.accent }]}
+                onPress={onRetry}
+                activeOpacity={0.82}
+              >
+                <Icon name="refresh" size={15} color={theme.cursorAccent} />
+                <Text style={[styles.primaryActionText, { color: theme.cursorAccent }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            )}
             {onSwitchToTerminal ? (
               <TouchableOpacity
                 accessibilityLabel="Open terminal"
@@ -190,40 +231,12 @@ export function CodexStatusSheet({
         <View style={styles.state}>
           <ComposerLoadingDots color={chrome.accent} size={10} />
           <Text style={[styles.stateTitle, { color: chrome.text }]}>
-            Waiting for Codex status
+            Asking Codex
           </Text>
-          {loading ? (
-            <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
-              /status sent
-            </Text>
-          ) : null}
         </View>
       )}
     </BottomSheetFrame>
   );
-}
-
-function parseCodexStatusRows(body: string): StatusRow[] {
-  if (!body.trim()) {
-    return [];
-  }
-  const rows: StatusRow[] = [];
-  for (const line of body.split(/\r?\n/)) {
-    const cleaned = line.trim().replace(/^[-*]\s+/, "");
-    if (!cleaned) {
-      continue;
-    }
-    const match = /^([^:：]{1,48})[:：]\s*(.+)$/.exec(cleaned);
-    if (!match) {
-      continue;
-    }
-    const key = match[1].trim();
-    const value = match[2].trim();
-    if (key && value) {
-      rows.push({ key, value });
-    }
-  }
-  return rows;
 }
 
 function formatStatusTimestamp(value?: string) {
@@ -317,13 +330,14 @@ const styles = StyleSheet.create({
     fontFamily: Typography.uiFontMedium,
     textTransform: "uppercase",
   },
-  rawOutput: {
-    ...outlinedSurface(8),
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: Typography.terminalFont,
+  meterTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  meterFill: {
+    height: 6,
+    borderRadius: 3,
   },
   state: {
     minHeight: 190,

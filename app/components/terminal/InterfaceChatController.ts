@@ -147,24 +147,6 @@ export function useInterfaceChatController({
     uploading,
   });
 
-  const runStatusCommand = useCallback(
-    (
-      text: string,
-      command?: CodexSlashCommand,
-      previousDraft?: string,
-      previousAttachments?: ComposerAttachment[],
-    ) => {
-      openStatusSheet();
-      sendSlashCommandToInterface(
-        text,
-        command,
-        previousDraft,
-        previousAttachments,
-      );
-    },
-    [openStatusSheet, sendSlashCommandToInterface],
-  );
-
   const { pickSlashCommand, routeDraftSubmission } = useCodexSlashCommandRouter(
     {
       attachments,
@@ -175,7 +157,7 @@ export function useInterfaceChatController({
       submitTextToInterface,
       startNewInterfaceChat,
       sendSlashCommandToInterface,
-      runStatusCommand,
+      openStatusSheet,
       openSkillsSheet,
       onSwitchToTerminal,
     },
@@ -217,7 +199,6 @@ export function useInterfaceChatController({
     interruptInterface,
     actOnPendingUserMessage,
     pickSlashCommand,
-    runStatusCommand,
     handleUploadAttachment,
     cancelUpload,
     removeAttachment,

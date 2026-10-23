@@ -1,3 +1,4 @@
+import { normalizeCodexStatus, type CodexStatus } from "./codexStatus";
 import type { ConnectionRequest, ConnectionResponse } from "./connections";
 import type { StoredServer } from "./storage";
 import type { StatsPayload } from "./statsPayload";
@@ -1986,18 +1987,22 @@ export class WebSocketClient {
     );
   }
 
-  getCodexTerminalSnapshot(serverId: string, targetId: string) {
-    return this.request<string>(
+  getCodexStatus(serverId: string, targetId: string) {
+    return this.request<CodexStatus>(
       serverId,
-      "codex_terminal_snapshot",
+      "codex_status",
       { target_id: targetId },
       {
-        responseType: "codex_terminal_snapshot",
-        timeoutMs: 10000,
-        timeout: "Timed out while loading Codex terminal output.",
-        error: "Failed to load Codex terminal output.",
-        parse: (payload) =>
-          typeof payload.text === "string" ? payload.text : "",
+        responseType: "codex_status",
+        timeoutMs: 20000,
+        timeout: () =>
+          daemonRequestError("Timed out while loading Codex status.", "timeout"),
+        error: (payload) =>
+          daemonRequestError(
+            payload.message || "Failed to load Codex status.",
+            payload.code,
+          ),
+        parse: (payload) => normalizeCodexStatus(payload.status),
       },
     );
   }

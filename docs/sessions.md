@@ -151,7 +151,7 @@ the screen or the agent's files:
 | Agent | Followed through | Messages and Stop |
 | --- | --- | --- |
 | Claude Code | Its hooks, set when Mewla starts it | Typed into the Terminal; the hook confirms delivery |
-| Codex | An app-server beside the Terminal, set when Mewla starts it; the conversation is read from the thread Codex announced | Sent to Codex directly |
+| Codex | An app-server beside the Terminal, set when Mewla starts it; the conversation is read from the thread Codex announced, and the Status sheet asks the same app-server (account, usage limits, model, approvals, sandbox, token use) | Sent to Codex directly |
 | OpenCode | OpenCode's background service: one event stream for all Workers, the session id chosen at launch | Sent to the service directly; a message to a session OpenCode has not created yet (its first) is typed |
 | Pi | A small extension Mewla loads into each Pi it starts (`pi -e`), which reports Pi's turns over a local socket; the session file is chosen at launch | Handed to Pi by the extension; Stop aborts the running turn |
 | Cursor | The chat is created before Cursor starts and resumed, so its transcript is known from the first moment; turns are read from the transcript and the screen | Typed into the Terminal |
@@ -161,7 +161,15 @@ A Worker that Mewla did not start, or that started with its own settings, is
 followed from the transcript and the screen, and the app offers only what that
 supports. For Codex that is the one case still found by looking: a Codex you
 opened by hand has no app-server of Mewla's, so its conversation is matched by
-folder, start time and the files it holds open.
+folder, start time and the files it holds open, and its Status sheet says to
+type `/status` in the Terminal. A Codex that Mewla started is not looked for
+at all: until it announces its thread (a moment after it starts) there is
+nothing to read, and only if it has not announced one after 30 seconds is its
+transcript searched for.
+
+Cursor and Grok can only be hooked through the user's own global
+configuration, and Mewla never writes to it. They stay on the transcript and the
+screen, and so does anything an agent offers only through such a file.
 
 ## What the daemon costs while idle
 
