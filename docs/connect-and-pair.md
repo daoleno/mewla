@@ -324,5 +324,28 @@ Mewla Link is the relay remote access runs on. You can also run your own
 relay: configure relay infrastructure and a `link.json` file in the state
 directory. See the operator guide in `docs/internal/mewla-link-relay.md`.
 
+### Direct when it can
+
+A phone paired through Mewla Link goes straight to the computer when it can
+reach it on the same Wi-Fi/LAN or over Tailscale, and uses the relay otherwise.
+The badge on the Screen page says which: **LAN**, **Tailscale** or **Relay**.
+
+The computer has to be listening on those networks (`mewla --lan`, or
+`-addr` with its Tailscale address). A computer that listens only on loopback,
+the default, has no direct address to offer and always uses the relay. Each
+time the phone connects, the computer tells it the addresses it listens on, and
+the phone remembers them.
+
+The phone tries them while it also measures the relay. It uses a direct address
+only after two proofs: the TLS connection to it is pinned to the computer's key
+from pairing, and the computer has signed a fresh challenge from the phone with
+its daemon key. Until then nothing from the phone, including the device
+signature, is sent there. An address that has moved to another device, or that
+answers wrongly, fails the proof and the relay is used. When the direct address
+is lost the connection goes to the relay, which the phone keeps open for that,
+and a phone on the relay moves to a direct address within about half a minute
+of it becoming reachable. Moving between the two reconnects, so the Screen
+viewer retries once on its own when its direct path ends.
+
 If something does not connect, see
 [Troubleshooting](troubleshooting.md#the-phone-cannot-connect).

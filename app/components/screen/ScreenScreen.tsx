@@ -15,7 +15,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
-import { currentTransportPath } from "../../services/pinnedTransport";
+import { currentTransportPath, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
 import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
@@ -106,6 +106,9 @@ export function ScreenScreen() {
   const host = useRef<ScreenViewerHostHandle>(null);
   const input = useRef<TextInput>(null);
   const connection = useRef<ScreenConnection | null>(null);
+  // The path the live viewer opened on, and whether it has retried its loss.
+  const openedVia = useRef<TransportPath | null>(null);
+  const retriedLostPath = useRef(false);
   const viewerReady = useRef(false);
   const outbox = useRef<ScreenHostMessage[]>([]);
   const chunks = useRef<string[]>([]);
@@ -196,9 +199,14 @@ export function ScreenScreen() {
     setWatching(watch);
     setPhase("connecting");
     const socket = new ScreenConnection(server, {
-      open() { if (active()) toViewer({ type: "open" }); },
+      open() {
+        if (!active()) return;
+        openedVia.current = currentTransportPath(server.id);
+        toViewer({ type: "open" });
+      },
       data(chunk) {
         if (!active()) return;
+        retriedLostPath.current = false;
         chunks.current.push(chunk);
         schedule();
       },
@@ -211,6 +219,14 @@ export function ScreenScreen() {
         toViewer({ type: "close" });
         // The agent finished: look again, which opens the screen.
         if (watch) { void connect(); return; }
+        // A viewer that was on a direct path when it ended retries once. The
+        // retry first re-verifies that path, so a lost one goes to the relay.
+        if (openedVia.current && openedVia.current !== "relay" && !retriedLostPath.current) {
+          retriedLostPath.current = true;
+          recheckDirectPath(server.id);
+          void connect();
+          return;
+        }
         setReason(why || "The connection to the screen ended.");
         setPhase("lost");
       },
