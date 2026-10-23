@@ -1,6 +1,8 @@
 package watcher
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -11,7 +13,7 @@ func pressureFixture(available uint64) MachineResourceSnapshot {
 func TestPressureDurationHysteresisEscalationRecoveryCooldown(t *testing.T) {
 	now := time.Unix(1000, 0)
 	m := NewPressureMachine(DefaultResourceThresholds())
-	step := func(seconds int, available uint64, want string, event bool) {
+	step := func(seconds int, available uint64, want PressureState, event bool) {
 		t.Helper()
 		state, _, notify := m.Step(pressureFixture(available), now.Add(time.Duration(seconds)*time.Second))
 		if state != want || notify != event {
@@ -108,5 +110,26 @@ func TestMemoryPSIRealPressureAlerts(t *testing.T) {
 		if !found[name] {
 			t.Fatalf("missing %s in %v", name, signals)
 		}
+	}
+}
+
+func TestPressureStateIsClosedAndOrdered(t *testing.T) {
+	for _, state := range []PressureState{PressureNormal, PressureElevated, PressureCritical} {
+		if !state.Valid() {
+			t.Errorf("%q is not valid", state)
+		}
+	}
+	for _, state := range []PressureState{"", "warn", "Normal", "severe"} {
+		if state.Valid() {
+			t.Errorf("%q is valid", state)
+		}
+	}
+	if !(PressureNormal.rank() < PressureElevated.rank() && PressureElevated.rank() < PressureCritical.rank()) {
+		t.Error("pressure states are not ordered normal < elevated < critical")
+	}
+	// The states are the words the persisted file and Brain's payload carry.
+	raw, err := json.Marshal(ResourcePressureEvent{State: PressureElevated, PreviousState: PressureNormal})
+	if err != nil || !strings.Contains(string(raw), `"state":"elevated"`) || !strings.Contains(string(raw), `"previous_state":"normal"`) {
+		t.Fatalf("wire form = %s (%v)", raw, err)
 	}
 }

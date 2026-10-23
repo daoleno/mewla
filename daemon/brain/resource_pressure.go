@@ -101,10 +101,10 @@ func (s *Service) RouteResourcePressure(event watcher.ResourcePressureEvent) err
 	}
 	// Recovery is informational: it closes unreviewed pressure Work above and
 	// needs no Brain turn. Engaged Work stays with Brain.
-	if event.State == "normal" {
+	if event.State == watcher.PressureNormal {
 		return nil
 	}
-	_, _, err = s.store.EnsureWork(Work{ID: id, Title: "Machine resource pressure: " + event.State, Objective: "Assess the machine resource event and decide whether any Worker action is needed.", CompletionPolicy: CompletionBounded, NextAction: "Decide whether to defer dispatch, ask a Worker to release resources, or close it."})
+	_, _, err = s.store.EnsureWork(Work{ID: id, Title: "Machine resource pressure: " + string(event.State), Objective: "Assess the machine resource event and decide whether any Worker action is needed.", CompletionPolicy: CompletionBounded, NextAction: "Decide whether to defer dispatch, ask a Worker to release resources, or close it."})
 	if err != nil {
 		return err
 	}
@@ -137,8 +137,8 @@ const (
 // Process rows, trend samples and PSI detail stay in mewla resources --json,
 // which Brain reads only when it acts.
 type resourcePressureBrief struct {
-	State         string                   `json:"state"`
-	PreviousState string                   `json:"previous_state"`
+	State         watcher.PressureState    `json:"state"`
+	PreviousState watcher.PressureState    `json:"previous_state"`
 	SampledAt     time.Time                `json:"sampled_at"`
 	Crossed       []watcher.PressureSignal `json:"crossed,omitempty"`
 	MemoryFreeGiB float64                  `json:"memory_available_gib,omitempty"`
