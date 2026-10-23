@@ -69,6 +69,7 @@ import {
   dispatchStructuredCommand,
   sendWebSocketMessageNow,
   structuredActionMessage,
+  type WorkerAction,
   structuredInputMessage,
   type StructuredCommandReceipt,
 } from "./structuredWebSocketTransport";
@@ -2205,7 +2206,7 @@ export class WebSocketClient {
   sendAction(
     serverId: string,
     workerId: string,
-    action: string,
+    action: WorkerAction,
   ): StructuredCommandReceipt {
     const socket = this.liveSocket(serverId);
     if (!socket?.isConnected) {

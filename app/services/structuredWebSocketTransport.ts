@@ -158,10 +158,13 @@ export function structuredInputMessage(input: {
   };
 }
 
+/** The daemon accepts one action: Ctrl-C, sent by the stop control. */
+export type WorkerAction = "pause";
+
 export function structuredActionMessage(input: {
   requestId: string;
   workerId: string;
-  action: string;
+  action: WorkerAction;
 }) {
   return {
     type: "send_action",
