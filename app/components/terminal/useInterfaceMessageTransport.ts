@@ -18,7 +18,11 @@ import type {
   PendingUserMessageSettlement,
 } from "./InterfaceChatSession";
 import { messageOutbox } from "../../services/messageOutboxRuntime";
-import type { OutboxEntry, OutboxEvent } from "../../services/messageOutbox";
+import type {
+  OutboxEntry,
+  OutboxEvent,
+  SendAttachment,
+} from "../../services/messageOutbox";
 import {
   UNCERTAIN_SEND_ERROR,
   UNDELIVERED_SEND_ERROR,
@@ -136,9 +140,13 @@ export function useInterfaceMessageTransport({
         return;
       }
       const rowId = addPendingUserMessage({
-        body: entry.displayBody.trim(),
-        sentText: entry.displayBody,
-        attachments: [],
+        body: entry.text.trim(),
+        sentText: entry.text.trim(),
+        attachments: (entry.attachments ?? []).map((file) => ({
+          name: file.name,
+          path: file.path,
+          mimeType: file.content_type,
+        })),
         lifecycle: entry.state === "undeliverable" ? "failed" : "pending",
         dispatchRequestId: entry.id,
         ...(entry.state === "undeliverable"
@@ -290,8 +298,8 @@ export function useInterfaceMessageTransport({
         serverId,
         workerId,
         conversationScopeKey,
-        text: `${text}\n`,
-        displayBody: text,
+        text,
+        attachments: toSendAttachments(previousAttachments),
       });
       requestTurnFocus(pendingMessageId);
       setDraft("");
@@ -343,8 +351,8 @@ export function useInterfaceMessageTransport({
         serverId,
         workerId,
         conversationScopeKey,
-        text: `${message.sentText}\n`,
-        displayBody: message.sentText,
+        text: message.sentText,
+        attachments: toSendAttachments(message.attachments),
       });
     },
     [
@@ -355,6 +363,14 @@ export function useInterfaceMessageTransport({
       serverId,
       workerId,
     ],
+  );
+
+  // A provider command is only its text: the files in the composer are not part
+  // of it, so the row and the daemon request carry none.
+  const submitProviderCommandText = useCallback(
+    (text: string, previousDraft: string) =>
+      submitTextToInterface(text, previousDraft, []),
+    [submitTextToInterface],
   );
 
   const startNewInterfaceChat = useCallback(
@@ -371,10 +387,10 @@ export function useInterfaceMessageTransport({
         submittedText,
         previousDraft,
         previousAttachments,
-        submitTextToInterface,
+        submitProviderCommandText,
       );
     },
-    [submitTextToInterface, runningActivity],
+    [submitProviderCommandText, runningActivity],
   );
 
   const sendSlashCommandToInterface = useCallback(
@@ -388,10 +404,10 @@ export function useInterfaceMessageTransport({
         text,
         previousDraft,
         previousAttachments,
-        submitTextToInterface,
+        submitProviderCommandText,
       );
     },
-    [submitTextToInterface],
+    [submitProviderCommandText],
   );
 
   const interruptInterface = useCallback(() => {
@@ -449,4 +465,14 @@ export function useInterfaceMessageTransport({
     interruptInterface,
     actOnPendingUserMessage,
   };
+}
+
+function toSendAttachments(
+  attachments: ReadonlyArray<{ name: string; path: string; mimeType?: string }>,
+): SendAttachment[] {
+  return attachments.map((file) => ({
+    name: file.name,
+    path: file.path,
+    ...(file.mimeType ? { content_type: file.mimeType } : {}),
+  }));
 }

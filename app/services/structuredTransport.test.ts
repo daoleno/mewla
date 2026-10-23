@@ -80,27 +80,31 @@ describe("structured provider transport", () => {
     expect(structuredInputMessage({
       requestId: "request-input",
       workerId: "agent-a",
-      text: "hello\n",
+      text: "hello",
     })).toEqual({
       type: "send_input",
       request_id: "request-input",
       worker_id: "agent-a",
-      text: "hello\n",
+      text: "hello",
     });
     expect(
       structuredInputMessage({
         requestId: "request-brain",
         workerId: "brain-host",
-        text: "hello\n",
-        displayBody: "hello",
+        text: "hello",
+        attachments: [
+          { name: "photo.png", path: "/uploads/photo.png", content_type: "image/png" },
+        ],
         conversationScopeKey: "brain-thread:thread-a",
       }),
     ).toEqual({
       type: "send_input",
       request_id: "request-brain",
       worker_id: "brain-host",
-      text: "hello\n",
-      display_body: "hello",
+      text: "hello",
+      attachments: [
+        { name: "photo.png", path: "/uploads/photo.png", content_type: "image/png" },
+      ],
       conversation_scope_key: "brain-thread:thread-a",
     });
     expect(structuredActionMessage({

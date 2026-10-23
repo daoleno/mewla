@@ -1,7 +1,10 @@
 import type {
+  SendAttachment,
   StructuredCommandOutcome,
   StructuredCommandReceipt,
 } from "./structuredWebSocketTransport";
+
+export type { SendAttachment };
 
 /**
  * The send queue behind every chat. A message joins the outbox the moment the
@@ -33,9 +36,9 @@ export type OutboxEntry = {
   serverId: string;
   workerId: string;
   conversationScopeKey?: string;
-  /** Exactly what is sent to the provider. */
+  /** What the person wrote; the daemon renders it with the attachments. */
   text: string;
-  displayBody: string;
+  attachments?: SendAttachment[];
   createdAt: number;
   state: OutboxEntryState;
   /** Proven-non-submitted attempts so far. */
@@ -52,7 +55,7 @@ export type OutboxEnqueueInput = {
   workerId: string;
   conversationScopeKey?: string;
   text: string;
-  displayBody: string;
+  attachments?: SendAttachment[];
 };
 
 export type OutboxEvent =
@@ -73,7 +76,7 @@ export type OutboxTransport = {
     workerId: string,
     text: string,
     options: {
-      displayBody: string;
+      attachments?: SendAttachment[];
       conversationScopeKey?: string;
       requestId: string;
     },
@@ -213,7 +216,9 @@ export class MessageOutbox {
         ? { conversationScopeKey: input.conversationScopeKey }
         : {}),
       text: input.text,
-      displayBody: input.displayBody,
+      ...(input.attachments && input.attachments.length > 0
+        ? { attachments: input.attachments }
+        : {}),
       createdAt: this.clock.now(),
       state: "queued",
       attempts: 0,
@@ -347,7 +352,7 @@ export class MessageOutbox {
         entry.workerId,
         entry.text,
         {
-          displayBody: entry.displayBody,
+          attachments: entry.attachments,
           conversationScopeKey: entry.conversationScopeKey,
           requestId: entry.id,
         },

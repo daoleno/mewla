@@ -66,7 +66,6 @@ function isOutboxEntry(value: unknown): value is OutboxEntry {
     typeof entry.serverId === "string" &&
     typeof entry.workerId === "string" &&
     typeof entry.text === "string" &&
-    typeof entry.displayBody === "string" &&
     typeof entry.createdAt === "number" &&
     typeof entry.attempts === "number" &&
     (entry.state === "queued" ||

@@ -1555,8 +1555,8 @@ describe("structured input identity reuse", () => {
     const socket = await connectClient(client);
     socket.open();
 
-    const retry = client.sendInput(server.id, "agent-a", "same\n", {
-      displayBody: "same",
+    const retry = client.sendInput(server.id, "agent-a", "same", {
+      attachments: [{ name: "a.txt", path: "/uploads/a.txt" }],
       requestId: "request-stable",
     });
     expect(retry.requestId).toBe("request-stable");
@@ -1567,8 +1567,8 @@ describe("structured input identity reuse", () => {
         type: "send_input",
         request_id: "request-stable",
         worker_id: "agent-a",
-        text: "same\n",
-        display_body: "same",
+        text: "same",
+        attachments: [{ name: "a.txt", path: "/uploads/a.txt" }],
       },
       {
         type: "send_input",

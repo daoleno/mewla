@@ -39,7 +39,6 @@ import {
   type ConversationStreamCursor,
 } from "./interfaceConversationReconciliation";
 import { shouldDropStructuredChatEvent } from "./interfaceConversationVisibility";
-import { stripAttachmentEnvelope } from "./attachmentEnvelope";
 import {
   interfaceChatSessionCacheKey,
   isUnboundInterfaceChatSessionCacheKey,
@@ -864,6 +863,7 @@ function codexEventsEqual(
       left.role === right.role &&
       left.title === right.title &&
       left.body === right.body &&
+      attachmentsEqual(left.attachments, right.attachments) &&
       left.command === right.command &&
       left.tool_name === right.tool_name &&
       left.input === right.input &&
@@ -883,6 +883,24 @@ function codexEventsEqual(
       fileChangesEqual(left.file_changes, right.file_changes) &&
       planStepsEqual(left.plan, right.plan) &&
       conversationChoicesEqual(left.choice, right.choice))
+  );
+}
+
+function attachmentsEqual(
+  left?: CodexConversation["events"][number]["attachments"],
+  right?: CodexConversation["events"][number]["attachments"],
+) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (file, index) =>
+      file.name === right[index].name &&
+      file.path === right[index].path &&
+      file.content_type === right[index].content_type,
   );
 }
 
@@ -1382,6 +1400,7 @@ function cleanCodexConversationEventForChat(
     !command &&
     !title &&
     !toolName &&
+    !event.attachments?.length &&
     !event.files?.length &&
     !event.file_changes?.length &&
     !nextPlan?.length
@@ -1437,7 +1456,7 @@ function looksLikeCodexInstructionContext(value: string) {
 }
 
 function normalizeInstructionContextText(value: string) {
-  return stripAttachmentEnvelope(value)
+  return value
     .replace(/\s+/g, " ")
     .trim();
 }

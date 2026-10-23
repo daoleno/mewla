@@ -5,7 +5,6 @@ import type {
 } from "../../services/codexConversation";
 import type { ConnectionIssue } from "../../services/connectionIssue";
 import type { ComposerAttachment } from "./InterfaceChatSession";
-import { buildAttachmentEnvelope } from "./attachmentEnvelope";
 
 export function buildInterfaceStatusMeta(input: {
   connectionState: ConnectionState;
@@ -42,17 +41,19 @@ export function buildInterfaceStatusMeta(input: {
   return "Live";
 }
 
+/**
+ * What the composer sends: the person's text and the files they attached, as
+ * separate fields. The daemon is the only place that turns them into provider
+ * input. Null while an upload is still running or when there is nothing to send.
+ */
 export function buildInterfaceComposerMessage(
   draft: string,
   attachments: ComposerAttachment[],
-) {
-  if (attachments.some((item) => item.uploadStatus && item.uploadStatus !== "ready")) return "";
-  const body = draft.trim();
-  if (attachments.length === 0) {
-    return body;
-  }
-  const attachmentBlock = buildAttachmentEnvelope(attachments);
-  return [body, attachmentBlock].filter(Boolean).join("\n\n");
+): { text: string; attachments: ComposerAttachment[] } | null {
+  if (attachments.some((item) => item.uploadStatus && item.uploadStatus !== "ready")) return null;
+  const text = draft.trim();
+  if (!text && attachments.length === 0) return null;
+  return { text, attachments };
 }
 
 export function conversationUnavailableReason(reason?: string) {
