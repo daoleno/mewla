@@ -227,7 +227,7 @@ only carries the same pinned TLS stream.
 
 So that a Link phone can go direct without any setting, a daemon that listens
 only on loopback also listens, on the same port, on this computer's private
-IPv4 addresses (RFC 1918 and Tailscale's 100.64.0.0/10), and follows those
+IPv4 addresses (the usual home and office ranges, and the carrier-grade NAT range Tailscale uses), and follows those
 addresses as they change. That is new exposure on the local network, kept small:
 
 - **TLS only.** The listener presents the daemon's transport identity and
