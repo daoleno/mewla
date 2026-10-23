@@ -16,7 +16,7 @@ import (
 )
 
 // TurnRecord is the provider-facing read model for an accepted delegated turn
-// inside presentation.json. Lifecycle State is the sole Work/Attempt/Event
+// in the presentation rows. Lifecycle State is the sole Work/Attempt/Event
 // authority; these rows support transcript and Session presentation only and
 // are rebuilt from accepted admissions after restart.
 type TurnRecord struct {

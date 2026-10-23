@@ -164,7 +164,7 @@ func (s *Store) ProjectBrainInputAdmission(admission BrainInputAdmission) error 
 }
 
 // TimelineItem is one durable Brain-thread timeline row. The append-only
-// messages.jsonl ledger is the sole presentation truth for Brain chat history
+// timeline table is the sole presentation truth for Brain chat history
 // and Work cards. Work Events remain the scheduler audit log and are never
 // reprojected into the UI on every snapshot.
 //

@@ -75,7 +75,7 @@ const (
 // BrainInputAdmission is the restart-enumerable authority for one foreground
 // Brain input. Pending is persisted before provider mutation and is a no-replay
 // hold. Accepted is committed with every matching user-input Attention in the
-// same lifecycle replacement. messages.jsonl is only its projection.
+// same lifecycle replacement. The timeline row is only its projection.
 type BrainInputAdmission struct {
 	RequestID          string                   `json:"request_id"`
 	ThreadID           string                   `json:"thread_id"`
