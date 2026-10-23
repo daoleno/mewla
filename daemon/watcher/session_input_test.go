@@ -3147,3 +3147,72 @@ func TestDelegatedReceiptReplayRequiresConfirmedTransportAcceptance(t *testing.T
 		}
 	})
 }
+
+func TestSessionInputStructuredSendReplacesThePasteAndCarriesTheReceipt(t *testing.T) {
+	io := newFakeSessionInputIO()
+	identity := testSessionInputIdentity("codex")
+	resolver := fixedSessionInputResolver(identity)
+	owner := newSessionInputOwner(io)
+	var sent [][3]string
+	owner.structured = func(sessionID, payload, receipt string) (bool, error) {
+		sent = append(sent, [3]string{sessionID, payload, receipt})
+		return true, nil
+	}
+	result, err := owner.submit("agent:@1", identity, resolver, identity.Command, "hello", "event-1")
+	if err != nil || result.Outcome != InputAccepted {
+		t.Fatalf("submit = (%+v, %v), want accepted", result, err)
+	}
+	if len(sent) != 1 || sent[0][1] != "hello" || sent[0][2] != "event-1" {
+		t.Fatalf("structured sends = %#v, want one with the payload and the receipt", sent)
+	}
+	if len(io.queues) != 0 {
+		t.Fatalf("a message taken through the agent's own interface was pasted too: %d queues", len(io.queues))
+	}
+	if entry, found := io.ledger.entry("event-1"); !found || entry.Outcome != InputAccepted {
+		t.Fatalf("ledger = %#v, want accepted", io.ledger)
+	}
+}
+
+func TestSessionInputStructuredSendFallsBackToThePasteWhenItIsNotHandled(t *testing.T) {
+	io := newFakeSessionInputIO()
+	identity := testSessionInputIdentity("codex")
+	owner := newSessionInputOwner(io)
+	owner.structured = func(string, string, string) (bool, error) { return false, nil }
+	if _, err := owner.submit("agent:@1", identity, fixedSessionInputResolver(identity), identity.Command, "hello", "event-2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(io.queues) != 1 {
+		t.Fatalf("queues = %d, want the paste when the agent has no typed interface for the Worker", len(io.queues))
+	}
+}
+
+func TestSessionInputStructuredSendRefusedIsDefinitelyNotSubmittedButAnythingElseIsAmbiguous(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		notSent  bool
+		wantSafe bool
+	}{{"refused by the server", true, true}, {"connection lost mid-call", false, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			io := newFakeSessionInputIO()
+			identity := testSessionInputIdentity("codex")
+			owner := newSessionInputOwner(io)
+			owner.structured = func(string, string, string) (bool, error) {
+				return true, &StructuredInputError{Err: errors.New("app-server said no"), NotSent: tc.notSent}
+			}
+			result, err := owner.submit("agent:@1", identity, fixedSessionInputResolver(identity), identity.Command, "hello", "event-3")
+			if err == nil {
+				t.Fatalf("submit = %+v, want an error", result)
+			}
+			if len(io.queues) != 0 {
+				t.Fatalf("a failed typed send was replayed as a paste: %d queues", len(io.queues))
+			}
+			entry, found := io.ledger.entry("event-3")
+			if tc.wantSafe && (found && entry.Outcome == InputAmbiguous) {
+				t.Fatalf("a refused message left an ambiguous receipt: %#v", entry)
+			}
+			if !tc.wantSafe && (!found || entry.Outcome != InputAmbiguous) {
+				t.Fatalf("a send of unknown outcome must stay ambiguous, got %#v (found=%v)", entry, found)
+			}
+		})
+	}
+}

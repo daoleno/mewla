@@ -372,7 +372,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
 	} else {
 		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
-		w.ObserveSessions(newCodexEvents(ctx, eventHub).Observe)
+		codexEvents := newCodexEvents(ctx, eventHub)
+		w.ObserveSessions(codexEvents.Observe)
+		w.SetStructuredInput(codexEvents.send)
 	}
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,

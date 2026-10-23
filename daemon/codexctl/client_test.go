@@ -579,3 +579,13 @@ func TestServerRequestsAreDeliveredAndAnsweredByTheirOwnID(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestThreadStatusReadsAStringOrAnObject(t *testing.T) {
+	var threads []ThreadInfo
+	if err := json.Unmarshal([]byte(`[{"id":"a","status":"idle"},{"id":"b","status":{"type":"active","activeFlags":[]}},{"id":"c"}]`), &threads); err != nil {
+		t.Fatal(err)
+	}
+	if threads[0].Status != "idle" || threads[1].Status != "active" || threads[2].Status != "" {
+		t.Fatalf("statuses = %q %q %q", threads[0].Status, threads[1].Status, threads[2].Status)
+	}
+}
