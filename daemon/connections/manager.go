@@ -292,7 +292,11 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 			return Response{}, err
 		}
 	case "remove_key":
-		if err := m.removeHyperliquidKey(r); err != nil {
+		d, ok := driverFor(r)
+		if !ok || d.removeKey == nil {
+			return Response{}, errors.New("only a Hyperliquid account has a trading key")
+		}
+		if err := d.removeKey(m, r); err != nil {
 			return Response{}, err
 		}
 	case "confirm_updates", "dismiss_updates":
@@ -344,8 +348,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 }
 
 func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
-	if in != nil && in.Integration == "hyperliquid" {
-		return m.addHyperliquid(ctx, in)
+	if in != nil {
+		if e := lookup(in.Integration); e != nil && e.Driver != "" && drivers[e.Driver].add != nil {
+			return drivers[e.Driver].add(m, ctx, in)
+		}
 	}
 	if in == nil || strings.TrimSpace(in.Name) == "" || len(in.Name) > 80 {
 		return Response{}, errors.New("account name is required (up to 80 characters)")
@@ -357,7 +363,7 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 		return Response{}, errors.New("invalid credential")
 	}
 	name := strings.TrimSpace(in.Name)
-	if len(in.Spec) != 0 && in.Integration != "openapi" {
+	if e := lookup(in.Integration); len(in.Spec) != 0 && (e == nil || !e.TakesSpec) {
 		return Response{}, errors.New("only OpenAPI plugins accept a document")
 	}
 	// The complete document is persisted for dispatch, including fields that do
@@ -373,33 +379,24 @@ func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
 			return Response{}, errors.New("choose a unique account name for this plugin")
 		}
 	}
-	endpoint := in.Endpoint
-	switch in.Integration {
-	case googleCalendarID, gmailID:
-		return Response{}, errors.New("Google uses browser authorization; start OAuth for this account")
-	case "onlora":
-		return Response{}, errors.New("Onlora uses browser authorization; connect it from Extensions")
-	case "cloudflare":
-		return Response{}, errors.New("Cloudflare uses browser authorization; connect it from Extensions")
-	case "github":
-		endpoint = "https://api.github.com"
-	case "notion":
-		endpoint = "https://api.notion.com/v1"
-	case "slack":
-		endpoint = "https://slack.com/api"
-	case "linear":
-		endpoint = "https://mcp.linear.app/mcp"
-	case "mcp", "openapi":
-	default:
+	e := lookup(in.Integration)
+	if e == nil {
 		return Response{}, errors.New("unknown plugin")
 	}
-	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" && in.Integration != "openapi" {
+	if e.AddRefusal != "" {
+		return Response{}, errors.New(e.AddRefusal)
+	}
+	endpoint := in.Endpoint
+	if !e.Custom {
+		endpoint = e.Endpoint
+	}
+	if len(in.TrustedNetworks) > 0 && !e.Custom {
 		return Response{}, errors.New("internal network trust is only supported for custom plugins")
 	}
 	if _, err := trustedEndpointURL(endpoint, in.TrustedNetworks); err != nil {
 		return Response{}, err
 	}
-	if (in.Integration == "github" || in.Integration == "notion" || in.Integration == "slack" || in.Integration == "linear") && strings.TrimSpace(in.Credential) == "" {
+	if e.NeedsCredential && strings.TrimSpace(in.Credential) == "" {
 		return Response{}, errors.New("connect an authorized account first")
 	}
 	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: name, Endpoint: endpoint, TrustedNetworks: append([]string(nil), in.TrustedNetworks...), Enabled: true, History: []Event{}}, Spec: in.Spec, Grants: map[string]string{}}
@@ -585,21 +582,14 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 		return Response{}, err
 	}
 	secret, err := m.accountToken(ctx, r)
-	ok := secret != ""
 	if err != nil {
 		return Response{}, err
 	}
-	if !ok && (r.Account.Integration == "github" || r.Account.Integration == "notion" || r.Account.Integration == "slack" || r.Account.Integration == "linear") {
+	if e := lookup(r.Account.Integration); secret == "" && e != nil && e.NeedsCredential {
 		return Response{}, errAuth
 	}
 	var result []byte
-	if isGoogle(r.Account.Integration) {
-		result, err = m.invokeGoogle(ctx, r, secret, t, args)
-	} else if r.Account.Integration == "hyperliquid" {
-		result, err = m.invokeHyperliquid(ctx, r, secret, t, args)
-	} else {
-		result, err = m.invokeHTTP(ctx, r, secret, t, args)
-	}
+	result, err = m.invokeTool(ctx, r, secret, t, args)
 	if ctx.Err() != nil {
 		err = safeError(ctx.Err())
 	}

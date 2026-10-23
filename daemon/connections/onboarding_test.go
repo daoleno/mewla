@@ -132,7 +132,7 @@ func TestSlackOfficialUserTokenExchange(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":true,"access_token":"bot-token-not-selected","authed_user":{"access_token":"user-token","scope":"channels:read,search:read"}}`))}, nil
 	})}
 	r := &record{Account: Account{Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "mewla-owned", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: "https://owned.example/plugins/oauth/callback"}}
-	token, err := m.exchangeSlack(context.Background(), r, "publisher-secret", "code", "verifier")
+	token, err := slackCodec.exchange(m, context.Background(), r, "publisher-secret", "code", "verifier")
 	if err != nil || token.AccessToken != "user-token" || token.Extra("scope") != "channels:read search:read" {
 		t.Fatal("Slack user authorization parsed incorrectly", err)
 	}
@@ -145,12 +145,12 @@ func TestGitHubDevicePollingRespectsSlowDown(t *testing.T) {
 		calls++
 		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":"slow_down"}`))}, nil
 	})}
-	f := &connectFlow{interval: 5 * time.Second, nextPoll: time.Now().Add(time.Minute)}
-	if err := m.pollGitHubDevice(context.Background(), f); err != nil || calls != 0 {
+	f := &connectFlow{ConnectFlow: ConnectFlow{Integration: "github"}, interval: 5 * time.Second, nextPoll: time.Now().Add(time.Minute)}
+	if err := m.pollDevice(context.Background(), f); err != nil || calls != 0 {
 		t.Fatal("polled before provider interval")
 	}
 	f.nextPoll = time.Now().Add(-time.Second)
-	_ = m.pollGitHubDevice(context.Background(), f)
+	_ = m.pollDevice(context.Background(), f)
 	if calls != 1 || f.interval != 10*time.Second {
 		t.Fatal("slow_down ignored")
 	}
@@ -207,7 +207,7 @@ func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
 	r := &record{Account: Account{ID: "slack", Integration: "slack", Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "owned-public", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: NativeCallback}}
-	token, err := m.exchangeSlack(context.Background(), r, "", "code", "original-verifier")
+	token, err := slackCodec.exchange(m, context.Background(), r, "", "code", "original-verifier")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
 
 func TestPermissionGroupsSurviveRestart(t *testing.T) {
 	m, _ := New(t.TempDir())
-	r := &record{Account: Account{ID: "github", Integration: "github", Tools: builtinTools("github")}, Grants: map[string]string{}}
+	r := &record{Account: Account{ID: "github", Integration: "github", Tools: lookup("github").reviewed()}, Grants: map[string]string{}}
 	m.records[r.Account.ID] = r
 	_ = m.save()
 	reloaded, err := New(strings.TrimSuffix(m.path, "/integrations.json"))
@@ -288,7 +288,7 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 	})}
 	f := &connectFlow{ConnectFlow: ConnectFlow{ID: "device-flow", Integration: "github", Status: "waiting", Expires: time.Now().Add(time.Minute)}, deviceCode: "device-code", clientID: "mewla-public", interval: 5 * time.Second}
 	m.connectFlows[f.ID] = f
-	if err := m.pollGitHubDevice(context.Background(), f); err != nil {
+	if err := m.pollDevice(context.Background(), f); err != nil {
 		t.Fatal(err)
 	}
 	r := m.records[f.AccountID]
@@ -342,7 +342,7 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 	oldID := r.Account.ID
 	rejectRefresh = false
 	f.deviceCode, f.nextPoll, f.Status = "device-code", time.Time{}, "waiting"
-	if err := m.pollGitHubDevice(context.Background(), f); err != nil {
+	if err := m.pollDevice(context.Background(), f); err != nil {
 		t.Fatal(err)
 	}
 	r = m.records[f.AccountID]

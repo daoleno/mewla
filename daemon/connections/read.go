@@ -135,10 +135,8 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 		m.mu.Lock()
 		body, err = m.finishMCP(accountID, tool, sensitive, outcome, false)
 		m.mu.Unlock()
-	} else if isGoogle(snapshot.Account.Integration) {
-		body, err = m.invokeGoogle(ctx, &snapshot, secret, t, checked)
 	} else {
-		body, err = m.invokeHTTP(ctx, &snapshot, secret, t, checked, &headers)
+		body, err = m.invokeTool(ctx, &snapshot, secret, t, checked, &headers)
 	}
 	if remaining, convErr := strconv.Atoi(headers.Get("X-RateLimit-Remaining")); convErr == nil {
 		out.RateRemaining = remaining

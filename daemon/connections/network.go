@@ -294,11 +294,11 @@ func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, meth
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mewla-Integrations")
-	if u.Hostname() == "api.notion.com" {
-		req.Header.Set("Notion-Version", "2022-06-28")
-	}
-	if u.Hostname() == "api.github.com" {
-		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	rule := requestRule(u.Hostname())
+	if rule != nil {
+		for name, value := range rule.Headers {
+			req.Header.Set(name, value)
+		}
 	}
 	resp, err := m.clientFor(r).Do(req)
 	if err != nil {
@@ -327,7 +327,7 @@ func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, meth
 	if len(raw) == 0 {
 		raw = []byte(`{}`)
 	}
-	if u.Hostname() == "slack.com" {
+	if rule != nil && rule.OKEnvelope {
 		var result struct {
 			OK bool `json:"ok"`
 		}

@@ -24,10 +24,11 @@ func sortedKeys(set map[string]bool) []string {
 // goldenOfficial lists, per integration, the official MCP endpoint and the
 // reviewed read and write tool names.
 func goldenOfficial() map[string]goldenOfficialSet {
-	endpoints := map[string]string{"notion": "https://mcp.notion.com/mcp", "linear": "https://mcp.linear.app/mcp", "onlora": onloraMCP, "cloudflare": cloudflareMCP}
 	out := map[string]goldenOfficialSet{}
-	for id, endpoint := range endpoints {
-		out[id] = goldenOfficialSet{Endpoint: endpoint, Reads: sortedKeys(officialReads[id]), Writes: sortedKeys(officialWrites[id])}
+	for _, e := range integrations {
+		if e.MCP != nil {
+			out[e.ID] = goldenOfficialSet{Endpoint: e.MCP.Endpoint, Reads: sortedCopy(e.MCP.Reads), Writes: sortedCopy(e.MCP.Writes)}
+		}
 	}
 	return out
 }
@@ -35,10 +36,7 @@ func goldenOfficial() map[string]goldenOfficialSet {
 // goldenReviewed returns the reviewed built-in tool definitions of an
 // integration that has no official MCP list.
 func goldenReviewed(id string) []Tool {
-	if isGoogle(id) {
-		return googleReviewedTools(id)
-	}
-	return builtinTools(id)
+	return lookup(id).reviewed()
 }
 
 func goldenGoogleScopes(id string, writes bool) []string { return googleScopes(id, writes) }

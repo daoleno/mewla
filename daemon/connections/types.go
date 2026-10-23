@@ -35,22 +35,6 @@ type Integration struct {
 	UnavailableReason string `json:"unavailable_reason,omitempty"`
 }
 
-func Catalog() []Integration {
-	return []Integration{
-		{ID: "github", Name: "GitHub", Available: true, SetupURL: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", Description: "Repositories, issues and pull requests"},
-		{ID: "notion", Name: "Notion", Available: true, SetupURL: "https://www.notion.so/profile/integrations", Description: "Pages, search and workspace content"},
-		{ID: "google-calendar", Name: "Google Calendar", Available: true, SetupURL: "https://calendar.google.com", Description: "Calendars, events and free time"},
-		{ID: "gmail", Name: "Gmail", Available: true, SetupURL: "https://mail.google.com", Description: "Search, read and draft email"},
-		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
-		{ID: "hyperliquid", Name: "Hyperliquid", Available: true, SetupURL: "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api", Description: "Markets and accounts on Hyperliquid, mainnet or testnet; trading only with an API wallet you add"},
-		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
-		{ID: "onlora", Name: "Onlora", Available: true, SetupURL: "https://onlora.ai", Description: "Asset generation and search: images, speech and openly licensed media, kept in projects"},
-		{ID: "cloudflare", Name: "Cloudflare", Available: true, SetupURL: "https://github.com/cloudflare/mcp", Description: "The whole Cloudflare API: Workers, R2, D1, DNS and more"},
-		{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},
-		{ID: "openapi", Name: "OpenAPI", Available: true, SetupURL: "https://spec.openapis.org/oas/v3.0.3", Description: "Discover operations from an OpenAPI 3 document"},
-	}
-}
-
 type Tool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`

@@ -30,6 +30,14 @@ Native authorization-session close and provider denial have explicit retry state
 
 Slack public clients request only user scopes on the relay redirect and send S256/verifier without `client_secret`. The official token response has a nested `authed_user` on initial consent and top-level rotating token on refresh; both are handled. The refreshed token pair is saved before subsequent use. Slack's public-client refresh tokens expire after 30 days; expired authorization requires reconnect.
 
+## The integration catalog
+
+Everything that differs per service lives in one typed table, `daemon/connections/catalog.go`, validated when the daemon starts (a malformed entry stops it). An entry holds the service's name and setup link, its fixed API origin, whether a credential is required, how a person signs in (publisher, registered or owner-supplied OAuth client; fixed or discovered endpoints; scopes; device flow), the reviewed built-in tools or the official MCP read/write allowlist with its exact endpoint, the headers and query defaults the network layer adds, and the write scopes a grant needs before changes can be allowed. Generic code reads the entry and never asks which service this is.
+
+Behaviour that is code (Hyperliquid signing and adding, Google discovery and calls, Slack's token exchange, refresh and revoke, MCP and OpenAPI discovery) is registered once as a driver or token codec and named by the entry that uses it. Adding a service is adding one entry, plus a driver or codec only when the existing ones do not fit.
+
+The trust model is not data in the entries: the MCP allowlist is fail-closed and applies only on its exact endpoint, an unreviewed tool belongs to no group, and every grant is bound to the full tool-definition fingerprint. `daemon/connections/testdata/golden_integrations.json` pins every service's catalog row, readiness, tool classes, endpoints, scopes and sign-in requests; a change to it needs a deliberate `MEWLA_UPDATE_GOLDEN=1` regeneration.
+
 ## Permissions and execution
 
 Reviewed built-in read groups become usable after successful identity verification/discovery. Optional write consent grants the reviewed changes group, not arbitrary tools or remote annotations. Notion and Linear allowlists are tied to their fixed official resource URLs. Unknown newly discovered tools require individual review. Custom MCP/OpenAPI receive no automatic group grants. All grants remain bound to complete tool-definition fingerprints; MCP rediscovery at invocation rejects changed schemas. Vendor scopes further limit advertised operations.

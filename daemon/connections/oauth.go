@@ -64,22 +64,6 @@ type oauthMetadata struct {
 	AuthMethods           []string `json:"token_endpoint_auth_methods_supported"`
 }
 
-// Onlora's remote MCP server. Onlora registers Mewla's app as the public
-// client "mewla", returning to mewla://plugins; a web UI return registers a
-// client of its own on connect.
-const onloraMCP = "https://api.onlora.ai/mcp"
-const onloraAppClientID = "mewla"
-
-var onloraScopes = []string{"projects", "generate", "offline_access"}
-
-// Cloudflare's official remote MCP server: search, execute and docs over the
-// whole Cloudflare API. It registers Mewla on the first connect. Mewla asks
-// only for the scopes every grant needs; Cloudflare's consent page picks the
-// rest, read-only unless the person chooses more.
-const cloudflareMCP = "https://mcp.cloudflare.com/mcp"
-
-var cloudflareScopes = []string{"user:read", "account:read", "offline_access"}
-
 // nativeRedirect reports a return address that OpenID Connect registration
 // calls native: an app scheme or an http loopback address. Servers that follow
 // it, such as Onlora's, refuse those addresses for the default web type.
@@ -119,18 +103,24 @@ func appReturn(redirect string) bool {
 	return redirect == NativeCallback || redirect == NativeReturnRelay
 }
 func (m *Manager) configureOAuth(in *Input) (Response, error) {
-	if in == nil || in.OAuthClient == nil || !(validCallback(in.OAuthClient.RedirectURL) || in.Integration == "github" && in.OAuthClient.RedirectURL == "" || in.Integration == "slack" && in.OAuthClient.RedirectURL == NativeCallback && in.OAuthClient.ClientSecret == "") || len(in.OAuthClient.ClientID) > 2048 || len(in.OAuthClient.ClientSecret) > 16384 {
+	var e *entry
+	if in != nil {
+		e = lookup(in.Integration)
+	}
+	var oauth *oauthSpec
+	if e != nil {
+		oauth = e.OAuth
+	}
+	if in == nil || in.OAuthClient == nil || !(validCallback(in.OAuthClient.RedirectURL) || oauth.acceptsRedirect(in.OAuthClient)) || len(in.OAuthClient.ClientID) > 2048 || len(in.OAuthClient.ClientSecret) > 16384 {
 		return Response{}, errors.New("provide an OAuth client and registered daemon /plugins/oauth/callback URL")
 	}
-	switch in.Integration {
-	case "github", "slack", "notion", "linear", "mcp":
-	default:
+	if oauth == nil || !oauth.Configurable {
 		return Response{}, errors.New("OAuth is not supported for this plugin")
 	}
-	if (in.Integration == "slack" || in.Integration == "github") && in.OAuthClient.ClientID == "" {
+	if oauth.PublisherClientID && in.OAuthClient.ClientID == "" {
 		return Response{}, errors.New("this service requires a publisher-owned client ID")
 	}
-	if in.Integration == "mcp" && in.OAuthClient.ClientID != "" {
+	if oauth.Source == clientOperator && in.OAuthClient.ClientID != "" {
 		if _, err := trustedEndpointURL(in.OAuthClient.ResourceURL, in.TrustedNetworks); err != nil {
 			return Response{}, errors.New("bind the registered MCP client to its exact resource_url")
 		}
@@ -141,11 +131,20 @@ func (m *Manager) configureOAuth(in *Input) (Response, error) {
 	}
 	return Response{OAuthConfigured: m.oauthConfigured()}, nil
 }
+
+// acceptsRedirect reports whether the service takes this client with a return
+// address other than a registered daemon callback.
+func (o *oauthSpec) acceptsRedirect(c *OAuthClientConfig) bool {
+	return o != nil && o.ExtraRedirect != nil && c.RedirectURL == o.ExtraRedirect.URL && (!o.ExtraRedirect.PublicOnly || c.ClientSecret == "")
+}
 func (m *Manager) oauthConfigured() []string {
 	configured := []string{}
-	for _, kind := range []string{"github", "slack", "notion", "linear", "mcp"} {
-		if _, ok, err := m.vault.Get("oauth-client:" + kind); err == nil && ok {
-			configured = append(configured, kind)
+	for _, e := range integrations {
+		if e.OAuth == nil || !e.OAuth.Configurable {
+			continue
+		}
+		if _, ok, err := m.vault.Get("oauth-client:" + e.ID); err == nil && ok {
+			configured = append(configured, e.ID)
 		}
 	}
 	return configured
@@ -168,6 +167,11 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if len(m.pending) >= 20 {
 		return Response{}, errors.New("too many pending authorizations; try again later")
 	}
+	e := lookup(in.Integration)
+	var oauth *oauthSpec
+	if e != nil {
+		oauth = e.OAuth
+	}
 	client, ok, err := m.clientConfig(in.Integration)
 	if err != nil {
 		return Response{}, errors.New("authorization configuration unavailable")
@@ -177,21 +181,22 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if callback == "" && in.Mobile {
 		callback = NativeCallback
 	}
-	if !ok && callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora" || in.Integration == "cloudflare" || in.Integration == "mcp") {
+	registers := oauth != nil && (oauth.Source == clientRegistered || oauth.Source == clientOperator)
+	if !ok && callback != "" && registers {
 		client.RedirectURL = callback
 	} else if !ok {
 		return Response{}, errors.New("Sign-in is not set up for this service yet.")
 	}
-	if callback != "" && (in.Integration == "notion" || in.Integration == "linear" || in.Integration == "onlora" || in.Integration == "cloudflare") {
+	if callback != "" && oauth != nil && oauth.Source == clientRegistered {
 		client = OAuthClientConfig{RedirectURL: callback}
 	}
-	if in.Integration == "onlora" && callback == NativeCallback {
-		client.ClientID = onloraAppClientID
+	if oauth != nil && oauth.NativeClientID != "" && callback == NativeCallback {
+		client.ClientID = oauth.NativeClientID
 	}
-	// Cloudflare registers only https and loopback returns, never mewla://, so
-	// the app's sign-in returns through Mewla's https page, which forwards the
+	// A service that registers only https and loopback returns, never mewla://,
+	// gets the app's sign-in through Mewla's https page, which forwards the
 	// code and state to mewla://plugins.
-	if in.Integration == "cloudflare" && client.RedirectURL == NativeCallback {
+	if oauth != nil && oauth.NativeViaRelay && client.RedirectURL == NativeCallback {
 		client.RedirectURL = NativeReturnRelay
 	}
 	// A registered app that returns only to the Mewla app (Slack's publisher
@@ -201,51 +206,38 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 
 	endpoint := in.Endpoint
-	switch in.Integration {
-	case "slack":
-		endpoint = "https://slack.com/api"
-	case "notion":
-		endpoint = "https://mcp.notion.com/mcp"
-	case "linear":
-		endpoint = "https://mcp.linear.app/mcp"
-	case "onlora":
-		endpoint = onloraMCP
-	case "cloudflare":
-		endpoint = cloudflareMCP
-	case "mcp":
-	default:
+	switch {
+	case oauth == nil:
+		return Response{}, errors.New("OAuth is not supported for this plugin")
+	case e.MCP != nil:
+		endpoint = e.MCP.Endpoint
+	case oauth.Static != nil:
+		endpoint = e.Endpoint
+	case !e.Custom:
 		return Response{}, errors.New("OAuth is not supported for this plugin")
 	}
-	if len(in.TrustedNetworks) > 0 && in.Integration != "mcp" {
+	if len(in.TrustedNetworks) > 0 && !e.Custom {
 		return Response{}, errors.New("internal network trust is only available for custom MCP")
 	}
 	if _, err := trustedEndpointURL(endpoint, in.TrustedNetworks); err != nil {
 		return Response{}, err
 	}
-	if in.Integration == "mcp" && client.ClientID != "" && client.ResourceURL != endpoint {
+	if e.Custom && client.ClientID != "" && client.ResourceURL != endpoint {
 		return Response{}, errors.New("this OAuth client belongs to another MCP endpoint; configure the matching client first")
 	}
 	r := &record{Account: Account{ID: uuid.NewString(), Integration: in.Integration, Name: strings.TrimSpace(in.Name), Endpoint: endpoint, TrustedNetworks: append([]string(nil), in.TrustedNetworks...), Enabled: true, Status: "authorization_required", AuthMethod: "mcp_oauth", History: []Event{}}, Grants: map[string]string{}}
 	var meta oauthMetadata
-	if in.Integration == "slack" {
+	if oauth.Static != nil {
 		r.Account.AuthMethod = "oauth"
-		meta = oauthMetadata{Issuer: "https://slack.com", AuthorizationEndpoint: "https://slack.com/oauth/v2/authorize", TokenEndpoint: "https://slack.com/api/oauth.v2.access", AuthMethods: []string{"client_secret_post"}}
-		r.Account.Scopes = []string{"channels:read", "channels:history", "search:read"}
-		if in.AllowWrites {
-			r.Account.Scopes = append(r.Account.Scopes, "chat:write")
-		}
+		meta = oauthMetadata{Issuer: oauth.Static.Issuer, AuthorizationEndpoint: oauth.Static.AuthURL, TokenEndpoint: oauth.Static.TokenURL, AuthMethods: oauth.Static.AuthMethods}
+		r.Account.Scopes = oauth.Scopes(in.AllowWrites)
 	} else {
 		meta, err = m.discoverOAuth(ctx, r)
 		if err != nil {
 			return Response{}, err
 		}
-		if in.Integration == "onlora" {
-			// Onlora's scopes are areas, not read and write: every tool needs
-			// one of them, and offline_access keeps the sign-in past the hour.
-			// What Brain may change is still each tool's own grant.
-			r.Account.Scopes = append([]string(nil), onloraScopes...)
-		} else if in.Integration == "cloudflare" {
-			r.Account.Scopes = append([]string(nil), cloudflareScopes...)
+		if oauth.Scopes != nil {
+			r.Account.Scopes = oauth.Scopes(in.AllowWrites)
 		} else {
 			// Ask the provider for its normal read scope. Writes require a separate
 			// connect action requesting them, then the usual per-tool grant.
@@ -262,7 +254,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	if client.ClientID == "" {
 		if meta.RegistrationEndpoint == "" {
-			if in.Integration == "mcp" {
+			if e.Custom {
 				return Response{}, errors.New("this custom service requires a client registered by its operator")
 			}
 			return Response{}, errors.New("Mewla's authorization for this service is not ready. No account was connected.")
@@ -313,9 +305,9 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		options = append(options, oauth2.SetAuthURLParam("resource", r.OAuth.Resource))
 	}
 	config := oauthConfig(r, client.ClientSecret)
-	if in.Integration == "slack" {
+	if oauth.Static != nil && oauth.Static.ScopeParam != "" {
 		config.Scopes = nil
-		options = append(options, oauth2.SetAuthURLParam("user_scope", strings.Join(r.Account.Scopes, ",")))
+		options = append(options, oauth2.SetAuthURLParam(oauth.Static.ScopeParam, strings.Join(r.Account.Scopes, ",")))
 	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
@@ -462,8 +454,8 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	}
 	var token *oauth2.Token
 	var err error
-	if r.Account.Integration == "slack" {
-		token, err = m.exchangeSlack(ctx, r, flow.ClientSecret, req.URL.Query().Get("code"), flow.Verifier)
+	if codec := codecFor(r); codec != nil {
+		token, err = codec.exchange(m, ctx, r, flow.ClientSecret, req.URL.Query().Get("code"), flow.Verifier)
 	} else {
 		token, err = config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)), req.URL.Query().Get("code"), options...)
 	}
@@ -528,8 +520,8 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 		client.Transport = oauthRefreshResourceTransport{client.Transport, r.OAuth.TokenURL, r.OAuth.Resource}
 	}
 	var token *oauth2.Token
-	if r.Account.Integration == "slack" {
-		token, err = m.slackToken(ctx, r, url.Values{"client_id": {r.OAuth.ClientID}, "grant_type": {"refresh_token"}, "refresh_token": {secret.Token.RefreshToken}})
+	if codec := codecFor(r); codec != nil {
+		token, err = codec.refresh(m, ctx, r, secret.Token.RefreshToken)
 	} else {
 		token, err = config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, client), secret.Token).Token()
 	}
@@ -591,11 +583,8 @@ func (m *Manager) revokeOAuth(ctx context.Context, r *record) error {
 	if json.Unmarshal([]byte(raw), &secret) != nil || secret.Token == nil {
 		return errors.New("account disabled; stored OAuth credential is invalid")
 	}
-	if r.Account.Integration == "slack" {
-		if _, err := m.request(ctx, r, "https://slack.com/api", secret.Token.AccessToken, "POST", "/auth.revoke", nil); err != nil {
-			return errors.New("account disabled; Slack revocation failed, retry disconnect")
-		}
-		return nil
+	if codec := codecFor(r); codec != nil {
+		return codec.revoke(m, ctx, r, secret.Token.AccessToken)
 	}
 	if r.OAuth.RevokeURL == "" {
 		return nil
