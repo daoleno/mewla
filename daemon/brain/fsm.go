@@ -3,6 +3,7 @@ package brain
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -70,12 +71,9 @@ func (s *Store) fsmWorkByAttemptSession(sessionID string) (*lifecycle.State, boo
 	if sessionID == "" || s.fsm == nil {
 		return nil, false
 	}
-	for _, st := range s.fsm.ListViews() {
-		if st.Attempt != nil && st.Attempt.SessionID == sessionID {
-			return st, true
-		}
-	}
-	return nil, false
+	return s.fsm.Find(func(st *lifecycle.State) bool {
+		return st.Attempt != nil && st.Attempt.SessionID == sessionID
+	})
 }
 
 // ReleaseSessionAttempt records an explicitly closed delegated Session as lost
@@ -551,11 +549,15 @@ func (s *Store) fsmFanoutSessionTerminal(sessionID, turnID string) error {
 		return nil
 	}
 	ref := SessionTerminalWakeRef(sessionID, turnID)
-	for _, st := range s.fsm.ListViews() {
+	var waiting []lifecycle.WorkID
+	s.fsm.Each(func(st *lifecycle.State) {
 		if st.Wake != nil && st.Wake.Kind == lifecycle.WakeSessionTerminal && st.Wake.Ref == ref {
-			if _, err := s.fsm.ClearWait(st.ID, lifecycle.WakeSessionTerminal, ref, "turn:"+turnID); err != nil {
-				return err
-			}
+			waiting = append(waiting, st.ID)
+		}
+	})
+	for _, id := range waiting {
+		if _, err := s.fsm.ClearWait(id, lifecycle.WakeSessionTerminal, ref, "turn:"+turnID); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -695,20 +697,27 @@ func (s *Store) SweepLifecycle() error {
 	for _, item := range database.BrainWork {
 		revisions[item.ID] = item.Revision
 	}
+	type canonical struct {
+		id       lifecycle.WorkID
+		revision uint64
+	}
+	var all []canonical
+	s.fsm.Each(func(st *lifecycle.State) { all = append(all, canonical{st.ID, st.Revision}) })
+	sort.Slice(all, func(i, j int) bool { return all[i].id < all[j].id })
 	var firstErr error
-	for _, st := range s.fsm.ListViews() {
-		revision, found := revisions[string(st.ID)]
+	for _, st := range all {
+		revision, found := revisions[string(st.id)]
 		if !found {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("read Work %s after lifecycle sweep: %w", st.ID, ErrWorkNotFound)
+				firstErr = fmt.Errorf("read Work %s after lifecycle sweep: %w", st.id, ErrWorkNotFound)
 			}
 			continue
 		}
-		if revision == st.Revision {
+		if revision == st.revision {
 			continue
 		}
-		if err := s.SyncWorkProjection(string(st.ID)); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("project Work %s after lifecycle sweep: %w", st.ID, err)
+		if err := s.SyncWorkProjection(string(st.id)); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("project Work %s after lifecycle sweep: %w", st.id, err)
 		}
 	}
 	return firstErr

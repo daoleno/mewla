@@ -52,16 +52,12 @@ func (s *Store) liveDelegatedAttempt(sessionID, turnID string) (*lifecycle.State
 // sessionID never gained an Attempt: the Work has none and is still open.
 func (s *Store) unadmittedDelegatedPrompt(sessionID, turnID string) (*lifecycle.State, bool) {
 	token := lifecycle.TurnToken(strings.TrimSpace(turnID))
-	for _, st := range s.fsm.ListViews() {
+	return s.fsm.Find(func(st *lifecycle.State) bool {
 		admission := st.AdmissionByToken(token)
-		if admission == nil || st.Attempt != nil || st.Status.Terminal() || admission.SessionID != sessionID ||
-			!admission.SignalProtocol || admission.ClaimToken != "" || admission.Purpose != "" ||
-			(admission.Status != lifecycle.AdmissionPrepared && admission.Status != lifecycle.AdmissionAmbiguous) {
-			continue
-		}
-		return st, true
-	}
-	return nil, false
+		return admission != nil && st.Attempt == nil && !st.Status.Terminal() && admission.SessionID == sessionID &&
+			admission.SignalProtocol && admission.ClaimToken == "" && admission.Purpose == "" &&
+			(admission.Status == lifecycle.AdmissionPrepared || admission.Status == lifecycle.AdmissionAmbiguous)
+	})
 }
 
 // TurnRecoveries implements watcher.TurnRecoveryLedger. The records are the
