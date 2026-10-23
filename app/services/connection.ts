@@ -76,9 +76,6 @@ export function parseConnectLink(
       if (version === "3") {
         return parseCompactLinkPairingPayload(compactPayload);
       }
-      if (version === "2") {
-        return parseLinkPairingPayload(compactPayload);
-      }
       return parseCompactConnectPayload(compactPayload);
     }
 
@@ -104,109 +101,9 @@ export function parseConnectLink(
   }
 }
 
-interface CompactLinkPairingPayload {
-  v?: unknown;
-  d?: unknown;
-  k?: unknown;
-  e?: unknown;
-  r?: unknown;
-  p?: unknown;
-  c?: unknown;
-  x?: unknown;
-  z?: unknown;
-}
-
-function parseLinkPairingPayload(
-  encodedPayload: string,
-): ConnectionImportPayload | null {
-  try {
-    const decoded = decodeBase64URL(encodedPayload);
-    const raw = JSON.parse(
-      new TextDecoder().decode(decoded),
-    ) as CompactLinkPairingPayload;
-    if (
-      raw.v !== 2 ||
-      typeof raw.d !== "string" ||
-      typeof raw.k !== "string" ||
-      typeof raw.e !== "string" ||
-      typeof raw.r !== "string" ||
-      typeof raw.p !== "string" ||
-      !Array.isArray(raw.c) ||
-      raw.c.length === 0 ||
-      raw.c.length > MAX_LINK_CANDIDATES ||
-      typeof raw.x !== "number" ||
-      typeof raw.z !== "string"
-    ) {
-      return null;
-    }
-
-    const daemonId = normalizeDaemonId(raw.d);
-    const daemonPublicKey = normalizePublicKeyHex(raw.k);
-    const enrollmentToken = normalizePairingToken(raw.e);
-    const routeId = normalizeFixedHex(raw.r, 32);
-    const transportPin = normalizeFixedHex(raw.p, 64);
-    const signature = normalizeFixedHex(raw.z, 128);
-    if (
-      !daemonId ||
-      !daemonPublicKey ||
-      !enrollmentToken ||
-      !routeId ||
-      !transportPin ||
-      !signature ||
-      !Number.isSafeInteger(raw.x) ||
-      raw.x <= Date.now()
-    ) {
-      return null;
-    }
-
-    const candidates: LinkTransportCandidate[] = [];
-    const bindingCandidateValues: string[] = [];
-    for (const value of raw.c) {
-      if (!value || typeof value !== "object") {
-        return null;
-      }
-      const candidate = value as Record<string, unknown>;
-      const name = typeof candidate.n === "string" ? candidate.n.trim() : "";
-      const admissionUrl =
-        typeof candidate.a === "string" ? normalizeServerURL(candidate.a) : "";
-      const url =
-        typeof candidate.s === "string" ? normalizeServerURL(candidate.s) : "";
-      if (!name || !url) {
-        return null;
-      }
-      candidates.push({
-        name,
-        admissionUrl: admissionUrl || undefined,
-        url,
-      });
-      bindingCandidateValues.push(
-        name,
-        typeof candidate.a === "string" ? candidate.a.trim() : "",
-        typeof candidate.s === "string" ? candidate.s.trim() : "",
-      );
-    }
-    return verifiedLinkPairing({
-      version: "2",
-      daemonId,
-      daemonPublicKey,
-      enrollmentToken,
-      routeId,
-      transportPin,
-      expiresAtMs: raw.x,
-      signature,
-      candidates,
-      bindingCandidateValues,
-    });
-  } catch {
-    return null;
-  }
-}
-
 // verifiedLinkPairing checks the daemon's signature over a Link pairing
 // payload, as daemon/link PairingBindingPayload builds it.
 function verifiedLinkPairing(input: {
-  version: "2" | "3";
-  daemonId?: string;
   daemonPublicKey: string;
   enrollmentToken: string;
   routeId: string;
@@ -224,8 +121,8 @@ function verifiedLinkPairing(input: {
   }
   const bindingPayload = new TextEncoder().encode(
     [
-      input.version,
-      input.daemonId ?? "",
+      "3",
+      "",
       input.daemonPublicKey,
       input.enrollmentToken,
       input.routeId,
@@ -246,7 +143,6 @@ function verifiedLinkPairing(input: {
 
   return {
     url: admissionCandidate.admissionUrl,
-    daemonId: input.daemonId,
     daemonPublicKey: input.daemonPublicKey,
     enrollmentToken: input.enrollmentToken,
     link: {
@@ -258,8 +154,8 @@ function verifiedLinkPairing(input: {
   };
 }
 
-// parseCompactLinkPairingPayload reads version 3: the version 2 fields in
-// fixed binary, base32 so the terminal QR code stays small. Layout (see
+// parseCompactLinkPairingPayload reads the Link pairing link: the signed
+// fields in fixed binary, base32 so the terminal QR code stays small. Layout (see
 // daemon/link/pairing_compact.go): version, public key 32, token 32, route 16,
 // pin 32, expiry ms 6, signature 64, stable label, candidate count, then per
 // candidate name, domain, port 2, flags, admission alias 16.
@@ -324,7 +220,6 @@ function parseCompactLinkPairingPayload(
       return null;
     }
     return verifiedLinkPairing({
-      version: "3",
       daemonPublicKey,
       enrollmentToken,
       routeId,

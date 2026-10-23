@@ -20,90 +20,64 @@ mock.module("@react-native-async-storage/async-storage", () => ({
 
 const { bytesToHex } = await import("./protocolCrypto");
 const { parseConnectLink } = await import("./connection");
+const { buildLinkPairingTestLink } = await import("./linkPairingTestLink");
 
-describe("Pairing V2", () => {
-  test("accepts daemon-signed Link route, pin, admission, and stable candidates", () => {
-    const seed = new Uint8Array(32).fill(7);
-    const keyPair = nacl.sign.keyPair.fromSeed(seed);
-    const payload = {
-      v: 2,
-      d: "1".repeat(64),
-      k: bytesToHex(keyPair.publicKey),
-      e: "2".repeat(64),
-      r: "3".repeat(32),
-      p: "4".repeat(64),
-      c: [
-        {
-          n: "region-a",
-          a: "wss://55555555555555555555555555555555.a.link.test/ws",
-          s: "wss://33333333333333333333333333333333.a.link.test/ws",
-        },
-        {
-          n: "region-b",
-          s: "wss://33333333333333333333333333333333.b.link.test/ws",
-        },
-      ],
-      x: Date.now() + 60_000,
-      z: "",
+describe("Pairing links from the app's own builder", () => {
+  test("accepts a daemon-signed Link route, pin and admission, and rejects tampering", () => {
+    const keyPair = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));
+    const input = {
+      secretKey: keyPair.secretKey,
+      publicKey: keyPair.publicKey,
+      enrollmentToken: "2".repeat(64),
+      routeId: "3".repeat(32),
+      transportPin: "4".repeat(64),
+      label: "quiet-otter-3f9a",
+      domain: "a.link.test",
+      name: "region-a",
+      admissionAlias: "55555555555555555555555555555555",
     };
-    const binding = new TextEncoder().encode(
-      [
-        "2",
-        payload.d,
-        payload.k,
-        payload.e,
-        payload.r,
-        payload.p,
-        payload.x.toString(),
-        "region-a",
-        payload.c[0].a,
-        payload.c[0].s,
-        "region-b",
-        "",
-        payload.c[1].s,
-      ].join("\n"),
-    );
-    const domain = new TextEncoder().encode("mewla-link-pairing-v2\u0000");
-    const signed = new Uint8Array(domain.length + binding.length);
-    signed.set(domain);
-    signed.set(binding, domain.length);
-    payload.z = bytesToHex(nacl.sign.detached(signed, keyPair.secretKey));
-
-    const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
-    const link = `mewla://settings?v=2&p=${encoded}`;
-    expect(parseConnectLink(`other://settings?v=2&p=${encoded}`)).toBeNull();
+    const link = buildLinkPairingTestLink(input);
+    expect(parseConnectLink(`other://${link.slice("mewla://".length)}`)).toBeNull();
     expect(parseConnectLink(link)).toEqual({
-      url: payload.c[0].a!,
-      daemonId: payload.d,
-      daemonPublicKey: payload.k,
-      enrollmentToken: payload.e,
+      url: "wss://55555555555555555555555555555555.a.link.test/ws",
+      daemonId: undefined,
+      daemonPublicKey: bytesToHex(keyPair.publicKey),
+      enrollmentToken: input.enrollmentToken,
       link: {
         kind: "link",
-        routeId: payload.r,
-        transportPin: payload.p,
+        routeId: input.routeId,
+        transportPin: input.transportPin,
         candidates: [
           {
             name: "region-a",
-            admissionUrl: payload.c[0].a!,
-            url: payload.c[0].s,
-          },
-          {
-            name: "region-b",
-            admissionUrl: undefined,
-            url: payload.c[1].s,
+            admissionUrl: "wss://55555555555555555555555555555555.a.link.test/ws",
+            url: "wss://quiet-otter-3f9a.a.link.test/ws",
           },
         ],
       },
     });
 
-    payload.p = "6".repeat(64);
-    const tampered = `mewla://settings?v=2&p=${Buffer.from(
-      JSON.stringify(payload),
-    ).toString("base64url")}`;
-    expect(parseConnectLink(tampered)).toBeNull();
+    expect(
+      parseConnectLink(link.replace(/.$/, (c) => (c === "A" ? "B" : "A"))),
+    ).toBeNull();
+    expect(parseConnectLink(buildLinkPairingTestLink({ ...input, expiresAtMs: Date.now() - 1 }))).toBeNull();
+    expect(parseConnectLink(`mewla://settings?v=3&p=${"A".repeat((64 << 10) + 1)}`)).toBeNull();
+  });
 
-    const oversized = `mewla://settings?v=2&p=${"A".repeat((64 << 10) + 1)}`;
-    expect(parseConnectLink(oversized)).toBeNull();
+  test("rejects the retired version 2 JSON link", () => {
+    const payload = {
+      v: 2,
+      d: "1".repeat(64),
+      k: "7".repeat(64),
+      e: "2".repeat(64),
+      r: "3".repeat(32),
+      p: "4".repeat(64),
+      c: [{ n: "a", a: "wss://55555555555555555555555555555555.a.link.test/ws", s: "wss://33333333333333333333333333333333.a.link.test/ws" }],
+      x: Date.now() + 60_000,
+      z: "0".repeat(128),
+    };
+    const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    expect(parseConnectLink(`mewla://settings?v=2&p=${encoded}`)).toBeNull();
   });
 });
 

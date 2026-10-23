@@ -20,7 +20,7 @@ func compactFixture(t *testing.T) PairingPayload {
 	}
 	key := ed25519.NewKeyFromSeed(seed)
 	payload := PairingPayload{
-		Version:         CompactPairingVersion,
+		Version:         PairingVersion,
 		DaemonPublicKey: hex.EncodeToString(key.Public().(ed25519.PublicKey)),
 		EnrollmentToken: strings.Repeat("22", 32),
 		RouteID:         strings.Repeat("33", 16),
