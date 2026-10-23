@@ -12,6 +12,7 @@ import {
 import {
   BrainExecutorSheet,
 } from "../../components/brain/BrainExecutorSheet";
+import { brainRouteLink } from "../../components/brain/brainRouteLink";
 import { BrainExecutorIcon } from "../../components/brain/BrainExecutorIcon";
 import { BrainExecutorMentionPicker } from "../../components/brain/BrainExecutorMentionPicker";
 import { QuickReplies } from "../../components/brain/QuickReplies";
@@ -126,16 +127,13 @@ export default function BrainScreen() {
   const toast = useToast();
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(false);
 
-  // A notification's computer is applied once. After this page has shown it,
-  // switching computer from the menu or Settings is not undone by the param.
-  const linkedServerId = params.serverId?.trim() || "";
-  const [shownServerId, setShownServerId] = useState("");
-  const routeServerId = linkedServerId === shownServerId ? "" : linkedServerId;
+  const [shownLinkKey, setShownLinkKey] = useState("");
+  const link = brainRouteLink(params, activeServer?.id, shownLinkKey);
+  const routeServerId = link.switchTo;
+  const routeServerMatches = link.showsCurrent;
   useEffect(() => {
-    if (linkedServerId && activeServer?.id === linkedServerId) setShownServerId(linkedServerId);
-  }, [activeServer?.id, linkedServerId]);
-  const routeServerMatches =
-    !routeServerId || activeServer?.id === routeServerId;
+    if (link.shown !== shownLinkKey) setShownLinkKey(link.shown);
+  }, [link.shown, shownLinkKey]);
 
   useEffect(() => {
     if (
@@ -185,7 +183,7 @@ export default function BrainScreen() {
     [hostWorkerId, hostWorkerProcessId, hostWorkerStartedAt],
   );
   const hostExecutor = activeBrain?.host_executor ?? null;
-  const routedThreadId = routeServerMatches ? params.brainThreadId : undefined;
+  const routedThreadId = link.threadId;
   const displayedThreadId = routedThreadId || activeBrain?.chat_thread_id;
   const targetedThreadReadOnly = isTargetedBrainThreadReadOnly(
     routedThreadId,
