@@ -14,13 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/hostdeps"
+	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
 // ErrSessionNotFound means the service does not know the requested session.
@@ -53,7 +53,7 @@ var Runner = func(ctx context.Context, args ...string) ([]byte, error) {
 	defer os.Remove(stdout.Name())
 	defer stdout.Close()
 	var stderr bytes.Buffer
-	command := exec.CommandContext(ctx, binary, args...)
+	command := procspawn.CommandContext(ctx, "opencode api", binary, args...)
 	command.Stdout = stdout
 	command.Stderr = &stderr
 	runErr := command.Run()

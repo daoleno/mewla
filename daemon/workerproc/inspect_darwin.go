@@ -1,12 +1,13 @@
 package workerproc
 
 import (
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
 // Environ returns pid's environment from kern.procargs2, or nil when it
@@ -25,7 +26,7 @@ func Environ(pid int) []string {
 // Descendants returns every process below root, breadth first, from one ps
 // snapshot of the process tree.
 func Descendants(root int) []int {
-	out, err := exec.Command("ps", "-axo", "pid=,ppid=").Output()
+	out, err := procspawn.Command("ps ppid", "ps", "-axo", "pid=,ppid=").Output()
 	if err != nil {
 		return nil
 	}

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/debuglog"
+	"github.com/daoleno/mewla/daemon/procspawn"
 	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
@@ -1137,7 +1138,7 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 		return daily, modelsByDate, projectsByDate
 	}
 
-	out, err := exec.Command(sqlite3, "-json", dbPath,
+	out, err := procspawn.Command("sqlite3 stats", sqlite3, "-json", dbPath,
 		"SELECT id, cwd, model, rollout_path FROM threads WHERE tokens_used > 0").Output()
 	if err != nil {
 		c.warnf("codex-query", "[stats] Codex sqlite3 query failed: %v", err)

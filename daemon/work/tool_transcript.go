@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/procspawn"
 	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
@@ -337,7 +338,7 @@ func lsofOpenCodexRolloutPaths(processIDs []int) []string {
 		return nil
 	}
 	codexLookupCost.Subprocesses.Add(1)
-	out, err := exec.Command(lsof, "-w", "-p", strings.Join(ids, ","), "-Fn").Output()
+	out, err := procspawn.Command("lsof codex", lsof, "-w", "-p", strings.Join(ids, ","), "-Fn").Output()
 	if err != nil {
 		return nil
 	}
@@ -423,7 +424,7 @@ func queryCodexThreads(sqlite3, dbPath, cwd string) ([]codexThreadRow, error) {
 
 func queryCodexThreadRows(sqlite3, dbPath, query string) ([]codexThreadRow, error) {
 	codexLookupCost.Subprocesses.Add(1)
-	out, err := exec.Command(sqlite3, "-json", dbPath, query).CombinedOutput()
+	out, err := procspawn.Command("sqlite3 codex state", sqlite3, "-json", dbPath, query).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("query codex threads: %w%s", err, stderrSuffix(string(out)))
 	}
