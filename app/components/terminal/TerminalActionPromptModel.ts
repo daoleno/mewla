@@ -1,4 +1,3 @@
-import { isClaudeCommand, isGrokCommand } from "../../services/agentCommands";
 
 export type TerminalActionPromptOption = {
   id: string;
@@ -41,14 +40,14 @@ export function buildTerminalActionPrompt({
   status,
   summary,
   lastOutputLines,
-  command,
+  provider,
   scopeKey,
 }: {
   status?: string;
   summary?: string;
   lastOutputLines?: string[];
-  /** Live pane command; Grok radio menus are only projected for Grok. */
-  command?: string;
+  /** The Worker's provider as the daemon names it; Grok radio menus are only projected for Grok. */
+  provider?: string;
   /** Live process/session identity so a switched generation cannot reuse card state. */
   scopeKey?: string;
 }): TerminalActionPrompt | null {
@@ -56,10 +55,10 @@ export function buildTerminalActionPrompt({
     return null;
   }
   const lines = cleanTerminalPromptLines(lastOutputLines ?? []);
-  if (isClaudeCommand(command)) {
+  if (provider === "claude") {
     return scopePrompt(buildClaudeTerminalPrompt(lines, summary), scopeKey);
   }
-  if (isGrokCommand(command) && looksLikeGrokChoiceMenu(lines)) {
+  if (provider === "grok" && looksLikeGrokChoiceMenu(lines)) {
     return scopePrompt(buildGrokChoicePrompt(lines, summary), scopeKey);
   }
   if (!looksLikeTerminalActionPrompt(lines, summary)) {

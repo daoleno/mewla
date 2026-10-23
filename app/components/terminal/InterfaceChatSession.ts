@@ -111,6 +111,8 @@ export type InterfaceChatWorkerInfo = {
   lastOutputLines?: string[];
   cwd?: string;
   command?: string;
+  /** Adapter family of the Worker's executor, as the daemon names it. */
+  provider?: string;
   name?: string;
   startedAt?: number;
   processId?: number;

@@ -1,17 +1,5 @@
 import type { ConnectionState } from '../store/workers';
-import { isDSHCommand, isClaudeCommand, isCodexCommand, isCursorAgentCommand, isGrokCommand, isOpenCodeCommand, isPiCommand } from './agentCommands';
 import type { AgentKind } from './workerPresentation';
-
-export function agentKindFromCommand(command?: string): AgentKind {
-  if (isDSHCommand(command)) return 'dsh';
-  if (isClaudeCommand(command)) return 'claude';
-  if (isCodexCommand(command)) return 'codex';
-  if (isCursorAgentCommand(command)) return 'cursor';
-  if (isGrokCommand(command)) return 'grok';
-  if (isPiCommand(command)) return 'pi';
-  if (isOpenCodeCommand(command)) return 'opencode';
-  return 'terminal';
-}
 
 export function chatAgentSupportsSlashCommands(kind: AgentKind): boolean {
   return kind === 'codex';

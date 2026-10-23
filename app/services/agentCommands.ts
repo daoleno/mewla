@@ -102,85 +102,6 @@ export function commandBinary(command?: string) {
   return parts[parts.length - 1] || token;
 }
 
-export function isClaudeCommand(command?: string) {
-  const normalized = normalizeCommand(command);
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized === "claude" ||
-    normalized === "claude code" ||
-    normalized.startsWith("claude ") ||
-    commandBinary(normalized) === "claude"
-  );
-}
-
-export function isCodexCommand(command?: string) {
-  const normalized = normalizeCommand(command);
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized === "codex" ||
-    normalized.startsWith("codex ") ||
-    commandBinary(normalized) === "codex"
-  );
-}
-
-export function isGrokCommand(command?: string) {
-  const normalized = normalizeCommand(command);
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized === "grok" ||
-    normalized.startsWith("grok ") ||
-    commandBinary(normalized) === "grok"
-  );
-}
-
-export function isCursorAgentCommand(command?: string) {
-  const normalized = normalizeCommand(command);
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized === "cursor-agent" ||
-    normalized.startsWith("cursor-agent ") ||
-    commandBinary(normalized) === "cursor-agent"
-  );
-}
-
-export function isPiCommand(command?: string) {
-  const normalized = normalizeCommand(command);
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized === "pi" ||
-    normalized.startsWith("pi ") ||
-    commandBinary(normalized) === "pi"
-  );
-}
-
-export function isOpenCodeCommand(command?: string) {
-  const normalized = normalizeCommand(command);
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized === "opencode" ||
-    normalized.startsWith("opencode ") ||
-    commandBinary(normalized) === "opencode"
-  );
-}
-
 export function findSupportedAgentByHandle(handle?: string) {
   const normalized = handle?.trim().toLowerCase() || "";
   if (!normalized) {
@@ -217,8 +138,4 @@ export function stripSupportedAgentMentions(text?: string) {
     .replace(/\n[ \t]+/g, "\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
-}
-
-export function isDSHCommand(command?: string) {
- return commandBinary(command) === "dsh" || /(?:^|\s)dsh-session(?:\s|$)/.test(command || "");
 }

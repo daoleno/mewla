@@ -102,6 +102,8 @@ export type BrainWorkerRef = {
   phase?: string;
   cwd?: string;
   command?: string;
+  /** Adapter family of the Worker's executor, as the daemon names it. */
+  provider?: string;
   started_at?: number;
   process_id?: number;
   updated_at?: string;
@@ -486,6 +488,10 @@ function normalizeWorkerRef(raw: any): BrainWorkerRef {
     phase: typeof raw?.phase === "string" && raw.phase ? raw.phase : undefined,
     cwd: typeof raw?.cwd === "string" ? raw.cwd : undefined,
     command: typeof raw?.command === "string" ? raw.command : undefined,
+    provider:
+      typeof raw?.provider === "string" && raw.provider
+        ? raw.provider
+        : undefined,
     started_at: Number.isFinite(parsedStartedAt) ? parsedStartedAt : undefined,
     process_id: processID,
     updated_at:
@@ -712,6 +718,7 @@ function workerRefsEqual(
     left.summary === right.summary &&
     left.cwd === right.cwd &&
     left.command === right.command &&
+    left.provider === right.provider &&
     left.started_at === right.started_at &&
     left.process_id === right.process_id &&
     left.updated_at === right.updated_at &&

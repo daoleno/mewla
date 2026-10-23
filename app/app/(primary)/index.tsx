@@ -753,6 +753,7 @@ export default function BrainScreen() {
                 workerInfo={{
                   cwd: hostWorker?.cwd,
                   command: hostWorker?.command,
+                  provider: hostWorker?.provider,
                   name: hostWorker?.name,
                   processId: hostWorker?.process_id,
                   startedAt: hostWorker?.started_at,
