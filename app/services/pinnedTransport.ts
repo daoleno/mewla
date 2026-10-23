@@ -1,15 +1,60 @@
+import {
+  directAddressesFor,
+  verifyHealthChallenge,
+  type DirectAddress,
+  type DirectKind,
+} from "./directAddresses";
 import type { StoredServer, StoredTransportCandidate } from "./storage";
 
-const selectionCache = new Map<
-  string,
-  {
-    remoteURL: string;
-    localOrigin: string;
-    tunnelKey: string;
-    measuredAt: number;
-  }
->();
+/** How the phone reaches a computer: through Mewla Link's relay, or straight. */
+export type TransportPath = "relay" | DirectKind;
+
+interface Selection {
+  path: TransportPath;
+  remoteURL: string;
+  localOrigin: string;
+  tunnelKey: string;
+  rttMs: number;
+  measuredAt: number;
+}
+
+// Per computer. `relay` stays open as the fallback while `current` is direct,
+// so a lost direct address moves to the relay without measuring it again.
+interface Paths {
+  relay?: Selection;
+  direct?: Selection;
+  current?: "relay" | "direct";
+}
+
+const paths = new Map<string, Paths>();
+const directSuppressedUntil = new Map<string, number>();
 const SELECTION_TTL_MS = 30_000;
+// A direct address that cannot be verified in this long is treated as
+// unreachable; the relay is already being measured meanwhile.
+const DIRECT_PROBE_CAP_MS = 1_200;
+// When the relay answers first, a direct answer this close behind still wins.
+const DIRECT_GRACE_MS = 250;
+const DIRECT_SUPPRESS_MS = 20_000;
+
+function pathsFor(serverId: string): Paths {
+  let entry = paths.get(serverId);
+  if (!entry) {
+    entry = {};
+    paths.set(serverId, entry);
+  }
+  return entry;
+}
+
+function fresh(selection: Selection | undefined): selection is Selection {
+  return !!selection && Date.now() - selection.measuredAt < SELECTION_TTL_MS;
+}
+
+/** The path the phone is using for a computer, or null before it has chosen. */
+export function currentTransportPath(serverId: string): TransportPath | null {
+  const entry = paths.get(serverId);
+  if (!entry?.current) return null;
+  return entry.current === "relay" ? "relay" : (entry.direct?.path ?? null);
+}
 
 export async function resolveStoredServerURL(
   server: StoredServer,
@@ -25,17 +70,59 @@ export async function resolveStoredServerURL(
       "Mewla Link needs setup. Scan a fresh Mewla Link QR code; the saved route or transport pin is missing.",
     );
   }
-  const candidates = linkCandidates(server);
-  const cacheKey = `server:${server.id}`;
-  const cached = selectionCache.get(cacheKey);
+  const entry = pathsFor(server.id);
+  const direct = stillListed(server, entry.direct);
+  if (fresh(direct)) {
+    entry.current = "direct";
+    return rewriteSelection(server, direct);
+  }
+  const relay = entry.relay;
   if (
-    cached &&
-    Date.now() - cached.measuredAt < SELECTION_TTL_MS &&
-    candidates.some((candidate) => candidate.url === cached.remoteURL)
+    entry.current === "relay" &&
+    fresh(relay) &&
+    linkCandidates(server).some((candidate) => candidate.url === relay.remoteURL)
   ) {
-    return rewriteToLocal(server.url, cached.remoteURL, cached.localOrigin);
+    return rewriteSelection(server, relay);
   }
 
+  const relayAttempt = measureRelay(server, entry);
+  const directAttempt = probeDirect(server, entry);
+  relayAttempt.catch(() => undefined);
+
+  const first = await Promise.race([
+    directAttempt.then((selected) => ({ direct: selected })),
+    relayAttempt.then(
+      (selected) => ({ relay: selected }),
+      () => ({ relay: null }),
+    ),
+  ]);
+  let chosen: Selection | null;
+  if ("direct" in first) {
+    chosen = first.direct ?? (await relayAttempt.catch(() => null));
+  } else if (first.relay) {
+    const late = await Promise.race([directAttempt, sleep(DIRECT_GRACE_MS)]);
+    chosen = late ?? first.relay;
+  } else {
+    chosen = await directAttempt;
+  }
+  if (!chosen) {
+    throw new Error(
+      "Mewla Link is offline. Keep mewla running and check its Link connection.",
+    );
+  }
+  chosen.measuredAt = Date.now();
+  entry.current = chosen.path === "relay" ? "relay" : "direct";
+  return rewriteSelection(server, chosen);
+}
+
+// Dials every Link candidate, keeps the nearest one open as the relay path and
+// closes the rest.
+async function measureRelay(
+  server: StoredServer,
+  entry: Paths,
+): Promise<Selection> {
+  const candidates = linkCandidates(server);
+  const cacheKey = `server:${server.id}`;
   const attempts = await Promise.all(
     candidates.map(async (candidate, index) => {
       const tunnelKey = `${cacheKey}:${index}`;
@@ -80,13 +167,16 @@ export async function resolveStoredServerURL(
       "Mewla Link is offline. Keep mewla running and check its Link connection.",
     );
   }
-  const selected = available[0];
-  selectionCache.set(cacheKey, {
-    remoteURL: selected.candidate.url,
-    localOrigin: selected.localOrigin,
-    tunnelKey: selected.tunnelKey,
+  const best = available[0];
+  const selection: Selection = {
+    path: "relay",
+    remoteURL: best.candidate.url,
+    localOrigin: best.localOrigin,
+    tunnelKey: best.tunnelKey,
+    rttMs: best.rttMs,
     measuredAt: Date.now(),
-  });
+  };
+  entry.relay = selection;
   await Promise.all(
     available
       .slice(1)
@@ -94,11 +184,183 @@ export async function resolveStoredServerURL(
         stopNativePinnedTunnel(attempt.tunnelKey).catch(() => undefined),
       ),
   );
-  return rewriteToLocal(
-    server.url,
-    selected.candidate.url,
-    selected.localOrigin,
+  return selection;
+}
+
+// Tries each address the computer published, in parallel, and keeps the first
+// that proves it is the paired daemon. Resolves null, never rejects, within
+// DIRECT_PROBE_CAP_MS: an unreachable address must not delay the relay.
+async function probeDirect(
+  server: StoredServer,
+  entry: Paths,
+): Promise<Selection | null> {
+  const addresses = directAddressesFor(server);
+  if (addresses.length === 0) return null;
+  if ((directSuppressedUntil.get(server.id) ?? 0) > Date.now()) return null;
+  const verified = stillListed(server, entry.direct);
+  if (fresh(verified)) return verified;
+
+  const winner = await firstVerified(
+    addresses.map((address) => probeAddress(server, address)),
+    (late) => void stopNativePinnedTunnel(late.tunnelKey).catch(() => undefined),
   );
+  if (!winner) {
+    directSuppressedUntil.set(server.id, Date.now() + DIRECT_SUPPRESS_MS);
+    return null;
+  }
+  directSuppressedUntil.delete(server.id);
+  entry.direct = winner;
+  return winner;
+}
+
+async function probeAddress(
+  server: StoredServer,
+  address: DirectAddress,
+): Promise<Selection | null> {
+  const tunnelKey = `server:${server.id}:direct:${address.host}:${address.port}`;
+  const abort = new AbortController();
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cap = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      abort.abort();
+      resolve(null);
+    }, DIRECT_PROBE_CAP_MS);
+  });
+  const attempt = (async (): Promise<Selection | null> => {
+    // The TLS stream is pinned to the computer's transport key before a byte
+    // of HTTP flows, and the challenge below ties it to the daemon key. Only
+    // then is the address offered to the callers that send the device header.
+    const tunnel = await startNativePinnedTunnel(
+      tunnelKey,
+      address.host,
+      address.port,
+      server.transportPin!,
+      "measure",
+    );
+    if (timedOut || !(await answersChallenge(server, tunnel.port, abort.signal))) {
+      await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
+      return null;
+    }
+    return {
+      path: address.kind,
+      remoteURL: `wss://${address.host}:${address.port}`,
+      localOrigin: `ws://127.0.0.1:${tunnel.port}`,
+      tunnelKey,
+      rttMs: tunnel.rttMs,
+      measuredAt: Date.now(),
+    };
+  })().catch(async () => {
+    await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
+    return null;
+  });
+  try {
+    const selected = await Promise.race([attempt, cap]);
+    if (!selected) {
+      // Whatever the dial is still doing is closed when it lands.
+      await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
+    }
+    return selected;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function answersChallenge(
+  server: StoredServer,
+  localPort: number,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const challengeHex = await newChallenge();
+  const response = await fetch(
+    `http://127.0.0.1:${localPort}/health?challenge=${challengeHex}`,
+    { method: "GET", headers: { Accept: "application/json" }, signal },
+  );
+  if (!response.ok) return false;
+  return verifyHealthChallenge({
+    challengeHex,
+    daemonId: server.daemonId,
+    daemonPublicKey: server.daemonPublicKey,
+    payload: await response.json(),
+  });
+}
+
+async function newChallenge(): Promise<string> {
+  const Crypto = await import("expo-crypto");
+  return Array.from(Crypto.getRandomBytes(16), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+// The first non-null result, or null once all are null. A result that lands
+// after the winner is handed to `discard`.
+function firstVerified<T>(
+  attempts: Promise<T | null>[],
+  discard: (late: T) => void,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let pending = attempts.length;
+    let won = false;
+    for (const attempt of attempts) {
+      attempt.then(
+        (result) => {
+          if (result && !won) {
+            won = true;
+            resolve(result);
+          } else if (result) {
+            discard(result);
+          }
+          if (--pending === 0 && !won) resolve(null);
+        },
+        () => {
+          if (--pending === 0 && !won) resolve(null);
+        },
+      );
+    }
+  });
+}
+
+// A verified direct path is only trusted while the computer still lists it.
+function stillListed(
+  server: StoredServer,
+  selection: Selection | undefined,
+): Selection | undefined {
+  if (!selection || selection.path === "relay") return undefined;
+  return directAddressesFor(server).some(
+    (address) => selection.remoteURL === `wss://${address.host}:${address.port}`,
+  )
+    ? selection
+    : undefined;
+}
+
+/**
+ * Looks for a direct path while the phone is on the relay. True when one was
+ * just verified, so the caller can reconnect onto it.
+ */
+export async function directPathBecameAvailable(
+  server: StoredServer,
+): Promise<boolean> {
+  if (server.transportKind !== "link") return false;
+  const entry = paths.get(server.id);
+  if (entry?.current !== "relay") return false;
+  return (await probeDirect(server, entry)) !== null;
+}
+
+/**
+ * The live connection failed. A failed direct path is closed and the relay
+ * kept ready; a failed relay is closed so it is measured afresh.
+ */
+export async function transportFailed(server: StoredServer): Promise<void> {
+  const entry = paths.get(server.id);
+  if (!entry?.current) {
+    return invalidateStoredServerTransport(server);
+  }
+  const failed = entry.current === "direct" ? entry.direct : entry.relay;
+  if (entry.current === "direct") delete entry.direct;
+  else delete entry.relay;
+  delete entry.current;
+  if (failed) await stopNativePinnedTunnel(failed.tunnelKey).catch(() => undefined);
 }
 
 export async function invalidateStoredServerTransport(
@@ -107,11 +369,15 @@ export async function invalidateStoredServerTransport(
   if (server.transportKind !== "link") {
     return;
   }
-  const cached = selectionCache.get(`server:${server.id}`);
-  selectionCache.delete(`server:${server.id}`);
-  if (cached) {
-    await stopNativePinnedTunnel(cached.tunnelKey).catch(() => undefined);
-  }
+  const entry = paths.get(server.id);
+  paths.delete(server.id);
+  await Promise.all(
+    [entry?.relay, entry?.direct].map((selection) =>
+      selection
+        ? stopNativePinnedTunnel(selection.tunnelKey).catch(() => undefined)
+        : undefined,
+    ),
+  );
 }
 
 export async function resolveCanonicalServerURL(
@@ -212,17 +478,21 @@ function requireTLSServerURL(value: string): URL {
   return parsed;
 }
 
-function rewriteToLocal(
-  requestedURL: string,
-  selectedRemoteURL: string,
-  localOrigin: string,
-): string {
-  const requested = new URL(requestedURL);
-  const selected = new URL(selectedRemoteURL);
-  if (requested.origin === selected.origin) {
-    return rewriteURL(requestedURL, localOrigin);
+function rewriteSelection(server: StoredServer, selection: Selection): string {
+  // A direct address only ever reaches the phone's own loopback tunnel, on the
+  // request path the caller asked for.
+  if (selection.path !== "relay") {
+    return rewriteURL(server.url, selection.localOrigin);
   }
-  return rewriteURL(selectedRemoteURL, localOrigin);
+  const requested = new URL(server.url);
+  const selected = new URL(selection.remoteURL);
+  return requested.origin === selected.origin
+    ? rewriteURL(server.url, selection.localOrigin)
+    : rewriteURL(selection.remoteURL, selection.localOrigin);
+}
+
+function sleep(ms: number): Promise<null> {
+  return new Promise((resolve) => setTimeout(() => resolve(null), ms));
 }
 
 function rewriteURL(remoteURL: string, localOrigin: string): string {

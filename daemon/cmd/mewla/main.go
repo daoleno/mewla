@@ -469,6 +469,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 	}
 	srv.SetAddressBook(book)
+	srv.SetDirectEndpoints(func() []server.DirectEndpoint {
+		return directEndpoints(cfg.addr, detectPrivateNetworkAddresses())
+	})
 	enrollmentManager, err := enrollment.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize enrollment manager: %w", err)

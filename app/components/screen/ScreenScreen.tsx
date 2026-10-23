@@ -15,6 +15,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
+import { currentTransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
 import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
@@ -445,6 +446,7 @@ export function ScreenScreen() {
   const readout = {
     rttMs: rtt, inputMs: stats?.inputMs ?? null, fps: stats?.fps ?? 0, kbps: stats?.kbps ?? 0,
     bridgeMs: stats?.bridgeMs, presentMs: stats?.presentMs, daemon: daemonStats,
+    viaPath: currentTransportPath(currentServer.id),
   };
   const readoutHeadline = streamHeadline(readout);
   const viewerVisible = phase === "connecting" || phase === "live";

@@ -116,6 +116,11 @@ export interface StreamReadout {
   daemon?: ScreenStreamStats | null;
   /** The JPEG level the viewer asked for, 0-9. */
   viewerQuality?: number;
+  /**
+   * The path this phone chose, which it knows better than the daemon: the
+   * daemon sees only the address a tunnel or proxy connected from.
+   */
+  viaPath?: ScreenPath | null;
 }
 
 const PATH_LABELS: Record<ScreenPath, string> = {
@@ -164,7 +169,7 @@ export function qualityReduced(daemon: ScreenStreamStats | null | undefined, vie
 /** How the stream arrived and what holds it up: the badge's first line. */
 export function streamHeadline(readout: StreamReadout): string | null {
   const parts: string[] = [];
-  const path = readout.daemon?.path;
+  const path = readout.viaPath ?? readout.daemon?.path;
   if (path) parts.push(PATH_LABELS[path]);
   const slowest = slowestStage(readout);
   if (slowest) parts.push(`${slowest.label} ${Math.round(slowest.ms)} ms`);

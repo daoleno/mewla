@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/pairlink"
 	"github.com/daoleno/mewla/daemon/remote"
+	"github.com/daoleno/mewla/daemon/server"
 )
 
 const (
@@ -421,6 +423,29 @@ func startupAddresses(listenAddr string, detected []privateNetworkAddress) []str
 		}
 	}
 	return addresses
+}
+
+// directEndpoints are the addresses a phone on the same network or tailnet can
+// dial, for the address this daemon listens on. A loopback daemon has none: it
+// is reachable only through its relay.
+func directEndpoints(listenAddr string, detected []privateNetworkAddress) []server.DirectEndpoint {
+	host, portText, err := net.SplitHostPort(listenAddr)
+	if err != nil || isLoopbackHost(host) {
+		return nil
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		return nil
+	}
+	var endpoints []server.DirectEndpoint
+	for _, address := range startupPairingAddresses(host, detected) {
+		kind := "lan"
+		if isTailscaleAddress(address.label, address.ip) {
+			kind = "tailscale"
+		}
+		endpoints = append(endpoints, server.DirectEndpoint{Host: address.ip.String(), Port: port, Kind: kind})
+	}
+	return endpoints
 }
 
 // printStartupInfo is what a foreground start shows. After a pairing screen

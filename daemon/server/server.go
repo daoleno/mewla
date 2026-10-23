@@ -155,6 +155,7 @@ type Server struct {
 	terminalCleanup            terminalCleanupOwner
 	tlsConfig                  *tls.Config
 	addresses                  *addressbook.Store
+	directEndpoints            func() []DirectEndpoint
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
@@ -465,13 +466,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-health", map[string]any{
-			"status":            "ok",
-			"daemon_id":         s.auth.DaemonID(),
-			"daemon_public_key": s.auth.PublicKeyHex(),
-		})
-	})
+	mux.HandleFunc("/health", s.handleHealth)
 	mux.Handle("/", webUI)
 	return withCORS(mux)
 }
@@ -575,6 +570,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		s.sendCalendarSnapshot(conn, "")
 	}
 	s.sendBrainSnapshot(conn, "")
+	s.sendDirectEndpoints(conn)
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -3750,6 +3746,32 @@ func isAllowedCORSOrigin(origin string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
+// handleHealth answers a liveness probe. With ?challenge=<16 bytes hex> the
+// response is signed over that challenge, which proves the answerer holds the
+// daemon key now; the plain response is a recorded-able identity hint only.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	payload := map[string]any{
+		"status":            "ok",
+		"daemon_id":         s.auth.DaemonID(),
+		"daemon_public_key": s.auth.PublicKeyHex(),
+	}
+	challenge, challenged := r.URL.Query()["challenge"]
+	if !challenged {
+		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-health", payload)
+		return
+	}
+	if len(challenge) != 1 {
+		http.Error(w, "challenge must be given once", http.StatusBadRequest)
+		return
+	}
+	assertion, err := s.auth.CreateChallengeAssertion(challenge[0])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeSignedJSON(w, http.StatusOK, auth.HealthChallengePurpose, assertion, payload)
+}
+
 func (s *Server) writeJSONWithAssertion(w http.ResponseWriter, status int, purpose string, payload map[string]any) {
 	assertion, err := s.auth.CreateServerAssertion(purpose)
 	if err != nil {
@@ -3757,12 +3779,17 @@ func (s *Server) writeJSONWithAssertion(w http.ResponseWriter, status int, purpo
 		return
 	}
 
+	writeSignedJSON(w, status, purpose, assertion, payload)
+}
+
+func writeSignedJSON(w http.ResponseWriter, status int, purpose string, assertion auth.ServerAssertion, payload map[string]any) {
 	payload["assertion_purpose"] = purpose
 	payload["assertion_timestamp"] = assertion.Timestamp
 	payload["assertion_nonce"] = assertion.NonceHex
 	payload["assertion_signature"] = assertion.SignatureHex
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
