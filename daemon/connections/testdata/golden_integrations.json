@@ -1,0 +1,5163 @@
+{
+  "add": {
+    "bogus": {
+      "credential": {
+        "error": "unknown plugin",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "unknown plugin",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "unknown plugin",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "cloudflare": {
+      "credential": {
+        "error": "Cloudflare uses browser authorization; connect it from Extensions",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "Cloudflare uses browser authorization; connect it from Extensions",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "Cloudflare uses browser authorization; connect it from Extensions",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "github": {
+      "credential": {
+        "account": {
+          "access": {
+            "read": "allowed",
+            "write": "off",
+            "allowed": 9,
+            "tools": 11
+          },
+          "address": "",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://api.github.com",
+          "identity": "octo",
+          "integration": "github",
+          "name": "Name",
+          "network": "",
+          "scopes": null,
+          "status": "connected",
+          "tools": [
+            {
+              "allowed": true,
+              "fingerprint": "d9ba37b9572da9c137ec6e654944711fca9e0ae80eb99a8c08f76487fa475f3c",
+              "group": "read",
+              "name": "get_me"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "76d6bbdf0c39df301d60e47b84c37a8391af558ee654e5d4473a68afb1fbe768",
+              "group": "read",
+              "name": "list_repositories"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "d46adb30ce3e12f65ebf78a5e81f1b060aa90f5a6323224f085af15cf4a4da01",
+              "group": "read",
+              "name": "get_repository"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "b38d8b7fd0dc50d941cd00cc506b815abe673705868dacaf73c8b03fb3243cd5",
+              "group": "read",
+              "name": "list_issues"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "9af2dfaa46e42f3b060e94d1b99b94d43fcf2f0b7068bd3e2732c348c3909a7f",
+              "group": "read",
+              "name": "get_issue"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "d6457f7d791cd7366c3666507cc60de439cd7f1f50c1fba75d7916c3d37d8286",
+              "group": "read",
+              "name": "list_updated_issues"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "73535dc33c9b45936dadaad6604d1bb01f84c5c5b10b087e100ad783a28ed29a",
+              "group": "read",
+              "name": "list_workflow_runs"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "4705d10b2cf05d0137e94136b9d05d7ac083a5d5ecace2d3235f6d9da5eb093f",
+              "group": "read",
+              "name": "list_dependabot_alerts"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "669ff4139faae58fadd4a25909db744843f66964eeb76ef4c91924a596d2e38d",
+              "group": "read",
+              "name": "list_code_scanning_alerts"
+            },
+            {
+              "allowed": false,
+              "fingerprint": "f054e6c843fd5bf1eedd5c5e0c6747ab5e964caddd5f4bb70ef5714ab3172e78",
+              "group": "write",
+              "name": "create_issue"
+            },
+            {
+              "allowed": false,
+              "fingerprint": "414d19998691d76cbc769f07bc332eef20fdd2d4db0bb519050023cddb193161",
+              "group": "write",
+              "name": "comment_on_issue"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": [
+          "GET https://api.github.com/user X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok-123"
+        ]
+      },
+      "no_credential": {
+        "error": "connect an authorized account first",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "internal network trust is only supported for custom plugins",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "gmail": {
+      "credential": {
+        "error": "Google uses browser authorization; start OAuth for this account",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "Google uses browser authorization; start OAuth for this account",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "Google uses browser authorization; start OAuth for this account",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "google-calendar": {
+      "credential": {
+        "error": "Google uses browser authorization; start OAuth for this account",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "Google uses browser authorization; start OAuth for this account",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "Google uses browser authorization; start OAuth for this account",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "hyperliquid": {
+      "credential": {
+        "account": {
+          "access": {
+            "read": "allowed",
+            "write": "none",
+            "allowed": 13,
+            "tools": 13
+          },
+          "address": "0x1234567890abcdef1234567890abcdef12345678",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://api.hyperliquid.xyz",
+          "identity": "Mainnet · 0x1234…5678 · read only",
+          "integration": "hyperliquid",
+          "name": "Hyperliquid Mainnet · 0x1234…5678",
+          "network": "mainnet",
+          "scopes": null,
+          "status": "connected",
+          "tools": [
+            {
+              "allowed": true,
+              "fingerprint": "9b542ccceada4ad872d6d5b10326b19ab9dc9e5ed01ff87fc4c46eb3d6f0605b",
+              "group": "read",
+              "name": "get_me"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "f3e2d1a50a2e9f34d9487ee1e8d6b568406d406e5cbf46f91b2a985d6cc6e7d7",
+              "group": "read",
+              "name": "list_markets"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "88694a99c8693681999b7720a5b9c93c5fc360ca4f7cd68c607dd69d74c6223f",
+              "group": "read",
+              "name": "get_mids"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "7485095802bfc2ce0c9f0078973020aca8f25d8cdac8d1658fef07f41a7e84d5",
+              "group": "read",
+              "name": "get_book"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "f084a9f68b4062071b5e7b0af46d025634c22786db1822c367576917d5e54d7e",
+              "group": "read",
+              "name": "get_candles"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "ca3ff86b75e99c74029933f3fcdd0f5def282a0695aa17e98c681552ae1a703a",
+              "group": "read",
+              "name": "get_funding_history"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "718b76565b4f44b0fe0f57363718d35883de029ae5252da04a3691d36741bc82",
+              "group": "read",
+              "name": "get_account"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "d4be2b3d4e9f73d15cf4203de24197c38385653a331b4b29c70b25f4d9ad941b",
+              "group": "read",
+              "name": "get_open_orders"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "08d6cbb57807d8450740a2763f88f8452086cc36a2dec8ae396e46437a50a91e",
+              "group": "read",
+              "name": "get_fills"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "d53e723d1a1a4ec176aef7e0695f7102f4b1c9cfefea49de9bfe4a6048d1a756",
+              "group": "read",
+              "name": "get_funding_payments"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "82b6e262654ac4e2ce8892d8d1db5d420369db0a3ae4a4c141f5d791eac6c100",
+              "group": "read",
+              "name": "get_portfolio"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "73773df2e48bc69a5c4c2c98c3099f33d9be9709d203575f58fac7c3cbdea07b",
+              "group": "read",
+              "name": "get_vaults"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "45a53e7541430928efe23bcfa686606fda584f925a05e47966c10d1cd0df3c12",
+              "group": "read",
+              "name": "get_order_status"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": [
+          "POST https://api.hyperliquid.xyz/info body={\"type\":\"clearinghouseState\",\"user\":\"0x1234567890abcdef1234567890abcdef12345678\"}"
+        ]
+      },
+      "no_credential": {
+        "account": {
+          "access": {
+            "read": "allowed",
+            "write": "none",
+            "allowed": 13,
+            "tools": 13
+          },
+          "address": "0x1234567890abcdef1234567890abcdef12345678",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://api.hyperliquid-testnet.xyz",
+          "identity": "Testnet · 0x1234…5678 · read only",
+          "integration": "hyperliquid",
+          "name": "Hyperliquid Testnet · 0x1234…5678",
+          "network": "testnet",
+          "scopes": null,
+          "status": "connected",
+          "tools": [
+            {
+              "allowed": true,
+              "fingerprint": "9b542ccceada4ad872d6d5b10326b19ab9dc9e5ed01ff87fc4c46eb3d6f0605b",
+              "group": "read",
+              "name": "get_me"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "f3e2d1a50a2e9f34d9487ee1e8d6b568406d406e5cbf46f91b2a985d6cc6e7d7",
+              "group": "read",
+              "name": "list_markets"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "88694a99c8693681999b7720a5b9c93c5fc360ca4f7cd68c607dd69d74c6223f",
+              "group": "read",
+              "name": "get_mids"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "7485095802bfc2ce0c9f0078973020aca8f25d8cdac8d1658fef07f41a7e84d5",
+              "group": "read",
+              "name": "get_book"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "f084a9f68b4062071b5e7b0af46d025634c22786db1822c367576917d5e54d7e",
+              "group": "read",
+              "name": "get_candles"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "ca3ff86b75e99c74029933f3fcdd0f5def282a0695aa17e98c681552ae1a703a",
+              "group": "read",
+              "name": "get_funding_history"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "718b76565b4f44b0fe0f57363718d35883de029ae5252da04a3691d36741bc82",
+              "group": "read",
+              "name": "get_account"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "d4be2b3d4e9f73d15cf4203de24197c38385653a331b4b29c70b25f4d9ad941b",
+              "group": "read",
+              "name": "get_open_orders"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "08d6cbb57807d8450740a2763f88f8452086cc36a2dec8ae396e46437a50a91e",
+              "group": "read",
+              "name": "get_fills"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "d53e723d1a1a4ec176aef7e0695f7102f4b1c9cfefea49de9bfe4a6048d1a756",
+              "group": "read",
+              "name": "get_funding_payments"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "82b6e262654ac4e2ce8892d8d1db5d420369db0a3ae4a4c141f5d791eac6c100",
+              "group": "read",
+              "name": "get_portfolio"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "73773df2e48bc69a5c4c2c98c3099f33d9be9709d203575f58fac7c3cbdea07b",
+              "group": "read",
+              "name": "get_vaults"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "45a53e7541430928efe23bcfa686606fda584f925a05e47966c10d1cd0df3c12",
+              "group": "read",
+              "name": "get_order_status"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": [
+          "POST https://api.hyperliquid-testnet.xyz/info body={\"type\":\"clearinghouseState\",\"user\":\"0x1234567890abcdef1234567890abcdef12345678\"}"
+        ]
+      },
+      "spec_on_other": {
+        "error": "choose Mainnet or Testnet",
+        "requests": []
+      },
+      "trusted": {
+        "error": "choose Mainnet or Testnet",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "choose Mainnet or Testnet",
+        "requests": []
+      }
+    },
+    "linear": {
+      "credential": {
+        "error": "Linear did not accept the MCP connection; check that its endpoint still serves MCP",
+        "requests": [
+          "POST https://mcp.linear.app/mcp Authorization=Bearer tok-123"
+        ]
+      },
+      "no_credential": {
+        "error": "connect an authorized account first",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "internal network trust is only supported for custom plugins",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "mcp": {
+      "credential": {
+        "error": "Name did not accept the MCP connection; check that its endpoint still serves MCP",
+        "requests": [
+          "POST https://custom.example/mcp Authorization=Bearer tok-123"
+        ]
+      },
+      "no_credential": {
+        "error": "Name did not accept the MCP connection; check that its endpoint still serves MCP",
+        "requests": [
+          "POST https://custom.example/mcp"
+        ]
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "Name did not accept the MCP connection; check that its endpoint still serves MCP",
+        "requests": [
+          "POST https://custom.example/mcp Authorization=Bearer tok-123"
+        ]
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "notion": {
+      "credential": {
+        "account": {
+          "access": {
+            "read": "allowed",
+            "write": "off",
+            "allowed": 5,
+            "tools": 7
+          },
+          "address": "",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://api.notion.com/v1",
+          "identity": "Workspace",
+          "integration": "notion",
+          "name": "Name",
+          "network": "",
+          "scopes": null,
+          "status": "connected",
+          "tools": [
+            {
+              "allowed": true,
+              "fingerprint": "6d7f72cf2702089e825de3f9e01e2785b9ed733e4946c97665a6ff99d9b1d88a",
+              "group": "read",
+              "name": "get_me"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "ef4c7dcff1f1b027a5fd01aafd437ff674201ca1120da698af7d373d8d5e4f80",
+              "group": "read",
+              "name": "search"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "06522aca6f2961f2a4b98ca17d8250a1e085ec7a1a5d1e99d6241d59654de007",
+              "group": "read",
+              "name": "get_page"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "4493b6c0a5b075877bc5a36284f2388eb34865fe61397900c0026a99492cc11b",
+              "group": "read",
+              "name": "get_block"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "11160d713a87a1dcf46f4f50a65d3bf95674b7ea64e5a87efda2aa0707fdf1c2",
+              "group": "read",
+              "name": "list_block_children"
+            },
+            {
+              "allowed": false,
+              "fingerprint": "2584545cab54eeb135e015dc58188e0790466c62258a873416736c282a6997c7",
+              "group": "write",
+              "name": "update_page"
+            },
+            {
+              "allowed": false,
+              "fingerprint": "754c5ea08b69a1f904bdbaa2cf932c679f577ec6e4350c985bcd09b029bd2d36",
+              "group": "write",
+              "name": "append_blocks"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": [
+          "GET https://api.notion.com/v1/users/me Notion-Version=2022-06-28 Authorization=Bearer tok-123"
+        ]
+      },
+      "no_credential": {
+        "error": "connect an authorized account first",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "internal network trust is only supported for custom plugins",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "onlora": {
+      "credential": {
+        "error": "Onlora uses browser authorization; connect it from Extensions",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "Onlora uses browser authorization; connect it from Extensions",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "Onlora uses browser authorization; connect it from Extensions",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "openapi": {
+      "credential": {
+        "account": {
+          "access": {
+            "read": "none",
+            "write": "none",
+            "allowed": 0,
+            "tools": 1
+          },
+          "address": "",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://custom.example/mcp",
+          "identity": "Account identity unavailable",
+          "integration": "openapi",
+          "name": "Name",
+          "network": "",
+          "scopes": null,
+          "status": "configured",
+          "tools": [
+            {
+              "allowed": false,
+              "fingerprint": "72c928f0d15da2a30322f4ca464ffa727416f3285afe998f55d84c2cbbbc5c21",
+              "group": "",
+              "name": "ping"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": []
+      },
+      "no_credential": {
+        "account": {
+          "access": {
+            "read": "none",
+            "write": "none",
+            "allowed": 0,
+            "tools": 1
+          },
+          "address": "",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://custom.example/mcp",
+          "identity": "Account identity unavailable",
+          "integration": "openapi",
+          "name": "Name",
+          "network": "",
+          "scopes": null,
+          "status": "configured",
+          "tools": [
+            {
+              "allowed": false,
+              "fingerprint": "72c928f0d15da2a30322f4ca464ffa727416f3285afe998f55d84c2cbbbc5c21",
+              "group": "",
+              "name": "ping"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "endpoint must be HTTPS without credentials, query or fragment",
+        "requests": []
+      },
+      "trusted": {
+        "account": {
+          "access": {
+            "read": "none",
+            "write": "none",
+            "allowed": 0,
+            "tools": 1
+          },
+          "address": "",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://custom.example/mcp",
+          "identity": "Account identity unavailable",
+          "integration": "openapi",
+          "name": "Name",
+          "network": "",
+          "scopes": null,
+          "status": "configured",
+          "tools": [
+            {
+              "allowed": false,
+              "fingerprint": "72c928f0d15da2a30322f4ca464ffa727416f3285afe998f55d84c2cbbbc5c21",
+              "group": "",
+              "name": "ping"
+            }
+          ],
+          "trusted_networks": [
+            "10.0.0.0/8"
+          ]
+        },
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
+    "remove_key_on_github": "only a Hyperliquid account has a trading key",
+    "slack": {
+      "credential": {
+        "account": {
+          "access": {
+            "read": "allowed",
+            "write": "off",
+            "allowed": 2,
+            "tools": 4
+          },
+          "address": "",
+          "auth_method": "",
+          "enabled": true,
+          "endpoint": "https://slack.com/api",
+          "identity": "Team · User",
+          "integration": "slack",
+          "name": "Name",
+          "network": "",
+          "scopes": null,
+          "status": "connected",
+          "tools": [
+            {
+              "allowed": true,
+              "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+              "group": "read",
+              "name": "get_me"
+            },
+            {
+              "allowed": true,
+              "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
+              "group": "read",
+              "name": "list_channels"
+            },
+            {
+              "allowed": false,
+              "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
+              "group": "write",
+              "name": "send_message"
+            },
+            {
+              "allowed": false,
+              "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+              "group": "write",
+              "name": "update_message"
+            }
+          ],
+          "trusted_networks": null
+        },
+        "requests": [
+          "GET https://slack.com/api/auth.test Authorization=Bearer tok-123"
+        ]
+      },
+      "no_credential": {
+        "error": "connect an authorized account first",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "internal network trust is only supported for custom plugins",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    }
+  },
+  "catalog": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "available": true,
+      "setup_url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
+      "description": "Repositories, issues and pull requests"
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "available": true,
+      "setup_url": "https://www.notion.so/profile/integrations",
+      "description": "Pages, search and workspace content"
+    },
+    {
+      "id": "google-calendar",
+      "name": "Google Calendar",
+      "available": true,
+      "setup_url": "https://calendar.google.com",
+      "description": "Calendars, events and free time"
+    },
+    {
+      "id": "gmail",
+      "name": "Gmail",
+      "available": true,
+      "setup_url": "https://mail.google.com",
+      "description": "Search, read and draft email"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "available": true,
+      "setup_url": "https://api.slack.com/apps",
+      "description": "Channels, conversations and messages"
+    },
+    {
+      "id": "hyperliquid",
+      "name": "Hyperliquid",
+      "available": true,
+      "setup_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api",
+      "description": "Markets and accounts on Hyperliquid, mainnet or testnet; trading only with an API wallet you add"
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "available": true,
+      "setup_url": "https://linear.app/settings/account/security",
+      "description": "Issues, projects and team activity"
+    },
+    {
+      "id": "onlora",
+      "name": "Onlora",
+      "available": true,
+      "setup_url": "https://onlora.ai",
+      "description": "Asset generation and search: images, speech and openly licensed media, kept in projects"
+    },
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare",
+      "available": true,
+      "setup_url": "https://github.com/cloudflare/mcp",
+      "description": "The whole Cloudflare API: Workers, R2, D1, DNS and more"
+    },
+    {
+      "id": "mcp",
+      "name": "Remote MCP",
+      "available": true,
+      "setup_url": "https://modelcontextprotocol.io",
+      "description": "Discover tools from a remote MCP server"
+    },
+    {
+      "id": "openapi",
+      "name": "OpenAPI",
+      "available": true,
+      "setup_url": "https://spec.openapis.org/oas/v3.0.3",
+      "description": "Discover operations from an OpenAPI 3 document"
+    }
+  ],
+  "configure": {
+    "all_configured": [
+      "github",
+      "linear",
+      "notion",
+      "slack"
+    ],
+    "bogus": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "cloudflare": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "github": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": [
+        "github"
+      ],
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": [
+        "github"
+      ],
+      "id_valid": [
+        "github"
+      ],
+      "mcp_resource": [
+        "github"
+      ],
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "this service requires a publisher-owned client ID",
+      "no_id_valid": "this service requires a publisher-owned client ID"
+    },
+    "gmail": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "google-calendar": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "hyperliquid": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "linear": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": [
+        "linear"
+      ],
+      "id_valid": [
+        "linear"
+      ],
+      "mcp_resource": [
+        "linear"
+      ],
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": [
+        "linear"
+      ]
+    },
+    "mcp": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "bind the registered MCP client to its exact resource_url",
+      "id_valid": "bind the registered MCP client to its exact resource_url",
+      "mcp_resource": [
+        "mcp"
+      ],
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": [
+        "mcp"
+      ]
+    },
+    "notion": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": [
+        "notion"
+      ],
+      "id_valid": [
+        "notion"
+      ],
+      "mcp_resource": [
+        "notion"
+      ],
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": [
+        "notion"
+      ]
+    },
+    "onlora": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "openapi": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "slack": {
+      "id_app": [
+        "slack"
+      ],
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": [
+        "slack"
+      ],
+      "id_valid": [
+        "slack"
+      ],
+      "mcp_resource": [
+        "slack"
+      ],
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "this service requires a publisher-owned client ID",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "this service requires a publisher-owned client ID"
+    }
+  },
+  "connect": {
+    "bogus": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      }
+    },
+    "cloudflare": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://connect.mewla.ai/plugins/return\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_operator_other": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "cloudflare",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://connect.mewla.ai/plugins/return\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_custom_endpoint": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "cloudflare",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://connect.mewla.ai/plugins/return\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "cloudflare",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://connect.mewla.ai/plugins/return\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "cloudflare",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://connect.mewla.ai/plugins/return\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "cloudflare",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.cloudflare.com/mcp",
+          "integration": "cloudflare",
+          "name": "Cloudflare",
+          "scopes": [
+            "user:read",
+            "account:read",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.cloudflare.com%2Fmcp\u0026response_type=code\u0026scope=user%3Aread+account%3Aread+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "cloudflare",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://mcp.cloudflare.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      }
+    },
+    "github": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "GitHub sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "GitHub sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "flow": {
+          "authorization_url": "https://github.com/login/device",
+          "has_account": false,
+          "integration": "github",
+          "status": "waiting",
+          "user_code": "ABCD-1234",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": [
+          "POST https://github.com/login/device/code"
+        ]
+      },
+      "native_writes_publishers": {
+        "flow": {
+          "authorization_url": "https://github.com/login/device",
+          "has_account": false,
+          "integration": "github",
+          "status": "waiting",
+          "user_code": "ABCD-1234",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": [
+          "POST https://github.com/login/device/code"
+        ]
+      },
+      "web": {
+        "error": "GitHub sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "flow": {
+          "authorization_url": "https://github.com/login/device",
+          "has_account": false,
+          "integration": "github",
+          "status": "waiting",
+          "user_code": "ABCD-1234",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": [
+          "POST https://github.com/login/device/code"
+        ]
+      }
+    },
+    "gmail": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Google authorization is temporarily unavailable. Try again.",
+        "requests": [
+          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"gmail\",\"writes\":true}"
+        ]
+      },
+      "web": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Google authorization is temporarily unavailable. Try again.",
+        "requests": [
+          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"gmail\",\"writes\":true}"
+        ]
+      }
+    },
+    "google-calendar": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Google authorization is temporarily unavailable. Try again.",
+        "requests": [
+          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"calendar\",\"writes\":true}"
+        ]
+      },
+      "web": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Google sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Google authorization is temporarily unavailable. Try again.",
+        "requests": [
+          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"calendar\",\"writes\":true}"
+        ]
+      }
+    },
+    "hyperliquid": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      }
+    },
+    "linear": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "write",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+write+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_operator_other": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "linear",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_custom_endpoint": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "linear",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "linear",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "write",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+write+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "linear",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "linear",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.linear.app/mcp",
+          "integration": "linear",
+          "name": "Linear",
+          "scopes": [
+            "read",
+            "write",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.linear.app%2Fmcp\u0026response_type=code\u0026scope=read+write+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "linear",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://mcp.linear.app/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.linear.app/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      }
+    },
+    "mcp": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "endpoint must be HTTPS without credentials, query or fragment",
+        "requests": []
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://custom.example/mcp",
+          "integration": "mcp",
+          "name": "Remote MCP",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fcustom.example%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://custom.example/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://custom.example/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_operator_other": {
+        "error": "this OAuth client belongs to another MCP endpoint; configure the matching client first",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "endpoint must be HTTPS without credentials, query or fragment",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://custom.example/mcp",
+          "integration": "mcp",
+          "name": "Remote MCP",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fcustom.example%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "mcp",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://custom.example/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://custom.example/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://custom.example/mcp",
+          "integration": "mcp",
+          "name": "Remote MCP",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fcustom.example%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "mcp",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 2,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://custom.example/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": true,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://custom.example/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "native_writes_publishers": {
+        "error": "endpoint must be HTTPS without credentials, query or fragment",
+        "requests": []
+      },
+      "web": {
+        "error": "endpoint must be HTTPS without credentials, query or fragment",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "endpoint must be HTTPS without credentials, query or fragment",
+        "requests": []
+      }
+    },
+    "notion": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "write",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+write+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_operator_other": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp"
+        ]
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "notion",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_custom_endpoint": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "notion",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "notion",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "native_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "write",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+write+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "notion",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"mewla://plugins\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "notion",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://mcp.notion.com/mcp",
+          "integration": "notion",
+          "name": "Notion",
+          "scopes": [
+            "read",
+            "write",
+            "openid",
+            "email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fmcp.notion.com%2Fmcp\u0026response_type=code\u0026scope=read+write+openid+email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "notion",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://mcp.notion.com/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "GET https://mcp.notion.com/.well-known/oauth-protected-resource/mcp",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      }
+    },
+    "onlora": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=mewla\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "mewla",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "direct_operator_other": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://auth.example/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "op",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=mewla\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "onlora",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "mewla",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "native_custom_endpoint": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=mewla\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "onlora",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "mewla",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=mewla\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "onlora",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "mewla",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "native_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=mewla\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=mewla%3A%2F%2Fplugins\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "onlora",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "mewla",
+          "issuer": "https://auth.example",
+          "redirect_url": "mewla://plugins",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server"
+        ]
+      },
+      "web": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "onlora",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "account": {
+          "auth_method": "mcp_oauth",
+          "enabled": true,
+          "endpoint": "https://api.onlora.ai/mcp",
+          "integration": "onlora",
+          "name": "Onlora",
+          "scopes": [
+            "projects",
+            "generate",
+            "offline_access"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://auth.example/authorize?client_id=dynamic-client\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fmewla.example%2Fplugins%2Foauth%2Fcallback\u0026resource=https%3A%2F%2Fapi.onlora.ai%2Fmcp\u0026response_type=code\u0026scope=projects+generate+offline_access\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "onlora",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": true
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://auth.example/authorize",
+          "client_id": "dynamic-client",
+          "issuer": "https://auth.example",
+          "redirect_url": "https://mewla.example/plugins/oauth/callback",
+          "resource": "https://api.onlora.ai/mcp",
+          "revoke_url": "https://auth.example/revoke",
+          "token_url": "https://auth.example/token"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": false,
+            "web": true
+          }
+        ],
+        "requests": [
+          "GET https://api.onlora.ai/.well-known/oauth-protected-resource/mcp",
+          "GET https://auth.example/.well-known/oauth-authorization-server",
+          "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+        ]
+      }
+    },
+    "openapi": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      }
+    },
+    "slack": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://slack.com/api",
+          "integration": "slack",
+          "name": "Slack",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "search:read"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://slack.com/oauth/v2/authorize",
+          "client_id": "op",
+          "issuer": "https://slack.com",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "",
+          "revoke_url": "",
+          "token_url": "https://slack.com/api/oauth.v2.access"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "direct_operator_other": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://slack.com/api",
+          "integration": "slack",
+          "name": "Slack",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "search:read"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://slack.com/oauth/v2/authorize",
+          "client_id": "op",
+          "issuer": "https://slack.com",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "",
+          "revoke_url": "",
+          "token_url": "https://slack.com/api/oauth.v2.access"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Slack sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Slack sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://slack.com/api",
+          "integration": "slack",
+          "name": "Slack",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "search:read"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread",
+          "has_account": true,
+          "integration": "slack",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://slack.com/oauth/v2/authorize",
+          "client_id": "op",
+          "issuer": "https://slack.com",
+          "redirect_url": "https://daemon.example/plugins/oauth/callback",
+          "resource": "",
+          "revoke_url": "",
+          "token_url": "https://slack.com/api/oauth.v2.access"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": true,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://slack.com/api",
+          "integration": "slack",
+          "name": "Slack",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "search:read",
+            "chat:write"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread%2Cchat%3Awrite",
+          "has_account": true,
+          "integration": "slack",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://slack.com/oauth/v2/authorize",
+          "client_id": "sl",
+          "issuer": "https://slack.com",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "",
+          "revoke_url": "",
+          "token_url": "https://slack.com/api/oauth.v2.access"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": true,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "web": {
+        "error": "Slack sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Slack sign-in returns to the Mewla app. Connect Slack from the Mewla app on your phone.",
+        "requests": []
+      }
+    }
+  },
+  "defaults": {
+    "openapi https://api.notion.com/v1": "integration returned HTTP 404",
+    "openapi https://other.example": "integration returned HTTP 404",
+    "openapi https://slack.com/api": "Slack rejected the call; check account authorization and required scopes",
+    "requests": [
+      "GET https://api.github.com/user X-GitHub-Api-Version=2022-11-28",
+      "GET https://api.github.com/user X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok",
+      "GET https://api.github.com/user/repos?per_page=30 X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok",
+      "GET https://api.github.com/user/repos?per_page=5 X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok",
+      "GET https://api.notion.com/v1/blocks/b1/children?page_size=30 Notion-Version=2022-06-28 Authorization=Bearer ntn",
+      "GET https://api.notion.com/v1/user Notion-Version=2022-06-28",
+      "GET https://api.notion.com/v1/users/me Notion-Version=2022-06-28 Authorization=Bearer ntn",
+      "GET https://other.example/user",
+      "GET https://slack.com/api/user"
+    ]
+  },
+  "names": {
+    "": {
+      "account": "Custom service",
+      "account_name": "Custom service",
+      "service": "Custom service"
+    },
+    "bogus": {
+      "account": "Custom service",
+      "account_name": "Custom service",
+      "service": "Custom service"
+    },
+    "cloudflare": {
+      "account": "Cloudflare",
+      "account_name": "Cloudflare",
+      "service": "Cloudflare"
+    },
+    "github": {
+      "account": "GitHub",
+      "account_name": "GitHub",
+      "service": "GitHub"
+    },
+    "gmail": {
+      "account": "Gmail",
+      "account_name": "Gmail",
+      "service": "Gmail"
+    },
+    "google-calendar": {
+      "account": "Google Calendar",
+      "account_name": "Google Calendar",
+      "service": "Google Calendar"
+    },
+    "hyperliquid": {
+      "account": "Hyperliquid",
+      "account_name": "Hyperliquid",
+      "service": "Hyperliquid"
+    },
+    "linear": {
+      "account": "Linear",
+      "account_name": "Linear",
+      "service": "Linear"
+    },
+    "mcp": {
+      "account": "The MCP service",
+      "account_name": "Mine",
+      "service": "Remote MCP"
+    },
+    "notion": {
+      "account": "Notion",
+      "account_name": "Notion",
+      "service": "Notion"
+    },
+    "onlora": {
+      "account": "Onlora",
+      "account_name": "Onlora",
+      "service": "Onlora"
+    },
+    "openapi": {
+      "account": "OpenAPI",
+      "account_name": "OpenAPI",
+      "service": "OpenAPI"
+    },
+    "slack": {
+      "account": "Slack",
+      "account_name": "Slack",
+      "service": "Slack"
+    }
+  },
+  "official": {
+    "cloudflare": {
+      "no_auth_method": {
+        "docs": "",
+        "execute": "",
+        "get_me": "",
+        "save_something_new": "",
+        "search": "",
+        "unknown_tool": "",
+        "whoami": ""
+      },
+      "oauth": {
+        "docs": "read",
+        "execute": "write",
+        "get_me": "",
+        "save_something_new": "",
+        "search": "read",
+        "unknown_tool": "",
+        "whoami": "read"
+      },
+      "oauth_other": {
+        "docs": "",
+        "execute": "",
+        "get_me": "",
+        "save_something_new": "",
+        "search": "",
+        "unknown_tool": "",
+        "whoami": ""
+      },
+      "set": {
+        "endpoint": "https://mcp.cloudflare.com/mcp",
+        "reads": [
+          "docs",
+          "search",
+          "whoami"
+        ],
+        "writes": [
+          "execute"
+        ]
+      }
+    },
+    "linear": {
+      "no_auth_method": {
+        "create_comment": "write",
+        "create_document": "write",
+        "create_issue": "write",
+        "create_project": "write",
+        "get_document": "read",
+        "get_issue": "read",
+        "get_issue_status": "read",
+        "get_me": "",
+        "get_milestone": "read",
+        "get_project": "read",
+        "get_project_status": "read",
+        "get_status_updates": "read",
+        "get_team": "read",
+        "get_user": "read",
+        "list_comments": "read",
+        "list_cycles": "read",
+        "list_documents": "read",
+        "list_issue_labels": "read",
+        "list_issue_statuses": "read",
+        "list_issues": "read",
+        "list_milestones": "read",
+        "list_project_labels": "read",
+        "list_project_statuses": "read",
+        "list_projects": "read",
+        "list_teams": "read",
+        "list_users": "read",
+        "save_comment": "write",
+        "save_document": "write",
+        "save_issue": "write",
+        "save_milestone": "write",
+        "save_project": "write",
+        "save_something_new": "",
+        "save_status_update": "write",
+        "unknown_tool": "",
+        "update_comment": "write",
+        "update_document": "write",
+        "update_issue": "write",
+        "update_project": "write"
+      },
+      "oauth": {
+        "create_comment": "write",
+        "create_document": "write",
+        "create_issue": "write",
+        "create_project": "write",
+        "get_document": "read",
+        "get_issue": "read",
+        "get_issue_status": "read",
+        "get_me": "",
+        "get_milestone": "read",
+        "get_project": "read",
+        "get_project_status": "read",
+        "get_status_updates": "read",
+        "get_team": "read",
+        "get_user": "read",
+        "list_comments": "read",
+        "list_cycles": "read",
+        "list_documents": "read",
+        "list_issue_labels": "read",
+        "list_issue_statuses": "read",
+        "list_issues": "read",
+        "list_milestones": "read",
+        "list_project_labels": "read",
+        "list_project_statuses": "read",
+        "list_projects": "read",
+        "list_teams": "read",
+        "list_users": "read",
+        "save_comment": "write",
+        "save_document": "write",
+        "save_issue": "write",
+        "save_milestone": "write",
+        "save_project": "write",
+        "save_something_new": "",
+        "save_status_update": "write",
+        "unknown_tool": "",
+        "update_comment": "write",
+        "update_document": "write",
+        "update_issue": "write",
+        "update_project": "write"
+      },
+      "oauth_other": {
+        "create_comment": "",
+        "create_document": "",
+        "create_issue": "",
+        "create_project": "",
+        "get_document": "",
+        "get_issue": "",
+        "get_issue_status": "",
+        "get_me": "",
+        "get_milestone": "",
+        "get_project": "",
+        "get_project_status": "",
+        "get_status_updates": "",
+        "get_team": "",
+        "get_user": "",
+        "list_comments": "",
+        "list_cycles": "",
+        "list_documents": "",
+        "list_issue_labels": "",
+        "list_issue_statuses": "",
+        "list_issues": "",
+        "list_milestones": "",
+        "list_project_labels": "",
+        "list_project_statuses": "",
+        "list_projects": "",
+        "list_teams": "",
+        "list_users": "",
+        "save_comment": "",
+        "save_document": "",
+        "save_issue": "",
+        "save_milestone": "",
+        "save_project": "",
+        "save_something_new": "",
+        "save_status_update": "",
+        "unknown_tool": "",
+        "update_comment": "",
+        "update_document": "",
+        "update_issue": "",
+        "update_project": ""
+      },
+      "set": {
+        "endpoint": "https://mcp.linear.app/mcp",
+        "reads": [
+          "get_document",
+          "get_issue",
+          "get_issue_status",
+          "get_milestone",
+          "get_project",
+          "get_project_status",
+          "get_status_updates",
+          "get_team",
+          "get_user",
+          "list_comments",
+          "list_cycles",
+          "list_documents",
+          "list_issue_labels",
+          "list_issue_statuses",
+          "list_issues",
+          "list_milestones",
+          "list_project_labels",
+          "list_project_statuses",
+          "list_projects",
+          "list_teams",
+          "list_users"
+        ],
+        "writes": [
+          "create_comment",
+          "create_document",
+          "create_issue",
+          "create_project",
+          "save_comment",
+          "save_document",
+          "save_issue",
+          "save_milestone",
+          "save_project",
+          "save_status_update",
+          "update_comment",
+          "update_document",
+          "update_issue",
+          "update_project"
+        ]
+      }
+    },
+    "notion": {
+      "no_auth_method": {
+        "get_me": "",
+        "notion-create-comment": "",
+        "notion-create-pages": "",
+        "notion-duplicate-page": "",
+        "notion-fetch": "",
+        "notion-get-comments": "",
+        "notion-get-self": "",
+        "notion-get-teams": "",
+        "notion-get-users": "",
+        "notion-move-pages": "",
+        "notion-search": "",
+        "notion-update-page": "",
+        "save_something_new": "",
+        "unknown_tool": ""
+      },
+      "oauth": {
+        "get_me": "",
+        "notion-create-comment": "write",
+        "notion-create-pages": "write",
+        "notion-duplicate-page": "write",
+        "notion-fetch": "read",
+        "notion-get-comments": "read",
+        "notion-get-self": "read",
+        "notion-get-teams": "read",
+        "notion-get-users": "read",
+        "notion-move-pages": "write",
+        "notion-search": "read",
+        "notion-update-page": "write",
+        "save_something_new": "",
+        "unknown_tool": ""
+      },
+      "oauth_other": {
+        "get_me": "",
+        "notion-create-comment": "",
+        "notion-create-pages": "",
+        "notion-duplicate-page": "",
+        "notion-fetch": "",
+        "notion-get-comments": "",
+        "notion-get-self": "",
+        "notion-get-teams": "",
+        "notion-get-users": "",
+        "notion-move-pages": "",
+        "notion-search": "",
+        "notion-update-page": "",
+        "save_something_new": "",
+        "unknown_tool": ""
+      },
+      "set": {
+        "endpoint": "https://mcp.notion.com/mcp",
+        "reads": [
+          "notion-fetch",
+          "notion-get-comments",
+          "notion-get-self",
+          "notion-get-teams",
+          "notion-get-users",
+          "notion-search"
+        ],
+        "writes": [
+          "notion-create-comment",
+          "notion-create-pages",
+          "notion-duplicate-page",
+          "notion-move-pages",
+          "notion-update-page"
+        ]
+      }
+    },
+    "onlora": {
+      "no_auth_method": {
+        "add_asset": "",
+        "create_project": "",
+        "create_upload": "",
+        "delete_file": "",
+        "edit_image": "",
+        "generate_image": "",
+        "generate_voice": "",
+        "get_asset": "",
+        "get_job": "",
+        "get_me": "",
+        "get_project": "",
+        "get_quota": "",
+        "list_files": "",
+        "list_models": "",
+        "list_projects": "",
+        "read_file": "",
+        "save_something_new": "",
+        "search_library": "",
+        "unknown_tool": "",
+        "update_asset": "",
+        "update_project": "",
+        "write_file": ""
+      },
+      "oauth": {
+        "add_asset": "write",
+        "create_project": "write",
+        "create_upload": "write",
+        "delete_file": "write",
+        "edit_image": "write",
+        "generate_image": "write",
+        "generate_voice": "write",
+        "get_asset": "read",
+        "get_job": "read",
+        "get_me": "",
+        "get_project": "read",
+        "get_quota": "read",
+        "list_files": "read",
+        "list_models": "read",
+        "list_projects": "read",
+        "read_file": "read",
+        "save_something_new": "",
+        "search_library": "read",
+        "unknown_tool": "",
+        "update_asset": "write",
+        "update_project": "write",
+        "write_file": "write"
+      },
+      "oauth_other": {
+        "add_asset": "",
+        "create_project": "",
+        "create_upload": "",
+        "delete_file": "",
+        "edit_image": "",
+        "generate_image": "",
+        "generate_voice": "",
+        "get_asset": "",
+        "get_job": "",
+        "get_me": "",
+        "get_project": "",
+        "get_quota": "",
+        "list_files": "",
+        "list_models": "",
+        "list_projects": "",
+        "read_file": "",
+        "save_something_new": "",
+        "search_library": "",
+        "unknown_tool": "",
+        "update_asset": "",
+        "update_project": "",
+        "write_file": ""
+      },
+      "set": {
+        "endpoint": "https://api.onlora.ai/mcp",
+        "reads": [
+          "get_asset",
+          "get_job",
+          "get_project",
+          "get_quota",
+          "list_files",
+          "list_models",
+          "list_projects",
+          "read_file",
+          "search_library"
+        ],
+        "writes": [
+          "add_asset",
+          "create_project",
+          "create_upload",
+          "delete_file",
+          "edit_image",
+          "generate_image",
+          "generate_voice",
+          "update_asset",
+          "update_project",
+          "write_file"
+        ]
+      }
+    },
+    "others": {
+      "github": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
+      "gmail": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
+      "google-calendar": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
+      "hyperliquid": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
+      "mcp": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
+      "openapi": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
+      "slack": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      }
+    }
+  },
+  "readiness": {
+    "none": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": "Slack sign-in is not set up yet."
+    },
+    "operator_github": {
+      "cloudflare": "",
+      "github": "",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": "Slack sign-in is not set up yet."
+    },
+    "operator_google": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": "Slack sign-in is not set up yet."
+    },
+    "operator_notion": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": "Slack sign-in is not set up yet."
+    },
+    "operator_slack_app": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": ""
+    },
+    "operator_slack_no_secret_callback": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": "Slack sign-in is not set up yet."
+    },
+    "operator_slack_relay": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": ""
+    },
+    "operator_slack_secret_app": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": "Slack sign-in is not set up yet."
+    },
+    "operator_slack_secret_callback": {
+      "cloudflare": "",
+      "github": "GitHub sign-in is not set up yet.",
+      "gmail": "Google sign-in is not set up yet.",
+      "google-calendar": "Google sign-in is not set up yet.",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": ""
+    },
+    "publisher": {
+      "cloudflare": "",
+      "github": "",
+      "gmail": "",
+      "google-calendar": "",
+      "hyperliquid": "",
+      "linear": "",
+      "mcp": "",
+      "notion": "",
+      "onlora": "",
+      "openapi": "",
+      "slack": ""
+    }
+  },
+  "slack_scopes": {
+    "all": {
+      "access": {
+        "read": "allowed",
+        "write": "off",
+        "allowed": 4,
+        "tools": 6
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
+          "group": "read",
+          "name": "list_channels"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
+          "group": "read",
+          "name": "channel_history"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "d6c57d89bf71804821656b1aa8d8df69eaa89935b5244da558e235a61382e134",
+          "group": "read",
+          "name": "search_messages"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
+          "group": "write",
+          "name": "send_message"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+          "group": "write",
+          "name": "update_message"
+        }
+      ],
+      "trusted_networks": null
+    },
+    "bot": {
+      "access": {
+        "read": "allowed",
+        "write": "off",
+        "allowed": 3,
+        "tools": 5
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
+          "group": "read",
+          "name": "list_channels"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
+          "group": "read",
+          "name": "channel_history"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
+          "group": "write",
+          "name": "send_message"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+          "group": "write",
+          "name": "update_message"
+        }
+      ],
+      "trusted_networks": null
+    },
+    "chat_user": {
+      "access": {
+        "read": "allowed",
+        "write": "off",
+        "allowed": 1,
+        "tools": 3
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
+          "group": "write",
+          "name": "send_message"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+          "group": "write",
+          "name": "update_message"
+        }
+      ],
+      "trusted_networks": null
+    },
+    "history": {
+      "access": {
+        "read": "allowed",
+        "write": "none",
+        "allowed": 2,
+        "tools": 2
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
+          "group": "read",
+          "name": "channel_history"
+        }
+      ],
+      "trusted_networks": null
+    },
+    "none": {
+      "access": {
+        "read": "allowed",
+        "write": "none",
+        "allowed": 1,
+        "tools": 1
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        }
+      ],
+      "trusted_networks": null
+    },
+    "read": {
+      "access": {
+        "read": "allowed",
+        "write": "none",
+        "allowed": 3,
+        "tools": 3
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
+          "group": "read",
+          "name": "list_channels"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "d6c57d89bf71804821656b1aa8d8df69eaa89935b5244da558e235a61382e134",
+          "group": "read",
+          "name": "search_messages"
+        }
+      ],
+      "trusted_networks": null
+    }
+  },
+  "tools": {
+    "github": [
+      {
+        "name": "get_me",
+        "description": "Read the authenticated GitHub account",
+        "method": "GET",
+        "path": "/user",
+        "read": true,
+        "fingerprint": "d9ba37b9572da9c137ec6e654944711fca9e0ae80eb99a8c08f76487fa475f3c",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_repositories",
+        "description": "List repositories visible to this account (one page)",
+        "method": "GET",
+        "path": "/user/repos",
+        "read": true,
+        "fingerprint": "76d6bbdf0c39df301d60e47b84c37a8391af558ee654e5d4473a68afb1fbe768",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_repository",
+        "description": "Read repository details",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}",
+        "read": true,
+        "fingerprint": "d46adb30ce3e12f65ebf78a5e81f1b060aa90f5a6323224f085af15cf4a4da01",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_issues",
+        "description": "List repository issues and pull requests (one page)",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/issues",
+        "read": true,
+        "fingerprint": "b38d8b7fd0dc50d941cd00cc506b815abe673705868dacaf73c8b03fb3243cd5",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_issue",
+        "description": "Read an issue or pull request",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/issues/{number}",
+        "read": true,
+        "fingerprint": "9af2dfaa46e42f3b060e94d1b99b94d43fcf2f0b7068bd3e2732c348c3909a7f",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_updated_issues",
+        "description": "List issues and pull requests updated since a time, most recently updated first (one page)",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/issues",
+        "read": true,
+        "fingerprint": "d6457f7d791cd7366c3666507cc60de439cd7f1f50c1fba75d7916c3d37d8286",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_workflow_runs",
+        "description": "List a repository's GitHub Actions workflow runs, newest first (one page)",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/actions/runs",
+        "read": true,
+        "fingerprint": "73535dc33c9b45936dadaad6604d1bb01f84c5c5b10b087e100ad783a28ed29a",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_dependabot_alerts",
+        "description": "List a repository's Dependabot alerts (one page)",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/dependabot/alerts",
+        "read": true,
+        "fingerprint": "4705d10b2cf05d0137e94136b9d05d7ac083a5d5ecace2d3235f6d9da5eb093f",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_code_scanning_alerts",
+        "description": "List a repository's code scanning alerts (one page)",
+        "method": "GET",
+        "path": "/repos/{owner}/{repo}/code-scanning/alerts",
+        "read": true,
+        "fingerprint": "669ff4139faae58fadd4a25909db744843f66964eeb76ef4c91924a596d2e38d",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "create_issue",
+        "description": "Create a repository issue",
+        "method": "POST",
+        "path": "/repos/{owner}/{repo}/issues",
+        "read": false,
+        "fingerprint": "f054e6c843fd5bf1eedd5c5e0c6747ab5e964caddd5f4bb70ef5714ab3172e78",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "comment_on_issue",
+        "description": "Post a comment on an issue or pull request",
+        "method": "POST",
+        "path": "/repos/{owner}/{repo}/issues/{number}/comments",
+        "read": false,
+        "fingerprint": "414d19998691d76cbc769f07bc332eef20fdd2d4db0bb519050023cddb193161",
+        "group": "write",
+        "group_oauth": "write"
+      }
+    ],
+    "gmail": [
+      {
+        "name": "get_me",
+        "description": "Read the signed-in Google account (email and name)",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "6b05552be28e35cccd5cc03d81ba2392caad3ef125ca3522636002096b75aa2d",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "search_messages",
+        "description": "Search mail with Gmail's search syntax (from:, subject:, is:unread, newer_than:2d, label:, has:attachment). Returns up to 25 messages per page with sender, subject, date and snippet; pass next_page_token for more",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "addb92615fc5804a68f3f398e8ad77b60adef3bc7f2d65ee819cd745af74476e",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "read_message",
+        "description": "Read one message: headers, the body as readable text (long bodies are cut and flagged) and its attachment names",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "edc6ac737d5dab869152d1b011f6f86d01658df8500a1978676a6402c20df079",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "read_thread",
+        "description": "Read a conversation: up to 30 messages, oldest first, each with a shortened body",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "0546aaeab8115c0e74238739c03d722eb13ea1c5743004d81903914d9c8828b2",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_labels",
+        "description": "List the mailbox's labels with their ids (system labels such as INBOX and UNREAD included)",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "2e88e2e42c2790cee03d855863edb6a326bb6da79bac4e090c77abfa04f266bc",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "create_draft",
+        "description": "Save a draft in Gmail without sending it. Give to, subject and body; set reply_to_message_id to draft a reply in that conversation",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "4b669ab90b328af5e541755638858234c31989cf88ea1699d74e858ca535fea3",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "send_message",
+        "description": "Send an email now. Only when the person asked for this exact message to be sent; otherwise create a draft",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "dcba88650a68f7b6fe769939b509d3bd6b0ebd397e287f5f31a21ce387207331",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "send_draft",
+        "description": "Send an existing draft now. Only when the person asked for it to be sent",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "9e26bfb63ac61c9fbeb35d89ec353c47811a2976fdfcd8e3ecc12d5fd6185808",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "update_labels",
+        "description": "Mark a message or a whole conversation read, archive it, or add and remove labels (names or ids from list_labels). Give message_id or thread_id",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "bea7dda9f351a2e7c433526def4b7a5a1e52daf08c2f1c300032a5da059fa6e5",
+        "group": "write",
+        "group_oauth": "write"
+      }
+    ],
+    "google-calendar": [
+      {
+        "name": "get_me",
+        "description": "Read the signed-in Google account (email and name)",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "6b05552be28e35cccd5cc03d81ba2392caad3ef125ca3522636002096b75aa2d",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_calendars",
+        "description": "List the calendars this account can see, with id, name, time zone and access role",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "bb40d59c3e1a1ee02f597ea229473dc014f9252eed66f3748bab1bb28ef64c5f",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_events",
+        "description": "List events between time_min and time_max (RFC 3339 with an offset such as 2026-10-23T00:00:00+08:00, or a date YYYY-MM-DD). Recurring events come as single occurrences in start order. Up to 100 per page; times are in the calendar's time zone unless time_zone is given",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "2062a7e8f89f7750f9b9847413ce4c7ec7bd888997346bf1c24bfdead7a27eac",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_event",
+        "description": "Read one event in full: guests and their replies, location, description and meeting link",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "0037e210448b51b87056473e6687418444bb4c77ea70e000e919fbfb432bde7b",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "check_availability",
+        "description": "Find when calendars are busy between time_min and time_max (RFC 3339 or a date). Defaults to the primary calendar; up to 20 calendar ids or people's email addresses",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "fad84512b810a7d702ea08dfcc12aaf4ef55737c8c8c3557de43e0152adae962",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "create_event",
+        "description": "Create an event. start and end are RFC 3339 with an offset (or with time_zone, an IANA name such as Asia/Shanghai), or dates for an all-day event, where end is the day after the last day. Guests are not emailed unless send_updates is \"all\"",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "30145707155efd08fe6d4769446af7e9d05e8fab34427e304400d26f1c1e7376",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "update_event",
+        "description": "Change an event. Only the fields given change. add_attendees and remove_attendees edit the guest list without touching other guests",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "15c8994834958d7ab604ca450322cf6c0c00ecff878a522eda6ddd91b23eb5c8",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "delete_event",
+        "description": "Delete an event from a calendar. Guests are not emailed unless send_updates is \"all\"",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "fbcb7e7993112645f49b588b8bcc3329138ede809f7519dc8b1bf86687a630c2",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "respond_to_event",
+        "description": "Reply to an invitation for this account: accepted, declined or tentative. The organizer is not emailed unless send_updates is \"all\"",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "f8477f91f8d08699505fda63f716a17c6d7a646e4fa79711b2901f521c70d296",
+        "group": "write",
+        "group_oauth": "write"
+      }
+    ],
+    "hyperliquid": [
+      {
+        "name": "get_me",
+        "description": "Show this Hyperliquid account: network (mainnet or testnet), address, and whether a trading key is saved. Makes no request.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "9b542ccceada4ad872d6d5b10326b19ab9dc9e5ed01ff87fc4c46eb3d6f0605b",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_markets",
+        "description": "List perpetual and spot markets with their asset index, size decimals and maximum leverage (one page). Spot names look like PURR/USDC or @107.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "f3e2d1a50a2e9f34d9487ee1e8d6b568406d406e5cbf46f91b2a985d6cc6e7d7",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_mids",
+        "description": "Read mid prices in USDC for the named coins, or the first 100 coins by name.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "88694a99c8693681999b7720a5b9c93c5fc360ca4f7cd68c607dd69d74c6223f",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_book",
+        "description": "Read the level 2 order book of a coin: bids and asks, price in USDC and size in coin units.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "7485095802bfc2ce0c9f0078973020aca8f25d8cdac8d1658fef07f41a7e84d5",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_candles",
+        "description": "Read OHLCV candles of a coin, oldest first. Prices in USDC, volume in coin units. Defaults to the latest candles.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "f084a9f68b4062071b5e7b0af46d025634c22786db1822c367576917d5e54d7e",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_funding_history",
+        "description": "Read a perp's hourly funding rate history, oldest first (rates are per hour, as fractions). Defaults to the last 7 days.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "ca3ff86b75e99c74029933f3fcdd0f5def282a0695aa17e98c681552ae1a703a",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_account",
+        "description": "Read an account's perp positions and margin summary (USDC) and its spot balances.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "718b76565b4f44b0fe0f57363718d35883de029ae5252da04a3691d36741bc82",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_open_orders",
+        "description": "List an account's open orders with ids (one page).",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "d4be2b3d4e9f73d15cf4203de24197c38385653a331b4b29c70b25f4d9ad941b",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_fills",
+        "description": "List an account's recent fills, newest first (one page).",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "08d6cbb57807d8450740a2763f88f8452086cc36a2dec8ae396e46437a50a91e",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_funding_payments",
+        "description": "List funding payments an account paid or received, oldest first. Defaults to the last 7 days.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "d53e723d1a1a4ec176aef7e0695f7102f4b1c9cfefea49de9bfe4a6048d1a756",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_portfolio",
+        "description": "Read an account's account-value and PnL history in USDC for one timeframe (the latest 48 points).",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "82b6e262654ac4e2ce8892d8d1db5d420369db0a3ae4a4c141f5d791eac6c100",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_vaults",
+        "description": "List the vaults an account holds a deposit in, with equity in USDC.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "73773df2e48bc69a5c4c2c98c3099f33d9be9709d203575f58fac7c3cbdea07b",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_order_status",
+        "description": "Read one order's status by order id or client order id, to confirm what happened to it.",
+        "method": "",
+        "path": "",
+        "read": true,
+        "fingerprint": "45a53e7541430928efe23bcfa686606fda584f925a05e47966c10d1cd0df3c12",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "place_order",
+        "description": "Place one limit order. The result states the network and exactly what was signed and sent, and Hyperliquid's own reply with the order id. Price and size are never rounded for you; a value that is not valid is refused. Never retried. Only on the user's explicit instruction.",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "5691b4b03bc0ec274314bdc543c11dc3516d79334aed29d3e032f82d59941ae1",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "modify_order",
+        "description": "Replace an open order (by oid, or by the client order id in order_to_replace) with a new one. Everything in the new order is given in full. The result states the network and what was sent. Never retried. Only on the user's explicit instruction.",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "69d748f840d7870df5030f97fb4243f8e3addfd9b49b2994e799633dad774991",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "cancel_order",
+        "description": "Cancel one open order by order id, or by client order id. The result states the network and Hyperliquid's reply. Never retried.",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "9300eef4620ad2fe4df6004fb2e163e978c3d6cafa285745ae950cbd78b3cb70",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "set_leverage",
+        "description": "Set the leverage of a perp, cross or isolated. Spot has no leverage.",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "48e531b836460e1fba9488a72153d4a91626f148aa3e615ee4963b7f94d554ff",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "schedule_cancel",
+        "description": "Arm a dead man's switch that cancels every open order after a delay, or clear it. Hyperliquid allows 10 triggers a day.",
+        "method": "",
+        "path": "",
+        "read": false,
+        "fingerprint": "23fdf6c0c840904a29543f7a8ad12aea16028c7d9c6ed463958198525ff1a4c5",
+        "group": "write",
+        "group_oauth": "write"
+      }
+    ],
+    "notion": [
+      {
+        "name": "get_me",
+        "description": "Read this Notion integration and workspace identity",
+        "method": "GET",
+        "path": "/users/me",
+        "read": true,
+        "fingerprint": "6d7f72cf2702089e825de3f9e01e2785b9ed733e4946c97665a6ff99d9b1d88a",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "search",
+        "description": "Search pages shared with this Notion connection (one page)",
+        "method": "POST",
+        "path": "/search",
+        "read": true,
+        "fingerprint": "ef4c7dcff1f1b027a5fd01aafd437ff674201ca1120da698af7d373d8d5e4f80",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_page",
+        "description": "Read a shared Notion page",
+        "method": "GET",
+        "path": "/pages/{id}",
+        "read": true,
+        "fingerprint": "06522aca6f2961f2a4b98ca17d8250a1e085ec7a1a5d1e99d6241d59654de007",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_block",
+        "description": "Read a shared Notion block",
+        "method": "GET",
+        "path": "/blocks/{id}",
+        "read": true,
+        "fingerprint": "4493b6c0a5b075877bc5a36284f2388eb34865fe61397900c0026a99492cc11b",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_block_children",
+        "description": "Read blocks in a page (one page)",
+        "method": "GET",
+        "path": "/blocks/{id}/children",
+        "read": true,
+        "fingerprint": "11160d713a87a1dcf46f4f50a65d3bf95674b7ea64e5a87efda2aa0707fdf1c2",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "update_page",
+        "description": "Update page properties or archive state",
+        "method": "PATCH",
+        "path": "/pages/{id}",
+        "read": false,
+        "fingerprint": "2584545cab54eeb135e015dc58188e0790466c62258a873416736c282a6997c7",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "append_blocks",
+        "description": "Append content blocks to a shared page",
+        "method": "PATCH",
+        "path": "/blocks/{id}/children",
+        "read": false,
+        "fingerprint": "754c5ea08b69a1f904bdbaa2cf932c679f577ec6e4350c985bcd09b029bd2d36",
+        "group": "write",
+        "group_oauth": "write"
+      }
+    ],
+    "slack": [
+      {
+        "name": "get_me",
+        "description": "Read the authenticated Slack account and workspace",
+        "method": "GET",
+        "path": "/auth.test",
+        "read": true,
+        "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "list_channels",
+        "description": "List channels visible to this account (one page)",
+        "method": "GET",
+        "path": "/conversations.list",
+        "read": true,
+        "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "channel_history",
+        "description": "Read messages from a channel (one page)",
+        "method": "GET",
+        "path": "/conversations.history",
+        "read": true,
+        "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "search_messages",
+        "description": "Search messages using this user's search:read grant (one page)",
+        "method": "GET",
+        "path": "/search.messages",
+        "read": true,
+        "fingerprint": "d6c57d89bf71804821656b1aa8d8df69eaa89935b5244da558e235a61382e134",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "send_message",
+        "description": "Send a message to a Slack conversation",
+        "method": "POST",
+        "path": "/chat.postMessage",
+        "read": false,
+        "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "update_message",
+        "description": "Update a message posted by this account",
+        "method": "POST",
+        "path": "/chat.update",
+        "read": false,
+        "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+        "group": "write",
+        "group_oauth": "write"
+      }
+    ]
+  },
+  "uses_mcp": {
+    "cloudflare": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "github": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "gmail": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "google-calendar": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "hyperliquid": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "linear": {
+      "method:": true,
+      "method:mcp_oauth": true,
+      "method:oauth": true
+    },
+    "mcp": {
+      "method:": true,
+      "method:mcp_oauth": true,
+      "method:oauth": true
+    },
+    "notion": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "onlora": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "openapi": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "slack": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    }
+  },
+  "write_consent": {
+    "cloudflare": {
+      "all_goog": false,
+      "chat": false,
+      "no_oauth": false,
+      "none": false,
+      "read": false,
+      "read_goog": false,
+      "write": false
+    },
+    "github": {
+      "all_goog": false,
+      "chat": false,
+      "no_oauth": false,
+      "none": false,
+      "read": false,
+      "read_goog": false,
+      "write": false
+    },
+    "gmail": {
+      "all_goog": false,
+      "chat": true,
+      "no_oauth": false,
+      "none": true,
+      "read": true,
+      "read_goog": true,
+      "write": true
+    },
+    "google-calendar": {
+      "all_goog": false,
+      "chat": true,
+      "no_oauth": false,
+      "none": true,
+      "read": true,
+      "read_goog": true,
+      "write": true
+    },
+    "hyperliquid": {
+      "all_goog": false,
+      "chat": false,
+      "no_oauth": false,
+      "none": false,
+      "read": false,
+      "read_goog": false,
+      "write": false
+    },
+    "linear": {
+      "all_goog": true,
+      "chat": true,
+      "no_oauth": false,
+      "none": true,
+      "read": true,
+      "read_goog": true,
+      "write": false
+    },
+    "mcp": {
+      "all_goog": false,
+      "chat": false,
+      "no_oauth": false,
+      "none": false,
+      "read": false,
+      "read_goog": false,
+      "write": false
+    },
+    "notion": {
+      "all_goog": false,
+      "chat": false,
+      "no_oauth": false,
+      "none": false,
+      "read": false,
+      "read_goog": false,
+      "write": false
+    },
+    "onlora": {
+      "all_goog": false,
+      "chat": false,
+      "no_oauth": false,
+      "none": false,
+      "read": false,
+      "read_goog": false,
+      "write": false
+    },
+    "slack": {
+      "all_goog": true,
+      "chat": false,
+      "no_oauth": false,
+      "none": true,
+      "read": true,
+      "read_goog": true,
+      "write": true
+    }
+  }
+}
