@@ -25,6 +25,7 @@ import (
 	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	codexadapter "github.com/daoleno/mewla/daemon/agentevents/codex"
 	opencodeadapter "github.com/daoleno/mewla/daemon/agentevents/opencode"
+	piadapter "github.com/daoleno/mewla/daemon/agentevents/pi"
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -382,9 +383,20 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return providerOf(execs, worker.ExecutorID, worker.Command)
 	})
 	w.ObserveSessions(opencodeFollow.Observe)
+	senders, stops := []watcher.StructuredSender{opencodeFollow.send}, []func(string) (bool, error){opencodeFollow.interrupt}
+	piFollow := newPiEvents(ctx, eventHub, w.Workers)
+	piSocket, piExtension := filepath.Join(authManager.StorageDir(), "pi-events.sock"), filepath.Join(authManager.StorageDir(), "pi-extension.js")
+	if err := piadapter.WriteExtension(piExtension, piSocket); err != nil {
+		log.Printf("WARN agent events: cannot write the Pi extension, Pi Workers will be followed from their transcript: %v", err)
+	} else if err := piFollow.Listen(piSocket); err != nil {
+		logPiListen(err)
+	} else {
+		adapters.Register(piadapter.Provider, piadapter.Adapter{ExtensionPath: piExtension})
+		w.ObserveSessions(piFollow.Observe)
+		senders, stops = append(senders, piFollow.send), append(stops, piFollow.interrupt)
+	}
 	// Each agent's follower takes the sends and stops of the Workers it
 	// follows; any other Worker is typed into.
-	senders, stops := []watcher.StructuredSender{opencodeFollow.send}, []func(string) (bool, error){opencodeFollow.interrupt}
 	if codexFollow != nil {
 		senders, stops = append([]watcher.StructuredSender{codexFollow.send}, senders...), append([]func(string) (bool, error){codexFollow.interrupt}, stops...)
 	}

@@ -153,7 +153,8 @@ the screen or the agent's files:
 | Claude Code | Its hooks, set when Mewla starts it | Typed into the Terminal; the hook confirms delivery |
 | Codex | An app-server beside the Terminal, set when Mewla starts it | Sent to Codex directly |
 | OpenCode | OpenCode's background service: one event stream for all Workers, the session id chosen at launch | Sent to the service directly; a message to a session OpenCode has not created yet (its first) is typed |
-| Cursor, Grok, Pi, dsh | The agent's transcript and the screen | Typed into the Terminal |
+| Pi | A small extension Mewla loads into each Pi it starts (`pi -e`), which reports Pi's turns over a local socket; the session file is chosen at launch | Handed to Pi by the extension; Stop aborts the running turn |
+| Cursor, Grok, dsh | The agent's transcript and the screen | Typed into the Terminal |
 
 A Worker that Mewla did not start, or that started with its own settings, is
 followed from the transcript and the screen, and the app offers only what that
