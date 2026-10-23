@@ -1,4 +1,5 @@
 import type { ScreenPower, ScreenStatus } from "../../services/screen";
+import type { ScreenPath, ScreenStreamStats } from "../../services/screenStream";
 import type { ScreenModifier } from "./screenViewerProtocol";
 
 /**
@@ -103,7 +104,75 @@ export function powerWarning(status: ScreenStatus | null): { title: string; deta
   return null;
 }
 
-export function formatStats(stats: { rttMs: number | null; inputMs: number | null; fps: number; kbps: number }): string {
+export interface StreamReadout {
+  rttMs: number | null;
+  inputMs: number | null;
+  fps: number;
+  kbps: number;
+  /** The viewer's own stages, from the page that draws. */
+  bridgeMs?: number | null;
+  presentMs?: number | null;
+  /** The daemon's stages; absent from a daemon that predates them. */
+  daemon?: ScreenStreamStats | null;
+  /** The JPEG level the viewer asked for, 0-9. */
+  viewerQuality?: number;
+}
+
+const PATH_LABELS: Record<ScreenPath, string> = {
+  relay: "Relay",
+  tailscale: "Tailscale",
+  lan: "LAN",
+  loopback: "Local",
+  direct: "Direct",
+};
+
+export type StreamStage = "network" | "encode" | "bridge" | "draw";
+
+const STAGE_LABELS: Record<StreamStage, string> = {
+  network: "network",
+  encode: "encode",
+  bridge: "app",
+  draw: "draw",
+};
+
+/**
+ * The stage that takes longest between the screen changing and your phone
+ * showing it. They don't overlap: the round trip (which includes bytes
+ * waiting in the link), the daemon's encode, the hop into the viewer page,
+ * and the viewer's decode and draw. Null until something is measured.
+ */
+export function slowestStage(readout: StreamReadout): { stage: StreamStage; label: string; ms: number } | null {
+  const stages: [StreamStage, number | null | undefined][] = [
+    ["network", readout.rttMs],
+    ["encode", readout.daemon && readout.daemon.updates > 0 ? readout.daemon.encodeMs : null],
+    ["bridge", readout.bridgeMs],
+    ["draw", readout.presentMs],
+  ];
+  let best: { stage: StreamStage; label: string; ms: number } | null = null;
+  for (const [stage, ms] of stages) {
+    if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) continue;
+    if (!best || ms > best.ms) best = { stage, label: STAGE_LABELS[stage], ms };
+  }
+  return best;
+}
+
+/** True while adaptive streaming holds the JPEG level below what the viewer asked for. */
+export function qualityReduced(daemon: ScreenStreamStats | null | undefined, viewerQuality = 6): boolean {
+  return !!daemon && daemon.quality > 0 && daemon.quality < viewerQuality;
+}
+
+/** How the stream arrived and what holds it up: the badge's first line. */
+export function streamHeadline(readout: StreamReadout): string | null {
+  const parts: string[] = [];
+  const path = readout.daemon?.path;
+  if (path) parts.push(PATH_LABELS[path]);
+  const slowest = slowestStage(readout);
+  if (slowest) parts.push(`${slowest.label} ${Math.round(slowest.ms)} ms`);
+  if (qualityReduced(readout.daemon, readout.viewerQuality)) parts.push("reduced quality");
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export function formatStats(stats: StreamReadout): string {
   const parts: string[] = [];
   if (stats.rttMs !== null) parts.push(`${Math.round(stats.rttMs)} ms network`);
   if (stats.inputMs !== null) parts.push(`${Math.round(stats.inputMs)} ms to screen`);

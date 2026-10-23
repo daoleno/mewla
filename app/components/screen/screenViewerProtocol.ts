@@ -3,7 +3,8 @@
 export type ScreenHostMessage =
   | { type: "open" }
   | { type: "close" }
-  | { type: "rfb"; data: string[] }
+  /** `at` is when the app handed the bytes over, for timing the bridge. */
+  | { type: "rfb"; data: string[]; at: number }
   | { type: "text"; text: string; mods: ScreenModifier[] }
   | { type: "key"; key: ScreenKey; mods: ScreenModifier[] }
   | { type: "mode"; mode: ScreenPointerMode }
@@ -25,7 +26,18 @@ export type ScreenViewerMessage =
   | { type: "name"; name: string }
   | { type: "zoom"; zoom: number }
   | { type: "haptic" }
-  | { type: "stats"; fps: number; kbps: number; inputMs: number | null; width: number; height: number };
+  | {
+      type: "stats";
+      fps: number;
+      kbps: number;
+      inputMs: number | null;
+      /** Median ms for bytes to cross from the app into the viewer. */
+      bridgeMs?: number | null;
+      /** Median ms from handing noVNC its bytes to the first redraw. */
+      presentMs?: number | null;
+      width: number;
+      height: number;
+    };
 
 export interface ScreenViewerHostProps {
   onMessage(raw: string): void;

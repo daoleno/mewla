@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { resolveStoredServerURL } from "./pinnedTransport";
+import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 import type { StoredServer } from "./storage";
 
 export interface ScreenPower {
@@ -41,6 +42,8 @@ export interface ScreenStatus {
   can_restart?: boolean;
   /** An agent using the screen now. Viewing it takes over and stops the agent. */
   agent?: { worker: string; name?: string; since: string };
+  /** The computer is locked: a viewer sees its login window. */
+  locked?: boolean;
 }
 
 export type ScreenAction =
@@ -118,6 +121,10 @@ export interface ScreenConnectionHandlers {
   /** The daemon finished the RFB handshake on the viewer's behalf. */
   ready(): void;
   rtt(ms: number): void;
+  /** The computer is locked, or not: sent when the viewer opens and on a change. */
+  locked?(locked: boolean): void;
+  /** The daemon's measurements of the stream, about once a second. */
+  streamStats?(stats: ScreenStreamStats): void;
   /** The socket ended; `reason` is the daemon's explanation when it gave one. */
   closed(reason: string | null): void;
 }
@@ -166,10 +173,15 @@ export class ScreenConnection {
         this.handlers.data(bytesToBase64(new Uint8Array(event.data as ArrayBuffer)));
         return;
       }
-      let message: { type?: string; t?: number; error?: string };
+      let message: { type?: string; t?: number; error?: string; locked?: unknown };
       try { message = JSON.parse(event.data); } catch { return; }
       if (message.type === "pong" && typeof message.t === "number") this.handlers.rtt(Date.now() - message.t);
       else if (message.type === "ready") this.handlers.ready();
+      else if (message.type === "state" && typeof message.locked === "boolean") this.handlers.locked?.(message.locked);
+      else if (message.type === "stats") {
+        const stats = parseStreamStats(message as Record<string, unknown>);
+        if (stats) this.handlers.streamStats?.(stats);
+      }
       else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
     };
     socket.onerror = () => {

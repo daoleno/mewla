@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
+import type { ScreenStreamStats } from "../../services/screenStream";
 import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
@@ -30,6 +31,7 @@ import {
   NO_MODIFIERS,
   powerSummary,
   powerWarning,
+  streamHeadline,
   unsupportedScreen,
   spendModifiers,
   tapModifier,
@@ -89,7 +91,10 @@ export function ScreenScreen() {
   const [status, setStatus] = useState<ScreenStatus | null>(null);
   const [reason, setReason] = useState<string | null>(null);
   const [rtt, setRtt] = useState<number | null>(null);
-  const [stats, setStats] = useState<{ fps: number; kbps: number; inputMs: number | null; width: number; height: number } | null>(null);
+  const [stats, setStats] = useState<{ fps: number; kbps: number; inputMs: number | null; bridgeMs?: number | null; presentMs?: number | null; width: number; height: number } | null>(null);
+  // What the daemon measured of the stream, and whether the computer is locked.
+  const [daemonStats, setDaemonStats] = useState<ScreenStreamStats | null>(null);
+  const [locked, setLocked] = useState(false);
   const [showStats, setShowStats] = useState(true);
   const [mode, setMode] = useState<ScreenPointerMode>("touch");
   const [mods, setMods] = useState<ModifierState>(NO_MODIFIERS);
@@ -118,7 +123,7 @@ export function ScreenScreen() {
     const batch = outbox.current;
     outbox.current = [];
     if (chunks.current.length) {
-      batch.push({ type: "rfb", data: chunks.current });
+      batch.push({ type: "rfb", data: chunks.current, at: Date.now() });
       chunks.current = [];
     }
     if (batch.length) host.current?.post(batch);
@@ -131,7 +136,7 @@ export function ScreenScreen() {
   const toViewer = useCallback((message: ScreenHostMessage) => {
     // Bytes already queued belong before any later control message.
     if (chunks.current.length) {
-      outbox.current.push({ type: "rfb", data: chunks.current });
+      outbox.current.push({ type: "rfb", data: chunks.current, at: Date.now() });
       chunks.current = [];
     }
     outbox.current.push(message);
@@ -147,6 +152,7 @@ export function ScreenScreen() {
     if (viewerReady.current) host.current?.post([{ type: "close" }]);
     setRtt(null);
     setStats(null);
+    setDaemonStats(null);
   }, []);
 
   // A person comes first, so viewing ends an agent's control. Only an
@@ -173,6 +179,7 @@ export function ScreenScreen() {
     }
     if (!active()) return;
     setStatus(next);
+    setLocked(!!next.locked);
     // Unsupported, off at the computer, not yet allowed, or missing
     // permissions: the setup view explains the one next step.
     if (!next.ready) {
@@ -196,6 +203,8 @@ export function ScreenScreen() {
       },
       ready() {},
       rtt(ms) { if (active()) setRtt(ms); },
+      locked(now) { if (active()) setLocked(now); },
+      streamStats(next) { if (active()) setDaemonStats(next); },
       closed(why) {
         if (!active()) return;
         toViewer({ type: "close" });
@@ -433,6 +442,11 @@ export function ScreenScreen() {
   const quality = connectionQuality(rtt);
   const qualityColor = quality === "good" ? colors.success : quality === "fair" ? colors.warning : quality === "poor" ? colors.dangerText : colors.textTertiary;
   const power = powerSummary(status?.power, status?.keep_awake ?? false);
+  const readout = {
+    rttMs: rtt, inputMs: stats?.inputMs ?? null, fps: stats?.fps ?? 0, kbps: stats?.kbps ?? 0,
+    bridgeMs: stats?.bridgeMs, presentMs: stats?.presentMs, daemon: daemonStats,
+  };
+  const readoutHeadline = streamHeadline(readout);
   const viewerVisible = phase === "connecting" || phase === "live";
   const active = activeModifiers(mods);
 
@@ -471,8 +485,14 @@ export function ScreenScreen() {
       ) : null}
       {phase === "lost" ? (
         <View style={styles.notice}>
-          <InlineNotice tone="warning" title="Not connected to the screen" detail={reason}
-            action={{ label: "Reconnect", onPress: () => void connect() }} />
+          {locked ? (
+            // A state, not a sentence: the Mac is locked, so there is nothing to explain.
+            <InlineNotice tone="warning" icon="lock" title="Mac is locked"
+              action={{ label: "Reconnect", onPress: () => void connect() }} />
+          ) : (
+            <InlineNotice tone="warning" title="Not connected to the screen" detail={reason}
+              action={{ label: "Reconnect", onPress: () => void connect() }} />
+          )}
         </View>
       ) : null}
       {warning && phase !== "setup" ? (
@@ -494,10 +514,18 @@ export function ScreenScreen() {
             style={[styles.stats, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle, top: landscape ? Math.max(insets.top, Spacing.sm) : Spacing.sm }]}>
             <View style={[styles.dot, { backgroundColor: qualityColor }]} />
             <AppText variant="micro" style={{ color: colors.textSecondary }}>
-              {formatStats({ rttMs: rtt, inputMs: stats?.inputMs ?? null, fps: stats?.fps ?? 0, kbps: stats?.kbps ?? 0 })}
+              {readoutHeadline ? `${readoutHeadline}\n` : ""}
+              {formatStats(readout)}
               {power ? `\n${power}` : ""}
             </AppText>
           </Pressable>
+        ) : null}
+        {locked && phase === "live" ? (
+          <View accessibilityLabel="Mac is locked"
+            style={[styles.lockedChip, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle, top: landscape ? Math.max(insets.top, Spacing.sm) : Spacing.sm }]}>
+            <Icon name="lock" size={14} color={colors.textSecondary} />
+            <AppText variant="micro" style={{ color: colors.textSecondary }}>Locked</AppText>
+          </View>
         ) : null}
       </View>
       {phase === "live" && !watching ? (
@@ -632,6 +660,11 @@ const styles = StyleSheet.create({
   agentActions: { flexDirection: "row", gap: Spacing.sm, paddingTop: Spacing.sm },
   stats: {
     position: "absolute", left: Spacing.sm, flexDirection: "row", alignItems: "center", gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radii.sm, borderWidth: StyleSheet.hairlineWidth, opacity: 0.92,
+    ...ContinuousCorners,
+  },
+  lockedChip: {
+    position: "absolute", right: Spacing.sm, flexDirection: "row", alignItems: "center", gap: Spacing.xs,
     paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radii.sm, borderWidth: StyleSheet.hairlineWidth, opacity: 0.92,
     ...ContinuousCorners,
   },
