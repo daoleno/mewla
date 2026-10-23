@@ -1413,45 +1413,20 @@ function cleanCodexConversationEventForChat(
   };
 }
 
+// Codex injects the AGENTS.md preamble as a user-role record. Its fixed
+// "AGENTS.md instructions for <cwd>" header, a document that opens with the
+// standard contributor-guide heading, or its environment/skills/permissions
+// wrappers identify it; no project-specific phrase is matched.
 function looksLikeCodexInstructionContext(value: string) {
   const text = normalizeInstructionContextText(value);
   if (!text) {
     return false;
   }
   const lower = text.toLowerCase();
-  if (
+  return (
     lower.startsWith("# repository guidelines") ||
     lower.startsWith("repository guidelines ") ||
     lower.startsWith("## project structure & module organization") ||
-    lower.includes("agents.md instructions for ")
-  ) {
-    return true;
-  }
-  const markerCount = [
-    "repository guidelines",
-    "project structure & module organization",
-    "build, test, and development commands",
-    "coding style & naming conventions",
-    "testing guidelines",
-    "commit & pull request guidelines",
-    "security & configuration tips",
-    "configuration & secrets",
-    "agent & sandbox releases",
-    "first-principles engineering",
-  ].filter((marker) => lower.includes(marker)).length;
-  const hasStrongMarker = [
-    "agent & sandbox releases",
-    "first-principles engineering",
-    "exchange data & trading state",
-    "refresh cadence is part of the product contract",
-    "avoid compatibility barrels",
-    "freeride-sandbox",
-    "daytona",
-  ].some((marker) => lower.includes(marker));
-  if (markerCount >= 2 && hasStrongMarker) {
-    return true;
-  }
-  return (
     lower.includes("agents.md instructions for ") ||
     lower.includes("<environment_context>") ||
     lower.includes("<skills_instructions>") ||
