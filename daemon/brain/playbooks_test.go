@@ -1,7 +1,6 @@
 package brain
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,32 +73,6 @@ func TestNewStorePreservesCustomNonProductPlaybookContent(t *testing.T) {
 	}
 	if !strings.Contains(content, "Custom align playbook.") {
 		t.Fatalf("custom align frontmatter was lost:\n%s", content)
-	}
-}
-
-func TestRetiringEditedBrainFlowsKeepsUserNotesAndDropsProductBlock(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "workspace", "playbooks", "brain-flows.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	user := "---\ndescription: Existing Brain flows.\n---\n\n# Brain Flows\n\nUser routing note must survive.\n"
-	stale := user + "\n" + managedStartMarker(brainFlowsManagedID) + "\nold product contract\n" + managedEndMarker(brainFlowsManagedID) + "\n"
-	if err := os.WriteFile(path, []byte(stale), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := NewStore(root); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(path)
-	if err != nil || string(got) != user {
-		t.Fatalf("edited brain-flows = %q, err=%v; want user notes only", got, err)
-	}
-	if _, err := NewStore(root); err != nil {
-		t.Fatal(err)
-	}
-	if again, _ := os.ReadFile(path); !bytes.Equal(again, got) {
-		t.Fatalf("second reconciliation changed bytes:\n%s", again)
 	}
 }
 

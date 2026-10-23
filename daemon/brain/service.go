@@ -746,10 +746,6 @@ type workspaceFileIdentity struct {
 func workspaceContentIdentity(store *Store) (map[string]workspaceFileIdentity, error) {
 	identities := make(map[string]workspaceFileIdentity)
 	paths := standardWorkspaceRelativePaths()
-	for relativePath := range retiredWorkspaceDefaults {
-		paths = append(paths, relativePath)
-	}
-	paths = append(paths, retiredBrainFlowsPath)
 	for _, relativePath := range paths {
 		path := filepath.Join(store.WorkspacePath(), filepath.FromSlash(relativePath))
 		raw, exists, err := readOptionalFile(path)

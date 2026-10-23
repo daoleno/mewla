@@ -1,12 +1,9 @@
 package brain
 
 import (
-	"crypto/sha256"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -34,18 +31,6 @@ func (s *Store) playbookPath(name string) string {
 	return filepath.Join(s.playbooksPath(), name)
 }
 
-func (s *Store) ensurePlaybooks() error {
-	if err := os.MkdirAll(s.playbooksPath(), 0o700); err != nil {
-		return err
-	}
-	for _, playbook := range seedPlaybooks {
-		if err := ensurePlaybookFile(s.playbookPath(playbook.name), playbook.initial); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func seedPlaybookFilenames() []string {
 	names := make([]string, 0, len(seedPlaybooks))
 	for _, playbook := range seedPlaybooks {
@@ -70,7 +55,7 @@ func (s *Store) PlaybookCatalog() (PlaybookCatalog, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.ensurePlaybooks(); err != nil {
+	if err := s.seedWorkspaceFiles(); err != nil {
 		return PlaybookCatalog{}, err
 	}
 	return s.playbookCatalogLocked()
@@ -113,43 +98,6 @@ func (s *Store) playbookCatalogLocked() (PlaybookCatalog, error) {
 		Playbooks:   playbooks,
 		GeneratedAt: time.Now().UTC(),
 	}, nil
-}
-
-func ensurePlaybookFile(path, initial string) error {
-	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return nil
-	}
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return writeAtomic(path, []byte(initial), 0o600)
-	}
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(string(raw)) == "" || slices.Contains(legacyPlaybookDigests[filepath.Base(path)], fmt.Sprintf("%x", sha256.Sum256(raw))) {
-		return writeAtomic(path, []byte(initial), 0o600)
-	}
-	return nil
-}
-
-// Only byte-identical shipped seeds may be upgraded. Unmarked edits belong to the user.
-var legacyPlaybookDigests = map[string][]string{
-	"delegate-brief.md": {
-		"30c87bc60bded178f68c6eb91139db695034b03cb7f53d731feecf77e2a06e09",
-		"946f49be659a684f66f9ca240dc93dd3519d43d891de867d01b866220dc17af3",
-		"f35740b2a172dfc82bd501e532d150c5eebc658cbefd96041c1e4cf07648e2d3",
-		"2d84523557839705a0db259f6eef3f1f209492f31ae46ae9b29679194e5c1f95",
-	},
-	"slice-work.md": {
-		"4e03dadce6efc85d5f36ee70a78da39c38a0aba7f52e305d2409a3a57b89513a",
-		"b19639c92d621913b196be7b81e057733c09aafb39f934831078aa5b7be12026",
-		"2f4d9159984433b29b7f1ab8eafb62dfa8c180ce04ded765e43e9a416c08ea58",
-	},
-	"wayfind.md": {
-		"608144c76be0298aa26cc66583bd5a7db98b8b9dba7a5dc512813711058bdf5e",
-		"bf21a87732cb9cc38a92a5933c02d1a8573726912f564fc2bff879491ead00ed",
-		"36ce81991e2993d7936da73e310ba39ae83656a33ac85cf367377fbff3a3d9d1",
-	},
 }
 
 func parsePlaybookDescription(content string) string {

@@ -122,7 +122,7 @@ Brain reads them on demand: `mewla brain context --json` and `brain_snapshot`
 carry only their paths, sizes and budgets (16, 32 and 8 KiB), never their
 contents, and `mewla brain gc` recommends compaction when a note exceeds its
 budget. Communication principles live in the managed `AGENTS.md`; Mewla no longer
-creates or reads `soul.md` and deletes an untouched shipped copy.
+creates or reads `soul.md`; a leftover one is reported by `mewla brain gc` as unmanaged.
 
 Brain Worklog boundary: internal audits, handoffs, and delegated reports belong
 under the configured Brain workspace's `worklog/` directory (normally
