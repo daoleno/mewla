@@ -30,7 +30,7 @@ const (
 // without it (tests, no Expo) simply never receives live state.
 type livePusher interface {
 	SendLive(data map[string]any) error
-	SetLiveCapable(capable bool)
+	SetLiveCapable(deviceID string, capable bool)
 	LiveCapable() bool
 }
 
@@ -44,11 +44,6 @@ type liveHub struct {
 
 	mu       sync.Mutex
 	prevKind string
-
-	// The device whose live_state registration the daemon pushes to. When that
-	// device is revoked the pushes stop: they carry what the phone shows.
-	pushDeviceMu sync.Mutex
-	pushDevice   string
 
 	answerMu sync.Mutex
 	answers  map[string]map[string]any
@@ -76,7 +71,10 @@ func (s *Server) liveRuntime() *liveHub {
 		if hub.tokens != nil && s.auth != nil {
 			hub.stopRevoc = s.auth.SubscribeRevocations(func(deviceID string) {
 				hub.tokens.RevokeDevice(deviceID)
-				s.stopLivePushesFor(deviceID)
+				if s.pusher != nil {
+					// A revoked phone must stop hearing what its agents say.
+					s.pusher.ForgetDevice(deviceID)
+				}
 			})
 		}
 	})
@@ -191,10 +189,7 @@ func (s *Server) handleLiveMessage(conn *websocket.Conn, msg []byte, raw clientM
 	case "register_push":
 		if message.PushToken != "" {
 			if pusher, ok := s.pusher.(livePusher); ok {
-				pusher.SetLiveCapable(message.LiveState)
-				hub.pushDeviceMu.Lock()
-				hub.pushDevice = s.deviceIDForConn(conn)
-				hub.pushDeviceMu.Unlock()
+				pusher.SetLiveCapable(s.deviceIDOf(conn), message.LiveState)
 			}
 		}
 		return false
@@ -221,22 +216,6 @@ func (s *Server) handleLiveMessage(conn *websocket.Conn, msg []byte, raw clientM
 		s.handleLiveAnswer(conn, message)
 	}
 	return true
-}
-
-// stopLivePushesFor ends live pushes when the revoked device is the one they go to.
-func (s *Server) stopLivePushesFor(deviceID string) {
-	hub := &s.live
-	hub.pushDeviceMu.Lock()
-	match := deviceID != "" && hub.pushDevice == deviceID
-	if match {
-		hub.pushDevice = ""
-	}
-	hub.pushDeviceMu.Unlock()
-	if match {
-		if pusher, ok := s.pusher.(livePusher); ok {
-			pusher.SetLiveCapable(false)
-		}
-	}
 }
 
 func (s *Server) deviceIDForConn(conn *websocket.Conn) string {

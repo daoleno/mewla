@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 )
 
 // SessionServiceSnapshot describes TCP services started under tmux sessions.

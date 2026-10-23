@@ -5,26 +5,41 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 )
 
 // ErrNotLiveCapable means the registered device never said it can show live
 // state, so it gets no data-only pushes (an iOS token cannot use them).
 var ErrNotLiveCapable = errors.New("push device did not declare live state support")
 
-// liveCapable remembers, per client, whether the device that registered asked
-// for live state. It lives here, not on Client, so push.go stays untouched.
-var liveCapable sync.Map // *Client -> bool
-
-// SetLiveCapable records the device's live_state capability from its latest
+// SetLiveCapable records whether a device asked for live state in its latest
 // registration. Registering again updates it.
-func (c *Client) SetLiveCapable(capable bool) { liveCapable.Store(c, capable) }
+func (c *Client) SetLiveCapable(deviceID string, capable bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !capable {
+		delete(c.liveDevices, deviceID)
+		return
+	}
+	if c.liveDevices == nil {
+		c.liveDevices = map[string]bool{}
+	}
+	c.liveDevices[deviceID] = true
+}
 
-// LiveCapable reports whether live state may be pushed to the device.
-func (c *Client) LiveCapable() bool {
-	value, ok := liveCapable.Load(c)
-	capable, _ := value.(bool)
-	return ok && capable
+// LiveCapable reports whether any registered device takes live state.
+func (c *Client) LiveCapable() bool { return len(c.liveTargets()) > 0 }
+
+func (c *Client) liveTargets() []registration {
+	var targets []registration
+	for _, r := range c.snapshot() {
+		c.mu.RLock()
+		live := c.liveDevices[r.deviceID]
+		c.mu.RUnlock()
+		if live {
+			targets = append(targets, r)
+		}
+	}
+	return targets
 }
 
 // SendLive pushes a data-only, high-priority message: no title, body or sound,
@@ -33,16 +48,29 @@ func (c *Client) LiveCapable() bool {
 // app is not running would then show an empty system notification instead of
 // waking the app's service. Values are sent as strings, which is all an FCM data message carries.
 // The ticket is handled like any other push (dead tokens dropped, credential
-// problems logged once per token); live messages are not receipt-tracked,
+// problems reported once per token); live messages are not receipt-tracked,
 // because a newer state always follows and a lost one costs nothing.
 func (c *Client) SendLive(data map[string]any) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
+	if !c.HasToken() {
+		return ErrNoRegistration
 	}
-	if !c.LiveCapable() {
+	targets := c.liveTargets()
+	if len(targets) == 0 {
 		return ErrNotLiveCapable
 	}
+	var failures []error
+	for _, target := range targets {
+		if err := c.sendLiveTo(target, data); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	if len(failures) == len(targets) {
+		return errors.Join(failures...)
+	}
+	return nil
+}
+
+func (c *Client) sendLiveTo(registration registration, data map[string]any) error {
 	token := registration.token
 	flat := make(map[string]string, len(data)+2)
 	for key, value := range data {

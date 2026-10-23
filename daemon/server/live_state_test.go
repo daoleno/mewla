@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"github.com/daoleno/mewla/daemon/push"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -292,12 +293,13 @@ type fakeLivePusher struct {
 	sentSeen atomic.Int64
 }
 
-func (p *fakeLivePusher) SetRegistration(string, string)                {}
-func (p *fakeLivePusher) NotifyWorkerBlocked(_, _, _ string) error      { return nil }
-func (p *fakeLivePusher) NotifyWorkerFailed(_, _, _ string) error       { return nil }
-func (p *fakeLivePusher) NotifyWorkerDone(_, _, _ string) error         { return nil }
+func (p *fakeLivePusher) SetRegistration(string, string, string)        {}
+func (p *fakeLivePusher) NotifyWorker(string, push.WorkerNotice) error  { return nil }
 func (p *fakeLivePusher) NotifyScheduledResult(_, _, _, _ string) error { return nil }
-func (p *fakeLivePusher) SetLiveCapable(capable bool) {
+
+// ForgetDevice models the real client: a forgotten device is no longer live.
+func (p *fakeLivePusher) ForgetDevice(string) { p.SetLiveCapable("", false) }
+func (p *fakeLivePusher) SetLiveCapable(_ string, capable bool) {
 	p.mu.Lock()
 	p.capable = capable
 	p.mu.Unlock()
