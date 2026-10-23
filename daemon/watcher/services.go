@@ -3,12 +3,13 @@ package watcher
 import (
 	"fmt"
 	"net"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
 // SessionServiceSnapshot describes TCP services started under tmux sessions.
@@ -342,7 +343,7 @@ func descendantPIDsIncludingRoot(rootPID int, processes map[int]processInfo) []i
 }
 
 func listListeningSockets() ([]listeningSocket, error) {
-	out, err := exec.Command("ss", "-H", "-ltnpe").CombinedOutput()
+	out, err := procspawn.Command("ss listeners", "ss", "-H", "-ltnpe").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("ss listening sockets: %w", err)
 	}

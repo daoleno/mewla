@@ -3,9 +3,10 @@ package workerproc
 import (
 	"bytes"
 	"encoding/binary"
-	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
 func readProcesses(_ map[int]Process) (map[int]Process, error) {
@@ -14,7 +15,7 @@ func readProcesses(_ map[int]Process) (map[int]Process, error) {
 		return nil, err
 	}
 	// ps start timestamps fence reuse on macOS; unsupported CPU rates stay absent.
-	raw, err := exec.Command("ps", "-axo", "pid=,lstart=").Output()
+	raw, err := procspawn.Command("ps lstart all", "ps", "-axo", "pid=,lstart=").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func readProcesses(_ map[int]Process) (map[int]Process, error) {
 	return records, nil
 }
 func processIdentityMatches(p Process) bool {
-	raw, err := exec.Command("ps", "-p", strconv.Itoa(p.PID), "-o", "lstart=").Output()
+	raw, err := procspawn.Command("ps lstart pid", "ps", "-p", strconv.Itoa(p.PID), "-o", "lstart=").Output()
 	return err == nil && strings.Join(strings.Fields(string(raw)), " ") == p.Start && p.Start != ""
 }
 

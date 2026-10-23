@@ -2,12 +2,13 @@ package modelprofiles
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
 // CodexControlPidPath returns the daemon-owned pid file for a Session's Codex
@@ -108,7 +109,7 @@ func processCmdline(pid int) string {
 	if raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline"); err == nil {
 		return strings.ReplaceAll(string(raw), "\x00", " ")
 	}
-	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "args=").Output()
+	out, err := procspawn.Command("ps args pid", "ps", "-p", strconv.Itoa(pid), "-o", "args=").Output()
 	if err != nil {
 		return ""
 	}

@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/daoleno/mewla/daemon/procspawn"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
@@ -21,7 +22,7 @@ import (
 // tmuxCommand builds a tmux invocation bound to the given server socket.
 // Empty socketPath targets the user's default server.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
-	cmd := exec.Command("tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
+	cmd := procspawn.Command(procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
 	cmd.Env = tmuxHostEnvironment()
 	return cmd
 }
