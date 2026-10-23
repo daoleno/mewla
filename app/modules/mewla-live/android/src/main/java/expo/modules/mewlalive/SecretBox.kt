@@ -3,6 +3,7 @@ package expo.modules.mewlalive
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -42,7 +43,8 @@ internal object SecretBox {
       val cipher = Cipher.getInstance("AES/GCM/NoPadding")
       cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, raw, 0, 12))
       String(cipher.doFinal(raw, 12, raw.size - 12), Charsets.UTF_8)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+      Log.w("MewlaLive", "widget token could not be opened: ${e.javaClass.simpleName}")
       null
     }
   }

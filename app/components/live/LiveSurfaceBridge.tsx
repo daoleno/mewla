@@ -5,6 +5,10 @@ import { widgetBaseUrl } from "../../services/liveSurface";
 import { wsClient } from "../../services/websocket";
 import { useCurrentServer } from "../../store/currentServer";
 
+// One token request at a time: the daemon keeps a single token per device, so a second
+// request in flight would replace the token the first one is about to hand over.
+let provisioning = false;
+
 /**
  * Headless. Keeps the Android live notification and home-screen widgets bound to the one
  * current server: it applies live_state from the socket (pushes reach the native service
@@ -12,14 +16,17 @@ import { useCurrentServer } from "../../store/currentServer";
  * iOS has no module yet and does nothing here.
  */
 export function LiveSurfaceBridge() {
-  const { currentServer } = useCurrentServer();
+  const { currentServer, hydrated } = useCurrentServer();
   const serverId = currentServer?.id ?? "";
   const baseUrl = currentServer ? widgetBaseUrl(currentServer) : null;
 
   // Server switch (or none): the native side drops the old server's surface and widget cache.
+  // Not before the stored server has loaded: "no server yet" is not "no server", and treating
+  // it so would clear the widget credentials on every cold start.
   useEffect(() => {
+    if (!hydrated) return;
     getMewlaLiveModule()?.setCurrentServer(serverId);
-  }, [serverId]);
+  }, [hydrated, serverId]);
 
   useEffect(() => {
     const live = getMewlaLiveModule();
@@ -49,12 +56,15 @@ export function LiveSurfaceBridge() {
     const provisionWidget = async () => {
       // Only a widget that was never provisioned gets a token. A revoked one stays revoked until
       // the server is switched or cleared; re-issuing here would undo the revocation.
-      if (!baseUrl || live.widgetState() !== "none") return;
+      if (!baseUrl || provisioning || live.widgetState() !== "none") return;
+      provisioning = true;
       try {
         const { token } = await wsClient.issueWidgetToken(serverId);
         if (token && !cancelled) live.configureWidget(baseUrl, token);
       } catch (error) {
         console.log("Widget token could not be issued:", error);
+      } finally {
+        provisioning = false;
       }
     };
 

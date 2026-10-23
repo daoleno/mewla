@@ -34,6 +34,10 @@ internal object WidgetSync {
     val prefs = LivePrefs(context)
     val base = prefs.widgetBaseUrl
     val token = SecretBox.open(prefs.widgetTokenSealed)
+    if (token.isNullOrEmpty() && prefs.widgetTokenSealed.isNotEmpty()) {
+      // A token the Keystore can no longer open is useless: forget it so the app issues a new one.
+      prefs.widgetTokenSealed = ""
+    }
     if (base.isEmpty() || token.isNullOrEmpty()) return Result.UNCONFIGURED
     var connection: HttpURLConnection? = null
     return try {
@@ -47,10 +51,12 @@ internal object WidgetSync {
       when (val code = connection.responseCode) {
         200 -> {
           val body = connection.inputStream.bufferedReader().use { it.readText() }
-          if (LiveState.parse(body) == null) {
+          val live = LiveState.liveFromSnapshot(body)
+          if (live == null) {
+            Log.w(TAG, "widget snapshot was not a live state")
             Result.FAILED
           } else {
-            prefs.widgetCache = body
+            prefs.widgetCache = live
             prefs.widgetFetchedAt = System.currentTimeMillis()
             prefs.widgetRevoked = false
             Result.OK
@@ -64,7 +70,10 @@ internal object WidgetSync {
           Log.i(TAG, "widget token rejected ($code); widgets cleared")
           Result.REVOKED
         }
-        else -> Result.FAILED
+        else -> {
+          Log.w(TAG, "widget snapshot answered $code")
+          Result.FAILED
+        }
       }
     } catch (e: Exception) {
       Log.w(TAG, "widget snapshot fetch failed: ${e.javaClass.simpleName}")

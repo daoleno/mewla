@@ -46,6 +46,17 @@ data class LiveState(
       }
     }
 
+    /** The state inside the widget endpoint's `{"live": <State>, "generated_at": ms}`, as the JSON the widget caches. */
+    fun liveFromSnapshot(raw: String?): String? {
+      if (raw.isNullOrBlank()) return null
+      return try {
+        val live = JSONObject(raw).optJSONObject("live") ?: return null
+        if (from(live) == null) null else live.toString()
+      } catch (_: Exception) {
+        null
+      }
+    }
+
     fun from(o: JSONObject): LiveState? {
       val kind = o.optString("kind")
       if (kind != KIND_IDLE && kind != KIND_RUNNING && kind != KIND_NEEDS_YOU) return null

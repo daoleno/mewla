@@ -36,12 +36,12 @@ func TestSendLiveIsDataOnlyHighPriorityAndStringly(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := *sent
-	for _, forbidden := range []string{"title", "body", "sound", "subtitle", "badge"} {
+	for _, forbidden := range []string{"title", "body", "sound", "subtitle", "badge", "channelId"} {
 		if _, ok := body[forbidden]; ok {
 			t.Fatalf("a live push must be data-only, found %q", forbidden)
 		}
 	}
-	if body["to"] != "ExponentPushToken[abc]" || body["priority"] != "high" || body["channelId"] != "mewla-agents" || body["ttl"] != float64(120) {
+	if body["to"] != "ExponentPushToken[abc]" || body["priority"] != "high" || body["ttl"] != float64(120) {
 		t.Fatalf("body = %v", body)
 	}
 	data, ok := body["data"].(map[string]any)
