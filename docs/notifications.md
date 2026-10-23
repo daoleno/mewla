@@ -3,6 +3,8 @@
 Mewla interrupts you only when an agent needs you or finished while you were
 away. It is not a progress feed.
 
+A running task and a question that needs you can also stay on the phone: see [Live surfaces](live-surfaces.md).
+
 ## Push notifications
 
 ![Three pushes (needs input, failed, finished) and, below, Brain answering in Telegram](assets/alerts.svg)
