@@ -76,6 +76,30 @@ type Manager struct {
 	typingInterval time.Duration
 	typingDeadline time.Duration
 	failures       logonce.Log
+	timelineSeen   timelineMark
+}
+
+// timelineSafetyNet bounds how long the Brain timeline goes unprojected when
+// nothing it was keyed on changed.
+const timelineSafetyNet = time.Minute
+
+// versionedBrain is implemented by a Brain owner that can say, cheaply, whether
+// what a thread's conversation shows may have changed.
+type versionedBrain interface {
+	ConversationProjectionVersion() (string, error)
+}
+
+// timelineMark is everything the last Brain timeline projection depended on.
+// Projecting the same inputs again enqueues nothing new.
+type timelineMark struct {
+	valid             bool
+	brainVersion      string
+	usersCreateTopics bool
+	brainTopicID      int64
+	deliveryStarted   time.Time
+	outboxRows        int
+	pendingRows       int
+	at                time.Time
 }
 
 // noteStore reports a durable write that failed where the caller has no one to
@@ -511,7 +535,7 @@ func (m *Manager) Run(ctx context.Context) error {
 			if err := m.ensureBrainEntry(); err != nil {
 				m.recordError("Brain navigation is temporarily unavailable.")
 			}
-			if err := m.projectTimeline(); err != nil {
+			if err := m.projectTimelineIfChanged(); err != nil {
 				m.recordError("Brain timeline projection is temporarily unavailable.")
 			}
 			if err := m.projectFallbackSession(); err != nil {
@@ -1364,6 +1388,52 @@ func trimProcessedUpdates(state *durableState) {
 			delete(state.CallbackIDs, id)
 		}
 	}
+}
+
+func pendingOutboxRows(state durableState) int {
+	pending := 0
+	for _, row := range state.Outbox {
+		if row.State == "pending" {
+			pending++
+		}
+	}
+	return pending
+}
+
+func (t timelineMark) sameInputs(other timelineMark) bool {
+	return t.brainVersion == other.brainVersion && t.usersCreateTopics == other.usersCreateTopics &&
+		t.brainTopicID == other.brainTopicID && t.deliveryStarted.Equal(other.deliveryStarted) && t.outboxRows == other.outboxRows && t.pendingRows == other.pendingRows
+}
+
+// projectTimelineIfChanged projects the Brain timeline only when something it
+// reads changed: the timeline or chat files, the Telegram connection, or the
+// outbox (a full outbox refuses rows until it drains). Otherwise the pass would
+// copy the whole durable state and compare it to itself to learn nothing. A
+// minute-old projection is repeated regardless, and an owner that cannot version
+// its timeline is projected every pass.
+func (m *Manager) projectTimelineIfChanged() error {
+	versioned, ok := m.brain.(versionedBrain)
+	if !ok {
+		return m.projectTimeline()
+	}
+	version, err := versioned.ConversationProjectionVersion()
+	if err != nil {
+		return m.projectTimeline()
+	}
+	connection := m.store.snapshot()
+	mark := timelineMark{valid: true, brainVersion: version, usersCreateTopics: connection.UsersCreateTopics, brainTopicID: connection.BrainTopicID,
+		deliveryStarted: connection.DeliveryStartedAt, outboxRows: len(connection.Outbox), pendingRows: pendingOutboxRows(connection), at: m.now()}
+	seen := m.timelineSeen
+	if seen.valid && m.now().Sub(seen.at) < timelineSafetyNet {
+		if seen.sameInputs(mark) {
+			return nil
+		}
+	}
+	if err := m.projectTimeline(); err != nil {
+		return err
+	}
+	m.timelineSeen = mark
+	return nil
 }
 
 func (m *Manager) projectTimeline() error {
