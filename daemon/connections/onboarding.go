@@ -271,7 +271,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 				// make it forget a consent Google has already recorded.
 				f.Message = "Couldn't reach Google to confirm the account. Trying again."
 				if errors.As(err, &unreachable) {
-					f.Message = unreachable.Error()
+					f.Message = unreachable.Error() + " Trying again."
 				}
 				return flowResult(f), nil
 			}

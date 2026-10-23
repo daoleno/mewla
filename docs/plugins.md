@@ -293,3 +293,10 @@ Each call is one bounded request; nothing pages automatically.
 Tokens stay on the daemon, in a private vault file readable only by your user.
 Account history records which tool was called and when, but not tokens,
 arguments or results.
+
+Mewla only connects a plugin to public addresses, so a name that resolves to your
+own network is refused. One exception: a proxy app in fake-IP mode (Surge, Clash
+and similar) answers every lookup with an address in `198.18.0.0/15` and routes
+by name, so Mewla connects to a *name* that resolves there. HTTPS still checks
+the certificate for that name. If your network answers with some other private
+address, the connection fails with "this network answers with a private address".
