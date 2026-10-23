@@ -41,15 +41,15 @@ func (Adapter) Descriptor() agentevents.Descriptor {
 // names or continues a session keeps it, and one that carries its own
 // --settings is left without the hook file, so the user's choice stands and
 // that Worker is followed by the fallback.
-func (a Adapter) PrepareLaunch(command string) (string, error) {
+func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 	command, err := work.EnsureClaudeSessionLaunchCommand(command)
 	if err != nil {
-		return "", err
+		return agentevents.Launch{}, err
 	}
 	if a.SettingsPath == "" || hasSettingsFlag(command) {
-		return command, nil
+		return agentevents.Launch{Command: command}, nil
 	}
-	return strings.TrimSpace(command) + " --settings " + shellquote.Word(a.SettingsPath), nil
+	return agentevents.Launch{Command: strings.TrimSpace(command) + " --settings " + shellquote.Word(a.SettingsPath)}, nil
 }
 
 func hasSettingsFlag(command string) bool {

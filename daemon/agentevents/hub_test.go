@@ -158,7 +158,7 @@ type fakeAdapter struct{}
 func (fakeAdapter) Descriptor() Descriptor {
 	return Descriptor{Provider: "fake", Capabilities: map[Capability]Level{CapApprove: LevelHook, CapEvents: LevelHook}}
 }
-func (fakeAdapter) PrepareLaunch(c string) (string, error) { return c, nil }
+func (fakeAdapter) PrepareLaunch(c string) (Launch, error) { return Launch{Command: c}, nil }
 
 func TestRegistryLevelsFallBackUntilTheAdapterIsConnected(t *testing.T) {
 	r := NewRegistry()

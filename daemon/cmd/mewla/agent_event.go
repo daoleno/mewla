@@ -305,11 +305,11 @@ func providerOf(execs *work.ExecutorConfig, executorID, command string) string {
 
 // launchAdapterFor lets the adapter of a session's agent add what lets Mewla
 // follow it from its first moment (a session id, a hook file).
-func launchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry) func(executorID, command string) (string, error) {
-	return func(executorID, command string) (string, error) {
+func launchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry) func(executorID, command string) (agentevents.Launch, error) {
+	return func(executorID, command string) (agentevents.Launch, error) {
 		if adapter, ok := adapters.For(providerOf(execs, executorID, command)); ok {
 			return adapter.PrepareLaunch(command)
 		}
-		return command, nil
+		return agentevents.Launch{Command: command}, nil
 	}
 }
