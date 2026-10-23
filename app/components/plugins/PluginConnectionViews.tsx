@@ -5,7 +5,7 @@ import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import type { ConnectPhase, PendingConnection } from "../../services/pluginOnboarding";
+import { waitingDetail, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 import {
   accessControl,
   accountRecovery,
@@ -315,7 +315,7 @@ export function ConnectStatusCard({
   }
   if (phase === "waiting") {
     return (
-      <StatusCard busy title={`Waiting for ${serviceName}`} detail={`Finish signing in on ${serviceName}'s page. This updates when you're back.`}>
+      <StatusCard busy title={`Waiting for ${serviceName}`} detail={waitingDetail(flow?.flow.integration, serviceName)}>
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>

@@ -58,6 +58,13 @@ export async function finishPluginReturn(
   if (Date.parse(pending.flow.expires) <= Date.now()) throw new Error("This connection expired. Connect again.");
   return send(pending.serverId, { action: "connect_finish", flow_id: pending.flow.id, callback });
 }
+/** The line under "Waiting for <service>". Google's review of Mewla blocks accounts that aren't on its early-access list on Google's own page, which never comes back, so say so while waiting. */
+export function waitingDetail(integration: string | undefined, serviceName: string): string {
+  const base = `Finish signing in on ${serviceName}'s page. This updates when you're back.`;
+  return integration === "google-calendar" || integration === "gmail"
+    ? `${base} If Google says Mewla isn't verified or blocks access, this Google account isn't on Mewla's early-access list yet.`
+    : base;
+}
 type ConnectInput = NonNullable<ConnectionRequest["input"]>;
 // The web UI asks the daemon to return sign-in to its own origin; native apps
 // return to PLUGIN_CALLBACK. The daemon accepts only origins it serves.

@@ -113,7 +113,9 @@ func (m *Manager) pollGoogleExchange(ctx context.Context, f *connectFlow) error 
 	}
 	if session.Status == "failed" {
 		f.Status = "failed"
-		f.Message = "Google authorization was declined or could not be verified. Connect again."
+		// Google returns here for a cancelled consent and also when Mewla is still
+		// in Google's review and the account is not on its test list.
+		f.Message = "This Google account isn't on Mewla's early-access list yet, or access was declined. Connect again if you cancelled."
 		return nil
 	}
 	if session.Status != "connected" {

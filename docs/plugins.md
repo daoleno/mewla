@@ -54,7 +54,7 @@ Mewla's own app registration with the provider:
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
-| Google Calendar, Gmail | Google's own sign-in, one per plugin, through Mewla's sign-in service at `connect.mewla.ai` (see [Google Calendar and Gmail](#google-calendar-and-gmail)) | Works: the sign-in opens in a new tab, which says when to close it, and Extensions updates by itself |
+| Google Calendar, Gmail | **Invite only while Google reviews Mewla's app.** Google's own sign-in, one per plugin, through Mewla's sign-in service at `connect.mewla.ai` (see [Google Calendar and Gmail](#google-calendar-and-gmail)) | Works: the sign-in opens in a new tab, which says when to close it, and Extensions updates by itself |
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
@@ -145,8 +145,11 @@ computer encrypted so that only the computer that asked can open them, and the
 service keeps nothing afterwards. Refreshing a token goes through the same
 service with a receipt only your computer holds.
 
-**Until Google has verified Mewla, only people on Mewla's test list can sign
-in, and Google ends each connection after 7 days.** The account then shows
+**Invite only while Google reviews Mewla's app.** Until Google has verified
+Mewla, only accounts on Mewla's early-access list can sign in, and Google ends
+each connection after 7 days. Any other account gets Google's own "access
+blocked" page, and Mewla says "This Google account isn't on Mewla's
+early-access list yet". A connection that Google ended shows
 **Needs sign-in again**; tap **Reconnect**. Google's verification of Gmail
 access also needs a yearly third-party security assessment.
 
