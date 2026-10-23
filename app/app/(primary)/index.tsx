@@ -17,7 +17,7 @@ import { BrainExecutorIcon } from "../../components/brain/BrainExecutorIcon";
 import { BrainExecutorMentionPicker } from "../../components/brain/BrainExecutorMentionPicker";
 import { LiveAnswer } from "../../components/brain/LiveAnswer";
 import { QuickReplies } from "../../components/brain/QuickReplies";
-import { quickRepliesVisible } from "../../components/brain/brainQuickReplies";
+import { quickRepliesVisible, quickReplyLine } from "../../components/brain/brainQuickReplies";
 import { BrainWorkspaceViewer } from "../../components/brain/BrainWorkspaceViewer";
 import { BrainWorkEventDetailSheet } from "../../components/brain/BrainWorkEventDetailSheet";
 import { SessionModelSheet } from "../../components/providers/SessionModelSheet";
@@ -450,21 +450,15 @@ export default function BrainScreen() {
       draft,
       setDraft,
       sendText,
-      lastUserMessageAt,
-      hasMessage,
     }: {
       draft: string;
       setDraft: (value: string) => void;
       sendText: (text: string) => void;
-      lastUserMessageAt: number;
-      hasMessage: boolean;
     }) => {
       composerDraftRef.current = setDraft;
       const activeMention = activeExecutorMentionAtEnd(draft);
       if (!activeMention || availableExecutors.length === 0) {
-        return quickRepliesVisible(quickReplies, { draft, lastUserMessageAt, hasMessage }) ? (
-          <QuickReplies rows={quickReplies.rows} chrome={chrome} onSelect={sendText} />
-        ) : null;
+        return null;
       }
       return (
         <BrainExecutorMentionPicker
@@ -480,7 +474,26 @@ export default function BrainScreen() {
         />
       );
     },
-    [availableExecutors, chrome, hostExecutor?.id, quickReplies],
+    [availableExecutors, chrome, hostExecutor?.id],
+  );
+  const renderBrainTimelineTail = useCallback(
+    ({
+      draft,
+      focused,
+      sendText,
+      lastUserMessageAt,
+      hasMessage,
+    }: {
+      draft: string;
+      focused: boolean;
+      sendText: (text: string) => void;
+      lastUserMessageAt: number;
+      hasMessage: boolean;
+    }) =>
+      quickRepliesVisible(quickReplies, { draft, focused, lastUserMessageAt, hasMessage }) ? (
+        <QuickReplies chips={quickReplyLine(quickReplies)} chrome={chrome} onSelect={sendText} />
+      ) : null,
+    [chrome, quickReplies],
   );
   // A tap on a live notification/widget answers through here, where the composer's send lives.
   const renderBrainComposerAccessory = useCallback(
@@ -776,6 +789,7 @@ export default function BrainScreen() {
                 emptyTitle={BRAIN_EMPTY_TITLE}
                 emptyBody={BRAIN_EMPTY_BODY}
                 renderComposerAccessory={brainWaking ? undefined : renderBrainComposerAccessory}
+                renderTimelineTail={brainWaking ? undefined : renderBrainTimelineTail}
                 composerModelControl={brainWaking ? null : brainModelSheet.composerControl}
                 onComposerModelControlPress={() => brainModelSheet.open()}
               />

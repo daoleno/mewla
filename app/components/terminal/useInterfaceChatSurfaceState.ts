@@ -93,6 +93,14 @@ interface UseInterfaceChatSurfaceStateInput {
   renderComposerAccessory?: (args: {
     draft: string;
     setDraft: (value: string) => void;
+    /** Sends text as if typed (live answers). */
+    sendText: (text: string) => void;
+  }) => ReactNode;
+  /** Continues the conversation's last message, in the timeline. */
+  renderTimelineTail?: (args: {
+    draft: string;
+    /** Whether the composer has focus. */
+    focused: boolean;
     /** Sends text as if typed (quick replies). */
     sendText: (text: string) => void;
     /** When the person last wrote in this conversation, in ms; 0 if never. */
@@ -168,6 +176,7 @@ export function useInterfaceChatSurfaceState({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
+  renderTimelineTail,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -253,15 +262,22 @@ export function useInterfaceChatSurfaceState({
         draft,
         setDraft: setObservedDraft,
         sendText: sendQuickText,
-        lastUserMessageAt,
-        hasMessage: Boolean(
-          conversation?.events.some((event) => event.kind === "assistant_message"),
-        ),
       })
     : composerAccessory;
   const composerInput = useInterfaceComposerInput({
     enabled: active && connectionState === "connected",
   });
+  const renderedTimelineTail = renderTimelineTail
+    ? renderTimelineTail({
+        draft,
+        focused: composerInput.focused,
+        sendText: sendQuickText,
+        lastUserMessageAt,
+        hasMessage: Boolean(
+          conversation?.events.some((event) => event.kind === "assistant_message"),
+        ),
+      })
+    : undefined;
   useEffect(() => {
     const routeSessionKey = makeSessionKey(serverId, workerId);
     const effect = resolveInterfaceComposerInitialFocusEffect({
@@ -747,6 +763,7 @@ export function useInterfaceChatSurfaceState({
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
     composerAccessory: renderedComposerAccessory,
+    timelineTail: renderedTimelineTail,
     composerEditBar: messageActions.accessory,
     skillsSheet: sheets,
   });

@@ -1,59 +1,71 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { Radii, TypeScale, UiTextMetrics } from "../../constants/tokens";
-import { outlinedSurface } from "../ui/outlinedSurface";
+import { TypeScale, UiTextMetrics } from "../../constants/tokens";
+import { INTERFACE_TIMELINE_HORIZONTAL_INSET } from "../terminal/interfaceTimelineGeometry";
+
+const CHIP_MIN_SIZE = 44;
+const CHIP_PADDING = 9;
 
 /**
- * Tap-to-answer chips under Brain's last message. Any Brain question can use
- * them; a tap sends the chip's text exactly as if the person typed it.
+ * Optional answers to Brain's last message, as one quiet line of text buttons
+ * that continues the message in the timeline. Never a second row: a long set
+ * scrolls sideways. The visible chip is only its text; the 44 px target is the
+ * chip's own padded box, because Android clips hitSlop to the scroll view.
+ * A tap sends the chip's text exactly as if the person typed it.
  */
 export function QuickReplies({
-  rows,
+  chips,
   chrome,
   onSelect,
 }: {
-  rows: readonly (readonly string[])[];
+  chips: readonly string[];
   chrome: TerminalThemeChrome;
   onSelect(text: string): void;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   return (
-    <View style={styles.wrap} accessibilityRole="toolbar">
-      {rows.map((row, index) => (
-        <View key={index} style={styles.row}>
-          {row.map((text) => (
-            <Pressable
-              key={text}
-              accessibilityRole="button"
-              accessibilityLabel={text}
-              onPress={() => onSelect(text)}
-              style={({ pressed }) => [styles.chip, pressed ? styles.chipPressed : null]}
-            >
-              <Text style={styles.label} numberOfLines={1}>
-                {text}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      accessibilityRole="toolbar"
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+    >
+      {chips.map((text) => (
+        <Pressable
+          key={text}
+          accessibilityRole="button"
+          accessibilityLabel={text}
+          onPress={() => onSelect(text)}
+          style={styles.chip}
+        >
+          {({ pressed }) => (
+            <Text style={[styles.label, pressed ? styles.labelPressed : null]} numberOfLines={1}>
+              {text}
+            </Text>
+          )}
+        </Pressable>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
 function createStyles(chrome: TerminalThemeChrome) {
   return StyleSheet.create({
-    wrap: { marginHorizontal: 10, marginBottom: 6, gap: 8 },
-    row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    // The line bleeds to the screen edges so a long set scrolls under them,
+    // while the first chip's text lines up with the message above.
+    scroll: { flexGrow: 0, marginHorizontal: -INTERFACE_TIMELINE_HORIZONTAL_INSET },
+    content: { paddingHorizontal: INTERFACE_TIMELINE_HORIZONTAL_INSET - CHIP_PADDING, alignItems: "center" },
     chip: {
-      minHeight: 44,
-      maxWidth: "100%",
+      minHeight: CHIP_MIN_SIZE,
+      minWidth: CHIP_MIN_SIZE,
       justifyContent: "center",
-      ...outlinedSurface(Radii.pill, chrome.border),
-      backgroundColor: chrome.surface,
-      paddingHorizontal: 14,
+      alignItems: "center",
+      paddingHorizontal: CHIP_PADDING,
     },
-    chipPressed: { backgroundColor: chrome.surfaceActive },
-    label: { ...UiTextMetrics, ...TypeScale.label, color: chrome.text, flexShrink: 1 },
+    label: { ...UiTextMetrics, ...TypeScale.label, color: chrome.textMuted },
+    labelPressed: { color: chrome.text },
   });
 }
