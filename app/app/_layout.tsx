@@ -31,6 +31,7 @@ import {
   useCurrentServer,
 } from "../store/currentServer";
 import { syncCalendarNotifications } from "../services/calendarNotifications";
+import { createNotificationReporter } from "../services/notificationReport";
 import { ensurePushPermission } from "../services/pushPermission";
 import { terminalRouteParams } from "../services/workerRouteId";
 import { useAppTheme } from "../constants/tokens";
@@ -533,6 +534,16 @@ const LatencySampler = memo(function LatencySampler() {
   return null;
 });
 
+// Watch judges whether a push was worth sending, and needs to know whether the
+// person was already in the app. Only the foreground state leaves the app.
+function sendAppState(serverId: string, state: string) {
+  try {
+    wsClient.send(serverId, { type: "app_state", app_state: state });
+  } catch {
+    // The connection dropped; the next connection reports the state again.
+  }
+}
+
 const NotificationObserver = memo(function NotificationObserver() {
   const router = useRouter();
   const routerRef = useRef(router);
@@ -552,6 +563,10 @@ const NotificationObserver = memo(function NotificationObserver() {
       const previous = appStateRef.current;
       appStateRef.current = nextState;
       wsClient.noteAppState(nextState);
+      const liveServerId = wsClient.liveServerId();
+      if (liveServerId && wsClient.isConnected(liveServerId)) {
+        sendAppState(liveServerId, nextState);
+      }
       if (nextState !== "active") {
         wsClient.clearActiveWorkersExcept(null);
         return;
@@ -599,13 +614,17 @@ const NotificationObserver = memo(function NotificationObserver() {
 
     const onConnected = (data: any) => {
       registerPush(data.serverId);
+      sendAppState(data.serverId, appStateRef.current);
     };
     wsClient.on("connected", onConnected);
 
     const liveServerId = wsClient.liveServerId();
     if (liveServerId && wsClient.isConnected(liveServerId)) {
       registerPush(liveServerId);
+      sendAppState(liveServerId, appStateRef.current);
     }
+
+    const reporter = createNotificationReporter(wsClient);
 
     notificationListener.current =
       Notifications.addNotificationReceivedListener((notification) => {
@@ -620,6 +639,7 @@ const NotificationObserver = memo(function NotificationObserver() {
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data;
+        reporter.report(data, "tapped");
         const destination = resolveNotificationDestination(data);
         switch (destination?.kind) {
           case "terminal":
@@ -655,6 +675,7 @@ const NotificationObserver = memo(function NotificationObserver() {
     return () => {
       cancelled = true;
       wsClient.off("connected", onConnected);
+      reporter.dispose();
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };

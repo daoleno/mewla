@@ -442,6 +442,9 @@ func (n *notifier) envelope(kind string, problems []Problem, now time.Time) stri
 		if reason := firstNonEmpty(problem.Reason, problem.Detail); reason != "" {
 			fmt.Fprintf(&b, "   why: %s\n", clean(reason, envelopeReason))
 		}
+		if problem.Suggestion != "" {
+			fmt.Fprintf(&b, "   suggest: %s\n", clean(problem.Suggestion, envelopeReason))
+		}
 	}
 	b.WriteString("</problems>\n</mewla_watch>\n")
 	switch kind {

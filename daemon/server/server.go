@@ -93,6 +93,14 @@ type notificationPusher interface {
 	NotifyScheduledResult(title, status, threadID, resultID string) error
 }
 
+// notificationRecorder is how the server tells Watch what the phone did with
+// notifications, and which ones it held back. It is optional.
+type notificationRecorder interface {
+	NotificationSuppressed(kind, workerID, title, body, reason string)
+	NotificationResponse(id, action string, at time.Time)
+	NotificationEngaged(action, workerID string)
+}
+
 // Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
 	browsers                     *browser.Manager
@@ -103,6 +111,8 @@ type Server struct {
 	terminal                     *terminal.Manager
 	pusher                       notificationPusher
 	deviceHook                   func(timeZone, locale string)
+	notifications                notificationRecorder
+	appStates                    map[*websocket.Conn]string
 	stats                        *stats.Collector
 	work                         *work.Store
 	execs                        *work.ExecutorConfig
@@ -307,6 +317,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		uploadStore:        &attachment.Store{Dir: uploadDir},
 		clients:            make(map[*websocket.Conn]*authenticatedClient),
 		active:             make(map[*websocket.Conn]string),
+		appStates:          make(map[*websocket.Conn]string),
 		outboxes:           make(map[*websocket.Conn]*clientOutbox),
 		codexSubs:          make(map[*websocket.Conn]map[string]codexConversationSubscription),
 		skillsInventories:  make(map[*websocket.Conn]skillsInventoryRequest),
@@ -361,6 +372,9 @@ type clientMessage struct {
 	Body                 string                                 `json:"body"`
 	Action               string                                 `json:"action"`
 	PushToken            string                                 `json:"push_token"`
+	NotificationID       string                                 `json:"notification_id"`
+	AppState             string                                 `json:"app_state"`
+	OccurredAtMS         int64                                  `json:"occurred_at_ms"`
 	ServerRef            string                                 `json:"server_ref"`
 	TimeZone             string                                 `json:"time_zone"`
 	Locale               string                                 `json:"locale"`
@@ -679,6 +693,7 @@ func (s *Server) removeClientLocked(
 	s.terminalCleanup.Submit(terminalCleanup)
 	delete(s.clients, conn)
 	delete(s.active, conn)
+	delete(s.appStates, conn)
 	if outbox := s.outboxes[conn]; outbox != nil {
 		outbox.close()
 	}
@@ -1009,6 +1024,10 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 			}
 			s.sendJSON(conn, map[string]any{"type": "push_registered", "ok": true})
 		}
+	case "notification_response":
+		s.handleNotificationResponse(raw)
+	case "app_state":
+		s.handleAppState(conn, raw)
 	case "codex_conversation_subscribe":
 		s.handleCodexConversationSubscribe(conn, raw)
 	case "codex_conversation_unsubscribe":
@@ -1099,7 +1118,11 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 	case "set_active_worker":
 		s.mu.Lock()
 		s.active[conn] = raw.WorkerID
+		recorder := s.notifications
 		s.mu.Unlock()
+		if recorder != nil && strings.TrimSpace(raw.WorkerID) != "" {
+			recorder.NotificationEngaged(notificationViewed, strings.TrimSpace(raw.WorkerID))
+		}
 	case "create_session":
 		command := strings.TrimSpace(raw.Command)
 		if work.InferWorkerProvider(command) == work.WorkerProviderDSH {
@@ -3422,6 +3445,7 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 	// stale event projections from a superseded turn must never notify done,
 	// failed, or blocked. The canonical Turn Ledger is the only owner.
 	if s.brain == nil || strings.TrimSpace(ev.TurnID) == "" {
+		s.noteSuppressedNotification(ev, "no_turn_marker")
 		return
 	}
 	current, found, err := s.brain.Turn(ev.WorkerID)
@@ -3432,6 +3456,7 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 		return
 	}
 	if s.hasActiveViewer(ev.WorkerID) {
+		s.noteSuppressedNotification(ev, "person_viewing_session")
 		return
 	}
 

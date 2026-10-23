@@ -31,6 +31,8 @@ var secretPatterns = []secretPattern{
 		return m[0]
 	}},
 	{regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})`), whole("github")},
+	// Expo push tokens address one phone; they never belong in a record.
+	{regexp.MustCompile(`\bExpo(?:nent)?PushToken\[[^\]]*\]`), whole("expo push token")},
 	{regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`), whole("slack")},
 	{regexp.MustCompile(`\bA(?:KIA|SIA)[0-9A-Z]{16}\b`), whole("aws")},
 	{regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{30,}`), whole("google")},

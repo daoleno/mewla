@@ -24,23 +24,25 @@ type expoTicket struct {
 }
 
 type pendingReceipt struct {
-	ticketID string
-	token    string
-	attempt  int
-	due      time.Time
+	ticketID       string
+	notificationID string
+	token          string
+	attempt        int
+	due            time.Time
 }
 
 // trackReceipt queues an accepted ticket for a delivery check.
-func (c *Client) trackReceipt(ticketID, token string) {
+func (c *Client) trackReceipt(ticketID, token, notificationID string) {
 	if ticketID == "" {
 		return
 	}
 	c.receiptMu.Lock()
 	defer c.receiptMu.Unlock()
 	c.pending = append(c.pending, pendingReceipt{
-		ticketID: ticketID,
-		token:    token,
-		due:      time.Now().Add(c.receiptDelays[0]),
+		ticketID:       ticketID,
+		notificationID: notificationID,
+		token:          token,
+		due:            time.Now().Add(c.receiptDelays[0]),
 	})
 	c.armReceiptTimerLocked()
 }
@@ -116,12 +118,17 @@ func (c *Client) fetchReceipts(batch []pendingReceipt) []pendingReceipt {
 			continue
 		}
 		if receipt.Status == "ok" {
+			c.observeReceipt(Receipt{ID: entry.notificationID, At: time.Now().UTC(), OK: true})
 			continue
 		}
 		if receipt.Details.Error == errDeviceNotRegistered {
 			c.dropToken(entry.token)
 		}
 		problem := describeProblem(receipt.Details.Error, receipt.Message, entry.token) + receiptHint(receipt.Details.Error)
+		c.observeReceipt(Receipt{
+			ID: entry.notificationID, At: time.Now().UTC(),
+			Reason: firstNonEmpty(receipt.Details.Error, "failed"), Detail: strings.TrimPrefix(problem, ": "),
+		})
 		if isCredentialError(receipt.Details.Error) {
 			c.logCredentialFailureOnce(entry.token, "delivery"+problem)
 			continue

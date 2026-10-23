@@ -17,6 +17,9 @@ const (
 	SourceProcess  = "process"
 	SourceRuntime  = "runtime"
 	SourceExternal = "external"
+	// SourceNotification is every phone notification the daemon sent (or would
+	// have sent), with what became of it. See collect_notification.go.
+	SourceNotification = "notification"
 )
 
 // Problem statuses. Rules create "new"; judgment marks problems fixed or
@@ -123,6 +126,8 @@ type Signal struct {
 	PlaceReason  string `json:"place_reason,omitempty"`
 	Author       string `json:"judged_author,omitempty"`
 	AuthorReason string `json:"author_reason,omitempty"`
+	// Notification is what happened to a notification after it was sent.
+	Notification *NotificationState `json:"notification,omitempty"`
 }
 
 // Annotation is what Watch learned about a signal after collecting it: a
@@ -136,6 +141,8 @@ type Annotation struct {
 	AuthorReason string `json:"author_reason,omitempty"`
 	// Run is the judgment run that saw the signal; empty until judged.
 	Run string `json:"run,omitempty"`
+	// Notification is the delivery and response state of a notification signal.
+	Notification *NotificationState `json:"notification,omitempty"`
 }
 
 // Problem is raised by a rule or by judgment. A rule problem's ID is stable
@@ -158,7 +165,9 @@ type Problem struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	// Judgment fields.
-	Reason      string   `json:"reason,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// Suggestion is one concrete thing to change, when judgment has one.
+	Suggestion  string   `json:"suggestion,omitempty"`
 	Cost        *Cost    `json:"cost,omitempty"`
 	Sources     []string `json:"sources,omitempty"`
 	MergedFrom  []string `json:"merged_from,omitempty"`

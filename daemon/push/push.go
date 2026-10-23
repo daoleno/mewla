@@ -2,6 +2,8 @@ package push
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,6 +41,7 @@ type Client struct {
 	mu         sync.RWMutex
 	token      string // Expo push token from mobile app
 	serverRef  string // Opaque client-side server identifier for notification routing
+	observer   Observer
 
 	receiptDelays    []time.Duration
 	credentialLogged map[string]bool
@@ -77,20 +80,16 @@ func (c *Client) HasToken() bool {
 
 // Message represents a push notification.
 type Message struct {
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Data     any    `json:"data,omitempty"`
-	Priority string `json:"priority,omitempty"` // "high" or "default"
-	Sound    string `json:"sound,omitempty"`
+	Title    string            `json:"title"`
+	Body     string            `json:"body"`
+	Data     map[string]string `json:"data,omitempty"`
+	Priority string            `json:"priority,omitempty"` // "high" or "default"
+	Sound    string            `json:"sound,omitempty"`
 }
 
 // Send sends a push notification to the registered device.
 func (c *Client) Send(msg Message) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
-	}
-	return c.sendTo(registration.token, msg)
+	return c.dispatch(KindOther, func(registration) Message { return msg })
 }
 
 func (c *Client) registration() (registration, error) {
@@ -102,7 +101,52 @@ func (c *Client) registration() (registration, error) {
 	return registration{token: c.token, serverRef: c.serverRef}, nil
 }
 
+// dispatch builds one notification for the registered device, sends it and
+// tells the observer what became of it. Without a registration nothing is
+// sent, but the observer still hears of the notification that would have been.
+func (c *Client) dispatch(kind string, build func(registration) Message) error {
+	registration, regErr := c.registration()
+	msg := build(registration)
+	event := Sent{
+		ID: newNotificationID(), Kind: kind, At: time.Now().UTC(),
+		Title: msg.Title, Body: msg.Body, Priority: msg.Priority,
+		Refs: msg.Data,
+	}
+	if regErr != nil {
+		event.Outcome, event.Reason = OutcomeNotSent, ReasonNoRegistration
+		c.observeSent(event)
+		return regErr
+	}
+	// The app reports a tap with this id; it changes no visible text.
+	data := make(map[string]string, len(msg.Data)+1)
+	for key, value := range msg.Data {
+		data[key] = value
+	}
+	data[dataNotificationID] = event.ID
+	msg.Data = data
+	result, err := c.submit(registration.token, msg, event.ID)
+	event.Outcome, event.Reason, event.Detail = result.outcome, result.reason, result.detail
+	c.observeSent(event)
+	return err
+}
+
 func (c *Client) sendTo(token string, msg Message) error {
+	_, err := c.submit(token, msg, "")
+	return err
+}
+
+// submitResult is what Expo's ticket said, in words the observer can keep.
+type submitResult struct {
+	outcome string
+	reason  string
+	detail  string
+}
+
+func failedResult(reason, detail string) submitResult {
+	return submitResult{outcome: OutcomeFailed, reason: reason, detail: detail}
+}
+
+func (c *Client) submit(token string, msg Message, notificationID string) (submitResult, error) {
 	payload := map[string]any{
 		"to":    token,
 		"title": msg.Title,
@@ -120,40 +164,59 @@ func (c *Client) sendTo(token string, msg Message) error {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal push: %w", err)
+		return failedResult("marshal", ""), fmt.Errorf("marshal push: %w", err)
 	}
 
 	respBody, status, err := c.post(expoPushURL, body)
 	if err != nil {
-		return fmt.Errorf("send push: %w", err)
+		return failedResult("network", ""), fmt.Errorf("send push: %w", err)
 	}
 	if status != http.StatusOK {
-		return fmt.Errorf("push API returned %d%s", status, describeAPIErrors(respBody, token))
+		problem := describeAPIErrors(respBody, token)
+		return failedResult(fmt.Sprintf("http_%d", status), strings.TrimPrefix(problem, ": ")), fmt.Errorf("push API returned %d%s", status, problem)
 	}
 	var response struct {
 		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return fmt.Errorf("decode push ticket: %w", err)
+		return failedResult("bad_ticket", ""), fmt.Errorf("decode push ticket: %w", err)
 	}
 	// One message answers with one ticket object; a batch would answer with a list.
 	var ticket expoTicket
 	if err := json.Unmarshal(response.Data, &ticket); err != nil {
-		return fmt.Errorf("decode push ticket: %w", err)
+		return failedResult("bad_ticket", ""), fmt.Errorf("decode push ticket: %w", err)
 	}
 	if ticket.Status != "ok" {
 		if ticket.Details.Error == errDeviceNotRegistered {
 			c.dropToken(token)
 		}
 		problem := describeProblem(ticket.Details.Error, ticket.Message, token) + receiptHint(ticket.Details.Error)
+		result := failedResult(firstNonEmpty(ticket.Details.Error, "rejected"), strings.TrimPrefix(problem, ": "))
 		if isCredentialError(ticket.Details.Error) {
 			c.logCredentialFailureOnce(token, "send"+problem)
-			return fmt.Errorf("push API rejected notification%s: %w", problem, ErrCredentials)
+			return result, fmt.Errorf("push API rejected notification%s: %w", problem, ErrCredentials)
 		}
-		return fmt.Errorf("push API rejected notification%s", problem)
+		return result, fmt.Errorf("push API rejected notification%s", problem)
 	}
-	c.trackReceipt(ticket.ID, token)
-	return nil
+	c.trackReceipt(ticket.ID, token, notificationID)
+	return submitResult{outcome: OutcomeAccepted}, nil
+}
+
+func newNotificationID() string {
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Sprintf("n_%x", time.Now().UnixNano())
+	}
+	return "n_" + hex.EncodeToString(raw[:])
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (c *Client) post(url string, body []byte) ([]byte, int, error) {
@@ -226,94 +289,82 @@ func notificationData(workerID, serverRef string) map[string]string {
 	}
 }
 
-// NotifyAgentBlocked sends a high-priority notification for a blocked agent.
+// workerMessage is the notification for a Worker that became blocked, failed or done.
+func workerMessage(kind, workerID, workerName, summary, serverRef string) Message {
+	label := formatNotificationWorkerLabel(workerName, workerID)
+	message := Message{Data: notificationData(workerID, serverRef)}
+	switch kind {
+	case KindWorkerBlocked:
+		message.Title, message.Body, message.Priority = label+" needs input", buildNotificationBody(summary, "Waiting for your response."), "high"
+		if label == "" {
+			message.Title = "Agent needs input"
+		}
+	case KindWorkerFailed:
+		message.Title, message.Body, message.Priority = label+" failed", buildNotificationBody(summary, "Check the terminal for details."), "high"
+		if label == "" {
+			message.Title = "Agent failed"
+		}
+	default:
+		message.Title, message.Body, message.Priority = label+" finished", buildNotificationBody(summary, "Session completed."), "default"
+		if label == "" {
+			message.Title = "Agent finished"
+		}
+	}
+	return message
+}
+
+// WorkerMessageText is the title and body a Worker notification of kind would
+// carry, for recording a notification that was held back.
+func WorkerMessageText(kind, workerID, workerName, summary string) (title, body string) {
+	message := workerMessage(kind, workerID, workerName, summary, "")
+	return message.Title, message.Body
+}
+
+func (c *Client) notifyWorker(kind, workerID, workerName, summary string) error {
+	return c.dispatch(kind, func(r registration) Message {
+		return workerMessage(kind, workerID, workerName, summary, r.serverRef)
+	})
+}
+
+// NotifyWorkerBlocked sends a high-priority notification for a blocked agent.
 func (c *Client) NotifyWorkerBlocked(workerID, workerName, summary string) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
-	}
-
-	label := formatNotificationWorkerLabel(workerName, workerID)
-	title := label + " needs input"
-	if label == "" {
-		title = "Agent needs input"
-	}
-	return c.sendTo(registration.token, Message{
-		Title:    title,
-		Body:     buildNotificationBody(summary, "Waiting for your response."),
-		Priority: "high",
-		Data:     notificationData(workerID, registration.serverRef),
-	})
+	return c.notifyWorker(KindWorkerBlocked, workerID, workerName, summary)
 }
 
-// NotifyAgentFailed sends a high-priority notification for a failed agent.
+// NotifyWorkerFailed sends a high-priority notification for a failed agent.
 func (c *Client) NotifyWorkerFailed(workerID, workerName, summary string) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
-	}
-
-	label := formatNotificationWorkerLabel(workerName, workerID)
-	title := label + " failed"
-	if label == "" {
-		title = "Agent failed"
-	}
-	return c.sendTo(registration.token, Message{
-		Title:    title,
-		Body:     buildNotificationBody(summary, "Check the terminal for details."),
-		Priority: "high",
-		Data:     notificationData(workerID, registration.serverRef),
-	})
+	return c.notifyWorker(KindWorkerFailed, workerID, workerName, summary)
 }
 
-// NotifyAgentDone sends a low-priority neutral completion notification.
+// NotifyWorkerDone sends a low-priority neutral completion notification.
 func (c *Client) NotifyWorkerDone(workerID, workerName, summary string) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
-	}
-
-	label := formatNotificationWorkerLabel(workerName, workerID)
-	title := label + " finished"
-	if label == "" {
-		title = "Agent finished"
-	}
-	return c.sendTo(registration.token, Message{
-		Title:    title,
-		Body:     buildNotificationBody(summary, "Session completed."),
-		Priority: "default",
-		Data:     notificationData(workerID, registration.serverRef),
-	})
+	return c.notifyWorker(KindWorkerDone, workerID, workerName, summary)
 }
 
-// NotifyBrainMessage sends a notification that opens the Brain thread. The
-// body is one line Brain chose to show; the message itself stays in Brain.
-func (c *Client) NotifyBrainMessage(threadID, title, body string) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
+// BrainNotifier returns a sender for notifications that open the Brain
+// thread, recorded under kind (KindBrainReply, KindWatchUrgent). The body is
+// one line Brain chose to show; the message itself stays in Brain.
+func (c *Client) BrainNotifier(kind string) func(threadID, title, body string) error {
+	return func(threadID, title, body string) error {
+		return c.dispatch(kind, func(r registration) Message {
+			return Message{
+				Title:    title,
+				Body:     buildNotificationBody(body, "Brain has a question."),
+				Priority: "high",
+				Data: map[string]string{
+					"brain_thread_id": threadID,
+					"screen":          "brain",
+					"server_id":       r.serverRef,
+				},
+			}
+		})
 	}
-	return c.sendTo(registration.token, Message{
-		Title:    title,
-		Body:     buildNotificationBody(body, "Brain has a question."),
-		Priority: "high",
-		Data: map[string]string{
-			"brain_thread_id": threadID,
-			"screen":          "brain",
-			"server_id":       registration.serverRef,
-		},
-	})
 }
 
 // NotifyScheduledResult sends a notification that deep-links to one canonical
 // Calendar result projected in Brain. Result and failure contents deliberately
 // never cross this boundary.
 func (c *Client) NotifyScheduledResult(title, status, threadID, resultID string) error {
-	registration, err := c.registration()
-	if err != nil {
-		return err
-	}
-
 	label := strings.TrimSpace(title)
 	if label == "" {
 		label = "Scheduled Work"
@@ -330,16 +381,17 @@ func (c *Client) NotifyScheduledResult(title, status, threadID, resultID string)
 	default:
 		return fmt.Errorf("invalid scheduled result status %q", status)
 	}
-
-	return c.sendTo(registration.token, Message{
-		Title:    title,
-		Body:     body,
-		Priority: priority,
-		Data: map[string]string{
-			"brain_message_id": resultID,
-			"brain_thread_id":  threadID,
-			"screen":           "brain",
-			"server_id":        registration.serverRef,
-		},
+	return c.dispatch(KindScheduledResult, func(r registration) Message {
+		return Message{
+			Title:    title,
+			Body:     body,
+			Priority: priority,
+			Data: map[string]string{
+				"brain_message_id": resultID,
+				"brain_thread_id":  threadID,
+				"screen":           "brain",
+				"server_id":        r.serverRef,
+			},
+		}
 	})
 }
