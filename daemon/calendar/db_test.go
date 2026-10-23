@@ -142,3 +142,41 @@ func TestCommitsWriteTheRunTheyTouchNotTheHistory(t *testing.T) {
 		t.Fatal("restart did not read back what was committed")
 	}
 }
+
+// TestMigrationOfARealCalendar migrates a copy of an actual calendar
+// directory. Set MEWLA_REAL_CALENDAR_COPY to it; the test never writes there.
+func TestMigrationOfARealCalendar(t *testing.T) {
+	source := os.Getenv("MEWLA_REAL_CALENDAR_COPY")
+	if source == "" {
+		t.Skip("MEWLA_REAL_CALENDAR_COPY is not set")
+	}
+	raw := mustRead(t, filepath.Join(source, legacyFile))
+	want, err := decodeDocument(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	writeCalendarFixture(t, root, raw)
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, found, err := sqlitedb.ReadRecord(store.db)
+	if err != nil || !found {
+		t.Fatalf("record found=%v err=%v", found, err)
+	}
+	t.Logf("migrated %s", record.Details)
+	items := map[string]Item{}
+	for _, item := range want.Items {
+		got, err := store.Get(item.ID)
+		if err != nil || !reflect.DeepEqual(got, cloneItem(item)) {
+			t.Fatalf("item %s differs after migration: %v", item.ID, err)
+		}
+		items[item.ID] = item
+	}
+	if digest, err := digestItems(items); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(string(record.Details), digest.Sha256) {
+		t.Fatalf("record %s does not hold digest %+v", record.Details, digest)
+	}
+}
