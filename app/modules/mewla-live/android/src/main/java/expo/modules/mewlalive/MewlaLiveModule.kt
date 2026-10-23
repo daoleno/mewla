@@ -15,7 +15,12 @@ class MewlaLiveModule : Module() {
     Name("MewlaLive")
 
     /** A live_state the app received on its socket. Same rules as a push: ordered, deduped, once. */
-    Function("apply") { raw: String -> LiveController.apply(context, raw, "") }
+    Function("apply") { raw: String ->
+      val applied = LiveController.apply(context, raw, "")
+      // The daemon pushes only while the phone is away, so with the socket up the widgets learn here.
+      if (applied) WidgetSync.refreshAsync(context)
+      applied
+    }
 
     /** The server whose live state the phone shows; changing it clears the old server's surface and widgets. */
     Function("setCurrentServer") { serverRef: String ->
