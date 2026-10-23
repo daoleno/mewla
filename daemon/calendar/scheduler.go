@@ -2,11 +2,14 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/logonce"
 )
 
 const DefaultMissedActionWindow = 15 * time.Minute
@@ -49,6 +52,18 @@ type Scheduler struct {
 	missedWindow time.Duration
 	launchMu     sync.Mutex
 	launching    map[string]struct{}
+	failures     logonce.Log
+}
+
+// note reports a failed store write once per distinct cause and operation, so
+// a completion that cannot be persisted is visible without a line every pass.
+// A later success clears the scope. ErrClaimed is the benign loss of a launch
+// race, not a failure.
+func (s *Scheduler) note(scope string, err error) {
+	if errors.Is(err, ErrClaimed) {
+		err = nil
+	}
+	s.failures.Note(scope, err)
 }
 
 func NewScheduler(store *Store, runner ActionRunner) *Scheduler {
@@ -81,7 +96,8 @@ func (s *Scheduler) tickOwned(item Item, now time.Time) {
 		return
 	}
 	if now.Sub(item.NextAt) > duty.Window {
-		_, _, _ = s.store.CompleteOccurrence(item.ID, item.NextAt)
+		_, _, err := s.store.CompleteOccurrence(item.ID, item.NextAt)
+		s.note("calendar skip-missed "+item.ID, err)
 		return
 	}
 	s.dutiesMu.Lock()
@@ -102,7 +118,8 @@ func (s *Scheduler) tickOwned(item Item, now time.Time) {
 			s.dutiesMu.Unlock()
 			return
 		}
-		_, _, _ = s.store.CompleteOccurrence(item.ID, item.NextAt)
+		_, _, err := s.store.CompleteOccurrence(item.ID, item.NextAt)
+		s.note("calendar complete-occurrence "+item.ID, err)
 	}()
 }
 
@@ -146,13 +163,13 @@ func (s *Scheduler) Tick(ctx context.Context) {
 				if item.Recurrence != RecurrenceNone {
 					status = StatusCompleted
 				}
-				_, _ = s.store.SetStatus(item.ID, status, "")
+				s.setStatus(item.ID, status)
 			}
 		case KindEvent:
 			if item.EndAt != nil && !item.EndAt.After(now) {
-				_, _ = s.store.SetStatus(item.ID, StatusCompleted, "")
+				s.setStatus(item.ID, StatusCompleted)
 			} else if !item.NextAt.After(now) && item.Status == StatusScheduled {
-				_, _ = s.store.SetStatus(item.ID, StatusRunning, "")
+				s.setStatus(item.ID, StatusRunning)
 			}
 		case KindScheduledAction:
 			if item.NextAt.After(now) || item.Status != StatusScheduled || s.isLaunching(item.ID) {
@@ -163,7 +180,10 @@ func (s *Scheduler) Tick(ctx context.Context) {
 				s.failOccurrence(ctx, item.ID, reason)
 				continue
 			}
-			go s.run(ctx, item.ID, false)
+			go func(id string) {
+				_, err := s.run(ctx, id, false)
+				s.note("calendar run "+id, err)
+			}(item.ID)
 		}
 	}
 }
@@ -203,9 +223,22 @@ func (s *Scheduler) run(ctx context.Context, id string, manual bool) (Item, erro
 func (s *Scheduler) failOccurrence(ctx context.Context, id, failure string) {
 	item, run, err := s.store.Claim(id, false)
 	if err != nil {
+		s.note("calendar claim-missed "+id, err)
 		return
 	}
-	_, _ = s.complete(item, run, "", failure)
+	s.finish(item, run, "", failure)
+}
+
+// setStatus moves an item and reports a failed write.
+func (s *Scheduler) setStatus(id string, status Status) {
+	_, err := s.store.SetStatus(id, status, "")
+	s.note("calendar set-status "+id, err)
+}
+
+// finish ends a run and reports a terminal state that could not be persisted.
+func (s *Scheduler) finish(item Item, run Run, result, failure string) {
+	_, err := s.complete(item, run, result, failure)
+	s.note("calendar finish-run "+item.ID, err)
 }
 
 func (s *Scheduler) complete(item Item, run Run, result, failure string) (Item, error) {
@@ -221,7 +254,8 @@ func (s *Scheduler) reconcile(ctx context.Context, item Item) {
 		}
 	}
 	if active == nil {
-		_, _ = s.store.SetStatus(item.ID, StatusFailed, "Running calendar item has no durable run record.")
+		_, err := s.store.SetStatus(item.ID, StatusFailed, "Running calendar item has no durable run record.")
+		s.note("calendar set-status "+item.ID, err)
 		return
 	}
 	inspector, ok := s.runner.(ActionInspector)
@@ -230,17 +264,17 @@ func (s *Scheduler) reconcile(ctx context.Context, item Item) {
 	} // Explicitly remain running when this architecture cannot prove a terminal state.
 	status, result, failure, known := inspector.InspectScheduledAction(ctx, item, *active)
 	if !known {
-		_, _ = s.complete(item, *active, "", "Linked Work/agent is no longer observable after restart; Mewla did not relaunch it to avoid duplicate execution.")
+		s.finish(item, *active, "", "Linked Work/agent is no longer observable after restart; Mewla did not relaunch it to avoid duplicate execution.")
 		return
 	}
 	switch status {
 	case StatusCompleted:
-		_, _ = s.complete(item, *active, result, "")
+		s.finish(item, *active, result, "")
 	case StatusFailed:
 		if strings.TrimSpace(failure) == "" {
 			failure = "Linked Work/agent failed."
 		}
-		_, _ = s.complete(item, *active, "", failure)
+		s.finish(item, *active, "", failure)
 	}
 }
 
