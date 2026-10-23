@@ -48,6 +48,10 @@ type OwnerConfig struct {
 	ListenerPath  string
 	DiscoveryPath string // secret-free TTL/LKG model id cache
 	ModelsDevURL  string // models.dev metadata feed; empty disables refresh
+	// CodexModels lists the installed Codex's models (see
+	// codex_app_server_models.go). Nil leaves the Codex picker on Codex's
+	// models_cache.json and the pinned catalog.
+	CodexModels CodexModelLister
 	// ModelsObserved queues downstream metadata work without blocking discovery.
 	ModelsObserved func([]string)
 	Lookup         func(string) (string, bool)
@@ -133,6 +137,7 @@ type Owner struct {
 	listenerBackupSet    bool
 	discovery            *modelDiscoveryCache
 	modelsDev            *modelsDevCatalog
+	codexModels          *codexModelList
 	modelsObserved       func([]string)
 	discoveryPath        string
 	discoveryLoadWarning error
@@ -316,6 +321,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 	o.backgroundCtx, o.cancelBackground = context.WithCancel(context.Background())
 	o.modelsDev = newModelsDevCatalog(modelsDevPath, cfg.ModelsDevURL)
 	_ = o.modelsDev.load()
+	o.codexModels = newCodexModelList(cfg.CodexModels)
 	if err := o.recoverProviderSwitchJournal(); err != nil {
 		_ = o.Close()
 		return nil, err
@@ -334,6 +340,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 			_ = o.modelsDev.refresh(o.backgroundCtx)
 		}()
 	}
+	o.refreshCodexModelsInBackground()
 	if o.discoveryPath != "" {
 		if err := o.discovery.load(o.discoveryPath); err != nil {
 			o.discoveryLoadWarning = fmt.Errorf("%w: %v", ErrDiscoveryCacheInvalid, err)
