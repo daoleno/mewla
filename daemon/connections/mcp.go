@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -167,7 +168,9 @@ func (m *Manager) mcpSession(ctx context.Context, r *record, secret string, onTo
 	if err != nil {
 		closeIdle()
 		// SDK errors carry status and JSON-RPC text, never the bearer header.
-		log.Printf("plugins: %s MCP connect failed: %.300s", r.Account.Integration, err)
+		if ctx.Err() == nil {
+			diag.Report("plugins.mcp.connect", diag.SeverityWarn, r.Account.Integration, fmt.Sprintf("%.300s", err))
+		}
 		if isTransportError(err, errAuth) {
 			return nil, errAuth
 		}
@@ -193,7 +196,9 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 	for page := 0; page < 10; page++ {
 		result, err := s.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
 		if err != nil {
-			log.Printf("plugins: MCP tools/list failed on page %d: %.300s", page+1, err)
+			if ctx.Err() == nil {
+				diag.Report("plugins.mcp.list_tools", diag.SeverityWarn, "", fmt.Sprintf("page %d: %.300s", page+1, err))
+			}
 			if isTransportError(err, errAuth) {
 				return nil, errAuth
 			}

@@ -39,6 +39,7 @@ import (
 	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/debuglog"
+	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/pairlink"
@@ -3282,7 +3283,7 @@ func (s *Server) handleCalendarEvent(event calendar.Event) {
 	s.broadcastJSON(map[string]any{"type": "calendar_item_changed", "calendar_item": calendarItemWire(event.Item)})
 	if s.brain != nil {
 		if _, err := s.brain.RouteCalendarEvent(event); err != nil {
-			log.Printf("calendar Work event routing failed for %s: %v", event.Item.ID, err)
+			diag.Report("calendar.work_routing", diag.SeverityWarn, "", fmt.Sprintf("item %s: %v", event.Item.ID, err))
 		}
 	}
 	if event.ScheduledResult == nil || s.pusher == nil {
@@ -3674,8 +3675,8 @@ func (w *uploadStatusWriter) WriteHeader(code int) {
 
 // logUploadRejected records one failed upload with the status it was sent.
 func logUploadRejected(r *http.Request, name string, status int, err error) {
-	log.Printf("upload failed remote=%q name=%q content_length=%d transport=%q status=%d: %v",
-		r.RemoteAddr, name, r.ContentLength, r.Header.Get("X-Mewla-Upload-Transport"), status, err)
+	diag.Report("server.upload", diag.SeverityWarn, "", fmt.Sprintf("remote=%q name=%q content_length=%d transport=%q status=%d: %v",
+		r.RemoteAddr, name, r.ContentLength, r.Header.Get("X-Mewla-Upload-Transport"), status, err))
 }
 
 func writeUploadReadError(w http.ResponseWriter, err error, limits uploadLimits) {

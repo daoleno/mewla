@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/connections"
+	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 )
 
@@ -385,54 +388,63 @@ func TestProcessCollectorPlacesWorkAndIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestRuntimeCollectorFollowsRotationAndFlagsRepeats(t *testing.T) {
+func TestRuntimeCollectorReadsReportedProblemsAndFlagsRepeats(t *testing.T) {
 	home := t.TempDir()
 	collector, store := newTestCollector(t, home)
-	logPath := filepath.Join(home, ".mewla", "logs", "daemon.log")
-	collector.logPath = logPath
-	line := func(at time.Time, message string) string {
-		return at.Local().Format("2006/01/02 15:04:05") + " " + message + "\n"
-	}
-	base := time.Now().Add(-time.Hour)
-	appendLog := func(path, text string) {
-		_ = os.MkdirAll(filepath.Dir(path), 0o700)
-		file, _ := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		_, _ = file.WriteString(text)
-		_ = file.Close()
-	}
-	appendLog(logPath, line(base, "WARN telegram poll failed for session %12: timeout after 30s"))
+	// Other tests in this package report through diag too.
+	collector.runtimeSeq = diag.Last()
+	defer log.SetOutput(log.Writer())
+	log.SetOutput(io.Discard)
+
+	diag.Report("test.telegram.poll", diag.SeverityWarn, "alpha", "timeout after 30s for session %12")
 	if pass := collector.Collect(context.Background(), []string{SourceRuntime}, true); pass.Added[SourceRuntime] != 1 {
 		t.Fatalf("first pass added %d", pass.Added[SourceRuntime])
 	}
-	for index := 1; index <= 3; index++ {
-		appendLog(logPath, line(base.Add(time.Duration(index)*time.Minute), fmt.Sprintf("WARN telegram poll failed for session %%%d: timeout after %ds", index, 30+index)))
+	// The same failure with different ids and numbers is one signature; a log
+	// line that merely says "error" or "failed" is not a signal at all.
+	for index := 1; index <= 4; index++ {
+		diag.Report("test.telegram.poll", diag.SeverityWarn, "alpha", fmt.Sprintf("timeout after %ds for session %%%d", 30+index, index))
 	}
-	// Rotate mid-stream: the unread tail of the old file must still be read.
-	if err := os.Rename(logPath, logPath+".1"); err != nil {
-		t.Fatal(err)
-	}
-	appendLog(logPath, line(base.Add(5*time.Minute), "WARN telegram poll failed for session %99: timeout after 41s"))
-	appendLog(logPath, line(base.Add(6*time.Minute), "plugin catalog could not be saved"))
+	diag.Report("test.plugin.save", diag.SeverityError, "", "catalog could not be saved")
+	log.Print("ERROR panic: this is only a log line and says error, fail and panic")
 	if pass := collector.Collect(context.Background(), []string{SourceRuntime}, true); pass.Added[SourceRuntime] != 5 {
-		t.Fatalf("rotation pass added %d", pass.Added[SourceRuntime])
+		t.Fatalf("second pass added %d", pass.Added[SourceRuntime])
 	}
 	if pass := collector.Collect(context.Background(), []string{SourceRuntime}, true); pass.Added[SourceRuntime] != 0 {
 		t.Fatalf("re-run added %d", pass.Added[SourceRuntime])
 	}
-	signals := store.Signals(Filter{Source: SourceRuntime})
 	signatures := map[string]int{}
-	for _, signal := range signals {
-		signatures[signal.Refs["signature"]]++
+	kinds := map[string]string{}
+	for _, signal := range store.Signals(Filter{Source: SourceRuntime}) {
+		signatures[signal.Refs["pattern"]]++
+		kinds[signal.Refs["pattern"]] = signal.Kind
 		if signal.ProjectID != RuntimeProjectID {
 			t.Errorf("runtime signal in project %q", signal.ProjectID)
 		}
 	}
-	if len(signatures) != 2 {
+	if len(signatures) != 2 || signatures["test.telegram.poll alpha"] != 5 || signatures["test.plugin.save"] != 1 {
 		t.Fatalf("signatures = %v", signatures)
 	}
+	if kinds["test.telegram.poll alpha"] != kindRuntimeWarn || kinds["test.plugin.save"] != kindRuntimeError {
+		t.Fatalf("kinds = %v", kinds)
+	}
 	problems := store.Problems(Filter{Kind: RuleRepeatedError})
-	if len(problems) != 1 || problems[0].Count != 5 {
+	if len(problems) != 1 || problems[0].Count != 5 || !strings.Contains(problems[0].Title, "test.telegram.poll alpha") {
 		t.Fatalf("repeated error problems = %+v", problems)
+	}
+}
+
+func TestRuntimeCollectorKeepsReportsWhenTheCollectorStops(t *testing.T) {
+	home := t.TempDir()
+	collector, store := newTestCollector(t, home)
+	collector.runtimeSeq = diag.Last()
+	defer log.SetOutput(log.Writer())
+	log.SetOutput(io.Discard)
+
+	diag.Report("test.shutdown", diag.SeverityError, "beta", "reported just before stopping")
+	collector.finishRuntime()
+	if signals := store.Signals(Filter{Source: SourceRuntime}); len(signals) != 1 || signals[0].Refs["pattern"] != "test.shutdown beta" {
+		t.Fatalf("signals = %+v", signals)
 	}
 }
 
@@ -564,14 +576,6 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	}
 	if got := store.Signals(Filter{Kind: kindLinearComment}); len(got) != 1 {
 		t.Fatalf("linear comments = %+v", got)
-	}
-}
-
-func TestLogSignatureIgnoresVariableParts(t *testing.T) {
-	a := LogSignature(`WARN send to %12 failed after 30s: open /home/x/.mewla/run/a.sock: refused (id 9f3c2a1b)`)
-	b := LogSignature(`WARN send to %977 failed after 4s: open /tmp/other.sock: refused (id 00aa11bb22)`)
-	if a != b {
-		t.Errorf("signatures differ:\n%s\n%s", a, b)
 	}
 }
 
@@ -859,5 +863,21 @@ func TestExternalCIClearsAFailureTheCursorForgot(t *testing.T) {
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	if got := len(store.Signals(Filter{Kind: kindCIPassed})); got != passes || passes != 1 {
 		t.Fatalf("pass signals = %d then %d, want exactly 1", passes, got)
+	}
+}
+
+func TestRuntimeCollectorSaysWhenReportsWereDropped(t *testing.T) {
+	home := t.TempDir()
+	collector, _ := newTestCollector(t, home)
+	collector.runtimeSeq = diag.Last()
+	defer log.SetOutput(log.Writer())
+	log.SetOutput(io.Discard)
+
+	for range 600 { // more than diag keeps between passes
+		diag.Report("test.flood", diag.SeverityWarn, "gamma", "again")
+	}
+	pass := collector.Collect(context.Background(), []string{SourceRuntime}, true)
+	if message := pass.Errors[SourceRuntime]; !strings.Contains(message, "dropped before Watch read them") {
+		t.Fatalf("errors = %v", pass.Errors)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/diag"
 )
 
 func capture(t *testing.T) *bytes.Buffer {
@@ -62,5 +64,18 @@ func TestNoteComparesRootCauseNotWrappingPaths(t *testing.T) {
 	}
 	if l.Note("save", &pathErr{path: "/tmp/.x.tmp-2"}) {
 		t.Fatal("the same cause under a different temp name must not be logged again")
+	}
+}
+
+func TestNoteReportsOneStructuredEventPerDistinctFailure(t *testing.T) {
+	capture(t)
+	var l Log
+	after := diag.Last()
+	l.Note("calendar save", errors.New("disk full"))
+	l.Note("calendar save", errors.New("disk full"))
+	l.Note("calendar save", errors.New("read-only"))
+	events, _ := diag.After(after)
+	if len(events) != 2 || events[0].Kind != "calendar save" || events[0].Severity != diag.SeverityWarn || events[0].Detail != "disk full" || events[1].Detail != "read-only" {
+		t.Fatalf("events = %+v", events)
 	}
 }

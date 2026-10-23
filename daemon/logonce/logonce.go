@@ -3,8 +3,9 @@ package logonce
 
 import (
 	"errors"
-	"log"
 	"sync"
+
+	"github.com/daoleno/mewla/daemon/diag"
 )
 
 // Log remembers the last failure of each scope. The zero value is ready.
@@ -13,7 +14,8 @@ type Log struct {
 	last map[string]string
 }
 
-// Note logs "WARN <scope>: <err>" when err differs from the scope's previous
+// Note reports the failure through diag (a "WARN <scope>: <err>" log line and
+// a Watch event whose kind is the scope) when err differs from the scope's previous
 // failure. Failures are compared by their root cause, so paths and temp-file
 // names inside a wrapping message do not make every repeat look new. A nil err
 // clears the scope, so the next failure is logged again. It reports whether it
@@ -33,7 +35,7 @@ func (l *Log) Note(scope string, err error) bool {
 		l.last = map[string]string{}
 	}
 	l.last[scope] = text
-	log.Printf("WARN %s: %v", scope, err)
+	diag.Report(scope, diag.SeverityWarn, "", err.Error())
 	return true
 }
 

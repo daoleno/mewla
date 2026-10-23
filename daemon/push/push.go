@@ -27,9 +27,8 @@ const (
 var (
 	ErrNoRegistration = errors.New("no push token registered")
 	// ErrCredentials means Expo has no usable FCM or APNs credential for the
-	// registered app. The client logs it once per token itself, so a phone whose
-	// platform has no credential yet does not log (and raise a Watch problem) on
-	// every push.
+	// registered app. The client reports it once per token itself, so a phone
+	// whose platform has no credential yet does not report on every push.
 	ErrCredentials                   = errors.New("push credentials unavailable")
 	notificationSessionSuffixPattern = regexp.MustCompile(`\s+\([^)]+\)\s*$`)
 	notificationTimestampPrefix      = regexp.MustCompile(`^\d{4}[/-]\d{2}[/-]\d{2}[ T]\d{2}:\d{2}:\d{2}\s*`)

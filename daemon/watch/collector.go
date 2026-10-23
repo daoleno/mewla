@@ -14,6 +14,7 @@ import (
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/logonce"
 )
@@ -39,7 +40,6 @@ type SessionLister interface {
 type Options struct {
 	Store      *Store
 	Home       string
-	LogPath    string
 	Works      WorkSource
 	Admissions AdmissionSource
 	Sessions   SessionLister
@@ -62,7 +62,7 @@ type Options struct {
 type Collector struct {
 	store       *Store
 	home        string
-	logPath     string
+	runtimeSeq  uint64 // last diag event collected; guarded by pass
 	works       WorkSource
 	admissions  AdmissionSource
 	sessions    SessionLister
@@ -98,7 +98,6 @@ func NewCollector(options Options) *Collector {
 	c := &Collector{
 		store:       options.Store,
 		home:        options.Home,
-		logPath:     options.LogPath,
 		works:       options.Works,
 		admissions:  options.Admissions,
 		sessions:    options.Sessions,
@@ -165,7 +164,7 @@ func (c *Collector) Store() *Store { return c.store }
 func (c *Collector) horizon() time.Time { return c.now().Add(-Backfill) }
 
 // noteError records a source failure, logging it only when it changes so a
-// persistent failure cannot flood the daemon log Watch itself reads.
+// persistent failure cannot flood the daemon log or Watch.
 func (c *Collector) noteError(source string, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -181,7 +180,7 @@ func (c *Collector) noteError(source string, err error) {
 		return
 	}
 	c.errors[source] = message
-	log.Printf("WARN watch: %s collection failed: %s", source, message)
+	diag.Report("watch.collection", diag.SeverityWarn, source, message)
 }
 
 // Run collects until ctx ends, and judges in the background while Watch is
@@ -194,6 +193,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			c.finishRuntime()
 			return nil
 		case <-timer.C:
 		}
@@ -201,6 +201,17 @@ func (c *Collector) Run(ctx context.Context) error {
 		c.notify.tick()
 		timer.Reset(runtimeEvery)
 	}
+}
+
+// finishRuntime keeps the problems reported since the last pass when the
+// daemon stops; they would otherwise live only in memory.
+func (c *Collector) finishRuntime() {
+	c.pass.Lock()
+	defer c.pass.Unlock()
+	if _, err := c.collectRuntime(context.Background()); err != nil {
+		return
+	}
+	_ = c.store.Flush()
 }
 
 // Collect runs one pass. With no sources it runs whichever sources are due;
@@ -257,8 +268,8 @@ func (c *Collector) Collect(ctx context.Context, sources []string, force bool) (
 		result.Added[source] += added
 		c.noteError(source, err)
 	}
-	// Runtime goes first so a long transcript read never delays daemon log
-	// lines. Human runs before Process: it learns where each turn ran, which
+	// Runtime goes first so a long transcript read never delays daemon problem
+	// reports. Human runs before Process: it learns where each turn ran, which
 	// places Work in its project.
 	if due(SourceRuntime, runtimeEvery) {
 		run(SourceRuntime, c.collectRuntime)

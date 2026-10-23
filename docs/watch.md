@@ -32,7 +32,7 @@ Watch records five kinds of signal:
 |---|---|---|
 | Human | What you said in Brain and Worker conversations, with the reply you were answering. Every agent Mewla supports is read: Claude Code, Codex, Pi, Cursor, Grok, OpenCode and dsh. Prompts that Brain wrote for a Worker are kept separate from what you typed. | The Session's working directory |
 | Process | Problems in the Work store: lost or stalled turns, automatic resumes, reconcile requests, ambiguous deliveries, input requests, failed turns, follow-up turns sent to a Worker, and Work reopened after it was closed. | The Work's working directory |
-| Runtime | Problem lines from the daemon log ([Troubleshooting](troubleshooting.md#reading-the-daemons-terminal-output)) | Mewla |
+| Runtime | Problems the daemon reports about itself (a failed plugin connection, a dropped upload, a collection that keeps failing), each with a kind, a severity and a subject. The daemon log carries the same problems as plain lines for you to read ([Troubleshooting](troubleshooting.md#reading-the-daemons-terminal-output)); Watch does not read the log. | Mewla |
 | Notification | Every push Mewla sends to your phone, and every one it held back: the text as sent, the kind (a Worker needing input, failing or finishing; a Brain message; a scheduled result; a Watch alert), the Work or thread it was about, whether it was delivered, whether the app was in the foreground and whether you had that Session open. After the send it keeps what you did with it: tapped it, opened that Session, or brought the app forward. Push tokens are never stored. | The Session's working directory |
 | External | From connected [Plugins](plugins.md), read only. GitHub: failed CI runs on the default branch, open issues and pull requests with new activity, and Dependabot and code scanning alerts where your grant allows. Linear: issues and comments for the team you linked. | GitHub: by the repository's remote. Linear: by the team you confirm. |
 
@@ -87,8 +87,8 @@ A few clear-cut problems are flagged immediately, without a model:
 
 - **CI is red.** The latest CI run on the default branch failed. Watch also
   shows how long it has been failing.
-- **Repeated daemon error.** The same daemon log error appeared at least five
-  times within ten minutes in the last week.
+- **Repeated daemon error.** The daemon reported the same problem (same kind
+  and subject) at least five times within ten minutes in the last week.
 - **Worker stalled or lost repeatedly.** One piece of Work lost or stalled its
   Worker at least twice in the last week.
 - **Phone notifications are not being delivered.** The last three pushes that
