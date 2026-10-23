@@ -1938,7 +1938,9 @@ func grokVisibleUserText(text string) string {
 	if text == "" {
 		return ""
 	}
-	text = attachmentpkg.WithoutEnvelope(text)
+	if message, err := attachmentpkg.Split(text); err == nil {
+		text = message.Text
+	}
 	const openTag = "<user_query>"
 	const closeTag = "</user_query>"
 	if start := strings.Index(text, openTag); start >= 0 {

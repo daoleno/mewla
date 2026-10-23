@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
@@ -60,7 +61,7 @@ func TestInboundSendInputCallsProviderOnceAndAcknowledges(t *testing.T) {
 		first.FieldCount != 2 {
 		t.Fatalf("first response = %#v", first)
 	}
-	if call := <-calls; call != (thinProxyInputCall{workerID: "agent-1", text: "hello"}) {
+	if call := <-calls; call != (thinProxyInputCall{workerID: "agent-1", text: "hello\n"}) {
 		t.Fatalf("first provider call = %#v", call)
 	}
 	select {
@@ -74,7 +75,7 @@ func TestInboundSendInputCallsProviderOnceAndAcknowledges(t *testing.T) {
 	if second.Type != "input_sent" || second.RequestID != request.RequestID {
 		t.Fatalf("repeated response = %#v", second)
 	}
-	if call := <-calls; call != (thinProxyInputCall{workerID: "agent-1", text: "hello"}) {
+	if call := <-calls; call != (thinProxyInputCall{workerID: "agent-1", text: "hello\n"}) {
 		t.Fatalf("repeated provider call = %#v", call)
 	}
 	select {
@@ -220,7 +221,6 @@ func TestBrainAdmissionIntentFailurePreventsProviderMutation(t *testing.T) {
 		RequestID:            "request-admit-fail",
 		WorkerID:             hostID,
 		Text:                 "persist me",
-		DisplayBody:          "persist me",
 		ConversationScopeKey: "brain-thread:unknown-thread",
 	})
 	if response.Type != "input_failed" ||
@@ -328,7 +328,7 @@ func TestBrainAcceptedInputReservesQueuedAttentionDespiteProjectionFailure(t *te
 		brain: service,
 		sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
 			providerCalls.Add(1)
-			if workerID != hostID || text != "continue" || receipt != requestID {
+			if workerID != hostID || text != "continue\n" || receipt != requestID {
 				t.Fatalf("provider call=%q %q %q", workerID, text, receipt)
 			}
 			return nil
@@ -337,7 +337,7 @@ func TestBrainAcceptedInputReservesQueuedAttentionDespiteProjectionFailure(t *te
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
 		Type: "send_input", RequestID: requestID, WorkerID: hostID, Text: "continue",
-		DisplayBody: "continue", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	}
 	// The queued internal Event is admitted at the serialized input boundary BEFORE the
 	// user's message is prepared: steering can never overtake it. The
@@ -447,7 +447,7 @@ func TestBrainAcceptedInputUsesPreparedGenerationWhenProviderChangesBeforeAdmit(
 		brain: service,
 		sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
 			providerCalls.Add(1)
-			if workerID != hostID || text != "continue" || receipt != requestID {
+			if workerID != hostID || text != "continue\n" || receipt != requestID {
 				t.Fatalf("provider call=%q %q %q", workerID, text, receipt)
 			}
 			// Provider mutation succeeded on G1; the ambient pane/process
@@ -459,7 +459,7 @@ func TestBrainAcceptedInputUsesPreparedGenerationWhenProviderChangesBeforeAdmit(
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
 		Type: "send_input", RequestID: requestID, WorkerID: hostID, Text: "continue",
-		DisplayBody: "continue", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	}
 	// The queued internal Event is delivered at the serialized input boundary before the
 	// user message. The accepted G1 admission remains exact history, while the
@@ -603,7 +603,7 @@ func TestNonBrainSendInputStillAcknowledgesAfterProviderAccept(t *testing.T) {
 	}
 }
 
-func TestServerSendInputWithReceiptForwardsExactRawText(t *testing.T) {
+func TestServerSendInputRendersTypedTextAndAttachmentsForTheProvider(t *testing.T) {
 	var gotWorker, gotText, gotReceipt string
 	srv := &Server{sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
 		gotWorker, gotText, gotReceipt = workerID, text, receipt
@@ -619,8 +619,28 @@ func TestServerSendInputWithReceiptForwardsExactRawText(t *testing.T) {
 	if response.Type != "input_sent" || response.RequestID != "request-raw-text" {
 		t.Fatalf("WebSocket send_input response = %#v", response)
 	}
-	if gotWorker != "owned-session:@1" || gotText != "hello\nraw text" || gotReceipt != "request-raw-text" {
+	if gotWorker != "owned-session:@1" || gotText != "hello\nraw text\n" || gotReceipt != "request-raw-text" {
 		t.Fatalf("forwarded input = agent %q text %q receipt %q", gotWorker, gotText, gotReceipt)
+	}
+
+	files := []attachment.File{{Name: "photo.png", Path: "/uploads/photo.png", ContentType: "image/png"}}
+	response = sendThinProxyRequest(t, conn, clientMessage{
+		Type: "send_input", RequestID: "request-attachments", WorkerID: "owned-session:@1",
+		Text: "look at this", Attachments: files,
+	})
+	if response.Type != "input_sent" {
+		t.Fatalf("attachment send response = %#v", response)
+	}
+	want := "look at this\n\n<mewla_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":\"/uploads/photo.png\",\"content_type\":\"image/png\"}]}</mewla_attachments>\n"
+	if gotText != want || gotReceipt != "request-attachments" {
+		t.Fatalf("provider input = %q receipt %q, want %q", gotText, gotReceipt, want)
+	}
+
+	response = sendThinProxyRequest(t, conn, clientMessage{
+		Type: "send_input", RequestID: "request-empty", WorkerID: "owned-session:@1", Text: "  \n",
+	})
+	if response.Type != "input_failed" || gotReceipt != "request-attachments" {
+		t.Fatalf("an empty message reached the provider: %#v receipt %q", response, gotReceipt)
 	}
 }
 
@@ -802,7 +822,7 @@ func TestSendInputStaleReceiptMismatchReturnsTypedCodeAndFreesTheAdmission(t *te
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
 		Type: "send_input", RequestID: requestID, WorkerID: hostID, Text: "edited message",
-		DisplayBody: "edited message", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	}
 	response := sendThinProxyRequest(t, conn, request)
 	if response.Type != "input_failed" || response.Code != "stale_receipt_invalidated" ||
@@ -822,7 +842,7 @@ func TestSendInputStaleReceiptMismatchReturnsTypedCodeAndFreesTheAdmission(t *te
 	freshRequestID := "request-stale-receipt-fresh"
 	fresh := sendThinProxyRequest(t, conn, clientMessage{
 		Type: "send_input", RequestID: freshRequestID, WorkerID: hostID, Text: "edited message",
-		DisplayBody: "edited message", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	})
 	if fresh.Type != "input_sent" || fresh.RequestID != freshRequestID {
 		t.Fatalf("fresh-identity retry response=%#v", fresh)
@@ -874,7 +894,7 @@ func TestSendInputLaneErrorNeverBlocksForegroundSend(t *testing.T) {
 		brain: service,
 		sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
 			providerCalls.Add(1)
-			if workerID != hostID || text != "user message" || receipt != requestID {
+			if workerID != hostID || text != "user message\n" || receipt != requestID {
 				t.Fatalf("provider call=%q %q %q", workerID, text, receipt)
 			}
 			return nil
@@ -883,7 +903,7 @@ func TestSendInputLaneErrorNeverBlocksForegroundSend(t *testing.T) {
 	conn := openThinProxyTestSocket(t, srv)
 	response := sendThinProxyRequest(t, conn, clientMessage{
 		Type: "send_input", RequestID: requestID, WorkerID: hostID, Text: "user message",
-		DisplayBody: "user message", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	})
 	if response.Type != "input_sent" || response.RequestID != requestID {
 		t.Fatalf("foreground send behind lane error response=%#v", response)
@@ -925,7 +945,7 @@ func TestSendInputSameIdentityRetryAfterNotSubmittedRearmsAndSubmits(t *testing.
 		brain: service,
 		sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
 			providerCalls.Add(1)
-			if workerID != hostID || text != "same message" || receipt != requestID {
+			if workerID != hostID || text != "same message\n" || receipt != requestID {
 				t.Fatalf("provider call=%q %q %q", workerID, text, receipt)
 			}
 			if failFirst.CompareAndSwap(true, false) {
@@ -937,7 +957,7 @@ func TestSendInputSameIdentityRetryAfterNotSubmittedRearmsAndSubmits(t *testing.
 	conn := openThinProxyTestSocket(t, srv)
 	request := clientMessage{
 		Type: "send_input", RequestID: requestID, WorkerID: hostID, Text: "same message",
-		DisplayBody: "same message", ConversationScopeKey: "brain-thread:" + threadID,
+		ConversationScopeKey: "brain-thread:" + threadID,
 	}
 	first := sendThinProxyRequest(t, conn, request)
 	if first.Type != "input_failed" || first.Code != "input_not_submitted" {

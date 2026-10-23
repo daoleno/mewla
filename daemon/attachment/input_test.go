@@ -1,51 +1,59 @@
 package attachment
 
 import (
-	"strings"
+	"errors"
+	"reflect"
 	"testing"
 )
 
-func TestEnvelopeRoundTripsThroughInputFindAndWithoutEnvelope(t *testing.T) {
+func TestRenderGolden(t *testing.T) {
 	files := []File{{Name: "photo.png", Path: "/uploads/photo.png", ContentType: "image/png"}}
-	body := Input("  look at this ", files, []Caption{{Text: "caption <b>"}})
-	if !strings.HasPrefix(body, "look at this\n\n<mewla_attachments>") || !strings.HasSuffix(body, "</mewla_attachments>") {
-		t.Fatalf("body = %q", body)
+	cases := []struct {
+		name    string
+		message Message
+		want    string
+	}{
+		{"plain text is trimmed and untagged", Message{Text: "  look at this \n"}, "look at this"},
+		{"files follow a blank line", Message{Text: "  look at this ", Files: files},
+			"look at this\n\n<mewla_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":\"/uploads/photo.png\",\"content_type\":\"image/png\"}]}</mewla_attachments>"},
+		{"files alone are only the tag", Message{Files: files},
+			"<mewla_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":\"/uploads/photo.png\",\"content_type\":\"image/png\"}]}</mewla_attachments>"},
+		{"captions alone keep an empty file list", Message{Text: "hi", Captions: []Caption{{Text: "caption <b>"}}},
+			"hi\n\n<mewla_attachments>{\"files\":[],\"captions\":[{\"text\":\"caption \\u003cb\\u003e\"}]}</mewla_attachments>"},
 	}
-	match, ok := Find(body)
-	if !ok {
-		t.Fatal("envelope not found")
-	}
-	envelope, err := match.Decode()
-	if err != nil || len(envelope.Files) != 1 || envelope.Files[0] != files[0] || envelope.Captions[0].Text != "caption <b>" {
-		t.Fatalf("envelope = %+v, err=%v", envelope, err)
-	}
-	if got := body[:match.Start] + Format(envelope) + body[match.End:]; got != body {
-		t.Fatalf("Format does not reproduce the span:\n%q\n%q", got, body)
-	}
-	if got := WithoutEnvelope(body); got != "look at this" {
-		t.Fatalf("WithoutEnvelope = %q", got)
+	for _, tc := range cases {
+		if got := tc.message.Render(); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
 	}
 }
 
-func TestEnvelopeReadsLooseSpacingAndIgnoresOtherText(t *testing.T) {
-	text := "hello <mewla_attachments>\n  {\"files\":[]}\n</mewla_attachments> tail"
-	match, ok := Find(text)
-	if !ok || match.Raw != `{"files":[]}` {
-		t.Fatalf("match = %+v ok=%v", match, ok)
+func TestSplitReadsWhatRenderWrote(t *testing.T) {
+	message := Message{
+		Text:     "look at this",
+		Files:    []File{{Name: "photo.png", Path: "/uploads/photo.png", ContentType: "image/png", Size: 12, Kind: "photo"}},
+		Captions: []Caption{{Text: "caption <b>", Entities: []Entity{{Type: "bold", Offset: 0, Length: 7}}}},
 	}
-	if got := WithoutEnvelope(text); got != "hello  tail" {
-		t.Fatalf("WithoutEnvelope = %q", got)
+	got, err := Split(message.Render())
+	if err != nil || !reflect.DeepEqual(got, message) {
+		t.Fatalf("Split(Render) = %+v, %v; want %+v", got, err, message)
 	}
-	for _, plain := range []string{"no envelope", "<mewla_attachments>unclosed", ""} {
-		if _, ok := Find(plain); ok || WithoutEnvelope(plain) != plain {
-			t.Fatalf("%q was treated as an envelope", plain)
+}
+
+func TestSplitReadsLooseSpacingAndLeavesOtherTextAlone(t *testing.T) {
+	got, err := Split("hello <mewla_attachments>\n  {\"files\":[]}\n</mewla_attachments> tail")
+	if err != nil || got.Text != "hello  tail" || len(got.Files) != 0 {
+		t.Fatalf("Split = %+v, %v", got, err)
+	}
+	for _, plain := range []string{"no tag", "<mewla_attachments>unclosed", "", "Uploaded files:\n- a.png: /uploads/a.png"} {
+		got, err := Split(plain)
+		if err != nil || got.Text != plain || len(got.Files) != 0 {
+			t.Fatalf("%q was treated as a rendering: %+v, %v", plain, got, err)
 		}
 	}
-	bad, ok := Find("<mewla_attachments>{broken</mewla_attachments>")
-	if !ok {
-		t.Fatal("malformed envelope not found")
-	}
-	if _, err := bad.Decode(); err == nil {
-		t.Fatal("malformed envelope decoded")
+	broken := "<mewla_attachments>{broken</mewla_attachments>"
+	got, err = Split(broken)
+	if !errors.Is(err, ErrMalformedRendering) || got.Text != broken {
+		t.Fatalf("malformed Split = %+v, %v", got, err)
 	}
 }

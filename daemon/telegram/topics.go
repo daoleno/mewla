@@ -637,17 +637,19 @@ func (m *Manager) handleSessionTopicMessage(ctx context.Context, token string, m
 	if body == "" {
 		return "ignored"
 	}
+	var captions []attachment.Caption
 	if len(message.Entities) > 0 {
 		caption := attachment.Caption{Text: message.Text, Entities: message.Entities}
 		if err := validateCaption(caption); err != nil {
 			m.enqueueTopicText(fmt.Sprintf("entities:%d", updateID), err.Error(), message.MessageThreadID, message.MessageID)
 			return "invalid_entities"
 		}
-		body = attachment.Input(body, nil, []attachment.Caption{caption})
+		captions = []attachment.Caption{caption}
 	}
 	if reply := replyContext(message.ReplyToMessage); reply != "" {
 		body = "Replying to: " + reply + "\n\n" + body
 	}
+	body = attachment.Message{Text: body, Captions: captions}.Render()
 	receipt := fmt.Sprintf("telegram:update:%d:%d", m.store.snapshot().BotID, updateID)
 	result, err := m.brain.SubmitExternalSessionInput(mapping.SessionID, receipt, body)
 	if err != nil && result == brain.ExternalInputPending {

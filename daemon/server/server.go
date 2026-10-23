@@ -412,7 +412,7 @@ type clientMessage struct {
 	CalendarItem         *calendar.Item                         `json:"calendar_item"`
 	Revision             int64                                  `json:"revision"`
 	ConversationScopeKey string                                 `json:"conversation_scope_key"`
-	DisplayBody          string                                 `json:"display_body"`
+	Attachments          []attachment.File                      `json:"attachments"`
 	Generation           int64                                  `json:"generation"`
 	Limit                int                                    `json:"limit"`
 	Operation            string                                 `json:"operation"`
@@ -1308,6 +1308,17 @@ func (s *Server) handleTelegramMessage(conn *websocket.Conn, raw clientMessage) 
 func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessage) {
 	switch raw.Type {
 	case "send_input":
+		// The phone sends the person's text and the staged files as typed
+		// fields; this is the one place they become what a provider receives.
+		// The final newline is the transport's submit delimiter.
+		message := attachment.Message{Text: raw.Text, Files: raw.Attachments}.Render()
+		if message == "" {
+			s.sendJSON(conn, map[string]any{
+				"type": "input_failed", "request_id": raw.RequestID,
+				"code": "send_input_failed", "message": "Message is empty.",
+			})
+			break
+		}
 		brainSteering := false
 		if s.brain != nil {
 			var steeringErr error
@@ -1320,16 +1331,12 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				break
 			}
 		}
-		displayBody := strings.TrimSpace(raw.DisplayBody)
-		if displayBody == "" {
-			displayBody = strings.TrimSpace(raw.Text)
-		}
 		var brainAdmission brain.BrainInputAdmission
 		if brainSteering {
 			prepared, created, prepareErr := s.brain.PrepareHostUserInput(
 				raw.WorkerID,
 				raw.RequestID,
-				displayBody,
+				message,
 				raw.ConversationScopeKey,
 			)
 			if prepareErr != nil {
@@ -1377,7 +1384,7 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				break
 			}
 		}
-		err := s.sendInputWithReceipt(raw.WorkerID, raw.Text, raw.RequestID)
+		err := s.sendInputWithReceipt(raw.WorkerID, message+"\n", raw.RequestID)
 		if err != nil {
 			inputOutcome := watcher.InputOutcomeFromError(err)
 			if watcher.IsStaleReceiptMismatch(err) {

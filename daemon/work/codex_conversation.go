@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/classifier"
 )
 
@@ -254,6 +255,10 @@ type CodexConversationEvent struct {
 	// (Claude's compaction summary). Consumers read this field; they never
 	// infer authorship from the text.
 	Origin string `json:"origin,omitempty"`
+	// Attachments are the files a user_message carried, as typed fields; Body
+	// is then the text the person wrote. The apps render chips from this and
+	// never read a tag out of Body.
+	Attachments []attachment.File `json:"attachments,omitempty"`
 	// Work-card fields are only set for Brain timeline Source=work_result items.
 	WorkID      string `json:"work_id,omitempty"`
 	WorkSession string `json:"work_session_id,omitempty"`

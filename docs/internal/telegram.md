@@ -214,9 +214,10 @@ conversation rejects an older staged batch, including at canonical admission.
 
 The largest photo variant is selected. Safe original document names, content
 types, byte sizes, captions and their UTF-16/custom-emoji entities are preserved.
-Files use the existing `mewla_attachments` envelope with local `name`/`path`
-references, extended with size/type/description and caption metadata. This is
-the same provider input mechanism as mobile uploads, not a Telegram-specific
+Staged batches keep the text, files (local `name`/`path` references with
+size/type/description) and captions as typed fields; the one
+`attachment.Message.Render` turns them into provider input at admission. This is
+the same provider input as mobile uploads, not a Telegram-specific
 prompt, native-vision request, or separate conversation. Actual image/file
 interpretation depends on the selected executor's tools and capabilities.
 
