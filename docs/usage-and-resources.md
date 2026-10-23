@@ -27,7 +27,9 @@ differently.
 
 When Codex is signed in with ChatGPT and uses **Official login**, Stats also
 shows the plan's usage windows (for example 5 hours and 1 week) with the share
-left.
+left. Mewla asks Codex for them through Codex's own app-server (`codex app-server`,
+`account/rateLimits/read`); it never reads Codex's sign-in file or sends its token
+anywhere.
 
 Per agent:
 
