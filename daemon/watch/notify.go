@@ -449,9 +449,9 @@ func (n *notifier) envelope(kind string, problems []Problem, now time.Time) stri
 	b.WriteString("</problems>\n</mewla_watch>\n")
 	switch kind {
 	case "brief":
-		b.WriteString("Morning brief due. Follow policies/watch.md: drop noise first, then write one short message for the rest and set the quick replies.")
+		b.WriteString("Morning brief due. Follow policies/watch.md: drop noise first, then write one short message for the rest and set one line of handle chips.")
 	case "urgent":
-		b.WriteString("Urgent. The user has already been pushed. Follow policies/watch.md: tell them in one short message and set the quick replies; do not push again.")
+		b.WriteString("Urgent. The user has already been pushed. Follow policies/watch.md: tell them in one short message and set the single handle chip; do not push again.")
 	default:
 		b.WriteString("Triage once, quietly. Follow policies/watch.md; do not message the user unless it says to.")
 	}
