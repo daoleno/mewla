@@ -59,25 +59,24 @@ choose a method; Brain must still exercise judgment and compose the brief.
 Managed `AGENTS.md` and policy blocks are updated; text outside them is retained.
 Nonempty profile, memory, current context and worklogs remain user-owned.
 
-Playbooks are seed files, not managed policy blocks. The retired `brain-flows`
-playbook, `playbooks/README.md` and `soul.md` are deleted only when they are
-byte-identical shipped defaults; an edited `brain-flows` loses only its retired
-product block, and other edited copies are reported by `mewla brain gc` as
-unmanaged entries. The four exact shipped seeds from revision
-`4c72f7b` are recognized by SHA-256 and upgraded. Any byte change, including
-whitespace or an appended note, preserves the entire unmarked file. Unknown
-older versions are also preserved. Symlink overrides are not replaced or
-followed by the catalog. Missing or empty regular files receive current defaults.
-Repeated reconciliation is idempotent. Future changes to unmarked defaults
-must explicitly recognize a prior shipped version, not infer user ownership
-from a heading or filename. Customized playbooks may intentionally retain old
-methods; the managed principle/routing layer still updates.
-
-The method delta also recognizes the exact `slice-work` and `delegate-brief`
-seeds from `7d1349b830d6283c5d9bb33009642b8e413fe04c`, in addition to those older
-seeds. Their frozen fixtures are in `daemon/brain/testdata/engineering-v2/`.
-Startup and housekeeping upgrade recognized defaults directly to the latest
-text; unknown versions, whitespace edits and user notes remain untouched.
+Playbooks are seed files, not managed policy blocks. The seeded files
+(`current.md`, `routing.md`, `worklog/README.md` and the three playbooks) are
+written once and followed across releases without a table of past digests: the
+state directory keeps `workspace-seeds.json`, the SHA-256 of what Mewla last
+wrote to each file. A file still matching that digest is untouched, so a new
+release replaces it directly; any byte change, including whitespace or an
+appended note, makes the whole file the user's and it is never touched again.
+Files that exist without a recorded digest (a workspace from before the
+manifest, or a deleted manifest) are the user's unless they already equal the
+current seed, which then starts being tracked. An unreadable manifest is logged
+and treated as empty. Symlink overrides are not replaced or followed by the
+catalog. Missing or empty regular files receive current defaults. Repeated
+reconciliation is idempotent. Retired product files (`soul.md`,
+`playbooks/README.md`, `playbooks/align.md`, `playbooks/brain-flows.md`) are no
+longer removed by the daemon; `mewla brain gc` reports leftover root entries as
+unmanaged, and Brain deletes stale playbooks it no longer wants. Customized
+playbooks may intentionally retain old methods; the managed principle/routing
+layer still updates.
 
 Bootstrap and executor handoff already reference `AGENTS.md`; they do not embed
 the playbook manual. The existing activation receipt now hashes release-owned

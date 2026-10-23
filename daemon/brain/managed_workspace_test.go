@@ -381,48 +381,12 @@ func TestHousekeepingReportsOnlySortedChangedPaths(t *testing.T) {
 	}
 }
 
-func TestRetiredShippedDefaultsAreDeletedAndEditedCopiesReported(t *testing.T) {
+func TestUnmanagedWorkspaceEntriesAreReportedAndLeftAlone(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	workspace := store.WorkspacePath()
-	fixtures := map[string]string{
-		"soul.md":                  "testdata/retired/soul.md",
-		"playbooks/README.md":      "testdata/retired/playbooks-README.md",
-		"playbooks/brain-flows.md": "testdata/retired/brain-flows.md",
-		"current.md":               "testdata/retired/current.md",
-		"worklog/README.md":        "testdata/retired/worklog-README.md",
-	}
-	for target, fixture := range fixtures {
-		// Retired fixtures predate the marker rename; rewrite them the way the
-		// host workspace was rewritten.
-		content := strings.ReplaceAll(string(mustReadFile(t, fixture)), "<!-- zen:brain-managed:", managedMarkerPrefix)
-		if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(target)), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	service := NewService(store, nil, nil)
-	report, err := service.Housekeeping()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, retired := range []string{"soul.md", "playbooks/README.md", "playbooks/brain-flows.md"} {
-		if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(retired))); !os.IsNotExist(err) {
-			t.Fatalf("shipped default %s was not deleted: %v", retired, err)
-		}
-	}
-	if got := string(mustReadFile(t, store.currentPath())); got != defaultCurrentContext {
-		t.Fatalf("legacy current.md seed not upgraded:\n%s", got)
-	}
-	if got := string(mustReadFile(t, store.worklogReadmePath())); got != defaultWorklogReadme {
-		t.Fatalf("legacy worklog README not upgraded:\n%s", got)
-	}
-	want := []string{"current.md", "playbooks/README.md", "playbooks/brain-flows.md", "soul.md", "worklog/README.md"}
-	if !equalStrings(report.ChangedPaths, want) {
-		t.Fatalf("changed paths = %v, want %v", report.ChangedPaths, want)
-	}
-
 	private := []byte("# Brain Soul\n\nPRIVATE_SOUL_SENTINEL\n")
 	soulPath := filepath.Join(workspace, "soul.md")
 	if err := os.WriteFile(soulPath, private, 0o600); err != nil {
@@ -435,13 +399,13 @@ func TestRetiredShippedDefaultsAreDeletedAndEditedCopiesReported(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(workspace, "downloads"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.Housekeeping()
+	report, err := NewService(store, nil, nil).Housekeeping()
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertBytesAndMtime(t, soulPath, private, fixed)
-	if len(second.ChangedPaths) != 0 || !equalStrings(second.UnmanagedPaths, []string{"downloads/", "soul.md"}) {
-		t.Fatalf("second report changed=%v unmanaged=%v", second.ChangedPaths, second.UnmanagedPaths)
+	if len(report.ChangedPaths) != 0 || !equalStrings(report.UnmanagedPaths, []string{"downloads/", "soul.md"}) {
+		t.Fatalf("report changed=%v unmanaged=%v", report.ChangedPaths, report.UnmanagedPaths)
 	}
 }
 

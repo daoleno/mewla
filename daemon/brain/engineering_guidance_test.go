@@ -14,82 +14,6 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-func TestEngineeringPlaybookUpgradePreservesCustomFiles(t *testing.T) {
-	for _, name := range []string{"wayfind.md", "slice-work.md", "delegate-brief.md"} {
-		for _, customized := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/custom=%t", name, customized), func(t *testing.T) {
-				root := t.TempDir()
-				store, err := NewStore(root)
-				if err != nil {
-					t.Fatal(err)
-				}
-				legacy := mustReadFile(t, filepath.Join("testdata", "engineering-v1", name))
-				if customized {
-					legacy = append(legacy, []byte("\nUser-owned override.  \n")...)
-				}
-				if err := os.WriteFile(store.playbookPath(name), legacy, 0o640); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Chmod(store.playbookPath(name), 0o640); err != nil {
-					t.Fatal(err)
-				}
-				service := NewService(store, nil, nil)
-				report, err := service.Housekeeping()
-				if err != nil {
-					t.Fatal(err)
-				}
-				got := mustReadFile(t, store.playbookPath(name))
-				changed := containsString(report.ChangedPaths, "playbooks/"+name)
-				if customized {
-					if !bytes.Equal(got, legacy) || changed {
-						t.Fatal("customized unmarked playbook was changed")
-					}
-					assertFileMode(t, store.playbookPath(name), 0o640)
-				} else {
-					if bytes.Equal(got, legacy) || !changed {
-						t.Fatal("known shipped seed did not upgrade through Housekeeping")
-					}
-					assertFileMode(t, store.playbookPath(name), 0o600)
-				}
-				if _, err := NewStore(root); err != nil {
-					t.Fatal(err)
-				}
-				if after := mustReadFile(t, store.playbookPath(name)); !bytes.Equal(after, got) {
-					t.Fatal("reopening store changed the reconciled playbook")
-				}
-				report, err = service.Housekeeping()
-				if err != nil || len(report.ChangedPaths) != 0 {
-					t.Fatalf("second repair not idempotent: %+v, %v", report, err)
-				}
-			})
-		}
-	}
-}
-
-func TestRetiredAlignPlaybookRemovedOnlyWhenShipped(t *testing.T) {
-	for _, customized := range []bool{false, true} {
-		root := t.TempDir()
-		store, err := NewStore(root)
-		if err != nil {
-			t.Fatal(err)
-		}
-		legacy := mustReadFile(t, filepath.Join("testdata", "engineering-v1", "align.md"))
-		if customized {
-			legacy = append(legacy, []byte("\nUser-owned override.\n")...)
-		}
-		if err := os.WriteFile(store.playbookPath("align.md"), legacy, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := NewService(store, nil, nil).Housekeeping(); err != nil {
-			t.Fatal(err)
-		}
-		_, statErr := os.Stat(store.playbookPath("align.md"))
-		if customized != (statErr == nil) {
-			t.Fatalf("custom=%t: align.md exists=%t", customized, statErr == nil)
-		}
-	}
-}
-
 func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -169,7 +93,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 func TestEngineeringMethodDeltaSeedDelivery(t *testing.T) {
 	for _, name := range []string{"slice-work.md", "delegate-brief.md"} {
 		for _, repair := range []string{"startup", "housekeeping"} {
-			for _, variant := range []string{"known-old", "whitespace-edit", "custom-note", "unknown", "empty", "missing"} {
+			for _, variant := range []string{"whitespace-edit", "custom-note", "unknown", "empty", "missing"} {
 				t.Run(name+"/"+repair+"/"+variant, func(t *testing.T) {
 					root := t.TempDir()
 					store, err := NewStore(root)
@@ -178,7 +102,7 @@ func TestEngineeringMethodDeltaSeedDelivery(t *testing.T) {
 					}
 					path := store.playbookPath(name)
 					want := mustReadFile(t, path)
-					old := mustReadFile(t, filepath.Join("testdata", "engineering-v2", name))
+					old := append([]byte{}, want...)
 					preserve := false
 					switch variant {
 					case "whitespace-edit":
@@ -328,7 +252,7 @@ func TestEngineeringSeedUpgradeLeavesSymlinkOwnedByUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := filepath.Join(t.TempDir(), "custom.md")
-	legacy := mustReadFile(t, "testdata/engineering-v1/wayfind.md")
+	legacy := []byte("# My own wayfind\n")
 	if err := os.WriteFile(target, legacy, 0o600); err != nil {
 		t.Fatal(err)
 	}

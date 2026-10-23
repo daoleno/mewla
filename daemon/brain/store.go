@@ -438,22 +438,10 @@ func (s *Store) ensureFiles() error {
 	if err := s.reconcileManagedWorkspace(); err != nil {
 		return err
 	}
-	if err := s.retireLegacyWorkspaceDefaults(); err != nil {
-		return err
-	}
 	if err := ensureFile(s.memoryPath(), []byte("# Brain Memory\n\n")); err != nil {
 		return err
 	}
-	if err := ensureFile(s.currentPath(), []byte(defaultCurrentContext)); err != nil {
-		return err
-	}
-	if err := s.ensurePlaybooks(); err != nil {
-		return err
-	}
-	if err := ensurePlaybookFile(s.routingGuidePath(), defaultRoutingGuide); err != nil {
-		return err
-	}
-	if err := s.ensureWorklog(); err != nil {
+	if err := s.seedWorkspaceFiles(); err != nil {
 		return err
 	}
 	if err := ensureFile(s.HostSessionPath(), []byte("{}\n")); err != nil {
@@ -797,13 +785,6 @@ func ensureFile(path string, initial []byte) error {
 		return err
 	}
 	return os.WriteFile(path, initial, 0o600)
-}
-
-func (s *Store) ensureWorklog() error {
-	if err := os.MkdirAll(s.worklogPath(), 0o700); err != nil {
-		return err
-	}
-	return ensureFile(s.worklogReadmePath(), []byte(defaultWorklogReadme))
 }
 
 const defaultProfileNotes = `# Brain Profile
