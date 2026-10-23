@@ -13,7 +13,14 @@ import (
 	"time"
 )
 
-const expoPushURL = "https://exp.host/--/api/v2/push/send"
+const (
+	expoPushURL     = "https://exp.host/--/api/v2/push/send"
+	expoReceiptsURL = "https://exp.host/--/api/v2/push/getReceipts"
+
+	// errDeviceNotRegistered is Expo's word for a token its provider (FCM or
+	// APNs) no longer accepts: the app was uninstalled or lost its permission.
+	errDeviceNotRegistered = "DeviceNotRegistered"
+)
 
 var (
 	ErrNoRegistration                = errors.New("no push token registered")
@@ -27,6 +34,11 @@ type Client struct {
 	mu         sync.RWMutex
 	token      string // Expo push token from mobile app
 	serverRef  string // Opaque client-side server identifier for notification routing
+
+	receiptDelays []time.Duration
+	receiptMu     sync.Mutex
+	pending       []pendingReceipt
+	receiptTimer  *time.Timer
 }
 
 type registration struct {
@@ -37,7 +49,8 @@ type registration struct {
 // New creates a push notification client.
 func New() *Client {
 	return &Client{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient:    &http.Client{Timeout: 10 * time.Second},
+		receiptDelays: defaultReceiptDelays,
 	}
 }
 
@@ -89,6 +102,8 @@ func (c *Client) sendTo(token string, msg Message) error {
 		"title": msg.Title,
 		"body":  msg.Body,
 		"sound": "default",
+		// The channel the app creates for alerts (importance max).
+		"channelId": "mewla-agents",
 	}
 	if msg.Priority != "" {
 		payload["priority"] = msg.Priority
@@ -102,35 +117,52 @@ func (c *Client) sendTo(token string, msg Message) error {
 		return fmt.Errorf("marshal push: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", expoPushURL, bytes.NewReader(body))
+	respBody, status, err := c.post(expoPushURL, body)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return fmt.Errorf("send push: %w", err)
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("push API returned %d%s", status, describeAPIErrors(respBody, token))
+	}
+	var response struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return fmt.Errorf("decode push ticket: %w", err)
+	}
+	// One message answers with one ticket object; a batch would answer with a list.
+	var ticket expoTicket
+	if err := json.Unmarshal(response.Data, &ticket); err != nil {
+		return fmt.Errorf("decode push ticket: %w", err)
+	}
+	if ticket.Status != "ok" {
+		if ticket.Details.Error == errDeviceNotRegistered {
+			c.dropToken(token)
+		}
+		return fmt.Errorf("push API rejected notification%s%s", describeProblem(ticket.Details.Error, ticket.Message, token), receiptHint(ticket.Details.Error))
+	}
+	c.trackReceipt(ticket.ID, token)
+	return nil
+}
+
+func (c *Client) post(url string, body []byte) ([]byte, int, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send push: %w", err)
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("push API returned %d", resp.StatusCode)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return nil, 0, err
 	}
-	var ticket struct {
-		Data struct {
-			Status string `json:"status"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&ticket); err != nil {
-		return fmt.Errorf("decode push ticket: %w", err)
-	}
-	if ticket.Data.Status != "ok" {
-		return fmt.Errorf("push API rejected notification")
-	}
-
-	return nil
+	return respBody, resp.StatusCode, nil
 }
 
 func formatNotificationWorkerLabel(workerName, workerID string) string {

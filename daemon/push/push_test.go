@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestFormatNotificationWorkerLabel(t *testing.T) {
@@ -161,11 +162,11 @@ func TestScheduledResultPushUsesOnlyRoutingAndGenericCopy(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			if payload["to"] != "token-1" || payload["title"] != test.wantTitle ||
+			if payload["channelId"] != "mewla-agents" || payload["to"] != "token-1" || payload["title"] != test.wantTitle ||
 				payload["body"] != test.wantBody || payload["priority"] != test.wantPriority {
 				t.Fatalf("payload = %#v", payload)
 			}
-			if len(payload) != 6 {
+			if len(payload) != 7 {
 				t.Fatalf("unexpected scheduled payload fields: %#v", payload)
 			}
 			data, ok := payload["data"].(map[string]any)
@@ -261,4 +262,105 @@ func pushResponse(status int, body string) *http.Response {
 		Header:     make(http.Header),
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
+}
+
+func TestTicketDeviceNotRegisteredDropsOnlyTheSentToken(t *testing.T) {
+	var logs bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previousWriter)
+
+	client := New()
+	client.SetRegistration("ExponentPushToken[old]", "server-1")
+	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		// The app re-registers while the send is in flight.
+		client.SetRegistration("ExponentPushToken[new]", "server-1")
+		return pushResponse(http.StatusOK, `{"data":{"status":"error","message":"\"ExponentPushToken[old]\" is not a registered push notification recipient","details":{"error":"DeviceNotRegistered"}}}`), nil
+	})
+	err := client.sendTo("ExponentPushToken[old]", Message{Title: "t"})
+	if err == nil || !strings.Contains(err.Error(), "DeviceNotRegistered") {
+		t.Fatalf("error = %v, want DeviceNotRegistered", err)
+	}
+	if strings.Contains(err.Error(), "ExponentPushToken") {
+		t.Fatalf("token leaked in error: %v", err)
+	}
+	if !client.HasToken() {
+		t.Fatal("a newer registration must survive a stale DeviceNotRegistered")
+	}
+
+	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return pushResponse(http.StatusOK, `{"data":{"status":"error","details":{"error":"DeviceNotRegistered"}}}`), nil
+	})
+	_ = client.sendTo("ExponentPushToken[new]", Message{Title: "t"})
+	if client.HasToken() {
+		t.Fatal("DeviceNotRegistered should drop the matching token")
+	}
+}
+
+func TestHTTPFailureNamesExpoErrorWithoutToken(t *testing.T) {
+	client := New()
+	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return pushResponse(http.StatusBadRequest, `{"errors":[{"code":"PUSH_BAD_PROJECT","message":"bad project for credential-token"}]}`), nil
+	})
+	err := client.sendTo("credential-token", Message{Title: "t"})
+	if err == nil || !strings.Contains(err.Error(), "400") || !strings.Contains(err.Error(), "PUSH_BAD_PROJECT") ||
+		strings.Contains(err.Error(), "credential-token") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestReceiptErrorIsLoggedAndDropsDeadDevice(t *testing.T) {
+	logs := &lockedBuffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logs)
+	defer log.SetOutput(previousWriter)
+
+	client := New()
+	client.receiptDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	client.SetRegistration("credential-token", "server-1")
+	var receiptRequests atomic.Int64
+	client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() == expoPushURL {
+			return pushResponse(http.StatusOK, `{"data":{"status":"ok","id":"ticket-1"}}`), nil
+		}
+		// The first look finds nothing yet; the second finds the failure.
+		if receiptRequests.Add(1) == 1 {
+			return pushResponse(http.StatusOK, `{"data":{}}`), nil
+		}
+		return pushResponse(http.StatusOK, `{"data":{"ticket-1":{"status":"error","message":"gone","details":{"error":"DeviceNotRegistered"}}}}`), nil
+	})
+	if err := client.NotifyWorkerDone("agent-1", "Agent", "done"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for client.HasToken() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if client.HasToken() {
+		t.Fatal("receipt DeviceNotRegistered should drop the token")
+	}
+	time.Sleep(20 * time.Millisecond) // the drop is logged right after it happens
+	if got := logs.String(); !strings.Contains(got, "ticket-1") || !strings.Contains(got, "DeviceNotRegistered") || strings.Contains(got, "credential-token") {
+		t.Fatalf("log = %q", got)
+	}
+	if receiptRequests.Load() != 2 {
+		t.Fatalf("receipt lookups = %d, want 2", receiptRequests.Load())
+	}
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
