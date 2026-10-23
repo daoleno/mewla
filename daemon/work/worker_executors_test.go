@@ -2,6 +2,7 @@ package work
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -79,7 +80,7 @@ func TestPrepareDelegatedCommandUsesOneProviderAdapterBoundary(t *testing.T) {
 		if err != nil {
 			t.Fatalf("provider %q: %v", tc.provider, err)
 		}
-		if got != tc.want {
+		if got = regexp.MustCompile(` --session-id [0-9a-f-]{36}`).ReplaceAllString(got, ""); got != tc.want {
 			t.Fatalf("provider %q command = %q, want %q", tc.provider, got, tc.want)
 		}
 	}
@@ -254,5 +255,60 @@ func TestProfileClientExecutorSeparatesAliasFromCanonicalClient(t *testing.T) {
 	ae := NewWorkerExecutor("primary", Executor{Name: "primary", Command: "codex", Kind: "codex"})
 	if ae.ID != "primary" || ae.ProfileClientExecutor() != WorkerProviderCodex {
 		t.Fatalf("AgentExecutor=%+v hint=%q", ae, ae.ProfileClientExecutor())
+	}
+}
+
+func TestEnsureClaudeSessionLaunchCommandGivesFreshLaunchItsOwnID(t *testing.T) {
+	first, err := EnsureClaudeSessionLaunchCommand("claude --permission-mode auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := EnsureClaudeSessionLaunchCommand("claude --permission-mode auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstID, present, err := ProviderResumeToken(WorkerProviderClaude, first)
+	if err != nil || !present || firstID == "" {
+		t.Fatalf("first id = %q present=%v err=%v in %q", firstID, present, err, first)
+	}
+	secondID, _, _ := ProviderResumeToken(WorkerProviderClaude, second)
+	if firstID == secondID {
+		t.Fatalf("two launches share session id %q", firstID)
+	}
+	if got := claudeResumeSessionID(first); got != firstID {
+		t.Fatalf("transcript lookup reads %q from the command, want %q", got, firstID)
+	}
+}
+
+func TestEnsureClaudeSessionLaunchCommandLeavesExistingIdentityAlone(t *testing.T) {
+	for _, command := range []string{
+		"claude --resume 7f1c",
+		"claude --session-id 7f1c",
+		"claude --continue",
+		"claude -c",
+		"claude -- prompt",
+		"claude $(weird)",
+	} {
+		got, err := EnsureClaudeSessionLaunchCommand(command)
+		if err != nil || got != command {
+			t.Fatalf("%q -> %q, %v; want unchanged", command, got, err)
+		}
+	}
+}
+
+func TestPrepareDelegatedCommandBindsClaudeButNotOtherProviders(t *testing.T) {
+	claude, err := PrepareDelegatedCommand(WorkerProviderClaude, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present, _ := ProviderResumeToken(WorkerProviderClaude, claude); !present {
+		t.Fatalf("delegated Claude launch has no session id: %q", claude)
+	}
+	grok, err := PrepareDelegatedCommand(WorkerProviderGrok, "grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(grok, "session") {
+		t.Fatalf("grok launch unexpectedly changed: %q", grok)
 	}
 }
