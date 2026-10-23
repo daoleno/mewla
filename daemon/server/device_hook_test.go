@@ -26,7 +26,8 @@ func TestRegisterPushTellsTheDeviceHookTheTimeZoneAndLocale(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := New(authManager, watcher.New(time.Second), nil, nil, nil, nil, nil)
-	srv.pusher = &recordingNotificationPusher{}
+	pusher := &recordingNotificationPusher{}
+	srv.pusher = pusher
 	heard := make(chan [2]string, 1)
 	srv.SetDeviceHook(func(timeZone, locale string) { heard <- [2]string{timeZone, locale} })
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
@@ -48,5 +49,16 @@ func TestRegisterPushTellsTheDeviceHookTheTimeZoneAndLocale(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("the device hook was not called")
+	}
+	// The push token is kept under the paired device that sent it, and a
+	// revoked device is forgotten.
+	calls := pusher.snapshot()
+	if len(calls) != 1 || calls[0].kind != "registration" || calls[0].deviceID != "device-locale" || calls[0].serverRef != "ref" {
+		t.Fatalf("registration calls = %+v", calls)
+	}
+	srv.revokeAuthenticatedDevice("device-locale")
+	calls = pusher.snapshot()
+	if len(calls) != 2 || calls[1].kind != "forget" || calls[1].deviceID != "device-locale" {
+		t.Fatalf("revocation calls = %+v", calls)
 	}
 }

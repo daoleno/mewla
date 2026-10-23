@@ -52,10 +52,13 @@ first server connects, not at launch. If you decline it, Mewla does not ask
 again; turn notifications on in the system settings for Mewla.
 
 Your daemon sends each push to Expo's push service with your phone's push
-token, and Expo hands it to Google (Android) or Apple (iOS). The push carries
-the title, the Session name and a short line, never the full result. If Expo
-reports that the phone is no longer registered, the daemon forgets the token
-until the app connects again.
+token, and Expo hands it to Google (Android) or Apple (iOS). Every paired
+device that has connected since the daemon started gets the push, each under
+its own token. The push carries the title, the Session name and a short line,
+never the full result. If Expo reports that a phone is no longer registered, the
+daemon forgets that token until the app connects again; revoking a device
+forgets its token at once. Tokens are kept in memory only, so a phone hears
+pushes again after a daemon restart once its app connects.
 
 Remote push on iOS is not yet available in official builds; Android is.
 

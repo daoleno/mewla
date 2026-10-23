@@ -154,17 +154,17 @@ func (c *Client) reschedule(entries []pendingReceipt) []pendingReceipt {
 	return next
 }
 
-// dropToken forgets a token Expo says is dead, unless the app has already
+// dropToken forgets a token Expo says is dead, unless its device has already
 // registered a newer one. The app registers again on its next connection.
 func (c *Client) dropToken(token string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.token != token {
-		return
+	for id, existing := range c.registrations {
+		if existing.token == token {
+			delete(c.registrations, id)
+			log.Printf("push: %s: dropped a registered device; the app registers again when it next connects", errDeviceNotRegistered)
+		}
 	}
-	c.token = ""
-	c.serverRef = ""
-	log.Printf("push: %s: dropped the registered device; the app registers again when it next connects", errDeviceNotRegistered)
 }
 
 func isCredentialError(code string) bool {

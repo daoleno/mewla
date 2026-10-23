@@ -87,10 +87,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type notificationPusher interface {
-	SetRegistration(token, serverRef string)
-	NotifyWorkerBlocked(workerID, workerName, summary string) error
-	NotifyWorkerFailed(workerID, workerName, summary string) error
-	NotifyWorkerDone(workerID, workerName, summary string) error
+	SetRegistration(deviceID, token, serverRef string)
+	ForgetDevice(deviceID string)
+	NotifyWorker(kind string, notice push.WorkerNotice) error
 	NotifyScheduledResult(title, status, threadID, resultID string) error
 }
 
@@ -311,7 +310,6 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		auth:               authManager,
 		watcher:            w,
 		terminal:           terminal.NewManager(&terminal.TmuxBackend{}),
-		pusher:             pusher,
 		stats:              sc,
 		work:               workStore,
 		execs:              execs,
@@ -346,6 +344,10 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		srv.authRevocationUnsubscribe = authManager.SubscribeRevocations(
 			srv.revokeAuthenticatedDevice,
 		)
+	}
+	if pusher != nil {
+		// A nil *push.Client in the interface would pass every nil check.
+		srv.pusher = pusher
 	}
 	srv.terminal.SetCleanupSubmitter(srv.terminalCleanup.Submit)
 	return srv
@@ -637,10 +639,24 @@ func (s *Server) detachAuthenticatedClient(
 	s.completeClientDetach(work)
 }
 
+// deviceIDOf is the paired device behind an authenticated connection.
+func (s *Server) deviceIDOf(conn *websocket.Conn) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if owner := s.clients[conn]; owner != nil {
+		return owner.deviceID
+	}
+	return ""
+}
+
 func (s *Server) revokeAuthenticatedDevice(deviceID string) {
 	normalizedID := strings.TrimSpace(deviceID)
 	if normalizedID == "" {
 		return
+	}
+	if s.pusher != nil {
+		// A revoked phone must stop hearing what its agents say.
+		s.pusher.ForgetDevice(normalizedID)
 	}
 	var revoked []clientDetachWork
 	s.mu.Lock()
@@ -1024,7 +1040,7 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainWorkspaceFile(conn, raw)
 	case "register_push":
 		if raw.PushToken != "" && s.pusher != nil {
-			s.pusher.SetRegistration(raw.PushToken, raw.ServerRef)
+			s.pusher.SetRegistration(s.deviceIDOf(conn), raw.PushToken, raw.ServerRef)
 			if s.deviceHook != nil {
 				s.deviceHook(strings.TrimSpace(raw.TimeZone), strings.TrimSpace(raw.Locale))
 			}
@@ -3499,20 +3515,12 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 		return
 	}
 
-	state := ev.NewState
-	switch state {
-	case "blocked":
-		if err := s.pusher.NotifyWorkerBlocked(ev.WorkerID, ev.Worker.Name, ev.Worker.Summary); err != nil {
-			logPushFailure("blocked-agent", "worker="+ev.WorkerID, err)
-		}
-	case "failed":
-		if err := s.pusher.NotifyWorkerFailed(ev.WorkerID, ev.Worker.Name, ev.Worker.Summary); err != nil {
-			logPushFailure("failed-agent", "worker="+ev.WorkerID, err)
-		}
-	case "done":
-		if err := s.pusher.NotifyWorkerDone(ev.WorkerID, ev.Worker.Name, ev.Worker.Summary); err != nil {
-			logPushFailure("done-agent", "worker="+ev.WorkerID, err)
-		}
+	kind, ok := workerNotificationKind(ev.NewState)
+	if !ok {
+		return
+	}
+	if err := s.pusher.NotifyWorker(kind, workerNotice(ev)); err != nil {
+		logPushFailure(strings.ReplaceAll(kind, "_", "-"), "worker="+ev.WorkerID, err)
 	}
 }
 

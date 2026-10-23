@@ -1476,8 +1476,9 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 		worker, exists := w.workers[win.target]
 		if !exists {
 			worker = &classifier.Worker{
-				ID:   win.target,
-				Name: formatWorkerName(win.name, win.target),
+				ID:     win.target,
+				Name:   formatWorkerName(win.name, win.target),
+				Window: strings.TrimSpace(win.name),
 			}
 			w.workers[win.target] = worker
 			w.workerOrder = append(w.workerOrder, win.target)
@@ -1495,6 +1496,7 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 		previousMetadata := workerMetadataSnapshotFor(worker)
 		if nextName := formatWorkerName(win.name, win.target); nextName != "" {
 			worker.Name = nextName
+			worker.Window = strings.TrimSpace(win.name)
 		}
 		if w.hidden[win.target] || win.hidden {
 			w.hidden[win.target] = true
@@ -4198,6 +4200,7 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 		BrowserID:    opts.BrowserID,
 		ID:           target,
 		Name:         formatWorkerName(createdSessionName(opts), target),
+		Window:       strings.TrimSpace(createdSessionName(opts)),
 		Project:      projectNameFromPath(cwd),
 		Cwd:          strings.TrimSpace(cwd),
 		Command:      strings.TrimSpace(opts.Command),

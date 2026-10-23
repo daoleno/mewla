@@ -104,17 +104,29 @@ func (s *Server) noteSuppressedNotification(ev watcher.SessionEvent, reason stri
 	if recorder == nil || ev.Worker == nil || ev.Type != "worker_state_change" || ev.OldState == ev.NewState {
 		return
 	}
-	var kind string
-	switch ev.NewState {
-	case "blocked":
-		kind = push.KindWorkerBlocked
-	case "failed":
-		kind = push.KindWorkerFailed
-	case "done":
-		kind = push.KindWorkerDone
-	default:
+	kind, ok := workerNotificationKind(ev.NewState)
+	if !ok {
 		return
 	}
-	title, body := push.WorkerMessageText(kind, ev.WorkerID, ev.Worker.Name, ev.Worker.Summary)
+	title, body := push.WorkerMessageText(kind, workerNotice(ev))
 	recorder.NotificationSuppressed(kind, ev.WorkerID, title, body, reason)
+}
+
+// workerNotificationKind is the notification a Worker's new state earns, if any.
+func workerNotificationKind(state string) (string, bool) {
+	switch state {
+	case "blocked":
+		return push.KindWorkerBlocked, true
+	case "failed":
+		return push.KindWorkerFailed, true
+	case "done":
+		return push.KindWorkerDone, true
+	}
+	return "", false
+}
+
+// workerNotice is what a Worker notification says about the Worker of a
+// session event.
+func workerNotice(ev watcher.SessionEvent) push.WorkerNotice {
+	return push.WorkerNotice{WorkerID: ev.WorkerID, Window: ev.Worker.Window, Summary: ev.Worker.Summary}
 }

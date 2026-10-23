@@ -116,7 +116,7 @@ func TestSuppressedWorkerNotificationIsRecordedWithItsText(t *testing.T) {
 	srv := New(nil, watcher.New(time.Second), nil, nil, nil, nil, nil)
 	heard := &heardNotifications{responseSig: make(chan struct{}, 1)}
 	srv.SetNotificationRecorder(heard)
-	worker := &classifier.Worker{ID: "main:7", Name: "mewla", Summary: "all tests pass"}
+	worker := &classifier.Worker{ID: "main:7", Name: "mewla (main:7)", Window: "mewla", Summary: "all tests pass"}
 	srv.noteSuppressedNotification(watcher.SessionEvent{Type: "worker_state_change", WorkerID: "main:7", OldState: "running", NewState: "done", Worker: worker}, "person_viewing_session")
 	srv.noteSuppressedNotification(watcher.SessionEvent{Type: "worker_state_change", WorkerID: "main:7", OldState: "done", NewState: "done", Worker: worker}, "person_viewing_session")
 	srv.noteSuppressedNotification(watcher.SessionEvent{Type: "worker_updated", WorkerID: "main:7", OldState: "running", NewState: "done", Worker: worker}, "person_viewing_session")
