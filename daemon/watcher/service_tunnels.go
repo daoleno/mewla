@@ -1,9 +1,7 @@
 package watcher
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -219,24 +216,6 @@ func serviceOriginURL(service SessionService) (*url.URL, error) {
 	return url.Parse("http://" + net.JoinHostPort(host, fmt.Sprint(service.Port)))
 }
 
-var quickTunnelURL = regexp.MustCompile(`https://[a-z0-9-]+\.trycloudflare\.com\b`)
-
-func quickTunnelLogURL(line []byte) string {
-	var record map[string]json.RawMessage
-	if json.Unmarshal(line, &record) != nil {
-		return ""
-	}
-	for _, key := range []string{"url", "message"} {
-		var value string
-		if json.Unmarshal(record[key], &value) == nil {
-			if match := quickTunnelURL.FindString(value); match != "" {
-				return match
-			}
-		}
-	}
-	return ""
-}
-
 func (w *Watcher) runServiceTunnel(ctx context.Context, owner *serviceTunnels, tunnel *quickTunnel, service SessionService) {
 	defer close(tunnel.done)
 	defer tunnel.cancel()
@@ -325,7 +304,12 @@ func (w *Watcher) runServiceTunnel(ctx context.Context, owner *serviceTunnels, t
 		fail(err)
 		return
 	}
-	command := exec.CommandContext(ctx, "cloudflared", "tunnel", "--config", config, "--no-autoupdate", "--output", "json", "--metrics", "127.0.0.1:0", "--url", "http://"+listener.Addr().String())
+	metricsAddress, err := reserveLoopbackAddress()
+	if err != nil {
+		fail(err)
+		return
+	}
+	command := exec.CommandContext(ctx, "cloudflared", "tunnel", "--config", config, "--no-autoupdate", "--metrics", metricsAddress, "--url", "http://"+listener.Addr().String())
 	command.Env = []string{}
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
@@ -338,46 +322,25 @@ func (w *Watcher) runServiceTunnel(ctx context.Context, owner *serviceTunnels, t
 		fail(err)
 		return
 	}
-	output, err := command.StdoutPipe()
-	if err != nil {
-		fail(err)
-		return
-	}
-	command.Stderr = command.Stdout
+	// cloudflared's output is not read: the public URL and readiness come from
+	// its metrics endpoint, and nothing about the tunnel is stored on disk.
 	if err := command.Start(); err != nil {
 		fail(err)
 		return
 	}
-	// Scanner stores no logs or public URLs on disk.
 	announced := make(chan string, 1)
 	connected := make(chan struct{}, 1)
 	scanned := make(chan struct{})
+	pollContext, stopPolling := context.WithCancel(ctx)
 	go func() {
 		defer close(scanned)
-		scanner := bufio.NewScanner(output)
-		scanner.Buffer(make([]byte, 4096), 128<<10)
-		for scanner.Scan() {
-			var record struct {
-				Message string `json:"message"`
-			}
-			if json.Unmarshal(scanner.Bytes(), &record) == nil && strings.Contains(record.Message, "Registered tunnel connection") {
-				select {
-				case connected <- struct{}{}:
-				default:
-				}
-			}
-			if publicURL := quickTunnelLogURL(scanner.Bytes()); publicURL != "" {
-				select {
-				case announced <- publicURL:
-				default:
-				}
-			}
-		}
+		pollCloudflared(pollContext, newCloudflaredMetrics(metricsAddress), announced, connected)
 	}()
 	exited := make(chan error, 1)
 	go func() { exited <- command.Wait() }()
 	defer func() {
 		tunnel.cancel()
+		stopPolling()
 		_ = command.Process.Kill()
 		select {
 		case <-exited:

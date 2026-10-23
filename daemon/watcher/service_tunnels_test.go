@@ -93,14 +93,11 @@ func waitTunnel(t *testing.T, tunnel *quickTunnel, owner *serviceTunnels) Servic
 func TestQuickTunnelOriginLifetimeAndStopDoNotKillOrigin(t *testing.T) {
 	directory := t.TempDir()
 	binary := filepath.Join(directory, "cloudflared")
-	if err := os.WriteFile(binary, []byte(`#!/bin/sh
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = --url ]; then printf '%s' "$2" > "$MEWLA_TUNNEL_TEST_PROXY"; fi
-  shift
-done
-printf '%s\n' '{"message":"https://fixture-test.trycloudflare.com"}' '{"message":"Registered tunnel connection"}'
-exec sleep 60
-`), 0700); err != nil {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nMEWLA_FAKE_CLOUDFLARED=1 exec "+shellQuote(executable)+" -test.run='^TestFakeCloudflared$' -- \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -160,15 +157,117 @@ exec sleep 60
 	response.Body.Close()
 }
 
-func TestQuickTunnelLogOnlyAcceptsStructuredCloudflareURLs(t *testing.T) {
-	if quickTunnelLogURL([]byte(`{"message":"Your tunnel: https://hello-world.trycloudflare.com"}`)) != "https://hello-world.trycloudflare.com" {
-		t.Fatal("missing native URL")
+// TestFakeCloudflared is the test binary standing in for cloudflared: it
+// records the --url it was given and serves the two metrics endpoints the
+// daemon reads. It does nothing unless re-executed by the fake `cloudflared`
+// script.
+func TestFakeCloudflared(t *testing.T) {
+	if os.Getenv("MEWLA_FAKE_CLOUDFLARED") != "1" {
+		t.Skip("runs only as the fake cloudflared")
 	}
-	for _, line := range []string{`https://bad.trycloudflare.com`, `{"message":"https://example.com"}`, `{"error":"https://bad.trycloudflare.com"}`} {
-		if quickTunnelLogURL([]byte(line)) != "" {
-			t.Fatal("accepted unrelated output")
+	var metrics, origin string
+	args := os.Args
+	for index, arg := range args {
+		switch arg {
+		case "--metrics":
+			metrics = args[index+1]
+		case "--url":
+			origin = args[index+1]
 		}
 	}
+	if err := os.WriteFile(os.Getenv("MEWLA_TUNNEL_TEST_PROXY"), []byte(origin), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/quicktunnel", func(writer http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(writer, `{"hostname":"fixture-test.trycloudflare.com"}`)
+	})
+	mux.HandleFunc("/ready", func(writer http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(writer, `{"status":200,"readyConnections":1,"connectorId":"fixture"}`)
+	})
+	listener, err := net.Listen("tcp", metrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(listener, mux) }()
+	time.Sleep(60 * time.Second)
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+func TestCloudflaredMetricsReadsHostnameAndReadiness(t *testing.T) {
+	var readyBody, hostnameBody string
+	var readyStatus int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/quicktunnel":
+			fmt.Fprint(writer, hostnameBody)
+		case "/ready":
+			writer.WriteHeader(readyStatus)
+			fmt.Fprint(writer, readyBody)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	metrics := newCloudflaredMetrics(strings.TrimPrefix(server.URL, "http://"))
+	ctx := context.Background()
+
+	for body, want := range map[string]string{
+		`{"hostname":"hello-world.trycloudflare.com"}`: "https://hello-world.trycloudflare.com",
+		`{"hostname":""}`: "",
+		`{}`:              "",
+	} {
+		hostnameBody = body
+		if got, err := metrics.publicURL(ctx); err != nil || got != want {
+			t.Errorf("publicURL(%s) = %q, %v; want %q", body, got, err, want)
+		}
+	}
+	for _, body := range []string{`{"hostname":"example.com"}`, `{"hostname":"evil.com/x.trycloudflare.com"}`, `not json`} {
+		hostnameBody = body
+		if got, err := metrics.publicURL(ctx); err == nil || got != "" {
+			t.Errorf("publicURL(%s) = %q, %v; want an error", body, got, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		status  int
+		body    string
+		want    bool
+		wantErr bool
+	}{
+		{http.StatusServiceUnavailable, `{"status":503,"readyConnections":0}`, false, false},
+		{http.StatusOK, `{"status":200,"readyConnections":2}`, true, false},
+		{http.StatusOK, `{"status":200,"readyConnections":0}`, false, false},
+		{http.StatusInternalServerError, ``, false, true},
+		{http.StatusOK, `not json`, false, true},
+	} {
+		readyStatus, readyBody = tc.status, tc.body
+		if got, err := metrics.ready(ctx); got != tc.want || (err != nil) != tc.wantErr {
+			t.Errorf("ready(%d %s) = %v, %v", tc.status, tc.body, got, err)
+		}
+	}
+}
+
+func TestCloudflaredMetricsAddressIsFreeLoopback(t *testing.T) {
+	address, err := reserveLoopbackAddress()
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || host != "127.0.0.1" || port == "0" {
+		t.Fatalf("address = %q (%v)", address, err)
+	}
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("reserved address is not free: %v", err)
+	}
+	listener.Close()
+}
+
+func TestControlServicesAreNotPublishable(t *testing.T) {
 	if !privateService(SessionService{Process: "mewla serve"}) || !privateService(SessionService{Command: "mewla dsh-session"}) {
 		t.Fatal("control service publishable")
 	}
