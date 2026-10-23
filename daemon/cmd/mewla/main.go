@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -491,6 +492,21 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetDirectEndpoints(func() []server.DirectEndpoint {
 		return directEndpoints(cfg.addr, detectPrivateNetworkAddresses())
 	})
+	if host, port, err := net.SplitHostPort(cfg.addr); err == nil && isLoopbackHost(host) {
+		// A loopback daemon also listens, over TLS only, on this computer's
+		// private addresses, so a paired phone on the same network or tailnet
+		// can skip the relay without any flag.
+		if portNumber, err := strconv.Atoi(port); err == nil {
+			srv.EnablePrivateListeners(portNumber, func() []net.IP {
+				var ips []net.IP
+				for _, address := range detectPrivateNetworkAddresses() {
+					ips = append(ips, address.ip)
+				}
+				return ips
+			})
+			srv.SetDirectEndpoints(srv.PrivateEndpoints)
+		}
+	}
 	enrollmentManager, err := enrollment.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize enrollment manager: %w", err)

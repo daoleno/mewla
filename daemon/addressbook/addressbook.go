@@ -222,7 +222,9 @@ func (s *Store) Learn(rawHost string) error {
 	if strings.TrimSpace(rawHost) == "" {
 		return ErrInvalidAddress
 	}
-	if isLoopback(hostOnly(rawHost)) {
+	if isLoopback(hostOnly(rawHost)) || isPrivateNetwork(hostOnly(rawHost)) {
+		// A private address is reached over the private listener, which
+		// announces itself; it is never an HTTPS entry point to offer.
 		return nil
 	}
 	return func() error {

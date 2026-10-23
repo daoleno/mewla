@@ -330,11 +330,14 @@ A phone paired through Mewla Link goes straight to the computer when it can
 reach it on the same Wi-Fi/LAN or over Tailscale, and uses the relay otherwise.
 The badge on the Screen page says which: **LAN**, **Tailscale** or **Relay**.
 
-The computer has to be listening on those networks (`mewla --lan`, or
-`-addr` with its Tailscale address). A computer that listens only on loopback,
-the default, has no direct address to offer and always uses the relay. Each
-time the phone connects, the computer tells it the addresses it listens on, and
-the phone remembers them.
+A computer that listens only on loopback, the default, also listens on its
+Wi-Fi/LAN and Tailscale addresses (private networks: 10/8, 172.16/12,
+192.168/16, 100.64/10) over TLS only, on the same port. Plain HTTP there is
+refused, and only the routes a paired phone signs for are served there: not
+pairing, join requests or the web UI. Mewla follows the addresses as networks
+come and go. Each time the phone connects, the computer tells it the addresses
+it is listening on, and the phone remembers them. `mewla --lan` is still how you
+open plain HTTP, pairing and the web UI to your network.
 
 The phone tries them while it also measures the relay. It uses a direct address
 only after two proofs: the TLS connection to it is pinned to the computer's key
