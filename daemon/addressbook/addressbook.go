@@ -28,7 +28,11 @@ type Source string
 const (
 	SourceDiscovered Source = "discovered"
 	SourceManual     Source = "manual"
-	SourceVerified   Source = "verified"
+	// SourceVerified marks addresses an earlier version learned from the
+	// Host header of signed requests. Nothing records new ones: addresses
+	// come only from the daemon's own discovery, mewla address add and
+	// remote login.
+	SourceVerified Source = "verified"
 	// SourceRemote is this computer's hosted remote access address.
 	SourceRemote Source = "remote"
 )
@@ -213,26 +217,6 @@ func (s *Store) ReplaceDiscovered(raws []string) error {
 	return s.saveLocked(next)
 }
 
-// Learn records a host only after the caller has verified the device
-// signature. It accepts HTTPS hosts and deliberately ignores HTTP/LAN Hosts.
-// A loopback Host names the requester's own machine, never this one: a phone
-// on Mewla Link sends its in-app tunnel's 127.0.0.1 port, which no other
-// device can reach, so it is never learned.
-func (s *Store) Learn(rawHost string) error {
-	if strings.TrimSpace(rawHost) == "" {
-		return ErrInvalidAddress
-	}
-	if isLoopback(hostOnly(rawHost)) || isPrivateNetwork(hostOnly(rawHost)) {
-		// A private address is reached over the private listener, which
-		// announces itself; it is never an HTTPS entry point to offer.
-		return nil
-	}
-	return func() error {
-		_, err := s.Add("https://"+strings.TrimSuffix(rawHost, ":443"), SourceVerified)
-		return err
-	}()
-}
-
 func (s *Store) Contains(raw string) bool {
 	value, err := Normalize(raw)
 	if err != nil {
@@ -272,13 +256,6 @@ func (s *Store) loadLocked() ([]Entry, error) {
 		entries = append(entries, entry)
 	}
 	return entries, nil
-}
-
-func hostOnly(rawHost string) string {
-	if host, _, err := net.SplitHostPort(rawHost); err == nil {
-		return host
-	}
-	return rawHost
 }
 
 func isLoopbackURL(raw string) bool {

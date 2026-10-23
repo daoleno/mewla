@@ -245,9 +245,9 @@ HTTPS or Mewla Link) and how Mewla knows it:
 - **detected**: found when the daemon started. Detected addresses are refreshed
   at each start, so an old network's address disappears.
 - **added**: added with `mewla address add`.
-- **seen**: an HTTPS address a paired device used. Loopback hosts are never
-  learned: a phone on Mewla Link reaches the computer through a `127.0.0.1`
-  port inside the app, which names the phone, not this computer.
+- **seen**: an HTTPS address an earlier version learned from a paired device's
+  request. Mewla no longer learns addresses from the `Host` header: an address
+  is detected, added by you or set by `mewla login`.
 
 Changes take effect without a restart.
 

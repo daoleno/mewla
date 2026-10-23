@@ -180,7 +180,7 @@ func checkedTransportWith(origin string, networks []string, lookup func(context.
 		addresses := make([]net.IP, 0, len(ips))
 		for _, ip := range ips {
 			if !publicIP(ip.IP) && !benchmarkIP(host, ip.IP) && !(address == origin && trustedIP(ip.IP, networks)) {
-				log.Printf("plugins: %s resolves to %s, a private address; not connecting", host, ip.IP)
+				diag.Report("plugins.private_endpoint", diag.SeverityWarn, host, fmt.Sprintf("resolves to %s, a private address; not connecting", ip.IP))
 				return nil, errPrivateEndpoint
 			}
 			addresses = append(addresses, ip.IP)

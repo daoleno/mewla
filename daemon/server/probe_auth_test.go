@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
 )
 
@@ -128,5 +129,35 @@ func TestAuthCheckReportsComputerName(t *testing.T) {
 	}
 	if body.Name != "daoleno's MacBook Pro" {
 		t.Fatalf("name = %q", body.Name)
+	}
+}
+
+// A signed request proves a device, not that its Host is one of this
+// computer's addresses: a tunnel's Host or a forged X-Forwarded-Proto must
+// never add an entry to the address book.
+func TestSignedRequestsNeverTeachTheAddressBook(t *testing.T) {
+	manager, privateKey, deviceID := sessionFileAuthFixture(t)
+	book, err := addressbook.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := New(manager, nil, nil, nil, nil, nil, nil)
+	server.SetAddressBook(book)
+
+	request := httptest.NewRequest(http.MethodGet, "/auth-check", nil)
+	request.Host = "tunnel.example.com"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("Authorization", probeAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("auth-check status=%d body=%q", response.Code, response.Body.String())
+	}
+	entries, err := book.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("address book learned %+v from a request", entries)
 	}
 }
