@@ -640,6 +640,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		PrepareWorkspace: work.PrepareDelegatedWorkspace,
 		Delegated:        !req.Hidden,
 		Env:              progressEnvForStateDir(a.stateDir),
+		ExecutorID:       a.spawnExecutorID(req),
 	}
 	if req.BrowserID != "" {
 		if err := a.browsers.ValidateAttachment(context.Background(), req.BrowserID); err != nil {
@@ -1657,6 +1658,21 @@ func (a *controlApp) spawnProfileClientHint(req control.Request, command string)
 		}
 	}
 	return work.ProfileClientExecutor(name, command)
+}
+
+// spawnExecutorID is the catalog executor a spawn names, if it names one.
+func (a *controlApp) spawnExecutorID(req control.Request) string {
+	if a == nil || a.execs == nil {
+		return ""
+	}
+	for _, name := range []string{req.ExecutorID, req.Executor} {
+		if name = strings.TrimSpace(name); name != "" {
+			if _, ok := a.execs.ByName[name]; ok {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // resolveSpawnCommand builds the launch command for a spawn and lets the

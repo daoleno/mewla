@@ -184,6 +184,7 @@ type Server struct {
 	mu                 sync.Mutex
 	enrollmentRateMu   sync.Mutex
 	enrollmentRates    map[string][]time.Time
+	agentLevelsFn      func(*classifier.Worker) map[string]string
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.

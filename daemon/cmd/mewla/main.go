@@ -471,6 +471,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
 	controlHandler.notifyBrain = pusher.BrainNotifier(push.KindBrainReply)
 	srv.SetResourceSampler(resourceSampler)
+	w.SetExecutorResolver(execs.IDForCommand)
+	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize address book: %w", err)

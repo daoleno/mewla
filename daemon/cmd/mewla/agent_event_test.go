@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
+	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func newTestAgentEvents(workers ...*classifier.Worker) (*agentEventService, *agentevents.Hub) {
@@ -149,5 +151,25 @@ func TestAgentEventsPruneVanishedWorkers(t *testing.T) {
 	}
 	if _, ok := hub.State("%1"); !ok {
 		t.Fatal("live Worker dropped")
+	}
+}
+
+func TestAgentLevelsFollowTheAdapterOnceItsEventsFlow(t *testing.T) {
+	execs := work.NewExecutorConfig(map[string]work.Executor{"claude": {Name: "claude", Command: "claude"}})
+	adapters := agentevents.NewRegistry()
+	adapters.Register("claude", claudeadapter.Adapter{})
+	hub := agentevents.NewHub()
+	levels := agentLevelsFor(execs, adapters, hub)
+	worker := &classifier.Worker{ID: "%7", ExecutorID: "claude", Command: "claude"}
+	if got := levels(worker); got["approve"] != "keystroke" {
+		t.Fatalf("before any hook the Worker is followed by the fallback: %v", got)
+	}
+	hub.Publish(agentevents.Event{WorkerID: "%7", Kind: agentevents.KindTurnStarted, TurnID: "p1", At: time.Now()})
+	if got := levels(worker); got["approve"] != "hook" || got["events"] != "hook" {
+		t.Fatalf("once hooks flow the Worker is described by the adapter: %v", got)
+	}
+	other := &classifier.Worker{ID: "%8", ExecutorID: "my-proxy", Command: "my-proxy"}
+	if got := levels(other); got["approve"] != "keystroke" {
+		t.Fatalf("an unknown executor is never promoted: %v", got)
 	}
 }

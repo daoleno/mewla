@@ -16,6 +16,11 @@ type workerSessionWireCapabilities struct {
 	// back to an earlier prompt, so editing a message can rewind instead of
 	// sending an edited copy as a new message.
 	MessageRewind bool `json:"message_rewind"`
+	// Levels says how Mewla performs each thing for this Worker: binding,
+	// events, send, approve and interrupt, each one of structured, hook, file,
+	// keystroke or none. The app offers an action by its level, not by
+	// guessing the agent from its command line.
+	Levels map[string]string `json:"levels,omitempty"`
 }
 
 type workerSessionWire struct {
@@ -39,6 +44,7 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 			ModelProfileManaged:      managed,
 			ModelProfileActiveSwitch: activeSwitch,
 			MessageRewind:            s.workerSupportsMessageRewind(worker),
+			Levels:                   s.agentLevels(worker),
 		},
 	}
 }
@@ -192,4 +198,22 @@ func (s *Server) workerSupportsMessageRewind(worker *classifier.Worker) bool {
 	}
 	_, ok := messageRewindProvider(s.structuredProviderForWorker(worker))
 	return ok
+}
+
+// SetAgentLevels installs the function that says, for one Worker, how Mewla
+// performs binding, events, send, approve and interrupt.
+func (s *Server) SetAgentLevels(levels func(*classifier.Worker) map[string]string) {
+	s.mu.Lock()
+	s.agentLevelsFn = levels
+	s.mu.Unlock()
+}
+
+func (s *Server) agentLevels(worker *classifier.Worker) map[string]string {
+	s.mu.Lock()
+	levels := s.agentLevelsFn
+	s.mu.Unlock()
+	if levels == nil {
+		return nil
+	}
+	return levels(worker)
 }

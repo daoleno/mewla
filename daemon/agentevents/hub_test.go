@@ -152,3 +152,24 @@ func TestProgressAfterARequestMeansTheAgentAnsweredItselfElsewhere(t *testing.T)
 		t.Fatalf("approvals = %+v", s.Approvals)
 	}
 }
+
+type fakeAdapter struct{}
+
+func (fakeAdapter) Descriptor() Descriptor {
+	return Descriptor{Provider: "fake", Capabilities: map[Capability]Level{CapApprove: LevelHook, CapEvents: LevelHook}}
+}
+func (fakeAdapter) PrepareLaunch(c string) (string, error) { return c, nil }
+
+func TestRegistryLevelsFallBackUntilTheAdapterIsConnected(t *testing.T) {
+	r := NewRegistry()
+	r.Register("fake", fakeAdapter{})
+	if got := r.Levels("fake", false); got["approve"] != "keystroke" || got["events"] != "file" {
+		t.Fatalf("unconnected levels = %v", got)
+	}
+	if got := r.Levels("fake", true); got["approve"] != "hook" || got["events"] != "hook" {
+		t.Fatalf("connected levels = %v", got)
+	}
+	if got := r.Levels("other", true); got["approve"] != "keystroke" {
+		t.Fatalf("an agent without an adapter must be described as unadapted: %v", got)
+	}
+}
