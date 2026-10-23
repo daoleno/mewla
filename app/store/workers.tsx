@@ -64,8 +64,8 @@ export interface State {
   hydratedServers: Record<string, boolean>;
   /**
    * Transport-owned: increments when a server enters `connected`.
-   * Used with workerSessionListGenerationByServer to prove a full
-   * worker_session_list arrived for the current WebSocket generation.
+   * Used with workerSessionListGenerationByServer to prove the
+   * connect snapshot (worker_session_list) arrived for the current WebSocket generation.
    */
   connectionGenerationByServer: Record<string, number>;
   /** Set to connectionGeneration when UPSERT_SERVER_WORKERS arrives while connected. */
@@ -319,9 +319,9 @@ function markServerHydrated(
 }
 
 /**
- * Full worker_session_list is the transport proof that retained agents were
- * replaced/confirmed for the current WebSocket connection generation.
- * Incremental UPSERT_WORKER must not stamp this.
+ * The connect snapshot (a full worker_session_list) replaces the retained
+ * agents for the current WebSocket connection generation, and is the only
+ * thing that stamps it. Incremental UPSERT_WORKER must not.
  */
 function stampWorkerSessionListGeneration(
   state: State,
@@ -335,7 +335,7 @@ function stampWorkerSessionListGeneration(
   });
 }
 
-/** True when a full worker_session_list arrived for the current connected generation. */
+/** True when the connect snapshot arrived for the current connected generation. */
 export function isWorkerSessionListFreshForConnection(
   state: Pick<
     State,

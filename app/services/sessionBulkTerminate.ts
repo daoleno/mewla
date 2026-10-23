@@ -5,10 +5,9 @@
  * Contract audited from daemon/server/server.go and daemon/modelprofiles:
  * - Command: `kill_worker` with `worker_id` and optional `request_id`.
  * - Failure: daemon replies `{type:"error", code, message, request_id, ...}`.
- * - Success: no direct reply. The authoritative acknowledgement is the Session
- *   leaving the daemon list: either the `worker_session_archived` event or
- *   absence from the next full `worker_session_list` snapshot (heartbeat and
- *   refresh broadcasts replace the whole set).
+ * - Success: the daemon replies `{type:"worker_killed", request_id, worker_id}`
+ *   once the Session is confirmed gone. The sequenced `worker_session_archived`
+ *   change is the same fact on the list. Absence from a list proves nothing.
  *
  * The batch never deletes locally and never invents state: entries are a
  * point-in-time snapshot of stable Session IDs; every entry settles from
@@ -153,29 +152,14 @@ function archivedWorkerId(payload: any): string | null {
   return typeof id === "string" && id ? id : null;
 }
 
-function listedWorkerIds(payload: any): Set<string> {
-  const ids = new Set<string>();
-  const sessions = Array.isArray(payload?.worker_sessions)
-    ? payload.worker_sessions
-    : [];
-  for (const session of sessions) {
-    if (session && typeof session.id === "string" && session.id) {
-      ids.add(session.id);
-    }
-  }
-  return ids;
-}
-
 /**
  * Runs one confirmed batch. `start()` submits exactly once (a second call is
  * a no-op), subscribes to daemon events, and settles each entry from
  * authoritative evidence:
  * - `error` matching this batch's request_id → failed (daemon message kept).
+ * - `worker_killed` echoing this batch's request_id → succeeded.
  * - `worker_session_archived` for the Session → succeeded.
- * - absence from a full `worker_session_list` snapshot → succeeded.
  * - per-entry timeout → failed (retryable).
- * - `settleDisappeared` (called by the UI when the authoritative row vanished
- *   while the batch was running) → succeeded, treated as already settled.
  */
 export class SessionTerminationBatch {
   private readonly entries: SessionTerminationEntry[];
@@ -247,11 +231,6 @@ export class SessionTerminationBatch {
     }
     this.emitSummary();
     return true;
-  }
-
-  /** Treat a Session that authoritatively disappeared as already settled. */
-  settleDisappeared(sessionKey: string): void {
-    this.settle(sessionKey, "succeeded");
   }
 
   dispose(): void {
@@ -337,19 +316,16 @@ export class SessionTerminationBatch {
         }
       }
     };
-    const onList = (data: any) => {
-      const serverId = data?.serverId;
-      if (typeof serverId !== "string") {
+    const onKilled = (data: any) => {
+      if (data?.serverId == null || typeof data.request_id !== "string") {
         return;
       }
-      const present = listedWorkerIds(data);
-      for (const entry of this.entries) {
+      for (const [sessionKey, requestId] of this.requestIdBySessionKey) {
         if (
-          entry.status === "pending" &&
-          entry.serverId === serverId &&
-          !present.has(entry.workerId)
+          requestId === data.request_id &&
+          data.serverId === this.entryFor(sessionKey)?.serverId
         ) {
-          this.settle(entry.sessionKey, "succeeded");
+          this.settle(sessionKey, "succeeded");
         }
       }
     };
@@ -359,7 +335,7 @@ export class SessionTerminationBatch {
     }> = [
       { type: "error", handler: onError },
       { type: "worker_session_archived", handler: onArchived },
-      { type: "worker_session_list", handler: onList },
+      { type: "worker_killed", handler: onKilled },
     ];
     for (const { type, handler } of handlers) {
       this.transport.on(type, handler);

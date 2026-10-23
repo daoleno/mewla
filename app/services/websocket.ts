@@ -1,6 +1,10 @@
 import type { ConnectionRequest, ConnectionResponse } from "./connections";
 import type { StoredServer } from "./storage";
 import type { StatsPayload } from "./statsPayload";
+import {
+  isWorkerSessionFeedType,
+  WorkerSessionFeed,
+} from "./workerSessionFeed";
 import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { diagnoseConnectionIssue } from "./connectionIssue";
@@ -399,6 +403,8 @@ class ServerSocket {
   private probingForDirect = false;
   /** How the last socket ended, told to the daemon once the next one opens. */
   private pendingEndReport: string | null = null;
+  /** Where this connection is in the daemon's sequenced Session feed. */
+  private readonly workerFeed = new WorkerSessionFeed();
 
   constructor(
     private meta: ConnectionMeta,
@@ -589,6 +595,7 @@ class ServerSocket {
         }
 
         opened = true;
+        this.workerFeed.reset();
         openedAt = Date.now();
         this.lastFrameAt = openedAt;
         this.reconnectDelay = 1000;
@@ -616,6 +623,18 @@ class ServerSocket {
           const data = JSON.parse(event.data);
           if (data.type === "direct_addresses") {
             void rememberDirectAddresses(this.meta.serverId, data.addresses);
+          }
+          if (isWorkerSessionFeedType(data.type)) {
+            const verdict = this.workerFeed.accept(data);
+            if (verdict === "resync") {
+              // A change went missing: the list is the only way back in step.
+              if (!this.trySendNow({ type: "list_worker_sessions" })) {
+                this.workerFeed.resyncNotSent();
+              }
+            }
+            if (verdict !== "apply") {
+              return;
+            }
           }
           this.emit(data.type, data);
         } catch (error) {
@@ -2491,10 +2510,10 @@ export class WebSocketClient {
   }
 
   /**
-   * Fire-and-forget terminate: the daemon tears the Session down and the
-   * authoritative removal arrives via `worker_session_archived` or the next
-   * full `worker_session_list`. An optional request_id correlates the
-   * `error` reply for batch termination; success has no reply.
+   * Fire-and-forget terminate: the daemon tears the Session down and replies
+   * `worker_killed` once it is confirmed gone, or `error` when it is not; both
+   * echo the optional request_id. The Session also leaves the list through a
+   * `worker_session_archived` change.
    */
   killWorker(serverId: string, workerId: string, requestId?: string) {
     this.send(serverId, {

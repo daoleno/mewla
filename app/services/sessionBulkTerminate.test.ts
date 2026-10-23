@@ -223,7 +223,7 @@ describe("SessionTerminationBatch settlement", () => {
     expect(batch.summary.running).toBe(false);
   });
 
-  test("absence from a full worker_session_list settles as success", () => {
+  test("worker_killed echoing the request settles as success", () => {
     const transport = new FakeTransport();
     const batch = new SessionTerminationBatch({
       transport,
@@ -231,23 +231,28 @@ describe("SessionTerminationBatch settlement", () => {
       onSettled: () => undefined,
     });
     batch.start();
-    // Snapshot without agent-1 but with agent-3: only agent-1 settles.
-    transport.emit("worker_session_list", {
+    transport.emit("worker_killed", {
       serverId: "srv-a",
-      worker_sessions: [{ id: "agent-9" }],
+      request_id: transport.kills[0].requestId,
+      worker_id: "agent-1",
     });
     expect(batch.summary.succeeded).toBe(1);
     expect(batch.summary.pending).toBe(1);
-    // Next snapshot without agent-3 settles the rest.
-    transport.emit("worker_session_list", {
+    // A reply from another server never settles the entry.
+    transport.emit("worker_killed", {
+      serverId: "srv-a",
+      request_id: transport.kills[1].requestId,
+    });
+    expect(batch.summary.pending).toBe(1);
+    transport.emit("worker_killed", {
       serverId: "srv-b",
-      worker_sessions: [],
+      request_id: transport.kills[1].requestId,
     });
     expect(batch.summary.succeeded).toBe(2);
     expect(batch.summary.running).toBe(false);
   });
 
-  test("presence in worker_session_list keeps the entry pending", () => {
+  test("a worker_session_list proves nothing about termination", () => {
     const transport = new FakeTransport();
     const batch = new SessionTerminationBatch({
       transport,
@@ -255,9 +260,10 @@ describe("SessionTerminationBatch settlement", () => {
       onSettled: () => undefined,
     });
     batch.start();
+    expect(transport.listenerCount("worker_session_list")).toBe(0);
     transport.emit("worker_session_list", {
       serverId: "srv-a",
-      worker_sessions: [{ id: "agent-1" }],
+      worker_sessions: [],
     });
     expect(batch.summary.pending).toBe(1);
   });
@@ -282,19 +288,6 @@ describe("SessionTerminationBatch settlement", () => {
     });
     expect(batch.summary.succeeded).toBe(1);
     expect(batch.summary.failed).toBe(0);
-  });
-
-  test("settleDisappeared treats authoritative disappearance as success", () => {
-    const transport = new FakeTransport();
-    const batch = new SessionTerminationBatch({
-      transport,
-      entries: createSessionTerminationEntries([targets[0]]),
-      onSettled: () => undefined,
-    });
-    batch.start();
-    batch.settleDisappeared(targets[0].sessionKey);
-    expect(batch.summary.succeeded).toBe(1);
-    expect(batch.summary.running).toBe(false);
   });
 
   test("timeout without any acknowledgement fails as retryable", async () => {
@@ -374,12 +367,12 @@ describe("SessionTerminationBatch dispose", () => {
     batch.start();
     expect(transport.listenerCount("error")).toBe(1);
     expect(transport.listenerCount("worker_session_archived")).toBe(1);
-    expect(transport.listenerCount("worker_session_list")).toBe(1);
+    expect(transport.listenerCount("worker_killed")).toBe(1);
     expect(summaries).toHaveLength(1); // initial running summary from start()
     batch.dispose();
     expect(transport.listenerCount("error")).toBe(0);
     expect(transport.listenerCount("worker_session_archived")).toBe(0);
-    expect(transport.listenerCount("worker_session_list")).toBe(0);
+    expect(transport.listenerCount("worker_killed")).toBe(0);
     // No event or timer may settle after dispose.
     transport.emit("worker_session_archived", {
       serverId: "srv-a",

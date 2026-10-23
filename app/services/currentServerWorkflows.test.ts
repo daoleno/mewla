@@ -40,7 +40,7 @@ test("Sessions, services and Stats have no feature-local server enumeration or p
   const stats = readFileSync(new URL("../app/stats.tsx", import.meta.url), "utf8");
   expect(list).toContain("selectCurrentServerItems(state.workers, currentServerId)");
   expect(list).toContain("isCurrentServer(server.id)");
-  expect(list).toContain("isWorkerSessionListFreshForConnection(state, serverId)");
+  expect(list).toContain("isWorkerSessionListFreshForConnection(state, server.id)");
   for (const source of [list, stats]) {
     expect(source).not.toContain("getServers(");
     expect(source).not.toContain("connectedServers");

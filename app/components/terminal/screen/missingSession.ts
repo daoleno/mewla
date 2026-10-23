@@ -3,7 +3,7 @@ export interface MissingSessionInput {
   resolved: boolean;
   /** The route resolved a Session at some point since this screen mounted. */
   everResolved: boolean;
-  /** A full worker_session_list arrived for the current connection. */
+  /** The connect snapshot (worker_session_list) arrived for the current connection. */
   sessionListFresh: boolean;
   /** brain_snapshot arrived, so the hidden Brain host is known. */
   brainHostKnown: boolean;

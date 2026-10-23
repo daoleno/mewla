@@ -100,7 +100,7 @@ describe("Sessions list integration contract", () => {
   test("selection survives reorder by stable key and prunes on disappearance", () => {
     expect(listSource).toContain("pruneSessionSelection");
     expect(listSource).toContain("authoritativeWorkerKeySet");
-    expect(listSource).toContain("batch.settleDisappeared");
+    expect(listSource).not.toContain("settleDisappeared");
   });
 
   test("batch submission uses current-server selected Sessions, not sorted viewport rows", () => {

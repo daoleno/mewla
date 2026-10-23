@@ -1,7 +1,8 @@
 /**
  * Transport-owned freshness for live interaction prompts.
- * A full `worker_session_list` (UPSERT_SERVER_WORKERS) must arrive while the
- * server is in the current WebSocket `connected` generation. Watcher
+ * The daemon's connect snapshot (`worker_session_list`, UPSERT_SERVER_WORKERS)
+ * must arrive while the server is in the current WebSocket `connected`
+ * generation; the sequenced changes that follow keep it current. Watcher
  * `updated_at` ticks are not proof of App receipt.
  */
 

@@ -165,6 +165,18 @@ have it:
 
 - WebSocket reconnect re-authenticates and the app refreshes canonical current
   server snapshots.
+- The Session list is a sequenced feed. The daemon sends the full
+  `worker_session_list` once per connection, stamped with the `seq` it is
+  current as of, and every later `worker_session_created`, `_updated` or
+  `_archived` carries the next `seq`. The app applies a change only when its
+  `seq` is one past the last, drops duplicates, and on a gap asks once for a
+  fresh list (`list_worker_sessions`); there is no periodic full list. A
+  daemon check once a minute publishes, as ordinary sequenced changes, any
+  Session whose derived fields (capabilities, executor, provider) moved
+  without a watcher event. Absence from a list is never proof of anything:
+  `kill_worker` is answered with `worker_killed` (or `error`), which is what a
+  terminate waits for. The app and daemon change this together; an app that
+  predates it must update.
 - HTTP Range lets Session File Preview resume/read bounded byte ranges. The app
   spends a fresh ordinary nonce once on `/session-file-capability`, then native
   GET/HEAD/Range and retry use a two-minute daemon-signed capability bound to
