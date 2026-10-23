@@ -4712,3 +4712,60 @@ exports[`correlated WebSocket requests deleteWorkItem 1`] = `
   "timeoutMs": 10000,
 }
 `;
+
+exports[`correlated WebSocket requests decideApproval 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "message": "probe failure",
+        "name": "Error",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to send the decision.",
+      "name": "Error",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": "undefined",
+  },
+  "request": {
+    "id": "a1",
+    "option_id": "accept",
+    "request_id": "#_#",
+    "type": "approval_decision",
+    "worker_id": "worker",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "message": "Timed out while sending the decision.",
+      "name": "Error",
+    },
+  },
+  "timeoutMs": 8000,
+}
+`;

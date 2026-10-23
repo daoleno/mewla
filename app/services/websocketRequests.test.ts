@@ -158,6 +158,7 @@ const RPCS: Rpc[] = [
   { name: "getTerminalHistory", call: (c) => c.getTerminalHistory(server.id, "s"), reply: { type: "terminal_history", session_id: "s", history: { lines: [] } } },
   { name: "answerChoice", call: (c) => c.answerChoice(server.id, "worker", { call_id: "c", answers: [{ selected: [0] }] }), reply: { type: "choice_answered", answers: ["A"] } },
   { name: "sendKey", call: (c) => c.sendKey(server.id, "worker", "Enter"), reply: { type: "key_sent" } },
+  { name: "decideApproval", call: (c) => c.decideApproval(server.id, "worker", "a1", "accept"), reply: { type: "approval_decided" } },
   { name: "getStats", call: (c) => c.getStats(server.id), reply: { type: "stats_data", total: 1 } },
   { name: "getResourceTelemetry", call: (c) => c.getResourceTelemetry(server.id), reply: { type: "resource_telemetry" } },
   { name: "actOnBrainWork", call: (c) => c.actOnBrainWork(server.id, "work", "reply" as any, { text: "hi" }), reply: { type: "brain_work_action", status: "ok", admission: "" } },

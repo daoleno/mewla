@@ -1,9 +1,14 @@
+import type { WorkerApproval } from "../../store/workers";
+
 
 export type TerminalActionPromptOption = {
   id: string;
   label: string;
   description?: string;
+  /** The key typed into the terminal to choose this option; empty when the agent takes the answer itself. */
   key: string;
+  /** Set when the agent reported the decision: the answer goes to it, not to the terminal. */
+  approvalOptionId?: string;
   primary?: boolean;
   destructive?: boolean;
   default?: boolean;
@@ -17,6 +22,8 @@ export type TerminalActionPrompt = {
   requestText?: string;
   defaultOptionId?: string;
   options: TerminalActionPromptOption[];
+  /** The agent's own id for a decision it reported; its options answer through it. */
+  approvalId?: string;
   /** False when the live surface proves choices but no fail-fast native input contract. */
   actionable?: boolean;
   inputHints?: string;
@@ -36,13 +43,49 @@ type CleanPromptLine = {
   selected: boolean;
 };
 
+/**
+ * A decision the agent reported itself. It states exactly what is asked and
+ * what can be answered, so nothing is read off the screen.
+ */
+export function buildApprovalPrompt(approval: WorkerApproval, scopeKey?: string): TerminalActionPrompt {
+  const options: TerminalActionPromptOption[] = approval.options.map((option) => ({
+    id: option.id,
+    label: option.label,
+    key: "",
+    approvalOptionId: option.id,
+    destructive: option.scope === "deny",
+  }));
+  const allow = approval.options.find((option) => option.scope === "once") ?? approval.options.find((option) => option.scope !== "deny");
+  const primary = options.find((option) => option.id === allow?.id);
+  if (primary) {
+    primary.primary = true;
+    primary.default = true;
+  }
+  const prompt: TerminalActionPrompt = {
+    id: `approval:${approval.id}`,
+    title: "Waiting for confirmation",
+    detail: approval.kind === "file_change" ? "The agent wants to change files." : "The agent needs your decision before it can continue.",
+    requestLabel: approval.tool || undefined,
+    requestText: approval.summary ? redactSensitiveText(approval.summary) : undefined,
+    defaultOptionId: primary?.id,
+    options,
+    approvalId: approval.id,
+    actionable: true,
+  };
+  const scope = scopeKey?.trim();
+  return scope ? { ...prompt, id: `${scope}|${prompt.id}` } : prompt;
+}
+
 export function buildTerminalActionPrompt({
   status,
   summary,
   lastOutputLines,
   provider,
   scopeKey,
+  approvals,
 }: {
+  /** Decisions the agent reported; the first one is the prompt, and nothing is read off the screen. */
+  approvals?: WorkerApproval[];
   status?: string;
   summary?: string;
   lastOutputLines?: string[];
@@ -51,6 +94,9 @@ export function buildTerminalActionPrompt({
   /** Live process/session identity so a switched generation cannot reuse card state. */
   scopeKey?: string;
 }): TerminalActionPrompt | null {
+  if (approvals && approvals.length > 0) {
+    return buildApprovalPrompt(approvals[0], scopeKey);
+  }
   if (status !== "blocked") {
     return null;
   }

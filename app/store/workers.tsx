@@ -29,6 +29,8 @@ export interface Worker {
   executor_id?: string;
   /** Adapter family of that executor (claude, codex, cursor, ...); absent for a plain terminal. */
   provider?: string;
+  /** Decisions the agent is waiting on; absent when it waits on none. */
+  approvals?: WorkerApproval[];
   summary: string;
   phase?: string;
   attention?: string;
@@ -42,6 +44,15 @@ export interface Worker {
   process_id?: number;
   delegated?: boolean;
   capabilities?: WorkerCapabilities;
+}
+
+/** A decision the agent is waiting on, as the daemon reports it. */
+export interface WorkerApproval {
+  id: string;
+  kind?: string;
+  tool?: string;
+  summary?: string;
+  options: { id: string; label: string; scope?: string }[];
 }
 
 export type ConnectionState = 'offline' | 'connecting' | 'connected';
@@ -70,6 +81,7 @@ export type RawWorker = {
   command?: string;
   executor_id?: string;
   provider?: string;
+  approvals?: unknown;
   summary?: string;
   phase?: string;
   attention?: string;
@@ -357,6 +369,7 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.command === right.command &&
       left.executor_id === right.executor_id &&
       left.provider === right.provider &&
+      approvalsEqual(left.approvals, right.approvals) &&
       left.summary === right.summary &&
       left.phase === right.phase &&
       left.attention === right.attention &&
@@ -434,6 +447,7 @@ function normalizeWorker(
     command: agent.command,
     executor_id: typeof agent.executor_id === 'string' && agent.executor_id ? agent.executor_id : undefined,
     provider: typeof agent.provider === 'string' && agent.provider ? agent.provider : undefined,
+    approvals: normalizeApprovals(agent.approvals),
     summary: agent.summary || '',
     phase: typeof agent.phase === 'string' ? agent.phase : undefined,
     attention: typeof agent.attention === 'string' ? agent.attention : undefined,
@@ -450,6 +464,37 @@ function normalizeWorker(
     delegated: agent.delegated === true,
     capabilities: normalizeWorkerCapabilities(agent.capabilities),
   };
+}
+
+export function normalizeApprovals(raw: unknown): WorkerApproval[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  const approvals: WorkerApproval[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.id !== 'string' || !entry.id || !Array.isArray(entry.options)) continue;
+    const options = entry.options.flatMap((option) => {
+      const o = option as Record<string, unknown> | null;
+      return o && typeof o.id === 'string' && o.id && typeof o.label === 'string'
+        ? [{ id: o.id, label: o.label, scope: typeof o.scope === 'string' ? o.scope : undefined }]
+        : [];
+    });
+    if (options.length === 0) continue;
+    approvals.push({
+      id: entry.id,
+      kind: typeof entry.kind === 'string' ? entry.kind : undefined,
+      tool: typeof entry.tool === 'string' ? entry.tool : undefined,
+      summary: typeof entry.summary === 'string' ? entry.summary : undefined,
+      options,
+    });
+  }
+  return approvals.length > 0 ? approvals : undefined;
+}
+
+function approvalsEqual(left?: WorkerApproval[], right?: WorkerApproval[]): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
 function normalizeWorkerCapabilities(

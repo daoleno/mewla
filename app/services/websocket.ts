@@ -2408,6 +2408,22 @@ export class WebSocketClient {
     );
   }
 
+  /** Answers a decision the agent reported with one of the options it offered. */
+  decideApproval(serverId: string, workerId: string, approvalId: string, optionId: string) {
+    return this.request<void>(
+      serverId,
+      "approval_decision",
+      { worker_id: workerId, id: approvalId, option_id: optionId },
+      {
+        responseType: "approval_decided",
+        timeoutMs: 8000,
+        timeout: "Timed out while sending the decision.",
+        error: "Failed to send the decision.",
+        parse: () => undefined,
+      },
+    );
+  }
+
   setActiveWorker(serverId: string, workerId: string | null) {
     this.trySendNow(serverId, {
       type: "set_active_worker",

@@ -5,6 +5,7 @@ import {
   countWorkersByServer,
   initialWorkerState,
   reconcileServerWorkers,
+  normalizeApprovals,
   type Worker,
 } from "./workers";
 
@@ -211,5 +212,22 @@ describe("worker list ordering", () => {
     expect(state.workers.map(item => item.id)).toEqual(["c", "a", "b"]);
     expect(state.workers.map(item => item.updated_at)).toEqual([30000, 40000, 50000]);
     expect(state.workers[2].status).toBe("done");
+  });
+});
+
+describe("normalizeApprovals", () => {
+  test("keeps what the daemon reported and drops anything that cannot be answered", () => {
+    expect(
+      normalizeApprovals([
+        { id: "a1", kind: "command", summary: "touch x", options: [{ id: "accept", label: "Allow", scope: "once" }, { id: 7 }] },
+        { id: "a2", options: [] },
+        { options: [{ id: "x", label: "X" }] },
+        null,
+      ]),
+    ).toEqual([
+      { id: "a1", kind: "command", tool: undefined, summary: "touch x", options: [{ id: "accept", label: "Allow", scope: "once" }] },
+    ]);
+    expect(normalizeApprovals(undefined)).toBeUndefined();
+    expect(normalizeApprovals([])).toBeUndefined();
   });
 });

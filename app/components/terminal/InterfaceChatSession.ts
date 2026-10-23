@@ -6,7 +6,7 @@ import {
   useState,
   type SetStateAction,
 } from "react";
-import type { ConnectionState } from "../../store/workers";
+import type { ConnectionState, WorkerApproval } from "../../store/workers";
 import {
   conversationChoicesEqual,
   type CodexConversation,
@@ -111,6 +111,8 @@ export type InterfaceChatWorkerInfo = {
   command?: string;
   /** Adapter family of the Worker's executor, as the daemon names it. */
   provider?: string;
+  /** Decisions the agent is waiting on, as the daemon reports them. */
+  approvals?: WorkerApproval[];
   name?: string;
   startedAt?: number;
   processId?: number;

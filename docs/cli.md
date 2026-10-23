@@ -73,9 +73,10 @@ mewla worker approve -id <session> -approval <id> -option allow   # or deny
 mewla worker close -id <session>
 ```
 
-`approvals` and `approve` answer the permission prompts of a Claude Worker that
-Mewla started and that is not in bypass mode. The answer goes through Claude's
-own hook, so no keys are sent; with no answer Claude's prompt decides.
+`approvals` and `approve` answer the permission prompts of a Claude or Codex
+Worker that Mewla started and that is not in bypass mode. The answer goes
+through Claude's own hook or Codex's app-server, so no keys are sent; with no
+answer the agent's own prompt decides. The phone answers the same requests.
 
 `mewla worker spawn`, `worker progress`, `worker release`, `brain context`,
 `brain playbooks`, `brain gc` and the other `brain work` actions (`create`,

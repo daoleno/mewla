@@ -66,8 +66,13 @@ stops and says so, and nothing is submitted. You can always finish in the
 Terminal. Once the question is answered, from the card or from the Terminal,
 the card becomes an **Answered** line in the chat.
 
-Claude's permission and plan-approval prompts also show as **Waiting for your
-choice**, with Claude's own options. Answer those in the Terminal.
+When Claude or Codex asks to run a command or change files, and Mewla started
+that Worker, the card names the command and offers the agent's own options
+(Allow, Deny). Tapping one answers the agent directly: nothing is typed into
+the Terminal, and a request that was already answered, or that belongs to
+another conversation, is refused. A Worker Mewla did not start, and the prompts
+of other agents, are still read from the screen: Claude's own prompts then show
+as **Waiting for your choice** and are answered in the Terminal.
 
 ### Copy and edit a message
 

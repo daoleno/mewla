@@ -20,14 +20,15 @@ interface TerminalActionPromptCardProps {
   prompt: TerminalActionPrompt;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
-  onSendKey(key: string): Promise<void> | void;
+  /** Answers with the chosen option: a key for the terminal, or the agent's own approval answer. */
+  onAnswer(option: TerminalActionPrompt["options"][number]): Promise<void> | void;
   onSwitchToTerminal?: () => void;
 }
 
 export function TerminalActionPromptCard({
   prompt,
   chrome,
-  onSendKey,
+  onAnswer,
   onSwitchToTerminal,
 }: TerminalActionPromptCardProps) {
   const [sendingOptionId, setSendingOptionId] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export function TerminalActionPromptCard({
     setSentOptionId(null);
     setFailedOptionId(null);
     Promise.resolve()
-      .then(() => onSendKey(option.key))
+      .then(() => onAnswer(option))
       .then(() => {
         setSentOptionId(option.id);
       })

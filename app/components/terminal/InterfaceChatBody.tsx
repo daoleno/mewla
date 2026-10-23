@@ -31,7 +31,10 @@ import { InterfaceChatComposerSection } from "./InterfaceChatComposerSection";
 import { InterfaceChatKeyboardFrame } from "./InterfaceChatKeyboardFrame";
 import { InterfaceChatTimelineSection } from "./InterfaceChatTimelineSection";
 import { TerminalActionPromptCard } from "./TerminalActionPromptCard";
-import type { TerminalActionPrompt } from "./TerminalActionPromptModel";
+import type {
+  TerminalActionPrompt,
+  TerminalActionPromptOption,
+} from "./TerminalActionPromptModel";
 import { ClaudeChoiceCard } from "./ClaudeChoiceCard";
 import { choiceCardMaxHeight, type InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
@@ -134,7 +137,7 @@ export interface InterfaceChatBodyProps {
   onStopPress(): void;
   onModelControlPress?(): void;
   onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
-  onTerminalActionKey(key: string): Promise<void> | void;
+  onTerminalActionAnswer(option: TerminalActionPromptOption): Promise<void> | void;
   composerAccessory?: React.ReactNode;
   /** Brain only: answers to its last message, as a row after that message. */
   quickReplies?: QuickRepliesRow;
@@ -220,7 +223,7 @@ export function InterfaceChatBody({
   onStopPress,
   onModelControlPress,
   onPendingUserMessageAction,
-  onTerminalActionKey,
+  onTerminalActionAnswer,
   composerAccessory,
   quickReplies,
   composerEditBar,
@@ -249,7 +252,7 @@ export function InterfaceChatBody({
           prompt={terminalActionPrompt}
           chrome={chrome}
           theme={theme}
-          onSendKey={onTerminalActionKey}
+          onAnswer={onTerminalActionAnswer}
           onSwitchToTerminal={onUnavailableAction}
         />
       ) : null}
