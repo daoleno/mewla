@@ -238,3 +238,22 @@ func (s *agentEventService) decide(workerID, approvalID, optionID string) contro
 	}
 	return control.Response{OK: true}
 }
+
+// agentLevelsFor says, for one Worker, how Mewla performs each capability: by
+// the adapter of the Worker's executor once that adapter's events are flowing
+// for it, and by screen and keystrokes until then.
+func agentLevelsFor(execs *work.ExecutorConfig, adapters *agentevents.Registry, hub *agentevents.Hub) func(*classifier.Worker) map[string]string {
+	return func(worker *classifier.Worker) map[string]string {
+		if worker == nil {
+			return nil
+		}
+		provider := work.InferWorkerProvider(worker.Command)
+		if execs != nil && worker.ExecutorID != "" {
+			if executor, ok := execs.WorkerExecutor(worker.ExecutorID); ok && executor.Provider != "" {
+				provider = executor.Provider
+			}
+		}
+		state, known := hub.State(worker.ID)
+		return adapters.Levels(provider, known && !state.Exited)
+	}
+}

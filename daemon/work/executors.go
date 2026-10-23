@@ -3,6 +3,7 @@ package work
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -95,4 +96,45 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 		cfg.ByName[name] = executor
 	}
 	return cfg, nil
+}
+
+// IDForCommand names the executor a launch command belongs to: the one whose
+// configured command it is, or else the single executor that starts the same
+// program (the app launches "claude --permission-mode auto" for the "claude"
+// executor). It returns "" when no executor claims the command, and the caller
+// then reports no executor rather than guessing one.
+func (c *ExecutorConfig) IDForCommand(command string) string {
+	if c == nil {
+		return ""
+	}
+	command = strings.TrimSpace(command)
+	program := commandProgram(command)
+	if command == "" || program == "" {
+		return ""
+	}
+	best := ""
+	bestFields := 0
+	for _, name := range c.Roles() {
+		configured := strings.TrimSpace(c.ByName[name].Command)
+		if configured == command {
+			return name
+		}
+		if commandProgram(configured) != program {
+			continue
+		}
+		// Several executors may start one program with different flags; the
+		// plainest launch is the program's own executor.
+		if fields := len(strings.Fields(configured)); best == "" || fields < bestFields {
+			best, bestFields = name, fields
+		}
+	}
+	return best
+}
+
+func commandProgram(command string) string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	return filepath.Base(fields[0])
 }

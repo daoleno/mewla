@@ -21,12 +21,15 @@ const (
 
 // Worker holds the current state and metadata for a single execution session.
 type Worker struct {
-	BrowserID           string      `json:"browser_id,omitempty"`
-	ID                  string      `json:"id"`
-	Name                string      `json:"name"`
-	Project             string      `json:"project,omitempty"`
-	Cwd                 string      `json:"cwd,omitempty"`
-	Command             string      `json:"command,omitempty"`
+	BrowserID string `json:"browser_id,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Project   string `json:"project,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
+	Command   string `json:"command,omitempty"`
+	// ExecutorID names the executors.toml entry the Worker was launched from.
+	// Empty for a Worker Mewla did not launch.
+	ExecutorID          string      `json:"executor_id,omitempty"`
 	State               WorkerState `json:"status"`
 	Summary             string      `json:"summary"`
 	Phase               string      `json:"phase,omitempty"`

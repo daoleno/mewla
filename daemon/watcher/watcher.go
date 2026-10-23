@@ -266,6 +266,7 @@ type Watcher struct {
 	hidden                map[string]bool
 	delegated             map[string]bool
 	activityProbe         classifier.ActivityProbe
+	executorResolver      func(command string) string
 	providerActivityProbe ProviderActivityProbe
 	agentTools            func(command string, worker bool) string
 	nextEpoch             int64
@@ -826,6 +827,17 @@ func (w *Watcher) SetProviderActivityProbe(probe ProviderActivityProbe) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.providerActivityProbe = probe
+}
+
+// SetExecutorResolver names the executor a session started without one is
+// launched from, so every Worker carries its executor id from birth.
+func (w *Watcher) SetExecutorResolver(resolve func(command string) string) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.executorResolver = resolve
 }
 
 // SetAgentTools installs what every visible agent launch gains on this
@@ -1456,6 +1468,9 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 			w.delegated[win.target] = true
 		}
 		worker.Delegated = (w.delegated[win.target] || win.delegated) && !worker.Hidden
+		if win.executorID != "" {
+			worker.ExecutorID = win.executorID
+		}
 
 		worker.PaneAlive = obs.alive
 		worker.LastLines = lastN(obs.lines, 120)
@@ -2469,6 +2484,7 @@ type tmuxPane struct {
 	hidden           bool
 	delegated        bool
 	resourceUnit     string
+	executorID       string // executors.toml entry the pane was launched from (@mewla_worker_executor)
 }
 
 // listTmuxPanes inventories only explicitly Mewla-owned panes on the one
@@ -2513,7 +2529,7 @@ func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
 var malformedPaneInventoryLogged atomic.Bool
 
 func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
-	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{session_name}")
+	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{@mewla_worker_executor}\t#{session_name}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("tmux list-panes: %w: %s", err, strings.TrimSpace(string(out)))
@@ -2525,15 +2541,15 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 10)
-		if len(parts) != 10 && malformedPaneInventoryLogged.CompareAndSwap(false, true) {
-			log.Printf("watcher: tmux list-panes line has %d of 10 tab-separated fields (non-UTF-8 tmux client?): %q", len(parts), truncateDiagnostic(line))
+		parts := strings.SplitN(line, "\t", 11)
+		if len(parts) != 11 && malformedPaneInventoryLogged.CompareAndSwap(false, true) {
+			log.Printf("watcher: tmux list-panes line has %d of 11 tab-separated fields (non-UTF-8 tmux client?): %q", len(parts), truncateDiagnostic(line))
 		}
 		target := parts[0]
 		// Terminal views link an owned window but are not execution Sessions.
 		sessionName := ""
-		if len(parts) >= 10 {
-			sessionName = parts[9]
+		if len(parts) >= 11 {
+			sessionName = parts[10]
 		}
 		if strings.HasPrefix(sessionName, "mewla-view-") || seen[target] {
 			continue
@@ -2571,10 +2587,14 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 		if len(parts) >= 9 {
 			piSessionBinding = strings.TrimSpace(parts[8])
 		}
+		executorID := ""
+		if len(parts) >= 10 {
+			executorID = strings.TrimSpace(parts[9])
+		}
 		windows = append(windows, tmuxPane{
 			target: target, name: name, cwd: cwd, command: command, sessionName: sessionName,
-			piSessionBinding: piSessionBinding,
-			panePID:          panePID, hidden: hidden, delegated: delegated,
+			piSessionBinding: piSessionBinding, executorID: executorID,
+			panePID: panePID, hidden: hidden, delegated: delegated,
 			resourceUnit: resourceUnit,
 		})
 	}
@@ -3843,7 +3863,9 @@ type CreateSessionOptions struct {
 	// PrepareWorkspace applies the provider adapter before starting a delegated process.
 	PrepareWorkspace func(command, cwd string, env map[string]string) (string, error)
 	Delegated        bool
-	resource         *delegatedResourceSpec
+	// ExecutorID is the executors.toml entry the session is launched from.
+	ExecutorID string
+	resource   *delegatedResourceSpec
 }
 
 // CreateSession allocates and launches an owned pane and returns its %pane_id.
@@ -3853,6 +3875,14 @@ type CreateSessionOptions struct {
 // Ambient user sessions are never joined or adopted.
 func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOptions) (string, error) {
 	createdAt := time.Now().UTC()
+	if strings.TrimSpace(opts.ExecutorID) == "" {
+		w.mu.RLock()
+		resolve := w.executorResolver
+		w.mu.RUnlock()
+		if resolve != nil {
+			opts.ExecutorID = resolve(opts.Command)
+		}
+	}
 	createSocket := w.socketPathFor("")
 	if preferredTarget != "" {
 		present, owned, err := probeTmuxTargetOwnership(createSocket, preferredTarget)
@@ -4079,20 +4109,21 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 		w.resourceManager().Bind(target, opts.resource.Unit)
 	}
 	worker := &classifier.Worker{
-		BrowserID: opts.BrowserID,
-		ID:        target,
-		Name:      formatWorkerName(createdSessionName(opts), target),
-		Project:   projectNameFromPath(cwd),
-		Cwd:       strings.TrimSpace(cwd),
-		Command:   strings.TrimSpace(opts.Command),
-		State:     classifier.StateUnknown,
-		Summary:   "Session starting",
-		LastLines: []string{},
-		StartedAt: createdAt,
-		UpdatedAt: createdAt,
-		PaneAlive: true,
-		Hidden:    opts.Hidden,
-		Delegated: opts.Delegated && !opts.Hidden,
+		BrowserID:  opts.BrowserID,
+		ID:         target,
+		Name:       formatWorkerName(createdSessionName(opts), target),
+		Project:    projectNameFromPath(cwd),
+		Cwd:        strings.TrimSpace(cwd),
+		Command:    strings.TrimSpace(opts.Command),
+		State:      classifier.StateUnknown,
+		Summary:    "Session starting",
+		LastLines:  []string{},
+		StartedAt:  createdAt,
+		UpdatedAt:  createdAt,
+		PaneAlive:  true,
+		Hidden:     opts.Hidden,
+		Delegated:  opts.Delegated && !opts.Hidden,
+		ExecutorID: strings.TrimSpace(opts.ExecutorID),
 	}
 
 	w.eventMu.Lock()
@@ -4142,6 +4173,11 @@ func markCreatedSession(socket, target string, opts CreateSessionOptions) error 
 			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_pi_session", EncodePiSessionBinding(flag, path)); err != nil {
 				return err
 			}
+		}
+	}
+	if id := strings.TrimSpace(opts.ExecutorID); id != "" {
+		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_executor", id); err != nil {
+			return err
 		}
 	}
 	if opts.Hidden {

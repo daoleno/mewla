@@ -60,3 +60,24 @@ func TestRealTmuxBatchOwnershipAnswersEveryPane(t *testing.T) {
 		t.Fatalf("owned = %v err=%v, want all %d panes (pane ids with digits tmux's strftime would rewrite included)", got, err, len(panes))
 	}
 }
+
+func TestRealTmuxInventoryCarriesTheExecutorID(t *testing.T) {
+	h := newSharedTmuxHarness(t, false)
+	pane := createHarnessPane(t, h.selected, "exec", "exec /bin/sh")
+	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-p", "-t", pane, "@mewla_worker_executor", "my-claude").CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	panes, err := listTmuxPanesOn(h.selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range panes {
+		if p.target == pane {
+			if p.executorID != "my-claude" || p.sessionName != "exec" {
+				t.Fatalf("pane = %+v", p)
+			}
+			return
+		}
+	}
+	t.Fatalf("pane %s not inventoried: %+v", pane, panes)
+}

@@ -43,3 +43,32 @@ func (r *Registry) For(provider string) (Adapter, bool) {
 	a, ok := r.adapters[provider]
 	return a, ok
 }
+
+// Unadapted is what Mewla can do for an agent that has no adapter, or whose
+// adapter is not connected to the Worker: read the screen and the agent's
+// transcript, and type into the pane.
+var Unadapted = Descriptor{
+	Capabilities: map[Capability]Level{
+		CapBinding:   LevelNone,
+		CapEvents:    LevelFile,
+		CapSend:      LevelKeystroke,
+		CapApprove:   LevelKeystroke,
+		CapInterrupt: LevelKeystroke,
+	},
+}
+
+// Levels names what Mewla can do for one Worker. connected says the adapter's
+// events are flowing for it: a Worker launched before the adapter (or with
+// the user's own settings) is still followed by the fallback and is described
+// as such, so the app never offers what the Worker cannot do.
+func (r *Registry) Levels(provider string, connected bool) map[string]string {
+	descriptor := Unadapted
+	if adapter, ok := r.For(provider); ok && connected {
+		descriptor = adapter.Descriptor()
+	}
+	out := make(map[string]string, len(descriptor.Capabilities))
+	for capability, level := range descriptor.Capabilities {
+		out[string(capability)] = string(level)
+	}
+	return out
+}
