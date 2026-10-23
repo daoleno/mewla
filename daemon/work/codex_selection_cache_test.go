@@ -155,3 +155,43 @@ func TestLsofIsAskedOnceForTheWholeProcessTree(t *testing.T) {
 		t.Fatal("no processes must spawn nothing")
 	}
 }
+
+func TestABoundWorkersRolloutIsUsedWithoutAnyLookup(t *testing.T) {
+	now := time.Now()
+	fx := newCodexIdleFixture(t, now)
+	previous := CodexBoundRollout
+	defer func() { CodexBoundRollout = previous }()
+	other := filepath.Join(filepath.Dir(fx.rollout), "rollout-2026-10-23T10-05-00-thread-2.jsonl")
+	writeJSONL(t, other, map[string]any{"type": "session_meta", "payload": map[string]any{"id": "thread-2", "cwd": fx.cwd, "originator": "codex-tui"}})
+	CodexBoundRollout = func(id string) string {
+		if id == fx.worker.ID {
+			return other
+		}
+		return ""
+	}
+	before := readCodexLookupCost()
+	reader := NewProviderConversationReader()
+	candidate, ok, err := reader.selectCodexTranscript(fx.worker, now)
+	if err != nil || !ok || candidate.Path != other || candidate.Meta.ID != "thread-2" {
+		t.Fatalf("candidate = %+v, %v, %v (the database's thread is %s)", candidate, ok, err, fx.rollout)
+	}
+	if cost := readCodexLookupCost().since(before); cost.selections != 0 || cost.subprocesses != 0 {
+		t.Fatalf("a bound Worker ran the discovery: %+v", cost)
+	}
+
+	// Bound, but the rollout is not written yet: no turn, and no guessing at
+	// another thread in the same folder.
+	CodexBoundRollout = func(string) string { return filepath.Join(filepath.Dir(fx.rollout), "not-yet.jsonl") }
+	if _, ok, err := reader.selectCodexTranscript(fx.worker, now); ok || err != nil {
+		t.Fatalf("an unwritten rollout was found: %v, %v", ok, err)
+	}
+	if cost := readCodexLookupCost().since(before); cost.selections != 0 {
+		t.Fatalf("an unwritten rollout fell back to discovery: %+v", cost)
+	}
+
+	// A Worker with no binding is found the old way.
+	CodexBoundRollout = func(string) string { return "" }
+	if candidate, ok, _ := reader.selectCodexTranscript(fx.worker, now); !ok || candidate.Path != fx.rollout {
+		t.Fatalf("unbound Worker candidate = %+v, %v", candidate, ok)
+	}
+}

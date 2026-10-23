@@ -151,14 +151,17 @@ the screen or the agent's files:
 | Agent | Followed through | Messages and Stop |
 | --- | --- | --- |
 | Claude Code | Its hooks, set when Mewla starts it | Typed into the Terminal; the hook confirms delivery |
-| Codex | An app-server beside the Terminal, set when Mewla starts it | Sent to Codex directly |
+| Codex | An app-server beside the Terminal, set when Mewla starts it; the conversation is read from the thread Codex announced | Sent to Codex directly |
 | OpenCode | OpenCode's background service: one event stream for all Workers, the session id chosen at launch | Sent to the service directly; a message to a session OpenCode has not created yet (its first) is typed |
 | Pi | A small extension Mewla loads into each Pi it starts (`pi -e`), which reports Pi's turns over a local socket; the session file is chosen at launch | Handed to Pi by the extension; Stop aborts the running turn |
-| Cursor, Grok, dsh | The agent's transcript and the screen | Typed into the Terminal |
+| Cursor | The chat is created before Cursor starts and resumed, so its transcript is known from the first moment; turns are read from the transcript and the screen | Typed into the Terminal |
+| Grok, dsh | The agent's transcript and the screen | Typed into the Terminal |
 
 A Worker that Mewla did not start, or that started with its own settings, is
 followed from the transcript and the screen, and the app offers only what that
-supports.
+supports. For Codex that is the one case still found by looking: a Codex you
+opened by hand has no app-server of Mewla's, so its conversation is matched by
+folder, start time and the files it holds open.
 
 ## What the daemon costs while idle
 

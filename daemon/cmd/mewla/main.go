@@ -24,6 +24,7 @@ import (
 	"github.com/daoleno/mewla/daemon/agentevents"
 	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	codexadapter "github.com/daoleno/mewla/daemon/agentevents/codex"
+	cursoradapter "github.com/daoleno/mewla/daemon/agentevents/cursor"
 	opencodeadapter "github.com/daoleno/mewla/daemon/agentevents/opencode"
 	piadapter "github.com/daoleno/mewla/daemon/agentevents/pi"
 	"github.com/daoleno/mewla/daemon/agentuse"
@@ -307,6 +308,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)
 	w.SetProviderActivityProbe(newEventActivityProbe(eventHub, newWorkProviderActivityProbe()))
+	// A Codex that Mewla started announces its thread and rollout; its
+	// conversation is read from there instead of being searched for.
+	work.CodexBoundRollout = func(workerID string) string {
+		if state, ok := eventHub.State(workerID); ok && state.Bound && !state.Exited {
+			return state.Binding.Ref
+		}
+		return ""
+	}
 	sc := stats.NewCollector()
 
 	workRoot, err := work.DefaultRoot()
@@ -379,6 +388,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		w.ObserveSessions(codexFollow.Observe)
 	}
 	adapters.Register(opencodeadapter.Provider, opencodeadapter.Adapter{})
+	adapters.Register(cursoradapter.Provider, cursoradapter.Adapter{})
 	opencodeFollow := newOpencodeEvents(ctx, eventHub, func(worker *classifier.Worker) string {
 		return providerOf(execs, worker.ExecutorID, worker.Command)
 	})
