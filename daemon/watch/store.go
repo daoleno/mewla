@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -287,11 +289,25 @@ func (s *Store) Projects() []Project {
 	return out
 }
 
+// cloneProject copies a project so a caller can keep or change it without
+// touching the store's: the slices, the map and both pointers are duplicated.
 func cloneProject(project Project) Project {
-	raw, _ := json.Marshal(project)
-	var out Project
-	_ = json.Unmarshal(raw, &out)
-	return out
+	project.Remotes = slices.Clone(project.Remotes)
+	if project.GitHub != nil {
+		github := *project.GitHub
+		github.Endpoints = maps.Clone(github.Endpoints)
+		project.GitHub = &github
+	}
+	if project.Linear != nil {
+		linear := *project.Linear
+		linear.Suggested = slices.Clone(linear.Suggested)
+		if linear.Confirmed != nil {
+			confirmed := *linear.Confirmed
+			linear.Confirmed = &confirmed
+		}
+		project.Linear = &linear
+	}
+	return project
 }
 
 // UpdateProject applies change to one project and saves it.
