@@ -126,7 +126,14 @@ export default function BrainScreen() {
   const toast = useToast();
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(false);
 
-  const routeServerId = params.serverId?.trim() || "";
+  // A notification's computer is applied once. After this page has shown it,
+  // switching computer from the menu or Settings is not undone by the param.
+  const linkedServerId = params.serverId?.trim() || "";
+  const [shownServerId, setShownServerId] = useState("");
+  const routeServerId = linkedServerId === shownServerId ? "" : linkedServerId;
+  useEffect(() => {
+    if (linkedServerId && activeServer?.id === linkedServerId) setShownServerId(linkedServerId);
+  }, [activeServer?.id, linkedServerId]);
   const routeServerMatches =
     !routeServerId || activeServer?.id === routeServerId;
 
