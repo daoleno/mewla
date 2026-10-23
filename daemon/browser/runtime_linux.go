@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"golang.org/x/sys/unix"
@@ -224,7 +226,10 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err = waitFor(ctx, 10*time.Second, func() bool { _, e := os.Stat(filepath.Join(dir, "run", "mewla-browser")); return e == nil }); err != nil {
+	if err = waitForFile(ctx, 10*time.Second, filepath.Join(dir, "run"), r.display, func() bool {
+		_, e := os.Stat(filepath.Join(dir, "run", "mewla-browser"))
+		return e == nil
+	}); err != nil {
 		return nil, errors.New("Private graphical session could not start")
 	}
 	// The private profile lock is also enforced by Chrome. Never delete its SingletonLock.
@@ -239,7 +244,7 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err = waitFor(ctx, 10*time.Second, func() bool {
+	if err = waitForFile(ctx, 10*time.Second, profile, r.chrome, func() bool {
 		data, e := os.ReadFile(filepath.Join(profile, "DevToolsActivePort"))
 		if e != nil {
 			return false
@@ -270,22 +275,68 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	success = true
 	return r, nil
 }
-func waitFor(ctx context.Context, d time.Duration, f func() bool) error {
-	t := time.NewTicker(50 * time.Millisecond)
-	defer t.Stop()
+
+// waitForFile waits until ready reports true, re-checking it whenever dir
+// changes, and gives up when d passes, ctx ends or the process that should
+// create the file exits, so a crashed launch fails at once instead of after
+// the timeout.
+func waitForFile(ctx context.Context, d time.Duration, dir string, creator *child, ready func() bool) error {
+	watcher, err := fsnotify.NewWatcher()
+	var events <-chan fsnotify.Event
+	var watchErrors <-chan error
+	var tick <-chan time.Time
+	if err == nil {
+		defer watcher.Close()
+		err = watcher.Add(dir)
+	}
+	if err == nil {
+		events, watchErrors = watcher.Events, watcher.Errors
+	} else {
+		// No inotify (limits exhausted): poll, and say so once per launch.
+		log.Printf("browser: cannot watch %s for the launch (%v); polling every 50ms", dir, err)
+		t := time.NewTicker(50 * time.Millisecond)
+		defer t.Stop()
+		tick = t.C
+	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
-	for {
-		if f() {
-			return nil
-		}
+	var exited <-chan struct{}
+	if creator != nil {
+		exited = creator.done
+	}
+	// The watch is in place before the first check, so a file created between
+	// the two is not missed.
+	for !ready() {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timer.C:
 			return context.DeadlineExceeded
-		case <-t.C:
+		case <-exited:
+			if ready() {
+				return nil
+			}
+			return errors.New("the process exited before it was ready")
+		case <-events:
+		case <-watchErrors:
+			// An overflowed queue only means events were missed; ready() looks.
+		case <-tick:
 		}
+	}
+	return nil
+}
+
+// waitForExit waits for a process to end, up to d.
+func waitForExit(ctx context.Context, d time.Duration, p *child) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-p.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return context.DeadlineExceeded
 	}
 }
 func (r *linuxRuntime) Target() string { r.mu.Lock(); defer r.mu.Unlock(); return r.target }
@@ -622,7 +673,7 @@ func (r *linuxRuntime) Close() error {
 	if r.chrome.alive() && r.endpoint != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, _ = r.cdp(ctx, "Browser.close", map[string]any{})
-		_ = waitFor(ctx, 4*time.Second, func() bool { return !r.chrome.alive() })
+		_ = waitForExit(ctx, 4*time.Second, r.chrome)
 		cancel()
 	}
 	r.chrome.stop()
