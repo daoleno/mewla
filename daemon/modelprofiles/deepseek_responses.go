@@ -111,11 +111,6 @@ func sketchJSONValue(v any) any {
 //     service_tier, etc.
 //   - Preserve supported function tools/calls/results and portable text history.
 
-func isDeepSeekResponsesUpstream(b RouteBinding) bool {
-	return normalizeID(b.ProviderID) == "deepseek" &&
-		normalizeID(b.RouteProtocol) == RouteProtocolResponses
-}
-
 func envelopeDeepSeekV4Flash() CapabilityEnvelope {
 	return CapabilityEnvelope{
 		ContextWindowTokens: 1000000,
