@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -59,6 +60,8 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
+	agentEvents     *agentEventService
+	adapters        *agentevents.Registry
 	browsers        *browser.Manager
 	connections     *connections.Manager
 	computers       *computers.Manager
@@ -148,6 +151,21 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			}
 		}
 		return control.Response{OK: true, ResourceTelemetry: &snap}
+	case "agent_event":
+		if req.AgentEvent == nil || a.agentEvents == nil {
+			return control.ErrorResponse("invalid_request", "Agent event request is required")
+		}
+		return a.agentEvents.Handle(context.Background(), *req.AgentEvent)
+	case "worker_approvals":
+		if a.agentEvents == nil {
+			return control.ErrorResponse("agent_events_unavailable", "Agent events are not running.")
+		}
+		return control.Response{OK: true, Approvals: a.agentEvents.approvals(strings.TrimSpace(req.WorkerID))}
+	case "worker_approve":
+		if a.agentEvents == nil {
+			return control.ErrorResponse("agent_events_unavailable", "Agent events are not running.")
+		}
+		return a.agentEvents.decide(strings.TrimSpace(req.WorkerID), strings.TrimSpace(req.ApprovalID), strings.TrimSpace(req.OptionID))
 	case "worker_list":
 		return a.handleWorkerList()
 	case "worker_spawn":
@@ -1641,7 +1659,20 @@ func (a *controlApp) spawnProfileClientHint(req control.Request, command string)
 	return work.ProfileClientExecutor(name, command)
 }
 
+// resolveSpawnCommand builds the launch command for a spawn and lets the
+// agent's adapter add what lets Mewla follow the Worker from its first moment.
 func (a *controlApp) resolveSpawnCommand(req control.Request) (string, error) {
+	command, err := a.resolveSpawnBaseCommand(req)
+	if err != nil || req.Hidden || a == nil || a.adapters == nil {
+		return command, err
+	}
+	if adapter, ok := a.adapters.For(work.InferWorkerProvider(command)); ok {
+		return adapter.PrepareLaunch(command)
+	}
+	return command, nil
+}
+
+func (a *controlApp) resolveSpawnBaseCommand(req control.Request) (string, error) {
 	if a == nil || a.execs == nil {
 		if req.Command != "" {
 			if req.Hidden {
