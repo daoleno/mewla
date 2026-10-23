@@ -3154,7 +3154,8 @@ func TestSessionInputStructuredSendReplacesThePasteAndCarriesTheReceipt(t *testi
 	resolver := fixedSessionInputResolver(identity)
 	owner := newSessionInputOwner(io)
 	var sent [][3]string
-	owner.structured = func(sessionID, payload, receipt string) (bool, error) {
+	owner.structured = func(sessionID, payload, receipt string, begin func() error) (bool, error) {
+		_ = begin()
 		sent = append(sent, [3]string{sessionID, payload, receipt})
 		return true, nil
 	}
@@ -3177,7 +3178,7 @@ func TestSessionInputStructuredSendFallsBackToThePasteWhenItIsNotHandled(t *test
 	io := newFakeSessionInputIO()
 	identity := testSessionInputIdentity("codex")
 	owner := newSessionInputOwner(io)
-	owner.structured = func(string, string, string) (bool, error) { return false, nil }
+	owner.structured = func(string, string, string, func() error) (bool, error) { return false, nil }
 	if _, err := owner.submit("agent:@1", identity, fixedSessionInputResolver(identity), identity.Command, "hello", "event-2"); err != nil {
 		t.Fatal(err)
 	}
@@ -3196,7 +3197,7 @@ func TestSessionInputStructuredSendRefusedIsDefinitelyNotSubmittedButAnythingEls
 			io := newFakeSessionInputIO()
 			identity := testSessionInputIdentity("codex")
 			owner := newSessionInputOwner(io)
-			owner.structured = func(string, string, string) (bool, error) {
+			owner.structured = func(string, string, string, func() error) (bool, error) {
 				return true, &StructuredInputError{Err: errors.New("app-server said no"), NotSent: tc.notSent}
 			}
 			result, err := owner.submit("agent:@1", identity, fixedSessionInputResolver(identity), identity.Command, "hello", "event-3")
@@ -3214,5 +3215,39 @@ func TestSessionInputStructuredSendRefusedIsDefinitelyNotSubmittedButAnythingEls
 				t.Fatalf("a send of unknown outcome must stay ambiguous, got %#v (found=%v)", entry, found)
 			}
 		})
+	}
+}
+
+func TestSessionInputDelegatedTurnGoesThroughTheStructuredSenderAndNotThePaste(t *testing.T) {
+	io := newFakeSessionInputIO()
+	ledger := newFakeTurnLedger()
+	identity := testSessionInputIdentity("codex")
+	resolver := fixedSessionInputResolver(identity)
+	owner := newLedgerSessionInputOwner(io, ledger)
+	var sent []string
+	owner.structured = func(sessionID, payload, receipt string, begin func() error) (bool, error) {
+		if err := begin(); err != nil {
+			return true, err
+		}
+		sent = append(sent, payload+"|"+receipt)
+		return true, nil
+	}
+	turn := delegatedTurnDraft{
+		ID:              "turn-structured",
+		AcceptedAt:      time.Date(2026, 10, 24, 1, 0, 0, 0, time.UTC),
+		ProcessIdentity: delegatedTurnIdentity(identity),
+	}
+	result, err := owner.submitDelegated("agent:@1", identity, resolver, identity.Command, "do the thing", turn, scriptedCorrelatedAdmission("do the thing"))
+	if err != nil || result.Outcome != InputAccepted || result.TurnID != turn.ID {
+		t.Fatalf("delegated structured submit = (%+v, %v)", result, err)
+	}
+	if len(sent) != 1 || sent[0] != "do the thing|"+turn.ID {
+		t.Fatalf("structured sends = %#v, want one carrying the turn's own id as the receipt", sent)
+	}
+	if len(io.queues) != 0 {
+		t.Fatalf("a delegated message the agent took itself was pasted too: %d queues", len(io.queues))
+	}
+	if canonical := ledger.snapshot("agent:@1"); canonical.TurnID != turn.ID || canonical.Status != TurnAccepted {
+		t.Fatalf("canonical turn = %+v, want accepted %s", canonical, turn.ID)
 	}
 }

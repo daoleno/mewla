@@ -9,6 +9,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/agentevents/codex"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/codexctl"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -34,19 +35,47 @@ type codexEvents struct {
 	now      func() time.Time
 	mu       sync.Mutex
 	sessions map[string]*codexSession
+	// socketSource names the app-server socket of a Worker whose launch did
+	// not come from the adapter.
+	socketSource func(workerID string) string
 }
 
 func newCodexEvents(ctx context.Context, hub *agentevents.Hub) *codexEvents {
 	return &codexEvents{ctx: ctx, hub: hub, now: time.Now, sessions: map[string]*codexSession{}}
 }
 
+// SetSocketSource installs where a Worker's app-server socket is looked up
+// when its pane does not name one.
+func (c *codexEvents) SetSocketSource(source func(workerID string) string) {
+	c.mu.Lock()
+	c.socketSource = source
+	c.mu.Unlock()
+}
+
+func (c *codexEvents) socketOf(worker *classifier.Worker) string {
+	if worker.AgentControl != "" {
+		return worker.AgentControl
+	}
+	c.mu.Lock()
+	source := c.socketSource
+	c.mu.Unlock()
+	if source == nil {
+		return ""
+	}
+	return source(worker.ID)
+}
+
 // Observe follows the Watcher: a Worker with a control socket gets a session,
-// and a Worker that is gone takes its app-server with it.
+// and a Worker that is gone takes its app-server with it. The route table
+// records a profile-routed Worker's socket a moment after the Worker appears,
+// so every event of a Worker without a session looks again.
 func (c *codexEvents) Observe(event watcher.SessionEvent) {
 	switch event.Type {
-	case "worker_discovered":
-		if event.Worker != nil && event.Worker.AgentControl != "" {
-			c.start(event.Worker.ID, event.Worker.AgentControl, event.Worker.Cwd)
+	case "worker_discovered", "worker_state_change", "worker_metadata_change":
+		if event.Worker != nil {
+			if socket := c.socketOf(event.Worker); socket != "" {
+				c.start(event.Worker.ID, socket, event.Worker.Cwd)
+			}
 		}
 	case "worker_removed":
 		c.stop(event.WorkerID)
@@ -122,10 +151,12 @@ func (s *codexSession) run(ctx context.Context) {
 	s.mu.Lock()
 	s.client = client
 	s.mu.Unlock()
+	s.owner.hub.SetConnected(s.workerID, true)
 	defer func() {
 		s.mu.Lock()
 		s.client = nil
 		s.mu.Unlock()
+		s.owner.hub.SetConnected(s.workerID, false)
 		_ = client.Close()
 	}()
 	decided, cancelSub := s.owner.hub.Subscribe(s.workerID)
@@ -286,16 +317,36 @@ func (s *codexSession) attach(ctx context.Context, client *codexctl.Client, thre
 	return attachOutcome{thread: thread, tries: tries, err: lastErr}
 }
 
+// interrupt stops the Worker's running turn through the app-server. A Worker
+// with a connected thread and no running turn has nothing to stop, and gets
+// no keystroke either: Ctrl-C at an idle Codex prompt starts its quit.
+func (c *codexEvents) interrupt(sessionID string) (handled bool, err error) {
+	client, thread := c.client(sessionID)
+	if client == nil || thread == "" {
+		return false, nil
+	}
+	state, ok := c.hub.State(sessionID)
+	if !ok || state.Current == nil || state.Current.Status != agentevents.TurnRunning {
+		return true, nil
+	}
+	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+	defer cancel()
+	return true, client.InterruptTurn(ctx, thread, state.Current.ID)
+}
+
 // send submits a message to the Worker's thread through the app-server.
 // handled is false for a Worker without a connected session, which is typed
 // into its pane instead.
-func (c *codexEvents) send(sessionID, payload, receipt string) (handled bool, err error) {
+func (c *codexEvents) send(sessionID, payload, receipt string, begin func() error) (handled bool, err error) {
 	client, thread := c.client(sessionID)
 	if client == nil || thread == "" {
 		return false, nil
 	}
 	if receipt == "" {
 		receipt = "mewla-msg-" + uuid.NewString()
+	}
+	if err := begin(); err != nil {
+		return true, err
 	}
 	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()

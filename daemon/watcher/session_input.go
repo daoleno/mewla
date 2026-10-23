@@ -366,15 +366,21 @@ type sessionInputSession struct {
 // sessionInputOwner is the sole serialization owner for every terminal
 // provider. It has no provider-specific queue, journal, spool, or resume loop.
 type sessionInputOwner struct {
-	mu       sync.Mutex
-	sessions map[string]*sessionInputSession
-	io       sessionInputIO
-	ledger   TurnLedger
-	now      func() time.Time
-	// structured sends a message through the agent's own interface; it reports
-	// handled=false for a Session that has none.
-	structured func(sessionID, payload, receipt string) (handled bool, err error)
+	mu         sync.Mutex
+	sessions   map[string]*sessionInputSession
+	io         sessionInputIO
+	ledger     TurnLedger
+	now        func() time.Time
+	structured StructuredSender
+	// interrupt stops a running turn through the agent's own interface.
+	interrupt func(sessionID string) (handled bool, err error)
 }
+
+// StructuredSender sends a message through the agent's own interface. It
+// reports handled=false, having done nothing, for a Session that has none.
+// begin must run once the Session is known to take the message, immediately
+// before the message leaves; a failure of begin means nothing was sent.
+type StructuredSender func(sessionID, payload, receipt string, begin func() error) (handled bool, err error)
 
 // StructuredInputError is a failure of an agent's typed input interface.
 // NotSent says the agent refused the message before taking it, so it is safe
@@ -875,16 +881,35 @@ func (owner *sessionInputOwner) submitWithTurn(
 		}
 		// An agent with a typed way to take a message takes it there: no paste,
 		// no wait for the prompt to be ready, no read-back. The receipt rides
-		// along as the message's own client id.
+		// along as the message's own client id. A message sent while the agent
+		// is mid-turn joins that turn, as the paste would have queued it.
 		mutationBoundary := time.Time{}
 		structuredSent := false
-		if turn == nil && owner.structured != nil {
-			handled, sendErr := owner.structured(sessionID, payload, result.Receipt)
+		if owner.structured != nil {
+			begin := func() error {
+				if turn != nil {
+					if transport, ok := owner.ledger.(InputAdmissionTransportLedger); ok {
+						if err := transport.MarkInputAdmissionTransportStarted(sessionID, turn.ID); err != nil {
+							return &StructuredInputError{Err: err, NotSent: true}
+						}
+					}
+				}
+				mutationBoundary = owner.nowUTC()
+				return nil
+			}
+			handled, sendErr := owner.structured(sessionID, payload, result.Receipt, begin)
 			if handled {
 				if sendErr != nil {
 					var failure *StructuredInputError
 					if errors.As(sendErr, &failure) && failure.NotSent {
 						return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, sendErr)
+					}
+					if turn != nil {
+						if ambiguityLedger, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
+							if markErr := ambiguityLedger.MarkInputAdmissionAmbiguous(sessionID, turn.ID, sendErr.Error()); markErr != nil {
+								sendErr = errors.Join(sendErr, fmt.Errorf("persist ambiguous admission: %w", markErr))
+							}
+						}
 					}
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, sendErr)
