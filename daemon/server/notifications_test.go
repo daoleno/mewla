@@ -75,7 +75,7 @@ func TestPhoneReportsTapsForegroundAndViewingToTheRecorder(t *testing.T) {
 	}
 	defer conn.Close()
 
-	if got := srv.NotificationPresence("w1"); !got.Connected || got.Foreground || got.Viewing {
+	if got := srv.NotificationPresence("w1"); !got.Connected || got.Foreground || got.ForegroundKnown || got.Viewing {
 		t.Fatalf("presence before the app spoke = %#v", got)
 	}
 	tapped := time.Now().Add(-time.Minute).UnixMilli()
@@ -104,7 +104,7 @@ func TestPhoneReportsTapsForegroundAndViewingToTheRecorder(t *testing.T) {
 	if len(engaged) != 2 || engaged[0] != "opened_app|" || engaged[1] != "viewed|w1" {
 		t.Fatalf("engaged = %v", engaged)
 	}
-	if got := srv.NotificationPresence("w1"); !got.Connected || !got.Foreground || !got.Viewing {
+	if got := srv.NotificationPresence("w1"); !got.Connected || !got.Foreground || !got.ForegroundKnown || !got.Viewing {
 		t.Fatalf("presence = %#v", got)
 	}
 	if got := srv.NotificationPresence("w2"); got.Viewing {

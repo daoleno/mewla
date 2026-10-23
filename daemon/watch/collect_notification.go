@@ -110,6 +110,9 @@ func mergeNotification(current, change *NotificationState) *NotificationState {
 type Presence struct {
 	// Foreground is true when an app connection reported itself in the foreground.
 	Foreground bool
+	// ForegroundKnown is false when an app is connected that never reports its
+	// foreground state (an older version), so "not in the foreground" is unknown.
+	ForegroundKnown bool
 	// Connected is true when any app connection is open.
 	Connected bool
 	// Viewing is true when an app connection has the notification's Session open.
@@ -198,6 +201,9 @@ func (c *Collector) recordNotification(id, kind string, at time.Time, title, bod
 		refs["screen"] = screen
 	}
 	refs["app_foreground"], refs["app_connected"], refs["viewing_target"] = yesNo(presence.Foreground), yesNo(presence.Connected), yesNo(presence.Viewing)
+	if !presence.ForegroundKnown {
+		refs["app_foreground"] = "unknown"
+	}
 	projectID := ""
 	if workerID != "" {
 		refs["session"] = workerID
