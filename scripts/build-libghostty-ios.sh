@@ -33,21 +33,28 @@ fi
 
 # shellcheck source=lib/zig.sh
 source "$ROOT/scripts/lib/zig.sh"
+# shellcheck source=lib/zig-xcode-compat.sh
+source "$ROOT/scripts/lib/zig-xcode-compat.sh"
 ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 
+# Retire this and scripts/zig-xcode-compat/ once scripts/check-zig-xcode-compat.sh
+# (run in native-cache.yml) fails because Xcode no longer needs them.
 prepare_macos_sdk_for_zig() {
   local sdk
   sdk="$(realpath "$(xcrun --sdk macosx --show-sdk-path)")"
   local libsystem="$sdk/usr/lib/libSystem.B.tbd"
 
-  if grep -m1 '^targets:' "$libsystem" | grep -q 'arm64-macos'; then
-    echo "$sdk"
-    return
-  fi
-  if ! grep -m1 '^targets:' "$libsystem" | grep -q 'arm64e-macos'; then
-    echo "error: unsupported libSystem target list in $libsystem" >&2
-    exit 1
-  fi
+  case "$(mewla_libsystem_arm64_support "$sdk")" in
+    native)
+      echo "$sdk"
+      return
+      ;;
+    arm64e-only) ;;
+    *)
+      echo "error: unsupported libSystem target list in $libsystem" >&2
+      exit 1
+      ;;
+  esac
 
   # Xcode 26.6's macOS 26.5 SDK advertises the top-level libSystem stub as
   # arm64e-only. Apple's linker accepts it for arm64 hosts, while Zig 0.15.2
