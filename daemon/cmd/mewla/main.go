@@ -613,7 +613,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		controlHandler.watch = watchCollector
 		watchCollector.SetPresence(func(workerID string) watch.Presence {
 			presence := srv.NotificationPresence(workerID)
-			return watch.Presence{Foreground: presence.Foreground, Connected: presence.Connected, Viewing: presence.Viewing}
+			return watch.Presence{Foreground: presence.Foreground, ForegroundKnown: presence.ForegroundKnown, Connected: presence.Connected, Viewing: presence.Viewing}
 		})
 		pusher.SetObserver(watchCollector)
 		srv.SetNotificationRecorder(watchCollector)

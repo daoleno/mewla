@@ -33,7 +33,7 @@ func TestNotificationRecordsTextContextAndNeverTheToken(t *testing.T) {
 		{ID: "work-2", Title: "Ship v2", Status: brain.WorkNeedsInput, Question: "Release now or wait?"},
 	}}
 	collector.SetPresence(func(workerID string) Presence {
-		return Presence{Connected: true, Viewing: workerID == "main:7"}
+		return Presence{Connected: true, ForegroundKnown: true, Viewing: workerID == "main:7"}
 	})
 	collector.NotificationSent(push.Sent{
 		ID: "n_abc", Kind: push.KindWorkerDone, At: time.Now().UTC(),
@@ -241,7 +241,9 @@ func TestJudgmentReadsNotificationsInContextAndStoresVerdicts(t *testing.T) {
 	now := time.Now().UTC()
 	collector.now = func() time.Time { return now }
 	collector.works = &fakeWorks{works: []brain.Work{{ID: "work-1", Title: "Add dark mode", Status: brain.WorkRunning, AttemptSessionID: "main:7"}}}
-	collector.SetPresence(func(string) Presence { return Presence{Connected: true, Foreground: true, Viewing: true} })
+	collector.SetPresence(func(string) Presence {
+		return Presence{Connected: true, Foreground: true, ForegroundKnown: true, Viewing: true}
+	})
 	collector.NotificationSent(push.Sent{ID: "n_1", Kind: push.KindWorkerDone, At: now.Add(-40 * time.Minute), Title: "mewla finished",
 		Body: "Session completed.", Priority: "default", Refs: map[string]string{"worker_id": "main:7"}, Outcome: push.OutcomeAccepted})
 	collector.NotificationSent(push.Sent{ID: "n_2", Kind: push.KindWorkerDone, At: now.Add(-35 * time.Minute), Title: "mewla finished",
@@ -296,5 +298,16 @@ func TestJudgmentReadsNotificationsInContextAndStoresVerdicts(t *testing.T) {
 	}
 	if len(store.Unjudged()) != 0 {
 		t.Fatalf("still unjudged: %d", len(store.Unjudged()))
+	}
+}
+
+func TestForegroundIsUnknownWhenTheAppNeverReportsIt(t *testing.T) {
+	collector, store := newTestCollector(t, t.TempDir())
+	collector.SetPresence(func(string) Presence { return Presence{Connected: true} })
+	collector.NotificationSent(push.Sent{ID: "n_old_app", Kind: push.KindBrainReply, At: time.Now().UTC(), Title: "Brain", Body: "q", Outcome: push.OutcomeAccepted})
+	drain(t, collector)
+	signal, _ := store.Signal(signalID(SourceNotification, "n_old_app"))
+	if signal.Refs["app_foreground"] != "unknown" {
+		t.Fatalf("app_foreground = %q, want unknown", signal.Refs["app_foreground"])
 	}
 }

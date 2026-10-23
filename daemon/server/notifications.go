@@ -21,8 +21,11 @@ const (
 // the foreground, and with a given Session open.
 type NotificationPresence struct {
 	Foreground bool
-	Connected  bool
-	Viewing    bool
+	// ForegroundKnown is false when an app is connected but has never said
+	// whether it is in the foreground (an older app version).
+	ForegroundKnown bool
+	Connected       bool
+	Viewing         bool
 }
 
 // SetNotificationRecorder lets Watch hear what the phone does with
@@ -78,9 +81,14 @@ func (s *Server) NotificationPresence(workerID string) NotificationPresence {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	presence := NotificationPresence{Connected: len(s.clients) > 0}
+	// With no app connected, it is certainly not in the foreground.
+	presence.ForegroundKnown = !presence.Connected
 	for conn := range s.clients {
-		if s.appStates[conn] == "active" {
-			presence.Foreground = true
+		if state := s.appStates[conn]; state != "" {
+			presence.ForegroundKnown = true
+			if state == "active" {
+				presence.Foreground = true
+			}
 		}
 		if target != "" && strings.TrimSpace(s.active[conn]) == target {
 			presence.Viewing = true
