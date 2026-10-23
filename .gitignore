@@ -43,6 +43,7 @@ app/modules/file-upload/android/build/
 app/modules/app-update/android/build/
 app/modules/keyboard-lifecycle/android/build/
 app/modules/link-transport/android/build/
+app/modules/mewla-live/android/build/
 
 # Host CMake/JVM bridge test build (never shipped)
 /build/
