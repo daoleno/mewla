@@ -144,3 +144,15 @@ test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
   expect(parseConnectLink("https://mewla.example/")).toBeNull();
   expect(parseConnectLink("https://mewla.example/#pair=https%3A%2F%2Fevil.example")).toBeNull();
 });
+
+test("reads the compact link the daemon prints for a plain LAN or Tailscale address", () => {
+  // Printed by `mewla pair` on a daemon with no Mewla Link: a version 1 payload
+  // (address, daemon key, one-time token) in the `p` parameter, no `v`.
+  const printed =
+    "mewla://settings?p=AQAXd3M6Ly8xMDAuOTIuMTc0LjkwOjk4OTVHHP7dxlX0zaLK5et3b5-J2j8CAtWfBkaokDtuDeNf4XI0E2sWgLagbSggpg8GyjHp4XBIrZmAi12ffdjAhOoX";
+  const parsed = parseConnectLink(printed);
+  expect(parsed?.url).toBe("ws://100.92.174.90:9895/ws");
+  expect(parsed?.daemonPublicKey).toHaveLength(64);
+  expect(parsed?.enrollmentToken).toHaveLength(64);
+  expect(parsed?.link).toBeUndefined();
+});
