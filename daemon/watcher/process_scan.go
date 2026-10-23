@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/logonce"
 	"github.com/daoleno/mewla/daemon/procspawn"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/workerproc"
@@ -24,10 +25,19 @@ type processInfo struct {
 	args      string
 }
 
+// snapshotProcesses returns nil when ps failed: a nil map means the process
+// table is unknown, which is not the same as "no processes". Callers must not
+// treat a nil map as evidence that a process is gone or that a Worker's
+// identity changed.
 func snapshotProcesses() map[int]processInfo {
-	processes, _ := snapshotProcessesErr()
+	processes, err := snapshotProcessesErr()
+	psFailures.Note("watcher process snapshot (keeping the last known Worker process identities)", err)
 	return processes
 }
+
+// psFailures logs a failing ps once per distinct failure and again after a
+// success, so a broken ps shows up in the log without one line per poll.
+var psFailures logonce.Log
 
 // snapshotProcessesErr is snapshotProcesses with the failing ps detail kept for
 // ownership-probe diagnostics.

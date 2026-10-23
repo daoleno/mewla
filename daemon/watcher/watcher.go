@@ -1502,17 +1502,22 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 		}
 		worker.Cwd = win.cwd
 		worker.Project = projectNameFromPath(win.cwd)
-		detectedCommand, detectedStartedAt, detectedPID := detectWorkerProcess(win.command, win.panePID, processes, processSnapshotAt)
-		// Sub-second provider start evidence: ps lstart is whole-second
-		// precision, so instance-ownership arms would compare against a
-		// rounded start. The platform's precise derivation (Linux
-		// /proc/<pid>/stat starttime, boot-relative clock ticks) refines the
-		// detected provider start when it is consistent with the observation;
-		// the guarded fallback keeps the observed value everywhere else.
-		detectedStartedAt = refineProcessStartedAt(detectedStartedAt, detectedPID)
-		worker.Command = mergeWorkerCommandOwnership(worker.Command, detectedCommand)
-		worker.StartedAt = detectedStartedAt
-		worker.ProcessID = detectedPID
+		// A failed ps leaves processes nil: the process table is unknown, so
+		// the Worker keeps the identity it had instead of being rewritten from
+		// the tmux pane command alone.
+		if processes != nil {
+			detectedCommand, detectedStartedAt, detectedPID := detectWorkerProcess(win.command, win.panePID, processes, processSnapshotAt)
+			// Sub-second provider start evidence: ps lstart is whole-second
+			// precision, so instance-ownership arms would compare against a
+			// rounded start. The platform's precise derivation (Linux
+			// /proc/<pid>/stat starttime, boot-relative clock ticks) refines the
+			// detected provider start when it is consistent with the observation;
+			// the guarded fallback keeps the observed value everywhere else.
+			detectedStartedAt = refineProcessStartedAt(detectedStartedAt, detectedPID)
+			worker.Command = mergeWorkerCommandOwnership(worker.Command, detectedCommand)
+			worker.StartedAt = detectedStartedAt
+			worker.ProcessID = detectedPID
+		}
 		if w.hidden[win.target] {
 			worker.Hidden = true
 		}
@@ -2881,11 +2886,14 @@ func (w *Watcher) WaitForPaneProcessExit(sessionID string, processID int, timeou
 		return false
 	}
 	sessionID = strings.TrimSpace(sessionID)
+	_, _, snapshot := w.pollReaders()
 	deadline := time.Now().Add(timeout)
 	for {
-		processes := snapshotProcesses()
-		if _, alive := processes[processID]; !alive {
-			return true
+		// A failed ps is not evidence that the process exited.
+		if processes := snapshot(); processes != nil {
+			if _, alive := processes[processID]; !alive {
+				return true
+			}
 		}
 		if !time.Now().Before(deadline) {
 			return false
