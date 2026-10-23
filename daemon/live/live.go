@@ -361,6 +361,29 @@ func (p *Projector) Observe(snapshot brain.Snapshot) {
 	p.mu.Unlock()
 }
 
+// ObserveNow projects a snapshot and reports it at once (no debounce), for a
+// phone that is asking what is happening right now. It returns the state.
+func (p *Projector) ObserveNow(snapshot brain.Snapshot) State {
+	candidate := Project(snapshot, p.now())
+	key := materialKey(candidate)
+	p.mu.Lock()
+	if p.timer != nil {
+		p.timer.Stop()
+		p.timer = nil
+	}
+	if p.emitted && key == p.emittedKey {
+		p.pending = nil
+		p.current.StartedAt = candidate.StartedAt
+		current := p.current
+		p.mu.Unlock()
+		return current
+	}
+	p.pending = &candidate
+	p.mu.Unlock()
+	p.flush()
+	return p.Current()
+}
+
 func (p *Projector) flush() {
 	p.mu.Lock()
 	p.timer = nil
