@@ -216,6 +216,7 @@ type Worker struct {
 	LeaseSeconds        int        `json:"lease_seconds,omitempty"`
 	Cwd                 string     `json:"cwd,omitempty"`
 	Command             string     `json:"command,omitempty"`
+	ExecutorID          string     `json:"executor_id,omitempty"`
 	UpdatedAt           time.Time  `json:"updated_at,omitempty"`
 	LastSeenAt          *time.Time `json:"last_seen_at,omitempty"`
 	Hidden              bool       `json:"hidden,omitempty"`

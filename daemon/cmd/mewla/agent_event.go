@@ -247,13 +247,30 @@ func agentLevelsFor(execs *work.ExecutorConfig, adapters *agentevents.Registry, 
 		if worker == nil {
 			return nil
 		}
-		provider := work.InferWorkerProvider(worker.Command)
-		if execs != nil && worker.ExecutorID != "" {
-			if executor, ok := execs.WorkerExecutor(worker.ExecutorID); ok && executor.Provider != "" {
-				provider = executor.Provider
-			}
-		}
+		provider := providerOf(execs, worker.ExecutorID, worker.Command)
 		state, known := hub.State(worker.ID)
 		return adapters.Levels(provider, known && !state.Exited)
+	}
+}
+
+// providerOf is the provider of an executor, or of the program in a command no
+// executor claims.
+func providerOf(execs *work.ExecutorConfig, executorID, command string) string {
+	if execs != nil {
+		if executor, ok := execs.WorkerExecutor(executorID); ok && executor.Provider != "" {
+			return executor.Provider
+		}
+	}
+	return work.InferWorkerProvider(command)
+}
+
+// launchAdapterFor lets the adapter of a session's agent add what lets Mewla
+// follow it from its first moment (a session id, a hook file).
+func launchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry) func(executorID, command string) (string, error) {
+	return func(executorID, command string) (string, error) {
+		if adapter, ok := adapters.For(providerOf(execs, executorID, command)); ok {
+			return adapter.PrepareLaunch(command)
+		}
+		return command, nil
 	}
 }

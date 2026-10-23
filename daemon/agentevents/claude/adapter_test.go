@@ -31,12 +31,27 @@ func TestPrepareLaunchAddsTheHookFileOnce(t *testing.T) {
 	if err != nil || got != "claude --session-id abc --settings '/state/agent events/claude settings.json'" {
 		t.Fatalf("got %q, %v", got, err)
 	}
-	same, _ := a.PrepareLaunch("claude --settings /mine.json")
-	if same != "claude --settings /mine.json" {
-		t.Fatalf("the user's own --settings was changed: %q", same)
+	own, _ := a.PrepareLaunch("claude --settings /mine.json --session-id abc")
+	if own != "claude --settings /mine.json --session-id abc" {
+		t.Fatalf("the user's own --settings was changed: %q", own)
 	}
-	if same, _ := (Adapter{}).PrepareLaunch("claude"); same != "claude" {
-		t.Fatalf("no settings path, yet %q", same)
+	if bare, _ := (Adapter{}).PrepareLaunch("claude --session-id abc"); bare != "claude --session-id abc" {
+		t.Fatalf("no settings path, yet %q", bare)
+	}
+}
+
+func TestPrepareLaunchGivesAFreshLaunchItsOwnSession(t *testing.T) {
+	got, err := Adapter{SettingsPath: "/s.json"}.PrepareLaunch("claude --permission-mode auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := strings.Fields(got)
+	if !strings.Contains(got, " --session-id ") || fields[len(fields)-2] != "--settings" {
+		t.Fatalf("a fresh launch must carry a session id and the hook file: %q", got)
+	}
+	resumed, _ := Adapter{SettingsPath: "/s.json"}.PrepareLaunch("claude --resume 11111111-1111-1111-1111-111111111111")
+	if strings.Contains(resumed, "--session-id") {
+		t.Fatalf("a resumed conversation keeps its own id: %q", resumed)
 	}
 }
 

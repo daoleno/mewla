@@ -367,7 +367,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,
-		adapters:        adapters,
 		resourceSampler: resourceSampler,
 		auth:            authManager,
 		watcher:         w,
@@ -472,6 +471,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	controlHandler.notifyBrain = pusher.BrainNotifier(push.KindBrainReply)
 	srv.SetResourceSampler(resourceSampler)
 	w.SetExecutorResolver(execs.IDForCommand)
+	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
