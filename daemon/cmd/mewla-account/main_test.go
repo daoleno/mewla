@@ -92,3 +92,36 @@ func selfSignedPEM(t *testing.T) []byte {
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
+
+func TestGoogleExchangeNeedsEveryValueOrNone(t *testing.T) {
+	env := func(values map[string]string) func(string) string {
+		return func(key string) string { return values[key] }
+	}
+	key := "MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY"
+	good := map[string]string{
+		"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret",
+		key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	}
+	if handler, err := googleExchange("https://connect.example", true, env(nil)); handler != nil || err != nil {
+		t.Fatalf("no configuration: %v %v", handler, err)
+	}
+	if handler, err := googleExchange("https://connect.example", true, env(good)); handler == nil || err != nil {
+		t.Fatalf("full configuration: %v %v", handler, err)
+	}
+	for name, values := range map[string]map[string]string{
+		"only an id":     {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id"},
+		"no receipt key": {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret"},
+		"short key":      {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", key: "AAAA"},
+		"bad key":        {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", key: "not base64!"},
+	} {
+		if handler, err := googleExchange("https://connect.example", true, env(values)); handler != nil || err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if _, err := googleExchange("https://connect.example", false, env(good)); err == nil {
+		t.Fatal("served without the public HTTPS listener")
+	}
+	if _, err := googleExchange("http://connect.example", true, env(good)); err == nil {
+		t.Fatal("served from a non-HTTPS origin")
+	}
+}

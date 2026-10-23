@@ -15,17 +15,32 @@ ROOT = Path(__file__).resolve().parent.parent
 SYMBOLS = {
     "github": "GitHubPublicClientID",
     "slack": "SlackPublicClientID",
+    "google": "GoogleExchangeOrigin",
 }
+# Google has no public client ID to ship: its sign-in runs on Mewla's own
+# service, which holds the client secret. The daemon only needs that origin.
+GOOGLE_ORIGIN = "https://connect.mewla.ai"
 
 
 def publisher_flags(document, required):
-    if not isinstance(document, dict) or set(document) != {"schema_version", "github", "slack"}:
-        raise ValueError("publisher manifest must contain only schema_version, github and slack")
+    if not isinstance(document, dict) or set(document) != {"schema_version", "github", "slack", "google"}:
+        raise ValueError("publisher manifest must contain only schema_version, github, slack and google")
     if document["schema_version"] != 1:
         raise ValueError("unsupported publisher manifest version")
     flags = []
     for service, symbol in SYMBOLS.items():
         config = document[service]
+        if service == "google":
+            if not isinstance(config, dict) or set(config) != {"exchange_origin"}:
+                raise ValueError("google: only exchange_origin is allowed")
+            origin = config["exchange_origin"]
+            if origin is not None and origin != GOOGLE_ORIGIN:
+                raise ValueError(f"google: the exchange origin must be {GOOGLE_ORIGIN}")
+            if service in required and origin is None:
+                raise ValueError("google: Mewla's Google sign-in is not configured; cannot publish")
+            if origin:
+                flags.extend(["-X", f"github.com/daoleno/mewla/daemon/connections.{symbol}={origin}"])
+            continue
         identity = "owner" if service == "github" else "workspace_id"
         if not isinstance(config, dict) or set(config) != {identity, "client_id"}:
             raise ValueError(f"{service}: only public publisher identity and client_id are allowed")
