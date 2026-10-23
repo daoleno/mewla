@@ -6,14 +6,14 @@ The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow 
 
 ## Ordinary CI triggers
 
-| Event | Fast checks (`installer`, `daemon`, `app`, `native-contract`, `release-identity`) | Native/packaging checks (`ios-native`, `android-native`, Android/iOS JS exports, daemon release binaries) |
+| Event | Fast checks (`installer`, `daemon`, `app`, `native-contract`, `release-identity`) | Native/packaging checks (`ios-native`, `android-native`, daemon release binaries) |
 | --- | --- | --- |
 | Push to `main` | yes | no |
 | Pull request | yes | no |
 | Release tag push (`vX.Y.Z` / `vX.Y.Z-beta.N`) | yes | yes |
 | Manual `workflow_dispatch` of `ci.yml` | yes | yes |
 
-The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check; the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64, darwin arm64, with the embedded web UI) build only with the native/packaging checks. The `app` fast job runs unit tests, typecheck, and only the web export; the Android and iOS exports run with the native checks. `ci.yml` cancels superseded runs for the same ref.
+The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check; the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64, darwin arm64, with the embedded web UI) build only with the native/packaging checks. The `app` fast job runs unit tests, typecheck and the Android and iOS JS exports; the web export runs only inside the daemon release build, which embeds it. `ci.yml` cancels superseded runs for the same ref.
 
 The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml` and `ios-release.yml`. Those workflows build the signed Android APK and the signed iOS IPA, so an Android native break is caught by `release-artifacts.yml` before the public release is published, and an iOS compile break is caught by `ios-release.yml` before the IPA is exported or uploaded. The unsigned Simulator build and the bounded Android native link additionally run on a manual `ci.yml` dispatch and on a maintainer-pushed release tag.
 

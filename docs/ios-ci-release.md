@@ -25,7 +25,7 @@ The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml
 6. verifies the `.app` bundle identifier and Mach-O executable;
 7. uploads the unsigned Simulator `.app` as a seven-day workflow artifact.
 
-This job contains no Apple credentials. The Linux `app` job keeps unit tests, typecheck, and the web export on every push; the Android and iOS JS exports are gated to the same release-tag and manual-dispatch triggers as this job, and none of them is a substitute for this macOS compile/link job.
+This job contains no Apple credentials. The Linux `app` job keeps unit tests, typecheck and the Android and iOS JS exports on every push; none of them is a substitute for this macOS compile/link job.
 
 Because ordinary pushes no longer compile iOS, an iOS compile break is caught at release time by the signed archive in [`ios-release.yml`](../.github/workflows/ios-release.yml), which runs on every release before any IPA is exported or uploaded, and earlier by this unsigned job on a manual `ci.yml` dispatch or a maintainer-pushed release tag.
 
