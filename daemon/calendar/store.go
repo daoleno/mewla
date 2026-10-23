@@ -44,6 +44,7 @@ type Store struct {
 	stored  map[string]Item
 	subs    map[int]chan Event
 	nextSub int
+	changed chan struct{}
 }
 
 func DefaultRoot() (string, error) {
@@ -68,7 +69,7 @@ func NewStore(root string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{path: filepath.Join(root, databaseName), db: db, now: time.Now, items: map[string]Item{}, subs: map[int]chan Event{}}
+	s := &Store{path: filepath.Join(root, databaseName), db: db, now: time.Now, items: map[string]Item{}, subs: map[int]chan Event{}, changed: make(chan struct{}, 1)}
 	if err := s.load(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -167,7 +168,16 @@ func (s *Store) broadcast(item Item) {
 	s.broadcastEvent(Event{Item: item})
 }
 
+// Changed receives a value after any item changes. It holds at most one
+// pending value, so a burst of changes is one wake; a receiver re-reads the
+// store rather than counting them.
+func (s *Store) Changed() <-chan struct{} { return s.changed }
+
 func (s *Store) broadcastEvent(event Event) {
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
 	event.Item = cloneItem(event.Item)
 	if event.ScheduledResult != nil {
 		result := *event.ScheduledResult
@@ -196,6 +206,20 @@ func (s *Store) List() []Item {
 	})
 	return out
 }
+
+// Running returns the scheduled actions that are launched and not finished.
+func (s *Store) Running() []Item {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Item
+	for _, item := range s.items {
+		if item.Kind == KindScheduledAction && item.Status == StatusRunning {
+			out = append(out, cloneItem(item))
+		}
+	}
+	return out
+}
+
 func (s *Store) Get(id string) (Item, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -3362,6 +3362,11 @@ func (s *Server) heartbeat(ctx context.Context) {
 }
 
 func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
+	if ev.Type == "worker_state_change" || ev.Type == "worker_removed" {
+		// A launched Calendar action ends when its Worker does, even if its
+		// Work file never changes.
+		s.calendarScheduler.WorkerChanged()
+	}
 	if ev.Worker != nil && ev.Worker.Hidden {
 		if s.brain != nil {
 			if _, err := s.brain.ObserveHostSessionEvent(ev); err != nil {

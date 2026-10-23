@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -37,6 +38,46 @@ const (
 )
 
 var errScheduledWorkIdentity = errors.New("linked scheduled Work identity mismatch")
+
+// ScheduledActionProgress signals when a Work file of a scheduled action
+// changes, so a finished action is noticed as soon as its agent writes the
+// deliverable instead of on the next poll.
+func (r *WorkRunner) ScheduledActionProgress() (<-chan struct{}, func()) {
+	out := make(chan struct{}, 1)
+	if r == nil || r.Store == nil {
+		return out, func() {}
+	}
+	dir := filepath.Join(r.Store.Root, "calendar")
+	id, events := r.Store.Subscribe()
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case event, ok := <-events:
+				if !ok {
+					close(out) // the Work store closed; the scheduler stops listening
+					return
+				}
+				if filepath.Dir(event.Path) != dir {
+					continue
+				}
+				select {
+				case out <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}()
+	return out, func() {
+		once.Do(func() {
+			close(done)
+			r.Store.Unsubscribe(id)
+		})
+	}
+}
 
 func (r *WorkRunner) InspectScheduledAction(_ context.Context, item Item, run Run) (Status, string, string, bool) {
 	if r == nil || r.Store == nil || strings.TrimSpace(run.WorkID) == "" {

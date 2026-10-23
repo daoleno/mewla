@@ -27,6 +27,8 @@ Recurring actions advance to their next wall-clock occurrence after either succe
 
 The durable claim is the idempotency boundary. After restart, Mewla reconciles a running claim and never launches the same occurrence again. If its linked Work and agent are no longer observable, the item fails with an uncertain-outcome explanation so the user can inspect and explicitly choose Run now.
 
+The scheduler does not poll. It sleeps on one timer armed for the earliest instant any item is due (an item's time, an event's end, an owner's retry) and looks again when the Calendar store changes, an owner registers, the linked Work file changes, or a Worker changes state. A one-minute safety net re-checks everything in case the clock jumped or the machine slept. A failed store write (a status change, a terminal Run) is logged once per distinct cause and retried on the next pass.
+
 At startup, a scheduled action missed by no more than 15 minutes runs as catch-up. Older scheduled actions fail visibly instead of unexpectedly starting stale work. Overdue reminders and deadlines remain waiting and visible.
 
 ## Brain and API control

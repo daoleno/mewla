@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/logonce"
@@ -29,6 +30,14 @@ type ActionInspector interface {
 	InspectScheduledAction(context.Context, Item, Run) (status Status, result, failure string, known bool)
 }
 
+// ActionWaker is implemented by a runner that can say when a launched action
+// may have made progress (its Work item changed). The scheduler reconciles
+// running actions on that signal instead of re-reading them on a timer. The
+// returned stop func ends the subscription.
+type ActionWaker interface {
+	ScheduledActionProgress() (progress <-chan struct{}, stop func())
+}
+
 // OwnerDuty is what an owner does when an item it owns is due. Fire gets the
 // instant the occurrence was due. An occurrence more than Window late is
 // skipped, not fired: the daemon was down and the moment has passed. A failed
@@ -48,12 +57,32 @@ type Scheduler struct {
 	retryAt      map[string]time.Time
 	runner       ActionRunner
 	now          func() time.Time
-	interval     time.Duration
+	newTimer     func(time.Duration) wakeTimer
 	missedWindow time.Duration
 	launchMu     sync.Mutex
 	launching    map[string]struct{}
 	failures     logonce.Log
+	wake         chan struct{}
+	workerWake   chan struct{}
+	passes       atomic.Int64
 }
+
+// safetyNet bounds how long the scheduler goes without looking at the store.
+// Every wake point is derived from the store and the clock, so this is not what
+// makes reminders fire. It covers a clock that jumped, a suspended machine
+// (timers do not count suspended time) and a write that failed and is retried.
+const safetyNet = time.Minute
+
+type wakeTimer interface {
+	C() <-chan time.Time
+	Stop() bool
+}
+
+type realTimer struct{ *time.Timer }
+
+func (t realTimer) C() <-chan time.Time { return t.Timer.C }
+
+func newRealTimer(d time.Duration) wakeTimer { return realTimer{time.NewTimer(d)} }
 
 // note reports a failed store write once per distinct cause and operation, so
 // a completion that cannot be persisted is visible without a line every pass.
@@ -67,7 +96,7 @@ func (s *Scheduler) note(scope string, err error) {
 }
 
 func NewScheduler(store *Store, runner ActionRunner) *Scheduler {
-	return &Scheduler{store: store, runner: runner, now: time.Now, interval: time.Second, missedWindow: DefaultMissedActionWindow, launching: map[string]struct{}{}}
+	return &Scheduler{store: store, runner: runner, now: time.Now, newTimer: newRealTimer, wake: make(chan struct{}, 1), workerWake: make(chan struct{}, 1), missedWindow: DefaultMissedActionWindow, launching: map[string]struct{}{}}
 }
 
 // Own registers what happens when an item owned by owner is due. Until it is
@@ -79,6 +108,32 @@ func (s *Scheduler) Own(owner string, duty OwnerDuty) {
 		s.duties = map[string]OwnerDuty{}
 	}
 	s.duties[owner] = duty
+	s.Wake()
+}
+
+// WorkerChanged tells Run that a Worker changed state or went away, which may
+// end a launched action. Only running actions are re-checked. It never blocks
+// and is safe on a nil Scheduler.
+func (s *Scheduler) WorkerChanged() {
+	if s == nil {
+		return
+	}
+	select {
+	case s.workerWake <- struct{}{}:
+	default:
+	}
+}
+
+// Wake asks Run to look at the store again. It never blocks and is safe on a
+// nil Scheduler.
+func (s *Scheduler) Wake() {
+	if s == nil {
+		return
+	}
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
 }
 
 func (s *Scheduler) duty(owner string) (OwnerDuty, bool) {
@@ -88,11 +143,33 @@ func (s *Scheduler) duty(owner string) (OwnerDuty, bool) {
 	return duty, ok && duty.Fire != nil
 }
 
+// wakePoints collects the earliest future instant at which a pass has
+// something to do. Instants that are not in the future are ignored: a pass
+// that could not act on an item yet (launching, backing off) is woken by the
+// change that unblocks it, not by a past time.
+type wakePoints struct {
+	now time.Time
+	at  time.Time
+}
+
+func (w *wakePoints) consider(t time.Time) {
+	if t.After(w.now) && (w.at.IsZero() || t.Before(w.at)) {
+		w.at = t
+	}
+}
+
 // tickOwned acts on an owned reminder. Its owner acts instead of the
 // reminder notification; it never waits for the user.
-func (s *Scheduler) tickOwned(item Item, now time.Time) {
+func (s *Scheduler) tickOwned(item Item, now time.Time, next *wakePoints) {
 	duty, ok := s.duty(item.Owner)
-	if !ok || item.NextAt.After(now) || item.Status != StatusScheduled || s.isLaunching(item.ID) {
+	if !ok || item.Status != StatusScheduled {
+		return
+	}
+	if item.NextAt.After(now) {
+		next.consider(item.NextAt)
+		return
+	}
+	if s.isLaunching(item.ID) {
 		return
 	}
 	if now.Sub(item.NextAt) > duty.Window {
@@ -103,7 +180,11 @@ func (s *Scheduler) tickOwned(item Item, now time.Time) {
 	s.dutiesMu.Lock()
 	wait := s.retryAt[item.ID]
 	s.dutiesMu.Unlock()
-	if wait.After(now) || !s.beginLaunch(item.ID) {
+	if wait.After(now) {
+		next.consider(wait)
+		return
+	}
+	if !s.beginLaunch(item.ID) {
 		return
 	}
 	go func() {
@@ -116,6 +197,7 @@ func (s *Scheduler) tickOwned(item Item, now time.Time) {
 			}
 			s.retryAt[item.ID] = now.Add(ownerRetry)
 			s.dutiesMu.Unlock()
+			s.Wake() // the retry time is a new wake point
 			return
 		}
 		_, _, err := s.store.CompleteOccurrence(item.ID, item.NextAt)
@@ -123,25 +205,80 @@ func (s *Scheduler) tickOwned(item Item, now time.Time) {
 	}()
 }
 
+// Run acts on due items until ctx ends. It sleeps on one timer armed for the
+// earliest instant anything is due and looks again when the store changes, an
+// owner registers, a launched action's Work progresses, or the safety net
+// elapses; an idle scheduler does no work.
 func (s *Scheduler) Run(ctx context.Context) {
-	s.Tick(ctx)
-	ticker := time.NewTicker(s.interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.Tick(ctx)
-		}
-	}
-}
-
-func (s *Scheduler) Tick(ctx context.Context) {
 	if s == nil || s.store == nil {
 		return
 	}
+	var progress <-chan struct{}
+	if waker, ok := s.runner.(ActionWaker); ok {
+		var stop func()
+		progress, stop = waker.ScheduledActionProgress()
+		defer stop()
+	}
+	changed := s.store.Changed()
+	newTimer := s.newTimer
+	if newTimer == nil {
+		newTimer = newRealTimer
+	}
+	// Whatever changed before this point is seen by the first pass; only what
+	// changes after it needs a wake.
+	drain(changed)
+	drain(s.wake)
+	next := s.tick(ctx)
+	for {
+		wait := safetyNet
+		if !next.IsZero() {
+			wait = min(wait, next.Sub(s.now()))
+		}
+		timer := newTimer(max(wait, time.Millisecond))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C():
+			next = s.tick(ctx)
+		case <-changed:
+			next = s.tick(ctx)
+		case <-s.wake:
+			next = s.tick(ctx)
+		case <-s.workerWake:
+			s.reconcileRunning(ctx)
+		case _, ok := <-progress:
+			if !ok {
+				progress = nil // the subscription ended; never spin on a closed channel
+			} else {
+				s.reconcileRunning(ctx)
+			}
+		}
+		timer.Stop()
+	}
+}
+
+func drain(ch <-chan struct{}) {
+	select {
+	case <-ch:
+	default:
+	}
+}
+
+// Tick runs one full pass over every item.
+func (s *Scheduler) Tick(ctx context.Context) {
+	s.tick(ctx)
+}
+
+// tick acts on everything due and returns the earliest future instant that
+// needs another pass, or the zero time when nothing is waiting on the clock.
+func (s *Scheduler) tick(ctx context.Context) time.Time {
+	if s == nil || s.store == nil {
+		return time.Time{}
+	}
+	s.passes.Add(1)
 	now := s.now()
+	next := &wakePoints{now: now}
 	for _, item := range s.store.List() {
 		if item.Kind == KindScheduledAction && item.Status == StatusRunning {
 			if !s.isLaunching(item.ID) {
@@ -155,24 +292,46 @@ func (s *Scheduler) Tick(ctx context.Context) {
 		switch item.Kind {
 		case KindReminder, KindDeadline:
 			if item.Owner != "" {
-				s.tickOwned(item, now)
+				s.tickOwned(item, now, next)
 				continue
 			}
-			if !item.NextAt.After(now) && item.Status == StatusScheduled {
-				status := StatusWaiting
-				if item.Recurrence != RecurrenceNone {
-					status = StatusCompleted
-				}
-				s.setStatus(item.ID, status)
+			if item.Status != StatusScheduled {
+				continue
 			}
+			if item.NextAt.After(now) {
+				next.consider(item.NextAt)
+				continue
+			}
+			status := StatusWaiting
+			if item.Recurrence != RecurrenceNone {
+				status = StatusCompleted
+			}
+			s.setStatus(item.ID, status)
 		case KindEvent:
-			if item.EndAt != nil && !item.EndAt.After(now) {
-				s.setStatus(item.ID, StatusCompleted)
-			} else if !item.NextAt.After(now) && item.Status == StatusScheduled {
+			if item.EndAt != nil {
+				if !item.EndAt.After(now) {
+					s.setStatus(item.ID, StatusCompleted)
+					continue
+				}
+				next.consider(*item.EndAt)
+			}
+			if item.Status != StatusScheduled {
+				continue
+			}
+			if item.NextAt.After(now) {
+				next.consider(item.NextAt)
+			} else {
 				s.setStatus(item.ID, StatusRunning)
 			}
 		case KindScheduledAction:
-			if item.NextAt.After(now) || item.Status != StatusScheduled || s.isLaunching(item.ID) {
+			if item.Status != StatusScheduled {
+				continue
+			}
+			if item.NextAt.After(now) {
+				next.consider(item.NextAt)
+				continue
+			}
+			if s.isLaunching(item.ID) {
 				continue
 			}
 			if now.Sub(item.NextAt) > s.missedWindow {
@@ -184,6 +343,20 @@ func (s *Scheduler) Tick(ctx context.Context) {
 				_, err := s.run(ctx, id, false)
 				s.note("calendar run "+id, err)
 			}(item.ID)
+		}
+	}
+	return next.at
+}
+
+// reconcileRunning re-checks launched actions against their Work. It runs when
+// that Work may have progressed, without a pass over unrelated items.
+func (s *Scheduler) reconcileRunning(ctx context.Context) {
+	if s == nil || s.store == nil {
+		return
+	}
+	for _, item := range s.store.Running() {
+		if !s.isLaunching(item.ID) {
+			s.reconcile(ctx, item)
 		}
 	}
 }
