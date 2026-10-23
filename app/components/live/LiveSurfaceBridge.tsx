@@ -47,7 +47,9 @@ export function LiveSurfaceBridge() {
     };
 
     const provisionWidget = async () => {
-      if (!baseUrl || live.widgetState() === "ok") return;
+      // Only a widget that was never provisioned gets a token. A revoked one stays revoked until
+      // the server is switched or cleared; re-issuing here would undo the revocation.
+      if (!baseUrl || live.widgetState() !== "none") return;
       try {
         const { token } = await wsClient.issueWidgetToken(serverId);
         if (token && !cancelled) live.configureWidget(baseUrl, token);

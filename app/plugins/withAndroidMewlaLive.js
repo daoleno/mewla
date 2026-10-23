@@ -28,7 +28,9 @@ function addMewlaLive(androidManifest) {
   }
   if (!application.service.some((item) => name(item) === MEWLA_SERVICE)) {
     application.service.push({
-      $: { 'android:name': MEWLA_SERVICE, 'android:exported': 'false' },
+      // Lint cannot see through the compileOnly expo-notifications supertype in the app module and
+      // reports the service as not extending Service; it does (FirebaseMessagingService).
+      $: { 'android:name': MEWLA_SERVICE, 'android:exported': 'false', 'tools:ignore': 'Instantiatable' },
       'intent-filter': [{ action: [{ $: { 'android:name': MESSAGING_EVENT } }] }],
     });
   }
