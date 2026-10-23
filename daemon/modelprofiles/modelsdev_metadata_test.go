@@ -15,7 +15,7 @@ import (
 
 func TestModelsDevMetadataRefreshFixtureAndCachePreservation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"openai":{"models":{"gpt-live":{"name":"GPT Live","context":128000,"modalities":{"input":["text","image"],"output":["text"]},"temperature":true,"input":1.5,"output":6,"release_date":"2026-01-02"},"models-only":{"name":"Should Not Become Available"}}}}`))
+		_, _ = w.Write([]byte(`{"openai":{"models":{"gpt-live":{"name":"GPT Live","limit":{"context":128000},"modalities":{"input":["text","image"],"output":["text"]},"temperature":true,"cost":{"input":1.5,"output":6},"release_date":"2026-01-02"},"models-only":{"name":"Should Not Become Available"}}}}`))
 	}))
 	defer server.Close()
 	home := t.TempDir()
@@ -143,7 +143,7 @@ func TestModelsDevMetadataFollowsAnotherReadersRefresh(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		_, _ = w.Write([]byte(`{"openai":{"models":{"gpt-shared":{"name":"GPT Shared","context":64000}}}}`))
+		_, _ = w.Write([]byte(`{"openai":{"models":{"gpt-shared":{"name":"GPT Shared","limit":{"context":64000}}}}}`))
 	}))
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), modelsDevCacheFile)

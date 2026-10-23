@@ -26,19 +26,8 @@ var (
 	pricingProviders  = map[string]bool{"anthropic": true, "openai": true, "xai": true}
 )
 
-type modelsDevCost struct {
-	Input        *float64        `json:"input"`
-	Output       *float64        `json:"output"`
-	CacheRead    *float64        `json:"cache_read"`
-	CacheWrite   *float64        `json:"cache_write"`
-	CacheWrite5m *float64        `json:"cache_write_5m"`
-	Tiers        json.RawMessage `json:"tiers"`
-	ContextTier  json.RawMessage `json:"context_over_200k"`
-}
-
-func (c modelsDevCost) hasRates() bool {
-	return c.Input != nil || c.Output != nil || c.CacheRead != nil || c.CacheWrite != nil || c.CacheWrite5m != nil
-}
+// modelsDevCost is a model's tariff as the shared catalog states it.
+type modelsDevCost = modelfacts.Cost
 
 type pricingRegistry struct {
 	mu        sync.RWMutex
@@ -143,15 +132,16 @@ func pricingModelID(modelID string) string {
 // since the last one applied here, so the model picker's refresh also refreshes
 // these prices without a second download.
 func adoptSharedPricing(home string) (changed bool) {
-	raw, at := pricingFeed(home).Raw()
+	catalog := pricingFeed(home).Catalog()
 	prices.mu.RLock()
-	newer := raw != nil && at.After(prices.updatedAt)
+	newer := catalog != nil && catalog.At.After(prices.updatedAt)
 	before := cloneProviderPricing(prices.models)
 	prices.mu.RUnlock()
 	if !newer {
 		return false
 	}
-	fetched, err := parsePricing(raw, at)
+	at := catalog.At
+	fetched, err := pricingFromCatalog(catalog)
 	if err != nil {
 		return false
 	}
@@ -184,11 +174,12 @@ func samePricing(a, b map[string]map[string]modelPricing) bool {
 // file, on top of the built-in prices. A catalog that cannot establish prices
 // leaves the built-ins.
 func loadPricingCache(home string) {
-	raw, at := pricingFeed(home).Raw()
-	if raw == nil {
+	catalog := pricingFeed(home).Catalog()
+	if catalog == nil {
 		return
 	}
-	loaded, err := parsePricing(raw, at)
+	at := catalog.At
+	loaded, err := pricingFromCatalog(catalog)
 	if err != nil {
 		return
 	}
@@ -219,14 +210,15 @@ func pricingIsStale() bool {
 }
 
 func syncPricing(ctx context.Context, home string) error {
-	raw, at, err := pricingFeed(home).Refresh(ctx, func(raw []byte) error {
-		_, err := parsePricing(raw, time.Now().UTC())
+	feed := pricingFeed(home)
+	_, at, err := feed.Refresh(ctx, func(catalog *modelfacts.Catalog) error {
+		_, err := pricingFromCatalog(catalog)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	fetched, err := parsePricing(raw, at)
+	fetched, err := pricingFromCatalog(feed.Catalog())
 	if err != nil {
 		return err
 	}
@@ -238,30 +230,29 @@ func syncPricing(ctx context.Context, home string) error {
 	return nil
 }
 
-// parsePricing reads the supported providers' rates out of a models.dev
-// catalog.
-func parsePricing(raw []byte, at time.Time) (map[string]map[string]modelPricing, error) {
-	var payload map[string]struct {
-		Models map[string]struct {
-			Name string        `json:"name"`
-			Cost modelsDevCost `json:"cost"`
-		} `json:"models"`
+// pricingFromCatalog reads the supported providers' rates out of the shared
+// models.dev catalog. A catalog with a malformed rate, an invalid tier or no
+// supported rate at all is rejected as a whole.
+func pricingFromCatalog(catalog *modelfacts.Catalog) (map[string]map[string]modelPricing, error) {
+	if catalog == nil {
+		return nil, fmt.Errorf("pricing catalog is unavailable")
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil, err
-	}
+	at := catalog.At
 	updated := map[string]map[string]modelPricing{}
 	count := 0
-	for provider, providerData := range payload {
+	for provider, models := range catalog.Providers {
 		if !pricingProviders[provider] {
 			continue
 		}
-		for modelID, modelData := range providerData.Models {
+		for modelID, modelData := range models {
 			if modelID == "" {
 				return nil, fmt.Errorf("pricing catalog contains an empty model ID")
 			}
+			if modelData.CostErr != nil {
+				return nil, fmt.Errorf("model %q: %w", modelID, modelData.CostErr)
+			}
 			cost := modelData.Cost
-			if !cost.hasRates() {
+			if !cost.HasRates() {
 				continue
 			}
 			localID := modelID

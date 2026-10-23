@@ -2,7 +2,6 @@ package modelprofiles
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -54,19 +53,23 @@ func (c *modelsDevCatalog) sync() error {
 	if c == nil || c.path == "" {
 		return nil
 	}
-	raw, at := c.feed().Raw()
+	return c.adopt()
+}
+
+func (c *modelsDevCatalog) adopt() error {
+	catalog := c.feed().Catalog()
 	c.mu.RLock()
 	current := c.UpdatedAt
 	c.mu.RUnlock()
-	if raw == nil || at.Equal(current) {
+	if catalog == nil || catalog.At.Equal(current) {
 		return nil
 	}
-	parsed, err := parseModelsDevMetadata(raw)
+	parsed, err := presentationFromCatalog(catalog)
 	if err != nil {
 		return err
 	}
 	c.mu.Lock()
-	c.UpdatedAt, c.Models = at, parsed
+	c.UpdatedAt, c.Models = catalog.At, parsed
 	c.mu.Unlock()
 	return nil
 }
@@ -120,21 +123,14 @@ func (c *modelsDevCatalog) refresh(ctx context.Context) error {
 	if c.url == "" {
 		return fmt.Errorf("models.dev metadata refresh is disabled")
 	}
-	raw, at, err := c.feed().Refresh(ctx, func(raw []byte) error {
-		_, err := parseModelsDevMetadata(raw)
+	feed := c.feed()
+	if _, _, err := feed.Refresh(ctx, func(catalog *modelfacts.Catalog) error {
+		_, err := presentationFromCatalog(catalog)
 		return err
-	})
-	if err != nil {
-		return err
-	}
-	parsed, err := parseModelsDevMetadata(raw)
-	if err != nil {
+	}); err != nil {
 		return err
 	}
-	c.mu.Lock()
-	c.UpdatedAt, c.Models = at, parsed
-	c.mu.Unlock()
-	return nil
+	return c.adopt()
 }
 
 // RefreshModelsDevMetadata performs an explicit bounded refresh. It only
@@ -146,96 +142,28 @@ func (o *Owner) RefreshModelsDevMetadata(ctx context.Context) error {
 	return o.modelsDev.refresh(ctx)
 }
 
-func parseModelsDevMetadata(raw []byte) (map[string]map[string]modelPresentationMetadata, error) {
-	var providers map[string]struct {
-		Models map[string]json.RawMessage `json:"models"`
-	}
-	if err := json.Unmarshal(raw, &providers); err != nil {
-		return nil, err
-	}
-	out := map[string]map[string]modelPresentationMetadata{}
-	for provider, value := range providers {
-		for id, rawModel := range value.Models {
-			var model map[string]json.RawMessage
-			if json.Unmarshal(rawModel, &model) != nil {
-				continue
-			}
-			meta := modelPresentationMetadata{DisplayName: jsonString(model["name"]), ReleaseDate: jsonString(model["release_date"])}
-			meta.ContextWindow = jsonInt(model["context"])
-			if meta.ContextWindow == 0 {
-				meta.ContextWindow = jsonInt(model["context_window"])
-			}
-			if meta.ContextWindow == 0 {
-				var limit map[string]json.RawMessage
-				if json.Unmarshal(model["limit"], &limit) == nil {
-					meta.ContextWindow = jsonInt(limit["context"])
-				}
-			}
-			meta.InputPricePerMillion = jsonFloat(model["input"])
-			meta.OutputPricePerMillion = jsonFloat(model["output"])
-			if cost, ok := model["cost"]; ok {
-				var c map[string]json.RawMessage
-				_ = json.Unmarshal(cost, &c)
-				if meta.InputPricePerMillion == nil {
-					meta.InputPricePerMillion = jsonFloat(c["input"])
-				}
-				if meta.OutputPricePerMillion == nil {
-					meta.OutputPricePerMillion = jsonFloat(c["output"])
-				}
-			}
-			if v, ok := model["temperature"]; ok {
-				var b bool
-				if json.Unmarshal(v, &b) == nil {
-					meta.TemperatureSupported = &b
-				}
-			}
-			meta.Modalities = jsonStrings(model["modalities"])
-			for _, effort := range jsonStrings(model["reasoning_efforts"]) {
-				meta.SupportedReasoningLevels = append(meta.SupportedReasoningLevels, CodexReasoningEffortPreset{Effort: effort})
-			}
-			meta = normalizeModelPresentationMetadata(meta)
-			if out[strings.ToLower(provider)] == nil {
-				out[strings.ToLower(provider)] = map[string]modelPresentationMetadata{}
-			}
-			out[strings.ToLower(provider)][id] = meta
-		}
-	}
-	if len(out) == 0 {
+// presentationFromCatalog is the picker's view of the shared catalog: display
+// name, context window, modalities, temperature, release date and list prices.
+// It errors when the catalog holds no provider at all.
+func presentationFromCatalog(catalog *modelfacts.Catalog) (map[string]map[string]modelPresentationMetadata, error) {
+	if catalog == nil || len(catalog.Providers) == 0 {
 		return nil, fmt.Errorf("models.dev metadata has no providers")
 	}
-	return out, nil
-}
-
-func jsonString(raw json.RawMessage) string {
-	var s string
-	_ = json.Unmarshal(raw, &s)
-	return strings.TrimSpace(s)
-}
-func jsonFloat(raw json.RawMessage) *float64 {
-	var n float64
-	if len(raw) == 0 || json.Unmarshal(raw, &n) != nil || n < 0 {
-		return nil
-	}
-	return &n
-}
-func jsonInt(raw json.RawMessage) int64 {
-	var n int64
-	_ = json.Unmarshal(raw, &n)
-	if n < 0 {
-		return 0
-	}
-	return n
-}
-func jsonStrings(raw json.RawMessage) []string {
-	var a []string
-	if json.Unmarshal(raw, &a) == nil {
-		return a
-	}
-	var o map[string][]string
-	if json.Unmarshal(raw, &o) == nil {
-		for _, values := range o {
-			a = append(a, values...)
+	out := make(map[string]map[string]modelPresentationMetadata, len(catalog.Providers))
+	for provider, models := range catalog.Providers {
+		items := make(map[string]modelPresentationMetadata, len(models))
+		for id, model := range models {
+			items[id] = normalizeModelPresentationMetadata(modelPresentationMetadata{
+				DisplayName:           model.Name,
+				ReleaseDate:           model.ReleaseDate,
+				ContextWindow:         model.Context,
+				Modalities:            model.Modalities,
+				TemperatureSupported:  model.Temperature,
+				InputPricePerMillion:  model.Cost.Input,
+				OutputPricePerMillion: model.Cost.Output,
+			})
 		}
+		out[provider] = items
 	}
-	return a
+	return out, nil
 }
