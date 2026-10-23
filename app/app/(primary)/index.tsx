@@ -16,7 +16,6 @@ import { brainRouteLink } from "../../components/brain/brainRouteLink";
 import { BrainExecutorIcon } from "../../components/brain/BrainExecutorIcon";
 import { BrainExecutorMentionPicker } from "../../components/brain/BrainExecutorMentionPicker";
 import { LiveAnswer } from "../../components/brain/LiveAnswer";
-import { QuickReplies } from "../../components/brain/QuickReplies";
 import { quickRepliesVisible, quickReplyLine } from "../../components/brain/brainQuickReplies";
 import { BrainWorkspaceViewer } from "../../components/brain/BrainWorkspaceViewer";
 import { BrainWorkEventDetailSheet } from "../../components/brain/BrainWorkEventDetailSheet";
@@ -476,24 +475,10 @@ export default function BrainScreen() {
     },
     [availableExecutors, chrome, hostExecutor?.id],
   );
-  const renderBrainTimelineTail = useCallback(
-    ({
-      draft,
-      focused,
-      sendText,
-      lastUserMessageAt,
-      hasMessage,
-    }: {
-      draft: string;
-      focused: boolean;
-      sendText: (text: string) => void;
-      lastUserMessageAt: number;
-      hasMessage: boolean;
-    }) =>
-      quickRepliesVisible(quickReplies, { draft, focused, lastUserMessageAt, hasMessage }) ? (
-        <QuickReplies chips={quickReplyLine(quickReplies)} chrome={chrome} onSelect={sendText} />
-      ) : null,
-    [chrome, quickReplies],
+  const resolveBrainQuickReplies = useCallback(
+    (input: { draft: string; focused: boolean; lastUserMessageAt: number; hasMessage: boolean }) =>
+      quickRepliesVisible(quickReplies, input) ? quickReplyLine(quickReplies) : null,
+    [quickReplies],
   );
   // A tap on a live notification/widget answers through here, where the composer's send lives.
   const renderBrainComposerAccessory = useCallback(
@@ -789,7 +774,7 @@ export default function BrainScreen() {
                 emptyTitle={BRAIN_EMPTY_TITLE}
                 emptyBody={BRAIN_EMPTY_BODY}
                 renderComposerAccessory={brainWaking ? undefined : renderBrainComposerAccessory}
-                renderTimelineTail={brainWaking ? undefined : renderBrainTimelineTail}
+                resolveQuickReplies={brainWaking ? undefined : resolveBrainQuickReplies}
                 composerModelControl={brainWaking ? null : brainModelSheet.composerControl}
                 onComposerModelControlPress={() => brainModelSheet.open()}
               />

@@ -96,18 +96,16 @@ interface UseInterfaceChatSurfaceStateInput {
     /** Sends text as if typed (live answers). */
     sendText: (text: string) => void;
   }) => ReactNode;
-  /** Continues the conversation's last message, in the timeline. */
-  renderTimelineTail?: (args: {
+  /** Brain only: the answers to its last message, or none, as the chat stands. */
+  resolveQuickReplies?: (args: {
     draft: string;
     /** Whether the composer has focus. */
     focused: boolean;
-    /** Sends text as if typed (quick replies). */
-    sendText: (text: string) => void;
     /** When the person last wrote in this conversation, in ms; 0 if never. */
     lastUserMessageAt: number;
     /** Whether a message of the conversation is on screen to answer. */
     hasMessage: boolean;
-  }) => ReactNode;
+  }) => readonly string[] | null;
   composerModelControl?:
     | import("../../services/providers/sessionModelHelpers").ComposerModelControlPresentation
     | null;
@@ -176,7 +174,7 @@ export function useInterfaceChatSurfaceState({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
-  renderTimelineTail,
+  resolveQuickReplies,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -267,17 +265,18 @@ export function useInterfaceChatSurfaceState({
   const composerInput = useInterfaceComposerInput({
     enabled: active && connectionState === "connected",
   });
-  const renderedTimelineTail = renderTimelineTail
-    ? renderTimelineTail({
-        draft,
-        focused: composerInput.focused,
-        sendText: sendQuickText,
-        lastUserMessageAt,
-        hasMessage: Boolean(
-          conversation?.events.some((event) => event.kind === "assistant_message"),
-        ),
-      })
-    : undefined;
+  const quickReplyChips = resolveQuickReplies?.({
+    draft,
+    focused: composerInput.focused,
+    lastUserMessageAt,
+    hasMessage: Boolean(
+      conversation?.events.some((event) => event.kind === "assistant_message"),
+    ),
+  });
+  const quickReplies = useMemo(
+    () => (quickReplyChips ? { chips: quickReplyChips, onSelect: sendQuickText } : undefined),
+    [quickReplyChips, sendQuickText],
+  );
   useEffect(() => {
     const routeSessionKey = makeSessionKey(serverId, workerId);
     const effect = resolveInterfaceComposerInitialFocusEffect({
@@ -763,7 +762,7 @@ export function useInterfaceChatSurfaceState({
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
     composerAccessory: renderedComposerAccessory,
-    timelineTail: renderedTimelineTail,
+    quickReplies,
     composerEditBar: messageActions.accessory,
     skillsSheet: sheets,
   });

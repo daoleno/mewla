@@ -74,6 +74,12 @@ export function timelineItemsSemanticEqual(
   ) {
     return taskNotificationItemsEqual(left, right);
   }
+  if (left.type === "quick-replies" && right.type === "quick-replies") {
+    return (
+      left.onSelect === right.onSelect &&
+      stringArraysEqual(left.chips, right.chips)
+    );
+  }
   if (left.type === "computer-message" && right.type === "computer-message") {
     return (
       left.kindLabel === right.kindLabel &&
@@ -379,7 +385,7 @@ export function attachmentsEqual(
   return true;
 }
 
-function stringArraysEqual(left?: string[], right?: string[]) {
+function stringArraysEqual(left?: readonly string[], right?: readonly string[]) {
   if (left === right) {
     return true;
   }

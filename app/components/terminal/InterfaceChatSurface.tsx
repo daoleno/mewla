@@ -48,18 +48,16 @@ interface InterfaceChatSurfaceProps {
     /** Sends text as if typed (live answers). */
     sendText: (text: string) => void;
   }) => React.ReactNode;
-  /** Continues the conversation's last message, in the timeline. */
-  renderTimelineTail?: (args: {
+  /** Brain only: the answers to its last message, or none, as the chat stands. */
+  resolveQuickReplies?: (args: {
     draft: string;
     /** Whether the composer has focus. */
     focused: boolean;
-    /** Sends text as if typed (quick replies). */
-    sendText: (text: string) => void;
     /** When the person last wrote in this conversation, in ms; 0 if never. */
     lastUserMessageAt: number;
     /** Whether a message of the conversation is on screen to answer. */
     hasMessage: boolean;
-  }) => React.ReactNode;
+  }) => readonly string[] | null;
   composerModelControl?: ComposerModelControlPresentation | null;
   onComposerModelControlPress?: () => void;
   onSwitchToTerminal?: () => void;
@@ -93,7 +91,7 @@ function InterfaceChatSurfaceImpl({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
-  renderTimelineTail,
+  resolveQuickReplies,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -125,7 +123,7 @@ function InterfaceChatSurfaceImpl({
     composerAccessory,
     onDraftChange,
     renderComposerAccessory,
-    renderTimelineTail,
+    resolveQuickReplies,
     composerModelControl,
     onComposerModelControlPress,
     onSwitchToTerminal,
