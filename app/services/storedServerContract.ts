@@ -1,8 +1,11 @@
 export type ServerTransportKind = "manual" | "link";
 
+/** "direct" is a LAN or Tailscale address the computer published itself. */
+export type TransportCandidateKind = ServerTransportKind | "direct";
+
 export interface StoredTransportCandidate {
   name: string;
-  kind: ServerTransportKind;
+  kind: TransportCandidateKind;
   url: string;
 }
 
@@ -225,7 +228,10 @@ function normalizeTransportCandidates(
           typeof candidate.name === "string" && candidate.name.trim()
             ? candidate.name.trim()
             : deriveServerName(url),
-        kind: candidate.kind === "link" ? "link" : fallbackKind,
+        kind:
+          candidate.kind === "link" || candidate.kind === "direct"
+            ? candidate.kind
+            : fallbackKind,
         url,
       });
     }

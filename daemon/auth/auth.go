@@ -554,6 +554,44 @@ func (m *Manager) CreateServerAssertion(purpose string) (ServerAssertion, error)
 	}, nil
 }
 
+// HealthChallengePurpose is the fixed purpose of a challenged /health
+// response. The client picks only the 16-byte challenge, which takes the nonce
+// slot, so a phone cannot get the daemon to sign any other purpose and a
+// recorded response is useless against a fresh challenge.
+const HealthChallengePurpose = "mewla-health-challenge"
+
+// CreateChallengeAssertion proves this daemon is alive and holds its identity
+// key right now, for the caller that chose challengeHex.
+func (m *Manager) CreateChallengeAssertion(challengeHex string) (ServerAssertion, error) {
+	challengeHex = normalizeHex(challengeHex)
+	if _, err := decodeFixedHex(challengeHex, 16); err != nil {
+		return ServerAssertion{}, fmt.Errorf("challenge must be 16 bytes of hex")
+	}
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	signature := ed25519.Sign(
+		m.privateKey,
+		BuildServerAssertionPayload(HealthChallengePurpose, m.daemonID, timestamp, challengeHex),
+	)
+	return ServerAssertion{
+		Timestamp:    timestamp,
+		NonceHex:     challengeHex,
+		SignatureHex: hex.EncodeToString(signature),
+	}, nil
+}
+
+// VerifyChallengeAssertion accepts a response only if it answers challengeHex
+// and is signed by the pinned daemon key.
+func VerifyChallengeAssertion(publicKeyHex, challengeHex string, assertion ServerAssertion) bool {
+	challengeHex = normalizeHex(challengeHex)
+	if _, err := decodeFixedHex(challengeHex, 16); err != nil {
+		return false
+	}
+	if normalizeHex(assertion.NonceHex) != challengeHex {
+		return false
+	}
+	return VerifyServerAssertion(publicKeyHex, HealthChallengePurpose, assertion)
+}
+
 // CreateComputerInviteSignature signs a domain-separated computer invite with
 // the daemon identity, so an invite cannot be confused with any other signed
 // daemon payload.

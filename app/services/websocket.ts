@@ -4,9 +4,11 @@ import type { StatsPayload } from "./statsPayload";
 import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { diagnoseConnectionIssue } from "./connectionIssue";
+import { rememberDirectAddresses } from "./directAddressSync";
 import {
-  invalidateStoredServerTransport,
+  directPathBecameAvailable,
   resolveStoredServerURL,
+  transportFailed,
 } from "./pinnedTransport";
 import type {
   GitDiffFileContentPayload,
@@ -376,6 +378,8 @@ let appState = "unknown";
  * left for the OS to notice minutes later.
  */
 export const socketWatchdog = { silentLimitMs: 25_000, checkMs: 5_000 };
+/** How often a connection on the relay looks for a direct path. */
+const DIRECT_UPGRADE_CHECK_MS = 20_000;
 /** A connection that lived this long and then dropped reconnects without delay. */
 const HEALTHY_CONNECTION_MS = 10_000;
 
@@ -391,6 +395,8 @@ class ServerSocket {
   /** Ends the current socket now, whatever state it is in. */
   private endCurrent: ((reason: string, code?: number) => void) | null = null;
   private watchdog: ReturnType<typeof setInterval> | null = null;
+  private upgradeProbe: ReturnType<typeof setInterval> | null = null;
+  private probingForDirect = false;
   /** How the last socket ended, told to the daemon once the next one opens. */
   private pendingEndReport: string | null = null;
 
@@ -443,12 +449,32 @@ class ServerSocket {
         this.abandon("silent");
       }
     }, socketWatchdog.checkMs);
+    // A phone that joined Wi-Fi after connecting through the relay moves onto
+    // the direct path with one quick reconnect.
+    this.upgradeProbe = setInterval(() => {
+      if (this.probingForDirect || !this.isConnected || appState !== "active") {
+        return;
+      }
+      this.probingForDirect = true;
+      void directPathBecameAvailable(this.meta.server)
+        .then((available) => {
+          if (available && this.isConnected) this.abandon("direct-available");
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          this.probingForDirect = false;
+        });
+    }, DIRECT_UPGRADE_CHECK_MS);
   }
 
   private stopWatchdog() {
     if (this.watchdog) {
       clearInterval(this.watchdog);
       this.watchdog = null;
+    }
+    if (this.upgradeProbe) {
+      clearInterval(this.upgradeProbe);
+      this.upgradeProbe = null;
     }
   }
 
@@ -592,6 +618,9 @@ class ServerSocket {
         this.lastFrameAt = Date.now();
         try {
           const data = JSON.parse(event.data);
+          if (data.type === "direct_addresses") {
+            void rememberDirectAddresses(this.meta.serverId, data.addresses);
+          }
           this.emit(data.type, data);
         } catch (error) {
           console.warn("[ws] malformed payload", {
@@ -637,7 +666,10 @@ class ServerSocket {
         this.emit("disconnected", { reason: "transport_closed" });
         if (this.shouldReconnect) {
           this.emit("connecting", {});
-          void invalidateStoredServerTransport(this.meta.server);
+          // Moving to the direct path leaves the relay open as the fallback.
+          if (reason !== "direct-available") {
+            void transportFailed(this.meta.server);
+          }
         }
         if (!opened) {
           void this.reportConnectionIssue(attemptId);
@@ -678,7 +710,7 @@ class ServerSocket {
       this.emit("disconnected", { reason: "transport_closed" });
       if (this.shouldReconnect) {
         this.emit("connecting", {});
-        void invalidateStoredServerTransport(this.meta.server);
+        void transportFailed(this.meta.server);
       }
       void this.reportConnectionIssue(attemptId);
       this.scheduleReconnect();

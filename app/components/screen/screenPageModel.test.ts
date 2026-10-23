@@ -139,6 +139,13 @@ describe("stream stages", () => {
     expect(streamHeadline(readout({ daemon: daemonStats({ path: "tailscale", quality: 3 }) }))).toBe("Tailscale · network 142 ms · reduced quality");
     expect(streamHeadline(readout({ daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
   });
+  test("the path the phone chose is named, not the address the daemon saw", () => {
+    // Through the phone's loopback tunnel the daemon may see "Local" or "Direct".
+    expect(streamHeadline(readout({ viaPath: "lan", daemon: daemonStats({ path: "loopback" }) }))).toBe("LAN · network 142 ms");
+    expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ path: "direct" }) }))).toBe("Relay · network 142 ms");
+    expect(streamHeadline(readout({ viaPath: "tailscale", daemon: null }))).toBe("Tailscale · network 142 ms");
+    expect(streamHeadline(readout({ viaPath: null, daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
+  });
   test("an older daemon's stream still has a headline from what the phone measured", () => {
     expect(streamHeadline(readout({ daemon: null }))).toBe("network 142 ms");
     expect(streamHeadline(readout({ daemon: null, rttMs: null, bridgeMs: null, presentMs: null }))).toBeNull();

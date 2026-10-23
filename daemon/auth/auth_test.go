@@ -424,6 +424,47 @@ func TestManagerCreateServerAssertion(t *testing.T) {
 	}
 }
 
+func TestChallengeAssertionBindsToTheCallersChallenge(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewManager returned error: %v", err)
+	}
+	other, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewManager returned error: %v", err)
+	}
+	challenge := "00112233445566778899aabbccddeeff"
+	answer, err := manager.CreateChallengeAssertion(challenge)
+	if err != nil {
+		t.Fatalf("CreateChallengeAssertion returned error: %v", err)
+	}
+	if !VerifyChallengeAssertion(manager.PublicKeyHex(), challenge, answer) {
+		t.Fatal("a fresh answer to the challenge must verify")
+	}
+	if VerifyChallengeAssertion(manager.PublicKeyHex(), "ffeeddccbbaa99887766554433221100", answer) {
+		t.Fatal("a recorded answer must not verify against a new challenge")
+	}
+	if VerifyChallengeAssertion(other.PublicKeyHex(), challenge, answer) {
+		t.Fatal("an answer must not verify under another daemon's key")
+	}
+	forged := answer
+	forged.NonceHex = "ffeeddccbbaa99887766554433221100"
+	if VerifyChallengeAssertion(manager.PublicKeyHex(), forged.NonceHex, forged) {
+		t.Fatal("rewriting the nonce must break the signature")
+	}
+	// The signature is for the challenge purpose only: it can never stand in
+	// for a health, probe or pairing assertion.
+	if VerifyServerAssertion(manager.PublicKeyHex(), "mewla-health", answer) ||
+		VerifyServerAssertion(manager.PublicKeyHex(), "mewla-pair", answer) {
+		t.Fatal("a challenge answer verified under another purpose")
+	}
+	for _, bad := range []string{"", "zz", "00112233", challenge + "00"} {
+		if _, err := manager.CreateChallengeAssertion(bad); err == nil {
+			t.Fatalf("challenge %q must be refused", bad)
+		}
+	}
+}
+
 func buildTestAuthorizationHeader(t *testing.T, privateKey ed25519.PrivateKey, daemonID, deviceID, purpose string) string {
 	t.Helper()
 

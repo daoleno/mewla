@@ -68,7 +68,11 @@ export async function saveServer(
 /** Renames a server or moves its address, keeping every other field. */
 export async function updateServer(
   serverID: string,
-  change: { name?: string; url?: string },
+  change: {
+    name?: string;
+    url?: string;
+    transportCandidates?: StoredTransportCandidate[];
+  },
 ): Promise<StoredServer | null> {
   const existing = (await getServers()).find((server) => server.id === serverID);
   if (!existing) return null;
