@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { resetWarnOnce } from "./warnOnce";
 import { reconcileCalendarNotifications } from "./calendarNotificationReconciler";
 import type { CalendarItem } from "../store/calendar";
 
@@ -42,6 +43,8 @@ function harness(initial = "{}") {
     },
   };
 }
+
+afterEach(() => resetWarnOnce());
 
 describe("calendar notification reconciliation", () => {
   test("schedules the canonical next occurrence, not original notify_at", async () => {
@@ -122,5 +125,42 @@ describe("calendar notification reconciliation", () => {
     await reconcileCalendarNotifications("a", [], mock.deps, now);
     expect(Object.keys(mock.value())).toEqual(["b:b"]);
     expect(mock.cancelled).toEqual(["notification-1"]);
+  });
+
+  test("a reminder that cannot be cancelled stays recorded so the next sync retries it", async () => {
+    resetWarnOnce();
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const mock = harness();
+    const now = Date.parse("2026-07-14T10:00:00Z");
+    await reconcileCalendarNotifications("server", [base], mock.deps, now);
+    let failing = true;
+    const deps = {
+      ...mock.deps,
+      cancel: async (id: string) => {
+        if (failing) throw new Error("cancel failed");
+        mock.cancelled.push(id);
+      },
+    };
+    await reconcileCalendarNotifications("server", [], deps, now);
+    await reconcileCalendarNotifications("server", [], deps, now);
+    expect(Object.keys(mock.value())).toHaveLength(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    failing = false;
+    await reconcileCalendarNotifications("server", [], deps, now);
+    expect(mock.cancelled).toEqual(["notification-1"]);
+    expect(mock.value()).toEqual({});
+    warn.mockRestore();
+  });
+
+  test("an unreadable stored record is logged once and reminders are scheduled again", async () => {
+    resetWarnOnce();
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const mock = harness("{not json");
+    const now = Date.parse("2026-07-14T10:00:00Z");
+    await reconcileCalendarNotifications("server", [base], mock.deps, now);
+    expect(mock.scheduled).toHaveLength(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });

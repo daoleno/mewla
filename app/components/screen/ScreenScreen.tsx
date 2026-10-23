@@ -23,6 +23,7 @@ import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
 import { ScreenViewerHost } from "./ScreenViewerHost";
+import { warnOnce } from "../../services/warnOnce";
 import {
   activeModifiers,
   connectionQuality,
@@ -306,7 +307,7 @@ export function ScreenScreen() {
         if (!isCurrentServer(server.id)) return;
         setStatus(next);
         if (!next.agent) void connect();
-      }).catch(() => {});
+      }).catch((error) => warnOnce("screen.status", error));
     }, 3000);
     return () => clearInterval(timer);
   }, [connect, currentServer, isCurrentServer, phase]);
@@ -316,7 +317,7 @@ export function ScreenScreen() {
     if (phase !== "live" || !currentServer) return;
     const server = currentServer;
     const timer = setInterval(() => {
-      void screenRequest(server).then((next) => { if (isCurrentServer(server.id)) setStatus(next); }).catch(() => {});
+      void screenRequest(server).then((next) => { if (isCurrentServer(server.id)) setStatus(next); }).catch((error) => warnOnce("screen.status", error));
     }, 30000);
     return () => clearInterval(timer);
   }, [currentServer, isCurrentServer, phase]);

@@ -1,5 +1,6 @@
 import type { CalendarItem } from "../store/calendar";
 import { calendarReminderPlan } from "./calendarPresentation";
+import { warnOnce } from "./warnOnce";
 
 export type CalendarNotificationRequest = {
   title: string;
@@ -40,7 +41,10 @@ export async function reconcileCalendarNotifications(
     if (existing?.id) {
       try {
         await deps.cancel(existing.id);
-      } catch {}
+      } catch (error) {
+        // The old reminder may still fire next to its replacement.
+        warnOnce("calendar.notifications", error);
+      }
     }
     const id = await deps.schedule({
       title: item.title,
@@ -55,7 +59,12 @@ export async function reconcileCalendarNotifications(
     if (!key.startsWith(`${serverId}:`) || wanted.has(key)) continue;
     try {
       await deps.cancel(record.id);
-    } catch {}
+    } catch (error) {
+      // Keep the record: forgetting a reminder that is still scheduled would
+      // leave it firing with nothing able to cancel it. The next sync retries.
+      warnOnce("calendar.notifications", error);
+      continue;
+    }
     delete current[key];
   }
   await deps.setStored(JSON.stringify(current));
@@ -77,7 +86,9 @@ async function readMap(
           : value,
       ]),
     );
-  } catch {
+  } catch (error) {
+    // An unreadable record means every reminder is scheduled again.
+    warnOnce("calendar.notifications", error);
     return {};
   }
 }
