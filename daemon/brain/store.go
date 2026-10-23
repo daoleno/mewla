@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
@@ -38,13 +39,14 @@ type Store struct {
 	// db is state/brain.db: the lifecycle engine's tables, the presentation
 	// rows and the timeline (presentation_store.go). presentation is the last
 	// committed presentation image, generation the database generation it was
-	// read or committed at. rev advances on every commit that can change a
-	// conversation projection, so caches and invalidation keys compare a
-	// number instead of file times.
+	// read or committed at. rev advances on every write that can change a
+	// conversation projection (the presentation rows and timeline, the chat
+	// state and the host session binding), so caches and invalidation keys
+	// compare a number instead of file times. See Version.
 	db              *sql.DB
 	presentation    presentationDatabase
 	presentationGen int64
-	rev             uint64
+	rev             atomic.Uint64
 
 	// fsm is the canonical delegated-Work lifecycle engine (docs/work-lifecycle.md).
 	fsm *lifecycle.Engine
@@ -154,31 +156,17 @@ func hostSessionPath(root string) string {
 	return filepath.Join(root, "state", "host_session.json")
 }
 
-// ConversationProjectionVersion returns a cheap version of every durable
-// Brain input that can change a thread conversation projection. Callers use it
-// only as an invalidation key; canonical content still comes from the normal
-// Store readers after the key changes.
-func (s *Store) ConversationProjectionVersion() (string, error) {
+// Version is a counter that advances on every write that can change a thread
+// conversation projection. Callers use it only as an invalidation key: when it
+// is unchanged since they last looked, nothing they derived from the Store has
+// changed; canonical content still comes from the normal Store readers after
+// it moves. Every writer of those inputs lives in this process (the Store owns
+// the database, chat_state.json and host_session.json), so no file is stat'd.
+func (s *Store) Version() uint64 {
 	if s == nil {
-		return "", nil
+		return 0
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	paths := []string{s.ChatStatePath(), s.HostSessionPath()}
-	var version strings.Builder
-	fmt.Fprintf(&version, "brain:%d;", s.rev)
-	for _, path := range paths {
-		info, err := os.Stat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintf(&version, "%s:missing;", path)
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		fmt.Fprintf(&version, "%s:%d:%d;", path, info.Size(), info.ModTime().UnixNano())
-	}
-	return version.String(), nil
+	return s.rev.Load()
 }
 
 // HostReplacementsPath is an append-only audit log for Brain host replacements.
@@ -279,6 +267,7 @@ func (s *Store) SetHostSessionID(id string) error {
 func (s *Store) SetHostSession(id, executorID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.rev.Add(1)
 	id = strings.TrimSpace(id)
 	executorID = strings.TrimSpace(executorID)
 	if id == "" {
@@ -304,6 +293,7 @@ func (s *Store) SetHostSession(id, executorID string) error {
 func (s *Store) ReplaceHostSessionBinding(id, executorID, providerSessionID, transcriptPath, providerDataRoot string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.rev.Add(1)
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("host session id required")
@@ -328,6 +318,7 @@ func (s *Store) writeReplaceHostSessionBinding(path string, value any) error {
 func (s *Store) SetHostExecutorID(executorID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.rev.Add(1)
 	return setHostExecutorID(s.HostSessionPath(), executorID)
 }
 
@@ -401,6 +392,7 @@ func (s *Store) compareAndSetHostProviderTranscript(expected HostSession, provid
 }
 
 func (s *Store) writeHostProviderTranscriptLocked(host HostSession, providerSessionID, transcriptPath, providerDataRoot string) error {
+	defer s.rev.Add(1)
 	return writeHostSessionFile(s.HostSessionPath(), hostSessionFile{
 		ID:                host.ID,
 		ExecutorID:        host.ExecutorID,
@@ -740,6 +732,7 @@ func (s *Store) readProfileLocked() (profileFile, error) {
 }
 
 func (s *Store) writeChatStateLocked(state ChatState) error {
+	defer s.rev.Add(1)
 	state.ThreadID = strings.TrimSpace(state.ThreadID)
 	if state.ThreadID == "" {
 		state.ThreadID = newChatThreadID()

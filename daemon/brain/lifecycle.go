@@ -1104,7 +1104,7 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 			if image, generation, readErr := readPresentationImage(s.db); readErr == nil {
 				s.presentation, s.presentationGen = image, generation
 				s.turnCache = turnReadCache{}
-				s.rev++
+				s.rev.Add(1)
 			}
 		}
 		return err
@@ -1112,7 +1112,7 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 	s.presentation = committed
 	s.presentationGen++
 	s.turnCache = turnReadCache{}
-	s.rev++
+	s.rev.Add(1)
 	return nil
 }
 

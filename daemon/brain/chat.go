@@ -20,11 +20,13 @@ func (s *Service) HasChatThread(threadID string) (bool, error) {
 	return s.store.HasChatThread(threadID)
 }
 
-func (s *Service) ConversationProjectionVersion() (string, error) {
+// ConversationProjectionVersion is the Store's change counter: it moves
+// whenever a write could change a thread conversation projection.
+func (s *Service) ConversationProjectionVersion() uint64 {
 	if s == nil || s.store == nil {
-		return "", nil
+		return 0
 	}
-	return s.store.ConversationProjectionVersion()
+	return s.store.Version()
 }
 
 func (s *Service) ChatThreadIDs() ([]string, error) {

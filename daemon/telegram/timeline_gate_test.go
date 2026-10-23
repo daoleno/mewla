@@ -25,8 +25,8 @@ type versionedTimelineBrain struct {
 	version atomic.Int64
 }
 
-func (b *versionedTimelineBrain) ConversationProjectionVersion() (string, error) {
-	return time.Duration(b.version.Load()).String(), nil
+func (b *versionedTimelineBrain) ConversationProjectionVersion() uint64 {
+	return uint64(b.version.Load())
 }
 
 func (b *versionedTimelineBrain) append(item brain.TimelineItem) {
