@@ -65,7 +65,9 @@ Development fixture:
 mewla://screenshot-demo?demo=1&state=mermaid
 ```
 
-Requires `EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1` in a development build.
+Requires `EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1` in a development build. The demo screen
+(`app/components/screenshotDemo/ScreenshotDemoScreen.tsx`) and its fixtures are loaded
+by the `screenshot-demo` route behind `__DEV__`, so release bundles do not contain them.
 
 ## Verification
 

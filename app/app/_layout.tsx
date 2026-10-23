@@ -79,7 +79,7 @@ import {
 import {
   screenshotDemoEnabled,
   shouldUseScreenshotDemoRuntime,
-} from "../services/screenshotDemo";
+} from "../services/screenshotDemoGate";
 
 Notifications.setNotificationHandler({
   handleNotification: foregroundNotificationPresentation,
