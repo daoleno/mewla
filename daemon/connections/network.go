@@ -100,7 +100,7 @@ func publicIP(ip net.IP) bool {
 		return false
 	}
 	address = address.Unmap()
-	for _, block := range []string{"100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15"} {
+	for _, block := range []string{"100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "2001:2::/48"} {
 		if netip.MustParsePrefix(block).Contains(address) {
 			return false
 		}
@@ -108,7 +108,7 @@ func publicIP(ip net.IP) bool {
 	return true
 }
 
-// benchmarkNet is the RFC 2544 benchmarking range. It is never a real host, so
+// benchmarkNets are the RFC 2544 and RFC 5180 benchmarking ranges. It is never a real host, so
 // proxies in fake-IP mode (Surge, Clash, sing-box and others, common for people
 // behind a filtered network) answer every DNS lookup from it and then route by
 // the name on the connection. For a hostname it is therefore safe to dial: the
@@ -118,14 +118,29 @@ func publicIP(ip net.IP) bool {
 // 100.64.0.0/10 (carrier NAT, Tailscale) and 192.0.0.0/24 (IETF protocol
 // assignments) hold real internal hosts, and link-local, private, loopback and
 // unspecified addresses are the host's own network.
-var benchmarkNet = netip.MustParsePrefix("198.18.0.0/15")
+var benchmarkNets = []netip.Prefix{
+	netip.MustParsePrefix("198.18.0.0/15"), // RFC 2544, IPv4
+	netip.MustParsePrefix("2001:2::/48"),   // RFC 5180, the same range for IPv6
+}
 
+// benchmarkIP reports whether ip is a fake-IP answer for the name host. It
+// judges one address: a name that also resolves to a real internal address is
+// still refused, by that address.
 func benchmarkIP(host string, ip net.IP) bool {
 	if net.ParseIP(host) != nil {
 		return false
 	}
 	address, ok := netip.AddrFromSlice(ip)
-	return ok && benchmarkNet.Contains(address.Unmap())
+	if !ok {
+		return false
+	}
+	address = address.Unmap()
+	for _, block := range benchmarkNets {
+		if block.Contains(address) {
+			return true
+		}
+	}
+	return false
 }
 
 // errPrivateEndpoint is a name that resolves to an address Mewla will not dial.
