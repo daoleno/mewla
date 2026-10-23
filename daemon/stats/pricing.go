@@ -4,52 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
-	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/modelfacts"
+	"github.com/daoleno/mewla/daemon/statedir"
 )
 
 const (
-	pricingCacheRelPath = ".mewla/pricing-cache.json"
-	pricingSyncEvery    = 24 * time.Hour
-	pricingCacheVersion = 5
-	pricingMaxBytes     = 32 << 20
+	pricingSyncEvery = modelfacts.TTL
 )
 
 var (
-	pricingSyncURL    = "https://models.dev/api.json"
+	pricingSyncURL    = modelfacts.URL
 	pricingHTTPClient = http.DefaultClient
 	pricingProviders  = map[string]bool{"anthropic": true, "openai": true, "xai": true}
 )
-
-type pricingCacheFile struct {
-	Version   int                                     `json:"version,omitempty"`
-	UpdatedAt time.Time                               `json:"updatedAt"`
-	Source    string                                  `json:"source"`
-	Providers map[string]map[string]pricingCacheEntry `json:"providers,omitempty"`
-	Models    map[string]pricingCacheEntry            `json:"models,omitempty"`
-}
-
-type pricingCacheEntry struct {
-	DisplayName  string             `json:"displayName"`
-	Input        float64            `json:"input"`
-	Output       float64            `json:"output"`
-	CacheRead    float64            `json:"cacheRead"`
-	CacheCreate  float64            `json:"cacheCreate"`
-	Present      uint8              `json:"present"`
-	Tiered       bool               `json:"tiered,omitempty"`
-	ContextTiers []contextPriceTier `json:"contextTiers,omitempty"`
-	Provider     string             `json:"provider,omitempty"`
-	Source       string             `json:"source"`
-	UpdatedAt    time.Time          `json:"updatedAt,omitempty"`
-}
 
 type modelsDevCost struct {
 	Input        *float64        `json:"input"`
@@ -101,8 +76,19 @@ func staticProviderPricing() map[string]map[string]modelPricing {
 	return out
 }
 
-func pricingCachePath(home string) string {
-	return filepath.Join(home, pricingCacheRelPath)
+func pricingFeedPath(home string) string {
+	return filepath.Join(statedir.Default(home), modelfacts.CacheFile)
+}
+
+// pricingFeed is the models.dev catalog for a home directory.
+func pricingFeed(home string) *modelfacts.Feed {
+	// The model picker reads the same file from the same state directory
+	// (see modelfacts), so the catalog is downloaded once.
+	path := ""
+	if home != "" {
+		path = pricingFeedPath(home)
+	}
+	return modelfacts.Open(modelfacts.Config{URL: pricingSyncURL, Path: path, Client: pricingHTTPClient})
 }
 
 func currentProviderPricing(provider, modelID string) (modelPricing, bool) {
@@ -153,68 +139,63 @@ func pricingModelID(modelID string) string {
 	return modelID
 }
 
+// adoptSharedPricing applies a catalog another reader of the feed downloaded
+// since the last one applied here, so the model picker's refresh also refreshes
+// these prices without a second download.
+func adoptSharedPricing(home string) (changed bool) {
+	raw, at := pricingFeed(home).Raw()
+	prices.mu.RLock()
+	newer := raw != nil && at.After(prices.updatedAt)
+	before := cloneProviderPricing(prices.models)
+	prices.mu.RUnlock()
+	if !newer {
+		return false
+	}
+	fetched, err := parsePricing(raw, at)
+	if err != nil {
+		return false
+	}
+	prices.mu.Lock()
+	prices.models = mergeProviderPricing(prices.models, fetched)
+	prices.updatedAt = at
+	prices.source = "models.dev"
+	after := cloneProviderPricing(prices.models)
+	prices.mu.Unlock()
+	return !samePricing(before, after)
+}
+
+// samePricing compares two registries by their rates, not by when they were
+// fetched.
+func samePricing(a, b map[string]map[string]modelPricing) bool {
+	strip := func(in map[string]map[string]modelPricing) {
+		for _, models := range in {
+			for id, p := range models {
+				p.updatedAt = time.Time{}
+				models[id] = p
+			}
+		}
+	}
+	strip(a)
+	strip(b)
+	return reflect.DeepEqual(a, b)
+}
+
+// loadPricingCache applies the catalog the feed already holds, from its cache
+// file, on top of the built-in prices. A catalog that cannot establish prices
+// leaves the built-ins.
 func loadPricingCache(home string) {
-	if home == "" {
+	raw, at := pricingFeed(home).Raw()
+	if raw == nil {
 		return
 	}
-	path := pricingCachePath(home)
-	data, err := os.ReadFile(path)
+	loaded, err := parsePricing(raw, at)
 	if err != nil {
 		return
 	}
-	var cache pricingCacheFile
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return
-	}
-	if len(cache.Providers) == 0 && len(cache.Models) == 0 {
-		return
-	}
-	// Older caches lost rate presence and context tiers; they cannot establish prices.
-	if cache.Version != pricingCacheVersion {
-		return
-	}
-	loaded := make(map[string]map[string]modelPricing)
-	loadEntry := func(provider, id string, item pricingCacheEntry) bool {
-		if id == "" || item.Present > 15 || !validContextPriceTiers(item.ContextTiers) || (item.Source != "built-in" && item.Source != "models.dev") {
-			return false
-		}
-		for _, rate := range []float64{item.Input, item.Output, item.CacheRead, item.CacheCreate} {
-			if rate < 0 || math.IsInf(rate, 0) || math.IsNaN(rate) {
-				return false
-			}
-		}
-		provider = normalizePricingProvider(provider)
-		if loaded[provider] == nil {
-			loaded[provider] = make(map[string]modelPricing)
-		}
-		loaded[provider][id] = modelPricing{
-			displayName: item.DisplayName,
-			input:       item.Input,
-			output:      item.Output,
-			cacheRead:   item.CacheRead,
-			cacheCreate: item.CacheCreate,
-			present:     item.Present, tiered: item.Tiered, provider: item.Provider, source: item.Source,
-			contextTiers: item.ContextTiers,
-			updatedAt:    item.UpdatedAt,
-		}
-		return true
-	}
-	for provider, models := range cache.Providers {
-		for id, item := range models {
-			if !loadEntry(provider, id, item) {
-				return
-			}
-		}
-	}
-	for id, item := range cache.Models {
-		if !loadEntry(inferOfficialProvider(id), id, item) {
-			return
-		}
-	}
 	prices.mu.Lock()
 	prices.models = mergeProviderPricing(staticProviderPricing(), loaded)
-	prices.updatedAt = cache.UpdatedAt
-	prices.source = cache.Source
+	prices.updatedAt = at
+	prices.source = "models.dev"
 	prices.mu.Unlock()
 }
 
@@ -238,52 +219,46 @@ func pricingIsStale() bool {
 }
 
 func syncPricing(ctx context.Context, home string) error {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pricingSyncURL, nil)
+	raw, at, err := pricingFeed(home).Refresh(ctx, func(raw []byte) error {
+		_, err := parsePricing(raw, time.Now().UTC())
+		return err
+	})
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "mewla (+https://github.com/daoleno/mewla)")
-
-	resp, err := pricingHTTPClient.Do(req)
+	fetched, err := parsePricing(raw, at)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &httpStatusError{statusCode: resp.StatusCode}
-	}
+	prices.mu.Lock()
+	prices.models = mergeProviderPricing(prices.models, fetched)
+	prices.updatedAt = at
+	prices.source = "models.dev"
+	prices.mu.Unlock()
+	return nil
+}
 
+// parsePricing reads the supported providers' rates out of a models.dev
+// catalog.
+func parsePricing(raw []byte, at time.Time) (map[string]map[string]modelPricing, error) {
 	var payload map[string]struct {
 		Models map[string]struct {
 			Name string        `json:"name"`
 			Cost modelsDevCost `json:"cost"`
 		} `json:"models"`
 	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, pricingMaxBytes+1))
-	if err != nil {
-		return err
-	}
-	if len(raw) > pricingMaxBytes {
-		return fmt.Errorf("pricing catalog exceeds size limit")
-	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return err
+		return nil, err
 	}
-
-	prices.mu.RLock()
-	updated := cloneProviderPricing(prices.models)
-	prices.mu.RUnlock()
+	updated := map[string]map[string]modelPricing{}
 	count := 0
-	now := time.Now().UTC()
 	for provider, providerData := range payload {
 		if !pricingProviders[provider] {
 			continue
 		}
 		for modelID, modelData := range providerData.Models {
 			if modelID == "" {
-				return fmt.Errorf("pricing catalog contains an empty model ID")
+				return nil, fmt.Errorf("pricing catalog contains an empty model ID")
 			}
 			cost := modelData.Cost
 			if !cost.hasRates() {
@@ -293,16 +268,16 @@ func syncPricing(ctx context.Context, home string) error {
 			if updated[provider] == nil {
 				updated[provider] = make(map[string]modelPricing)
 			}
-			current := modelPricing{displayName: modelDisplayName(localID, modelData.Name), source: "models.dev", provider: provider, updatedAt: now,
+			current := modelPricing{displayName: modelDisplayName(localID, modelData.Name), source: "models.dev", provider: provider, updatedAt: at,
 				tiered: meaningfulTier(cost.Tiers) || meaningfulTier(cost.ContextTier)}
 			var tierErr error
 			current.contextTiers, tierErr = parseContextPriceTiers(cost)
 			if tierErr != nil {
-				return fmt.Errorf("model %q: %w", localID, tierErr)
+				return nil, fmt.Errorf("model %q: %w", localID, tierErr)
 			}
 			for _, rate := range []*float64{cost.Input, cost.Output, cost.CacheRead, cost.CacheWrite, cost.CacheWrite5m} {
 				if rate != nil && (math.IsNaN(*rate) || math.IsInf(*rate, 0) || *rate < 0) {
-					return fmt.Errorf("invalid pricing rate for model %q", localID)
+					return nil, fmt.Errorf("invalid pricing rate for model %q", localID)
 				}
 			}
 			if cost.Input != nil {
@@ -328,45 +303,10 @@ func syncPricing(ctx context.Context, home string) error {
 			updated[provider][localID] = current
 		}
 	}
-
 	if count == 0 {
-		return fmt.Errorf("pricing catalog has no supported rates")
+		return nil, fmt.Errorf("pricing catalog has no supported rates")
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	if home != "" {
-		cacheProviders := make(map[string]map[string]pricingCacheEntry, len(updated))
-		for provider, models := range updated {
-			cacheProviders[provider] = make(map[string]pricingCacheEntry, len(models))
-			for id, item := range models {
-				cacheProviders[provider][id] = pricingCacheEntry{
-					DisplayName: item.displayName,
-					Input:       item.input,
-					Output:      item.output,
-					CacheRead:   item.cacheRead,
-					CacheCreate: item.cacheCreate,
-					Present:     item.ratePresence(), Tiered: item.tiered, Provider: item.provider, Source: item.priceSource(), UpdatedAt: item.updatedAt,
-					ContextTiers: item.contextTiers,
-				}
-			}
-		}
-		if err := persistPricingCache(home, pricingCacheFile{
-			Version:   pricingCacheVersion,
-			UpdatedAt: now,
-			Source:    "models.dev",
-			Providers: cacheProviders,
-		}); err != nil {
-			return fmt.Errorf("persist pricing cache: %w", err)
-		}
-	}
-	prices.mu.Lock()
-	prices.models = updated
-	prices.updatedAt = now
-	prices.source = "models.dev"
-	prices.mu.Unlock()
-	return nil
+	return updated, nil
 }
 
 func modelDisplayName(modelID, sourceName string) string {
@@ -374,18 +314,6 @@ func modelDisplayName(modelID, sourceName string) string {
 		return sourceName
 	}
 	return modelID
-}
-
-func persistPricingCache(home string, cache pricingCacheFile) error {
-	path := pricingCachePath(home)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	data, err := json.Marshal(cache)
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(path, data, 0o600)
 }
 
 func meaningfulTier(raw json.RawMessage) bool {
@@ -433,12 +361,4 @@ func (p modelPricing) ratePresence() uint8 {
 		}
 	}
 	return mask
-}
-
-type httpStatusError struct {
-	statusCode int
-}
-
-func (e *httpStatusError) Error() string {
-	return http.StatusText(e.statusCode)
 }

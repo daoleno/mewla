@@ -113,8 +113,10 @@ display-only candidates with a freshness warning; those fallback rows do not
 reject a custom Agent request. Mewla may enrich discovered rows from the
 secret-free public `models.dev` metadata cache (display name, limits, capabilities,
 prices, and release date); that metadata never adds a routable model or re-enables
-one disabled in Settings. The cache refreshes in the background and can be manually
-refreshed through the daemon control path.
+one disabled in Settings. The `daemon/modelfacts` package owns the one download and
+its cache file (`models-dev.json` in the state directory); Stats reference prices and
+this metadata both parse that same copy, so the catalog is fetched once. It refreshes
+in the background and can be manually refreshed through the daemon control path.
 For a custom Claude gateway, enter its endpoint root (including any proxy path,
 optionally ending in `/v1`). A model ID is an Agent/Session choice, not a
 connection requirement. When a gateway has no `/models` endpoint, Mewla keeps
