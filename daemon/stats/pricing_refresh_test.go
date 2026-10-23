@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelfacts"
 )
 
 func isolatePricing(t *testing.T) {
@@ -140,7 +142,7 @@ func TestPricingInvalidCatalogRetainsLastGood(t *testing.T) {
 	}
 	before := cloneProviderPricing(prices.models)
 	at := prices.updatedAt
-	disk, err := os.ReadFile(pricingCachePath(home))
+	disk, err := os.ReadFile(pricingFeedPath(home))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +158,7 @@ func TestPricingInvalidCatalogRetainsLastGood(t *testing.T) {
 		if !reflect.DeepEqual(before, prices.models) || at != prices.updatedAt {
 			t.Fatal("last good registry replaced")
 		}
-		got, _ := os.ReadFile(pricingCachePath(home))
+		got, _ := os.ReadFile(pricingFeedPath(home))
 		if string(got) != string(disk) {
 			t.Fatal("last good disk replaced")
 		}
@@ -241,7 +243,7 @@ func TestPricingTimeoutCancellationAndSizeLimit(t *testing.T) {
 		t.Fatalf("cancel: %v", err)
 	}
 	pricingHTTPClient = &http.Client{Transport: pricingRoundTrip(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(io.LimitReader(zeroPricingReader{}, pricingMaxBytes+1))}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(io.LimitReader(zeroPricingReader{}, modelfacts.MaxBytes+1))}, nil
 	})}
 	if err := syncPricing(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "size limit") {
 		t.Fatalf("size: %v", err)
@@ -362,7 +364,7 @@ func TestPricingWriteFailureRetainsRegistryAndCleansTemporaryFile(t *testing.T) 
 	pricingServer(t, &payload)
 	home := t.TempDir()
 	// A directory at the destination forces rename failure after the temp file is synced.
-	if err := os.MkdirAll(pricingCachePath(home), 0700); err != nil {
+	if err := os.MkdirAll(pricingFeedPath(home), 0700); err != nil {
 		t.Fatal(err)
 	}
 	before := cloneProviderPricing(prices.models)

@@ -3,7 +3,6 @@ package stats
 import (
 	"context"
 	"log"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -92,6 +91,9 @@ func (r *pricingRefresher) step(ctx context.Context, home string, refreshed func
 	if ctx.Err() != nil {
 		return
 	}
+	if adoptSharedPricing(home) {
+		refreshed()
+	}
 	r.mu.Lock()
 	if r.now().Before(r.next) || (!r.pending && !pricingIsStale()) {
 		r.mu.Unlock()
@@ -125,19 +127,7 @@ func (r *pricingRefresher) step(ctx context.Context, home string, refreshed func
 	prices.mu.RLock()
 	after := cloneProviderPricing(prices.models)
 	prices.mu.RUnlock()
-	for _, models := range before {
-		for id, p := range models {
-			p.updatedAt = time.Time{}
-			models[id] = p
-		}
-	}
-	for _, models := range after {
-		for id, p := range models {
-			p.updatedAt = time.Time{}
-			models[id] = p
-		}
-	}
-	changed := !reflect.DeepEqual(before, after)
+	changed := !samePricing(before, after)
 	if changed && ctx.Err() == nil {
 		refreshed()
 	}

@@ -6,8 +6,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelfacts"
 )
 
 func TestModelsDevMetadataRefreshFixtureAndCachePreservation(t *testing.T) {
@@ -131,5 +134,39 @@ func TestOwnerWithoutModelsDevURLNeverRefreshes(t *testing.T) {
 	}
 	if err := owner.RefreshModelsDevMetadata(t.Context()); err == nil {
 		t.Fatal("explicit refresh without a feed URL succeeded")
+	}
+}
+
+// The picker and the usage stats read one download: a refresh by the other
+// reader shows up here without a request of its own.
+func TestModelsDevMetadataFollowsAnotherReadersRefresh(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"openai":{"models":{"gpt-shared":{"name":"GPT Shared","context":64000}}}}`))
+	}))
+	defer server.Close()
+	path := filepath.Join(t.TempDir(), modelsDevCacheFile)
+	picker := newModelsDevCatalog(path, server.URL)
+	if !picker.stale() {
+		t.Fatal("a catalog nobody downloaded is fresh")
+	}
+	if _, _, ok := picker.lookup("openai", "gpt-shared"); ok {
+		t.Fatal("found a model before any download")
+	}
+
+	// The other reader opens the same feed and refreshes it.
+	if _, _, err := modelfacts.Open(modelfacts.Config{URL: server.URL, Path: path}).Refresh(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if picker.stale() {
+		t.Fatal("the picker still calls a catalog the other reader just downloaded stale")
+	}
+	meta, _, ok := picker.lookup("openai", "gpt-shared")
+	if !ok || meta.DisplayName != "GPT Shared" || meta.ContextWindow != 64000 {
+		t.Fatalf("metadata = %+v ok=%v", meta, ok)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("downloads = %d, want 1", hits.Load())
 	}
 }

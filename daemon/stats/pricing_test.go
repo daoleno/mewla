@@ -2,10 +2,16 @@ package stats
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelfacts"
 )
 
 func TestSyncPricingUpdatesRegistryAndCache(t *testing.T) {
@@ -126,53 +132,61 @@ func TestSyncPricingUpdatesRegistryAndCache(t *testing.T) {
 	}
 }
 
-func TestLoadPreviousPricingCacheCannotEstablishRatePresence(t *testing.T) {
+func TestAStaleCatalogFileIsLoadedButForcesAFreshSync(t *testing.T) {
 	prevModels := cloneProviderPricing(prices.models)
 	prevSource := prices.source
 	prevUpdated := prices.updatedAt
+	prevURL := pricingSyncURL
 	t.Cleanup(func() {
+		pricingSyncURL = prevURL
 		prices.mu.Lock()
 		prices.models = prevModels
 		prices.source = prevSource
 		prices.updatedAt = prevUpdated
 		prices.mu.Unlock()
 	})
+	pricingSyncURL = "http://unused.invalid/stale-file"
 
 	home := t.TempDir()
-	if err := persistPricingCache(home, pricingCacheFile{
-		Version:   pricingCacheVersion - 1,
-		UpdatedAt: time.Now().UTC(),
-		Source:    "models.dev",
-		Models: map[string]pricingCacheEntry{
-			"old-cache-only": {DisplayName: "Old cache", Input: 5, Output: 30, CacheRead: 0.5},
-		},
-	}); err != nil {
-		t.Fatalf("persist previous cache: %v", err)
+	path := pricingFeedPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"openai":{"models":{"old-file-model":{"cost":{"input":5,"output":30}}}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * pricingSyncEvery)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
 	}
 
 	loadPricingCache(home)
-	if _, ok := currentPricing("old-cache-only"); ok {
-		t.Fatal("previous cache cannot establish presence or tiers")
+	if got, ok := currentPricing("old-file-model"); !ok || got.input != 5 {
+		t.Fatalf("the file's prices were not applied: %+v ok=%v", got, ok)
 	}
 	if !pricingIsStale() {
-		t.Fatal("previous cache should force a fresh models.dev sync")
+		t.Fatal("a catalog older than a day should force a fresh models.dev sync")
 	}
 }
 
-func TestPricingCacheKeepsSameModelSeparateByProvider(t *testing.T) {
+func TestPricingCatalogFileKeepsSameModelSeparateByProvider(t *testing.T) {
 	previous := cloneProviderPricing(prices.models)
 	previousSource, previousUpdated := prices.source, prices.updatedAt
+	prevURL := pricingSyncURL
 	t.Cleanup(func() {
+		pricingSyncURL = prevURL
 		prices.mu.Lock()
 		defer prices.mu.Unlock()
 		prices.models, prices.source, prices.updatedAt = previous, previousSource, previousUpdated
 	})
+	pricingSyncURL = "http://unused.invalid/separate-providers"
 	home := t.TempDir()
-	cache := pricingCacheFile{Version: pricingCacheVersion, UpdatedAt: time.Now().UTC(), Source: "fixture", Providers: map[string]map[string]pricingCacheEntry{
-		"openai":    {"shared-model": {Input: 1, Output: 2, Present: rateInput | rateOutput, Source: "models.dev"}},
-		"anthropic": {"shared-model": {Input: 3, Output: 4, Present: rateInput | rateOutput, Source: "models.dev"}},
-	}}
-	if err := persistPricingCache(home, cache); err != nil {
+	path := pricingFeedPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	catalog := `{"openai":{"models":{"shared-model":{"cost":{"input":1,"output":2}}}},"anthropic":{"models":{"shared-model":{"cost":{"input":3,"output":4}}}}}`
+	if err := os.WriteFile(path, []byte(catalog), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	loadPricingCache(home)
@@ -180,5 +194,42 @@ func TestPricingCacheKeepsSameModelSeparateByProvider(t *testing.T) {
 	anthropic, ok2 := currentProviderPricing("anthropic", "shared-model")
 	if !ok1 || !ok2 || openAI.input != 1 || anthropic.input != 3 {
 		t.Fatalf("provider collision: openai=%+v anthropic=%+v", openAI, anthropic)
+	}
+}
+
+// The model picker refreshes the same download; the next pricing step adopts
+// it without a request of its own.
+func TestPricingAdoptsACatalogAnotherReaderDownloaded(t *testing.T) {
+	isolatePricing(t)
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_, _ = io.WriteString(w, newModelCatalog)
+	}))
+	t.Cleanup(srv.Close)
+	pricingSyncURL, pricingHTTPClient = srv.URL, srv.Client()
+	home := t.TempDir()
+	prices.mu.Lock()
+	prices.updatedAt = time.Time{}
+	prices.mu.Unlock()
+
+	other := modelfacts.Open(modelfacts.Config{URL: srv.URL, Path: pricingFeedPath(home), Client: srv.Client()})
+	if _, _, err := other.Refresh(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	r := newPricingRefresher()
+	refreshed := 0
+	r.step(context.Background(), home, func() { refreshed++ })
+	if hits.Load() != 1 {
+		t.Fatalf("downloads = %d, want the other reader's only", hits.Load())
+	}
+	if got, ok := currentPricing("new-exact-model"); !ok || got.input != 2 {
+		t.Fatalf("the shared catalog was not adopted: %+v ok=%v", got, ok)
+	}
+	if refreshed != 1 {
+		t.Fatalf("changed rates must rescan usage once, got %d", refreshed)
+	}
+	if pricingIsStale() {
+		t.Fatal("an adopted fresh catalog is stale")
 	}
 }

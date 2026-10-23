@@ -4,28 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/modelfacts"
 )
 
-const (
-	modelsDevTTL       = 24 * time.Hour
-	modelsDevMaxBytes  = 16 << 20
-	modelsDevTimeout   = 10 * time.Second
-	modelsDevCacheFile = "models-dev-metadata.json"
-)
+// modelsDevCacheFile is the shared models.dev catalog file, the one the usage
+// stats read as well (see modelfacts).
+const modelsDevCacheFile = modelfacts.CacheFile
 
 // ModelsDevURL is the public models.dev metadata feed the daemon refreshes.
-const ModelsDevURL = "https://models.dev/api.json"
+const ModelsDevURL = modelfacts.URL
 
+// modelsDevCatalog is the picker's view of the models.dev catalog: display
+// names, context windows and list prices. The download and its cache belong to
+// modelfacts; this keeps what it parsed from the copy it last saw.
 type modelsDevCatalog struct {
 	mu        sync.RWMutex
 	UpdatedAt time.Time                                       `json:"updated_at"`
@@ -36,46 +33,58 @@ type modelsDevCatalog struct {
 }
 
 func newModelsDevCatalog(path, url string) *modelsDevCatalog {
-	return &modelsDevCatalog{path: path, url: strings.TrimSpace(url), client: &http.Client{Timeout: modelsDevTimeout}, Models: map[string]map[string]modelPresentationMetadata{}}
+	return &modelsDevCatalog{path: path, url: strings.TrimSpace(url), Models: map[string]map[string]modelPresentationMetadata{}}
 }
 
+func (c *modelsDevCatalog) feed() *modelfacts.Feed {
+	return modelfacts.Open(modelfacts.Config{URL: c.url, Path: c.path, Client: c.client})
+}
+
+// load parses the catalog the feed already holds, from its cache file.
 func (c *modelsDevCatalog) load() error {
 	if c == nil || c.path == "" {
 		return nil
 	}
-	if info, statErr := os.Stat(c.path); statErr == nil && info.Size() > modelsDevMaxBytes {
-		return fmt.Errorf("models.dev metadata cache exceeds size limit")
+	return c.sync()
+}
+
+// sync parses the feed's catalog when it is newer than the one parsed. Another
+// reader's refresh shows up here without a download of its own.
+func (c *modelsDevCatalog) sync() error {
+	if c == nil || c.path == "" {
+		return nil
 	}
-	raw, err := os.ReadFile(c.path)
+	raw, at := c.feed().Raw()
+	c.mu.RLock()
+	current := c.UpdatedAt
+	c.mu.RUnlock()
+	if raw == nil || at.Equal(current) {
+		return nil
+	}
+	parsed, err := parseModelsDevMetadata(raw)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
 		return err
-	}
-	if len(raw) > modelsDevMaxBytes {
-		return fmt.Errorf("models.dev metadata cache exceeds size limit")
-	}
-	var disk modelsDevCatalog
-	if err := json.Unmarshal(raw, &disk); err != nil {
-		return err
-	}
-	if disk.Models == nil {
-		return fmt.Errorf("models.dev metadata cache has no models")
 	}
 	c.mu.Lock()
-	c.UpdatedAt, c.Models = disk.UpdatedAt, disk.Models
+	c.UpdatedAt, c.Models = at, parsed
 	c.mu.Unlock()
 	return nil
 }
 
 func (c *modelsDevCatalog) stale() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.UpdatedAt.IsZero() || time.Since(c.UpdatedAt) >= modelsDevTTL
+	if c == nil {
+		return true
+	}
+	if c.path == "" {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		return c.UpdatedAt.IsZero() || time.Since(c.UpdatedAt) >= modelfacts.TTL
+	}
+	return c.feed().Stale(modelfacts.TTL)
 }
 
 func (c *modelsDevCatalog) lookup(provider, id string) (modelPresentationMetadata, time.Time, bool) {
+	_ = c.sync()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	items := c.Models[strings.ToLower(strings.TrimSpace(provider))]
@@ -89,6 +98,7 @@ func (c *modelsDevCatalog) modelIDs(provider string) []string {
 	if c == nil {
 		return nil
 	}
+	_ = c.sync()
 	c.mu.RLock()
 	items := c.Models[strings.ToLower(strings.TrimSpace(provider))]
 	ids := make([]string, 0, len(items))
@@ -110,44 +120,19 @@ func (c *modelsDevCatalog) refresh(ctx context.Context) error {
 	if c.url == "" {
 		return fmt.Errorf("models.dev metadata refresh is disabled")
 	}
-	ctx, cancel := context.WithTimeout(ctx, modelsDevTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	raw, at, err := c.feed().Refresh(ctx, func(raw []byte) error {
+		_, err := parseModelsDevMetadata(raw)
+		return err
+	})
 	if err != nil {
 		return err
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("models.dev metadata status %d", resp.StatusCode)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, modelsDevMaxBytes+1))
-	if err != nil {
-		return err
-	}
-	if len(raw) > modelsDevMaxBytes {
-		return fmt.Errorf("models.dev metadata exceeds size limit")
 	}
 	parsed, err := parseModelsDevMetadata(raw)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
-	disk := modelsDevCatalog{UpdatedAt: now, Models: parsed}
-	data, err := json.Marshal(&disk)
-	if err != nil {
-		return err
-	}
-	if c.path != "" {
-		if err := atomicWriteModelsDev(c.path, data); err != nil {
-			return err
-		}
-	}
 	c.mu.Lock()
-	c.UpdatedAt, c.Models = now, parsed
+	c.UpdatedAt, c.Models = at, parsed
 	c.mu.Unlock()
 	return nil
 }
@@ -159,13 +144,6 @@ func (o *Owner) RefreshModelsDevMetadata(ctx context.Context) error {
 		return fmt.Errorf("models.dev metadata unavailable")
 	}
 	return o.modelsDev.refresh(ctx)
-}
-
-func atomicWriteModelsDev(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return atomicfile.Write(path, data, 0o600)
 }
 
 func parseModelsDevMetadata(raw []byte) (map[string]map[string]modelPresentationMetadata, error) {
